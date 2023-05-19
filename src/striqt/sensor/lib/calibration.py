@@ -153,8 +153,7 @@ class YFactorSink(sinks.SinkBase):
 
         assert isinstance(capture_result.extra_coords, specs.SoapyAcquisitionInfo)
 
-        if len(self._pending_data) == self._batch.size:
-            self._batch.next()
+        self.captures_elapsed += 1
         if self.captures_elapsed == self._batch.total_size:
             self.flush()
 
