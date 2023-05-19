@@ -469,9 +469,9 @@ class CalibrationSweep(
     def __post_init__(self):
         super().__post_init__()
 
-        if len(self.captures) > 1:
+        if not self.calibration.implied_loops and len(self.captures) > 1:
             raise TypeError(
-                'calibration sweeps may specify loops but not captures, only loops'
+                'calibration sweeps may only include explicit capture sequences if implied_loops are specified'
             )
         if self.source.calibration is not None:
             raise ValueError('source.calibration must be None for a calibration sweep')
