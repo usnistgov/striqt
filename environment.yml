@@ -1,0 +1,40 @@
+name: spectrum-sensor-edge-analysis
+
+channels:
+  # - nvidia
+  - conda-forge
+
+dependencies:
+  # python3.9 is the most recent supported by our jetson board
+  - python=3.9
+  - pip
+  - jupyter
+  - numpy
+  - scipy
+  - matplotlib
+  # - pytorch
+  - numba
+  - pandas<2
+  - scipy>=1.9.2
+  - seaborn>=0.12
+  - numpy>=1.21
+  - matplotlib>=3.6
+  - numexpr>=2.7
+  - scikit-learn>=1.1,<2.0
+  - ruff
+  - msgspec
+  - pyppeteer
+  - ipympl
+  - numexpr>=2.8.4
+  - nptdms
+  - humanfriendly
+  - xarray
+  - pip:
+      - methodtools
+      # - sea_ingest @ git+https://github.com/usnistgov/nasctn-sea-ingest
+      - iqwaveform @ git+https://github.com/usnistgov/iqwaveform
+      # - sea_survey_analysis @ git+https://github.com/usnistgov/nasctn-sea-survey-analysis
+      # - line-profiler
+
+      # allows imports from the src/ directory from anywhere in the environment 
+      - -e .

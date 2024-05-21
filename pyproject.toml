@@ -1,0 +1,26 @@
+# This is here to allow an editable install of modules in src/ toshare code between notebooks
+
+[project]
+name = "spectrum-sensor-edge-analysis"
+version = "0.0"
+description = "exploring the analysis of IQ in aggregate waveforms"
+authors = [
+    {name = "Dan Kuester", email = "daniel.kuester@nist.gov"},
+]
+requires-python = "~=3.9.0"
+
+# NOTE: port over dependencies from environment.yml before making anything installable
+dependencies = []
+
+[tool.ruff]
+target-version = "py39"
+extend-include = ["*.ipynb"]
+
+[tool.ruff.format]
+quote-style = "single"
+line-ending = "lf"
+docstring-code-format = true
+docstring-code-line-length = "dynamic"
+
+[tool.ruff.lint.extend-per-file-ignores]
+"**/__init__.py" = ["F401", "F403", "E402"]
