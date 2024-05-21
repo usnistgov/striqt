@@ -4,6 +4,7 @@ from functools import lru_cache
 from iqwaveform.power_analysis import iq_to_cyclic_power
 import numpy as np
 from scipy.signal import ellip, ellipord, sosfreqz
+from iqwaveform.util import array_namespace
 
 @lru_cache(8)
 def generate_iir_lpf(
@@ -64,7 +65,8 @@ def amplitude_probability_distribution(iq, *, power_low, power_high, power_count
 def persistence_spectrum(iq, *, fs, window, fres, quantiles):
     # TODO: validate fs % fres
     # TODO: implement other statistics, such as mean
+    xp = array_namespace(iq)
     fft_size = int(fs/fres)
     freqs, times, X = iqwaveform.stft(iq, window='flattop', fs=fs, nperseg=fft_size)
-    spectrum = np.quantile(iqwaveform.envtopow(X), quantiles, axis=0)
+    spectrum = xp.quantile(iqwaveform.envtopow(X), quantiles, axis=0)
     return freqs, iqwaveform.powtodB(spectrum.T)
