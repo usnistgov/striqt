@@ -278,9 +278,18 @@ def persistence_spectrum(
         # need fs/resolution to give us a counting number
         raise ValueError('fs/resolution must be a counting number')
 
+    fft_size = int(fs / resolution)
+    enbw = resolution * equivalent_noise_bandwidth(window, fft_size)
+    metadata = {
+        'window': window,
+        'resolution_Hz': resolution,
+        'fractional_overlap': fractional_overlap,
+        'noise_bandwidth_Hz': enbw,
+        'fft_size': fft_size
+    }
+
     xp = array_namespace(iq)
 
-    fft_size = int(fs / resolution)
     _, times, X = iqwaveform.stft(iq, window=window, fs=fs, nperseg=fft_size)
     spectrum = xp.quantile(iqwaveform.envtopow(X), quantiles, axis=0)
 
@@ -292,14 +301,6 @@ def persistence_spectrum(
 
     coords = {**freq_coords, **stat_coords}
 
-    enbw = resolution * equivalent_noise_bandwidth(window, fft_size)
-
-    metadata = {
-        'window': window,
-        'resolution_Hz': resolution,
-        'fractional_overlap': fractional_overlap,
-        'noise_bandwidth_Hz': enbw,
-    }
 
     data = xr.DataArray(
         iqwaveform.powtodB(spectrum.T),
