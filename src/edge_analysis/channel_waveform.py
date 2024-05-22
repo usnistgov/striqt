@@ -27,25 +27,21 @@ def generate_iir_lpf(
     """
     Generate an elliptic IIR low pass filter.
 
-    Parameters
-    ----------
-    rp_dB: (float, int)
-        Maximum passband ripple below unity gain, in dB.
-    rs_dB: (float, int)
-        Minimum stopband attenuation, in dB.
-    cutoff_Hz: (float, int)
-        Filter cutoff frequency, in Hz.
-    width_Hz: (float, int)
-        Passband-to-stopband transition width, in Hz.
-    Fs_MHz: (float, int)
-        Sampling rate, in MHz.
-    plot_response: bool
-        If True, plot the filter response.
 
-    Returns
-    -------
-    sos: numpy.ndarray
-        Second-order sections representation of the IIR filter.
+    Args:
+        passband_ripple_dB:
+            Maximum passband ripple below unity gain, in dB.
+        stopband_attenuation_dB:
+            Minimum stopband attenuation, in dB.
+        cutoff_Hz:
+            Filter cutoff frequency, in Hz.
+        transition_bandwidth_Hz:
+            Passband-to-stopband transition width, in Hz.
+        fs:
+            Sampling rate, in Hz.
+
+    Returns:
+        Second-order sections (sos) representation of the IIR filter.
     """
 
     # Generate filter
