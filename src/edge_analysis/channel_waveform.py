@@ -7,7 +7,7 @@ from scipy import signal
 from iqwaveform.util import array_namespace
 import xarray as xr
 from array_api_strict._typing import Array
-
+import array_api_compat
 
 @lru_cache
 def equivalent_noise_bandwidth(window, N):
@@ -137,8 +137,12 @@ def cyclic_channel_power(
         **metadata,
     }
 
+    data = [[v for v in vset.values()] for vset in data_dict.values()]
+    if array_api_compat.is_torch_array(data[0][0]):
+        data = [[a.cpu() for a in l] for l in data]
+
     return xr.DataArray(
-        [[v for v in vset.values()] for vset in data_dict.values()],
+        data,
         coords=coords,
         dims=list(coords.keys()),
         attrs=attrs,
@@ -183,6 +187,9 @@ def power_time_series(
 
     coords = {**detector_coords, **time_coords}
 
+    if array_api_compat.is_torch_array(data[0]):
+        data = [a.cpu() for a in data]
+
     return xr.DataArray(
         data,
         coords=coords,
@@ -198,7 +205,7 @@ def power_time_series(
 
 @lru_cache
 def _get_apd_bins(lo, hi, count, xp=np):
-    return xp.linspace(lo, hi, count, dtype='float32')
+    return xp.linspace(lo, hi, count)
 
 
 @lru_cache
@@ -232,7 +239,7 @@ def amplitude_probability_distribution(
 
     return xr.DataArray(
         ccdf,
-        coords=_label_apd_power_bins(xp=xp, units=units, **bin_params),
+        coords=_label_apd_power_bins(xp=np, units=units, **bin_params),
         name='amplitude_probability_distribution',
         attrs={'label': 'Amplitude probability distribution', **bin_params},
     )
@@ -299,7 +306,7 @@ def persistence_spectrum(
     _, times, X = iqwaveform.stft(
         iq, window=window, fs=sample_rate_Hz, nperseg=fft_size
     )
-    spectrum = xp.quantile(iqwaveform.envtopow(X), quantiles, axis=0)
+    spectrum = xp.quantile(iqwaveform.envtopow(X), xp.asarray(quantiles, dtype=xp.float32), axis=0)
 
     freq_coords = _baseband_frequency_to_coords(
         sample_rate_Hz=sample_rate_Hz,
@@ -311,6 +318,8 @@ def persistence_spectrum(
     stat_coords = _persistence_stats_to_coords(tuple(quantiles))
 
     coords = {**freq_coords, **stat_coords}
+    if array_api_compat.is_torch_array(spectrum):
+        spectrum = np.array(spectrum.cpu())
 
     data = xr.DataArray(
         iqwaveform.powtodB(spectrum.T),

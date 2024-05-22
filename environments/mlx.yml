@@ -33,4 +33,4 @@ dependencies:
       # - line-profiler
 
       # allows imports from the src/ directory from anywhere in the environment 
-      - -e .
+      - -e ..

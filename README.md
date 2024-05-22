@@ -1,4 +1,4 @@
-This is a base library and collection of scripts oriented toward GPU-accelerated RF monitoring with software-defined radios.
+This is a base library and collection of scripts oriented toward CUDA-accelerated RF monitoring with software-defined radios.
 
 ### Environment setup
 The source code layout is oriented toward execution of notebooks/scripts in conda environments.

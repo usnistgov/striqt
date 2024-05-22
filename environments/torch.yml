@@ -3,7 +3,6 @@
 name: spectrum-sensor-edge-analysis
 
 channels:
-  - nvidia
   - conda-forge
 
 dependencies:
@@ -11,6 +10,7 @@ dependencies:
   - python=3.9
   - pip
   - jupyter
+  # - pytorch
   - numba
   - pandas<2
   - scipy>=1.9.2
@@ -26,8 +26,9 @@ dependencies:
   - numexpr>=2.8.4
   - humanfriendly
   - xarray
-  - cupy
-  - xarray-cupy
+  - pytorch
+  - torchvision
+  # - torchaudio
   - pip:
       - methodtools
       - iqwaveform @ git+https://github.com/usnistgov/iqwaveform
