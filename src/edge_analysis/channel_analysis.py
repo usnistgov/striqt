@@ -45,8 +45,8 @@ def generate_iir_lpf(
     return sos
 
 @lru_cache(16)
-def _get_apd_bins(lo, hi, count):
-    return np.linspace(lo, hi, count)
+def _get_apd_bins(lo, hi, count, xp=np):
+    return xp.linspace(lo, hi, count)
 
 def power_time_series(iq, *, fs: float, detector_period: float, detectors=('rms', 'peak')):
     return {
@@ -57,7 +57,9 @@ def power_time_series(iq, *, fs: float, detector_period: float, detectors=('rms'
     }
 
 def amplitude_probability_distribution(iq, *, power_low, power_high, power_count):
-    bins = _get_apd_bins(power_low, power_high, power_count)
+    xp = array_namespace(iq)
+
+    bins = _get_apd_bins(power_low, power_high, power_count, xp=xp)
     ccdf = iqwaveform.sample_ccdf(iqwaveform.envtodB(iq), bins)
 
     return ccdf, bins

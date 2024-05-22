@@ -29,7 +29,7 @@ dependencies:
   - nptdms
   - humanfriendly
   - xarray
-  - mlx
+  - cupy
   - pip:
       - methodtools
       # - sea_ingest @ git+https://github.com/usnistgov/nasctn-sea-ingest
