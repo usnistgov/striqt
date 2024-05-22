@@ -22,7 +22,7 @@ def generate_iir_lpf(
     stopband_attenuation_dB: float | int,
     cutoff_Hz: float | int,
     transition_bandwidth_Hz: float | int,
-    fs: float | int,
+    sample_rate_Hz: float | int,
 ) -> np.ndarray:
     """
     Generate an elliptic IIR low pass filter.
@@ -37,7 +37,7 @@ def generate_iir_lpf(
             Filter cutoff frequency, in Hz.
         transition_bandwidth_Hz:
             Passband-to-stopband transition width, in Hz.
-        fs:
+        sample_rate_Hz:
             Sampling rate, in Hz.
 
     Returns:
@@ -51,7 +51,7 @@ def generate_iir_lpf(
         passband_ripple_dB,
         stopband_attenuation_dB,
         False,
-        fs,
+        sample_rate_Hz,
     )
     sos = signal.ellip(
         ord,
@@ -61,7 +61,7 @@ def generate_iir_lpf(
         'lowpass',
         False,
         'sos',
-        fs,
+        sample_rate_Hz,
     )
 
     return sos
@@ -77,7 +77,7 @@ def _label_detector_coords(detectors: tuple[str]):
 
 @lru_cache
 def _label_cyclic_power_coords(
-    fs: float,
+    sample_rate_Hz: float,
     cyclic_period: float,
     detector_period: float,
     cyclic_statistics: list[str],
@@ -101,8 +101,8 @@ def _label_cyclic_power_coords(
 
 def cyclic_channel_power(
     iq,
-    fs,
-    analysis_bandwidth,
+    sample_rate_Hz,
+    analysis_bandwidth_Hz,
     cyclic_period: float,
     detector_period: float,
     detectors: list[str] = ('rms', 'peak'),
@@ -115,7 +115,7 @@ def cyclic_channel_power(
 
     data_dict = iq_to_cyclic_power(
         iq,
-        1 / fs,
+        1 / sample_rate_Hz,
         cyclic_period=cyclic_period,
         detector_period=detector_period,
         detectors=detectors,
@@ -124,7 +124,7 @@ def cyclic_channel_power(
 
     detector_coords = _label_detector_coords(detectors)
     cyclic_coords = _label_cyclic_power_coords(
-        fs,
+        sample_rate_Hz,
         cyclic_period=cyclic_period,
         detector_period=detector_period,
         cyclic_statistics=cyclic_statistics,
@@ -133,7 +133,7 @@ def cyclic_channel_power(
 
     attrs = {
         'label': 'Channel power',
-        'units': f'dBm/{analysis_bandwidth/1e6} MHz',
+        'units': f'dBm/{analysis_bandwidth_Hz/1e6} MHz',
         **metadata,
     }
 
@@ -162,8 +162,8 @@ def _label_detector_time_coords(detector_period: float, length: int):
 def power_time_series(
     iq,
     *,
-    fs: float,
-    analysis_bandwidth: float,
+    sample_rate_Hz: float,
+    analysis_bandwidth_Hz: float,
     detector_period: float,
     detectors=('rms', 'peak'),
 ) -> xr.DataArray:
@@ -172,7 +172,7 @@ def power_time_series(
     data = [
         iqwaveform.powtodB(
             iqwaveform.iq_to_bin_power(
-                iq, Ts=1 / fs, Tbin=detector_period, kind=detector
+                iq, Ts=1 / sample_rate_Hz, Tbin=detector_period, kind=detector
             )
         )
         for detector in detectors
@@ -190,7 +190,7 @@ def power_time_series(
         name='power_time_series',
         attrs={
             'label': 'Channel power',
-            'units': f'dBm/{analysis_bandwidth/1e6} MHz',
+            'units': f'dBm/{analysis_bandwidth_Hz/1e6} MHz',
             **metadata,
         },
     )
@@ -216,8 +216,8 @@ def _label_apd_power_bins(lo, hi, count, xp, units):
 def amplitude_probability_distribution(
     iq,
     *,
-    fs: float = None,
-    analysis_bandwidth: float,
+    sample_rate_Hz: float = None,
+    analysis_bandwidth_Hz: float,
     power_low: float,
     power_high: float,
     power_count: float,
@@ -228,7 +228,7 @@ def amplitude_probability_distribution(
 
     bins = _get_apd_bins(xp=xp, **bin_params)
     ccdf = iqwaveform.sample_ccdf(iqwaveform.envtodB(iq), bins)
-    units = f'dBm/{analysis_bandwidth/1e6} MHz'
+    units = f'dBm/{analysis_bandwidth_Hz/1e6} MHz'
 
     return xr.DataArray(
         ccdf,
@@ -240,9 +240,15 @@ def amplitude_probability_distribution(
 
 @lru_cache
 def _baseband_frequency_to_coords(
-    fs: float, fft_size: int, time_size: int, overlap_frac: float = 0, xp=np
+    sample_rate_Hz: float, fft_size: int, time_size: int, overlap_frac: float = 0, xp=np
 ):
-    freqs, times = iqwaveform.fourier._get_stft_axes(**locals())
+    freqs, times = iqwaveform.fourier._get_stft_axes(
+        fs=sample_rate_Hz,
+        fft_size=fft_size,
+        time_size=time_size,
+        overlap_frac=overlap_frac,
+        xp=np,
+    )
 
     array = xr.DataArray(
         freqs,
@@ -265,8 +271,8 @@ def _persistence_stats_to_coords(stat_names):
 def persistence_spectrum(
     iq: Array,
     *,
-    fs: float,
-    analysis_bandwidth=None,
+    sample_rate_Hz: float,
+    analysis_bandwidth_Hz=None,
     window,
     resolution: float,
     fractional_overlap=0,
@@ -274,33 +280,37 @@ def persistence_spectrum(
 ) -> xr.DataArray:
     # TODO: support other persistence statistics, such as mean
 
-    if not iqwaveform.power_analysis.isroundmod(fs, resolution):
-        # need fs/resolution to give us a counting number
-        raise ValueError('fs/resolution must be a counting number')
+    if not iqwaveform.power_analysis.isroundmod(sample_rate_Hz, resolution):
+        # need sample_rate_Hz/resolution to give us a counting number
+        raise ValueError('sample_rate_Hz/resolution must be a counting number')
 
-    fft_size = int(fs / resolution)
+    fft_size = int(sample_rate_Hz / resolution)
     enbw = resolution * equivalent_noise_bandwidth(window, fft_size)
     metadata = {
         'window': window,
         'resolution_Hz': resolution,
         'fractional_overlap': fractional_overlap,
         'noise_bandwidth_Hz': enbw,
-        'fft_size': fft_size
+        'fft_size': fft_size,
     }
 
     xp = array_namespace(iq)
 
-    _, times, X = iqwaveform.stft(iq, window=window, fs=fs, nperseg=fft_size)
+    _, times, X = iqwaveform.stft(
+        iq, window=window, fs=sample_rate_Hz, nperseg=fft_size
+    )
     spectrum = xp.quantile(iqwaveform.envtopow(X), quantiles, axis=0)
 
     freq_coords = _baseband_frequency_to_coords(
-        fs=fs, fft_size=fft_size, time_size=len(times), overlap_frac=fractional_overlap
+        sample_rate_Hz=sample_rate_Hz,
+        fft_size=fft_size,
+        time_size=len(times),
+        overlap_frac=fractional_overlap,
     )
 
     stat_coords = _persistence_stats_to_coords(tuple(quantiles))
 
     coords = {**freq_coords, **stat_coords}
-
 
     data = xr.DataArray(
         iqwaveform.powtodB(spectrum.T),
@@ -319,8 +329,8 @@ def persistence_spectrum(
 
 def from_spec(
     iq,
-    fs,
-    analysis_bandwidth,
+    sample_rate_Hz,
+    analysis_bandwidth_Hz,
     *,
     filter_spec: dict = {
         'passband_ripple_dB': 0.1,
@@ -342,10 +352,18 @@ def from_spec(
         )
 
     if filter_spec is not None:
-        sos = generate_iir_lpf(cutoff_Hz=analysis_bandwidth / 2, fs=fs, **filter_spec)
+        sos = generate_iir_lpf(
+            cutoff_Hz=analysis_bandwidth_Hz / 2,
+            sample_rate_Hz=sample_rate_Hz,
+            **filter_spec,
+        )
         iq = signal.sosfilt(sos.astype('float32'), iq)
 
-    acq_kws = {'iq': iq, 'fs': fs, 'analysis_bandwidth': analysis_bandwidth}
+    acq_kws = {
+        'iq': iq,
+        'sample_rate_Hz': sample_rate_Hz,
+        'analysis_bandwidth_Hz': analysis_bandwidth_Hz,
+    }
 
     arrays = [
         globals()[func_name](**acq_kws, **func_kws)
@@ -353,13 +371,10 @@ def from_spec(
     ]
 
     return xr.Dataset(
-        {
-            a.name: a
-            for a in arrays
-        },
+        {a.name: a for a in arrays},
         attrs={
-            'fs': fs,
-            'analysis_bandwidth': analysis_bandwidth,
+            'sample_rate_Hz': sample_rate_Hz,
+            'analysis_bandwidth_Hz': analysis_bandwidth_Hz,
             'filter_specification': filter_spec,
         },
     )
