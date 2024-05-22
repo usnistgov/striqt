@@ -146,7 +146,7 @@ def power_time_series(iq, *, fs: float, analysis_bandwidth: float, detector_peri
         for detector in detectors
     ]
 
-    time_coords = _label_detector_time_coords(fs, len(data[0]))
+    time_coords = _label_detector_time_coords(detector_period, len(data[0]))
     detector_coords = _label_detector_coords(detectors)
 
     coords = {**detector_coords, **time_coords}
