@@ -272,9 +272,6 @@ def persistence_spectrum(
     fractional_overlap=0,
     quantiles: list[float],
 ) -> xr.DataArray:
-    persistence_args = dict(locals())
-    del persistence_args['iq']
-
     # TODO: support other persistence statistics, such as mean
 
     if not iqwaveform.power_analysis.isroundmod(fs, resolution):
