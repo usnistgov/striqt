@@ -1,4 +1,4 @@
-# a python environment including CUDA capability
+# the environment without cuda dependencies (CPU only)
 
 name: spectrum-sensor-edge-analysis
 
@@ -27,8 +27,6 @@ dependencies:
   - numexpr>=2.8.4
   - humanfriendly
   - xarray
-  - cupy
-  - xarray-cupy
   - pip:
       - methodtools
       # - sea_ingest @ git+https://github.com/usnistgov/nasctn-sea-ingest
