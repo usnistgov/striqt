@@ -118,7 +118,8 @@ def cyclic_channel_power(
         [[v for v in vset.values()] for vset in data_dict.values()],
         coords = coords,
         dims = list(coords.keys()),
-        attrs = attrs
+        attrs = attrs,
+        name = 'cyclic_channel_power',
     )
 
 @lru_cache
@@ -155,6 +156,7 @@ def power_time_series(iq, *, fs: float, analysis_bandwidth: float, detector_peri
         data,
         coords = coords,
         dims = list(coords.keys()),
+        name = 'power_time_series',
         attrs = {
             'label': 'Channel power',
             'units': f'dBm/{analysis_bandwidth/1e6} MHz',
@@ -190,6 +192,7 @@ def amplitude_probability_distribution(iq, *, analysis_bandwidth, power_low, pow
     return xr.DataArray(
         ccdf,
         coords=_label_apd_power_bins(xp=xp, units=units, **bin_params),
+        name='amplitude_probability_distribution',
         attrs={
             'label': 'Amplitude probability distribution',
             **metadata
@@ -241,6 +244,7 @@ def persistence_spectrum(iq: Array, *, fs: float, window, fres: float, overlap_f
         iqwaveform.powtodB(spectrum.T),
         dims=coords.keys(),
         coords=coords,
+        name='persistence_spectrum',
         attrs={
             'label': 'Power spectral density',
             'units': f'dBm/{enbw/1e3:0.3f} kHz',
