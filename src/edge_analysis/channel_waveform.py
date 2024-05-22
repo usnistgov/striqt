@@ -270,6 +270,7 @@ def persistence_spectrum(
     iq: Array,
     *,
     fs: float,
+    analysis_bandwidth=None,
     window,
     resolution: float,
     fractional_overlap=0,
@@ -320,3 +321,51 @@ def persistence_spectrum(
     )
 
     return data
+
+
+def from_spec(
+    iq,
+    fs,
+    analysis_bandwidth,
+    *,
+    filter_spec: dict = {
+        'passband_ripple_dB': 0.1,
+        'stopband_attenuation_dB': 70,
+        'transition_bandwidth_Hz': 250e3,
+    },
+    analysis_spec: dict[str, dict[str]] = {},
+):
+    VALID_FUNCS = {
+        'power_time_series',
+        'persistence_spectrum',
+        'amplitude_probability_distribution',
+        'cyclic_channel_power',
+    }
+
+    if len(analysis_spec.keys() - VALID_FUNCS) > 0:
+        raise KeyError(
+            f'analysis_spec keys may only be analysis function names: {VALID_FUNCS}'
+        )
+
+    if filter_spec is not None:
+        sos = generate_iir_lpf(cutoff_Hz=analysis_bandwidth / 2, fs=fs, **filter_spec)
+        iq = signal.sosfilt(sos.astype('float32'), iq)
+
+    acq_kws = {'iq': iq, 'fs': fs, 'analysis_bandwidth': analysis_bandwidth}
+
+    arrays = [
+        globals()[func_name](**acq_kws, **func_kws)
+        for func_name, func_kws in analysis_spec.items()
+    ]
+
+    return xr.Dataset(
+        {
+            a.name: a
+            for a in arrays
+        },
+        attrs={
+            'fs': fs,
+            'analysis_bandwidth': analysis_bandwidth,
+            'filter_specification': filter_spec,
+        },
+    )
