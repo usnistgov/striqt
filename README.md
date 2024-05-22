@@ -13,18 +13,18 @@ In order to get started:
     - To support CUDA GPU acceleration (requires hardware GPU support):
 
         ```sh
-            conda env create -f environment.yml
+            conda env create -f environments/cuda.yml
         ```
 
     - For cross-platform CPU-only support:
         Otherwise:
         ```sh
-            conda env create -f environment-no-gpu.yml
+            conda env create -f environments/cpu-only.yml
         ```
 
-    - Apple Metal GPUs support is still pending feature development in the `mlx` module, but to test it out:
+    - Apple Metal GPUs support is not yet functional, pending more features in `mlx`. Still, an environment is provided for development support:
         ```sh
-            conda env create -f environment-mlx.yml
+            conda env create -f environments/mlx.yml
 
 4. Activate the environment by selecting the `spectrum-sensor-edge-analysis` virtual environment in your IDE, or run the following to use in a command line environment:
 
