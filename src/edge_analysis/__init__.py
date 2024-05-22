@@ -1,1 +1,1 @@
-from . import io, channel_analysis
+from . import channel_waveform, io

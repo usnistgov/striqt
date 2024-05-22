@@ -2,9 +2,15 @@ from __future__ import annotations
 import xarray as xr
 import matplotlib as mpl
 
-def label_axis(axis: mpl.axis.Axis, a: xr.DataArray|xr.Dataset, dimension: str=None, tick_units=True):
+
+def label_axis(
+    axis: mpl.axis.Axis,
+    a: xr.DataArray | xr.Dataset,
+    dimension: str = None,
+    tick_units=True,
+):
     """apply axis labeling based on label and unit metadata in the specified dimension of `a`.
-    
+
     If dimension is None, then labeling is applied from metadata in a.attrs
     """
 
@@ -22,7 +28,13 @@ def label_axis(axis: mpl.axis.Axis, a: xr.DataArray|xr.Dataset, dimension: str=N
     if units is not None and tick_units:
         axis.set_major_formatter(mpl.ticker.EngFormatter(unit=units))
 
-def label_legend(ax: mpl.axes._axes.Axes, a: xr.DataArray|xr.Dataset, dimension: str, tick_units=True):
+
+def label_legend(
+    ax: mpl.axes._axes.Axes,
+    a: xr.DataArray | xr.Dataset,
+    dimension: str,
+    tick_units=True,
+):
     """apply legend labeling based on label and unit metadata in the specified dimension of `a`"""
 
     label = a[dimension].attrs.get('label', None)
