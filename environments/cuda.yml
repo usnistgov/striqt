@@ -30,7 +30,7 @@ dependencies:
   - pip:
       - methodtools
       - iqwaveform @ git+https://github.com/usnistgov/iqwaveform
-      - xarray-cupy
+      # - xarray-cupy
       # - line-profiler
 
       # allows imports from the src/ directory from anywhere in the environment 
