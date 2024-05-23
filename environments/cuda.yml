@@ -27,10 +27,10 @@ dependencies:
   - humanfriendly
   - xarray
   - cupy
-  - xarray-cupy
   - pip:
       - methodtools
       - iqwaveform @ git+https://github.com/usnistgov/iqwaveform
+      - xarray-cupy
       # - line-profiler
 
       # allows imports from the src/ directory from anywhere in the environment 
