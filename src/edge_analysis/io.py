@@ -18,6 +18,6 @@ def simulated_awgn(duration: float, sample_rate: float, power: float = 1, xp=np)
         xp.complex64
     )
 
-    samples *= xp.sqrt(power / np.sqrt(2))
+    samples *= xp.sqrt(power/2)
 
     return samples

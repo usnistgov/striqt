@@ -66,7 +66,6 @@ def generate_iir_lpf(
 
     return sos
 
-
 @lru_cache
 def _label_detector_coords(detectors: tuple[str]):
     array = xr.DataArray(
@@ -288,6 +287,7 @@ def persistence_spectrum(
     resolution: float,
     fractional_overlap=0,
     quantiles: list[float],
+    dB = False
 ) -> xr.DataArray:
     # TODO: support other persistence statistics, such as mean
 
@@ -311,7 +311,11 @@ def persistence_spectrum(
         iq, window=window, fs=sample_rate_Hz, nperseg=fft_size
     )
 
-    spectrum = xp.quantile(spg.T, xp.asarray(quantiles, dtype=xp.float32), axis=1)
+    spg = xp.ascontiguousarray(spg)
+    if dB:
+        spg = iqwaveform.powtodB(spg, eps=1e-25)
+
+    spectrum = xp.quantile(spg, xp.asarray(quantiles, dtype=xp.float32), axis=0)
 
     freq_coords = _baseband_frequency_to_coords(
         sample_rate_Hz=sample_rate_Hz,
@@ -329,7 +333,7 @@ def persistence_spectrum(
         spectrum = spectrum.get()
 
     data = xr.DataArray(
-        iqwaveform.powtodB(spectrum.T),
+        spectrum.T,
         dims=coords.keys(),
         coords=coords,
         name='persistence_spectrum',
