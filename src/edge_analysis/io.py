@@ -2,14 +2,22 @@ import numpy as np
 import iqwaveform
 
 
-def simulated_awgn(duration: float, sample_rate: float, power: float = 1):
-    generator = np.random.Generator(np.random.PCG64())
+def simulated_awgn(duration: float, sample_rate: float, power: float = 1, xp=np):
+
+    try:
+        # e.g., numpy
+        bitgen = xp.random.PCG64()
+    except AttributeError:
+        # e.g., cupy
+        bitgen = xp.random.MRG32k3a()
+
+    generator = xp.random.Generator(bitgen)
     size = int(duration * sample_rate)
 
-    samples = generator.standard_normal(size=2 * size, dtype=np.float32).view(
-        np.complex64
+    samples = generator.standard_normal(size=2 * size, dtype=xp.float32).view(
+        xp.complex64
     )
 
-    samples *= np.sqrt(power / np.sqrt(2))
+    samples *= xp.sqrt(power / np.sqrt(2))
 
     return samples

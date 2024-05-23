@@ -74,6 +74,60 @@ def _label_detector_coords(detectors: tuple[str]):
     )
     return {array.dims[0]: array}
 
+@lru_cache
+def _label_detector_time_coords(detector_period: float, length: int):
+    array = xr.DataArray(
+        np.arange(length) * detector_period,
+        dims='time_elapsed',
+        attrs={'label': 'Acquisition time elapsed', 'units': 's'},
+    )
+
+    return {
+        array.dims[0]: array,
+    }
+
+
+def power_time_series(
+    iq,
+    *,
+    sample_rate_Hz: float,
+    analysis_bandwidth_Hz: float,
+    detector_period: float,
+    detectors=('rms', 'peak'),
+) -> xr.DataArray:
+    metadata = {'detector_period': detector_period}
+
+    data = [
+        iqwaveform.powtodB(
+            iqwaveform.iq_to_bin_power(
+                iq, Ts=1 / sample_rate_Hz, Tbin=detector_period, kind=detector
+            )
+        )
+        for detector in detectors
+    ]
+
+    time_coords = _label_detector_time_coords(detector_period, len(data[0]))
+    detector_coords = _label_detector_coords(detectors)
+
+    coords = {**detector_coords, **time_coords}
+
+    if array_api_compat.is_torch_array(data[0]):
+        data = [a.cpu() for a in data]
+    elif array_api_compat.is_cupy_array(data[0]):
+        data = [a.get() for a in data]
+
+    return xr.DataArray(
+        data,
+        coords=coords,
+        dims=list(coords.keys()),
+        name='power_time_series',
+        attrs={
+            'label': 'Channel power',
+            'units': f'dBm/{analysis_bandwidth_Hz/1e6} MHz',
+            **metadata,
+        },
+    )
+
 
 @lru_cache
 def _label_cyclic_power_coords(
@@ -140,6 +194,9 @@ def cyclic_channel_power(
     data = [[v for v in vset.values()] for vset in data_dict.values()]
     if array_api_compat.is_torch_array(data[0][0]):
         data = [[a.cpu() for a in l] for l in data]
+    elif array_api_compat.is_cupy_array(data[0][0]):
+        data = [[a.get() for a in l] for l in data]
+
 
     return xr.DataArray(
         data,
@@ -147,59 +204,6 @@ def cyclic_channel_power(
         dims=list(coords.keys()),
         attrs=attrs,
         name='cyclic_channel_power',
-    )
-
-
-@lru_cache
-def _label_detector_time_coords(detector_period: float, length: int):
-    array = xr.DataArray(
-        np.arange(length) * detector_period,
-        dims='time_elapsed',
-        attrs={'label': 'Acquisition time elapsed', 'units': 's'},
-    )
-
-    return {
-        array.dims[0]: array,
-    }
-
-
-def power_time_series(
-    iq,
-    *,
-    sample_rate_Hz: float,
-    analysis_bandwidth_Hz: float,
-    detector_period: float,
-    detectors=('rms', 'peak'),
-) -> xr.DataArray:
-    metadata = {'detector_period': detector_period}
-
-    data = [
-        iqwaveform.powtodB(
-            iqwaveform.iq_to_bin_power(
-                iq, Ts=1 / sample_rate_Hz, Tbin=detector_period, kind=detector
-            )
-        )
-        for detector in detectors
-    ]
-
-    time_coords = _label_detector_time_coords(detector_period, len(data[0]))
-    detector_coords = _label_detector_coords(detectors)
-
-    coords = {**detector_coords, **time_coords}
-
-    if array_api_compat.is_torch_array(data[0]):
-        data = [a.cpu() for a in data]
-
-    return xr.DataArray(
-        data,
-        coords=coords,
-        dims=list(coords.keys()),
-        name='power_time_series',
-        attrs={
-            'label': 'Channel power',
-            'units': f'dBm/{analysis_bandwidth_Hz/1e6} MHz',
-            **metadata,
-        },
     )
 
 
@@ -303,10 +307,11 @@ def persistence_spectrum(
 
     xp = array_namespace(iq)
 
-    _, times, X = iqwaveform.stft(
+    _, times, spg = iqwaveform.fourier.spectrogram(
         iq, window=window, fs=sample_rate_Hz, nperseg=fft_size
     )
-    spectrum = xp.quantile(iqwaveform.envtopow(X), xp.asarray(quantiles, dtype=xp.float32), axis=0)
+
+    spectrum = xp.quantile(spg.T, xp.asarray(quantiles, dtype=xp.float32), axis=1)
 
     freq_coords = _baseband_frequency_to_coords(
         sample_rate_Hz=sample_rate_Hz,
@@ -320,6 +325,8 @@ def persistence_spectrum(
     coords = {**freq_coords, **stat_coords}
     if array_api_compat.is_torch_array(spectrum):
         spectrum = np.array(spectrum.cpu())
+    elif array_api_compat.is_cupy_array(spectrum):
+        spectrum = spectrum.get()
 
     data = xr.DataArray(
         iqwaveform.powtodB(spectrum.T),
