@@ -8,8 +8,6 @@ from iqwaveform.util import array_namespace
 import xarray as xr
 from array_api_strict._typing import Array
 import array_api_compat
-from dataclasses import dataclass
-import methodtools
 
 @lru_cache
 def equivalent_noise_bandwidth(window: str|tuple[str,float], N):
@@ -67,22 +65,6 @@ def generate_iir_lpf(
     )
 
     return sos
-
-
-# @dataclass
-# class _ChannelAnalysisResult:
-#     sample_rate_Hz: float
-#     analysis_bandwidth_Hz: float
-
-#     label: str
-#     units: str
-
-#     inputs: dict
-#     result: dict|Array
-
-#     def to_xarray(self, **kwargs) -> xr.DataArray:
-#         """convert self.result into a DataArray"""
-#         raise NotImplementedError
 
 
 @lru_cache
@@ -316,6 +298,7 @@ def persistence_spectrum(
     resolution: float,
     fractional_overlap=0,
     quantiles: list[float],
+    bypass: bool = False,
     dB = False
 ) -> callable[[],xr.DataArray]:
     # TODO: support other persistence statistics, such as mean
@@ -339,6 +322,9 @@ def persistence_spectrum(
     freqs, times, spg = iqwaveform.fourier.spectrogram(
         iq, window=window, fs=sample_rate_Hz, nperseg=fft_size
     )
+   
+    if bypass:
+        return spg
 
     which_freqs = np.abs(freqs) <= analysis_bandwidth_Hz/2
     spg = xp.ascontiguousarray(spg[:,which_freqs])
