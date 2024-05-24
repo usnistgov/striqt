@@ -1,3 +1,5 @@
+""" backported IIR filter functions from cupy 13.x """
+
 import cupy
 from cupy._core.internal import _normalize_axis_index
 from itertools import product
