@@ -5,6 +5,7 @@ from iqwaveform.power_analysis import iq_to_cyclic_power
 import numpy as np
 from scipy import signal
 from iqwaveform.util import array_namespace
+from iqwaveform import fourier
 import xarray as xr
 from array_api_strict._typing import Array
 import array_api_compat
@@ -258,7 +259,7 @@ def amplitude_probability_distribution(
 
 @lru_cache
 def _baseband_frequency_to_coords(
-    sample_rate_Hz: float, analysis_bandwidth_Hz: float, fft_size: int, time_size: int, overlap_frac: float = 0, xp=np
+    sample_rate_Hz: float, analysis_bandwidth_Hz: float, fft_size: int, time_size: int, overlap_frac: float = 0, truncate: bool = False, xp=np
 ):
     freqs, times = iqwaveform.fourier._get_stft_axes(
         fs=sample_rate_Hz,
@@ -268,8 +269,9 @@ def _baseband_frequency_to_coords(
         xp=np,
     )
 
-    which_freqs = np.abs(freqs) <= analysis_bandwidth_Hz/2
-    freqs = freqs[which_freqs]
+    if truncate:
+        which_freqs = np.abs(freqs) <= analysis_bandwidth_Hz/2
+        freqs = freqs[which_freqs]
 
     array = xr.DataArray(
         freqs,
@@ -298,8 +300,10 @@ def persistence_spectrum(
     resolution: float,
     fractional_overlap=0,
     quantiles: list[float],
+    truncate = False,
     bypass: bool = False,
-    dB = False
+    dB = False,
+    spg = None
 ) -> callable[[],xr.DataArray]:
     # TODO: support other persistence statistics, such as mean
 
@@ -315,19 +319,31 @@ def persistence_spectrum(
         'fractional_overlap': fractional_overlap,
         'noise_bandwidth_Hz': enbw,
         'fft_size': fft_size,
+        'truncate': truncate
     }
 
     xp = array_namespace(iq)
 
-    freqs, times, spg = iqwaveform.fourier.spectrogram(
-        iq, window=window, fs=sample_rate_Hz, nperseg=fft_size
-    )
-   
+    if spg is None:
+        noverlap=int(np.rint(fractional_overlap*fft_size))
+        freqs, times, spg = iqwaveform.fourier.spectrogram(
+            iq, window=window, fs=sample_rate_Hz, nperseg=fft_size, noverlap=noverlap
+        )
+
+        if truncate:
+            which_freqs = np.abs(freqs) <= analysis_bandwidth_Hz/2
+            spg = spg[:,which_freqs]
+
+    else:
+        # TODO: 
+        spg = spg[::2]
+
     if bypass:
         return spg
 
-    which_freqs = np.abs(freqs) <= analysis_bandwidth_Hz/2
-    spg = xp.ascontiguousarray(spg[:,which_freqs])
+    import cupy
+    cupy.cuda.runtime.deviceSynchronize()
+    # spg = xp.ascontiguousarray(spg)
 
     if dB:
         spg = iqwaveform.powtodB(spg, eps=1e-25)
@@ -338,7 +354,7 @@ def persistence_spectrum(
         sample_rate_Hz=sample_rate_Hz,
         analysis_bandwidth_Hz=analysis_bandwidth_Hz,
         fft_size=fft_size,
-        time_size=len(times),
+        time_size=spg.shape[0],
         overlap_frac=fractional_overlap,
     )
 
@@ -358,6 +374,59 @@ def persistence_spectrum(
         },
     )
 
+    xp = array_api_compat.array_namespace(x)
+    
+    if out is None:
+        ret = xp.empty_like(x)
+    else:
+        ret = out
+
+    overlap_factor = int(np.rint(1/fractional_overlap))
+    noverlap = fft_size // overlap_factor    
+
+    freqs, times, X = fourier.stft(
+        x, fs=sample_rate_Hz, window=window, nperseg=fft_size, noverlap=noverlap
+    )
+    X[..., xp.abs(freqs) > bandwidth_Hz/2] = 1e-35
+    print('stft shape: ', X.shape)
+    if array_api_compat.is_cupy_array(x):
+        from cupyx import scipy
+        x_inv = scipy.fft.ifft(xp.fft.fftshift(X, axes=-1), axis=-1)
+    else:
+        x_inv = fourier.ifft(xp.fft.fftshift(X, axes=-1), axis=-1)
+
+    #x_inv = x_inv.reshape((overlap_factor, x_inv.shape[0]//overlap_factor, x_inv.shape[1]))
+
+    print('x_inv: ', x_inv.shape)
+    ret = x_inv[:,0]
+    for i in range(x_inv.shape[1]):
+        ret += xp.roll(x_inv[:,i], i*noverlap, axis=0)
+
+    ret = ret.flatten()
+    #ret = ret[fft_size:-fft_size]
+
+    # ret[:] = x_inv.sum(axis=1).flatten()
+    # ret[:] = x_inv[:,0,:].flatten()
+    # apply overlap
+    # ret[:-fft_size//overlap_factor] = x_inv[:,0].flatten()[:-fft_size//overlap_factor]
+    # ret[-fft_size//overlap_factor:] = 0
+    # for i in range(1,overlap_factor):
+    #     istart = i*noverlap
+    #     iend = ((i-overlap_factor+1)*noverlap) or None
+    #     ret[istart:iend] += x_inv[:,i].flatten()[istart:iend]
+
+    if return_spectrogram:
+        # in-memory location of the real part of X
+        x_real = X.T.view('float32')[:,::2].T
+
+        # store mag^2 by overwriting the real part
+        ret_spectrum = xp.abs(X)#, out=x_real)
+        ret_spectrum *= ret_spectrum
+
+        return ret, ret_spectrum
+    else:
+        return ret
+
 
 def from_spec(
     iq,
@@ -370,6 +439,7 @@ def from_spec(
         'transition_bandwidth_Hz': 250e3,
     },
     analysis_spec: dict[str, dict[str]] = {},
+    overwrite_iq = False
 ):
     VALID_FUNCS = {
         'power_time_series',
@@ -385,7 +455,22 @@ def from_spec(
             f'analysis_spec keys may only be analysis function names: {VALID_FUNCS}'
         )
 
-    if filter_spec is not None:
+    if filter_spec == 'cupy':
+        # TODO: allow a real spec here
+        iq = fourier.ola_filter(
+            iq,
+            passband=(-analysis_bandwidth_Hz/2, analysis_bandwidth_Hz/2),
+            fs=sample_rate_Hz,
+            nperseg=768*16,
+            noverlap=512*16,
+            window='blackman'
+            # return_spectrogram=True
+        )
+        spg = None
+        import cupy
+        cupy.cuda.runtime.deviceSynchronize()
+
+    elif filter_spec is not None:
         sos = generate_iir_lpf(
             cutoff_Hz=analysis_bandwidth_Hz / 2,
             sample_rate_Hz=sample_rate_Hz,
@@ -396,20 +481,44 @@ def from_spec(
             from . import cuda_filter
             sos = xp.asarray(sos)
             iq = cuda_filter.sosfilt(sos.astype('float32'), iq)
+            import cupy
+            cupy.cuda.runtime.deviceSynchronize()
+
         else:
             iq = signal.sosfilt(sos.astype('float32'), iq)
 
+        spg = None
+    
     acq_kws = {
         'iq': iq,
         'sample_rate_Hz': sample_rate_Hz,
         'analysis_bandwidth_Hz': analysis_bandwidth_Hz,
     }
 
+    # if array_api_compat.is_cupy_array(iq):
+    #     import cupy as cp
+
+    #     streams = {
+    #         name: cp.cuda.stream.Stream(non_blocking=True)
+    #         for name in analysis_spec.keys()
+    #     }
+    # else:
+    #     streams = {}
+    
     # get everything running in parallel first
-    xarray_funcs = [
-        globals()[func_name](**acq_kws, **func_kws)
-        for func_name, func_kws in analysis_spec.items()
-    ]
+    xarray_funcs = []
+    for func_name, func_kws in analysis_spec.items():
+        # if func_name in streams:
+        #     with streams[func_name]:
+        #         ret = globals()[func_name](**acq_kws, **func_kws)
+        # else:
+
+        if False:#func_name == 'persistence_spectrum':
+            ret = globals()[func_name](spg=spg, **acq_kws, **func_kws)
+        else:
+            ret = globals()[func_name](**acq_kws, **func_kws)
+        
+        xarray_funcs.append(ret) 
 
     # then materialize the xarrays on the cpu
     xarrays = {}

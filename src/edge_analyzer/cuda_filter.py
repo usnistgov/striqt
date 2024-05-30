@@ -513,7 +513,7 @@ def apply_iir_sos(x, sos, axis=-1, zi=None, dtype=None, block_sz=1024,
     return out
 
 
-def sosfilt(sos, x, axis=-1, zi=None):
+def sosfilt(sos, x, axis=-1, zi=None, out=None):
     """
     Filter data along one dimension using cascaded second-order sections.
 
@@ -557,7 +557,5 @@ def sosfilt(sos, x, axis=-1, zi=None):
     """
     x_ndim = x.ndim
     axis = _normalize_axis_index(axis, x_ndim)
-    out = x
 
-    out = apply_iir_sos(out, sos, axis, zi)
-    return out
+    return apply_iir_sos(x, sos, axis, zi, out=out)
