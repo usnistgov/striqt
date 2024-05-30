@@ -10,21 +10,25 @@ In order to get started:
 2. Clone this repository
 3. Install one an environment depending on your available GPU resources:
 
-    - To support CUDA GPU acceleration (requires hardware GPU support):
-
-        ```sh
-            conda env create -f environments/cuda.yml
-        ```
-
-    - For cross-platform CPU-only support:
+    - Cross-platform support for CPUs:
         Otherwise:
         ```sh
             conda env create -f environments/cpu-only.yml
         ```
 
-    - Apple Metal GPUs support is not yet functional, pending more features in `mlx`. Still, an environment is provided for development support:
+    - Added CUDA GPU support on PCs:
+
         ```sh
-            conda env create -f environments/mlx.yml
+            conda env create -f environments/cuda.yml
+        ```
+
+    - Added CUDA GPU support on Jetson TX2/AirStack:
+
+        ```sh
+            conda env create -f environments/cuda.yml
+        ```
+
+    Other environments oriented toward other GPU processing libraries are known not to work.
 
 4. Activate the environment by selecting the `spectrum-sensor-edge-analysis` virtual environment in your IDE, or run the following to use in a command line environment:
 
