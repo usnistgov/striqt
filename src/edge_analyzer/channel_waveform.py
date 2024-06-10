@@ -8,13 +8,13 @@ from iqwaveform.util import array_namespace
 from iqwaveform import fourier
 import xarray as xr
 from array_api_strict._typing import Array
-from array_api_compat import is_cupy_array, is_numpy_array, is_torch_array, array_namespace
+from array_api_compat import is_cupy_array, is_numpy_array, is_torch_array
 from dataclasses import dataclass
 from collections import UserDict
 
 
 @lru_cache
-def equivalent_noise_bandwidth(window: str|tuple[str,float], N):
+def equivalent_noise_bandwidth(window: str | tuple[str, float], N):
     """return the equivalent noise bandwidth (ENBW) of a window, in bins"""
     w = iqwaveform.fourier._get_window(window, N)
     return len(w) * np.sum(w**2) / np.sum(w) ** 2
@@ -56,7 +56,7 @@ def generate_iir_lpf(
         False,
         sample_rate_Hz,
     )
-    
+
     sos = signal.ellip(
         order,
         passband_ripple_dB,
@@ -71,10 +71,8 @@ def generate_iir_lpf(
     return sos
 
 
-def _to_maybe_nested_numpy(obj: tuple|list|dict|Array):
+def _to_maybe_nested_numpy(obj: tuple | list | dict | Array):
     """convert an array, or a container of arrays, into a numpy array (or container of numpy arrays)"""
-
-    ret = []
 
     if isinstance(obj, (tuple, list)):
         return [_to_maybe_nested_numpy(item) for item in obj]
@@ -115,7 +113,9 @@ class ChannelAnalysisResult(UserDict):
 
 
 @lru_cache
-def _power_time_series_coords(detectors: tuple[str], detector_period: float, length: int):
+def _power_time_series_coords(
+    detectors: tuple[str], detector_period: float, length: int
+):
     time = xr.DataArray(
         np.arange(length) * detector_period,
         dims='time_elapsed',
@@ -126,10 +126,12 @@ def _power_time_series_coords(detectors: tuple[str], detector_period: float, len
         list(detectors), dims='power_detector', attrs={'label': 'Power detector'}
     )
 
-    return xr.Coordinates({
-        detector_list.dims[0]: detector_list,
-        time.dims[0]: time,
-    })
+    return xr.Coordinates(
+        {
+            detector_list.dims[0]: detector_list,
+            time.dims[0]: time,
+        }
+    )
 
 
 def power_time_series(
@@ -139,12 +141,12 @@ def power_time_series(
     analysis_bandwidth_Hz: float,
     detector_period: float,
     detectors=('rms', 'peak'),
-) -> callable[[],xr.DataArray]:
-
-
-    Ts = 1/sample_rate_Hz
+) -> callable[[], xr.DataArray]:
+    Ts = 1 / sample_rate_Hz
     data = [
-        iqwaveform.powtodB(iqwaveform.iq_to_bin_power(iq, Ts=Ts, Tbin=detector_period, kind=detector))
+        iqwaveform.powtodB(
+            iqwaveform.iq_to_bin_power(iq, Ts=Ts, Tbin=detector_period, kind=detector)
+        )
         for detector in detectors
     ]
 
@@ -183,13 +185,17 @@ def _cyclic_channel_power_cyclic_coords(
         attrs={'label': 'Cyclic lag', 'units': 's'},
     )
 
-    detector_coords = _power_time_series_coords(detectors, detector_period=detector_period, length=1)['power_detector']
+    detector_coords = _power_time_series_coords(
+        detectors, detector_period=detector_period, length=1
+    )['power_detector']
 
-    return xr.Coordinates({
-        'power_detector': detector_coords,
-        cyclic_statistic.dims[0]: cyclic_statistic,
-        cyclic_lag.dims[0]: cyclic_lag,
-    })
+    return xr.Coordinates(
+        {
+            'power_detector': detector_coords,
+            cyclic_statistic.dims[0]: cyclic_statistic,
+            cyclic_lag.dims[0]: cyclic_lag,
+        }
+    )
 
 
 def cyclic_channel_power(
@@ -200,7 +206,7 @@ def cyclic_channel_power(
     detector_period: float,
     detectors: list[str] = ('rms', 'peak'),
     cyclic_statistics: list[str] = ('min', 'mean', 'max'),
-) -> callable[[],xr.DataArray]:
+) -> callable[[], xr.DataArray]:
     metadata = {}
 
     detectors = tuple(detectors)
@@ -227,7 +233,7 @@ def cyclic_channel_power(
         'label': 'Channel power',
         'units': f'dBm/{analysis_bandwidth_Hz/1e6} MHz',
         'cyclic_period': cyclic_period,
-        'detector_period': detector_period        
+        'detector_period': detector_period,
     }
 
     return ChannelAnalysisResult(
@@ -260,25 +266,36 @@ def amplitude_probability_distribution(
     power_low: float,
     power_high: float,
     power_count: float,
-) -> callable[[],xr.DataArray]:
+) -> callable[[], xr.DataArray]:
     xp = array_namespace(iq)
 
     bin_params = {'lo': power_low, 'hi': power_high, 'count': power_count}
 
     bins = _get_apd_bins(xp=xp, **bin_params)
-    coords = _label_apd_power_bins(xp=np, units=f'dBm/{analysis_bandwidth_Hz/1e6} MHz', **bin_params)
+    coords = _label_apd_power_bins(
+        xp=np, units=f'dBm/{analysis_bandwidth_Hz/1e6} MHz', **bin_params
+    )
 
     ccdf = iqwaveform.sample_ccdf(iqwaveform.envtodB(iq), bins)
 
     return ChannelAnalysisResult(
-        data=ccdf, name='amplitude_probability_distribution', coords=coords, attrs=bin_params
+        data=ccdf,
+        name='amplitude_probability_distribution',
+        coords=coords,
+        attrs=bin_params,
     )
 
 
 @lru_cache
 def _persistence_spectrum_coords(
-    sample_rate_Hz: float, analysis_bandwidth_Hz: float, fft_size: int, time_size: int,
-    stat_names: tuple[str], overlap_frac: float = 0, truncate: bool = True, xp=np
+    sample_rate_Hz: float,
+    analysis_bandwidth_Hz: float,
+    fft_size: int,
+    time_size: int,
+    stat_names: tuple[str],
+    overlap_frac: float = 0,
+    truncate: bool = True,
+    xp=np,
 ):
     freqs, times = iqwaveform.fourier._get_stft_axes(
         fs=sample_rate_Hz,
@@ -289,7 +306,7 @@ def _persistence_spectrum_coords(
     )
 
     if truncate:
-        which_freqs = np.abs(freqs) <= analysis_bandwidth_Hz/2
+        which_freqs = np.abs(freqs) <= analysis_bandwidth_Hz / 2
         freqs = freqs[which_freqs]
 
     freqs = xr.DataArray(
@@ -316,9 +333,9 @@ def persistence_spectrum(
     resolution: float,
     fractional_overlap=0,
     quantiles: list[float],
-    truncate = True,
-    dB = True,
-) -> callable[[],xr.DataArray]:
+    truncate=True,
+    dB=True,
+) -> callable[[], xr.DataArray]:
     # TODO: support other persistence statistics, such as mean
 
     if not iqwaveform.power_analysis.isroundmod(sample_rate_Hz, resolution):
@@ -336,19 +353,19 @@ def persistence_spectrum(
         'fft_size': fft_size,
         'truncate': truncate,
         'label': 'Power spectral density',
-        'units': f'dBm/{enbw/1e3:0.3f} kHz'
+        'units': f'dBm/{enbw/1e3:0.3f} kHz',
     }
 
     xp = array_namespace(iq)
 
-    noverlap=int(np.rint(fractional_overlap*fft_size))
+    noverlap = int(np.rint(fractional_overlap * fft_size))
     freqs, times, spg = iqwaveform.fourier.spectrogram(
         iq, window=window, fs=sample_rate_Hz, nperseg=fft_size, noverlap=noverlap
     )
 
     if truncate:
-        which_freqs = np.abs(freqs) <= analysis_bandwidth_Hz/2
-        spg = spg[:,which_freqs]
+        which_freqs = np.abs(freqs) <= analysis_bandwidth_Hz / 2
+        spg = spg[:, which_freqs]
 
     # if is_cupy_array(spg):
     #     import cupy
@@ -367,7 +384,7 @@ def persistence_spectrum(
         time_size=spg.shape[0],
         overlap_frac=fractional_overlap,
         stat_names=tuple(quantiles),
-        truncate=truncate
+        truncate=truncate,
     )
 
     return ChannelAnalysisResult(
@@ -386,7 +403,7 @@ def from_spec(
         'transition_bandwidth_Hz': 250e3,
     },
     analysis_spec: dict[str, dict[str]] = {},
-    overwrite_iq = False
+    overwrite_iq=False,
 ):
     xp = array_namespace(iq)
 
@@ -398,20 +415,24 @@ def from_spec(
 
     filter_spec = dict(filter_spec)
 
-    kws = filter_spec.pop('ola', None)
-    if kws is not None:
+    try:
+        kws = filter_spec.pop('ola')
+    except KeyError:
+        pass
+    else:
         iq = fourier.ola_filter(
             iq,
             fs=sample_rate_Hz,
-            passband=(-analysis_bandwidth_Hz/2, analysis_bandwidth_Hz/2),
+            passband=(-analysis_bandwidth_Hz / 2, analysis_bandwidth_Hz / 2),
             axis=0,
-            **kws
+            **kws,
         )
 
-        spg = None
-
-    kws = filter_spec.pop('iir', None)
-    if kws is not None:
+    try:
+        kws = filter_spec.pop('iir')
+    except KeyError:
+        pass
+    else:
         sos = generate_iir_lpf(
             cutoff_Hz=analysis_bandwidth_Hz / 2,
             sample_rate_Hz=sample_rate_Hz,
@@ -420,41 +441,55 @@ def from_spec(
 
         if is_cupy_array(iq):
             from . import cuda_filter
+
             sos = xp.asarray(sos)
             iq = cuda_filter.sosfilt(sos.astype('float32'), iq)
 
         else:
             iq = signal.sosfilt(sos.astype('float32'), iq)
 
-        spg = None
-
     if len(filter_spec) > 0:
-        raise ValueError(f'unrecognized filter specification keys: {list(filter_spec.keys())}')
+        raise ValueError(
+            f'unrecognized filter specification keys: {list(filter_spec.keys())}'
+        )
 
     if is_cupy_array(iq):
-        # sync all operations in order to prevent copies of previous operations being
+        # sync all operations in order to prevent duplicates of previous operations being
         # evaluated in parallel
         import cupy
+
         cupy.cuda.runtime.deviceSynchronize()
 
     analysis_spec = dict(analysis_spec)
     results = []
 
-    func_kws = analysis_spec.pop('power_time_series', None)
-    if func_kws is not None:
-        results += [power_time_series(**acq_kws, **func_kws)]
+    try:
+        func_kws = analysis_spec.pop('power_time_series')
+    except KeyError:
+        pass
+    else:
+        results.append(power_time_series(**acq_kws, **func_kws))
 
-    func_kws = analysis_spec.pop('persistence_spectrum', None)
-    if func_kws is not None:
-        results += [persistence_spectrum(**acq_kws, **func_kws)]
+    try:
+        func_kws = analysis_spec.pop('persistence_spectrum', None)
+    except KeyError:
+        pass
+    else:
+        results.append(persistence_spectrum(**acq_kws, **func_kws))
 
-    func_kws = analysis_spec.pop('amplitude_probability_distribution', None)
-    if func_kws is not None:
-        results += [amplitude_probability_distribution(**acq_kws, **func_kws)]
+    try:
+        func_kws = analysis_spec.pop('amplitude_probability_distribution')
+    except KeyError:
+        pass
+    else:
+        results.append(amplitude_probability_distribution(**acq_kws, **func_kws))
 
-    func_kws = analysis_spec.pop('cyclic_channel_power', None)
-    if func_kws is not None:
-        results += [cyclic_channel_power(**acq_kws, **func_kws)]
+    try:
+        func_kws = analysis_spec.pop('cyclic_channel_power')
+    except KeyError:
+        pass
+    else:
+        results.append(cyclic_channel_power(**acq_kws, **func_kws))
 
     if len(analysis_spec) > 0:
         raise ValueError(f'invalid analysis_spec key(s): {list(analysis_spec.keys())}')
@@ -463,13 +498,11 @@ def from_spec(
         # sync all operations in order to prevent copies of previous operations being
         # evaluated in parallel
         import cupy
+
         cupy.cuda.runtime.deviceSynchronize()
 
-    # materialize the xarrays on the cpu
-    xarrays = {
-        res.name: res.to_xarray()
-        for res in results
-    }
+    # materialize as xarrays on the cpu
+    xarrays = {res.name: res.to_xarray() for res in results}
 
     metadata = {
         'sample_rate_Hz': sample_rate_Hz,
