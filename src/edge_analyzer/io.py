@@ -1,9 +1,7 @@
 import numpy as np
-import iqwaveform
 
 
 def simulated_awgn(duration: float, sample_rate: float, power: float = 1, xp=np):
-
     try:
         # e.g., numpy
         bitgen = xp.random.PCG64()
@@ -18,6 +16,6 @@ def simulated_awgn(duration: float, sample_rate: float, power: float = 1, xp=np)
         xp.complex64
     )
 
-    samples *= xp.sqrt(power/2)
+    samples *= xp.sqrt(power / 2)
 
     return samples
