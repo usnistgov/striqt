@@ -88,16 +88,16 @@ class AirTCapture:
         # what follows is some acrobatics to minimize new memory allocation and copy
         buff_int16 = cp.array(self.rx_buff, copy=False)[:4*N]
 
-        # re-interpret the buffer contents as float32 without casting
+        # 1. re-interpret the buffer contents as float32 without casting
         buff_float32 = buff_int16.view('float32')
 
-        # in-place casting from the int16 samples, filling in the extra allocation in self.rx_buff
+        # 2. in-place casting from the int16 samples, filling in the extra allocation in self.rx_buff
         cp.copyto(buff_float32, buff_int16[::2], casting='unsafe')
 
-        # last, re-interpret each interleaved (float32 I, float32 Q) as a complex value
+        # 3. last, re-interpret each interleaved (float32 I, float32 Q) as a complex value
         buff_complex64 = buff_float32.view("complex64")        
 
-        # convert to full scale
+        # 4. convert to full scale
         if scale:
             buff_complex64 *= self.get_scale()
 
