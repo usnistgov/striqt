@@ -89,6 +89,12 @@ def _to_maybe_nested_numpy(obj: tuple | list | dict | Array):
         raise TypeError(f'obj type {type(obj)} is unrecognized')
 
 
+def sync_if_cupy_array(obj: Array):
+    if is_cupy_array(obj):
+        import cupy
+        cupy.cuda.runtime.deviceSynchronize()    
+
+
 @dataclass
 class ChannelAnalysisResult(UserDict):
     """represents the return result from a channel analysis function.
@@ -436,9 +442,11 @@ def from_spec(
     analysis_bandwidth_Hz,
     *,
     filter_spec: dict = {
-        'passband_ripple_dB': 0.1,
-        'stopband_attenuation_dB': 70,
-        'transition_bandwidth_Hz': 250e3,
+        'iir': {
+            'passband_ripple_dB': 0.1,
+            'stopband_attenuation_dB': 70,
+            'transition_bandwidth_Hz': 250e3
+        }
     },
     analysis_spec: dict[str, dict[str]] = {}
 ):
@@ -450,6 +458,7 @@ def from_spec(
         'analysis_bandwidth_Hz': analysis_bandwidth_Hz,
     }
 
+    filter_metadata = filter_spec
     filter_spec = dict(filter_spec)
 
     try:
@@ -490,60 +499,25 @@ def from_spec(
             f'unrecognized filter specification keys: {list(filter_spec.keys())}'
         )
 
-    if is_cupy_array(iq):
-        # sync all operations in order to prevent duplicates of previous operations being
-        # evaluated in parallel
-        import cupy
-
-        cupy.cuda.runtime.deviceSynchronize()
+    sync_if_cupy_array(iq)
 
     analysis_spec = dict(analysis_spec)
     results = []
 
-    try:
-        func_kws = analysis_spec.pop('power_time_series')
-    except KeyError:
-        pass
-    else:
-        results.append(power_time_series(**acq_kws, **func_kws))
-
-    try:
-        func_kws = analysis_spec.pop('persistence_spectrum')
-    except KeyError:
-        pass
-    else:
-        results.append(persistence_spectrum(**acq_kws, **func_kws))
-
-    try:
-        func_kws = analysis_spec.pop('iq_waveform')
-    except KeyError:
-        pass
-    else:
-        results.append(iq_waveform(**acq_kws, **func_kws))
-
-    try:
-        func_kws = analysis_spec.pop('amplitude_probability_distribution')
-    except KeyError:
-        pass
-    else:
-        results.append(amplitude_probability_distribution(**acq_kws, **func_kws))
-
-    try:
-        func_kws = analysis_spec.pop('cyclic_channel_power')
-    except KeyError:
-        pass
-    else:
-        results.append(cyclic_channel_power(**acq_kws, **func_kws))
+    for func in (power_time_series, persistence_spectrum, iq_waveform, amplitude_probability_distribution, cyclic_channel_power):
+        # check for each allowed function in the specification
+        try:
+            func_kws = analysis_spec.pop(func.__name__)
+        except KeyError:
+            pass
+        else:
+            results.append(func(**acq_kws, **func_kws))
 
     if len(analysis_spec) > 0:
+        # anything left refers to an invalid function invalid
         raise ValueError(f'invalid analysis_spec key(s): {list(analysis_spec.keys())}')
 
-    if is_cupy_array(iq):
-        # sync all operations in order to prevent copies of previous operations being
-        # evaluated in parallel
-        import cupy
-
-        cupy.cuda.runtime.deviceSynchronize()
+    sync_if_cupy_array(iq)
 
     # materialize as xarrays on the cpu
     xarrays = {res.name: res.to_xarray() for res in results}
@@ -551,7 +525,7 @@ def from_spec(
     metadata = {
         'sample_rate_Hz': sample_rate_Hz,
         'analysis_bandwidth_Hz': analysis_bandwidth_Hz,
-        'filter_specification': filter_spec or [],
+        'filter': filter_metadata or [],
     }
 
     return xr.Dataset(xarrays, attrs=metadata)
