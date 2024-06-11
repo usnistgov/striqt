@@ -32,5 +32,5 @@ dependencies:
       - iqwaveform @ git+https://github.com/usnistgov/iqwaveform
       # - line-profiler
 
-      # allows imports from the src/ directory from anywhere in the environment 
+      # allows imports from the src/ directory in this repo
       - -e ..
