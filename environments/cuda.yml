@@ -28,6 +28,7 @@ dependencies:
   - xarray
   - zarr
   - cupy
+  - dask # this makes zarr output chunking configurable
   - pip:
       - methodtools
       - iqwaveform @ git+https://github.com/usnistgov/iqwaveform

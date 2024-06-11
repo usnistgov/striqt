@@ -28,6 +28,7 @@ dependencies:
   - humanfriendly
   - xarray
   - zarr
+  - dask # this makes zarr output chunking configurable
   - cython
   - soapysdr-module-airt
   - pip:
