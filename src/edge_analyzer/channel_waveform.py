@@ -289,7 +289,7 @@ def amplitude_probability_distribution(
         data=ccdf,
         name='amplitude_probability_distribution',
         coords=coords,
-        attrs=bin_params,
+        attrs={'label': 'CCDF', **bin_params},
     )
 
 
