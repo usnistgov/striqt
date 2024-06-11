@@ -27,6 +27,7 @@ dependencies:
   - numexpr>=2.8.4
   - humanfriendly
   - xarray
+  - netCDF4
   - cython
   - soapysdr-module-airt
   - pip:
