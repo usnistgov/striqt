@@ -7,6 +7,7 @@ from scipy import signal
 from iqwaveform.util import array_namespace
 from iqwaveform import fourier
 import xarray as xr
+import pandas as pd
 from array_api_strict._typing import Array
 from array_api_compat import is_cupy_array, is_numpy_array, is_torch_array
 from dataclasses import dataclass
@@ -286,6 +287,43 @@ def amplitude_probability_distribution(
     )
 
 
+def iq_waveform(
+    iq,
+    *,
+    sample_rate_Hz: float,
+    analysis_bandwidth_Hz=None,
+    start_time_sec=None,
+    stop_time_sec=None
+) -> callable[[], xr.DataArray]:
+    """package the IQ recording with optional clipping"""
+
+    metadata = {
+        'label': 'IQ waveform',
+        'units': 'V',
+        'start_time_sec': start_time_sec,
+        'stop_time_sec': stop_time_sec
+    }
+
+    if start_time_sec is None:
+        start = None
+    else:
+        start = int(start_time_sec*sample_rate_Hz)
+
+    if stop_time_sec is None:
+        stop = None
+    else:
+        stop = int(stop_time_sec*sample_rate_Hz)
+
+    coords = xr.Coordinates({'iq_sample': pd.RangeIndex(start, stop, name='iq_sample')})
+
+    return ChannelAnalysisResult(
+        data=iq[start:stop],
+        name='iq_waveform',
+        coords=coords,
+        attrs=metadata,
+    )
+
+
 @lru_cache
 def _persistence_spectrum_coords(
     sample_rate_Hz: float,
@@ -402,8 +440,7 @@ def from_spec(
         'stopband_attenuation_dB': 70,
         'transition_bandwidth_Hz': 250e3,
     },
-    analysis_spec: dict[str, dict[str]] = {},
-    overwrite_iq=False,
+    analysis_spec: dict[str, dict[str]] = {}
 ):
     xp = array_namespace(iq)
 
@@ -471,11 +508,18 @@ def from_spec(
         results.append(power_time_series(**acq_kws, **func_kws))
 
     try:
-        func_kws = analysis_spec.pop('persistence_spectrum', None)
+        func_kws = analysis_spec.pop('persistence_spectrum')
     except KeyError:
         pass
     else:
         results.append(persistence_spectrum(**acq_kws, **func_kws))
+
+    try:
+        func_kws = analysis_spec.pop('iq_waveform')
+    except KeyError:
+        pass
+    else:
+        results.append(iq_waveform(**acq_kws, **func_kws))
 
     try:
         func_kws = analysis_spec.pop('amplitude_probability_distribution')
@@ -507,7 +551,7 @@ def from_spec(
     metadata = {
         'sample_rate_Hz': sample_rate_Hz,
         'analysis_bandwidth_Hz': analysis_bandwidth_Hz,
-        'filter_specification': filter_spec,
+        'filter_specification': filter_spec or [],
     }
 
     return xr.Dataset(xarrays, attrs=metadata)
