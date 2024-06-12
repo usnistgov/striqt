@@ -66,7 +66,7 @@ class AirTCapture:
         # Read the samples from the data buffer
         sr = self.sdr.readStream(
             self.rx_stream,
-            [self.rx_buff[: 4 * N : 2]],
+            [self.rx_buff[:2*N]],
             N,
             timeoutUs=int(self.timeout * 1e6),
         )
@@ -91,13 +91,13 @@ class AirTCapture:
             return None
 
         # what follows is some acrobatics to minimize new memory allocation and copy
-        buff_int16 = cp.array(self.rx_buff, copy=False)[: 4 * N]
+        buff_int16 = cp.array(self.rx_buff, copy=False)[: 2*N]
 
-        # 1. re-interpret the buffer contents as float32 without casting
-        buff_float32 = buff_int16.view('float32')
+        # 1. the same memory buffer, interpreted as float32 without casting
+        buff_float32 = cp.array(self.rx_buff, copy=False).view('float32')
 
         # 2. in-place casting from the int16 samples, filling in the extra allocation in self.rx_buff
-        cp.copyto(buff_float32, buff_int16[::2], casting='unsafe')
+        cp.copyto(buff_float32, buff_int16, casting='unsafe')
 
         # 3. last, re-interpret each interleaved (float32 I, float32 Q) as a complex value
         buff_complex64 = buff_float32.view('complex64')
@@ -109,7 +109,10 @@ class AirTCapture:
         return buff_complex64
 
     def __del__(self):
-        self.close()
+        try:
+            self.close()
+        except ValueError:
+            pass
 
     def close(self):
         try:

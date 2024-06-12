@@ -74,6 +74,12 @@ def _generate_iir_lpf(
     return sos
 
 
+def _sync_if_cuda(obj: Array):
+    if is_cupy_array(obj):
+        import cupy
+        cupy.cuda.Stream.null.synchronize()
+
+
 def _to_maybe_nested_numpy(obj: tuple | list | dict | Array):
     """convert an array, or a container of arrays, into a numpy array (or container of numpy arrays)"""
 
@@ -521,8 +527,9 @@ def from_spec(
             f'unrecognized filter specification keys: {list(filter_spec.keys())}'
         )
 
-    # then: analyses that need filtered output
+    _sync_if_cuda(iq)
 
+    # then: analyses that need filtered output
     for func in (persistence_spectrum, cyclic_channel_power, power_time_series, amplitude_probability_distribution, iq_waveform):
         # check for each allowed function in the specification
         try:
@@ -541,6 +548,8 @@ def from_spec(
         # anything left refers to an invalid function invalid
         raise ValueError(f'invalid analysis_spec key(s): {list(analysis_spec.keys())}')
 
+    _sync_if_cuda(iq)
+    
     # materialize as xarrays on the cpu
     xarrays = {res.name: res.to_xarray() for res in results}
 
