@@ -1,10 +1,12 @@
+"""Wrap iqwaveform to perform DSP evaluation of baseband waveforms"""
+
 from __future__ import annotations
 import iqwaveform
 from functools import lru_cache
-from iqwaveform.power_analysis import iq_to_cyclic_power
 import numpy as np
 from scipy import signal
-from iqwaveform.util import array_namespace
+from iqwaveform.power_analysis import iq_to_cyclic_power
+from iqwaveform.util import array_namespace, array_stream
 from iqwaveform import fourier
 import xarray as xr
 import pandas as pd
@@ -22,10 +24,10 @@ def equivalent_noise_bandwidth(window: str | tuple[str, float], N):
 
 
 @lru_cache(8)
-def generate_iir_lpf(
+def _generate_iir_lpf(
     passband_ripple_dB: float | int,
     stopband_attenuation_dB: float | int,
-    cutoff_Hz: float | int,
+    bandwidth_Hz: float | int,
     transition_bandwidth_Hz: float | int,
     sample_rate_Hz: float | int,
 ) -> np.ndarray:
@@ -38,7 +40,7 @@ def generate_iir_lpf(
             Maximum passband ripple below unity gain, in dB.
         stopband_attenuation_dB:
             Minimum stopband attenuation, in dB.
-        cutoff_Hz:
+        bandwidth_Hz:
             Filter cutoff frequency, in Hz.
         transition_bandwidth_Hz:
             Passband-to-stopband transition width, in Hz.
@@ -50,8 +52,8 @@ def generate_iir_lpf(
     """
 
     order, wn = signal.ellipord(
-        cutoff_Hz,
-        cutoff_Hz + transition_bandwidth_Hz,
+        bandwidth_Hz,
+        bandwidth_Hz + transition_bandwidth_Hz,
         passband_ripple_dB,
         stopband_attenuation_dB,
         False,
@@ -87,12 +89,6 @@ def _to_maybe_nested_numpy(obj: tuple | list | dict | Array):
         return obj
     else:
         raise TypeError(f'obj type {type(obj)} is unrecognized')
-
-
-def sync_if_cupy_array(obj: Array):
-    if is_cupy_array(obj):
-        import cupy
-        cupy.cuda.runtime.deviceSynchronize()    
 
 
 @dataclass
@@ -250,7 +246,7 @@ def cyclic_channel_power(
 
 @lru_cache
 def _bin_apd(lo, hi, count, xp=np):
-    return 
+    return xp.linspace(lo, hi, count)
 
 
 @lru_cache
@@ -411,11 +407,6 @@ def persistence_spectrum(
         which_freqs = np.abs(freqs) <= analysis_bandwidth_Hz / 2
         spg = spg[:, which_freqs]
 
-    # if is_cupy_array(spg):
-    #     import cupy
-    #     cupy.cuda.runtime.deviceSynchronize()
-    #     spg = xp.ascontiguousarray(spg)
-
     if dB:
         spg = iqwaveform.powtodB(spg, eps=1e-25)
 
@@ -436,6 +427,55 @@ def persistence_spectrum(
     )
 
 
+def iir_filter(
+    iq: Array,
+    *,
+    sample_rate_Hz: float,
+    bandwidth_Hz: float | int,
+    passband_ripple_dB: float | int,
+    stopband_attenuation_dB: float | int,
+    transition_bandwidth_Hz: float | int,
+    out=None
+):
+    filter_kws = dict(locals())
+    del filter_kws['iq'], filter_kws['bandwidth_Hz']
+
+    sos = _generate_iir_lpf(
+        # scipy filter design assumes real-valued waveforms. for complex,
+        # account for this by halving the bandwidth
+        bandwidth_Hz=bandwidth_Hz/2, 
+        **filter_kws
+    )
+
+    if is_cupy_array(iq):
+        from . import cuda_filter
+
+        sos = xp.asarray(sos)
+        return cuda_filter.sosfilt(sos.astype('float32'), iq)
+
+    else:
+        return signal.sosfilt(sos.astype('float32'), iq)
+
+
+def ola_filter(
+    iq: Array,
+    *,
+    sample_rate_Hz: float,
+    bandwidth_Hz: float,
+    noverlap: int,
+    window: str|tuple,
+    out=None
+):
+    return fourier.ola_filter(
+        iq,
+        fs=sample_rate_Hz,
+        passband=(-bandwidth_Hz / 2, bandwidth_Hz / 2),
+        noverlap=noverlap,
+        window=window,
+        out=out
+    )
+
+
 def from_spec(
     iq,
     sample_rate_Hz,
@@ -453,71 +493,53 @@ def from_spec(
     xp = array_namespace(iq)
 
     acq_kws = {
-        'iq': iq,
         'sample_rate_Hz': sample_rate_Hz,
         'analysis_bandwidth_Hz': analysis_bandwidth_Hz,
     }
 
+    iq_in = iq
     filter_metadata = filter_spec
     filter_spec = dict(filter_spec)
+    analysis_spec = dict(analysis_spec)
+    results = []
 
-    try:
-        kws = filter_spec.pop('ola')
-    except KeyError:
-        pass
-    else:
-        iq = fourier.ola_filter(
-            iq,
-            fs=sample_rate_Hz,
-            passband=(-analysis_bandwidth_Hz / 2, analysis_bandwidth_Hz / 2),
-            axis=0,
-            **kws,
-        )
+    # first: everything that doesn't need the filter output
+    filter_stream = array_stream(iq)
+    spectrum_stream = array_stream(iq)
 
-    try:
-        kws = filter_spec.pop('iir')
-    except KeyError:
-        pass
-    else:
-        sos = generate_iir_lpf(
-            cutoff_Hz=analysis_bandwidth_Hz / 2,
-            sample_rate_Hz=sample_rate_Hz,
-            **kws,
-        )
-
-        if is_cupy_array(iq):
-            from . import cuda_filter
-
-            sos = xp.asarray(sos)
-            iq = cuda_filter.sosfilt(sos.astype('float32'), iq)
-
+    for filter_func in (iir_filter, ola_filter):
+        try:
+            name = filter_func.__name__.rsplit('_filter', 1)[0]
+            kws = filter_spec.pop(name)
+        except KeyError:
+            pass
         else:
-            iq = signal.sosfilt(sos.astype('float32'), iq)
+            iq = filter_func(iq, bandwidth_Hz=analysis_bandwidth_Hz, sample_rate_Hz=sample_rate_Hz, **kws)
 
     if len(filter_spec) > 0:
         raise ValueError(
             f'unrecognized filter specification keys: {list(filter_spec.keys())}'
         )
 
-    sync_if_cupy_array(iq)
+    # then: analyses that need filtered output
 
-    analysis_spec = dict(analysis_spec)
-    results = []
-
-    for func in (power_time_series, persistence_spectrum, iq_waveform, amplitude_probability_distribution, cyclic_channel_power):
+    for func in (persistence_spectrum, cyclic_channel_power, power_time_series, amplitude_probability_distribution, iq_waveform):
         # check for each allowed function in the specification
         try:
             func_kws = analysis_spec.pop(func.__name__)
         except KeyError:
             pass
         else:
-            results.append(func(**acq_kws, **func_kws))
+            if func is persistence_spectrum:
+                iq_arg = iq_in
+            else:
+                iq_arg = iq
+
+            results.append(func(iq_arg, **acq_kws, **func_kws))
 
     if len(analysis_spec) > 0:
         # anything left refers to an invalid function invalid
         raise ValueError(f'invalid analysis_spec key(s): {list(analysis_spec.keys())}')
-
-    sync_if_cupy_array(iq)
 
     # materialize as xarrays on the cpu
     xarrays = {res.name: res.to_xarray() for res in results}
