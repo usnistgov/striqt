@@ -410,7 +410,7 @@ def persistence_spectrum(
     if dB:
         spg = iqwaveform.powtodB(spg, eps=1e-25)
 
-    data = xp.quantile(spg, xp.asarray(quantiles, dtype=xp.float32), axis=0)
+    data = xp.quantile(spg, xp.asarray(quantiles, dtype=xp.float32), axis=0, out=spg[:len(quantiles)])
 
     coords = _persistence_spectrum_coords(
         sample_rate_Hz=sample_rate_Hz,
