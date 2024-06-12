@@ -249,16 +249,16 @@ def cyclic_channel_power(
 
 
 @lru_cache
-def _get_apd_bins(lo, hi, count, xp=np):
-    return xp.linspace(lo, hi, count)
+def _bin_apd(lo, hi, count, xp=np):
+    return 
 
 
 @lru_cache
-def _label_apd_power_bins(lo, hi, count, xp, units):
+def _amplitude_probability_distribution_coords(lo, hi, count, xp, units):
     params = dict(locals())
     del params['units']
 
-    bins = _get_apd_bins(**params)
+    bins = _bin_apd(**params)
     array = xr.DataArray(
         bins, dims='channel_power', attrs={'label': 'Channel power', 'units': units}
     )
@@ -278,8 +278,8 @@ def amplitude_probability_distribution(
 
     bin_params = {'lo': power_low, 'hi': power_high, 'count': power_count}
 
-    bins = _get_apd_bins(xp=xp, **bin_params)
-    coords = _label_apd_power_bins(
+    bins = _bin_apd(xp=xp, **bin_params)
+    coords = _amplitude_probability_distribution_coords(
         xp=np, units=f'dBm/{analysis_bandwidth_Hz/1e6} MHz', **bin_params
     )
 
