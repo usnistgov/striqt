@@ -469,7 +469,9 @@ def ola_filter(
     sample_rate_Hz: float,
     bandwidth_Hz: float,
     noverlap: int,
-    window: str|tuple,
+    noverlap_out: int = None,
+    frequency_shift: str = None,
+    window: str|tuple = 'hamming',
     out=None
 ):
     return fourier.ola_filter(
@@ -478,6 +480,8 @@ def ola_filter(
         passband=(-bandwidth_Hz / 2, bandwidth_Hz / 2),
         noverlap=noverlap,
         window=window,
+        noverlap_out=noverlap_out,
+        frequency_shift=frequency_shift,
         out=out
     )
 
@@ -538,7 +542,7 @@ def from_spec(
             pass
         else:
             if func is persistence_spectrum:
-                iq_arg = iq_in
+                iq_arg = iq
             else:
                 iq_arg = iq
 
