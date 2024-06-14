@@ -468,9 +468,7 @@ def ola_filter(
     *,
     sample_rate_Hz: float,
     bandwidth_Hz: float,
-    noverlap: int,
-    noverlap_out: int = None,
-    frequency_shift: str = None,
+    fft_size: int,
     window: str|tuple = 'hamming',
     out=None
 ):
@@ -478,10 +476,8 @@ def ola_filter(
         iq,
         fs=sample_rate_Hz,
         passband=(-bandwidth_Hz / 2, bandwidth_Hz / 2),
-        noverlap=noverlap,
+        fft_size=fft_size,
         window=window,
-        noverlap_out=noverlap_out,
-        frequency_shift=frequency_shift,
         out=out
     )
 
