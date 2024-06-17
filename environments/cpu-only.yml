@@ -1,4 +1,4 @@
-# the environment without cuda dependencies (CPU only)
+# the base environment that supports CPU computations (no GPU and no SDR hardware support)
 
 name: spectrum-sensor-edge-analysis
 
