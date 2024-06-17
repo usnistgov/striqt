@@ -384,11 +384,12 @@ def persistence_spectrum(
 ) -> callable[[], xr.DataArray]:
     # TODO: support other persistence statistics, such as mean
 
-    if not iqwaveform.power_analysis.isroundmod(sample_rate_Hz, resolution):
+    if iqwaveform.power_analysis.isroundmod(sample_rate_Hz, resolution):
+        fft_size = round(sample_rate_Hz / resolution)
+    else:
         # need sample_rate_Hz/resolution to give us a counting number
         raise ValueError('sample_rate_Hz/resolution must be a counting number')
 
-    fft_size = int(sample_rate_Hz / resolution)
     enbw = resolution * equivalent_noise_bandwidth(window, fft_size)
 
     metadata = {
@@ -444,7 +445,8 @@ def iir_filter(
     out=None
 ):
     filter_kws = dict(locals())
-    del filter_kws['iq'], filter_kws['bandwidth_Hz']
+    for name in ('iq', 'bandwidth_Hz', 'out'):
+        del filter_kws[name]
 
     sos = _generate_iir_lpf(
         # scipy filter design assumes real-valued waveforms. for complex,

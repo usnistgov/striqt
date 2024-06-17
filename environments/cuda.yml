@@ -1,4 +1,4 @@
-# a python environment including CUDA capability
+# the CPU computation requirements plus CUDA (GPU compute)
 
 name: spectrum-sensor-edge-analysis
 

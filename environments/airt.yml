@@ -1,9 +1,8 @@
-# a python environment including CUDA capability
+# a python environment including CUDA capability, and the proprietary AirStack SDR drivers
 
 name: spectrum-sensor-edge-analysis
 
 channels:
-  # - pytorch
   - nvidia
   - conda-forge
   - file://opt/deepwave/conda-channels/airstack-conda
