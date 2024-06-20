@@ -1,4 +1,4 @@
-# a python environment including CUDA capability, and the proprietary AirStack SDR drivers
+# the CPU computation requirements plus CUDA (GPU compute) and the proprietary AirStack SDR drivers
 
 name: spectrum-sensor-edge-analysis
 
@@ -36,7 +36,7 @@ dependencies:
       - https://archive.deepwavedigital.com/pytools/pytools-2022.1.12-py2.py3-none-any.whl
       - --extra-index-url https://pip.cupy.dev/aarch64
       - cupy-cuda102
-      
+
       # the conda pytorch package doesn't seem to play nice with the above
       # cupy-cuda102
       # - --extra-index-url https://download.pytorch.org/whl/cu102
