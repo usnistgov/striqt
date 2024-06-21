@@ -13,6 +13,8 @@ from pathlib import Path
 import socket
 import uuid
 
+METADATA_VERSION = '0.0'
+
 
 @lru_cache(8)
 def _find_repo_in_parents(path: Path) -> Repo:
@@ -110,8 +112,9 @@ def build_metadata(search_path='.'):
         'git_remote': repo.get_config().get(('remote', 'origin'), 'url').decode(),
         # 'git_browse': None,
         'git_commit': repo.head().decode(),
-        'sensor_uuid': hex(uuid.getnode())
-        # 'git_unstaged_changes': git_unstaged_changes('.')
+        # 'git_unstaged_changes': git_unstaged_changes('.')        
+        'sensor_uuid': hex(uuid.getnode()),
+        'metadata_version': METADATA_VERSION,
     }
     # repo_info['git_browse'] = f'{repo_info["git_remote"]}/tree/{repo_info["git_commit"]}'
 
