@@ -11,6 +11,7 @@ from dulwich.repo import Repo, NotGitRepository
 from dulwich import porcelain
 from pathlib import Path
 import socket
+import uuid
 
 
 @lru_cache(8)
@@ -96,7 +97,7 @@ def git_unstaged_changes(repo_or_path='.'):
     return [n.decode() for n in names]
 
 
-def git_repository_metadata(search_path='.'):
+def build_metadata(search_path='.'):
     try:
         repo = _find_repo_in_parents(search_path)
     except NotGitRepository:
@@ -104,15 +105,16 @@ def git_repository_metadata(search_path='.'):
     
     if repo is None:
         return {}
-    
+
     repo_info = {
         'git_remote': repo.get_config().get(('remote', 'origin'), 'url').decode(),
         # 'git_browse': None,
         'git_commit': repo.head().decode(),
+        'sensor_uuid': hex(uuid.getnode())
         # 'git_unstaged_changes': git_unstaged_changes('.')
     }
     # repo_info['git_browse'] = f'{repo_info["git_remote"]}/tree/{repo_info["git_commit"]}'
-    
+
     return repo_info
 
 

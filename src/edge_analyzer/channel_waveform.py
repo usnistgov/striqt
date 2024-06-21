@@ -517,7 +517,6 @@ def from_spec(
     filter_metadata = filter_spec
     filter_spec = dict(filter_spec)
     analysis_spec = dict(analysis_spec)
-    analysis_metadata = dict(analysis_spec)
     results = []
 
     # first: everything that doesn't need the filter output
@@ -569,9 +568,8 @@ def from_spec(
         'sample_rate_Hz': sample_rate_Hz,
         'analysis_bandwidth_Hz': analysis_bandwidth_Hz,
         'filter': filter_metadata or [],
-        'analysis_spec': analysis_metadata,
         'metadata_version': METADATA_VERSION,
-        **diagnostics.git_repository_metadata()
+        **diagnostics.build_metadata()
     }
 
     return xr.Dataset(xarrays, attrs=metadata)
