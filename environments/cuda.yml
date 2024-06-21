@@ -28,6 +28,7 @@ dependencies:
   - xarray
   - zarr
   - cupy
+  - dulwich # git repository introspection for metadata
   - dask # this makes zarr output chunking configurable
   - pip:
       - methodtools

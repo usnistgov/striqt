@@ -14,6 +14,9 @@ from array_api_strict._typing import Array
 from array_api_compat import is_cupy_array, is_numpy_array, is_torch_array
 from dataclasses import dataclass
 from collections import UserDict
+from . import diagnostics
+
+METADATA_VERSION = '0.0.0'
 
 
 @lru_cache
@@ -152,10 +155,14 @@ def power_time_series(
     detectors=('rms', 'peak'),
 ) -> callable[[], xr.DataArray]:
     Ts = 1 / sample_rate_Hz
+
+    xp = array_namespace(iq)
+    dtype = xp.finfo(iq.dtype).dtype
+
     data = [
         iqwaveform.powtodB(
             iqwaveform.iq_to_bin_power(iq, Ts=Ts, Tbin=detector_period, kind=detector)
-        )
+        ).astype(dtype)
         for detector in detectors
     ]
 
@@ -260,7 +267,7 @@ def _amplitude_probability_distribution_coords(lo, hi, count, xp, units):
     params = dict(locals())
     del params['units']
 
-    bins = _bin_apd(**params)
+    bins = _bin_apd(**params).astype(np.float32)
     array = xr.DataArray(
         bins, dims='channel_power', attrs={'label': 'Channel power', 'units': units}
     )
@@ -277,6 +284,7 @@ def amplitude_probability_distribution(
     power_count: float,
 ) -> callable[[], xr.DataArray]:
     xp = array_namespace(iq)
+    dtype = xp.finfo(iq.dtype).dtype
 
     bin_params = {'lo': power_low, 'hi': power_high, 'count': power_count}
 
@@ -285,50 +293,13 @@ def amplitude_probability_distribution(
         xp=np, units=f'dBm/{analysis_bandwidth_Hz/1e6} MHz', **bin_params
     )
 
-    ccdf = iqwaveform.sample_ccdf(iqwaveform.envtodB(iq), bins)
+    ccdf = iqwaveform.sample_ccdf(iqwaveform.envtodB(iq), bins).astype(dtype)
 
     return ChannelAnalysisResult(
         data=ccdf,
         name='amplitude_probability_distribution',
         coords=coords,
         attrs={'label': 'CCDF', **bin_params},
-    )
-
-
-def iq_waveform(
-    iq,
-    *,
-    sample_rate_Hz: float,
-    analysis_bandwidth_Hz=None,
-    start_time_sec=None,
-    stop_time_sec=None
-) -> callable[[], xr.DataArray]:
-    """package the IQ recording with optional clipping"""
-
-    metadata = {
-        'label': 'IQ waveform',
-        'units': 'V',
-        'start_time_sec': start_time_sec,
-        'stop_time_sec': stop_time_sec
-    }
-
-    if start_time_sec is None:
-        start = None
-    else:
-        start = int(start_time_sec*sample_rate_Hz)
-
-    if stop_time_sec is None:
-        stop = None
-    else:
-        stop = int(stop_time_sec*sample_rate_Hz)
-
-    coords = xr.Coordinates({'iq_sample': pd.RangeIndex(start, stop, name='iq_sample')})
-
-    return ChannelAnalysisResult(
-        data=iq[start:stop],
-        name='iq_waveform',
-        coords=coords,
-        attrs=metadata,
     )
 
 
@@ -417,7 +388,7 @@ def persistence_spectrum(
     if dB:
         spg = iqwaveform.powtodB(spg, eps=1e-25)
 
-    data = xp.quantile(spg, xp.asarray(quantiles, dtype=xp.float32), axis=0, out=spg[:len(quantiles)])
+    data = xp.quantile(spg, xp.asarray(quantiles), axis=0, out=spg[:len(quantiles)]).astype(xp.float32)
 
     coords = _persistence_spectrum_coords(
         sample_rate_Hz=sample_rate_Hz,
@@ -431,6 +402,43 @@ def persistence_spectrum(
 
     return ChannelAnalysisResult(
         data=data, name='persistence_spectrum', coords=coords, attrs=metadata
+    )
+
+
+def iq_waveform(
+    iq,
+    *,
+    sample_rate_Hz: float,
+    analysis_bandwidth_Hz=None,
+    start_time_sec=None,
+    stop_time_sec=None
+) -> callable[[], xr.DataArray]:
+    """package the IQ recording with optional clipping"""
+
+    metadata = {
+        'label': 'IQ waveform',
+        'units': 'V',
+        'start_time_sec': start_time_sec,
+        'stop_time_sec': stop_time_sec
+    }
+
+    if start_time_sec is None:
+        start = None
+    else:
+        start = int(start_time_sec*sample_rate_Hz)
+
+    if stop_time_sec is None:
+        stop = None
+    else:
+        stop = int(stop_time_sec*sample_rate_Hz)
+
+    coords = xr.Coordinates({'iq_sample': pd.RangeIndex(start, stop, name='iq_sample')})
+
+    return ChannelAnalysisResult(
+        data=iq[start:stop],
+        name='iq_waveform',
+        coords=coords,
+        attrs=metadata,
     )
 
 
@@ -509,6 +517,7 @@ def from_spec(
     filter_metadata = filter_spec
     filter_spec = dict(filter_spec)
     analysis_spec = dict(analysis_spec)
+    analysis_metadata = dict(analysis_spec)
     results = []
 
     # first: everything that doesn't need the filter output
@@ -554,11 +563,15 @@ def from_spec(
     
     # materialize as xarrays on the cpu
     xarrays = {res.name: res.to_xarray() for res in results}
+    xarrays.update(diagnostics.build_diagnostic_data())
 
     metadata = {
         'sample_rate_Hz': sample_rate_Hz,
         'analysis_bandwidth_Hz': analysis_bandwidth_Hz,
         'filter': filter_metadata or [],
+        'analysis_spec': analysis_metadata,
+        'metadata_version': METADATA_VERSION,
+        **diagnostics.git_repository_metadata()
     }
 
     return xr.Dataset(xarrays, attrs=metadata)

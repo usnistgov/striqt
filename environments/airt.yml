@@ -27,6 +27,7 @@ dependencies:
   - humanfriendly
   - xarray
   - zarr
+  - dulwich # git repository introspection for metadata
   - dask # this makes zarr output chunking configurable
   - cython
   - soapysdr-module-airt

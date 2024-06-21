@@ -1,0 +1,49 @@
+location:
+    # [lat, long asl] or 'gps'
+    coordinates: [39.9918, -105.27452, 1783.4]
+
+timebase:
+    # "cpu" or "gps"
+    cpu
+
+channel_analysis:
+    amplitude_probability_distribution:
+        power_count: 221
+        power_high: 15
+        power_low: -40
+    cyclic_channel_power:
+        cyclic_period: 0.01
+        cyclic_statistics:
+        # any of "min", "mean", "max", or a quantile number 
+        - min
+        - mean
+        - max
+        detector_period: 1.6666666666666667e-05
+        detectors:
+        - rms
+        - peak
+    iq_waveform:
+        start_time_sec: 0
+        stop_time_sec: 0.1
+    persistence_spectrum:
+        quantiles:
+        - 0.1
+        - 0.25
+        - 0.5
+        - 0.75
+        - 0.9
+        - 0.95
+        - 0.99
+        - 0.999
+        - 1
+        resolution: 15000.0
+        window: flattop
+    power_time_series:
+        detector_period: 0.01
+        detectors:
+        - rms
+        - peak
+filter:
+    ola:
+        fft_size: 1024
+        window: hamming
