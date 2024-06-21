@@ -14,9 +14,7 @@ from array_api_strict._typing import Array
 from array_api_compat import is_cupy_array, is_numpy_array, is_torch_array
 from dataclasses import dataclass
 from collections import UserDict
-from . import diagnostics
-
-METADATA_VERSION = '0.0.0'
+from . import metadata
 
 
 @lru_cache
@@ -562,14 +560,13 @@ def from_spec(
     
     # materialize as xarrays on the cpu
     xarrays = {res.name: res.to_xarray() for res in results}
-    xarrays.update(diagnostics.build_diagnostic_data())
+    xarrays.update(metadata.build_diagnostic_data())
 
-    metadata = {
+    attrs = {
         'sample_rate_Hz': sample_rate_Hz,
         'analysis_bandwidth_Hz': analysis_bandwidth_Hz,
         'filter': filter_metadata or [],
-        'metadata_version': METADATA_VERSION,
-        **diagnostics.build_metadata()
+        **metadata.build_metadata(),
     }
 
-    return xr.Dataset(xarrays, attrs=metadata)
+    return xr.Dataset(xarrays, attrs=attrs)
