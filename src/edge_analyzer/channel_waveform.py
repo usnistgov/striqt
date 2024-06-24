@@ -6,7 +6,7 @@ from functools import lru_cache
 import numpy as np
 from scipy import signal
 from iqwaveform.power_analysis import iq_to_cyclic_power
-from iqwaveform.util import array_namespace, array_stream
+from iqwaveform.util import array_namespace, array_stream, set_input_domain
 from iqwaveform import fourier
 import xarray as xr
 import pandas as pd
@@ -14,8 +14,8 @@ from array_api_strict._typing import Array
 from array_api_compat import is_cupy_array, is_numpy_array, is_torch_array
 from dataclasses import dataclass
 from collections import UserDict
+from inspect import signature
 from . import metadata
-
 
 @lru_cache
 def equivalent_noise_bandwidth(window: str | tuple[str, float], N):
@@ -150,7 +150,7 @@ def power_time_series(
     sample_rate_Hz: float,
     analysis_bandwidth_Hz: float,
     detector_period: float,
-    detectors=('rms', 'peak'),
+    detectors=('rms', 'peak')
 ) -> callable[[], xr.DataArray]:
     Ts = 1 / sample_rate_Hz
 
@@ -306,16 +306,15 @@ def _persistence_spectrum_coords(
     sample_rate_Hz: float,
     analysis_bandwidth_Hz: float,
     fft_size: int,
-    time_size: int,
     stat_names: tuple[str],
     overlap_frac: float = 0,
     truncate: bool = True,
     xp=np,
 ):
-    freqs, times = iqwaveform.fourier._get_stft_axes(
+    freqs, _ = iqwaveform.fourier._get_stft_axes(
         fs=sample_rate_Hz,
         fft_size=fft_size,
-        time_size=time_size,
+        time_size=1,
         overlap_frac=overlap_frac,
         xp=np,
     )
@@ -340,7 +339,7 @@ def _persistence_spectrum_coords(
 
 
 def persistence_spectrum(
-    iq: Array,
+    x: Array,
     *,
     sample_rate_Hz: float,
     analysis_bandwidth_Hz=None,
@@ -351,12 +350,12 @@ def persistence_spectrum(
     truncate=True,
     dB=True,
 ) -> callable[[], xr.DataArray]:
-    # TODO: support other persistence statistics, such as mean
 
+    # TODO: support other persistence statistics, such as mean
     if iqwaveform.power_analysis.isroundmod(sample_rate_Hz, resolution):
+        # need sample_rate_Hz/resolution to give us a counting number
         fft_size = round(sample_rate_Hz / resolution)
     else:
-        # need sample_rate_Hz/resolution to give us a counting number
         raise ValueError('sample_rate_Hz/resolution must be a counting number')
 
     enbw = resolution * equivalent_noise_bandwidth(window, fft_size)
@@ -372,27 +371,22 @@ def persistence_spectrum(
         'units': f'dBm/{enbw/1e3:0.3f} kHz',
     }
 
-    xp = array_namespace(iq)
-
-    noverlap = int(np.rint(fractional_overlap * fft_size))
-    freqs, times, spg = iqwaveform.fourier.spectrogram(
-        iq, window=window, fs=sample_rate_Hz, nperseg=fft_size, noverlap=noverlap
+    data = fourier.persistence_spectrum(
+        x,
+        fs=sample_rate_Hz,
+        bandwidth=analysis_bandwidth_Hz,
+        window=window,
+        resolution=resolution,
+        fractional_overlap=fractional_overlap,
+        quantiles=quantiles,
+        truncate=True,
+        dB=dB,
     )
-
-    if truncate:
-        which_freqs = np.abs(freqs) <= analysis_bandwidth_Hz / 2
-        spg = spg[:, which_freqs]
-
-    if dB:
-        spg = iqwaveform.powtodB(spg, eps=1e-25)
-
-    data = xp.quantile(spg, xp.asarray(quantiles), axis=0, out=spg[:len(quantiles)]).astype(xp.float32)
 
     coords = _persistence_spectrum_coords(
         sample_rate_Hz=sample_rate_Hz,
         analysis_bandwidth_Hz=analysis_bandwidth_Hz,
         fft_size=fft_size,
-        time_size=spg.shape[0],
         overlap_frac=fractional_overlap,
         stat_names=tuple(quantiles),
         truncate=truncate,
@@ -478,7 +472,8 @@ def ola_filter(
     bandwidth_Hz: float,
     fft_size: int,
     window: str|tuple = 'hamming',
-    out=None
+    out=None,
+    cache=None
 ):
     return fourier.ola_filter(
         iq,
@@ -486,8 +481,31 @@ def ola_filter(
         passband=(-bandwidth_Hz / 2, bandwidth_Hz / 2),
         fft_size=fft_size,
         window=window,
-        out=out
+        out=out,
+        cache=cache
     )
+
+
+def _compatible_filter_and_spectrum(sample_rate_Hz, filter_spec, persistence_kws):
+    filter_spec = dict(
+        bandwidth_Hz=None, sample_rate_Hz=sample_rate_Hz, **filter_spec
+    )
+    persistence_kws = dict(
+        sample_rate_Hz=sample_rate_Hz, analysis_bandwidth_Hz=None, **persistence_kws
+    )
+
+    sig1 = signature(ola_filter).bind(None, **filter_spec).arguments
+    sig2 = signature(persistence_spectrum).bind(None, **persistence_kws).arguments
+    sig2['fft_size'] = round(sample_rate_Hz / persistence_kws['resolution'])
+
+    for arg in ('fft_size', 'window'):
+        if sig1[arg] != sig2[arg]:
+            reuse_ola_stft = False
+            break
+    else:
+        reuse_ola_stft = True
+
+    return reuse_ola_stft
 
 
 def from_spec(
@@ -496,11 +514,8 @@ def from_spec(
     analysis_bandwidth_Hz,
     *,
     filter_spec: dict = {
-        'iir': {
-            'passband_ripple_dB': 0.1,
-            'stopband_attenuation_dB': 70,
-            'transition_bandwidth_Hz': 250e3
-        }
+        'fft_size': 1024,
+        'window': 'hamming',  # 'hamming', 'blackman', or 'blackmanharris'
     },
     analysis_spec: dict[str, dict[str]] = {}
 ):
@@ -515,51 +530,54 @@ def from_spec(
     filter_metadata = filter_spec
     filter_spec = dict(filter_spec)
     analysis_spec = dict(analysis_spec)
-    results = []
 
     # first: everything that doesn't need the filter output
-    filter_stream = array_stream(iq)
-    spectrum_stream = array_stream(iq)
+    # filter_stream = array_stream(iq)
+    # spectrum_stream = array_stream(iq)
 
-    for filter_func in (iir_filter, ola_filter):
-        try:
-            name = filter_func.__name__.rsplit('_filter', 1)[0]
-            kws = filter_spec.pop(name)
-        except KeyError:
-            pass
-        else:
-            iq = filter_func(iq, bandwidth_Hz=analysis_bandwidth_Hz, sample_rate_Hz=sample_rate_Hz, **kws)
+    cache = {}
 
-    if len(filter_spec) > 0:
-        raise ValueError(
-            f'unrecognized filter specification keys: {list(filter_spec.keys())}'
-        )
+    if filter_spec is not None and 'persistence_spectrum' in analysis_spec:
+        reuse_ola_stft = _compatible_filter_and_spectrum(sample_rate_Hz, filter_spec, analysis_spec['persistence_spectrum'])
+    else:
+        reuse_ola_stft = False
+
+    iq = ola_filter(
+        iq, bandwidth_Hz=analysis_bandwidth_Hz, sample_rate_Hz=sample_rate_Hz,
+        cache=cache if reuse_ola_stft else None,
+        **filter_spec
+    )
 
     _sync_if_cuda(iq)
 
     # then: analyses that need filtered output
-    for func in (persistence_spectrum, cyclic_channel_power, power_time_series, amplitude_probability_distribution, iq_waveform):
+    results = {}
+
+    for func in (persistence_spectrum, power_time_series, cyclic_channel_power, amplitude_probability_distribution, iq_waveform):
         # check for each allowed function in the specification
         try:
             func_kws = analysis_spec.pop(func.__name__)
         except KeyError:
             pass
         else:
-            if func is persistence_spectrum:
-                iq_arg = iq
+            if func is persistence_spectrum and 'stft' in cache:
+                x = cache['stft'][::2]
+                domain = 'frequency'
             else:
-                iq_arg = iq
+                x = iq
+                domain = 'time'
 
-            results.append(func(iq_arg, **acq_kws, **func_kws))
+            with set_input_domain(domain):
+                results[func.__name__] = func(x, **acq_kws, **func_kws)
 
     if len(analysis_spec) > 0:
         # anything left refers to an invalid function invalid
         raise ValueError(f'invalid analysis_spec key(s): {list(analysis_spec.keys())}')
 
     _sync_if_cuda(iq)
-    
+
     # materialize as xarrays on the cpu
-    xarrays = {res.name: res.to_xarray() for res in results}
+    xarrays = {res.name: res.to_xarray() for res in results.values()}
     xarrays.update(metadata.build_diagnostic_data())
 
     attrs = {
