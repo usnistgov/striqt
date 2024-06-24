@@ -39,7 +39,7 @@ def _filter_types(obj: dict|list|tuple):
         return {k: _filter_types(v) for k,v in obj.items()}
     elif isinstance(obj, (list, tuple)):
         return [_filter_types(v) for v in obj]
-    elif isinstance(obj, Enum):
+    elif isinstance(obj, Enum) or obj is None:
         return None
     elif isinstance(obj, (Number, bool, str)):
         return obj
@@ -66,11 +66,7 @@ def _get_psutil(name, *args, **kws):
 
     ret = func(*args, **kws)
 
-    try:
-        return _asdict(ret)
-    except:
-        print('problem object: ', repr(ret))
-        raise
+    return _asdict(ret)
 
 
 @lru_cache(8)
@@ -138,10 +134,13 @@ def build_diagnostic_data(temperature={}):
         **_compute_status_meta(tuple(compute_status.keys()))
     )
 
-    temperature = _get_psutil('sensors_temperatures') or {}
+    temperature = _get_psutil('sensors_temperatures') or {}   
+    temperature = {k: v[0][1] for k,v in temperature.items()}
+
     temperature = xr.DataArray(
         list(temperature.values()),
-        coords=_temperature_coords(tuple(temperature.keys()))
+        coords=_temperature_coords(tuple(temperature.keys())),
+        attrs={'units': 'C'}
     )
 
     return {'temperature': temperature, 'compute_status': compute_status}
