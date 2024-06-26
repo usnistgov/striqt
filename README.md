@@ -10,7 +10,7 @@ The following setup procedure creates a python environment tailored based on har
 
 1. Ensure that `conda` is installed (or `mamba`/`micromamba`, substituted in what follows)
 2. Clone this repository
-3. Select a predefined environment based on use case and hardware:
+3. Select a predefined environment based on use-case and hardware:
     - `environments/post-analysis-cpu.yml`: Cross-platform analysis
     - `environments/post-analysis-cpu-cuda.yml`: Analysis with added CUDA-specific GPU acceleration
     - `environments/edge-airt-cuda.yml`: Real-time edge sensing with AirT/AirStack radios
