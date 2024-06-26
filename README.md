@@ -8,22 +8,20 @@ The following setup procedure needs to be followed to create an environment that
 In order to get started:
 1. Ensure that `conda` is installed (or substitute `mamba`/`micromamba` if preferred)
 2. Clone this repository
-3. Create one conda environment to suit your use case and hardware:
+3. Select and create a conda environment for your use case and hardware:
+    ```sh
+        conda env create -f environments/<name.yml>
+    ```
+
+    Replace `<name.yml>` with one of the following:
+
     - For post-analysis and testing:
-        - Cross-platform CPU analysis:
-            ```sh
-                conda env create -f environments/post-analysis-cpu.yml
-            ```
-        - Cross-platform CPU, plus GPU acceleration with CUDA:
-            ```sh
-                conda env create -f environments/post-analysis-cpu-cuda.yml
-            ```
+        - `post-analysis-cpu.yml`: Cross-platform CPU analysis:
+        - `post-analysis-cpu-cuda.yml`: Cross-platform CPU _and_ GPU acceleration with CUDA
 
     - For real-time sensor acquisition and edge analysis:
-        - AirT/AirStack SDR platform with CUDA GPU acceleration:
-            ```sh
-                conda env create -f environments/edge-airt-cuda.yml
-            ```
+        - `edge-airt-cuda.yml`: Real-time edge sensor on AirT/AirStack SDR platform
+            
 
 4. Activate the environment by selecting the `gpu-spectrum-sensor` virtual environment in your IDE, or run the following to use in a command line environment:
 
