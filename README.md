@@ -1,4 +1,4 @@
-This is a base library and collection of scripts oriented toward GPU-accelerated real-time RF environmental monitoring with support for software-defined radios.
+This is a base library and collection of scripts oriented toward GPU-accelerated real-time RF environmental monitoring with support for software-defined radios. The lowest-level routines are implemented separetely in (iqwaveform)[https://github.com/dgkuester/iqwaveform`], which allow interchangable operation on `numpy` or `cupy` arrays for transparent evaluation on either CPU or CUDA GPUs.  
 
 ### Development status
 This is alpha software. The API may change frequently without warning.
