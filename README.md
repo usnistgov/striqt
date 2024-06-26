@@ -22,7 +22,7 @@ In order to get started:
     - For real-time SDR acquisition and analysis:
         - Jetson TX2/AirStack with CUDA GPU acceleration:
             ```sh
-                conda env create -f environments/cuda.yml
+                conda env create -f environments/sdr-airt-cuda.yml
             ```
 
 4. Activate the environment by selecting the `gpu-spectrum-sensor` virtual environment in your IDE, or run the following to use in a command line environment:
