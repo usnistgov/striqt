@@ -498,14 +498,14 @@ def _compatible_filter_and_spectrum(sample_rate_Hz, filter_spec, persistence_kws
     sig2 = signature(persistence_spectrum).bind(None, **persistence_kws).arguments
     sig2['fft_size'] = round(sample_rate_Hz / persistence_kws['resolution'])
 
+    if sig1['window'] != 'hamming':
+        return False
+
     for arg in ('fft_size', 'window'):
         if sig1[arg] != sig2[arg]:
-            reuse_ola_stft = False
-            break
-    else:
-        reuse_ola_stft = True
+            return False
 
-    return reuse_ola_stft
+    return True
 
 
 def from_spec(
@@ -531,12 +531,12 @@ def from_spec(
     filter_spec = dict(filter_spec)
     analysis_spec = dict(analysis_spec)
 
-    # first: everything that doesn't need the filter output
-    # filter_stream = array_stream(iq)
-    # spectrum_stream = array_stream(iq)
+    stream = array_stream(iq, non_blocking=True, null=True, ptds=True)
+    stream.use()
 
     cache = {}
 
+    # first: everything that doesn't need the filter output
     if filter_spec is not None and 'persistence_spectrum' in analysis_spec:
         reuse_ola_stft = _compatible_filter_and_spectrum(sample_rate_Hz, filter_spec, analysis_spec['persistence_spectrum'])
     else:
@@ -548,12 +548,12 @@ def from_spec(
         **filter_spec
     )
 
-    _sync_if_cuda(iq)
+    stream.synchronize()
 
     # then: analyses that need filtered output
     results = {}
 
-    for func in (persistence_spectrum, power_time_series, cyclic_channel_power, amplitude_probability_distribution, iq_waveform):
+    for func in (power_time_series, cyclic_channel_power, amplitude_probability_distribution, iq_waveform, persistence_spectrum):
         # check for each allowed function in the specification
         try:
             func_kws = analysis_spec.pop(func.__name__)
@@ -561,6 +561,7 @@ def from_spec(
             pass
         else:
             if func is persistence_spectrum and 'stft' in cache:
+                # for now, this is hard-coded to assume overlap factor of 2 (hamming window)
                 x = cache['stft'][::2]
                 domain = 'frequency'
             else:
