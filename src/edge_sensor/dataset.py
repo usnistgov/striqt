@@ -1,8 +1,13 @@
-""""""
+"""
+Package analysis of a given waveform into an xarray.Dataset,
+based a specification for calls to channel_analysis.waveform.
+"""
 
 from array_api_strict._typing import Array
 from array_api_compat import is_cupy_array
-from iqwaveform.util import array_namespace, array_stream, set_input_domain
+from iqwaveform.util import set_input_domain
+from inspect import signature
+import xarray as xr
 
 from channel_analysis.waveform import (
     ola_filter,
@@ -13,8 +18,6 @@ from channel_analysis.waveform import (
     iq_waveform,
 )
 
-from inspect import signature
-import xarray as xr
 
 from . import metadata
 
@@ -43,7 +46,6 @@ def _compatible_filter_and_spectrum(sample_rate_Hz, filter_spec, persistence_kws
 def _sync_if_cuda(obj: Array):
     if is_cupy_array(obj):
         import cupy
-
         cupy.cuda.Stream.null.synchronize()
 
 
@@ -58,20 +60,15 @@ def from_spec(
     },
     analysis_spec: dict[str, dict[str]] = {},
 ):
-    xp = array_namespace(iq)
 
     acq_kws = {
         'sample_rate_Hz': sample_rate_Hz,
         'analysis_bandwidth_Hz': analysis_bandwidth_Hz,
     }
 
-    iq_in = iq
     filter_metadata = filter_spec
     filter_spec = dict(filter_spec)
     analysis_spec = dict(analysis_spec)
-
-    stream = array_stream(iq, non_blocking=True, null=True, ptds=True)
-    stream.use()
 
     cache = {}
 
@@ -91,7 +88,7 @@ def from_spec(
         **filter_spec,
     )
 
-    stream.synchronize()
+    _sync_if_cuda()
 
     # then: analyses that need filtered output
     results = {}
@@ -110,6 +107,7 @@ def from_spec(
             pass
         else:
             if func is persistence_spectrum and 'stft' in cache:
+                # TODO: generalize this?
                 # for now, this is hard-coded to assume overlap factor of 2 (hamming window)
                 x = cache['stft'][::2]
                 domain = 'frequency'
