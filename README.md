@@ -9,7 +9,7 @@ The source code layout is oriented toward execution of notebooks/scripts in cond
 The following setup procedure creates a python environment tailored based on hardware. This includes an editable install of the internal python modules implemented in `src/`. The only supported version of python is 3.9, in order to accommodate broad CUDA platform support. 
 
 In order to get started:
-1. Ensure that `conda` is installed (or substitute `mamba`/`micromamba`)
+1. Ensure that `conda` is installed (or substitute `mamba`/`micromamba` in what follows)
 2. Clone this repository
 3. Select and create a conda environment for your use case and hardware:
     ```sh
