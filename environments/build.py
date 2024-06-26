@@ -1,4 +1,4 @@
-""" auto-generate conda environment files by inheriting layers """
+""" merge conda environment files to avoid manual duplication of inherited dependencies """
 
 from ruamel.yaml import YAML  # use of ruamel.yaml preserves comments
 import sys
@@ -32,7 +32,7 @@ recipe_paths = list(RECIPE_DIR.glob('*.yml')) + list(RECIPE_DIR.glob('*.yaml'))
 if len(recipe_paths) == 0:
     print('no recipes', file=sys.stderr)
 
-
+# merge layers in recipes
 for recipe_path in recipe_paths:
     recipe = yaml.load(open(recipe_path, 'r'))
     env = read_layer(recipe_path, recipe['layers'][0])
