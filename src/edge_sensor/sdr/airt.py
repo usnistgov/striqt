@@ -66,7 +66,7 @@ class AirTCapture:
         # Read the samples from the data buffer
         sr = self.sdr.readStream(
             self.rx_stream,
-            [self.rx_buff[:2*N]],
+            [self.rx_buff[: 2 * N]],
             N,
             timeoutUs=int(self.timeout * 1e6),
         )
@@ -91,7 +91,7 @@ class AirTCapture:
             return None
 
         # what follows is some acrobatics to minimize new memory allocation and copy
-        buff_int16 = cp.array(self.rx_buff, copy=False)[: 2*N]
+        buff_int16 = cp.array(self.rx_buff, copy=False)[: 2 * N]
 
         # 1. the same memory buffer, interpreted as float32 without casting
         buff_float32 = cp.array(self.rx_buff, copy=False).view('float32')

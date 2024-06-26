@@ -30,13 +30,13 @@ def _find_repo_in_parents(path: Path) -> Repo:
         try:
             return _find_repo_in_parents(path.parent)
         except NotGitRepository:
-            ex.args = (ex.args[0] + ' (and parent directories)')
+            ex.args = ex.args[0] + ' (and parent directories)'
             raise ex
 
 
-def _filter_types(obj: dict|list|tuple):
+def _filter_types(obj: dict | list | tuple):
     if isinstance(obj, dict):
-        return {k: _filter_types(v) for k,v in obj.items()}
+        return {k: _filter_types(v) for k, v in obj.items()}
     elif isinstance(obj, (list, tuple)):
         return [_filter_types(v) for v in obj]
     elif isinstance(obj, Enum) or obj is None:
@@ -78,7 +78,7 @@ def _compute_status_meta(keys: tuple):
             'disk_size': _get_psutil('disk_usage', '.')['total'],
             'swap_size': _get_psutil('swap_memory')['total'],
             'mem_size': _get_psutil('virtual_memory')['total'],
-        }
+        },
     }
 
 
@@ -87,7 +87,7 @@ def git_unstaged_changes(repo_or_path='.'):
         repo = _find_repo_in_parents(repo_or_path)
     except NotGitRepository:
         return []
-    
+
     if repo is None:
         return []
 
@@ -100,7 +100,7 @@ def build_metadata(search_path='.'):
         repo = _find_repo_in_parents(search_path)
     except NotGitRepository:
         return {}
-    
+
     if repo is None:
         return {}
 
@@ -108,7 +108,7 @@ def build_metadata(search_path='.'):
         'git_remote': repo.get_config().get(('remote', 'origin'), 'url').decode(),
         # 'git_browse': None,
         'git_commit': repo.head().decode(),
-        # 'git_unstaged_changes': git_unstaged_changes('.')        
+        # 'git_unstaged_changes': git_unstaged_changes('.')
         'sensor_uuid': hex(uuid.getnode()),
         'metadata_version': METADATA_VERSION,
     }
@@ -131,16 +131,16 @@ def build_diagnostic_data(temperature={}):
 
     compute_status = xr.DataArray(
         list(compute_status.values()),
-        **_compute_status_meta(tuple(compute_status.keys()))
+        **_compute_status_meta(tuple(compute_status.keys())),
     )
 
-    temperature = _get_psutil('sensors_temperatures') or {}   
-    temperature = {k: v[0][1] for k,v in temperature.items()}
+    temperature = _get_psutil('sensors_temperatures') or {}
+    temperature = {k: v[0][1] for k, v in temperature.items()}
 
     temperature = xr.DataArray(
         list(temperature.values()),
         coords=_temperature_coords(tuple(temperature.keys())),
-        attrs={'units': 'C'}
+        attrs={'units': 'C'},
     )
 
     return {'temperature': temperature, 'compute_status': compute_status}
