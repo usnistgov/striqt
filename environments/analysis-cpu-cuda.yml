@@ -1,0 +1,35 @@
+# the base environment that supports CPU computations (no GPU or SDRs)
+
+channels:
+- nvidia
+- conda-forge
+dependencies:
+  # python3.9 is the most recent supported by the air-t platform board
+- python=3.9
+- pip
+- jupyter
+- numba
+- pandas<2
+- scipy>=1.9.2
+- seaborn>=0.12
+- numpy>=1.21,<2
+- matplotlib-base>=3.7
+- numexpr>=2.7
+- scikit-learn>=1.1,<2.0
+- msgspec
+- pyppeteer
+- ipympl
+- numexpr>=2.8.4
+- humanfriendly
+- ruff
+- xarray
+- zarr
+- dask
+- dulwich
+- ruamel.yaml
+- cupy
+- pip:
+  - iqwaveform @ git+https://github.com/usnistgov/iqwaveform
+
+      # allows imports from the src/ directory in this repo
+  - -e ..

@@ -1,0 +1,5 @@
+# the CPU computation requirements plus CUDA (GPU compute)
+
+layers:
+  - layers/base.yml
+  - layers/add-conda-forge-cuda.yml

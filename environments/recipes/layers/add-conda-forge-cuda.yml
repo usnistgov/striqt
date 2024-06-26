@@ -1,0 +1,8 @@
+# add GPU compute via CUDA
+
+channels:
+  - nvidia
+  - conda-forge
+
+dependencies:
+  - cupy
