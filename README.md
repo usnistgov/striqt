@@ -1,9 +1,12 @@
 This is a base library and collection of scripts oriented toward CUDA-accelerated RF monitoring with software-defined radios.
 
+### Development status
+
+
 ### Environment setup
 The source code layout is oriented toward execution of notebooks/scripts in conda environments.
 
-The following setup procedure needs to be followed to create an environment that across operating systems and including the software-defined radios for deployment. This creates a virtual environment with the only supported version of python (3.9), a mixture of conda and pip package dependencies, and an editable install that allows imports from subdirectories of `src/`. 
+The following setup procedure creates a python environment tailored based on hardware. This includes an editable install of the internal python modules implemented in `src/`. The only supported version of python is 3.9, in order to accommodate broad CUDA platform support. 
 
 In order to get started:
 1. Ensure that `conda` is installed (or substitute `mamba`/`micromamba` if preferred)
@@ -16,8 +19,8 @@ In order to get started:
     Replace `<name.yml>` with one of the following:
 
     - For post-analysis and testing:
-        - `post-analysis-cpu.yml`: Cross-platform CPU analysis:
-        - `post-analysis-cpu-cuda.yml`: Cross-platform CPU _and_ GPU acceleration with CUDA
+        - `post-analysis-cpu.yml`: Cross-platform CPU analysis
+        - `post-analysis-cpu-cuda.yml`: Cross-platform CPU plus CUDA GPU acceleration
 
     - For real-time sensor acquisition and edge analysis:
         - `edge-airt-cuda.yml`: Real-time edge sensor on AirT/AirStack SDR platform
