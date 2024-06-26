@@ -1,6 +1,6 @@
 # the base environment that supports CPU computations (no GPU and no SDR hardware support)
 
-name: spectrum-sensor-edge-analysis
+name: gpu-spectrum-sensor
 
 channels:
   - conda-forge

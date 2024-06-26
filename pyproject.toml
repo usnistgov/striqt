@@ -1,7 +1,7 @@
 # This is here to allow an editable install of modules in src/ toshare code between notebooks
 
 [project]
-name = "spectrum-sensor-edge-analysis"
+name = "gpu-spectrum-sensor"
 version = "0.0"
 description = "exploring the analysis of IQ in aggregate waveforms"
 authors = [
