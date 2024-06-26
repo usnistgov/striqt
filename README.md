@@ -8,27 +8,22 @@ The following setup procedure needs to be followed to create an environment that
 In order to get started:
 1. Ensure that `conda` is installed (or substitute `mamba`/`micromamba` if preferred)
 2. Clone this repository
-3. Install one an environment depending on your available GPU resources:
+3. Create a conda environment to suit your use case and hardware:
+    - For post-analysis and testing:
+        - Cross-platform CPU analysis:
+            ```sh
+                conda env create -f environments/analysis-cpu.yml
+            ```
+        - Cross-platform CPU, plus GPU acceleration with CUDA:
+            ```sh
+                conda env create -f environments/analysis-cpu-cuda.yml
+            ```
 
-    - Cross-platform support for CPUs:
-        Otherwise:
-        ```sh
-            conda env create -f environments/cpu-only.yml
-        ```
-
-    - Added CUDA GPU support on PCs:
-
-        ```sh
-            conda env create -f environments/cuda.yml
-        ```
-
-    - Added CUDA GPU support on Jetson TX2/AirStack:
-
-        ```sh
-            conda env create -f environments/cuda.yml
-        ```
-
-    Other environments oriented toward other GPU processing libraries are known not to work.
+    - For real-time SDR acquisition and analysis:
+        - Jetson TX2/AirStack with CUDA GPU acceleration:
+            ```sh
+                conda env create -f environments/cuda.yml
+            ```
 
 4. Activate the environment by selecting the `gpu-spectrum-sensor` virtual environment in your IDE, or run the following to use in a command line environment:
 
