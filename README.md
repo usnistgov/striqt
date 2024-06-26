@@ -30,8 +30,8 @@ In order to get started:
 
     Other environments oriented toward other GPU processing libraries are known not to work.
 
-4. Activate the environment by selecting the `spectrum-sensor-edge-analysis` virtual environment in your IDE, or run the following to use in a command line environment:
+4. Activate the environment by selecting the `gpu-spectrum-sensor` virtual environment in your IDE, or run the following to use in a command line environment:
 
     ```sh
-        conda activate spectrum-sensor-edge-analysis
+        conda activate gpu-spectrum-sensor
     ```

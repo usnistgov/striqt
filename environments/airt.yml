@@ -1,6 +1,6 @@
 # the CPU computation requirements plus CUDA (GPU compute) and the proprietary AirStack SDR drivers
 
-name: spectrum-sensor-edge-analysis
+name: gpu-spectrum-sensor
 
 channels:
   - nvidia
