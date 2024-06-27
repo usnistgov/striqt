@@ -58,7 +58,7 @@ def _asdict(obj):
     return _filter_types(ret)
 
 
-def _get_psutil(name, *args, **kws):
+def _psutil_to_dict(name, *args, **kws):
     try:
         func = getattr(psutil, name)
     except AttributeError:
@@ -75,14 +75,19 @@ def _compute_status_meta(keys: tuple):
         'coords': xr.Coordinates({'compute_status_category': list(keys)}),
         'attrs': {
             'hostname': socket.gethostname(),
-            'disk_size': _get_psutil('disk_usage', '.')['total'],
-            'swap_size': _get_psutil('swap_memory')['total'],
-            'mem_size': _get_psutil('virtual_memory')['total'],
+            'disk_size': _psutil_to_dict('disk_usage', '.')['total'],
+            'swap_size': _psutil_to_dict('swap_memory')['total'],
+            'mem_size': _psutil_to_dict('virtual_memory')['total'],
         },
     }
 
 
-def git_unstaged_changes(repo_or_path='.'):
+def git_unstaged_changes(repo_or_path='.') -> list[str]:
+    """returns a list of files in a git repository with unstaged changes.
+
+    Args:
+        repo_or_path: root or child path to locate the repository
+    """
     try:
         repo = _find_repo_in_parents(repo_or_path)
     except NotGitRepository:
@@ -124,9 +129,9 @@ def _temperature_coords(keys: tuple):
 
 def build_diagnostic_data(temperature={}):
     compute_status = {
-        'disk_usage_percentage': _get_psutil('disk_usage', '.')['percent'],
-        'swap_usage_percentage': _get_psutil('swap_memory')['percent'],
-        'mem_usage_percentage': _get_psutil('virtual_memory')['percent'],
+        'disk_usage_percentage': _psutil_to_dict('disk_usage', '.')['percent'],
+        'swap_usage_percentage': _psutil_to_dict('swap_memory')['percent'],
+        'mem_usage_percentage': _psutil_to_dict('virtual_memory')['percent'],
     }
 
     compute_status = xr.DataArray(
@@ -134,7 +139,7 @@ def build_diagnostic_data(temperature={}):
         **_compute_status_meta(tuple(compute_status.keys())),
     )
 
-    temperature = _get_psutil('sensors_temperatures') or {}
+    temperature = _psutil_to_dict('sensors_temperatures') or {}
     temperature = {k: v[0][1] for k, v in temperature.items()}
 
     temperature = xr.DataArray(
