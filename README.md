@@ -1,4 +1,4 @@
-This is a base library and collection of scripts oriented toward GPU-accelerated real-time RF environmental monitoring with support for software-defined radios. The lowest-level routines are implemented separetely in [iqwaveform](https://github.com/dgkuester/iqwaveform), which allow interchangable operation on `numpy` or `cupy` arrays to transparently evaluate on either a CPU or CUDA GPU.
+This is a collection of python scripts and underlying libraries that enable GPU-accelerated real-time RF environmental monitoring with support for software-defined radios. The lowest-level routines are implemented separetely in [iqwaveform](https://github.com/dgkuester/iqwaveform), which allow interchangable operation on `numpy` or `cupy` arrays to transparently evaluate on either a CPU or CUDA GPU.
 
 ### Development status
 This is alpha software. The API may change frequently without warning.
@@ -19,5 +19,5 @@ The following setup procedure creates a python environment tailored based on har
         conda env create -f <name.yml>
     ```
 4. Activate:
-    - For IDEs, select the `gpu-spectrum-sensor` virtual environment 
+    - For IDEs, select the `flex-spectrum-sensor` virtual environment 
     - For a command line, `conda activate gpu-spectrum-sensor`

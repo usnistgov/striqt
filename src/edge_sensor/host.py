@@ -100,7 +100,7 @@ def git_unstaged_changes(repo_or_path='.') -> list[str]:
     return [n.decode() for n in names]
 
 
-def build_metadata(search_path='.'):
+def host_metadata(search_path='.'):
     try:
         repo = _find_repo_in_parents(search_path)
     except NotGitRepository:
@@ -127,7 +127,12 @@ def _temperature_coords(keys: tuple):
     return xr.Coordinates({'temperature_sensor': list(keys)})
 
 
-def build_diagnostic_data(temperature={}):
+@lru_cache(8)
+def _temperature_coords(keys: tuple):
+    return xr.Coordinates({'temperature_sensor': list(keys)})
+
+
+def host_index_variables(temperature={}):
     compute_status = {
         'disk_usage_percentage': _psutil_to_dict('disk_usage', '.')['percent'],
         'swap_usage_percentage': _psutil_to_dict('swap_memory')['percent'],

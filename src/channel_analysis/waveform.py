@@ -6,38 +6,14 @@ from functools import lru_cache
 import numpy as np
 from scipy import signal
 from iqwaveform.power_analysis import iq_to_cyclic_power
-from iqwaveform.util import array_namespace
+from iqwaveform.util import Array, array_namespace, set_input_domain
 from iqwaveform import fourier
 import xarray as xr
 import pandas as pd
-from array_api_strict._typing import Array
 from array_api_compat import is_cupy_array, is_numpy_array, is_torch_array
 from dataclasses import dataclass
 from collections import UserDict
-
-
-@lru_cache
-def equivalent_noise_bandwidth(window: str | tuple[str, float], N):
-    """return the equivalent noise bandwidth (ENBW) of a window, in bins"""
-    w = iqwaveform.fourier._get_window(window, N)
-    return len(w) * np.sum(w**2) / np.sum(w) ** 2
-
-
-def _to_maybe_nested_numpy(obj: tuple | list | dict | Array):
-    """convert an array, or a container of arrays, into a numpy array (or container of numpy arrays)"""
-
-    if isinstance(obj, (tuple, list)):
-        return [_to_maybe_nested_numpy(item) for item in obj]
-    elif isinstance(obj, dict):
-        return [_to_maybe_nested_numpy(item) for item in obj.values()]
-    elif is_torch_array(obj):
-        return obj.cpu()
-    elif is_cupy_array(obj):
-        return obj.get()
-    elif is_numpy_array(obj):
-        return obj
-    else:
-        raise TypeError(f'obj type {type(obj)} is unrecognized')
+from .sources import WaveformSource
 
 
 @dataclass
@@ -65,6 +41,36 @@ class ChannelAnalysisResult(UserDict):
 
 
 @lru_cache
+def equivalent_noise_bandwidth(window: str | tuple[str, float], N):
+    """return the equivalent noise bandwidth (ENBW) of a window, in bins"""
+    w = iqwaveform.fourier._get_window(window, N)
+    return len(w) * np.sum(w**2) / np.sum(w) ** 2
+
+
+def _to_maybe_nested_numpy(obj: tuple | list | dict | Array):
+    """convert an array, or a container of arrays, into a numpy array (or container of numpy arrays)"""
+
+    if isinstance(obj, (tuple, list)):
+        return [_to_maybe_nested_numpy(item) for item in obj]
+    elif isinstance(obj, dict):
+        return [_to_maybe_nested_numpy(item) for item in obj.values()]
+    elif is_torch_array(obj):
+        return obj.cpu()
+    elif is_cupy_array(obj):
+        return obj.get()
+    elif is_numpy_array(obj):
+        return obj
+    else:
+        raise TypeError(f'obj type {type(obj)} is unrecognized')
+
+
+def _analysis_parameter_kwargs(locals_: dict, omit=('iq', 'source', 'out')) -> dict:
+    """return the analysis parameters from the locals() evaluated at the beginning of analysis function"""
+
+    return {k: v for k,v in locals_.items() if k not in omit}
+
+
+@lru_cache
 def _power_time_series_coords(
     detectors: tuple[str], detector_period: float, length: int
 ):
@@ -88,13 +94,12 @@ def _power_time_series_coords(
 
 def power_time_series(
     iq,
+    source: WaveformSource,
     *,
-    sample_rate_Hz: float,
-    analysis_bandwidth_Hz: float,
     detector_period: float,
     detectors=('rms', 'peak'),
 ) -> callable[[], xr.DataArray]:
-    Ts = 1 / sample_rate_Hz
+    Ts = 1 / source.sample_rate
 
     xp = array_namespace(iq)
     dtype = xp.finfo(iq.dtype).dtype
@@ -111,7 +116,7 @@ def power_time_series(
     metadata = {
         'detector_period': detector_period,
         'label': 'Channel power',
-        'units': f'dBm/{analysis_bandwidth_Hz/1e6} MHz',
+        'units': f'dBm/{source.analysis_bandwidth/1e6} MHz',
     }
 
     return ChannelAnalysisResult(
@@ -121,7 +126,7 @@ def power_time_series(
 
 @lru_cache
 def _cyclic_channel_power_cyclic_coords(
-    sample_rate_Hz: float,
+    source: WaveformSource,
     cyclic_period: float,
     detector_period: float,
     detectors: list[str],
@@ -156,8 +161,7 @@ def _cyclic_channel_power_cyclic_coords(
 
 def cyclic_channel_power(
     iq,
-    sample_rate_Hz,
-    analysis_bandwidth_Hz,
+    source: WaveformSource,
     cyclic_period: float,
     detector_period: float,
     detectors: list[str] = ('rms', 'peak'),
@@ -170,7 +174,7 @@ def cyclic_channel_power(
 
     data_dict = iq_to_cyclic_power(
         iq,
-        1 / sample_rate_Hz,
+        1 / source.sample_rate,
         cyclic_period=cyclic_period,
         detector_period=detector_period,
         detectors=detectors,
@@ -178,7 +182,7 @@ def cyclic_channel_power(
     )
 
     coords = _cyclic_channel_power_cyclic_coords(
-        sample_rate_Hz,
+        source.sample_rate,
         cyclic_period=cyclic_period,
         detector_period=detector_period,
         detectors=detectors,
@@ -187,7 +191,7 @@ def cyclic_channel_power(
 
     metadata = {
         'label': 'Channel power',
-        'units': f'dBm/{analysis_bandwidth_Hz/1e6} MHz',
+        'units': f'dBm/{source.analysis_bandwidth/1e6} MHz',
         'cyclic_period': cyclic_period,
         'detector_period': detector_period,
     }
@@ -204,8 +208,7 @@ def _bin_apd(lo, hi, count, xp=np):
 
 @lru_cache
 def _amplitude_probability_distribution_coords(lo, hi, count, xp, units):
-    params = dict(locals())
-    del params['units']
+    params = _analysis_parameter_kwargs(locals(), omit=('units',))
 
     bins = _bin_apd(**params).astype(np.float32)
     array = xr.DataArray(
@@ -216,9 +219,8 @@ def _amplitude_probability_distribution_coords(lo, hi, count, xp, units):
 
 def amplitude_probability_distribution(
     iq,
+    source: WaveformSource,
     *,
-    sample_rate_Hz: float = None,
-    analysis_bandwidth_Hz: float,
     power_low: float,
     power_high: float,
     power_count: float,
@@ -230,7 +232,7 @@ def amplitude_probability_distribution(
 
     bins = _bin_apd(xp=xp, **bin_params)
     coords = _amplitude_probability_distribution_coords(
-        xp=np, units=f'dBm/{analysis_bandwidth_Hz/1e6} MHz', **bin_params
+        xp=np, units=f'dBm/{source.analysis_bandwidth/1e6} MHz', **bin_params
     )
 
     ccdf = iqwaveform.sample_ccdf(iqwaveform.envtodB(iq), bins).astype(dtype)
@@ -245,8 +247,7 @@ def amplitude_probability_distribution(
 
 @lru_cache
 def _persistence_spectrum_coords(
-    sample_rate_Hz: float,
-    analysis_bandwidth_Hz: float,
+    source: WaveformSource,
     fft_size: int,
     stat_names: tuple[str],
     overlap_frac: float = 0,
@@ -254,7 +255,7 @@ def _persistence_spectrum_coords(
     xp=np,
 ):
     freqs, _ = iqwaveform.fourier._get_stft_axes(
-        fs=sample_rate_Hz,
+        fs=source.sample_rate,
         fft_size=fft_size,
         time_size=1,
         overlap_frac=overlap_frac,
@@ -262,7 +263,7 @@ def _persistence_spectrum_coords(
     )
 
     if truncate:
-        which_freqs = np.abs(freqs) <= analysis_bandwidth_Hz / 2
+        which_freqs = np.abs(freqs) <= source.analysis_bandwidth / 2
         freqs = freqs[which_freqs]
 
     freqs = xr.DataArray(
@@ -282,9 +283,8 @@ def _persistence_spectrum_coords(
 
 def persistence_spectrum(
     x: Array,
+    source: WaveformSource,
     *,
-    sample_rate_Hz: float,
-    analysis_bandwidth_Hz=None,
     window,
     resolution: float,
     fractional_overlap=0,
@@ -293,19 +293,19 @@ def persistence_spectrum(
     dB=True,
 ) -> callable[[], xr.DataArray]:
     # TODO: support other persistence statistics, such as mean
-    if iqwaveform.power_analysis.isroundmod(sample_rate_Hz, resolution):
-        # need sample_rate_Hz/resolution to give us a counting number
-        fft_size = round(sample_rate_Hz / resolution)
+    if iqwaveform.power_analysis.isroundmod(source.sample_rate, resolution):
+        # need source.sample_rate/resolution to give us a counting number
+        fft_size = round(source.sample_rate / resolution)
     else:
-        raise ValueError('sample_rate_Hz/resolution must be a counting number')
+        raise ValueError('sample_rate/resolution must be a counting number')
 
     enbw = resolution * equivalent_noise_bandwidth(window, fft_size)
 
     metadata = {
         'window': window,
-        'resolution_Hz': resolution,
+        'resolution': resolution,
         'fractional_overlap': fractional_overlap,
-        'noise_bandwidth_Hz': enbw,
+        'noise_bandwidth': enbw,
         'fft_size': fft_size,
         'truncate': truncate,
         'label': 'Power spectral density',
@@ -314,8 +314,8 @@ def persistence_spectrum(
 
     data = fourier.persistence_spectrum(
         x,
-        fs=sample_rate_Hz,
-        bandwidth=analysis_bandwidth_Hz,
+        fs=source.sample_rate,
+        bandwidth=source.analysis_bandwidth,
         window=window,
         resolution=resolution,
         fractional_overlap=fractional_overlap,
@@ -325,8 +325,7 @@ def persistence_spectrum(
     )
 
     coords = _persistence_spectrum_coords(
-        sample_rate_Hz=sample_rate_Hz,
-        analysis_bandwidth_Hz=analysis_bandwidth_Hz,
+        source,
         fft_size=fft_size,
         overlap_frac=fractional_overlap,
         stat_names=tuple(quantiles),
@@ -340,50 +339,45 @@ def persistence_spectrum(
 
 @lru_cache(8)
 def _generate_iir_lpf(
-    passband_ripple_dB: float | int,
-    stopband_attenuation_dB: float | int,
-    bandwidth_Hz: float | int,
-    transition_bandwidth_Hz: float | int,
-    sample_rate_Hz: float | int,
+    source: WaveformSource,
+    *,
+    passband_ripple: float | int,
+    stopband_attenuation: float | int,
+    transition_bandwidth: float | int,
 ) -> np.ndarray:
     """
-    Generate an elliptic IIR low pass filter.
-
+    Generate an elliptic IIR low pass filter for complex-valued waveforms.
 
     Args:
-        passband_ripple_dB:
-            Maximum passband ripple below unity gain, in dB.
-        stopband_attenuation_dB:
-            Minimum stopband attenuation, in dB.
-        bandwidth_Hz:
-            Filter cutoff frequency, in Hz.
-        transition_bandwidth_Hz:
-            Passband-to-stopband transition width, in Hz.
-        sample_rate_Hz:
-            Sampling rate, in Hz.
+        passband_ripple:
+            Maximum amplitude ripple in the passband of the frequency-response below unity gain (dB)
+        stopband_attenuation:
+            Maximum amplitude ripple in the passband of the frequency-response below unity gain (dB).
+        transition_bandwidth:
+            Passband-to-stopband transition width (Hz)
 
     Returns:
         Second-order sections (sos) representation of the IIR filter.
     """
 
     order, wn = signal.ellipord(
-        bandwidth_Hz,
-        bandwidth_Hz + transition_bandwidth_Hz,
-        passband_ripple_dB,
-        stopband_attenuation_dB,
+        source.analysis_bandwidth/2,
+        source.analysis_bandwidth/2 + transition_bandwidth,
+        passband_ripple,
+        stopband_attenuation,
         False,
-        sample_rate_Hz,
+        source.sample_rate,
     )
 
     sos = signal.ellip(
         order,
-        passband_ripple_dB,
-        stopband_attenuation_dB,
+        passband_ripple,
+        stopband_attenuation,
         wn,
         'lowpass',
         False,
         'sos',
-        sample_rate_Hz,
+        source.sample_rate,
     )
 
     return sos
@@ -391,9 +385,8 @@ def _generate_iir_lpf(
 
 def iq_waveform(
     iq,
+    source: WaveformSource,    
     *,
-    sample_rate_Hz: float,
-    analysis_bandwidth_Hz=None,
     start_time_sec=None,
     stop_time_sec=None,
 ) -> callable[[], xr.DataArray]:
@@ -409,12 +402,12 @@ def iq_waveform(
     if start_time_sec is None:
         start = None
     else:
-        start = int(start_time_sec * sample_rate_Hz)
+        start = int(start_time_sec * source.sample_rate)
 
     if stop_time_sec is None:
         stop = None
     else:
-        stop = int(stop_time_sec * sample_rate_Hz)
+        stop = int(stop_time_sec * source.sample_rate)
 
     coords = xr.Coordinates({'iq_sample': pd.RangeIndex(start, stop, name='iq_sample')})
 
@@ -428,24 +421,18 @@ def iq_waveform(
 
 def iir_filter(
     iq: Array,
+    source: WaveformSource,
     *,
-    sample_rate_Hz: float,
-    bandwidth_Hz: float | int,
-    passband_ripple_dB: float | int,
-    stopband_attenuation_dB: float | int,
-    transition_bandwidth_Hz: float | int,
+    passband_ripple: float | int,
+    stopband_attenuation: float | int,
+    transition_bandwidth: float | int,
     out=None,
 ):
-    filter_kws = dict(locals())
-    for name in ('iq', 'bandwidth_Hz', 'out'):
-        del filter_kws[name]
+    xp = array_namespace(iq)
+    
+    filter_kws = _analysis_parameter_kwargs(locals())
 
-    sos = _generate_iir_lpf(
-        # scipy filter design assumes real-valued waveforms. for complex,
-        # account for this by halving the bandwidth
-        bandwidth_Hz=bandwidth_Hz / 2,
-        **filter_kws,
-    )
+    sos = _generate_iir_lpf(source, **filter_kws)
 
     if is_cupy_array(iq):
         from . import cuda_filter
@@ -459,20 +446,56 @@ def iir_filter(
 
 def ola_filter(
     iq: Array,
+    source: WaveformSource,
     *,
-    sample_rate_Hz: float,
-    bandwidth_Hz: float,
     fft_size: int,
     window: str | tuple = 'hamming',
     out=None,
     cache=None,
 ):
+    kwargs = _analysis_parameter_kwargs(locals())
     return fourier.ola_filter(
         iq,
-        fs=sample_rate_Hz,
-        passband=(-bandwidth_Hz / 2, bandwidth_Hz / 2),
-        fft_size=fft_size,
-        window=window,
-        out=out,
-        cache=cache,
+        fs=source.sample_rate,
+        passband=(-source.analysis_bandwidth / 2, source.analysis_bandwidth / 2),
+        **kwargs
     )
+
+
+def from_spec(
+    iq,
+    source: WaveformSource,
+    *,
+    analysis_spec: dict[str, dict[str]] = {},
+    cache = {}
+):
+
+    analysis_spec = dict(analysis_spec)
+
+    # then: analyses that need filtered output
+    results = {}
+
+    # evaluate each possible analysis function if specified
+    for func in (
+        power_time_series,
+        cyclic_channel_power,
+        amplitude_probability_distribution,
+        iq_waveform,
+        persistence_spectrum,
+    ):
+        try:
+            func_kws = analysis_spec.pop(func.__name__)
+        except KeyError:
+            pass
+        else:
+            results[func.__name__] = func(iq, source, **func_kws)
+
+    if len(analysis_spec) > 0:
+        # anything left refers to an invalid function invalid
+        raise ValueError(f'invalid analysis_spec key(s): {list(analysis_spec.keys())}')
+
+    # materialize as xarrays on the cpu
+    xarrays = {res.name: res.to_xarray() for res in results.values()}
+    # xarrays.update(metadata.build_index_variables())
+
+    return xr.Dataset(xarrays, attrs=source.build_metadata())

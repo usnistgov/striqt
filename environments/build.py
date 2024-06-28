@@ -35,11 +35,14 @@ if len(recipe_paths) == 0:
 # merge layers in recipes
 for recipe_path in recipe_paths:
     recipe = yaml.load(open(recipe_path, 'r'))
-    env = read_layer(recipe_path, recipe['layers'][0])
+    env = read_layer(recipe_path, recipe['inherit'][0])
     env_pip = pop_pip(env['dependencies']) or []
 
-    for layer_path in recipe['layers'][1:]:
+    for layer_path in recipe['inherit'][1:]:
         layer = read_layer(recipe_path, layer_path)
+
+        if 'name' in layer:
+            env.setdefault('name', layer)
 
         env['channels'] = ordered_merge(
             layer.get('channels', []), env.get('channels', [])

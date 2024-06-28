@@ -1,5 +1,7 @@
 # the base environment that supports CPU computations (no GPU or SDRs)
 
+name: flex-spectrum-sensor
+
 channels:
 - nvidia
 - conda-forge
@@ -8,6 +10,8 @@ dependencies:
 - python=3.9
 - pip
 - jupyter
+- ruff
+- frozendict
 - numba
 - pandas<2
 - scipy>=1.9.2
@@ -21,15 +25,25 @@ dependencies:
 - ipympl
 - numexpr>=2.8.4
 - humanfriendly
-- ruff
+- validators
+- greenlet
+- sqlalchemy
+- pyserial
+- feather-format
+- pyvisa
+- pyvisa-py
+- pyvisa-sim
+- sqlalchemy<1.5
 - xarray
 - zarr
 - dask
 - dulwich
 - ruamel.yaml
 - cupy
+- cython
 - pip:
   - iqwaveform @ git+https://github.com/usnistgov/iqwaveform
+  - labbench     # not available in conda-forge on arm64 or aarch64
 
       # allows imports from the src/ directory in this repo
   - -e ..

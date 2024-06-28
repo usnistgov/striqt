@@ -2,6 +2,6 @@
 
 # CPU computations (no GPU and no SDR hardware support)
 
-layers:
+inherit:
   - layers/base.yml
   - layers/add-airt.yml
