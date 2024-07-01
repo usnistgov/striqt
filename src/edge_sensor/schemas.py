@@ -2,13 +2,18 @@
 
 
 from __future__ import annotations
-import msgspec
+from msgspec import Struct, field
 from typing import Literal, Optional
-from channel_analysis import waveform
+from channel_analysis.waveform import _registry as analysis_registry
+from channel_analysis.waveform import _ConfigStruct as ChannelAnalysis
+
 from pathlib import Path
 
+def analysis_factory():
+    return analysis_registry.tospec()()
 
-class State(msgspec.Struct):
+
+class State(Struct):
     # RF and leveling
     center_frequency: float = 3710e6
     channel: int = 0
@@ -29,17 +34,16 @@ class State(msgspec.Struct):
     lo_gain: Optional[float] = None# dB
 
 
-class Acquisition(msgspec.Struct):
+class Acquisition(Struct):
     location: Optional[tuple[str,str,str]] = None
     timebase: 'builtin'|'gps' = 'builtin'
     cyclic_trigger: bool|float = False
     calibration_path: Optional[str] = None
     timeout: float = 5
-    defaults: State = msgspec.field(default_factory=State)
+    defaults: State = field(default_factory=State)
 
 
-class Runner(msgspec.Struct, omit_defaults=True):
-    acquisition: Acquisition = msgspec.field(default_factory=Acquisition)
-    sweep: list[State] = msgspec.field(default_factory=lambda: [State()])
-    channel_analysis: waveform._ConfigStruct = \
-        msgspec.field(default_factory=lambda: waveform._registry.tospec()())
+class Runner(Struct):
+    acquisition: Acquisition = field(default_factory=Acquisition)
+    sweep: list[State] = field(default_factory=lambda: [State()])
+    channel_analysis: ChannelAnalysis = field(default_factory=analysis_factory)
