@@ -1,19 +1,18 @@
-# Import Packages
 from __future__ import annotations
-import numpy as np
 import sys
-import SoapySDR
-from SoapySDR import SOAPY_SDR_RX, SOAPY_SDR_CS16, errToStr
-import cupy as cp
 import time
+import cupy as cp
+import numpy as np
 import numba
 import numba.cuda
 from iqwaveform.power_analysis import isroundmod
 from iqwaveform import fourier
+import SoapySDR
+from SoapySDR import SOAPY_SDR_RX, SOAPY_SDR_CS16, errToStr
 import labbench as lb
 import labbench.paramattr as attr
+
 from .base import HardwareSource
-import msgspec
 
 
 channel_kwarg = attr.method_kwarg.int('channel', min=0, max=1, help='port number')
