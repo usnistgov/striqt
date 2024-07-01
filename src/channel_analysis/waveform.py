@@ -15,15 +15,13 @@ from array_api_compat import is_cupy_array, is_numpy_array, is_torch_array
 from dataclasses import dataclass
 from collections import UserDict
 from .sources import WaveformSource
-from .config import registry as _registry
+from . import config
 
 import typing
 import msgspec
 
 TDecoratedFunc = typing.Callable[..., typing.Any]
 
-
-register_analysis = _registry.decorator_factory()
 
 @dataclass
 class ChannelAnalysisResult(UserDict):
@@ -101,7 +99,7 @@ def _power_time_series_coords(
     )
 
 
-@register_analysis
+@config.registry.include
 def power_time_series(
     iq,
     source: WaveformSource,
@@ -169,7 +167,7 @@ def _cyclic_channel_power_cyclic_coords(
     )
 
 
-@register_analysis
+@config.registry.include
 def cyclic_channel_power(
     iq,
     source: WaveformSource,
@@ -229,7 +227,7 @@ def _amplitude_probability_distribution_coords(lo, hi, count, xp, units):
     return xr.Coordinates({array.dims[0]: array})
 
 
-@register_analysis
+@config.registry.include
 def amplitude_probability_distribution(
     iq,
     source: WaveformSource,
@@ -294,7 +292,7 @@ def _persistence_spectrum_coords(
     return xr.Coordinates({stats.dims[0]: stats, freqs.dims[0]: freqs})
 
 
-@register_analysis
+@config.registry.include
 def persistence_spectrum(
     x: Array,
     source: WaveformSource,
@@ -397,7 +395,7 @@ def _generate_iir_lpf(
     return sos
 
 
-@register_analysis
+@config.registry.include
 def iq_waveform(
     iq,
     source: WaveformSource,    
@@ -478,27 +476,11 @@ def ola_filter(
     )
 
 
-def _get_spec(obj: str|dict|_ConfigStruct) -> _ConfigStruct:
-    """return a channel analysis specification from a yaml string,
-    dictionary of dictionaries, or channel analysis specification
-    """
-    struct = _registry.tospec()
-
-    if isinstance(obj, _ConfigStruct):
-        return obj
-    elif isinstance(obj, dict):
-        return struct(obj)
-    elif isinstance(obj, str):
-        return msgspec.yaml.decode(obj, type=struct)
-    else:
-        return TypeError('unrecognized type')
-
-
 def from_spec(
     iq,
     source: WaveformSource,
     *,
-    analysis_spec: str|dict|_ConfigStruct = {},
+    analysis_spec: str|dict|config._AnalysisConfig = {},
     cache = {}
 ):
 
@@ -507,13 +489,13 @@ def from_spec(
     # then: analyses that need filtered output
     results = {}
 
-    analysis_spec = _get_spec(analysis_spec)
+    analysis_spec = msgspec.to_builtins(config.from_any(analysis_spec))
 
     # evaluate each possible analysis function if specified
-    for func in _registry.keys():
+    for func in config.registry.keys():
         func_kws = analysis_spec.pop(func.__name__)
 
-        if func_kws is not None:
+        if func_kws:
             results[func.__name__] = func(iq, source, **func_kws)
 
     if len(analysis_spec) > 0:

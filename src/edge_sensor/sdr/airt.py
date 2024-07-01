@@ -120,7 +120,7 @@ class AirTSource(HardwareSource):
     def reset_counts(self):
         self.acquisition_counts = {'overflow': 0, 'exception': 0, 'total': 0}
 
-    def _read_stream(self, N, full_scale=True, raise_on_overflow=False, channel=0) -> cp.ndarray:
+    def _read_stream(self, N, raise_on_overflow=False, channel=0) -> cp.ndarray:
         if self.buffer is None or self.buffer.size < 4 * N:
             # create a buffer for received samples that can be shared across CPU<->GPU
             #     ref: https://github.com/cupy/cupy/issues/3452#issuecomment-903273011
@@ -159,17 +159,16 @@ class AirTSource(HardwareSource):
             if sr.ret == -4:
                 self.acquisition_counts['overflow'] += 1
                 total_info = f"{self.acquisition_counts['overflow']}/{self.acquisition_counts['total']}"
-                print(f'{time.perf_counter()}: overflow (total {total_info}')
+                raise IOError(f'{time.perf_counter()}: overflow (total {total_info}')
             else:
                 self.acquisition_counts['exceptions'] += 1
-                print('Error {}: {}'.format(sr.ret, errToStr(sr.ret)), sys.stderr)
-            return None
+                raise IOError(f'Error {sr.ret}: {errToStr(sr.ret)}')
 
         # what follows is some acrobatics to minimize new memory allocation and copy
         buff_int16 = cp.array(self.buffer, copy=False)[: 2 * N]
 
         # 1. the same memory buffer, interpreted as float32 without casting
-        buff_float32 = cp.array(self.buffer, copy=False).view('float32')
+        buff_float32 = cp.array(self.buffer, copy=False)[: 4 * N].view('float32')
 
         # 2. in-place casting from the int16 samples, filling in the extra allocation in self.buffer
         cp.copyto(buff_float32, buff_int16, casting='unsafe')
@@ -180,12 +179,13 @@ class AirTSource(HardwareSource):
         return buff_complex64
 
     def acquire(self, count, calibrate:bool=False):
-        if isroundmod(count*self._downsample, 1):
-            backend_count = round(count*self._downsample)
+        if isroundmod(count, 1):
+            # upsampled_count = count*self._downsample
+            backend_count = round(np.ceil(count*self._downsample))
         else:
             raise ValueError('duration must be an integer multiple of the sample rate')
 
-        iq = self._read_stream(backend_count, full_scale=(not calibrate))
+        iq = self._read_stream(backend_count)
 
         if calibrate:
             raise ValueError('calibration not yet supported')
