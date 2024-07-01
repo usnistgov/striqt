@@ -1,14 +1,14 @@
-"""mgspec structs for configuration"""
+"""mgspec structs for use as configuration schemas"""
 
 
 from __future__ import annotations
 from msgspec import Struct, field
 from typing import Optional
-from channel_analysis.waveform import _registry as analysis_registry
-from channel_analysis.waveform import _ConfigStruct as ChannelAnalysis
+from channel_analysis import waveform
 
-def analysis_factory():
-    return analysis_registry.tospec()()
+
+def _analysis_factory():
+    return waveform._registry.tospec()()
 
 
 class State(Struct):
@@ -44,4 +44,4 @@ class Acquisition(Struct):
 class Runner(Struct):
     acquisition: Acquisition = field(default_factory=Acquisition)
     sweep: list[State] = field(default_factory=lambda: [State()])
-    channel_analysis: ChannelAnalysis = field(default_factory=analysis_factory)
+    channel_analysis: waveform._ConfigStruct = field(default_factory=_analysis_factory)
