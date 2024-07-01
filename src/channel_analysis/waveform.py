@@ -15,19 +15,83 @@ from array_api_compat import is_cupy_array, is_numpy_array, is_torch_array
 from dataclasses import dataclass
 from collections import UserDict
 from .sources import WaveformSource
+
 import typing
 
-TDecoratedFunc = callable[..., typing.Any]
+import msgspec
+import inspect
 
-_registered_analysis_funcs = {}
+TDecoratedFunc = typing.Callable[..., typing.Any]
 
 
-def register_channel_analysis(func: TDecoratedFunc) -> TDecoratedFunc:
-    """register a channel analysis function for use in from_spec"""
+class _FunctionStruct(msgspec.Struct):
+    pass
 
-    _registered_analysis_funcs[func.__name__] = func
-    return func
 
+class _ConfigStruct(msgspec.Struct):
+    pass
+
+
+class KeywordSpecRegistry(UserDict):
+    @staticmethod
+    def _param_to_field(name, p: inspect.Parameter):
+        """convert an inspect.Parameter to a msgspec.Struct field"""
+        if p.annotation is inspect._empty:
+            raise TypeError(f'to register this function, keyword-only argument "{name}" of needs a type annotation')
+
+        if p.default is inspect._empty:
+            return (name, p.annotation)
+        else:
+            return (name, p.annotation, p.default)
+
+    def addfunc(self, func: callable):
+        """introspect keyword-only arguments in callable and add a corresponding msgspec.Struct to self"""
+        name = func.__name__
+
+        params = inspect.signature(func).parameters
+
+        kws = [
+            self._param_to_field(k, p)
+            for k, p in params.items()
+            if p.kind is inspect.Parameter.KEYWORD_ONLY
+        ]
+
+        struct = msgspec.defstruct(
+            name,
+            kws,
+            bases=(_FunctionStruct,)
+        )
+
+        # validate the struct
+        msgspec.json.schema(struct)
+
+        self[func] = struct
+
+    def decorator_factory(self) -> callable[[TDecoratedFunc],TDecoratedFunc]:
+        """return a callable """
+        def registry_decorator(func: TDecoratedFunc) -> TDecoratedFunc:
+            self.addfunc(func)
+            return func
+        
+        return registry_decorator
+
+    def tospec(self) -> msgspec.Struct:
+        """return a Struct representing a specification for calls to all registered functions"""
+        fields = [
+            (func.__name__, typing.Union[struct,None], None)
+            for func, struct in self.items()
+        ]
+
+        return msgspec.defstruct(
+            'channel_analysis',
+            fields,
+            bases=(_ConfigStruct,)
+        )
+
+
+_registry = KeywordSpecRegistry()
+
+register_analysis = _registry.decorator_factory()
 
 @dataclass
 class ChannelAnalysisResult(UserDict):
@@ -105,13 +169,13 @@ def _power_time_series_coords(
     )
 
 
-@register_channel_analysis
+@register_analysis
 def power_time_series(
     iq,
     source: WaveformSource,
     *,
     detector_period: float,
-    detectors=('rms', 'peak'),
+    detectors: tuple[str, ...]=('rms', 'peak'),
 ) -> callable[[], xr.DataArray]:
     Ts = 1 / source.sample_rate
 
@@ -173,10 +237,11 @@ def _cyclic_channel_power_cyclic_coords(
     )
 
 
-@register_channel_analysis
+@register_analysis
 def cyclic_channel_power(
     iq,
     source: WaveformSource,
+    *,
     cyclic_period: float,
     detector_period: float,
     detectors: tuple[str, ...] = ('rms', 'peak'),
@@ -232,7 +297,7 @@ def _amplitude_probability_distribution_coords(lo, hi, count, xp, units):
     return xr.Coordinates({array.dims[0]: array})
 
 
-@register_channel_analysis
+@register_analysis
 def amplitude_probability_distribution(
     iq,
     source: WaveformSource,
@@ -297,17 +362,17 @@ def _persistence_spectrum_coords(
     return xr.Coordinates({stats.dims[0]: stats, freqs.dims[0]: freqs})
 
 
-@register_channel_analysis
+@register_analysis
 def persistence_spectrum(
     x: Array,
     source: WaveformSource,
     *,
-    window,
+    window: typing.Any,
     resolution: float,
-    fractional_overlap=0,
     quantiles: tuple[float, ...],
-    truncate=True,
-    dB=True,
+    fractional_overlap:float=0,
+    truncate:bool=True,
+    dB:bool=True,
 ) -> callable[[], xr.DataArray]:
     # TODO: support other persistence statistics, such as mean
     if iqwaveform.power_analysis.isroundmod(source.sample_rate, resolution):
@@ -400,13 +465,13 @@ def _generate_iir_lpf(
     return sos
 
 
-@register_channel_analysis
+@register_analysis
 def iq_waveform(
     iq,
     source: WaveformSource,    
     *,
-    start_time_sec=None,
-    stop_time_sec=None,
+    start_time_sec:typing.Optional[float]=None,
+    stop_time_sec:typing.Optional[float]=None,
 ) -> callable[[], xr.DataArray]:
     """package the IQ recording with optional clipping"""
 
@@ -467,7 +532,7 @@ def ola_filter(
     source: WaveformSource,
     *,
     fft_size: int,
-    window: str | tuple = 'hamming',
+    window: typing.Any = 'hamming',
     out=None,
     cache=None,
 ):
@@ -481,11 +546,24 @@ def ola_filter(
     )
 
 
+def _get_spec(obj: str|dict|_ConfigStruct) -> _ConfigStruct:
+    struct = _registry.tospec()
+
+    if isinstance(obj, _ConfigStruct):
+        return obj
+    elif isinstance(obj, dict):
+        return struct(obj)
+    elif isinstance(obj, str):
+        return msgspec.yaml.decode(obj, type=struct)
+    else:
+        return TypeError('unrecognized type')
+
+
 def from_spec(
     iq,
     source: WaveformSource,
     *,
-    analysis_spec: dict[str, dict[str]] = {},
+    analysis_spec: str|dict|_ConfigStruct = {},
     cache = {}
 ):
 
@@ -494,14 +572,14 @@ def from_spec(
     # then: analyses that need filtered output
     results = {}
 
+    analysis_spec = _get_spec(analysis_spec)
+
     # evaluate each possible analysis function if specified
-    for name, func in _registered_analysis_funcs.items():
-        try:
-            func_kws = analysis_spec.pop(name)
-        except KeyError:
-            pass
-        else:
-            results[name] = func(iq, source, **func_kws)
+    for func in _registry.keys():
+        func_kws = analysis_spec.pop(func.__name__)
+
+        if func_kws is not None:
+            results[func.__name__] = func(iq, source, **func_kws)
 
     if len(analysis_spec) > 0:
         # anything left refers to an invalid function invalid

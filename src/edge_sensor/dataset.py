@@ -89,7 +89,7 @@ def from_spec(
 
     # materialize as xarrays on the cpu
     xarrays = {res.name: res.to_xarray() for res in results.values()}
-    xarrays.update(host.build_index_variables())
+    xarrays.update(host.host_index_variables())
 
     attrs = {
         'sample_rate': source.sample_rate,
