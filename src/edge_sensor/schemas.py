@@ -3,11 +3,9 @@
 
 from __future__ import annotations
 from msgspec import Struct, field
-from typing import Literal, Optional
+from typing import Optional
 from channel_analysis.waveform import _registry as analysis_registry
 from channel_analysis.waveform import _ConfigStruct as ChannelAnalysis
-
-from pathlib import Path
 
 def analysis_factory():
     return analysis_registry.tospec()()
@@ -31,7 +29,7 @@ class State(Struct):
 
     # external frequency conversion support
     if_frequency: Optional[float] = None # Hz (or none, for no IF frontend)
-    lo_gain: Optional[float] = None# dB
+    lo_gain: Optional[float] = 0 # dB (ignored for no IF frontend)
 
 
 class Acquisition(Struct):
