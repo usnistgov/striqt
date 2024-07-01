@@ -26,15 +26,14 @@ class KeywordConfigRegistry(UserDict):
     def _param_to_field(name, p: inspect.Parameter):
         """convert an inspect.Parameter to a msgspec.Struct field"""
         if p.annotation is inspect._empty:
-            raise TypeError(f'to register this function, keyword-only argument "{name}" of needs a type annotation')
+            raise TypeError(f'to register this function, keyword-only argument "{name}" needs a type annotation')
 
         if p.default is inspect._empty:
             return (name, p.annotation)
         else:
             return (name, p.annotation, p.default)
 
-    def addfunc(self, func: callable):
-        """introspect keyword-only arguments in callable and add a corresponding msgspec.Struct to self"""
+    def include(self, func: TDecoratedFunc) -> TDecoratedFunc:
         name = func.__name__
 
         params = inspect.signature(func).parameters
@@ -48,7 +47,7 @@ class KeywordConfigRegistry(UserDict):
         struct = msgspec.defstruct(
             name,
             kws,
-            bases=(self.field_cls,)
+            bases=(self.field_cls,) if self.field_cls else None
         )
 
         # validate the struct
@@ -56,13 +55,7 @@ class KeywordConfigRegistry(UserDict):
 
         self[func] = struct
 
-    def decorator_factory(self) -> callable[[TDecoratedFunc],TDecoratedFunc]:
-        """return a callable """
-        def registry_decorator(func: TDecoratedFunc) -> TDecoratedFunc:
-            self.addfunc(func)
-            return func
-        
-        return registry_decorator
+        return func
 
     def tospec(self) -> msgspec.Struct:
         """return a Struct representing a specification for calls to all registered functions"""
@@ -74,8 +67,24 @@ class KeywordConfigRegistry(UserDict):
         return msgspec.defstruct(
             'channel_analysis',
             fields,
-            bases=(_AnalysisConfig,)
+            bases=(self.parent_cls,) if self.parent_cls else None
         )
     
 
 registry = KeywordConfigRegistry(field_struct=_CallConfig, parent_struct=_AnalysisConfig)
+
+
+def from_any(obj: str|dict|registry.parent_cls) -> registry.parent_cls:
+    """return a channel analysis specification from a yaml string,
+    dictionary of dictionaries, or channel analysis specification
+    """
+    struct = registry.tospec()
+
+    if isinstance(obj, registry.parent_cls):
+        return obj
+    elif isinstance(obj, dict):
+        return struct(**obj)
+    elif isinstance(obj, str):
+        return msgspec.yaml.decode(obj, type=struct)
+    else:
+        return TypeError('unrecognized type')
