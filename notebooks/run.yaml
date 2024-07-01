@@ -1,16 +1,64 @@
-location:
-    # [lat, long asl] or 'gps'
-    coordinates: [39.9918, -105.27452, 1783.4]
+acquisition:
+    location:
+        # location triplet (or None for GPS automatic)
+        - 39.9918 # lat (deg)
+        - -105.27452 # long (deg)
+        - 1783.4 # ASL (m)
 
-timebase:
-    # "cpu" or "gps"
-    cpu
+    # eventually: "builtin" or "gps"
+    timebase: builtin
+
+    # start acquisition at a fixed time modulus (requires GPS sync)
+    cyclic_trigger: false # false (eventually: also float)
+
+    # calibration data path
+    calibration_path:
+
+    # these are overridden by 
+    defaults:
+        # RF
+        center_frequency: 3710e6
+        channel: 0 # (index)
+        gain: -10 # dB
+
+        # acquisition
+        duration: 0.1 # acquisition duration (sec)
+        sample_rate: 15.36e6
+
+        # filtering and resampling
+        analysis_bandwidth: 10e6
+        if_frequency: none # Hz (or none, for no IF frontend)
+        lo_shift: left # shift the LO outside the acquisition band: 'left', 'right', False
+        window: hamming
+
+
+sweep:
+    - center_frequency: 3710e6 # Hz
+      gain: 0 # dB
+      duration: 1
+    - center_frequency: 3730e6 # Hz
+      gain: 0 # dB
+      duration: 1
+    - center_frequency: 3750e6 # Hz
+      gain: 0 # dB
+      duration: 1
+    - center_frequency: 3770e6 # Hz
+      gain: 0 # dB
+      duration: 1
+    - center_frequency: 3790e6 # Hz
+      gain: 0 # dB
+      duration: 1
+    - center_frequency: 3810e6 # Hz
+      gain: 0 # dB
+      duration: 1
+
 
 channel_analysis:
     amplitude_probability_distribution:
-        power_count: 221
-        power_high: 15
-        power_low: -40
+        power_count: 221 # dBm
+        power_high: 15 # dBm
+        power_low: -40 # dBm
+
     cyclic_channel_power:
         cyclic_period: 0.01
         cyclic_statistics:
@@ -22,9 +70,11 @@ channel_analysis:
         detectors:
         - rms
         - peak
+
     iq_waveform:
         start_time_sec: 0
         stop_time_sec: 0.1
+
     persistence_spectrum:
         quantiles:
         - 0.1
@@ -37,13 +87,12 @@ channel_analysis:
         - 0.999
         - 1
         resolution: 15000.0
-        window: flattop
+        window:
+            - dpss
+            - 5
+        
     power_time_series:
         detector_period: 0.01
         detectors:
         - rms
         - peak
-filter:
-    ola:
-        fft_size: 1024
-        window: hamming

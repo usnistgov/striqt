@@ -13,6 +13,7 @@ from iqwaveform import fourier
 import labbench as lb
 import labbench.paramattr as attr
 from .base import HardwareSource
+import msgspec
 
 
 channel_kwarg = attr.method_kwarg.int('channel', min=0, max=1, help='port number')
