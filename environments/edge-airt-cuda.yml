@@ -12,7 +12,6 @@ dependencies:
 - pip
 - jupyter
 - ruff
-- frozendict
 - numba
 - pandas<2
 - scipy>=1.9.2
@@ -26,9 +25,9 @@ dependencies:
 - ipympl
 - numexpr>=2.8.4
 - humanfriendly
+- array-api-compat
 - validators
 - greenlet
-- sqlalchemy
 - pyserial
 - feather-format
 - pyvisa
