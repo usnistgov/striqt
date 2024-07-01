@@ -1,8 +1,7 @@
 acquisition:
     location:
-        # location triplet (or None for GPS automatic)
-        - 39.9918 # lat (deg)
-        - -105.27452 # long (deg)
+        - 39.991746624418745 # lat (deg)
+        - -105.26457779333897 # long (deg)
         - 1783.4 # ASL (m)
 
     # eventually: "builtin" or "gps"
@@ -11,8 +10,10 @@ acquisition:
     # start acquisition at a fixed time modulus (requires GPS sync)
     cyclic_trigger: false # false (eventually: also float)
 
-    # calibration data path
-    calibration_path:
+    # # calibration data path
+    # calibration_path:
+
+    timeout: 5 # sec
 
     # these are overridden by 
     defaults:
@@ -27,8 +28,9 @@ acquisition:
 
         # filtering and resampling
         analysis_bandwidth: 10e6
-        if_frequency: none # Hz (or none, for no IF frontend)
-        lo_shift: left # shift the LO outside the acquisition band: 'left', 'right', False
+        # if_frequency: none # Hz (or none, for no external frequency conversion)
+        # lo_gain: none # dB (or none, for no external frequency conversion)
+        lo_shift: left # digitally shift the LO out of the acquisition band: 'left', 'right', False
         window: hamming
 
 

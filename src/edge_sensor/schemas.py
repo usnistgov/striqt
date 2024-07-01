@@ -28,9 +28,10 @@ class State(msgspec.Struct):
 
 class Acquisition(msgspec.Struct):
     location: Optional[tuple[str,str,str]] = None
-    timebase: Literal['builtin']|Literal['gps'] = 'builtin'
+    timebase: 'builtin'|'gps' = 'builtin'
     cyclic_trigger: bool|float = False
     calibration_path: Optional[str] = None
+    timeout: float = 5
     defaults: State = msgspec.field(default_factory=State)
 
 
