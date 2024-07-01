@@ -1,10 +1,12 @@
 """mgspec structs for configuration"""
 
+
 from __future__ import annotations
 import msgspec
 from typing import Literal, Optional
 from channel_analysis import waveform
 from pathlib import Path
+
 
 class State(msgspec.Struct):
     # RF and leveling
