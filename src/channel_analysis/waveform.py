@@ -15,81 +15,13 @@ from array_api_compat import is_cupy_array, is_numpy_array, is_torch_array
 from dataclasses import dataclass
 from collections import UserDict
 from .sources import WaveformSource
+from .config import registry as _registry
 
 import typing
-
 import msgspec
-import inspect
 
 TDecoratedFunc = typing.Callable[..., typing.Any]
 
-
-class _FunctionStruct(msgspec.Struct):
-    pass
-
-
-class _ConfigStruct(msgspec.Struct):
-    pass
-
-
-class KeywordSpecRegistry(UserDict):
-    @staticmethod
-    def _param_to_field(name, p: inspect.Parameter):
-        """convert an inspect.Parameter to a msgspec.Struct field"""
-        if p.annotation is inspect._empty:
-            raise TypeError(f'to register this function, keyword-only argument "{name}" of needs a type annotation')
-
-        if p.default is inspect._empty:
-            return (name, p.annotation)
-        else:
-            return (name, p.annotation, p.default)
-
-    def addfunc(self, func: callable):
-        """introspect keyword-only arguments in callable and add a corresponding msgspec.Struct to self"""
-        name = func.__name__
-
-        params = inspect.signature(func).parameters
-
-        kws = [
-            self._param_to_field(k, p)
-            for k, p in params.items()
-            if p.kind is inspect.Parameter.KEYWORD_ONLY
-        ]
-
-        struct = msgspec.defstruct(
-            name,
-            kws,
-            bases=(_FunctionStruct,)
-        )
-
-        # validate the struct
-        msgspec.json.schema(struct)
-
-        self[func] = struct
-
-    def decorator_factory(self) -> callable[[TDecoratedFunc],TDecoratedFunc]:
-        """return a callable """
-        def registry_decorator(func: TDecoratedFunc) -> TDecoratedFunc:
-            self.addfunc(func)
-            return func
-        
-        return registry_decorator
-
-    def tospec(self) -> msgspec.Struct:
-        """return a Struct representing a specification for calls to all registered functions"""
-        fields = [
-            (func.__name__, typing.Union[struct,None], None)
-            for func, struct in self.items()
-        ]
-
-        return msgspec.defstruct(
-            'channel_analysis',
-            fields,
-            bases=(_ConfigStruct,)
-        )
-
-
-_registry = KeywordSpecRegistry()
 
 register_analysis = _registry.decorator_factory()
 
@@ -547,6 +479,9 @@ def ola_filter(
 
 
 def _get_spec(obj: str|dict|_ConfigStruct) -> _ConfigStruct:
+    """return a channel analysis specification from a yaml string,
+    dictionary of dictionaries, or channel analysis specification
+    """
     struct = _registry.tospec()
 
     if isinstance(obj, _ConfigStruct):
