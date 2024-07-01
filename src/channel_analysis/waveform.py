@@ -5,15 +5,26 @@ import iqwaveform
 from functools import lru_cache
 import numpy as np
 from scipy import signal
-from iqwaveform.power_analysis import iq_to_cyclic_power
 from iqwaveform.util import Array, array_namespace, set_input_domain
-from iqwaveform import fourier
+from iqwaveform import fourier, power_analysis
 import xarray as xr
 import pandas as pd
 from array_api_compat import is_cupy_array, is_numpy_array, is_torch_array
 from dataclasses import dataclass
 from collections import UserDict
 from .sources import WaveformSource
+import typing
+
+TDecoratedFunc = callable[..., typing.Any]
+
+_registered_analysis_funcs = {}
+
+
+def register_channel_analysis(func: TDecoratedFunc) -> TDecoratedFunc:
+    """register a channel analysis function for use in from_spec"""
+
+    _registered_analysis_funcs[func.__name__] = func
+    return func
 
 
 @dataclass
@@ -92,6 +103,7 @@ def _power_time_series_coords(
     )
 
 
+@register_channel_analysis
 def power_time_series(
     iq,
     source: WaveformSource,
@@ -159,6 +171,7 @@ def _cyclic_channel_power_cyclic_coords(
     )
 
 
+@register_channel_analysis
 def cyclic_channel_power(
     iq,
     source: WaveformSource,
@@ -172,7 +185,7 @@ def cyclic_channel_power(
     detectors = tuple(detectors)
     cyclic_statistics = tuple(cyclic_statistics)
 
-    data_dict = iq_to_cyclic_power(
+    data_dict = power_analysis.iq_to_cyclic_power(
         iq,
         1 / source.sample_rate,
         cyclic_period=cyclic_period,
@@ -217,6 +230,7 @@ def _amplitude_probability_distribution_coords(lo, hi, count, xp, units):
     return xr.Coordinates({array.dims[0]: array})
 
 
+@register_channel_analysis
 def amplitude_probability_distribution(
     iq,
     source: WaveformSource,
@@ -281,6 +295,7 @@ def _persistence_spectrum_coords(
     return xr.Coordinates({stats.dims[0]: stats, freqs.dims[0]: freqs})
 
 
+@register_channel_analysis
 def persistence_spectrum(
     x: Array,
     source: WaveformSource,
@@ -383,6 +398,7 @@ def _generate_iir_lpf(
     return sos
 
 
+@register_channel_analysis
 def iq_waveform(
     iq,
     source: WaveformSource,    
@@ -476,19 +492,13 @@ def from_spec(
     results = {}
 
     # evaluate each possible analysis function if specified
-    for func in (
-        power_time_series,
-        cyclic_channel_power,
-        amplitude_probability_distribution,
-        iq_waveform,
-        persistence_spectrum,
-    ):
+    for name, func in _registered_analysis_funcs.items():
         try:
-            func_kws = analysis_spec.pop(func.__name__)
+            func_kws = analysis_spec.pop(name)
         except KeyError:
             pass
         else:
-            results[func.__name__] = func(iq, source, **func_kws)
+            results[name] = func(iq, source, **func_kws)
 
     if len(analysis_spec) > 0:
         # anything left refers to an invalid function invalid
