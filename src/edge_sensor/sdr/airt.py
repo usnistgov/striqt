@@ -26,9 +26,6 @@ class AirTSource(HardwareSource):
     lo_offset = attr.value.float(0., min=-125e6, max=125e6, label='Hz', help='digital frequency shift of the RX center frequency')
     analysis_bandwidth = attr.value.float(None, min=1, label='Hz', help='bandwidth of the digital filter passband (or None to bypass)')
 
-    # TODO: should this be made dependent on backend_sample_rate?
-    sample_rate = attr.value.float(15.36e6, min=1, max=125e6, label='Hz', help='downsampled sample rate after processing')
-
     @attr.method.float(min=300e6, max=6000e6, label='Hz', help='direct conversion LO frequency of the RX')
     def lo_frequency(self, center_frequency: float = lb.Undefined):
         # there is only one RX LO, shared by both channels
@@ -44,7 +41,7 @@ class AirTSource(HardwareSource):
     )
 
     # TODO: check low bound
-    @attr.property.float(min=200e3, max=125e6, label='Hz', help='sample rate before resampling')
+    @attr.property.float(min=200e3, max=125e6, cache=True, label='Hz', help='sample rate before resampling')
     def backend_sample_rate(self, sample_rate: float = lb.Undefined):
         # there is only one RX sample clock, shared by both channels?
         return self.backend.getSampleRate(SOAPY_SDR_RX, 0)
@@ -61,6 +58,10 @@ class AirTSource(HardwareSource):
         label='Hz',
         help='sample rate of acquired waveform'
     )
+
+    @attr.property.float(sets=False, label='Hz', help='realized sample rate')
+    def realized_sample_rate(self):
+        return self.backend.getSampleRate(SOAPY_SDR_RX, 0)/self._downsample 
 
     @attr.method.bool(gets=False).setter
     @channel_kwarg    
