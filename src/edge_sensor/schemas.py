@@ -28,6 +28,7 @@ class State(msgspec.Struct):
     if_frequency: Optional[float] = None # Hz (or none, for no IF frontend)
     lo_gain: Optional[float] = None# dB
 
+
 class Acquisition(msgspec.Struct):
     location: Optional[tuple[str,str,str]] = None
     timebase: 'builtin'|'gps' = 'builtin'
