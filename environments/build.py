@@ -61,3 +61,4 @@ for recipe_path in recipe_paths:
         env['dependencies'].append({'pip': env_pip})
 
     yaml.dump(env, open(OUTPUT_DIR / recipe_path.name, 'w'))
+    print(f"wrote '{OUTPUT_DIR / recipe_path.name}'")

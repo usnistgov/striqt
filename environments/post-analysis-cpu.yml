@@ -11,7 +11,6 @@ dependencies:
 - pip
 - jupyter
 - ruff
-- frozendict
 
   # hard-coded on behalf of pip for iqwaveform
 - numba
@@ -27,11 +26,11 @@ dependencies:
 - ipympl
 - numexpr>=2.8.4
 - humanfriendly
+- array-api-compat
 
   # hard-coded on behalf of pip for labbench
 - validators
 - greenlet
-- sqlalchemy
 - pyserial
 - feather-format
 - pyvisa

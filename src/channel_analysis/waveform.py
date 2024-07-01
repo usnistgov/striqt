@@ -4,11 +4,13 @@ from __future__ import annotations
 import iqwaveform
 from functools import lru_cache
 import numpy as np
-from scipy import signal
-from iqwaveform.util import Array, array_namespace, set_input_domain
+from iqwaveform.util import Array, array_namespace
 from iqwaveform import fourier, power_analysis
+
+from scipy import signal
 import xarray as xr
 import pandas as pd
+
 from array_api_compat import is_cupy_array, is_numpy_array, is_torch_array
 from dataclasses import dataclass
 from collections import UserDict
@@ -141,8 +143,8 @@ def _cyclic_channel_power_cyclic_coords(
     source: WaveformSource,
     cyclic_period: float,
     detector_period: float,
-    detectors: list[str],
-    cyclic_statistics: list[str],
+    detectors: tuple[str, ...],
+    cyclic_statistics: tuple[str, ...],
 ):
     cyclic_statistic = xr.DataArray(
         list(cyclic_statistics),
@@ -177,8 +179,8 @@ def cyclic_channel_power(
     source: WaveformSource,
     cyclic_period: float,
     detector_period: float,
-    detectors: list[str] = ('rms', 'peak'),
-    cyclic_statistics: list[str] = ('min', 'mean', 'max'),
+    detectors: tuple[str, ...] = ('rms', 'peak'),
+    cyclic_statistics: tuple[str, ...] = ('min', 'mean', 'max'),
 ) -> callable[[], xr.DataArray]:
     metadata = {}
 
@@ -303,7 +305,7 @@ def persistence_spectrum(
     window,
     resolution: float,
     fractional_overlap=0,
-    quantiles: list[float],
+    quantiles: tuple[float, ...],
     truncate=True,
     dB=True,
 ) -> callable[[], xr.DataArray]:
@@ -470,6 +472,7 @@ def ola_filter(
     cache=None,
 ):
     kwargs = _analysis_parameter_kwargs(locals())
+
     return fourier.ola_filter(
         iq,
         fs=source.sample_rate,
