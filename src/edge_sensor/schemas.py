@@ -21,10 +21,12 @@ class State(msgspec.Struct):
 
     # filtering and resampling
     analysis_bandwidth: float = 10e6
-    if_frequency: Optional[float] = None # Hz (or none, for no IF frontend)
     lo_shift: Optional['left'|'right'] = 'left' # shift the LO outside the acquisition band
     window: 'hamming'|'blackman'|'blackmanharris' = 'hamming' # the COLA spectral window to use
 
+    # external frequency conversion support
+    if_frequency: Optional[float] = None # Hz (or none, for no IF frontend)
+    lo_gain: Optional[float] = None# dB
 
 class Acquisition(msgspec.Struct):
     location: Optional[tuple[str,str,str]] = None
