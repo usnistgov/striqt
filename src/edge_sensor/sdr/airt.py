@@ -1,5 +1,4 @@
 from __future__ import annotations
-import sys
 import time
 import cupy as cp
 import numpy as np
@@ -22,10 +21,26 @@ class AirTSource(HardwareSource):
     """fast simplified single-channel receive acquisition"""
 
     # TODO: sanity-check bounds
-    lo_offset = attr.value.float(0., min=-125e6, max=125e6, label='Hz', help='digital frequency shift of the RX center frequency')
-    analysis_bandwidth = attr.value.float(None, min=1, label='Hz', help='bandwidth of the digital filter passband (or None to bypass)')
+    lo_offset = attr.value.float(
+        0.0,
+        min=-125e6,
+        max=125e6,
+        label='Hz',
+        help='digital frequency shift of the RX center frequency',
+    )
+    analysis_bandwidth = attr.value.float(
+        None,
+        min=1,
+        label='Hz',
+        help='bandwidth of the digital filter passband (or None to bypass)',
+    )
 
-    @attr.method.float(min=300e6, max=6000e6, label='Hz', help='direct conversion LO frequency of the RX')
+    @attr.method.float(
+        min=300e6,
+        max=6000e6,
+        label='Hz',
+        help='direct conversion LO frequency of the RX',
+    )
     def lo_frequency(self, center_frequency: float = lb.Undefined):
         # there is only one RX LO, shared by both channels
         if center_frequency is lb.Undefined:
@@ -36,11 +51,17 @@ class AirTSource(HardwareSource):
     center_frequency = lo_frequency.corrected_from_expression(
         lo_frequency + lo_offset,
         help='RF frequency at the center of the RX baseband',
-        label='Hz'
+        label='Hz',
     )
 
     # TODO: check low bound
-    @attr.property.float(min=200e3, max=125e6, cache=True, label='Hz', help='sample rate before resampling')
+    @attr.property.float(
+        min=200e3,
+        max=125e6,
+        cache=True,
+        label='Hz',
+        help='sample rate before resampling',
+    )
     def backend_sample_rate(self, sample_rate: float = lb.Undefined):
         # there is only one RX sample clock, shared by both channels?
         return self.backend.getSampleRate(SOAPY_SDR_RX, 0)
@@ -50,20 +71,20 @@ class AirTSource(HardwareSource):
         # there is only one RX sample clock, shared by both channels?
         self.backend.setSampleRate(SOAPY_SDR_RX, 0, sample_rate)
 
-    _downsample = attr.value.float(1., min=1, help='backend_sample_rate/sample_rate')
+    _downsample = attr.value.float(1.0, min=1, help='backend_sample_rate/sample_rate')
 
     sample_rate = backend_sample_rate.corrected_from_expression(
-        backend_sample_rate/_downsample,
+        backend_sample_rate / _downsample,
         label='Hz',
-        help='sample rate of acquired waveform'
+        help='sample rate of acquired waveform',
     )
 
     @attr.property.float(sets=False, label='Hz', help='realized sample rate')
     def realized_sample_rate(self):
-        return self.backend.getSampleRate(SOAPY_SDR_RX, 0)/self._downsample 
+        return self.backend.getSampleRate(SOAPY_SDR_RX, 0) / self._downsample
 
     @attr.method.bool(gets=False).setter
-    @channel_kwarg    
+    @channel_kwarg
     def channel_enabled(self, enable: bool = lb.Undefined, /, *, channel: int):
         if enable:
             if channel != 0:
@@ -89,12 +110,16 @@ class AirTSource(HardwareSource):
         self.rx_streams = []
         self.analysis_filter = {}
 
-        for channel in 0,1:
+        for channel in 0, 1:
             self.backend.setGainMode(SOAPY_SDR_RX, channel, False)
-            self.rx_streams += [self.backend.setupStream(SOAPY_SDR_RX, SOAPY_SDR_CS16, [channel])]
+            self.rx_streams += [
+                self.backend.setupStream(SOAPY_SDR_RX, SOAPY_SDR_CS16, [channel])
+            ]
             # self.channel_enabled(False, channel=channel)
 
-    def autosample(self, center_frequency, sample_rate, analysis_bandwidth, shift=False):
+    def autosample(
+        self, center_frequency, sample_rate, analysis_bandwidth, shift=False
+    ):
         """automatically configure center frequency and sampling parameters.
 
         Sampling rates are set to ensure rational resampling relative to the SDR master clock.
@@ -105,13 +130,15 @@ class AirTSource(HardwareSource):
             fs_base=125e6, fs_target=sample_rate, bw=analysis_bandwidth, shift=shift
         )
 
-        fft_size_out = self.analysis_filter.get('fft_size_out', self.analysis_filter['fft_size'])
+        fft_size_out = self.analysis_filter.get(
+            'fft_size_out', self.analysis_filter['fft_size']
+        )
 
         with lb.paramattr.hold_attr_notifications(self):
-            self._downsample = 1 # temporarily avoid a potential bounding error
+            self._downsample = 1  # temporarily avoid a potential bounding error
             self.backend_sample_rate = fs_backend
-            self._downsample = self.analysis_filter['fft_size']/fft_size_out
-            self.lo_offset = lo_offset # hold update on this one?
+            self._downsample = self.analysis_filter['fft_size'] / fft_size_out
+            self.lo_offset = lo_offset  # hold update on this one?
 
         self.center_frequency = center_frequency
         self.sample_rate = sample_rate
@@ -193,13 +220,12 @@ class AirTSource(HardwareSource):
         else:
             return iq
 
-
     def __del__(self):
         self.close()
 
     def close(self):
         try:
-            for channel in 0,:
+            for channel in (0,):
                 self.channel_enabled(False, channel=channel)
                 self.backend.closeStream(self.rx_streams[channel])
 
