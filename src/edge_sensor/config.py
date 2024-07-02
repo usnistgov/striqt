@@ -1,17 +1,23 @@
 """mgspec structs for use as configuration schemas"""
 
-
 from __future__ import annotations
 from msgspec import Struct, field
-from typing import Optional
+from typing import Optional, Literal
 from channel_analysis import waveform
 
 
-def _analysis_factory():
-    return waveform._registry.tospec()()
+def make_default_analysis():
+    return waveform.analysis_registry.tospec()()
+
+
+ColaWindowType = Literal['hamming'] | Literal['blackman'] | Literal['blackmanharris']
+LOShiftType = Optional[Literal['left'] | Literal['right']]
+TimebaseType = Literal['builtin'] | Literal['gps']
 
 
 class State(Struct):
+    """configuration for a single waveform capture"""
+
     # RF and leveling
     center_frequency: float = 3710e6
     channel: int = 0
@@ -24,18 +30,18 @@ class State(Struct):
 
     # filtering and resampling
     analysis_bandwidth: float = 10e6
-    lo_shift: Optional['left'|'right'] = 'left' # shift the LO outside the acquisition band
-    window: 'hamming'|'blackman'|'blackmanharris' = 'hamming' # the COLA spectral window to use
+    lo_shift: LOShiftType = 'left'  # shift the LO outside the acquisition band
+    window: ColaWindowType = 'hamming'  # the COLA spectral window to use
 
     # external frequency conversion support
-    if_frequency: Optional[float] = None # Hz (or none, for no IF frontend)
-    lo_gain: Optional[float] = 0 # dB (ignored for no IF frontend)
+    if_frequency: Optional[float] = None  # Hz (or none, for no IF frontend)
+    lo_gain: Optional[float] = 0  # dB (ignored for no IF frontend)
 
 
 class Acquisition(Struct):
-    location: Optional[tuple[str,str,str]] = None
-    timebase: 'builtin'|'gps' = 'builtin'
-    cyclic_trigger: bool|float = False
+    location: Optional[tuple[str, str, str]] = None
+    timebase: TimebaseType = 'builtin'
+    cyclic_trigger: bool | float = False
     calibration_path: Optional[str] = None
     timeout: float = 5
     defaults: State = field(default_factory=State)
@@ -44,4 +50,4 @@ class Acquisition(Struct):
 class Runner(Struct):
     acquisition: Acquisition = field(default_factory=Acquisition)
     sweep: list[State] = field(default_factory=lambda: [State()])
-    channel_analysis: waveform._ConfigStruct = field(default_factory=_analysis_factory)
+    channel_analysis: waveform._ConfigStruct = field(default_factory=make_default_analysis)

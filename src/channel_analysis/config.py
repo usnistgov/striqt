@@ -26,7 +26,9 @@ class KeywordConfigRegistry(UserDict):
     def _param_to_field(name, p: inspect.Parameter):
         """convert an inspect.Parameter to a msgspec.Struct field"""
         if p.annotation is inspect._empty:
-            raise TypeError(f'to register this function, keyword-only argument "{name}" needs a type annotation')
+            raise TypeError(
+                f'to register this function, keyword-only argument "{name}" needs a type annotation'
+            )
 
         if p.default is inspect._empty:
             return (name, p.annotation)
@@ -45,9 +47,7 @@ class KeywordConfigRegistry(UserDict):
         ]
 
         struct = msgspec.defstruct(
-            name,
-            kws,
-            bases=(self.field_cls,) if self.field_cls else None
+            name, kws, bases=(self.field_cls,) if self.field_cls else None
         )
 
         # validate the struct
@@ -60,21 +60,23 @@ class KeywordConfigRegistry(UserDict):
     def tospec(self) -> msgspec.Struct:
         """return a Struct representing a specification for calls to all registered functions"""
         fields = [
-            (func.__name__, typing.Union[struct,None], None)
+            (func.__name__, typing.Union[struct, None], None)
             for func, struct in self.items()
         ]
 
         return msgspec.defstruct(
             'channel_analysis',
             fields,
-            bases=(self.parent_cls,) if self.parent_cls else None
+            bases=(self.parent_cls,) if self.parent_cls else None,
         )
-    
-
-registry = KeywordConfigRegistry(field_struct=_CallConfig, parent_struct=_AnalysisConfig)
 
 
-def from_any(obj: str|dict|registry.parent_cls) -> registry.parent_cls:
+registry = KeywordConfigRegistry(
+    field_struct=_CallConfig, parent_struct=_AnalysisConfig
+)
+
+
+def from_any(obj: str | dict | registry.parent_cls) -> registry.parent_cls:
     """return a channel analysis specification from a yaml string,
     dictionary of dictionaries, or channel analysis specification
     """
