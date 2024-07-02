@@ -97,9 +97,14 @@ class AirTSource(HardwareSource):
     def realized_sample_rate(self):
         return self.backend.getSampleRate(SOAPY_SDR_RX, 0) / self._downsample
 
-    @attr.method.bool(gets=False).setter
+    @attr.method.bool(cache=True).getter
     @channel_kwarg
-    def channel_enabled(self, enable: bool = lb.Undefined, /, *, channel: int):
+    def channel_enabled(self, /, *, channel: int):
+        # this is only called at most once, due to cache=True
+        raise ValueError('must set channel_enabled once before reading')
+
+    @channel_enabled.setter
+    def _(self, /, enable: bool, *, channel: int):
         if enable:
             if channel != 0:
                 raise ValueError('only channel 0 is supported for now')
@@ -116,9 +121,9 @@ class AirTSource(HardwareSource):
             self.backend.setGain(SOAPY_SDR_RX, channel, gain)
 
     def open(self):
-        self._logger.debug('connecting')
+        self._logger.info('connecting')
         self.backend = SoapySDR.Device(dict(driver='SoapyAIRT'))
-        self._logger.debug('connected')
+        self._logger.info('connected')
         self.buffer = None
         self.reset_counts()
         self.rx_streams = []
@@ -157,6 +162,34 @@ class AirTSource(HardwareSource):
         self.center_frequency = center_frequency
         self.sample_rate = sample_rate
         self.analysis_bandwidth = analysis_bandwidth
+
+    def toconfiguration(self, channel=0, duration=None) -> config.Capture:
+        if self.lo_offset == 0:
+            lo_shift = None
+        elif self.lo_offset < 0:
+            lo_shift = 'left'
+        elif self.lo_offset > 0:
+            lo_shift = 'right'
+
+        return config.Capture(
+            # RF and leveling
+            center_frequency = self.center_frequency,
+            channel = channel,
+            gain = self.gain(channel=channel),
+
+            # acquisition
+            duration = duration,
+            sample_rate = self.sample_rate,
+
+            # filtering and resampling
+            analysis_bandwidth = self.analysis_bandwidth,
+            lo_shift = lo_shift,
+
+            # future: external frequency conversion support
+            if_frequency = None,
+            lo_gain = 0,
+            rf_gain = 0,
+        )
 
     def reset_counts(self):
         self.acquisition_counts = {'overflow': 0, 'exceptions': 0, 'total': 0}

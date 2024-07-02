@@ -311,6 +311,10 @@ def persistence_spectrum(
     else:
         raise ValueError('sample_rate/resolution must be a counting number')
 
+    if isinstance(window, list):
+        # lists break lru_cache
+        window = tuple(window)
+        
     enbw = resolution * equivalent_noise_bandwidth(window, fft_size)
 
     metadata = {
