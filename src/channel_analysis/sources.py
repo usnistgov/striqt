@@ -1,10 +1,8 @@
 from __future__ import annotations
-from dataclasses import dataclass, field
 import numpy as np
 from typing import Any
 from iqwaveform import fourier
 from functools import wraps
-from frozendict import frozendict
 from typing import Optional
 
 
@@ -14,7 +12,7 @@ class WaveformSource:
         sample_rate: float,
         analysis_bandwidth: Optional[float] = None,
         buffer: Any = None,
-        analysis_filter: dict = {'fft_size': 1024, 'window': 'hamming'}
+        analysis_filter: dict = {'fft_size': 1024, 'window': 'hamming'},
     ):
         self.sample_rate = sample_rate
         self.analysis_bandwidth = analysis_bandwidth
@@ -25,7 +23,9 @@ class WaveformSource:
         return {
             'sample_rate': self.sample_rate,
             'analysis_bandwidth': self.analysis_bandwidth,
-            'analysis_filter': dict(self.analysis_filter) if self.analysis_bandwidth else None
+            'analysis_filter': dict(self.analysis_filter)
+            if self.analysis_bandwidth
+            else None,
         }
 
     def build_index_variables(self) -> dict:
@@ -33,7 +33,7 @@ class WaveformSource:
 
     def __hash__(self):
         """a hash that is unique from the perspective of sampling constants.
-        
+
         This allows use of WaveformSource objects as arguments to functions
         defined with @lru_cache.
         """
@@ -54,7 +54,7 @@ def optional_filter(decorated):
             passband=(-source.analysis_bandwidth / 2, source.analysis_bandwidth / 2),
             fft_size=source.analysis_filter['fft_size'],
             window=source.analysis_filter['window'],
-            out=source.buffer
+            out=source.buffer,
         )
 
     return func
@@ -62,7 +62,12 @@ def optional_filter(decorated):
 
 @optional_filter
 def simulated_awgn(
-    source: WaveformSource, duration: float, *, power: float = 1, xp=np, pinned_cuda=False
+    source: WaveformSource,
+    duration: float,
+    *,
+    power: float = 1,
+    xp=np,
+    pinned_cuda=False,
 ):
     try:
         # e.g., numpy
@@ -97,7 +102,7 @@ def simulated_awgn(
     )
 
     if source.analysis_bandwidth is not None:
-        power = power * source.sample_rate/source.analysis_bandwidth
+        power = power * source.sample_rate / source.analysis_bandwidth
 
     samples *= xp.sqrt(power / 2)
 

@@ -74,7 +74,7 @@ def _to_maybe_nested_numpy(obj: tuple | list | dict | Array):
 def _analysis_parameter_kwargs(locals_: dict, omit=('iq', 'source', 'out')) -> dict:
     """return the analysis parameters from the locals() evaluated at the beginning of analysis function"""
 
-    return {k: v for k,v in locals_.items() if k not in omit}
+    return {k: v for k, v in locals_.items() if k not in omit}
 
 
 @lru_cache
@@ -105,7 +105,7 @@ def power_time_series(
     source: WaveformSource,
     *,
     detector_period: float,
-    detectors: tuple[str, ...]=('rms', 'peak'),
+    detectors: tuple[str, ...] = ('rms', 'peak'),
 ) -> callable[[], xr.DataArray]:
     Ts = 1 / source.sample_rate
 
@@ -300,9 +300,9 @@ def persistence_spectrum(
     window: typing.Any,
     resolution: float,
     quantiles: tuple[float, ...],
-    fractional_overlap:float=0,
-    truncate:bool=True,
-    dB:bool=True,
+    fractional_overlap: float = 0,
+    truncate: bool = True,
+    dB: bool = True,
 ) -> callable[[], xr.DataArray]:
     # TODO: support other persistence statistics, such as mean
     if iqwaveform.power_analysis.isroundmod(source.sample_rate, resolution):
@@ -373,8 +373,8 @@ def _generate_iir_lpf(
     """
 
     order, wn = signal.ellipord(
-        source.analysis_bandwidth/2,
-        source.analysis_bandwidth/2 + transition_bandwidth,
+        source.analysis_bandwidth / 2,
+        source.analysis_bandwidth / 2 + transition_bandwidth,
         passband_ripple,
         stopband_attenuation,
         False,
@@ -398,10 +398,10 @@ def _generate_iir_lpf(
 @config.registry.include
 def iq_waveform(
     iq,
-    source: WaveformSource,    
+    source: WaveformSource,
     *,
-    start_time_sec:typing.Optional[float]=None,
-    stop_time_sec:typing.Optional[float]=None,
+    start_time_sec: typing.Optional[float] = None,
+    stop_time_sec: typing.Optional[float] = None,
 ) -> callable[[], xr.DataArray]:
     """package the IQ recording with optional clipping"""
 
@@ -442,7 +442,7 @@ def iir_filter(
     out=None,
 ):
     xp = array_namespace(iq)
-    
+
     filter_kws = _analysis_parameter_kwargs(locals())
 
     sos = _generate_iir_lpf(source, **filter_kws)
@@ -472,7 +472,7 @@ def ola_filter(
         iq,
         fs=source.sample_rate,
         passband=(-source.analysis_bandwidth / 2, source.analysis_bandwidth / 2),
-        **kwargs
+        **kwargs,
     )
 
 
@@ -480,10 +480,9 @@ def from_spec(
     iq,
     source: WaveformSource,
     *,
-    analysis_spec: str|dict|config._AnalysisConfig = {},
-    cache = {}
+    analysis_spec: str | dict | config._AnalysisConfig = {},
+    cache={},
 ):
-
     analysis_spec = dict(analysis_spec)
 
     # then: analyses that need filtered output

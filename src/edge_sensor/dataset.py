@@ -3,13 +3,10 @@ Package analysis of a given waveform into an xarray.Dataset,
 based a specification for calls to channel_analysis.waveform.
 """
 
-from array_api_compat import is_cupy_array
-from iqwaveform.util import Array, set_input_domain
-from inspect import signature
+from iqwaveform.util import set_input_domain
 import xarray as xr
 
 from channel_analysis.waveform import (
-    ola_filter,
     persistence_spectrum,
     power_time_series,
     amplitude_probability_distribution,
@@ -46,13 +43,8 @@ from . import host
 
 
 def from_spec(
-    iq,
-    source: WaveformSource,
-    *,
-    analysis_spec: dict[str, dict[str]] = {},
-    cache = {}
+    iq, source: WaveformSource, *, analysis_spec: dict[str, dict[str]] = {}, cache={}
 ):
-
     analysis_spec = dict(analysis_spec)
 
     # then: analyses that need filtered output
