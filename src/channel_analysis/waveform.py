@@ -84,7 +84,7 @@ def _power_time_series_coords(
     time = xr.DataArray(
         np.arange(length) * detector_period,
         dims='time_elapsed',
-        attrs={'label': 'Acquisition time elapsed', 'units': 's'},
+        attrs={'label': 'System time elapsed', 'units': 's'},
     )
 
     detector_list = xr.DataArray(
@@ -234,7 +234,7 @@ def amplitude_probability_distribution(
     *,
     power_low: float,
     power_high: float,
-    power_count: float,
+    power_count: int,
 ) -> callable[[], xr.DataArray]:
     xp = array_namespace(iq)
     dtype = xp.finfo(iq.dtype).dtype
@@ -425,7 +425,7 @@ def iq_waveform(
     coords = xr.Coordinates({'iq_sample': pd.RangeIndex(start, stop, name='iq_sample')})
 
     return ChannelAnalysisResult(
-        data=iq[start:stop],
+        data=iq[start:stop].copy(),
         name='iq_waveform',
         coords=coords,
         attrs=metadata,
@@ -480,7 +480,7 @@ def from_spec(
     iq,
     source: WaveformSource,
     *,
-    analysis_spec: str | dict | config._AnalysisConfig = {},
+    analysis_spec: str | dict | config.AnalysisStruct = {},
     cache={},
 ):
     analysis_spec = dict(analysis_spec)
@@ -488,7 +488,8 @@ def from_spec(
     # then: analyses that need filtered output
     results = {}
 
-    analysis_spec = msgspec.to_builtins(config.from_any(analysis_spec))
+    schema = config.registry.tostruct()
+    analysis_spec = msgspec.to_builtins(msgspec.convert(analysis_spec, schema))
 
     # evaluate each possible analysis function if specified
     for func in config.registry.keys():
@@ -498,7 +499,7 @@ def from_spec(
             results[func.__name__] = func(iq, source, **func_kws)
 
     if len(analysis_spec) > 0:
-        # anything left refers to an invalid function invalid
+        # anything left refers to an invalid function
         raise ValueError(f'invalid analysis_spec key(s): {list(analysis_spec.keys())}')
 
     # materialize as xarrays on the cpu
