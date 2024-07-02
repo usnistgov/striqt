@@ -7,22 +7,16 @@ from channel_analysis import waveform
 
 
 def make_default_analysis():
-    return waveform.analysis_registry.tospec()()
+    return waveform.analysis_registry.tostruct()()
 
 
-ColaWindowType = Literal['hamming'] | Literal['blackman'] | Literal['blackmanharris']
-LOShiftType = Optional[Literal['left'] | Literal['right']]
-TimebaseType = Literal['builtin'] | Literal['gps']
-
-
-class State(Struct):
+class Capture(Struct):
     """configuration for a single waveform capture"""
 
     # RF and leveling
     center_frequency: float = 3710e6
     channel: int = 0
     gain: float = -10
-    calibrated: bool = True
 
     # acquisition
     duration: float = 0.1
@@ -30,24 +24,25 @@ class State(Struct):
 
     # filtering and resampling
     analysis_bandwidth: float = 10e6
-    lo_shift: LOShiftType = 'left'  # shift the LO outside the acquisition band
-    window: ColaWindowType = 'hamming'  # the COLA spectral window to use
+    lo_shift: Literal['left','right',None] = 'left'  # shift the LO outside the acquisition band
 
     # external frequency conversion support
-    if_frequency: Optional[float] = None  # Hz (or none, for no IF frontend)
-    lo_gain: Optional[float] = 0  # dB (ignored for no IF frontend)
+    if_frequency: Optional[float] = None  # Hz (or none, for no ext frontend)
+    lo_gain: Optional[float] = 0  # dB (ignored when if_frequency is None)
+    rf_gain: Optional[float] = 0 # dB (ignored when if_frequency is None)
 
 
-class Acquisition(Struct):
+class System(Struct):
     location: Optional[tuple[str, str, str]] = None
-    timebase: TimebaseType = 'builtin'
+    timebase: Literal['builtin','gps'] = 'builtin'
     cyclic_trigger: bool | float = False
     calibration_path: Optional[str] = None
-    timeout: float = 5
-    defaults: State = field(default_factory=State)
+    defaults: Capture = field(default_factory=Capture)
 
 
-class Runner(Struct):
-    acquisition: Acquisition = field(default_factory=Acquisition)
-    sweep: list[State] = field(default_factory=lambda: [State()])
-    channel_analysis: waveform._ConfigStruct = field(default_factory=make_default_analysis)
+class Run(Struct):
+    acquisition: System = field(default_factory=System)
+    sweep: list[Capture] = field(default_factory=lambda: [Capture()])
+    channel_analysis: waveform._ConfigStruct = field(
+        default_factory=make_default_analysis
+    )

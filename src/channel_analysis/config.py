@@ -8,19 +8,18 @@ import typing
 TDecoratedFunc = typing.Callable[..., typing.Any]
 
 
-class _CallConfig(msgspec.Struct):
+class KeywordArgumentStruct(msgspec.Struct):
     pass
 
 
-class _AnalysisConfig(msgspec.Struct):
+class AnalysisStruct(msgspec.Struct):
     pass
 
 
 class KeywordConfigRegistry(UserDict):
-    def __init__(self, field_struct=None, parent_struct=None):
+    def __init__(self, base_struct=None):
         super().__init__()
-        self.field_cls = field_struct
-        self.parent_cls = parent_struct
+        self.base_struct = base_struct
 
     @staticmethod
     def _param_to_field(name, p: inspect.Parameter):
@@ -36,6 +35,7 @@ class KeywordConfigRegistry(UserDict):
             return (name, p.annotation, p.default)
 
     def include(self, func: TDecoratedFunc) -> TDecoratedFunc:
+        """add decorated `func` and its keyword arguments in the self.tostruct() schema"""
         name = func.__name__
 
         params = inspect.signature(func).parameters
@@ -46,9 +46,7 @@ class KeywordConfigRegistry(UserDict):
             if p.kind is inspect.Parameter.KEYWORD_ONLY
         ]
 
-        struct = msgspec.defstruct(
-            name, kws, bases=(self.field_cls,) if self.field_cls else None
-        )
+        struct = msgspec.defstruct(name, kws, bases=(KeywordArgumentStruct,))
 
         # validate the struct
         msgspec.json.schema(struct)
@@ -57,7 +55,7 @@ class KeywordConfigRegistry(UserDict):
 
         return func
 
-    def tospec(self) -> msgspec.Struct:
+    def tostruct(self) -> msgspec.Struct:
         """return a Struct representing a specification for calls to all registered functions"""
         fields = [
             (func.__name__, typing.Union[struct, None], None)
@@ -67,25 +65,21 @@ class KeywordConfigRegistry(UserDict):
         return msgspec.defstruct(
             'channel_analysis',
             fields,
-            bases=(self.parent_cls,) if self.parent_cls else None,
+            bases=(self.base_struct,) if self.base_struct else None,
         )
 
 
-registry = KeywordConfigRegistry(
-    field_struct=_CallConfig, parent_struct=_AnalysisConfig
-)
+registry = KeywordConfigRegistry(AnalysisStruct)
 
 
-def from_any(obj: str | dict | registry.parent_cls) -> registry.parent_cls:
+def from_any(obj: str | dict | registry.base_struct) -> registry.base_struct:
     """return a channel analysis specification from a yaml string,
     dictionary of dictionaries, or channel analysis specification
     """
-    struct = registry.tospec()
+    struct = registry.tostruct()
 
-    if isinstance(obj, registry.parent_cls):
-        return obj
-    elif isinstance(obj, dict):
-        return struct(**obj)
+    if isinstance(obj, (dict,registry.base_struct)):
+        return msgspec.convert(obj, struct)
     elif isinstance(obj, str):
         return msgspec.yaml.decode(obj, type=struct)
     else:
