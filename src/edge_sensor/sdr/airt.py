@@ -179,12 +179,7 @@ class AirTSource(HardwareSource):
         return buff_complex64
 
     def acquire(self, count, calibrate:bool=False):
-        if isroundmod(count, 1):
-            # upsampled_count = count*self._downsample
-            backend_count = round(np.ceil(count*self._downsample))
-        else:
-            raise ValueError('duration must be an integer multiple of the sample rate')
-
+        backend_count = round(np.ceil(count*self._downsample))
         iq = self._read_stream(backend_count)
 
         if calibrate:
