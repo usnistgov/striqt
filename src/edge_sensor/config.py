@@ -1,16 +1,16 @@
 """mgspec structs for use as configuration schemas"""
 
 from __future__ import annotations
-from msgspec import Struct, field
-from typing import Optional, Literal
-from channel_analysis import waveform
+import msgspec
+from typing import Optional, Literal, Union, Any
+from channel_analysis import config as _waveform_config
 
 
 def make_default_analysis():
-    return waveform.analysis_registry.tostruct()()
+    return _waveform_config.analysis_registry.tostruct()()
 
 
-class Capture(Struct):
+class Capture(msgspec.Struct, omit_defaults=True):
     """configuration for a single waveform capture"""
 
     # RF and leveling
@@ -32,17 +32,34 @@ class Capture(Struct):
     rf_gain: Optional[float] = 0 # dB (ignored when if_frequency is None)
 
 
-class System(Struct):
-    location: Optional[tuple[str, str, str]] = None
+class System(msgspec.Struct):
+    location: Optional[tuple[float, float, float]] = None
     timebase: Literal['builtin','gps'] = 'builtin'
-    cyclic_trigger: bool | float = False
+    cyclic_trigger: Optional[float] = None
     calibration_path: Optional[str] = None
-    defaults: Capture = field(default_factory=Capture)
 
 
-class Run(Struct):
-    acquisition: System = field(default_factory=System)
-    sweep: list[Capture] = field(default_factory=lambda: [Capture()])
-    channel_analysis: waveform._ConfigStruct = field(
-        default_factory=make_default_analysis
-    )
+class Run(msgspec.Struct):
+    sweep: list[Capture]
+    system: System = msgspec.field(default_factory=System)
+    defaults: Capture = msgspec.field(default_factory=Capture)
+    channel_analysis: Any = msgspec.field(default_factory=make_default_analysis)
+
+
+def read_yaml_runner(path) -> (Run, tuple):
+    with open(path, 'rb') as fd:
+        text = fd.read()
+
+    # validate first
+    msgspec.yaml.decode(text, type=Run, strict=False)
+
+    # build a dict to extract the list of sweep fields and apply defaults
+    tree = msgspec.yaml.decode(text, type=dict, strict=False)
+    sweep_fields = sorted(set.union(*[set(c) for c in tree['sweep']]))
+
+    # apply default capture settings
+    defaults = tree['defaults']
+    tree['sweep'] = [dict(defaults, **c) for c in tree['sweep']]
+
+    run = msgspec.convert(tree, type=Run, strict=False)
+    return run, sweep_fields
