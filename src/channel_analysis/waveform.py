@@ -1,26 +1,28 @@
 """wrap lower-level iqwaveform DSP calls to accept physical inputs and return xarray.DataArray"""
 
 from __future__ import annotations
-import iqwaveform
-from functools import lru_cache
-import numpy as np
-from iqwaveform.util import Array, array_namespace
-from iqwaveform import fourier, power_analysis
 
+from dataclasses import dataclass
+from collections import UserDict
+from functools import lru_cache
+
+import numpy as np
 from scipy import signal
 import xarray as xr
 import pandas as pd
+import iqwaveform
+from iqwaveform.util import Array, array_namespace
+from iqwaveform import fourier, power_analysis
 
 from array_api_compat import is_cupy_array, is_numpy_array, is_torch_array
-from dataclasses import dataclass
-from collections import UserDict
-from .sources import WaveformSource
-from . import config
+from . import structs
 
 import typing
 import msgspec
 
 TDecoratedFunc = typing.Callable[..., typing.Any]
+
+registry = structs.KeywordConfigRegistry(structs.ChannelAnalysis)
 
 
 @dataclass
@@ -71,7 +73,7 @@ def _to_maybe_nested_numpy(obj: tuple | list | dict | Array):
         raise TypeError(f'obj type {type(obj)} is unrecognized')
 
 
-def _analysis_parameter_kwargs(locals_: dict, omit=('iq', 'source', 'out')) -> dict:
+def _analysis_parameter_kwargs(locals_: dict, omit=('iq', 'capture', 'out')) -> dict:
     """return the analysis parameters from the locals() evaluated at the beginning of analysis function"""
 
     return {k: v for k, v in locals_.items() if k not in omit}
@@ -99,15 +101,15 @@ def _power_time_series_coords(
     )
 
 
-@config.registry.include
+@registry
 def power_time_series(
     iq,
-    source: WaveformSource,
+    capture: structs.Capture,
     *,
     detector_period: float,
     detectors: tuple[str, ...] = ('rms', 'peak'),
 ) -> callable[[], xr.DataArray]:
-    Ts = 1 / source.sample_rate
+    Ts = 1 / capture.sample_rate
 
     xp = array_namespace(iq)
     dtype = xp.finfo(iq.dtype).dtype
@@ -124,7 +126,7 @@ def power_time_series(
     metadata = {
         'detector_period': detector_period,
         'label': 'Channel power',
-        'units': f'dBm/{source.analysis_bandwidth/1e6} MHz',
+        'units': f'dBm/{capture.analysis_bandwidth/1e6} MHz',
     }
 
     return ChannelAnalysisResult(
@@ -134,7 +136,7 @@ def power_time_series(
 
 @lru_cache
 def _cyclic_channel_power_cyclic_coords(
-    source: WaveformSource,
+    capture: structs.Capture,
     cyclic_period: float,
     detector_period: float,
     detectors: tuple[str, ...],
@@ -167,10 +169,10 @@ def _cyclic_channel_power_cyclic_coords(
     )
 
 
-@config.registry.include
+@registry
 def cyclic_channel_power(
     iq,
-    source: WaveformSource,
+    capture: structs.Capture,
     *,
     cyclic_period: float,
     detector_period: float,
@@ -184,7 +186,7 @@ def cyclic_channel_power(
 
     data_dict = power_analysis.iq_to_cyclic_power(
         iq,
-        1 / source.sample_rate,
+        1 / capture.sample_rate,
         cyclic_period=cyclic_period,
         detector_period=detector_period,
         detectors=detectors,
@@ -192,7 +194,7 @@ def cyclic_channel_power(
     )
 
     coords = _cyclic_channel_power_cyclic_coords(
-        source.sample_rate,
+        capture.sample_rate,
         cyclic_period=cyclic_period,
         detector_period=detector_period,
         detectors=detectors,
@@ -201,7 +203,7 @@ def cyclic_channel_power(
 
     metadata = {
         'label': 'Channel power',
-        'units': f'dBm/{source.analysis_bandwidth/1e6} MHz',
+        'units': f'dBm/{capture.analysis_bandwidth/1e6} MHz',
         'cyclic_period': cyclic_period,
         'detector_period': detector_period,
     }
@@ -227,10 +229,10 @@ def _amplitude_probability_distribution_coords(lo, hi, count, xp, units):
     return xr.Coordinates({array.dims[0]: array})
 
 
-@config.registry.include
+@registry
 def amplitude_probability_distribution(
     iq,
-    source: WaveformSource,
+    capture: structs.Capture,
     *,
     power_low: float,
     power_high: float,
@@ -243,7 +245,7 @@ def amplitude_probability_distribution(
 
     bins = _bin_apd(xp=xp, **bin_params)
     coords = _amplitude_probability_distribution_coords(
-        xp=np, units=f'dBm/{source.analysis_bandwidth/1e6} MHz', **bin_params
+        xp=np, units=f'dBm/{capture.analysis_bandwidth/1e6} MHz', **bin_params
     )
 
     ccdf = iqwaveform.sample_ccdf(iqwaveform.envtodB(iq), bins).astype(dtype)
@@ -258,7 +260,7 @@ def amplitude_probability_distribution(
 
 @lru_cache
 def _persistence_spectrum_coords(
-    source: WaveformSource,
+    capture: structs.Capture,
     fft_size: int,
     stat_names: tuple[str],
     overlap_frac: float = 0,
@@ -266,7 +268,7 @@ def _persistence_spectrum_coords(
     xp=np,
 ):
     freqs, _ = iqwaveform.fourier._get_stft_axes(
-        fs=source.sample_rate,
+        fs=capture.sample_rate,
         fft_size=fft_size,
         time_size=1,
         overlap_frac=overlap_frac,
@@ -274,7 +276,7 @@ def _persistence_spectrum_coords(
     )
 
     if truncate:
-        which_freqs = np.abs(freqs) <= source.analysis_bandwidth / 2
+        which_freqs = np.abs(freqs) <= capture.analysis_bandwidth / 2
         freqs = freqs[which_freqs]
 
     freqs = xr.DataArray(
@@ -292,10 +294,10 @@ def _persistence_spectrum_coords(
     return xr.Coordinates({stats.dims[0]: stats, freqs.dims[0]: freqs})
 
 
-@config.registry.include
+@registry
 def persistence_spectrum(
     x: Array,
-    source: WaveformSource,
+    capture: structs.Capture,
     *,
     window: typing.Any,
     resolution: float,
@@ -305,9 +307,9 @@ def persistence_spectrum(
     dB: bool = True,
 ) -> callable[[], xr.DataArray]:
     # TODO: support other persistence statistics, such as mean
-    if iqwaveform.power_analysis.isroundmod(source.sample_rate, resolution):
-        # need source.sample_rate/resolution to give us a counting number
-        fft_size = round(source.sample_rate / resolution)
+    if iqwaveform.power_analysis.isroundmod(capture.sample_rate, resolution):
+        # need capture.sample_rate/resolution to give us a counting number
+        fft_size = round(capture.sample_rate / resolution)
     else:
         raise ValueError('sample_rate/resolution must be a counting number')
 
@@ -330,8 +332,8 @@ def persistence_spectrum(
 
     data = fourier.persistence_spectrum(
         x,
-        fs=source.sample_rate,
-        bandwidth=source.analysis_bandwidth,
+        fs=capture.sample_rate,
+        bandwidth=capture.analysis_bandwidth,
         window=window,
         resolution=resolution,
         fractional_overlap=fractional_overlap,
@@ -341,7 +343,7 @@ def persistence_spectrum(
     )
 
     coords = _persistence_spectrum_coords(
-        source,
+        capture,
         fft_size=fft_size,
         overlap_frac=fractional_overlap,
         stat_names=tuple(quantiles),
@@ -355,7 +357,7 @@ def persistence_spectrum(
 
 @lru_cache(8)
 def _generate_iir_lpf(
-    source: WaveformSource,
+    capture: structs.Capture,
     *,
     passband_ripple: float | int,
     stopband_attenuation: float | int,
@@ -377,12 +379,12 @@ def _generate_iir_lpf(
     """
 
     order, wn = signal.ellipord(
-        source.analysis_bandwidth / 2,
-        source.analysis_bandwidth / 2 + transition_bandwidth,
+        capture.analysis_bandwidth / 2,
+        capture.analysis_bandwidth / 2 + transition_bandwidth,
         passband_ripple,
         stopband_attenuation,
         False,
-        source.sample_rate,
+        capture.sample_rate,
     )
 
     sos = signal.ellip(
@@ -393,16 +395,16 @@ def _generate_iir_lpf(
         'lowpass',
         False,
         'sos',
-        source.sample_rate,
+        capture.sample_rate,
     )
 
     return sos
 
 
-@config.registry.include
+@registry
 def iq_waveform(
     iq,
-    source: WaveformSource,
+    capture: structs.Capture,
     *,
     start_time_sec: typing.Optional[float] = None,
     stop_time_sec: typing.Optional[float] = None,
@@ -419,12 +421,12 @@ def iq_waveform(
     if start_time_sec is None:
         start = None
     else:
-        start = int(start_time_sec * source.sample_rate)
+        start = int(start_time_sec * capture.sample_rate)
 
     if stop_time_sec is None:
         stop = None
     else:
-        stop = int(stop_time_sec * source.sample_rate)
+        stop = int(stop_time_sec * capture.sample_rate)
 
     coords = xr.Coordinates({'iq_sample': pd.RangeIndex(start, stop, name='iq_sample')})
 
@@ -438,7 +440,7 @@ def iq_waveform(
 
 def iir_filter(
     iq: Array,
-    source: WaveformSource,
+    capture: structs.Capture,
     *,
     passband_ripple: float | int,
     stopband_attenuation: float | int,
@@ -449,7 +451,7 @@ def iir_filter(
 
     filter_kws = _analysis_parameter_kwargs(locals())
 
-    sos = _generate_iir_lpf(source, **filter_kws)
+    sos = _generate_iir_lpf(capture, **filter_kws)
 
     if is_cupy_array(iq):
         from . import cuda_filter
@@ -463,7 +465,7 @@ def iir_filter(
 
 def ola_filter(
     iq: Array,
-    source: WaveformSource,
+    capture: structs.Capture,
     *,
     fft_size: int,
     window: typing.Any = 'hamming',
@@ -474,40 +476,47 @@ def ola_filter(
 
     return fourier.ola_filter(
         iq,
-        fs=source.sample_rate,
-        passband=(-source.analysis_bandwidth / 2, source.analysis_bandwidth / 2),
+        fs=capture.sample_rate,
+        passband=(-capture.analysis_bandwidth / 2, capture.analysis_bandwidth / 2),
         **kwargs,
     )
 
 
-def from_spec(
-    iq,
-    source: WaveformSource,
-    *,
-    analysis_spec: str | dict | config.AnalysisStruct = {},
-    cache={},
-):
-    analysis_spec = dict(analysis_spec)
+def to_analysis_spec(obj: str | dict | structs.ChannelAnalysis) -> structs.ChannelAnalysis:
+    """return a channel analysis specification from a yaml string,
+    dictionary of dictionaries, or channel analysis specification
+    """
+    struct = registry.spec_type()
 
-    # then: analyses that need filtered output
+    if isinstance(obj, (dict,registry.base_struct)):
+        return msgspec.convert(obj, struct)
+    elif isinstance(obj, str):
+        return msgspec.yaml.decode(obj, type=struct)
+    else:
+        return TypeError('unrecognized type')
+
+from frozendict import frozendict
+
+def analyze_by_spec(iq: Array, capture: structs.Capture, *, spec: str | dict | structs.ChannelAnalysis):
+    """evaluate a set of different channel analyses on the iq waveform as specified by spec"""
+
+    # round-trip for type conversion and validation
+    spec = msgspec.convert(spec, registry.spec_type())
+    spec_dict = msgspec.to_builtins(spec)
+
     results = {}
 
-    schema = config.registry.tostruct()
-    analysis_spec = msgspec.to_builtins(msgspec.convert(analysis_spec, schema))
-
     # evaluate each possible analysis function if specified
-    for func in config.registry.keys():
-        func_kws = analysis_spec.pop(func.__name__)
+    for name, func_kws in spec_dict.items():
+        func = registry[type(getattr(spec, name))]
 
         if func_kws:
-            results[func.__name__] = func(iq, source, **func_kws)
+            results[name] = func(iq, capture, **func_kws)
 
-    if len(analysis_spec) > 0:
-        # anything left refers to an invalid function
-        raise ValueError(f'invalid analysis_spec key(s): {list(analysis_spec.keys())}')
-
-    # materialize as xarrays on the cpu
+    # materialize as xarrays
     xarrays = {res.name: res.to_xarray() for res in results.values()}
-    # xarrays.update(metadata.build_index_variables())
-
-    return xr.Dataset(xarrays, attrs=source.build_metadata())
+    # capture.analysis_filter = dict(capture.analysis_filter)
+    # capture = msgspec.convert(capture, type=type(capture))
+    attrs = msgspec.to_builtins(capture, builtin_types=(frozendict,))
+    attrs['analysis_filter'] = dict(capture.analysis_filter)
+    return xr.Dataset(xarrays, attrs=attrs)
