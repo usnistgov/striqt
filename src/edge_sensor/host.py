@@ -113,7 +113,7 @@ def host_metadata(search_path='.'):
         'git_commit': repo.head().decode(),
         # 'git_unstaged_changes': git_unstaged_changes('.')
         'sensor_uuid': hex(uuid.getnode()),
-        'metadata_version': METADATA_VERSION,
+        # 'metadata_version': METADATA_VERSION,
     }
     # repo_info['git_browse'] = f'{repo_info["git_remote"]}/tree/{repo_info["git_commit"]}'
 

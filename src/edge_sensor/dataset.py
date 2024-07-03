@@ -14,7 +14,7 @@ from channel_analysis.waveform import (
     iq_waveform,
 )
 
-from channel_analysis.sources import WaveformSource
+from channel_analysis.source import Source
 
 from . import host
 
@@ -43,7 +43,7 @@ from . import host
 
 
 def from_spec(
-    iq, source: WaveformSource, *, analysis_spec: dict[str, dict[str]] = {}, cache={}
+    iq, source: Source, *, analysis_spec: dict[str, dict[str]] = {}, cache={}
 ):
     analysis_spec = dict(analysis_spec)
 
