@@ -13,6 +13,7 @@ import pandas as pd
 import iqwaveform
 from iqwaveform.util import Array, array_namespace
 from iqwaveform import fourier, power_analysis
+from frozendict import frozendict
 
 from array_api_compat import is_cupy_array, is_numpy_array, is_torch_array
 from . import structs
@@ -275,9 +276,12 @@ def _persistence_spectrum_coords(
         xp=np,
     )
 
+    print(freqs.size)
     if truncate:
         which_freqs = np.abs(freqs) <= capture.analysis_bandwidth / 2
         freqs = freqs[which_freqs]
+
+    print(freqs.size)
 
     freqs = xr.DataArray(
         freqs,
@@ -338,7 +342,7 @@ def persistence_spectrum(
         resolution=resolution,
         fractional_overlap=fractional_overlap,
         quantiles=quantiles,
-        truncate=True,
+        truncate=truncate,
         dB=dB,
     )
 
@@ -483,9 +487,8 @@ def ola_filter(
 
 
 def to_analysis_spec(obj: str | dict | structs.ChannelAnalysis) -> structs.ChannelAnalysis:
-    """return a channel analysis specification from a yaml string,
-    dictionary of dictionaries, or channel analysis specification
-    """
+    """coerces a yaml string or dictionary of dictionaries into channel analysis spec"""
+
     struct = registry.spec_type()
 
     if isinstance(obj, (dict,registry.base_struct)):
@@ -495,7 +498,6 @@ def to_analysis_spec(obj: str | dict | structs.ChannelAnalysis) -> structs.Chann
     else:
         return TypeError('unrecognized type')
 
-from frozendict import frozendict
 
 def analyze_by_spec(iq: Array, capture: structs.Capture, *, spec: str | dict | structs.ChannelAnalysis):
     """evaluate a set of different channel analyses on the iq waveform as specified by spec"""
