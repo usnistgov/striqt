@@ -1,51 +1,51 @@
-system:
-    location:
-        - 39.991746624418745 # lat (deg)
-        - -105.26457779333897 # long (deg)
-        - 1783.4 # ASL (m)
+radio:
+  location:
+    - 39.991746624418745 # lat (deg)
+    - -105.26457779333897 # long (deg)
+    - 1783.4 # ASL (m)
 
-    # eventually: "builtin" or "gps"
-    timebase: builtin
+  # eventually: "builtin" or "gps"
+  timebase: internal
 
-    # start acquisition at a fixed time modulus (requires GPS sync)
-    cyclic_trigger:  # none (eventually: also float)
+  # start acquisition at a fixed time modulus (requires GPS sync)
+  cyclic_trigger:  # none (eventually: also float)
 
-    # # calibration data path
-    calibration_path: # none (eventually: path to cal data)
+  # # calibration data path
+  calibration_path: # none (eventually: path to cal data)
 
 
 # any of these can be overridden by sweep settings
 defaults:
-    # RF
-    center_frequency: 3710e6
-    channel: 0 # (index)
-    gain: -10 # dB
+  # RF
+  center_frequency: 3710e6
+  channel: 0 # (index)
+  gain: -10 # dB
 
-    # acquisition
-    duration: 0.1 # acquisition duration (sec)
-    sample_rate: 15.36e6
+  # acquisition
+  duration: 0.1 # acquisition duration (sec)
+  sample_rate: 15.36e6
 
-    # filtering and resampling
-    analysis_bandwidth: 10e6
-    lo_shift: right # digitally shift the LO out of the acquisition band: 'left', 'right', False
+  # filtering and resampling
+  analysis_bandwidth: 10e6
+  lo_shift: right # digitally shift the LO out of the acquisition band: 'left', 'right', False
 
-    # if_frequency: none # Hz (or none, for no external frequency conversion)
-    # lo_gain: none # dB (or none, for no external frequency conversion)
+  # if_frequency: none # Hz (or none, for no external frequency conversion)
+  # lo_gain: none # dB (or none, for no external frequency conversion)
 
 
-sweep:
-    - center_frequency: 3710e6 # Hz
-      gain: 0 # dB
-    - center_frequency: 3730e6 # Hz
-      gain: 0 # dB
-    - center_frequency: 3750e6 # Hz
-      gain: 0 # dB
-    - center_frequency: 3770e6 # Hz
-      gain: 0 # dB
-    - center_frequency: 3790e6 # Hz
-      gain: 0 # dB
-    - center_frequency: 3810e6 # Hz
-      gain: 0 # dB
+captures:
+  - center_frequency: 3710e6 # Hz
+    gain: 0 # dB
+  - center_frequency: 3730e6 # Hz
+    gain: 0 # dB
+  - center_frequency: 3750e6 # Hz
+    gain: 0 # dB
+  - center_frequency: 3770e6 # Hz
+    gain: 0 # dB
+  - center_frequency: 3790e6 # Hz
+    gain: 0 # dB
+  - center_frequency: 3810e6 # Hz
+    gain: 0 # dB
 
 
 channel_analysis:
