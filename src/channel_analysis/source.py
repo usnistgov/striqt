@@ -3,7 +3,28 @@ import numpy as np
 from iqwaveform import fourier
 from functools import wraps
 from . import structs
+import xarray as xr
+from pathlib import Path
 
+def dump(path: str|Path, data: xr.DataArray | xr.Dataset, mode='a'):
+    """serialize a dataset into a zarr directory structure""" 
+    if hasattr(data, 'iq_index'):
+        if 'sample_rate' in data.attrs:
+            # sample rate is metadata
+            sample_rate = data.attrs['sample_rate']
+        else:
+            # sample rate is a variate
+            sample_rate = data.sample_rate.values.flatten()[0]
+
+        chunks = {'iq_index': round(sample_rate*10e-3)}
+    else:
+        chunks = {}
+
+    data.chunk(chunks).to_zarr(path, mode=mode)
+
+def load(path: str|Path) -> xr.DataArray|xr.Dataset:
+    """load a dataset or data array"""
+    return xr.open_zarr(path)
 
 def filter_after(decorated):
     """apply a filter after the decorated function if a structs.FilteredCapture is passed"""
