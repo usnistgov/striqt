@@ -1,4 +1,4 @@
-"""evaluation of IQ data into analysis products packaged with xarray"""
+"""evaluation of IQ data into analysis products packaged into xarray.DataArray and xarray.Dataset"""
 
 from . import source, structs, waveform
 
