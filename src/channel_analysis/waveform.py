@@ -276,12 +276,9 @@ def _persistence_spectrum_coords(
         xp=np,
     )
 
-    print(freqs.size)
     if truncate:
         which_freqs = np.abs(freqs) <= capture.analysis_bandwidth / 2
         freqs = freqs[which_freqs]
-
-    print(freqs.size)
 
     freqs = xr.DataArray(
         freqs,
@@ -432,7 +429,7 @@ def iq_waveform(
     else:
         stop = int(stop_time_sec * capture.sample_rate)
 
-    coords = xr.Coordinates({'iq_sample': pd.RangeIndex(start, stop, name='iq_sample')})
+    coords = xr.Coordinates({'iq_index': pd.RangeIndex(start, stop, name='iq_index')})
 
     return ChannelAnalysisResult(
         data=iq[start:stop].copy(),
@@ -524,5 +521,6 @@ def analyze_by_spec(
     # capture.analysis_filter = dict(capture.analysis_filter)
     # capture = msgspec.convert(capture, type=type(capture))
     attrs = msgspec.to_builtins(capture, builtin_types=(frozendict,))
-    attrs['analysis_filter'] = dict(capture.analysis_filter)
+    if isinstance(capture, structs.FilteredCapture):
+        attrs['analysis_filter'] = dict(capture.analysis_filter)
     return xr.Dataset(xarrays, attrs=attrs)

@@ -3,14 +3,14 @@
 from __future__ import annotations
 import msgspec
 from typing import Optional, Literal, Any
-from channel_analysis import structs
+import channel_analysis
 
 
 def make_default_analysis():
-    return structs.analysis_registry.tostruct()()
+    return channel_analysis.waveforms.analysis_registry.tostruct()()
 
 
-class RadioCapture(structs.Capture):
+class RadioCapture(channel_analysis.Capture):
     """configuration for a single waveform capture"""
 
     # defaults have been added here
@@ -43,7 +43,7 @@ class Radio(msgspec.Struct):
     resource: Any = None
     gps: bool = False
     location: Optional[tuple[float, float, float]] = None
-    timebase: Literal['internal', 'gps'] = 'internal'
+    timebase: Literal['internal', 'gpsdo'] = 'internal'
     cyclic_trigger: Optional[float] = None
     calibration_path: Optional[str] = None
 
@@ -66,11 +66,11 @@ def read_yaml_sweep(path) -> tuple[Sweep, tuple[str, ...]]:
 
     # build a dict to extract the list of sweep fields and apply defaults
     tree = msgspec.yaml.decode(text, type=dict, strict=False)
-    sweep_fields = sorted(set.union(*[set(c) for c in tree['sweep']]))
+    sweep_fields = sorted(set.union(*[set(c) for c in tree['captures']]))
 
     # apply default capture settings
     defaults = tree['defaults']
-    tree['sweep'] = [dict(defaults, **c) for c in tree['sweep']]
+    tree['sweep'] = [dict(defaults, **c) for c in tree['captures']]
 
     run = msgspec.convert(tree, type=Sweep, strict=False)
     return run, sweep_fields

@@ -1,3 +1,7 @@
 """this module deals with the integration of sensor operation on sensor hardware"""
 
-from . import dataset, host, radio
+# work around a dynamic library loading packaging quirk on jetson aarch64
+import iqwaveform
+del iqwaveform
+
+from . import host, radio

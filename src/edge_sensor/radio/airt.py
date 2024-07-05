@@ -1,11 +1,11 @@
 from __future__ import annotations
+from iqwaveform.power_analysis import isroundmod
+from iqwaveform import fourier
 import time
 import cupy as cp
 import numpy as np
 import numba
 import numba.cuda
-from iqwaveform.power_analysis import isroundmod
-from iqwaveform import fourier
 import SoapySDR
 from SoapySDR import SOAPY_SDR_RX, SOAPY_SDR_CS16, errToStr
 import labbench as lb
@@ -16,7 +16,7 @@ from .. import structs
 
 
 channel_kwarg = attr.method_kwarg.int(
-    'channel', default=0, min=0, max=1, help='port number'
+    'channel', min=0, max=1, help='port number'
 )
 
 
@@ -34,9 +34,10 @@ class AirT7201B(HardwareSource):
         help='path to a calibration file, or None to skip calibration',
     )
 
+    duration = attr.value.float(100e-3, min=0, label='s', help='receive waveform capture duration')
+
     _downsample = attr.value.float(1.0, min=1, help='backend_sample_rate/sample_rate')
 
-    # TODO: sanity-check bounds
     lo_offset = attr.value.float(
         0.0,
         min=-125e6,
@@ -48,7 +49,7 @@ class AirT7201B(HardwareSource):
         None,
         min=1,
         label='Hz',
-        help='bandwidth of the digital filter passband (or None to bypass)',
+        help='bandwidth of the digital bandpass filter (or None to bypass)',
     )
 
     @attr.method.float(
@@ -57,6 +58,7 @@ class AirT7201B(HardwareSource):
         label='Hz',
         help='direct conversion LO frequency of the RX',
     )
+    @channel_kwarg
     def lo_frequency(self, center_frequency: float = lb.Undefined):
         # there is only one RX LO, shared by both channels
         if center_frequency is lb.Undefined:
@@ -70,22 +72,20 @@ class AirT7201B(HardwareSource):
         label='Hz',
     )
 
-    # TODO: check low bound
-    @attr.property.float(
-        min=200e3,
+    @attr.method.float(
+        min=3.906250e6,
         max=125e6,
         cache=True,
         label='Hz',
         help='sample rate before resampling',
     )
-    def backend_sample_rate(self, sample_rate: float = lb.Undefined):
-        # there is only one RX sample clock, shared by both channels?
-        return self.backend.getSampleRate(SOAPY_SDR_RX, 0)
+    @channel_kwarg
+    def backend_sample_rate(self, /, *, channel: int=0):
+        return self.backend.getSampleRate(SOAPY_SDR_RX, channel)
 
     @backend_sample_rate.setter
-    def backend_sample_rate(self, sample_rate):
-        # there is only one RX sample clock, shared by both channels?
-        self.backend.setSampleRate(SOAPY_SDR_RX, 0, sample_rate)
+    def _(self, sample_rate, /, *, channel: int=0):
+        self.backend.setSampleRate(SOAPY_SDR_RX, channel, sample_rate)
 
     sample_rate = backend_sample_rate.corrected_from_expression(
         backend_sample_rate / _downsample,
@@ -93,18 +93,20 @@ class AirT7201B(HardwareSource):
         help='sample rate of acquired waveform',
     )
 
-    @attr.property.float(sets=False, label='Hz', help='realized sample rate')
-    def realized_sample_rate(self):
+    @attr.method.float(sets=False, label='Hz')
+    @channel_kwarg
+    def realized_sample_rate(self, *, channel=0):
+        """the self-reported "actual" sample rate of the radio"""
         return self.backend.getSampleRate(SOAPY_SDR_RX, 0) / self._downsample
 
-    @attr.method.bool(cache=True).getter
+    @attr.method.bool(cache=True)
     @channel_kwarg
     def channel_enabled(self, /, *, channel: int = 0):
         # this is only called at most once, due to cache=True
         raise ValueError('must set channel_enabled once before reading')
 
     @channel_enabled.setter
-    def _(self, /, enable: bool, *, channel: int = 0):
+    def _(self, enable: bool, /, *, channel: int = 0):
         if enable:
             if channel != 0:
                 raise ValueError('only channel 0 is supported for now')
@@ -112,13 +114,25 @@ class AirT7201B(HardwareSource):
         else:
             self.backend.deactivateStream(self.rx_streams[channel])
 
-    @attr.method.float(min=-31.5, max=0, step=0.5, label='dB', help='SDR hardware gain')
+    @attr.method.float(min=-30, max=0, step=0.05, label='dB', help='SDR hardware gain')
     @channel_kwarg
     def gain(self, gain: float = lb.Undefined, /, *, channel: int = 0):
         if gain is lb.Undefined:
             return self.backend.getGain(SOAPY_SDR_RX, channel)
         else:
             self.backend.setGain(SOAPY_SDR_RX, channel, gain)
+
+    @attr.method.float(min=-41.95, max=0, step=0.05, label='dB', help='SDR TX hardware gain')
+    @channel_kwarg
+    def tx_gain(self, gain: float = lb.Undefined, /, *, channel: int = 0):
+        if gain is lb.Undefined:
+            return self.backend.getGain(SOAPY_SDR_TX, channel)
+        else:
+            self.backend.setGain(SOAPY_SDR_TX, channel, gain)
+
+    @attr.property.float(sets=False, cache=True, label='Hz', help='base sample clock rate (MCR)')
+    def master_clock_rate(self):
+        return self.backend.getMasterClockRate()
 
     def open(self):
         self._logger.info('connecting')
@@ -137,7 +151,7 @@ class AirT7201B(HardwareSource):
             # self.channel_enabled(False, channel=channel)
 
     def autosample(
-        self, center_frequency, sample_rate, analysis_bandwidth, lo_shift=False
+        self, center_frequency, sample_rate, analysis_bandwidth, lo_shift=False, channel=0
     ):
         """automatically configure center frequency and sampling parameters.
 
@@ -145,8 +159,12 @@ class AirT7201B(HardwareSource):
         Optionally, a frequency shift with oversampling is implemented to move the LO leakage
         outside of the specified analysis bandwidth.
         """
+
         fs_backend, lo_offset, self.analysis_filter = fourier.design_cola_resampler(
-            fs_base=125e6, fs_target=sample_rate, bw=analysis_bandwidth, shift=lo_shift
+            fs_base=self.master_clock_rate,
+            fs_target=sample_rate,
+            bw=analysis_bandwidth,
+            shift=lo_shift
         )
 
         fft_size_out = self.analysis_filter.get(
@@ -160,10 +178,60 @@ class AirT7201B(HardwareSource):
             self.lo_offset = lo_offset  # hold update on this one?
 
         self.center_frequency = center_frequency
-        self.sample_rate = sample_rate
+        self.sample_rate(sample_rate, channel=channel)
         self.analysis_bandwidth = analysis_bandwidth
 
-    def summarize(self, channel=0, duration=None) -> structs.RadioCapture:
+    def reset_counts(self):
+        self.acquisition_counts = {'overflow': 0, 'exceptions': 0, 'total': 0}
+
+    def acquire(self, channel=0, calibration_bypass=False):
+        if isroundmod(self.duration * self.sample_rate(channel=channel), 1):
+            sample_count = round(self.duration * self.sample_rate(channel=channel))
+        else:
+            msg = f'duration must be an integer multiple of the sample period (1/{self.sample_rate} s)'
+            raise ValueError(msg)
+
+        backend_count = round(np.ceil(sample_count * self._downsample))
+        iq = self._read_stream(backend_count)
+
+        if self.calibration_path is not None and not calibration_bypass:
+            raise ValueError('calibration not yet supported')
+        else:
+            iq /= float(np.iinfo(np.int16).max)
+
+        if self.analysis_filter:
+            # out = cp.array(self.buffer, copy=False).view(iq.dtype)
+            return fourier.ola_filter(iq, extend=True, **self.analysis_filter)
+        else:
+            return iq
+
+    def arm(self, capture: structs.RadioCapture, enable=True) -> int:
+        """apply a capture configuration and enable the channel to receive samples"""
+
+        if capture.if_frequency is not None:
+            raise IOError('external frequency conversion is not yet supported')
+
+        if isroundmod(capture.duration * capture.sample_rate, 1):
+            self.duration = capture.duration
+        else:
+            raise ValueError(
+                f'duration {capture.duration} is not an integer multiple of sample period'
+            )
+
+        self.gain = capture.gain
+
+        self.autosample(
+            center_frequency=capture.center_frequency,
+            sample_rate=capture.sample_rate,
+            analysis_bandwidth=capture.analysis_bandwidth,
+            lo_shift=capture.lo_shift,
+        )
+
+        if enable:
+            self.channel_enabled(True, channel=capture.channel)
+
+    def get_armed_state(self, channel=0, duration=None) -> structs.RadioCapture:
+        """generate the currently armed capture configuration for the specified channel"""
         if self.lo_offset == 0:
             lo_shift = None
         elif self.lo_offset < 0:
@@ -187,51 +255,6 @@ class AirT7201B(HardwareSource):
             lo_gain=0,
             rf_gain=0,
         )
-
-    def reset_counts(self):
-        self.acquisition_counts = {'overflow': 0, 'exceptions': 0, 'total': 0}
-
-    def acquire(self, count, calibration_bypass=False):
-        backend_count = round(np.ceil(count * self._downsample))
-        iq = self._read_stream(backend_count)
-
-        if self.calibration_path is not None and not calibration_bypass:
-            raise ValueError('calibration not yet supported')
-        else:
-            iq /= float(np.iinfo(np.int16).max)
-
-        if self.analysis_filter:
-            # out = cp.array(self.buffer, copy=False).view(iq.dtype)
-            return fourier.ola_filter(iq, extend=True, **self.analysis_filter)
-        else:
-            return iq
-
-    def configure(self, capture: structs.RadioCapture, enable=True) -> int:
-        """apply a capture configuration, returning the number of IQ samples to acquire"""
-
-        if capture.if_frequency is not None:
-            raise IOError('external frequency conversion is not yet supported')
-
-        if isroundmod(capture.duration * capture.sample_rate, 1):
-            sample_count = round(capture.duration * capture.sample_rate)
-        else:
-            raise ValueError(
-                f'duration {capture.duration} is not an integer multiple of sample period'
-            )
-
-        self.gain = capture.gain
-
-        self.autosample(
-            center_frequency=capture.center_frequency,
-            sample_rate=capture.sample_rate,
-            analysis_bandwidth=capture.analysis_bandwidth,
-            lo_shift=capture.lo_shift,
-        )
-
-        if enable:
-            self.channel_enabled(True, channel=capture.channel)
-
-        return sample_count
 
     def close(self):
         pending_ex = None
