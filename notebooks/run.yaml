@@ -66,9 +66,9 @@ channel_analysis:
         - rms
         - peak
 
-    iq_waveform:
-        start_time_sec: 0
-        stop_time_sec: 0.1
+    # iq_waveform:
+    #     start_time_sec: 0
+    #     stop_time_sec: 0.1
 
     persistence_spectrum:
         quantiles:

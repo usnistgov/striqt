@@ -4,6 +4,7 @@ from .structs import Sweep
 import labbench as lb
 from channel_analysis import waveform
 import xarray as xr
+import pandas as pd
 
 
 def sweep(radio: base.RadioDevice, run_spec: Sweep, sweep_fields: list[str]) -> xr.Dataset:
@@ -15,7 +16,8 @@ def sweep(radio: base.RadioDevice, run_spec: Sweep, sweep_fields: list[str]) -> 
 
         with lb.stopwatch(f'{desc}: '):
             radio.arm(capture)
-            iq = radio.acquire()
+            iq, timestamp = radio.acquire()
+            coords['timestamp'] = [timestamp]
             analysis = (
                 waveform
                 .analyze_by_spec(iq, capture, spec=run_spec.channel_analysis)

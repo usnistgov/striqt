@@ -1,4 +1,4 @@
-"""this is installed into the script environment under a name specified by pyproject.toml"""
+"""this is installed into the shell PATH environment as configured by pyproject.toml"""
 
 import click
 from pathlib import Path

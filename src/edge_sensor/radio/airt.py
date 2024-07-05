@@ -10,6 +10,7 @@ import SoapySDR
 from SoapySDR import SOAPY_SDR_RX, SOAPY_SDR_TX, SOAPY_SDR_CS16, errToStr
 import labbench as lb
 import labbench.paramattr as attr
+import pandas as pd
 
 from .base import RadioDevice
 from .. import structs
@@ -184,13 +185,14 @@ class AirT7201B(RadioDevice):
     def reset_counts(self):
         self.acquisition_counts = {'overflow': 0, 'exceptions': 0, 'total': 0}
 
-    def acquire(self, channel=0, calibration_bypass=False):
+    def acquire(self, channel=0, calibration_bypass=False) -> tuple[cp.array, pd.Timestamp]:
         if isroundmod(self.duration * self.sample_rate(channel=channel), 1):
             sample_count = round(self.duration * self.sample_rate(channel=channel))
         else:
             msg = f'duration must be an integer multiple of the sample period (1/{self.sample_rate} s)'
             raise ValueError(msg)
 
+        timestamp = pd.Timestamp('now')
         backend_count = round(np.ceil(sample_count * self._downsample))
         iq = self._read_stream(backend_count)
 
@@ -201,9 +203,9 @@ class AirT7201B(RadioDevice):
 
         if self.analysis_filter:
             # out = cp.array(self.buffer, copy=False).view(iq.dtype)
-            return fourier.ola_filter(iq, extend=True, **self.analysis_filter)
+            return fourier.ola_filter(iq, extend=True, **self.analysis_filter), timestamp
         else:
-            return iq
+            return iq, timestamp
 
     def arm(self, capture: structs.RadioCapture, enable=True) -> int:
         """apply a capture configuration and enable the channel to receive samples"""
