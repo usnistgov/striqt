@@ -12,7 +12,10 @@ def filter_after(decorated):
     def func(capture, *args, out=None, **kws):
         iq = decorated(capture, *args, out=out, **kws)
 
-        if isinstance(capture, structs.FilteredCapture) or capture.analysis_bandwidth is None:
+        if (
+            isinstance(capture, structs.FilteredCapture)
+            or capture.analysis_bandwidth is None
+        ):
             return iq
 
         return fourier.ola_filter(
@@ -29,12 +32,7 @@ def filter_after(decorated):
 
 @filter_after
 def simulated_awgn(
-    capture: structs.Capture,
-    *,
-    power: float = 1,
-    xp=np,
-    pinned_cuda=False,
-    out=None
+    capture: structs.Capture, *, power: float = 1, xp=np, pinned_cuda=False, out=None
 ):
     try:
         # e.g., numpy

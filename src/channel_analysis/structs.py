@@ -25,7 +25,9 @@ class Capture(msgspec.Struct, kw_only=True, frozen=True):
 class FilteredCapture(Capture):
     # filtering and resampling
     analysis_bandwidth: typing.Optional[float] = None
-    analysis_filter: dict = msgspec.field(default_factory=lambda: frozendict({'fft_size': 1024, 'window': 'hamming'}))
+    analysis_filter: dict = msgspec.field(
+        default_factory=lambda: frozendict({'fft_size': 1024, 'window': 'hamming'})
+    )
 
 
 class KeywordArguments(msgspec.Struct):
@@ -90,5 +92,5 @@ class KeywordConfigRegistry(UserDict):
             bases=(self.base_struct,) if self.base_struct else None,
             kw_only=True,
             forbid_unknown_fields=True,
-            omit_defaults=True
+            omit_defaults=True,
         )

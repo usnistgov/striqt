@@ -1,3 +1,13 @@
-"""xarray and GPU evaluation of IQ data and post-analysis plotting routines"""
+"""evaluation of IQ data into analysis products packaged with xarray"""
 
 from . import source, structs, waveform
+
+from .structs import Capture, FilteredCapture
+from .waveform import (
+    amplitude_probability_distribution,
+    analyze_by_spec,
+    cyclic_channel_power,
+    persistence_spectrum,
+    power_time_series,
+    to_analysis_spec,
+)

@@ -320,7 +320,7 @@ def persistence_spectrum(
     if isinstance(window, list):
         # lists break lru_cache
         window = tuple(window)
-        
+
     enbw = resolution * equivalent_noise_bandwidth(window, fft_size)
 
     metadata = {
@@ -486,12 +486,14 @@ def ola_filter(
     )
 
 
-def to_analysis_spec(obj: str | dict | structs.ChannelAnalysis) -> structs.ChannelAnalysis:
+def to_analysis_spec(
+    obj: str | dict | structs.ChannelAnalysis,
+) -> structs.ChannelAnalysis:
     """coerces a yaml string or dictionary of dictionaries into channel analysis spec"""
 
     struct = registry.spec_type()
 
-    if isinstance(obj, (dict,registry.base_struct)):
+    if isinstance(obj, (dict, registry.base_struct)):
         return msgspec.convert(obj, struct)
     elif isinstance(obj, str):
         return msgspec.yaml.decode(obj, type=struct)
@@ -499,7 +501,9 @@ def to_analysis_spec(obj: str | dict | structs.ChannelAnalysis) -> structs.Chann
         return TypeError('unrecognized type')
 
 
-def analyze_by_spec(iq: Array, capture: structs.Capture, *, spec: str | dict | structs.ChannelAnalysis):
+def analyze_by_spec(
+    iq: Array, capture: structs.Capture, *, spec: str | dict | structs.ChannelAnalysis
+):
     """evaluate a set of different channel analyses on the iq waveform as specified by spec"""
 
     # round-trip for type conversion and validation

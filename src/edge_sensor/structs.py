@@ -26,21 +26,24 @@ class RadioCapture(structs.Capture):
 
     # filtering and resampling
     analysis_bandwidth: float = 10e6
-    lo_shift: Literal['left','right',None] = 'left'  # shift the LO outside the acquisition band
+    lo_shift: Literal['left', 'right', None] = (
+        'left'  # shift the LO outside the acquisition band
+    )
 
     # external frequency conversion support
     if_frequency: Optional[float] = None  # Hz (or none, for no ext frontend)
     lo_gain: Optional[float] = 0  # dB (ignored when if_frequency is None)
-    rf_gain: Optional[float] = 0 # dB (ignored when if_frequency is None)
+    rf_gain: Optional[float] = 0  # dB (ignored when if_frequency is None)
 
 
 class Radio(msgspec.Struct):
     """characteristics of the radio"""
+
     driver: str = 'AirT7201'
     resource: Any = None
     gps: bool = False
     location: Optional[tuple[float, float, float]] = None
-    timebase: Literal['internal','gps'] = 'internal'
+    timebase: Literal['internal', 'gps'] = 'internal'
     cyclic_trigger: Optional[float] = None
     calibration_path: Optional[str] = None
 
