@@ -31,9 +31,9 @@ class RadioCapture(channel_analysis.Capture):
     )
 
     # external frequency conversion support
-    if_frequency: Optional[float] = None  # Hz (or none, for no ext frontend)
-    lo_gain: Optional[float] = 0  # dB (ignored when if_frequency is None)
-    rf_gain: Optional[float] = 0  # dB (ignored when if_frequency is None)
+    preselect_if_frequency: Optional[float] = None  # Hz (or none, for no ext frontend)
+    preselect_lo_gain: Optional[float] = 0  # dB (ignored when if_frequency is None)
+    preselect_rf_gain: Optional[float] = 0  # dB (ignored when if_frequency is None)
 
 
 class Radio(msgspec.Struct):

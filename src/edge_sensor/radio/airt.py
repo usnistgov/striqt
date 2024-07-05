@@ -210,7 +210,7 @@ class AirT7201B(RadioDevice):
     def arm(self, capture: structs.RadioCapture, enable=True) -> int:
         """apply a capture configuration and enable the channel to receive samples"""
 
-        if capture.if_frequency is not None:
+        if capture.preselect_if_frequency is not None:
             raise IOError('external frequency conversion is not yet supported')
 
         if isroundmod(capture.duration * capture.sample_rate, 1):
