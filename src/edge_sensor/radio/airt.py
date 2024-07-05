@@ -7,11 +7,11 @@ import numpy as np
 import numba
 import numba.cuda
 import SoapySDR
-from SoapySDR import SOAPY_SDR_RX, SOAPY_SDR_CS16, errToStr
+from SoapySDR import SOAPY_SDR_RX, SOAPY_SDR_TX, SOAPY_SDR_CS16, errToStr
 import labbench as lb
 import labbench.paramattr as attr
 
-from .base import HardwareSource
+from .base import RadioDevice
 from .. import structs
 
 
@@ -20,7 +20,7 @@ channel_kwarg = attr.method_kwarg.int(
 )
 
 
-class AirT7201B(HardwareSource):
+class AirT7201B(RadioDevice):
     """fast simplified single-channel receive acquisition"""
 
     on_overflow = attr.value.str(
@@ -230,7 +230,7 @@ class AirT7201B(HardwareSource):
         if enable:
             self.channel_enabled(True, channel=capture.channel)
 
-    def get_armed_state(self, channel=0, duration=None) -> structs.RadioCapture:
+    def get_current_capture(self, channel=0, duration=None) -> structs.RadioCapture:
         """generate the currently armed capture configuration for the specified channel"""
         if self.lo_offset == 0:
             lo_shift = None

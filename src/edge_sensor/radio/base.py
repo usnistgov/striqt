@@ -5,7 +5,7 @@ import labbench.paramattr as attr
 from .. import host
 
 
-class HardwareSource(lb.Device):
+class RadioDevice(lb.Device):
     def build_index_variables(self):
         return host.index_variables()
 
