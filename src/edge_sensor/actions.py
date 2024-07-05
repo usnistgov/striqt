@@ -13,20 +13,15 @@ FIELD_ATTRS = {
         'label': 'RF center frequency',
         'units': 'Hz',
     },
-    RadioCapture.channel.__name__: {
-        'label': 'RX hardware input port'
-    },
+    RadioCapture.channel.__name__: {'label': 'RX hardware input port'},
     RadioCapture.gain.__name__: {
         'label': 'internal gain setting inside the radio',
-        'unit': 'dB'
+        'unit': 'dB',
     },
-    RadioCapture.duration.__name__: {
-        'label': 'duration of the capture',
-        'unit': 's'
-    },
+    RadioCapture.duration.__name__: {'label': 'duration of the capture', 'unit': 's'},
     RadioCapture.sample_rate.__name__: {
         'label': 'sample rate of the waveform',
-        'unit': 'S/s'
+        'unit': 'S/s',
     },
     RadioCapture.analysis_bandwidth.__name__: {
         'label': 'filtered bandwidth of the received waveform',
@@ -34,7 +29,7 @@ FIELD_ATTRS = {
     },
     RadioCapture.lo_shift.__name__: {
         'label': 'direction of the LO shift (or None for no shift)',
-        'unit': 'Hz'
+        'unit': 'Hz',
     },
     RadioCapture.preselect_if_frequency.__name__: {
         'label': 'IF filter center frequency',
@@ -42,55 +37,33 @@ FIELD_ATTRS = {
     },
     RadioCapture.preselect_lo_gain.__name__: {
         'label': 'gain of the LO stage',
-        'unit': 'dB'
+        'unit': 'dB',
     },
     RadioCapture.preselect_rf_gain.__name__: {
         'label': 'preselector gain setting',
-        'unit': 'dB'
+        'unit': 'dB',
     },
-    'timestamp': {
-        'label': 'Capture start time'
-    }
+    'timestamp': {'label': 'Capture start time'},
 }
 
-@cache
-def _template_coordinates(fields):
-    defaults = msgspec.to_builtins(RadioCapture())
 
-    coords = xr.Coordinates(
-        {f: [defaults[f]] for f in fields}
-
-    )
-
-    for field in fields:
-        coords[field].attrs = FIELD_ATTRS[field]
-
-    return coords
-
-def coordinates(capture: RadioCapture, fields):
-    fields = tuple(fields)
-    coords = _template_coordinates(fields).copy(deep=True)
-    for field in fields:
-        coords[field].values[:] = np.array([getattr(capture, field)])
-    return coords
-
-def sweep(radio: base.RadioDevice, run_spec: Sweep, sweep_fields: list[str]) -> xr.Dataset:
+def sweep(
+    radio: base.RadioDevice, run_spec: Sweep, sweep_fields: list[str]
+) -> xr.Dataset:
     data = []
     spec = run_spec.channel_analysis
 
     for capture in run_spec.captures:
         # treat swept fields as coordinates/indices
         coords = {k: [getattr(capture, k)] for k in sweep_fields}
-        desc = ', '.join([f'{k}={v[0]}' for k,v in coords.items()])
+        desc = ', '.join([f'{k}={v[0]}' for k, v in coords.items()])
 
         with lb.stopwatch(f'{desc}: '):
             radio.arm(capture)
-            iq, timestamp = radio.acquire()
+            iq, timestamp = radio.acquire(capture.channel)
             coords['timestamp'] = [timestamp]
-            analysis = (
-                waveform
-                .analyze_by_spec(iq, capture, spec=spec)
-                .assign_coords(coords)
+            analysis = waveform.analyze_by_spec(iq, capture, spec=spec).assign_coords(
+                coords
             )
 
         # remove swept fields from the metadata

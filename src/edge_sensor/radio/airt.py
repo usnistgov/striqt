@@ -16,9 +16,7 @@ from .base import RadioDevice
 from .. import structs
 
 
-channel_kwarg = attr.method_kwarg.int(
-    'channel', min=0, max=1, help='port number'
-)
+channel_kwarg = attr.method_kwarg.int('channel', min=0, max=1, help='port number')
 
 
 class AirT7201B(RadioDevice):
@@ -35,7 +33,9 @@ class AirT7201B(RadioDevice):
         help='path to a calibration file, or None to skip calibration',
     )
 
-    duration = attr.value.float(100e-3, min=0, label='s', help='receive waveform capture duration')
+    duration = attr.value.float(
+        100e-3, min=0, label='s', help='receive waveform capture duration'
+    )
 
     _downsample = attr.value.float(1.0, min=1, help='backend_sample_rate/sample_rate')
 
@@ -81,11 +81,11 @@ class AirT7201B(RadioDevice):
         help='sample rate before resampling',
     )
     @channel_kwarg
-    def backend_sample_rate(self, /, *, channel: int=0):
+    def backend_sample_rate(self, /, *, channel: int = 0):
         return self.backend.getSampleRate(SOAPY_SDR_RX, channel)
 
     @backend_sample_rate.setter
-    def _(self, sample_rate, /, *, channel: int=0):
+    def _(self, sample_rate, /, *, channel: int = 0):
         self.backend.setSampleRate(SOAPY_SDR_RX, channel, sample_rate)
 
     sample_rate = backend_sample_rate.corrected_from_expression(
@@ -123,7 +123,9 @@ class AirT7201B(RadioDevice):
         else:
             self.backend.setGain(SOAPY_SDR_RX, channel, gain)
 
-    @attr.method.float(min=-41.95, max=0, step=0.05, label='dB', help='SDR TX hardware gain')
+    @attr.method.float(
+        min=-41.95, max=0, step=0.05, label='dB', help='SDR TX hardware gain'
+    )
     @channel_kwarg
     def tx_gain(self, gain: float = lb.Undefined, /, *, channel: int = 0):
         if gain is lb.Undefined:
@@ -131,7 +133,9 @@ class AirT7201B(RadioDevice):
         else:
             self.backend.setGain(SOAPY_SDR_TX, channel, gain)
 
-    @attr.property.float(sets=False, cache=True, label='Hz', help='base sample clock rate (MCR)')
+    @attr.property.float(
+        sets=False, cache=True, label='Hz', help='base sample clock rate (MCR)'
+    )
     def master_clock_rate(self):
         return self.backend.getMasterClockRate()
 
@@ -152,7 +156,12 @@ class AirT7201B(RadioDevice):
             # self.channel_enabled(False, channel=channel)
 
     def autosample(
-        self, center_frequency, sample_rate, analysis_bandwidth, lo_shift=False, channel=0
+        self,
+        center_frequency,
+        sample_rate,
+        analysis_bandwidth,
+        lo_shift=False,
+        channel=0,
     ):
         """automatically configure center frequency and sampling parameters.
 
@@ -165,7 +174,7 @@ class AirT7201B(RadioDevice):
             fs_base=self.master_clock_rate,
             fs_target=sample_rate,
             bw=analysis_bandwidth,
-            shift=lo_shift
+            shift=lo_shift,
         )
 
         fft_size_out = self.analysis_filter.get(
@@ -185,7 +194,9 @@ class AirT7201B(RadioDevice):
     def reset_counts(self):
         self.acquisition_counts = {'overflow': 0, 'exceptions': 0, 'total': 0}
 
-    def acquire(self, channel=0, calibration_bypass=False) -> tuple[cp.array, pd.Timestamp]:
+    def acquire(
+        self, channel=0, calibration_bypass=False
+    ) -> tuple[cp.array, pd.Timestamp]:
         if isroundmod(self.duration * self.sample_rate(channel=channel), 1):
             sample_count = round(self.duration * self.sample_rate(channel=channel))
         else:
@@ -203,7 +214,9 @@ class AirT7201B(RadioDevice):
 
         if self.analysis_filter:
             # out = cp.array(self.buffer, copy=False).view(iq.dtype)
-            return fourier.ola_filter(iq, extend=True, **self.analysis_filter), timestamp
+            return fourier.ola_filter(
+                iq, extend=True, **self.analysis_filter
+            ), timestamp
         else:
             return iq, timestamp
 
