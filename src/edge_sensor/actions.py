@@ -5,53 +5,61 @@ import labbench as lb
 from channel_analysis import waveform
 import xarray as xr
 from functools import cache
+import msgspec
+import numpy as np
 
 FIELD_ATTRS = {
-    'center_frequency': {
+    RadioCapture.center_frequency.__name__: {
         'label': 'RF center frequency',
         'units': 'Hz',
     },
-    'channel': {
+    RadioCapture.channel.__name__: {
         'label': 'RX hardware input port'
     },
-    'gain': {
+    RadioCapture.gain.__name__: {
         'label': 'internal gain setting inside the radio',
         'unit': 'dB'
     },
-    'duration': {
+    RadioCapture.duration.__name__: {
         'label': 'duration of the capture',
         'unit': 's'
     },
-    'sample_rate': {
+    RadioCapture.sample_rate.__name__: {
         'label': 'sample rate of the waveform',
         'unit': 'S/s'
     },
-    'analysis_bandwidth': {
+    RadioCapture.analysis_bandwidth.__name__: {
         'label': 'filtered bandwidth of the received waveform',
         'unit': 'Hz',
     },
-    'lo_shift': {
+    RadioCapture.lo_shift.__name__: {
         'label': 'direction of the LO shift (or None for no shift)',
         'unit': 'Hz'
     },
-    'preselect_if_frequency': {
+    RadioCapture.preselect_if_frequency.__name__: {
         'label': 'IF filter center frequency',
         'unit': 'Hz',
     },
-    'preselect_lo_gain': {
+    RadioCapture.preselect_lo_gain.__name__: {
         'label': 'gain of the LO stage',
         'unit': 'dB'
     },
-    'preselect_rf_gain': {
+    RadioCapture.preselect_rf_gain.__name__: {
         'label': 'preselector gain setting',
         'unit': 'dB'
+    },
+    'timestamp': {
+        'label': 'Capture start time'
     }
 }
 
 @cache
 def _template_coordinates(fields):
+    defaults = msgspec.to_builtins(RadioCapture())
+
     coords = xr.Coordinates(
-        {f: [getattr(RadioCapture, f)] for f in fields}
+        {f: [defaults[f]] for f in fields}
+
     )
 
     for field in fields:
@@ -61,17 +69,18 @@ def _template_coordinates(fields):
 
 def coordinates(capture: RadioCapture, fields):
     fields = tuple(fields)
-    coords = _template_coordinates(fields).copy()
+    coords = _template_coordinates(fields).copy(deep=True)
     for field in fields:
-        coords[field].values[:] = [getattr(capture, field)]
+        coords[field].values[:] = np.array([getattr(capture, field)])
     return coords
 
 def sweep(radio: base.RadioDevice, run_spec: Sweep, sweep_fields: list[str]) -> xr.Dataset:
     data = []
+    spec = run_spec.channel_analysis
 
     for capture in run_spec.captures:
         # treat swept fields as coordinates/indices
-        coords = coordinates(capture, sweep_fields)
+        coords = {k: [getattr(capture, k)] for k in sweep_fields}
         desc = ', '.join([f'{k}={v[0]}' for k,v in coords.items()])
 
         with lb.stopwatch(f'{desc}: '):
@@ -80,7 +89,7 @@ def sweep(radio: base.RadioDevice, run_spec: Sweep, sweep_fields: list[str]) -> 
             coords['timestamp'] = [timestamp]
             analysis = (
                 waveform
-                .analyze_by_spec(iq, capture, spec=run_spec.channel_analysis)
+                .analyze_by_spec(iq, capture, spec=spec)
                 .assign_coords(coords)
             )
 
@@ -90,4 +99,8 @@ def sweep(radio: base.RadioDevice, run_spec: Sweep, sweep_fields: list[str]) -> 
 
         data.append(analysis)
 
-    return xr.combine_by_coords(data)
+    ds = xr.combine_by_coords(data)
+    for k in sweep_fields:
+        ds[k].attrs = FIELD_ATTRS[k]
+
+    return ds
