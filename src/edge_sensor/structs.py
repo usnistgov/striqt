@@ -6,14 +6,13 @@ from typing import Optional, Literal, Any
 import channel_analysis
 from pathlib import Path
 
+
 def make_default_analysis():
     return channel_analysis.waveforms.analysis_registry.tostruct()()
 
 
 class RadioCapture(channel_analysis.Capture):
     """configuration for a single waveform capture"""
-
-    # defaults have been added here
 
     # RF and leveling
     center_frequency: float = 3710e6
@@ -48,7 +47,6 @@ class Radio(msgspec.Struct):
     calibration_path: Optional[str] = None
 
 
-
 class Sweep(msgspec.Struct):
     captures: list[RadioCapture]
     radio: Radio = msgspec.field(default_factory=Radio)
@@ -56,7 +54,15 @@ class Sweep(msgspec.Struct):
     channel_analysis: Any = msgspec.field(default_factory=make_default_analysis)
 
 
-def read_yaml_sweep(path: str|Path) -> tuple[Sweep, tuple[str, ...]]:
+def to_calibration_capture(c: RadioCapture, duration=0.1) -> RadioCapture:
+    """return a capture configured as a calibration with the specified duration"""
+
+    d = msgspec.to_builtins(c)
+    d['duration'] = duration
+    return msgspec.convert(d, type=RadioCapture)
+
+
+def read_yaml_sweep(path: str | Path) -> tuple[Sweep, tuple[str, ...]]:
     """build a Sweep struct from the contents of specified yaml file"""
 
     with open(path, 'rb') as fd:

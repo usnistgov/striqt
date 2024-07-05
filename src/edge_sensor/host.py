@@ -112,7 +112,7 @@ def host_metadata(search_path='.'):
         'git_commit': repo.head().decode(),
         # 'git_unstaged_changes': git_unstaged_changes('.')
         'host_uuid': hex(uuid.getnode()),
-        'host_name': socket.gethostname()
+        'host_name': socket.gethostname(),
     }
 
     return repo_info
