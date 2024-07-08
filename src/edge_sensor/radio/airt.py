@@ -240,8 +240,10 @@ class AirT7201B(RadioDevice):
             fs_base=self.master_clock_rate,
             fs_target=sample_rate,
             bw=analysis_bandwidth,
+            bw_lo=0.75e6,
             shift=lo_shift,
         )
+        print(self.analysis_filter, fs_backend)
 
         fft_size_out = self.analysis_filter.get(
             'fft_size_out', self.analysis_filter['fft_size']

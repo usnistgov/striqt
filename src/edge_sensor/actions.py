@@ -85,10 +85,6 @@ def sweep(
     spec = run_spec.channel_analysis
     sweep_fields = tuple(sweep_fields)
 
-    timestamps = []
-
-    attrs = {}
-
     for capture in run_spec.captures:
         # treat swept fields as coordinates/indices
         desc = ', '.join([f'{k}={v}' for k, v in msgspec.to_builtins(capture).items()])
