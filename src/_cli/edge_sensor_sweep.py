@@ -22,7 +22,7 @@ def run(yaml_path: Path, output_path: Path, force: bool):
     import labbench as lb
     from channel_analysis import dump
 
-    lb.show_messages('debug')
+    lb.show_messages('info')
 
     with airt.AirT7201B() as sdr:
         data = sweep(sdr, run_spec, sweep_fields)

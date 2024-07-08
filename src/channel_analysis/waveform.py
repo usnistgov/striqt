@@ -127,7 +127,7 @@ def power_time_series(
     metadata = {
         'detector_period': detector_period,
         'label': 'Channel power',
-        'units': f'dBm/{capture.analysis_bandwidth/1e6} MHz',
+        'units': f'dBm/{(capture.analysis_bandwidth or capture.sample_rate)/1e6} MHz',
     }
 
     return ChannelAnalysisResult(
@@ -204,7 +204,7 @@ def cyclic_channel_power(
 
     metadata = {
         'label': 'Channel power',
-        'units': f'dBm/{capture.analysis_bandwidth/1e6} MHz',
+        'units': f'dBm/{(capture.analysis_bandwidth or capture.sample_rate)/1e6} MHz',
         'cyclic_period': cyclic_period,
         'detector_period': detector_period,
     }
@@ -246,7 +246,7 @@ def amplitude_probability_distribution(
 
     bins = _bin_apd(xp=xp, **bin_params)
     coords = _amplitude_probability_distribution_coords(
-        xp=np, units=f'dBm/{capture.analysis_bandwidth/1e6} MHz', **bin_params
+        xp=np, units=f'dBm/{(capture.analysis_bandwidth or capture.sample_rate)/1e6} MHz', **bin_params
     )
 
     ccdf = iqwaveform.sample_ccdf(iqwaveform.envtodB(iq), bins).astype(dtype)
@@ -276,7 +276,7 @@ def _persistence_spectrum_coords(
         xp=np,
     )
 
-    if truncate:
+    if truncate and capture.analysis_bandwidth is not None:
         which_freqs = np.abs(freqs) <= capture.analysis_bandwidth / 2
         freqs = freqs[which_freqs]
 

@@ -7,16 +7,52 @@ import numpy as np
 import numba
 import numba.cuda
 import SoapySDR
-from SoapySDR import SOAPY_SDR_RX, SOAPY_SDR_TX, SOAPY_SDR_CS16, errToStr
+from SoapySDR import SOAPY_SDR_RX, SOAPY_SDR_TX, SOAPY_SDR_CF32 , errToStr
 import labbench as lb
 import labbench.paramattr as attr
 import pandas as pd
+import typing
+from functools import wraps
 
 from .base import RadioDevice
 from .. import structs
 
-
+# for TX only (RX channel is accessed through the AirT7201B.channel method)
 channel_kwarg = attr.method_kwarg.int('channel', min=0, max=1, help='port number')
+
+
+def _verify_channel_setting(func: callable) -> callable:
+    # TODO: fix typing
+    @wraps(func)
+    def wrapper(self, *args, **kws):
+        if self.channel() is None:
+            raise ValueError(f'set {self}.channel first')
+        else:
+            return func(self, *args, **kws)
+
+    return wrapper
+
+def _verify_channel_for_getter(func: callable) -> callable:
+    # TODO: fix typing
+    @wraps(func)
+    def wrapper(self):
+        if self.channel() is None:
+            raise ValueError(f'set {self}.channel first')
+        else:
+            return func(self)
+
+    return wrapper
+
+def _verify_channel_for_setter(func: callable) -> callable:
+    # TODO: fix typing
+    @wraps(func)
+    def wrapper(self, argument):
+        if self.channel() is None:
+            raise ValueError(f'set {self}.channel first')
+        else:
+            return func(self, argument)
+
+    return wrapper
 
 
 class AirT7201B(RadioDevice):
@@ -53,26 +89,48 @@ class AirT7201B(RadioDevice):
         help='bandwidth of the digital bandpass filter (or None to bypass)',
     )
 
+    @attr.method.int(
+        min=0,
+        max=1,
+        allow_none=True,
+        cache=True,
+        help='RX input port index',
+    )
+    def channel(self):
+        # return none until this is set, then the cached value is returned
+        return None
+
+    @channel.setter
+    def _(self, channel: int):
+        if self.channel() == channel:
+            return
+
+        if channel is None and self.rx_stream is not None:
+            self.channel_enabled(False)
+        else:
+            if getattr(self, 'rx_stream', None) is not None:
+                self.backend.closeStream(self.rx_stream)
+            self.rx_stream = self.backend.setupStream(SOAPY_SDR_RX, SOAPY_SDR_CF32, [channel])
+
     @attr.method.float(
         min=300e6,
         max=6000e6,
         label='Hz',
         help='direct conversion LO frequency of the RX',
     )
-    @channel_kwarg
-    def lo_frequency(self, *, channel: int = 0):
+    @_verify_channel_for_getter
+    def lo_frequency(self):
         # there is only one RX LO, shared by both channels
 
-        ret = self.backend.getFrequency(SOAPY_SDR_RX, channel)
-        print('got ', ret)
+        ret = self.backend.getFrequency(SOAPY_SDR_RX, self.channel())
         return ret
 
     @lo_frequency.setter
-    def lo_frequency(self, center_frequency, *, channel: int = 0):
+    @_verify_channel_for_setter
+    def _(self, center_frequency):
         # there is only one RX LO, shared by both channels
 
-        print('set ', center_frequency)
-        self.backend.setFrequency(SOAPY_SDR_RX, channel, center_frequency)
+        self.backend.setFrequency(SOAPY_SDR_RX, self.channel(), center_frequency)
 
     center_frequency = lo_frequency.corrected_from_expression(
         lo_frequency + lo_offset,
@@ -87,13 +145,14 @@ class AirT7201B(RadioDevice):
         label='Hz',
         help='sample rate before resampling',
     )
-    @channel_kwarg
-    def backend_sample_rate(self, /, *, channel: int = 0):
-        return self.backend.getSampleRate(SOAPY_SDR_RX, channel)
+    @_verify_channel_for_getter
+    def backend_sample_rate(self):
+        return self.backend.getSampleRate(SOAPY_SDR_RX, self.channel())
 
     @backend_sample_rate.setter
-    def _(self, sample_rate, /, *, channel: int = 0):
-        self.backend.setSampleRate(SOAPY_SDR_RX, channel, sample_rate)
+    @_verify_channel_for_setter
+    def _(self, sample_rate):
+        self.backend.setSampleRate(SOAPY_SDR_RX, self.channel(), sample_rate)
 
     sample_rate = backend_sample_rate.corrected_from_expression(
         backend_sample_rate / _downsample,
@@ -102,33 +161,33 @@ class AirT7201B(RadioDevice):
     )
 
     @attr.method.float(sets=False, label='Hz')
-    @channel_kwarg
-    def realized_sample_rate(self, *, channel=0):
+    def realized_sample_rate(self):
         """the self-reported "actual" sample rate of the radio"""
         return self.backend.getSampleRate(SOAPY_SDR_RX, 0) / self._downsample
 
     @attr.method.bool(cache=True)
-    @channel_kwarg
-    def channel_enabled(self, /, *, channel: int = 0):
+    @_verify_channel_for_getter
+    def channel_enabled(self):
         # this is only called at most once, due to cache=True
         raise ValueError('must set channel_enabled once before reading')
 
     @channel_enabled.setter
-    def _(self, enable: bool, /, *, channel: int = 0):
+    @_verify_channel_for_setter
+    def _(self, enable: bool):
         if enable:
-            if channel != 0:
-                raise ValueError('only channel 0 is supported for now')
-            self.backend.activateStream(self.rx_streams[channel])
+            self.backend.activateStream(self.rx_stream)
         else:
-            self.backend.deactivateStream(self.rx_streams[channel])
+            self.backend.deactivateStream(self.rx_stream)
 
     @attr.method.float(min=-30, max=0, step=0.05, label='dB', help='SDR hardware gain')
-    @channel_kwarg
-    def gain(self, gain: float = lb.Undefined, /, *, channel: int = 0):
-        if gain is lb.Undefined:
-            return self.backend.getGain(SOAPY_SDR_RX, channel)
-        else:
-            self.backend.setGain(SOAPY_SDR_RX, channel, gain)
+    @_verify_channel_for_getter
+    def gain(self):
+        return self.backend.getGain(SOAPY_SDR_RX, self.channel())
+
+    @gain.setter
+    @_verify_channel_for_setter
+    def _(self, gain: float):
+        self.backend.setGain(SOAPY_SDR_RX, self.channel(), gain)
 
     @attr.method.float(
         min=-41.95, max=0, step=0.05, label='dB', help='SDR TX hardware gain'
@@ -151,24 +210,21 @@ class AirT7201B(RadioDevice):
         self.backend = SoapySDR.Device(dict(driver='SoapyAIRT'))
         self._logger.info('connected')
         self.buffer = None
-        self.reset_counts()
-        self.rx_streams = []
+        self._reset_counts()
         self.analysis_filter = {}
+
+        self.channel(0)
 
         for channel in 0, 1:
             self.backend.setGainMode(SOAPY_SDR_RX, channel, False)
-            self.rx_streams += [
-                self.backend.setupStream(SOAPY_SDR_RX, SOAPY_SDR_CS16, [channel])
-            ]
-            # self.channel_enabled(False, channel=channel)
 
+    @_verify_channel_setting
     def autosample(
         self,
         center_frequency,
         sample_rate,
         analysis_bandwidth,
         lo_shift='none',
-        channel=0,
     ):
         """automatically configure center frequency and sampling parameters.
 
@@ -198,31 +254,35 @@ class AirT7201B(RadioDevice):
             self.lo_offset = lo_offset  # hold update on this one?
 
         self.center_frequency(center_frequency)
-        self.sample_rate(sample_rate, channel=channel)
+        self.sample_rate(sample_rate)
         self.analysis_bandwidth = analysis_bandwidth
 
-    def reset_counts(self):
+    def _reset_counts(self):
         self.acquisition_counts = {'overflow': 0, 'exceptions': 0, 'total': 0}
 
+    @_verify_channel_setting
     def acquire(
-        self, channel=0, calibration_bypass=False
+        self, calibration_bypass=False
     ) -> tuple[cp.array, pd.Timestamp]:
-        if isroundmod(self.duration * self.sample_rate(channel=channel), 1):
-            sample_count = round(self.duration * self.sample_rate(channel=channel))
+        if isroundmod(self.duration * self.sample_rate(), 1):
+            sample_count = round(self.duration * self.sample_rate())
         else:
             msg = f'duration must be an integer multiple of the sample period (1/{self.sample_rate} s)'
             raise ValueError(msg)
 
+
         timestamp = pd.Timestamp('now')
         backend_count = round(np.ceil(sample_count * self._downsample))
 
-        print(sample_count, backend_count, self._downsample)
+        self.channel_enabled(True)
         iq = self._read_stream(backend_count)
+        self.channel_enabled(False)
 
         if self.calibration_path is not None and not calibration_bypass:
             raise ValueError('calibration not yet supported')
         else:
-            iq /= float(np.iinfo(np.int16).max)
+            pass
+#            iq /= float(np.finfo(np.float32).max)
 
         if self.analysis_filter:
             # out = cp.array(self.buffer, copy=False).view(iq.dtype)
@@ -232,7 +292,7 @@ class AirT7201B(RadioDevice):
         else:
             return iq, timestamp
 
-    def arm(self, capture: structs.RadioCapture, enable=True) -> int:
+    def arm(self, capture: structs.RadioCapture):
         """apply a capture configuration and enable the channel to receive samples"""
 
         if capture.preselect_if_frequency is not None:
@@ -245,7 +305,8 @@ class AirT7201B(RadioDevice):
                 f'duration {capture.duration} is not an integer multiple of sample period'
             )
 
-        self.gain = capture.gain
+        self.channel(capture.channel)
+        self.gain(capture.gain)
 
         self.autosample(
             center_frequency=capture.center_frequency,
@@ -254,10 +315,7 @@ class AirT7201B(RadioDevice):
             lo_shift=capture.lo_shift,
         )
 
-        if enable:
-            self.channel_enabled(True, channel=capture.channel)
-
-    def get_current_capture(self, channel=0, duration=None) -> structs.RadioCapture:
+    def get_armed_capture(self, duration=None) -> structs.RadioCapture:
         """generate the currently armed capture configuration for the specified channel"""
         if self.lo_offset == 0:
             lo_shift = None
@@ -268,9 +326,9 @@ class AirT7201B(RadioDevice):
 
         return structs.RadioCapture(
             # RF and leveling
-            center_frequency=self.center_frequency,
-            channel=channel,
-            gain=self.gain(channel=channel),
+            center_frequency=self.center_frequency(),
+            channel=self.channel(),
+            gain=self.gain(),
             # acquisition
             duration=duration,
             sample_rate=self.sample_rate,
@@ -284,21 +342,15 @@ class AirT7201B(RadioDevice):
         )
 
     def close(self):
-        pending_ex = None
-
-        for channel in (0, 1):
-            try:
-                self.channel_enabled(False, channel=channel)
-                self.backend.closeStream(self.rx_streams[channel])
-            except ValueError as ex:
-                if 'invalid parameter' in str(ex):
-                    # already closed
-                    pass
-                else:
-                    pending_ex = ex
-
-        if pending_ex is not None:
-            raise pending_ex
+        try:
+            self.channel_enabled(False)
+            self.backend.closeStream(self.rx_stream)
+        except ValueError as ex:
+            if 'invalid parameter' in str(ex):
+                # already closed
+                pass
+            else:
+                raise
 
     def __del__(self):
         self.close()
@@ -333,7 +385,8 @@ class AirT7201B(RadioDevice):
         else:
             raise TypeError(f'did not understand response {sr.ret}')
 
-    def _read_stream(self, N, raise_on_overflow=False, channel=0) -> cp.ndarray:
+    @_verify_channel_setting
+    def _read_stream(self, N, raise_on_overflow=False) -> cp.ndarray:
         if self.buffer is None or self.buffer.size < 4 * N:
             # create a buffer for received samples that can be shared across CPU<->GPU
             #     ref: https://github.com/cupy/cupy/issues/3452#issuecomment-903273011
@@ -344,8 +397,8 @@ class AirT7201B(RadioDevice):
             del self.buffer
 
             self.buffer = numba.cuda.mapped_array(
-                (4 * N,),
-                dtype=np.int16,
+                (2 * N,),
+                dtype=np.float32,
                 strides=None,
                 order='C',
                 stream=0,
@@ -360,8 +413,8 @@ class AirT7201B(RadioDevice):
         while remaining > 0:
             # Read the samples from the data buffer
             sr = self.backend.readStream(
-                self.rx_streams[channel],
-                [self.buffer[2 * (N-remaining): 2 * N]],
+                self.rx_stream,
+                [self.buffer[(N-remaining): N]],
                 remaining,
                 timeoutUs=int(timeout * 1e6),
             )
@@ -370,19 +423,21 @@ class AirT7201B(RadioDevice):
 
         self.acquisition_counts['total'] += 1
 
-        # what follows is some acrobatics to minimize new memory allocation and copy
-        buff_int16 = cp.array(self.buffer, copy=False)[: 2 * N]
+        # # what follows is some acrobatics to minimize new memory allocation and copy
+        # buff_int16 = cp.array(self.buffer, copy=False)[: 2 * N]
 
-        # 1. the same memory buffer, interpreted as float32 without casting
-        buff_float32 = cp.array(self.buffer, copy=False)[: 4 * N].view('float32')
+        # # 1. the same memory buffer, interpreted as float32 without casting
+        # buff_float32 = cp.array(self.buffer, copy=False)[: 4 * N].view('float32')
 
-        # 2. in-place casting from the int16 samples, filling in the extra allocation in self.buffer
-        cp.copyto(buff_float32, buff_int16, casting='unsafe')
+        # # 2. in-place casting from the int16 samples, filling in the extra allocation in self.buffer
+        # cp.copyto(buff_float32, buff_int16, casting='unsafe')
 
-        # 3. last, re-interpret each interleaved (float32 I, float32 Q) as a complex value
-        buff_complex64 = buff_float32.view('complex64')
+        # # 3. last, re-interpret each interleaved (float32 I, float32 Q) as a complex value
+        # buff_complex64 = buff_float32.view('complex64')
 
-        return buff_complex64
+        cp_buff = cp.array(self.buffer, copy=False)[:2*N]
+
+        return cp_buff.view('complex64')
 
 
 if __name__ == '__main__':

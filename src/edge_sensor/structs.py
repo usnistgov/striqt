@@ -24,7 +24,7 @@ class RadioCapture(channel_analysis.Capture):
     sample_rate: float = 15.36e6
 
     # filtering and resampling
-    analysis_bandwidth: float = 10e6
+    analysis_bandwidth: Optional[float] = 10e6 # None for no bandpass filter
     lo_shift: Literal['left', 'right', 'none'] = 'left'
 
     # external frequency conversion support
