@@ -73,7 +73,7 @@ def sweep(
         data.append(analysis)
 
     ds = xr.combine_by_coords(data)
-    for k in sweep_fields:
+    for k in tuple(sweep_fields) + ('timestamp',):
         ds[k].attrs = FIELD_ATTRS[k]
 
     return ds

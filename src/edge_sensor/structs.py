@@ -25,9 +25,7 @@ class RadioCapture(channel_analysis.Capture):
 
     # filtering and resampling
     analysis_bandwidth: float = 10e6
-    lo_shift: Literal['left', 'right', None] = (
-        'left'  # shift the LO outside the acquisition band
-    )
+    lo_shift: Literal['left', 'right', 'none'] = 'left'
 
     # external frequency conversion support
     preselect_if_frequency: Optional[float] = None  # Hz (or none, for no ext frontend)
