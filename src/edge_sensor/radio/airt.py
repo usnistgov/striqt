@@ -60,12 +60,19 @@ class AirT7201B(RadioDevice):
         help='direct conversion LO frequency of the RX',
     )
     @channel_kwarg
-    def lo_frequency(self, center_frequency: float = lb.Undefined):
+    def lo_frequency(self, *, channel: int = 0):
         # there is only one RX LO, shared by both channels
-        if center_frequency is lb.Undefined:
-            return self.backend.setFrequency(SOAPY_SDR_RX, 0)
-        else:
-            self.backend.setFrequency(SOAPY_SDR_RX, 0, center_frequency)
+
+        ret = self.backend.getFrequency(SOAPY_SDR_RX, channel)
+        print('got ', ret)
+        return ret
+
+    @lo_frequency.setter
+    def lo_frequency(self, center_frequency, *, channel: int = 0):
+        # there is only one RX LO, shared by both channels
+
+        print('set ', center_frequency)
+        self.backend.setFrequency(SOAPY_SDR_RX, channel, center_frequency)
 
     center_frequency = lo_frequency.corrected_from_expression(
         lo_frequency + lo_offset,
@@ -160,7 +167,7 @@ class AirT7201B(RadioDevice):
         center_frequency,
         sample_rate,
         analysis_bandwidth,
-        lo_shift=False,
+        lo_shift='none',
         channel=0,
     ):
         """automatically configure center frequency and sampling parameters.
@@ -169,6 +176,9 @@ class AirT7201B(RadioDevice):
         Optionally, a frequency shift with oversampling is implemented to move the LO leakage
         outside of the specified analysis bandwidth.
         """
+
+        if str(lo_shift).lower() == 'none':
+            lo_shift = False
 
         fs_backend, lo_offset, self.analysis_filter = fourier.design_cola_resampler(
             fs_base=self.master_clock_rate,
@@ -187,7 +197,7 @@ class AirT7201B(RadioDevice):
             self._downsample = self.analysis_filter['fft_size'] / fft_size_out
             self.lo_offset = lo_offset  # hold update on this one?
 
-        self.center_frequency = center_frequency
+        self.center_frequency(center_frequency)
         self.sample_rate(sample_rate, channel=channel)
         self.analysis_bandwidth = analysis_bandwidth
 
@@ -205,6 +215,8 @@ class AirT7201B(RadioDevice):
 
         timestamp = pd.Timestamp('now')
         backend_count = round(np.ceil(sample_count * self._downsample))
+
+        print(sample_count, backend_count, self._downsample)
         iq = self._read_stream(backend_count)
 
         if self.calibration_path is not None and not calibration_bypass:
@@ -291,7 +303,7 @@ class AirT7201B(RadioDevice):
     def __del__(self):
         self.close()
 
-    def _validate_stream_response(self, sr, count: int) -> None:
+    def _check_remaining_samples(self, sr, count: int) -> None:
         """validate the stream response after reading.
 
         Args:
@@ -302,7 +314,10 @@ class AirT7201B(RadioDevice):
 
         # ensure the proper number of waveform samples was read
         if sr.ret == count:
-            pass
+            return 0
+        elif sr.ret > 0:
+            self._logger.info(f'received {sr.ret} samples, but expected {count}')
+            return count - sr.ret
         elif sr.ret == -4:
             self.acquisition_counts['overflow'] += 1
             total_info = f"{self.acquisition_counts['overflow']}/{self.acquisition_counts['total']}"
@@ -311,9 +326,12 @@ class AirT7201B(RadioDevice):
                 raise OverflowError(msg)
             elif self.on_overflow == 'log':
                 self._logger.info(msg)
-        else:
+            return 0
+        elif sr.ret < 0:
             self.acquisition_counts['exceptions'] += 1
             raise IOError(f'Error {sr.ret}: {errToStr(sr.ret)}')
+        else:
+            raise TypeError(f'did not understand response {sr.ret}')
 
     def _read_stream(self, N, raise_on_overflow=False, channel=0) -> cp.ndarray:
         if self.buffer is None or self.buffer.size < 4 * N:
@@ -337,15 +355,18 @@ class AirT7201B(RadioDevice):
 
         timeout = max(round(N / self.backend_sample_rate * 1.5), 50e-3)
 
-        # Read the samples from the data buffer
-        sr = self.backend.readStream(
-            self.rx_streams[channel],
-            [self.buffer[: 2 * N]],
-            N,
-            timeoutUs=int(timeout * 1e6),
-        )
+        remaining = N
 
-        self._validate_stream_response(sr, N)
+        while remaining > 0:
+            # Read the samples from the data buffer
+            sr = self.backend.readStream(
+                self.rx_streams[channel],
+                [self.buffer[2 * (N-remaining): 2 * N]],
+                remaining,
+                timeoutUs=int(timeout * 1e6),
+            )
+
+            remaining = self._check_remaining_samples(sr, remaining)
 
         self.acquisition_counts['total'] += 1
 
