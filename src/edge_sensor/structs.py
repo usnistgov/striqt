@@ -24,10 +24,8 @@ class RadioCapture(channel_analysis.Capture):
     sample_rate: float = 15.36e6
 
     # filtering and resampling
-    analysis_bandwidth: float = 10e6
-    lo_shift: Literal['left', 'right', None] = (
-        'left'  # shift the LO outside the acquisition band
-    )
+    analysis_bandwidth: Optional[float] = 10e6 # None for no bandpass filter
+    lo_shift: Literal['left', 'right', 'none'] = 'left'
 
     # external frequency conversion support
     preselect_if_frequency: Optional[float] = None  # Hz (or none, for no ext frontend)
@@ -77,7 +75,7 @@ def read_yaml_sweep(path: str | Path) -> tuple[Sweep, tuple[str, ...]]:
 
     # apply default capture settings
     defaults = tree['defaults']
-    tree['sweep'] = [dict(defaults, **c) for c in tree['captures']]
+    tree['captures'] = [dict(defaults, **c) for c in tree['captures']]
 
     run = msgspec.convert(tree, type=Sweep, strict=False)
     return run, sweep_fields
