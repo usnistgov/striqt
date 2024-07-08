@@ -4,9 +4,14 @@ from .structs import Sweep, RadioCapture
 import labbench as lb
 from channel_analysis import waveform
 import xarray as xr
-from functools import cache
+from functools import lru_cache
 import msgspec
 import numpy as np
+from frozendict import frozendict
+import pandas as pd
+
+CAPTURE_DIM = 'capture'
+TIMESTAMP_NAME = 'timestamp'
 
 FIELD_ATTRS = {
     RadioCapture.center_frequency.__name__: {
@@ -43,27 +48,59 @@ FIELD_ATTRS = {
         'label': 'preselector gain setting',
         'unit': 'dB',
     },
-    'timestamp': {'label': 'Capture start time'},
+    TIMESTAMP_NAME: {'label': 'Capture start time'},
 }
 
+@lru_cache
+def _capture_coord_template(sweep_fields: tuple[str, ...]):
+    capture = RadioCapture()
+    coords = {}
+
+    for field in sweep_fields:
+        coords[field] = xr.Variable(
+            (CAPTURE_DIM,),
+            [getattr(capture, field)],
+            fastpath=True
+        )
+
+    coords[TIMESTAMP_NAME] = xr.Variable((CAPTURE_DIM,), [pd.Timestamp('now')], fastpath=True)
+
+    return xr.Coordinates(coords)
+
+def capture_to_coords(capture: RadioCapture, sweep_fields: list[str], timestamp=None):
+    coords = _capture_coord_template(sweep_fields).copy(deep=True)
+
+    for field in sweep_fields:
+        coords[field].values[:] = [getattr(capture, field)]
+
+    if timestamp is not None:
+        coords[TIMESTAMP_NAME].values[:] = [timestamp]
+
+    return coords
 
 def sweep(
     radio: base.RadioDevice, run_spec: Sweep, sweep_fields: list[str]
 ) -> xr.Dataset:
     data = []
     spec = run_spec.channel_analysis
+    sweep_fields = tuple(sweep_fields)
+
+    timestamps = []
+
+    attrs = {}
 
     for capture in run_spec.captures:
         # treat swept fields as coordinates/indices
-        coords = {k: [getattr(capture, k)] for k in sweep_fields}
-        desc = ', '.join([f'{k}={v[0]}' for k, v in coords.items()])
+        desc = ', '.join([f'{k}={v}' for k, v in msgspec.to_builtins(capture).items()])
 
         with lb.stopwatch(f'{desc}: '):
             radio.arm(capture)
-            iq, timestamp = radio.acquire(capture.channel)
-            coords['timestamp'] = [timestamp]
-            analysis = waveform.analyze_by_spec(iq, capture, spec=spec).assign_coords(
-                coords
+            iq, timestamp = radio.acquire()
+            coords = capture_to_coords(capture, sweep_fields, timestamp=timestamp)
+            analysis = (
+                waveform
+                .analyze_by_spec(iq, capture, spec=spec)
+                .assign_coords(coords)
             )
 
         # remove swept fields from the metadata
@@ -72,8 +109,9 @@ def sweep(
 
         data.append(analysis)
 
-    ds = xr.combine_by_coords(data)
-    for k in tuple(sweep_fields) + ('timestamp',):
-        ds[k].attrs = FIELD_ATTRS[k]
+    ds = xr.concat(data, CAPTURE_DIM)
+
+    for k in tuple(sweep_fields) + (TIMESTAMP_NAME,):
+        ds[k].attrs.update(FIELD_ATTRS[k])
 
     return ds
