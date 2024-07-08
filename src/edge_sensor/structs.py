@@ -75,7 +75,7 @@ def read_yaml_sweep(path: str | Path) -> tuple[Sweep, tuple[str, ...]]:
 
     # apply default capture settings
     defaults = tree['defaults']
-    tree['sweep'] = [dict(defaults, **c) for c in tree['captures']]
+    tree['captures'] = [dict(defaults, **c) for c in tree['captures']]
 
     run = msgspec.convert(tree, type=Sweep, strict=False)
     return run, sweep_fields
