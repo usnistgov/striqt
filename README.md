@@ -26,7 +26,7 @@ The following setup procedure creates a python environment tailored based on har
     ```
 4. Activate:
     - For IDEs, select the `flex-spectrum-sensor` virtual environment 
-    - For a command line, `conda activate gpu-spectrum-sensor`
+    - For a command line, `conda activate flex-spectrum-sensor`
   
 ### Usage
 The following scripts can be run from any of the `environments/edge-*` environments, which install all scripts into the command line path. 
