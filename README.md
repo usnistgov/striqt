@@ -20,9 +20,9 @@ The following setup procedure creates a python environment tailored based on har
     - `environments/post-analysis-cpu.yml`: Cross-platform analysis
     - `environments/post-analysis-cpu-cuda.yml`: Analysis with added CUDA-specific GPU acceleration
     - `environments/edge-airt-cuda.yml`: Real-time edge sensing with AirT/AirStack radios
-4. Create:
+4. Create the chosen environment:
     ```sh
-        conda env create -f <name.yml>
+        conda env create -f <path-to-environment-here.yml>
     ```
 4. Activate:
     - For IDEs, select the `flex-spectrum-sensor` virtual environment 
