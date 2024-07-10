@@ -2,14 +2,15 @@ from __future__ import annotations
 import numpy as np
 from iqwaveform import fourier
 from functools import wraps
-from . import structs
+from . import structs, waveform
 import xarray as xr
 from pathlib import Path
-
+import zarr
+import numcodecs
 
 def dump(path: str | Path, data: xr.DataArray | xr.Dataset, mode='a'):
     """serialize a dataset into a zarr directory structure"""
-    if hasattr(data, 'iq_index'):
+    if hasattr(data, waveform.IQ_WAVEFORM_INDEX_NAME):
         if 'sample_rate' in data.attrs:
             # sample rate is metadata
             sample_rate = data.attrs['sample_rate']
@@ -17,16 +18,34 @@ def dump(path: str | Path, data: xr.DataArray | xr.Dataset, mode='a'):
             # sample rate is a variate
             sample_rate = data.sample_rate.values.flatten()[0]
 
-        chunks = {'iq_index': round(sample_rate * 10e-3)}
+        chunks = {waveform.IQ_WAVEFORM_INDEX_NAME: round(sample_rate * 10e-3)}
     else:
         chunks = {}
 
-    data.chunk(chunks).to_zarr(path, mode=mode)
+    names = data.coords.keys()|data.keys()|data.indexes.keys()
+    compressor = numcodecs.Blosc('zstd', clevel=6)
+
+    if mode == 'a':
+        # follow existing encodings if appending
+        encodings = None
+    else:
+        # despite that iq waveforms are the largest on disk,
+        # compression tends to be slow and ineffective due
+        # to high entropy
+        encodings = {
+            name: {'compressor': compressor}
+            for name in names
+            if name != waveform.iq_waveform.__name__
+        }
+
+    with zarr.storage.ZipStore(path, mode=mode, compression=0) as store:
+        data.chunk(chunks).to_zarr(store, encoding=encodings)
 
 
 def load(path: str | Path) -> xr.DataArray | xr.Dataset:
     """load a dataset or data array"""
-    return xr.open_zarr(path)
+
+    return xr.open_dataset(zarr.storage.ZipStore(path, mode='r'), engine='zarr')
 
 
 def filter_after(decorated_func: callable):

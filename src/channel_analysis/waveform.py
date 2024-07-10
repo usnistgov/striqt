@@ -25,6 +25,8 @@ TDecoratedFunc = typing.Callable[..., typing.Any]
 
 registry = structs.KeywordConfigRegistry(structs.ChannelAnalysis)
 
+IQ_WAVEFORM_INDEX_NAME = 'iq_index'
+
 
 @dataclass
 class ChannelAnalysisResult(UserDict):
@@ -401,7 +403,6 @@ def _generate_iir_lpf(
 
     return sos
 
-
 @registry
 def iq_waveform(
     iq,
@@ -429,7 +430,7 @@ def iq_waveform(
     else:
         stop = int(stop_time_sec * capture.sample_rate)
 
-    coords = xr.Coordinates({'iq_index': pd.RangeIndex(start, stop, name='iq_index')})
+    coords = xr.Coordinates({IQ_WAVEFORM_INDEX_NAME: pd.RangeIndex(start, stop, name=IQ_WAVEFORM_INDEX_NAME)})
 
     return ChannelAnalysisResult(
         data=iq[start:stop].copy(),
