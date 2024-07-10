@@ -20,7 +20,8 @@ from .. import structs
 # for TX only (RX channel is accessed through the AirT7201B.channel method)
 channel_kwarg = attr.method_kwarg.int('channel', min=0, max=1, help='port number')
 
-TRANSIENT_HOLDOFF_TIME = 2e-3
+# number of extra FFT windows to acquire to allow resampling transients to settle
+TRANSIENT_HOLDOFF_WINDOWS = 40
 
 def _verify_channel_setting(func: callable) -> callable:
     # TODO: fix typing
@@ -281,9 +282,9 @@ class AirT7201B(RadioDevice):
         backend_count = round(np.ceil(sample_count * self._downsample))
         self.channel_enabled(True)
 
-        holdoff_count = round(self.backend_sample_rate*TRANSIENT_HOLDOFF_TIME)
+        holdoff_samples = TRANSIENT_HOLDOFF_WINDOWS * self.analysis_filter['fft_size']
 
-        iq = self._read_stream(backend_count+holdoff_count)
+        iq = self._read_stream(backend_count+holdoff_samples)
 
         if self.calibration_path is not None and not calibration_bypass:
             raise ValueError('calibration not yet supported')
