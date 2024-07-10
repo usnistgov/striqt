@@ -21,7 +21,7 @@ from .. import structs
 channel_kwarg = attr.method_kwarg.int('channel', min=0, max=1, help='port number')
 
 # number of extra FFT windows to acquire to allow resampling transients to settle
-TRANSIENT_HOLDOFF_WINDOWS = 40
+TRANSIENT_HOLDOFF_WINDOWS = 2
 
 def _verify_channel_setting(func: callable) -> callable:
     # TODO: fix typing
@@ -284,7 +284,7 @@ class AirT7201B(RadioDevice):
 
         holdoff_samples = TRANSIENT_HOLDOFF_WINDOWS * self.analysis_filter['fft_size']
 
-        iq = self._read_stream(backend_count+holdoff_samples)
+        iq = self._read_stream(backend_count+2*holdoff_samples)
 
         if self.calibration_path is not None and not calibration_bypass:
             raise ValueError('calibration not yet supported')
@@ -294,11 +294,10 @@ class AirT7201B(RadioDevice):
 
         if self.analysis_filter:
             # out = cp.array(self.buffer, copy=False).view(iq.dtype)
-            iq_out = fourier.ola_filter(iq, extend=True, **self.analysis_filter)
-            iq_out = iq_out[-sample_count:]
-            return iq_out[-sample_count:], timestamp
-        else:
-            return iq[-sample_count:], timestamp
+            iq = fourier.ola_filter(iq, extend=True, **self.analysis_filter)
+        
+        trim = sample_count - iq.shape[0]
+        return iq[-trim//2:trim//2 or None], timestamp
 
     def arm(self, capture: structs.RadioCapture):
         """apply a capture configuration and enable the channel to receive samples"""
