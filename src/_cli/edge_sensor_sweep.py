@@ -23,6 +23,7 @@ def run(yaml_path: Path, output_path, force):
     if output_path is None:
         output_path = Path(yaml_path).with_suffix('.zarr')
 
+    # defer imports to here to make the command line --help snappier
     from edge_sensor.actions import sweep
     from edge_sensor.structs import read_yaml_sweep
 
