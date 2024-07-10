@@ -25,14 +25,7 @@ dependencies:
 - numexpr>=2.8.4
 - humanfriendly
 - array-api-compat
-- validators
-- greenlet
-- pyserial
-- feather-format
-- pyvisa
-- pyvisa-py
-- pyvisa-sim
-- sqlalchemy<1.5
+- labbench
 - xarray
 - zarr
 - dask
@@ -42,7 +35,6 @@ dependencies:
 - cython
 - pip:
   - iqwaveform @ git+https://github.com/usnistgov/iqwaveform
-  - labbench     # not available in conda-forge on arm64 or aarch64
 
       # allows imports from the src/ directory in this repo
   - -e ..

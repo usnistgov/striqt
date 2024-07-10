@@ -26,14 +26,7 @@ dependencies:
 - numexpr>=2.8.4
 - humanfriendly
 - array-api-compat
-- validators
-- greenlet
-- pyserial
-- feather-format
-- pyvisa
-- pyvisa-py
-- pyvisa-sim
-- sqlalchemy<1.5
+- labbench
 - xarray
 - zarr
 - dask
@@ -43,7 +36,6 @@ dependencies:
 - cython<3
 - pip:
   - iqwaveform @ git+https://github.com/usnistgov/iqwaveform
-  - labbench
   - -e ..
   - https://archive.deepwavedigital.com/pycuda/pycuda-2020.1-cp39-cp39-linux_aarch64.whl
   - https://archive.deepwavedigital.com/pytools/pytools-2022.1.12-py2.py3-none-any.whl

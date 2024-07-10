@@ -29,12 +29,12 @@ def load(path: str | Path) -> xr.DataArray | xr.Dataset:
     return xr.open_zarr(path)
 
 
-def filter_after(decorated):
+def filter_after(decorated_func: callable):
     """apply a filter after the decorated function if a structs.FilteredCapture is passed"""
 
-    @wraps(decorated)
+    @wraps(decorated_func)
     def func(capture, *args, out=None, **kws):
-        iq = decorated(capture, *args, out=out, **kws)
+        iq = decorated_func(capture, *args, out=out, **kws)
 
         if (
             isinstance(capture, structs.FilteredCapture)
