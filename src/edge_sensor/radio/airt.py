@@ -20,6 +20,7 @@ from .. import structs
 # for TX only (RX channel is accessed through the AirT7201B.channel method)
 channel_kwarg = attr.method_kwarg.int('channel', min=0, max=1, help='port number')
 
+TRANSIENT_HOLDOFF_TIME = 2e-3
 
 def _verify_channel_setting(func: callable) -> callable:
     # TODO: fix typing
@@ -233,6 +234,8 @@ class AirT7201B(RadioDevice):
         outside of the specified analysis bandwidth.
         """
 
+        self.channel_enabled(False)
+
         if str(lo_shift).lower() == 'none':
             lo_shift = False
 
@@ -243,7 +246,6 @@ class AirT7201B(RadioDevice):
             bw_lo=0.75e6,
             shift=lo_shift,
         )
-        print(self.analysis_filter, fs_backend)
 
         fft_size_out = self.analysis_filter.get(
             'fft_size_out', self.analysis_filter['fft_size']
@@ -259,6 +261,8 @@ class AirT7201B(RadioDevice):
         self.sample_rate(sample_rate)
         self.analysis_bandwidth = analysis_bandwidth
 
+        self.channel_enabled(True)
+
     def _reset_counts(self):
         self.acquisition_counts = {'overflow': 0, 'exceptions': 0, 'total': 0}
 
@@ -272,13 +276,13 @@ class AirT7201B(RadioDevice):
             msg = f'duration must be an integer multiple of the sample period (1/{self.sample_rate} s)'
             raise ValueError(msg)
 
-
         timestamp = pd.Timestamp('now')
         backend_count = round(np.ceil(sample_count * self._downsample))
-
         self.channel_enabled(True)
-        iq = self._read_stream(backend_count)
-        self.channel_enabled(False)
+
+        holdoff_count = round(self.backend_sample_rate*TRANSIENT_HOLDOFF_TIME)
+
+        iq = self._read_stream(backend_count+holdoff_count)
 
         if self.calibration_path is not None and not calibration_bypass:
             raise ValueError('calibration not yet supported')
@@ -288,11 +292,11 @@ class AirT7201B(RadioDevice):
 
         if self.analysis_filter:
             # out = cp.array(self.buffer, copy=False).view(iq.dtype)
-            return fourier.ola_filter(
-                iq, extend=True, **self.analysis_filter
-            ), timestamp
+            iq_out = fourier.ola_filter(iq, extend=True, **self.analysis_filter)
+            iq_out = iq_out[-sample_count:]
+            return iq_out[-sample_count:], timestamp
         else:
-            return iq, timestamp
+            return iq[-sample_count:], timestamp
 
     def arm(self, capture: structs.RadioCapture):
         """apply a capture configuration and enable the channel to receive samples"""
@@ -316,6 +320,8 @@ class AirT7201B(RadioDevice):
             analysis_bandwidth=capture.analysis_bandwidth,
             lo_shift=capture.lo_shift,
         )
+
+        time.sleep(20e-3)
 
     def get_armed_capture(self, duration=None) -> structs.RadioCapture:
         """generate the currently armed capture configuration for the specified channel"""
@@ -357,12 +363,15 @@ class AirT7201B(RadioDevice):
     def __del__(self):
         self.close()
 
-    def _check_remaining_samples(self, sr, count: int) -> None:
+    def _check_remaining_samples(self, sr, count: int) -> int:
         """validate the stream response after reading.
 
         Args:
             sr: the return value from self.backend.readStream
             count: the expected number of samples (1 (I,Q) pair each)
+
+        Returns:
+            number of samples left to acquire
         """
         msg = None
 
@@ -370,7 +379,6 @@ class AirT7201B(RadioDevice):
         if sr.ret == count:
             return 0
         elif sr.ret > 0:
-            self._logger.info(f'received {sr.ret} samples, but expected {count}')
             return count - sr.ret
         elif sr.ret == -4:
             self.acquisition_counts['overflow'] += 1
@@ -416,7 +424,7 @@ class AirT7201B(RadioDevice):
             # Read the samples from the data buffer
             sr = self.backend.readStream(
                 self.rx_stream,
-                [self.buffer[(N-remaining): N]],
+                [self.buffer[2*(N-remaining): 2*N]],
                 remaining,
                 timeoutUs=int(timeout * 1e6),
             )
