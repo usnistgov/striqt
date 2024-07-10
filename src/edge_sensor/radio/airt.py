@@ -255,7 +255,7 @@ class AirT7201B(RadioDevice):
 
         with lb.paramattr.hold_attr_notifications(self):
             self._downsample = 1  # temporarily avoid a potential bounding error
-            self.backend_sample_rate = fs_backend
+            self.backend_sample_rate(fs_backend)
             self._downsample = self.analysis_filter['fft_size'] / fft_size_out
             self.lo_offset = lo_offset  # hold update on this one?
 
@@ -417,7 +417,7 @@ class AirT7201B(RadioDevice):
                 wc=False,
             )
 
-        timeout = max(round(N / self.backend_sample_rate * 1.5), 50e-3)
+        timeout = max(round(N / self.backend_sample_rate() * 1.5), 50e-3)
 
         remaining = N
 

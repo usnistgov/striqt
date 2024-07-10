@@ -4,15 +4,25 @@ import click
 from pathlib import Path
 
 
-@click.command()
+@click.command('Run a radio sensor acquisition sweep defined by a YAML file.')
 @click.argument('yaml_path', type=click.Path(exists=True, dir_okay=False))
-@click.argument('output_path', type=click.Path(file_okay=False))
 @click.option(
-    '--force/-f',
-    is_flag=True,
-    help='overwrite an existing output; otherwise, attempt to append',
+    '--output-path',
+    default=None,
+    type=click.Path(),
+    help='output file path; if unspecified, follows yaml file name'
 )
-def run(yaml_path: Path, output_path: Path, force: bool):
+@click.option(
+    '--force/','-f',
+    is_flag=True,
+    show_default=True,
+    default=False,
+    help='overwrite an existing output; otherwise, attempt append on existing data',
+)
+def run(yaml_path: Path, output_path, force):
+    if output_path is None:
+        output_path = Path(yaml_path).with_suffix('.zarr')
+
     from edge_sensor.actions import sweep
     from edge_sensor.structs import read_yaml_sweep
 
@@ -33,3 +43,5 @@ def run(yaml_path: Path, output_path: Path, force: bool):
         mode = 'a'
 
     dump(output_path, data, mode)
+
+    click.echo(f"wrote to {output_path}")

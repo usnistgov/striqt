@@ -21,18 +21,24 @@ dependencies:
 - matplotlib-base>=3.7
 - numexpr>=2.7
 - scikit-learn>=1.1,<2.0
-- msgspec
 - pyppeteer
 - ipympl
 - numexpr>=2.8.4
 - humanfriendly
 - array-api-compat
+- methodtools
+- mako
+- fastrlock
+
+  # for SoapySDR device wrappers
 - labbench
 
-  # xarray with data zarr and data chunking support
+  # data management (including zarr and data chunking in xarray)
 - xarray
 - zarr
 - dask
+- msgspec
+- frozendict
 
   # git repository introspection support for metadata
 - dulwich
