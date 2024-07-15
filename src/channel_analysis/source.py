@@ -8,6 +8,7 @@ from pathlib import Path
 import zarr
 import numcodecs
 
+
 def dump(path: str | Path, data: xr.DataArray | xr.Dataset, mode='a'):
     """serialize a dataset into a zarr directory structure"""
     if hasattr(data, waveform.IQ_WAVEFORM_INDEX_NAME):
@@ -22,7 +23,7 @@ def dump(path: str | Path, data: xr.DataArray | xr.Dataset, mode='a'):
     else:
         chunks = {}
 
-    names = data.coords.keys()|data.keys()|data.indexes.keys()
+    names = data.coords.keys() | data.keys() | data.indexes.keys()
     compressor = numcodecs.Blosc('zstd', clevel=6)
 
     if mode == 'a':

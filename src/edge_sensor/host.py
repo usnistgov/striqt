@@ -4,6 +4,7 @@ from enum import Enum
 import psutil
 import xarray as xr
 from functools import lru_cache
+import sys
 
 from dulwich.repo import Repo, NotGitRepository
 from dulwich import porcelain
@@ -12,6 +13,13 @@ import socket
 import uuid
 
 METADATA_VERSION = '0.0'
+
+if len(sys.argv) > 0:
+    SCRIPT_NAME = Path(sys.argv[0]).name
+    SCRIPT_ROOT = Path(sys.argv[0]).parent
+else:
+    SCRIPT_NAME = None
+    SCRIPT_ROOT = Path('.')
 
 
 @lru_cache(8)
@@ -80,7 +88,7 @@ def _compute_status_meta(keys: tuple):
     }
 
 
-def git_unstaged_changes(repo_or_path='.') -> list[str]:
+def git_unstaged_changes(repo_or_path=SCRIPT_ROOT) -> list[str]:
     """returns a list of files in a git repository with unstaged changes.
 
     Args:
@@ -98,7 +106,7 @@ def git_unstaged_changes(repo_or_path='.') -> list[str]:
     return [n.decode() for n in names]
 
 
-def host_metadata(search_path='.'):
+def host_metadata(search_path=SCRIPT_ROOT):
     try:
         repo = _find_repo_in_parents(search_path)
     except NotGitRepository:
@@ -108,6 +116,7 @@ def host_metadata(search_path='.'):
         return {}
 
     repo_info = {
+        'script': str(SCRIPT_ROOT / SCRIPT_NAME),
         'git_remote': repo.get_config().get(('remote', 'origin'), 'url').decode(),
         'git_commit': repo.head().decode(),
         # 'git_unstaged_changes': git_unstaged_changes('.')
@@ -115,7 +124,7 @@ def host_metadata(search_path='.'):
         'host_name': socket.gethostname(),
     }
 
-    return repo_info
+    return {'host': repo_info}
 
 
 @lru_cache(8)

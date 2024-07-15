@@ -1,107 +1,54 @@
-from .radio import base
-from .structs import Sweep, RadioCapture
-
 import labbench as lb
-from channel_analysis import waveform
 import xarray as xr
-from functools import lru_cache
 import msgspec
-import numpy as np
-from frozendict import frozendict
-import pandas as pd
 
-CAPTURE_DIM = 'capture'
-TIMESTAMP_NAME = 'timestamp'
+from channel_analysis import waveform
+from channel_analysis.structs import ChannelAnalysis
 
-FIELD_ATTRS = {
-    RadioCapture.center_frequency.__name__: {
-        'label': 'RF center frequency',
-        'units': 'Hz',
-    },
-    RadioCapture.channel.__name__: {'label': 'RX hardware input port'},
-    RadioCapture.gain.__name__: {
-        'label': 'internal gain setting inside the radio',
-        'unit': 'dB',
-    },
-    RadioCapture.duration.__name__: {'label': 'duration of the capture', 'unit': 's'},
-    RadioCapture.sample_rate.__name__: {
-        'label': 'sample rate of the waveform',
-        'unit': 'S/s',
-    },
-    RadioCapture.analysis_bandwidth.__name__: {
-        'label': 'filtered bandwidth of the received waveform',
-        'unit': 'Hz',
-    },
-    RadioCapture.lo_shift.__name__: {
-        'label': 'direction of the LO shift (or None for no shift)',
-        'unit': 'Hz',
-    },
-    RadioCapture.preselect_if_frequency.__name__: {
-        'label': 'IF filter center frequency',
-        'unit': 'Hz',
-    },
-    RadioCapture.preselect_lo_gain.__name__: {
-        'label': 'gain of the LO stage',
-        'unit': 'dB',
-    },
-    RadioCapture.preselect_rf_gain.__name__: {
-        'label': 'preselector gain setting',
-        'unit': 'dB',
-    },
-    TIMESTAMP_NAME: {'label': 'Capture start time'},
-}
+from .radio import base
+from .structs import (
+    CAPTURE_DIM,
+    Sweep,
+    RadioCapture,
+    TIMESTAMP_NAME,
+    FIELD_ATTRS,
+    capture_to_coords,
+)
 
-@lru_cache
-def _capture_coord_template(sweep_fields: tuple[str, ...]):
-    capture = RadioCapture()
-    coords = {}
 
-    for field in sweep_fields:
-        coords[field] = xr.Variable(
-            (CAPTURE_DIM,),
-            [getattr(capture, field)],
-            fastpath=True
-        )
+def sense(
+    radio: base.RadioDevice,
+    capture: RadioCapture,
+    analysis: ChannelAnalysis,
+    coord_fields: list[str],
+) -> xr.Dataset:
+    """use the supplied radio device to arm, acquire, and analyze a single capture"""
 
-    coords[TIMESTAMP_NAME] = xr.Variable((CAPTURE_DIM,), [pd.Timestamp('now')], fastpath=True)
+    desc = ', '.join([
+        f'{k}={v}'
+        for k, v in msgspec.to_builtins(capture).items()
+        if k in coord_fields
+    ])
 
-    return xr.Coordinates(coords)
+    with lb.stopwatch(f'{desc}: '):
+        radio.arm(capture)
+        iq, timestamp = radio.acquire()
+        coords = capture_to_coords(capture, coord_fields, timestamp=timestamp)
+        analysis = waveform.analyze_by_spec(iq, capture, spec=analysis).assign_coords(coords)
 
-def capture_to_coords(capture: RadioCapture, sweep_fields: list[str], timestamp=None):
-    coords = _capture_coord_template(sweep_fields).copy(deep=True)
+    for f in coord_fields:
+        del analysis.attrs[f]
 
-    for field in sweep_fields:
-        coords[field].values[:] = [getattr(capture, field)]
-
-    if timestamp is not None:
-        coords[TIMESTAMP_NAME].values[:] = [timestamp]
-
-    return coords
+    return analysis
 
 def sweep(
     radio: base.RadioDevice, run_spec: Sweep, sweep_fields: list[str]
 ) -> xr.Dataset:
     data = []
-    spec = run_spec.channel_analysis
     sweep_fields = tuple(sweep_fields)
 
     for capture in run_spec.captures:
-        # treat swept fields as coordinates/indices
-        desc = ', '.join([f'{k}={v}' for k, v in msgspec.to_builtins(capture).items()])
-
-        with lb.stopwatch(f'{desc}: '):
-            radio.arm(capture)
-            iq, timestamp = radio.acquire()
-            coords = capture_to_coords(capture, sweep_fields, timestamp=timestamp)
-            analysis = (
-                waveform
-                .analyze_by_spec(iq, capture, spec=spec)
-                .assign_coords(coords)
-            )
-
-        # remove swept fields from the metadata
-        for f in sweep_fields:
-            del analysis.attrs[f]
+        analysis = sense(radio, capture, run_spec.channel_analysis, sweep_fields)
 
         data.append(analysis)
 
@@ -109,5 +56,7 @@ def sweep(
 
     for k in tuple(sweep_fields) + (TIMESTAMP_NAME,):
         ds[k].attrs.update(FIELD_ATTRS[k])
+
+    ds[k].attrs.update()
 
     return ds

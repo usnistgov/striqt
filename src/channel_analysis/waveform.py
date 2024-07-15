@@ -248,7 +248,9 @@ def amplitude_probability_distribution(
 
     bins = _bin_apd(xp=xp, **bin_params)
     coords = _amplitude_probability_distribution_coords(
-        xp=np, units=f'dBm/{(capture.analysis_bandwidth or capture.sample_rate)/1e6} MHz', **bin_params
+        xp=np,
+        units=f'dBm/{(capture.analysis_bandwidth or capture.sample_rate)/1e6} MHz',
+        **bin_params,
     )
 
     ccdf = iqwaveform.sample_ccdf(iqwaveform.envtodB(iq), bins).astype(dtype)
@@ -403,6 +405,7 @@ def _generate_iir_lpf(
 
     return sos
 
+
 @registry
 def iq_waveform(
     iq,
@@ -430,7 +433,13 @@ def iq_waveform(
     else:
         stop = int(stop_time_sec * capture.sample_rate)
 
-    coords = xr.Coordinates({IQ_WAVEFORM_INDEX_NAME: pd.RangeIndex(start, stop, name=IQ_WAVEFORM_INDEX_NAME)})
+    coords = xr.Coordinates(
+        {
+            IQ_WAVEFORM_INDEX_NAME: pd.RangeIndex(
+                start, stop, name=IQ_WAVEFORM_INDEX_NAME
+            )
+        }
+    )
 
     return ChannelAnalysisResult(
         data=iq[start:stop].copy(),

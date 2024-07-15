@@ -7,7 +7,7 @@ import numpy as np
 import numba
 import numba.cuda
 import SoapySDR
-from SoapySDR import SOAPY_SDR_RX, SOAPY_SDR_TX, SOAPY_SDR_CF32 , errToStr
+from SoapySDR import SOAPY_SDR_RX, SOAPY_SDR_TX, SOAPY_SDR_CF32, errToStr
 import labbench as lb
 import labbench.paramattr as attr
 import pandas as pd
@@ -23,6 +23,7 @@ channel_kwarg = attr.method_kwarg.int('channel', min=0, max=1, help='port number
 # number of extra FFT windows to acquire to allow resampling transients to settle
 TRANSIENT_HOLDOFF_WINDOWS = 2
 
+
 def _verify_channel_setting(func: callable) -> callable:
     # TODO: fix typing
     @wraps(func)
@@ -34,6 +35,7 @@ def _verify_channel_setting(func: callable) -> callable:
 
     return wrapper
 
+
 def _verify_channel_for_getter(func: callable) -> callable:
     # TODO: fix typing
     @wraps(func)
@@ -44,6 +46,7 @@ def _verify_channel_for_getter(func: callable) -> callable:
             return func(self)
 
     return wrapper
+
 
 def _verify_channel_for_setter(func: callable) -> callable:
     # TODO: fix typing
@@ -112,7 +115,9 @@ class AirT7201B(RadioDevice):
         else:
             if getattr(self, 'rx_stream', None) is not None:
                 self.backend.closeStream(self.rx_stream)
-            self.rx_stream = self.backend.setupStream(SOAPY_SDR_RX, SOAPY_SDR_CF32, [channel])
+            self.rx_stream = self.backend.setupStream(
+                SOAPY_SDR_RX, SOAPY_SDR_CF32, [channel]
+            )
 
     @attr.method.float(
         min=300e6,
@@ -269,9 +274,7 @@ class AirT7201B(RadioDevice):
         self.acquisition_counts = {'overflow': 0, 'exceptions': 0, 'total': 0}
 
     @_verify_channel_setting
-    def acquire(
-        self, calibration_bypass=False
-    ) -> tuple[cp.array, pd.Timestamp]:
+    def acquire(self, calibration_bypass=False) -> tuple[cp.array, pd.Timestamp]:
         if isroundmod(self.duration * self.sample_rate(), 1):
             sample_count = round(self.duration * self.sample_rate())
         else:
@@ -284,20 +287,20 @@ class AirT7201B(RadioDevice):
 
         holdoff_samples = TRANSIENT_HOLDOFF_WINDOWS * self.analysis_filter['fft_size']
 
-        iq = self._read_stream(backend_count+2*holdoff_samples)
+        iq = self._read_stream(backend_count + 2 * holdoff_samples)
 
         if self.calibration_path is not None and not calibration_bypass:
             raise ValueError('calibration not yet supported')
         else:
             pass
-#            iq /= float(np.finfo(np.float32).max)
+        #            iq /= float(np.finfo(np.float32).max)
 
         if self.analysis_filter:
             # out = cp.array(self.buffer, copy=False).view(iq.dtype)
             iq = fourier.ola_filter(iq, extend=True, **self.analysis_filter)
-        
+
         trim = sample_count - iq.shape[0]
-        return iq[-trim//2:trim//2 or None], timestamp
+        return iq[-trim // 2 : trim // 2 or None], timestamp
 
     def arm(self, capture: structs.RadioCapture):
         """apply a capture configuration and enable the channel to receive samples"""
@@ -425,7 +428,7 @@ class AirT7201B(RadioDevice):
             # Read the samples from the data buffer
             sr = self.backend.readStream(
                 self.rx_stream,
-                [self.buffer[2*(N-remaining): 2*N]],
+                [self.buffer[2 * (N - remaining) : 2 * N]],
                 remaining,
                 timeoutUs=int(timeout * 1e6),
             )
@@ -446,7 +449,7 @@ class AirT7201B(RadioDevice):
         # # 3. last, re-interpret each interleaved (float32 I, float32 Q) as a complex value
         # buff_complex64 = buff_float32.view('complex64')
 
-        cp_buff = cp.array(self.buffer, copy=False)[:2*N]
+        cp_buff = cp.array(self.buffer, copy=False)[: 2 * N]
 
         return cp_buff.view('complex64')
 
