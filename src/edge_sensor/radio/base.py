@@ -1,11 +1,11 @@
 from __future__ import annotations
 import labbench as lb
-from .. import diagnostic_data, structs
-from iqwaveform import fourier
+from .. import diagnostic_data
 
 
 class RadioBase(lb.Device):
-    _buffer = None
+    _inbuf = None
+    _outbuf = None
 
     def build_index_variables(self):
         return diagnostic_data.index_variables()
@@ -15,5 +15,5 @@ class RadioBase(lb.Device):
             super().build_metadata(), **diagnostic_data.package_host_resources()
         )
 
-    def _prepare_buffer(self, size):
+    def _prepare_buffer(self, input_size, output_size):
         raise NotImplementedError

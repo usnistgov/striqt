@@ -52,7 +52,7 @@ def sweep(radio: base.RadioBase, sweep: Sweep, swept_fields: list[str]) -> xr.Da
 
     for i, capture in enumerate(sweep.captures):
         # treat swept fields as coordinates/indices
-        desc = ', '.join([f'{k}={v}' for k, v in msgspec.to_builtins(capture).items()])
+        desc = ', '.join([f'{k}={getattr(capture, k)}' for k in swept_fields])
 
         with lb.stopwatch(f'{desc}: '):
             iq, timestamp = radio.acquire()

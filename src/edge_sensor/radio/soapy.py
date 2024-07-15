@@ -60,7 +60,8 @@ class SoapyRadioDevice(RadioBase):
     """single-channel sensor waveform acquisition through SoapySDR and pre-processed with iqwaveform"""
 
     TRANSIENT_HOLDOFF_WINDOWS = 2  # one on each side
-    _buffer = None
+    _inbuf = None
+    _outbuf = None
 
     on_overflow = attr.value.str(
         'ignore',
@@ -257,28 +258,38 @@ class SoapyRadioDevice(RadioBase):
         self.sample_rate(sample_rate)
         self.analysis_bandwidth = analysis_bandwidth
 
-        self.channel_enabled(True)
-
     def _reset_stats(self):
         self._stream_stats = {'overflow': 0, 'exceptions': 0, 'total': 0}
 
     @_verify_channel_setting
     def acquire(self, calibration_bypass=False) -> tuple[cp.array, pd.Timestamp]:
         if isroundmod(self.duration * self.sample_rate(), 1):
-            sample_count = round(self.duration * self.sample_rate())
+            Nout = round(self.duration * self.sample_rate())
         else:
             msg = f'duration must be an integer multiple of the sample period (1/{self.sample_rate} s)'
             raise ValueError(msg)
 
         timestamp = pd.Timestamp('now')
-        backend_count = round(np.ceil(sample_count * self._downsample))
-        self.channel_enabled(True)
+        Nin = round(np.ceil(Nout * self._downsample))
 
-        holdoff_samples = (
-            self.TRANSIENT_HOLDOFF_WINDOWS * self.analysis_filter['fft_size']
-        )
+        if self.analysis_filter:
+            Npad = (
+                self.TRANSIENT_HOLDOFF_WINDOWS * self.analysis_filter['fft_size']
+            )
+            bufsize_in = Nin + 2*Npad            
+            bufsize_out = fourier._ola_filter_buffer_size(
+                bufsize_in,
+                window=self.analysis_filter['window'],
+                fft_size_out=self.analysis_filter['fft_size_out'],
+                fft_size=self.analysis_filter['fft_size'],
+                extend=True
+            )
+        else:
+            bufsize_in = Nin
+            bufsize_out = Nout
 
-        iq = self._read_stream(backend_count + 2 * holdoff_samples)
+        self._prepare_buffer(bufsize_in, bufsize_out)
+        iq = self._read_stream(Nin)
         if self.calibration_path is not None and not calibration_bypass:
             raise ValueError('calibration not yet supported')
         else:
@@ -287,9 +298,9 @@ class SoapyRadioDevice(RadioBase):
 
         if self.analysis_filter:
             # out = cp.array(self.buffer, copy=False).view(iq.dtype)
-            iq = fourier.ola_filter(iq, extend=True, **self.analysis_filter)
+            iq = fourier.ola_filter(iq, extend=True, out=self._outbuf, **self.analysis_filter)
 
-        trim = sample_count - iq.shape[0]
+        trim = Nout - iq.shape[0]
         return iq[-trim // 2 : trim // 2 or None], timestamp
 
     def arm(self, capture: structs.RadioCapture):
@@ -314,6 +325,8 @@ class SoapyRadioDevice(RadioBase):
             analysis_bandwidth=capture.analysis_bandwidth,
             lo_shift=capture.lo_shift,
         )
+
+        self.channel_enabled(True)
 
     def get_capture_struct(self, duration=None) -> structs.RadioCapture:
         """generate the currently armed capture configuration for the specified channel"""
@@ -397,20 +410,21 @@ class SoapyRadioDevice(RadioBase):
         else:
             raise TypeError(f'did not understand response {sr.ret}')
 
-    def _prepare_buffer(self, N):
-        if self._buffer is None or self._buffer.size < 2 * N:
+    def _prepare_buffer(self, Nin, Nout):
+        if self._inbuf is None or self._inbuf.size < 2 * Nin:
             # create a buffer for received samples that can be shared across CPU<->GPU
             #     ref: https://github.com/cupy/cupy/issues/3452#issuecomment-903273011
             #
             # this is double-sized compared to the usual number of (int16, int16) IQ pairs,
             # because later we want to store upcasted np.float32 without an extra (allocate, copy)
             #     ref: notebooks/profile_cupy.ipynb
-            self._buffer = empty_shared((2 * N,), dtype=np.float32, xp=np)
+            self._inbuf = empty_shared((2 * Nin,), dtype=np.float32, xp=np)
+
+        if self._outbuf is None or self._outbuf.size < Nout:
+            self._outbuf = empty_shared((Nout,), dtype=np.complex64, xp=cp)
 
     @_verify_channel_setting
-    def _read_stream(self, N, raise_on_overflow=False) -> cp.ndarray:
-        self._prepare_buffer(N)
-
+    def _read_stream(self, N, raise_on_overflow=False) -> cp.ndarray:        
         timeout = max(round(N / self.backend_sample_rate() * 1.5), 50e-3)
 
         remaining = N
@@ -419,7 +433,7 @@ class SoapyRadioDevice(RadioBase):
             # Read the samples from the data buffer
             sr = self.backend.readStream(
                 self.rx_stream,
-                [self._buffer[2 * (N - remaining) : 2 * N]],
+                [self._inbuf[2 * (N - remaining) : 2 * N]],
                 remaining,
                 timeoutUs=int(timeout * 1e6),
             )
@@ -440,13 +454,14 @@ class SoapyRadioDevice(RadioBase):
         # # 3. last, re-interpret each interleaved (float32 I, float32 Q) as a complex value
         # buff_complex64 = buff_float32.view('complex64')
 
-        cp_buff = cp.array(self._buffer, copy=False)[: 2 * N]
+        cp_buff = cp.array(self._inbuf, copy=False)[: 2 * N]
 
         return cp_buff.view('complex64')
 
 
 def empty_capture(radio: SoapyRadioDevice, capture: structs.RadioCapture):
     """evaluate a capture on an empty buffer to warm up a GPU"""
+
     import cupy as cp
 
     fs_backend, lo_offset, analysis_filter = fourier.design_cola_resampler(
@@ -455,16 +470,30 @@ def empty_capture(radio: SoapyRadioDevice, capture: structs.RadioCapture):
         bw=capture.analysis_bandwidth,
         bw_lo=0.75e6,
         shift=capture.lo_shift,
-    )
+    )    
 
-    N = round(capture.duration * fs_backend)
-    radio._prepare_buffer(N)
-    iq = cp.array(radio._buffer, copy=False)[: 2 * N].view('complex64')
-    iq = fourier.ola_filter(iq, extend=True, **analysis_filter)
-    return iq
+    Nin = round(capture.duration * fs_backend)
+    Nout = round(capture.duration * capture.sample_rate)
 
 
-if __name__ == '__main__':
-    airt = AirT7201B(freq=2.44e9, fs=2 * 31.25e6)
-    iq = airt.acquire(256 * 1024)
-    airt.close()
+    if analysis_filter:
+        Npad = (
+            radio.TRANSIENT_HOLDOFF_WINDOWS * analysis_filter['fft_size']
+        )
+        bufsize_in = Nin + 2*Npad            
+        bufsize_out = fourier._ola_filter_buffer_size(
+            bufsize_in,
+            window=analysis_filter['window'],
+            fft_size_out=analysis_filter['fft_size_out'],
+            fft_size=analysis_filter['fft_size'],
+            extend=True
+        )
+    else:
+        bufsize_in = Nin
+        bufsize_out = Nout
+
+    radio._prepare_buffer(bufsize_in, bufsize_out)
+    iq = cp.array(radio._inbuf, copy=False)[: 2*bufsize_in].view('complex64')
+    iq = fourier.ola_filter(iq, extend=True, out=radio._outbuf, **analysis_filter)
+    trim = Nout - iq.shape[0]
+    return iq[-trim // 2 : trim // 2 or None]
