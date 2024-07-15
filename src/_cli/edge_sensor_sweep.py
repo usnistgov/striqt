@@ -10,10 +10,11 @@ from pathlib import Path
     '--output-path',
     default=None,
     type=click.Path(),
-    help='output file path; if unspecified, follows yaml file name'
+    help='output file path; if unspecified, follows yaml file name',
 )
 @click.option(
-    '--force/','-f',
+    '--force/',
+    '-f',
     is_flag=True,
     show_default=True,
     default=False,
@@ -45,4 +46,4 @@ def run(yaml_path: Path, output_path, force):
 
     dump(output_path, data, mode)
 
-    click.echo(f"wrote to {output_path}")
+    click.echo(f'wrote to {output_path}')

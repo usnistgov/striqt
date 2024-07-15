@@ -14,6 +14,7 @@ from .base import RadioBase
 
 channel_kwarg = attr.method_kwarg.int('channel', min=0, help='hardware port number')
 
+
 def _verify_channel_setting(func: callable) -> callable:
     # TODO: fix typing
     @wraps(func)
@@ -184,9 +185,7 @@ class SoapyRadioDevice(RadioBase):
     def _(self, gain: float):
         self.backend.setGain(SOAPY_SDR_RX, self.channel(), gain)
 
-    @attr.method.float(
-        label='dB', help='SDR TX hardware gain'
-    )
+    @attr.method.float(label='dB', help='SDR TX hardware gain')
     @channel_kwarg
     def tx_gain(self, gain: float = lb.Undefined, /, *, channel: int = 0):
         if gain is lb.Undefined:
@@ -271,7 +270,9 @@ class SoapyRadioDevice(RadioBase):
         backend_count = round(np.ceil(sample_count * self._downsample))
         self.channel_enabled(True)
 
-        holdoff_samples = self.TRANSIENT_HOLDOFF_WINDOWS * self.analysis_filter['fft_size']
+        holdoff_samples = (
+            self.TRANSIENT_HOLDOFF_WINDOWS * self.analysis_filter['fft_size']
+        )
 
         iq = self._read_stream(backend_count + 2 * holdoff_samples)
 
@@ -358,7 +359,6 @@ class SoapyRadioDevice(RadioBase):
             else:
                 raise
 
-
     def __del__(self):
         self.close()
 
@@ -381,7 +381,9 @@ class SoapyRadioDevice(RadioBase):
             return count - sr.ret
         elif sr.ret == SoapySDR.SOAPY_SDR_OVERFLOW:
             self._stream_stats['overflow'] += 1
-            total_info = f"{self._stream_stats['overflow']}/{self._stream_stats['total']}"
+            total_info = (
+                f"{self._stream_stats['overflow']}/{self._stream_stats['total']}"
+            )
             msg = f'{time.perf_counter()}: overflow (total {total_info}'
             if self.on_overflow == 'except':
                 raise OverflowError(msg)

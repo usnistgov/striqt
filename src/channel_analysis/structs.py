@@ -29,7 +29,10 @@ def get_attrs(struct: typing.Type[msgspec.Struct], field: str) -> dict[str, str]
     elif len(metas) == 1 and isinstance(metas[0], msgspec.Meta):
         return metas[0].extra
     else:
-        raise TypeError("Annotated[] type hints must contain exactly one msgspec.Meta object")
+        raise TypeError(
+            'Annotated[] type hints must contain exactly one msgspec.Meta object'
+        )
+
 
 class Capture(msgspec.Struct, kw_only=True, frozen=True):
     """bare minimum information about an IQ acquisition"""

@@ -14,6 +14,7 @@ import typing
 CAPTURE_DIM = 'capture'
 TIMESTAMP_NAME = 'timestamp'
 
+
 @lru_cache
 def _capture_coord_template(sweep_fields: tuple[str, ...]):
     capture = RadioCapture()
@@ -43,9 +44,7 @@ def capture_to_coords(capture: RadioCapture, sweep_fields: list[str], timestamp=
     return coords
 
 
-def sweep(
-    radio: base.RadioBase, sweep: Sweep, swept_fields: list[str]
-) -> xr.Dataset:
+def sweep(radio: base.RadioBase, sweep: Sweep, swept_fields: list[str]) -> xr.Dataset:
     data = []
     spec = sweep.channel_analysis
     swept_fields = tuple(swept_fields)
