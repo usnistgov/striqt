@@ -5,9 +5,13 @@ import labbench.paramattr as attr
 from .. import host
 
 
-class RadioDevice(lb.Device):
+class RadioBase(lb.Device):
     def build_index_variables(self):
         return host.index_variables()
 
     def build_metadata(self):
         return dict(super().build_metadata(), **host.host_metadata())
+
+
+class SoapyRadio(RadioBase):
+    pass

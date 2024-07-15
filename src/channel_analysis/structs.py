@@ -3,28 +3,45 @@ import inspect
 import msgspec
 from collections import UserDict
 import typing
+from typing import Annotated as A
+from typing import Optional
 from frozendict import frozendict
+import functools
 # from iqwaveform.power_analysis import isroundmod
 
 
 TDecoratedFunc = typing.Callable[..., typing.Any]
 
 
+def meta(label: str, unit: str | None = None) -> msgspec.Meta:
+    """annotation that is used to generate 'label' and 'units' fields of xarray attrs objects"""
+    return msgspec.Meta(description=label, extra={'label': label, 'unit': unit})
+
+
+@functools.lru_cache
+def get_attrs(struct: typing.Type[msgspec.Struct], field: str) -> dict[str, str]:
+    """get an attrs dict for xarray based on Annotated type hints with `meta`"""
+    hints = typing.get_type_hints(struct, include_extras=True)
+
+    metas = hints[field].__metadata__
+    if len(metas) == 0:
+        return {}
+    elif len(metas) == 1 and isinstance(metas[0], msgspec.Meta):
+        return metas[0].extra
+    else:
+        raise TypeError("Annotated[] type hints must contain exactly one msgspec.Meta object")
+
 class Capture(msgspec.Struct, kw_only=True, frozen=True):
     """bare minimum information about an IQ acquisition"""
 
     # acquisition
-    duration: float
-    sample_rate: float
-
-    # def __post_init__(self):
-    #     if not isroundmod(self.duration, 1/self.sample_rate):
-    #         raise ValueError("duration must consist of a counting number of sample periods")
+    duration: A[float, meta('duration of the capture', 's')] = 0.1
+    sample_rate: A[float, meta('IQ sample rate', 'S/s')] = 15.36e6
 
 
 class FilteredCapture(Capture):
     # filtering and resampling
-    analysis_bandwidth: typing.Optional[float] = None
+    analysis_bandwidth: A[Optional[float], meta('DSP filter bandwidth', 'Hz')] = None
     analysis_filter: dict = msgspec.field(
         default_factory=lambda: frozendict({'fft_size': 1024, 'window': 'hamming'})
     )

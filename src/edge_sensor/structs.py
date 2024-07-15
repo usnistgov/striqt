@@ -4,33 +4,46 @@ from __future__ import annotations
 import msgspec
 from typing import Optional, Literal, Any
 import channel_analysis
+from channel_analysis.structs import meta, get_attrs
 from pathlib import Path
+from msgspec import Meta
+import typing
+from typing import Annotated as A
 
 
 def make_default_analysis():
     return channel_analysis.waveforms.analysis_registry.tostruct()()
 
 
+_TShift = Literal['left', 'right', 'none']
+
+
 class RadioCapture(channel_analysis.Capture):
     """configuration for a single waveform capture"""
 
     # RF and leveling
-    center_frequency: float = 3710e6
-    channel: int = 0
-    gain: float = -10
+    center_frequency: A[float, meta('RF center frequency', 'Hz')] = 3710e6
+    channel: A[int, meta('RX hardware input port')] = 0
+    gain: A[float, meta('internal gain setting inside the radio', 'dB')] = -10
 
     # acquisition
-    duration: float = 0.1
-    sample_rate: float = 15.36e6
+    duration: A[float, meta('duration of the capture', 's')] = 0.1
+    sample_rate: A[float, meta('IQ sample rate', 'S/s')] = 15.36e6
 
     # filtering and resampling
-    analysis_bandwidth: Optional[float] = 10e6 # None for no bandpass filter
-    lo_shift: Literal['left', 'right', 'none'] = 'left'
+    analysis_bandwidth: A[Optional[float], meta('DSP filter bandwidth', 'Hz')] = 10e6
+    lo_shift: A[_TShift, meta('direction of the LO shift')] = 'left'
 
-    # external frequency conversion support
-    preselect_if_frequency: Optional[float] = None  # Hz (or none, for no ext frontend)
-    preselect_lo_gain: Optional[float] = 0  # dB (ignored when if_frequency is None)
-    preselect_rf_gain: Optional[float] = 0  # dB (ignored when if_frequency is None)
+    # external frequency conversion disabled when if_frequency is None
+    preselect_if_frequency: A[
+        Optional[float], meta('preselector IF filter center frequency')
+    ] = None  # Hz (or none, for no ext frontend)
+    preselect_lo_gain: A[
+        Optional[float], meta('preselector LO path gain setting', 'dB')
+    ] = 0  # dB (ignored when if_frequency is None)
+    preselect_rf_gain: A[
+        Optional[float], meta('preselector RF path gain setting', 'dB')
+    ] = 0
 
 
 class Radio(msgspec.Struct):
@@ -50,14 +63,6 @@ class Sweep(msgspec.Struct):
     radio: Radio = msgspec.field(default_factory=Radio)
     defaults: RadioCapture = msgspec.field(default_factory=RadioCapture)
     channel_analysis: Any = msgspec.field(default_factory=make_default_analysis)
-
-
-def to_calibration_capture(c: RadioCapture, duration=0.1) -> RadioCapture:
-    """return a capture configured as a calibration with the specified duration"""
-
-    d = msgspec.to_builtins(c)
-    d['duration'] = duration
-    return msgspec.convert(d, type=RadioCapture)
 
 
 def read_yaml_sweep(path: str | Path) -> tuple[Sweep, tuple[str, ...]]:
