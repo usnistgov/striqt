@@ -1,4 +1,4 @@
-""" merge conda environment files to avoid manual duplication of inherited dependencies """
+"""merge conda environment files to avoid manual duplication of inherited dependencies"""
 
 from ruamel.yaml import YAML  # use of ruamel.yaml preserves comments
 import sys

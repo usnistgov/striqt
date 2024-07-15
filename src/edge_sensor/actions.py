@@ -5,9 +5,10 @@ import labbench as lb
 import xarray as xr
 import msgspec
 import numpy as np
-from frozendict import frozendict
 import pandas as pd
 import typing
+from channel_analysis import waveform
+from functools import lru_cache
 
 CAPTURE_DIM = 'capture'
 TIMESTAMP_NAME = 'timestamp'
@@ -47,13 +48,17 @@ def sweep(radio: base.RadioBase, sweep: Sweep, swept_fields: list[str]) -> xr.Da
     spec = sweep.channel_analysis
     swept_fields = tuple(swept_fields)
 
-    for capture in sweep.captures:
+    radio.arm(sweep.captures[0])
+
+    for i, capture in enumerate(sweep.captures):
         # treat swept fields as coordinates/indices
         desc = ', '.join([f'{k}={v}' for k, v in msgspec.to_builtins(capture).items()])
 
         with lb.stopwatch(f'{desc}: '):
-            radio.arm(capture)
             iq, timestamp = radio.acquire()
+            # prepare the next capture while we analyze
+            if i + 1 < len(sweep.captures):
+                radio.arm(sweep.captures[i + 1])
             coords = capture_to_coords(capture, swept_fields, timestamp=timestamp)
             analysis = waveform.analyze_by_spec(iq, capture, spec=spec).assign_coords(
                 coords

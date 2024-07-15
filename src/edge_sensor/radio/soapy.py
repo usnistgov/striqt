@@ -1,15 +1,20 @@
 import time
 from functools import wraps
 
+import cupy as cp
+import numpy as np
+import numba
+import numba.cuda
 import labbench as lb
 import pandas as pd
 import SoapySDR
 from iqwaveform import fourier
 from iqwaveform.power_analysis import isroundmod
+from iqwaveform.util import empty_shared
 from labbench import paramattr as attr
 from SoapySDR import SOAPY_SDR_CF32, SOAPY_SDR_RX, SOAPY_SDR_TX, errToStr
 
-from . import structs
+from .. import structs
 from .base import RadioBase
 
 channel_kwarg = attr.method_kwarg.int('channel', min=0, help='hardware port number')
@@ -54,7 +59,7 @@ def _verify_channel_for_setter(func: callable) -> callable:
 class SoapyRadioDevice(RadioBase):
     """single-channel sensor waveform acquisition through SoapySDR and pre-processed with iqwaveform"""
 
-    TRANSIENT_HOLDOFF_WINDOWS = 0
+    TRANSIENT_HOLDOFF_WINDOWS = 2  # one on each side
     _buffer = None
 
     on_overflow = attr.value.str(
@@ -203,10 +208,9 @@ class SoapyRadioDevice(RadioBase):
         self._logger.info('connecting')
         self.backend = SoapySDR.Device(dict(driver='SoapyAIRT'))
         self._logger.info('connected')
+
         self._reset_stats()
         self.analysis_filter = {}
-
-        self.channel(0)
 
         for channel in 0, 1:
             self.backend.setGainMode(SOAPY_SDR_RX, channel, False)
@@ -275,7 +279,6 @@ class SoapyRadioDevice(RadioBase):
         )
 
         iq = self._read_stream(backend_count + 2 * holdoff_samples)
-
         if self.calibration_path is not None and not calibration_bypass:
             raise ValueError('calibration not yet supported')
         else:
@@ -341,7 +344,6 @@ class SoapyRadioDevice(RadioBase):
     def close(self):
         try:
             self.channel_enabled(False)
-            self.backend.closeStream(self.rx_stream)
         except ValueError as ex:
             if 'invalid parameter' in str(ex):
                 # already closed
@@ -350,7 +352,6 @@ class SoapyRadioDevice(RadioBase):
                 raise
 
         try:
-            self.channel_enabled(False)
             self.backend.closeStream(self.rx_stream)
         except ValueError as ex:
             if 'invalid parameter' in str(ex):
@@ -396,26 +397,19 @@ class SoapyRadioDevice(RadioBase):
         else:
             raise TypeError(f'did not understand response {sr.ret}')
 
-    @_verify_channel_setting
-    def _read_stream(self, N, raise_on_overflow=False) -> cp.ndarray:
-        if self._buffer is None or self._buffer.size < 4 * N:
+    def _prepare_buffer(self, N):
+        if self._buffer is None or self._buffer.size < 2 * N:
             # create a buffer for received samples that can be shared across CPU<->GPU
             #     ref: https://github.com/cupy/cupy/issues/3452#issuecomment-903273011
             #
             # this is double-sized compared to the usual number of (int16, int16) IQ pairs,
             # because later we want to store upcasted np.float32 without an extra (allocate, copy)
             #     ref: notebooks/profile_cupy.ipynb
-            del self._buffer
+            self._buffer = empty_shared((2 * N,), dtype=np.float32, xp=np)
 
-            self._buffer = numba.cuda.mapped_array(
-                (2 * N,),
-                dtype=np.float32,
-                strides=None,
-                order='C',
-                stream=0,
-                portable=False,
-                wc=False,
-            )
+    @_verify_channel_setting
+    def _read_stream(self, N, raise_on_overflow=False) -> cp.ndarray:
+        self._prepare_buffer(N)
 
         timeout = max(round(N / self.backend_sample_rate() * 1.5), 50e-3)
 
@@ -449,6 +443,25 @@ class SoapyRadioDevice(RadioBase):
         cp_buff = cp.array(self._buffer, copy=False)[: 2 * N]
 
         return cp_buff.view('complex64')
+
+
+def empty_capture(radio: SoapyRadioDevice, capture: structs.RadioCapture):
+    """evaluate a capture on an empty buffer to warm up a GPU"""
+    import cupy as cp
+
+    fs_backend, lo_offset, analysis_filter = fourier.design_cola_resampler(
+        fs_base=type(radio).backend_sample_rate.max,
+        fs_target=capture.sample_rate,
+        bw=capture.analysis_bandwidth,
+        bw_lo=0.75e6,
+        shift=capture.lo_shift,
+    )
+
+    N = round(capture.duration * fs_backend)
+    radio._prepare_buffer(N)
+    iq = cp.array(radio._buffer, copy=False)[: 2 * N].view('complex64')
+    iq = fourier.ola_filter(iq, extend=True, **analysis_filter)
+    return iq
 
 
 if __name__ == '__main__':
