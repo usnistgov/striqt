@@ -306,7 +306,7 @@ def persistence_spectrum(
     *,
     window: typing.Any,
     resolution: float,
-    quantiles: tuple[float, ...],
+    statistics: tuple[typing.Union[str,float], ...],
     fractional_overlap: float = 0,
     truncate: bool = True,
     dB: bool = True,
@@ -342,7 +342,7 @@ def persistence_spectrum(
         window=window,
         resolution=resolution,
         fractional_overlap=fractional_overlap,
-        quantiles=quantiles,
+        statistics=statistics,
         truncate=truncate,
         dB=dB,
     )
@@ -351,7 +351,7 @@ def persistence_spectrum(
         capture,
         fft_size=fft_size,
         overlap_frac=fractional_overlap,
-        stat_names=tuple(quantiles),
+        stat_names=tuple(statistics),
         truncate=truncate,
     )
 
