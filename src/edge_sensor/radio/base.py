@@ -3,9 +3,9 @@ import labbench as lb
 from .. import host
 
 
-class RadioDevice(lb.Device):
+class RadioBase(lb.Device):
     def build_index_variables(self):
         return host.index_variables()
 
     def build_metadata(self):
-        return host.host_metadata()
+        return dict(super().build_metadata(), **host.host_metadata())

@@ -5,6 +5,6 @@ import iqwaveform
 
 del iqwaveform
 
-from . import host, radio
+from . import radio, structs
 
 from channel_analysis import load, dump

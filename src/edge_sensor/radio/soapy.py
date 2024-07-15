@@ -1,27 +1,18 @@
-from __future__ import annotations
-from iqwaveform.power_analysis import isroundmod
-from iqwaveform import fourier
 import time
-import cupy as cp
-import numpy as np
-import numba
-import numba.cuda
-import SoapySDR
-from SoapySDR import SOAPY_SDR_RX, SOAPY_SDR_TX, SOAPY_SDR_CF32, errToStr
-import labbench as lb
-import labbench.paramattr as attr
-import pandas as pd
-import typing
 from functools import wraps
 
+import labbench as lb
+import pandas as pd
+import SoapySDR
+from iqwaveform import fourier
+from iqwaveform.power_analysis import isroundmod
+from labbench import paramattr as attr
+from SoapySDR import SOAPY_SDR_CF32, SOAPY_SDR_RX, SOAPY_SDR_TX, errToStr
+
+from . import structs
 from .base import RadioBase
-from .. import structs
 
-# for TX only (RX channel is accessed through the AirT7201B.channel method)
-channel_kwarg = attr.method_kwarg.int('channel', min=0, max=1, help='port number')
-
-# number of extra FFT windows to acquire to allow resampling transients to settle
-TRANSIENT_HOLDOFF_WINDOWS = 2
+channel_kwarg = attr.method_kwarg.int('channel', min=0, help='hardware port number')
 
 
 def _verify_channel_setting(func: callable) -> callable:
@@ -60,8 +51,11 @@ def _verify_channel_for_setter(func: callable) -> callable:
     return wrapper
 
 
-class AirT7201B(RadioBase):
-    """fast simplified single-channel receive acquisition"""
+class SoapyRadioDevice(RadioBase):
+    """single-channel sensor waveform acquisition through SoapySDR and pre-processed with iqwaveform"""
+
+    TRANSIENT_HOLDOFF_WINDOWS = 0
+    _buffer = None
 
     on_overflow = attr.value.str(
         'ignore',
@@ -75,15 +69,13 @@ class AirT7201B(RadioBase):
     )
 
     duration = attr.value.float(
-        100e-3, min=0, label='s', help='receive waveform capture duration'
+        10e-3, min=0, label='s', help='receive waveform capture duration'
     )
 
     _downsample = attr.value.float(1.0, min=1, help='backend_sample_rate/sample_rate')
 
     lo_offset = attr.value.float(
         0.0,
-        min=-125e6,
-        max=125e6,
         label='Hz',
         help='digital frequency shift of the RX center frequency',
     )
@@ -96,7 +88,6 @@ class AirT7201B(RadioBase):
 
     @attr.method.int(
         min=0,
-        max=1,
         allow_none=True,
         cache=True,
         help='RX input port index',
@@ -120,8 +111,7 @@ class AirT7201B(RadioBase):
             )
 
     @attr.method.float(
-        min=300e6,
-        max=6000e6,
+        min=0,
         label='Hz',
         help='direct conversion LO frequency of the RX',
     )
@@ -146,8 +136,7 @@ class AirT7201B(RadioBase):
     )
 
     @attr.method.float(
-        min=3.906250e6,
-        max=125e6,
+        min=0,
         cache=True,
         label='Hz',
         help='sample rate before resampling',
@@ -186,7 +175,7 @@ class AirT7201B(RadioBase):
         else:
             self.backend.deactivateStream(self.rx_stream)
 
-    @attr.method.float(min=-30, max=0, step=0.05, label='dB', help='SDR hardware gain')
+    @attr.method.float(label='dB', help='SDR hardware gain')
     @_verify_channel_for_getter
     def gain(self):
         return self.backend.getGain(SOAPY_SDR_RX, self.channel())
@@ -196,9 +185,7 @@ class AirT7201B(RadioBase):
     def _(self, gain: float):
         self.backend.setGain(SOAPY_SDR_RX, self.channel(), gain)
 
-    @attr.method.float(
-        min=-41.95, max=0, step=0.05, label='dB', help='SDR TX hardware gain'
-    )
+    @attr.method.float(label='dB', help='SDR TX hardware gain')
     @channel_kwarg
     def tx_gain(self, gain: float = lb.Undefined, /, *, channel: int = 0):
         if gain is lb.Undefined:
@@ -216,8 +203,7 @@ class AirT7201B(RadioBase):
         self._logger.info('connecting')
         self.backend = SoapySDR.Device(dict(driver='SoapyAIRT'))
         self._logger.info('connected')
-        self.buffer = None
-        self._reset_counts()
+        self._reset_stats()
         self.analysis_filter = {}
 
         self.channel(0)
@@ -252,7 +238,6 @@ class AirT7201B(RadioBase):
             bw_lo=0.75e6,
             shift=lo_shift,
         )
-        print(self.analysis_filter, fs_backend)
 
         fft_size_out = self.analysis_filter.get(
             'fft_size_out', self.analysis_filter['fft_size']
@@ -270,8 +255,8 @@ class AirT7201B(RadioBase):
 
         self.channel_enabled(True)
 
-    def _reset_counts(self):
-        self.acquisition_counts = {'overflow': 0, 'exceptions': 0, 'total': 0}
+    def _reset_stats(self):
+        self._stream_stats = {'overflow': 0, 'exceptions': 0, 'total': 0}
 
     @_verify_channel_setting
     def acquire(self, calibration_bypass=False) -> tuple[cp.array, pd.Timestamp]:
@@ -285,7 +270,9 @@ class AirT7201B(RadioBase):
         backend_count = round(np.ceil(sample_count * self._downsample))
         self.channel_enabled(True)
 
-        holdoff_samples = TRANSIENT_HOLDOFF_WINDOWS * self.analysis_filter['fft_size']
+        holdoff_samples = (
+            self.TRANSIENT_HOLDOFF_WINDOWS * self.analysis_filter['fft_size']
+        )
 
         iq = self._read_stream(backend_count + 2 * holdoff_samples)
 
@@ -325,9 +312,7 @@ class AirT7201B(RadioBase):
             lo_shift=capture.lo_shift,
         )
 
-        time.sleep(20e-3)
-
-    def get_armed_capture(self, duration=None) -> structs.RadioCapture:
+    def get_capture_struct(self, duration=None) -> structs.RadioCapture:
         """generate the currently armed capture configuration for the specified channel"""
         if self.lo_offset == 0:
             lo_shift = None
@@ -364,6 +349,16 @@ class AirT7201B(RadioBase):
             else:
                 raise
 
+        try:
+            self.channel_enabled(False)
+            self.backend.closeStream(self.rx_stream)
+        except ValueError as ex:
+            if 'invalid parameter' in str(ex):
+                # already closed
+                pass
+            else:
+                raise
+
     def __del__(self):
         self.close()
 
@@ -384,9 +379,11 @@ class AirT7201B(RadioBase):
             return 0
         elif sr.ret > 0:
             return count - sr.ret
-        elif sr.ret == -4:
-            self.acquisition_counts['overflow'] += 1
-            total_info = f"{self.acquisition_counts['overflow']}/{self.acquisition_counts['total']}"
+        elif sr.ret == SoapySDR.SOAPY_SDR_OVERFLOW:
+            self._stream_stats['overflow'] += 1
+            total_info = (
+                f"{self._stream_stats['overflow']}/{self._stream_stats['total']}"
+            )
             msg = f'{time.perf_counter()}: overflow (total {total_info}'
             if self.on_overflow == 'except':
                 raise OverflowError(msg)
@@ -394,23 +391,23 @@ class AirT7201B(RadioBase):
                 self._logger.info(msg)
             return 0
         elif sr.ret < 0:
-            self.acquisition_counts['exceptions'] += 1
+            self._stream_stats['exceptions'] += 1
             raise IOError(f'Error {sr.ret}: {errToStr(sr.ret)}')
         else:
             raise TypeError(f'did not understand response {sr.ret}')
 
     @_verify_channel_setting
     def _read_stream(self, N, raise_on_overflow=False) -> cp.ndarray:
-        if self.buffer is None or self.buffer.size < 4 * N:
+        if self._buffer is None or self._buffer.size < 4 * N:
             # create a buffer for received samples that can be shared across CPU<->GPU
             #     ref: https://github.com/cupy/cupy/issues/3452#issuecomment-903273011
             #
             # this is double-sized compared to the usual number of (int16, int16) IQ pairs,
             # because later we want to store upcasted np.float32 without an extra (allocate, copy)
             #     ref: notebooks/profile_cupy.ipynb
-            del self.buffer
+            del self._buffer
 
-            self.buffer = numba.cuda.mapped_array(
+            self._buffer = numba.cuda.mapped_array(
                 (2 * N,),
                 dtype=np.float32,
                 strides=None,
@@ -428,14 +425,14 @@ class AirT7201B(RadioBase):
             # Read the samples from the data buffer
             sr = self.backend.readStream(
                 self.rx_stream,
-                [self.buffer[2 * (N - remaining) : 2 * N]],
+                [self._buffer[2 * (N - remaining) : 2 * N]],
                 remaining,
                 timeoutUs=int(timeout * 1e6),
             )
 
             remaining = self._check_remaining_samples(sr, remaining)
 
-        self.acquisition_counts['total'] += 1
+        self._stream_stats['total'] += 1
 
         # # what follows is some acrobatics to minimize new memory allocation and copy
         # buff_int16 = cp.array(self.buffer, copy=False)[: 2 * N]
@@ -449,7 +446,7 @@ class AirT7201B(RadioBase):
         # # 3. last, re-interpret each interleaved (float32 I, float32 Q) as a complex value
         # buff_complex64 = buff_float32.view('complex64')
 
-        cp_buff = cp.array(self.buffer, copy=False)[: 2 * N]
+        cp_buff = cp.array(self._buffer, copy=False)[: 2 * N]
 
         return cp_buff.view('complex64')
 

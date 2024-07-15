@@ -4,22 +4,15 @@ from enum import Enum
 import psutil
 import xarray as xr
 from functools import lru_cache
-import sys
 
 from dulwich.repo import Repo, NotGitRepository
 from dulwich import porcelain
 from pathlib import Path
 import socket
 import uuid
+from labbench._host import Host
 
 METADATA_VERSION = '0.0'
-
-if len(sys.argv) > 0:
-    SCRIPT_NAME = Path(sys.argv[0]).name
-    SCRIPT_ROOT = Path(sys.argv[0]).parent
-else:
-    SCRIPT_NAME = None
-    SCRIPT_ROOT = Path('.')
 
 
 @lru_cache(8)
@@ -88,7 +81,29 @@ def _compute_status_meta(keys: tuple):
     }
 
 
-def git_unstaged_changes(repo_or_path=SCRIPT_ROOT) -> list[str]:
+def package_log_messages(host: Host) -> dict[str, xr.DataArray]:
+    """package logger messages from labbench._host.Host.log into xarray DataArrays"""
+
+    messages = host.log
+
+    fields = list(messages[0].keys())
+    flat = [list(m.values()) for m in messages]
+
+    coords = {
+        'message_index': range(len(flat)),
+        'message_field': fields,
+    }
+
+    array = (
+        xr.DataArray(flat, coords=coords, name='messages')
+        .drop_sel({'message_field': ('thread', 'object_log_name')})
+        .astype('str')
+    )
+
+    return {'host_log': array}
+
+
+def git_unstaged_changes(repo_or_path='.') -> list[str]:
     """returns a list of files in a git repository with unstaged changes.
 
     Args:
@@ -106,7 +121,7 @@ def git_unstaged_changes(repo_or_path=SCRIPT_ROOT) -> list[str]:
     return [n.decode() for n in names]
 
 
-def host_metadata(search_path=SCRIPT_ROOT):
+def host_metadata(search_path='.'):
     try:
         repo = _find_repo_in_parents(search_path)
     except NotGitRepository:
@@ -116,7 +131,6 @@ def host_metadata(search_path=SCRIPT_ROOT):
         return {}
 
     repo_info = {
-        'script': str(SCRIPT_ROOT / SCRIPT_NAME),
         'git_remote': repo.get_config().get(('remote', 'origin'), 'url').decode(),
         'git_commit': repo.head().decode(),
         # 'git_unstaged_changes': git_unstaged_changes('.')
@@ -124,7 +138,7 @@ def host_metadata(search_path=SCRIPT_ROOT):
         'host_name': socket.gethostname(),
     }
 
-    return {'host': repo_info}
+    return repo_info
 
 
 @lru_cache(8)
@@ -137,7 +151,7 @@ def _temperature_coords(keys: tuple):
     return xr.Coordinates({'temperature_sensor': list(keys)})
 
 
-def host_index_variables(temperature={}):
+def package_host_resources(host: Host) -> dict[str, xr.DataArray]:
     compute_status = {
         'disk_usage_percentage': _psutil_to_dict('disk_usage', '.')['percent'],
         'swap_usage_percentage': _psutil_to_dict('swap_memory')['percent'],
@@ -158,4 +172,4 @@ def host_index_variables(temperature={}):
         attrs={'units': 'C'},
     )
 
-    return {'temperature': temperature, 'compute_status': compute_status}
+    return {'host_temperature': temperature, 'host_data_usage': compute_status}
