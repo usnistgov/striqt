@@ -12,7 +12,7 @@ from iqwaveform import fourier
 from iqwaveform.power_analysis import isroundmod
 from iqwaveform.util import empty_shared
 from labbench import paramattr as attr
-from SoapySDR import SOAPY_SDR_CS16, SOAPY_SDR_CF32, SOAPY_SDR_RX, SOAPY_SDR_TX, errToStr
+from SoapySDR import SOAPY_SDR_CS16, SOAPY_SDR_RX, SOAPY_SDR_TX, errToStr
 
 from .. import structs
 from .base import RadioBase
@@ -59,7 +59,7 @@ def _verify_channel_for_setter(func: callable) -> callable:
 class SoapyRadioDevice(RadioBase):
     """single-channel sensor waveform acquisition through SoapySDR and pre-processed with iqwaveform"""
 
-    TRANSIENT_HOLDOFF_WINDOWS = 1  # on each side
+    TRANSIENT_HOLDOFF_WINDOWS = 2  # on each side
     MASTER_CLOCK_RATE = 125e6
 
     _inbuf = None
@@ -227,8 +227,6 @@ class SoapyRadioDevice(RadioBase):
         outside of the specified analysis bandwidth.
         """
 
-        self.channel_enabled(False)
-
         if str(lo_shift).lower() == 'none':
             lo_shift = False
 
@@ -244,11 +242,10 @@ class SoapyRadioDevice(RadioBase):
             'fft_size_out', self.analysis_filter['fft_size']
         )
 
-        with lb.paramattr.hold_attr_notifications(self):
-            self._downsample = 1  # temporarily avoid a potential bounding error
-            self.backend_sample_rate(fs_backend)
-            self._downsample = self.analysis_filter['fft_size'] / fft_size_out
-            self.lo_offset = lo_offset  # hold update on this one?
+        self._downsample = 1  # temporarily avoid a potential bounding error
+        self.backend_sample_rate(fs_backend)
+        self._downsample = self.analysis_filter['fft_size'] / fft_size_out
+        self.lo_offset = lo_offset  # hold update on this one?
 
         self.center_frequency(center_frequency)
         self.sample_rate(sample_rate)
@@ -292,13 +289,15 @@ class SoapyRadioDevice(RadioBase):
             # iq /= float(np.finfo(np.float32).max)
             iq /= float(np.iinfo(np.int16).max)
 
-        return iq, timestamp
+        if Npad > 0:
+            return iq[Npad:-Npad], timestamp
+        else:
+            return iq, timestamp
 
     def resample(self, iq_in):
-        Nout = round(self.duration * self.sample_rate())
+        # Nout = round(self.duration * self.sample_rate())
 
         if self.analysis_filter:
-            # out = cp.array(self.buffer, copy=False).view(iq.dtype)
             iq = fourier.ola_filter(
                 iq_in, extend=True, out=self._outbuf, **self.analysis_filter
             )
@@ -306,8 +305,8 @@ class SoapyRadioDevice(RadioBase):
         else:
             iq = iq_in
 
-        trim = iq.shape[0] - Nout
-        iq = iq[trim // 2 : (-trim // 2) or None]
+        # trim = iq.shape[0] - Nout
+        # iq = iq[trim // 2 : (-trim // 2) or None]
 
         return iq
 
@@ -326,7 +325,6 @@ class SoapyRadioDevice(RadioBase):
             )
 
         self.channel(capture.channel)
-        self.channel_enabled(False)
         self.gain(capture.gain)
 
         self.autosample(
@@ -335,6 +333,7 @@ class SoapyRadioDevice(RadioBase):
             analysis_bandwidth=capture.analysis_bandwidth,
             lo_shift=capture.lo_shift,
         )
+
 
     def get_capture_struct(self, duration=None) -> structs.RadioCapture:
         """generate the currently armed capture configuration for the specified channel"""
@@ -427,6 +426,7 @@ class SoapyRadioDevice(RadioBase):
             # because later we want to store upcasted np.float32 without an extra (allocate, copy)
             #     ref: notebooks/profile_cupy.ipynb
             self._inbuf = empty_shared((4*Nin,), dtype=np.int16, xp=np)
+            self._inbuf[:] = 0
 
         if self._outbuf is None or self._outbuf.size < Nout:
             self._outbuf = empty_shared((Nout,), dtype=np.complex64, xp=cp)
@@ -438,9 +438,6 @@ class SoapyRadioDevice(RadioBase):
         remaining = N
 
         while remaining > 0:
-            if (N-remaining)%2 == 1 or N%2 ==1:
-                raise ValueError('unexpected odd buffer size')
-
             # Read the samples from the data buffer
             sr = self.backend.readStream(
                 self.rx_stream,
@@ -497,7 +494,7 @@ def empty_capture(radio: SoapyRadioDevice, capture: structs.RadioCapture):
         bufsize_out = Nout
 
     radio._prepare_buffer(bufsize_in, bufsize_out)
-    iq = cp.array(radio._inbuf, copy=False)[: bufsize_in]
+    iq = cp.array(radio._inbuf, copy=False).view('complex64')[: bufsize_in]
     iq.get()
     iq = fourier.ola_filter(iq, extend=True, out=radio._outbuf, **analysis_filter)
 
