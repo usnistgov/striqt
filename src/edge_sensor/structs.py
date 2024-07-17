@@ -52,10 +52,14 @@ class Radio(msgspec.Struct):
     driver: str = 'AirT7201'
     resource: Any = None
     gps: bool = False
-    location: Optional[tuple[float, float, float]] = None
     timebase: Literal['internal', 'gpsdo'] = 'internal'
     cyclic_trigger: Optional[float] = None
     calibration_path: Optional[str] = None
+
+
+class Conditions(msgspec.Struct):
+    location: Optional[tuple[float, float, float]] = None
+    external_signal_chain: tuple[dict, ...] = ()
 
 
 class Sweep(msgspec.Struct):
@@ -63,6 +67,7 @@ class Sweep(msgspec.Struct):
     radio: Radio = msgspec.field(default_factory=Radio)
     defaults: RadioCapture = msgspec.field(default_factory=RadioCapture)
     channel_analysis: Any = msgspec.field(default_factory=make_default_analysis)
+    conditions: Conditions = msgspec.field(default_factory=Conditions)
 
 
 def read_yaml_sweep(path: str | Path) -> tuple[Sweep, tuple[str, ...]]:

@@ -1,3 +1,4 @@
+from __future__ import annotations
 from .radio import base
 from .structs import Sweep, RadioCapture, get_attrs
 
@@ -42,27 +43,46 @@ def capture_to_coords(capture: RadioCapture, sweep_fields: list[str], timestamp=
 
     return coords
 
+def arm_acquire(radio, capture) -> tuple:
+    if capture is None:
+        return None, None
+    radio.arm(capture)
+    return radio.acquire()
 
-def sweep(radio: base.RadioBase, sweep: Sweep, swept_fields: list[str]) -> xr.Dataset:
+def sweep(radio: base.RadioBase, sweep: Sweep, swept_fields: list[str]) -> xr.Dataset|None:
     data = []
     spec = sweep.channel_analysis
     swept_fields = tuple(swept_fields)
 
-    radio.arm(sweep.captures[0])
+    if len(sweep.captures) == 0:
+        return None
 
-    for i, capture in enumerate(sweep.captures):
+    iq_oversampled, timestamp = arm_acquire(radio, sweep.captures[0])
+
+    for capture, next_capture in zip(sweep.captures, list(sweep.captures[1:]+[None])):
         # treat swept fields as coordinates/indices
         desc = ', '.join([f'{k}={getattr(capture, k)}' for k in swept_fields])
 
         with lb.stopwatch(f'{desc}: '):
-            iq, timestamp = radio.acquire()
+            iq = radio.resample(iq_oversampled)
+            iq.get()
+
             # prepare the next capture while we analyze
-            if i + 1 < len(sweep.captures):
-                radio.arm(sweep.captures[i + 1])
-            coords = capture_to_coords(capture, swept_fields, timestamp=timestamp)
-            analysis = waveform.analyze_by_spec(iq, capture, spec=spec).assign_coords(
-                coords
+            ret = lb.concurrently(
+                lb.Call(arm_acquire, radio, next_capture),
+                lb.Call(waveform.analyze_by_spec, iq, capture, spec=spec)
             )
+
+            coords = capture_to_coords(capture, swept_fields, timestamp=timestamp)
+            analysis = ret['analyze_by_spec'].assign_coords(coords)
+
+            iq_oversampled, timestamp = ret['arm_acquire']
+
+            # print(ret.keys())
+            # iq_oversampled, timestamp = arm_acquire(radio, next_capture)
+            # analysis = waveform.analyze_by_spec(iq, capture, spec=spec).assign_coords(
+            #     coords
+            # )
 
         # remove swept fields from the metadata
         for f in swept_fields:

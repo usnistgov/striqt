@@ -5,27 +5,46 @@ from pathlib import Path
 import contextlib
 
 
+def set_cuda_mem_limit(fraction=0.5):
+    import cupy
+    import psutil
+
+    available = psutil.virtual_memory().available
+
+    cupy.get_default_memory_pool().set_limit(int(fraction*available))
+
+
+def warm_resampler_design_cache(radio, captures):
+    """warm up the cache of resampler designs"""
+    from iqwaveform import fourier
+
+    for c in captures:
+        _ = fourier.design_cola_resampler(
+            fs_base=radio.MASTER_CLOCK_RATE,
+            fs_target=c.sample_rate,
+            bw=c.analysis_bandwidth,
+            bw_lo=0.75e6,
+            shift=c.lo_shift,
+        )
+
+
 @contextlib.contextmanager
 def prepare_gpu(radio, captures, spec, swept_fields):
-    """warm up the gpu by running analysis while the SDR connects"""
+    """perform analysis imports and warm up the gpu evaluation graph"""
     from edge_sensor.radio import soapy
     from channel_analysis import waveform
     from edge_sensor import actions
     import labbench as lb
-    from iqwaveform import fourier
 
     with lb.stopwatch('priming gpu'):
+        warm_resampler_design_cache(radio, tuple(captures))
+
         sizes = [c.duration * c.sample_rate for c in captures]
-        big_capture = captures[sizes.index(max(sizes))]
+        c = captures[sizes.index(max(sizes))]
 
-        # populate the buffer if necessary, and analyze
-        iq = soapy.empty_capture(radio, big_capture)
-
-        coords = actions.capture_to_coords(
-            big_capture, tuple(swept_fields), timestamp=None
-        )
-        for i in range(3):
-            waveform.analyze_by_spec(iq, big_capture, spec=spec).assign_coords(coords)
+        iq = soapy.empty_capture(radio, c)
+        coords = actions.capture_to_coords(c, tuple(swept_fields), timestamp=None)
+        waveform.analyze_by_spec(iq, c, spec=spec).assign_coords(coords)
 
     yield None
 
@@ -64,6 +83,7 @@ def run(yaml_path: Path, output_path, force):
 
     lb.show_messages('info')
 
+    set_cuda_mem_limit
     sdr = airt.AirT7201B()
     prep = prepare_gpu(sdr, run_spec.captures, run_spec.channel_analysis, sweep_fields)
 

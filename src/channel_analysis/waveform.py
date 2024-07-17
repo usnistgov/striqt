@@ -306,7 +306,7 @@ def persistence_spectrum(
     *,
     window: typing.Any,
     resolution: float,
-    statistics: tuple[typing.Union[str,float], ...],
+    statistics: tuple[typing.Union[str, float], ...],
     fractional_overlap: float = 0,
     truncate: bool = True,
     dB: bool = True,
