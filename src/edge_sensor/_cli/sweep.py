@@ -11,7 +11,7 @@ def set_cuda_mem_limit(fraction=0.5):
 
     available = psutil.virtual_memory().available
 
-    cupy.get_default_memory_pool().set_limit(int(fraction*available))
+    cupy.get_default_memory_pool().set_limit(fraction=fraction)
 
 
 def warm_resampler_design_cache(radio, captures):

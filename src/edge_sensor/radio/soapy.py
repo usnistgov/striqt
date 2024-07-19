@@ -191,6 +191,7 @@ class SoapyRadioDevice(RadioBase):
     @gain.setter
     @_verify_channel_for_setter
     def _(self, gain: float):
+        print('gain: ', gain)
         self.backend.setGain(SOAPY_SDR_RX, self.channel(), gain)
 
     @attr.method.float(label='dB', help='SDR TX hardware gain')
@@ -325,6 +326,7 @@ class SoapyRadioDevice(RadioBase):
             )
 
         self.channel(capture.channel)
+        print(capture.gain)
         self.gain(capture.gain)
 
         self.autosample(
