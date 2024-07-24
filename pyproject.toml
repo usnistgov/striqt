@@ -14,6 +14,7 @@ dependencies = []
 
 [project.scripts]
 edge-sensor-sweep = "_cli.edge_sensor_sweep:run"
+edge-sensor-leave-running = "_cli.edge_sensor_leave_running:run"
 
 [tool.ruff]
 target-version = "py39"

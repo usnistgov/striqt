@@ -1,4 +1,4 @@
-"""mgspec structs for radio and test configuration"""
+"""data structures for configuration of hardware and experiments"""
 
 from __future__ import annotations
 import msgspec

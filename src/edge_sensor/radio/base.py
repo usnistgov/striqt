@@ -1,17 +1,19 @@
 from __future__ import annotations
 import labbench as lb
-import labbench.paramattr as attr
-
-from .. import host
+from .. import diagnostic_data
 
 
 class RadioBase(lb.Device):
+    _inbuf = None
+    _outbuf = None
+
     def build_index_variables(self):
-        return host.index_variables()
+        return diagnostic_data.index_variables()
 
     def build_metadata(self):
-        return dict(super().build_metadata(), **host.host_metadata())
+        return dict(
+            super().build_metadata(), **diagnostic_data.package_host_resources()
+        )
 
-
-class SoapyRadio(RadioBase):
-    pass
+    def _prepare_buffer(self, input_size, output_size):
+        raise NotImplementedError
