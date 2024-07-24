@@ -49,6 +49,69 @@ def load(path: str | Path) -> xr.DataArray | xr.Dataset:
     return xr.open_dataset(zarr.storage.ZipStore(path, mode='r'), engine='zarr')
 
 
+def filter_iq_capture(
+    iq: fourier.Array,
+    capture: structs.FilteredCapture,
+    *,
+    axis=0,
+    out=None,
+):
+    """apply a bandpass filter implemented through STFT overlap-and-add.
+
+    Args:
+        iq: the input waveform
+        capture: the capture filter specification structure
+        axis: the axis of `x` along which to compute the filter
+        out: None, 'shared', or an array object to receive the output data
+
+    Returns:
+        the filtered IQ capture
+    """
+
+
+    fft_size = capture.analysis_filter['fft_size']
+    fft_size_out, noverlap, overlap_scale, _ = fourier._ola_filter_parameters(
+        iq.size,
+        window=capture.analysis_filter['window'],
+        fft_size_out=capture.analysis_filter.get('fft_size_out', fft_size),
+        fft_size=fft_size,
+        extend=True,
+    )
+
+    enbw = fourier.equivalent_noise_bandwidth(capture.analysis_filter['window'], fft_size_out)
+    passband=(
+        -capture.analysis_bandwidth / 2 + enbw/2,
+        capture.analysis_bandwidth / 2 - enbw/2
+    )
+
+    freqs, _, xstft = fourier.stft(
+        iq,
+        fs=capture.sample_rate,
+        window=capture.analysis_filter['window'],
+        nperseg=capture.analysis_filter['fft_size'],
+        noverlap=round(capture.analysis_filter['fft_size'] * overlap_scale),
+        axis=axis,
+        truncate=False,
+        # out=out
+    )
+
+    if fft_size_out != capture.analysis_filter['fft_size']:
+        freqs, xstft = fourier.downsample_stft(
+            freqs, xstft, fft_size_out=fft_size_out, passband=passband, axis=axis, out=xstft
+        )
+
+    fourier.zero_stft_by_freq(freqs, xstft, passband=passband, axis=axis)
+
+    return fourier.istft(
+        xstft,
+        iq.shape[axis],
+        fft_size=fft_size_out,
+        noverlap=noverlap,
+        out=out,
+        axis=axis,
+    )
+
+
 def filter_after(decorated_func: callable):
     """apply a filter after the decorated function if a structs.FilteredCapture is passed"""
 
@@ -57,19 +120,12 @@ def filter_after(decorated_func: callable):
         iq = decorated_func(capture, *args, out=out, **kws)
 
         if (
-            isinstance(capture, structs.FilteredCapture)
+            not isinstance(capture, structs.FilteredCapture)
             or capture.analysis_bandwidth is None
         ):
             return iq
 
-        return fourier.ola_filter(
-            iq,
-            fs=capture.sample_rate,
-            passband=(-capture.analysis_bandwidth / 2, capture.analysis_bandwidth / 2),
-            fft_size=capture.analysis_filter['fft_size'],
-            window=capture.analysis_filter['window'],
-            out=out,
-        )
+        return filter_iq_capture(iq, capture, out=out)
 
     return func
 
