@@ -191,7 +191,6 @@ class SoapyRadioDevice(RadioBase):
     @gain.setter
     @_verify_channel_for_setter
     def _(self, gain: float):
-        print('gain: ', gain)
         self.backend.setGain(SOAPY_SDR_RX, self.channel(), gain)
 
     @attr.method.float(label='dB', help='SDR TX hardware gain')
@@ -284,11 +283,9 @@ class SoapyRadioDevice(RadioBase):
         self.channel_enabled(True)
         iq = self._read_stream(Nin)
         self.channel_enabled(False)
-        if self.calibration_path is not None and not calibration_bypass:
-            raise ValueError('calibration not yet supported')
-        else:
-            # iq /= float(np.finfo(np.float32).max)
-            iq /= float(np.iinfo(np.int16).max)
+        
+        full_scale = float(np.iinfo(np.int16).max)
+        iq /= full_scale
 
         if Npad > 0:
             return iq[Npad:-Npad], timestamp
@@ -326,7 +323,6 @@ class SoapyRadioDevice(RadioBase):
             )
 
         self.channel(capture.channel)
-        print(capture.gain)
         self.gain(capture.gain)
 
         self.autosample(
