@@ -70,29 +70,31 @@ def filter_iq_capture(
 
 
     fft_size = capture.analysis_filter['fft_size']
+    window = capture.analysis_filter['window']
+
     fft_size_out, noverlap, overlap_scale, _ = fourier._ola_filter_parameters(
         iq.size,
-        window=capture.analysis_filter['window'],
+        window=window,
         fft_size_out=capture.analysis_filter.get('fft_size_out', fft_size),
         fft_size=fft_size,
         extend=True,
     )
 
-    enbw = fourier.equivalent_noise_bandwidth(capture.analysis_filter['window'], fft_size_out)
-    passband=(
-        -capture.analysis_bandwidth / 2 + enbw/2,
-        capture.analysis_bandwidth / 2 - enbw/2
-    )
-
     freqs, _, xstft = fourier.stft(
         iq,
         fs=capture.sample_rate,
-        window=capture.analysis_filter['window'],
+        window=window,
         nperseg=capture.analysis_filter['fft_size'],
         noverlap=round(capture.analysis_filter['fft_size'] * overlap_scale),
         axis=axis,
         truncate=False,
-        # out=out
+        out=out
+    )
+
+    enbw = capture.sample_rate/fft_size*fourier.equivalent_noise_bandwidth(window, fft_size)
+    passband=(
+        -capture.analysis_bandwidth / 2 + enbw,
+        capture.analysis_bandwidth / 2 - enbw
     )
 
     if fft_size_out != capture.analysis_filter['fft_size']:
@@ -112,25 +114,6 @@ def filter_iq_capture(
     )
 
 
-def filter_after(decorated_func: callable):
-    """apply a filter after the decorated function if a structs.FilteredCapture is passed"""
-
-    @wraps(decorated_func)
-    def func(capture, *args, out=None, **kws):
-        iq = decorated_func(capture, *args, out=out, **kws)
-
-        if (
-            not isinstance(capture, structs.FilteredCapture)
-            or capture.analysis_bandwidth is None
-        ):
-            return iq
-
-        return filter_iq_capture(iq, capture, out=out)
-
-    return func
-
-
-@filter_after
 def simulated_awgn(
     capture: structs.Capture, *, power: float = 1, xp=np, pinned_cuda=False, out=None
 ):
