@@ -12,7 +12,7 @@ from iqwaveform import fourier
 from iqwaveform.power_analysis import isroundmod
 from iqwaveform.util import empty_shared
 from labbench import paramattr as attr
-from SoapySDR import SOAPY_SDR_CF32, SOAPY_SDR_RX, SOAPY_SDR_TX, errToStr
+from SoapySDR import SOAPY_SDR_CS16, SOAPY_SDR_RX, SOAPY_SDR_TX, errToStr
 
 from .. import structs
 from .base import RadioBase
@@ -59,7 +59,9 @@ def _verify_channel_for_setter(func: callable) -> callable:
 class SoapyRadioDevice(RadioBase):
     """single-channel sensor waveform acquisition through SoapySDR and pre-processed with iqwaveform"""
 
-    TRANSIENT_HOLDOFF_WINDOWS = 2  # one on each side
+    TRANSIENT_HOLDOFF_WINDOWS = 2  # on each side
+    MASTER_CLOCK_RATE = 125e6
+
     _inbuf = None
     _outbuf = None
 
@@ -113,7 +115,7 @@ class SoapyRadioDevice(RadioBase):
             if getattr(self, 'rx_stream', None) is not None:
                 self.backend.closeStream(self.rx_stream)
             self.rx_stream = self.backend.setupStream(
-                SOAPY_SDR_RX, SOAPY_SDR_CF32, [channel]
+                SOAPY_SDR_RX, SOAPY_SDR_CS16, [channel]
             )
 
     @attr.method.float(
@@ -189,6 +191,7 @@ class SoapyRadioDevice(RadioBase):
     @gain.setter
     @_verify_channel_for_setter
     def _(self, gain: float):
+        print('gain: ', gain)
         self.backend.setGain(SOAPY_SDR_RX, self.channel(), gain)
 
     @attr.method.float(label='dB', help='SDR TX hardware gain')
@@ -198,12 +201,6 @@ class SoapyRadioDevice(RadioBase):
             return self.backend.getGain(SOAPY_SDR_TX, channel)
         else:
             self.backend.setGain(SOAPY_SDR_TX, channel, gain)
-
-    @attr.property.float(
-        sets=False, cache=True, label='Hz', help='base sample clock rate (MCR)'
-    )
-    def master_clock_rate(self):
-        return self.backend.getMasterClockRate()
 
     def open(self):
         self._logger.info('connecting')
@@ -231,13 +228,11 @@ class SoapyRadioDevice(RadioBase):
         outside of the specified analysis bandwidth.
         """
 
-        self.channel_enabled(False)
-
         if str(lo_shift).lower() == 'none':
             lo_shift = False
 
         fs_backend, lo_offset, self.analysis_filter = fourier.design_cola_resampler(
-            fs_base=self.master_clock_rate,
+            fs_base=self.MASTER_CLOCK_RATE,
             fs_target=sample_rate,
             bw=analysis_bandwidth,
             bw_lo=0.75e6,
@@ -248,11 +243,10 @@ class SoapyRadioDevice(RadioBase):
             'fft_size_out', self.analysis_filter['fft_size']
         )
 
-        with lb.paramattr.hold_attr_notifications(self):
-            self._downsample = 1  # temporarily avoid a potential bounding error
-            self.backend_sample_rate(fs_backend)
-            self._downsample = self.analysis_filter['fft_size'] / fft_size_out
-            self.lo_offset = lo_offset  # hold update on this one?
+        self._downsample = 1  # temporarily avoid a potential bounding error
+        self.backend_sample_rate(fs_backend)
+        self._downsample = self.analysis_filter['fft_size'] / fft_size_out
+        self.lo_offset = lo_offset  # hold update on this one?
 
         self.center_frequency(center_frequency)
         self.sample_rate(sample_rate)
@@ -273,35 +267,50 @@ class SoapyRadioDevice(RadioBase):
         Nin = round(np.ceil(Nout * self._downsample))
 
         if self.analysis_filter:
-            Npad = (
-                self.TRANSIENT_HOLDOFF_WINDOWS * self.analysis_filter['fft_size']
-            )
-            bufsize_in = Nin + 2*Npad            
+            Npad = self.TRANSIENT_HOLDOFF_WINDOWS * self.analysis_filter['fft_size']
+            bufsize_in = Nin + 2 * Npad
             bufsize_out = fourier._ola_filter_buffer_size(
                 bufsize_in,
                 window=self.analysis_filter['window'],
                 fft_size_out=self.analysis_filter['fft_size_out'],
                 fft_size=self.analysis_filter['fft_size'],
-                extend=True
+                extend=True,
             )
         else:
             bufsize_in = Nin
             bufsize_out = Nout
 
         self._prepare_buffer(bufsize_in, bufsize_out)
+        self.channel_enabled(True)
         iq = self._read_stream(Nin)
+        self.channel_enabled(False)
         if self.calibration_path is not None and not calibration_bypass:
             raise ValueError('calibration not yet supported')
         else:
-            pass
-        #            iq /= float(np.finfo(np.float32).max)
+            # iq /= float(np.finfo(np.float32).max)
+            iq /= float(np.iinfo(np.int16).max)
+
+        if Npad > 0:
+            return iq[Npad:-Npad], timestamp
+        else:
+            return iq, timestamp
+
+    def resample(self, iq_in):
+        # Nout = round(self.duration * self.sample_rate())
 
         if self.analysis_filter:
-            # out = cp.array(self.buffer, copy=False).view(iq.dtype)
-            iq = fourier.ola_filter(iq, extend=True, out=self._outbuf, **self.analysis_filter)
+            iq = fourier.ola_filter(
+                iq_in, extend=True, out=self._outbuf, **self.analysis_filter
+            )
 
-        trim = Nout - iq.shape[0]
-        return iq[-trim // 2 : trim // 2 or None], timestamp
+        else:
+            iq = iq_in
+
+        # trim = iq.shape[0] - Nout
+        # iq = iq[trim // 2 : (-trim // 2) or None]
+
+        return iq
+
 
     def arm(self, capture: structs.RadioCapture):
         """apply a capture configuration and enable the channel to receive samples"""
@@ -317,6 +326,7 @@ class SoapyRadioDevice(RadioBase):
             )
 
         self.channel(capture.channel)
+        print(capture.gain)
         self.gain(capture.gain)
 
         self.autosample(
@@ -326,7 +336,6 @@ class SoapyRadioDevice(RadioBase):
             lo_shift=capture.lo_shift,
         )
 
-        self.channel_enabled(True)
 
     def get_capture_struct(self, duration=None) -> structs.RadioCapture:
         """generate the currently armed capture configuration for the specified channel"""
@@ -418,13 +427,14 @@ class SoapyRadioDevice(RadioBase):
             # this is double-sized compared to the usual number of (int16, int16) IQ pairs,
             # because later we want to store upcasted np.float32 without an extra (allocate, copy)
             #     ref: notebooks/profile_cupy.ipynb
-            self._inbuf = empty_shared((2 * Nin,), dtype=np.float32, xp=np)
+            self._inbuf = empty_shared((4*Nin,), dtype=np.int16, xp=np)
+            self._inbuf[:] = 0
 
         if self._outbuf is None or self._outbuf.size < Nout:
             self._outbuf = empty_shared((Nout,), dtype=np.complex64, xp=cp)
 
     @_verify_channel_setting
-    def _read_stream(self, N, raise_on_overflow=False) -> cp.ndarray:        
+    def _read_stream(self, N, raise_on_overflow=False) -> cp.ndarray:
         timeout = max(round(N / self.backend_sample_rate() * 1.5), 50e-3)
 
         remaining = N
@@ -433,7 +443,7 @@ class SoapyRadioDevice(RadioBase):
             # Read the samples from the data buffer
             sr = self.backend.readStream(
                 self.rx_stream,
-                [self._inbuf[2 * (N - remaining) : 2 * N]],
+                [self._inbuf[(N - remaining)*2: N*2]],
                 remaining,
                 timeoutUs=int(timeout * 1e6),
             )
@@ -442,21 +452,17 @@ class SoapyRadioDevice(RadioBase):
 
         self._stream_stats['total'] += 1
 
-        # # what follows is some acrobatics to minimize new memory allocation and copy
-        # buff_int16 = cp.array(self.buffer, copy=False)[: 2 * N]
+        # what follows is some acrobatics to minimize new memory allocation and copy
+        buff_int16 = cp.array(self._inbuf, copy=False)[: 2 * N]
 
-        # # 1. the same memory buffer, interpreted as float32 without casting
-        # buff_float32 = cp.array(self.buffer, copy=False)[: 4 * N].view('float32')
+        # 1. the same memory buffer, interpreted as float32 without casting
+        buff_float32 = cp.array(self._inbuf, copy=False)[: 4 * N].view('float32')
 
-        # # 2. in-place casting from the int16 samples, filling in the extra allocation in self.buffer
-        # cp.copyto(buff_float32, buff_int16, casting='unsafe')
+        # 2. in-place casting from the int16 samples, filling in the extra allocation in self.buffer
+        cp.copyto(buff_float32, buff_int16, casting='unsafe')
 
-        # # 3. last, re-interpret each interleaved (float32 I, float32 Q) as a complex value
-        # buff_complex64 = buff_float32.view('complex64')
-
-        cp_buff = cp.array(self._inbuf, copy=False)[: 2 * N]
-
-        return cp_buff.view('complex64')
+        # 3. last, re-interpret each interleaved (float32 I, float32 Q) as a complex value
+        return buff_float32.view('complex64')
 
 
 def empty_capture(radio: SoapyRadioDevice, capture: structs.RadioCapture):
@@ -470,30 +476,29 @@ def empty_capture(radio: SoapyRadioDevice, capture: structs.RadioCapture):
         bw=capture.analysis_bandwidth,
         bw_lo=0.75e6,
         shift=capture.lo_shift,
-    )    
+    )
 
     Nin = round(capture.duration * fs_backend)
     Nout = round(capture.duration * capture.sample_rate)
 
-
     if analysis_filter:
-        Npad = (
-            radio.TRANSIENT_HOLDOFF_WINDOWS * analysis_filter['fft_size']
-        )
-        bufsize_in = Nin + 2*Npad            
+        Npad = radio.TRANSIENT_HOLDOFF_WINDOWS * analysis_filter['fft_size']
+        bufsize_in = Nin + 2 * Npad
         bufsize_out = fourier._ola_filter_buffer_size(
             bufsize_in,
             window=analysis_filter['window'],
             fft_size_out=analysis_filter['fft_size_out'],
             fft_size=analysis_filter['fft_size'],
-            extend=True
+            extend=True,
         )
     else:
         bufsize_in = Nin
         bufsize_out = Nout
 
     radio._prepare_buffer(bufsize_in, bufsize_out)
-    iq = cp.array(radio._inbuf, copy=False)[: 2*bufsize_in].view('complex64')
+    iq = cp.array(radio._inbuf, copy=False).view('complex64')[: bufsize_in]
+    iq.get()
     iq = fourier.ola_filter(iq, extend=True, out=radio._outbuf, **analysis_filter)
-    trim = Nout - iq.shape[0]
-    return iq[-trim // 2 : trim // 2 or None]
+
+    trim = iq.shape[0] - Nout
+    return iq[trim // 2 : -trim // 2 or None]

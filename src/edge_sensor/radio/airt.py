@@ -16,8 +16,8 @@ class AirT7201B(SoapyRadioDevice):
     channel = attr.method.int(min=0, max=1, inherit=True)
     lo_frequency = attr.method.float(min=300e6, max=6000e6, inherit=True)
     backend_sample_rate = attr.method.float(min=3.906250e6, max=125e6, inherit=True)
-    gain = attr.method.float(min=-30, max=0, step=1, inherit=True)
-    tx_gain = attr.method.float(min=-41.95, max=0, step=0.05, inherit=True)
+    gain = attr.method.float(min=-30, max=0, step=0.5, inherit=True)
+    tx_gain = attr.method.float(min=-41.95, max=0, step=0.1, inherit=True)
 
     # TODO: do the expressions handle inheritance properly?
     # sample_rate = backend_sample_rate.corrected_from_expression(
