@@ -20,7 +20,7 @@ def warm_resampler_design_cache(radio, captures):
 
     for c in captures:
         _ = fourier.design_cola_resampler(
-            fs_base=radio.MASTER_CLOCK_RATE,
+            fs_base=type(radio).backend_sample_rate.max,
             fs_target=c.sample_rate,
             bw=c.analysis_bandwidth,
             bw_lo=0.75e6,
@@ -67,13 +67,21 @@ def prepare_gpu(radio, captures, spec, swept_fields):
     default=False,
     help='overwrite an existing output; otherwise, attempt append on existing data',
 )
-def run(yaml_path: Path, output_path, force):
+@click.option(
+    '--verbose/',
+    '-v',
+    is_flag=True,
+    show_default=True,
+    default=False,
+    help='print debug',
+)
+def run(yaml_path: Path, output_path, force, verbose):
     if output_path is None:
         output_path = Path(yaml_path).with_suffix('.zarr.zip')
 
     # defer imports to here to make the command line --help snappier
     from edge_sensor.actions import sweep
-    from edge_sensor.structs import read_yaml_sweep, RadioCapture
+    from edge_sensor.structs import read_yaml_sweep
 
     run_spec, sweep_fields = read_yaml_sweep(yaml_path)
 
@@ -81,7 +89,10 @@ def run(yaml_path: Path, output_path, force):
     import labbench as lb
     from channel_analysis import dump
 
-    lb.show_messages('info')
+    if verbose:
+        lb.show_messages('debug')
+    else:
+        lb.show_messages('info')
 
     set_cuda_mem_limit
     sdr = airt.AirT7201B()

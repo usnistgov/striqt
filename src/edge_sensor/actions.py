@@ -43,13 +43,17 @@ def capture_to_coords(capture: RadioCapture, sweep_fields: list[str], timestamp=
 
     return coords
 
+
 def arm_acquire(radio, capture) -> tuple:
     if capture is None:
         return None, None
     radio.arm(capture)
-    return radio.acquire()
+    return radio.acquire(capture)
 
-def sweep(radio: base.RadioBase, sweep: Sweep, swept_fields: list[str]) -> xr.Dataset|None:
+
+def sweep(
+    radio: base.RadioBase, sweep: Sweep, swept_fields: list[str]
+) -> xr.Dataset | None:
     data = []
     spec = sweep.channel_analysis
     swept_fields = tuple(swept_fields)
@@ -57,16 +61,17 @@ def sweep(radio: base.RadioBase, sweep: Sweep, swept_fields: list[str]) -> xr.Da
     if len(sweep.captures) == 0:
         return None
 
-    radio.arm(sweep.captures[0])
-    iq_fast, t = radio.acquire()
+    capture = sweep.captures[0]
+    radio.arm(capture)
+    iq_fast, t = radio.acquire(capture)
 
-    for capture, next_capture in zip(sweep.captures, list(sweep.captures[1:]+[None])):
+    # Tomorrow-Dan: shift arm() to occur during the analysis
+    for capture, next_capture in zip(sweep.captures, list(sweep.captures[1:] + [None])):
         # treat swept fields as coordinates/indices
         desc = ', '.join([f'{k}={getattr(capture, k)}' for k in swept_fields])
 
         with lb.stopwatch(f'{desc}: '):
-            iq = radio.resample(iq_fast)
-            print('iq', iq.dtype)
+            iq = radio.resampling_correction(iq_fast, capture)
             if next_capture is not None:
                 radio.arm(next_capture)
             # iq.get()
@@ -75,16 +80,22 @@ def sweep(radio: base.RadioBase, sweep: Sweep, swept_fields: list[str]) -> xr.Da
                 coords = capture_to_coords(capture, swept_fields, timestamp=t)
                 analysis = waveform.analyze_by_spec(iq, capture, spec=spec).assign_coords(coords)
             else:
-                ret = lb.concurrently(
-                    acquire=lb.Call(radio.acquire),
-                    analyze_by_spec=lb.Call(waveform.analyze_by_spec, iq, capture, spec=spec)
-                )
-
+                # results = waveform._evaluate_raw_channel_analysis(iq, capture, spec=spec)
                 coords = capture_to_coords(capture, swept_fields, timestamp=t)
+                # iq_fast, t = radio.acquire(capture)
+                # analysis = (
+                #     waveform._package_channel_analysis(capture, results)
+                #     .assign_coords(coords)
+                # )
+                with lb.stopwatch('concurrent'):
+                    ret = lb.concurrently(
+                        lb.Call(radio.acquire, next_capture),
+                        lb.Call(waveform.analyze_by_spec, iq, capture, spec=spec),
+                    )
+
                 analysis = ret['analyze_by_spec'].assign_coords(coords)
                 iq_fast, t = ret['acquire']
-                print('iq_fast', iq_fast.dtype)
-                iq_fast.get()
+                # iq_fast.get()
 
             # print(ret.keys())
             # iq_fast, timestamp = arm_acquire(radio, next_capture)

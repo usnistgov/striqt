@@ -187,6 +187,8 @@ def cyclic_channel_power(
     detectors = tuple(detectors)
     cyclic_statistics = tuple(cyclic_statistics)
 
+    print(locals())
+
     data_dict = power_analysis.iq_to_cyclic_power(
         iq,
         1 / capture.sample_rate,
@@ -508,11 +510,7 @@ def to_analysis_spec(
         return TypeError('unrecognized type')
 
 
-def analyze_by_spec(
-    iq: Array, capture: structs.Capture, *, spec: str | dict | structs.ChannelAnalysis
-):
-    """evaluate a set of different channel analyses on the iq waveform as specified by spec"""
-
+def _evaluate_raw_channel_analysis(iq: Array, capture: structs.Capture, *, spec: str | dict | structs.ChannelAnalysis):
     # round-trip for type conversion and validation
     spec = msgspec.convert(spec, registry.spec_type())
     spec_dict = msgspec.to_builtins(spec)
@@ -526,6 +524,9 @@ def analyze_by_spec(
         if func_kws:
             results[name] = func(iq, capture, **func_kws)
 
+    return results
+
+def _package_channel_analysis(capture: structs.Capture, results: dict[str, structs.ChannelAnalysis]):
     # materialize as xarrays
     xarrays = {res.name: res.to_xarray() for res in results.values()}
     # capture.analysis_filter = dict(capture.analysis_filter)
@@ -534,3 +535,12 @@ def analyze_by_spec(
     if isinstance(capture, structs.FilteredCapture):
         attrs['analysis_filter'] = dict(capture.analysis_filter)
     return xr.Dataset(xarrays, attrs=attrs)
+
+
+def analyze_by_spec(
+    iq: Array, capture: structs.Capture, *, spec: str | dict | structs.ChannelAnalysis
+):
+    """evaluate a set of different channel analyses on the iq waveform as specified by spec"""
+
+    results = _evaluate_raw_channel_analysis(iq, capture, spec=spec)
+    return _package_channel_analysis(capture, results)

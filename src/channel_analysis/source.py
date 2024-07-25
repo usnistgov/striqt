@@ -68,38 +68,50 @@ def filter_iq_capture(
         the filtered IQ capture
     """
 
+    xp = fourier.array_namespace(iq)
 
     fft_size = capture.analysis_filter['fft_size']
-    window = capture.analysis_filter['window']
 
     fft_size_out, noverlap, overlap_scale, _ = fourier._ola_filter_parameters(
         iq.size,
-        window=window,
+        window=capture.analysis_filter['window'],
         fft_size_out=capture.analysis_filter.get('fft_size_out', fft_size),
         fft_size=fft_size,
         extend=True,
     )
 
+    w = fourier._get_window(
+        capture.analysis_filter['window'], fft_size, fftbins=False, xp=xp
+    )
     freqs, _, xstft = fourier.stft(
         iq,
         fs=capture.sample_rate,
-        window=window,
+        window=w,
         nperseg=capture.analysis_filter['fft_size'],
         noverlap=round(capture.analysis_filter['fft_size'] * overlap_scale),
         axis=axis,
         truncate=False,
-        out=out
+        out=out,
     )
 
-    enbw = capture.sample_rate/fft_size*fourier.equivalent_noise_bandwidth(window, fft_size)
-    passband=(
+    enbw = (
+        capture.sample_rate
+        / fft_size
+        * fourier.equivalent_noise_bandwidth(w, fft_size, fftbins=False)
+    )
+    passband = (
         -capture.analysis_bandwidth / 2 + enbw,
-        capture.analysis_bandwidth / 2 - enbw
+        capture.analysis_bandwidth / 2 - enbw,
     )
 
     if fft_size_out != capture.analysis_filter['fft_size']:
         freqs, xstft = fourier.downsample_stft(
-            freqs, xstft, fft_size_out=fft_size_out, passband=passband, axis=axis, out=xstft
+            freqs,
+            xstft,
+            fft_size_out=fft_size_out,
+            passband=passband,
+            axis=axis,
+            out=xstft,
         )
 
     fourier.zero_stft_by_freq(freqs, xstft, passband=passband, axis=axis)
