@@ -1,5 +1,5 @@
 from __future__ import annotations
-from .radio import base
+from .radio import base, soapy
 from .structs import Sweep, RadioCapture, get_attrs
 
 import labbench as lb
@@ -43,10 +43,13 @@ def capture_to_coords(capture: RadioCapture, sweep_fields: list[str], timestamp=
 
     return coords
 
+def analyze(iq, timestamp, radio, capture, swept_fields, spec):
+    iq = radio.resampling_correction(iq, capture)
+    coords = capture_to_coords(capture, swept_fields, timestamp=timestamp)
+    return waveform.analyze_by_spec(iq, capture, spec=spec).assign_coords(coords)
 
-def arm_acquire(radio, capture) -> tuple:
-    if capture is None:
-        return None, None
+
+def acquire(radio, capture):
     radio.arm(capture)
     return radio.acquire(capture)
 
@@ -62,8 +65,7 @@ def sweep(
         return None
 
     capture = sweep.captures[0]
-    radio.arm(capture)
-    iq_fast, t = radio.acquire(capture)
+    iq, t = acquire(radio, capture)
 
     # Tomorrow-Dan: shift arm() to occur during the analysis
     for capture, next_capture in zip(sweep.captures, list(sweep.captures[1:] + [None])):
@@ -71,37 +73,17 @@ def sweep(
         desc = ', '.join([f'{k}={getattr(capture, k)}' for k in swept_fields])
 
         with lb.stopwatch(f'{desc}: '):
-            iq = radio.resampling_correction(iq_fast, capture)
             if next_capture is not None:
-                radio.arm(next_capture)
-            # iq.get()
-
-            if next_capture is None:
-                coords = capture_to_coords(capture, swept_fields, timestamp=t)
-                analysis = waveform.analyze_by_spec(iq, capture, spec=spec).assign_coords(coords)
-            else:
                 # results = waveform._evaluate_raw_channel_analysis(iq, capture, spec=spec)
-                coords = capture_to_coords(capture, swept_fields, timestamp=t)
-                # iq_fast, t = radio.acquire(capture)
-                # analysis = (
-                #     waveform._package_channel_analysis(capture, results)
-                #     .assign_coords(coords)
-                # )
-                with lb.stopwatch('concurrent'):
-                    ret = lb.concurrently(
-                        lb.Call(radio.acquire, next_capture),
-                        lb.Call(waveform.analyze_by_spec, iq, capture, spec=spec),
-                    )
+                ret = lb.concurrently(
+                    lb.Call(acquire, radio, next_capture),
+                    lb.Call(analyze, iq, t, radio, capture, swept_fields, spec),
+                )
 
-                analysis = ret['analyze_by_spec'].assign_coords(coords)
-                iq_fast, t = ret['acquire']
-                # iq_fast.get()
-
-            # print(ret.keys())
-            # iq_fast, timestamp = arm_acquire(radio, next_capture)
-            # analysis = waveform.analyze_by_spec(iq, capture, spec=spec).assign_coords(
-            #     coords
-            # )
+                analysis = ret['analyze']
+                iq, t = ret['acquire']
+            else:
+                analysis = analyze(iq, t, radio, capture, swept_fields, spec)
 
         # remove swept fields from the metadata
         for f in swept_fields:

@@ -5,9 +5,12 @@ from pathlib import Path
 import contextlib
 
 
-def set_cuda_mem_limit(fraction=0.5):
+def set_cuda_mem_limit(fraction=0.4):
     import cupy
     import psutil
+    from cupy.fft.config import get_plan_cache
+
+#    cupy.cuda.set_allocator(None)
 
     available = psutil.virtual_memory().available
 
@@ -27,6 +30,16 @@ def warm_resampler_design_cache(radio, captures):
             shift=c.lo_shift,
         )
 
+def find_largest_capture(radio, captures):
+    from edge_sensor.radio import soapy
+
+    sizes = [
+        sum(soapy._get_capture_sizes(radio._master_clock_rate, c))
+        for c in captures
+    ]
+
+    return captures[sizes.index(max(sizes))]
+
 
 @contextlib.contextmanager
 def prepare_gpu(radio, captures, spec, swept_fields):
@@ -37,14 +50,12 @@ def prepare_gpu(radio, captures, spec, swept_fields):
     import labbench as lb
 
     with lb.stopwatch('priming gpu'):
-        warm_resampler_design_cache(radio, tuple(captures))
-
-        sizes = [c.duration * c.sample_rate for c in captures]
-        c = captures[sizes.index(max(sizes))]
-
+        # select the capture with the largest size
+        c = find_largest_capture(radio, captures)
         iq = soapy.empty_capture(radio, c)
         coords = actions.capture_to_coords(c, tuple(swept_fields), timestamp=None)
         waveform.analyze_by_spec(iq, c, spec=spec).assign_coords(coords)
+        # soapy.free_cuda_memory()
 
     yield None
 

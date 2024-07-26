@@ -8,3 +8,4 @@ del iqwaveform
 from . import radio, structs
 
 from channel_analysis import load, dump
+from .structs import read_yaml_sweep
