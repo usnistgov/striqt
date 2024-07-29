@@ -43,15 +43,19 @@ def capture_to_coords(capture: RadioCapture, sweep_fields: list[str], timestamp=
 
     return coords
 
+
 def analyze(iq, timestamp, radio, capture, swept_fields, spec):
-    iq = radio.resampling_correction(iq, capture)
-    coords = capture_to_coords(capture, swept_fields, timestamp=timestamp)
-    return waveform.analyze_by_spec(iq, capture, spec=spec).assign_coords(coords)
+    with lb.stopwatch('analyze', logger_level='debug'):
+        iq = radio.resampling_correction(iq, capture)
+        coords = capture_to_coords(capture, swept_fields, timestamp=timestamp)
+        return waveform.analyze_by_spec(iq, capture, spec=spec).assign_coords(coords)
 
 
 def acquire(radio, capture):
-    radio.arm(capture)
-    return radio.acquire(capture)
+    with lb.stopwatch('arm', logger_level='debug'):
+        radio.arm(capture)
+    with lb.stopwatch('acquire', logger_level='debug'):
+        return radio.acquire(capture)
 
 
 def sweep(

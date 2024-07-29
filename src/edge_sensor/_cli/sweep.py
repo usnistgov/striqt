@@ -10,7 +10,7 @@ def set_cuda_mem_limit(fraction=0.4):
     import psutil
     from cupy.fft.config import get_plan_cache
 
-#    cupy.cuda.set_allocator(None)
+    #    cupy.cuda.set_allocator(None)
 
     available = psutil.virtual_memory().available
 
@@ -30,12 +30,12 @@ def warm_resampler_design_cache(radio, captures):
             shift=c.lo_shift,
         )
 
+
 def find_largest_capture(radio, captures):
     from edge_sensor.radio import soapy
 
     sizes = [
-        sum(soapy._get_capture_sizes(radio._master_clock_rate, c))
-        for c in captures
+        sum(soapy._get_capture_sizes(radio._master_clock_rate, c)) for c in captures
     ]
 
     return captures[sizes.index(max(sizes))]
