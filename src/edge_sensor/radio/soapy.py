@@ -192,7 +192,7 @@ class SoapyRadioDevice(RadioBase):
             self.backend.activateStream(
                 self.rx_stream,
                 flags=SOAPY_SDR_HAS_TIME,
-                timeNs=self.backend.getHardwareTime('now'),
+                # timeNs=self.backend.getHardwareTime('now'),
             )
         else:
             self.backend.deactivateStream(self.rx_stream)
@@ -505,7 +505,7 @@ class SoapyRadioDevice(RadioBase):
         #     self._outbuf = empty_shared((samples_out,), dtype=np.complex64, xp=cp)
 
     def _flush_stream(self):
-        read_duration = 10e-3
+        read_duration = 20e-3
         expected_samples = round(read_duration * self.backend_sample_rate())
 
         self.on_overflow = 'ignore'
