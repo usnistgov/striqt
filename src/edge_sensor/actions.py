@@ -44,18 +44,17 @@ def capture_to_coords(capture: RadioCapture, sweep_fields: list[str], timestamp=
     return coords
 
 
-def analyze(iq, timestamp, radio, capture, swept_fields, spec):
+def single_analysis(iq, timestamp, radio, capture, swept_fields, spec):
     with lb.stopwatch('analyze', logger_level='debug'):
         iq = radio.resampling_correction(iq, capture)
         coords = capture_to_coords(capture, swept_fields, timestamp=timestamp)
-        return waveform.analyze_by_spec(iq, capture, spec=spec).assign_coords(coords)
 
+        analysis = waveform.analyze_by_spec(iq, capture, spec=spec).assign_coords(coords)
 
-def acquire(radio, capture):
-    with lb.stopwatch('arm', logger_level='debug'):
-        radio.arm(capture)
-    with lb.stopwatch('acquire', logger_level='debug'):
-        return radio.acquire(capture)
+        for f in swept_fields:
+            del analysis.attrs[f]
+
+        return analysis
 
 
 def sweep(
@@ -68,32 +67,39 @@ def sweep(
     if len(sweep.captures) == 0:
         return None
 
-    capture = sweep.captures[0]
-    iq, t = acquire(radio, capture)
+    iq = None
+    t = None
 
-    # Tomorrow-Dan: shift arm() to occur during the analysis
-    for capture, next_capture in zip(sweep.captures, list(sweep.captures[1:] + [None])):
-        # treat swept fields as coordinates/indices
-        desc = ', '.join([f'{k}={getattr(capture, k)}' for k in swept_fields])
+    prevs = [None] + sweep.captures
+    currs = sweep.captures + [None]
+    nexts = sweep.captures[1:] + [None,None]
+
+    for (prev, curr, next_) in zip(prevs, currs, nexts):
+        if curr is None:
+            desc = 'last analysis'
+        else:
+            # treat swept fields as coordinates/indices
+            desc = ', '.join([f'{k}={getattr(curr, k)}' for k in swept_fields])
 
         with lb.stopwatch(f'{desc}: '):
-            if next_capture is not None:
-                # results = waveform._evaluate_raw_channel_analysis(iq, capture, spec=spec)
-                ret = lb.concurrently(
-                    lb.Call(acquire, radio, next_capture),
-                    lb.Call(analyze, iq, t, radio, capture, swept_fields, spec),
-                )
+            calls = {}
 
-                analysis = ret['analyze']
-                iq, t = ret['acquire']
-            else:
-                analysis = analyze(iq, t, radio, capture, swept_fields, spec)
+            if curr is not None:
+                # skip at end to allow the final analysis
+                calls['acquire'] = lb.Call(radio.acquire, curr, next_capture=next_, correction=False)
 
-        # remove swept fields from the metadata
-        for f in swept_fields:
-            del analysis.attrs[f]
+            if prev is not None:
+                # skip the first iteration before any iq data is available
+                calls['analyze'] = lb.Call(single_analysis, iq, t, radio, prev, swept_fields, spec)
 
-        data.append(analysis)
+            ret = lb.concurrently(**calls, flatten=False)
+
+        
+        if 'analyze' in ret:
+            data.append(ret['analyze'])
+
+        if 'acquire' in ret:
+            iq, t = ret['acquire']
 
     ds = xr.concat(data, CAPTURE_DIM)
 

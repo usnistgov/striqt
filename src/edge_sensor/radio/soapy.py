@@ -77,6 +77,11 @@ class SoapyRadioDevice(RadioBase):
     _inbuf = None
     _outbuf = None
 
+    resource = attr.value.dict(
+        default={},
+        help="SoapySDR resource dictionary to specify the device connection"
+    )
+
     on_overflow = attr.value.str(
         'ignore',
         only=['ignore', 'except', 'log'],
@@ -217,7 +222,7 @@ class SoapyRadioDevice(RadioBase):
 
     def open(self):
         self._logger.info('connecting')
-        self.backend = SoapySDR.Device(dict(driver='SoapyAIRT'))
+        self.backend = SoapySDR.Device(self.resource)
         self._logger.info('connected')
 
         self._reset_stats()
@@ -236,28 +241,30 @@ class SoapyRadioDevice(RadioBase):
         self._stream_stats = {'overflow': 0, 'exceptions': 0, 'total': 0}
 
     @_verify_channel_setting
-    def acquire(
-        self, capture, calibration_bypass=False
-    ) -> tuple[cp.array, pd.Timestamp]:
+    def acquire(self, capture, next_capture=None, correction: bool=True) -> tuple[np.array, pd.Timestamp]:
         count, _ = _get_capture_sizes(self._master_clock_rate, capture)
 
-        if self.get_capture_struct() != capture:
-            raise ValueError(
-                f'mismatched capture state: {self.get_capture_struct()} {capture}'
-            )
+        with lb.stopwatch('acquire', logger_level='debug'):
+            self.arm(capture)
+            self.channel_enabled(True)
+            timestamp = pd.Timestamp('now')        
+            self._prepare_buffer(capture)
+            iq = self._read_stream(count)
+            self.channel_enabled(False)
 
-        self._prepare_buffer(capture)
-        timestamp = pd.Timestamp('now')
-        iq = self._read_stream(count)
+            if next_capture is not None:
+                self.arm(next_capture)
 
-        # self._outbuf[:iq.size] = cp.asarray(iq)#[:iq.size] = iq[:]
-        # iq = self._outbuf[:iq.size]
-        # iq.get()
+            if correction:
+                iq = self.resampling_correction(iq, capture)
 
-        return iq, timestamp
+            return iq, timestamp
 
     def arm(self, capture: structs.RadioCapture):
-        """apply a capture configuration and enable the channel to receive samples"""
+        """apply a capture configuration"""
+
+        if capture == self.get_capture_struct():
+            return
 
         if capture.preselect_if_frequency is not None:
             raise IOError('external frequency conversion is not yet supported')
@@ -283,28 +290,19 @@ class SoapyRadioDevice(RadioBase):
         downsample = analysis_filter['fft_size'] / fft_size_out
 
         if fs_backend != self.backend_sample_rate() or downsample != self._downsample:
-            self.channel_enabled(False)
             with attr.hold_attr_notifications(self):
                 self._downsample = 1  # temporarily avoid a potential bounding error
             self.backend_sample_rate(fs_backend)
             self._downsample = downsample
 
         if capture.sample_rate != self.sample_rate():
-            self.channel_enabled(False)
             self.sample_rate(capture.sample_rate)
 
         if lo_offset != self.lo_offset:
-            self.channel_enabled(False)
             self.lo_offset = lo_offset  # hold update on this one?
 
         if capture.center_frequency != self.center_frequency():
-            self.channel_enabled(False)
             self.center_frequency(capture.center_frequency)
-
-        if not self.channel_enabled():
-            self.channel_enabled(True)
-        else:
-            self._flush_stream()
 
         self.analysis_bandwidth = capture.analysis_bandwidth
 
@@ -484,28 +482,18 @@ class SoapyRadioDevice(RadioBase):
         samples_in, samples_out = _get_capture_sizes(self._master_clock_rate, capture)
 
         # total buffer size for 2 values per IQ sample
-        size_in = (
-            2 * samples_in
-        )  # (2 * np.finfo('float32').bits * samples_in) // np.iinfo('int16').bits
+        size_in =  2 * samples_in
 
         if self._inbuf is None or self._inbuf.size < size_in:
-            # create a buffer for received samples that can be shared across CPU<->GPU
-            #     ref: https://github.com/cupy/cupy/issues/3452#issuecomment-903273011
-            #
-            # this is double-sized compared to the usual number of (int16, int16) IQ pairs,
-            # because later we want to store upcasted np.float32 without an extra (allocate, copy)
-            #     ref: notebooks/profile_cupy.ipynb
             self._logger.debug(
                 f"allocating input sample buffer ({size_in * 2 /1e6:0.2f} MB)"
             )
             self._inbuf = np.empty((size_in,), dtype=np.float32)
             self._logger.debug('done')
 
-        # if self._outbuf is None or self._outbuf.size < samples_out:
-        #     self._outbuf = empty_shared((samples_out,), dtype=np.complex64, xp=cp)
-
     def _flush_stream(self):
-        read_duration = 20e-3
+        """attempt to flush the buffer of the receive stream without a slower disable/enable cycle"""
+        read_duration = 10e-3
         expected_samples = round(read_duration * self.backend_sample_rate())
 
         self.on_overflow = 'ignore'
