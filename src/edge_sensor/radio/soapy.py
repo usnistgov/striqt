@@ -496,7 +496,7 @@ class SoapyRadioDevice(RadioBase):
             # because later we want to store upcasted np.float32 without an extra (allocate, copy)
             #     ref: notebooks/profile_cupy.ipynb
             self._logger.debug(
-                f"allocating input sample buffer ({size_in * np.iinfo('int16').bits // 8 /1e6:0.2f} MB)"
+                f"allocating input sample buffer ({size_in * 2 /1e6:0.2f} MB)"
             )
             self._inbuf = np.empty((size_in,), dtype=np.float32)
             self._logger.debug('done')
