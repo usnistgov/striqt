@@ -1,10 +1,12 @@
 import time
 from functools import wraps
+from typing import Union
 
 import numpy as np
 import labbench as lb
 import pandas as pd
 import SoapySDR
+
 from iqwaveform.power_analysis import isroundmod
 from labbench import paramattr as attr
 from SoapySDR import (
@@ -229,8 +231,13 @@ class SoapyRadioDevice(RadioBase):
     def _reset_stats(self):
         self._stream_stats = {'overflow': 0, 'exceptions': 0, 'total': 0}
 
+    def setup(self, radio_config: structs.RadioSetup):
+        # TODO: the other parameters too
+        print('setup: ', radio_config.calibration_path)
+        self.calibration_path = radio_config.calibration_path
+
     @_verify_channel_setting
-    def acquire(self, capture, next_capture=None, correction: bool=True) -> tuple[np.array, pd.Timestamp]:
+    def acquire(self, capture: structs.RadioCapture, next_capture: Union[structs.RadioCapture,None]=None, correction: bool=True) -> tuple[np.array, pd.Timestamp]:
         count, _ = get_capture_buffer_sizes(self._master_clock_rate, capture)
 
         with lb.stopwatch('acquire', logger_level='debug'):

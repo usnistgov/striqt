@@ -46,7 +46,7 @@ class RadioCapture(channel_analysis.Capture):
     ] = 0
 
 
-class Radio(msgspec.Struct):
+class RadioSetup(msgspec.Struct):
     """run-time characteristics of the radio that are invariant during a test"""
 
     driver: str = 'AirT7201'
@@ -64,7 +64,7 @@ class Conditions(msgspec.Struct):
 
 class Sweep(msgspec.Struct):
     captures: list[RadioCapture]
-    radio: Radio = msgspec.field(default_factory=Radio)
+    radio: RadioSetup = msgspec.field(default_factory=RadioSetup)
     defaults: RadioCapture = msgspec.field(default_factory=RadioCapture)
     channel_analysis: Any = msgspec.field(default_factory=make_default_analysis)
     conditions: Conditions = msgspec.field(default_factory=Conditions)

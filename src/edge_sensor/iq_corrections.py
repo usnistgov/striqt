@@ -12,11 +12,10 @@ from . import structs
 
 @lru_cache
 def read_calibration_corrections(path):
-    with zarr.storage.ZipStore(path, mode='r') as store:
-        return xr.open_zarr(store)
+    store = zarr.storage.ZipStore(path, mode='r')
+    return xr.open_zarr(store)
 
 
-@lru_cache
 def _save_calibration_corrections(path, corrections: xr.Dataset):
     with zarr.storage.ZipStore(path, mode='w', compression=0) as store:
         corrections.to_zarr(store)
@@ -43,7 +42,7 @@ def _y_factor_power_corrections(dataset: xr.Dataset, enr_dB: float, Tamb: float,
         dataset.power_time_series
         .sel(power_detector='rms', drop=True)
         .pipe(lambda x: 10**(x/10.))
-        .mean(dim='time_elapsed')
+        .median(dim='time_elapsed')
     )
     power.name = 'RMS power'
 
@@ -176,6 +175,18 @@ def resampling_correction(
             passband=(passband[0] + enbw, passband[1] - enbw),
             axis=axis,
         )
+
+    if radio.calibration_path:
+        corrections = read_calibration_corrections(radio.calibration_path)
+        power_scale = float(
+            corrections
+            .power_correction
+            .sel(gain=capture.gain, lo_shift=capture.lo_shift, sample_rate=capture.sample_rate, drop=True)
+            .interp(center_frequency=capture.center_frequency)
+        )
+
+        xstft *= np.sqrt(power_scale)
+
 
     iq = fourier.istft(
         xstft,
