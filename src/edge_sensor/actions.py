@@ -1,13 +1,11 @@
 from __future__ import annotations
-from .radio import base, soapy
+from .radio import base
 from .structs import Sweep, RadioCapture, get_attrs
+from . import iq_corrections
 
 import labbench as lb
 import xarray as xr
-import msgspec
-import numpy as np
 import pandas as pd
-import typing
 from channel_analysis import waveform
 from functools import lru_cache
 
@@ -46,7 +44,7 @@ def capture_to_coords(capture: RadioCapture, sweep_fields: list[str], timestamp=
 
 def single_analysis(iq, timestamp, radio, capture, swept_fields, spec):
     with lb.stopwatch('analyze', logger_level='debug'):
-        iq = radio.resampling_correction(iq, capture)
+        iq = iq_corrections.resampling_correction(iq, capture, radio)
         coords = capture_to_coords(capture, swept_fields, timestamp=timestamp)
 
         analysis = waveform.analyze_by_spec(iq, capture, spec=spec).assign_coords(coords)

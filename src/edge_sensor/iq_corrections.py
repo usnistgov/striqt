@@ -1,0 +1,190 @@
+from __future__ import annotations
+from iqwaveform import fourier
+from functools import lru_cache
+import xarray as xr
+import zarr
+import numpy as np
+from scipy.constants import Boltzmann
+
+from .radio import base
+from . import structs
+
+
+@lru_cache
+def read_calibration_corrections(path):
+    with zarr.storage.ZipStore(path, mode='r') as store:
+        return xr.open_zarr(store)
+
+
+@lru_cache
+def _save_calibration_corrections(path, corrections: xr.Dataset):
+    with zarr.storage.ZipStore(path, mode='w', compression=0) as store:
+        corrections.to_zarr(store)
+
+
+def _y_factor_temperature(power: xr.DataArray, enr_dB: float, Tamb: float, Tref=290.) -> xr.Dataset:
+    Toff = Tamb
+    Ton = Tref*10**(enr_dB/10.)
+
+    Y = power.sel(noise_diode_enabled=True, drop=True)/power.sel(noise_diode_enabled=False, drop=True)
+    T = (Ton-Y*Toff)/(Y-1)
+    T.name = 'T'
+    T.attrs = {'units': 'K'}
+
+    return T
+
+
+def _y_factor_power_corrections(dataset: xr.Dataset, enr_dB: float, Tamb: float, Tref=290.) -> xr.Dataset:
+    # TODO: check that this works for xr.DataArray inputs in (enr_dB, Tamb)
+
+    kwargs = dict(list(locals().items())[1:])
+
+    power = (
+        dataset.power_time_series
+        .sel(power_detector='rms', drop=True)
+        .pipe(lambda x: 10**(x/10.))
+        .mean(dim='time_elapsed')
+    )
+    power.name = 'RMS power'
+
+    T = _y_factor_temperature(power, **kwargs)
+    T.name = 'Noise temperature'
+    T.attrs = {'units': 'K'}
+
+    noise_figure = 10*np.log10(T/Tref+1)
+    noise_figure.name = 'Noise figure'
+    noise_figure.attrs = {'units': 'dB'}
+
+    power_correction = (Boltzmann * power.analysis_bandwidth * 1000 * T)/(power.sel(noise_diode_enabled=True, drop=True))
+    power_correction.name = 'Input power scaling correction'
+    power_correction.attrs = {'units': 'mW'}
+
+    return xr.Dataset({
+        'temperature': T,
+        'noise_figure': noise_figure,
+        'power_correction': power_correction,
+    })
+
+
+def _y_factor_frequency_response_correction(dataset: xr.DataArray, fc_temperatures: xr.DataArray, enr_dB: float, Tamb: float, Tref=290):
+    spectrum = (
+        dataset
+        .persistence_spectrum
+        .sel(persistence_statistic='mean', drop=True)
+        .pipe(lambda x: 10**(x/10.))
+    )
+
+    fc_T = fc_temperatures
+    all_T = _y_factor_temperature(spectrum, enr_dB=20.87, Tamb=294.5389)
+
+    # normalize the power correction at each center frequency, and then average the result across center frequency
+    baseband_frequency_response = (
+        (fc_T.broadcast_like(all_T)/all_T)
+        .median(dim='center_frequency')
+    )
+    baseband_frequency_response.name = 'Baseband power scaling correction'
+    baseband_frequency_response.attrs = {'units': 'unitless'}
+
+    return baseband_frequency_response
+
+
+def compute_y_factor_corrections(dataset: xr.Dataset, enr_dB: float, Tamb: float, Tref=290.) -> xr.Dataset:
+    kwargs = locals()
+    ret = _y_factor_power_corrections(**kwargs)
+    ret['baseband_frequency_response'] = _y_factor_frequency_response_correction(**kwargs, fc_temperatures=ret.temperature)
+    return ret
+
+
+def resampling_correction(
+    iq: fourier.Array,
+    capture: structs.RadioCapture,
+    radio: base.RadioBase,
+    *,
+    axis=0,
+):
+    """apply a bandpass filter implemented through STFT overlap-and-add.
+
+    Args:
+        iq: the input waveform
+        capture: the capture filter specification structure
+        axis: the axis of `x` along which to compute the filter
+        out: None, 'shared', or an array object to receive the output data
+
+    Returns:
+        the filtered IQ capture
+    """
+
+    import cupy as cp
+
+    # create a buffer large enough for post-processing seeded with a copy of the IQ
+    _, buf_size = base.get_capture_buffer_sizes(radio._master_clock_rate, capture)
+    buf = cp.empty(buf_size, dtype='complex64')
+    iq = buf[: iq.size] = cp.asarray(iq)
+
+    fs_backend, lo_offset, analysis_filter = base.design_capture_filter(
+        radio._master_clock_rate, capture
+    )
+
+    fft_size = analysis_filter['fft_size']
+
+    fft_size_out, noverlap, overlap_scale, _ = fourier._ola_filter_parameters(
+        iq.size,
+        window=analysis_filter['window'],
+        fft_size_out=analysis_filter.get('fft_size_out', fft_size),
+        fft_size=fft_size,
+        extend=True,
+    )
+
+    w = fourier._get_window(
+        analysis_filter['window'], fft_size, fftbins=False, xp=cp
+    )
+
+    freqs, _, xstft = fourier.stft(
+        iq,
+        fs=fs_backend,
+        window=w,
+        nperseg=analysis_filter['fft_size'],
+        noverlap=round(analysis_filter['fft_size'] * overlap_scale),
+        axis=axis,
+        truncate=False,
+        out=buf,
+    )
+
+    # set the passband roughly equal to the 3 dB bandwidth based on ENBW
+    enbw = (
+        fs_backend
+        / fft_size
+        * fourier.equivalent_noise_bandwidth(
+            analysis_filter['window'], fft_size, fftbins=False
+        )
+    )
+    passband = analysis_filter['passband']
+
+    if fft_size_out != analysis_filter['fft_size']:
+        freqs, xstft = fourier.downsample_stft(
+            freqs,
+            xstft,
+            fft_size_out=fft_size_out,
+            passband=passband,
+            axis=axis,
+            out=buf,
+        )
+    else:
+        fourier.zero_stft_by_freq(
+            freqs,
+            xstft,
+            passband=(passband[0] + enbw, passband[1] - enbw),
+            axis=axis,
+        )
+
+    iq = fourier.istft(
+        xstft,
+        iq.shape[axis],
+        fft_size=fft_size_out,
+        noverlap=noverlap,
+        out=buf,
+        axis=axis,
+    )
+
+    return iq[base.TRANSIENT_HOLDOFF_WINDOWS * fft_size_out :]
+
