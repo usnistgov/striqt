@@ -460,11 +460,10 @@ def iir_filter(
     transition_bandwidth: float | int,
     out=None,
 ):
-    xp = array_namespace(iq)
-
     filter_kws = _analysis_parameter_kwargs(locals())
-
     sos = _generate_iir_lpf(capture, **filter_kws)
+
+    xp = array_namespace(iq)
 
     if is_cupy_array(iq):
         from . import cuda_filter

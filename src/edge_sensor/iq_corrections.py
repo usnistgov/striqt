@@ -5,6 +5,7 @@ import xarray as xr
 import zarr
 import numpy as np
 from scipy.constants import Boltzmann
+from channel_analysis import waveform
 
 from .radio import base
 from . import structs
@@ -106,8 +107,8 @@ def resampling_correction(
     Args:
         iq: the input waveform
         capture: the capture filter specification structure
+        radio: the radio instance that performed the capture
         axis: the axis of `x` along which to compute the filter
-        out: None, 'shared', or an array object to receive the output data
 
     Returns:
         the filtered IQ capture
@@ -133,6 +134,33 @@ def resampling_correction(
         fft_size=fft_size,
         extend=True,
     )
+
+    if radio.calibration_path:
+        corrections = read_calibration_corrections(radio.calibration_path)
+        power_scale = float(
+            corrections
+            .power_correction
+            .sel(gain=capture.gain, lo_shift=capture.lo_shift, sample_rate=capture.sample_rate, drop=True)
+            .interp(center_frequency=capture.center_frequency)
+        )
+    else:
+        power_scale = None
+
+    if fft_size == fft_size_out:
+        # nothing to do here
+        if power_scale is not None:
+            iq *= power_scale
+        if analysis_filter['passband'] != (None, None):
+            iq = waveform.iir_filter(
+                iq,
+                capture,
+                passband_ripple = 0.5,
+                stopband_attenuation = 80,
+                transition_bandwidth = 500e3,
+                out=iq
+            )
+
+        return iq[base.TRANSIENT_HOLDOFF_WINDOWS * fft_size_out :]
 
     w = fourier._get_window(
         analysis_filter['window'], fft_size, fftbins=False, xp=cp
@@ -176,18 +204,6 @@ def resampling_correction(
             axis=axis,
         )
 
-    if radio.calibration_path:
-        corrections = read_calibration_corrections(radio.calibration_path)
-        power_scale = float(
-            corrections
-            .power_correction
-            .sel(gain=capture.gain, lo_shift=capture.lo_shift, sample_rate=capture.sample_rate, drop=True)
-            .interp(center_frequency=capture.center_frequency)
-        )
-
-        xstft *= np.sqrt(power_scale)
-
-
     iq = fourier.istft(
         xstft,
         iq.shape[axis],
@@ -196,6 +212,9 @@ def resampling_correction(
         out=buf,
         axis=axis,
     )
+
+    if power_scale is not None:
+        iq *= np.sqrt(power_scale)
 
     return iq[base.TRANSIENT_HOLDOFF_WINDOWS * fft_size_out :]
 

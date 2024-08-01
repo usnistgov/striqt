@@ -32,7 +32,9 @@ class RadioCapture(channel_analysis.Capture):
 
     # filtering and resampling
     analysis_bandwidth: A[Optional[float], meta('DSP filter bandwidth', 'Hz')] = 10e6
-    lo_shift: A[_TShift, meta('direction of the LO shift')] = 'left'
+    lo_shift: A[_TShift, meta('direction of the LO shift')] = 'none'
+    gpu_resample: bool = True
+    lo_filter: bool = False
 
     # external frequency conversion disabled when if_frequency is None
     preselect_if_frequency: A[

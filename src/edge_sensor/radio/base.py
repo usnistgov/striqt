@@ -35,14 +35,27 @@ def design_capture_filter(
     else:
         lo_shift = capture.lo_shift
 
-    # fs_backend, lo_offset, self.analysis_filter
-    return fourier.design_cola_resampler(
-        fs_base=master_clock_rate,
-        fs_target=capture.sample_rate,
-        bw=capture.analysis_bandwidth,
-        bw_lo=0.75e6,
-        shift=lo_shift,
-    )
+    if capture.gpu_resample:
+        # use GPU DSP to resample from integer divisor of the MCR
+        return fourier.design_cola_resampler(
+            fs_base=min(capture.sample_rate, master_clock_rate),
+            fs_target=capture.sample_rate,
+            bw=capture.analysis_bandwidth,
+            bw_lo=0.75e6,
+            shift=lo_shift,
+        )
+    elif lo_shift:
+        raise ValueError('lo_shift requires gpu_resample=True')
+    elif master_clock_rate < capture.sample_rate:
+        raise ValueError(f'upsampling above {master_clock_rate/1e6:f} MHz requires gpu_resample=True')
+    else:
+        # use the SDR firmware to set the desired sample rate
+        return fourier.design_cola_resampler(
+            fs_base=capture.sample_rate,
+            fs_target=capture.sample_rate,
+            bw=capture.analysis_bandwidth,
+            shift=False,
+        )        
 
 
 @lru_cache(30000)
