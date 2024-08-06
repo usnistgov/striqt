@@ -1,5 +1,6 @@
 from __future__ import annotations
 import labbench as lb
+from labbench import paramattr as attr
 from .. import diagnostic_data, structs
 from functools import lru_cache
 from iqwaveform import fourier
@@ -23,6 +24,10 @@ class RadioBase(lb.Device):
         )
 
     def _prepare_buffer(self, input_size, output_size):
+        raise NotImplementedError
+
+    @attr.property.str(sets=False, cache=True, help='unique radio hardware identifier')
+    def id(self):
         raise NotImplementedError
 
 

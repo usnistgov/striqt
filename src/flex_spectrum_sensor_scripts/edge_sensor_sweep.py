@@ -110,7 +110,7 @@ def run(yaml_path: Path, output_path, force, verbose):
     prep = prepare_gpu(sdr, run_spec.captures, run_spec.channel_analysis, sweep_fields)
 
     with lb.concurrently(sdr, prep):
-        sdr.setup(run_spec.radio)
+        sdr.setup(run_spec.radio_setup)
         data = sweep(sdr, run_spec, sweep_fields)
 
     if force:

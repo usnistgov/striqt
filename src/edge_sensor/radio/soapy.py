@@ -233,8 +233,11 @@ class SoapyRadioDevice(RadioBase):
 
     def setup(self, radio_config: structs.RadioSetup):
         # TODO: the other parameters too
-        print('setup: ', radio_config.calibration_path)
         self.calibration_path = radio_config.calibration_path
+        if radio_config.preselect_if_frequency is not None:
+            raise IOError('external frequency conversion is not yet supported')
+
+
 
     @_verify_channel_setting
     def acquire(self, capture: structs.RadioCapture, next_capture: Union[structs.RadioCapture,None]=None, correction: bool=True) -> tuple[np.array, pd.Timestamp]:
@@ -261,9 +264,6 @@ class SoapyRadioDevice(RadioBase):
 
         if capture == self.get_capture_struct():
             return
-
-        if capture.preselect_if_frequency is not None:
-            raise IOError('external frequency conversion is not yet supported')
 
         if isroundmod(capture.duration * capture.sample_rate, 1):
             self.duration = capture.duration

@@ -1,4 +1,4 @@
-radio:
+radio_setup:
   location:
     - 39.991746624418745 # lat (deg)
     - -105.26457779333897 # long (deg)

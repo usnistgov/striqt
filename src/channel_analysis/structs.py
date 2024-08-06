@@ -7,7 +7,7 @@ from typing import Annotated as A
 from typing import Optional
 from frozendict import frozendict
 import functools
-# from iqwaveform.power_analysis import isroundmod
+from msgspec import to_builtins
 
 
 TDecoratedFunc = typing.Callable[..., typing.Any]

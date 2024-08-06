@@ -1,6 +1,6 @@
 from __future__ import annotations
 from .radio import base
-from .structs import Sweep, RadioCapture, get_attrs
+from .structs import Sweep, RadioCapture, get_attrs, to_builtins
 from . import iq_corrections
 
 import labbench as lb
@@ -92,7 +92,6 @@ def sweep(
 
             ret = lb.concurrently(**calls, flatten=False)
 
-        
         if 'analyze' in ret:
             data.append(ret['analyze'])
 
@@ -103,6 +102,8 @@ def sweep(
 
     for k in tuple(swept_fields):
         ds[k].attrs.update(get_attrs(RadioCapture, k))
+    ds.attrs['radio_id'] = radio.id
+    ds.attrs['radio_setup'] = to_builtins(sweep.radio_setup)#{k: v for k, v in sweep.radio_setup.items() if v is not None}
     ds[TIMESTAMP_NAME].attrs.update(label='Capture start time')
 
     return ds

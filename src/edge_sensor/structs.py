@@ -6,7 +6,7 @@ from typing import Optional, Literal, Any
 import channel_analysis
 from channel_analysis.structs import meta, get_attrs
 from pathlib import Path
-from msgspec import Meta
+from msgspec import Meta, to_builtins
 import typing
 from typing import Annotated as A
 
@@ -36,6 +36,17 @@ class RadioCapture(channel_analysis.Capture):
     gpu_resample: bool = True
     lo_filter: bool = False
 
+
+class RadioSetup(msgspec.Struct):
+    """run-time characteristics of the radio that are invariant during a test"""
+
+    driver: str = 'AirT7201'
+    resource: Any = None
+    gps: bool = False
+    timebase: Literal['internal', 'gpsdo'] = 'internal'
+    cyclic_trigger: Optional[float] = None
+    calibration_path: Optional[str] = None
+
     # external frequency conversion disabled when if_frequency is None
     preselect_if_frequency: A[
         Optional[float], meta('preselector IF filter center frequency')
@@ -48,17 +59,6 @@ class RadioCapture(channel_analysis.Capture):
     ] = 0
 
 
-class RadioSetup(msgspec.Struct):
-    """run-time characteristics of the radio that are invariant during a test"""
-
-    driver: str = 'AirT7201'
-    resource: Any = None
-    gps: bool = False
-    timebase: Literal['internal', 'gpsdo'] = 'internal'
-    cyclic_trigger: Optional[float] = None
-    calibration_path: Optional[str] = None
-
-
 class Conditions(msgspec.Struct):
     location: Optional[tuple[float, float, float]] = None
     external_signal_chain: tuple[dict, ...] = ()
@@ -66,7 +66,7 @@ class Conditions(msgspec.Struct):
 
 class Sweep(msgspec.Struct):
     captures: list[RadioCapture]
-    radio: RadioSetup = msgspec.field(default_factory=RadioSetup)
+    radio_setup: RadioSetup = msgspec.field(default_factory=RadioSetup)
     defaults: RadioCapture = msgspec.field(default_factory=RadioCapture)
     channel_analysis: Any = msgspec.field(default_factory=make_default_analysis)
     conditions: Conditions = msgspec.field(default_factory=Conditions)

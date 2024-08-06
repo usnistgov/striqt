@@ -2,6 +2,7 @@ from __future__ import annotations
 import labbench.paramattr as attr
 
 from .soapy import SoapyRadioDevice
+import uuid
 
 # for TX only (RX channel is accessed through the AirT7201B.channel method)
 channel_kwarg = attr.method_kwarg.int(
@@ -22,6 +23,11 @@ class AirT7201B(SoapyRadioDevice):
     backend_sample_rate = attr.method.float(min=3.906250e6, max=125e6, inherit=True)
     gain = attr.method.float(min=-30, max=0, step=0.5, inherit=True)
     tx_gain = attr.method.float(min=-41.95, max=0, step=0.1, inherit=True)
+
+    @attr.property.str(inherit=True)
+    def id(self):
+        # Jetson UUID - AirStack doesn't seem to return serial through Soapy
+        return hex(uuid.getnode())
 
     # TODO: do the expressions handle inheritance properly?
     # sample_rate = backend_sample_rate.corrected_from_expression(
