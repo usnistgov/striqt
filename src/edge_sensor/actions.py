@@ -34,7 +34,11 @@ def capture_to_coords(capture: RadioCapture, sweep_fields: list[str], timestamp=
     coords = _capture_coord_template(sweep_fields).copy(deep=True)
 
     for field in sweep_fields:
-        coords[field].values[:] = [getattr(capture, field)]
+        value = getattr(capture, field)
+        if isinstance(value, str):
+            # to coerce 
+            coords[field] = coords[field].astype('object')
+        coords[field].values[:] = [value]
 
     if timestamp is not None:
         coords[TIMESTAMP_NAME].values[:] = [timestamp]
@@ -97,6 +101,7 @@ def sweep(
 
         if 'acquire' in ret:
             iq, t = ret['acquire']
+
 
     ds = xr.concat(data, CAPTURE_DIM)
 

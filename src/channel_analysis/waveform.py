@@ -296,7 +296,7 @@ def _persistence_spectrum_coords(
         [str(n) for n in stat_names],
         dims='persistence_statistic',
         attrs={'label': 'Persistence statistic'},
-    )
+    ).astype('object')
 
     return xr.Coordinates({stats.dims[0]: stats, freqs.dims[0]: freqs})
 

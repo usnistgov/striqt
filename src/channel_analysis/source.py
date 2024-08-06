@@ -26,6 +26,10 @@ def dump(path: str | Path, data: xr.DataArray | xr.Dataset, mode='a'):
     names = data.coords.keys() | data.keys() | data.indexes.keys()
     compressor = numcodecs.Blosc('zstd', clevel=6)
 
+    for name in data.coords.keys():
+        if data[name].dtype == np.dtype('object'):
+            data[name] = data[name].astype('str')
+
     if mode == 'a':
         # follow existing encodings if appending
         encodings = None
