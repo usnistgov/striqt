@@ -1,3 +1,15 @@
+description:
+  summary: Description of the conditions under test
+  location:
+    - 39.99394274565336 # lat (deg)
+    - -105.26294066791989 # long (deg)
+    - 1657 # ASL (m)
+  signal_chain:
+    - Antenna make and model
+    - Cable make and model
+    - etc.
+
+
 radio_setup:
   location:
     - 39.991746624418745 # lat (deg)

@@ -104,6 +104,7 @@ def sweep(
         ds[k].attrs.update(get_attrs(RadioCapture, k))
     ds.attrs['radio_id'] = radio.id
     ds.attrs['radio_setup'] = to_builtins(sweep.radio_setup)#{k: v for k, v in sweep.radio_setup.items() if v is not None}
+    ds.attrs['description'] = to_builtins(sweep.description)#{k: v for k, v in sweep.radio_setup.items() if v is not None}
     ds[TIMESTAMP_NAME].attrs.update(label='Capture start time')
 
     return ds

@@ -59,9 +59,10 @@ class RadioSetup(msgspec.Struct):
     ] = 0
 
 
-class Conditions(msgspec.Struct):
+class Description(msgspec.Struct):
+    summary: Optional[str] = None
     location: Optional[tuple[float, float, float]] = None
-    external_signal_chain: tuple[dict, ...] = ()
+    signal_chain: tuple[str, ...] = ()
 
 
 class Sweep(msgspec.Struct):
@@ -69,7 +70,7 @@ class Sweep(msgspec.Struct):
     radio_setup: RadioSetup = msgspec.field(default_factory=RadioSetup)
     defaults: RadioCapture = msgspec.field(default_factory=RadioCapture)
     channel_analysis: Any = msgspec.field(default_factory=make_default_analysis)
-    conditions: Conditions = msgspec.field(default_factory=Conditions)
+    description: Description = msgspec.field(default_factory=Description)
 
 
 def read_yaml_sweep(path: str | Path) -> tuple[Sweep, tuple[str, ...]]:
