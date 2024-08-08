@@ -1,8 +1,8 @@
 from __future__ import annotations
 from .radio import RadioBase
 from .structs import Sweep, RadioCapture, get_attrs, to_builtins
-from . import iq_corrections
 from .util import zip_offsets
+from . import iq_corrections
 from channel_analysis.structs import ChannelAnalysis
 
 import labbench as lb
@@ -38,9 +38,11 @@ def _capture_coord_template(sweep_fields: tuple[str, ...]):
 class _RadioCaptureAnalyzer:
     """analyze into a dataset"""
 
+    __name__ = 'analysis'
+
     radio: RadioBase
     analysis_spec: list[ChannelAnalysis]
-    remove_attrs: Optional[list[str]] = None
+    remove_attrs: Optional[tuple[str, ...]] = None
 
     def __call__(self, iq, timestamp, capture) -> xr.Dataset:
         with lb.stopwatch('analyze', logger_level='debug'):
@@ -57,6 +59,10 @@ class _RadioCaptureAnalyzer:
                 del analysis.attrs[f]
 
         return analysis
+
+    def __post_init__(self):
+        if self.remove_attrs is not None:
+            self.remove_attrs = tuple(self.remove_attrs)
 
     def get_coords(self, capture: RadioCapture, timestamp):
         coords = _capture_coord_template(self.remove_attrs).copy(deep=True)

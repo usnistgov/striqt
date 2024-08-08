@@ -1,5 +1,6 @@
 from __future__ import annotations
 from iqwaveform import fourier
+from iqwaveform.util import array_namespace
 from functools import lru_cache
 import xarray as xr
 import zarr
@@ -128,8 +129,10 @@ def resampling_correction(
     Returns:
         the filtered IQ capture
     """
-
-    import cupy as cp
+    try:   
+        import cupy as cp
+    except ModuleNotFoundError:
+        import numpy as cp
 
     # create a buffer large enough for post-processing seeded with a copy of the IQ
     _, buf_size = base.get_capture_buffer_sizes(radio._master_clock_rate, capture)

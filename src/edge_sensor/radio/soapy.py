@@ -62,7 +62,7 @@ def _verify_channel_for_setter(func: callable) -> callable:
     return wrapper
 
 
-class _SoapyRadioBase(RadioBase):
+class SoapyRadioBase(RadioBase):
     """single-channel sensor waveform acquisition through SoapySDR and pre-processed with iqwaveform"""
 
     _inbuf = None

@@ -50,12 +50,13 @@ def prepare_gpu(radio, captures, spec, swept_fields):
     from edge_sensor import actions
     import labbench as lb
 
+    analyzer = actions._RadioCaptureAnalyzer(radio, analysis_spec=spec, remove_attrs=swept_fields)
+
     with lb.stopwatch('priming gpu'):
         # select the capture with the largest size
-        c = find_largest_capture(radio, captures)
-        iq = base.empty_capture(radio, c)
-        coords = actions.capture_to_coords(c, tuple(swept_fields), timestamp=None)
-        waveform.analyze_by_spec(iq, c, spec=spec).assign_coords(coords)
+        capture = find_largest_capture(radio, captures)
+        iq = base.empty_capture(radio, capture)
+        analyzer(iq, timestamp=None, capture=capture)
         # soapy.free_cuda_memory()
 
     yield None
@@ -92,12 +93,12 @@ def run(yaml_path: Path, output_path, force, verbose):
         output_path = Path(yaml_path).with_suffix('.zarr.zip')
 
     # defer imports to here to make the command line --help snappier
-    from edge_sensor.actions import sweep
+    from edge_sensor.actions import sweep_dataset, sweep_iterator
     from edge_sensor.structs import read_yaml_sweep
 
     run_spec, sweep_fields = read_yaml_sweep(yaml_path)
 
-    from edge_sensor.radio import deepwave
+    from edge_sensor import radio
     import labbench as lb
     from channel_analysis import dump
 
@@ -106,13 +107,19 @@ def run(yaml_path: Path, output_path, force, verbose):
     else:
         lb.show_messages('info')
 
-    set_cuda_mem_limit
-    sdr = deepwave.Air7201B()
-    prep = prepare_gpu(sdr, run_spec.captures, run_spec.channel_analysis, sweep_fields)
+    try:
+        set_cuda_mem_limit()
+    except ModuleNotFoundError:
+        pass
 
-    with lb.concurrently(sdr, prep):
-        sdr.setup(run_spec.radio_setup)
-        data = sweep(sdr, run_spec, sweep_fields)
+    radio_type = radio.find_radio_driver_by_name(run_spec.radio_setup.driver)
+    radio = radio_type()
+    prep = prepare_gpu(radio, run_spec.captures, run_spec.channel_analysis, sweep_fields)
+
+    with lb.concurrently(radio, prep):
+        radio.setup(run_spec.radio_setup)
+        it = sweep_iterator(radio, run_spec, sweep_fields)
+        data = sweep_dataset(it, radio, run_spec, sweep_fields)
 
     if force:
         mode = 'w'

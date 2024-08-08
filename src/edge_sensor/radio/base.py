@@ -43,7 +43,7 @@ def design_capture_filter(
     if capture.gpu_resample:
         # use GPU DSP to resample from integer divisor of the MCR
         return fourier.design_cola_resampler(
-            fs_base=min(capture.sample_rate, master_clock_rate),
+            fs_base=max(capture.sample_rate, master_clock_rate),
             fs_target=capture.sample_rate,
             bw=capture.analysis_bandwidth,
             bw_lo=0.75e6,
@@ -97,22 +97,28 @@ def get_capture_buffer_sizes(
 def empty_capture(radio: RadioBase, capture: structs.RadioCapture):
     """evaluate a capture on an empty buffer to warm up a GPU"""
 
-    import cupy as cp
+    try:
+        import cupy as xp
+    except ModuleNotFoundError:
+        import numpy as xp
     from edge_sensor import iq_corrections
 
     nin, _ = get_capture_buffer_sizes(radio._master_clock_rate, capture)
     radio._prepare_buffer(capture)
-    iq = cp.array(radio._inbuf, copy=False).view('complex64')[:nin]
+    iq = xp.array(radio._inbuf, copy=False).view('complex64')[:nin]
     ret = iq_corrections.resampling_correction(iq, capture, radio)
 
     return ret
 
 
 def radio_subclasses(subclass=RadioBase):
+    """returns a list of radio subclasses that have been imported"""
+
     subs = {
         c.__name__: c
         for c in subclass.__subclasses__()
     }
+    
     for sub in list(subs.values()):
         subs.update(radio_subclasses(sub))
 
@@ -121,4 +127,16 @@ def radio_subclasses(subclass=RadioBase):
         for name, c in subs.items()
         if not name.startswith('_')
     }
+
     return subs
+
+
+def find_radio_driver_by_name(name, subclass=RadioBase) -> RadioBase:
+    """returns a list of radio subclasses that have been imported"""
+
+    mapping = radio_subclasses(subclass)
+
+    if name in mapping:
+        return mapping[name]
+    else:
+        raise AttributeError(f'invalid driver {repr(name)}. valid names: {tuple(mapping.keys())}')
