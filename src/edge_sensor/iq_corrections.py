@@ -7,6 +7,7 @@ import zarr
 import numpy as np
 from scipy.constants import Boltzmann
 from channel_analysis import waveform
+import labbench as lb
 
 from .radio import base
 from . import structs
@@ -132,6 +133,7 @@ def resampling_correction(
     try:   
         import cupy as cp
     except ModuleNotFoundError:
+        lb.logger.warning('cupy is not installed - falling back to cpu operation with numpy')
         import numpy as cp
 
     # create a buffer large enough for post-processing seeded with a copy of the IQ
