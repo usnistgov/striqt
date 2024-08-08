@@ -22,27 +22,32 @@ def _save_calibration_corrections(path, corrections: xr.Dataset):
         corrections.to_zarr(store)
 
 
-def _y_factor_temperature(power: xr.DataArray, enr_dB: float, Tamb: float, Tref=290.) -> xr.Dataset:
+def _y_factor_temperature(
+    power: xr.DataArray, enr_dB: float, Tamb: float, Tref=290.0
+) -> xr.Dataset:
     Toff = Tamb
-    Ton = Tref*10**(enr_dB/10.)
+    Ton = Tref * 10 ** (enr_dB / 10.0)
 
-    Y = power.sel(noise_diode_enabled=True, drop=True)/power.sel(noise_diode_enabled=False, drop=True)
-    T = (Ton-Y*Toff)/(Y-1)
+    Y = power.sel(noise_diode_enabled=True, drop=True) / power.sel(
+        noise_diode_enabled=False, drop=True
+    )
+    T = (Ton - Y * Toff) / (Y - 1)
     T.name = 'T'
     T.attrs = {'units': 'K'}
 
     return T
 
 
-def _y_factor_power_corrections(dataset: xr.Dataset, enr_dB: float, Tamb: float, Tref=290.) -> xr.Dataset:
+def _y_factor_power_corrections(
+    dataset: xr.Dataset, enr_dB: float, Tamb: float, Tref=290.0
+) -> xr.Dataset:
     # TODO: check that this works for xr.DataArray inputs in (enr_dB, Tamb)
 
     kwargs = dict(list(locals().items())[1:])
 
     power = (
-        dataset.power_time_series
-        .sel(power_detector='rms', drop=True)
-        .pipe(lambda x: 10**(x/10.))
+        dataset.power_time_series.sel(power_detector='rms', drop=True)
+        .pipe(lambda x: 10 ** (x / 10.0))
         .median(dim='time_elapsed')
     )
     power.name = 'RMS power'
@@ -51,36 +56,42 @@ def _y_factor_power_corrections(dataset: xr.Dataset, enr_dB: float, Tamb: float,
     T.name = 'Noise temperature'
     T.attrs = {'units': 'K'}
 
-    noise_figure = 10*np.log10(T/Tref+1)
+    noise_figure = 10 * np.log10(T / Tref + 1)
     noise_figure.name = 'Noise figure'
     noise_figure.attrs = {'units': 'dB'}
 
-    power_correction = (Boltzmann * power.analysis_bandwidth * 1000 * T)/(power.sel(noise_diode_enabled=True, drop=True))
+    power_correction = (Boltzmann * power.analysis_bandwidth * 1000 * T) / (
+        power.sel(noise_diode_enabled=True, drop=True)
+    )
     power_correction.name = 'Input power scaling correction'
     power_correction.attrs = {'units': 'mW'}
 
-    return xr.Dataset({
-        'temperature': T,
-        'noise_figure': noise_figure,
-        'power_correction': power_correction,
-    })
-
-
-def _y_factor_frequency_response_correction(dataset: xr.DataArray, fc_temperatures: xr.DataArray, enr_dB: float, Tamb: float, Tref=290):
-    spectrum = (
-        dataset
-        .persistence_spectrum
-        .sel(persistence_statistic='mean', drop=True)
-        .pipe(lambda x: 10**(x/10.))
+    return xr.Dataset(
+        {
+            'temperature': T,
+            'noise_figure': noise_figure,
+            'power_correction': power_correction,
+        }
     )
+
+
+def _y_factor_frequency_response_correction(
+    dataset: xr.DataArray,
+    fc_temperatures: xr.DataArray,
+    enr_dB: float,
+    Tamb: float,
+    Tref=290,
+):
+    spectrum = dataset.persistence_spectrum.sel(
+        persistence_statistic='mean', drop=True
+    ).pipe(lambda x: 10 ** (x / 10.0))
 
     fc_T = fc_temperatures
     all_T = _y_factor_temperature(spectrum, enr_dB=20.87, Tamb=294.5389)
 
     # normalize the power correction at each center frequency, and then average the result across center frequency
-    baseband_frequency_response = (
-        (fc_T.broadcast_like(all_T)/all_T)
-        .median(dim='center_frequency')
+    baseband_frequency_response = (fc_T.broadcast_like(all_T) / all_T).median(
+        dim='center_frequency'
     )
     baseband_frequency_response.name = 'Baseband power scaling correction'
     baseband_frequency_response.attrs = {'units': 'unitless'}
@@ -88,10 +99,14 @@ def _y_factor_frequency_response_correction(dataset: xr.DataArray, fc_temperatur
     return baseband_frequency_response
 
 
-def compute_y_factor_corrections(dataset: xr.Dataset, enr_dB: float, Tamb: float, Tref=290.) -> xr.Dataset:
+def compute_y_factor_corrections(
+    dataset: xr.Dataset, enr_dB: float, Tamb: float, Tref=290.0
+) -> xr.Dataset:
     kwargs = locals()
     ret = _y_factor_power_corrections(**kwargs)
-    ret['baseband_frequency_response'] = _y_factor_frequency_response_correction(**kwargs, fc_temperatures=ret.temperature)
+    ret['baseband_frequency_response'] = _y_factor_frequency_response_correction(
+        **kwargs, fc_temperatures=ret.temperature
+    )
     return ret
 
 
@@ -138,10 +153,12 @@ def resampling_correction(
     if radio.calibration_path:
         corrections = read_calibration_corrections(radio.calibration_path)
         power_scale = float(
-            corrections
-            .power_correction
-            .sel(gain=capture.gain, lo_shift=capture.lo_shift, sample_rate=capture.sample_rate, drop=True)
-            .interp(center_frequency=capture.center_frequency)
+            corrections.power_correction.sel(
+                gain=capture.gain,
+                lo_shift=capture.lo_shift,
+                sample_rate=capture.sample_rate,
+                drop=True,
+            ).interp(center_frequency=capture.center_frequency)
         )
     else:
         power_scale = None
@@ -154,17 +171,15 @@ def resampling_correction(
             iq = waveform.iir_filter(
                 iq,
                 capture,
-                passband_ripple = 0.5,
-                stopband_attenuation = 80,
-                transition_bandwidth = 500e3,
-                out=iq
+                passband_ripple=0.5,
+                stopband_attenuation=80,
+                transition_bandwidth=500e3,
+                out=iq,
             )
 
         return iq[base.TRANSIENT_HOLDOFF_WINDOWS * fft_size_out :]
 
-    w = fourier._get_window(
-        analysis_filter['window'], fft_size, fftbins=False, xp=cp
-    )
+    w = fourier._get_window(analysis_filter['window'], fft_size, fftbins=False, xp=cp)
 
     freqs, _, xstft = fourier.stft(
         iq,
@@ -217,4 +232,3 @@ def resampling_correction(
         iq *= np.sqrt(power_scale)
 
     return iq[base.TRANSIENT_HOLDOFF_WINDOWS * fft_size_out :]
-

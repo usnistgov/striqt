@@ -1,13 +1,17 @@
 from __future__ import annotations
-from .radio import base
+from .radio import RadioBase
 from .structs import Sweep, RadioCapture, get_attrs, to_builtins
 from . import iq_corrections
+from .util import zip_offsets
+from channel_analysis.structs import ChannelAnalysis
 
 import labbench as lb
 import xarray as xr
 import pandas as pd
 from channel_analysis import waveform
 from functools import lru_cache
+from dataclasses import dataclass
+from typing import Optional, Generator
 
 CAPTURE_DIM = 'capture'
 TIMESTAMP_NAME = 'timestamp'
@@ -30,86 +34,109 @@ def _capture_coord_template(sweep_fields: tuple[str, ...]):
     return xr.Coordinates(coords)
 
 
-def capture_to_coords(capture: RadioCapture, sweep_fields: list[str], timestamp=None):
-    coords = _capture_coord_template(sweep_fields).copy(deep=True)
+@dataclass
+class _RadioCaptureAnalyzer:
+    """analyze into a dataset"""
 
-    for field in sweep_fields:
-        value = getattr(capture, field)
-        if isinstance(value, str):
-            # to coerce 
-            coords[field] = coords[field].astype('object')
-        coords[field].values[:] = [value]
+    radio: RadioBase
+    analysis_spec: list[ChannelAnalysis]
+    remove_attrs: Optional[list[str]] = None
 
-    if timestamp is not None:
-        coords[TIMESTAMP_NAME].values[:] = [timestamp]
+    def __call__(self, iq, timestamp, capture) -> xr.Dataset:
+        with lb.stopwatch('analyze', logger_level='debug'):
+            # for performance, GPU operations are all here in the same thread
+            iq = iq_corrections.resampling_correction(iq, capture, self.radio)
+            coords = self.get_coords(capture, timestamp=timestamp)
 
-    return coords
+            analysis = waveform.analyze_by_spec(
+                iq, capture, spec=self.analysis_spec
+            ).assign_coords(coords)
 
-
-def single_analysis(iq, timestamp, radio, capture, swept_fields, spec):
-    with lb.stopwatch('analyze', logger_level='debug'):
-        iq = iq_corrections.resampling_correction(iq, capture, radio)
-        coords = capture_to_coords(capture, swept_fields, timestamp=timestamp)
-
-        analysis = waveform.analyze_by_spec(iq, capture, spec=spec).assign_coords(coords)
-
-        for f in swept_fields:
-            del analysis.attrs[f]
+        if self.remove_attrs is not None:
+            for f in self.remove_attrs:
+                del analysis.attrs[f]
 
         return analysis
 
+    def get_coords(self, capture: RadioCapture, timestamp):
+        coords = _capture_coord_template(self.remove_attrs).copy(deep=True)
 
-def sweep(
-    radio: base.RadioBase, sweep: Sweep, swept_fields: list[str]
-) -> xr.Dataset | None:
-    data = []
-    spec = sweep.channel_analysis
-    swept_fields = tuple(swept_fields)
+        for field in self.remove_attrs:
+            value = getattr(capture, field)
+            if isinstance(value, str):
+                # to coerce strings as variable-length types later for storage
+                coords[field] = coords[field].astype('object')
+            coords[field].values[:] = [value]
+
+        if timestamp is not None:
+            coords[TIMESTAMP_NAME].values[:] = [timestamp]
+
+        return coords
+
+
+def sweep_iterator(
+    radio: RadioBase, sweep: Sweep, swept_fields: list[str]
+) -> Generator[xr.Dataset | None]:
+    """sweep through capture acquisition analysis on radio hardware as specified by sweep"""
+
+    analyze = _RadioCaptureAnalyzer(
+        radio=radio, analysis_spec=sweep.channel_analysis, remove_attrs=swept_fields
+    )
 
     if len(sweep.captures) == 0:
         return None
 
-    iq = None
-    t = None
+    iq, timestamp = None, None
 
-    prevs = [None] + sweep.captures
-    currs = sweep.captures + [None]
-    nexts = sweep.captures[1:] + [None,None]
+    # iterate across (previous, current, next) captures to support concurrency
+    offset_captures = zip_offsets(sweep.captures, (-1, 0, 1), fill=None)
 
-    for (prev, curr, next_) in zip(prevs, currs, nexts):
-        if curr is None:
+    for cap_prev, cap_this, cap_next in offset_captures:
+        calls = {}
+
+        if cap_this is not None:
+            # extra iteration at the end for the last analysis
+            calls['acquire'] = lb.Call(
+                radio.acquire, cap_this, next_capture=cap_next, correction=False
+            )
+
+        if cap_prev is not None:
+            # no iq is available yet in the first iteration
+            calls['analyze'] = lb.Call(analyze, iq, timestamp, cap_prev)
+
+        if cap_next is None:
             desc = 'last analysis'
         else:
             # treat swept fields as coordinates/indices
-            desc = ', '.join([f'{k}={getattr(curr, k)}' for k in swept_fields])
+            desc = ', '.join([f'{k}={getattr(cap_this, k)}' for k in swept_fields])
 
         with lb.stopwatch(f'{desc}: '):
-            calls = {}
-
-            if curr is not None:
-                # skip at end to allow the final analysis
-                calls['acquire'] = lb.Call(radio.acquire, curr, next_capture=next_, correction=False)
-
-            if prev is not None:
-                # skip the first iteration before any iq data is available
-                calls['analyze'] = lb.Call(single_analysis, iq, t, radio, prev, swept_fields, spec)
-
             ret = lb.concurrently(**calls, flatten=False)
 
         if 'analyze' in ret:
-            data.append(ret['analyze'])
+            yield ret['analyze']
 
         if 'acquire' in ret:
-            iq, t = ret['acquire']
+            iq, timestamp = ret['acquire']
 
+
+def sweep_dataset(
+    iterator: Generator[xr.Dataset],
+    radio: RadioBase,
+    sweep: Sweep,
+    swept_fields: list[str],
+) -> xr.Dataset:
+    # step through the captures
+    data = [result for result in iterator]
 
     ds = xr.concat(data, CAPTURE_DIM)
 
     for k in tuple(swept_fields):
         ds[k].attrs.update(get_attrs(RadioCapture, k))
+
     ds.attrs['radio_id'] = radio.id
-    ds.attrs['radio_setup'] = to_builtins(sweep.radio_setup)#{k: v for k, v in sweep.radio_setup.items() if v is not None}
-    ds.attrs['description'] = to_builtins(sweep.description)#{k: v for k, v in sweep.radio_setup.items() if v is not None}
+    ds.attrs['radio_setup'] = to_builtins(sweep.radio_setup)
+    ds.attrs['description'] = to_builtins(sweep.description)
     ds[TIMESTAMP_NAME].attrs.update(label='Capture start time')
 
     return ds

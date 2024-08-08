@@ -1,7 +1,7 @@
 from __future__ import annotations
 import labbench.paramattr as attr
 
-from .soapy import SoapyRadioDevice
+from .soapy import SoapyRadioBase
 import uuid
 
 # for TX only (RX channel is accessed through the AirT7201B.channel method)
@@ -9,11 +9,8 @@ channel_kwarg = attr.method_kwarg.int(
     'channel', min=0, max=1, help='hardware port number'
 )
 
-class AirT7201B(SoapyRadioDevice):
-    resource = attr.value.dict(
-        default={'driver': 'SoapyAIRT'},
-        inherit=True
-    )
+class _AirT7x01B(SoapyRadioBase):
+    resource = attr.value.dict(default={'driver': 'SoapyAIRT'}, inherit=True)
 
     # adjust bounds based on the hardware
     duration = attr.value.float(100e-3, inherit=True)
@@ -29,15 +26,16 @@ class AirT7201B(SoapyRadioDevice):
         # Jetson UUID - AirStack doesn't seem to return serial through Soapy
         return hex(uuid.getnode())
 
-    # TODO: do the expressions handle inheritance properly?
-    # sample_rate = backend_sample_rate.corrected_from_expression(
-    #     backend_sample_rate / SoapyRadioDevice._downsample,
-    #     label='Hz',
-    #     help='sample rate of acquired waveform',
-    # )
+
+class Air7201B(_AirT7x01B):
+    pass
+
+
+class Air7101B(_AirT7x01B):
+    pass
 
 
 if __name__ == '__main__':
-    airt = AirT7201B(freq=2.44e9, fs=2 * 31.25e6)
+    airt = Air7201B(freq=2.44e9, fs=2 * 31.25e6)
     iq = airt.acquire(256 * 1024)
     airt.close()

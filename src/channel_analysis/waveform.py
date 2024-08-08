@@ -509,7 +509,9 @@ def to_analysis_spec(
         return TypeError('unrecognized type')
 
 
-def _evaluate_raw_channel_analysis(iq: Array, capture: structs.Capture, *, spec: str | dict | structs.ChannelAnalysis):
+def _evaluate_raw_channel_analysis(
+    iq: Array, capture: structs.Capture, *, spec: str | dict | structs.ChannelAnalysis
+):
     # round-trip for type conversion and validation
     spec = msgspec.convert(spec, registry.spec_type())
     spec_dict = msgspec.to_builtins(spec)
@@ -525,7 +527,10 @@ def _evaluate_raw_channel_analysis(iq: Array, capture: structs.Capture, *, spec:
 
     return results
 
-def _package_channel_analysis(capture: structs.Capture, results: dict[str, structs.ChannelAnalysis]):
+
+def _package_channel_analysis(
+    capture: structs.Capture, results: dict[str, structs.ChannelAnalysis]
+):
     # materialize as xarrays
     xarrays = {res.name: res.to_xarray() for res in results.values()}
     # capture.analysis_filter = dict(capture.analysis_filter)

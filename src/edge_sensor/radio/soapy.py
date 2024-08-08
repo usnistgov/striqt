@@ -62,15 +62,14 @@ def _verify_channel_for_setter(func: callable) -> callable:
     return wrapper
 
 
-class SoapyRadioDevice(RadioBase):
+class _SoapyRadioBase(RadioBase):
     """single-channel sensor waveform acquisition through SoapySDR and pre-processed with iqwaveform"""
 
     _inbuf = None
     _outbuf = None
 
     resource = attr.value.dict(
-        default={},
-        help="SoapySDR resource dictionary to specify the device connection"
+        default={}, help='SoapySDR resource dictionary to specify the device connection'
     )
 
     on_overflow = attr.value.str(
@@ -237,16 +236,19 @@ class SoapyRadioDevice(RadioBase):
         if radio_config.preselect_if_frequency is not None:
             raise IOError('external frequency conversion is not yet supported')
 
-
-
     @_verify_channel_setting
-    def acquire(self, capture: structs.RadioCapture, next_capture: Union[structs.RadioCapture,None]=None, correction: bool=True) -> tuple[np.array, pd.Timestamp]:
+    def acquire(
+        self,
+        capture: structs.RadioCapture,
+        next_capture: Union[structs.RadioCapture, None] = None,
+        correction: bool = True,
+    ) -> tuple[np.array, pd.Timestamp]:
         count, _ = get_capture_buffer_sizes(self._master_clock_rate, capture)
 
         with lb.stopwatch('acquire', logger_level='debug'):
             self.arm(capture)
             self.channel_enabled(True)
-            timestamp = pd.Timestamp('now')        
+            timestamp = pd.Timestamp('now')
             self._prepare_buffer(capture)
             iq = self._read_stream(count)
             self.channel_enabled(False)
@@ -384,14 +386,16 @@ class SoapyRadioDevice(RadioBase):
             raise TypeError(f'did not understand response {sr.ret}')
 
     def _prepare_buffer(self, capture: structs.RadioCapture):
-        samples_in, samples_out = get_capture_buffer_sizes(self._master_clock_rate, capture)
+        samples_in, samples_out = get_capture_buffer_sizes(
+            self._master_clock_rate, capture
+        )
 
         # total buffer size for 2 values per IQ sample
-        size_in =  2 * samples_in
+        size_in = 2 * samples_in
 
         if self._inbuf is None or self._inbuf.size < size_in:
             self._logger.debug(
-                f"allocating input sample buffer ({size_in * 2 /1e6:0.2f} MB)"
+                f'allocating input sample buffer ({size_in * 2 /1e6:0.2f} MB)'
             )
             self._inbuf = np.empty((size_in,), dtype=np.float32)
             self._logger.debug('done')
@@ -409,7 +413,7 @@ class SoapyRadioDevice(RadioBase):
             sr = self.backend.readStream(
                 self.rx_stream,
                 [self._inbuf],
-                round(read_duration*self.backend_sample_rate()),
+                round(read_duration * self.backend_sample_rate()),
                 timeoutUs=1,
             )
 
@@ -419,7 +423,6 @@ class SoapyRadioDevice(RadioBase):
                 break
             elif sr.ret < -1:
                 raise IOError(f'Error {sr.ret}: {errToStr(sr.ret)}')
-
 
     @_verify_channel_setting
     def _read_stream(self, N, raise_on_overflow=False) -> np.ndarray:

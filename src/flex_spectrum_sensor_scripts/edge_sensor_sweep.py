@@ -35,7 +35,8 @@ def find_largest_capture(radio, captures):
     from edge_sensor.radio import soapy
 
     sizes = [
-        sum(soapy.get_capture_buffer_sizes(radio._master_clock_rate, c)) for c in captures
+        sum(soapy.get_capture_buffer_sizes(radio._master_clock_rate, c))
+        for c in captures
     ]
 
     return captures[sizes.index(max(sizes))]
@@ -96,7 +97,7 @@ def run(yaml_path: Path, output_path, force, verbose):
 
     run_spec, sweep_fields = read_yaml_sweep(yaml_path)
 
-    from edge_sensor.radio import airt
+    from edge_sensor.radio import deepwave
     import labbench as lb
     from channel_analysis import dump
 
@@ -106,7 +107,7 @@ def run(yaml_path: Path, output_path, force, verbose):
         lb.show_messages('info')
 
     set_cuda_mem_limit
-    sdr = airt.AirT7201B()
+    sdr = deepwave.Air7201B()
     prep = prepare_gpu(sdr, run_spec.captures, run_spec.channel_analysis, sweep_fields)
 
     with lb.concurrently(sdr, prep):

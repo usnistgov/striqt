@@ -52,7 +52,9 @@ def design_capture_filter(
     elif lo_shift:
         raise ValueError('lo_shift requires gpu_resample=True')
     elif master_clock_rate < capture.sample_rate:
-        raise ValueError(f'upsampling above {master_clock_rate/1e6:f} MHz requires gpu_resample=True')
+        raise ValueError(
+            f'upsampling above {master_clock_rate/1e6:f} MHz requires gpu_resample=True'
+        )
     else:
         # use the SDR firmware to set the desired sample rate
         return fourier.design_cola_resampler(
@@ -60,7 +62,7 @@ def design_capture_filter(
             fs_target=capture.sample_rate,
             bw=capture.analysis_bandwidth,
             shift=False,
-        )        
+        )
 
 
 @lru_cache(30000)
@@ -104,3 +106,19 @@ def empty_capture(radio: RadioBase, capture: structs.RadioCapture):
     ret = iq_corrections.resampling_correction(iq, capture, radio)
 
     return ret
+
+
+def radio_subclasses(subclass=RadioBase):
+    subs = {
+        c.__name__: c
+        for c in subclass.__subclasses__()
+    }
+    for sub in list(subs.values()):
+        subs.update(radio_subclasses(sub))
+
+    subs = {
+        name: c
+        for name, c in subs.items()
+        if not name.startswith('_')
+    }
+    return subs
