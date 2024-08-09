@@ -2,48 +2,6 @@
 
 import click
 from pathlib import Path
-import contextlib
-
-
-def warm_resampler_design_cache(radio, captures):
-    """warm up the cache of resampler designs"""
-    from iqwaveform import fourier
-
-    for c in captures:
-        _ = fourier.design_cola_resampler(
-            fs_base=type(radio).backend_sample_rate.max,
-            fs_target=c.sample_rate,
-            bw=c.analysis_bandwidth,
-            bw_lo=0.75e6,
-            shift=c.lo_shift,
-        )
-
-
-@contextlib.contextmanager
-def prepare_gpu(radio, captures, spec, swept_fields):
-    """perform analysis imports and warm up the gpu evaluation graph"""
-
-    try:
-        import cupy
-    except ModuleNotFoundError:
-        # skip priming if a gpu is unavailable
-        yield None
-        return
-    
-    from edge_sensor.radio import util
-    from edge_sensor import actions
-    import labbench as lb
-
-    analyzer = actions._RadioCaptureAnalyzer(radio, analysis_spec=spec, remove_attrs=swept_fields)
-
-    with lb.stopwatch('priming gpu'):
-        # select the capture with the largest size
-        capture = util.find_largest_capture(radio, captures)
-        iq = util.empty_capture(radio, capture)
-        analyzer(iq, timestamp=None, capture=capture)
-        # soapy.free_cuda_memory()
-
-    yield None
 
 
 @click.command(
@@ -83,6 +41,7 @@ def run(yaml_path: Path, output_path, force, verbose):
     sweep_spec, sweep_fields = read_yaml_sweep(yaml_path)
 
     from edge_sensor.radio import find_radio_cls_by_name
+    from edge_sensor.radio.util import prepare_gpu
     from edge_sensor.util import set_cuda_mem_limit
 
     import labbench as lb

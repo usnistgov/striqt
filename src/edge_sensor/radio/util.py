@@ -3,6 +3,7 @@ from functools import lru_cache
 from iqwaveform import fourier
 from iqwaveform.power_analysis import isroundmod
 from typing import Type
+import contextlib
 
 import numpy as np
 
@@ -19,7 +20,7 @@ def design_capture_filter(
     master_clock_rate: float, capture: structs.RadioCapture
 ) -> tuple[float, float, dict]:
     """design a filter specified by the capture for a radio with the specified MCR.
-    
+
     For the return value, see `iqwaveform.fourier.design_cola_resampler`
     """
     if str(capture.lo_shift).lower() == 'none':
@@ -51,6 +52,11 @@ def design_capture_filter(
             shift=False,
         )
 
+def warm_resampler_design_cache(radio: RadioDevice, captures: list[structs.RadioCapture]):
+    """warm up the cache of resampler designs"""
+
+    for c in captures:
+        design_capture_filter(radio._master_clock_rate, c)
 
 @lru_cache(30000)
 def get_capture_buffer_sizes(
@@ -135,3 +141,29 @@ def find_radio_cls_by_name(name, parent_cls: Type[RadioDevice]=RadioDevice) -> R
     else:
         raise AttributeError(f'invalid driver {repr(name)}. valid names: {tuple(mapping.keys())}')
 
+
+@contextlib.contextmanager
+def prepare_gpu(radio, captures, spec, swept_fields):
+    """perform analysis imports and warm up the gpu evaluation graph"""
+
+    try:
+        import cupy
+    except ModuleNotFoundError:
+        # skip priming if a gpu is unavailable
+        yield None
+        return
+    
+    from edge_sensor.radio import util
+    from edge_sensor import actions
+    import labbench as lb
+
+    analyzer = actions._RadioCaptureAnalyzer(radio, analysis_spec=spec, remove_attrs=swept_fields)
+
+    with lb.stopwatch('priming gpu'):
+        # select the capture with the largest size
+        capture = util.find_largest_capture(radio, captures)
+        iq = util.empty_capture(radio, capture)
+        analyzer(iq, timestamp=None, capture=capture)
+        # soapy.free_cuda_memory()
+
+    yield None

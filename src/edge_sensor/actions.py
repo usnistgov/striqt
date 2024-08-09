@@ -110,7 +110,7 @@ def sweep_iterator(
             # iq is available after the first iteration
             calls['analyze'] = lb.Call(analyze, iq, timestamp, cap_prev)
 
-        if cap_next is None:
+        if cap_this is None:
             desc = 'last analysis'
         else:
             # treat swept fields as coordinates/indices

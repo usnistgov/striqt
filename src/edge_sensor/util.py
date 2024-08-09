@@ -3,8 +3,6 @@ import itertools
 from typing import Iterable, Any
 from functools import cache
 
-__all__ = ['zip_offsets', 'import_cupy_with_fallback_warning']
-
 
 def set_cuda_mem_limit(fraction=0.4):
     import cupy
