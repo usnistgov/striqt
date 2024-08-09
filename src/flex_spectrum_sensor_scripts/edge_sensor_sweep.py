@@ -5,18 +5,6 @@ from pathlib import Path
 import contextlib
 
 
-def set_cuda_mem_limit(fraction=0.4):
-    import cupy
-    import psutil
-    from cupy.fft.config import get_plan_cache
-
-    #    cupy.cuda.set_allocator(None)
-
-    available = psutil.virtual_memory().available
-
-    cupy.get_default_memory_pool().set_limit(fraction=fraction)
-
-
 def warm_resampler_design_cache(radio, captures):
     """warm up the cache of resampler designs"""
     from iqwaveform import fourier
@@ -31,22 +19,18 @@ def warm_resampler_design_cache(radio, captures):
         )
 
 
-def find_largest_capture(radio, captures):
-    from edge_sensor.radio import soapy
-
-    sizes = [
-        sum(soapy.get_capture_buffer_sizes(radio._master_clock_rate, c))
-        for c in captures
-    ]
-
-    return captures[sizes.index(max(sizes))]
-
-
 @contextlib.contextmanager
 def prepare_gpu(radio, captures, spec, swept_fields):
     """perform analysis imports and warm up the gpu evaluation graph"""
-    from edge_sensor.radio import base
-    from channel_analysis import waveform
+
+    try:
+        import cupy
+    except ModuleNotFoundError:
+        # skip priming if a gpu is unavailable
+        yield None
+        return
+    
+    from edge_sensor.radio import util
     from edge_sensor import actions
     import labbench as lb
 
@@ -54,8 +38,8 @@ def prepare_gpu(radio, captures, spec, swept_fields):
 
     with lb.stopwatch('priming gpu'):
         # select the capture with the largest size
-        capture = find_largest_capture(radio, captures)
-        iq = base.empty_capture(radio, capture)
+        capture = util.find_largest_capture(radio, captures)
+        iq = util.empty_capture(radio, capture)
         analyzer(iq, timestamp=None, capture=capture)
         # soapy.free_cuda_memory()
 
@@ -93,12 +77,14 @@ def run(yaml_path: Path, output_path, force, verbose):
         output_path = Path(yaml_path).with_suffix('.zarr.zip')
 
     # defer imports to here to make the command line --help snappier
-    from edge_sensor.actions import sweep_dataset, sweep_iterator
+    from edge_sensor.actions import concat_sweeps, sweep_iterator
     from edge_sensor.structs import read_yaml_sweep
 
-    run_spec, sweep_fields = read_yaml_sweep(yaml_path)
+    sweep_spec, sweep_fields = read_yaml_sweep(yaml_path)
 
-    from edge_sensor import radio
+    from edge_sensor.radio import find_radio_cls_by_name
+    from edge_sensor.util import set_cuda_mem_limit
+
     import labbench as lb
     from channel_analysis import dump
 
@@ -112,14 +98,14 @@ def run(yaml_path: Path, output_path, force, verbose):
     except ModuleNotFoundError:
         pass
 
-    radio_type = radio.find_radio_driver_by_name(run_spec.radio_setup.driver)
+    radio_type = find_radio_cls_by_name(sweep_spec.radio_setup.driver)
     radio = radio_type()
-    prep = prepare_gpu(radio, run_spec.captures, run_spec.channel_analysis, sweep_fields)
+    prep = prepare_gpu(radio, sweep_spec.captures, sweep_spec.channel_analysis, sweep_fields)
 
     with lb.concurrently(radio, prep):
-        radio.setup(run_spec.radio_setup)
-        it = sweep_iterator(radio, run_spec, sweep_fields)
-        data = sweep_dataset(it, radio, run_spec, sweep_fields)
+        radio.setup(sweep_spec.radio_setup)
+        sweep_it = sweep_iterator(radio, sweep_spec, sweep_fields)
+        data = concat_sweeps(sweep_it, radio, sweep_spec, sweep_fields)
 
     if force:
         mode = 'w'

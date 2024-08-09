@@ -6,9 +6,9 @@ import numpy as np
 import labbench as lb
 import pandas as pd
 import SoapySDR
+from labbench import paramattr as attr
 
 from iqwaveform.power_analysis import isroundmod
-from labbench import paramattr as attr
 from SoapySDR import (
     SOAPY_SDR_CS16,
     SOAPY_SDR_CF32,
@@ -19,9 +19,9 @@ from SoapySDR import (
     SOAPY_SDR_HAS_TIME,
 )
 
+from .base import RadioDevice
 from .. import structs, iq_corrections
-from .base import RadioBase, get_capture_buffer_sizes, design_capture_filter
-
+from .util import design_capture_filter, get_capture_buffer_sizes
 
 channel_kwarg = attr.method_kwarg.int('channel', min=0, help='hardware port number')
 
@@ -62,7 +62,7 @@ def _verify_channel_for_setter(func: callable) -> callable:
     return wrapper
 
 
-class SoapyRadioBase(RadioBase):
+class SoapyRadioDevice(RadioDevice):
     """single-channel sensor waveform acquisition through SoapySDR and pre-processed with iqwaveform"""
 
     _inbuf = None
@@ -78,27 +78,12 @@ class SoapyRadioBase(RadioBase):
         help='configure behavior on receive buffer overflow',
     )
 
-    calibration_path = attr.value.Path(
-        None,
-        help='path to a calibration file, or None to skip calibration',
-    )
-
-    duration = attr.value.float(
-        10e-3, min=0, label='s', help='receive waveform capture duration'
-    )
-
     _downsample = attr.value.float(1.0, min=1, help='backend_sample_rate/sample_rate')
 
     lo_offset = attr.value.float(
         0.0,
         label='Hz',
         help='digital frequency shift of the RX center frequency',
-    )
-    analysis_bandwidth = attr.value.float(
-        None,
-        min=1,
-        label='Hz',
-        help='bandwidth of the digital bandpass filter (or None to bypass)',
     )
 
     @attr.method.int(
@@ -345,6 +330,11 @@ class SoapyRadioBase(RadioBase):
                 pass
             else:
                 raise
+
+    @attr.property.str(sets=False, cache=True, help='radio hardware UUID or serial number')
+    def id(self):
+        # this is very radio dependent
+        raise NotImplementedError
 
     def __del__(self):
         self.close()

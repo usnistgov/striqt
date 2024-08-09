@@ -1,7 +1,7 @@
 from __future__ import annotations
 import labbench.paramattr as attr
 
-from .soapy import SoapyRadioBase
+from .soapy import SoapyRadioDevice
 import uuid
 
 # for TX only (RX channel is accessed through the AirT7201B.channel method)
@@ -9,7 +9,7 @@ channel_kwarg = attr.method_kwarg.int(
     'channel', min=0, max=1, help='hardware port number'
 )
 
-class _AirT7x01B(SoapyRadioBase):
+class _AirT7x01B(SoapyRadioDevice):
     resource = attr.value.dict(default={'driver': 'SoapyAIRT'}, inherit=True)
 
     # adjust bounds based on the hardware

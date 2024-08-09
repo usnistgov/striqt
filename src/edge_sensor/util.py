@@ -1,8 +1,21 @@
 from __future__ import annotations
 import itertools
 from typing import Iterable, Any
+from functools import cache
 
-__all__ = ['zip_offsets']
+__all__ = ['zip_offsets', 'import_cupy_with_fallback_warning']
+
+
+def set_cuda_mem_limit(fraction=0.4):
+    import cupy
+    import psutil
+    from cupy.fft.config import get_plan_cache
+
+    #    cupy.cuda.set_allocator(None)
+
+    available = psutil.virtual_memory().available
+
+    cupy.get_default_memory_pool().set_limit(fraction=fraction)
 
 
 def zip_offsets(seq: Iterable[Any], shifts: tuple | list, fill: Any):
@@ -25,3 +38,15 @@ def zip_offsets(seq: Iterable[Any], shifts: tuple | list, fill: Any):
         iters.append(sl)
 
     return itertools.zip_longest(*iters, fillvalue=fill)
+
+@cache
+def import_cupy_with_fallback_warning():
+    try:
+        import cupy as xp
+    except ModuleNotFoundError:
+        # warn only once due to @cache
+        import labbench as lb
+        import numpy as xp
+        lb.logger.warning('cupy is not installed; falling back to cpu with numpy')
+    
+    return xp

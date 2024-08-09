@@ -1,5 +1,5 @@
 from __future__ import annotations
-from .radio import RadioBase
+from .radio import RadioDevice
 from .structs import Sweep, RadioCapture, get_attrs, to_builtins
 from .util import zip_offsets
 from . import iq_corrections
@@ -11,7 +11,7 @@ import pandas as pd
 from channel_analysis import waveform
 from functools import lru_cache
 from dataclasses import dataclass
-from typing import Optional, Generator
+from typing import Optional, Generator, Iterable
 
 CAPTURE_DIM = 'capture'
 TIMESTAMP_NAME = 'timestamp'
@@ -40,7 +40,7 @@ class _RadioCaptureAnalyzer:
 
     __name__ = 'analysis'
 
-    radio: RadioBase
+    radio: RadioDevice
     analysis_spec: list[ChannelAnalysis]
     remove_attrs: Optional[tuple[str, ...]] = None
 
@@ -81,7 +81,7 @@ class _RadioCaptureAnalyzer:
 
 
 def sweep_iterator(
-    radio: RadioBase, sweep: Sweep, swept_fields: list[str]
+    radio: RadioDevice, sweep: Sweep, swept_fields: list[str]
 ) -> Generator[xr.Dataset | None]:
     """sweep through capture acquisition analysis on radio hardware as specified by sweep"""
 
@@ -107,7 +107,7 @@ def sweep_iterator(
             )
 
         if cap_prev is not None:
-            # no iq is available yet in the first iteration
+            # iq is available after the first iteration
             calls['analyze'] = lb.Call(analyze, iq, timestamp, cap_prev)
 
         if cap_next is None:
@@ -120,22 +120,21 @@ def sweep_iterator(
             ret = lb.concurrently(**calls, flatten=False)
 
         if 'analyze' in ret:
+            # this is what is made available for 
             yield ret['analyze']
 
         if 'acquire' in ret:
             iq, timestamp = ret['acquire']
 
 
-def sweep_dataset(
-    iterator: Generator[xr.Dataset],
-    radio: RadioBase,
+def concat_sweeps(
+    iterator: Iterable[xr.Dataset],
+    radio: RadioDevice,
     sweep: Sweep,
     swept_fields: list[str],
 ) -> xr.Dataset:
     # step through the captures
-    data = [result for result in iterator]
-
-    ds = xr.concat(data, CAPTURE_DIM)
+    ds = xr.concat(iterator, CAPTURE_DIM)
 
     for k in tuple(swept_fields):
         ds[k].attrs.update(get_attrs(RadioCapture, k))

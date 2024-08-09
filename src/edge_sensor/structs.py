@@ -6,8 +6,7 @@ from typing import Optional, Literal, Any
 import channel_analysis
 from channel_analysis.structs import meta, get_attrs
 from pathlib import Path
-from msgspec import Meta, to_builtins
-import typing
+from msgspec import to_builtins
 from typing import Annotated as A
 
 

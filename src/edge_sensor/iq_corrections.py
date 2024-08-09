@@ -1,16 +1,15 @@
 from __future__ import annotations
 from iqwaveform import fourier
-from iqwaveform.util import array_namespace
 from functools import lru_cache
 import xarray as xr
 import zarr
 import numpy as np
 from scipy.constants import Boltzmann
 from channel_analysis import waveform
-import labbench as lb
 
-from .radio import base
+from .radio import util
 from . import structs
+from .util import import_cupy_with_fallback_warning
 
 
 @lru_cache
@@ -111,11 +110,10 @@ def compute_y_factor_corrections(
     )
     return ret
 
-
 def resampling_correction(
     iq: fourier.Array,
     capture: structs.RadioCapture,
-    radio: base.RadioBase,
+    radio: util.SoapyRadioBase,
     *,
     axis=0,
 ):
@@ -130,18 +128,15 @@ def resampling_correction(
     Returns:
         the filtered IQ capture
     """
-    try:   
-        import cupy as cp
-    except ModuleNotFoundError:
-        lb.logger.warning('cupy is not installed - falling back to cpu operation with numpy')
-        import numpy as cp
+
+    xp = import_cupy_with_fallback_warning()
 
     # create a buffer large enough for post-processing seeded with a copy of the IQ
-    _, buf_size = base.get_capture_buffer_sizes(radio._master_clock_rate, capture)
-    buf = cp.empty(buf_size, dtype='complex64')
-    iq = buf[: iq.size] = cp.asarray(iq)
+    _, buf_size = util.get_capture_buffer_sizes(radio._master_clock_rate, capture)
+    buf = xp.empty(buf_size, dtype='complex64')
+    iq = buf[: iq.size] = xp.asarray(iq)
 
-    fs_backend, lo_offset, analysis_filter = base.design_capture_filter(
+    fs_backend, lo_offset, analysis_filter = util.design_capture_filter(
         radio._master_clock_rate, capture
     )
 
@@ -182,9 +177,9 @@ def resampling_correction(
                 out=iq,
             )
 
-        return iq[base.TRANSIENT_HOLDOFF_WINDOWS * fft_size_out :]
+        return iq[util.TRANSIENT_HOLDOFF_WINDOWS * fft_size_out :]
 
-    w = fourier._get_window(analysis_filter['window'], fft_size, fftbins=False, xp=cp)
+    w = fourier._get_window(analysis_filter['window'], fft_size, fftbins=False, xp=xp)
 
     freqs, _, xstft = fourier.stft(
         iq,
@@ -236,4 +231,4 @@ def resampling_correction(
     if power_scale is not None:
         iq *= np.sqrt(power_scale)
 
-    return iq[base.TRANSIENT_HOLDOFF_WINDOWS * fft_size_out :]
+    return iq[util.TRANSIENT_HOLDOFF_WINDOWS * fft_size_out :]
