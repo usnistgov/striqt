@@ -187,8 +187,6 @@ def cyclic_channel_power(
     detectors = tuple(detectors)
     cyclic_statistics = tuple(cyclic_statistics)
 
-    print(locals())
-
     data_dict = power_analysis.iq_to_cyclic_power(
         iq,
         1 / capture.sample_rate,

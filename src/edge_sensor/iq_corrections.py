@@ -113,7 +113,7 @@ def compute_y_factor_corrections(
 def resampling_correction(
     iq: fourier.Array,
     capture: structs.RadioCapture,
-    radio: util.SoapyRadioBase,
+    radio: util.RadioBase,
     *,
     axis=0,
 ):

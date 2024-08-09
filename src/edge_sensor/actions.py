@@ -6,12 +6,13 @@ from . import iq_corrections
 from channel_analysis.structs import ChannelAnalysis
 
 import labbench as lb
+from iqwaveform.util import Array
 import xarray as xr
 import pandas as pd
 from channel_analysis import waveform
 from functools import lru_cache
 from dataclasses import dataclass
-from typing import Optional, Generator, Iterable
+from typing import Optional, Generator, Any
 
 CAPTURE_DIM = 'capture'
 TIMESTAMP_NAME = 'timestamp'
@@ -19,6 +20,11 @@ TIMESTAMP_NAME = 'timestamp'
 
 @lru_cache
 def _capture_coord_template(sweep_fields: tuple[str, ...]):
+    """returns a valid cached xarray coordinate for the given list of swept fields.
+    
+    the 
+    """
+
     capture = RadioCapture()
     coords = {}
 
@@ -36,15 +42,18 @@ def _capture_coord_template(sweep_fields: tuple[str, ...]):
 
 @dataclass
 class _RadioCaptureAnalyzer:
-    """analyze into a dataset"""
+    """an IQ data analysis/packaging manager given a radio and desired channel analyses"""
 
-    __name__ = 'analysis'
+    __name__ = 'analyze'
 
     radio: RadioDevice
     analysis_spec: list[ChannelAnalysis]
     remove_attrs: Optional[tuple[str, ...]] = None
+    extra_attrs: Optional[dict[str, Any]] = None
 
-    def __call__(self, iq, timestamp, capture) -> xr.Dataset:
+    def __call__(self, iq: Array, timestamp, capture: RadioCapture) -> xr.Dataset:
+        """analyze iq from a capture and package it into a dataset"""
+
         with lb.stopwatch('analyze', logger_level='debug'):
             # for performance, GPU operations are all here in the same thread
             iq = iq_corrections.resampling_correction(iq, capture, self.radio)
@@ -57,6 +66,14 @@ class _RadioCaptureAnalyzer:
         if self.remove_attrs is not None:
             for f in self.remove_attrs:
                 del analysis.attrs[f]
+
+        for k in tuple(self.remove_attrs):
+            analysis[k].attrs.update(get_attrs(RadioCapture, k))
+
+        if self.extra_attrs is not None:
+            analysis.attrs.update(self.extra_attrs)
+
+        analysis[TIMESTAMP_NAME].attrs.update(label='Capture start time')
 
         return analysis
 
@@ -80,17 +97,23 @@ class _RadioCaptureAnalyzer:
         return coords
 
 
-def sweep_iterator(
+def iter_sweep(
     radio: RadioDevice, sweep: Sweep, swept_fields: list[str]
-) -> Generator[xr.Dataset | None]:
-    """sweep through capture acquisition analysis on radio hardware as specified by sweep"""
+) -> Generator[xr.Dataset]:
+    """iterate through sweep captures on the specified radio, yielding a dataset for each"""
+
+    attrs = {
+        'radio_id': radio.id,
+        'radio_setup': to_builtins(sweep.radio_setup),
+        'description': to_builtins(sweep.description)
+    }
 
     analyze = _RadioCaptureAnalyzer(
-        radio=radio, analysis_spec=sweep.channel_analysis, remove_attrs=swept_fields
+        radio=radio, analysis_spec=sweep.channel_analysis, remove_attrs=swept_fields, extra_attrs=attrs
     )
 
     if len(sweep.captures) == 0:
-        return None
+        return
 
     iq, timestamp = None, None
 
@@ -125,23 +148,3 @@ def sweep_iterator(
 
         if 'acquire' in ret:
             iq, timestamp = ret['acquire']
-
-
-def concat_sweeps(
-    iterator: Iterable[xr.Dataset],
-    radio: RadioDevice,
-    sweep: Sweep,
-    swept_fields: list[str],
-) -> xr.Dataset:
-    # step through the captures
-    ds = xr.concat(iterator, CAPTURE_DIM)
-
-    for k in tuple(swept_fields):
-        ds[k].attrs.update(get_attrs(RadioCapture, k))
-
-    ds.attrs['radio_id'] = radio.id
-    ds.attrs['radio_setup'] = to_builtins(sweep.radio_setup)
-    ds.attrs['description'] = to_builtins(sweep.description)
-    ds[TIMESTAMP_NAME].attrs.update(label='Capture start time')
-
-    return ds

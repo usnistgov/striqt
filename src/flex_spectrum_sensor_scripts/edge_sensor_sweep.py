@@ -35,7 +35,7 @@ def run(yaml_path: Path, output_path, force, verbose):
         output_path = Path(yaml_path).with_suffix('.zarr.zip')
 
     # defer imports to here to make the command line --help snappier
-    from edge_sensor.actions import concat_sweeps, sweep_iterator
+    from edge_sensor.actions import iter_sweep, CAPTURE_DIM
     from edge_sensor.structs import read_yaml_sweep
 
     sweep_spec, sweep_fields = read_yaml_sweep(yaml_path)
@@ -45,6 +45,7 @@ def run(yaml_path: Path, output_path, force, verbose):
     from edge_sensor.util import set_cuda_mem_limit
 
     import labbench as lb
+    import xarray as xr
     from channel_analysis import dump
 
     if verbose:
@@ -58,13 +59,17 @@ def run(yaml_path: Path, output_path, force, verbose):
         pass
 
     radio_type = find_radio_cls_by_name(sweep_spec.radio_setup.driver)
+
     radio = radio_type()
+    if sweep_spec.radio_setup.resource is not None:
+        radio.resource = sweep_spec.radio_setup.resource
+
     prep = prepare_gpu(radio, sweep_spec.captures, sweep_spec.channel_analysis, sweep_fields)
 
     with lb.concurrently(radio, prep):
         radio.setup(sweep_spec.radio_setup)
-        sweep_it = sweep_iterator(radio, sweep_spec, sweep_fields)
-        data = concat_sweeps(sweep_it, radio, sweep_spec, sweep_fields)
+        sweep_it = iter_sweep(radio, sweep_spec, sweep_fields)
+        data = xr.concat(sweep_it, CAPTURE_DIM)
 
     if force:
         mode = 'w'
