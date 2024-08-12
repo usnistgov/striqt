@@ -45,9 +45,14 @@ class SweepController:
 
     def open_radio(self, radio_setup: RadioSetup):
         driver_name = radio_setup.driver
-        resource = radio_setup.resource
+        radio_cls = find_radio_cls_by_name(driver_name)
 
-        if driver_name in self.radios and self.radios[driver_name].isopen and resource is not None:
+        if radio_setup.resource is None:
+            resource = radio_cls.resource.default
+        else:
+            resource = radio_setup.resource
+
+        if driver_name in self.radios and self.radios[driver_name].isopen:
             if is_same_resource(
                 self.radios[driver_name].resource, radio_setup.resource
             ):
@@ -61,7 +66,6 @@ class SweepController:
         else:
             lb.logger.debug(f'opening driver {repr(driver_name)}')
 
-        radio_cls = find_radio_cls_by_name(driver_name)
         radio = self.radios[driver_name] = radio_cls()
         if resource is not None:
             radio.resource = resource

@@ -195,10 +195,7 @@ class SoapyRadioDevice(RadioDevice):
         else:
             self.backend.setGain(SOAPY_SDR_TX, channel, gain)
 
-    def open(self):
-        if self.isopen:
-            return
-        
+    def open(self):            
         self._logger.info('connecting')
         self.backend = SoapySDR.Device(self.resource)
         self._logger.info('connected')
