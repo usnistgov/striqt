@@ -51,7 +51,6 @@ class _RadioCaptureAnalyzer:
     analysis_spec: list[ChannelAnalysis]
     remove_attrs: Optional[tuple[str, ...]] = None
     extra_attrs: Optional[dict[str, Any]] = None
-    as_pickle: bool = False
 
     def __call__(self, iq: Array, timestamp, capture: RadioCapture) -> xr.Dataset:
         """analyze iq from a capture and package it into a dataset"""
@@ -77,10 +76,7 @@ class _RadioCaptureAnalyzer:
 
         analysis[TIMESTAMP_NAME].attrs.update(label='Capture start time')
 
-        if self.as_pickle:
-            return pickle.dumps(analysis, protocol=5)
-        else:
-            return analysis
+        return analysis
 
     def __post_init__(self):
         if self.remove_attrs is not None:
@@ -99,6 +95,7 @@ class _RadioCaptureAnalyzer:
         if timestamp is not None:
             coords[TIMESTAMP_NAME].values[:] = [timestamp]
 
+        print('coords: ', coords)
         return coords
 
 
@@ -107,7 +104,7 @@ def describe_capture(capture: RadioCapture, swept_fields):
 
 
 def iter_sweep(
-    radio: RadioDevice, sweep: Sweep, swept_fields: list[str], as_pickle=False
+    radio: RadioDevice, sweep: Sweep, swept_fields: list[str]
 ) -> Generator[xr.Dataset]:
     """iterate through sweep captures on the specified radio, yielding a dataset for each"""
 
@@ -122,7 +119,6 @@ def iter_sweep(
         analysis_spec=sweep.channel_analysis,
         remove_attrs=swept_fields,
         extra_attrs=attrs,
-        as_pickle=as_pickle,
     )
 
     if len(sweep.captures) == 0:
