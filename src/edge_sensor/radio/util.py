@@ -142,6 +142,13 @@ def find_radio_cls_by_name(name, parent_cls: Type[RadioDevice]=RadioDevice) -> R
         raise AttributeError(f'invalid driver {repr(name)}. valid names: {tuple(mapping.keys())}')
 
 
+def is_same_resource(r1: str|dict, r2: str|dict):
+    if isinstance(r1, str):
+        return r1 == r2
+    else:
+        return set(r1.items()) == set(r2.items())
+
+
 @contextlib.contextmanager
 def prepare_gpu(radio, captures, spec, swept_fields):
     """perform analysis imports and warm up the gpu evaluation graph"""

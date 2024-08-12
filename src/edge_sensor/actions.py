@@ -40,6 +40,8 @@ def _capture_coord_template(sweep_fields: tuple[str, ...]):
     return xr.Coordinates(coords)
 
 
+import pickle
+
 @dataclass
 class _RadioCaptureAnalyzer:
     """an IQ data analysis/packaging manager given a radio and desired channel analyses"""
@@ -50,6 +52,7 @@ class _RadioCaptureAnalyzer:
     analysis_spec: list[ChannelAnalysis]
     remove_attrs: Optional[tuple[str, ...]] = None
     extra_attrs: Optional[dict[str, Any]] = None
+    as_pickle: bool = False
 
     def __call__(self, iq: Array, timestamp, capture: RadioCapture) -> xr.Dataset:
         """analyze iq from a capture and package it into a dataset"""
@@ -75,7 +78,10 @@ class _RadioCaptureAnalyzer:
 
         analysis[TIMESTAMP_NAME].attrs.update(label='Capture start time')
 
-        return analysis
+        if self.as_pickle:
+            return pickle.dumps(analysis, protocol=5)
+        else:
+            return analysis
 
     def __post_init__(self):
         if self.remove_attrs is not None:
@@ -96,9 +102,8 @@ class _RadioCaptureAnalyzer:
 
         return coords
 
-
 def iter_sweep(
-    radio: RadioDevice, sweep: Sweep, swept_fields: list[str]
+    radio: RadioDevice, sweep: Sweep, swept_fields: list[str], as_pickle=False
 ) -> Generator[xr.Dataset]:
     """iterate through sweep captures on the specified radio, yielding a dataset for each"""
 
@@ -109,7 +114,7 @@ def iter_sweep(
     }
 
     analyze = _RadioCaptureAnalyzer(
-        radio=radio, analysis_spec=sweep.channel_analysis, remove_attrs=swept_fields, extra_attrs=attrs
+        radio=radio, analysis_spec=sweep.channel_analysis, remove_attrs=swept_fields, extra_attrs=attrs, as_pickle=as_pickle
     )
 
     if len(sweep.captures) == 0:
@@ -137,6 +142,7 @@ def iter_sweep(
             desc = 'last analysis'
         else:
             # treat swept fields as coordinates/indices
+            print(type(cap_this), cap_this)
             desc = ', '.join([f'{k}={getattr(cap_this, k)}' for k in swept_fields])
 
         with lb.stopwatch(f'{desc}: '):
@@ -144,7 +150,10 @@ def iter_sweep(
 
         if 'analyze' in ret:
             # this is what is made available for 
+            print('yield')
             yield ret['analyze']
 
         if 'acquire' in ret:
             iq, timestamp = ret['acquire']
+
+    print('done')

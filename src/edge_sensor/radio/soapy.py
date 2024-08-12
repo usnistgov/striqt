@@ -68,7 +68,7 @@ class SoapyRadioDevice(RadioDevice):
     _inbuf = None
     _outbuf = None
 
-    resource = attr.value.dict(
+    resource: dict = attr.value.dict(
         default={}, help='SoapySDR resource dictionary to specify the device connection'
     )
 

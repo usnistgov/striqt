@@ -14,6 +14,7 @@ dependencies = []
 
 [project.scripts]
 edge-sensor-sweep = "flex_spectrum_sensor_scripts.edge_sensor_sweep:run"
+edge-sensor-server = "flex_spectrum_sensor_scripts.edge_sensor_server:run"
 
 [tool.ruff]
 target-version = "py39"

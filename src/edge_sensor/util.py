@@ -5,7 +5,11 @@ from functools import cache
 
 
 def set_cuda_mem_limit(fraction=0.4):
-    import cupy
+    try:
+        import cupy
+    except ModuleNotFoundError:
+        return
+    
     import psutil
     from cupy.fft.config import get_plan_cache
 

@@ -11,6 +11,7 @@ import numcodecs
 
 def dump(path: str | Path, data: xr.DataArray | xr.Dataset, mode='a'):
     """serialize a dataset into a zarr directory structure"""
+
     if hasattr(data, waveform.IQ_WAVEFORM_INDEX_NAME):
         if 'sample_rate' in data.attrs:
             # sample rate is metadata

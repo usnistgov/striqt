@@ -4,6 +4,7 @@ from __future__ import annotations
 import msgspec
 from typing import Optional, Literal, Any
 import channel_analysis
+import channel_analysis.waveform
 from channel_analysis.structs import meta, get_attrs
 from pathlib import Path
 from msgspec import to_builtins
@@ -11,7 +12,7 @@ from typing import Annotated as A
 
 
 def make_default_analysis():
-    return channel_analysis.waveforms.analysis_registry.tostruct()()
+    return channel_analysis.waveform.registry.spec_type()()
 
 
 _TShift = Literal['left', 'right', 'none']
@@ -65,7 +66,7 @@ class Description(msgspec.Struct):
 
 
 class Sweep(msgspec.Struct):
-    captures: list[RadioCapture]
+    captures: tuple[RadioCapture, ...]
     radio_setup: RadioSetup = msgspec.field(default_factory=RadioSetup)
     defaults: RadioCapture = msgspec.field(default_factory=RadioCapture)
     channel_analysis: Any = msgspec.field(default_factory=make_default_analysis)
