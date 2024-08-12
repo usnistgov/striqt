@@ -3,7 +3,6 @@ from __future__ import annotations
 import rpyc
 import labbench as lb
 import xarray as xr
-import sys
 
 from typing import Generator, Optional, Any
 
@@ -11,7 +10,8 @@ from edge_sensor import actions
 from edge_sensor.structs import Sweep, RadioCapture, RadioSetup
 from edge_sensor.radio import find_radio_cls_by_name, RadioDevice
 from edge_sensor.radio.util import is_same_resource
-from edge_sensor.util import set_cuda_mem_limit, zip_offsets
+from edge_sensor.util import set_cuda_mem_limit
+
 
 _PROTOCOL_CONFIG = {'logger': lb.logger, 'allow_pickle': True}
 
