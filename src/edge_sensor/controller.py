@@ -73,25 +73,6 @@ class SweepController:
         self.close()
 
 
-# def iter_call(gen: Generator, func):
-#     ret = next(gen)
-
-#     while True:
-#         try:
-#             result = lb.concurrently(
-#                 func=lb.Call(func, ret),
-#                 ret=lb.Call(next, gen)
-#             )
-#         except GeneratorExit:
-#             break
-#         else:
-#             ret = result['ret']
-#             yield result['func']
-    
-#     yield func(ret)
-
-
-
 class _ControllerService(rpyc.Service, SweepController):
     """this is what is exposed by a server to remote clients"""
 

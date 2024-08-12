@@ -39,6 +39,7 @@ dependencies:
   - dask
   - msgspec
   - frozendict
+  - rpyc
 
   # git repository introspection support for metadata
   - dulwich

@@ -33,6 +33,7 @@ dependencies:
 - dask
 - msgspec
 - frozendict
+- rpyc
 - dulwich
 - ruamel.yaml
 - cupy
