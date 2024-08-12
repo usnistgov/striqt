@@ -29,12 +29,13 @@ dependencies:
 - mako
 - fastrlock
 - labbench
+- rpyc
+- soapysdr
 - xarray
 - zarr
 - dask
 - msgspec
 - frozendict
-- rpyc
 - dulwich
 - ruamel.yaml
 - soapysdr-module-airt

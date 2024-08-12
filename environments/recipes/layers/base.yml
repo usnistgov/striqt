@@ -33,6 +33,7 @@ dependencies:
   # for SoapySDR device wrappers and remote control
   - labbench
   - rpyc
+  - soapysdr
 
   # data management (including zarr and data chunking in xarray)
   - xarray

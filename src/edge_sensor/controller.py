@@ -47,7 +47,7 @@ class SweepController:
         driver_name = radio_setup.driver
         resource = radio_setup.resource
 
-        if driver_name in self.radios and self.radios[driver_name].isopen:
+        if driver_name in self.radios and self.radios[driver_name].isopen and resource is not None:
             if is_same_resource(
                 self.radios[driver_name].resource, radio_setup.resource
             ):

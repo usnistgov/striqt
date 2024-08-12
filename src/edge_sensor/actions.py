@@ -13,6 +13,7 @@ from channel_analysis import waveform
 from functools import lru_cache
 from dataclasses import dataclass
 from typing import Optional, Generator, Any
+import pickle
 
 CAPTURE_DIM = 'capture'
 TIMESTAMP_NAME = 'timestamp'
@@ -38,9 +39,6 @@ def _capture_coord_template(sweep_fields: tuple[str, ...]):
     )
 
     return xr.Coordinates(coords)
-
-
-import pickle
 
 
 @dataclass

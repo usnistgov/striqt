@@ -30,8 +30,10 @@ dependencies:
 - mako
 - fastrlock
 
-  # for SoapySDR device wrappers
+  # for SoapySDR device wrappers and remote control
 - labbench
+- rpyc
+- soapysdr
 
   # data management (including zarr and data chunking in xarray)
 - xarray
@@ -39,7 +41,6 @@ dependencies:
 - dask
 - msgspec
 - frozendict
-- rpyc
 
   # git repository introspection support for metadata
 - dulwich

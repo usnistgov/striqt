@@ -43,7 +43,7 @@ def dump(path_or_store: str | Path, data: xr.DataArray | xr.Dataset, mode='a'):
             if name != waveform.iq_waveform.__name__
         }
 
-    if isinstance(path_or_store, zarr._storage.Store):
+    if isinstance(path_or_store, zarr.storage.Store):
         data.chunk(chunks).to_zarr(path_or_store, encoding=encodings)
     else:
         with zarr.storage.ZipStore(path_or_store, mode=mode, compression=0) as store:
