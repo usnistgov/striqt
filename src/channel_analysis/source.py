@@ -9,7 +9,7 @@ import zarr
 import numcodecs
 
 
-def dump(path: str | Path, data: xr.DataArray | xr.Dataset, mode='a'):
+def dump(path_or_store: str | Path, data: xr.DataArray | xr.Dataset, mode='a'):
     """serialize a dataset into a zarr directory structure"""
 
     if hasattr(data, waveform.IQ_WAVEFORM_INDEX_NAME):
@@ -35,17 +35,19 @@ def dump(path: str | Path, data: xr.DataArray | xr.Dataset, mode='a'):
         # follow existing encodings if appending
         encodings = None
     else:
-        # despite that iq waveforms are the largest on disk,
-        # compression tends to be slow and ineffective due
-        # to high entropy
+        # skip compression of iq waveforms, which is slow and 
+        # ineffective due to high entropy
         encodings = {
             name: {'compressor': compressor}
             for name in names
             if name != waveform.iq_waveform.__name__
         }
 
-    with zarr.storage.ZipStore(path, mode=mode, compression=0) as store:
-        data.chunk(chunks).to_zarr(store, encoding=encodings)
+    if isinstance(path_or_store, zarr._storage.Store):
+        data.chunk(chunks).to_zarr(path_or_store, encoding=encodings)
+    else:
+        with zarr.storage.ZipStore(path_or_store, mode=mode, compression=0) as store:
+            data.chunk(chunks).to_zarr(store, encoding=encodings)
 
 
 def load(path: str | Path) -> xr.DataArray | xr.Dataset:
