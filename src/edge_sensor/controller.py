@@ -54,7 +54,7 @@ class SweepController:
 
         if driver_name in self.radios and self.radios[driver_name].isopen:
             if is_same_resource(
-                self.radios[driver_name].resource, radio_setup.resource
+                self.radios[driver_name].resource, resource
             ):
                 lb.logger.debug(f'reusing open {repr(driver_name)}')
                 return self.radios[driver_name]
