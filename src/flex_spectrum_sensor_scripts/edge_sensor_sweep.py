@@ -99,6 +99,7 @@ def run(
     generator = list(controller.iter_sweep(sweep_spec, sweep_fields))
     print(generator[0])
     data = xr.concat(generator, CAPTURE_DIM)
+    print(data)
 
     if force:
         mode = 'w'
