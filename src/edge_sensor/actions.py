@@ -95,7 +95,6 @@ class _RadioCaptureAnalyzer:
         if timestamp is not None:
             coords[TIMESTAMP_NAME].values[:] = [timestamp]
 
-        print('coords: ', coords)
         return coords
 
 
