@@ -102,6 +102,9 @@ class _RadioCaptureAnalyzer:
 
         return coords
 
+def describe_capture(capture: RadioCapture, swept_fields):
+    return ', '.join([f'{k}={getattr(capture, k)}' for k in swept_fields])
+
 def iter_sweep(
     radio: RadioDevice, sweep: Sweep, swept_fields: list[str], as_pickle=False
 ) -> Generator[xr.Dataset]:
@@ -142,18 +145,14 @@ def iter_sweep(
             desc = 'last analysis'
         else:
             # treat swept fields as coordinates/indices
-            print(type(cap_this), cap_this)
-            desc = ', '.join([f'{k}={getattr(cap_this, k)}' for k in swept_fields])
+            desc = describe_capture(cap_this, swept_fields)
 
         with lb.stopwatch(f'{desc}: '):
             ret = lb.concurrently(**calls, flatten=False)
 
         if 'analyze' in ret:
             # this is what is made available for 
-            print('yield')
             yield ret['analyze']
 
         if 'acquire' in ret:
             iq, timestamp = ret['acquire']
-
-    print('done')

@@ -3,6 +3,7 @@ from __future__ import annotations
 import rpyc
 import labbench as lb
 import xarray as xr
+import sys
 
 from typing import Generator, Optional, Any
 
@@ -86,38 +87,21 @@ class _ControllerService(rpyc.Service, SweepController):
         sweep_spec = rpyc.utils.classic.obtain(sweep_spec)
         swept_fields = rpyc.utils.classic.obtain(swept_fields)
 
-        # the following requires that the client runs a service
-        # that exposes a `deliver` method to pickle results in the response
-
-        # generator = self.iter_sweep(sweep_spec, swept_fields)
-
-        # ret = next(generator)
-
-        # while True:
-            
-        #     try:
-        #         lb.concurrently(lb.Call(next, generator))
-        #     except:
-        #         pass
-
-
-        # offset_captures = zip_offsets(generator, (-1, 0), fill=None)
+        descs = [actions.describe_capture(c, swept_fields) for c in sweep_spec.captures]
         
-
-        # for result_prev, result_this in offset_captures:
-        #     if result_prev is None:
-
         return (
-            conn.root.deliver(r)
-            for r in self.iter_sweep(sweep_spec, swept_fields)
+            conn.root.deliver(r, d)
+            for r,d in zip(self.iter_sweep(sweep_spec, swept_fields), descs)
         )
 
 
-class _ControllerClientService(rpyc.Service):
-    def exposed_deliver(self, obj):
+class _ClientService(rpyc.Service):
+    def exposed_deliver(self, dataset: xr.Dataset, description:Optional[str]=None):
         """serialize an object back to the client via pickling"""
-        with lb.stopwatch('transfer from remote', logger_level='debug'):
-            return rpyc.utils.classic.obtain(obj)
+        if description is not None:
+            lb.logger.info(f'capture • {description}')
+        with lb.stopwatch('data transfer', logger_level='debug'):
+            return rpyc.utils.classic.obtain(dataset)
 
 
 def start_server(host=None, port=4567, default_driver:Optional[str] = None):
@@ -150,4 +134,4 @@ def connect(host='localhost', port=4567) -> rpyc.Connection:
         remote.root.iter_sweep()
     """
 
-    return rpyc.connect(host=host, port=port, config=_PROTOCOL_CONFIG, service=_ControllerClientService)
+    return rpyc.connect(host=host, port=port, config=_PROTOCOL_CONFIG, service=_ClientService)
