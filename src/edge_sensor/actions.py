@@ -21,8 +21,8 @@ TIMESTAMP_NAME = 'timestamp'
 @lru_cache
 def _capture_coord_template(sweep_fields: tuple[str, ...]):
     """returns a valid cached xarray coordinate for the given list of swept fields.
-    
-    the 
+
+    the
     """
 
     capture = RadioCapture()
@@ -41,6 +41,7 @@ def _capture_coord_template(sweep_fields: tuple[str, ...]):
 
 
 import pickle
+
 
 @dataclass
 class _RadioCaptureAnalyzer:
@@ -102,8 +103,10 @@ class _RadioCaptureAnalyzer:
 
         return coords
 
+
 def describe_capture(capture: RadioCapture, swept_fields):
     return ', '.join([f'{k}={getattr(capture, k)}' for k in swept_fields])
+
 
 def iter_sweep(
     radio: RadioDevice, sweep: Sweep, swept_fields: list[str], as_pickle=False
@@ -113,11 +116,15 @@ def iter_sweep(
     attrs = {
         'radio_id': radio.id,
         'radio_setup': to_builtins(sweep.radio_setup),
-        'description': to_builtins(sweep.description)
+        'description': to_builtins(sweep.description),
     }
 
     analyze = _RadioCaptureAnalyzer(
-        radio=radio, analysis_spec=sweep.channel_analysis, remove_attrs=swept_fields, extra_attrs=attrs, as_pickle=as_pickle
+        radio=radio,
+        analysis_spec=sweep.channel_analysis,
+        remove_attrs=swept_fields,
+        extra_attrs=attrs,
+        as_pickle=as_pickle,
     )
 
     if len(sweep.captures) == 0:
@@ -147,11 +154,11 @@ def iter_sweep(
             # treat swept fields as coordinates/indices
             desc = describe_capture(cap_this, swept_fields)
 
-        with lb.stopwatch(f'{desc}: '):
+        with lb.stopwatch(f'{desc} •'):
             ret = lb.concurrently(**calls, flatten=False)
 
         if 'analyze' in ret:
-            # this is what is made available for 
+            # this is what is made available for
             yield ret['analyze']
 
         if 'acquire' in ret:

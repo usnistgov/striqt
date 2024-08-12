@@ -52,11 +52,15 @@ def design_capture_filter(
             shift=False,
         )
 
-def warm_resampler_design_cache(radio: RadioDevice, captures: list[structs.RadioCapture]):
+
+def warm_resampler_design_cache(
+    radio: RadioDevice, captures: list[structs.RadioCapture]
+):
     """warm up the cache of resampler designs"""
 
     for c in captures:
         design_capture_filter(radio._master_clock_rate, c)
+
 
 @lru_cache(30000)
 def get_capture_buffer_sizes(
@@ -97,6 +101,7 @@ def find_largest_capture(radio, captures):
 
     return captures[sizes.index(max(sizes))]
 
+
 def empty_capture(radio: RadioDevice, capture: structs.RadioCapture):
     """evaluate a capture on an empty buffer to warm up a GPU"""
     from .. import iq_corrections
@@ -114,24 +119,19 @@ def empty_capture(radio: RadioDevice, capture: structs.RadioCapture):
 def radio_subclasses(subclass=RadioDevice):
     """returns a list of radio subclasses that have been imported"""
 
-    subs = {
-        c.__name__: c
-        for c in subclass.__subclasses__()
-    }
-    
+    subs = {c.__name__: c for c in subclass.__subclasses__()}
+
     for sub in list(subs.values()):
         subs.update(radio_subclasses(sub))
 
-    subs = {
-        name: c
-        for name, c in subs.items()
-        if not name.startswith('_')
-    }
+    subs = {name: c for name, c in subs.items() if not name.startswith('_')}
 
     return subs
 
 
-def find_radio_cls_by_name(name, parent_cls: Type[RadioDevice]=RadioDevice) -> RadioDevice:
+def find_radio_cls_by_name(
+    name, parent_cls: Type[RadioDevice] = RadioDevice
+) -> RadioDevice:
     """returns a list of radio subclasses that have been imported"""
 
     mapping = radio_subclasses(parent_cls)
@@ -139,10 +139,12 @@ def find_radio_cls_by_name(name, parent_cls: Type[RadioDevice]=RadioDevice) -> R
     if name in mapping:
         return mapping[name]
     else:
-        raise AttributeError(f'invalid driver {repr(name)}. valid names: {tuple(mapping.keys())}')
+        raise AttributeError(
+            f'invalid driver {repr(name)}. valid names: {tuple(mapping.keys())}'
+        )
 
 
-def is_same_resource(r1: str|dict, r2: str|dict):
+def is_same_resource(r1: str | dict, r2: str | dict):
     if isinstance(r1, str):
         return r1 == r2
     else:
@@ -159,12 +161,14 @@ def prepare_gpu(radio, captures, spec, swept_fields):
         # skip priming if a gpu is unavailable
         yield None
         return
-    
+
     from edge_sensor.radio import util
     from edge_sensor import actions
     import labbench as lb
 
-    analyzer = actions._RadioCaptureAnalyzer(radio, analysis_spec=spec, remove_attrs=swept_fields)
+    analyzer = actions._RadioCaptureAnalyzer(
+        radio, analysis_spec=spec, remove_attrs=swept_fields
+    )
 
     with lb.stopwatch('priming gpu'):
         # select the capture with the largest size

@@ -5,9 +5,8 @@ from socket import gethostname
 
 HOSTNAME = gethostname()
 
-@click.command(
-    'Host a server to control the edge sensor.'
-)
+
+@click.command('Host a server to control the edge sensor.')
 @click.argument('host', type=str, default=HOSTNAME)
 @click.option(
     '--port/',

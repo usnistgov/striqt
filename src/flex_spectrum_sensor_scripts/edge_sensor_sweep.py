@@ -4,6 +4,7 @@ import click
 from pathlib import Path
 from typing import Optional
 
+
 @click.command(
     'Run a radio spectrum sensor acquisition sweep according to a configuration file.'
 )
@@ -39,7 +40,9 @@ from typing import Optional
     default=False,
     help='print debug',
 )
-def run(yaml_path: Path, output_path: str, remote:Optional[str], force: bool, verbose: bool):
+def run(
+    yaml_path: Path, output_path: str, remote: Optional[str], force: bool, verbose: bool
+):
     if output_path is None:
         output_path = Path(yaml_path).with_suffix('.zarr.zip')
 

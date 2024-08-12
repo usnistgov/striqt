@@ -9,7 +9,7 @@ def set_cuda_mem_limit(fraction=0.4):
         import cupy
     except ModuleNotFoundError:
         return
-    
+
     import psutil
     from cupy.fft.config import get_plan_cache
 
@@ -41,6 +41,7 @@ def zip_offsets(seq: Iterable[Any], shifts: tuple | list, fill: Any):
 
     return itertools.zip_longest(*iters, fillvalue=fill)
 
+
 @cache
 def import_cupy_with_fallback_warning():
     try:
@@ -49,6 +50,7 @@ def import_cupy_with_fallback_warning():
         # warn only once due to @cache
         import labbench as lb
         import numpy as xp
+
         lb.logger.warning('cupy is not installed; falling back to cpu with numpy')
-    
+
     return xp

@@ -9,6 +9,7 @@ channel_kwarg = attr.method_kwarg.int(
     'channel', min=0, max=1, help='hardware port number'
 )
 
+
 class _AirT7x01B(SoapyRadioDevice):
     resource = attr.value.dict(default={'driver': 'SoapyAIRT'}, inherit=True)
 

@@ -331,7 +331,9 @@ class SoapyRadioDevice(RadioDevice):
             else:
                 raise
 
-    @attr.property.str(sets=False, cache=True, help='radio hardware UUID or serial number')
+    @attr.property.str(
+        sets=False, cache=True, help='radio hardware UUID or serial number'
+    )
     def id(self):
         # this is very radio dependent
         raise NotImplementedError
