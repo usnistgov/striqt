@@ -1,12 +1,12 @@
 from __future__ import annotations
 import xarray as xr
 import matplotlib as mpl
-
+from typing import Optional
 
 def label_axis(
     axis: mpl.axis.Axis,
     a: xr.DataArray | xr.Dataset,
-    dimension: str = None,
+    dimension: Optional[str] = None,
     tick_units=True,
 ):
     """apply axis labeling based on label and unit metadata in the specified dimension of `a`.
