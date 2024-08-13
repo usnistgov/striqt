@@ -2,7 +2,7 @@
 
 from . import source, structs, waveform
 
-from .source import load, dump
+from .io import load, dump
 from .structs import Capture, FilteredCapture
 from .waveform import (
     amplitude_probability_distribution,
