@@ -10,5 +10,4 @@ from .waveform import (
     cyclic_channel_power,
     persistence_spectrum,
     power_time_series,
-    to_analysis_spec,
 )
