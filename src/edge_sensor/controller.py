@@ -102,11 +102,9 @@ class _ServerService(rpyc.Service, SweepController):
         sweep_spec = rpyc.utils.classic.obtain(sweep_spec)
         swept_fields = rpyc.utils.classic.obtain(swept_fields)
 
-        # if calibration is not None:
-        #     print(calibration)
-        #     with lb.stopwatch('obtaining calibration data'):
-        #         print('from ', str(sweep_spec.radio_setup.calibration))
-        #         calibration = rpyc.utils.classic.obtain(calibration)
+        with lb.stopwatch('obtaining calibration data'):
+            print('from ', str(sweep_spec.radio_setup.calibration))
+            calibration = rpyc.utils.classic.obtain(calibration)
 
         descs = [
             f'{i+1}/{len(sweep_spec.captures)} {actions.describe_capture(c, swept_fields)}'
