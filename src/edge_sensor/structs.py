@@ -9,7 +9,6 @@ from channel_analysis.structs import meta, get_attrs
 from pathlib import Path
 from msgspec import to_builtins
 from typing import Annotated as A
-import xarray as xr
 
 
 def make_default_analysis():
@@ -46,7 +45,7 @@ class RadioSetup(msgspec.Struct):
     gps: bool = False
     timebase: Literal['internal', 'gpsdo'] = 'internal'
     cyclic_trigger: Optional[float] = None
-    calibration: Optional[str|xr.Dataset] = None
+    calibration: Optional[str] = None
 
     # external frequency conversion disabled when if_frequency is None
     preselect_if_frequency: A[
