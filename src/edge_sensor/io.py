@@ -35,8 +35,8 @@ def read_yaml_sweep(path: str | Path) -> tuple[Sweep, tuple[str, ...]]:
         cal_path = str(cal_path)
         tree['radio_setup']['calibration'] = cal_path
 
-        # read to validate the data and warm the calibration cache
-        iq_corrections.read_calibration_corrections(cal_path)
+        # # read to validate the data and warm the calibration cache
+        # iq_corrections.read_calibration_corrections(cal_path)
 
     tree['captures'] = [dict(defaults, **c) for c in tree['captures']]
 
