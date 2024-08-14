@@ -23,7 +23,7 @@ radio_setup:
   cyclic_trigger:  # none (eventually: also float)
 
   # # calibration data path
-  calibration_path: # none (eventually: path to cal data)
+  calibration: # none (eventually: path to cal data)
 
 
 # any of these can be overridden by sweep settings

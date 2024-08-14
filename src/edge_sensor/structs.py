@@ -9,6 +9,7 @@ from channel_analysis.structs import meta, get_attrs
 from pathlib import Path
 from msgspec import to_builtins
 from typing import Annotated as A
+import xarray as xr
 
 
 def make_default_analysis():
@@ -40,12 +41,12 @@ class RadioCapture(channel_analysis.Capture):
 class RadioSetup(msgspec.Struct):
     """run-time characteristics of the radio that are invariant during a test"""
 
-    driver: str = 'AirT7201'
+    driver: str = 'Air7201'
     resource: Any = None
     gps: bool = False
     timebase: Literal['internal', 'gpsdo'] = 'internal'
     cyclic_trigger: Optional[float] = None
-    calibration_path: Optional[str] = None
+    calibration: Optional[str|xr.Dataset] = None
 
     # external frequency conversion disabled when if_frequency is None
     preselect_if_frequency: A[
@@ -73,22 +74,3 @@ class Sweep(msgspec.Struct):
     description: Description = msgspec.field(default_factory=Description)
 
 
-def read_yaml_sweep(path: str | Path) -> tuple[Sweep, tuple[str, ...]]:
-    """build a Sweep struct from the contents of specified yaml file"""
-
-    with open(path, 'rb') as fd:
-        text = fd.read()
-
-    # validate first
-    msgspec.yaml.decode(text, type=Sweep, strict=False)
-
-    # build a dict to extract the list of sweep fields and apply defaults
-    tree = msgspec.yaml.decode(text, type=dict, strict=False)
-    sweep_fields = sorted(set.union(*[set(c) for c in tree['captures']]))
-
-    # apply default capture settings
-    defaults = tree['defaults']
-    tree['captures'] = [dict(defaults, **c) for c in tree['captures']]
-
-    run = msgspec.convert(tree, type=Sweep, strict=False)
-    return run, sweep_fields

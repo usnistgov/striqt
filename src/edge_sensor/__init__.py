@@ -7,5 +7,4 @@ del iqwaveform
 
 from . import radio, structs
 
-from .io import load, dump
-from .structs import read_yaml_sweep
+from .io import load, dump, read_yaml_sweep

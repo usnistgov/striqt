@@ -154,8 +154,8 @@ def resampling_correction(
         extend=True,
     )
 
-    if radio.calibration_path:
-        corrections = read_calibration_corrections(radio.calibration_path)
+    if radio.calibration:
+        corrections = read_calibration_corrections(radio.calibration)
         power_scale = float(
             corrections.power_correction.sel(
                 gain=capture.gain,

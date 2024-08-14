@@ -27,7 +27,7 @@ class RadioDevice(lb.Device):
         help='bandwidth of the digital bandpass filter (or None to bypass)',
     )
 
-    calibration_path = attr.value.Path(
+    calibration = attr.value.Path(
         None,
         help='path to a calibration file, or None to skip calibration',
     )

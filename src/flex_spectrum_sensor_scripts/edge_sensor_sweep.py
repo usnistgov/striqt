@@ -48,7 +48,7 @@ def run(
 
     # defer imports to here to make the command line --help snappier
     from edge_sensor.actions import iter_sweep, CAPTURE_DIM
-    from edge_sensor.structs import read_yaml_sweep
+    from edge_sensor import read_yaml_sweep
 
     sweep_spec, sweep_fields = read_yaml_sweep(yaml_path)
 

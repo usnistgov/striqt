@@ -217,7 +217,7 @@ class SoapyRadioDevice(RadioDevice):
 
     def setup(self, radio_config: structs.RadioSetup):
         # TODO: the other parameters too
-        self.calibration_path = radio_config.calibration_path
+        self.calibration = radio_config.calibration
         if radio_config.preselect_if_frequency is not None:
             raise IOError('external frequency conversion is not yet supported')
 
