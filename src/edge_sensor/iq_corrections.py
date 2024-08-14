@@ -172,14 +172,16 @@ def resampling_correction(
     if corrections is None:
         power_scale = None
     else:
-        power_scale = float(
-            corrections.power_correction.sel(
-                gain=capture.gain,
-                lo_shift=capture.lo_shift,
-                sample_rate=capture.sample_rate,
-                drop=True,
-            ).interp(center_frequency=capture.center_frequency)
+        sel = corrections.power_correction.sel(
+            gain=capture.gain,
+            lo_shift=capture.lo_shift,
+            sample_rate=capture.sample_rate,
+            drop=True,
         )
+
+        print(sel)
+
+        power_scale = float(sel.interp(center_frequency=capture.center_frequency))
 
     if fft_size == fft_size_out:
         # nothing to do here
