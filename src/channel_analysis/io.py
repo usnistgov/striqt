@@ -1,10 +1,12 @@
+from __future__ import annotations
 import numpy as np
 import numcodecs
 import xarray as xr
 import zarr
 
 from pathlib import Path
-
+import importlib
+import importlib.resources
 from . import waveform
 
 def dump(path_or_store: str | Path, data: xr.DataArray | xr.Dataset, mode='a'):
