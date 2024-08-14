@@ -120,6 +120,7 @@ def iter_sweep(
         analysis_spec=sweep.channel_analysis,
         remove_attrs=swept_fields,
         extra_attrs=attrs,
+        calibration=calibration
     )
 
     if len(sweep.captures) == 0:
