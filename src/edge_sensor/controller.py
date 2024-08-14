@@ -128,8 +128,11 @@ class _ClientService(rpyc.Service):
 
     def exposed_read_calibration_corrections(self, path: str):
         """return the cache of calibration data on the client side"""
+        print('sending calibration corrections for', path)
         path = rpyc.utils.classic.obtain(path)
-        return rpyc.utils.classic.obtain(iq_corrections.read_calibration_corrections(path))
+        ret = iq_corrections.read_calibration_corrections(path)
+        print('ret: ', ret)
+        return ret
 
 
 def start_server(host=None, port=4567, default_driver: Optional[str] = None):
