@@ -32,9 +32,9 @@ IQ_WAVEFORM_INDEX_NAME = 'iq_index'
 class ChannelAnalysisResult(UserDict):
     """represents the return result from a channel analysis function.
 
-    A method for delayed conversion to `xarray.DataArray` allows cupy to initiate
-    the evaluation of multiple concurrent analyses before materializing
-    them on the CPU.
+    This includes a method to convert to `xarray.DataArray`, which is
+    delayed to leave the GPU time to initiate the evaluation of multiple
+    analyses before we materialize them on the CPU.
     """
 
     data: Array
@@ -414,7 +414,7 @@ def iq_waveform(
     start_time_sec: typing.Optional[float] = None,
     stop_time_sec: typing.Optional[float] = None,
 ) -> callable[[], xr.DataArray]:
-    """package the IQ recording with optional clipping"""
+    """package a clipping of the IQ waveform"""
 
     metadata = {
         'label': 'IQ waveform',
@@ -490,21 +490,6 @@ def ola_filter(
         passband=(-capture.analysis_bandwidth / 2, capture.analysis_bandwidth / 2),
         **kwargs,
     )
-
-
-def to_analysis_spec(
-    obj: str | dict | structs.ChannelAnalysis,
-) -> structs.ChannelAnalysis:
-    """coerces a yaml string or dictionary of dictionaries into channel analysis spec"""
-
-    struct = registry.spec_type()
-
-    if isinstance(obj, (dict, registry.base_struct)):
-        return msgspec.convert(obj, struct)
-    elif isinstance(obj, str):
-        return msgspec.yaml.decode(obj, type=struct)
-    else:
-        return TypeError('unrecognized type')
 
 
 def _evaluate_raw_channel_analysis(
