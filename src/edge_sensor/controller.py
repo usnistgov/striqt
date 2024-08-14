@@ -103,6 +103,7 @@ class _ServerService(rpyc.Service, SweepController):
         swept_fields = rpyc.utils.classic.obtain(swept_fields)
 
         if calibration is not None:
+            print(calibration)
             with lb.stopwatch('obtaining calibration data'):
                 print('from ', str(sweep_spec.radio_setup.calibration))
                 calibration = rpyc.utils.classic.obtain(calibration)
@@ -126,13 +127,13 @@ class _ClientService(rpyc.Service):
         with lb.stopwatch('data transfer', logger_level='debug'):
             return rpyc.utils.classic.obtain(dataset)
 
-    def exposed_read_calibration_corrections(self, path: str):
-        """return the cache of calibration data on the client side"""
-        print('sending calibration corrections for', path)
-        path = rpyc.utils.classic.obtain(path)
-        ret = iq_corrections.read_calibration_corrections(path)
-        print('ret: ', ret)
-        return ret
+    # def exposed_read_calibration_corrections(self, path: str):
+    #     """return the cache of calibration data on the client side"""
+    #     print('sending calibration corrections for', path)
+    #     path = rpyc.utils.classic.obtain(path)
+    #     ret = iq_corrections.read_calibration_corrections(path)
+    #     print('ret: ', ret)
+    #     return ret
 
 
 def start_server(host=None, port=4567, default_driver: Optional[str] = None):
