@@ -16,7 +16,7 @@ from .util import import_cupy_with_fallback_warning
 @lru_cache
 def read_calibration_corrections(path):
     store = zarr.storage.ZipStore(path, mode='r')
-    return xr.open_zarr(store, chunks=False)
+    return xr.open_zarr(store).load()
 
 
 def _save_calibration_corrections(path, corrections: xr.Dataset):
