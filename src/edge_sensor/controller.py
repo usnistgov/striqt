@@ -84,7 +84,7 @@ class SweepController:
         self.close()
 
 
-class _ControllerService(rpyc.Service, SweepController):
+class _ServerService(rpyc.Service, SweepController):
     """API exposed by a server to remote clients"""
 
     def exposed_iter_sweep(
@@ -102,10 +102,10 @@ class _ControllerService(rpyc.Service, SweepController):
         sweep_spec = rpyc.utils.classic.obtain(sweep_spec)
         swept_fields = rpyc.utils.classic.obtain(swept_fields)
 
-        with lb.stopwatch('obtaining calibration data'):
-            print('from ', sweep_spec.radio_setup.calibration)
-            calibration = conn.root.read_calibration_corrections(sweep_spec.radio_setup.calibration)
-            calibration = rpyc.utils.classic.obtain(calibration)
+        if calibration is not None:
+            with lb.stopwatch('obtaining calibration data'):
+                print('from ', str(sweep_spec.radio_setup.calibration))
+                calibration = rpyc.utils.classic.obtain(calibration)
 
         descs = [
             f'{i+1}/{len(sweep_spec.captures)} {actions.describe_capture(c, swept_fields)}'
@@ -144,7 +144,7 @@ def start_server(host=None, port=4567, default_driver: Optional[str] = None):
         default_setup = RadioSetup(driver=default_driver)
 
     t = rpyc.ThreadedServer(
-        _ControllerService(default_setup),
+        _ServerService(default_setup),
         hostname=host,
         port=port,
         protocol_config=_PROTOCOL_CONFIG,

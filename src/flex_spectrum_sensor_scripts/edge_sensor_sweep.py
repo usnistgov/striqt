@@ -53,6 +53,7 @@ def run(
     sweep_spec, sweep_fields = read_yaml_sweep(yaml_path)
 
     from edge_sensor.controller import SweepController, connect
+    from edge_sensor.iq_corrections import read_calibration_corrections
 
     import labbench as lb
     import xarray as xr
@@ -93,7 +94,12 @@ def run(
         conn = connect(host, port=port)
         controller = conn.root
 
-    generator = list(controller.iter_sweep(sweep_spec, sweep_fields))
+    if sweep_spec.radio_setup.calibration is None:
+        calibration = None
+    else:
+        calibration = read_calibration_corrections(sweep_spec.radio_setup.calibration)
+
+    generator = list(controller.iter_sweep(sweep_spec, sweep_fields, calibration))
     data = xr.concat(generator, CAPTURE_DIM)
 
     if force:
