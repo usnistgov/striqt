@@ -27,7 +27,7 @@ def get_attrs(struct: typing.Type[msgspec.Struct], field: str) -> dict[str, str]
         metas = hints[field].__metadata__
     except AttributeError:
         return {}
-    
+
     if len(metas) == 0:
         return {}
     elif len(metas) == 1 and isinstance(metas[0], msgspec.Meta):

@@ -29,9 +29,11 @@ def _y_factor_temperature(
     Toff = Tamb
     Ton = Tref * 10 ** (enr_dB / 10.0)
 
+
     Y = power.sel(noise_diode_enabled=True, drop=True) / power.sel(
         noise_diode_enabled=False, drop=True
     )
+
     T = (Ton - Y * Toff) / (Y - 1)
     T.name = 'T'
     T.attrs = {'units': 'K'}
@@ -49,7 +51,7 @@ def _y_factor_power_corrections(
     power = (
         dataset.power_time_series.sel(power_detector='rms', drop=True)
         .pipe(lambda x: 10 ** (x / 10.0))
-        .median(dim='time_elapsed')
+        .mean(dim='time_elapsed')
     )
     power.name = 'RMS power'
 
@@ -94,6 +96,7 @@ def _y_factor_frequency_response_correction(
     baseband_frequency_response = (fc_T.broadcast_like(all_T) / all_T).median(
         dim='center_frequency'
     )
+
     baseband_frequency_response.name = 'Baseband power scaling correction'
     baseband_frequency_response.attrs = {'units': 'unitless'}
 
