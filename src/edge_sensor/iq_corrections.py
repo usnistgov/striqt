@@ -12,17 +12,6 @@ from . import structs
 from .util import import_cupy_with_fallback_warning
 
 
-@lru_cache
-def read_calibration_corrections(path):
-    store = zarr.storage.ZipStore(path, mode='r')
-    return xr.open_zarr(store)
-
-
-def _save_calibration_corrections(path, corrections: xr.Dataset):
-    with zarr.storage.ZipStore(path, mode='w', compression=0) as store:
-        corrections.to_zarr(store)
-
-
 def _y_factor_temperature(
     power: xr.DataArray, enr_dB: float, Tamb: float, Tref=290.0
 ) -> xr.Dataset:

@@ -5,8 +5,23 @@ from channel_analysis import load, dump
 import msgspec
 from .structs import Sweep
 from pathlib import Path
+from functools import lru_cache
+import zarr
+import xarray as xr
 
 __all__ = ['load', 'dump', 'read_yaml_sweep']
+
+
+@lru_cache
+def read_calibration_corrections(path):
+    store = zarr.storage.ZipStore(path, mode='r')
+    return xr.open_zarr(store)
+
+
+def _save_calibration_corrections(path, corrections: xr.Dataset):
+    with zarr.storage.ZipStore(path, mode='w', compression=0) as store:
+        corrections.to_zarr(store)
+
 
 def read_yaml_sweep(path: str | Path) -> tuple[Sweep, tuple[str, ...]]:
     """build a Sweep struct from the contents of specified yaml file"""
