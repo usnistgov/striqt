@@ -6,8 +6,7 @@ import xarray as xr
 
 from typing import Generator, Optional, Any
 
-from edge_sensor import actions
-from edge_sensor.iq_corrections import update_calibration_corrections
+from edge_sensor import actions, iq_corrections
 from edge_sensor.structs import Sweep, RadioCapture, RadioSetup
 from edge_sensor.radio import find_radio_cls_by_name, RadioDevice
 from edge_sensor.radio.util import is_same_resource
@@ -131,7 +130,6 @@ class _ClientService(rpyc.Service):
 
     def exposed_read_calibration_corrections(self, path: str):
         """return the cache of calibration data on the client side"""
-        from . import iq_corrections
         path = rpyc.utils.classic.obtain(path)
         return rpyc.utils.classic.obtain(iq_corrections.read_calibration_corrections(path))
 
