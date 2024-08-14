@@ -5,22 +5,9 @@ from channel_analysis import load, dump
 import msgspec
 from .structs import Sweep
 from pathlib import Path
-from functools import lru_cache
-import zarr
-import xarray as xr
+from . import iq_corrections
 
 __all__ = ['load', 'dump', 'read_yaml_sweep']
-
-
-@lru_cache
-def read_calibration_corrections(path):
-    store = zarr.storage.ZipStore(path, mode='r')
-    return xr.open_zarr(store)
-
-
-def _save_calibration_corrections(path, corrections: xr.Dataset):
-    with zarr.storage.ZipStore(path, mode='w', compression=0) as store:
-        corrections.to_zarr(store)
 
 
 def read_yaml_sweep(path: str | Path) -> tuple[Sweep, tuple[str, ...]]:
@@ -45,9 +32,14 @@ def read_yaml_sweep(path: str | Path) -> tuple[Sweep, tuple[str, ...]]:
             # take relative paths with respect to a yaml file,
             # not the interpreter working directory
             cal_path = cal_path.relative_to(sweep_parent)
-        tree['radio_setup']['calibration'] = load(cal_path)
+        cal_path = str(cal_path)
+        tree['radio_setup']['calibration'] = cal_path
+
+        # read to validate the data and warm the calibration cache
+        iq_corrections.read_calibration_corrections(cal_path)
 
     tree['captures'] = [dict(defaults, **c) for c in tree['captures']]
 
     run = msgspec.convert(tree, type=Sweep, strict=False)
+
     return run, sweep_fields

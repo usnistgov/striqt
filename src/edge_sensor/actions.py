@@ -51,13 +51,14 @@ class _RadioCaptureAnalyzer:
     analysis_spec: list[ChannelAnalysis]
     remove_attrs: Optional[tuple[str, ...]] = None
     extra_attrs: Optional[dict[str, Any]] = None
+    calibration: Optional[xr.Dataset] = None
 
     def __call__(self, iq: Array, timestamp, capture: RadioCapture) -> xr.Dataset:
         """analyze iq from a capture and package it into a dataset"""
 
         with lb.stopwatch('analyze', logger_level='debug'):
             # for performance, GPU operations are all here in the same thread
-            iq = iq_corrections.resampling_correction(iq, capture, self.radio)
+            iq = iq_corrections.resampling_correction(iq, capture, self.radio, force_calibration=self.calibration)
             coords = self.get_coords(capture, timestamp=timestamp)
 
             analysis = waveform.analyze_by_spec(
@@ -103,11 +104,12 @@ def describe_capture(capture: RadioCapture, swept_fields):
 
 
 def iter_sweep(
-    radio: RadioDevice, sweep: Sweep, swept_fields: list[str]
+    radio: RadioDevice, sweep: Sweep, swept_fields: list[str], calibration: xr.Dataset=None
 ) -> Generator[xr.Dataset]:
     """iterate through sweep captures on the specified radio, yielding a dataset for each"""
 
     attrs = {
+        # metadata fields
         'radio_id': radio.id,
         'radio_setup': to_builtins(sweep.radio_setup),
         'description': to_builtins(sweep.description),

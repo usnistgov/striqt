@@ -47,14 +47,11 @@ def run(
         output_path = Path(yaml_path).with_suffix('.zarr.zip')
 
     # defer imports to here to make the command line --help snappier
-    from edge_sensor.actions import iter_sweep, CAPTURE_DIM
+    from edge_sensor.actions import CAPTURE_DIM
     from edge_sensor import read_yaml_sweep
 
     sweep_spec, sweep_fields = read_yaml_sweep(yaml_path)
 
-    from edge_sensor.radio import find_radio_cls_by_name
-    from edge_sensor.radio.util import prepare_gpu
-    from edge_sensor.util import set_cuda_mem_limit
     from edge_sensor.controller import SweepController, connect
 
     import labbench as lb

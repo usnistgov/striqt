@@ -7,6 +7,7 @@ import xarray as xr
 from typing import Generator, Optional, Any
 
 from edge_sensor import actions
+from edge_sensor.iq_corrections import update_calibration_corrections
 from edge_sensor.structs import Sweep, RadioCapture, RadioSetup
 from edge_sensor.radio import find_radio_cls_by_name, RadioDevice
 from edge_sensor.radio.util import is_same_resource
@@ -74,11 +75,11 @@ class SweepController:
         return radio
 
     def iter_sweep(
-        self, sweep_spec: Sweep, swept_fields: list[str]
+        self, sweep_spec: Sweep, swept_fields: list[str], calibration: xr.Dataset=None
     ) -> Generator[xr.Dataset]:
         radio = self.open_radio(sweep_spec.radio_setup)
         radio.setup(sweep_spec.radio_setup)
-        return actions.iter_sweep(radio, sweep_spec, swept_fields)
+        return actions.iter_sweep(radio, sweep_spec, swept_fields, calibration)
 
     def __del__(self):
         self.close()
@@ -88,16 +89,26 @@ class _ControllerService(rpyc.Service, SweepController):
     """API exposed by a server to remote clients"""
 
     def exposed_iter_sweep(
-        self, sweep_spec: Sweep, swept_fields: list[str]
+        self, sweep_spec: Sweep, swept_fields: list[str], calibration: xr.Dataset=None
     ) -> Generator[xr.Dataset]:
         """wraps actions.sweep_iter to run on the remote server.
 
         rpyc mangles attribute names to access this when remote clients call `conn.root.iter_sweep`.
+
+        The calibrations dictionary maps filenames on the client to calibration data so that it can be
+        accessed by the server.
         """
 
         conn = sweep_spec.____conn__
         sweep_spec = rpyc.utils.classic.obtain(sweep_spec)
         swept_fields = rpyc.utils.classic.obtain(swept_fields)
+
+        if sweep_spec.radio_setup.calibration is None:
+            calibration = None
+        else:
+            with lb.stopwatch('obtaining calibration data'):
+                calibration = conn.root.read_calibration_corrections(sweep_spec.radio_setup.calibration)
+                calibration = rpyc.utils.classic.obtain(calibration)
 
         descs = [
             f'{i+1}/{len(sweep_spec.captures)} {actions.describe_capture(c, swept_fields)}'
@@ -106,7 +117,7 @@ class _ControllerService(rpyc.Service, SweepController):
 
         return (
             conn.root.deliver(r, d)
-            for r, d in zip(self.iter_sweep(sweep_spec, swept_fields), descs)
+            for r, d in zip(self.iter_sweep(sweep_spec, swept_fields, calibration), descs)
         )
 
 
@@ -117,6 +128,12 @@ class _ClientService(rpyc.Service):
             lb.logger.info(f'{description}')
         with lb.stopwatch('data transfer', logger_level='debug'):
             return rpyc.utils.classic.obtain(dataset)
+
+    def exposed_read_calibration_corrections(self, path: str):
+        """return the cache of calibration data on the client side"""
+        from . import iq_corrections
+        path = rpyc.utils.classic.obtain(path)
+        return rpyc.utils.classic.obtain(iq_corrections.read_calibration_corrections(path))
 
 
 def start_server(host=None, port=4567, default_driver: Optional[str] = None):

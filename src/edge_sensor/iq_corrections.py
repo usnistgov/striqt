@@ -6,10 +6,22 @@ import zarr
 import numpy as np
 from scipy.constants import Boltzmann
 from channel_analysis import waveform
+from typing import Optional
 
 from .radio import util
 from . import structs
 from .util import import_cupy_with_fallback_warning
+
+
+@lru_cache
+def read_calibration_corrections(path):
+    store = zarr.storage.ZipStore(path, mode='r')
+    return xr.open_zarr(store)
+
+
+def _save_calibration_corrections(path, corrections: xr.Dataset):
+    with zarr.storage.ZipStore(path, mode='w', compression=0) as store:
+        corrections.to_zarr(store)
 
 
 def _y_factor_temperature(
@@ -107,6 +119,7 @@ def resampling_correction(
     iq: fourier.Array,
     capture: structs.RadioCapture,
     radio: util.RadioBase,
+    force_calibration: Optional[xr.Dataset] = None,
     *,
     axis=0,
 ):
@@ -116,6 +129,7 @@ def resampling_correction(
         iq: the input waveform
         capture: the capture filter specification structure
         radio: the radio instance that performed the capture
+        force_calibration: if specified, this calibration dataset is used rather than loading from file
         axis: the axis of `x` along which to compute the filter
 
     Returns:
@@ -143,8 +157,16 @@ def resampling_correction(
         extend=True,
     )
 
-    if radio.calibration:
+    if force_calibration is not None:
+        corrections = force_calibration
+    elif radio.calibration:
         corrections = read_calibration_corrections(radio.calibration)
+    else:
+        corrections = None
+
+    if corrections is None:
+        power_scale = None
+    else:
         power_scale = float(
             corrections.power_correction.sel(
                 gain=capture.gain,
@@ -153,8 +175,6 @@ def resampling_correction(
                 drop=True,
             ).interp(center_frequency=capture.center_frequency)
         )
-    else:
-        power_scale = None
 
     if fft_size == fft_size_out:
         # nothing to do here
