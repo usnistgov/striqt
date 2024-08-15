@@ -180,7 +180,10 @@ def resampling_correction(
         )
 
         print (sel)
-        power_scale = float(sel.interp(center_frequency=capture.center_frequency))
+        if capture.center_frequency in sel.center_frequency:
+            power_scale = float(sel.sel(center_frequency=capture.center_frequency))
+        else:
+            power_scale = float(sel.interp(center_frequency=capture.center_frequency))
 
     if fft_size == fft_size_out:
         # nothing to do here
