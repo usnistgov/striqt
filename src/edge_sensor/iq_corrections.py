@@ -172,14 +172,14 @@ def resampling_correction(
     if corrections is None:
         power_scale = None
     else:
-        print(corrections.power_correction)
-
         sel = corrections.power_correction.sel(
             gain=capture.gain,
             lo_shift=capture.lo_shift,
             sample_rate=capture.sample_rate,
             drop=True,
         )
+
+        print(sel)
 
         power_scale = float(sel.interp(center_frequency=capture.center_frequency))
 
