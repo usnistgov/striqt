@@ -92,7 +92,7 @@ class _ServerService(rpyc.Service, SweepController):
     ) -> Generator[xr.Dataset]:
         """wraps actions.sweep_iter to run on the remote server.
 
-        rpyc mangles attribute names to access this when remote clients call `conn.root.iter_sweep`.
+        For clients, rpyc exposes this in a connection object `conn` as as `conn.root.iter_sweep`.
 
         The calibrations dictionary maps filenames on the client to calibration data so that it can be
         accessed by the server.
@@ -102,8 +102,7 @@ class _ServerService(rpyc.Service, SweepController):
         sweep_spec = rpyc.utils.classic.obtain(sweep_spec)
         swept_fields = rpyc.utils.classic.obtain(swept_fields)
 
-        with lb.stopwatch('obtaining calibration data'):
-            print('from ', str(sweep_spec.radio_setup.calibration))
+        with lb.stopwatch(f'obtaining calibration data {str(sweep_spec.radio_setup.calibration)}'):
             calibration = rpyc.utils.classic.obtain(calibration)
 
         descs = [
@@ -125,14 +124,6 @@ class _ClientService(rpyc.Service):
         with lb.stopwatch('data transfer', logger_level='debug'):
             return rpyc.utils.classic.obtain(dataset)
 
-    # def exposed_read_calibration_corrections(self, path: str):
-    #     """return the cache of calibration data on the client side"""
-    #     print('sending calibration corrections for', path)
-    #     path = rpyc.utils.classic.obtain(path)
-    #     ret = iq_corrections.read_calibration_corrections(path)
-    #     print('ret: ', ret)
-    #     return ret
-
 
 def start_server(host=None, port=4567, default_driver: Optional[str] = None):
     """start a server to run on a sensor (blocking)"""
@@ -148,7 +139,7 @@ def start_server(host=None, port=4567, default_driver: Optional[str] = None):
         port=port,
         protocol_config=_PROTOCOL_CONFIG,
     )
-    lb.logger.info(f'starting server hosting at {t.host}:{t.port}')
+    lb.logger.info(f'hosting at {t.host}:{t.port}')
     t.start()
 
 

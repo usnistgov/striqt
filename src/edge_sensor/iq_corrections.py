@@ -17,8 +17,6 @@ from .util import import_cupy_with_fallback_warning
 
 @lru_cache
 def read_calibration_corrections(path):
-    # store = zarr.storage.ZipStore(path, mode='r')
-    # return xr.open_zarr(store).load()
     with gzip.GzipFile(path, 'rb') as fd:
         return pickle.load(fd)
 
@@ -26,8 +24,6 @@ def read_calibration_corrections(path):
 def save_calibration_corrections(path, corrections: xr.Dataset):
     with gzip.GzipFile(path, 'wb') as fd:
         pickle.dump(corrections, fd)
-    # with zarr.storage.ZipStore(path, mode='w', compression=0) as store:
-    #     corrections.to_zarr(store)
 
 
 def _y_factor_temperature(
