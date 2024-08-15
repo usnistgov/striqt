@@ -40,7 +40,7 @@ class RadioCapture(channel_analysis.Capture):
 class RadioSetup(msgspec.Struct):
     """run-time characteristics of the radio that are invariant during a test"""
 
-    driver: str = 'Air7201'
+    driver: str = 'Air7201B'
     resource: Any = None
     gps: bool = False
     timebase: Literal['internal', 'gpsdo'] = 'internal'
