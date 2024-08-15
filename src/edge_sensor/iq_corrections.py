@@ -8,6 +8,7 @@ from scipy.constants import Boltzmann
 from channel_analysis import waveform
 from typing import Optional
 import pickle
+import gzip
 
 from .radio import util
 from . import structs
@@ -18,12 +19,12 @@ from .util import import_cupy_with_fallback_warning
 def read_calibration_corrections(path):
     # store = zarr.storage.ZipStore(path, mode='r')
     # return xr.open_zarr(store).load()
-    with open(path, 'rb') as fd:
+    with gzip.GzipFile(path, 'rb') as fd:
         return pickle.load(fd)
 
 
 def save_calibration_corrections(path, corrections: xr.Dataset):
-    with open(path, 'wb') as fd:
+    with gzip.GzipFile(path, 'wb') as fd:
         pickle.dump(corrections, fd)
     # with zarr.storage.ZipStore(path, mode='w', compression=0) as store:
     #     corrections.to_zarr(store)
