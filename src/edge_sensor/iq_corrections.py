@@ -173,6 +173,7 @@ def resampling_correction(
         power_scale = None
     else:
         sel = corrections.power_correction.sel(
+            channel=capture.channel,
             gain=capture.gain,
             lo_shift=capture.lo_shift,
             sample_rate=capture.sample_rate,
