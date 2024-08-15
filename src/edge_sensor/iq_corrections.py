@@ -180,7 +180,7 @@ def resampling_correction(
             drop=True,
         )
 
-        print (sel)
+        save_calibration_corrections('debug.p', sel)
 
         sel = sel.interp(center_frequency=capture.center_frequency)
 
