@@ -179,6 +179,7 @@ def resampling_correction(
             drop=True,
         )
 
+        print (sel)
         if capture.center_frequency in sel.center_frequency:
             power_scale = float(sel.sel(center_frequency=capture.center_frequency))
         else:
