@@ -177,6 +177,8 @@ def resampling_correction(
             gain=capture.gain,
             lo_shift=capture.lo_shift,
             sample_rate=capture.sample_rate,
+            gpu_resample=capture.gpu_resample,
+            analysis_bandwidth=capture.analysis_bandwidth,
             drop=True,
         )
 
