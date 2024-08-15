@@ -173,6 +173,7 @@ def resampling_correction(
     if corrections is None:
         power_scale = None
     else:
+        # these fields must match the calibration conditions exactly
         sel = corrections.power_correction.sel(
             channel=capture.channel,
             gain=capture.gain,
@@ -183,14 +184,10 @@ def resampling_correction(
             drop=True,
         )
 
-        save_calibration_corrections('debug.p', sel)
-
+        # allow interpolation between sample points in these fields
         sel = sel.interp(center_frequency=capture.center_frequency)
 
-        if capture.center_frequency in sel.center_frequency:
-            power_scale = float(sel)
-        else:
-            power_scale = float(sel)
+        power_scale = float(sel)
 
     if fft_size == fft_size_out:
         # nothing to do here
