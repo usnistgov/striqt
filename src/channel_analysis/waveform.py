@@ -53,7 +53,7 @@ class ChannelAnalysisResult(UserDict):
 
 
 @lru_cache
-def equivalent_noise_bandwidth(window: str | tuple[str, float], N):
+def equivalent_noise_bandwidth(window: str | tuple[str, float], N: int):
     """return the equivalent noise bandwidth (ENBW) of a window, in bins"""
     w = iqwaveform.fourier._get_window(window, N)
     return len(w) * np.sum(w**2) / np.sum(w) ** 2
