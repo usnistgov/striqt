@@ -34,20 +34,12 @@ Once a `flex-spectrum-sensor` environment is installed and activated, the follow
 Instructions for the use of these can be found with the `--help` flag. 
 
 ### Module APIs
+This is alpha software. The API may still change without warning.
+
 The repository is organized into two python modules that are importable as [editable installs](https://setuptools.pypa.io/en/latest/userguide/development_mode.html) within the `flex-spectrum-sensor` environment:
 
-* `channel_analysis`: Methods for the analysis of an IQ recording. These use [iqwaveform](https://github.com/dgkuester/iqwaveform) for interchangeable CPU or CUDA GPU compute, depending on whether `numpy` or `cupy` objects are passed in. Results are packaged into [xarray Dataset objects](https://docs.xarray.dev/en/stable/generated/xarray.Dataset.html).
+* `channel_analysis`: Methods for the analysis of an IQ recording. These use [iqwaveform](https://github.com/dgkuester/iqwaveform) and [the python array API](https://data-apis.org/array-api/latest/) for interchangeable CPU or CUDA GPU compute, depending on whether `numpy` or `cupy` objects are passed in. Results are packaged into [xarray Dataset objects](https://docs.xarray.dev/en/stable/generated/xarray.Dataset.html).
 
 * `edge_sensor`: Methods for swept acquisition and analysis of field data with software-defined radios.
 
 Currently, only source-code level documentation is available for these modules.
-
-### Tooling ecosystem and compatibility
-Python abstraction libraries like `SoapySDR` and `Array API` are used to minimize development time across different radio and compute hardware.
-* Low-level DSP is based on [iqwaveform](https://github.com/dgkuester/iqwaveform)
-* The [python array API](https://data-apis.org/array-api/latest/) is used to access `numpy` or `cupy` interchangeably
-* Interactive datasets are built and serialized to disk with [xarray](https://docs.xarray.dev/en/stable/)
-
-### Development status
-This is alpha software. The API changes frequently without warning.
-
