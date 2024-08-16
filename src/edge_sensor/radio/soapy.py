@@ -353,7 +353,7 @@ class SoapyRadioDevice(RadioDevice):
             raise TypeError(f'did not understand response {sr.ret}')
 
     def _prepare_buffer(self, capture: structs.RadioCapture):
-        samples_in, samples_out = get_capture_buffer_sizes(self, capture, include_holdoff=True)
+        samples_in, _ = get_capture_buffer_sizes(self, capture, include_holdoff=True)
 
         # total buffer size for 2 values per IQ sample
         size_in = 2 * samples_in
@@ -390,11 +390,11 @@ class SoapyRadioDevice(RadioDevice):
                 raise IOError(f'Error {sr.ret}: {errToStr(sr.ret)}')
 
     @_verify_channel_setting
-    def _read_stream(self, N, raise_on_overflow=False) -> np.ndarray:
-        timeout = max(round(N / self.backend_sample_rate() * 1.5), 50e-3)
+    def _read_stream(self, samples: int) -> np.ndarray:
+        timeout = max(round(samples / self.backend_sample_rate() * 1.5), 50e-3)
 
         timestamp = None
-        remaining = N
+        remaining = samples
         skip = 0
 
         self.on_overflow = 'ignore'
@@ -402,17 +402,15 @@ class SoapyRadioDevice(RadioDevice):
             # Read the samples from the data buffer
             rx_result = self.backend.readStream(
                 self.rx_stream,
-                [self._inbuf[(N - remaining) * 2 : (N) * 2]],
+                [self._inbuf[(samples - remaining) * 2 : (samples) * 2]],
                 remaining,
                 timeoutUs=int(timeout * 1e6),
             )
 
-            if remaining == N:
+            if remaining == samples and self.periodic_trigger is not None:
                 timestamp = rx_result.timeNs/1e9
                 excess_time = timestamp%self.periodic_trigger
                 skip = round(self.backend_sample_rate() * (self.periodic_trigger-excess_time))
-                print(f'excess time: {excess_time/1e-3} ms')
-                print(f'skip samples: {skip}')
 
             remaining = self._validate_remaining_samples(rx_result, remaining)
             self.on_overflow = 'except'
@@ -429,4 +427,4 @@ class SoapyRadioDevice(RadioDevice):
         # cp.copyto(buff_float32, buff_int16, casting='unsafe')
 
         # 3. last, re-interpret each interleaved (float32 I, float32 Q) as a complex value
-        return self._inbuf.view('complex64')[skip:N+skip]
+        return self._inbuf.view('complex64')[skip:samples+skip]

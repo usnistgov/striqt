@@ -76,9 +76,8 @@ def _get_capture_buffer_sizes_cached(master_clock_rate: float, periodic_trigger:
     Nin = ceil(Nout * analysis_filter['fft_size'] / analysis_filter['fft_size_out'])
 
     if include_holdoff and periodic_trigger is not None:
-        # account for maximum holdoff needed for the periodic trigger
+        # add holdoff samples needed for the periodic trigger
         Nin += ceil(analysis_filter['fs']*periodic_trigger)
-        print(Nin)
 
     if analysis_filter:
         Nin += TRANSIENT_HOLDOFF_WINDOWS * analysis_filter['fft_size']
