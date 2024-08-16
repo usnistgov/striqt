@@ -96,7 +96,7 @@ def _get_capture_buffer_sizes_cached(master_clock_rate: float, periodic_trigger:
 def get_capture_buffer_sizes(radio: RadioDevice, capture=None, include_holdoff=False) -> tuple[int, int]:
     if capture is None:
         capture = radio.get_capture_struct()
-        
+
     return _get_capture_buffer_sizes_cached(
         master_clock_rate=radio._master_clock_rate,
         periodic_trigger = radio.periodic_trigger,
@@ -123,7 +123,7 @@ def empty_capture(radio: RadioDevice, capture: structs.RadioCapture):
 
     xp = import_cupy_with_fallback_warning()
 
-    nin, _ = get_capture_buffer_sizes(radio, capture)
+    nin, _ = get_capture_buffer_sizes(radio, capture, include_holdoff=True)
     radio._prepare_buffer(capture)
     iq = xp.array(radio._inbuf, copy=False).view('complex64')[:nin]
     ret = iq_corrections.resampling_correction(iq, capture, radio)

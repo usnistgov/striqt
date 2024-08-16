@@ -414,7 +414,6 @@ class SoapyRadioDevice(RadioDevice):
                 print(f'excess time: {excess_time/1e-3} ms')
                 print(f'skip samples: {skip}')
 
-
             remaining = self._validate_remaining_samples(rx_result, remaining)
             self.on_overflow = 'except'
 
@@ -430,4 +429,4 @@ class SoapyRadioDevice(RadioDevice):
         # cp.copyto(buff_float32, buff_int16, casting='unsafe')
 
         # 3. last, re-interpret each interleaved (float32 I, float32 Q) as a complex value
-        return self._inbuf.view('complex64')[:N]
+        return self._inbuf.view('complex64')[skip:N+skip]
