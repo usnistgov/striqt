@@ -79,6 +79,7 @@ def _get_capture_buffer_sizes_cached(master_clock_rate: float, periodic_trigger:
     if include_holdoff and periodic_trigger is not None:
         # account for maximum holdoff needed for the periodic trigger
         Nin += np.rint(np.ceil(analysis_filter['fs']*periodic_trigger))
+        print(Nin)
 
     if analysis_filter:
         Nin += TRANSIENT_HOLDOFF_WINDOWS * analysis_filter['fft_size']
