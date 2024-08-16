@@ -404,7 +404,7 @@ class SoapyRadioDevice(RadioDevice):
             # Read the samples from the data buffer
             rx_result = self.backend.readStream(
                 self.rx_stream,
-                [self._inbuf[(samples - remaining) * 2 : (samples) * 2]],
+                [self._inbuf[(samples - remaining + skip) * 2 : (samples + skip) * 2]],
                 remaining,
                 timeoutUs=int(timeout * 1e6),
             )
