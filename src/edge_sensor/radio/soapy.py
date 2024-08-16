@@ -413,7 +413,7 @@ class SoapyRadioDevice(RadioDevice):
                 timestamp = rx_result.timeNs/1e9
                 excess_time = timestamp%self.periodic_trigger
                 skip = round(self.backend_sample_rate() * (self.periodic_trigger-excess_time))
-                remaining += skip
+                remaining = remaining + skip
 
             remaining = self._validate_remaining_samples(rx_result, remaining)
             self.on_overflow = 'except'
