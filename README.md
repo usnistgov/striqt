@@ -31,7 +31,7 @@ Once a `flex-spectrum-sensor` environment is installed and activated, the follow
 
 * `edge-sensor-server`: Serve access to local compute and radio resources for `edge-sensor-sweep` on remote clients.
 
-Detailed usage instructions for each can be discovered with `--help`.
+Detailed usage instructions for each can be discovered with the `--help` flag.
 
 ### Module APIs
 This is alpha software. The API may still change without warning, and only source-code level documentation is available for these modules.
