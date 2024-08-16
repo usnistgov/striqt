@@ -5,7 +5,7 @@ This is a collection of python scripts packaged with underlying libraries for GP
 ### Environment installation
 The source code layout is oriented toward execution of notebooks or scripts in conda environments. Several variants of a `flex-spectrum-sensor` environment are provided here, targeted at different host computing environments.
 
-Each environment incorporates an editable install of the internal python modules implemented in `src/`, and installs . The only supported version of python is 3.9, in order to accommodate broad CUDA platform support. 
+In order to accommodate broad support for legacy CUDA platforms, the required version of python is 3.9.
 
 1. Ensure that `conda` is installed (or `mamba`/`micromamba`, substituted in what follows)
 2. Clone this repository
