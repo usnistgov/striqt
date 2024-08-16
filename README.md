@@ -34,7 +34,7 @@ Once a `flex-spectrum-sensor` environment is installed and activated, the follow
 Instructions for the use of these can be found with the `--help` flag. 
 
 ### Module APIs
-This is alpha software. The API may still change without warning.
+This is alpha software. The API may still change without warning, and only source-code level documentation is available for these modules.
 
 The repository is organized into two python modules that are importable as [editable installs](https://setuptools.pypa.io/en/latest/userguide/development_mode.html) within the `flex-spectrum-sensor` environment:
 
@@ -42,4 +42,4 @@ The repository is organized into two python modules that are importable as [edit
 
 * `edge_sensor`: Methods for swept acquisition and analysis of field data with software-defined radios.
 
-Currently, only source-code level documentation is available for these modules.
+These may be imported from any directory provided that the `flex-spectrum-sensor` environment is activated. They are imported directly from the file tree in the source code repository, so __if your copy of the source code repository is moved, the flex-spectrum-sensor environment should be removed and built again from scratch__.
