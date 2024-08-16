@@ -20,7 +20,7 @@ radio_setup:
   timebase: internal
 
   # start acquisition at a fixed time modulus (requires GPS sync)
-  cyclic_trigger:  # none (eventually: also float)
+  periodic_trigger:  # none (eventually: also float)
 
   # # calibration data path
   calibration: # none (eventually: path to cal data)

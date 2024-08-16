@@ -44,7 +44,7 @@ class RadioSetup(msgspec.Struct):
     resource: Any = None
     gps: bool = False
     timebase: Literal['internal', 'gpsdo'] = 'internal'
-    cyclic_trigger: Optional[float] = None
+    periodic_trigger: Optional[float] = None
     calibration: Optional[str] = None
 
     # external frequency conversion disabled when if_frequency is None

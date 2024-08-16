@@ -78,6 +78,12 @@ class SoapyRadioDevice(RadioDevice):
         help='configure behavior on receive buffer overflow',
     )
 
+    periodic_trigger = attr.value.float(
+        None,
+        allow_none=True,
+        help='if specified, acquisition start times will begin at even multiples of this'
+    )
+
     _downsample = attr.value.float(1.0, min=1, help='backend_sample_rate/sample_rate')
 
     lo_offset = attr.value.float(
@@ -218,6 +224,7 @@ class SoapyRadioDevice(RadioDevice):
     def setup(self, radio_config: structs.RadioSetup):
         # TODO: the other parameters too
         self.calibration = radio_config.calibration
+        self.periodic_trigger = radio_config.periodic_trigger
         if radio_config.preselect_if_frequency is not None:
             raise IOError('external frequency conversion is not yet supported')
 
@@ -420,19 +427,29 @@ class SoapyRadioDevice(RadioDevice):
     def _read_stream(self, N, raise_on_overflow=False) -> np.ndarray:
         timeout = max(round(N / self.backend_sample_rate() * 1.5), 50e-3)
 
+        timestamp = None
         remaining = N
+        skip = 0
 
         self.on_overflow = 'ignore'
         while remaining > 0:
             # Read the samples from the data buffer
-            sr = self.backend.readStream(
+            rx_result = self.backend.readStream(
                 self.rx_stream,
                 [self._inbuf[(N - remaining) * 2 : (N) * 2]],
                 remaining,
                 timeoutUs=int(timeout * 1e6),
             )
 
-            remaining = self._validate_remaining_samples(sr, remaining)
+            if remaining == N:
+                timestamp = rx_result.timeNs/1e9
+                excess_time = timestamp%self.periodic_trigger
+                skip = round(self.backend_sample_rate * (self.periodic_trigger-excess_time))
+                print(f'excess time: {excess_time/1e-3} ms')
+                print(f'skip samples: {skip}')
+
+
+            remaining = self._validate_remaining_samples(rx_result, remaining)
             self.on_overflow = 'except'
 
         self._stream_stats['total'] += 1
