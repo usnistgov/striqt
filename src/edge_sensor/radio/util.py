@@ -4,6 +4,7 @@ from iqwaveform import fourier
 from iqwaveform.power_analysis import isroundmod
 from typing import Type
 import contextlib
+from math import ceil
 
 import numpy as np
 
@@ -72,13 +73,11 @@ def _get_capture_buffer_sizes_cached(master_clock_rate: float, periodic_trigger:
 
     _, _, analysis_filter = design_capture_filter(master_clock_rate, capture)
 
-    Nin = round(
-        np.ceil(Nout * analysis_filter['fft_size'] / analysis_filter['fft_size_out'])
-    )
+    Nin = ceil(Nout * analysis_filter['fft_size'] / analysis_filter['fft_size_out'])
 
     if include_holdoff and periodic_trigger is not None:
         # account for maximum holdoff needed for the periodic trigger
-        Nin += np.rint(np.ceil(analysis_filter['fs']*periodic_trigger))
+        Nin += ceil(analysis_filter['fs']*periodic_trigger)
         print(Nin)
 
     if analysis_filter:
