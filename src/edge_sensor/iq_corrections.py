@@ -241,9 +241,10 @@ def resampling_correction(
             axis=axis,
         )
 
+    out_size = round(capture.duration * capture.sample_rate)
     iq = fourier.istft(
         xstft,
-        iq.shape[axis],
+        out_size,
         fft_size=fft_size_out,
         noverlap=noverlap,
         out=buf,
@@ -253,4 +254,4 @@ def resampling_correction(
     if power_scale is not None:
         iq *= np.sqrt(power_scale)
 
-    return iq[util.TRANSIENT_HOLDOFF_WINDOWS * fft_size_out :]
+    return iq
