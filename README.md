@@ -1,4 +1,4 @@
-This is a collection of python scripts packaged with underlying libraries for GPU-accelerated real-time RF environmental monitoring with support for software-defined radios. Baseband signal processing may be performed interchangeably on either CPU or CUDA GPUs.
+This is a collection of python modules and scripts for GPU-accelerated RF environmental monitoring and analysis with software-defined radios. Baseband signal processing may be performed interchangeably on either CPU or CUDA GPUs.
 
 ## Usage
 
