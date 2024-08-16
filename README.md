@@ -1,18 +1,11 @@
 This is a collection of python scripts packaged with underlying libraries for GPU-accelerated real-time RF environmental monitoring with support for software-defined radios. Baseband signal processing may be performed interchangeably on either CPU or CUDA GPUs.
 
-### Tooling ecosystem and compatibility
-Python abstraction libraries like `SoapySDR` and `Array API` are used to minimize development time across different radio and compute hardware.
-* Low-level DSP is based on [iqwaveform](https://github.com/dgkuester/iqwaveform)
-* The [python array API](https://data-apis.org/array-api/latest/) is used to access `numpy` or `cupy` interchangeably
-* Interactive datasets are built and serialized to disk with [xarray](https://docs.xarray.dev/en/stable/)
+## Usage
 
-### Development status
-This is alpha software. The API changes frequently without warning.
+### Environment installation
+The source code layout is oriented toward execution of notebooks or scripts in conda environments. Several variants of a `flex-spectrum-sensor` environment are provided here, targeted at different host computing environments.
 
-### Environment setup
-The source code layout is oriented toward execution of notebooks or scripts in conda environments.
-
-The following setup procedure creates a python environment tailored based on hardware. This includes an editable install of the internal python modules implemented in `src/`. The only supported version of python is 3.9, in order to accommodate broad CUDA platform support. 
+Each environment incorporates an editable install of the internal python modules implemented in `src/`, and installs . The only supported version of python is 3.9, in order to accommodate broad CUDA platform support. 
 
 1. Ensure that `conda` is installed (or `mamba`/`micromamba`, substituted in what follows)
 2. Clone this repository
@@ -27,7 +20,34 @@ The following setup procedure creates a python environment tailored based on har
 4. Activate:
     - IDE: select the `flex-spectrum-sensor` virtual environment 
     - Command line: `conda activate flex-spectrum-sensor`
-  
-### Usage
-The following scripts can be run from any of the `environments/edge-*` environments, which install all scripts into the command line path. 
-* `edge-sensor-sweep`: evaluate baseband captures of wireless channels across multiple or repeated frequencies, gains, etc
+
+
+### Command line
+Once a `flex-spectrum-sensor` environment is installed and activated, the following scripts are installed into the environment `PATH`, so they can be run from any working directory.
+
+* `edge-sensor-sweep`: Acquire and analyze a capture sequence (sweep) according to a YAML input file specification.
+  Output datasets are serialized to `zarr` with `xarray`.
+  This can run locally or on a remote host (`-r` argument) running `edge-sensor-server`.
+
+* `edge-sensor-server`: Serve access to local compute and radio resources for `edge-sensor-sweep` on remote clients.
+
+Instructions for the use of these can be found with the `--help` flag. 
+
+### Module APIs
+The repository is organized into two python modules that are importable as [editable installs](https://setuptools.pypa.io/en/latest/userguide/development_mode.html) within the `flex-spectrum-sensor` environment:
+
+* `channel_analysis`: Methods for the analysis of an IQ recording. These use [iqwaveform](https://github.com/dgkuester/iqwaveform) for interchangeable CPU or CUDA GPU compute, depending on whether `numpy` or `cupy` objects are passed in. Results are packaged into [xarray Dataset objects](https://docs.xarray.dev/en/stable/generated/xarray.Dataset.html).
+
+* `edge_sensor`: Methods for swept acquisition and analysis of field data with software-defined radios.
+
+Currently, only source-code level documentation is available for these modules.
+
+### Tooling ecosystem and compatibility
+Python abstraction libraries like `SoapySDR` and `Array API` are used to minimize development time across different radio and compute hardware.
+* Low-level DSP is based on [iqwaveform](https://github.com/dgkuester/iqwaveform)
+* The [python array API](https://data-apis.org/array-api/latest/) is used to access `numpy` or `cupy` interchangeably
+* Interactive datasets are built and serialized to disk with [xarray](https://docs.xarray.dev/en/stable/)
+
+### Development status
+This is alpha software. The API changes frequently without warning.
+
