@@ -63,9 +63,7 @@ def warm_resampler_design_cache(
 
 
 @lru_cache(30000)
-def get_capture_buffer_sizes(
-    master_clock_rate: float, capture: structs.RadioCapture
-) -> tuple[int, int]:
+def _get_capture_buffer_sizes_cached(master_clock_rate: float, periodic_trigger:float|None, capture: structs.RadioCapture, include_holdoff: bool=False):
     if isroundmod(capture.duration * capture.sample_rate, 1):
         Nout = round(capture.duration * capture.sample_rate)
     else:
@@ -77,6 +75,10 @@ def get_capture_buffer_sizes(
     Nin = round(
         np.ceil(Nout * analysis_filter['fft_size'] / analysis_filter['fft_size_out'])
     )
+
+    if include_holdoff and periodic_trigger is not None:
+        # account for maximum holdoff needed for the periodic trigger
+        Nin += np.rint(np.ceil(analysis_filter['fs']*periodic_trigger))
 
     if analysis_filter:
         Nin += TRANSIENT_HOLDOFF_WINDOWS * analysis_filter['fft_size']
@@ -91,11 +93,24 @@ def get_capture_buffer_sizes(
     return Nin, Nout
 
 
+def get_capture_buffer_sizes(radio: RadioDevice, capture=None, include_holdoff=False) -> tuple[int, int]:
+    if capture is None:
+        capture = radio.get_capture_struct()
+        
+    return _get_capture_buffer_sizes_cached(
+        master_clock_rate=radio._master_clock_rate,
+        periodic_trigger = radio.periodic_trigger,
+        capture=capture,
+        include_holdoff=include_holdoff
+    )
+
+
+
 def find_largest_capture(radio, captures):
     from edge_sensor.radio import soapy
 
     sizes = [
-        sum(soapy.get_capture_buffer_sizes(radio._master_clock_rate, c))
+        sum(soapy.get_capture_buffer_sizes(radio, c))
         for c in captures
     ]
 
@@ -108,7 +123,7 @@ def empty_capture(radio: RadioDevice, capture: structs.RadioCapture):
 
     xp = import_cupy_with_fallback_warning()
 
-    nin, _ = get_capture_buffer_sizes(radio._master_clock_rate, capture)
+    nin, _ = get_capture_buffer_sizes(radio, capture)
     radio._prepare_buffer(capture)
     iq = xp.array(radio._inbuf, copy=False).view('complex64')[:nin]
     ret = iq_corrections.resampling_correction(iq, capture, radio)

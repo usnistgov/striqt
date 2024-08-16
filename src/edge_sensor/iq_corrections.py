@@ -141,7 +141,7 @@ def resampling_correction(
     xp = import_cupy_with_fallback_warning()
 
     # create a buffer large enough for post-processing seeded with a copy of the IQ
-    _, buf_size = util.get_capture_buffer_sizes(radio._master_clock_rate, capture)
+    _, buf_size = util.get_capture_buffer_sizes(radio, capture)
     buf = xp.empty(buf_size, dtype='complex64')
     iq = buf[: iq.size] = xp.asarray(iq)
 

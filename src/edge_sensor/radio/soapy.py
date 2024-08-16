@@ -78,12 +78,6 @@ class SoapyRadioDevice(RadioDevice):
         help='configure behavior on receive buffer overflow',
     )
 
-    periodic_trigger = attr.value.float(
-        None,
-        allow_none=True,
-        help='if specified, acquisition start times will begin at even multiples of this'
-    )
-
     _downsample = attr.value.float(1.0, min=1, help='backend_sample_rate/sample_rate')
 
     lo_offset = attr.value.float(
@@ -235,7 +229,7 @@ class SoapyRadioDevice(RadioDevice):
         next_capture: Union[structs.RadioCapture, None] = None,
         correction: bool = True,
     ) -> tuple[np.array, pd.Timestamp]:
-        count, _ = get_capture_buffer_sizes(self._master_clock_rate, capture)
+        count, _ = get_capture_buffer_sizes(self, capture)
 
         with lb.stopwatch('acquire', logger_level='debug'):
             self.arm(capture)
@@ -295,32 +289,6 @@ class SoapyRadioDevice(RadioDevice):
             self.center_frequency(capture.center_frequency)
 
         self.analysis_bandwidth = capture.analysis_bandwidth
-
-    def get_capture_struct(self) -> structs.RadioCapture:
-        """generate the currently armed capture configuration for the specified channel"""
-        if self.lo_offset == 0:
-            lo_shift = 'none'
-        elif self.lo_offset < 0:
-            lo_shift = 'left'
-        elif self.lo_offset > 0:
-            lo_shift = 'right'
-
-        return structs.RadioCapture(
-            # RF and leveling
-            center_frequency=self.center_frequency(),
-            channel=self.channel(),
-            gain=self.gain(),
-            # acquisition
-            duration=self.duration,
-            sample_rate=self.sample_rate(),
-            # filtering and resampling
-            analysis_bandwidth=self.analysis_bandwidth,
-            lo_shift=lo_shift,
-            # future: external frequency conversion support
-            # if_frequency=None,
-            # lo_gain=0,
-            # rf_gain=0,
-        )
 
     def close(self):
         try:
@@ -385,9 +353,7 @@ class SoapyRadioDevice(RadioDevice):
             raise TypeError(f'did not understand response {sr.ret}')
 
     def _prepare_buffer(self, capture: structs.RadioCapture):
-        samples_in, samples_out = get_capture_buffer_sizes(
-            self._master_clock_rate, capture
-        )
+        samples_in, samples_out = get_capture_buffer_sizes(self, capture, include_holdoff=True)
 
         # total buffer size for 2 values per IQ sample
         size_in = 2 * samples_in
