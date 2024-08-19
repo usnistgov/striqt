@@ -120,6 +120,7 @@ def design_warmup_sweep(sweep: structs.Sweep, skip: set[structs.RadioCapture]) -
     analysis slowdowns during sweeps.
     """
 
+    raise KeyboardInterrupt('what')
     FIELDS = ['duration', 'sample_rate', 'analysis_bandwidth', 'lo_shift', 'gpu_resample', 'lo_filter']
 
     sweep_map = structs.to_builtins(sweep)
@@ -136,7 +137,6 @@ def design_warmup_sweep(sweep: structs.Sweep, skip: set[structs.RadioCapture]) -
         for d in capture_maps
     }
 
-    raise KeyboardInterrupt(f'identified {len(warmup_captures)} potential warmup captures')
 
     sweep_map['captures'] = warmup_captures - skip
     lb.logger.info(f'kept {len(sweep_map["captures"])} new warmup captures')
