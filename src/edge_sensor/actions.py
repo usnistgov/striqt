@@ -136,8 +136,7 @@ def design_warmup_sweep(sweep: structs.Sweep, skip: set[structs.RadioCapture]) -
         for d in capture_maps
     }
 
-    print('***', len(warmup_captures))
-    lb.logger.info(f'identified {len(warmup_captures)} potential warmup captures')
+    raise KeyboardInterrupt(f'identified {len(warmup_captures)} potential warmup captures')
 
     sweep_map['captures'] = warmup_captures - skip
     lb.logger.info(f'kept {len(sweep_map["captures"])} new warmup captures')
