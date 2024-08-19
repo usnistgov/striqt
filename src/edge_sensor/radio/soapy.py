@@ -299,7 +299,7 @@ class SoapyRadioDevice(RadioDevice):
             pass
         except TypeError:
             # self.backend is None
-            return
+            pass
 
         try:
             self.backend.closeStream(self.rx_stream)
@@ -309,6 +309,10 @@ class SoapyRadioDevice(RadioDevice):
                 pass
             else:
                 raise
+        except TypeError:
+            # self.backend is None
+            pass
+
 
     @attr.property.str(
         sets=False, cache=True, help='radio hardware UUID or serial number'

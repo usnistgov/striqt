@@ -101,6 +101,7 @@ def run(
 
     warmup_iter = controller.iter_warmup(sweep_spec, sweep_fields, calibration)
     if warmup_iter != []:
+        print(warmup_iter)
         lb.logger.info('warming GPU')
         warmup_iter = list(warmup_iter) # consume iterator
         lb.logger.info('warmup captures finished')
