@@ -39,7 +39,7 @@ class RadioDevice(lb.Device):
     periodic_trigger = attr.value.float(
         None,
         allow_none=True,
-        help='if specified, acquisition start times will begin at even multiples of this'
+        help='if specified, acquisition start times will begin at even multiples of this',
     )
 
     @attr.property.str(sets=False, cache=True, help='unique radio hardware identifier')
@@ -49,7 +49,7 @@ class RadioDevice(lb.Device):
     @property
     def _master_clock_rate(self):
         return type(self).backend_sample_rate.max
-    
+
     def get_capture_struct(self) -> structs.RadioCapture:
         """generate the currently armed capture configuration for the specified channel"""
         if self.lo_offset == 0:

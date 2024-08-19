@@ -9,6 +9,7 @@ import importlib
 import importlib.resources
 from . import waveform
 
+
 def dump(path_or_store: str | Path, data: xr.DataArray | xr.Dataset, mode='a'):
     """serialize a dataset into a zarr directory structure"""
 
@@ -35,7 +36,7 @@ def dump(path_or_store: str | Path, data: xr.DataArray | xr.Dataset, mode='a'):
         # follow existing encodings if appending
         encodings = None
     else:
-        # skip compression of iq waveforms, which is slow and 
+        # skip compression of iq waveforms, which is slow and
         # ineffective due to high entropy
         encodings = {
             name: {'compressor': compressor}

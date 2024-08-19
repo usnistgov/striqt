@@ -32,7 +32,6 @@ def _y_factor_temperature(
     Toff = Tamb
     Ton = Tref * 10 ** (enr_dB / 10.0)
 
-
     Y = power.sel(noise_diode_enabled=True, drop=True) / power.sel(
         noise_diode_enabled=False, drop=True
     )

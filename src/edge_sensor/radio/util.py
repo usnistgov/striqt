@@ -64,7 +64,12 @@ def warm_resampler_design_cache(
 
 
 @lru_cache(30000)
-def _get_capture_buffer_sizes_cached(master_clock_rate: float, periodic_trigger:float|None, capture: structs.RadioCapture, include_holdoff: bool=False):
+def _get_capture_buffer_sizes_cached(
+    master_clock_rate: float,
+    periodic_trigger: float | None,
+    capture: structs.RadioCapture,
+    include_holdoff: bool = False,
+):
     if isroundmod(capture.duration * capture.sample_rate, 1):
         Nout = round(capture.duration * capture.sample_rate)
     else:
@@ -77,7 +82,7 @@ def _get_capture_buffer_sizes_cached(master_clock_rate: float, periodic_trigger:
 
     if include_holdoff and periodic_trigger is not None:
         # add holdoff samples needed for the periodic trigger
-        Nin += ceil(analysis_filter['fs']*periodic_trigger)
+        Nin += ceil(analysis_filter['fs'] * periodic_trigger)
 
     if analysis_filter:
         Nin += TRANSIENT_HOLDOFF_WINDOWS * analysis_filter['fft_size']
@@ -92,26 +97,24 @@ def _get_capture_buffer_sizes_cached(master_clock_rate: float, periodic_trigger:
     return Nin, Nout
 
 
-def get_capture_buffer_sizes(radio: RadioDevice, capture=None, include_holdoff=False) -> tuple[int, int]:
+def get_capture_buffer_sizes(
+    radio: RadioDevice, capture=None, include_holdoff=False
+) -> tuple[int, int]:
     if capture is None:
         capture = radio.get_capture_struct()
 
     return _get_capture_buffer_sizes_cached(
         master_clock_rate=radio._master_clock_rate,
-        periodic_trigger = radio.periodic_trigger,
+        periodic_trigger=radio.periodic_trigger,
         capture=capture,
-        include_holdoff=include_holdoff
+        include_holdoff=include_holdoff,
     )
-
 
 
 def find_largest_capture(radio, captures):
     from edge_sensor.radio import soapy
 
-    sizes = [
-        sum(soapy.get_capture_buffer_sizes(radio, c))
-        for c in captures
-    ]
+    sizes = [sum(soapy.get_capture_buffer_sizes(radio, c)) for c in captures]
 
     return captures[sizes.index(max(sizes))]
 

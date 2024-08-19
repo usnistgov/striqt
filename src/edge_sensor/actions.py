@@ -1,6 +1,6 @@
 from __future__ import annotations
 from .radio import RadioDevice
-from .structs import Sweep, RadioCapture, get_attrs, to_builtins
+from .structs import Sweep, RadioCapture, get_attrs, to_builtins, describe_capture
 from .util import zip_offsets
 from . import iq_corrections
 from channel_analysis.structs import ChannelAnalysis
@@ -13,7 +13,6 @@ from channel_analysis import waveform
 from functools import lru_cache
 from dataclasses import dataclass
 from typing import Optional, Generator, Any
-import pickle
 
 CAPTURE_DIM = 'capture'
 TIMESTAMP_NAME = 'timestamp'
@@ -58,7 +57,9 @@ class _RadioCaptureAnalyzer:
 
         with lb.stopwatch('analyze', logger_level='debug'):
             # for performance, GPU operations are all here in the same thread
-            iq = iq_corrections.resampling_correction(iq, capture, self.radio, force_calibration=self.calibration)
+            iq = iq_corrections.resampling_correction(
+                iq, capture, self.radio, force_calibration=self.calibration
+            )
             coords = self.get_coords(capture, timestamp=timestamp)
 
             analysis = waveform.analyze_by_spec(
@@ -99,14 +100,31 @@ class _RadioCaptureAnalyzer:
         return coords
 
 
-def describe_capture(capture: RadioCapture, swept_fields):
-    return ', '.join([f'{k}={getattr(capture, k)}' for k in swept_fields])
-
-
 def iter_sweep(
-    radio: RadioDevice, sweep: Sweep, swept_fields: list[str], calibration: xr.Dataset=None
-) -> Generator[xr.Dataset]:
-    """iterate through sweep captures on the specified radio, yielding a dataset for each"""
+    radio: RadioDevice,
+    sweep: Sweep,
+    swept_fields: list[str],
+    calibration: xr.Dataset = None,
+    always_yield=False,
+) -> Generator[xr.Dataset | None]:
+    """iterate through sweep captures on the specified radio, yielding a dataset for each.
+
+    Normally, for performance reasons, the first iteration consists of
+    `(capture 1) ➔ concurrent(capture 2, analysis 1) ➔ (yield analysis 1)`.
+    The `always_yield` argument is provided to allow synchronization of hardware between capture 1 and capture 2:
+    `(capture 1) ➔ yield None ➔ concurrent(capture 2, analysis 1) ➔ (yield analysis 1)`.
+    Added checks are needed to filter out the `None` before recording data.
+
+    Args:
+        radio: the device that runs the sweep
+        sweep: the specification that configures the sweep
+        swept_fields: the list of fields that were explicitly specified in the sweep
+        calibration: if specified, the calibration data used to scale the output from full-scale to physical power
+        always_yield: if `True`, yield `None` before the second capture
+
+    Returns:
+        An iterator of analyzed data
+    """
 
     attrs = {
         # metadata fields
@@ -120,7 +138,7 @@ def iter_sweep(
         analysis_spec=sweep.channel_analysis,
         remove_attrs=swept_fields,
         extra_attrs=attrs,
-        calibration=calibration
+        calibration=calibration,
     )
 
     if len(sweep.captures) == 0:
@@ -156,6 +174,8 @@ def iter_sweep(
         if 'analyze' in ret:
             # this is what is made available for
             yield ret['analyze']
+        elif always_yield:
+            yield None
 
         if 'acquire' in ret:
             iq, timestamp = ret['acquire']

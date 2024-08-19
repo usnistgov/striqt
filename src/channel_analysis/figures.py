@@ -3,6 +3,7 @@ import xarray as xr
 import matplotlib as mpl
 from typing import Optional
 
+
 def label_axis(
     axis: mpl.axis.Axis,
     a: xr.DataArray | xr.Dataset,

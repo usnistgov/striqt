@@ -15,6 +15,10 @@ def make_default_analysis():
     return channel_analysis.waveform.registry.spec_type()()
 
 
+def describe_capture(capture: RadioCapture, swept_fields):
+    return ', '.join([f'{k}={getattr(capture, k)}' for k in swept_fields])
+
+
 _TShift = Literal['left', 'right', 'none']
 
 
@@ -71,5 +75,3 @@ class Sweep(msgspec.Struct):
     defaults: RadioCapture = msgspec.field(default_factory=RadioCapture)
     channel_analysis: Any = msgspec.field(default_factory=make_default_analysis)
     description: Description = msgspec.field(default_factory=Description)
-
-

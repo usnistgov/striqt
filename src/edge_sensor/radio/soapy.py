@@ -195,7 +195,7 @@ class SoapyRadioDevice(RadioDevice):
         else:
             self.backend.setGain(SOAPY_SDR_TX, channel, gain)
 
-    def open(self):            
+    def open(self):
         self._logger.info('connecting')
         self.backend = SoapySDR.Device(self.resource)
         self._logger.info('connected')
@@ -410,11 +410,14 @@ class SoapyRadioDevice(RadioDevice):
             )
 
             if timestamp is None:
-                timestamp = rx_result.timeNs/1e9
+                timestamp = rx_result.timeNs / 1e9
 
-                if self.periodic_trigger is not None:                
-                    excess_time = timestamp%self.periodic_trigger
-                    skip = round(self.backend_sample_rate() * (self.periodic_trigger-excess_time))
+                if self.periodic_trigger is not None:
+                    excess_time = timestamp % self.periodic_trigger
+                    skip = round(
+                        self.backend_sample_rate()
+                        * (self.periodic_trigger - excess_time)
+                    )
                     remaining = remaining + skip
 
             remaining = self._validate_remaining_samples(rx_result, remaining)
@@ -432,4 +435,4 @@ class SoapyRadioDevice(RadioDevice):
         # cp.copyto(buff_float32, buff_int16, casting='unsafe')
 
         # 3. last, re-interpret each interleaved (float32 I, float32 Q) as a complex value
-        return self._inbuf.view('complex64')[skip:samples+skip]
+        return self._inbuf.view('complex64')[skip : samples + skip]

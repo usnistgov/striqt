@@ -7,7 +7,7 @@ import xarray as xr
 from typing import Generator, Optional, Any
 
 from edge_sensor import actions, iq_corrections
-from edge_sensor.structs import Sweep, RadioCapture, RadioSetup
+from edge_sensor.structs import Sweep, RadioCapture, RadioSetup, describe_capture
 from edge_sensor.radio import find_radio_cls_by_name, RadioDevice
 from edge_sensor.radio.util import is_same_resource
 from edge_sensor.util import set_cuda_mem_limit
@@ -53,9 +53,7 @@ class SweepController:
             resource = radio_setup.resource
 
         if driver_name in self.radios and self.radios[driver_name].isopen:
-            if is_same_resource(
-                self.radios[driver_name].resource, resource
-            ):
+            if is_same_resource(self.radios[driver_name].resource, resource):
                 lb.logger.debug(f'reusing open {repr(driver_name)}')
                 return self.radios[driver_name]
             else:
@@ -74,11 +72,17 @@ class SweepController:
         return radio
 
     def iter_sweep(
-        self, sweep_spec: Sweep, swept_fields: list[str], calibration: xr.Dataset=None
+        self,
+        sweep_spec: Sweep,
+        swept_fields: list[str],
+        calibration: xr.Dataset = None,
+        always_yield: bool = False,
     ) -> Generator[xr.Dataset]:
         radio = self.open_radio(sweep_spec.radio_setup)
         radio.setup(sweep_spec.radio_setup)
-        return actions.iter_sweep(radio, sweep_spec, swept_fields, calibration)
+        return actions.iter_sweep(
+            radio, sweep_spec, swept_fields, calibration, always_yield
+        )
 
     def __del__(self):
         self.close()
@@ -88,7 +92,11 @@ class _ServerService(rpyc.Service, SweepController):
     """API exposed by a server to remote clients"""
 
     def exposed_iter_sweep(
-        self, sweep_spec: Sweep, swept_fields: list[str], calibration: xr.Dataset=None
+        self,
+        sweep_spec: Sweep,
+        swept_fields: list[str],
+        calibration: xr.Dataset = None,
+        always_yield: bool = False,
     ) -> Generator[xr.Dataset]:
         """wraps actions.sweep_iter to run on the remote server.
 
@@ -102,21 +110,24 @@ class _ServerService(rpyc.Service, SweepController):
         sweep_spec = rpyc.utils.classic.obtain(sweep_spec)
         swept_fields = rpyc.utils.classic.obtain(swept_fields)
 
-        with lb.stopwatch(f'obtaining calibration data {str(sweep_spec.radio_setup.calibration)}'):
+        with lb.stopwatch(
+            f'obtaining calibration data {str(sweep_spec.radio_setup.calibration)}'
+        ):
             calibration = rpyc.utils.classic.obtain(calibration)
 
-        descs = [
-            f'{i+1}/{len(sweep_spec.captures)} {actions.describe_capture(c, swept_fields)}'
+        descs = (
+            f'{i+1}/{len(sweep_spec.captures)} {describe_capture(c, swept_fields)}'
             for i, c in enumerate(sweep_spec.captures)
-        ]
-
-        return (
-            conn.root.deliver(r, d)
-            for r, d in zip(self.iter_sweep(sweep_spec, swept_fields, calibration), descs)
         )
+
+        generator = self.iter_sweep(sweep_spec, swept_fields, calibration, always_yield)
+
+        return (conn.root.deliver(r, d) for r, d in zip(generator, descs))
 
 
 class _ClientService(rpyc.Service):
+    """API exposed to a server by clients"""
+
     def exposed_deliver(self, dataset: xr.Dataset, description: Optional[str] = None):
         """serialize an object back to the client via pickling"""
         if description is not None:
