@@ -4,6 +4,7 @@ import contextlib
 from math import ceil
 
 import labbench as lb
+import frozendict
 
 from .. import structs
 from ..util import import_cupy_with_fallback_warning

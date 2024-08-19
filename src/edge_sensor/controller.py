@@ -28,7 +28,7 @@ class SweepController:
 
     def __init__(self, radio_setup: RadioSetup = None):
         self.radios: dict[str, RadioDevice] = {}
-        self.prepared_sweeps: dict[str, RadioCapture] = {}
+        self.warmed_captures: set[RadioCapture] = set()
         self.handlers: dict[rpyc.Connection, Any] = {}
         util.set_cuda_mem_limit()
 
@@ -75,6 +75,15 @@ class SweepController:
 
         return radio
 
+    def iter_warmup(self, sweep_spec: Sweep, swept_fields: list[str], calibration):
+        warmup_sweep = actions.design_warmup_sweep(sweep_spec, skip=set(self.warmed_captures))
+        self.warmed_captures = self.warmed_captures | set(warmup_sweep.captures)
+
+        if len(warmup_sweep.captures) > 0:
+            return self.iter_sweep(warmup_sweep, swept_fields, calibration)
+        else:
+            return []
+
     def iter_sweep(
         self,
         sweep_spec: Sweep,
@@ -100,6 +109,9 @@ class _ServerService(rpyc.Service, SweepController):
 
     def on_disconnect(self, conn: rpyc.Service):
         lb.logger.info('disconnected from client')
+
+    def exposed_iter_warmup(self, sweep_spec: Sweep, swept_fields: list[str], calibration):
+        list(self.exposed_iter_sweep(sweep_spec, swept_fields, calibration))
 
     def exposed_iter_sweep(
         self,

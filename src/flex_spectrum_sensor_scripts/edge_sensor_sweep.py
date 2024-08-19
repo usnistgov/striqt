@@ -99,6 +99,12 @@ def run(
     else:
         calibration = read_calibration_corrections(sweep_spec.radio_setup.calibration)
 
+    warmup_iter = controller.iter_warmup(sweep_spec, sweep_fields, calibration)
+    if warmup_iter != []:
+        lb.logger.info('warming GPU')
+        warmup_iter = list(warmup_iter) # consume iterator
+        lb.logger.info('warmup captures finished')
+
     generator = list(controller.iter_sweep(sweep_spec, sweep_fields, calibration))
     data = xr.concat(generator, CAPTURE_DIM)
 

@@ -6,11 +6,12 @@ from typing import Optional, Generator, Any
 import typing
 
 import labbench as lb
+from frozendict import frozendict
 
 from .radio import RadioDevice
 from .structs import Sweep, RadioCapture, get_attrs, to_builtins, describe_capture
 from .util import zip_offsets
-from . import iq_corrections
+from . import iq_corrections, structs
 
 from channel_analysis.structs import ChannelAnalysis
 from channel_analysis import waveform, type_stubs
@@ -18,11 +19,9 @@ from channel_analysis import waveform, type_stubs
 if typing.TYPE_CHECKING:
     import pandas as pd
     import xarray as xr
-    import iqwaveform
 else:
     pd = lb.util.lazy_import('pandas')
     xr = lb.util.lazy_import('xarray')
-    iqwaveform = lb.util.lazy_import('iqwaveform')
 
 
 CAPTURE_DIM = 'capture'
@@ -111,6 +110,35 @@ class _RadioCaptureAnalyzer:
             coords[TIMESTAMP_NAME].values[:] = [timestamp]
 
         return coords
+
+
+def design_warmup_sweep(sweep: structs.Sweep, skip: set[structs.RadioCapture]) -> structs.Sweep:
+    """returns a Sweep object for a NullRadio consisting of capture combinations from
+    `sweep` with unique combinations of GPU analysis topologies.
+
+    This is meant to be run with fake data to warm up GPU operations and avoid
+    analysis slowdowns during sweeps.
+    """
+
+    FIELDS = ['duration', 'sample_rate', 'analysis_bandwidth', 'lo_shift', 'gpu_resample', 'lo_filter']
+
+    sweep_map = structs.to_builtins(sweep)
+    capture_maps = structs.to_builtins(sweep_map['captures'])
+    skip = set(structs.to_builtins(skip))
+
+    sweep_map['radio_setup']['driver'] = 'NullDriver'
+    sweep_map['radio_setup']['resource'] = 'empty'
+
+    # the set of unique combinations. frozendict enables comparisons for the set ops.    
+    
+    warmup_captures = {
+        frozendict([(k,v) for k,v in d.items() if k in FIELDS])
+        for d in capture_maps
+    }
+
+    sweep_map['captures'] = warmup_captures - skip
+
+    return structs.convert(sweep_map, type(sweep))
 
 
 def iter_sweep(

@@ -5,7 +5,7 @@ import msgspec
 from typing import Optional, Literal, Any
 from typing import Annotated as A
 from pathlib import Path
-from msgspec import to_builtins
+from msgspec import to_builtins, convert
 
 import channel_analysis
 import channel_analysis.waveform
