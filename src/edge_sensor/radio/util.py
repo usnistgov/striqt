@@ -1,16 +1,15 @@
 from __future__ import annotations
 from functools import lru_cache
-from iqwaveform import fourier
-from iqwaveform.power_analysis import isroundmod
-from typing import Type
 import contextlib
 from math import ceil
 
-import numpy as np
+import labbench as lb
 
 from .. import structs
 from ..util import import_cupy_with_fallback_warning
 from .base import RadioDevice
+
+iqwaveform = lb.util.lazy_import('iqwaveform')
 
 
 TRANSIENT_HOLDOFF_WINDOWS = 1
@@ -31,7 +30,7 @@ def design_capture_filter(
 
     if capture.gpu_resample:
         # use GPU DSP to resample from integer divisor of the MCR
-        return fourier.design_cola_resampler(
+        return iqwaveform.fourier.design_cola_resampler(
             fs_base=max(capture.sample_rate, master_clock_rate),
             fs_target=capture.sample_rate,
             bw=capture.analysis_bandwidth,
@@ -46,7 +45,7 @@ def design_capture_filter(
         )
     else:
         # use the SDR firmware to set the desired sample rate
-        return fourier.design_cola_resampler(
+        return iqwaveform.fourier.design_cola_resampler(
             fs_base=capture.sample_rate,
             fs_target=capture.sample_rate,
             bw=capture.analysis_bandwidth,
@@ -70,7 +69,7 @@ def _get_capture_buffer_sizes_cached(
     capture: structs.RadioCapture,
     include_holdoff: bool = False,
 ):
-    if isroundmod(capture.duration * capture.sample_rate, 1):
+    if iqwaveform.power_analysis.isroundmod(capture.duration * capture.sample_rate, 1):
         Nout = round(capture.duration * capture.sample_rate)
     else:
         msg = f'duration must be an integer multiple of the sample period (1/{capture.sample_rate} s)'
@@ -86,7 +85,7 @@ def _get_capture_buffer_sizes_cached(
 
     if analysis_filter:
         Nin += TRANSIENT_HOLDOFF_WINDOWS * analysis_filter['fft_size']
-        Nout = fourier._istft_buffer_size(
+        Nout = iqwaveform.fourier._istft_buffer_size(
             Nin,
             window=analysis_filter['window'],
             fft_size_out=analysis_filter['fft_size_out'],
@@ -147,7 +146,7 @@ def radio_subclasses(subclass=RadioDevice):
 
 
 def find_radio_cls_by_name(
-    name, parent_cls: Type[RadioDevice] = RadioDevice
+    name, parent_cls: type[RadioDevice] = RadioDevice
 ) -> RadioDevice:
     """returns a list of radio subclasses that have been imported"""
 

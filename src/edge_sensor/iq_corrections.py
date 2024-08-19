@@ -1,17 +1,27 @@
 from __future__ import annotations
-from iqwaveform import fourier
 from functools import lru_cache
-import xarray as xr
-import numpy as np
-from scipy.constants import Boltzmann
-from channel_analysis import waveform
-from typing import Optional
+import typing
 import pickle
 import gzip
+
+from channel_analysis import waveform
 
 from .radio import util
 from . import structs
 from .util import import_cupy_with_fallback_warning
+
+import labbench as lb
+
+if typing.TYPE_CHECKING:
+    import numpy as np
+    import xarray as xr
+    import scipy
+    import iqwaveform
+else:
+    np = lb.util.lazy_import('numpy')
+    xr = lb.util.lazy_import('xarray')
+    scipy = lb.util.lazy_import('scipy')
+    iqwaveform = lb.util.lazy_import('iqwaveform')
 
 
 @lru_cache
@@ -64,9 +74,9 @@ def _y_factor_power_corrections(
     noise_figure.name = 'Noise figure'
     noise_figure.attrs = {'units': 'dB'}
 
-    power_correction = (Boltzmann * power.analysis_bandwidth * 1000 * T) / (
-        power.sel(noise_diode_enabled=True, drop=True)
-    )
+    power_correction = (
+        scipy.constants.Boltzmann * power.analysis_bandwidth * 1000 * T
+    ) / (power.sel(noise_diode_enabled=True, drop=True))
     power_correction.name = 'Input power scaling correction'
     power_correction.attrs = {'units': 'mW'}
 
@@ -116,10 +126,10 @@ def compute_y_factor_corrections(
 
 
 def resampling_correction(
-    iq: fourier.Array,
+    iq: iqwaveform.fourier.Array,
     capture: structs.RadioCapture,
     radio: util.RadioBase,
-    force_calibration: Optional[xr.Dataset] = None,
+    force_calibration: typing.Optional[xr.Dataset] = None,
     *,
     axis=0,
 ):
@@ -149,12 +159,14 @@ def resampling_correction(
 
     fft_size = analysis_filter['fft_size']
 
-    fft_size_out, noverlap, overlap_scale, _ = fourier._ola_filter_parameters(
-        iq.size,
-        window=analysis_filter['window'],
-        fft_size_out=analysis_filter.get('fft_size_out', fft_size),
-        fft_size=fft_size,
-        extend=True,
+    fft_size_out, noverlap, overlap_scale, _ = (
+        iqwaveform.fourier._ola_filter_parameters(
+            iq.size,
+            window=analysis_filter['window'],
+            fft_size_out=analysis_filter.get('fft_size_out', fft_size),
+            fft_size=fft_size,
+            extend=True,
+        )
     )
 
     if force_calibration is not None:
@@ -199,9 +211,11 @@ def resampling_correction(
 
         return iq[util.TRANSIENT_HOLDOFF_WINDOWS * fft_size_out :]
 
-    w = fourier._get_window(analysis_filter['window'], fft_size, fftbins=False, xp=xp)
+    w = iqwaveform.fourier._get_window(
+        analysis_filter['window'], fft_size, fftbins=False, xp=xp
+    )
 
-    freqs, _, xstft = fourier.stft(
+    freqs, _, xstft = iqwaveform.fourier.stft(
         iq,
         fs=fs_backend,
         window=w,
@@ -216,14 +230,14 @@ def resampling_correction(
     enbw = (
         fs_backend
         / fft_size
-        * fourier.equivalent_noise_bandwidth(
+        * iqwaveform.fourier.equivalent_noise_bandwidth(
             analysis_filter['window'], fft_size, fftbins=False
         )
     )
     passband = analysis_filter['passband']
 
     if fft_size_out != analysis_filter['fft_size']:
-        freqs, xstft = fourier.downsample_stft(
+        freqs, xstft = iqwaveform.fourier.downsample_stft(
             freqs,
             xstft,
             fft_size_out=fft_size_out,
@@ -232,7 +246,7 @@ def resampling_correction(
             out=buf,
         )
     else:
-        fourier.zero_stft_by_freq(
+        iqwaveform.fourier.zero_stft_by_freq(
             freqs,
             xstft,
             passband=(passband[0] + enbw, passband[1] - enbw),
@@ -240,7 +254,7 @@ def resampling_correction(
         )
 
     out_size = round(capture.duration * capture.sample_rate)
-    iq = fourier.istft(
+    iq = iqwaveform.fourier.istft(
         xstft,
         out_size,
         fft_size=fft_size_out,

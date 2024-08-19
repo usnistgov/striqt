@@ -1,16 +1,16 @@
-from typing import Union
+import typing
 
-import numpy as np
 import labbench as lb
-import pandas as pd
-
-from iqwaveform.power_analysis import isroundmod
 from labbench import paramattr as attr
 
-from .. import structs
 from .soapy import SoapyRadioDevice
 from .base import RadioDevice
 from ..util import import_cupy_with_fallback_warning
+
+if typing.TYPE_CHECKING:
+    import numpy as np
+else:
+    np = lb.util.lazy_import('numpy')
 
 channel_kwarg = attr.method_kwarg.int('channel', min=0, help='hardware port number')
 

@@ -5,21 +5,29 @@ from __future__ import annotations
 from dataclasses import dataclass
 from collections import UserDict
 from functools import lru_cache
+import typing
 
-import numpy as np
-from scipy import signal
-import xarray as xr
-import pandas as pd
-import iqwaveform
+import msgspec
+import labbench as lb
+from array_api_compat import is_cupy_array, is_numpy_array, is_torch_array
 from iqwaveform.util import Array, array_namespace
-from iqwaveform import fourier, power_analysis
 from frozendict import frozendict
 
-from array_api_compat import is_cupy_array, is_numpy_array, is_torch_array
 from . import structs
 
-import typing
-import msgspec
+
+if typing.TYPE_CHECKING:
+    import numpy as np
+    import scipy
+    import pandas as pd
+    import xarray as xr
+    import iqwaveform
+else:
+    np = lb.util.lazy_import('numpy')
+    scipy = lb.util.lazy_import('scipy')
+    pd = lb.util.lazy_import('pandas')
+    xr = lb.util.lazy_import('xarray')
+    iqwaveform = lb.util.lazy_import('iqwaveform')
 
 TDecoratedFunc = typing.Callable[..., typing.Any]
 
@@ -187,7 +195,7 @@ def cyclic_channel_power(
     detectors = tuple(detectors)
     cyclic_statistics = tuple(cyclic_statistics)
 
-    data_dict = power_analysis.iq_to_cyclic_power(
+    data_dict = iqwaveform.power_analysis.iq_to_cyclic_power(
         iq,
         1 / capture.sample_rate,
         cyclic_period=cyclic_period,
@@ -335,7 +343,7 @@ def persistence_spectrum(
         'units': f'dBm/{enbw/1e3:0.3f} kHz',
     }
 
-    data = fourier.persistence_spectrum(
+    data = iqwaveform.fourier.persistence_spectrum(
         x,
         fs=capture.sample_rate,
         bandwidth=capture.analysis_bandwidth,
@@ -383,7 +391,7 @@ def _generate_iir_lpf(
         Second-order sections (sos) representation of the IIR filter.
     """
 
-    order, wn = signal.ellipord(
+    order, wn = scipy.signal.ellipord(
         capture.analysis_bandwidth / 2,
         capture.analysis_bandwidth / 2 + transition_bandwidth,
         passband_ripple,
@@ -392,7 +400,7 @@ def _generate_iir_lpf(
         capture.sample_rate,
     )
 
-    sos = signal.ellip(
+    sos = scipy.signal.ellip(
         order,
         passband_ripple,
         stopband_attenuation,
@@ -470,7 +478,7 @@ def iir_filter(
         return cuda_filter.sosfilt(sos.astype('float32'), iq)
 
     else:
-        return signal.sosfilt(sos.astype('float32'), iq)
+        return scipy.signal.sosfilt(sos.astype('float32'), iq)
 
 
 def ola_filter(
@@ -484,7 +492,7 @@ def ola_filter(
 ):
     kwargs = _analysis_parameter_kwargs(locals())
 
-    return fourier.ola_filter(
+    return iqwaveform.fourier.ola_filter(
         iq,
         fs=capture.sample_rate,
         passband=(-capture.analysis_bandwidth / 2, capture.analysis_bandwidth / 2),

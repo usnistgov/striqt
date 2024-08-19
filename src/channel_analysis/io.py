@@ -1,13 +1,22 @@
 from __future__ import annotations
-import numpy as np
-import numcodecs
-import xarray as xr
-import zarr
 
 from pathlib import Path
-import importlib
-import importlib.resources
+import typing
+
+import labbench as lb
+
 from . import waveform
+
+if typing.TYPE_CHECKING:
+    import numpy as np
+    import numcodecs
+    import xarray as xr
+    import zarr
+else:
+    np = lb.util.lazy_import('numpy')
+    numcodecs = lb.util.lazy_import('numcodecs')
+    xr = lb.util.lazy_import('xarray')
+    zarr = lb.util.lazy_import('zarr')
 
 
 def dump(path_or_store: str | Path, data: xr.DataArray | xr.Dataset, mode='a'):

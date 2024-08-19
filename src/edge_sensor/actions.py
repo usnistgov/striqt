@@ -1,18 +1,29 @@
 from __future__ import annotations
+
+from functools import lru_cache
+from dataclasses import dataclass
+from typing import Optional, Generator, Any
+import typing
+
+import labbench as lb
+
 from .radio import RadioDevice
 from .structs import Sweep, RadioCapture, get_attrs, to_builtins, describe_capture
 from .util import zip_offsets
 from . import iq_corrections
-from channel_analysis.structs import ChannelAnalysis
 
-import labbench as lb
-from iqwaveform.util import Array
-import xarray as xr
-import pandas as pd
+from channel_analysis.structs import ChannelAnalysis
 from channel_analysis import waveform
-from functools import lru_cache
-from dataclasses import dataclass
-from typing import Optional, Generator, Any
+
+if typing.TYPE_CHECKING:
+    import pandas as pd
+    import xarray as xr
+    import iqwaveform
+else:
+    pd = lb.util.lazy_import('pandas')
+    xr = lb.util.lazy_import('xarray')
+    iqwaveform = lb.util.lazy_import('iqwaveform')
+
 
 CAPTURE_DIM = 'capture'
 TIMESTAMP_NAME = 'timestamp'
@@ -52,7 +63,9 @@ class _RadioCaptureAnalyzer:
     extra_attrs: Optional[dict[str, Any]] = None
     calibration: Optional[xr.Dataset] = None
 
-    def __call__(self, iq: Array, timestamp, capture: RadioCapture) -> xr.Dataset:
+    def __call__(
+        self, iq: iqwaveform.util.Array, timestamp, capture: RadioCapture
+    ) -> xr.Dataset:
         """analyze iq from a capture and package it into a dataset"""
 
         with lb.stopwatch('analyze', logger_level='debug'):

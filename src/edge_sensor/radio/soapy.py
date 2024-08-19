@@ -1,27 +1,24 @@
 import time
 from functools import wraps
-from typing import Union
+import typing
 
-import numpy as np
 import labbench as lb
-import pandas as pd
-import SoapySDR
 from labbench import paramattr as attr
-
-from iqwaveform.power_analysis import isroundmod
-from SoapySDR import (
-    SOAPY_SDR_CS16,
-    SOAPY_SDR_CF32,
-    SOAPY_SDR_RX,
-    SOAPY_SDR_TX,
-    SOAPY_SDR_TIMEOUT,
-    errToStr,
-    SOAPY_SDR_HAS_TIME,
-)
 
 from .base import RadioDevice
 from .. import structs, iq_corrections
 from .util import design_capture_filter, get_capture_buffer_sizes
+
+if typing.TYPE_CHECKING:
+    import numpy as np
+    import pandas as pd
+    import SoapySDR as soapy
+    import iqwaveform
+else:
+    np = lb.util.lazy_import('numpy')
+    pd = lb.util.lazy_import('pandas')
+    soapy = lb.util.lazy_import('SoapySDR')
+    iqwaveform = lb.util.lazy_import('iqwaveform')
 
 channel_kwarg = attr.method_kwarg.int('channel', min=0, help='hardware port number')
 
@@ -107,7 +104,7 @@ class SoapyRadioDevice(RadioDevice):
             if getattr(self, 'rx_stream', None) is not None:
                 self.backend.closeStream(self.rx_stream)
             self.rx_stream = self.backend.setupStream(
-                SOAPY_SDR_RX, SOAPY_SDR_CF32, [channel]
+                soapy.SOAPY_SDR_RX, soapy.SOAPY_SDR_CF32, [channel]
             )
 
     @attr.method.float(
@@ -118,14 +115,14 @@ class SoapyRadioDevice(RadioDevice):
     @_verify_channel_for_getter
     def lo_frequency(self):
         # there is only one RX LO, shared by both channels
-        ret = self.backend.getFrequency(SOAPY_SDR_RX, self.channel())
+        ret = self.backend.getFrequency(soapy.SOAPY_SDR_RX, self.channel())
         return ret
 
     @lo_frequency.setter
     @_verify_channel_for_setter
     def _(self, center_frequency):
         # there is only one RX LO, shared by both channels
-        self.backend.setFrequency(SOAPY_SDR_RX, self.channel(), center_frequency)
+        self.backend.setFrequency(soapy.SOAPY_SDR_RX, self.channel(), center_frequency)
 
     center_frequency = lo_frequency.corrected_from_expression(
         lo_frequency + lo_offset,
@@ -141,12 +138,12 @@ class SoapyRadioDevice(RadioDevice):
     )
     @_verify_channel_for_getter
     def backend_sample_rate(self):
-        return self.backend.getSampleRate(SOAPY_SDR_RX, self.channel())
+        return self.backend.getSampleRate(soapy.SOAPY_SDR_RX, self.channel())
 
     @backend_sample_rate.setter
     @_verify_channel_for_setter
     def _(self, sample_rate):
-        self.backend.setSampleRate(SOAPY_SDR_RX, self.channel(), sample_rate)
+        self.backend.setSampleRate(soapy.SOAPY_SDR_RX, self.channel(), sample_rate)
 
     sample_rate = backend_sample_rate.corrected_from_expression(
         backend_sample_rate / _downsample,
@@ -157,7 +154,7 @@ class SoapyRadioDevice(RadioDevice):
     @attr.method.float(sets=False, label='Hz')
     def realized_sample_rate(self):
         """the self-reported "actual" sample rate of the radio"""
-        return self.backend.getSampleRate(SOAPY_SDR_RX, 0) / self._downsample
+        return self.backend.getSampleRate(soapy.SOAPY_SDR_RX, 0) / self._downsample
 
     @attr.method.bool(cache=True)
     @_verify_channel_for_getter
@@ -171,7 +168,7 @@ class SoapyRadioDevice(RadioDevice):
         if enable:
             self.backend.activateStream(
                 self.rx_stream,
-                flags=SOAPY_SDR_HAS_TIME,
+                flags=soapy.SOAPY_SDR_HAS_TIME,
                 # timeNs=self.backend.getHardwareTime('now'),
             )
         else:
@@ -180,30 +177,30 @@ class SoapyRadioDevice(RadioDevice):
     @attr.method.float(label='dB', help='SDR hardware gain')
     @_verify_channel_for_getter
     def gain(self):
-        return self.backend.getGain(SOAPY_SDR_RX, self.channel())
+        return self.backend.getGain(soapy.SOAPY_SDR_RX, self.channel())
 
     @gain.setter
     @_verify_channel_for_setter
     def _(self, gain: float):
-        self.backend.setGain(SOAPY_SDR_RX, self.channel(), gain)
+        self.backend.setGain(soapy.SOAPY_SDR_RX, self.channel(), gain)
 
     @attr.method.float(label='dB', help='SDR TX hardware gain')
     @channel_kwarg
     def tx_gain(self, gain: float = lb.Undefined, /, *, channel: int = 0):
         if gain is lb.Undefined:
-            return self.backend.getGain(SOAPY_SDR_TX, channel)
+            return self.backend.getGain(soapy.SOAPY_SDR_TX, channel)
         else:
-            self.backend.setGain(SOAPY_SDR_TX, channel, gain)
+            self.backend.setGain(soapy.SOAPY_SDR_TX, channel, gain)
 
     def open(self):
         self._logger.info('connecting')
-        self.backend = SoapySDR.Device(self.resource)
+        self.backend = soapy.Device(self.resource)
         self._logger.info('connected')
 
         self._reset_stats()
 
         for channel in 0, 1:
-            self.backend.setGainMode(SOAPY_SDR_RX, channel, False)
+            self.backend.setGainMode(soapy.SOAPY_SDR_RX, channel, False)
         self.channel(0)
         self.channel_enabled(False)
 
@@ -228,7 +225,7 @@ class SoapyRadioDevice(RadioDevice):
     def acquire(
         self,
         capture: structs.RadioCapture,
-        next_capture: Union[structs.RadioCapture, None] = None,
+        next_capture: typing.Union[structs.RadioCapture, None] = None,
         correction: bool = True,
     ) -> tuple[np.array, pd.Timestamp]:
         count, _ = get_capture_buffer_sizes(self, capture)
@@ -255,7 +252,9 @@ class SoapyRadioDevice(RadioDevice):
         if capture == self.get_capture_struct():
             return
 
-        if isroundmod(capture.duration * capture.sample_rate, 1):
+        if iqwaveform.power_analysis.isroundmod(
+            capture.duration * capture.sample_rate, 1
+        ):
             self.duration = capture.duration
         else:
             raise ValueError(
@@ -337,7 +336,7 @@ class SoapyRadioDevice(RadioDevice):
         elif sr.ret > 0:
             self._logger.debug(f'received {sr.ret} samples')
             return count - sr.ret
-        elif sr.ret == SoapySDR.SOAPY_SDR_OVERFLOW:
+        elif sr.ret == soapy.SOAPY_SDR_OVERFLOW:
             self._stream_stats['overflow'] += 1
             total_info = (
                 f"{self._stream_stats['overflow']}/{self._stream_stats['total']}"
@@ -350,7 +349,7 @@ class SoapyRadioDevice(RadioDevice):
             return 0
         elif sr.ret < 0:
             self._stream_stats['exceptions'] += 1
-            raise IOError(f'Error {sr.ret}: {errToStr(sr.ret)}')
+            raise IOError(f'Error {sr.ret}: {soapy.errToStr(sr.ret)}')
         else:
             raise TypeError(f'did not understand response {sr.ret}')
 
@@ -386,10 +385,10 @@ class SoapyRadioDevice(RadioDevice):
 
             if sr.ret > 0 and sr.ret < expected_samples:
                 break
-            elif sr.ret == SOAPY_SDR_TIMEOUT:
+            elif sr.ret == soapy.SOAPY_SDR_TIMEOUT:
                 break
             elif sr.ret < -1:
-                raise IOError(f'Error {sr.ret}: {errToStr(sr.ret)}')
+                raise IOError(f'Error {sr.ret}: {soapy.errToStr(sr.ret)}')
 
     @_verify_channel_setting
     def _read_stream(self, samples: int) -> np.ndarray:

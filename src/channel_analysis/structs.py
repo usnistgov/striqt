@@ -1,12 +1,13 @@
 from __future__ import annotations
-import inspect
-import msgspec
 from collections import UserDict
+import functools
+import inspect
 import typing
 from typing import Annotated as A
 from typing import Optional
+
 from frozendict import frozendict
-import functools
+import msgspec
 from msgspec import to_builtins
 
 

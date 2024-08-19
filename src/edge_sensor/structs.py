@@ -3,12 +3,13 @@
 from __future__ import annotations
 import msgspec
 from typing import Optional, Literal, Any
+from typing import Annotated as A
+from pathlib import Path
+from msgspec import to_builtins
+
 import channel_analysis
 import channel_analysis.waveform
 from channel_analysis.structs import meta, get_attrs
-from pathlib import Path
-from msgspec import to_builtins
-from typing import Annotated as A
 
 
 def make_default_analysis():

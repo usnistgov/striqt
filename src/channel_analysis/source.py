@@ -1,12 +1,21 @@
 from __future__ import annotations
-import numpy as np
-from iqwaveform import fourier
+import typing
+
+import labbench as lb
+
 from . import structs
 from .io import load, dump
 
+if typing.TYPE_CHECKING:
+    import numpy as np
+    import iqwaveform
+else:
+    np = lb.util.lazy_import('numpy')
+    iqwaveform = lb.util.lazy_import('iqwaveform')
+
 
 def filter_iq_capture(
-    iq: fourier.Array,
+    iq: iqwaveform.fourier.Array,
     capture: structs.FilteredCapture,
     *,
     axis=0,
@@ -24,22 +33,24 @@ def filter_iq_capture(
         the filtered IQ capture
     """
 
-    xp = fourier.array_namespace(iq)
+    xp = iqwaveform.fourier.array_namespace(iq)
 
     fft_size = capture.analysis_filter['fft_size']
 
-    fft_size_out, noverlap, overlap_scale, _ = fourier._ola_filter_parameters(
-        iq.size,
-        window=capture.analysis_filter['window'],
-        fft_size_out=capture.analysis_filter.get('fft_size_out', fft_size),
-        fft_size=fft_size,
-        extend=True,
+    fft_size_out, noverlap, overlap_scale, _ = (
+        iqwaveform.fourier._ola_filter_parameters(
+            iq.size,
+            window=capture.analysis_filter['window'],
+            fft_size_out=capture.analysis_filter.get('fft_size_out', fft_size),
+            fft_size=fft_size,
+            extend=True,
+        )
     )
 
-    w = fourier._get_window(
+    w = iqwaveform.fourier._get_window(
         capture.analysis_filter['window'], fft_size, fftbins=False, xp=xp
     )
-    freqs, _, xstft = fourier.stft(
+    freqs, _, xstft = iqwaveform.fourier.stft(
         iq,
         fs=capture.sample_rate,
         window=w,
@@ -53,7 +64,7 @@ def filter_iq_capture(
     enbw = (
         capture.sample_rate
         / fft_size
-        * fourier.equivalent_noise_bandwidth(w, fft_size, fftbins=False)
+        * iqwaveform.fourier.equivalent_noise_bandwidth(w, fft_size, fftbins=False)
     )
     passband = (
         -capture.analysis_bandwidth / 2 + enbw,
@@ -61,7 +72,7 @@ def filter_iq_capture(
     )
 
     if fft_size_out != capture.analysis_filter['fft_size']:
-        freqs, xstft = fourier.downsample_stft(
+        freqs, xstft = iqwaveform.fourier.downsample_stft(
             freqs,
             xstft,
             fft_size_out=fft_size_out,
@@ -70,9 +81,9 @@ def filter_iq_capture(
             out=xstft,
         )
 
-    fourier.zero_stft_by_freq(freqs, xstft, passband=passband, axis=axis)
+    iqwaveform.fourier.zero_stft_by_freq(freqs, xstft, passband=passband, axis=axis)
 
-    return fourier.istft(
+    return iqwaveform.fourier.istft(
         xstft,
         iq.shape[axis],
         fft_size=fft_size_out,

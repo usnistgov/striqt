@@ -2,13 +2,18 @@ from __future__ import annotations
 
 import rpyc
 import labbench as lb
-import xarray as xr
 
+import typing
 from typing import Generator, Optional, Any
 
 from edge_sensor import actions, util
 from edge_sensor.structs import Sweep, RadioCapture, RadioSetup, describe_capture
 from edge_sensor.radio import find_radio_cls_by_name, is_same_resource, RadioDevice
+
+if typing.TYPE_CHECKING:
+    import xarray as xr
+else:
+    xr = lb.util.lazy_import('xarray')
 
 
 _PROTOCOL_CONFIG = {'logger': lb.logger, 'allow_pickle': True}
