@@ -115,7 +115,11 @@ class _ServerService(rpyc.Service, SweepController):
 
     def exposed_iter_warmup(self, sweep_spec: Sweep, swept_fields: list[str], calibration):
         conn = sweep_spec.____conn__
-        generator = self.exposed_iter_sweep(sweep_spec, swept_fields, calibration)
+        sweep_spec = rpyc.utils.classic.obtain(sweep_spec)
+        swept_fields = rpyc.utils.classic.obtain(swept_fields)
+        calibration = rpyc.utils.classic.obtain(calibration)
+        
+        generator = self.iter_warmup(sweep_spec, swept_fields, calibration)
         if generator == []:
             return []
         else:
