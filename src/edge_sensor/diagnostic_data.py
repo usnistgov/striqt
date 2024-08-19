@@ -5,6 +5,7 @@ import psutil
 import xarray as xr
 from functools import lru_cache
 
+from channel_analysis import type_stubs
 from dulwich.repo import Repo, NotGitRepository
 from dulwich import porcelain
 from pathlib import Path
@@ -71,7 +72,7 @@ def _psutil_to_dict(name, *args, **kws):
 @lru_cache(8)
 def _compute_status_meta(keys: tuple):
     return {
-        'coords': xr.Coordinates({'compute_status_category': list(keys)}),
+        'coords': type_stubs.CoordinatesType({'compute_status_category': list(keys)}),
         'attrs': {
             'hostname': socket.gethostname(),
             'disk_size': _psutil_to_dict('disk_usage', '.')['total'],

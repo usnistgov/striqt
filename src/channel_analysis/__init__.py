@@ -1,6 +1,6 @@
 """evaluation of IQ data into analysis products packaged into xarray.DataArray and xarray.Dataset"""
 
-from . import source, structs, waveform
+from . import source, structs, type_stubs, waveform
 
 from .io import load, dump
 from .structs import Capture, FilteredCapture

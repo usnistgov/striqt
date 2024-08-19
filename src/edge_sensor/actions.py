@@ -13,7 +13,7 @@ from .util import zip_offsets
 from . import iq_corrections
 
 from channel_analysis.structs import ChannelAnalysis
-from channel_analysis import waveform
+from channel_analysis import waveform, type_stubs
 
 if typing.TYPE_CHECKING:
     import pandas as pd
@@ -64,7 +64,7 @@ class _RadioCaptureAnalyzer:
     calibration: Optional[xr.Dataset] = None
 
     def __call__(
-        self, iq: iqwaveform.util.Array, timestamp, capture: RadioCapture
+        self, iq: type_stubs.ArrayType, timestamp, capture: RadioCapture
     ) -> xr.Dataset:
         """analyze iq from a capture and package it into a dataset"""
 
@@ -117,7 +117,7 @@ def iter_sweep(
     radio: RadioDevice,
     sweep: Sweep,
     swept_fields: list[str],
-    calibration: xr.Dataset = None,
+    calibration: type_stubs.DatasetType = None,
     always_yield=False,
 ) -> Generator[xr.Dataset | None]:
     """iterate through sweep captures on the specified radio, yielding a dataset for each.

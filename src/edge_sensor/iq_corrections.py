@@ -4,7 +4,7 @@ import typing
 import pickle
 import gzip
 
-from channel_analysis import waveform
+from channel_analysis import waveform, type_stubs
 
 from .radio import util
 from . import structs
@@ -30,13 +30,13 @@ def read_calibration_corrections(path):
         return pickle.load(fd)
 
 
-def save_calibration_corrections(path, corrections: xr.Dataset):
+def save_calibration_corrections(path, corrections: type_stubs.DatasetType):
     with gzip.GzipFile(path, 'wb') as fd:
         pickle.dump(corrections, fd)
 
 
 def _y_factor_temperature(
-    power: xr.DataArray, enr_dB: float, Tamb: float, Tref=290.0
+    power: type_stubs.DataArrayType, enr_dB: float, Tamb: float, Tref=290.0
 ) -> xr.Dataset:
     Toff = Tamb
     Ton = Tref * 10 ** (enr_dB / 10.0)
@@ -53,7 +53,7 @@ def _y_factor_temperature(
 
 
 def _y_factor_power_corrections(
-    dataset: xr.Dataset, enr_dB: float, Tamb: float, Tref=290.0
+    dataset: type_stubs.DatasetType, enr_dB: float, Tamb: float, Tref=290.0
 ) -> xr.Dataset:
     # TODO: check that this works for xr.DataArray inputs in (enr_dB, Tamb)
 
@@ -90,8 +90,8 @@ def _y_factor_power_corrections(
 
 
 def _y_factor_frequency_response_correction(
-    dataset: xr.DataArray,
-    fc_temperatures: xr.DataArray,
+    dataset: type_stubs.DataArrayType,
+    fc_temperatures: type_stubs.DataArrayType,
     enr_dB: float,
     Tamb: float,
     Tref=290,
@@ -115,7 +115,7 @@ def _y_factor_frequency_response_correction(
 
 
 def compute_y_factor_corrections(
-    dataset: xr.Dataset, enr_dB: float, Tamb: float, Tref=290.0
+    dataset: type_stubs.DatasetType, enr_dB: float, Tamb: float, Tref=290.0
 ) -> xr.Dataset:
     kwargs = locals()
     ret = _y_factor_power_corrections(**kwargs)

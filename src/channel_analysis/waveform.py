@@ -10,11 +10,10 @@ import typing
 import msgspec
 import labbench as lb
 from array_api_compat import is_cupy_array, is_numpy_array, is_torch_array
-from iqwaveform.util import Array, array_namespace
 from frozendict import frozendict
 
 from . import structs
-
+from . import type_stubs# import type_stubs.DataArrayType, type_stubs.DatasetType, type_stubs.ArrayType, CoordinatesType
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -45,12 +44,12 @@ class ChannelAnalysisResult(UserDict):
     analyses before we materialize them on the CPU.
     """
 
-    data: Array
+    data: type_stubs.ArrayType
     name: str
-    coords: xr.Coordinates
+    coords: type_stubs.CoordinatesType
     attrs: list[str]
 
-    def to_xarray(self):
+    def to_xarray(self) -> type_stubs.DataArrayType:
         return xr.DataArray(
             _to_maybe_nested_numpy(self.data),
             coords=xr.Coordinates(self.coords),
@@ -67,7 +66,7 @@ def equivalent_noise_bandwidth(window: str | tuple[str, float], N: int):
     return len(w) * np.sum(w**2) / np.sum(w) ** 2
 
 
-def _to_maybe_nested_numpy(obj: tuple | list | dict | Array):
+def _to_maybe_nested_numpy(obj: tuple | list | dict | type_stubs.ArrayType):
     """convert an array, or a container of arrays, into a numpy array (or container of numpy arrays)"""
 
     if isinstance(obj, (tuple, list)):
@@ -93,7 +92,7 @@ def _analysis_parameter_kwargs(locals_: dict, omit=('iq', 'capture', 'out')) -> 
 @lru_cache
 def _power_time_series_coords(
     detectors: tuple[str], detector_period: float, length: int
-):
+) -> type_stubs.CoordinatesType:
     time = xr.DataArray(
         np.arange(length) * detector_period,
         dims='time_elapsed',
@@ -122,7 +121,7 @@ def power_time_series(
 ) -> callable[[], xr.DataArray]:
     Ts = 1 / capture.sample_rate
 
-    xp = array_namespace(iq)
+    xp = iqwaveform.util.array_namespace(iq)
     dtype = xp.finfo(iq.dtype).dtype
 
     data = [
@@ -249,7 +248,7 @@ def amplitude_probability_distribution(
     power_high: float,
     power_count: int,
 ) -> callable[[], xr.DataArray]:
-    xp = array_namespace(iq)
+    xp = iqwaveform.util.array_namespace(iq)
     dtype = xp.finfo(iq.dtype).dtype
 
     bin_params = {'lo': power_low, 'hi': power_high, 'count': power_count}
@@ -309,7 +308,7 @@ def _persistence_spectrum_coords(
 
 @registry
 def persistence_spectrum(
-    x: Array,
+    x: type_stubs.ArrayType,
     capture: structs.Capture,
     *,
     window: typing.Any,
@@ -458,7 +457,7 @@ def iq_waveform(
 
 
 def iir_filter(
-    iq: Array,
+    iq: type_stubs.ArrayType,
     capture: structs.Capture,
     *,
     passband_ripple: float | int,
@@ -469,7 +468,7 @@ def iir_filter(
     filter_kws = _analysis_parameter_kwargs(locals())
     sos = _generate_iir_lpf(capture, **filter_kws)
 
-    xp = array_namespace(iq)
+    xp = iqwaveform.util.array_namespace(iq)
 
     if is_cupy_array(iq):
         from . import cuda_filter
@@ -482,7 +481,7 @@ def iir_filter(
 
 
 def ola_filter(
-    iq: Array,
+    iq: type_stubs.ArrayType,
     capture: structs.Capture,
     *,
     fft_size: int,
@@ -501,7 +500,7 @@ def ola_filter(
 
 
 def _evaluate_raw_channel_analysis(
-    iq: Array, capture: structs.Capture, *, spec: str | dict | structs.ChannelAnalysis
+    iq: type_stubs.ArrayType, capture: structs.Capture, *, spec: str | dict | structs.ChannelAnalysis
 ):
     # round-trip for type conversion and validation
     spec = msgspec.convert(spec, registry.spec_type())
@@ -521,7 +520,7 @@ def _evaluate_raw_channel_analysis(
 
 def _package_channel_analysis(
     capture: structs.Capture, results: dict[str, structs.ChannelAnalysis]
-):
+) -> type_stubs.DatasetType:
     # materialize as xarrays
     xarrays = {res.name: res.to_xarray() for res in results.values()}
     # capture.analysis_filter = dict(capture.analysis_filter)
@@ -533,8 +532,8 @@ def _package_channel_analysis(
 
 
 def analyze_by_spec(
-    iq: Array, capture: structs.Capture, *, spec: str | dict | structs.ChannelAnalysis
-):
+    iq: type_stubs.ArrayType, capture: structs.Capture, *, spec: str | dict | structs.ChannelAnalysis
+) -> type_stubs.DatasetType:
     """evaluate a set of different channel analyses on the iq waveform as specified by spec"""
 
     results = _evaluate_raw_channel_analysis(iq, capture, spec=spec)

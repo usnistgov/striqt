@@ -6,6 +6,7 @@ import labbench as lb
 import typing
 from typing import Generator, Optional, Any
 
+from channel_analysis import type_stubs
 from edge_sensor import actions, util
 from edge_sensor.structs import Sweep, RadioCapture, RadioSetup, describe_capture
 from edge_sensor.radio import find_radio_cls_by_name, is_same_resource, RadioDevice
@@ -78,7 +79,7 @@ class SweepController:
         self,
         sweep_spec: Sweep,
         swept_fields: list[str],
-        calibration: xr.Dataset = None,
+        calibration: type_stubs.DatasetType = None,
         always_yield: bool = False,
     ) -> Generator[xr.Dataset]:
         radio = self.open_radio(sweep_spec.radio_setup)
@@ -98,7 +99,7 @@ class _ServerService(rpyc.Service, SweepController):
         self,
         sweep_spec: Sweep,
         swept_fields: list[str],
-        calibration: xr.Dataset = None,
+        calibration: type_stubs.DatasetType = None,
         always_yield: bool = False,
     ) -> Generator[xr.Dataset]:
         """wraps actions.sweep_iter to run on the remote server.
@@ -131,7 +132,7 @@ class _ServerService(rpyc.Service, SweepController):
 class _ClientService(rpyc.Service):
     """API exposed to a server by clients"""
 
-    def exposed_deliver(self, dataset: xr.Dataset, description: Optional[str] = None):
+    def exposed_deliver(self, dataset: type_stubs.DatasetType, description: Optional[str] = None):
         """serialize an object back to the client via pickling"""
         if description is not None:
             lb.logger.info(f'{description}')

@@ -3,7 +3,7 @@ import typing
 
 import labbench as lb
 
-from . import structs
+from . import structs, type_stubs
 from .io import load, dump
 
 if typing.TYPE_CHECKING:
@@ -15,12 +15,12 @@ else:
 
 
 def filter_iq_capture(
-    iq: iqwaveform.fourier.Array,
+    iq: type_stubs.ArrayType,
     capture: structs.FilteredCapture,
     *,
     axis=0,
     out=None,
-):
+) -> type_stubs.ArrayType:
     """apply a bandpass filter implemented through STFT overlap-and-add.
 
     Args:
@@ -95,7 +95,7 @@ def filter_iq_capture(
 
 def simulated_awgn(
     capture: structs.Capture, *, power: float = 1, xp=np, pinned_cuda=False, out=None
-):
+) -> type_stubs.ArrayType:
     try:
         # e.g., numpy
         bitgen = xp.random.PCG64()
