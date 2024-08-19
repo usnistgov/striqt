@@ -292,6 +292,9 @@ class SoapyRadioDevice(RadioDevice):
         self.analysis_bandwidth = capture.analysis_bandwidth
 
     def close(self):
+        if self.rx_stream is None:
+            return
+
         try:
             self.channel_enabled(False)
         except ValueError:

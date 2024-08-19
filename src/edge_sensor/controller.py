@@ -95,6 +95,12 @@ class SweepController:
 class _ServerService(rpyc.Service, SweepController):
     """API exposed by a server to remote clients"""
 
+    def on_connect(self, conn):
+        lb.logger.info(f'connected to client {conn}')
+
+    def on_disconnect(self, conn):
+        lb.logger.info(f'disconnected from client {conn}')
+
     def exposed_iter_sweep(
         self,
         sweep_spec: Sweep,
@@ -131,6 +137,12 @@ class _ServerService(rpyc.Service, SweepController):
 
 class _ClientService(rpyc.Service):
     """API exposed to a server by clients"""
+
+    def on_connect(self, conn):
+        lb.logger.info(f'connected to client {conn}')
+
+    def on_disconnect(self, conn):
+        lb.logger.info(f'disconnected from client {conn}')
 
     def exposed_deliver(self, dataset: type_stubs.DatasetType, description: Optional[str] = None):
         """serialize an object back to the client via pickling"""
