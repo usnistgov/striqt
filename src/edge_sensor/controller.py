@@ -79,6 +79,9 @@ class SweepController:
         warmup_sweep = actions.design_warmup_sweep(sweep_spec, skip=set(self.warmed_captures))
         self.warmed_captures = self.warmed_captures | set(warmup_sweep.captures)
 
+        if len(warmup_sweep.captures > 0):
+            lb.logger.info(f'running {len(warmup_sweep.captures)} warmup captures')
+
         if len(warmup_sweep.captures) > 0:
             return self.iter_sweep(warmup_sweep, swept_fields, calibration)
         else:
