@@ -21,9 +21,9 @@ def set_cuda_mem_limit(fraction=0.4):
 
 
 def zip_offsets(seq: Iterable[Any], shifts: tuple | list, fill: Any):
-    """return an iterator that yields tuples of length len(shifts) - shifted values in seq.
+    """return an iterator that yields tuples of length `len(shifts)` consisting of delayed or advanced iterations of `seq`.
 
-    Shifts to indexes below `0`, or greater than the length of `seq` return `fill`.
+    Shifts that would yield an invalid index (negative or beyond the end of `seq`) are replaced with the `fill` value.
     """
     lo = min(shifts)
 
