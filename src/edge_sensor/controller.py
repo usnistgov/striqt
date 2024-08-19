@@ -111,7 +111,7 @@ class _ServerService(rpyc.Service, SweepController):
         lb.logger.info('disconnected from client')
 
     def exposed_iter_warmup(self, sweep_spec: Sweep, swept_fields: list[str], calibration):
-        list(self.exposed_iter_sweep(sweep_spec, swept_fields, calibration))
+        return self.exposed_iter_sweep(sweep_spec, swept_fields, calibration)
 
     def exposed_iter_sweep(
         self,
@@ -144,7 +144,10 @@ class _ServerService(rpyc.Service, SweepController):
 
         generator = self.iter_sweep(sweep_spec, swept_fields, calibration, always_yield)
 
-        return (conn.root.deliver(r, d) for r, d in zip(generator, descs))
+        if generator == []:
+            return []
+        else:
+            return (conn.root.deliver(r, d) for r, d in zip(generator, descs))
 
 
 class _ClientService(rpyc.Service):
