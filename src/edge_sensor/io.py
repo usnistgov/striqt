@@ -5,7 +5,6 @@ from channel_analysis import load, dump
 import msgspec
 from .structs import Sweep
 from pathlib import Path
-from . import iq_corrections
 
 __all__ = ['load', 'dump', 'read_yaml_sweep']
 

@@ -2,7 +2,6 @@ from __future__ import annotations
 from iqwaveform import fourier
 from functools import lru_cache
 import xarray as xr
-import zarr
 import numpy as np
 from scipy.constants import Boltzmann
 from channel_analysis import waveform

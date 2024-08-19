@@ -6,11 +6,9 @@ import xarray as xr
 
 from typing import Generator, Optional, Any
 
-from edge_sensor import actions, iq_corrections
+from edge_sensor import actions, util
 from edge_sensor.structs import Sweep, RadioCapture, RadioSetup, describe_capture
-from edge_sensor.radio import find_radio_cls_by_name, RadioDevice
-from edge_sensor.radio.util import is_same_resource
-from edge_sensor.util import set_cuda_mem_limit
+from edge_sensor.radio import find_radio_cls_by_name, is_same_resource, RadioDevice
 
 
 _PROTOCOL_CONFIG = {'logger': lb.logger, 'allow_pickle': True}
@@ -26,7 +24,7 @@ class SweepController:
         self.radios: dict[str, RadioDevice] = {}
         self.prepared_sweeps: dict[str, RadioCapture] = {}
         self.handlers: dict[rpyc.Connection, Any] = {}
-        set_cuda_mem_limit()
+        util.set_cuda_mem_limit()
 
         if radio_setup is not None:
             self.open_radio(radio_setup)
