@@ -8,7 +8,7 @@ import typing
 import labbench as lb
 from frozendict import frozendict
 
-from .radio import RadioDevice
+from .radio import RadioDevice, NullRadio
 from .structs import Sweep, RadioCapture, get_attrs, to_builtins, describe_capture
 from .util import zip_offsets
 from . import iq_corrections, structs
@@ -126,7 +126,7 @@ def design_warmup_sweep(sweep: structs.Sweep, skip: set[structs.RadioCapture]) -
     capture_maps = structs.to_builtins(sweep_map['captures'])
     skip = set(structs.to_builtins(skip))
 
-    sweep_map['radio_setup']['driver'] = 'NullDriver'
+    sweep_map['radio_setup']['driver'] = NullRadio.__name__
     sweep_map['radio_setup']['resource'] = 'empty'
 
     # the set of unique combinations. frozendict enables comparisons for the set ops.    
