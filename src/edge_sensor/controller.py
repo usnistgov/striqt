@@ -79,10 +79,8 @@ class SweepController:
         warmup_sweep = actions.design_warmup_sweep(sweep_spec, skip=set(self.warmed_captures))
         self.warmed_captures = self.warmed_captures | set(warmup_sweep.captures)
 
-        if len(warmup_sweep.captures > 0):
-            lb.logger.info(f'running {len(warmup_sweep.captures)} warmup captures')
-
         if len(warmup_sweep.captures) > 0:
+            lb.logger.info(f'running {len(warmup_sweep.captures)} warmup captures')
             return self.iter_sweep(warmup_sweep, swept_fields, calibration)
         else:
             return []
@@ -118,7 +116,7 @@ class _ServerService(rpyc.Service, SweepController):
         sweep_spec = rpyc.utils.classic.obtain(sweep_spec)
         swept_fields = rpyc.utils.classic.obtain(swept_fields)
         calibration = rpyc.utils.classic.obtain(calibration)
-        
+
         generator = self.iter_warmup(sweep_spec, swept_fields, calibration)
         if generator == []:
             return []
