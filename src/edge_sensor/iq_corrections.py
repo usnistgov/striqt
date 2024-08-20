@@ -266,6 +266,6 @@ def resampling_correction(
     )
 
     if power_scale is not None:
-        iq *= np.sqrt(power_scale)
+        iq /= np.sqrt(power_scale)
 
     return iq
