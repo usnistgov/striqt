@@ -194,6 +194,9 @@ def resampling_correction(
         # allow interpolation between sample points in these fields
         sel = sel.interp(center_frequency=capture.center_frequency)
 
+        if not np.isfinite(sel):
+            raise ValueError('no calibration data available for this capture')
+
         power_scale = float(sel)
 
     if fft_size == fft_size_out:
