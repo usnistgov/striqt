@@ -3,6 +3,7 @@ from __future__ import annotations
 import rpyc
 import labbench as lb
 
+import socket
 import typing
 from typing import Generator, Optional, Any
 
@@ -98,9 +99,6 @@ class SweepController:
             sweep_spec, skip=tuple(self.warmed_captures)
         )
         self.warmed_captures = self.warmed_captures | set(warmup_sweep.captures)
-        lb.logger.info(f'already done: {repr(self.warmed_captures)}')
-        lb.logger.info(f'this: {repr(warmup_sweep)}')
-
         if len(warmup_sweep.captures) > 0:
             warmup_iter = self.iter_sweep(warmup_sweep, swept_fields, calibration)
         else:
@@ -112,8 +110,6 @@ class SweepController:
         )
 
         self.close_radio(warmup_sweep.radio_setup)
-
-        lb.logger.info('finished preparation')
 
     def iter_sweep(
         self,
@@ -137,10 +133,12 @@ class _ServerService(rpyc.Service, SweepController):
     """API exposed by a server to remote clients"""
 
     def on_connect(self, conn: rpyc.Service):
-        lb.logger.info('connected to client')
+        name = socket.getpeername(conn._channel.stream.sock)
+        lb.logger.info(f'new client connection from {name}')
 
     def on_disconnect(self, conn: rpyc.Service):
-        lb.logger.info('disconnected from client')
+        name = socket.getpeername(conn._channel.stream.sock)
+        lb.logger.info(f'client at {name} disconnected')
 
     def exposed_iter_sweep(
         self,
@@ -189,10 +187,12 @@ class _ClientService(rpyc.Service):
     """API exposed to a server by clients"""
 
     def on_connect(self, conn: rpyc.Service):
-        lb.logger.info('connected to server')
+        name = socket.getpeername(conn._channel.stream.sock)
+        lb.logger.info(f'connected to server at {name}')
 
     def on_disconnect(self, conn: rpyc.Service):
-        lb.logger.info('disconnected from server')
+        name = socket.getpeername(conn._channel.stream.sock)
+        lb.logger.info(f'disconnected from {name}')
 
     def exposed_deliver(
         self, dataset: type_stubs.DatasetType, description: Optional[str] = None
