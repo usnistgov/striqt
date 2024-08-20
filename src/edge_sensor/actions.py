@@ -112,7 +112,6 @@ class _RadioCaptureAnalyzer:
         return coords
 
 
-@lru_cache
 def design_warmup_sweep(sweep: structs.Sweep, skip: tuple[structs.RadioCapture, ...]) -> structs.Sweep:
     """returns a Sweep object for a NullRadio consisting of capture combinations from
     `sweep` with unique combinations of GPU analysis topologies.
