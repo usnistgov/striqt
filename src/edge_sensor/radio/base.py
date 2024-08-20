@@ -94,9 +94,11 @@ class RadioDevice(lb.Device):
             raise IOError('external frequency conversion is not yet supported')
 
     def arm(self, capture: structs.RadioCapture):
+        """to be implemented in subclasses"""
         raise NotImplementedError
 
     def _read_stream(self, samples: int) -> np.ndarray:
+        """to be implemented in subclasses"""
         raise NotImplementedError
 
     def get_capture_struct(self) -> structs.RadioCapture:

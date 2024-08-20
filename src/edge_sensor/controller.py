@@ -3,7 +3,6 @@ from __future__ import annotations
 import rpyc
 import labbench as lb
 
-import socket
 import typing
 from typing import Generator, Optional, Any
 
