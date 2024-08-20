@@ -88,8 +88,9 @@ class SweepController:
             ]
         return ' and '.join(msgs)
 
-    def _prepare_sweep(self, sweep_spec: Sweep, swept_fields: list[str], calibration):
+    def prepare_sweep(self, sweep_spec: Sweep, swept_fields: list[str], calibration):
         """open the radio while warming up the GPU"""
+
         warmup_sweep = actions.design_warmup_sweep(
             sweep_spec, skip=tuple(self.warmed_captures)
         )
@@ -112,8 +113,6 @@ class SweepController:
         calibration: type_stubs.DatasetType = None,
         always_yield: bool = False,
     ) -> Generator[xr.Dataset]:
-        self._prepare_sweep(sweep_spec, swept_fields, calibration)
-
         radio = self.open_radio(sweep_spec.radio_setup)
         radio.setup(sweep_spec.radio_setup)
 
@@ -162,6 +161,7 @@ class _ServerService(rpyc.Service, SweepController):
         if prep_msg:
             conn.root.deliver(None, prep_msg)
             lb.logger.info(prep_msg)
+        self.prepare_sweep(sweep_spec, swept_fields, calibration)
 
         descs = (
             f'{i+1}/{len(sweep_spec.captures)} {describe_capture(c, swept_fields)}'
