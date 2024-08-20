@@ -139,15 +139,12 @@ def design_warmup_sweep(
     sweep_map['radio_setup']['resource'] = 'empty'
 
     # the set of unique combinations. frozendict enables comparisons for the set ops.
-
     warmup_captures = {
         frozendict([(k, v) for k, v in d.items() if k in FIELDS]) for d in capture_maps
     }
 
-    lb.logger.info(f'identified {len(warmup_captures)} potential warmup captures')
-
+    lb.logger.info(f'identified {warmup_captures} {skip}')
     sweep_map['captures'] = warmup_captures - skip
-    lb.logger.info(f'kept {len(sweep_map["captures"])} new warmup captures')
 
     return structs.convert(sweep_map, type(sweep))
 
