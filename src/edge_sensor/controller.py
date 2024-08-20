@@ -109,7 +109,7 @@ class SweepController:
             open_radio=lb.Call(self.open_radio, sweep_spec.radio_setup),
         )
 
-        self.close_radio(warmup_sweep)
+        self.close_radio(warmup_sweep.radio_setup)
 
         lb.logger.info('finished preparation')
 
