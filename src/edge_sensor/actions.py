@@ -155,6 +155,7 @@ def iter_sweep(
     swept_fields: list[str],
     calibration: type_stubs.DatasetType = None,
     always_yield=False,
+    quiet=False
 ) -> Generator[xr.Dataset | None]:
     """iterate through sweep captures on the specified radio, yielding a dataset for each.
 
@@ -217,7 +218,7 @@ def iter_sweep(
             # treat swept fields as coordinates/indices
             desc = describe_capture(cap_this, swept_fields)
 
-        with lb.stopwatch(f'{desc} •'):
+        with lb.stopwatch(f'{desc} •', logger_level='debug' if quiet else 'info'):
             ret = lb.concurrently(**calls, flatten=False)
 
         if 'analyze' in ret:
