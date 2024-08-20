@@ -266,6 +266,7 @@ def resampling_correction(
     )
 
     if power_scale is not None:
+        lb.logger.info(f'power scale: {power_scale}')
         iq /= np.sqrt(power_scale)
 
     return iq
