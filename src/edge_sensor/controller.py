@@ -98,8 +98,8 @@ class SweepController:
             sweep_spec, skip=tuple(self.warmed_captures)
         )
         self.warmed_captures = self.warmed_captures | set(warmup_sweep.captures)
-        lb.logger.info('already done: ', repr(self.warmed_captures))
-        lb.logger.info('this: ', repr(warmup_sweep))
+        lb.logger.info(f'already done: {repr(self.warmed_captures)}')
+        lb.logger.info(f'this: {repr(warmup_sweep)}')
 
         if len(warmup_sweep.captures) > 0:
             warmup_iter = self.iter_sweep(warmup_sweep, swept_fields, calibration)
