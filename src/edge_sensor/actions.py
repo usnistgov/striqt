@@ -149,9 +149,7 @@ def design_warmup_sweep(
     sweep_map['captures'] = warmup_captures - skip
     lb.logger.info(f'kept {len(sweep_map["captures"])} new warmup captures')
 
-    ret = structs.convert(sweep_map, type(sweep))
-    lb.logger.info(f'warmup sweep: {ret}')
-    return ret
+    return structs.convert(sweep_map, type(sweep))
 
 
 def iter_sweep(
@@ -199,8 +197,6 @@ def iter_sweep(
         return
 
     iq, timestamp = None, None
-
-    lb.logger.info(f'sweep_iter sweep: {sweep}')
 
     # iterate across (previous, current, next) captures to support concurrency
     offset_captures = zip_offsets(sweep.captures, (-1, 0, 1), fill=None)
