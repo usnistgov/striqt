@@ -133,10 +133,21 @@ class _ServerService(rpyc.Service, SweepController):
     """API exposed by a server to remote clients"""
 
     def on_connect(self, conn: rpyc.Service):
-        lb.logger.info(f'new client connection from {conn._channel.stream.sock}')
+        info = repr(conn._channel.stream.sock)
+        try:
+            source =  eval(info[1:-1].split('raddr=',1)[1])
+        except IndexError:
+            source = 'unknown address'
+        lb.logger.info(f'new client connection from {source}')
 
     def on_disconnect(self, conn: rpyc.Service):
-        lb.logger.info(f'client at {conn._channel.stream.sock} disconnected')
+        info = repr(conn._channel.stream.sock)
+        try:
+            source =  eval(info[1:-1].split('raddr=',1)[1])
+        except IndexError:
+            source = 'unknown address'
+
+        lb.logger.info(f'client at {source} disconnected')
 
     def exposed_iter_sweep(
         self,
