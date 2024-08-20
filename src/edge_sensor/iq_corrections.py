@@ -200,6 +200,10 @@ def resampling_correction(
         power_scale = float(sel)
 
     if fft_size == fft_size_out:
+        if power_scale is not None:
+            lb.logger.info(f'power scale: {power_scale}')
+            iq *= np.sqrt(power_scale)
+
         # nothing to do here
         if analysis_filter['passband'] != (None, None):
             iq = waveform.iir_filter(
@@ -267,6 +271,6 @@ def resampling_correction(
 
     if power_scale is not None:
         lb.logger.info(f'power scale: {power_scale}')
-        iq /= np.sqrt(power_scale)
+        iq *= np.sqrt(power_scale)
 
     return iq
