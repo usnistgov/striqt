@@ -100,7 +100,7 @@ class SweepController:
         )
         self.warmed_captures = self.warmed_captures | set(warmup_sweep.captures)
         if len(warmup_sweep.captures) > 0:
-            warmup_iter = self.iter_sweep(warmup_sweep, swept_fields, calibration)
+            warmup_iter = self.iter_sweep(warmup_sweep, swept_fields, calibration, quiet=True)
         else:
             return []
 
@@ -117,12 +117,13 @@ class SweepController:
         swept_fields: list[str],
         calibration: type_stubs.DatasetType = None,
         always_yield: bool = False,
+        quiet: bool = False
     ) -> Generator[xr.Dataset]:
         radio = self.open_radio(sweep_spec.radio_setup)
         radio.setup(sweep_spec.radio_setup)
 
         return actions.iter_sweep(
-            radio, sweep_spec, swept_fields, calibration, always_yield
+            radio, sweep_spec, swept_fields, calibration, always_yield, quiet=quiet
         )
 
     def __del__(self):
