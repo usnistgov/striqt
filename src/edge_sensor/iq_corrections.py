@@ -6,7 +6,7 @@ import gzip
 
 from channel_analysis import waveform, type_stubs
 
-from .radio import RadioBase, get_capture_buffer_sizes, design_capture_filter
+from .radio import RadioDevice, get_capture_buffer_sizes, design_capture_filter
 from .radio.base import TRANSIENT_HOLDOFF_WINDOWS
 from . import structs
 from .util import import_cupy_with_fallback
@@ -129,7 +129,7 @@ def compute_y_factor_corrections(
 def resampling_correction(
     iq: iqwaveform.fourier.Array,
     capture: structs.RadioCapture,
-    radio: RadioBase,
+    radio: RadioDevice,
     force_calibration: typing.Optional[xr.Dataset] = None,
     *,
     axis=0,
