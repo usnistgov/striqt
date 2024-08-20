@@ -142,7 +142,7 @@ def design_warmup_sweep(sweep: structs.Sweep, skip: set[structs.RadioCapture]) -
     lb.logger.info(f'kept {len(sweep_map["captures"])} new warmup captures')
 
     ret = structs.convert(sweep_map, type(sweep))
-    print(ret)
+    lb.logger.info(repr(ret))
     return ret
 
 
