@@ -89,9 +89,9 @@ class SweepController:
         warmup_sweep = actions.design_warmup_sweep(sweep, skip=tuple(self.warmed_captures))
         msgs = []
         if sweep.radio_setup.driver not in self.radios:
-            msgs += [f"connecting to {sweep.radio_setup.driver}"]
+            msgs += [f"opening {sweep.radio_setup.driver} radio"]
         if len(warmup_sweep.captures) > 0:
-            msgs += [f"{len(warmup_sweep.captures)}"]
+            msgs += [f"warming GPU DSP with {len(warmup_sweep.captures)} empty captures"]
         return ' and '.join(msgs)
 
     def _prepare_sweep(self, sweep_spec: Sweep, swept_fields: list[str], calibration):
@@ -137,18 +137,6 @@ class _ServerService(rpyc.Service, SweepController):
 
     def on_disconnect(self, conn: rpyc.Service):
         lb.logger.info('disconnected from client')
-
-    # def exposed_iter_warmup(self, sweep_spec: Sweep, swept_fields: list[str], calibration):
-    #     conn = sweep_spec.____conn__
-    #     sweep_spec = rpyc.utils.classic.obtain(sweep_spec)
-    #     swept_fields = rpyc.utils.classic.obtain(swept_fields)
-    #     calibration = rpyc.utils.classic.obtain(calibration)
-
-    #     generator = self.iter_warmup(sweep_spec, swept_fields, calibration)
-    #     if generator == []:
-    #         return []
-    #     else:
-    #         return (conn.root.deliver(obj) for obj in generator)
 
     def exposed_iter_sweep(
         self,

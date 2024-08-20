@@ -142,7 +142,7 @@ def design_warmup_sweep(sweep: structs.Sweep, skip: tuple[structs.RadioCapture, 
     lb.logger.info(f'kept {len(sweep_map["captures"])} new warmup captures')
 
     ret = structs.convert(sweep_map, type(sweep))
-    lb.logger.info(repr(ret))
+    lb.logger.info(f'warmup captures: {ret.captures}')
     return ret
 
 
@@ -191,6 +191,8 @@ def iter_sweep(
         return
 
     iq, timestamp = None, None
+
+    lb.logger.info(f'sweep_iter captures: {sweep.captures}')
 
     # iterate across (previous, current, next) captures to support concurrency
     offset_captures = zip_offsets(sweep.captures, (-1, 0, 1), fill=None)
