@@ -111,6 +111,8 @@ class SweepController:
 
         self.close_radio(warmup_sweep)
 
+        lb.logger.info('finished preparation')
+
     def iter_sweep(
         self,
         sweep_spec: Sweep,
