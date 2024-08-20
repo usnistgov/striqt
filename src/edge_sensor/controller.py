@@ -75,15 +75,40 @@ class SweepController:
 
         return radio
 
-    def iter_warmup(self, sweep_spec: Sweep, swept_fields: list[str], calibration):
-        warmup_sweep = actions.design_warmup_sweep(sweep_spec, skip=set(self.warmed_captures))
+    # def iter_warmup(self, sweep_spec: Sweep, swept_fields: list[str], calibration):
+    #     warmup_sweep = actions.design_warmup_sweep(sweep_spec, skip=tuple(self.warmed_captures))
+    #     self.warmed_captures = self.warmed_captures | set(warmup_sweep.captures)
+
+    #     if len(warmup_sweep.captures) > 0:
+    #         lb.logger.info(f'running {len(warmup_sweep.captures)} warmup captures')
+    #         return self.iter_sweep(warmup_sweep, swept_fields, calibration)
+    #     else:
+    #         return []
+
+    def _describe_preparation(self, sweep: Sweep) -> str:
+        warmup_sweep = actions.design_warmup_sweep(sweep, skip=tuple(self.warmed_captures))
+        msgs = []
+        if sweep.radio_setup.driver not in self.radios:
+            msgs += [f"connecting to {sweep.radio_setup.driver}"]
+        if len(warmup_sweep.captures) > 0:
+            msgs += [f"{len(warmup_sweep.captures)}"]
+        return ' and '.join(msgs)
+
+    def _prepare_sweep(self, sweep_spec: Sweep, swept_fields: list[str], calibration):
+        """open the radio while warming up the GPU"""
+        warmup_sweep = actions.design_warmup_sweep(sweep_spec, skip=tuple(self.warmed_captures))
         self.warmed_captures = self.warmed_captures | set(warmup_sweep.captures)
 
         if len(warmup_sweep.captures) > 0:
-            lb.logger.info(f'running {len(warmup_sweep.captures)} warmup captures')
-            return self.iter_sweep(warmup_sweep, swept_fields, calibration)
+            lb.logger.info(f'warming GPU with {len(warmup_sweep.captures)} empty captures')
+            warmup_iter = self.iter_sweep(warmup_sweep, swept_fields, calibration)
         else:
             return []
+
+        lb.concurrently(
+            warmup=lb.Call(list, warmup_iter),
+            open_radio=lb.Call(self.open_radio, sweep_spec.radio_setup)
+        )
 
     def iter_sweep(
         self,
@@ -92,8 +117,10 @@ class SweepController:
         calibration: type_stubs.DatasetType = None,
         always_yield: bool = False,
     ) -> Generator[xr.Dataset]:
+
         radio = self.open_radio(sweep_spec.radio_setup)
         radio.setup(sweep_spec.radio_setup)
+
         return actions.iter_sweep(
             radio, sweep_spec, swept_fields, calibration, always_yield
         )
@@ -111,17 +138,17 @@ class _ServerService(rpyc.Service, SweepController):
     def on_disconnect(self, conn: rpyc.Service):
         lb.logger.info('disconnected from client')
 
-    def exposed_iter_warmup(self, sweep_spec: Sweep, swept_fields: list[str], calibration):
-        conn = sweep_spec.____conn__
-        sweep_spec = rpyc.utils.classic.obtain(sweep_spec)
-        swept_fields = rpyc.utils.classic.obtain(swept_fields)
-        calibration = rpyc.utils.classic.obtain(calibration)
+    # def exposed_iter_warmup(self, sweep_spec: Sweep, swept_fields: list[str], calibration):
+    #     conn = sweep_spec.____conn__
+    #     sweep_spec = rpyc.utils.classic.obtain(sweep_spec)
+    #     swept_fields = rpyc.utils.classic.obtain(swept_fields)
+    #     calibration = rpyc.utils.classic.obtain(calibration)
 
-        generator = self.iter_warmup(sweep_spec, swept_fields, calibration)
-        if generator == []:
-            return []
-        else:
-            return (conn.root.deliver(obj) for obj in generator)
+    #     generator = self.iter_warmup(sweep_spec, swept_fields, calibration)
+    #     if generator == []:
+    #         return []
+    #     else:
+    #         return (conn.root.deliver(obj) for obj in generator)
 
     def exposed_iter_sweep(
         self,
@@ -146,6 +173,11 @@ class _ServerService(rpyc.Service, SweepController):
             f'obtaining calibration data {str(sweep_spec.radio_setup.calibration)}'
         ):
             calibration = rpyc.utils.classic.obtain(calibration)
+
+        prep_msg = self._describe_preparation(sweep_spec)
+        if prep_msg:
+            conn.root.deliver(None, prep_msg)
+            lb.logger.info(prep_msg)
 
         descs = (
             f'{i+1}/{len(sweep_spec.captures)} {describe_capture(c, swept_fields)}'
