@@ -202,7 +202,7 @@ def resampling_correction(
     if fft_size == fft_size_out:
         # nothing to do here
         if power_scale is not None:
-            iq *= power_scale
+            iq /= power_scale
         if analysis_filter['passband'] != (None, None):
             iq = waveform.iir_filter(
                 iq,
