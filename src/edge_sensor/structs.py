@@ -39,7 +39,6 @@ class RadioCapture(channel_analysis.Capture):
     analysis_bandwidth: A[Optional[float], meta('DSP filter bandwidth', 'Hz')] = 10e6
     lo_shift: A[_TShift, meta('direction of the LO shift')] = 'none'
     gpu_resample: bool = True
-    lo_filter: bool = False
 
 
 class RadioSetup(msgspec.Struct):

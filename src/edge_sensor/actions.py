@@ -112,7 +112,7 @@ class _RadioCaptureAnalyzer:
         return coords
 
 
-def _frozensubset(d, keys):
+def _frozensubset(d: dict|frozendict, keys: list[str]) -> frozendict:
     return frozendict({k: d[k] for k in keys})
 
 
@@ -132,7 +132,6 @@ def design_warmup_sweep(
         'analysis_bandwidth',
         'lo_shift',
         'gpu_resample',
-        'lo_filter',
     ]
 
     sweep_map = structs.to_builtins(sweep)
@@ -143,11 +142,8 @@ def design_warmup_sweep(
     sweep_map['radio_setup']['resource'] = 'empty'
 
     # the set of unique combinations. frozendict enables comparisons for the set ops.
-    warmup_captures = {
-        _frozensubset(d, FIELDS) for d in capture_maps
-    }
+    warmup_captures = {_frozensubset(d, FIELDS) for d in capture_maps}
 
-    lb.logger.info(f'identified {warmup_captures} {skip}')
     sweep_map['captures'] = warmup_captures - skip
 
     return structs.convert(sweep_map, type(sweep))
