@@ -296,7 +296,7 @@ class SoapyRadioDevice(RadioDevice):
     def __del__(self):
         self.close()
 
-    def _validate_remaining_samples(self, sr, count: int) -> int:
+    def _validate_remaining_samples(self, sr, remaining: int) -> int:
         """validate the stream response after reading.
 
         Args:
@@ -309,12 +309,12 @@ class SoapyRadioDevice(RadioDevice):
         msg = None
 
         # ensure the proper number of waveform samples was read
-        if sr.ret == count:
+        if sr.ret == remaining:
             self._logger.debug(f'received all {sr.ret} samples')
-            return 0
+            return sr.ret, 0
         elif sr.ret > 0:
             self._logger.debug(f'received {sr.ret} samples')
-            return count - sr.ret
+            return sr.ret, remaining - sr.ret
         elif sr.ret == soapy.SOAPY_SDR_OVERFLOW:
             self._stream_stats['overflow'] += 1
             total_info = (
@@ -363,13 +363,14 @@ class SoapyRadioDevice(RadioDevice):
         timestamp = None
         remaining = samples
         skip = 0
+        next_start = 0
 
         self.on_overflow = 'ignore'
         while remaining > 0:
             # Read the samples from the data buffer
             rx_result = self.backend.readStream(
                 self.rx_stream,
-                [self._inbuf[(samples - remaining + skip) * 2 : (samples + skip) * 2]],
+                [self._inbuf[next_start * 2 : ]],
                 remaining,
                 timeoutUs=int(timeout * 1e6),
             )
@@ -385,7 +386,8 @@ class SoapyRadioDevice(RadioDevice):
                     )
                     remaining = remaining + skip
 
-            remaining = self._validate_remaining_samples(rx_result, remaining)
+            received, remaining = self._validate_remaining_samples(rx_result, remaining)
+            next_start += received
             self.on_overflow = 'except'
 
         self._stream_stats['total'] += 1
