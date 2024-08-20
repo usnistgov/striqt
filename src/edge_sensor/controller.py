@@ -135,7 +135,7 @@ class _ServerService(rpyc.Service, SweepController):
     def on_connect(self, conn: rpyc.Service):
         info = repr(conn._channel.stream.sock)
         try:
-            source = eval(info[1:-1].split('raddr=',1)[1])[0]
+            source = eval(info[1:-1].split('raddr=',1)[1])
         except IndexError:
             source = 'unknown address'
         lb.logger.info(f'new client connection from {source}')
@@ -143,7 +143,7 @@ class _ServerService(rpyc.Service, SweepController):
     def on_disconnect(self, conn: rpyc.Service):
         info = repr(conn._channel.stream.sock)
         try:
-            source = eval(info[1:-1].split('raddr=',1)[1])[0]
+            source = eval(info[1:-1].split('raddr=',1)[1])
         except IndexError:
             source = 'unknown address'
 
