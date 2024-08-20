@@ -193,7 +193,6 @@ class SoapyRadioDevice(RadioDevice):
             self.backend.setGain(soapy.SOAPY_SDR_TX, channel, gain)
 
     def open(self):
-        self._logger.info('connecting')
         self.backend = soapy.Device(self.resource)
         self._logger.info('connected')
 
@@ -229,7 +228,6 @@ class SoapyRadioDevice(RadioDevice):
         if capture == self.get_capture_struct():
             return
 
-        self._logger.info('1')
         if iqwaveform.power_analysis.isroundmod(
             capture.duration * capture.sample_rate, 1
         ):
@@ -239,11 +237,9 @@ class SoapyRadioDevice(RadioDevice):
                 f'duration {capture.duration} is not an integer multiple of sample period'
             )
 
-        self._logger.info('2')
         if capture.channel != self.channel():
             self.channel(capture.channel)
 
-        self._logger.info('3')
         if self.gain() != capture.gain:
             self.gain(capture.gain)
 
