@@ -133,12 +133,10 @@ class _ServerService(rpyc.Service, SweepController):
     """API exposed by a server to remote clients"""
 
     def on_connect(self, conn: rpyc.Service):
-        name = socket.getpeername(conn._channel.stream.sock)
-        lb.logger.info(f'new client connection from {name}')
+        lb.logger.info(f'new client connection from {conn._channel.stream.sock}')
 
     def on_disconnect(self, conn: rpyc.Service):
-        name = socket.getpeername(conn._channel.stream.sock)
-        lb.logger.info(f'client at {name} disconnected')
+        lb.logger.info(f'client at {conn._channel.stream.sock} disconnected')
 
     def exposed_iter_sweep(
         self,
