@@ -95,7 +95,7 @@ class SweepController:
         )
         self.warmed_captures = self.warmed_captures | set(warmup_sweep.captures)
 
-        lb.logger.info(f'wheeeeeeeeeeeee {warmup_sweep.captures}')
+        lb.logger.warning(f'wheeeeeeeeeeeee {warmup_sweep.captures}')
 
         if len(warmup_sweep.captures) > 0:
             lb.logger.info(

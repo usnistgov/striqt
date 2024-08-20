@@ -133,7 +133,7 @@ def design_warmup_sweep(
 
     sweep_map = structs.to_builtins(sweep)
     capture_maps = structs.to_builtins(sweep_map['captures'])
-    skip = set(structs.to_builtins(skip))
+    skip = {frozendict(structs.to_builtins(s)) for s in skip}
 
     sweep_map['radio_setup']['driver'] = NullRadio.__name__
     sweep_map['radio_setup']['resource'] = 'empty'
