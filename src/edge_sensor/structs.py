@@ -74,7 +74,7 @@ class Sweep(msgspec.Struct):
     captures: tuple[RadioCapture, ...]
     radio_setup: RadioSetup = msgspec.field(default_factory=RadioSetup)
     defaults: RadioCapture = msgspec.field(default_factory=RadioCapture)
-    channel_analysis: dict[str, ChannelAnalysis] = msgspec.field(
+    channel_analysis: dict = msgspec.field(
         default_factory=make_default_analysis
     )
     description: Description = msgspec.field(default_factory=Description)
