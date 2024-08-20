@@ -75,16 +75,6 @@ class SweepController:
 
         return radio
 
-    # def iter_warmup(self, sweep_spec: Sweep, swept_fields: list[str], calibration):
-    #     warmup_sweep = actions.design_warmup_sweep(sweep_spec, skip=tuple(self.warmed_captures))
-    #     self.warmed_captures = self.warmed_captures | set(warmup_sweep.captures)
-
-    #     if len(warmup_sweep.captures) > 0:
-    #         lb.logger.info(f'running {len(warmup_sweep.captures)} warmup captures')
-    #         return self.iter_sweep(warmup_sweep, swept_fields, calibration)
-    #     else:
-    #         return []
-
     def _describe_preparation(self, sweep: Sweep) -> str:
         warmup_sweep = actions.design_warmup_sweep(
             sweep, skip=tuple(self.warmed_captures)
@@ -125,6 +115,8 @@ class SweepController:
         calibration: type_stubs.DatasetType = None,
         always_yield: bool = False,
     ) -> Generator[xr.Dataset]:
+        self._prepare_sweep(sweep_spec, swept_fields, calibration)
+
         radio = self.open_radio(sweep_spec.radio_setup)
         radio.setup(sweep_spec.radio_setup)
 
