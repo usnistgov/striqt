@@ -75,6 +75,9 @@ class SweepController:
 
         return radio
 
+    def close_radio(self, radio_setup: RadioSetup):
+        self.radios[radio_setup.driver].close()
+
     def _describe_preparation(self, sweep: Sweep) -> str:
         warmup_sweep = actions.design_warmup_sweep(
             sweep, skip=tuple(self.warmed_captures)
@@ -105,6 +108,8 @@ class SweepController:
             warmup=lb.Call(list, warmup_iter),
             open_radio=lb.Call(self.open_radio, sweep_spec.radio_setup),
         )
+
+        self.close_radio(warmup_sweep)
 
     def iter_sweep(
         self,
