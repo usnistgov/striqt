@@ -221,7 +221,7 @@ class SoapyRadioDevice(RadioDevice):
         next_capture: typing.Union[structs.RadioCapture, None] = None,
         correction: bool = True,
     ) -> tuple[np.array, type_stubs.TimestampType]:
-        return super().acquire(**locals())
+        return super().acquire(capture=capture, next_capture=next_capture, correction=correction)
 
     def arm(self, capture: structs.RadioCapture):
         """apply a capture configuration"""
