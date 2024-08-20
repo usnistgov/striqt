@@ -190,6 +190,7 @@ def _get_capture_buffer_sizes_cached(
         # add holdoff samples needed for the periodic trigger
         Nin += ceil(analysis_filter['fs'] * periodic_trigger)
 
+    lb.logger.info(f'capture: {capture}')
     if analysis_filter and capture.gpu_resample:
         Nin += TRANSIENT_HOLDOFF_WINDOWS * analysis_filter['fft_size']
         Nout = iqwaveform.fourier._istft_buffer_size(
