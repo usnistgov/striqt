@@ -9,7 +9,7 @@ from msgspec import to_builtins, convert
 
 import channel_analysis
 import channel_analysis.waveform
-from channel_analysis.structs import meta, get_attrs
+from channel_analysis.structs import meta, get_attrs, ChannelAnalysis
 
 
 def make_default_analysis():
@@ -74,5 +74,5 @@ class Sweep(msgspec.Struct):
     captures: tuple[RadioCapture, ...]
     radio_setup: RadioSetup = msgspec.field(default_factory=RadioSetup)
     defaults: RadioCapture = msgspec.field(default_factory=RadioCapture)
-    channel_analysis: Any = msgspec.field(default_factory=make_default_analysis)
+    channel_analysis: dict[str, ChannelAnalysis] = msgspec.field(default_factory=make_default_analysis)
     description: Description = msgspec.field(default_factory=Description)

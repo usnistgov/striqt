@@ -6,9 +6,10 @@ import gzip
 
 from channel_analysis import waveform, type_stubs
 
-from .radio import util
+from .radio import RadioBase, get_capture_buffer_sizes, design_capture_filter
+from .radio.base import TRANSIENT_HOLDOFF_WINDOWS
 from . import structs
-from .util import import_cupy_with_fallback_warning
+from .util import import_cupy_with_fallback
 
 import labbench as lb
 
@@ -128,7 +129,7 @@ def compute_y_factor_corrections(
 def resampling_correction(
     iq: iqwaveform.fourier.Array,
     capture: structs.RadioCapture,
-    radio: util.RadioBase,
+    radio: RadioBase,
     force_calibration: typing.Optional[xr.Dataset] = None,
     *,
     axis=0,
@@ -146,14 +147,14 @@ def resampling_correction(
         the filtered IQ capture
     """
 
-    xp = import_cupy_with_fallback_warning()
+    xp = import_cupy_with_fallback()
 
     # create a buffer large enough for post-processing seeded with a copy of the IQ
-    _, buf_size = util.get_capture_buffer_sizes(radio, capture)
+    _, buf_size = get_capture_buffer_sizes(radio, capture)
     buf = xp.empty(buf_size, dtype='complex64')
     iq = buf[: iq.size] = xp.asarray(iq)
 
-    fs_backend, lo_offset, analysis_filter = util.design_capture_filter(
+    fs_backend, lo_offset, analysis_filter = design_capture_filter(
         radio._master_clock_rate, capture
     )
 
@@ -209,7 +210,7 @@ def resampling_correction(
                 out=iq,
             )
 
-        return iq[util.TRANSIENT_HOLDOFF_WINDOWS * fft_size_out :]
+        return iq[TRANSIENT_HOLDOFF_WINDOWS * fft_size_out :]
 
     w = iqwaveform.fourier._get_window(
         analysis_filter['window'], fft_size, fftbins=False, xp=xp

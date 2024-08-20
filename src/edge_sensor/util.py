@@ -43,7 +43,7 @@ def zip_offsets(seq: Iterable[Any], shifts: tuple | list, fill: Any):
 
 
 @cache
-def import_cupy_with_fallback_warning():
+def import_cupy_with_fallback():
     try:
         import cupy as xp
     except ModuleNotFoundError:

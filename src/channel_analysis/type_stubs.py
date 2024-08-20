@@ -8,8 +8,10 @@ if typing.TYPE_CHECKING:
 
     import xarray as xr
     import iqwaveform
+    import pandas as pd
 
-    DataArrayType: TypeAlias = 'xr.DataArray'
-    DatasetType: TypeAlias = 'xr.Dataset'
-    CooordinatesType: TypeAlias = 'xr.Coordinates'
-    ArrayType: TypeAlias = 'iqwaveform.util.Array'
+DataArrayType: TypeAlias = 'xr.DataArray'
+DatasetType: TypeAlias = 'xr.Dataset'
+CooordinatesType: TypeAlias = 'xr.Coordinates'
+TimestampType: TypeAlias = 'pd.Timestamp'
+ArrayType: TypeAlias = 'iqwaveform.util.Array'

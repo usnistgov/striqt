@@ -5,7 +5,7 @@ from labbench import paramattr as attr
 
 from .soapy import SoapyRadioDevice
 from .base import RadioDevice
-from ..util import import_cupy_with_fallback_warning
+from ..util import import_cupy_with_fallback
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -140,14 +140,10 @@ class NullRadio(RadioDevice):
     def _master_clock_rate(self):
         return 125e6
 
-    _prepare_buffer = SoapyRadioDevice._prepare_buffer
     arm = SoapyRadioDevice.arm
-    acquire = SoapyRadioDevice.acquire
-    setup = SoapyRadioDevice.setup
-    get_capture_struct = SoapyRadioDevice.get_capture_struct
 
     def _read_stream(self, N) -> np.ndarray:
-        xp = import_cupy_with_fallback_warning()
+        xp = import_cupy_with_fallback()
         ret = self._inbuf.view('complex64')[:N]
         if self.resource == 'empty':
             pass
