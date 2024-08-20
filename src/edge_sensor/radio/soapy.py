@@ -229,6 +229,7 @@ class SoapyRadioDevice(RadioDevice):
         if capture == self.get_capture_struct():
             return
 
+        self.logger.info('1')
         if iqwaveform.power_analysis.isroundmod(
             capture.duration * capture.sample_rate, 1
         ):
@@ -238,9 +239,11 @@ class SoapyRadioDevice(RadioDevice):
                 f'duration {capture.duration} is not an integer multiple of sample period'
             )
 
+        self.logger.info('2')
         if capture.channel != self.channel():
             self.channel(capture.channel)
 
+        self.logger.info('3')
         if self.gain() != capture.gain:
             self.gain(capture.gain)
 
