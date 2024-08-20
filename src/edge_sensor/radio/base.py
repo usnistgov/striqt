@@ -46,7 +46,7 @@ class RadioDevice(lb.Device):
     @property
     def _master_clock_rate(self):
         return type(self).backend_sample_rate.max
-    
+
     def _prepare_buffer(self, capture: structs.RadioCapture):
         samples_in, _ = get_capture_buffer_sizes(self, capture, include_holdoff=True)
 
@@ -166,6 +166,7 @@ def design_capture_filter(
             shift=False,
         )
 
+
 @lru_cache(30000)
 def _get_capture_buffer_sizes_cached(
     master_clock_rate: float,
@@ -212,6 +213,7 @@ def get_capture_buffer_sizes(
         capture=capture,
         include_holdoff=include_holdoff,
     )
+
 
 def radio_subclasses(subclass=RadioDevice):
     """returns a list of radio subclasses that have been imported"""

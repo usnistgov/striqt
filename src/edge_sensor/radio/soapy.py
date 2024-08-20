@@ -271,7 +271,7 @@ class SoapyRadioDevice(RadioDevice):
     def close(self):
         if self.backend is None:
             return
-        
+
         try:
             self.channel_enabled(False)
         except ValueError:

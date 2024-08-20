@@ -13,7 +13,9 @@ from array_api_compat import is_cupy_array, is_numpy_array, is_torch_array
 from frozendict import frozendict
 
 from . import structs
-from . import type_stubs# import type_stubs.DataArrayType, type_stubs.DatasetType, type_stubs.ArrayType, CoordinatesType
+from . import (
+    type_stubs,
+)  # import type_stubs.DataArrayType, type_stubs.DatasetType, type_stubs.ArrayType, CoordinatesType
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -500,7 +502,10 @@ def ola_filter(
 
 
 def _evaluate_raw_channel_analysis(
-    iq: type_stubs.ArrayType, capture: structs.Capture, *, spec: str | dict | structs.ChannelAnalysis
+    iq: type_stubs.ArrayType,
+    capture: structs.Capture,
+    *,
+    spec: str | dict | structs.ChannelAnalysis,
 ):
     # round-trip for type conversion and validation
     spec = msgspec.convert(spec, registry.spec_type())
@@ -532,7 +537,10 @@ def _package_channel_analysis(
 
 
 def analyze_by_spec(
-    iq: type_stubs.ArrayType, capture: structs.Capture, *, spec: str | dict | structs.ChannelAnalysis
+    iq: type_stubs.ArrayType,
+    capture: structs.Capture,
+    *,
+    spec: str | dict | structs.ChannelAnalysis,
 ) -> type_stubs.DatasetType:
     """evaluate a set of different channel analyses on the iq waveform as specified by spec"""
 

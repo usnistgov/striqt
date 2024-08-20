@@ -86,28 +86,36 @@ class SweepController:
     #         return []
 
     def _describe_preparation(self, sweep: Sweep) -> str:
-        warmup_sweep = actions.design_warmup_sweep(sweep, skip=tuple(self.warmed_captures))
+        warmup_sweep = actions.design_warmup_sweep(
+            sweep, skip=tuple(self.warmed_captures)
+        )
         msgs = []
         if sweep.radio_setup.driver not in self.radios:
-            msgs += [f"opening {sweep.radio_setup.driver} radio"]
+            msgs += [f'opening {sweep.radio_setup.driver} radio']
         if len(warmup_sweep.captures) > 0:
-            msgs += [f"warming GPU DSP with {len(warmup_sweep.captures)} empty captures"]
+            msgs += [
+                f'warming GPU DSP with {len(warmup_sweep.captures)} empty captures'
+            ]
         return ' and '.join(msgs)
 
     def _prepare_sweep(self, sweep_spec: Sweep, swept_fields: list[str], calibration):
         """open the radio while warming up the GPU"""
-        warmup_sweep = actions.design_warmup_sweep(sweep_spec, skip=tuple(self.warmed_captures))
+        warmup_sweep = actions.design_warmup_sweep(
+            sweep_spec, skip=tuple(self.warmed_captures)
+        )
         self.warmed_captures = self.warmed_captures | set(warmup_sweep.captures)
 
         if len(warmup_sweep.captures) > 0:
-            lb.logger.info(f'warming GPU with {len(warmup_sweep.captures)} empty captures')
+            lb.logger.info(
+                f'warming GPU with {len(warmup_sweep.captures)} empty captures'
+            )
             warmup_iter = self.iter_sweep(warmup_sweep, swept_fields, calibration)
         else:
             return []
 
         lb.concurrently(
             warmup=lb.Call(list, warmup_iter),
-            open_radio=lb.Call(self.open_radio, sweep_spec.radio_setup)
+            open_radio=lb.Call(self.open_radio, sweep_spec.radio_setup),
         )
 
     def iter_sweep(
@@ -117,7 +125,6 @@ class SweepController:
         calibration: type_stubs.DatasetType = None,
         always_yield: bool = False,
     ) -> Generator[xr.Dataset]:
-
         radio = self.open_radio(sweep_spec.radio_setup)
         radio.setup(sweep_spec.radio_setup)
 
@@ -189,7 +196,9 @@ class _ClientService(rpyc.Service):
     def on_disconnect(self, conn: rpyc.Service):
         lb.logger.info('disconnected from server')
 
-    def exposed_deliver(self, dataset: type_stubs.DatasetType, description: Optional[str] = None):
+    def exposed_deliver(
+        self, dataset: type_stubs.DatasetType, description: Optional[str] = None
+    ):
         """serialize an object back to the client via pickling"""
         if description is not None:
             lb.logger.info(f'{description}')

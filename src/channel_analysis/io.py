@@ -19,7 +19,11 @@ else:
     zarr = lb.util.lazy_import('zarr')
 
 
-def dump(path_or_store: str | Path, data: type_stubs.DataArrayType | type_stubs.DatasetType, mode='a'):
+def dump(
+    path_or_store: str | Path,
+    data: type_stubs.DataArrayType | type_stubs.DatasetType,
+    mode='a',
+):
     """serialize a dataset into a zarr directory structure"""
 
     if hasattr(data, waveform.IQ_WAVEFORM_INDEX_NAME):
@@ -60,7 +64,7 @@ def dump(path_or_store: str | Path, data: type_stubs.DataArrayType | type_stubs.
             data.chunk(chunks).to_zarr(store, encoding=encodings)
 
 
-def load(path: str | Path) -> type_stubs.DataArrayType|type_stubs.DatasetType:
+def load(path: str | Path) -> type_stubs.DataArrayType | type_stubs.DatasetType:
     """load a dataset or data array"""
 
     return xr.open_dataset(zarr.storage.ZipStore(path, mode='r'), engine='zarr')

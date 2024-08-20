@@ -112,7 +112,9 @@ class _RadioCaptureAnalyzer:
         return coords
 
 
-def design_warmup_sweep(sweep: structs.Sweep, skip: tuple[structs.RadioCapture, ...]) -> structs.Sweep:
+def design_warmup_sweep(
+    sweep: structs.Sweep, skip: tuple[structs.RadioCapture, ...]
+) -> structs.Sweep:
     """returns a Sweep object for a NullRadio consisting of capture combinations from
     `sweep` with unique combinations of GPU analysis topologies.
 
@@ -120,7 +122,14 @@ def design_warmup_sweep(sweep: structs.Sweep, skip: tuple[structs.RadioCapture, 
     analysis slowdowns during sweeps.
     """
 
-    FIELDS = ['duration', 'sample_rate', 'analysis_bandwidth', 'lo_shift', 'gpu_resample', 'lo_filter']
+    FIELDS = [
+        'duration',
+        'sample_rate',
+        'analysis_bandwidth',
+        'lo_shift',
+        'gpu_resample',
+        'lo_filter',
+    ]
 
     sweep_map = structs.to_builtins(sweep)
     capture_maps = structs.to_builtins(sweep_map['captures'])
@@ -129,11 +138,10 @@ def design_warmup_sweep(sweep: structs.Sweep, skip: tuple[structs.RadioCapture, 
     sweep_map['radio_setup']['driver'] = NullRadio.__name__
     sweep_map['radio_setup']['resource'] = 'empty'
 
-    # the set of unique combinations. frozendict enables comparisons for the set ops.    
-    
+    # the set of unique combinations. frozendict enables comparisons for the set ops.
+
     warmup_captures = {
-        frozendict([(k,v) for k,v in d.items() if k in FIELDS])
-        for d in capture_maps
+        frozendict([(k, v) for k, v in d.items() if k in FIELDS]) for d in capture_maps
     }
 
     lb.logger.info(f'identified {len(warmup_captures)} potential warmup captures')
