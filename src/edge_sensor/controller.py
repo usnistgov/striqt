@@ -118,12 +118,13 @@ class SweepController:
         always_yield: bool = False,
         quiet: bool = False
     ) -> Generator[xr.Dataset]:
+        kwargs = dict(locals())
+        del kwargs['self']
+
         radio = self.open_radio(sweep_spec.radio_setup)
         radio.setup(sweep_spec.radio_setup)
 
-        return actions.iter_sweep(
-            radio, sweep_spec, swept_fields, calibration, always_yield, quiet=quiet
-        )
+        return actions.iter_sweep(radio, **kwargs)
 
     def __del__(self):
         self.close()
