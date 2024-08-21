@@ -112,16 +112,18 @@ class SweepController:
 
     def iter_sweep(
         self,
-        sweep_spec: Sweep,
+        sweep: Sweep,
         swept_fields: list[str],
         calibration: type_stubs.DatasetType = None,
         always_yield: bool = False,
         quiet: bool = False
     ) -> Generator[xr.Dataset]:
-        kwargs = dict(list(locals().items())[2:])
+        # take args {3,4...N}
+        kwargs = dict(locals())
+        del kwargs['self']
 
-        radio = self.open_radio(sweep_spec.radio_setup)
-        radio.setup(sweep_spec.radio_setup)
+        radio = self.open_radio(sweep.radio_setup)
+        radio.setup(sweep.radio_setup)
 
         return actions.iter_sweep(radio, **kwargs)
 
