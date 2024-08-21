@@ -42,10 +42,12 @@ def _y_factor_temperature(
     Toff = Tamb
     Ton = Tref * 10 ** (enr_dB / 10.0)
 
-    Y = power.sel(noise_diode_enabled=True, drop=True) / power.sel(
-        noise_diode_enabled=False, drop=True
-    )
+    # compute the Y-factor from measured power
+    Pon = power.sel(noise_diode_enabled=True, drop=True)
+    Poff = power.sel(noise_diode_enabled=False, drop=True)
+    Y = Pon/Poff 
 
+    # compute receive noise temperature from the Y-factor
     T = (Ton - Y * Toff) / (Y - 1)
     T.name = 'T'
     T.attrs = {'units': 'K'}
@@ -60,6 +62,10 @@ def _y_factor_power_corrections(
 
     kwargs = dict(list(locals().items())[1:])
 
+    k = scipy.constants.Boltzmann * 1000 # scaled from W/K to mW/K
+    B = dataset.analysis_bandwidth
+    enr = 10**(enr_dB/10.)
+
     power = (
         dataset.power_time_series.sel(power_detector='rms', drop=True)
         .pipe(lambda x: 10 ** (x / 10.0))
@@ -67,17 +73,19 @@ def _y_factor_power_corrections(
     )
     power.name = 'RMS power'
 
-    T = _y_factor_temperature(power, **kwargs)
-    T.name = 'Noise temperature'
-    T.attrs = {'units': 'K'}
+    Pon = power.sel(noise_diode_enabled=True, drop=True)
+    Poff = power.sel(noise_diode_enabled=False, drop=True)
+    Y = Pon/Poff 
 
-    noise_figure = 10 * np.log10(T / Tref + 1)
+    noise_figure = enr_dB - 10*np.log10(Y-1)
     noise_figure.name = 'Noise figure'
     noise_figure.attrs = {'units': 'dB'}
 
-    power_correction = (
-        scipy.constants.Boltzmann * power.analysis_bandwidth * 1000 * T
-    ) / (power.sel(noise_diode_enabled=True, drop=True))
+    T = Tref * (10**(noise_figure/10) - 1) #_y_factor_temperature(power, **kwargs)
+    T.name = 'Noise temperature'
+    T.attrs = {'units': 'K'}
+
+    power_correction = (k * (T+enr*Tref) * B) / Pon
     power_correction.name = 'Input power scaling correction'
     power_correction.attrs = {'units': 'mW'}
 
