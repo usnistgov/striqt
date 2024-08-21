@@ -241,6 +241,11 @@ def connect(host='localhost', port=4567) -> rpyc.Connection:
         remote.root.iter_sweep()
     """
 
+    # support host:port
+    host, *extra = host.split(',', 1)
+    if len(extra) != 0:
+        port = int(extra[0])
+
     return rpyc.connect(
         host=host, port=port, config=_PROTOCOL_CONFIG, service=_ClientService
     )

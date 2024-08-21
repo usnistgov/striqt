@@ -41,7 +41,7 @@ from typing import Optional
     help='print debug',
 )
 def run(
-    yaml_path: Path, output_path: str, remote: Optional[str], force: bool, verbose: bool
+    yaml_path: Path, output_path: Optional[str], remote: Optional[str], force: bool, verbose: bool
 ):
     if output_path is None:
         output_path = Path(yaml_path).with_suffix('.zarr.zip')
@@ -64,35 +64,10 @@ def run(
     else:
         lb.show_messages('info')
 
-    # try:
-    #     set_cuda_mem_limit()
-    # except ModuleNotFoundError:
-    #     pass
-
-    # radio_type = find_radio_cls_by_name(sweep_spec.radio_setup.driver)
-
-    # radio = radio_type()
-    # if sweep_spec.radio_setup.resource is not None:
-    #     radio.resource = sweep_spec.radio_setup.resource
-
-    # prep = prepare_gpu(radio, sweep_spec.captures, sweep_spec.channel_analysis, sweep_fields)
-
-    # with lb.concurrently(radio, prep):
-    #     radio.setup(sweep_spec.radio_setup)
-    #     sweep_it = iter_sweep(radio, sweep_spec, sweep_fields)
-    #     data = xr.concat(sweep_it, CAPTURE_DIM)
-
     if remote is None:
         controller = SweepController()
     else:
-        host, *extra = remote.split(',', 1)
-        if len(extra) == 0:
-            port = 4567
-        else:
-            port = int(extra[0])
-
-        conn = connect(host, port=port)
-        controller = conn.root
+        controller = connect(remote).root
 
     if sweep_spec.radio_setup.calibration is None:
         calibration = None
