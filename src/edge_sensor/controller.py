@@ -3,6 +3,7 @@ from __future__ import annotations
 import rpyc
 import labbench as lb
 
+from itertools import zip_longest
 import typing
 from typing import Generator, Optional, Any
 
@@ -188,10 +189,11 @@ class _ServerService(rpyc.Service, SweepController):
 
         generator = self.iter_sweep(sweep_spec, swept_fields, calibration, always_yield)
 
+        desc_pairs = zip_longest(generator, descs, fillvalue='last analysis')
         if generator == []:
             return []
         else:
-            return (conn.root.deliver(r, d) for r, d in zip(generator, descs))
+            return (conn.root.deliver(r, d) for r, d in desc_pairs)
 
 
 class _ClientService(rpyc.Service):
