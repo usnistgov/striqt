@@ -137,7 +137,7 @@ class NullRadio(RadioDevice):
         return 'null'
 
     @property
-    def _master_clock_rate(self):
+    def master_clock_rate(self):
         return 125e6
 
     arm = SoapyRadioDevice.arm

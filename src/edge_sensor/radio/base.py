@@ -44,7 +44,7 @@ class RadioDevice(lb.Device):
         raise NotImplementedError
 
     @property
-    def _master_clock_rate(self):
+    def master_clock_rate(self):
         return type(self).backend_sample_rate.max
 
     def _prepare_buffer(self, capture: structs.RadioCapture):
@@ -147,12 +147,11 @@ def design_capture_filter(
     if capture.gpu_resample:
         # use GPU DSP to resample from integer divisor of the MCR
         fs_sdr, lo_offset, kws = iqwaveform.fourier.design_cola_resampler(
-            fs_base=max(capture.sample_rate, master_clock_rate),
+            fs_base=master_clock_rate,
             fs_target=capture.sample_rate,
             bw=capture.analysis_bandwidth,
             bw_lo=0.75e6,
             shift=lo_shift,
-            min_fft_size=2 * 4096 - 1,
         )
 
         return fs_sdr, lo_offset, kws
@@ -181,30 +180,30 @@ def _get_capture_buffer_sizes_cached(
     include_holdoff: bool = False,
 ):
     if iqwaveform.power_analysis.isroundmod(capture.duration * capture.sample_rate, 1):
-        Nout = round(capture.duration * capture.sample_rate)
+        nfft_out = round(capture.duration * capture.sample_rate)
     else:
         msg = f'duration must be an integer multiple of the sample period (1/{capture.sample_rate} s)'
         raise ValueError(msg)
 
     _, _, analysis_filter = design_capture_filter(master_clock_rate, capture)
 
-    Nin = ceil(Nout * analysis_filter['fft_size'] / analysis_filter['fft_size_out'])
+    nfft_in = ceil(nfft_out * analysis_filter['nfft'] / analysis_filter['nfft_out'])
 
     if include_holdoff and periodic_trigger is not None:
         # add holdoff samples needed for the periodic trigger
-        Nin += ceil(analysis_filter['fs'] * periodic_trigger)
+        nfft_in += ceil(analysis_filter['fs'] * periodic_trigger)
 
     if analysis_filter and capture.gpu_resample:
-        Nin += TRANSIENT_HOLDOFF_WINDOWS * analysis_filter['fft_size']
-        Nout = iqwaveform.fourier._istft_buffer_size(
-            Nin,
+        nfft_in += TRANSIENT_HOLDOFF_WINDOWS * analysis_filter['nfft']
+        nfft_out = iqwaveform.fourier._istft_buffer_size(
+            nfft_in,
             window=analysis_filter['window'],
-            fft_size_out=analysis_filter['fft_size_out'],
-            fft_size=analysis_filter['fft_size'],
+            nfft_out=analysis_filter['nfft_out'],
+            nfft=analysis_filter['nfft'],
             extend=True,
         )
 
-    return Nin, Nout
+    return nfft_in, nfft_out
 
 
 def get_capture_buffer_sizes(
@@ -214,7 +213,7 @@ def get_capture_buffer_sizes(
         capture = radio.get_capture_struct()
 
     return _get_capture_buffer_sizes_cached(
-        master_clock_rate=radio._master_clock_rate,
+        master_clock_rate=radio.master_clock_rate,
         periodic_trigger=radio.periodic_trigger,
         capture=capture,
         include_holdoff=include_holdoff,

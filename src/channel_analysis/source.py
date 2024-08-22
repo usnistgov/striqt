@@ -35,27 +35,27 @@ def filter_iq_capture(
 
     xp = iqwaveform.fourier.array_namespace(iq)
 
-    fft_size = capture.analysis_filter['fft_size']
+    nfft = capture.analysis_filter['nfft']
 
-    fft_size_out, noverlap, overlap_scale, _ = (
+    nfft_out, noverlap, overlap_scale, _ = (
         iqwaveform.fourier._ola_filter_parameters(
             iq.size,
             window=capture.analysis_filter['window'],
-            fft_size_out=capture.analysis_filter.get('fft_size_out', fft_size),
-            fft_size=fft_size,
+            nfft_out=capture.analysis_filter.get('nfft_out', nfft),
+            nfft=nfft,
             extend=True,
         )
     )
 
     w = iqwaveform.fourier._get_window(
-        capture.analysis_filter['window'], fft_size, fftbins=False, xp=xp
+        capture.analysis_filter['window'], nfft, fftbins=False, xp=xp
     )
     freqs, _, xstft = iqwaveform.fourier.stft(
         iq,
         fs=capture.sample_rate,
         window=w,
-        nperseg=capture.analysis_filter['fft_size'],
-        noverlap=round(capture.analysis_filter['fft_size'] * overlap_scale),
+        nperseg=capture.analysis_filter['nfft'],
+        noverlap=round(capture.analysis_filter['nfft'] * overlap_scale),
         axis=axis,
         truncate=False,
         out=out,
@@ -63,19 +63,19 @@ def filter_iq_capture(
 
     enbw = (
         capture.sample_rate
-        / fft_size
-        * iqwaveform.fourier.equivalent_noise_bandwidth(w, fft_size, fftbins=False)
+        / nfft
+        * iqwaveform.fourier.equivalent_noise_bandwidth(w, nfft, fftbins=False)
     )
     passband = (
         -capture.analysis_bandwidth / 2 + enbw,
         capture.analysis_bandwidth / 2 - enbw,
     )
 
-    if fft_size_out != capture.analysis_filter['fft_size']:
+    if nfft_out != capture.analysis_filter['nfft']:
         freqs, xstft = iqwaveform.fourier.downsample_stft(
             freqs,
             xstft,
-            fft_size_out=fft_size_out,
+            nfft_out=nfft_out,
             passband=passband,
             axis=axis,
             out=xstft,
@@ -86,7 +86,7 @@ def filter_iq_capture(
     return iqwaveform.fourier.istft(
         xstft,
         iq.shape[axis],
-        fft_size=fft_size_out,
+        nfft=nfft_out,
         noverlap=noverlap,
         out=out,
         axis=axis,
