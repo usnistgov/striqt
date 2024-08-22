@@ -25,7 +25,7 @@ In order to accommodate broad support for legacy CUDA platforms, the required ve
 ### Command line
 Once a `flex-spectrum-sensor` environment is installed and activated, the following scripts are installed into the environment `PATH`, so they can be run from any working directory.
 
-* `edge-sensor-sweep`: Acquire and analyze a capture sequence (sweep) according to a YAML input file specification.
+* `edge-sensor-sweep`: Acquire and analyze a capture sequence (sweep) according to [a YAML input file specification](https://github.com/usnistgov/flex-spectrum-sensor/blob/main/doc/reference-sweep.yaml).
   Output datasets are serialized to `zarr` with `xarray`.
   This can run locally or on a remote host (`-r` argument) running `edge-sensor-server`.
 
