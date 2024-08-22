@@ -18,7 +18,7 @@ description:
   - 1783.4   # ASL (m)
 
   external_signal_chain:
-  - PXIe-5644R Signal generator, 3710 MHz CW with 10 ms square pulse modulation
+  - Signal generator, 3710 MHz CW with 10 ms square pulse modulation
 
 
 # Radio setup parameters that apply to all captures
