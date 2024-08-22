@@ -189,15 +189,16 @@ def resampling_correction(
         power_scale = None
     else:
         # these fields must match the calibration conditions exactly
-        sel = corrections.power_correction.sel(
+        capture_dict = dict(
             channel=capture.channel,
             gain=capture.gain,
             lo_shift=capture.lo_shift,
             sample_rate=capture.sample_rate,
             analysis_bandwidth=capture.analysis_bandwidth,
-            gpu_resample=capture.gpu_resample,
-            drop=True,
-        )
+            gpu_resample=capture.gpu_resample
+        )        
+
+        sel = corrections.power_correction.sel(**capture_dict, drop=True)
 
         # allow interpolation between sample points in these fields
         sel = sel.interp(center_frequency=capture.center_frequency)

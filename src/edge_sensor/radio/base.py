@@ -146,13 +146,20 @@ def design_capture_filter(
 
     if capture.gpu_resample:
         # use GPU DSP to resample from integer divisor of the MCR
-        return iqwaveform.fourier.design_cola_resampler(
+        ret = iqwaveform.fourier.design_cola_resampler(
             fs_base=max(capture.sample_rate, master_clock_rate),
             fs_target=capture.sample_rate,
             bw=capture.analysis_bandwidth,
             bw_lo=0.75e6,
             shift=lo_shift,
         )
+
+        if ret['fft_size_out'] % 2 == 1 or ret['fft_size'] % 2 == 1:
+            ret['fft_size_out'] = 2*ret['fft_size_out']
+            ret['fft_size'] = 2*ret['fft_size']
+
+        return ret
+
     elif lo_shift:
         raise ValueError('lo_shift requires gpu_resample=True')
     elif master_clock_rate < capture.sample_rate:
