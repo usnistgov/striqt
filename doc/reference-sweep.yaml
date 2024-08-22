@@ -1,0 +1,154 @@
+###########################################################################
+# Reference sweep specification                                           #
+###########################################################################
+# This is the file format used as the input to configure a spectrum       #
+# monitoring sweep executed by the `edge-sensor-sweep` script.            #
+###########################################################################
+
+# Metadata added as-is to the `attrs` attribute of a saved xarray Dataset
+description:
+  # optional description of the capture
+  summary: 
+
+  # manual specification of GPS location coordinates
+  # (in the future, automatic GPS location via gpsd may be implemented)
+  location:
+  - 39.991746624418745   # lat (deg)
+  - -105.26457779333897   # long (deg)
+  - 1783.4   # ASL (m)
+
+  external_signal_chain:
+  - PXIe-5644R Signal generator, 3710 MHz CW with 10 ms square pulse modulation
+
+
+# Radio setup parameters that apply to all captures
+radio_setup:
+  # python radio driver to use to connect to hardware
+  # (must match a class name that subclasses edge_sensor.radio.RadioDevice)
+  driver: Air7201B
+
+  # eventually: "builtin" or "gps"
+  # (not yet implemented)
+  # timebase: internal
+
+  # Acquisition start times will only occur at this fixed time modulus (s)
+  # This can for example start all acquisitions at the same time within a
+  # cellular frame.
+  periodic_trigger: 10e-3
+
+  # calibration data path
+  # - if a relative path, it is interpreted as relative to this yaml
+  # - if not specified, IQ is normalized as ADC full scale
+  calibration: ../calibration-sweeps/Air7201B-calibration.p
+
+
+# These settings are used unless specified otherwise for each capture
+defaults:
+  # RF Center frequency (Hz)
+  center_frequency: 3710e6
+
+  # Channel index, e.g., 0 -> RX1, 1 -> RX2
+  channel: 0
+
+  # hardware gain setting (dB)
+  # Range is hardware-dependent - see the gain limits specified by
+  #   src/edge_sensor/radio/*.py
+  gain: -10 # dB
+
+  # acquisition duration (s)
+  duration: 0.5 
+
+  # waveform sample rate (samples/s)
+  sample_rate: 15.36e6
+
+  # filter bandwidth
+  analysis_bandwidth: 10e6
+
+  # digitally shift the LO out of the acquisition band: 'left', 'right', 'none'
+  lo_shift: none
+
+
+# A list of dictionaries that specify the characteristics of the sweep captures to acquire.
+# The sweep is executed by stepping each capture in order.
+#
+# The size of the `capture` dimension in the xarray Dataset output from `edge-sensor-sweep`
+# will match the number of entries given here. 
+captures:
+  - center_frequency: 3690e6 # Hz
+  - center_frequency: 3700e6 # Hz
+  - center_frequency: 3710e6 # Hz
+  - center_frequency: 3720e6 # Hz
+  - center_frequency: 3730e6 # Hz
+
+# Specify the output analyses performed for each capture.
+# - Each analysis key name corresponds with a function
+#   * These are decorated by @register in src/channel_analysis/waveform.py
+#   * The parameters specified here are passed in as keyword arguments in this function
+# - The xarray.Dataset output from this sweep will include a data variable
+#   matching the name of each of these analysis
+channel_analysis:
+
+    # amplitude probability distribution ("APD")
+    amplitude_probability_distribution:
+        # binning is performed on the power axis to allow aggregation across captures
+        power_low: -40 # dBm
+        power_high: 15 # dBm
+        power_count: 221
+
+    # a cyclic analysis of total power in the time domain 
+    cyclic_channel_power:
+        cyclic_period: 0.01
+        cyclic_statistics:
+        # any of "min", "mean", "max", or a quantile number 
+        - min
+        - mean
+        - max
+        detector_period: 1.6666666666666667e-05
+        detectors:
+        - rms
+        - peak
+
+    # save a clipping of the received IQ waveform
+    iq_waveform:
+        start_time_sec: 0
+        stop_time_sec: 0.1
+
+    # save a persistence spectrum evaluated from STFT
+    persistence_spectrum:
+        # a list of statistics to apply across the frequency axis
+        # 'min', 'max' (or equivalent 'peak'), 'mean' (or equivalent 'rms'), or a quantile number
+        statistics:
+        - mean
+        - 0.5
+        - 0.75
+        - 0.9
+        - 0.95
+        - 0.99
+        - 0.999
+        - max
+
+        # the step size in the frequency domain (Hz) 
+        resolution: 15000
+
+        # the fractional overlap in the STFT.
+        # (Examples: 0: no overlap, 0.5: 50% overlap)
+        overlap_frac: 0.
+
+        # whether to truncate the output frequencies at the capture analysis bandwidth 
+        truncate: true
+
+        # the spectrum analysis window to apply to the FFT
+        window:
+            - dpss
+            - 3.87638403 # for enbw:resolution == 2:1
+
+    # channel power vs time
+    power_time_series:
+        # time bin size
+        detector_period: 0.0005
+
+        # list of statistics to evaluate in each detector time bin:
+        # 'min', 'max' (or equivalent 'peak'), 'mean' (or equivalent 'rms'), or a quantile number
+        detectors:
+        - rms
+        - peak
