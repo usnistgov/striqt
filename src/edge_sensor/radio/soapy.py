@@ -143,7 +143,7 @@ class SoapyRadioDevice(RadioDevice):
     @backend_sample_rate.setter
     @_verify_channel_for_setter
     def _(self, sample_rate):
-        self._logger.info(f'sample rate {sample_rate}')
+        self._logger.info(f'sample rate {sample_rate}, downsample {self._downsample}')
         self.backend.setSampleRate(soapy.SOAPY_SDR_RX, self.channel(), sample_rate)
 
     sample_rate = backend_sample_rate.corrected_from_expression(
@@ -250,10 +250,7 @@ class SoapyRadioDevice(RadioDevice):
 
         nfft_out = analysis_filter.get('nfft_out', analysis_filter['nfft'])
 
-        if analysis_filter['nfft'] < nfft_out:
-            downsample = analysis_filter['nfft'] / nfft_out
-        else:
-            downsample = 1
+        downsample = analysis_filter['nfft'] / nfft_out
 
         if fs_backend != self.backend_sample_rate() or downsample != self._downsample:
             with attr.hold_attr_notifications(self):
