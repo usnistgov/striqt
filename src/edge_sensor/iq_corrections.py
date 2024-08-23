@@ -136,18 +136,6 @@ def compute_y_factor_corrections(
     )
     return ret
 
-def pad_along_axis(a, pad_width: list, axis=0, *args, **kws):
-    if axis >= 0:
-        pre_pad = [[0, 0]] * axis
-    else:
-        pre_pad = [[0, 0]] * (axis + a.ndim - 1)
-
-    xp = iqwaveform.util.array_namespace(a)
-
-    print(pre_pad+pad_width)
-
-    return xp.pad(a, pre_pad + pad_width, *args, **kws)
-
 def resampling_correction(
     iq: iqwaveform.type_stubs.ArrayType,
     capture: structs.RadioCapture,
@@ -173,7 +161,6 @@ def resampling_correction(
 
     # create a buffer large enough for post-processing seeded with a copy of the IQ
     _, buf_size = get_capture_buffer_sizes(radio, capture)
-    lb.logger.info(f'buffer size input: {buf_size}')
     buf = xp.empty(buf_size, dtype='complex64')
     iq = buf[: iq.size] = xp.asarray(iq)
 
@@ -302,13 +289,13 @@ def resampling_correction(
             freqs,
             xstft,
             nfft_out=nfft_out,
-            passband=passband,
+            passband=(passband[0] + enbw, passband[1] - enbw),
             axis=axis,
             out=buf,
         )
     elif nfft_out > nfft:
-        pad_left = int((nfft_out-nfft)/2)
-        pad_right = ceil((nfft_out-nfft)/2)
+        pad_left = (nfft_out-nfft)//2
+        pad_right = pad_left + (nfft_out-nfft)%2
 
         iqwaveform.fourier.zero_stft_by_freq(
             freqs,
@@ -317,8 +304,7 @@ def resampling_correction(
             axis=axis,
         )
 
-        lb.logger.info(f'xstft shape: {xstft.shape}, pads: {[pad_left, pad_right]}')
-        xstft = pad_along_axis(xstft, [[pad_left, pad_right]], axis=axis+1)
+        xstft = iqwaveform.util.pad_along_axis(xstft, [[pad_left, pad_right]], axis=axis+1)
 
     else:
         # filter
@@ -339,7 +325,6 @@ def resampling_correction(
     )
 
     if power_scale is not None:
-        lb.logger.info(f'power scale: {power_scale}')
         iq *= np.sqrt(power_scale)
 
     return iq
