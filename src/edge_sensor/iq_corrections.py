@@ -160,6 +160,7 @@ def resampling_correction(
 
     # create a buffer large enough for post-processing seeded with a copy of the IQ
     _, buf_size = get_capture_buffer_sizes(radio, capture)
+    lb.logger.info(f'buffer size input: {buf_size}')
     buf = xp.empty(buf_size, dtype='complex64')
     iq = buf[: iq.size] = xp.asarray(iq)
 
