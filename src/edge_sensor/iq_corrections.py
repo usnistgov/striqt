@@ -160,7 +160,7 @@ def resampling_correction(
     xp = import_cupy_with_fallback()
 
     # create a buffer large enough for post-processing seeded with a copy of the IQ
-    _, buf_size = get_capture_buffer_sizes(radio, capture)
+    # _, buf_size = get_capture_buffer_sizes(radio, capture)
     # buf = xp.empty(buf_size, dtype='complex64')
     # buf[: iq.size] = xp.asarray(iq)
     iq = xp.asarray(iq)
@@ -286,7 +286,7 @@ def resampling_correction(
 
     if nfft_out < nfft:
         # downsample already does the filter
-        print('downsample')
+        print('downsample', nfft_out, nfft)
         freqs, xstft = iqwaveform.fourier.downsample_stft(
             freqs,
             xstft,
@@ -296,6 +296,7 @@ def resampling_correction(
             # out=buf,
         )
     elif nfft_out > nfft:
+        print('upsample', nfft_out, nfft)
         pad_left = (nfft_out-nfft)//2
         pad_right = pad_left + (nfft_out-nfft)%2
 
