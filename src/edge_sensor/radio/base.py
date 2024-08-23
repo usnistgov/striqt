@@ -197,13 +197,14 @@ def _get_capture_buffer_sizes_cached(
 
     if analysis_filter and capture.gpu_resample:
         samples_in += TRANSIENT_HOLDOFF_WINDOWS * analysis_filter['nfft']
-        samples_out = 1.5*iqwaveform.fourier._istft_buffer_size(
+        samples_out = iqwaveform.fourier._istft_buffer_size(
             samples_in,
             window=analysis_filter['window'],
             nfft_out=analysis_filter['nfft_out'],
             nfft=analysis_filter['nfft'],
             extend=True,
         )
+        samples_out = int(1.5*samples_out)
 
     return samples_in, samples_out
 
