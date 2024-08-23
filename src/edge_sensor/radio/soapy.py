@@ -143,6 +143,7 @@ class SoapyRadioDevice(RadioDevice):
     @backend_sample_rate.setter
     @_verify_channel_for_setter
     def _(self, sample_rate):
+        self._logger.info(f'sample rate {sample_rate}')
         self.backend.setSampleRate(soapy.SOAPY_SDR_RX, self.channel(), sample_rate)
 
     sample_rate = backend_sample_rate.corrected_from_expression(
