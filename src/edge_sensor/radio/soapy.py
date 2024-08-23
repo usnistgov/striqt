@@ -255,6 +255,7 @@ class SoapyRadioDevice(RadioDevice):
         downsample = analysis_filter['nfft'] / nfft_out
 
         if fs_backend != self.backend_sample_rate() or downsample != self._downsample:
+            self._logger.info(f'fs_backend: {fs_backend}')
             with attr.hold_attr_notifications(self):
                 self._downsample = 1  # temporarily avoid a potential bounding error
             self.backend_sample_rate(fs_backend)
