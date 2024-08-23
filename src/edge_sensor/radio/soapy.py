@@ -81,6 +81,8 @@ class SoapyRadioDevice(RadioDevice):
         help='digital frequency shift of the RX center frequency',
     )
 
+    _downsample = attr.value.float(1.0, inherit=True)
+
     @attr.method.int(
         min=0,
         allow_none=True,
