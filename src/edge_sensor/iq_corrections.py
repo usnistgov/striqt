@@ -285,6 +285,7 @@ def resampling_correction(
 
     if nfft_out < nfft:
         # downsample already does the filter
+        print('downsample')
         freqs, xstft = iqwaveform.fourier.downsample_stft(
             freqs,
             xstft,
