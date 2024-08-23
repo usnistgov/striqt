@@ -30,7 +30,7 @@ class NullRadio(RadioDevice):
         help='configure behavior on receive buffer overflow',
     )
 
-    _downsample = attr.value.float(1.0, inherit=True)
+    _downsample = attr.value.float(1.0, min=0, help='backend_sample_rate/sample_rate')
 
     lo_offset = attr.value.float(
         0.0,
