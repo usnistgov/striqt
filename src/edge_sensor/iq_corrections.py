@@ -256,6 +256,10 @@ def resampling_correction(
             out=buf_stft,
         )
 
+        freqs = np.fft.fftshift(np.fft.fftfreq(nfft_out, 1/capture.sample_rate))
+        xstft = buf[:xstft.shape[axis]]
+        assert freqs.size == xstft.shape[axis+1]
+
     else:
         freqs, _, xstft = iqwaveform.fourier.stft(
             iq,
@@ -267,12 +271,6 @@ def resampling_correction(
             truncate=False,
             out=buf,
         )
-
-    if nfft_out > nfft :
-        # upsampling: take xstft to be the the zero-padded buffer
-        freqs = np.fft.fftshift(np.fft.fftfreq(nfft_out, 1/capture.sample_rate))
-        xstft = buf[:xstft.shape[axis]]
-        assert freqs.size == xstft.shape[axis+1]
 
     # set the passband roughly equal to the 3 dB bandwidth based on ENBW
     freq_res = fs_backend / nfft
