@@ -143,9 +143,9 @@ class SoapyRadioDevice(RadioDevice):
     @backend_sample_rate.setter
     @_verify_channel_for_setter
     def _(self, sample_rate):
-        if sample_rate * self._downsample == self.master_clock_rate:
-            sample_rate = self.master_clock_rate
-        self._logger.info(f'sample rate {sample_rate}, downsample {self._downsample}')
+        # if sample_rate * self._downsample == self.master_clock_rate:
+        #     sample_rate = self.master_clock_rate
+        self._logger.info(f'backend sample rate {sample_rate}, downsample {self._downsample}')
         self.backend.setSampleRate(soapy.SOAPY_SDR_RX, self.channel(), sample_rate)
 
     sample_rate = backend_sample_rate.corrected_from_expression(
