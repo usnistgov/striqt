@@ -157,21 +157,10 @@ def resampling_correction(
         the filtered IQ capture
     """
 
-    xp = import_cupy_with_fallback()
-
-    np.savez('debug.npy')
-    # create a buffer large enough for post-processing seeded with a copy of the IQ
-    _, buf_size = get_capture_buffer_sizes(radio, capture)
-    buf = xp.empty(buf_size, dtype='complex64')
-    buf[: iq.size] = xp.asarray(iq)
-    iq = buf[: iq.size]
-
     fs_backend, _, analysis_filter = design_capture_filter(
         radio.master_clock_rate, capture
     )
-
     nfft = analysis_filter['nfft']
-
     nfft_out, noverlap, overlap_scale, _ = (
         iqwaveform.fourier._ola_filter_parameters(
             iq.size,
@@ -181,6 +170,17 @@ def resampling_correction(
             extend=True,
         )
     )
+
+    xp = import_cupy_with_fallback()
+
+    np.savez('debug.npy')
+    # create a buffer large enough for post-processing seeded with a copy of the IQ
+    _, buf_size = get_capture_buffer_sizes(radio, capture)
+    if nfft_out > nfft:
+        buf_size = ceil(buf_size*nfft_out/nfft)
+    buf = xp.empty(buf_size, dtype='complex64')
+    buf[: iq.size] = xp.asarray(iq)
+    iq = buf[: iq.size]
 
     if force_calibration is not None:
         corrections = force_calibration
