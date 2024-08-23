@@ -231,9 +231,10 @@ def resampling_correction(
     )
 
     nfft_max = max(nfft, nfft_out)
-    buf = buf.reshape((buf.size//nfft_max, nfft_max))
+    buf = buf[:(buf.size//nfft_max)*nfft_max].reshape((buf.size//nfft_max, nfft_max))
 
-    if nfft < nfft_out:
+    if nfft_out > nfft:
+        # upsampling
         edge_offset = nfft_out / 2 - nfft / 2
         buf[:, :ceil(edge_offset)] = 0
         buf[:, -ceil(edge_offset):] = 0
@@ -253,8 +254,8 @@ def resampling_correction(
         out=buf_stft,
     )
 
-    if nfft < nfft_out:
-        # if upsampling, take xstft to be the the zero-padded buffer
+    if nfft_out > nfft :
+        # upsampling: take xstft to be the the zero-padded buffer
         freqs = xp.fft.fftfreq(nfft_out, 1/capture.sample_rate)
         xstft = buf_stft[:xstft.shape[0]]
 
