@@ -182,30 +182,30 @@ def _get_capture_buffer_sizes_cached(
     include_holdoff: bool = False,
 ):
     if iqwaveform.power_analysis.isroundmod(capture.duration * capture.sample_rate, 1):
-        nfft_out = round(capture.duration * capture.sample_rate)
+        samples_out = round(capture.duration * capture.sample_rate)
     else:
         msg = f'duration must be an integer multiple of the sample period (1/{capture.sample_rate} s)'
         raise ValueError(msg)
 
     _, _, analysis_filter = design_capture_filter(master_clock_rate, capture)
 
-    nfft_in = ceil(nfft_out * analysis_filter['nfft'] / analysis_filter['nfft_out'])
+    samples_in = ceil(samples_out * analysis_filter['nfft'] / analysis_filter['nfft_out'])
 
     if include_holdoff and periodic_trigger is not None:
         # add holdoff samples needed for the periodic trigger
-        nfft_in += ceil(analysis_filter['fs'] * periodic_trigger)
+        samples_in += ceil(analysis_filter['fs'] * periodic_trigger)
 
     if analysis_filter and capture.gpu_resample:
-        nfft_in += TRANSIENT_HOLDOFF_WINDOWS * analysis_filter['nfft']
-        nfft_out = iqwaveform.fourier._istft_buffer_size(
-            nfft_in,
+        samples_in += TRANSIENT_HOLDOFF_WINDOWS * analysis_filter['nfft']
+        samples_out = 1.5*iqwaveform.fourier._istft_buffer_size(
+            samples_in,
             window=analysis_filter['window'],
             nfft_out=analysis_filter['nfft_out'],
             nfft=analysis_filter['nfft'],
             extend=True,
         )
 
-    return nfft_in, nfft_out
+    return samples_in, samples_out
 
 
 def get_capture_buffer_sizes(
