@@ -319,7 +319,7 @@ def resampling_correction(
         xstft,
         size=round(capture.duration * capture.sample_rate),
         nfft=nfft_out,
-        noverlap=round(nfft_out * overlap_scale),
+        noverlap=noverlap,
         out=buf,
         axis=axis,
     )
