@@ -238,11 +238,11 @@ def resampling_correction(
             buf[:(buf.size//nfft_max)*nfft_max]
             .reshape((buf.size//nfft_max, nfft_max))
         )
-        edge_offset = nfft_out / 2 - nfft / 2
-        buf[:, :ceil(edge_offset)] = 0
-        buf[:, -ceil(edge_offset):] = 0
+        edge_offset = ceil(nfft_out / 2 - nfft / 2)
+        buf[:, :edge_offset] = 0
+        buf[:, -edge_offset:] = 0
 
-        buf_stft = buf[:, round(edge_offset):round(edge_offset)+nfft]
+        buf_stft = buf[:, edge_offset:edge_offset+nfft]
     else:
         buf_stft = buf
 
