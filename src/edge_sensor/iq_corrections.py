@@ -164,7 +164,7 @@ def resampling_correction(
     buf = xp.empty(buf_size, dtype='complex64')
     iq = buf[: iq.size] = xp.asarray(iq)
 
-    fs_backend, lo_offset, analysis_filter = design_capture_filter(
+    fs_backend, _, analysis_filter = design_capture_filter(
         radio.master_clock_rate, capture
     )
 
@@ -243,7 +243,6 @@ def resampling_correction(
 
         buf_stft = buf[:, edge_offset:edge_offset+nfft]
 
-        lb.logger.info(f'buf_stft size {buf_stft.size}')
 
         freqs, _, xstft = iqwaveform.fourier.stft(
             iq,
@@ -255,6 +254,8 @@ def resampling_correction(
             truncate=False,
             out=buf_stft,
         )
+
+        lb.logger.info(f'freqs: {repr(freqs)}')
 
     else:
         freqs, _, xstft = iqwaveform.fourier.stft(
