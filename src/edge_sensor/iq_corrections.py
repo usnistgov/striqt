@@ -173,7 +173,7 @@ def resampling_correction(
 
     xp = import_cupy_with_fallback()
 
-    np.savez('debug.npy')
+    np.savez('debug.npy', iq)
     # create a buffer large enough for post-processing seeded with a copy of the IQ
     _, buf_size = get_capture_buffer_sizes(radio, capture)
     if nfft_out > nfft:
