@@ -3,6 +3,7 @@ from functools import lru_cache
 import typing
 import pickle
 import gzip
+from math import ceil
 
 from channel_analysis import waveform, type_stubs
 
@@ -229,16 +230,33 @@ def resampling_correction(
         analysis_filter['window'], nfft, fftbins=False, xp=xp
     )
 
+    nfft_max = max(nfft, nfft_out)
+    buf = buf.reshape((buf.size//nfft_max, nfft_max))
+
+    if nfft < nfft_out:
+        edge_offset = nfft_out / 2 - nfft / 2
+        buf[:, :ceil(edge_offset)] = 0
+        buf[:, -ceil(edge_offset):] = 0
+
+        buf_stft = buf[:, round(edge_offset):round(edge_offset)+nfft_out]
+    else:
+        buf_stft = buf
+
     freqs, _, xstft = iqwaveform.fourier.stft(
         iq,
         fs=fs_backend,
         window=w,
-        nperseg=analysis_filter['nfft'],
-        noverlap=round(analysis_filter['nfft'] * overlap_scale),
+        nperseg=nfft,
+        noverlap=round(nfft * overlap_scale),
         axis=axis,
         truncate=False,
-        out=buf,
+        out=buf_stft,
     )
+
+    if nfft < nfft_out:
+        # if upsampling, take xstft to be the the zero-padded buffer
+        freqs = xp.fft.fftfreq(nfft_out, 1/capture.sample_rate)
+        xstft = buf_stft[:xstft.shape[0]]
 
     # set the passband roughly equal to the 3 dB bandwidth based on ENBW
     enbw = (
@@ -250,7 +268,8 @@ def resampling_correction(
     )
     passband = analysis_filter['passband']
 
-    if nfft_out != analysis_filter['nfft']:
+    if nfft_out < nfft:
+        # downsample already does the filter
         freqs, xstft = iqwaveform.fourier.downsample_stft(
             freqs,
             xstft,
@@ -260,6 +279,7 @@ def resampling_correction(
             out=buf,
         )
     else:
+        # filter
         iqwaveform.fourier.zero_stft_by_freq(
             freqs,
             xstft,
@@ -267,10 +287,9 @@ def resampling_correction(
             axis=axis,
         )
 
-    out_size = round(capture.duration * capture.sample_rate)
     iq = iqwaveform.fourier.istft(
         xstft,
-        out_size,
+        size=round(capture.duration * capture.sample_rate),
         nfft=nfft_out,
         noverlap=noverlap,
         out=buf,
