@@ -318,7 +318,7 @@ def resampling_correction(
         )
 
         lb.logger.info(f'xstft shape: {xstft.shape}, pads: {[pad_left, pad_right]}')
-        xstft = iqwaveform.util.pad_along_axis(xstft, [pad_left, pad_right], axis=axis+1, mode='constant', value=0)
+        xstft = pad_along_axis(xstft, [pad_left, pad_right], axis=axis+1, mode='constant', value=0)
 
     else:
         # filter
