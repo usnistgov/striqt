@@ -273,7 +273,7 @@ def resampling_correction(
 
     if nfft_out > nfft :
         # upsampling: take xstft to be the the zero-padded buffer
-        freqs = xp.fft.fftshift(xp.fft.fftfreq(nfft_out, 1/capture.sample_rate))
+        freqs = np.fft.fftshift(np.fft.fftfreq(nfft_out, 1/capture.sample_rate))
         xstft = buf[:xstft.shape[axis]]
         assert freqs.size == xstft.shape[axis+1]
         lb.logger.info(f'freqs: {type(freqs)}')        
