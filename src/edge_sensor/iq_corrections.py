@@ -242,7 +242,7 @@ def resampling_correction(
         buf[:, :ceil(edge_offset)] = 0
         buf[:, -ceil(edge_offset):] = 0
 
-        buf_stft = buf[:, round(edge_offset):round(edge_offset)+nfft_out]
+        buf_stft = buf[:, round(edge_offset):round(edge_offset)+nfft]
     else:
         buf_stft = buf
 
