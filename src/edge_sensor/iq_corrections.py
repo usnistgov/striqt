@@ -5,6 +5,8 @@ import pickle
 import gzip
 from math import ceil
 
+import iqwaveform.type_stubs
+
 from channel_analysis import waveform, type_stubs
 
 from .radio import RadioDevice, get_capture_buffer_sizes, design_capture_filter
@@ -136,7 +138,7 @@ def compute_y_factor_corrections(
 
 
 def resampling_correction(
-    iq: iqwaveform.fourier.Array,
+    iq: iqwaveform.type_stubs.ArrayType,
     capture: structs.RadioCapture,
     radio: RadioDevice,
     force_calibration: typing.Optional[xr.Dataset] = None,
@@ -239,7 +241,7 @@ def resampling_correction(
         )
         edge_offset = int(nfft_out / 2 - nfft / 2)
         buf[:, :edge_offset] = 0
-        buf[:, -edge_offset:] = 0
+        buf[:, edge_offset+nfft:] = 0
 
         buf_stft = buf[:, edge_offset:edge_offset+nfft]
 
@@ -254,7 +256,7 @@ def resampling_correction(
             truncate=False,
             out=buf_stft,
         )
-        lb.logger.info(f'freqs: {repr(freqs)}')
+        lb.logger.info(f'freqs: {type(freqs)}')
 
 
     else:
@@ -272,13 +274,14 @@ def resampling_correction(
     if nfft_out > nfft :
         # upsampling: take xstft to be the the zero-padded buffer
         freqs = xp.fft.fftshift(xp.fft.fftfreq(nfft_out, 1/capture.sample_rate))
-        xstft = buf[:xstft.shape[0]]
-        lb.logger.info(f'freqs: {freqs.shape, xstft.shape, nfft, nfft_out}')        
+        xstft = buf[:xstft.shape[axis]]
+        assert freqs.size == xstft.shape[axis+1]
+        lb.logger.info(f'freqs: {type(freqs)}')        
 
     # set the passband roughly equal to the 3 dB bandwidth based on ENBW
+    freq_res = fs_backend / nfft
     enbw = (
-        fs_backend
-        / nfft
+        freq_res
         * iqwaveform.fourier.equivalent_noise_bandwidth(
             analysis_filter['window'], nfft, fftbins=False
         )
@@ -297,7 +300,6 @@ def resampling_correction(
         )
     else:
         # filter
-
         iqwaveform.fourier.zero_stft_by_freq(
             freqs,
             xstft,
