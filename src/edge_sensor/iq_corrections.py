@@ -243,19 +243,29 @@ def resampling_correction(
         buf[:, -edge_offset:] = 0
 
         buf_stft = buf[:, edge_offset:edge_offset+nfft]
-    else:
-        buf_stft = buf
 
-    freqs, _, xstft = iqwaveform.fourier.stft(
-        iq,
-        fs=fs_backend,
-        window=w,
-        nperseg=nfft,
-        noverlap=round(nfft * overlap_scale),
-        axis=axis,
-        truncate=False,
-        out=buf_stft,
-    )
+        freqs, _, xstft = iqwaveform.fourier.stft(
+            iq,
+            fs=fs_backend,
+            window=w,
+            nperseg=nfft_out,
+            noverlap=round(nfft * overlap_scale),
+            axis=axis,
+            truncate=False,
+            out=buf_stft,
+        )
+
+    else:
+        freqs, _, xstft = iqwaveform.fourier.stft(
+            iq,
+            fs=fs_backend,
+            window=w,
+            nperseg=nfft,
+            noverlap=round(nfft * overlap_scale),
+            axis=axis,
+            truncate=False,
+            out=buf,
+        )
 
     if nfft_out > nfft :
         # upsampling: take xstft to be the the zero-padded buffer
