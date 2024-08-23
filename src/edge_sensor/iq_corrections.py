@@ -273,7 +273,7 @@ def resampling_correction(
         # upsampling: take xstft to be the the zero-padded buffer
         freqs = xp.fft.fftshift(xp.fft.fftfreq(nfft_out, 1/capture.sample_rate))
         xstft = buf_stft[:xstft.shape[0]]
-        lb.logger.info(f'freqs: {freqs.shape, xstft.shape}')        
+        lb.logger.info(f'freqs: {freqs.shape, xstft.shape, nfft, nfft_out}')        
 
     # set the passband roughly equal to the 3 dB bandwidth based on ENBW
     enbw = (
