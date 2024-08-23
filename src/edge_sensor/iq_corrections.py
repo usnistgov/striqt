@@ -235,10 +235,10 @@ def resampling_correction(
     if nfft_out > nfft:
         # upsampling
         buf = (
-            buf[:(buf.size//nfft_max)*nfft_max]
-            .reshape((buf.size//nfft_max, nfft_max))
+            buf[:(buf.size//nfft_out)*nfft_out]
+            .reshape((buf.size//nfft_out, nfft_out))
         )
-        edge_offset = ceil(nfft_out / 2 - nfft / 2)
+        edge_offset = int(nfft_out / 2 - nfft / 2)
         buf[:, :edge_offset] = 0
         buf[:, -edge_offset:] = 0
 
@@ -252,7 +252,7 @@ def resampling_correction(
             noverlap=round(nfft * overlap_scale),
             axis=axis,
             truncate=False,
-            out=buf_stft,
+            out=buf_stft.flatten(),
         )
 
     else:
