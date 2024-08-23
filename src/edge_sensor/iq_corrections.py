@@ -289,7 +289,7 @@ def resampling_correction(
             freqs,
             xstft,
             nfft_out=nfft_out,
-            passband=(passband[0] + enbw, passband[1] - enbw),
+            passband=passband,
             axis=axis,
             out=buf,
         )
@@ -300,7 +300,7 @@ def resampling_correction(
         iqwaveform.fourier.zero_stft_by_freq(
             freqs,
             xstft,
-            passband=(passband[0] + enbw, passband[1] - enbw),
+            passband=(passband[0] + enbw/2, passband[1] - enbw/2),
             axis=axis,
         )
 
