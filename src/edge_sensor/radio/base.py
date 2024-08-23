@@ -204,7 +204,6 @@ def _get_capture_buffer_sizes_cached(
             nfft=analysis_filter['nfft'],
             extend=True,
         )
-        samples_out = int(2*samples_out)
 
     return samples_in, samples_out
 
