@@ -293,14 +293,13 @@ def resampling_correction(
             out=buf,
         )
     else:
-        pass
         # filter
-        # iqwaveform.fourier.zero_stft_by_freq(
-        #     freqs,
-        #     xstft,
-        #     passband=(passband[0] + enbw, passband[1] - enbw),
-        #     axis=axis,
-        # )
+        iqwaveform.fourier.zero_stft_by_freq(
+            freqs,
+            xstft,
+            passband=(passband[0] + enbw, passband[1] - enbw),
+            axis=axis,
+        )
 
     iq = iqwaveform.fourier.istft(
         xstft,
