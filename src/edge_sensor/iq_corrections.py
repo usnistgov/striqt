@@ -270,7 +270,7 @@ def resampling_correction(
         noverlap=round(nfft * overlap_scale),
         axis=axis,
         truncate=False,
-        out=buf,
+        # out=buf,
     )
 
     # set the passband roughly equal to the 3 dB bandwidth based on ENBW
@@ -292,7 +292,7 @@ def resampling_correction(
             nfft_out=nfft_out,
             passband=passband,
             axis=axis,
-            out=buf,
+            # out=buf,
         )
     elif nfft_out > nfft:
         pad_left = (nfft_out-nfft)//2
@@ -321,7 +321,7 @@ def resampling_correction(
         size=round(capture.duration * capture.sample_rate),
         nfft=nfft_out,
         noverlap=noverlap,
-        out=buf,
+        # out=buf,
         axis=axis,
     )
 
