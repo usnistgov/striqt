@@ -234,7 +234,6 @@ def resampling_correction(
 
     if nfft_out > nfft:
         # upsampling
-        raise KeyboardInterrupt(repr(buf.shape))
         buf = (
             buf[:(buf.size//nfft_max)*nfft_max]
             .reshape((buf.size//nfft_max, nfft_max))
