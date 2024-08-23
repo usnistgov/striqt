@@ -161,10 +161,10 @@ def resampling_correction(
 
     np.savez('debug.npy')
     # create a buffer large enough for post-processing seeded with a copy of the IQ
-    # _, buf_size = get_capture_buffer_sizes(radio, capture)
-    # buf = xp.empty(buf_size, dtype='complex64')
-    # buf[: iq.size] = xp.asarray(iq)
-    iq = xp.asarray(iq)
+    _, buf_size = get_capture_buffer_sizes(radio, capture)
+    buf = xp.empty(buf_size, dtype='complex64')
+    buf[: iq.size] = xp.asarray(iq)
+    iq = buf[: iq.size]
 
     fs_backend, _, analysis_filter = design_capture_filter(
         radio.master_clock_rate, capture
@@ -272,7 +272,7 @@ def resampling_correction(
         noverlap=round(nfft * overlap_scale),
         axis=axis,
         truncate=False,
-        # out=buf,
+        out=buf,
     )
 
     # set the passband roughly equal to the 3 dB bandwidth based on ENBW
@@ -293,7 +293,7 @@ def resampling_correction(
             nfft_out=nfft_out,
             passband=passband,
             axis=axis,
-            # out=buf,
+            out=buf,
         )
     elif nfft_out > nfft:
         pad_left = (nfft_out-nfft)//2
@@ -322,7 +322,7 @@ def resampling_correction(
         size=round(capture.duration * capture.sample_rate),
         nfft=nfft_out,
         noverlap=noverlap,
-        # out=buf,
+        out=buf,
         axis=axis,
     )
 
