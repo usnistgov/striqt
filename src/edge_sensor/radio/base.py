@@ -39,6 +39,8 @@ class RadioDevice(lb.Device):
         help='if specified, acquisition start times will begin at even multiples of this',
     )
 
+    _downsample = attr.value.float(1.0, min=0, help='backend_sample_rate/sample_rate')
+
     @attr.property.str(sets=False, cache=True, help='unique radio hardware identifier')
     def id(self):
         raise NotImplementedError
