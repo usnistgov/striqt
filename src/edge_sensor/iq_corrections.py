@@ -256,8 +256,6 @@ def resampling_correction(
             truncate=False,
             out=buf_stft,
         )
-        lb.logger.info(f'freqs: {type(freqs)}')
-
 
     else:
         freqs, _, xstft = iqwaveform.fourier.stft(
@@ -276,7 +274,6 @@ def resampling_correction(
         freqs = np.fft.fftshift(np.fft.fftfreq(nfft_out, 1/capture.sample_rate))
         xstft = buf[:xstft.shape[axis]]
         assert freqs.size == xstft.shape[axis+1]
-        lb.logger.info(f'freqs: {type(freqs)}')        
 
     # set the passband roughly equal to the 3 dB bandwidth based on ENBW
     freq_res = fs_backend / nfft

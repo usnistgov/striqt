@@ -249,7 +249,11 @@ class SoapyRadioDevice(RadioDevice):
         )
 
         nfft_out = analysis_filter.get('nfft_out', analysis_filter['nfft'])
-        downsample = analysis_filter['nfft'] / nfft_out
+
+        if analysis_filter['nfft'] < nfft_out:
+            downsample = analysis_filter['nfft'] / nfft_out
+        else:
+            downsample = 1
 
         if fs_backend != self.backend_sample_rate() or downsample != self._downsample:
             with attr.hold_attr_notifications(self):
