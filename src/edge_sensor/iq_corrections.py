@@ -245,12 +245,11 @@ def resampling_correction(
 
         buf_stft = buf[:, edge_offset:edge_offset+nfft]
 
-
         freqs, _, xstft = iqwaveform.fourier.stft(
             iq,
             fs=fs_backend,
             window=w,
-            nperseg=nfft,
+            nperseg=nfft_out,
             noverlap=round(nfft * overlap_scale),
             axis=axis,
             truncate=False,
