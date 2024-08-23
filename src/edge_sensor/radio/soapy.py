@@ -81,7 +81,7 @@ class SoapyRadioDevice(RadioDevice):
         help='digital frequency shift of the RX center frequency',
     )
 
-    _downsample = attr.value.float(1.0, inherit=True)
+    _downsample = attr.value.float(1.0, min=0, help='backend_sample_rate/sample_rate')
 
     @attr.method.int(
         min=0,
@@ -142,11 +142,11 @@ class SoapyRadioDevice(RadioDevice):
 
     @backend_sample_rate.setter
     @_verify_channel_for_setter
-    def _(self, sample_rate):
+    def _(self, backend_sample_rate):
         # if sample_rate * self._downsample == self.master_clock_rate:
         #     sample_rate = self.master_clock_rate
-        self._logger.info(f'backend sample rate {sample_rate}, downsample {self._downsample}')
-        self.backend.setSampleRate(soapy.SOAPY_SDR_RX, self.channel(), sample_rate)
+        self._logger.info(f'backend sample rate {backend_sample_rate}, downsample {self._downsample}')
+        self.backend.setSampleRate(soapy.SOAPY_SDR_RX, self.channel(), backend_sample_rate)
 
     sample_rate = backend_sample_rate.corrected_from_expression(
         backend_sample_rate / _downsample,
