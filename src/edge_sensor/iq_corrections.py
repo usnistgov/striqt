@@ -161,8 +161,9 @@ def resampling_correction(
 
     # create a buffer large enough for post-processing seeded with a copy of the IQ
     _, buf_size = get_capture_buffer_sizes(radio, capture)
-    buf = xp.empty(buf_size, dtype='complex64')
-    iq = buf[: iq.size] = xp.asarray(iq)
+    # buf = xp.empty(buf_size, dtype='complex64')
+    # buf[: iq.size] = xp.asarray(iq)
+    iq = xp.asarray(iq)
 
     fs_backend, _, analysis_filter = design_capture_filter(
         radio.master_clock_rate, capture
