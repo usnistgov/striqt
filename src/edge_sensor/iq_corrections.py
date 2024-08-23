@@ -233,46 +233,47 @@ def resampling_correction(
         analysis_filter['window'], nfft, fftbins=False, xp=xp
     )
 
-    if nfft_out > nfft:
-        # upsampling
-        buf = (
-            buf[:(buf.size//nfft_out)*nfft_out]
-            .reshape((buf.size//nfft_out, nfft_out))
-        )
-        edge_offset = int(nfft_out / 2 - nfft / 2)
-        # buf[:, :edge_offset] = 0
-        # buf[:, edge_offset+nfft:] = 0
+    # if nfft_out > nfft:
+    #     # upsampling
+    #     buf = (
+    #         buf[:(buf.size//nfft_out)*nfft_out]
+    #         .reshape((buf.size//nfft_out, nfft_out))
+    #     )
+    #     edge_offset = int(nfft_out / 2 - nfft / 2)
+    #     # buf[:, :edge_offset] = 0
+    #     # buf[:, edge_offset+nfft:] = 0
 
-        buf_stft = buf[:, edge_offset:edge_offset+nfft]
+    #     buf_stft = buf[:, edge_offset:edge_offset+nfft]
+    #     xstft = buf[:]
 
-        freqs, _, xstft = iqwaveform.fourier.stft(
-            iq,
-            fs=fs_backend,
-            window=w,
-            nperseg=nfft,
-            noverlap=round(nfft * overlap_scale),
-            axis=axis,
-            truncate=False,
-            out=buf_stft,
-        )
+    #     freqs, _, xstft = iqwaveform.fourier.stft(
+    #         iq,
+    #         fs=fs_backend,
+    #         window=w,
+    #         nperseg=nfft,
+    #         noverlap=round(nfft * overlap_scale),
+    #         axis=axis,
+    #         truncate=False,
+    #         out=buf_stft,
+    #     )
 
-        lb.logger.info(f'stft size: {xstft.shape}, analysis_filter: {analysis_filter}, iq size: {iq.shape}')
+    #     lb.logger.info(f'stft size: {xstft.shape}, analysis_filter: {analysis_filter}, iq size: {iq.shape}')
 
-        freqs = np.fft.fftshift(np.fft.fftfreq(nfft_out, 1/capture.sample_rate))
-        xstft = buf[:xstft.shape[axis]]
-        assert freqs.size == xstft.shape[axis+1]
+    #     freqs = np.fft.fftshift(np.fft.fftfreq(nfft_out, 1/capture.sample_rate))
+    #     xstft = buf[:xstft.shape[axis]]
+    #     assert freqs.size == xstft.shape[axis+1]
 
-    else:
-        freqs, _, xstft = iqwaveform.fourier.stft(
-            iq,
-            fs=fs_backend,
-            window=w,
-            nperseg=nfft,
-            noverlap=round(nfft * overlap_scale),
-            axis=axis,
-            truncate=False,
-            out=buf,
-        )
+    # else:
+    freqs, _, xstft = iqwaveform.fourier.stft(
+        iq,
+        fs=fs_backend,
+        window=w,
+        nperseg=nfft,
+        noverlap=round(nfft * overlap_scale),
+        axis=axis,
+        truncate=False,
+        out=buf,
+    )
 
     # set the passband roughly equal to the 3 dB bandwidth based on ENBW
     freq_res = fs_backend / nfft
@@ -294,15 +295,27 @@ def resampling_correction(
             axis=axis,
             out=buf,
         )
+    elif nfft_out > nfft:
+        pad_left = int((nfft_out-nfft)/2)
+        pad_right = ceil((nfft_out-nfft)/2)
+
+        iqwaveform.fourier.zero_stft_by_freq(
+            freqs,
+            xstft,
+            passband=(passband[0] + enbw, passband[1] - enbw),
+            axis=axis,
+        )
+
+        xstft = iqwaveform.util.pad_along_axis(xstft, [pad_left, pad_right], axis=axis+1)
+
     else:
-        pass
         # filter
-        # iqwaveform.fourier.zero_stft_by_freq(
-        #     freqs,
-        #     xstft,
-        #     passband=(passband[0] + enbw, passband[1] - enbw),
-        #     axis=axis,
-        # )
+        iqwaveform.fourier.zero_stft_by_freq(
+            freqs,
+            xstft,
+            passband=(passband[0] + enbw, passband[1] - enbw),
+            axis=axis,
+        )
 
     iq = iqwaveform.fourier.istft(
         xstft,
