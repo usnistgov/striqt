@@ -230,8 +230,6 @@ def resampling_correction(
         analysis_filter['window'], nfft, fftbins=False, xp=xp
     )
 
-    nfft_max = max(nfft, nfft_out)
-
     if nfft_out > nfft:
         # upsampling
         buf = (
@@ -243,6 +241,8 @@ def resampling_correction(
         buf[:, -edge_offset:] = 0
 
         buf_stft = buf[:, edge_offset:edge_offset+nfft]
+
+        lb.logger.info(f'buf_stft size {buf_stft.size}')
 
         freqs, _, xstft = iqwaveform.fourier.stft(
             iq,
