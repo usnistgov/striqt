@@ -136,6 +136,17 @@ def compute_y_factor_corrections(
     )
     return ret
 
+def pad_along_axis(a, pad_width: list, axis=0, *args, **kws):
+    if axis >= 0:
+        pre_pad = [[0, 0]] * axis
+    else:
+        pre_pad = [[0, 0]] * (axis + a.ndim - 1)
+
+    xp = iqwaveform.util.array_namespace(a)
+
+    print(pre_pad+pad_width)
+
+    return xp.pad(a, pre_pad + pad_width, *args, **kws)
 
 def resampling_correction(
     iq: iqwaveform.type_stubs.ArrayType,
