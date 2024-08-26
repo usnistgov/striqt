@@ -51,7 +51,7 @@ class FilteredCapture(Capture):
     # filtering and resampling
     analysis_bandwidth: A[Optional[float], meta('DSP filter bandwidth', 'Hz')] = None
     analysis_filter: dict = msgspec.field(
-        default_factory=lambda: frozendict({'fft_size': 8192, 'window': 'hamming'})
+        default_factory=lambda: frozendict({'nfft': 8192, 'window': 'hamming'})
     )
 
 

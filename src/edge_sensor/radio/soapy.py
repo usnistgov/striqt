@@ -75,13 +75,13 @@ class SoapyRadioDevice(RadioDevice):
         help='configure behavior on receive buffer overflow',
     )
 
-    _downsample = attr.value.float(1.0, min=1, help='backend_sample_rate/sample_rate')
-
     lo_offset = attr.value.float(
         0.0,
         label='Hz',
         help='digital frequency shift of the RX center frequency',
     )
+
+    _downsample = attr.value.float(1.0, min=0, help='backend_sample_rate/sample_rate')
 
     @attr.method.int(
         min=0,
@@ -142,8 +142,11 @@ class SoapyRadioDevice(RadioDevice):
 
     @backend_sample_rate.setter
     @_verify_channel_for_setter
-    def _(self, sample_rate):
-        self.backend.setSampleRate(soapy.SOAPY_SDR_RX, self.channel(), sample_rate)
+    def _(self, backend_sample_rate):
+        # if sample_rate * self._downsample == self.master_clock_rate:
+        #     sample_rate = self.master_clock_rate
+        self._logger.info(f'backend sample rate {backend_sample_rate}, downsample {self._downsample}')
+        self.backend.setSampleRate(soapy.SOAPY_SDR_RX, self.channel(), backend_sample_rate)
 
     sample_rate = backend_sample_rate.corrected_from_expression(
         backend_sample_rate / _downsample,
@@ -207,7 +210,7 @@ class SoapyRadioDevice(RadioDevice):
         # self.backend.setHardwareTime(1, 'now')
 
     @property
-    def _master_clock_rate(self):
+    def master_clock_rate(self):
         return type(self).backend_sample_rate.max
 
     def _reset_stats(self):
@@ -244,13 +247,15 @@ class SoapyRadioDevice(RadioDevice):
             self.gain(capture.gain)
 
         fs_backend, lo_offset, analysis_filter = design_capture_filter(
-            self._master_clock_rate, capture
+            self.master_clock_rate, capture
         )
 
-        fft_size_out = analysis_filter.get('fft_size_out', analysis_filter['fft_size'])
-        downsample = analysis_filter['fft_size'] / fft_size_out
+        nfft_out = analysis_filter.get('nfft_out', analysis_filter['nfft'])
+
+        downsample = analysis_filter['nfft'] / nfft_out
 
         if fs_backend != self.backend_sample_rate() or downsample != self._downsample:
+            self._logger.info(f'fs_backend: {fs_backend}')
             with attr.hold_attr_notifications(self):
                 self._downsample = 1  # temporarily avoid a potential bounding error
             self.backend_sample_rate(fs_backend)

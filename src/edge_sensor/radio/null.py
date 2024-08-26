@@ -30,7 +30,7 @@ class NullRadio(RadioDevice):
         help='configure behavior on receive buffer overflow',
     )
 
-    _downsample = attr.value.float(1.0, min=1, help='backend_sample_rate/sample_rate')
+    _downsample = attr.value.float(1.0, min=0, help='backend_sample_rate/sample_rate')
 
     lo_offset = attr.value.float(
         0.0,
@@ -137,14 +137,18 @@ class NullRadio(RadioDevice):
         return 'null'
 
     @property
-    def _master_clock_rate(self):
+    def master_clock_rate(self):
         return 125e6
 
     arm = SoapyRadioDevice.arm
 
+    def _prepare_buffer(self, capture):
+        pass
+
+
     def _read_stream(self, N) -> np.ndarray:
         xp = import_cupy_with_fallback()
-        ret = self._inbuf.view('complex64')[:N]
+        ret = xp.empty(N, dtype='complex64')
         if self.resource == 'empty':
             pass
         elif self.resource == 'noise':
@@ -162,4 +166,5 @@ class NullRadio(RadioDevice):
             t = np.arange(N) / self.sample_rate()
             f_cw = self.sample_rate() / 5
             ret[:] += xp.sin((2 * np.pi * f_cw) * t)
-        return self._inbuf.view('complex64')[:N]
+            
+        return ret

@@ -3,6 +3,9 @@ from functools import lru_cache
 import typing
 import pickle
 import gzip
+from math import ceil
+
+import iqwaveform.type_stubs
 
 from channel_analysis import waveform, type_stubs
 
@@ -133,9 +136,8 @@ def compute_y_factor_corrections(
     )
     return ret
 
-
 def resampling_correction(
-    iq: iqwaveform.fourier.Array,
+    iq: iqwaveform.type_stubs.ArrayType,
     capture: structs.RadioCapture,
     radio: RadioDevice,
     force_calibration: typing.Optional[xr.Dataset] = None,
@@ -155,28 +157,30 @@ def resampling_correction(
         the filtered IQ capture
     """
 
-    xp = import_cupy_with_fallback()
-
-    # create a buffer large enough for post-processing seeded with a copy of the IQ
-    _, buf_size = get_capture_buffer_sizes(radio, capture)
-    buf = xp.empty(buf_size, dtype='complex64')
-    iq = buf[: iq.size] = xp.asarray(iq)
-
-    fs_backend, lo_offset, analysis_filter = design_capture_filter(
-        radio._master_clock_rate, capture
+    fs_backend, _, analysis_filter = design_capture_filter(
+        radio.master_clock_rate, capture
     )
-
-    fft_size = analysis_filter['fft_size']
-
-    fft_size_out, noverlap, overlap_scale, _ = (
+    nfft = analysis_filter['nfft']
+    nfft_out, noverlap, overlap_scale, _ = (
         iqwaveform.fourier._ola_filter_parameters(
             iq.size,
             window=analysis_filter['window'],
-            fft_size_out=analysis_filter.get('fft_size_out', fft_size),
-            fft_size=fft_size,
+            nfft_out=analysis_filter.get('nfft_out', nfft),
+            nfft=nfft,
             extend=True,
         )
     )
+
+    xp = import_cupy_with_fallback()
+
+    lb.logger.info(f'backend sample rate: {radio.backend_sample_rate()}')
+    # create a buffer large enough for post-processing seeded with a copy of the IQ
+    _, buf_size = get_capture_buffer_sizes(radio, capture)
+    if nfft_out > nfft:
+        buf_size = ceil(buf_size*nfft_out/nfft)
+    buf = xp.empty(buf_size, dtype='complex64')
+    buf[: iq.size] = xp.asarray(iq)
+    iq = buf[: iq.size]
 
     if force_calibration is not None:
         corrections = force_calibration
@@ -208,7 +212,7 @@ def resampling_correction(
 
         power_scale = float(sel)
 
-    if fft_size == fft_size_out:
+    if nfft == nfft_out:
         if power_scale is not None:
             iq *= np.sqrt(power_scale)
 
@@ -223,43 +227,89 @@ def resampling_correction(
                 out=iq,
             )
 
-        return iq[TRANSIENT_HOLDOFF_WINDOWS * fft_size_out :]
+        return iq[TRANSIENT_HOLDOFF_WINDOWS * nfft_out :]
 
     w = iqwaveform.fourier._get_window(
-        analysis_filter['window'], fft_size, fftbins=False, xp=xp
+        analysis_filter['window'], nfft, fftbins=False, xp=xp
     )
 
+    # if nfft_out > nfft:
+    #     # upsampling
+    #     buf = (
+    #         buf[:(buf.size//nfft_out)*nfft_out]
+    #         .reshape((buf.size//nfft_out, nfft_out))
+    #     )
+    #     edge_offset = int(nfft_out / 2 - nfft / 2)
+    #     # buf[:, :edge_offset] = 0
+    #     # buf[:, edge_offset+nfft:] = 0
+
+    #     buf_stft = buf[:, edge_offset:edge_offset+nfft]
+    #     xstft = buf[:]
+
+    #     freqs, _, xstft = iqwaveform.fourier.stft(
+    #         iq,
+    #         fs=fs_backend,
+    #         window=w,
+    #         nperseg=nfft,
+    #         noverlap=round(nfft * overlap_scale),
+    #         axis=axis,
+    #         truncate=False,
+    #         out=buf_stft,
+    #     )
+
+    #     lb.logger.info(f'stft size: {xstft.shape}, analysis_filter: {analysis_filter}, iq size: {iq.shape}')
+
+    #     freqs = np.fft.fftshift(np.fft.fftfreq(nfft_out, 1/capture.sample_rate))
+    #     xstft = buf[:xstft.shape[axis]]
+    #     assert freqs.size == xstft.shape[axis+1]
+
+    # else:
     freqs, _, xstft = iqwaveform.fourier.stft(
         iq,
         fs=fs_backend,
         window=w,
-        nperseg=analysis_filter['fft_size'],
-        noverlap=round(analysis_filter['fft_size'] * overlap_scale),
+        nperseg=nfft,
+        noverlap=round(nfft * overlap_scale),
         axis=axis,
         truncate=False,
         out=buf,
     )
 
     # set the passband roughly equal to the 3 dB bandwidth based on ENBW
+    freq_res = fs_backend / nfft
     enbw = (
-        fs_backend
-        / fft_size
+        freq_res
         * iqwaveform.fourier.equivalent_noise_bandwidth(
-            analysis_filter['window'], fft_size, fftbins=False
+            analysis_filter['window'], nfft, fftbins=False
         )
     )
     passband = analysis_filter['passband']
 
-    if fft_size_out != analysis_filter['fft_size']:
+    if nfft_out < nfft:
+        # downsample already does the filter
         freqs, xstft = iqwaveform.fourier.downsample_stft(
             freqs,
             xstft,
-            fft_size_out=fft_size_out,
+            nfft_out=nfft_out,
             passband=passband,
             axis=axis,
             out=buf,
         )
+    elif nfft_out > nfft:
+        pad_left = (nfft_out-nfft)//2
+        pad_right = pad_left + (nfft_out-nfft)%2
+
+        iqwaveform.fourier.zero_stft_by_freq(
+            freqs,
+            xstft,
+            passband=(passband[0] + enbw/2, passband[1] - enbw/2),
+            axis=axis,
+        )
+
+        xstft = iqwaveform.util.pad_along_axis(xstft, [[pad_left, pad_right]], axis=axis+1)
+
     else:
+        # filter
         iqwaveform.fourier.zero_stft_by_freq(
             freqs,
             xstft,
@@ -267,18 +317,16 @@ def resampling_correction(
             axis=axis,
         )
 
-    out_size = round(capture.duration * capture.sample_rate)
     iq = iqwaveform.fourier.istft(
         xstft,
-        out_size,
-        fft_size=fft_size_out,
+        size=round(capture.duration * capture.sample_rate),
+        nfft=nfft_out,
         noverlap=noverlap,
         out=buf,
         axis=axis,
     )
 
     if power_scale is not None:
-        lb.logger.info(f'power scale: {power_scale}')
         iq *= np.sqrt(power_scale)
 
     return iq

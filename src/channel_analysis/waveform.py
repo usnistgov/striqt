@@ -275,7 +275,7 @@ def amplitude_probability_distribution(
 @lru_cache
 def _persistence_spectrum_coords(
     capture: structs.Capture,
-    fft_size: int,
+    nfft: int,
     stat_names: tuple[str],
     overlap_frac: float = 0,
     truncate: bool = True,
@@ -283,7 +283,7 @@ def _persistence_spectrum_coords(
 ):
     freqs, _ = iqwaveform.fourier._get_stft_axes(
         fs=capture.sample_rate,
-        fft_size=fft_size,
+        nfft=nfft,
         time_size=1,
         overlap_frac=overlap_frac,
         xp=np,
@@ -323,7 +323,7 @@ def persistence_spectrum(
     # TODO: support other persistence statistics, such as mean
     if iqwaveform.power_analysis.isroundmod(capture.sample_rate, resolution):
         # need capture.sample_rate/resolution to give us a counting number
-        fft_size = round(capture.sample_rate / resolution)
+        nfft = round(capture.sample_rate / resolution)
     else:
         raise ValueError('sample_rate/resolution must be a counting number')
 
@@ -331,14 +331,14 @@ def persistence_spectrum(
         # lists break lru_cache
         window = tuple(window)
 
-    enbw = resolution * equivalent_noise_bandwidth(window, fft_size)
+    enbw = resolution * equivalent_noise_bandwidth(window, nfft)
 
     metadata = {
         'window': window,
         'resolution': resolution,
         'fractional_overlap': fractional_overlap,
         'noise_bandwidth': enbw,
-        'fft_size': fft_size,
+        'nfft': nfft,
         'truncate': truncate,
         'label': 'Power spectral density',
         'units': f'dBm/{enbw/1e3:0.3f} kHz',
@@ -358,7 +358,7 @@ def persistence_spectrum(
 
     coords = _persistence_spectrum_coords(
         capture,
-        fft_size=fft_size,
+        nfft=nfft,
         overlap_frac=fractional_overlap,
         stat_names=tuple(statistics),
         truncate=truncate,
@@ -486,7 +486,7 @@ def ola_filter(
     iq: type_stubs.ArrayType,
     capture: structs.Capture,
     *,
-    fft_size: int,
+    nfft: int,
     window: typing.Any = 'hamming',
     out=None,
     cache=None,
