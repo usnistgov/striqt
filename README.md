@@ -43,3 +43,6 @@ The repository is organized into two python modules that are importable as [edit
 * `edge_sensor`: Methods for swept acquisition and analysis of field data with software-defined radios.
 
 These may be imported from any directory provided that the `flex-spectrum-sensor` environment is activated. They are imported directly from the file tree in the source code repository, so __if your copy of the source code repository is moved, the flex-spectrum-sensor environment should be removed and built again from scratch__.
+
+### See Also
+* [Validation and calibration with hardware](https://github.com/usnistgov/flex-spectrum-sensor-tests)
