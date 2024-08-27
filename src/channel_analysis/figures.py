@@ -5,12 +5,24 @@ from typing import Optional
 from .structs import Capture
 
 
-def summarize_capture_metadata(dataset: xr.Dataset, capture: Capture):
-    return {
-        k: dataset.attrs[k]
-        for k in capture.__struct_fields__
-        if k in dataset.attrs
+def summarize_metadata(source: xr.Dataset, capture_type: type[Capture], array: xr.DataArray = None, *, as_str: bool=False):
+    meta = {
+        k: source.attrs[k]
+        for k in capture_type.__struct_fields__
+        if k in source.attrs
     }
+
+    if array is not None:
+        meta.update({
+            name: coord.item()
+            for name, coord in array.coords.items()
+            if coord.size == 1
+        })
+
+    if as_str:
+        return '\n'.join([f'{k}: {v}' for k,v in meta.items()])
+    else:
+        return meta
 
 
 def label_axis(
@@ -47,15 +59,15 @@ def label_legend(
 ):
     """apply legend labeling based on label and unit metadata in the specified dimension of `a`"""
 
-    long_name = a[dimension].attrs.get('long_name', None)
+    standard_name = a[dimension].attrs.get('standard_name', None)
     units = a[dimension].attrs.get('units', None)
     values = a[dimension].values
 
-    if long_name is not None:
+    if standard_name is not None:
         if units is not None and not tick_units:
-            long_name = f'{long_name} ({units})'
+            standard_name = f'{standard_name} ({units})'
     if units is not None:
         # TODO: implement tick_units
         pass
 
-    ax.legend(values, title=long_name)
+    ax.legend(values, title=standard_name)

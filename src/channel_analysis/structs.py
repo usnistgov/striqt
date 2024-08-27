@@ -14,9 +14,9 @@ from msgspec import to_builtins
 TDecoratedFunc = typing.Callable[..., typing.Any]
 
 
-def meta(long_name: str, unit: str | None = None) -> msgspec.Meta:
-    """annotation that is used to generate 'long_name' and 'units' fields of xarray attrs objects"""
-    return msgspec.Meta(description=long_name, extra={'long_name': long_name, 'unit': unit})
+def meta(standard_name: str, unit: str | None = None) -> msgspec.Meta:
+    """annotation that is used to generate 'standard_name' and 'units' fields of xarray attrs objects"""
+    return msgspec.Meta(description=standard_name, extra={'standard_name': standard_name, 'unit': unit})
 
 
 @functools.lru_cache
