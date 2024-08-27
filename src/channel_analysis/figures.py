@@ -68,6 +68,7 @@ def label_legend(
             standard_name = f'{standard_name} ({units})'
     if units is not None:
         # TODO: implement tick_units
-        values = [mpl.ticker.EngFormatter(unit=units)(v) for v in values]
+        formatter = mpl.ticker.EngFormatter(unit=units)
+        values = [formatter(v) for v in values]
 
     ax.legend(values, title=standard_name)
