@@ -28,16 +28,16 @@ class RadioCapture(channel_analysis.Capture):
 
     # RF and leveling
     center_frequency: A[float, meta('RF center frequency', 'Hz')] = 3710e6
-    channel: A[int, meta('RX hardware input port')] = 0
-    gain: A[float, meta('internal gain setting inside the radio', 'dB')] = -10
+    channel: A[int, meta('Input port index')] = 0
+    gain: A[float, meta('Gain setting', 'dB')] = -10
 
     # acquisition
     duration: A[float, meta('duration of the capture', 's')] = 0.1
-    sample_rate: A[float, meta('IQ sample rate', 'S/s')] = 15.36e6
+    sample_rate: A[float, meta('Sample rate', 'S/s')] = 15.36e6
 
     # filtering and resampling
-    analysis_bandwidth: A[Optional[float], meta('DSP filter bandwidth', 'Hz')] = 10e6
-    lo_shift: A[_TShift, meta('direction of the LO shift')] = 'none'
+    analysis_bandwidth: A[Optional[float], meta('Waveform filter bandwidth', 'Hz')] = 10e6
+    lo_shift: A[_TShift, meta('Direction of the LO shift')] = 'none'
     gpu_resample: bool = True
 
 
