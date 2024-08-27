@@ -37,7 +37,7 @@ class RadioCapture(channel_analysis.Capture):
 
     # filtering and resampling
     analysis_bandwidth: A[Optional[float], meta('Waveform filter bandwidth', 'Hz')] = 10e6
-    lo_shift: A[_TShift, meta('Direction of the LO shift')] = 'none'
+    lo_shift: A[_TShift, meta('LO shift direction')] = 'none'
     gpu_resample: bool = True
 
 
