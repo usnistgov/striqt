@@ -152,6 +152,7 @@ def design_capture_filter(
             bw=capture.analysis_bandwidth,
             bw_lo=0.75e6,
             shift=lo_shift,
+            min_fft_size=4 * 4096 - 1
         )
 
         return fs_sdr, lo_offset, kws
