@@ -326,6 +326,7 @@ def persistence_spectrum(
         nfft = round(capture.sample_rate / resolution)
         print('nfft: ', nfft)
         print('window count: ', x.size / nfft)
+        print(dB, truncate)
     else:
         raise ValueError('sample_rate/resolution must be a counting number')
 
