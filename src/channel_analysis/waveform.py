@@ -98,11 +98,11 @@ def _power_time_series_coords(
     time = xr.DataArray(
         np.arange(length) * detector_period,
         dims='time_elapsed',
-        attrs={'label': 'System time elapsed', 'units': 's'},
+        attrs={'long_name': 'System time elapsed', 'units': 's'},
     )
 
     detector_list = xr.DataArray(
-        list(detectors), dims='power_detector', attrs={'label': 'Power detector'}
+        list(detectors), dims='power_detector', attrs={'long_name': 'Power detector'}
     )
 
     return xr.Coordinates(
@@ -137,7 +137,7 @@ def power_time_series(
 
     metadata = {
         'detector_period': detector_period,
-        'label': 'Channel power',
+        'long_name': 'Channel power',
         'units': f'dBm/{(capture.analysis_bandwidth or capture.sample_rate)/1e6} MHz',
     }
 
@@ -157,7 +157,7 @@ def _cyclic_channel_power_cyclic_coords(
     cyclic_statistic = xr.DataArray(
         list(cyclic_statistics),
         dims='cyclic_statistic',
-        attrs={'label': 'Cyclic statistic'},
+        attrs={'long_name': 'Cyclic statistic'},
     )
 
     lag_count = int(np.rint(cyclic_period / detector_period))
@@ -165,7 +165,7 @@ def _cyclic_channel_power_cyclic_coords(
     cyclic_lag = xr.DataArray(
         np.arange(lag_count) * detector_period,
         dims='cyclic_lag',
-        attrs={'label': 'Cyclic lag', 'units': 's'},
+        attrs={'long_name': 'Cyclic lag', 'units': 's'},
     )
 
     detector_coords = _power_time_series_coords(
@@ -214,7 +214,7 @@ def cyclic_channel_power(
     )
 
     metadata = {
-        'label': 'Channel power',
+        'long_name': 'Channel power',
         'units': f'dBm/{(capture.analysis_bandwidth or capture.sample_rate)/1e6} MHz',
         'cyclic_period': cyclic_period,
         'detector_period': detector_period,
@@ -236,7 +236,7 @@ def _amplitude_probability_distribution_coords(lo, hi, count, xp, units):
 
     bins = _bin_apd(**params).astype(np.float32)
     array = xr.DataArray(
-        bins, dims='channel_power', attrs={'label': 'Channel power', 'units': units}
+        bins, dims='channel_power', attrs={'long_name': 'Channel power', 'units': units}
     )
     return xr.Coordinates({array.dims[0]: array})
 
@@ -268,7 +268,7 @@ def amplitude_probability_distribution(
         data=ccdf,
         name='amplitude_probability_distribution',
         coords=coords,
-        attrs={'label': 'CCDF', **bin_params},
+        attrs={'long_name': 'CCDF', **bin_params},
     )
 
 
@@ -296,13 +296,13 @@ def _persistence_spectrum_coords(
     freqs = xr.DataArray(
         freqs,
         dims='baseband_frequency',
-        attrs={'label': 'Baseband frequency', 'units': 'Hz'},
+        attrs={'long_name': 'Baseband frequency', 'units': 'Hz'},
     )
 
     stats = xr.DataArray(
         [str(n) for n in stat_names],
         dims='persistence_statistic',
-        attrs={'label': 'Persistence statistic'},
+        attrs={'long_name': 'Persistence statistic'},
     ).astype('object')
 
     return xr.Coordinates({stats.dims[0]: stats, freqs.dims[0]: freqs})
@@ -324,6 +324,8 @@ def persistence_spectrum(
     if iqwaveform.power_analysis.isroundmod(capture.sample_rate, resolution):
         # need capture.sample_rate/resolution to give us a counting number
         nfft = round(capture.sample_rate / resolution)
+        print('nfft: ', nfft)
+        print('window count: ', x.size / nfft)
     else:
         raise ValueError('sample_rate/resolution must be a counting number')
 
@@ -340,7 +342,7 @@ def persistence_spectrum(
         'noise_bandwidth': enbw,
         'nfft': nfft,
         'truncate': truncate,
-        'label': 'Power spectral density',
+        'long_name': 'Power spectral density',
         'units': f'dBm/{enbw/1e3:0.3f} kHz',
     }
 
@@ -426,7 +428,7 @@ def iq_waveform(
     """package a clipping of the IQ waveform"""
 
     metadata = {
-        'label': 'IQ waveform',
+        'long_name': 'IQ waveform',
         'units': 'V',
         'start_time_sec': start_time_sec,
         'stop_time_sec': stop_time_sec,

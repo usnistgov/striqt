@@ -48,6 +48,9 @@ dependencies:
   # for environment.yml autogeneration
 - ruamel.yaml
 
+  # for documentation
+- schemdraw
+
 - pip:
   - iqwaveform @ git+https://github.com/usnistgov/iqwaveform
 

@@ -4,6 +4,28 @@ from .rx_blocks import RxBlock, SDR, Mixer
 from iqwaveform import powtodB, dBtopow
 from .schematics import copy_element
 
+def summarize_sensor_performance(frontend: RxBlock, *, sensor: RxBlock, channel_bandwidth, dnr_max_dB: float=-6., ):
+    """Summarize the predicted performance of (1) the RX front-end and (2) the front-end connected to the SDR.
+
+    Args:
+        frontend: the cascaded front-end
+        sensor: the fully connected receive chain in cascade (frontend->SDR)
+        dnr_max_dB: max distortion-to-noise ratio of adjacent-channel leakage,
+            e.g., dnr_max_dB = -6 is similar to "1 dB increase in noise"
+    """
+    noise_power = -174 + powtodB(channel_bandwidth) + sensor.NF_dB
+    imd3_power_max = noise_power + dnr_max_dB # -6 dB ~= "1 dB increase in noise"
+    acp_max = (1/3)*imd3_power_max + 2/3*(frontend.iip3_dBm)
+
+    print('Outside IF BW:')
+    print(f'\tIIP3: {frontend.iip3_dBm:0.1f} dBm')
+    print(f'\tOIP3: {frontend.oip3_dBm:0.1f} dBm')
+    print(f'\tIM3 overload level: {acp_max:0.1f} dBm')
+    print(f'\tAdjacent-channel rejection ratio (ACRR) @ overload: {acp_max-imd3_power_max:0.1f} dB')    
+    print('Inside IF BW:')
+    print(f'\tGain: {frontend.G_dB:0.1f} dB')
+    print(f'\tNoise figure: {sensor.NF_dB:0.1f} dB')
+
 def cascade(*blocks: RxBlock) -> RxBlock:
     """return an RxBlock representing the design estimate for the cascaded performance"""
     if len(blocks) == 1:

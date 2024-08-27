@@ -2,6 +2,15 @@ from __future__ import annotations
 import xarray as xr
 import matplotlib as mpl
 from typing import Optional
+from .structs import Capture
+
+
+def summarize_capture_metadata(dataset: xr.Dataset, capture: Capture):
+    return {
+        k: dataset.attrs[k]
+        for k in capture.__struct_fields__
+        if k in dataset.attrs
+    }
 
 
 def label_axis(
@@ -16,16 +25,16 @@ def label_axis(
     """
 
     if dimension is None:
-        label = a.attrs.get('label', None)
+        # label = a.attrs.get('label', None)
         units = a.attrs.get('units', None)
     else:
-        label = a[dimension].attrs.get('label', None)
+        # label = a[dimension].attrs.get('label', None)
         units = a[dimension].attrs.get('units', None)
 
-    if label is not None:
-        if units is not None and not tick_units:
-            label = f'{label} ({units})'
-        axis.set_label_text(label)
+    # if label is not None:
+    #     if units is not None and not tick_units:
+    #         label = f'{label} ({units})'
+    #     axis.set_label_text(label)
     if units is not None and tick_units:
         axis.set_major_formatter(mpl.ticker.EngFormatter(unit=units))
 
@@ -38,15 +47,15 @@ def label_legend(
 ):
     """apply legend labeling based on label and unit metadata in the specified dimension of `a`"""
 
-    label = a[dimension].attrs.get('label', None)
+    long_name = a[dimension].attrs.get('long_name', None)
     units = a[dimension].attrs.get('units', None)
     values = a[dimension].values
 
-    if label is not None:
+    if long_name is not None:
         if units is not None and not tick_units:
-            label = f'{label} ({units})'
+            long_name = f'{long_name} ({units})'
     if units is not None:
         # TODO: implement tick_units
         pass
 
-    ax.legend(values, title=label)
+    ax.legend(values, title=long_name)

@@ -51,12 +51,22 @@ class Attenuator(PassiveBlock):
             self.name = f'{-self.G_dB} dB'
 
 @dataclass
+class VariableAttenuator(PassiveBlock):
+    symbol = schematics.AttenuatorVarIEEE(l=0)
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        if self.name is None:
+            self.name = f'{-self.G_dB} dB'
+
+@dataclass
 class SDR(RxBlock):
     symbol = dsp.Ic(
         pins=[
-            dsp.IcPin(name='TXRX2', side='left'),
+            dsp.IcPin(name='TX2', side='left'),
             dsp.IcPin(name='RX2', side='left'),
-            dsp.IcPin(name='TXRX1', side='left'),
+            dsp.IcPin(name='TX1', side='left'),
             dsp.IcPin(name='RX1', side='left')
         ],
         leadlen=0,
@@ -156,6 +166,11 @@ reactel_8C7_3610_x180s11 = Filter(
     G_dB=-1.0
 )
 
+minicircuits_vbfz_3590 = Filter(
+    name='Minicircuits\nVBFZ-3590\n3000-4300\nMHz',
+    G_dB=-2.4
+)
+
 #%% Mixers
 # For these:
 #    G_dB == -(conversion loss in dB)
@@ -171,4 +186,9 @@ marki_t3a_07pa = Mixer(
 ettus_e313 = SDR(
     name='SDR\nUSRP E313',
     NF_dB=8.
+)
+
+deepwave_air7201b = SDR(
+    name='SDR\nDeepwave Air7201B',
+    NF_dB=18.
 )

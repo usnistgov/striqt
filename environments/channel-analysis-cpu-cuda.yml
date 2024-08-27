@@ -37,6 +37,7 @@ dependencies:
 - frozendict
 - dulwich
 - ruamel.yaml
+- schemdraw
 - cupy
 - cython
 - pip:

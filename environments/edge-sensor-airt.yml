@@ -38,6 +38,7 @@ dependencies:
 - frozendict
 - dulwich
 - ruamel.yaml
+- schemdraw
 - soapysdr-module-airt
 - cython<3
 - pytools==2022.1.12
