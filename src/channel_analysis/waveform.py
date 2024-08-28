@@ -123,13 +123,13 @@ def power_time_series(
 ) -> callable[[], xr.DataArray]:
     Ts = 1 / capture.sample_rate
 
-    xp = iqwaveform.util.array_namespace(iq)
-    dtype = xp.finfo(iq.dtype).dtype
+    # xp = iqwaveform.util.array_namespace(iq)
+    # dtype = 'float16'
 
     data = [
         iqwaveform.powtodB(
             iqwaveform.iq_to_bin_power(iq, Ts=Ts, Tbin=detector_period, kind=detector)
-        ).astype(dtype)
+        ).astype('float16')
         for detector in detectors
     ]
 
@@ -204,6 +204,8 @@ def cyclic_channel_power(
         detectors=detectors,
         cycle_stats=cyclic_statistics,
     )
+
+    data_dict = {k1: {k2: v2.astype('float16') for k2, v2 in d.items()} for k1, d in data_dict.items()}
 
     coords = _cyclic_channel_power_cyclic_coords(
         capture.sample_rate,
@@ -318,7 +320,6 @@ def persistence_spectrum(
     statistics: tuple[typing.Union[str, float], ...],
     fractional_overlap: float = 0,
     truncate: bool = True,
-    dB: bool = True,
 ) -> callable[[], xr.DataArray]:
     # TODO: support other persistence statistics, such as mean
     if iqwaveform.power_analysis.isroundmod(capture.sample_rate, resolution):
@@ -353,8 +354,11 @@ def persistence_spectrum(
         fractional_overlap=fractional_overlap,
         statistics=statistics,
         truncate=truncate,
-        dB=dB,
+        dB=False,
     )
+
+    # downcast power data
+    data = data.astype('float16')
 
     coords = _persistence_spectrum_coords(
         capture,
@@ -366,6 +370,49 @@ def persistence_spectrum(
 
     return ChannelAnalysisResult(
         data=data, name='persistence_spectrum', coords=coords, attrs=metadata
+    )
+
+
+@registry
+def iq_waveform(
+    iq,
+    capture: structs.Capture,
+    *,
+    start_time_sec: typing.Optional[float] = None,
+    stop_time_sec: typing.Optional[float] = None,
+) -> callable[[], xr.DataArray]:
+    """package a clipping of the IQ waveform"""
+
+    metadata = {
+        'standard_name': 'IQ waveform',
+        'units': 'V',
+        'start_time_sec': start_time_sec,
+        'stop_time_sec': stop_time_sec,
+    }
+
+    if start_time_sec is None:
+        start = None
+    else:
+        start = int(start_time_sec * capture.sample_rate)
+
+    if stop_time_sec is None:
+        stop = None
+    else:
+        stop = int(stop_time_sec * capture.sample_rate)
+
+    coords = xr.Coordinates(
+        {
+            IQ_WAVEFORM_INDEX_NAME: pd.RangeIndex(
+                start, stop, name=IQ_WAVEFORM_INDEX_NAME
+            )
+        }
+    )
+
+    return ChannelAnalysisResult(
+        data=iq[start:stop].copy(),
+        name='iq_waveform',
+        coords=coords,
+        attrs=metadata,
     )
 
 
@@ -413,49 +460,6 @@ def _generate_iir_lpf(
     )
 
     return sos
-
-
-@registry
-def iq_waveform(
-    iq,
-    capture: structs.Capture,
-    *,
-    start_time_sec: typing.Optional[float] = None,
-    stop_time_sec: typing.Optional[float] = None,
-) -> callable[[], xr.DataArray]:
-    """package a clipping of the IQ waveform"""
-
-    metadata = {
-        'standard_name': 'IQ waveform',
-        'units': 'V',
-        'start_time_sec': start_time_sec,
-        'stop_time_sec': stop_time_sec,
-    }
-
-    if start_time_sec is None:
-        start = None
-    else:
-        start = int(start_time_sec * capture.sample_rate)
-
-    if stop_time_sec is None:
-        stop = None
-    else:
-        stop = int(stop_time_sec * capture.sample_rate)
-
-    coords = xr.Coordinates(
-        {
-            IQ_WAVEFORM_INDEX_NAME: pd.RangeIndex(
-                start, stop, name=IQ_WAVEFORM_INDEX_NAME
-            )
-        }
-    )
-
-    return ChannelAnalysisResult(
-        data=iq[start:stop].copy(),
-        name='iq_waveform',
-        coords=coords,
-        attrs=metadata,
-    )
 
 
 def iir_filter(

@@ -61,11 +61,14 @@ def filter_iq_capture(
         out=out,
     )
 
+    freq_res = capture.sample_rate / nfft
     enbw = (
-        capture.sample_rate
-        / nfft
-        * iqwaveform.fourier.equivalent_noise_bandwidth(w, nfft, fftbins=False)
+        freq_res
+        * iqwaveform.fourier.equivalent_noise_bandwidth(
+            capture.analysis_filter['window'], nfft, fftbins=False
+        )
     )
+
     passband = (
         -capture.analysis_bandwidth / 2 + enbw,
         capture.analysis_bandwidth / 2 - enbw,
@@ -106,6 +109,9 @@ def simulated_awgn(
     generator = xp.random.Generator(bitgen)
     size = round(capture.duration * capture.sample_rate)
 
+    if isinstance(capture, structs.FilteredCapture):
+        size = size + 2*capture.analysis_filter['nfft']
+
     if pinned_cuda:
         import numba
         import numba.cuda
@@ -133,4 +139,7 @@ def simulated_awgn(
 
     samples *= xp.sqrt(power / 2)
 
-    return samples
+    if isinstance(capture, structs.FilteredCapture):
+        return filter_iq_capture(samples, capture)[capture.analysis_filter['nfft']:-capture.analysis_filter['nfft']]
+    else:
+        return samples

@@ -59,9 +59,14 @@ def dump(
 
     if isinstance(path_or_store, zarr.storage.Store):
         data.chunk(chunks).to_zarr(path_or_store, encoding=encodings)
-    else:
+    elif not isinstance(path_or_store, (str, Path)):
+        raise ValueError('must pass a string or Path savefile or zarr.Store object')
+    elif str(path_or_store).endswith('.zip'):
         with zarr.storage.ZipStore(path_or_store, mode=mode, compression=0) as store:
             data.chunk(chunks).to_zarr(store, encoding=encodings)
+    else:
+        data.chunk(chunks).to_zarr(path_or_store, encoding=encodings)
+        
 
 
 def load(path: str | Path) -> type_stubs.DataArrayType | type_stubs.DatasetType:
