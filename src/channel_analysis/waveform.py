@@ -129,7 +129,7 @@ def power_time_series(
     data = [
         iqwaveform.powtodB(
             iqwaveform.iq_to_bin_power(iq, Ts=Ts, Tbin=detector_period, kind=detector)
-        ).astype('float16')
+        ).astype('float32')
         for detector in detectors
     ]
 
@@ -205,7 +205,7 @@ def cyclic_channel_power(
         cycle_stats=cyclic_statistics,
     )
 
-    data_dict = {k1: {k2: v2.astype('float16') for k2, v2 in d.items()} for k1, d in data_dict.items()}
+    # data_dict = {k1: {k2: v2.astype('float16') for k2, v2 in d.items()} for k1, d in data_dict.items()}
 
     coords = _cyclic_channel_power_cyclic_coords(
         capture.sample_rate,
@@ -358,7 +358,7 @@ def persistence_spectrum(
     )
 
     # downcast power data
-    data = data.astype('float16')
+    # data = data.astype('float16')
 
     coords = _persistence_spectrum_coords(
         capture,

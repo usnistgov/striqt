@@ -38,7 +38,7 @@ dependencies:
 - dulwich
 - ruamel.yaml
 - schemdraw
-- cupy
+- cupy ~= 12.2
 - cython
 - pip:
   - iqwaveform @ git+https://github.com/usnistgov/iqwaveform
