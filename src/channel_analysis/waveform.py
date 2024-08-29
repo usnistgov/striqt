@@ -229,12 +229,15 @@ def cyclic_channel_power(
 
 
 @lru_cache
-def _bin_apd(lo, hi, count, xp=np):
-    return xp.linspace(lo, hi, count)
+def _bin_apd(lo, hi, step, xp=np):
+    ret = xp.arange(lo, hi, step)
+    if hi - ret[-1] > step/2:
+        ret = xp.pad(ret, [[0,1]], mode='constant', constant_values=hi).copy()
+    return ret
 
 
 @lru_cache
-def _amplitude_probability_distribution_coords(lo, hi, count, xp, units):
+def _amplitude_probability_distribution_coords(lo, hi, step, xp, units):
     params = _analysis_parameter_kwargs(locals(), omit=('units',))
 
     bins = _bin_apd(**params).astype(np.float32)
@@ -251,12 +254,12 @@ def amplitude_probability_distribution(
     *,
     power_low: float,
     power_high: float,
-    power_count: int,
+    power_resolution: float,
 ) -> callable[[], xr.DataArray]:
     xp = iqwaveform.util.array_namespace(iq)
     dtype = xp.finfo(iq.dtype).dtype
 
-    bin_params = {'lo': power_low, 'hi': power_high, 'count': power_count}
+    bin_params = {'lo': power_low, 'hi': power_high, 'step': power_resolution}
 
     bins = _bin_apd(xp=xp, **bin_params)
     coords = _amplitude_probability_distribution_coords(

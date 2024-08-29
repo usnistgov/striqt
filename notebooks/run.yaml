@@ -64,7 +64,7 @@ channel_analysis:
     amplitude_probability_distribution:
         power_low: -40 # dBm
         power_high: 15 # dBm
-        power_count: 221
+        power_resolution: 0.25
 
     cyclic_channel_power:
         cyclic_period: 0.01

@@ -93,7 +93,7 @@ channel_analysis:
         # binning is performed on the power axis to allow aggregation across captures
         power_low: -40 # dBm
         power_high: 15 # dBm
-        power_count: 221
+        power_resolution: 0.25
 
     # a cyclic analysis of total power in the time domain 
     cyclic_channel_power:
