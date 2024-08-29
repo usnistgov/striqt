@@ -77,11 +77,6 @@ def run(
     generator = list(controller.iter_sweep(sweep_spec, sweep_fields, calibration))
     data = xr.concat(generator, CAPTURE_DIM)
 
-    if force:
-        mode = 'w'
-    else:
-        mode = 'a'
-
-    dump(output_path, data, mode)
+    dump(output_path, data, mode='w' if force else 'a')
 
     click.echo(f'wrote to {output_path}')

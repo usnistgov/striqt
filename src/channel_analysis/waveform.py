@@ -123,13 +123,8 @@ def power_time_series(
 ) -> callable[[], xr.DataArray]:
     Ts = 1 / capture.sample_rate
 
-    # xp = iqwaveform.util.array_namespace(iq)
-    # dtype = 'float16'
-
     data = [
-        iqwaveform.powtodB(
-            iqwaveform.iq_to_bin_power(iq, Ts=Ts, Tbin=detector_period, kind=detector)
-        ).astype('float32')
+        iqwaveform.iq_to_bin_power(iq, Ts=Ts, Tbin=detector_period, kind=detector).astype('float32')
         for detector in detectors
     ]
 
@@ -138,7 +133,7 @@ def power_time_series(
     metadata = {
         'detector_period': detector_period,
         'standard_name': 'Channel power',
-        'units': f'dBm/{(capture.analysis_bandwidth or capture.sample_rate)/1e6} MHz',
+        'units': f'mW/{(capture.analysis_bandwidth or capture.sample_rate)/1e6} MHz',
     }
 
     return ChannelAnalysisResult(
@@ -217,7 +212,7 @@ def cyclic_channel_power(
 
     metadata = {
         'standard_name': 'Channel power',
-        'units': f'dBm/{(capture.analysis_bandwidth or capture.sample_rate)/1e6} MHz',
+        'units': f'mW/{(capture.analysis_bandwidth or capture.sample_rate)/1e6} MHz',
         'cyclic_period': cyclic_period,
         'detector_period': detector_period,
     }
@@ -342,7 +337,7 @@ def persistence_spectrum(
         'nfft': nfft,
         'truncate': truncate,
         'standard_name': 'Power spectral density',
-        'units': f'dBm/{enbw/1e3:0.3f} kHz',
+        'units': f'mW/{enbw/1e3:0.3f} kHz',
     }
 
     data = iqwaveform.fourier.persistence_spectrum(
