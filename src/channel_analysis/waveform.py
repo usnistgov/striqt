@@ -12,6 +12,9 @@ import labbench as lb
 from array_api_compat import is_cupy_array, is_numpy_array, is_torch_array
 from frozendict import frozendict
 
+import iqwaveform
+from iqwaveform import powtodB
+
 from . import structs
 from . import (
     type_stubs,
@@ -22,13 +25,12 @@ if typing.TYPE_CHECKING:
     import scipy
     import pandas as pd
     import xarray as xr
-    import iqwaveform
 else:
     np = lb.util.lazy_import('numpy')
     scipy = lb.util.lazy_import('scipy')
     pd = lb.util.lazy_import('pandas')
     xr = lb.util.lazy_import('xarray')
-    iqwaveform = lb.util.lazy_import('iqwaveform')
+
 
 TDecoratedFunc = typing.Callable[..., typing.Any]
 
@@ -123,8 +125,10 @@ def power_time_series(
 ) -> callable[[], xr.DataArray]:
     Ts = 1 / capture.sample_rate
 
+    kwargs = {'iq': iq, 'Ts': Ts, 'Tbin': detector_period}
+
     data = [
-        iqwaveform.iq_to_bin_power(iq, Ts=Ts, Tbin=detector_period, kind=detector).astype('float32')
+        powtodB(iqwaveform.iq_to_bin_power(kind=detector, **kwargs).astype('float32'))
         for detector in detectors
     ]
 
@@ -133,7 +137,7 @@ def power_time_series(
     metadata = {
         'detector_period': detector_period,
         'standard_name': 'Channel power',
-        'units': f'mW/{(capture.analysis_bandwidth or capture.sample_rate)/1e6} MHz',
+        'units': f'dBm/{(capture.analysis_bandwidth or capture.sample_rate)/1e6} MHz',
     }
 
     return ChannelAnalysisResult(
@@ -200,7 +204,9 @@ def cyclic_channel_power(
         cycle_stats=cyclic_statistics,
     )
 
-    # data_dict = {k1: {k2: v2.astype('float16') for k2, v2 in d.items()} for k1, d in data_dict.items()}
+    data_dict = {
+        k1: {k2: powtodB(v2) for k2, v2 in d.items()} for k1, d in data_dict.items()
+    }
 
     coords = _cyclic_channel_power_cyclic_coords(
         capture.sample_rate,
@@ -212,7 +218,7 @@ def cyclic_channel_power(
 
     metadata = {
         'standard_name': 'Channel power',
-        'units': f'mW/{(capture.analysis_bandwidth or capture.sample_rate)/1e6} MHz',
+        'units': f'dBm/{(capture.analysis_bandwidth or capture.sample_rate)/1e6} MHz',
         'cyclic_period': cyclic_period,
         'detector_period': detector_period,
     }
@@ -337,7 +343,7 @@ def persistence_spectrum(
         'nfft': nfft,
         'truncate': truncate,
         'standard_name': 'Power spectral density',
-        'units': f'mW/{enbw/1e3:0.3f} kHz',
+        'units': f'dBm/{enbw/1e3:0.3f} kHz',
     }
 
     data = iqwaveform.fourier.persistence_spectrum(
@@ -349,11 +355,8 @@ def persistence_spectrum(
         fractional_overlap=fractional_overlap,
         statistics=statistics,
         truncate=truncate,
-        dB=False,
+        dB=True,
     )
-
-    # downcast power data
-    # data = data.astype('float16')
 
     coords = _persistence_spectrum_coords(
         capture,
