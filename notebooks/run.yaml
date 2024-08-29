@@ -92,7 +92,7 @@ channel_analysis:
         - 0.99
         - 0.999
         - max
-        resolution: 15000.0
+        frequency_resolution: 15000.0
         window:
             - dpss
             - 3.87638403         # for enbw:resolution == 2:1

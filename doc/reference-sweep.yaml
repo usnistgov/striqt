@@ -128,7 +128,7 @@ channel_analysis:
         - max
 
         # the step size in the frequency domain (Hz) 
-        resolution: 15000
+        frequency_resolution: 15000
 
         # the fractional overlap in the STFT.
         # (Examples: 0: no overlap, 0.5: 50% overlap)

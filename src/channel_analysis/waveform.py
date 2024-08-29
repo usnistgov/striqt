@@ -317,15 +317,15 @@ def persistence_spectrum(
     capture: structs.Capture,
     *,
     window: typing.Any,
-    resolution: float,
+    frequency_resolution: float,
     statistics: tuple[typing.Union[str, float], ...],
     fractional_overlap: float = 0,
     truncate: bool = True,
 ) -> callable[[], xr.DataArray]:
     # TODO: support other persistence statistics, such as mean
-    if iqwaveform.power_analysis.isroundmod(capture.sample_rate, resolution):
+    if iqwaveform.power_analysis.isroundmod(capture.sample_rate, frequency_resolution):
         # need capture.sample_rate/resolution to give us a counting number
-        nfft = round(capture.sample_rate / resolution)
+        nfft = round(capture.sample_rate / frequency_resolution)
     else:
         raise ValueError('sample_rate/resolution must be a counting number')
 
@@ -333,11 +333,11 @@ def persistence_spectrum(
         # lists break lru_cache
         window = tuple(window)
 
-    enbw = resolution * equivalent_noise_bandwidth(window, nfft)
+    enbw = frequency_resolution * equivalent_noise_bandwidth(window, nfft)
 
     metadata = {
         'window': window,
-        'resolution': resolution,
+        'resolution': frequency_resolution,
         'fractional_overlap': fractional_overlap,
         'noise_bandwidth': enbw,
         'nfft': nfft,
@@ -351,7 +351,7 @@ def persistence_spectrum(
         fs=capture.sample_rate,
         bandwidth=capture.analysis_bandwidth,
         window=window,
-        resolution=resolution,
+        resolution=frequency_resolution,
         fractional_overlap=fractional_overlap,
         statistics=statistics,
         truncate=truncate,
