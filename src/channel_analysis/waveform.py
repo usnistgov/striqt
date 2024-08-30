@@ -340,7 +340,7 @@ def persistence_spectrum(
 
     metadata = {
         'window': window,
-        'resolution': frequency_resolution,
+        'frequency_resolution': frequency_resolution,
         'fractional_overlap': fractional_overlap,
         'noise_bandwidth': enbw,
         'nfft': nfft,
