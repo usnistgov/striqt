@@ -8,12 +8,12 @@ from pathlib import Path
 from msgspec import to_builtins, convert
 
 import channel_analysis
-import channel_analysis.waveform
+import channel_analysis.dataarrays
 from channel_analysis.structs import meta, get_attrs, ChannelAnalysis
 
 
 def make_default_analysis():
-    return channel_analysis.waveform.registry.spec_type()()
+    return channel_analysis.dataarrays.expose_in_yaml.spec_type()()
 
 
 def describe_capture(capture: RadioCapture, swept_fields):

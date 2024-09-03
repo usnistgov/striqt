@@ -16,7 +16,9 @@ TDecoratedFunc = typing.Callable[..., typing.Any]
 
 def meta(standard_name: str, unit: str | None = None) -> msgspec.Meta:
     """annotation that is used to generate 'standard_name' and 'units' fields of xarray attrs objects"""
-    return msgspec.Meta(description=standard_name, extra={'standard_name': standard_name, 'units': unit})
+    return msgspec.Meta(
+        description=standard_name, extra={'standard_name': standard_name, 'units': unit}
+    )
 
 
 @functools.lru_cache

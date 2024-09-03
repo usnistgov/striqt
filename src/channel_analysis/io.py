@@ -9,7 +9,7 @@ import typing
 import labbench as lb
 import zarr.storage
 
-from . import waveform, type_stubs
+from . import dataarrays, type_stubs
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -23,7 +23,7 @@ else:
     zarr = lb.util.lazy_import('zarr')
 
 
-def open_store(path: str|Path, *, mode: str):
+def open_store(path: str | Path, *, mode: str):
     if isinstance(path, zarr.storage.Store):
         store = path
     elif not isinstance(path, (str, Path)):
@@ -32,20 +32,20 @@ def open_store(path: str|Path, *, mode: str):
         store = zarr.ZipStore(path, mode=mode, compression=0)
     else:
         store = zarr.DirectoryStore(path, mode=mode)
-    
+
     return store
 
 
 def dump(
     path_or_store: str | Path,
-    data: typing.Optional[type_stubs.DataArrayType | type_stubs.DatasetType]=None,
+    data: typing.Optional[type_stubs.DataArrayType | type_stubs.DatasetType] = None,
     mode='a',
     compression=None,
-    filter=True
+    filter=True,
 ) -> zarr.storage.Store:
     """serialize a dataset into a zarr directory structure"""
 
-    if hasattr(data, waveform.IQ_WAVEFORM_INDEX_NAME):
+    if hasattr(data, dataarrays.IQ_WAVEFORM_INDEX_NAME):
         if 'sample_rate' in data.attrs:
             # sample rate is metadata
             sample_rate = data.attrs['sample_rate']
@@ -53,7 +53,7 @@ def dump(
             # sample rate is a variate
             sample_rate = data.sample_rate.values.flatten()[0]
 
-        chunks = {waveform.IQ_WAVEFORM_INDEX_NAME: round(sample_rate * 10e-3)}
+        chunks = {dataarrays.IQ_WAVEFORM_INDEX_NAME: round(sample_rate * 10e-3)}
     else:
         chunks = {}
 
@@ -64,7 +64,7 @@ def dump(
     else:
         compressor = compression
 
-    if isinstance(filter, (list,tuple)):
+    if isinstance(filter, (list, tuple)):
         filters = filter
     elif filter:
         # round in dBs, tolerate max error +/- 0.005 dB
@@ -78,9 +78,9 @@ def dump(
 
     encodings = defaultdict(dict)
     for name in data.data_vars.keys():
-    # skip compression of iq waveforms, which is slow and
-    # ineffective due to high entropy
-        if name != waveform.iq_waveform.__name__:
+        # skip compression of iq waveforms, which is slow and
+        # ineffective due to high entropy
+        if name != dataarrays.iq_waveform.__name__:
             if compressor is not None:
                 encodings[name]['compressor'] = compressor
 
@@ -96,6 +96,7 @@ def dump(
         # open, write/append, and close
         with open_store(path_or_store, mode=mode) as store:
             data.chunk(chunks).to_zarr(store, encoding=encodings)
+
 
 def load(path: str | Path) -> type_stubs.DataArrayType | type_stubs.DatasetType:
     """load a dataset or data array"""

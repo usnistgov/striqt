@@ -7,7 +7,7 @@ from math import ceil
 
 import iqwaveform.type_stubs
 
-from channel_analysis import waveform, type_stubs
+from channel_analysis import dataarrays, type_stubs
 
 from .radio import RadioDevice, get_capture_buffer_sizes, design_capture_filter
 from .radio.base import TRANSIENT_HOLDOFF_WINDOWS
@@ -217,7 +217,7 @@ def resampling_correction(
 
         # nothing to do here
         if analysis_filter['passband'] != (None, None):
-            iq = waveform.iir_filter(
+            iq = dataarrays.iir_filter(
                 iq,
                 capture,
                 passband_ripple=0.5,

@@ -5,22 +5,28 @@ from typing import Optional
 from .structs import Capture
 
 
-def summarize_metadata(source: xr.Dataset, capture_type: type[Capture], array: xr.DataArray = None, *, as_str: bool=False):
+def summarize_metadata(
+    source: xr.Dataset,
+    capture_type: type[Capture],
+    array: xr.DataArray = None,
+    *,
+    as_str: bool = False,
+):
     meta = {
-        k: source.attrs[k]
-        for k in capture_type.__struct_fields__
-        if k in source.attrs
+        k: source.attrs[k] for k in capture_type.__struct_fields__ if k in source.attrs
     }
 
     if array is not None:
-        meta.update({
-            name: coord.item()
-            for name, coord in array.coords.items()
-            if coord.size == 1
-        })
+        meta.update(
+            {
+                name: coord.item()
+                for name, coord in array.coords.items()
+                if coord.size == 1
+            }
+        )
 
     if as_str:
-        return '\n'.join([f'{k}: {v}' for k,v in meta.items()])
+        return '\n'.join([f'{k}: {v}' for k, v in meta.items()])
     else:
         return meta
 

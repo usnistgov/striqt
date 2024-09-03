@@ -37,14 +37,12 @@ def filter_iq_capture(
 
     nfft = capture.analysis_filter['nfft']
 
-    nfft_out, noverlap, overlap_scale, _ = (
-        iqwaveform.fourier._ola_filter_parameters(
-            iq.size,
-            window=capture.analysis_filter['window'],
-            nfft_out=capture.analysis_filter.get('nfft_out', nfft),
-            nfft=nfft,
-            extend=True,
-        )
+    nfft_out, noverlap, overlap_scale, _ = iqwaveform.fourier._ola_filter_parameters(
+        iq.size,
+        window=capture.analysis_filter['window'],
+        nfft_out=capture.analysis_filter.get('nfft_out', nfft),
+        nfft=nfft,
+        extend=True,
     )
 
     w = iqwaveform.fourier._get_window(
@@ -62,11 +60,8 @@ def filter_iq_capture(
     )
 
     freq_res = capture.sample_rate / nfft
-    enbw = (
-        freq_res
-        * iqwaveform.fourier.equivalent_noise_bandwidth(
-            capture.analysis_filter['window'], nfft, fftbins=False
-        )
+    enbw = freq_res * iqwaveform.fourier.equivalent_noise_bandwidth(
+        capture.analysis_filter['window'], nfft, fftbins=False
     )
 
     passband = (
@@ -110,7 +105,7 @@ def simulated_awgn(
     size = round(capture.duration * capture.sample_rate)
 
     if isinstance(capture, structs.FilteredCapture):
-        size = size + 2*capture.analysis_filter['nfft']
+        size = size + 2 * capture.analysis_filter['nfft']
 
     if pinned_cuda:
         import numba
@@ -140,6 +135,8 @@ def simulated_awgn(
     samples *= xp.sqrt(power / 2)
 
     if isinstance(capture, structs.FilteredCapture):
-        return filter_iq_capture(samples, capture)[capture.analysis_filter['nfft']:-capture.analysis_filter['nfft']]
+        return filter_iq_capture(samples, capture)[
+            capture.analysis_filter['nfft'] : -capture.analysis_filter['nfft']
+        ]
     else:
         return samples
