@@ -10,31 +10,33 @@ authors = [
 requires-python = "~=3.9.0"
 
 # TODO: SoapySDR doesn't exist as a pypi dependency
-dependencies = [
-  "numba",
-  "scipy>=1.9.2",
-  "seaborn>=0.12",
-  "numpy>=1.21,<2",
-  "matplotlib>=3.7",
-  "scikit-learn>=1.1,<2.0",
-  "pyppeteer",
-  "ipympl",
-  "numexpr>=2.8.4",
-  "humanfriendly",
-  "array-api-compat",
-  "methodtools",
-  "labbench",
-  "rpyc",
-  "xarray",
-  "zarr",
-  "dask",
-  "msgspec",
-  "frozendict",
-  "dulwich",
-  "ruamel.yaml",
-  "xarray_dataclasses",
-  "iqwaveform @ git+https://github.com/usnistgov/iqwaveform"
-]
+# dependencies = [
+#  "numba",
+#  "scipy>=1.9.2",
+#  "seaborn>=0.12",
+#  "numpy>=1.21,<2",
+#   "matplotlib>=3.7",
+#   "scikit-learn>=1.1,<2.0",
+#   "pyppeteer",
+#   "ipympl",
+#   "numexpr>=2.8.4",
+#   "humanfriendly",
+#   "array-api-compat",
+#   "methodtools",
+#   "labbench",
+#   "rpyc",
+#   "xarray",
+#   "zarr",
+#   "dask",
+#   "msgspec",
+#   "frozendict",
+#   "dulwich",
+#   "ruamel.yaml",
+#   "xarray_dataclasses",
+#   "typing-extensions",
+#   "setuptools",
+#   "iqwaveform @ git+https://github.com/usnistgov/iqwaveform"
+# ]
 
 [project.optional-dependencies]
 dev = ["ipykernel", "jupyter", "ruff"]
