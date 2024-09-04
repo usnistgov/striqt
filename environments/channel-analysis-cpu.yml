@@ -27,8 +27,6 @@ dependencies:
 - humanfriendly
 - array-api-compat
 - methodtools
-- mako
-- fastrlock
 
   # for SoapySDR device wrappers and remote control
 - labbench
@@ -54,6 +52,7 @@ dependencies:
 - pip:
   - iqwaveform @ git+https://github.com/usnistgov/iqwaveform
   - xarray_dataclasses
+  - ssmdevices
 
       # allows imports from the src/ directory in this repo
   - -e ..
