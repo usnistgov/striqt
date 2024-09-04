@@ -152,7 +152,7 @@ def design_capture_filter(
             bw=capture.analysis_bandwidth,
             bw_lo=0.75e6,
             shift=lo_shift,
-            min_fft_size=4 * 4096 - 1
+            min_fft_size=4 * 4096 - 1,
         )
 
         return fs_sdr, lo_offset, kws
@@ -188,7 +188,9 @@ def _get_capture_buffer_sizes_cached(
 
     _, _, analysis_filter = design_capture_filter(master_clock_rate, capture)
 
-    samples_in = ceil(samples_out * analysis_filter['nfft'] / analysis_filter['nfft_out'])
+    samples_in = ceil(
+        samples_out * analysis_filter['nfft'] / analysis_filter['nfft_out']
+    )
 
     if include_holdoff and periodic_trigger is not None:
         # add holdoff samples needed for the periodic trigger
@@ -203,7 +205,7 @@ def _get_capture_buffer_sizes_cached(
             nfft=analysis_filter['nfft'],
             extend=True,
         )
-        
+
     return samples_in, samples_out
 
 

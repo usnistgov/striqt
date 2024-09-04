@@ -48,7 +48,7 @@ def _y_factor_temperature(
     # compute the Y-factor from measured power
     Pon = power.sel(noise_diode_enabled=True, drop=True)
     Poff = power.sel(noise_diode_enabled=False, drop=True)
-    Y = Pon/Poff 
+    Y = Pon / Poff
 
     # compute receive noise temperature from the Y-factor
     T = (Ton - Y * Toff) / (Y - 1)
@@ -65,9 +65,9 @@ def _y_factor_power_corrections(
 
     kwargs = dict(list(locals().items())[1:])
 
-    k = scipy.constants.Boltzmann * 1000 # scaled from W/K to mW/K
+    k = scipy.constants.Boltzmann * 1000  # scaled from W/K to mW/K
     B = dataset.analysis_bandwidth
-    enr = 10**(enr_dB/10.)
+    enr = 10 ** (enr_dB / 10.0)
 
     power = (
         dataset.power_time_series.sel(power_detector='rms', drop=True)
@@ -78,17 +78,17 @@ def _y_factor_power_corrections(
 
     Pon = power.sel(noise_diode_enabled=True, drop=True)
     Poff = power.sel(noise_diode_enabled=False, drop=True)
-    Y = Pon/Poff 
+    Y = Pon / Poff
 
-    noise_figure = enr_dB - 10*np.log10(Y-1)
+    noise_figure = enr_dB - 10 * np.log10(Y - 1)
     noise_figure.name = 'Noise figure'
     noise_figure.attrs = {'units': 'dB'}
 
-    T = Tref * (10**(noise_figure/10) - 1) #_y_factor_temperature(power, **kwargs)
+    T = Tref * (10 ** (noise_figure / 10) - 1)  # _y_factor_temperature(power, **kwargs)
     T.name = 'Noise temperature'
     T.attrs = {'units': 'K'}
 
-    power_correction = (k * (T+enr*Tref) * B) / Pon
+    power_correction = (k * (T + enr * Tref) * B) / Pon
     power_correction.name = 'Input power scaling correction'
     power_correction.attrs = {'units': 'mW'}
 
@@ -136,6 +136,7 @@ def compute_y_factor_corrections(
     )
     return ret
 
+
 def resampling_correction(
     iq: iqwaveform.type_stubs.ArrayType,
     capture: structs.RadioCapture,
@@ -161,14 +162,12 @@ def resampling_correction(
         radio.master_clock_rate, capture
     )
     nfft = analysis_filter['nfft']
-    nfft_out, noverlap, overlap_scale, _ = (
-        iqwaveform.fourier._ola_filter_parameters(
-            iq.size,
-            window=analysis_filter['window'],
-            nfft_out=analysis_filter.get('nfft_out', nfft),
-            nfft=nfft,
-            extend=True,
-        )
+    nfft_out, noverlap, overlap_scale, _ = iqwaveform.fourier._ola_filter_parameters(
+        iq.size,
+        window=analysis_filter['window'],
+        nfft_out=analysis_filter.get('nfft_out', nfft),
+        nfft=nfft,
+        extend=True,
     )
 
     xp = import_cupy_with_fallback()
@@ -176,7 +175,7 @@ def resampling_correction(
     # create a buffer large enough for post-processing seeded with a copy of the IQ
     _, buf_size = get_capture_buffer_sizes(radio, capture)
     if nfft_out > nfft:
-        buf_size = ceil(buf_size*nfft_out/nfft)
+        buf_size = ceil(buf_size * nfft_out / nfft)
     buf = xp.empty(buf_size, dtype='complex64')
     buf[: iq.size] = xp.asarray(iq)
     iq = buf[: iq.size]
@@ -198,8 +197,8 @@ def resampling_correction(
             lo_shift=capture.lo_shift,
             sample_rate=capture.sample_rate,
             analysis_bandwidth=capture.analysis_bandwidth,
-            gpu_resample=capture.gpu_resample
-        )        
+            gpu_resample=capture.gpu_resample,
+        )
 
         sel = corrections.power_correction.sel(**capture_dict, drop=True)
 
@@ -245,11 +244,8 @@ def resampling_correction(
 
     # set the passband roughly equal to the 3 dB bandwidth based on ENBW
     freq_res = fs_backend / nfft
-    enbw = (
-        freq_res
-        * iqwaveform.fourier.equivalent_noise_bandwidth(
-            analysis_filter['window'], nfft, fftbins=False
-        )
+    enbw = freq_res * iqwaveform.fourier.equivalent_noise_bandwidth(
+        analysis_filter['window'], nfft, fftbins=False
     )
     passband = analysis_filter['passband']
 
@@ -264,17 +260,19 @@ def resampling_correction(
             out=buf,
         )
     elif nfft_out > nfft:
-        pad_left = (nfft_out-nfft)//2
-        pad_right = pad_left + (nfft_out-nfft)%2
+        pad_left = (nfft_out - nfft) // 2
+        pad_right = pad_left + (nfft_out - nfft) % 2
 
         iqwaveform.fourier.zero_stft_by_freq(
             freqs,
             xstft,
-            passband=(passband[0] + enbw/2, passband[1] - enbw/2),
+            passband=(passband[0] + enbw / 2, passband[1] - enbw / 2),
             axis=axis,
         )
 
-        xstft = iqwaveform.util.pad_along_axis(xstft, [[pad_left, pad_right]], axis=axis+1)
+        xstft = iqwaveform.util.pad_along_axis(
+            xstft, [[pad_left, pad_right]], axis=axis + 1
+        )
 
     else:
         # filter

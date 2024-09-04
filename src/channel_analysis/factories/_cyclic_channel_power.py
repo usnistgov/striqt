@@ -5,12 +5,11 @@ from functools import lru_cache
 from dataclasses import dataclass
 import numpy as np
 
-from xarray_dataclasses import AsDataArray, Coordof, Data, Attr, Name
-from iqwaveform import powtodB
-from iqwaveform.power_analysis import iq_to_cyclic_power
+from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
+import iqwaveform
 
 from ..dataarrays import expose_in_yaml, ChannelAnalysisResult, select_parameter_kws
-from .. import structs
+from ..structs import Capture
 
 from ._channel_power_time_series import PowerDetectorAxis, PowerDetectorCoords
 
@@ -19,7 +18,7 @@ from ._channel_power_time_series import PowerDetectorAxis, PowerDetectorCoords
 @expose_in_yaml
 def cyclic_channel_power(
     iq,
-    capture: structs.Capture,
+    capture: Capture,
     *,
     cyclic_period: float,
     detector_period: float,
@@ -33,7 +32,7 @@ def cyclic_channel_power(
     power_detectors = tuple(power_detectors)
     cyclic_statistics = tuple(cyclic_statistics)
 
-    data_dict = iq_to_cyclic_power(
+    data_dict = iqwaveform.iq_to_cyclic_power(
         iq,
         1 / capture.sample_rate,
         cyclic_period=cyclic_period,
@@ -43,7 +42,7 @@ def cyclic_channel_power(
     )
 
     data_dict = {
-        det: {cyc_stat: powtodB(power) for cyc_stat, power in d.items()}
+        det: {cyc_stat: iqwaveform.powtodB(power) for cyc_stat, power in d.items()}
         for det, d in data_dict.items()
     }
 
@@ -65,10 +64,10 @@ CyclicStatisticAxis = typing.Literal['cyclic_statistic']
 
 @lru_cache
 def cyclic_statistic_coord_factory(
-    capture: structs.Capture,
+    capture: Capture,
     *,
     cyclic_statistics: tuple[str, ...] = ('min', 'mean', 'max'),
-    **kws,
+    **_,
 ):
     return list(cyclic_statistics)
 
@@ -76,7 +75,6 @@ def cyclic_statistic_coord_factory(
 @dataclass
 class CyclicStatisticCoords:
     data: Data[CyclicStatisticAxis, object]
-    name: Name[str] = 'cyclic_statistic'
     standard_name: Attr[str] = 'Cyclic statistic'
 
     factory: callable = cyclic_statistic_coord_factory
@@ -88,7 +86,7 @@ CyclicLagAxis = typing.Literal['cyclic_lag']
 
 @lru_cache
 def cyclic_lag_coord_factory(
-    capture: structs.Capture, *, cyclic_period: float, detector_period: float, **kws
+    capture: Capture, *, cyclic_period: float, detector_period: float, **_
 ):
     lag_count = int(np.rint(cyclic_period / detector_period))
 
@@ -98,7 +96,6 @@ def cyclic_lag_coord_factory(
 @dataclass
 class CyclicLagCoords:
     data: Data[CyclicLagAxis, np.float32]
-    name: Name[str] = 'cyclic_lag'
     standard_name: Attr[str] = 'Cyclic lag'
     units: Attr[str] = 's'
 

@@ -36,7 +36,9 @@ class RadioCapture(channel_analysis.Capture):
     sample_rate: A[float, meta('Sample rate', 'S/s')] = 15.36e6
 
     # filtering and resampling
-    analysis_bandwidth: A[Optional[float], meta('Waveform filter bandwidth', 'Hz')] = 10e6
+    analysis_bandwidth: A[Optional[float], meta('Waveform filter bandwidth', 'Hz')] = (
+        10e6
+    )
     lo_shift: A[_TShift, meta('LO shift direction')] = 'none'
     gpu_resample: bool = True
 
@@ -73,7 +75,5 @@ class Sweep(msgspec.Struct):
     captures: tuple[RadioCapture, ...]
     radio_setup: RadioSetup = msgspec.field(default_factory=RadioSetup)
     defaults: RadioCapture = msgspec.field(default_factory=RadioCapture)
-    channel_analysis: dict = msgspec.field(
-        default_factory=make_default_analysis
-    )
+    channel_analysis: dict = msgspec.field(default_factory=make_default_analysis)
     description: Description = msgspec.field(default_factory=Description)

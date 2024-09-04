@@ -4,11 +4,11 @@ from . import dataarrays, source, structs, type_stubs
 
 from .io import load, dump, open_store
 from .structs import Capture, FilteredCapture
-from .dataarrays import (
-    amplitude_probability_distribution,
-    analyze_by_spec,
+from .factories import (
+    channel_power_distribution,
+    channel_power_time_series,
     cyclic_channel_power,
-    persistence_spectrum,
-    power_time_series,
+    iq_waveform,
+    # persistence_spectrum,
 )
-from .factories import channel_power_distribution
+from .dataarrays import analyze_by_spec

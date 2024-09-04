@@ -11,7 +11,7 @@ import msgspec
 from msgspec import to_builtins
 
 
-TDecoratedFunc = typing.Callable[..., typing.Any]
+TFunc = typing.Callable[..., typing.Any]
 
 
 def meta(standard_name: str, unit: str | None = None) -> msgspec.Meta:
@@ -85,7 +85,7 @@ class KeywordConfigRegistry(UserDict):
         else:
             return (name, p.annotation, p.default)
 
-    def __call__(self, func: TDecoratedFunc) -> TDecoratedFunc:
+    def __call__(self, func: TFunc) -> TFunc:
         """add decorated `func` and its keyword arguments in the self.tostruct() schema"""
         name = func.__name__
 

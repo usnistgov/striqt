@@ -4,7 +4,14 @@ from .rx_blocks import RxBlock, SDR, Mixer
 from iqwaveform import powtodB, dBtopow
 from .schematics import copy_element
 
-def summarize_sensor_performance(frontend: RxBlock, *, sensor: RxBlock, channel_bandwidth, dnr_max_dB: float=-6., ):
+
+def summarize_sensor_performance(
+    frontend: RxBlock,
+    *,
+    sensor: RxBlock,
+    channel_bandwidth,
+    dnr_max_dB: float = -6.0,
+):
     """Summarize the predicted performance of (1) the RX front-end and (2) the front-end connected to the SDR.
 
     Args:
@@ -14,17 +21,20 @@ def summarize_sensor_performance(frontend: RxBlock, *, sensor: RxBlock, channel_
             e.g., dnr_max_dB = -6 is similar to "1 dB increase in noise"
     """
     noise_power = -174 + powtodB(channel_bandwidth) + sensor.NF_dB
-    imd3_power_max = noise_power + dnr_max_dB # -6 dB ~= "1 dB increase in noise"
-    acp_max = (1/3)*imd3_power_max + 2/3*(frontend.iip3_dBm)
+    imd3_power_max = noise_power + dnr_max_dB  # -6 dB ~= "1 dB increase in noise"
+    acp_max = (1 / 3) * imd3_power_max + 2 / 3 * (frontend.iip3_dBm)
 
     print('Outside IF BW:')
     print(f'\tIIP3: {frontend.iip3_dBm:0.1f} dBm')
     print(f'\tOIP3: {frontend.oip3_dBm:0.1f} dBm')
     print(f'\tIM3 overload level: {acp_max:0.1f} dBm')
-    print(f'\tAdjacent-channel rejection ratio (ACRR) @ overload: {acp_max-imd3_power_max:0.1f} dB')    
+    print(
+        f'\tAdjacent-channel rejection ratio (ACRR) @ overload: {acp_max-imd3_power_max:0.1f} dB'
+    )
     print('Inside IF BW:')
     print(f'\tGain: {frontend.G_dB:0.1f} dB')
     print(f'\tNoise figure: {sensor.NF_dB:0.1f} dB')
+
 
 def cascade(*blocks: RxBlock) -> RxBlock:
     """return an RxBlock representing the design estimate for the cascaded performance"""
@@ -38,7 +48,7 @@ def cascade(*blocks: RxBlock) -> RxBlock:
         iip3_dBm = -powtodB(dBtopow(-b0.iip3_dBm) + dBtopow(b0.G_dB - b1.iip3_dBm))
 
         # Friis noise equation
-        NF_dB = powtodB(dBtopow(b0.NF_dB) + (dBtopow(b1.NF_dB)-1)/dBtopow(b0.G_dB))
+        NF_dB = powtodB(dBtopow(b0.NF_dB) + (dBtopow(b1.NF_dB) - 1) / dBtopow(b0.G_dB))
 
         if None in (b0.G_dB, b1.G_dB):
             G_dB = None
@@ -56,7 +66,7 @@ def draw(*blocks: RxBlock, sdr_TX_as_LO: bool = True):
     # ref: https://schemdraw.readthedocs.io/en/0.6.0/gallery/gallery.html#superheterodyne-receiver
     with schemdraw.Drawing() as d:
         d.config(fontsize=10)
-        L = d.unit/3
+        L = d.unit / 3
 
         antenna = dsp.Antenna()
 
@@ -84,4 +94,3 @@ def draw(*blocks: RxBlock, sdr_TX_as_LO: bool = True):
             dsp.Line(arrow='->').toy(mixer_symbol.S)
 
     return d
-

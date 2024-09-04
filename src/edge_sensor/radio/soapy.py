@@ -143,7 +143,9 @@ class SoapyRadioDevice(RadioDevice):
     @backend_sample_rate.setter
     @_verify_channel_for_setter
     def _(self, backend_sample_rate):
-        self.backend.setSampleRate(soapy.SOAPY_SDR_RX, self.channel(), backend_sample_rate)
+        self.backend.setSampleRate(
+            soapy.SOAPY_SDR_RX, self.channel(), backend_sample_rate
+        )
 
     sample_rate = backend_sample_rate.corrected_from_expression(
         backend_sample_rate / _downsample,
@@ -220,7 +222,9 @@ class SoapyRadioDevice(RadioDevice):
         next_capture: typing.Union[structs.RadioCapture, None] = None,
         correction: bool = True,
     ) -> tuple[np.array, type_stubs.TimestampType]:
-        return super().acquire(capture=capture, next_capture=next_capture, correction=correction)
+        return super().acquire(
+            capture=capture, next_capture=next_capture, correction=correction
+        )
 
     def arm(self, capture: structs.RadioCapture):
         """apply a capture configuration"""
@@ -371,7 +375,7 @@ class SoapyRadioDevice(RadioDevice):
             # Read the samples from the data buffer
             rx_result = self.backend.readStream(
                 self.rx_stream,
-                [self._inbuf[next_start * 2 : ]],
+                [self._inbuf[next_start * 2 :]],
                 remaining,
                 timeoutUs=int(timeout * 1e6),
             )

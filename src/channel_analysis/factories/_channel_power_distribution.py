@@ -5,11 +5,11 @@ from functools import lru_cache
 from dataclasses import dataclass
 import numpy as np
 
-from xarray_dataclasses import AsDataArray, Coordof, Data, Attr, Name
+from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 import iqwaveform
 
 from ..dataarrays import expose_in_yaml, ChannelAnalysisResult, select_parameter_kws
-from .. import structs
+from ..structs import Capture
 
 
 ChannelPowerBinAxis = typing.Literal['channel_power_bin']
@@ -17,7 +17,7 @@ ChannelPowerBinAxis = typing.Literal['channel_power_bin']
 
 @lru_cache
 def coord_factory(
-    capture: structs.RadioCapture,
+    capture: Capture,
     *,
     power_low: float,
     power_high: float,
@@ -30,7 +30,6 @@ def coord_factory(
 @dataclass
 class ChannelPowerCoords:
     data: Data[ChannelPowerBinAxis, np.float32]
-    name: Name[str] = 'channel_power_bin'
     standard_name: Attr[str] = 'Channel power'
     units: Attr[str] = 'dBm'
 
@@ -49,7 +48,7 @@ def _make_power_bins(power_low, power_high, power_resolution, xp=np):
 @expose_in_yaml
 def channel_power_distribution(
     iq,
-    capture: structs.Capture,
+    capture: Capture,
     *,
     power_low: float,
     power_high: float,

@@ -100,7 +100,9 @@ class SweepController:
         )
         self.warmed_captures = self.warmed_captures | set(warmup_sweep.captures)
         if len(warmup_sweep.captures) > 0:
-            warmup_iter = self.iter_sweep(warmup_sweep, swept_fields, calibration, quiet=True)
+            warmup_iter = self.iter_sweep(
+                warmup_sweep, swept_fields, calibration, quiet=True
+            )
         else:
             return []
 
@@ -117,7 +119,7 @@ class SweepController:
         swept_fields: list[str],
         calibration: type_stubs.DatasetType = None,
         always_yield: bool = False,
-        quiet: bool = False
+        quiet: bool = False,
     ) -> Generator[xr.Dataset]:
         # take args {3,4...N}
         kwargs = dict(locals())
@@ -138,7 +140,7 @@ class _ServerService(rpyc.Service, SweepController):
     def on_connect(self, conn: rpyc.Service):
         info = repr(conn._channel.stream.sock)
         try:
-            source = eval(info[1:-1].split('raddr=',1)[1])
+            source = eval(info[1:-1].split('raddr=', 1)[1])
         except IndexError:
             source = 'unknown address'
         lb.logger.info(f'new client connection from {source}')
@@ -146,7 +148,7 @@ class _ServerService(rpyc.Service, SweepController):
     def on_disconnect(self, conn: rpyc.Service):
         info = repr(conn._channel.stream.sock)
         try:
-            source = eval(info[1:-1].split('raddr=',1)[1])
+            source = eval(info[1:-1].split('raddr=', 1)[1])
         except IndexError:
             source = 'unknown address'
 

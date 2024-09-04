@@ -145,7 +145,6 @@ class NullRadio(RadioDevice):
     def _prepare_buffer(self, capture):
         pass
 
-
     def _read_stream(self, N) -> np.ndarray:
         xp = import_cupy_with_fallback()
         ret = xp.empty(N, dtype='complex64')
@@ -166,5 +165,5 @@ class NullRadio(RadioDevice):
             t = np.arange(N) / self.sample_rate()
             f_cw = self.sample_rate() / 5
             ret[:] += xp.sin((2 * np.pi * f_cw) * t)
-            
+
         return ret

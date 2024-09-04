@@ -41,7 +41,11 @@ from typing import Optional
     help='print debug',
 )
 def run(
-    yaml_path: Path, output_path: Optional[str], remote: Optional[str], force: bool, verbose: bool
+    yaml_path: Path,
+    output_path: Optional[str],
+    remote: Optional[str],
+    force: bool,
+    verbose: bool,
 ):
     if output_path is None:
         output_path = Path(yaml_path).with_suffix('.zarr.zip')

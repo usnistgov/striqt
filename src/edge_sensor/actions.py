@@ -112,7 +112,7 @@ class _RadioCaptureAnalyzer:
         return coords
 
 
-def _frozensubset(d: dict|frozendict, keys: list[str]) -> frozendict:
+def _frozensubset(d: dict | frozendict, keys: list[str]) -> frozendict:
     return frozendict({k: d[k] for k in keys})
 
 
@@ -155,7 +155,7 @@ def iter_sweep(
     swept_fields: list[str],
     calibration: type_stubs.DatasetType = None,
     always_yield=False,
-    quiet=False
+    quiet=False,
 ) -> Generator[xr.Dataset | None]:
     """iterate through sweep captures on the specified radio, yielding a dataset for each.
 

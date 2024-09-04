@@ -1,12 +1,12 @@
 from __future__ import annotations
-from typing import Literal, get_args
+from typing import Literal
 from functools import lru_cache
 
 from dataclasses import dataclass
 import numpy as np
 
-from xarray_dataclasses import AsDataArray, Coordof, Data, Attr, Name
-from iqwaveform import powtodB, iq_to_bin_power
+from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
+import iqwaveform
 
 from ..dataarrays import expose_in_yaml, ChannelAnalysisResult, select_parameter_kws
 from ..structs import Capture
@@ -25,10 +25,10 @@ def channel_power_time_series(
 
     kws = {'iq': iq, 'Ts': 1 / capture.sample_rate, 'Tbin': detector_period}
 
-    data = [
-        powtodB(iq_to_bin_power(kind=detector, **kws).astype('float32'))
-        for detector in power_detectors
-    ]
+    data = []
+    for detector in power_detectors:
+        power = iqwaveform.iq_to_bin_power(kind=detector, **kws).astype('float32')
+        data.append(iqwaveform.powtodB(power))
 
     metadata = {
         'detector_period': detector_period,
@@ -56,7 +56,6 @@ def time_elapsed_coord_factory(
 @dataclass
 class TimeElapsedCoords:
     data: Data[TimeElapsedAxis, np.float32]
-    name: Name[str] = get_args(TimeElapsedAxis)[0]
     standard_name: Attr[str] = 'Time elapsed'
     units: Attr[str] = 's'
 
@@ -77,7 +76,6 @@ def power_detector_coord_factory(
 @dataclass
 class PowerDetectorCoords:
     data: Data[PowerDetectorAxis, object]
-    name: Name[str] = get_args(PowerDetectorAxis)[0]
     standard_name: Attr[str] = 'Power detector'
 
     factory: callable = power_detector_coord_factory
