@@ -42,6 +42,7 @@ dependencies:
 - cython
 - pip:
   - iqwaveform @ git+https://github.com/usnistgov/iqwaveform
+  - xarray_dataclasses
 
       # allows imports from the src/ directory in this repo
   - -e ..
