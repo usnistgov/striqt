@@ -1,15 +1,13 @@
 from __future__ import annotations
 
+import typing
 from pathlib import Path
 from collections import defaultdict
 
-import math
-import typing
-
 import labbench as lb
-import zarr.storage
 
 from . import dataarrays, type_stubs
+from .factories._iq_waveform import IQSampleIndexAxis
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -21,6 +19,8 @@ else:
     numcodecs = lb.util.lazy_import('numcodecs')
     xr = lb.util.lazy_import('xarray')
     zarr = lb.util.lazy_import('zarr')
+
+IQ_WAVEFORM_INDEX_NAME = typing.get_args(IQSampleIndexAxis)[0]
 
 
 def open_store(path: str | Path, *, mode: str):
@@ -45,7 +45,7 @@ def dump(
 ) -> zarr.storage.Store:
     """serialize a dataset into a zarr directory structure"""
 
-    if hasattr(data, dataarrays.IQ_WAVEFORM_INDEX_NAME):
+    if hasattr(data, IQ_WAVEFORM_INDEX_NAME):
         if 'sample_rate' in data.attrs:
             # sample rate is metadata
             sample_rate = data.attrs['sample_rate']
@@ -53,7 +53,7 @@ def dump(
             # sample rate is a variate
             sample_rate = data.sample_rate.values.flatten()[0]
 
-        chunks = {dataarrays.IQ_WAVEFORM_INDEX_NAME: round(sample_rate * 10e-3)}
+        chunks = {IQ_WAVEFORM_INDEX_NAME: round(sample_rate * 10e-3)}
     else:
         chunks = {}
 

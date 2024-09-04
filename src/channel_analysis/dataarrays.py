@@ -3,35 +3,24 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal, Any
-from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
-import numpy as np
-import functools
-import xarray_dataclasses
-
 import inspect
-from xarray_dataclasses.dataarray import OptionedClass, TDataArray, DataClass, PInit
-from xarray_dataclasses.datamodel import AnyEntry
-from typing import Type, overload
-import xarray as xr
-
-
-from collections import UserDict
-from functools import lru_cache
 import typing
 
-import msgspec
-import labbench as lb
+from functools import lru_cache
+from collections import UserDict
+
+from xarray_dataclasses.dataarray import OptionedClass, TDataArray, DataClass, PInit
+from xarray_dataclasses.datamodel import AnyEntry, DataModel
+
 from array_api_compat import is_cupy_array, is_numpy_array, is_torch_array
 from frozendict import frozendict
-
 import iqwaveform
-from iqwaveform import powtodB
+import labbench as lb
+import msgspec
+import numpy as np
 
-from . import structs
-from . import (
-    type_stubs,
-)  # import type_stubs.DataArrayType, type_stubs.DatasetType, type_stubs.ArrayType, CoordinatesType
+from . import structs, type_stubs
+
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -45,25 +34,24 @@ else:
     xr = lb.util.lazy_import('xarray')
 
 
+expose_in_yaml = structs.KeywordConfigRegistry(structs.ChannelAnalysis)
+
+
 def _entry_stub(entry: AnyEntry):
     return np.empty(len(entry.dims) * (1,), dtype=entry.dtype)
 
 
-@overload
+@typing.overload
 def shaped(
-    cls: Type[OptionedClass[PInit, TDataArray]],
+    cls: type[OptionedClass[PInit, TDataArray]],
 ) -> TDataArray: ...
-
-
-@overload
+@typing.overload
 @classmethod
 def shaped(
-    cls: Type[DataClass[PInit]],
+    cls: type[DataClass[PInit]],
 ) -> xr.DataArray: ...
-
-
-@functools.lru_cache
-def dataarray_stub(cls: Any) -> Any:
+@lru_cache
+def dataarray_stub(cls: typing.Any) -> typing.Any:
     """return an empty array of type `cls`"""
 
     entries = get_data_model(cls).entries
@@ -79,13 +67,13 @@ def dataarray_stub(cls: Any) -> Any:
     return stub.isel(slices)
 
 
-@functools.lru_cache
-def get_data_model(dataclass: Any):
-    return xarray_dataclasses.datamodel.DataModel.from_dataclass(dataclass)
+@lru_cache
+def get_data_model(dataclass: typing.Any):
+    return DataModel.from_dataclass(dataclass)
 
 
 def channel_dataarray(
-    cls, data: np.ndarray, capture, parameters: dict[str, Any]
+    cls, data: np.ndarray, capture, parameters: dict[str, typing.Any]
 ) -> xr.DataArray:
     """build an `xarray.DataArray` from an ndarray, capture information, and channel analysis keyword arguments"""
     template = dataarray_stub(cls)
@@ -103,12 +91,6 @@ def channel_dataarray(
     return da
 
 
-expose_in_yaml = structs.KeywordConfigRegistry(structs.ChannelAnalysis)
-
-
-IQ_WAVEFORM_INDEX_NAME = 'iq_index'
-
-
 @dataclass
 class ChannelAnalysisResult(UserDict):
     """represents the return result from a channel analysis function.
@@ -121,7 +103,7 @@ class ChannelAnalysisResult(UserDict):
     datacls: type
     data: typing.Union[type_stubs.ArrayType, dict]
     capture: structs.RadioCapture
-    parameters: dict[str, Any]
+    parameters: dict[str, typing.Any]
     attrs: list[str] = frozendict()
 
     def to_xarray(self) -> type_stubs.DataArrayType:
@@ -150,53 +132,11 @@ def _to_maybe_nested_numpy(obj: tuple | list | dict | type_stubs.ArrayType):
         raise TypeError(f'obj type {type(obj)} is unrecognized')
 
 
-def select_parameter_kws(locals_: dict, omit=('iq', 'capture', 'out')) -> dict:
+def select_parameter_kws(locals_: dict, omit=('capture', 'out')) -> dict:
     """return the analysis parameters from the locals() evaluated at the beginning of analysis function"""
 
-    return {k: v for k, v in locals_.items() if k not in omit}
-
-
-@expose_in_yaml
-def iq_waveform(
-    iq,
-    capture: structs.Capture,
-    *,
-    start_time_sec: typing.Optional[float] = None,
-    stop_time_sec: typing.Optional[float] = None,
-) -> ChannelAnalysisResult:
-    """package a clipping of the IQ waveform"""
-
-    metadata = {
-        'standard_name': 'IQ waveform',
-        'units': 'V',
-        'start_time_sec': start_time_sec,
-        'stop_time_sec': stop_time_sec,
-    }
-
-    if start_time_sec is None:
-        start = None
-    else:
-        start = int(start_time_sec * capture.sample_rate)
-
-    if stop_time_sec is None:
-        stop = None
-    else:
-        stop = int(stop_time_sec * capture.sample_rate)
-
-    coords = xr.Coordinates(
-        {
-            IQ_WAVEFORM_INDEX_NAME: pd.RangeIndex(
-                start, stop, name=IQ_WAVEFORM_INDEX_NAME
-            )
-        }
-    )
-
-    return ChannelAnalysisResult(
-        data=iq[start:stop].copy(),
-        name='iq_waveform',
-        coords=coords,
-        attrs=metadata,
-    )
+    items = list(locals_.items())
+    return {k: v for k, v in items[1:] if k not in omit}
 
 
 @lru_cache(8)

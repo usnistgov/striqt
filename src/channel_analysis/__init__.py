@@ -9,6 +9,11 @@ from .factories import (
     channel_power_time_series,
     cyclic_channel_power,
     iq_waveform,
-    # persistence_spectrum,
+    persistence_spectrum,
 )
-from .dataarrays import analyze_by_spec
+
+from .dataarrays import (
+    analyze_by_spec,
+    iir_filter,
+    ola_filter
+)
