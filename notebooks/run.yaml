@@ -74,7 +74,7 @@ channel_analysis:
         - mean
         - max
         detector_period: 1.6666666666666667e-05
-        detectors:
+        power_detectors:
         - rms
         - peak
 
@@ -99,6 +99,6 @@ channel_analysis:
         
     power_time_series:
         detector_period: 0.01
-        detectors:
+        power_detectors:
         - rms
         - peak

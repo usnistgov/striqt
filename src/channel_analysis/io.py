@@ -6,7 +6,7 @@ from collections import defaultdict
 
 import labbench as lb
 
-from . import dataarrays, type_stubs
+from . import dataarrays, type_stubs, factories
 from .factories._iq_waveform import IQSampleIndexAxis
 
 if typing.TYPE_CHECKING:
@@ -80,7 +80,7 @@ def dump(
     for name in data.data_vars.keys():
         # skip compression of iq waveforms, which is slow and
         # ineffective due to high entropy
-        if name != dataarrays.iq_waveform.__name__:
+        if name != factories.iq_waveform.__name__:
             if compressor is not None:
                 encodings[name]['compressor'] = compressor
 

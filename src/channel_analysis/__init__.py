@@ -3,7 +3,7 @@
 from . import dataarrays, source, structs, type_stubs
 
 from .io import load, dump, open_store
-from .structs import Capture, FilteredCapture
+
 from .factories import (
     channel_power_distribution,
     channel_power_time_series,
@@ -14,6 +14,8 @@ from .factories import (
 
 from .dataarrays import (
     analyze_by_spec,
-    iir_filter,
-    ola_filter
 )
+
+from .source import simulated_awgn, filter_iq_capture
+
+from .structs import Capture, FilteredCapture

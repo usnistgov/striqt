@@ -104,7 +104,7 @@ channel_analysis:
         - mean
         - max
         detector_period: 1.6666666666666667e-05
-        detectors:
+        power_detectors:
         - rms
         - peak
 
@@ -149,6 +149,6 @@ channel_analysis:
 
         # list of statistics to evaluate in each detector time bin:
         # 'min', 'max' (or equivalent 'peak'), 'mean' (or equivalent 'rms'), or a quantile number
-        detectors:
+        power_detectors:
         - rms
         - peak

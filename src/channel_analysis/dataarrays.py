@@ -72,13 +72,17 @@ def get_data_model(dataclass: typing.Any):
     return DataModel.from_dataclass(dataclass)
 
 
+def _freeze(parameters: dict):
+    return {k: (tuple(v) if isinstance(v, list) else v) for k,v in parameters.items()}
+
+
 def channel_dataarray(
     cls, data: np.ndarray, capture, parameters: dict[str, typing.Any]
 ) -> xr.DataArray:
     """build an `xarray.DataArray` from an ndarray, capture information, and channel analysis keyword arguments"""
     template = dataarray_stub(cls)
-
     data = np.asarray(data)
+    parameters = _freeze(parameters)
 
     # to bypass initialization overhead, grow from the empty template
     da = template.pad({dim: [0, data.shape[i]] for i, dim in enumerate(template.dims)})
@@ -254,7 +258,7 @@ def _package_channel_analysis(
     capture: structs.Capture, results: dict[str, structs.ChannelAnalysis]
 ) -> type_stubs.DatasetType:
     # materialize as xarrays
-    xarrays = {res.name: res.to_xarray() for res in results.values()}
+    xarrays = {name: res.to_xarray() for name, res in results.items()}
     # capture.analysis_filter = dict(capture.analysis_filter)
     # capture = msgspec.convert(capture, type=type(capture))
     attrs = msgspec.to_builtins(capture, builtin_types=(frozendict,))
