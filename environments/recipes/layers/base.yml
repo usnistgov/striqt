@@ -27,8 +27,6 @@ dependencies:
   - humanfriendly
   - array-api-compat
   - methodtools
-  - mako
-  - fastrlock
 
   # for SoapySDR device wrappers and remote control
   - labbench
