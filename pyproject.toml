@@ -40,7 +40,6 @@ requires-python = "~=3.9.0"
 
 [project.optional-dependencies]
 dev = ["ipykernel", "jupyter", "ruff"]
-# cupy = ["cupy ~= 12.2","cython"]
 
 [project.scripts]
 edge-sensor-sweep = "flex_spectrum_sensor_scripts.edge_sensor_sweep:run"
