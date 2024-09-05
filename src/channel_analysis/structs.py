@@ -47,11 +47,10 @@ class Capture(msgspec.Struct, kw_only=True, frozen=True):
     # acquisition
     duration: A[float, meta('duration of the capture', 's')] = 0.1
     sample_rate: A[float, meta('IQ sample rate', 'S/s')] = 15.36e6
-
+    analysis_bandwidth: A[Optional[float], meta('Analysis bandwidth', 'Hz')] = None
 
 class FilteredCapture(Capture):
     # filtering and resampling
-    analysis_bandwidth: A[Optional[float], meta('DSP filter bandwidth', 'Hz')] = None
     analysis_filter: dict = msgspec.field(
         default_factory=lambda: frozendict({'nfft': 8192, 'window': 'hamming'})
     )

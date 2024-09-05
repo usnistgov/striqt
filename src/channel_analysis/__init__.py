@@ -5,6 +5,7 @@ from . import dataarrays, source, structs, type_stubs
 from .io import load, dump, open_store
 
 from .factories import (
+    cellular_cyclic_autocorrelation,
     channel_power_distribution,
     channel_power_time_series,
     cyclic_channel_power,

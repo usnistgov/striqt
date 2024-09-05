@@ -1,5 +1,6 @@
-"""Factory functions that produce channel analysis products"""
+"""Factory functions that produce channel analysis products packaged as xarray DataArray objects"""
 
+from ._cellular_cyclic_autocorrelation import cellular_cyclic_autocorrelation
 from ._channel_power_distribution import channel_power_distribution
 from ._channel_power_time_series import channel_power_time_series
 from ._cyclic_channel_power import cyclic_channel_power
