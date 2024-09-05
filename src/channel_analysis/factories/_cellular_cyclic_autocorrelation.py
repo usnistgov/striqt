@@ -125,7 +125,8 @@ def cellular_cyclic_autocorrelation(
     capture: Capture,
     *,
     subcarrier_spacings: tuple[float, ...] = (15e3, 30e3, 60e3),
-    max_frame_count: int = 2
+    frame_limit: int = 2,
+    normalize: bool = True
 ) -> ChannelAnalysisResult:
     
     params = select_parameter_kws(locals())
@@ -134,7 +135,7 @@ def cellular_cyclic_autocorrelation(
     subcarrier_spacings = tuple(subcarrier_spacings)
     phy_scs = get_phy_mappings(capture.analysis_bandwidth, subcarrier_spacings, xp=xp)
 
-    kws = dict(slots='all', symbols='all', frames=np.arange(0,max_frame_count), norm=True)
+    kws = dict(slots='all', symbols='all', frames=np.arange(0,frame_limit), norm=normalize)
 
     max_len = get_correlation_length(capture, subcarrier_spacings=subcarrier_spacings)
 
@@ -143,10 +144,18 @@ def cellular_cyclic_autocorrelation(
         R, _ = correlate_cyclic_prefixes(iq, phy, **kws)
         result[i][:R.size] = xp.abs(R)
 
+
     metadata = {
-        'standard_name': 'Correlation',
-        'max_frame_count': max_frame_count
+        'frame_limit': frame_limit
     }
+
+    if normalize:
+        metadata.update(standard_name='Autocorrelation')
+    else:
+        metadata.update(
+            standard_name='Autocovariance',
+            units='mW'
+        )
 
     return ChannelAnalysisResult(
         CellularCyclicAutocorrelation, xp.array(result), capture, parameters=params, attrs=metadata
