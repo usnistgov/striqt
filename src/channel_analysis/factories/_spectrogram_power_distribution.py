@@ -14,6 +14,8 @@ from .. import type_stubs
 from ._persistence_spectrum import equivalent_noise_bandwidth
 from ._channel_power_distribution import make_power_bins, power_bin_coord_factory
 
+_debug = {}
+
 @expose_in_yaml
 def spectrogram_power_distribution(
     iq: type_stubs.ArrayType,
@@ -24,7 +26,8 @@ def spectrogram_power_distribution(
     power_low: float,
     power_high: float,
     power_resolution: float,
-    fractional_overlap: float = 0
+    fractional_overlap: float = 0,
+    frequency_bin_size: int = None
 ) -> ChannelAnalysisResult:
     params = select_parameter_kws(locals())
     xp = iqwaveform.util.array_namespace(iq)
@@ -50,16 +53,26 @@ def spectrogram_power_distribution(
         # need sample_rate_Hz/resolution to give us a counting number
         raise ValueError('sample_rate_Hz/resolution must be a counting number')
 
-    freqs, _, X = iqwaveform.fourier.spectrogram(
-        iq, window=window, fs=capture.sample_rate, nperseg=nfft, noverlap=noverlap
+    freqs, _, spg = iqwaveform.fourier.spectrogram(
+        iq, window=window, fs=capture.sample_rate, nperseg=nfft, noverlap=noverlap, axis=0
     )
 
     # truncate to the analysis bandwidth
     bw_args = (-capture.analysis_bandwidth / 2, +capture.analysis_bandwidth / 2)
     ilo, ihi = iqwaveform.fourier._freq_band_edges(freqs[0], freqs[-1], freqs.size, *bw_args)
-    X = X[:, ilo:ihi]
+    spg = spg[:, ilo:ihi]
 
-    spg = iqwaveform.powtodB(X, eps=1e-25, out=X.real)
+    if frequency_bin_size is not None:
+        trim = spg.shape[1]%(2*frequency_bin_size)
+        if trim > 0:
+            spg = spg[:,trim//2:-trim//2:]
+        spg = iqwaveform.fourier.to_blocks(spg, frequency_bin_size, axis=1)
+        spg = spg.mean(axis=2)
+
+    _debug['spg'] = spg.copy()
+    print(spg.shape)
+
+    spg = iqwaveform.powtodB(spg, eps=1e-25, out=spg)
 
     bins = make_power_bins(power_low=power_low, power_high=power_high, power_resolution=power_resolution, xp=xp)
     data = iqwaveform.sample_ccdf(spg.flatten(), bins).astype(dtype)

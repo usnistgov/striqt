@@ -64,7 +64,7 @@ def persistence_spectrum(
         'fractional_overlap': fractional_overlap,
         'noise_bandwidth': enbw,
         'fft_size': nfft,
-        'units': f'dBm/{enbw/1e3:0.3f} kHz',
+        'units': f'dBm/{round(enbw/1e3, 1):0.0f} kHz',
     }
 
     return ChannelAnalysisResult(

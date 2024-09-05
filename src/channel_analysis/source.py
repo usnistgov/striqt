@@ -140,3 +140,33 @@ def simulated_awgn(
         ]
     else:
         return samples
+
+
+def read_tdms(path, analysis_bandwidth: float = None):
+    from nptdms import TdmsFile
+
+    fd = TdmsFile.read(path)
+
+    header_fd, iq_fd = fd.groups()
+
+    size = int(header_fd['total_samples'][0])
+    ref_level = header_fd['reference_level_dBm'][0]
+    fs = header_fd['IQ_samples_per_second'][0]
+    fc = header_fd['carrier_frequency'][0]
+
+    scale = 10 ** (float(ref_level) / 20.0) / np.iinfo(np.int16).max
+    i, q = iq_fd.channels()
+    iq = np.empty((2 * size,), dtype=np.int16)
+    iq[::2] = i[:]
+    iq[1::2] = q[:]
+
+    frame_size = int(np.rint(10e-3 * fs))
+    if iq.shape[0] % frame_size != 0:
+        iq = iq[: (iq.shape[0] // frame_size) * frame_size]
+
+    iq = (iq * np.float32(scale)).view('complex64')
+    capture = structs.FilteredCapture(duration = iq.size/fs, sample_rate=fs, analysis_bandwidth=analysis_bandwidth)
+
+    iq = filter_iq_capture(iq, capture)
+
+    return iq, capture
