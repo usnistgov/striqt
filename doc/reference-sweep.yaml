@@ -152,3 +152,17 @@ channel_analysis:
         power_detectors:
         - rms
         - peak
+
+    # cyclic autocorrelation function for cellular OFDM cyclic prefixes
+    cellular_cyclic_autocorrelation:
+        # evaluate for the following cellular SCS
+        subcarrier_spacings:
+        - 15e3
+        - 30e3
+        - 60e3
+        
+        # the evaluation can be expensive; limit to this number of frames
+        frame_limit: 2
+
+        # if true, return a correlation; otherwise, return a covariance (power)
+        normalize: true

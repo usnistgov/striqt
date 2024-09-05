@@ -102,3 +102,11 @@ channel_analysis:
         power_detectors:
         - rms
         - peak
+
+    cellular_cyclic_autocorrelation:
+        subcarrier_spacings:
+        - 15e3
+        - 30e3
+        - 60e3
+        frame_limit: 2
+        normalize: true

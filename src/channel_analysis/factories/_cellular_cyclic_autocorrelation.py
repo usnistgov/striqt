@@ -16,6 +16,50 @@ ofdm = iqwaveform.util.lazy_import('iqwaveform.ofdm')
 pd = iqwaveform.util.lazy_import('pandas')
 
 
+### iqwaveform wrapper
+@expose_in_yaml
+def cellular_cyclic_autocorrelation(
+    iq,
+    capture: Capture,
+    *,
+    subcarrier_spacings: tuple[float, ...] = (15e3, 30e3, 60e3),
+    frame_limit: int = 2,
+    normalize: bool = True
+) -> ChannelAnalysisResult:
+    
+    params = select_parameter_kws(locals())
+
+    xp = iqwaveform.util.array_namespace(iq)
+    subcarrier_spacings = tuple(subcarrier_spacings)
+    phy_scs = get_phy_mappings(capture.analysis_bandwidth, subcarrier_spacings, xp=xp)
+
+    kws = dict(slots='all', symbols='all', frames=np.arange(0,frame_limit), norm=normalize)
+
+    max_len = get_correlation_length(capture, subcarrier_spacings=subcarrier_spacings)
+
+    result = xp.full((len(subcarrier_spacings), max_len), np.nan, dtype=np.float32)
+    for i, phy in enumerate(phy_scs.values()):
+        R, _ = correlate_cyclic_prefixes(iq, phy, **kws)
+        result[i][:R.size] = xp.abs(R)
+
+
+    metadata = {
+        'frame_limit': frame_limit
+    }
+
+    if normalize:
+        metadata.update(standard_name='Autocorrelation')
+    else:
+        metadata.update(
+            standard_name='Autocovariance',
+            units='mW'
+        )
+
+    return ChannelAnalysisResult(
+        CellularCyclicAutocorrelation, xp.array(result), capture, parameters=params, attrs=metadata
+    )
+
+
 def correlate_along_axis(a, b, axes=0, norm=False, _ab_product=None):
     """correlate `a` and `b` along the specified axes.
 
@@ -116,50 +160,6 @@ def correlate_cyclic_prefixes(
     power = xp.mean(power, axis=corr_axes) / cp_inds.shape[-1]
 
     return R, power
-
-
-### iqwaveform wrapper
-@expose_in_yaml
-def cellular_cyclic_autocorrelation(
-    iq,
-    capture: Capture,
-    *,
-    subcarrier_spacings: tuple[float, ...] = (15e3, 30e3, 60e3),
-    frame_limit: int = 2,
-    normalize: bool = True
-) -> ChannelAnalysisResult:
-    
-    params = select_parameter_kws(locals())
-
-    xp = iqwaveform.util.array_namespace(iq)
-    subcarrier_spacings = tuple(subcarrier_spacings)
-    phy_scs = get_phy_mappings(capture.analysis_bandwidth, subcarrier_spacings, xp=xp)
-
-    kws = dict(slots='all', symbols='all', frames=np.arange(0,frame_limit), norm=normalize)
-
-    max_len = get_correlation_length(capture, subcarrier_spacings=subcarrier_spacings)
-
-    result = xp.full((len(subcarrier_spacings), max_len), np.nan, dtype=np.float32)
-    for i, phy in enumerate(phy_scs.values()):
-        R, _ = correlate_cyclic_prefixes(iq, phy, **kws)
-        result[i][:R.size] = xp.abs(R)
-
-
-    metadata = {
-        'frame_limit': frame_limit
-    }
-
-    if normalize:
-        metadata.update(standard_name='Autocorrelation')
-    else:
-        metadata.update(
-            standard_name='Autocovariance',
-            units='mW'
-        )
-
-    return ChannelAnalysisResult(
-        CellularCyclicAutocorrelation, xp.array(result), capture, parameters=params, attrs=metadata
-    )
 
 
 ### Time elapsed dimension and coordinates
