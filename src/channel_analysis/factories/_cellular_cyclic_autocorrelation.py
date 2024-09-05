@@ -125,14 +125,16 @@ def cellular_cyclic_autocorrelation(
     capture: Capture,
     *,
     subcarrier_spacings: tuple[float, ...] = (15e3, 30e3, 60e3),
+    max_frame_count: int = 2
 ) -> ChannelAnalysisResult:
+    
     params = select_parameter_kws(locals())
 
     xp = iqwaveform.util.array_namespace(iq)
     subcarrier_spacings = tuple(subcarrier_spacings)
     phy_scs = get_phy_mappings(capture.analysis_bandwidth, subcarrier_spacings, xp=xp)
 
-    kws = dict(slots='all', symbols='all', frames=np.arange(0,10), norm=True)
+    kws = dict(slots='all', symbols='all', frames=np.arange(0,max_frame_count), norm=True)
 
     max_len = get_correlation_length(capture, subcarrier_spacings=subcarrier_spacings)
 
@@ -143,6 +145,7 @@ def cellular_cyclic_autocorrelation(
 
     metadata = {
         'standard_name': 'Correlation',
+        'max_frame_count': max_frame_count
     }
 
     return ChannelAnalysisResult(
