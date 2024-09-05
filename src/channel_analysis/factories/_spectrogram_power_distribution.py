@@ -1,0 +1,97 @@
+from __future__ import annotations
+import typing
+from functools import lru_cache
+
+from dataclasses import dataclass
+import numpy as np
+
+from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
+import iqwaveform
+
+from ..dataarrays import expose_in_yaml, ChannelAnalysisResult, select_parameter_kws
+from ..structs import Capture
+from .. import type_stubs
+from ._persistence_spectrum import equivalent_noise_bandwidth
+from ._channel_power_distribution import make_power_bins, power_bin_coord_factory
+
+@expose_in_yaml
+def spectrogram_power_distribution(
+    iq: type_stubs.ArrayType,
+    capture: Capture,
+    *,
+    window: typing.Union[str, tuple[str, float]],
+    frequency_resolution: float,
+    power_low: float,
+    power_high: float,
+    power_resolution: float,
+    fractional_overlap: float = 0
+) -> ChannelAnalysisResult:
+    params = select_parameter_kws(locals())
+    xp = iqwaveform.util.array_namespace(iq)
+    dtype = xp.finfo(iq.dtype).dtype
+
+    # TODO: support other persistence statistics, such as mean
+    if iqwaveform.isroundmod(capture.sample_rate, frequency_resolution):
+        # need capture.sample_rate/resolution to give us a counting number
+        nfft = round(capture.sample_rate / frequency_resolution)
+    else:
+        raise ValueError('sample_rate/resolution must be a counting number')
+
+    if isinstance(window, list):
+        # lists break lru_cache
+        window = tuple(window)
+
+    enbw = frequency_resolution * equivalent_noise_bandwidth(window, nfft)
+
+    if iqwaveform.isroundmod(capture.sample_rate, frequency_resolution):
+        nfft = round(capture.sample_rate / frequency_resolution)
+        noverlap = round(fractional_overlap * nfft)
+    else:
+        # need sample_rate_Hz/resolution to give us a counting number
+        raise ValueError('sample_rate_Hz/resolution must be a counting number')
+
+    freqs, _, X = iqwaveform.fourier.spectrogram(
+        iq, window=window, fs=capture.sample_rate, nperseg=nfft, noverlap=noverlap
+    )
+
+    # truncate to the analysis bandwidth
+    bw_args = (-capture.analysis_bandwidth / 2, +capture.analysis_bandwidth / 2)
+    ilo, ihi = iqwaveform.fourier._freq_band_edges(freqs[0], freqs[-1], freqs.size, *bw_args)
+    X = X[:, ilo:ihi]
+
+    spg = iqwaveform.powtodB(X, eps=1e-25, out=X.real)
+
+    bins = make_power_bins(power_low=power_low, power_high=power_high, power_resolution=power_resolution, xp=xp)
+    data = iqwaveform.sample_ccdf(spg.flatten(), bins).astype(dtype)
+
+    metadata = {
+        'window': window,
+        'frequency_resolution': frequency_resolution,
+        'fractional_overlap': fractional_overlap,
+        'noise_bandwidth': enbw,
+        'fft_size': nfft,
+        # 'units': f'dBm/{enbw/1e3:0.3f} kHz',
+    }
+
+    return ChannelAnalysisResult(
+        SpectrogramPowerDistribution, data, capture, parameters=params, attrs=metadata
+    )
+
+# Axis and coordinates
+SpectrogramPowerBinAxis = typing.Literal['spectrogram_power_bin']
+
+
+@dataclass
+class SpectrogramPowerCoords:
+    data: Data[SpectrogramPowerBinAxis, np.float32]
+    standard_name: Attr[str] = 'Spectrogram bin power'
+    units: Attr[str] = 'dBm'
+
+    factory: callable = power_bin_coord_factory
+
+
+@dataclass
+class SpectrogramPowerDistribution(AsDataArray):
+    ccdf: Data[SpectrogramPowerBinAxis, np.float32]
+    spectrogram_power_bin: Coordof[SpectrogramPowerCoords]
+    standard_name: Attr[str] = 'CCDF'

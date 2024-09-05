@@ -12,39 +12,6 @@ from ..dataarrays import expose_in_yaml, ChannelAnalysisResult, select_parameter
 from ..structs import Capture
 
 
-ChannelPowerBinAxis = typing.Literal['channel_power_bin']
-
-
-@lru_cache
-def coord_factory(
-    capture: Capture,
-    *,
-    power_low: float,
-    power_high: float,
-    power_resolution: float,
-) -> dict[str, np.ndarray]:
-    """returns a dictionary of coordinate values, keyed by axis dimension name"""
-    return _make_power_bins(power_low, power_high, power_resolution)
-
-
-@dataclass
-class ChannelPowerCoords:
-    data: Data[ChannelPowerBinAxis, np.float32]
-    standard_name: Attr[str] = 'Channel power'
-    units: Attr[str] = 'dBm'
-
-    factory: callable = coord_factory
-
-
-@lru_cache
-def _make_power_bins(power_low, power_high, power_resolution, xp=np):
-    """generate the list of power bins"""
-    ret = xp.arange(power_low, power_high, power_resolution)
-    if power_high - ret[-1] > power_resolution / 2:
-        ret = xp.pad(ret, [[0, 1]], mode='constant', constant_values=power_high).copy()
-    return ret
-
-
 @expose_in_yaml
 def channel_power_distribution(
     iq,
@@ -60,7 +27,7 @@ def channel_power_distribution(
     xp = iqwaveform.util.array_namespace(iq)
     dtype = xp.finfo(iq.dtype).dtype
 
-    bins = _make_power_bins(**params, xp=xp)
+    bins = make_power_bins(**params, xp=xp)
     result = iqwaveform.sample_ccdf(iqwaveform.envtodB(iq), bins).astype(dtype)
 
     return ChannelAnalysisResult(
@@ -69,6 +36,40 @@ def channel_power_distribution(
         capture=capture,
         parameters=params,
     )
+
+
+@lru_cache
+def make_power_bins(power_low, power_high, power_resolution, xp=np):
+    """generate the list of power bins"""
+    ret = xp.arange(power_low, power_high, power_resolution)
+    if power_high - ret[-1] > power_resolution / 2:
+        ret = xp.pad(ret, [[0, 1]], mode='constant', constant_values=power_high).copy()
+    return ret
+
+
+ChannelPowerBinAxis = typing.Literal['channel_power_bin']
+
+
+@lru_cache
+def power_bin_coord_factory(
+    capture: Capture,
+    *,
+    power_low: float,
+    power_high: float,
+    power_resolution: float,
+    **_
+) -> dict[str, np.ndarray]:
+    """returns a dictionary of coordinate values, keyed by axis dimension name"""
+    return make_power_bins(power_low, power_high, power_resolution)
+
+
+@dataclass
+class ChannelPowerCoords:
+    data: Data[ChannelPowerBinAxis, np.float32]
+    standard_name: Attr[str] = 'Channel power'
+    units: Attr[str] = 'dBm'
+
+    factory: callable = power_bin_coord_factory
 
 
 @dataclass

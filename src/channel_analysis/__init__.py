@@ -11,6 +11,7 @@ from .factories import (
     cyclic_channel_power,
     iq_waveform,
     persistence_spectrum,
+    spectrogram_power_distribution
 )
 
 from .dataarrays import (
