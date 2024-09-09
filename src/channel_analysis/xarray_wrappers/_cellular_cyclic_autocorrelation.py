@@ -9,6 +9,7 @@ import iqwaveform
 from .. import structs, dataarrays
 import array_api_compat
 
+
 ofdm = iqwaveform.util.lazy_import('iqwaveform.ofdm')
 pd = iqwaveform.util.lazy_import('pandas')
 
@@ -100,7 +101,13 @@ def cellular_cyclic_autocorrelation(
 
 @nb.njit(
     nb.void(
-        nb.complex64[:], nb.int_[:], nb.int_, nb.complex64[:], nb.complex64[:], nb.complex64[:], nb.float32[:]
+        nb.complex64[:],
+        nb.int_[:],
+        nb.int_,
+        nb.complex64[:],
+        nb.complex64[:],
+        nb.complex64[:],
+        nb.float32[:],
     ),
     parallel=True,
 )
@@ -120,14 +127,14 @@ def _indexed_cp_product(iq, cp_inds, nfft):
     """
 
     xp = iqwaveform.util.array_namespace(iq)
-    
+
     # numba accepts only flat arrays. flatten and then unflatten after exec
     if xp is array_api_compat.numpy:
         out = dict(
-            a_out = np.empty(cp_inds.size, dtype=np.complex64),
-            b_out = np.empty(cp_inds.size, dtype=np.complex64),
-            prod_out = np.empty(cp_inds.size, dtype=np.complex64),
-            power_out = np.empty(cp_inds.size, dtype=np.float32)
+            a_out=np.empty(cp_inds.size, dtype=np.complex64),
+            b_out=np.empty(cp_inds.size, dtype=np.complex64),
+            prod_out=np.empty(cp_inds.size, dtype=np.complex64),
+            power_out=np.empty(cp_inds.size, dtype=np.float32),
         )
 
         _numba_indexed_cp_product(iq, cp_inds.flatten(), nfft, **out)
@@ -136,11 +143,11 @@ def _indexed_cp_product(iq, cp_inds, nfft):
     else:
         # cuda, etc
         a = iq[cp_inds]
-        b = iq[nfft :][cp_inds]
+        b = iq[nfft:][cp_inds]
         power = iqwaveform.envtopow(a)
         power += iqwaveform.envtopow(b)
         power /= 2
-        return a, b, power, a*b
+        return a, b, power, a * b
 
 
 # %% TODO: the following low level code may be merged with similar functions in iqwaveform in the future

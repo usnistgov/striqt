@@ -163,7 +163,10 @@ def get_data_model(dataclass: typing.Any):
 
 
 def _freeze(parameters: dict):
-    return {k: (tuple(v) if isinstance(v, (list,np.ndarray)) else v) for k, v in parameters.items()}
+    return {
+        k: (tuple(v) if isinstance(v, (list, np.ndarray)) else v)
+        for k, v in parameters.items()
+    }
 
 
 def channel_dataarray(
