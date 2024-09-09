@@ -74,7 +74,7 @@ class _RadioCaptureAnalyzer:
             )
             coords = self.get_coords(capture, timestamp=timestamp)
 
-            analysis =  channel_analysis.analyze_by_spec(
+            analysis = channel_analysis.analyze_by_spec(
                 iq, capture, spec=self.analysis_spec
             ).assign_coords(coords)
 

@@ -16,14 +16,14 @@ radio_setup:
     - -105.26457779333897 # long (deg)
     - 1783.4 # ASL (m)
 
-  # eventually: "builtin" or "gps"
+  # eventually: "internal", "external", "gps"
   timebase: internal
 
   # start acquisition at a fixed time modulus (requires GPS sync)
-  periodic_trigger:  # none (eventually: also float)
+  periodic_trigger: 10e-3 # none (eventually: also float)
 
   # # calibration data path
-  calibration: # none (eventually: path to cal data)
+  calibration: # insert path here
 
 
 # any of these can be overridden by sweep settings
@@ -39,25 +39,32 @@ defaults:
 
   # filtering and resampling
   analysis_bandwidth: 10e6
-  lo_shift: right # digitally shift the LO out of the acquisition band: 'left', 'right', False
+  lo_shift: none # digitally shift the LO out of the acquisition band: 'left', 'right', False
 
   # if_frequency: none # Hz (or none, for no external frequency conversion)
   # lo_gain: none # dB (or none, for no external frequency conversion)
 
 
 captures:
-  - center_frequency: 3710e6 # Hz
-    gain: 0 # dB
-  - center_frequency: 3730e6 # Hz
-    gain: 0 # dB
   - center_frequency: 3750e6 # Hz
-    gain: 0 # dB
-  - center_frequency: 3770e6 # Hz
-    gain: 0 # dB
-  - center_frequency: 3790e6 # Hz
-    gain: 0 # dB
-  - center_frequency: 3810e6 # Hz
-    gain: 0 # dB
+    analysis_bandwidth: 100e6 # Hz
+    sample_rate: 153.6e6 # Hz
+    gain: -10 # dB
+
+  - center_frequency: 3830e6 # Hz
+    analysis_bandwidth: 60e6 # Hz
+    sample_rate: 92.16e6 # Hz
+    gain: -10 # dB
+
+  - center_frequency: 3900e6 # Hz
+    analysis_bandwidth: 80e6 # Hz
+    sample_rate: 122.88e6 # Hz
+    gain: -10 # dB
+
+  - center_frequency: 3960e6 # Hz
+    sample_rate: 61.44e6 # Hz
+    analysis_bandwidth: 40e6 # Hz
+    gain: -10 # dB
 
 
 channel_analysis:
@@ -78,10 +85,6 @@ channel_analysis:
         - rms
         - peak
 
-    # iq_waveform:
-    #     start_time_sec: 0
-    #     stop_time_sec: 0.1
-
     persistence_spectrum:
         statistics:
         - mean
@@ -96,7 +99,7 @@ channel_analysis:
         window:
             - dpss
             - 3.87638403         # for enbw:resolution == 2:1
-        
+
     power_time_series:
         detector_period: 0.01
         power_detectors:
@@ -108,5 +111,9 @@ channel_analysis:
         - 15e3
         - 30e3
         - 60e3
-        frame_limit: 2
+        frame_limit: 1
         normalize: true
+
+    # iq_waveform:
+    #     start_time_sec: 0
+    #     stop_time_sec: 0.1

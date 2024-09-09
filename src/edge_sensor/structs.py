@@ -13,7 +13,7 @@ from channel_analysis.structs import meta, get_attrs, ChannelAnalysis
 
 
 def make_default_analysis():
-    return channel_analysis.dataarrays.expose_in_yaml.spec_type()()
+    return channel_analysis.dataarrays.as_registered_channel_analysis.spec_type()()
 
 
 def describe_capture(capture: RadioCapture, swept_fields):

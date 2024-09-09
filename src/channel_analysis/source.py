@@ -165,7 +165,9 @@ def read_tdms(path, analysis_bandwidth: float = None):
         iq = iq[: (iq.shape[0] // frame_size) * frame_size]
 
     iq = (iq * np.float32(scale)).view('complex64')
-    capture = structs.FilteredCapture(duration = iq.size/fs, sample_rate=fs, analysis_bandwidth=analysis_bandwidth)
+    capture = structs.FilteredCapture(
+        duration=iq.size / fs, sample_rate=fs, analysis_bandwidth=analysis_bandwidth
+    )
 
     iq = filter_iq_capture(iq, capture)
 

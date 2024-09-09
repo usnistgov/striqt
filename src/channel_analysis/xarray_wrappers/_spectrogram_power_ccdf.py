@@ -1,25 +1,40 @@
 from __future__ import annotations
 import typing
-from functools import lru_cache
-
 from dataclasses import dataclass
+
 import numpy as np
 
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 import iqwaveform
 
-from ..dataarrays import expose_in_yaml, ChannelAnalysisResult, select_parameter_kws
-from ..structs import Capture
-from .. import type_stubs
+from .. import type_stubs, structs, dataarrays
 from ._persistence_spectrum import equivalent_noise_bandwidth
-from ._channel_power_ccdf import make_power_bins, power_bin_coord_factory
+from ._channel_power_ccdf import make_power_bins, ChannelPowerCoords
 
-_debug = {}
+# Axis and coordinates
+SpectrogramPowerBinAxis = typing.Literal['spectrogram_power_bin']
 
-@expose_in_yaml
+
+@dataclass
+class SpectrogramPowerCoords:
+    data: Data[SpectrogramPowerBinAxis, np.float32]
+    standard_name: Attr[str] = 'Spectrogram bin power'
+    units: Attr[str] = 'dBm'
+
+    factory = ChannelPowerCoords.factory
+
+
+@dataclass
+class SpectrogramPowerCCDF(AsDataArray):
+    ccdf: Data[SpectrogramPowerBinAxis, np.float32]
+    spectrogram_power_bin: Coordof[SpectrogramPowerCoords]
+    standard_name: Attr[str] = 'CCDF'
+
+
+@dataarrays.as_registered_channel_analysis(SpectrogramPowerCCDF)
 def spectrogram_power_ccdf(
     iq: type_stubs.ArrayType,
-    capture: Capture,
+    capture: structs.Capture,
     *,
     window: typing.Union[str, tuple[str, float]],
     frequency_resolution: float,
@@ -27,15 +42,13 @@ def spectrogram_power_ccdf(
     power_high: float,
     power_resolution: float,
     fractional_overlap: float = 0,
-    frequency_bin_size: int = None
-) -> ChannelAnalysisResult:
-    params = select_parameter_kws(locals())
+    frequency_bin_size: int = None,
+):
     xp = iqwaveform.util.array_namespace(iq)
     dtype = xp.finfo(iq.dtype).dtype
 
-    # TODO: support other persistence statistics, such as mean
+    # TODO: integrate this back into iqwaveform
     if iqwaveform.isroundmod(capture.sample_rate, frequency_resolution):
-        # need capture.sample_rate/resolution to give us a counting number
         nfft = round(capture.sample_rate / frequency_resolution)
     else:
         raise ValueError('sample_rate/resolution must be a counting number')
@@ -54,27 +67,36 @@ def spectrogram_power_ccdf(
         raise ValueError('sample_rate_Hz/resolution must be a counting number')
 
     freqs, _, spg = iqwaveform.fourier.spectrogram(
-        iq, window=window, fs=capture.sample_rate, nperseg=nfft, noverlap=noverlap, axis=0
+        iq,
+        window=window,
+        fs=capture.sample_rate,
+        nperseg=nfft,
+        noverlap=noverlap,
+        axis=0,
     )
 
     # truncate to the analysis bandwidth
     bw_args = (-capture.analysis_bandwidth / 2, +capture.analysis_bandwidth / 2)
-    ilo, ihi = iqwaveform.fourier._freq_band_edges(freqs[0], freqs[-1], freqs.size, *bw_args)
+    ilo, ihi = iqwaveform.fourier._freq_band_edges(
+        freqs[0], freqs[-1], freqs.size, *bw_args
+    )
     spg = spg[:, ilo:ihi]
 
     if frequency_bin_size is not None:
-        trim = spg.shape[1]%(2*frequency_bin_size)
+        trim = spg.shape[1] % (2 * frequency_bin_size)
         if trim > 0:
-            spg = spg[:,trim//2:-trim//2:]
+            spg = spg[:, trim // 2 : -trim // 2 :]
         spg = iqwaveform.fourier.to_blocks(spg, frequency_bin_size, axis=1)
         spg = spg.mean(axis=2)
 
-    _debug['spg'] = spg.copy()
-    print(spg.shape)
-
     spg = iqwaveform.powtodB(spg, eps=1e-25, out=spg)
 
-    bins = make_power_bins(power_low=power_low, power_high=power_high, power_resolution=power_resolution, xp=xp)
+    bins = make_power_bins(
+        power_low=power_low,
+        power_high=power_high,
+        power_resolution=power_resolution,
+        xp=xp,
+    )
     data = iqwaveform.sample_ccdf(spg.flatten(), bins).astype(dtype)
 
     metadata = {
@@ -86,25 +108,4 @@ def spectrogram_power_ccdf(
         # 'units': f'dBm/{enbw/1e3:0.3f} kHz',
     }
 
-    return ChannelAnalysisResult(
-        SpectrogramPowerCCDF, data, capture, parameters=params, attrs=metadata
-    )
-
-# Axis and coordinates
-SpectrogramPowerBinAxis = typing.Literal['spectrogram_power_bin']
-
-
-@dataclass
-class SpectrogramPowerCoords:
-    data: Data[SpectrogramPowerBinAxis, np.float32]
-    standard_name: Attr[str] = 'Spectrogram bin power'
-    units: Attr[str] = 'dBm'
-
-    factory: callable = power_bin_coord_factory
-
-
-@dataclass
-class SpectrogramPowerCCDF(AsDataArray):
-    ccdf: Data[SpectrogramPowerBinAxis, np.float32]
-    spectrogram_power_bin: Coordof[SpectrogramPowerCoords]
-    standard_name: Attr[str] = 'CCDF'
+    return data, metadata

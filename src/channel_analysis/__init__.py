@@ -4,14 +4,14 @@ from . import dataarrays, source, structs, type_stubs
 
 from .io import load, dump, open_store
 
-from .factories import (
+from .xarray_wrappers import (
     cellular_cyclic_autocorrelation,
     channel_power_ccdf,
     channel_power_time_series,
     cyclic_channel_power,
     iq_waveform,
     persistence_spectrum,
-    spectrogram_power_ccdf
+    spectrogram_power_ccdf,
 )
 
 from .dataarrays import (

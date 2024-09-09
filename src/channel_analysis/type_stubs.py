@@ -15,3 +15,4 @@ DatasetType: TypeAlias = 'xr.Dataset'
 CooordinatesType: TypeAlias = 'xr.Coordinates'
 TimestampType: TypeAlias = 'pd.Timestamp'
 ArrayType: TypeAlias = 'iqwaveform.util.Array'
+StatisticListType: TypeAlias = tuple[typing.Union[str,float], ...]
