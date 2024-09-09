@@ -14,7 +14,7 @@ from .util import zip_offsets
 from . import iq_corrections, structs
 
 from channel_analysis.structs import ChannelAnalysis
-from channel_analysis import dataarrays, type_stubs
+from channel_analysis import analyze_by_spec, type_stubs
 
 if typing.TYPE_CHECKING:
     import pandas as pd
@@ -74,7 +74,7 @@ class _RadioCaptureAnalyzer:
             )
             coords = self.get_coords(capture, timestamp=timestamp)
 
-            analysis = channel_analysis.analyze_by_spec(
+            analysis = analyze_by_spec(
                 iq, capture, spec=self.analysis_spec
             ).assign_coords(coords)
 
