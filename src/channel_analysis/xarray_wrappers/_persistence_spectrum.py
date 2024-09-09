@@ -39,7 +39,6 @@ class PersistenceStatisticCoords:
 BasebandFrequencyAxis = typing.Literal['baseband_frequency']
 
 
-
 @dataclass
 class BasebandFrequencyCoords:
     data: Data[BasebandFrequencyAxis, np.float64]

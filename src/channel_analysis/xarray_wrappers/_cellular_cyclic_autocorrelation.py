@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import Literal, get_args
 from functools import lru_cache
 import numpy as np
+import numba as nb
 from dataclasses import dataclass
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 import iqwaveform
@@ -15,8 +16,6 @@ pd = iqwaveform.util.lazy_import('pandas')
 CyclicSampleLagAxis = Literal['cyclic_sample_lag']
 
 
-
-
 @dataclass
 class CyclicSampleLagCoords:
     data: Data[CyclicSampleLagAxis, np.float32]
@@ -28,7 +27,9 @@ class CyclicSampleLagCoords:
     def factory(
         capture: structs.Capture, *, subcarrier_spacings: tuple[float, ...], **_
     ) -> dict[str, np.ndarray]:
-        max_len = _get_correlation_length(capture, subcarrier_spacings=subcarrier_spacings)
+        max_len = _get_correlation_length(
+            capture, subcarrier_spacings=subcarrier_spacings
+        )
         return pd.RangeIndex(0, max_len, name=get_args(CyclicSampleLagAxis)[0])
 
 
@@ -94,6 +95,39 @@ def cellular_cyclic_autocorrelation(
         metadata.update(standard_name='Cyclic Autocovariance', units='mW')
 
     return result, metadata
+
+
+@nb.njit(
+    nb.void(
+        nb.complex64[:], nb.int_[:], nb.int_, nb.complex64[:], nb.complex64[:], nb.complex64[:], nb.float32[:]
+    ),
+    parallel=True,
+)
+def _numba_indexed_cp_product(x, inds, fft_size, a_out, b_out, prod_out, power_out):
+    """accelerated evaluation of the inner cyclic prefix indexing loop"""
+
+    for i in nb.prange(inds.size):
+        a_out[i] = x[inds[i] + fft_size]
+        b_out[i] = np.conj(x[inds[i]])
+        power_out[i] = 0.5 * (np.abs(a_out[i]) ** 2 + np.abs(b_out[i]) ** 2)
+        prod_out[i] = a_out[i] * b_out[i]
+
+
+def _indexed_cp_product(iq, cp_inds, fft_size):
+    """evaluates the index-and-dot-product inner loop needed for
+    correlating the cyclic prefixes in iq.
+    """
+
+    out = dict(
+        a_out = np.empty(cp_inds.size, dtype=np.complex64),
+        b_out = np.empty(cp_inds.size, dtype=np.complex64),
+        prod_out = np.empty(cp_inds.size, dtype=np.complex64),
+        power_out = np.empty(cp_inds.size, dtype=np.float32)
+    )
+
+    # numba accepts only flat arrays. flatten and then unflatten after exec
+    _numba_indexed_cp_product(iq, cp_inds.flatten(), fft_size, **out)
+    return [a.reshape(cp_inds.shape) for a in list(out.values())]
 
 
 # %% TODO: the following low level code may be merged with similar functions in iqwaveform in the future

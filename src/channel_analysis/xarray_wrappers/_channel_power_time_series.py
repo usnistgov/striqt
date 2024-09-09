@@ -14,6 +14,7 @@ from .. import structs, dataarrays
 ### Time elapsed dimension and coordinates
 TimeElapsedAxis = Literal['time_elapsed']
 
+
 @dataclass
 class TimeElapsedCoords:
     data: Data[TimeElapsedAxis, np.float32]
@@ -31,6 +32,7 @@ class TimeElapsedCoords:
 
 ### Power detector dimension and coordinates
 PowerDetectorAxis = Literal['power_detector']
+
 
 @dataclass
 class PowerDetectorCoords:
