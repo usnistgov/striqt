@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 import iqwaveform
 from .. import structs, dataarrays
+import array_api_compat
 
 ofdm = iqwaveform.util.lazy_import('iqwaveform.ofdm')
 pd = iqwaveform.util.lazy_import('pandas')
@@ -113,21 +114,33 @@ def _numba_indexed_cp_product(x, inds, fft_size, a_out, b_out, prod_out, power_o
         prod_out[i] = a_out[i] * b_out[i]
 
 
-def _indexed_cp_product(iq, cp_inds, fft_size):
+def _indexed_cp_product(iq, cp_inds, nfft):
     """evaluates the index-and-dot-product inner loop needed for
     correlating the cyclic prefixes in iq.
     """
 
-    out = dict(
-        a_out = np.empty(cp_inds.size, dtype=np.complex64),
-        b_out = np.empty(cp_inds.size, dtype=np.complex64),
-        prod_out = np.empty(cp_inds.size, dtype=np.complex64),
-        power_out = np.empty(cp_inds.size, dtype=np.float32)
-    )
-
+    xp = iqwaveform.util.array_namespace(iq)
+    
     # numba accepts only flat arrays. flatten and then unflatten after exec
-    _numba_indexed_cp_product(iq, cp_inds.flatten(), fft_size, **out)
-    return [a.reshape(cp_inds.shape) for a in list(out.values())]
+    if xp is array_api_compat.numpy:
+        out = dict(
+            a_out = np.empty(cp_inds.size, dtype=np.complex64),
+            b_out = np.empty(cp_inds.size, dtype=np.complex64),
+            prod_out = np.empty(cp_inds.size, dtype=np.complex64),
+            power_out = np.empty(cp_inds.size, dtype=np.float32)
+        )
+
+        _numba_indexed_cp_product(iq, cp_inds.flatten(), nfft, **out)
+        return [a.reshape(cp_inds.shape) for a in list(out.values())]
+
+    else:
+        # cuda, etc
+        a = iq[cp_inds]
+        b = iq[nfft :][cp_inds]
+        power = iqwaveform.envtopow(a)
+        power += iqwaveform.envtopow(b)
+        power /= 2
+        return a, b, power, a*b
 
 
 # %% TODO: the following low level code may be merged with similar functions in iqwaveform in the future
@@ -216,14 +229,14 @@ def _correlate_cyclic_prefixes(
     else:
         raise ValueError('idx_reduction must be one of "corr", "peak", or None')
 
-    # a, b, ab, power = _indexed_cp_product(iq, cp_inds, phy.fft_size)
-    a = iq[cp_inds]
-    b = iq[phy.nfft :][cp_inds]
-    power = iqwaveform.envtopow(a)
-    power += iqwaveform.envtopow(b)
-    power /= 2
+    a, b, ab, power = _indexed_cp_product(iq, cp_inds, phy.nfft)
+    # a = iq[cp_inds]
+    # b = iq[phy.nfft :][cp_inds]
+    # power = iqwaveform.envtopow(a)
+    # power += iqwaveform.envtopow(b)
+    # power /= 2
 
-    R = -_correlate_along_axis(a, b, axes=corr_axes, norm=norm)  # , _ab_product=ab)
+    R = -_correlate_along_axis(a, b, axes=corr_axes, norm=norm, _ab_product=ab)
 
     corr_size = np.prod([cp_inds.shape[i] for i in corr_axes])
     R /= corr_size
