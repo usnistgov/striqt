@@ -134,6 +134,29 @@ class SweepController:
         self.close()
 
 
+def process_iterator(iter, func):
+    def trap_next():
+        # raise StopIteration -> return StopIteration
+        try:
+            return next(iter)
+        except StopIteration:
+            return StopIteration
+
+    values = next(iter)
+
+    while True:
+        calls = dict(
+            value=lb.Call(trap_next),
+            func=lb.Call(func, *values)
+        )
+
+        result = lb.concurrently(**calls)
+        yield result['func']
+
+        if result['value'] is StopIteration:
+            break
+
+
 class _ServerService(rpyc.Service, SweepController):
     """API exposed by a server to remote clients"""
 
@@ -192,10 +215,11 @@ class _ServerService(rpyc.Service, SweepController):
         generator = self.iter_sweep(sweep_spec, swept_fields, calibration, always_yield)
 
         desc_pairs = zip_longest(generator, descs, fillvalue='last analysis')
+
         if generator == []:
             return []
         else:
-            return (conn.root.deliver(r, d) for r, d in desc_pairs)
+            return process_iterator(desc_pairs, conn.root.deliver)#(conn.root.deliver(r, d) for r, d in desc_pairs)
 
 
 class _ClientService(rpyc.Service):

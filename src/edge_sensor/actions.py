@@ -211,7 +211,7 @@ def iter_sweep(
             )
 
         if cap_prev is not None:
-            # iq is available after the first iteration
+            # iq is only available after the first iteration
             calls['analyze'] = lb.Call(analyze, iq, timestamp, cap_prev)
 
         if cap_this is None:
