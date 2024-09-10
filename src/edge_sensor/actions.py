@@ -78,7 +78,7 @@ class _RadioCaptureAnalyzer:
                 iq, capture, spec=self.analysis_spec
             )
 
-            analysis = analysis.expand_dims({CAPTURE_DIM: 1}).assign_coords(coords)
+            analysis = analysis.assign_coords(coords)
 
         if self.remove_attrs is not None:
             for f in self.remove_attrs:
