@@ -143,7 +143,7 @@ def process_iterator(iter, func):
             return StopIteration
 
     def call_func(args):
-        print('call ', args)
+        print('call ')
         return func(args)
 
     values = next(iter)
