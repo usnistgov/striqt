@@ -141,8 +141,9 @@ def process_iterator(iter, func):
             return next(iter)
         except StopIteration:
             return StopIteration
-        
+
     def call_func(args):
+        print('call ', args)
         return func(*args)
 
     values = next(iter)
