@@ -226,6 +226,7 @@ def iter_sweep(
 
         if 'analyze' in ret:
             # this is what is made available for
+            print('yield')
             yield ret['analyze']
         elif always_yield:
             yield None
