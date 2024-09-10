@@ -13,8 +13,8 @@ from .structs import Sweep, RadioCapture, get_attrs, to_builtins, describe_captu
 from .util import zip_offsets
 from . import iq_corrections, structs
 
-from channel_analysis.structs import ChannelAnalysis
-from channel_analysis import analyze_by_spec, type_stubs
+import channel_analysis
+from channel_analysis import type_stubs
 
 if typing.TYPE_CHECKING:
     import pandas as pd
@@ -57,7 +57,7 @@ class _RadioCaptureAnalyzer:
     __name__ = 'analyze'
 
     radio: RadioDevice
-    analysis_spec: list[ChannelAnalysis]
+    analysis_spec: list[channel_analysis.ChannelAnalysis]
     remove_attrs: Optional[tuple[str, ...]] = None
     extra_attrs: Optional[dict[str, Any]] = None
     calibration: Optional[xr.Dataset] = None
@@ -74,9 +74,11 @@ class _RadioCaptureAnalyzer:
             )
             coords = self.get_coords(capture, timestamp=timestamp)
 
-            analysis = analyze_by_spec(
+            analysis = channel_analysis.analyze_by_spec(
                 iq, capture, spec=self.analysis_spec
-            ).assign_coords(coords)
+            )
+
+            analysis = analysis.expand_dims({CAPTURE_DIM: 1}).assign_coords(coords)
 
         if self.remove_attrs is not None:
             for f in self.remove_attrs:

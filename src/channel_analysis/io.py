@@ -30,33 +30,18 @@ def open_store(path: str | Path, *, mode: str):
         raise ValueError('must pass a string or Path savefile or zarr.Store object')
     elif str(path).endswith('.zip'):
         store = zarr.ZipStore(path, mode=mode, compression=0)
+    elif str(path).endswith('.shelf'):
+        # see for example https://github.com/zarr-developers/zarr-python/issues/129s
+        import shelve
+        import pickle
+        store = shelve.open(str(path), protocol=pickle.HIGHEST_PROTOCOL)
     else:
         store = zarr.DirectoryStore(path, mode=mode)
 
     return store
 
 
-def dump(
-    path_or_store: str | Path,
-    data: typing.Optional[type_stubs.DataArrayType | type_stubs.DatasetType] = None,
-    mode='a',
-    compression=None,
-    filter=True,
-) -> zarr.storage.Store:
-    """serialize a dataset into a zarr directory structure"""
-
-    if hasattr(data, IQ_WAVEFORM_INDEX_NAME):
-        if 'sample_rate' in data.attrs:
-            # sample rate is metadata
-            sample_rate = data.attrs['sample_rate']
-        else:
-            # sample rate is a variate
-            sample_rate = data.sample_rate.values.flatten()[0]
-
-        chunks = {IQ_WAVEFORM_INDEX_NAME: round(sample_rate * 10e-3)}
-    else:
-        chunks = {}
-
+def _build_encodings(data, compression=None, filter: bool=True):
     if compression is None:
         compressor = numcodecs.Blosc('zlib', clevel=6)
     elif compression is False:
@@ -72,11 +57,8 @@ def dump(
     else:
         filters = None
 
-    for name in dict(data.coords).keys():
-        if data[name].dtype == np.dtype('object'):
-            data = data.assign(name=data[name].astype('str'))
-
     encodings = defaultdict(dict)
+
     for name in data.data_vars.keys():
         # skip compression of iq waveforms, which is slow and
         # ineffective due to high entropy
@@ -89,21 +71,54 @@ def dump(
                 encodings[name]['filters'] = filters
             encodings[name]['dtype'] = 'float32'
 
-    if isinstance(path_or_store, zarr.storage.Store):
-        # write/append only
-        data.chunk(chunks).to_zarr(path_or_store, encoding=encodings)
-    else:
-        # open, write/append, and close
-        with open_store(path_or_store, mode=mode) as store:
-            data.chunk(chunks).to_zarr(store, encoding=encodings)
+    return encodings
+    
 
+def dump(
+    store: zarr.storage.Store,
+    data: typing.Optional[type_stubs.DataArrayType | type_stubs.DatasetType] = None,
+    append_dim=None,
+    # mode='a',
+    compression=None,
+    filter=True,
+) -> zarr.storage.Store:
+    """serialize a dataset into a zarr directory structure"""
+
+    # if not isinstance(store, zarr.storage.Store):
+    #     raise TypeError('must pass a zarr store object')
+
+    if hasattr(data, IQ_WAVEFORM_INDEX_NAME):
+        if 'sample_rate' in data.attrs:
+            # sample rate is metadata
+            sample_rate = data.attrs['sample_rate']
+        else:
+            # sample rate is a variate
+            sample_rate = data.sample_rate.values.flatten()[0]
+
+        chunks = {IQ_WAVEFORM_INDEX_NAME: round(sample_rate * 10e-3)}
+    else:
+        chunks = {}
+
+    # take object dtypes to mean variable length strings for coordinates
+    # and make fixed length now
+    
+    for name in dict(data.coords).keys():
+        if data[name].dtype == np.dtype('object'):
+            data = data.assign({name: data[name].astype('str')})
+
+    # write/append only
+    if len(store) > 0:
+        print('not first')
+        return data.chunk(chunks).to_zarr(store, mode='a', append_dim='capture')
+    else:
+        print('first')
+        encodings = _build_encodings(data, compression=compression, filter=filter)
+        return data.chunk(chunks).to_zarr(store, encoding=encodings, mode='w')
 
 def load(path: str | Path) -> type_stubs.DataArrayType | type_stubs.DatasetType:
     """load a dataset or data array"""
 
-    if str(path).endswith('.zip'):
-        store = zarr.storage.ZipStore(path, mode='r')
-    else:
-        store = zarr.storage.DirectoryStore(path, mode='r')
+    if isinstance(path, (str, Path)):
+        store = open_store(path, mode='r')
 
     return xr.open_dataset(store, engine='zarr')
