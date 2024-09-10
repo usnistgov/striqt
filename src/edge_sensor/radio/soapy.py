@@ -281,6 +281,9 @@ class SoapyRadioDevice(RadioDevice):
         except ValueError:
             # channel not yet set
             pass
+        except TypeError:
+            # soapy has deconstructed itself too far to proceed
+            return
 
         try:
             self.backend.closeStream(self.rx_stream)
