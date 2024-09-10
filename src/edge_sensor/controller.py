@@ -151,15 +151,18 @@ def process_iterator(iter, func):
         print('got it')
         return ret
 
+    result = {}
     values = next(iter)
 
     while True:
-        calls = dict(
-            values=lb.Call(trap_next),
-            func=lb.Call(call_func, values)
-        )
+        # calls = dict(
+        #     values=lb.Call(trap_next),
+        #     func=lb.Call(call_func, values)
+        # )
 
-        result = lb.concurrently(**calls)
+        # result = lb.concurrently(**calls)
+        result['calls'] = trap_next()
+        result['func'] = func(values)
         yield result['func']
 
         if result['values'] is StopIteration:
