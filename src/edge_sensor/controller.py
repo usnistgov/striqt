@@ -135,6 +135,8 @@ class SweepController:
 
 
 def process_iterator(iter, func):
+    result = {}
+
     def value():
         # raise StopIteration -> return StopIteration
         try:
@@ -145,22 +147,19 @@ def process_iterator(iter, func):
         except StopIteration:
             return StopIteration
 
-    def call(args):
+    def call():
         print('call ')
-        ret = func(args)
+        ret = func(result['value'])
         print('got it')
         return ret
 
-    result = {}
     result['value'] = value()
 
     while True:
         if result['value'] is StopIteration:
             break
 
-        calls = [value, lb.Call(call, result['value'])]
-
-        result = lb.concurrently(*calls)
+        result.update(lb.concurrently(call, value))
         # result['value'] = trap_next()
         # result['call'] = func(result)
         yield result['call']
