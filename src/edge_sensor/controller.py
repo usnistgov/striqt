@@ -241,11 +241,16 @@ class _ClientService(rpyc.Service):
         self, payload#dataset: type_stubs.DatasetType, description: Optional[str] = None
     ):
         """serialize an object back to the client via pickling"""
+        print('deliver')
         dataset, description = payload
+        print('1')
         if description is not None:
             lb.logger.info(f'{description}')
+        print('2')
         with lb.stopwatch('data transfer', logger_level='debug'):
-            return rpyc.utils.classic.obtain(dataset)
+            ret = rpyc.utils.classic.obtain(dataset)
+            print('3')
+            return ret
 
 
 def start_server(host=None, port=4567, default_driver: Optional[str] = None):
