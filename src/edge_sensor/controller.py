@@ -161,7 +161,7 @@ def process_iterator(iter, func):
         # )
 
         # result = lb.concurrently(**calls)
-        result['calls'] = trap_next()
+        result['values'] = trap_next()
         result['func'] = func(values)
         yield result['func']
 
