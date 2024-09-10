@@ -144,7 +144,9 @@ def process_iterator(iter, func):
 
     def call_func(args):
         print('call ')
-        return func(args)
+        ret = func(args)
+        print('got it')
+        return ret
 
     values = next(iter)
 
