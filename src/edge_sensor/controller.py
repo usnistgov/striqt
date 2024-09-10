@@ -144,7 +144,7 @@ def process_iterator(iter, func):
 
     def call_func(args):
         print('call ', args)
-        return func(*args)
+        return func(args)
 
     values = next(iter)
 
@@ -161,7 +161,6 @@ def process_iterator(iter, func):
             break
 
         values = result['values']
-        
 
 
 class _ServerService(rpyc.Service, SweepController):
@@ -239,9 +238,10 @@ class _ClientService(rpyc.Service):
         lb.logger.info('disconnected from server')
 
     def exposed_deliver(
-        self, dataset: type_stubs.DatasetType, description: Optional[str] = None
+        self, payload#dataset: type_stubs.DatasetType, description: Optional[str] = None
     ):
         """serialize an object back to the client via pickling"""
+        dataset, description = payload
         if description is not None:
             lb.logger.info(f'{description}')
         with lb.stopwatch('data transfer', logger_level='debug'):
