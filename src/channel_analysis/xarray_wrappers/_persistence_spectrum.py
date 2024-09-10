@@ -32,7 +32,7 @@ class PersistenceStatisticCoords:
         persistence_statistics: type_stubs.StatisticListType,
         **_,
     ) -> np.ndarray:
-        return np.asarray(persistence_statistics, dtype=object)
+        return np.asarray(persistence_statistics, dtype=str)
 
 
 ### Baseband frequency axis and coordinates
