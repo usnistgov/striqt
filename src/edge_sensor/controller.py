@@ -141,20 +141,26 @@ def process_iterator(iter, func):
             return next(iter)
         except StopIteration:
             return StopIteration
+        
+    def call_func(args):
+        return func(*args)
 
     values = next(iter)
 
     while True:
         calls = dict(
-            value=lb.Call(trap_next),
-            func=lb.Call(func, *values)
+            values=lb.Call(trap_next),
+            func=lb.Call(call_func, values)
         )
 
         result = lb.concurrently(**calls)
         yield result['func']
 
-        if result['value'] is StopIteration:
+        if result['values'] is StopIteration:
             break
+
+        values = result['values']
+        
 
 
 class _ServerService(rpyc.Service, SweepController):
