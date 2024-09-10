@@ -135,7 +135,7 @@ class SweepController:
 
 
 def process_iterator(iter, func):
-    def trap_next():
+    def value():
         # raise StopIteration -> return StopIteration
         try:
             print('getting...')
@@ -145,31 +145,25 @@ def process_iterator(iter, func):
         except StopIteration:
             return StopIteration
 
-    def call_func(args):
+    def call(args):
         print('call ')
         ret = func(args)
         print('got it')
         return ret
 
     result = {}
-    values = next(iter)
+    result['value'] = value()
 
     while True:
-        # calls = dict(
-        #     values=lb.Call(trap_next),
-        #     func=lb.Call(call_func, values)
-        # )
-
-        # result = lb.concurrently(**calls)
-        result['values'] = trap_next()
-        result['func'] = func(values)
-        yield result['func']
-
-        if result['values'] is StopIteration:
+        if result['value'] is StopIteration:
             break
 
-        values = result['values']
+        calls = [value, lb.Call(call, result['value'])]
 
+        result = lb.concurrently(*calls)
+        # result['value'] = trap_next()
+        # result['call'] = func(result)
+        yield result['call']
 
 class _ServerService(rpyc.Service, SweepController):
     """API exposed by a server to remote clients"""
