@@ -138,7 +138,10 @@ def process_iterator(iter, func):
     def trap_next():
         # raise StopIteration -> return StopIteration
         try:
-            return next(iter)
+            print('getting...')
+            ret = next(iter)
+            print('got')
+            return ret
         except StopIteration:
             return StopIteration
 
