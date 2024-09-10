@@ -202,6 +202,7 @@ def iter_sweep(
     offset_captures = zip_offsets(sweep.captures, (-1, 0, 1), fill=None)
 
     for cap_prev, cap_this, cap_next in offset_captures:
+        print('*')
         calls = {}
 
         if cap_this is not None:
