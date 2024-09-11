@@ -78,8 +78,6 @@ class _RadioCaptureAnalyzer:
                 iq, capture, spec=self.analysis_spec
             )
 
-            print(analysis.dims)
-
             analysis = analysis.expand_dims(CAPTURE_DIM).assign_coords(coords)
 
 

@@ -38,8 +38,10 @@ def open_store(path: str | Path, *, mode: str):
         path = str(path)
         if mode.startswith('w'):
             for extra_suffix in ('.dat', '.bak', '.dir'):
-                if Path(path+extra_suffix).exists:
+                try:
                     os.unlink(path+extra_suffix)
+                except FileNotFoundError:
+                    pass
         store = shelve.open(path, protocol=pickle.HIGHEST_PROTOCOL)
     else:
         store = zarr.DirectoryStore(path, mode=mode)
@@ -112,9 +114,12 @@ def dump(
         if data[name].dtype == np.dtype('object'):
             data = data.assign({name: data[name].astype('str')})
 
+    if append_dim is None:
+        append_dim = 'capture'
+
     # write/append only
     if len(store) > 0:
-        return data.chunk(chunks).to_zarr(store, mode='a', append_dim='capture')
+        return data.chunk(chunks).to_zarr(store, mode='a', append_dim=append_dim)
     else:
         encodings = _build_encodings(data, compression=compression, filter=filter)
         return data.chunk(chunks).to_zarr(store, encoding=encodings, mode='w')
