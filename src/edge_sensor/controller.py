@@ -198,8 +198,7 @@ class _ServerService(rpyc.Service, SweepController):
         if generator == []:
             return []
         else:
-            iter_ = (conn.root.deliver(r, d) for r, d in desc_pairs)
-            return rpyc.utils.helpers.buffiter(iter_)
+            return (conn.root.deliver(r, d) for r, d in desc_pairs)
 
 class _ClientService(rpyc.Service):
     """API exposed to a server by clients"""
