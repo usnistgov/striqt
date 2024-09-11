@@ -93,7 +93,7 @@ class SweepController:
             ]
         return ' and '.join(msgs)
 
-    def prepare_sweep(self, sweep_spec: Sweep, swept_fields: list[str], calibration):
+    def prepare_sweep(self, sweep_spec: Sweep, swept_fields: list[str], calibration, pickled=False):
         """open the radio while warming up the GPU"""
 
         warmup_sweep = actions.design_warmup_sweep(
@@ -102,7 +102,7 @@ class SweepController:
         self.warmed_captures = self.warmed_captures | set(warmup_sweep.captures)
         if len(warmup_sweep.captures) > 0:
             warmup_iter = self.iter_sweep(
-                warmup_sweep, swept_fields, calibration, quiet=True
+                warmup_sweep, swept_fields, calibration, quiet=True, pickled=pickled
             )
         else:
             return []
@@ -121,6 +121,7 @@ class SweepController:
         calibration: type_stubs.DatasetType = None,
         always_yield: bool = False,
         quiet: bool = False,
+        pickled: bool = False
     ) -> Generator[xr.Dataset]:
         # take args {3,4...N}
         kwargs = dict(locals())
@@ -183,21 +184,22 @@ class _ServerService(rpyc.Service, SweepController):
         if prep_msg:
             conn.root.deliver(None, prep_msg)
             lb.logger.info(prep_msg)
-        self.prepare_sweep(sweep_spec, swept_fields, calibration)
+        self.prepare_sweep(sweep_spec, swept_fields, calibration, pickled=True)
 
         descs = (
             f'{i+1}/{len(sweep_spec.captures)} {describe_capture(c, swept_fields)}'
             for i, c in enumerate(sweep_spec.captures)
         )
 
-        generator = self.iter_sweep(sweep_spec, swept_fields, calibration, always_yield)
+        generator = self.iter_sweep(sweep_spec, swept_fields, calibration, always_yield, pickled=True)
 
         desc_pairs = zip_longest(generator, descs, fillvalue='last analysis')
 
         if generator == []:
             return []
         else:
-            return (conn.root.deliver(r, d) for r, d in desc_pairs)
+            iter_ = (conn.root.deliver(r, d) for r, d in desc_pairs)
+            return rpyc.utils.helpers.buffiter(iter_)
 
 class _ClientService(rpyc.Service):
     """API exposed to a server by clients"""
@@ -209,13 +211,13 @@ class _ClientService(rpyc.Service):
         lb.logger.info('disconnected from server')
 
     def exposed_deliver(
-        self, dataset: type_stubs.DatasetType, description: Optional[str] = None
+        self, pickled_dataset: type_stubs.DatasetType, description: Optional[str] = None
     ):
         """serialize an object back to the client via pickling"""
         if description is not None:
             lb.logger.info(f'{description}')
         with lb.stopwatch('data transfer', logger_level='debug'):
-            return rpyc.classic.obtain(dataset)
+            return pickle.loads(pickled_dataset)
 
 
 def start_server(host=None, port=4567, default_driver: Optional[str] = None):
