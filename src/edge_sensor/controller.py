@@ -4,6 +4,7 @@ import rpyc
 import labbench as lb
 
 from itertools import zip_longest
+import pickle
 import typing
 from typing import Generator, Optional, Any
 
@@ -189,7 +190,7 @@ class _ServerService(rpyc.Service, SweepController):
             for i, c in enumerate(sweep_spec.captures)
         )
 
-        generator = self.iter_sweep(sweep_spec, swept_fields, calibration, always_yield)
+        generator = self.iter_sweep(sweep_spec, swept_fields, calibration, always_yield, pickled=True)
 
         desc_pairs = zip_longest(generator, descs, fillvalue='last analysis')
 
@@ -197,8 +198,6 @@ class _ServerService(rpyc.Service, SweepController):
             return []
         else:
             return (conn.root.deliver(r, d) for r, d in desc_pairs)
-
-import pickle
 
 class _ClientService(rpyc.Service):
     """API exposed to a server by clients"""
