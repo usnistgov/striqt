@@ -43,3 +43,6 @@ def run(host: str, port: int, driver: str, verbose: bool):
         lb.show_messages('info')
 
     start_server(host=host, port=port, default_driver=driver)
+
+if __name__ == '__main__':
+    run()

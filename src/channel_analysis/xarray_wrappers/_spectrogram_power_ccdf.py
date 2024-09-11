@@ -42,7 +42,7 @@ def spectrogram_power_ccdf(
     power_high: float,
     power_resolution: float,
     fractional_overlap: float = 0,
-    frequency_bin_size: int = None,
+    frequency_bin_averaging: int = None,
 ):
     xp = iqwaveform.util.array_namespace(iq)
     dtype = xp.finfo(iq.dtype).dtype
@@ -82,11 +82,11 @@ def spectrogram_power_ccdf(
     )
     spg = spg[:, ilo:ihi]
 
-    if frequency_bin_size is not None:
-        trim = spg.shape[1] % (2 * frequency_bin_size)
+    if frequency_bin_averaging is not None:
+        trim = spg.shape[1] % (2 * frequency_bin_averaging)
         if trim > 0:
             spg = spg[:, trim // 2 : -trim // 2 :]
-        spg = iqwaveform.fourier.to_blocks(spg, frequency_bin_size, axis=1)
+        spg = iqwaveform.fourier.to_blocks(spg, frequency_bin_averaging, axis=1)
         spg = spg.mean(axis=2)
 
     spg = iqwaveform.powtodB(spg, eps=1e-25, out=spg)
