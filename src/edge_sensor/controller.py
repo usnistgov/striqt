@@ -198,7 +198,8 @@ class _ServerService(rpyc.Service, SweepController):
         if generator == []:
             return []
         else:
-            return (conn.root.deliver(r, d) for r, d in desc_pairs)
+            iter_ = (conn.root.deliver(r, d) for r, d in desc_pairs)
+            return rpyc.utils.helpers.buffiter(iter_)
 
 class _ClientService(rpyc.Service):
     """API exposed to a server by clients"""
@@ -219,8 +220,7 @@ class _ClientService(rpyc.Service):
             if pickled_dataset is None:
                 return None
             else:
-                ret = pickle.loads(pickled_dataset)
-        return ret
+                return pickle.loads(pickled_dataset)
 
 
 def start_server(host=None, port=4567, default_driver: Optional[str] = None):
