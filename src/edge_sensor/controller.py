@@ -182,7 +182,7 @@ class _ServerService(rpyc.Service, SweepController):
 
         prep_msg = self._describe_preparation(sweep_spec)
         if prep_msg:
-            conn.root.deliver((None, prep_msg))
+            conn.root.deliver(None, prep_msg)
             lb.logger.info(prep_msg)
         self.prepare_sweep(sweep_spec, swept_fields, calibration, pickled=True)
 
