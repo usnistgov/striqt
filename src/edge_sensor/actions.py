@@ -78,7 +78,7 @@ class _RadioCaptureAnalyzer:
                 iq, capture, spec=self.analysis_spec
             )
 
-            analysis = analysis.assign_coords(coords)
+            print(analysis.dims)
 
         if self.remove_attrs is not None:
             for f in self.remove_attrs:
@@ -91,6 +91,8 @@ class _RadioCaptureAnalyzer:
             analysis.attrs.update(self.extra_attrs)
 
         analysis[TIMESTAMP_NAME].attrs.update(label='Capture start time')
+
+        analysis = analysis.expand_dims(CAPTURE_DIM).assign_coords(coords)
 
         return analysis
 
