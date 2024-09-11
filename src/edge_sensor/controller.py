@@ -216,7 +216,10 @@ class _ClientService(rpyc.Service):
         if description is not None:
             lb.logger.info(f'{description}')
         with lb.stopwatch('data transfer', logger_level='debug'):
-            ret = pickle.loads(pickled_dataset)
+            if pickled_dataset is None:
+                return None
+            else:
+                ret = pickle.loads(pickled_dataset)
         return ret
 
 
