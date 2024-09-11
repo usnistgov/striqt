@@ -134,33 +134,6 @@ class SweepController:
         self.close()
 
 
-def process_iterator(iter, func):
-    result = {}
-
-    def value():
-        # raise StopIteration -> return StopIteration
-        try:
-            return next(iter)
-        except StopIteration:
-            return StopIteration
-        except TypeError:
-            print(iter)
-            raise
-
-    def call():
-        return func(result['value'])
-
-    result['value'] = value()
-
-    while True:
-        if result['value'] is StopIteration:
-            break
-
-        result = lb.concurrently(value, call, nones=True)
-
-        yield result.get('call', None)
-
-
 class _ServerService(rpyc.Service, SweepController):
     """API exposed by a server to remote clients"""
 
