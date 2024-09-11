@@ -231,7 +231,7 @@ def iter_sweep(
             ret = lb.concurrently(**calls, flatten=False)
 
         if 'analyze' in ret:
-            # this is what is made available for
+            print(type(ret['analyze']))
             yield ret['analyze']
         elif always_yield:
             yield None
