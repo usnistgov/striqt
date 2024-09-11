@@ -198,6 +198,7 @@ class _ServerService(rpyc.Service, SweepController):
         else:
             return (conn.root.deliver(r, d) for r, d in desc_pairs)
 
+import pickle
 
 class _ClientService(rpyc.Service):
     """API exposed to a server by clients"""
@@ -214,8 +215,12 @@ class _ClientService(rpyc.Service):
         """serialize an object back to the client via pickling"""
         if description is not None:
             lb.logger.info(f'{description}')
-        with lb.stopwatch('data transfer', logger_level='debug'):
-            return rpyc.utils.classic.obtain(dataset)
+        with lb.stopwatch('data transfer - 1', logger_level='debug'):
+            s = pickle.dumps(dataset)
+
+        with lb.stopwatch('data transfer - 2', logger_level='debug'):
+            ret = pickle.loads(s)
+        return ret
 
 
 def start_server(host=None, port=4567, default_driver: Optional[str] = None):

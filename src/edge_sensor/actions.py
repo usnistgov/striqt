@@ -206,22 +206,21 @@ def iter_sweep(
     for cap_prev, cap_this, cap_next in offset_captures:
         calls = {}
 
-        with lb.stopwatch(f'...setup'):
-            if cap_this is not None:
-                # extra iteration at the end for the last analysis
-                calls['acquire'] = lb.Call(
-                    radio.acquire, cap_this, next_capture=cap_next, correction=False
-                )
+        if cap_this is not None:
+            # extra iteration at the end for the last analysis
+            calls['acquire'] = lb.Call(
+                radio.acquire, cap_this, next_capture=cap_next, correction=False
+            )
 
-            if cap_prev is not None:
-                # iq is only available after the first iteration
-                calls['analyze'] = lb.Call(analyze, iq, timestamp, cap_prev)
+        if cap_prev is not None:
+            # iq is only available after the first iteration
+            calls['analyze'] = lb.Call(analyze, iq, timestamp, cap_prev)
 
-            if cap_this is None:
-                desc = 'last analysis'
-            else:
-                # treat swept fields as coordinates/indices
-                desc = describe_capture(cap_this, swept_fields)
+        if cap_this is None:
+            desc = 'last analysis'
+        else:
+            # treat swept fields as coordinates/indices
+            desc = describe_capture(cap_this, swept_fields)
 
         with lb.stopwatch(f'{desc} •', logger_level='debug' if quiet else 'info'):
             ret = lb.concurrently(**calls, flatten=False)
