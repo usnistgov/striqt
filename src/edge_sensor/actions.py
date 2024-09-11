@@ -95,7 +95,8 @@ class _RadioCaptureAnalyzer:
         analysis[TIMESTAMP_NAME].attrs.update(label='Capture start time')
 
         if pickled:
-            return pickle.dumps(analysis)
+            with lb.stopwatch('pickle.dump'):
+                return pickle.dumps(analysis)
         else:
             return analysis
 
