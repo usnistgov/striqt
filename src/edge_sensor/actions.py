@@ -80,6 +80,9 @@ class _RadioCaptureAnalyzer:
 
             print(analysis.dims)
 
+            analysis = analysis.expand_dims(CAPTURE_DIM).assign_coords(coords)
+
+
         if self.remove_attrs is not None:
             for f in self.remove_attrs:
                 del analysis.attrs[f]
@@ -92,7 +95,6 @@ class _RadioCaptureAnalyzer:
 
         analysis[TIMESTAMP_NAME].attrs.update(label='Capture start time')
 
-        analysis = analysis.expand_dims(CAPTURE_DIM).assign_coords(coords)
 
         return analysis
 
@@ -108,10 +110,10 @@ class _RadioCaptureAnalyzer:
             if isinstance(value, str):
                 # to coerce strings as variable-length types later for storage
                 coords[field] = coords[field].astype('object')
-            coords[field].values[:] = [value]
+            coords[field].values[:] = value
 
         if timestamp is not None:
-            coords[TIMESTAMP_NAME].values[:] = [timestamp]
+            coords[TIMESTAMP_NAME].values[:] = timestamp
 
         return coords
 
