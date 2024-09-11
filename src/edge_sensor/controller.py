@@ -121,6 +121,7 @@ class SweepController:
         calibration: type_stubs.DatasetType = None,
         always_yield: bool = False,
         quiet: bool = False,
+        pickled: bool = False
     ) -> Generator[xr.Dataset]:
         # take args {3,4...N}
         kwargs = dict(locals())
