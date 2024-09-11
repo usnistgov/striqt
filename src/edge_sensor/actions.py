@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from dataclasses import dataclass
+import pickle
 from typing import Optional, Generator, Any
 import typing
 
@@ -63,7 +64,7 @@ class _RadioCaptureAnalyzer:
     calibration: Optional[xr.Dataset] = None
 
     def __call__(
-        self, iq: type_stubs.ArrayType, timestamp, capture: RadioCapture
+        self, iq: type_stubs.ArrayType, timestamp, capture: RadioCapture, pickled=False
     ) -> xr.Dataset:
         """analyze iq from a capture and package it into a dataset"""
 
@@ -93,8 +94,11 @@ class _RadioCaptureAnalyzer:
 
         analysis[TIMESTAMP_NAME].attrs.update(label='Capture start time')
 
+        if pickled:
+            return pickle.dumps(analysis)
+        else:
+            return analysis
 
-        return analysis
 
     def __post_init__(self):
         if self.remove_attrs is not None:
@@ -152,7 +156,6 @@ def design_warmup_sweep(
 
     return structs.convert(sweep_map, type(sweep))
 
-
 def iter_sweep(
     radio: RadioDevice,
     sweep: Sweep,
@@ -160,6 +163,7 @@ def iter_sweep(
     calibration: type_stubs.DatasetType = None,
     always_yield=False,
     quiet=False,
+    pickled=False
 ) -> Generator[xr.Dataset | None]:
     """iterate through sweep captures on the specified radio, yielding a dataset for each.
 
@@ -214,7 +218,7 @@ def iter_sweep(
 
         if cap_prev is not None:
             # iq is only available after the first iteration
-            calls['analyze'] = lb.Call(analyze, iq, timestamp, cap_prev)
+            calls['analyze'] = lb.Call(analyze, iq, timestamp, cap_prev, pickled=pickled)
 
         if cap_this is None:
             desc = 'last analysis'

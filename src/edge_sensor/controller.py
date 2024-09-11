@@ -210,16 +210,13 @@ class _ClientService(rpyc.Service):
         lb.logger.info('disconnected from server')
 
     def exposed_deliver(
-        self, dataset: type_stubs.DatasetType, description: Optional[str] = None
+        self, pickled_dataset: type_stubs.DatasetType, description: Optional[str] = None
     ):
         """serialize an object back to the client via pickling"""
         if description is not None:
             lb.logger.info(f'{description}')
-        with lb.stopwatch('data transfer - 1', logger_level='debug'):
-            s = pickle.dumps(dataset)
-
-        with lb.stopwatch('data transfer - 2', logger_level='debug'):
-            ret = pickle.loads(s)
+        with lb.stopwatch('data transfer', logger_level='debug'):
+            ret = pickle.loads(pickled_dataset)
         return ret
 
 
