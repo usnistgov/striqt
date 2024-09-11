@@ -20,7 +20,7 @@ def set_cuda_mem_limit(fraction=0.6):
     cupy.get_default_memory_pool().set_limit(fraction=fraction)
 
 
-def zip_offsets(seq: Iterable[Any], shifts: tuple | list, fill: Any):
+def zip_offsets(seq: Iterable[Any], shifts: tuple | list, fill: Any, squeeze=True):
     """return an iterator that yields tuples of length `len(shifts)` consisting of delayed or advanced iterations of `seq`.
 
     Shifts that would yield an invalid index (negative or beyond the end of `seq`) are replaced with the `fill` value.
@@ -39,7 +39,10 @@ def zip_offsets(seq: Iterable[Any], shifts: tuple | list, fill: Any):
         sl = itertools.islice(it, shift - lo, None)
         iters.append(sl)
 
-    return itertools.zip_longest(*iters, fillvalue=fill)
+    if squeeze and len(shifts) == 1:
+        return iters[0]
+    else:
+        return itertools.zip_longest(*iters, fillvalue=fill)
 
 
 @cache

@@ -78,6 +78,7 @@ class _RadioCaptureAnalyzer:
                 iq, capture, spec=self.analysis_spec
             )
 
+            analysis = analysis.expand_dims({CAPTURE_DIM: 0})
             analysis = analysis.assign_coords(coords)
 
         if self.remove_attrs is not None:
@@ -202,7 +203,6 @@ def iter_sweep(
     offset_captures = zip_offsets(sweep.captures, (-1, 0, 1), fill=None)
 
     for cap_prev, cap_this, cap_next in offset_captures:
-        print('*')
         calls = {}
 
         if cap_this is not None:
@@ -226,7 +226,6 @@ def iter_sweep(
 
         if 'analyze' in ret:
             # this is what is made available for
-            print('yield')
             yield ret['analyze']
         elif always_yield:
             yield None

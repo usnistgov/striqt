@@ -276,7 +276,11 @@ class SoapyRadioDevice(RadioDevice):
         if self.backend is None:
             return
 
-        # if soapy._SoapySDR.
+        if soapy._SoapySDR.Device_deactivateStream is None:
+            # occurs sometimes when soapy's underlying libraries
+            # have been deconstructed too far to proceed
+            return
+
         try:
             self.channel_enabled(False)
         except ValueError:

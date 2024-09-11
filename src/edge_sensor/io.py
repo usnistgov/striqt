@@ -1,7 +1,7 @@
 """just a stub for now in case we change this in the future"""
 
 from __future__ import annotations
-from channel_analysis import load, dump
+from channel_analysis import load, dump, open_store
 import msgspec
 from .structs import Sweep
 from pathlib import Path

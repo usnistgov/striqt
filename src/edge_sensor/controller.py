@@ -135,24 +135,20 @@ class SweepController:
 
 
 def process_iterator(iter, func):
-    params = {'catch': False, 'traceback_delay': False, 'nones': True, }
     result = {}
 
     def value():
         # raise StopIteration -> return StopIteration
         try:
-            print('getting...')
-            ret = next(iter)
-            print('got')
-            return ret
+            return next(iter)
         except StopIteration:
             return StopIteration
+        except TypeError:
+            print(iter)
+            raise
 
     def call():
-        print('call ')
-        ret = func(result['value'])
-        print('got it')
-        return ret
+        return func(result['value'])
 
     result['value'] = value()
 
@@ -160,10 +156,10 @@ def process_iterator(iter, func):
         if result['value'] is StopIteration:
             break
 
-        result = lb.util.concurrently_call(params, [('value', value), ('call', call)])
-        # result['value'] = trap_next()
-        # result['call'] = func(result)
-        yield result['call']
+        result = lb.concurrently(value, call, nones=True)
+
+        yield result.get('call', None)
+
 
 class _ServerService(rpyc.Service, SweepController):
     """API exposed by a server to remote clients"""
@@ -227,7 +223,7 @@ class _ServerService(rpyc.Service, SweepController):
         if generator == []:
             return []
         else:
-            return process_iterator(desc_pairs, conn.root.deliver)#(conn.root.deliver(r, d) for r, d in desc_pairs)
+            return (conn.root.deliver(r, d) for r, d in desc_pairs)
 
 
 class _ClientService(rpyc.Service):
@@ -240,19 +236,13 @@ class _ClientService(rpyc.Service):
         lb.logger.info('disconnected from server')
 
     def exposed_deliver(
-        self, payload#dataset: type_stubs.DatasetType, description: Optional[str] = None
+        self, dataset: type_stubs.DatasetType, description: Optional[str] = None
     ):
         """serialize an object back to the client via pickling"""
-        print('deliver')
-        dataset, description = payload
-        print('1')
         if description is not None:
             lb.logger.info(f'{description}')
-        print('2')
         with lb.stopwatch('data transfer', logger_level='debug'):
-            ret = rpyc.utils.classic.obtain(dataset)
-            print('3')
-            return ret
+            return rpyc.utils.classic.obtain(dataset)
 
 
 def start_server(host=None, port=4567, default_driver: Optional[str] = None):
