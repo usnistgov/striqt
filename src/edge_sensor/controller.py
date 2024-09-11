@@ -93,7 +93,7 @@ class SweepController:
             ]
         return ' and '.join(msgs)
 
-    def prepare_sweep(self, sweep_spec: Sweep, swept_fields: list[str], calibration):
+    def prepare_sweep(self, sweep_spec: Sweep, swept_fields: list[str], calibration, pickled=False):
         """open the radio while warming up the GPU"""
 
         warmup_sweep = actions.design_warmup_sweep(
@@ -102,7 +102,7 @@ class SweepController:
         self.warmed_captures = self.warmed_captures | set(warmup_sweep.captures)
         if len(warmup_sweep.captures) > 0:
             warmup_iter = self.iter_sweep(
-                warmup_sweep, swept_fields, calibration, quiet=True
+                warmup_sweep, swept_fields, calibration, quiet=True, pickled=pickled
             )
         else:
             return []
@@ -184,7 +184,7 @@ class _ServerService(rpyc.Service, SweepController):
         if prep_msg:
             conn.root.deliver((None, prep_msg))
             lb.logger.info(prep_msg)
-        self.prepare_sweep(sweep_spec, swept_fields, calibration)
+        self.prepare_sweep(sweep_spec, swept_fields, calibration, pickled=True)
 
         descs = (
             f'{i+1}/{len(sweep_spec.captures)} {describe_capture(c, swept_fields)}'
