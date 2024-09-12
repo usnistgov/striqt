@@ -120,14 +120,15 @@ def cellular_cyclic_autocorrelation(
     ),
     parallel=True,
 )
-def _numba_indexed_cp_product(x, inds, fft_size, a_out, b_out, prod_out, power_out):
+def _numba_indexed_cp_product(x, inds, fft_size, a, b, summand, power):
     """accelerated evaluation of the inner cyclic prefix indexing loop"""
 
     for i in nb.prange(inds.size):
-        a_out[i] = x[inds[i] + fft_size]
-        b_out[i] = np.conj(x[inds[i]])
-        power_out[i] = 0.5 * (np.abs(a_out[i]) ** 2 + np.abs(b_out[i]) ** 2)
-        prod_out[i] = a_out[i] * b_out[i]
+        i_here = inds[i]
+        a_here = a[i] = x[i_here + fft_size]
+        b_here = b[i] = x[i_here]
+        power[i] = 0.5 * (np.abs(a_here) ** 2 + np.abs(b_here) ** 2)
+        summand[i] = a_here * np.conj(b_here)
 
 
 def _indexed_cp_product(iq, cp_inds, nfft):
@@ -140,10 +141,10 @@ def _indexed_cp_product(iq, cp_inds, nfft):
     # numba accepts only flat arrays. flatten and then unflatten after exec
     if xp is array_api_compat.numpy:
         out = dict(
-            a_out=np.empty(cp_inds.size, dtype=np.complex64),
-            b_out=np.empty(cp_inds.size, dtype=np.complex64),
-            prod_out=np.empty(cp_inds.size, dtype=np.complex64),
-            power_out=np.empty(cp_inds.size, dtype=np.float32),
+            a=np.empty(cp_inds.size, dtype=np.complex64),
+            b=np.empty(cp_inds.size, dtype=np.complex64),
+            summand=np.empty(cp_inds.size, dtype=np.complex64),
+            power=np.empty(cp_inds.size, dtype=np.float32),
         )
 
         _numba_indexed_cp_product(iq, cp_inds.flatten(), nfft, **out)
@@ -151,34 +152,38 @@ def _indexed_cp_product(iq, cp_inds, nfft):
 
     else:
         # cuda, etc
-        a = iq[cp_inds]
         b = iq[nfft:][cp_inds]
-        power = iqwaveform.envtopow(a)
-        power += iqwaveform.envtopow(b)
-        power /= 2
-        return a, b, power, a * b
+        power = iqwaveform.envtopow(b)
 
+        a = iq[cp_inds]
+        power += iqwaveform.envtopow(a)
+        power /= 2
+
+        summand = a*xp.conj(b)
+
+        return a, b, summand, power
 
 # %% TODO: the following low level code may be merged with similar functions in iqwaveform in the future
-def _correlate_along_axis(a, b, axes=0, norm=False, _ab_product=None):
+def _correlate_along_axis(a, b, axes=0, norm=False, _summand=None):
     """correlate `a` and `b` along the specified axes.
 
     if `norm`, normalize by the product of the standard deviates of
     a and b across the axes.
 
-    if _product is passed in, it is assumed to contain the pre-computed
+    if _summand is passed in, it is assumed to contain the pre-computed
     element-wise product a*np.conj(b).
     """
 
     xp = iqwaveform.util.array_namespace(a)
-    R = xp.sum(a * xp.conj(b), axis=axes)
-    # if _ab_product is None:
-    #     R = xp.sum(a * xp.conj(b), axis=axes)
-    # else:
-    #     R = xp.sum(_ab_product, axis=axes)
+
+    if _summand is None:
+        R = xp.sum(a * np.conj(b), axis=axes)
+    else:
+        R = xp.sum(_summand, axis=axes, )
 
     if norm:
-        R /= xp.std(a, axis=axes) * xp.std(b, axis=axes)
+        R /= xp.std(b, axis=axes)
+        R /= xp.std(a, axis=axes)
 
     return R
 
@@ -245,14 +250,8 @@ def _correlate_cyclic_prefixes(
     else:
         raise ValueError('idx_reduction must be one of "corr", "peak", or None')
 
-    a, b, ab, power = _indexed_cp_product(iq, cp_inds, phy.nfft)
-    # a = iq[cp_inds]
-    # b = iq[phy.nfft :][cp_inds]
-    # power = iqwaveform.envtopow(a)
-    # power += iqwaveform.envtopow(b)
-    # power /= 2
-
-    R = -_correlate_along_axis(a, b, axes=corr_axes, norm=norm, _ab_product=ab)
+    a, b, summand, power = _indexed_cp_product(iq, cp_inds, phy.nfft)
+    R = -_correlate_along_axis(a, b, axes=corr_axes, norm=norm, _summand=summand)
 
     corr_size = np.prod([cp_inds.shape[i] for i in corr_axes])
     R /= corr_size
