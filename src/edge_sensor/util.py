@@ -4,7 +4,7 @@ from typing import Iterable, Any
 from functools import cache
 
 
-def set_cuda_mem_limit(fraction=0.6):
+def set_cuda_mem_limit(fraction=0.7):
     try:
         import cupy
     except ModuleNotFoundError:
