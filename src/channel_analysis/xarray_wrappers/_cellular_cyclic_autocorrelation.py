@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Literal, get_args
+import typing
 from functools import lru_cache
 import numpy as np
 import numba as nb
@@ -15,7 +15,7 @@ pd = iqwaveform.util.lazy_import('pandas')
 
 
 ### Time elapsed dimension and coordinates
-CyclicSampleLagAxis = Literal['cyclic_sample_lag']
+CyclicSampleLagAxis = typing.Literal['cyclic_sample_lag']
 
 
 @dataclass
@@ -32,11 +32,12 @@ class CyclicSampleLagCoords:
         max_len = _get_correlation_length(
             capture, subcarrier_spacings=subcarrier_spacings
         )
-        return pd.RangeIndex(0, max_len, name=get_args(CyclicSampleLagAxis)[0])
+        axis_name = typing.get_args(CyclicSampleLagAxis)[0]
+        return pd.RangeIndex(0, max_len, name=axis_name)
 
 
 ### Subcarrier spacing label axis
-SubcarrierSpacingAxis = Literal['subcarrier_spacing']
+SubcarrierSpacingAxis = typing.Literal['subcarrier_spacing']
 
 
 @dataclass
@@ -71,16 +72,26 @@ def cellular_cyclic_autocorrelation(
     capture: structs.Capture,
     *,
     subcarrier_spacings: tuple[float, ...] = (15e3, 30e3, 60e3),
-    frame_limit: int = 2,
+    frame_range: tuple[int,typing.Optional[int]] = (0, 1),
+    slot_range: tuple[int,typing.Optional[int]] = (0, None),
+    symbol_range: tuple[int,typing.Optional[int]] = (0, None),
     normalize: bool = True,
 ):
+    RANGE_MAP = {'frames': frame_range, 'slots': slot_range, 'symbols': symbol_range}
     xp = iqwaveform.util.array_namespace(iq)
     subcarrier_spacings = tuple(subcarrier_spacings)
     phy_scs = _get_phy_mappings(capture.analysis_bandwidth, subcarrier_spacings, xp=xp)
+    metadata = {}
 
-    kws = dict(
-        slots='all', symbols='all', frames=np.arange(0, frame_limit), norm=normalize
-    )
+    kws = {'norm': normalize}
+    for name, field_range in RANGE_MAP.items():
+        field_range = tuple(field_range)
+        metadata[name] = field_range
+
+        if field_range in ((0,), (None, None), (0,None)):
+            kws[name] = 'all'
+        else:
+            kws[name] = tuple(range(*field_range))
 
     max_len = _get_correlation_length(capture, subcarrier_spacings=subcarrier_spacings)
 
@@ -88,8 +99,6 @@ def cellular_cyclic_autocorrelation(
     for i, phy in enumerate(phy_scs.values()):
         R, _ = _correlate_cyclic_prefixes(iq, phy, **kws)
         result[i][: R.size] = xp.abs(R)
-
-    metadata = {'frame_limit': frame_limit}
 
     if normalize:
         metadata.update(standard_name='Cyclic Autocorrelation')
