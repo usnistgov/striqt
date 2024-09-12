@@ -91,7 +91,7 @@ class _ChannelAnalysisRegistry(UserDict):
                     result,
                     capture,
                     parameters=call_params,
-                    attrs=metadata,
+                    attrs=ret_metadata,
                 )
 
             sig_kws = [
