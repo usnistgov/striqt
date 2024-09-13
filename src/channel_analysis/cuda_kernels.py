@@ -1,25 +1,25 @@
 """IIR filter functions backported from cupy 13.x"""
 
 import cupy
+from cupy._core._scalar import get_typename
 from cupy._core.internal import _normalize_axis_index
 from itertools import product
-from cupy._core._scalar import get_typename
 from cupy_backends.cuda.api import runtime
 import numba as nb
 import numba.cuda
 import math
 
 @nb.cuda.jit(
-    [
-        (nb.int32[:,:], nb.complex64[:], nb.int32, nb.boolean, nb.complex64[:]),
-        (nb.int32[:,:], nb.complex64[:], nb.int64, nb.boolean, nb.complex64[:]),
-        (nb.int64[:,:], nb.complex64[:], nb.int32, nb.boolean, nb.complex64[:]),
-        (nb.int64[:,:], nb.complex64[:], nb.int64, nb.boolean, nb.complex64[:]),
-    ],
+    # [
+    #     nb.void(nb.int32[:,:], nb.complex64[:], nb.int32, nb.boolean, nb.complex64[:]),
+    #     nb.void(nb.int32[:,::-1], nb.complex64[:], nb.int32, nb.boolean, nb.complex64[:]),
+    #     nb.void(nb.int32[::-1,:], nb.complex64[:], nb.int32, nb.boolean, nb.complex64[:]),
+    #     # (nb.int32[:,:], nb.complex64[:], nb.int64, nb.boolean, nb.complex64[:]),
+    #     # (nb.int64[:,:], nb.complex64[:], nb.int32, nb.boolean, nb.complex64[:]),
+    #     # (nb.int64[:,:], nb.complex64[:], nb.int64, nb.boolean, nb.complex64[:]),
+    # ],
 )
 def _corr_at_indices_cuda(inds, x, nfft, norm, out):
-    """minimize usage of """
-
     # iterate on parallel across the points in the output correlation
     j = nb.cuda.grid(1)
 

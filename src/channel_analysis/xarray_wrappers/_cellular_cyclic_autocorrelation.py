@@ -150,6 +150,7 @@ def _correlate_cyclic_prefixes(
     Returns:
         _type_: _description_
     """
+
     xp = iqwaveform.util.array_namespace(iq)
 
     frames = iqwaveform.ofdm._index_or_all(
@@ -171,7 +172,6 @@ def _correlate_cyclic_prefixes(
     #     raise ValueError('idx_reduction must be one of "corr", "peak", or None')
 
     # R = -_correlate_along_axis(a, b, axes=corr_axes, norm=norm, _summand=summand)
-    print(cp_inds.shape)
     R = corr_at_indices(cp_inds, iq, phy.nfft, norm=norm)
 
     # corr_size = np.prod([cp_inds.shape[i] for i in corr_axes])
@@ -232,9 +232,11 @@ def corr_at_indices(inds, x, nfft, norm=True, out=None):
         _corr_at_indices_cpu(inds, x, nfft, norm, out)
 
     else:
-        tpb = 64
+        tpb = 32
         bpg = (x.size + (tpb - 1)) // tpb
-        _corr_at_indices_cuda[bpg,tpb](inds, x, nfft, norm, out)
+
+        print(type(inds), inds.dtype, inds.shape, type(x), x.dtype, x.shape, type(nfft), type(norm), type(out), out.dtype, out.shape)
+        _corr_at_indices_cuda[bpg,tpb](inds, x, np.int32(nfft), norm, out)
 
     out /= inds.shape[0]
 
