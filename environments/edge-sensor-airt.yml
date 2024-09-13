@@ -12,7 +12,6 @@ dependencies:
 - pip
 - jupyter
 - ruff
-- numba
 - pandas<2
 - scipy>=1.9.2
 - seaborn>=0.12
@@ -40,6 +39,7 @@ dependencies:
 - soapysdr-module-airt
 - cython<3
 - pytools==2022.1.12
+- numba~=0.56.0
 - pip:
   - iqwaveform @ git+https://github.com/usnistgov/iqwaveform
   - xarray_dataclasses

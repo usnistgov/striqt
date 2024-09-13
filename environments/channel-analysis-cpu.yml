@@ -13,7 +13,6 @@ dependencies:
 - ruff
 
   # hard-coded on behalf of pip for iqwaveform
-- numba
 - pandas<2
 - scipy>=1.9.2
 - seaborn>=0.12
