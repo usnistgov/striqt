@@ -108,97 +108,6 @@ def cellular_cyclic_autocorrelation(
     return result, metadata
 
 
-@nb.njit(
-    nb.void(
-        nb.complex64[:],
-        nb.int_[:],
-        nb.int_,
-        nb.complex64[:],
-        nb.complex64[:],
-        nb.complex64[:],
-        nb.float32[:],
-    ),
-    parallel=True,
-)
-def _numba_indexed_cp_product(x, inds, fft_size, a, b, summand, power):
-    """accelerated evaluation of the inner cyclic prefix indexing loop"""
-
-    for i in nb.prange(inds.size):
-        i_here = inds[i]
-        a_here = a[i] = x[i_here + fft_size]
-        b_here = b[i] = x[i_here]
-        power[i] = 0.5 * (np.abs(a_here) ** 2 + np.abs(b_here) ** 2)
-        summand[i] = a_here * np.conj(b_here)
-
-
-try:
-    from ..cuda_kernels import _cupy_indexed_cp_product
-except ModuleNotFoundError:
-    pass
-
-def _indexed_cp_product(iq, cp_inds, nfft):
-    """evaluates the index-and-dot-product inner loop needed for
-    correlating the cyclic prefixes in iq.
-    """
-
-    xp = iqwaveform.util.array_namespace(iq)
-
-    out = dict(
-        a=xp.empty(cp_inds.size, dtype=np.complex64),
-        b=xp.empty(cp_inds.size, dtype=np.complex64),
-        summand=xp.empty(cp_inds.size, dtype=np.complex64),
-        power=xp.empty(cp_inds.size, dtype=np.float32),
-    )
-
-    print(cp_inds.dtype)
-    # numba accepts only flat arrays. flatten and then unflatten after exec
-    if xp is array_api_compat.numpy:
-        _numba_indexed_cp_product(iq, cp_inds.flatten(), nfft, *out.values())
-    else:
-        _cupy_indexed_cp_product(iq, cp_inds.flatten(), nfft, *out.values())
-
-    return [a.reshape(cp_inds.shape) for a in list(out.values())]
-        # # cuda, etc
-        # b = np.conj(iq[nfft:][cp_inds])
-        # power = iqwaveform.envtopow(b)
-
-        # a = iq[cp_inds]
-        # power += iqwaveform.envtopow(a)
-        # power /= 2
-
-        # summand = a*xp.conj(b)
-
-        # return a, b, summand, power
-
-debug = {}
-
-# %% TODO: the following low level code may be merged with similar functions in iqwaveform in the future
-def _correlate_along_axis(a, b, axes=0, norm=False, _summand=None):
-    """correlate `a` and `b` along the specified axes.
-
-    if `norm`, normalize by the product of the standard deviates of
-    a and b across the axes.
-
-    if _summand is passed in, it is assumed to contain the pre-computed
-    element-wise product a*np.conj(b).
-    """
-
-    xp = iqwaveform.util.array_namespace(a)
-
-    print(axes)
-
-    if _summand is None:
-        R = xp.sum(a * np.conj(b), axis=axes)
-    else:
-        R = xp.sum(_summand, axis=axes, )
-
-    if norm:
-        R /= xp.std(b, axis=axes)
-        R /= xp.std(a, axis=axes)
-
-    return R
-
-
 @lru_cache
 def _get_phy_mappings(
     channel_bandwidth: float, subcarrier_spacings: tuple[float, ...], xp=np
@@ -261,16 +170,8 @@ def _correlate_cyclic_prefixes(
     # else:
     #     raise ValueError('idx_reduction must be one of "corr", "peak", or None')
 
-    # a, b, summand, power = _indexed_cp_product(iq, cp_inds, phy.nfft)
-
-    # global debug
-    # debug['a'] = a
-    # debug['b'] = b
-    # debug['iq'] = iq
-    # debug['cp_inds'] = cp_inds
-    # debug['nfft'] = phy.nfft
-
     # R = -_correlate_along_axis(a, b, axes=corr_axes, norm=norm, _summand=summand)
+    print(cp_inds.shape)
     R = corr_at_indices(cp_inds, iq, phy.nfft, norm=norm)
 
     # corr_size = np.prod([cp_inds.shape[i] for i in corr_axes])
@@ -279,6 +180,12 @@ def _correlate_cyclic_prefixes(
     # power = xp.mean(power, axis=corr_axes) / cp_inds.shape[-1]
 
     return R#, power
+
+
+try:
+    from ..cuda_kernels import _corr_at_indices_cuda
+except ModuleNotFoundError:
+    pass
 
 
 @nb.njit(
@@ -315,7 +222,7 @@ def corr_at_indices(inds, x, nfft, norm=True, out=None):
     xp = iqwaveform.util.array_namespace(x)
 
     if out is None:
-        out = xp.empty(inds.shape[1], dtype=x.dtype)
+        out = xp.empty(inds.shape[-1], dtype=x.dtype)
 
     if inds.ndim > 2:
         new_shape = np.prod(inds.shape[:-1]), inds.shape[-1]
@@ -325,7 +232,6 @@ def corr_at_indices(inds, x, nfft, norm=True, out=None):
         _corr_at_indices_cpu(inds, x, nfft, norm, out)
 
     else:
-        from ..cuda_kernels import _corr_at_indices_cuda
         tpb = 64
         bpg = (x.size + (tpb - 1)) // tpb
         _corr_at_indices_cuda[bpg,tpb](inds, x, nfft, norm, out)
