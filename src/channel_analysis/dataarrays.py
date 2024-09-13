@@ -297,10 +297,10 @@ def iir_filter(
     xp = iqwaveform.util.array_namespace(iq)
 
     if is_cupy_array(iq):
-        from . import cuda_filter
+        from . import cuda_kernels
 
         sos = xp.asarray(sos)
-        return cuda_filter.sosfilt(sos.astype('float32'), iq)
+        return cuda_kernels.sosfilt(sos.astype('float32'), iq)
 
     else:
         return scipy.signal.sosfilt(sos.astype('float32'), iq)

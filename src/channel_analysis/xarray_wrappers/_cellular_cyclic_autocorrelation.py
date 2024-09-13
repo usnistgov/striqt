@@ -8,7 +8,7 @@ from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 import iqwaveform
 from .. import structs, dataarrays
 import array_api_compat
-
+import math
 
 ofdm = iqwaveform.util.lazy_import('iqwaveform.ofdm')
 pd = iqwaveform.util.lazy_import('pandas')
@@ -97,7 +97,7 @@ def cellular_cyclic_autocorrelation(
 
     result = xp.full((len(subcarrier_spacings), max_len), np.nan, dtype=np.float32)
     for i, phy in enumerate(phy_scs.values()):
-        R, _ = _correlate_cyclic_prefixes(iq, phy, **kws)
+        R = _correlate_cyclic_prefixes(iq, phy, **kws)
         result[i][: R.size] = xp.abs(R)
 
     if normalize:
@@ -131,6 +131,11 @@ def _numba_indexed_cp_product(x, inds, fft_size, a, b, summand, power):
         summand[i] = a_here * np.conj(b_here)
 
 
+try:
+    from ..cuda_kernels import _cupy_indexed_cp_product
+except ModuleNotFoundError:
+    pass
+
 def _indexed_cp_product(iq, cp_inds, nfft):
     """evaluates the index-and-dot-product inner loop needed for
     correlating the cyclic prefixes in iq.
@@ -138,30 +143,34 @@ def _indexed_cp_product(iq, cp_inds, nfft):
 
     xp = iqwaveform.util.array_namespace(iq)
 
+    out = dict(
+        a=xp.empty(cp_inds.size, dtype=np.complex64),
+        b=xp.empty(cp_inds.size, dtype=np.complex64),
+        summand=xp.empty(cp_inds.size, dtype=np.complex64),
+        power=xp.empty(cp_inds.size, dtype=np.float32),
+    )
+
+    print(cp_inds.dtype)
     # numba accepts only flat arrays. flatten and then unflatten after exec
     if xp is array_api_compat.numpy:
-        out = dict(
-            a=np.empty(cp_inds.size, dtype=np.complex64),
-            b=np.empty(cp_inds.size, dtype=np.complex64),
-            summand=np.empty(cp_inds.size, dtype=np.complex64),
-            power=np.empty(cp_inds.size, dtype=np.float32),
-        )
-
-        _numba_indexed_cp_product(iq, cp_inds.flatten(), nfft, **out)
-        return [a.reshape(cp_inds.shape) for a in list(out.values())]
-
+        _numba_indexed_cp_product(iq, cp_inds.flatten(), nfft, *out.values())
     else:
-        # cuda, etc
-        b = iq[nfft:][cp_inds]
-        power = iqwaveform.envtopow(b)
+        _cupy_indexed_cp_product(iq, cp_inds.flatten(), nfft, *out.values())
 
-        a = iq[cp_inds]
-        power += iqwaveform.envtopow(a)
-        power /= 2
+    return [a.reshape(cp_inds.shape) for a in list(out.values())]
+        # # cuda, etc
+        # b = np.conj(iq[nfft:][cp_inds])
+        # power = iqwaveform.envtopow(b)
 
-        summand = a*xp.conj(b)
+        # a = iq[cp_inds]
+        # power += iqwaveform.envtopow(a)
+        # power /= 2
 
-        return a, b, summand, power
+        # summand = a*xp.conj(b)
+
+        # return a, b, summand, power
+
+debug = {}
 
 # %% TODO: the following low level code may be merged with similar functions in iqwaveform in the future
 def _correlate_along_axis(a, b, axes=0, norm=False, _summand=None):
@@ -175,6 +184,8 @@ def _correlate_along_axis(a, b, axes=0, norm=False, _summand=None):
     """
 
     xp = iqwaveform.util.array_namespace(a)
+
+    print(axes)
 
     if _summand is None:
         R = xp.sum(a * np.conj(b), axis=axes)
@@ -243,19 +254,82 @@ def _correlate_cyclic_prefixes(
     if sample_rate_error != 0:
         cp_inds = (cp_inds * (1 + sample_rate_error)).round().astype(int)
 
-    if idx_reduction == 'corr':
-        corr_axes = tuple(range(cp_inds.ndim - 1))
-    elif idx_reduction in ('peak', None):
-        corr_axes = (-3, -2)
+    # if idx_reduction == 'corr':
+    #     corr_axes = tuple(range(cp_inds.ndim - 1))
+    # elif idx_reduction in ('peak', None):
+    #     corr_axes = (-3, -2)
+    # else:
+    #     raise ValueError('idx_reduction must be one of "corr", "peak", or None')
+
+    # a, b, summand, power = _indexed_cp_product(iq, cp_inds, phy.nfft)
+
+    # global debug
+    # debug['a'] = a
+    # debug['b'] = b
+    # debug['iq'] = iq
+    # debug['cp_inds'] = cp_inds
+    # debug['nfft'] = phy.nfft
+
+    # R = -_correlate_along_axis(a, b, axes=corr_axes, norm=norm, _summand=summand)
+    R = corr_at_indices(cp_inds, iq, phy.nfft, norm=norm)
+
+    # corr_size = np.prod([cp_inds.shape[i] for i in corr_axes])
+    # R /= corr_size
+
+    # power = xp.mean(power, axis=corr_axes) / cp_inds.shape[-1]
+
+    return R#, power
+
+
+@nb.njit(
+    [
+        (nb.int32[:,:], nb.complex64[:], nb.int32, nb.boolean, nb.complex64[:]),
+        (nb.int32[:,:], nb.complex64[:], nb.int64, nb.boolean, nb.complex64[:]),
+        (nb.int64[:,:], nb.complex64[:], nb.int32, nb.boolean, nb.complex64[:]),
+        (nb.int64[:,:], nb.complex64[:], nb.int64, nb.boolean, nb.complex64[:]),
+    ],
+    parallel=True
+)
+def _corr_at_indices_cpu(inds, x, nfft, norm, out):
+    for j in nb.prange(inds.shape[1]):
+        accum_corr = nb.complex128(0+0j)
+        accum_power_a = nb.float64(0.0)
+        accum_power_b = nb.float64(0.0)
+        for i in range(inds.shape[0]):
+            ix = inds[i,j]
+            a = x[ix]
+            b = x[ix+nfft].conjugate()
+            accum_corr += a*b
+            if norm:
+                accum_power_a += a.real*a.real+a.imag*a.imag
+                accum_power_b += b.real*b.real+b.imag*b.imag
+
+        if norm:
+            # normalized by the standard deviation, assuming zero-mean 
+            accum_corr /= math.sqrt(accum_power_a*accum_power_b)/inds.shape[0]
+
+        out[j] = accum_corr
+
+
+def corr_at_indices(inds, x, nfft, norm=True, out=None):
+    xp = iqwaveform.util.array_namespace(x)
+
+    if out is None:
+        out = xp.empty(inds.shape[1], dtype=x.dtype)
+
+    if inds.ndim > 2:
+        new_shape = np.prod(inds.shape[:-1]), inds.shape[-1]
+        inds = inds.reshape(new_shape)
+
+    if xp is array_api_compat.numpy:
+        _corr_at_indices_cpu(inds, x, nfft, norm, out)
+
     else:
-        raise ValueError('idx_reduction must be one of "corr", "peak", or None')
+        from ..cuda_kernels import _corr_at_indices_cuda
+        tpb = 64
+        bpg = (x.size + (tpb - 1)) // tpb
+        _corr_at_indices_cuda[bpg,tpb](inds, x, nfft, norm, out)
 
-    a, b, summand, power = _indexed_cp_product(iq, cp_inds, phy.nfft)
-    R = -_correlate_along_axis(a, b, axes=corr_axes, norm=norm, _summand=summand)
+    out /= inds.shape[0]
 
-    corr_size = np.prod([cp_inds.shape[i] for i in corr_axes])
-    R /= corr_size
-
-    power = xp.mean(power, axis=corr_axes) / cp_inds.shape[-1]
-
-    return R, power
+    return out

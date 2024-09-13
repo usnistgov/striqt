@@ -5,6 +5,58 @@ from cupy._core.internal import _normalize_axis_index
 from itertools import product
 from cupy._core._scalar import get_typename
 from cupy_backends.cuda.api import runtime
+import numba as nb
+import numba.cuda
+import math
+
+@nb.cuda.jit(
+    [
+        (nb.int32[:,:], nb.complex64[:], nb.int32, nb.boolean, nb.complex64[:]),
+        (nb.int32[:,:], nb.complex64[:], nb.int64, nb.boolean, nb.complex64[:]),
+        (nb.int64[:,:], nb.complex64[:], nb.int32, nb.boolean, nb.complex64[:]),
+        (nb.int64[:,:], nb.complex64[:], nb.int64, nb.boolean, nb.complex64[:]),
+    ],
+)
+def _corr_at_indices_cuda(inds, x, nfft, norm, out):
+    """minimize usage of """
+
+    # iterate on parallel across the points in the output correlation
+    j = nb.cuda.grid(1)
+
+    if j < inds.shape[1]:
+        accum_corr = nb.complex128(0+0j)
+        accum_power_a = nb.float64(0.0)
+        accum_power_b = nb.float64(0.0)
+        for i in range(inds.shape[0]):
+            ix = inds[i,j]
+            a = x[ix]
+            b = x[ix+nfft].conjugate()
+            accum_corr += a*b
+            if norm:
+                accum_power_a += a.real*a.real+a.imag*a.imag
+                accum_power_b += b.real*b.real+b.imag*b.imag
+
+        if norm:
+            # normalized by the standard deviation, assuming zero-mean 
+            accum_corr /= math.sqrt(accum_power_a*accum_power_b)/inds.shape[0]
+
+        out[j] = accum_corr
+
+
+@cupy.fuse()
+def _cupy_indexed_cp_product(x, inds, fft_size, a, b, summand, power):
+    """accelerated evaluation of the inner cyclic prefix indexing loop"""
+
+
+    a = x[fft_size:][inds]
+    b = x[inds]
+    summand = a * cupy.conj(b)
+
+    if power is not None:
+        power = 0.5 * (cupy.abs(a) ** 2 + cupy.abs(b) ** 2)
+
+    return a, b, summand, power
+
 
 IIR_SOS_KERNEL = r"""
 #include <cupy/math_constants.h>
