@@ -9,7 +9,7 @@ from pathlib import Path
 __all__ = ['load', 'dump', 'read_yaml_sweep']
 
 
-def read_yaml_sweep(path: str | Path) -> tuple[Sweep, tuple[str, ...]]:
+def read_yaml_sweep(path: str | Path, adjust_captures={}) -> tuple[Sweep, tuple[str, ...]]:
     """build a Sweep struct from the contents of specified yaml file"""
 
     with open(path, 'rb') as fd:
@@ -37,7 +37,7 @@ def read_yaml_sweep(path: str | Path) -> tuple[Sweep, tuple[str, ...]]:
         # # read to validate the data and warm the calibration cache
         # iq_corrections.read_calibration_corrections(cal_path)
 
-    tree['captures'] = [dict(defaults, **c) for c in tree['captures']]
+    tree['captures'] = [dict(defaults, **c, **adjust_captures) for c in tree['captures']]
 
     run = msgspec.convert(tree, type=Sweep, strict=False)
 
