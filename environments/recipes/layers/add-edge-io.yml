@@ -1,0 +1,8 @@
+# add GPU compute via CUDA
+
+channels:
+  - conda-forge
+
+dependencies:
+  - pip:
+    - ssmdevices

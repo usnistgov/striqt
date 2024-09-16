@@ -3,8 +3,8 @@
 name: flex-spectrum-sensor
 
 channels:
-- nvidia
 - conda-forge
+- nvidia
 - file://opt/deepwave/conda-channels/airstack-conda
 dependencies:
   # python3.9 is the most recent supported by the air-t platform board
@@ -48,3 +48,4 @@ dependencies:
   - https://archive.deepwavedigital.com/pytools/pytools-2022.1.12-py2.py3-none-any.whl
   - --extra-index-url https://pip.cupy.dev/aarch64
   - cupy-cuda102
+  - ssmdevices

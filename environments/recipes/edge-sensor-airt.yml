@@ -5,3 +5,4 @@
 inherit:
   - layers/base.yml
   - layers/add-airt.yml
+  - layers/add-edge-io.yml
