@@ -163,6 +163,7 @@ def iter_sweep(
     always_yield=False,
     quiet=False,
     pickled=False,
+    close_after=False
 ) -> Generator[xr.Dataset | None]:
     """iterate through sweep captures on the specified radio, yielding a dataset for each.
 
@@ -206,34 +207,38 @@ def iter_sweep(
     # iterate across (previous, current, next) captures to support concurrency
     offset_captures = zip_offsets(sweep.captures, (-1, 0, 1), fill=None)
 
-    for cap_prev, cap_this, cap_next in offset_captures:
-        calls = {}
+    try:
+        for cap_prev, cap_this, cap_next in offset_captures:
+            calls = {}
 
-        if cap_this is not None:
-            # extra iteration at the end for the last analysis
-            calls['acquire'] = lb.Call(
-                radio.acquire, cap_this, next_capture=cap_next, correction=False
-            )
+            if cap_this is not None:
+                # extra iteration at the end for the last analysis
+                calls['acquire'] = lb.Call(
+                    radio.acquire, cap_this, next_capture=cap_next, correction=False
+                )
 
-        if cap_prev is not None:
-            # iq is only available after the first iteration
-            calls['analyze'] = lb.Call(
-                analyze, iq, timestamp, cap_prev, pickled=pickled
-            )
+            if cap_prev is not None:
+                # iq is only available after the first iteration
+                calls['analyze'] = lb.Call(
+                    analyze, iq, timestamp, cap_prev, pickled=pickled
+                )
 
-        if cap_this is None:
-            desc = 'last analysis'
-        else:
-            # treat swept fields as coordinates/indices
-            desc = describe_capture(cap_this, swept_fields)
+            if cap_this is None:
+                desc = 'last analysis'
+            else:
+                # treat swept fields as coordinates/indices
+                desc = describe_capture(cap_this, swept_fields)
 
-        with lb.stopwatch(f'{desc} •', logger_level='debug' if quiet else 'info'):
-            ret = lb.concurrently(**calls, flatten=False)
+            with lb.stopwatch(f'{desc} •', logger_level='debug' if quiet else 'info'):
+                ret = lb.concurrently(**calls, flatten=False)
 
-        if 'analyze' in ret:
-            yield ret['analyze']
-        elif always_yield:
-            yield None
+            if 'analyze' in ret:
+                yield ret['analyze']
+            elif always_yield:
+                yield None
 
-        if 'acquire' in ret:
-            iq, timestamp = ret['acquire']
+            if 'acquire' in ret:
+                iq, timestamp = ret['acquire']
+    finally:
+        if close_after:
+            radio.close()
