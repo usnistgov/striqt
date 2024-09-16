@@ -81,7 +81,6 @@ class _RadioCaptureAnalyzer:
 
             analysis = analysis.expand_dims(CAPTURE_DIM).assign_coords(coords)
 
-
         if self.remove_attrs is not None:
             for f in self.remove_attrs:
                 del analysis.attrs[f]
@@ -98,7 +97,6 @@ class _RadioCaptureAnalyzer:
             return pickle.dumps(analysis)
         else:
             return analysis
-
 
     def __post_init__(self):
         if self.remove_attrs is not None:
@@ -156,6 +154,7 @@ def design_warmup_sweep(
 
     return structs.convert(sweep_map, type(sweep))
 
+
 def iter_sweep(
     radio: RadioDevice,
     sweep: Sweep,
@@ -163,7 +162,7 @@ def iter_sweep(
     calibration: type_stubs.DatasetType = None,
     always_yield=False,
     quiet=False,
-    pickled=False
+    pickled=False,
 ) -> Generator[xr.Dataset | None]:
     """iterate through sweep captures on the specified radio, yielding a dataset for each.
 
@@ -218,7 +217,9 @@ def iter_sweep(
 
         if cap_prev is not None:
             # iq is only available after the first iteration
-            calls['analyze'] = lb.Call(analyze, iq, timestamp, cap_prev, pickled=pickled)
+            calls['analyze'] = lb.Call(
+                analyze, iq, timestamp, cap_prev, pickled=pickled
+            )
 
         if cap_this is None:
             desc = 'last analysis'

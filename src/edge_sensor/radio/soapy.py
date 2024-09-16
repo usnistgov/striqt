@@ -66,7 +66,7 @@ class SoapyRadioDevice(RadioDevice):
     _outbuf = None
 
     resource: dict = attr.value.dict(
-            default={}, help='SoapySDR resource dictionary to specify the device connection'
+        default={}, help='SoapySDR resource dictionary to specify the device connection'
     )
 
     on_overflow = attr.value.str(
@@ -284,7 +284,7 @@ class SoapyRadioDevice(RadioDevice):
         if self.backend is None:
             return
 
-        if soapy._SoapySDR.Device_deactivateStream is None:
+        if soapy._SoapySDR is None or soapy._SoapySDR.Device_deactivateStream is None:
             # occurs sometimes when soapy's underlying libraries
             # have been deconstructed too far to proceed
             return

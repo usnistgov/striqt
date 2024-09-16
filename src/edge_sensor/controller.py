@@ -93,7 +93,9 @@ class SweepController:
             ]
         return ' and '.join(msgs)
 
-    def prepare_sweep(self, sweep_spec: Sweep, swept_fields: list[str], calibration, pickled=False):
+    def prepare_sweep(
+        self, sweep_spec: Sweep, swept_fields: list[str], calibration, pickled=False
+    ):
         """open the radio while warming up the GPU"""
 
         warmup_sweep = actions.design_warmup_sweep(
@@ -121,7 +123,7 @@ class SweepController:
         calibration: type_stubs.DatasetType = None,
         always_yield: bool = False,
         quiet: bool = False,
-        pickled: bool = False
+        pickled: bool = False,
     ) -> Generator[xr.Dataset]:
         # take args {3,4...N}
         kwargs = dict(locals())
@@ -191,7 +193,9 @@ class _ServerService(rpyc.Service, SweepController):
             for i, c in enumerate(sweep_spec.captures)
         )
 
-        generator = self.iter_sweep(sweep_spec, swept_fields, calibration, always_yield, pickled=True)
+        generator = self.iter_sweep(
+            sweep_spec, swept_fields, calibration, always_yield, pickled=True
+        )
 
         desc_pairs = zip_longest(generator, descs, fillvalue='last analysis')
 
@@ -199,6 +203,7 @@ class _ServerService(rpyc.Service, SweepController):
             return []
         else:
             return (conn.root.deliver(r, d) for r, d in desc_pairs)
+
 
 class _ClientService(rpyc.Service):
     """API exposed to a server by clients"""

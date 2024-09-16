@@ -72,9 +72,9 @@ def cellular_cyclic_autocorrelation(
     capture: structs.Capture,
     *,
     subcarrier_spacings: tuple[float, ...] = (15e3, 30e3, 60e3),
-    frame_range: tuple[int,typing.Optional[int]] = (0, 1),
-    slot_range: tuple[int,typing.Optional[int]] = (0, None),
-    symbol_range: tuple[int,typing.Optional[int]] = (0, None),
+    frame_range: tuple[int, typing.Optional[int]] = (0, 1),
+    slot_range: tuple[int, typing.Optional[int]] = (0, None),
+    symbol_range: tuple[int, typing.Optional[int]] = (0, None),
     normalize: bool = True,
 ):
     RANGE_MAP = {'frames': frame_range, 'slots': slot_range, 'symbols': symbol_range}
@@ -88,7 +88,7 @@ def cellular_cyclic_autocorrelation(
         field_range = tuple(field_range)
         metadata[name] = field_range
 
-        if field_range in ((0,), (None, None), (0,None)):
+        if field_range in ((0,), (None, None), (0, None)):
             kws[name] = 'all'
         else:
             kws[name] = tuple(range(*field_range))
@@ -179,7 +179,7 @@ def _correlate_cyclic_prefixes(
 
     # power = xp.mean(power, axis=corr_axes) / cp_inds.shape[-1]
 
-    return R#, power
+    return R  # , power
 
 
 try:
@@ -199,12 +199,12 @@ except ModuleNotFoundError:
         (nb.int64[:], nb.complex64[:], nb.int32, nb.int64, nb.boolean, nb.complex64[:]),
         (nb.int64[:], nb.complex64[:], nb.int64, nb.int64, nb.boolean, nb.complex64[:]),
     ],
-    parallel=True
+    parallel=True,
 )
 def _corr_at_indices_cpu(inds, x, nfft: int, ncp: int, norm: bool, out):
-    # j: autocorrelation sequence (output) index    
-    for j in nb.prange(nfft+ncp):
-        accum_corr = nb.complex128(0+0j)
+    # j: autocorrelation sequence (output) index
+    for j in nb.prange(nfft + ncp):
+        accum_corr = nb.complex128(0 + 0j)
         accum_power_a = nb.float64(0.0)
         accum_power_b = nb.float64(0.0)
 
@@ -216,17 +216,17 @@ def _corr_at_indices_cpu(inds, x, nfft: int, ncp: int, norm: bool, out):
                 break
 
             a = x[ix]
-            b = x[ix+nfft]
+            b = x[ix + nfft]
             bconj = b.conjugate()
-            accum_corr += a*bconj
+            accum_corr += a * bconj
             if norm:
-                accum_power_a += (a*a.conjugate()).real
-                accum_power_b += (b*bconj).real
+                accum_power_a += (a * a.conjugate()).real
+                accum_power_b += (b * bconj).real
 
         if norm:
             # normalize by the standard deviation under the assumption
             # that the voltage has a mean of zero
-            accum_corr /= math.sqrt(accum_power_a*accum_power_b)
+            accum_corr /= math.sqrt(accum_power_a * accum_power_b)
 
         out[j] = accum_corr
 
@@ -234,13 +234,13 @@ def _corr_at_indices_cpu(inds, x, nfft: int, ncp: int, norm: bool, out):
 def corr_at_indices(inds, x, nfft, norm=True, out=None):
     xp = iqwaveform.util.array_namespace(x)
 
-    # the number of waveform samples per cyclic prefix    
+    # the number of waveform samples per cyclic prefix
     ncp = inds.shape[-1]
     flat_inds = inds.flatten()
 
     if out is None:
-        out = xp.empty(nfft+ncp, dtype=x.dtype)
-    
+        out = xp.empty(nfft + ncp, dtype=x.dtype)
+
     if xp is array_api_compat.numpy:
         _corr_at_indices_cpu(flat_inds, x, nfft, ncp, norm, out)
 
@@ -248,6 +248,6 @@ def corr_at_indices(inds, x, nfft, norm=True, out=None):
         tpb = 32
         bpg = max((x.size + (tpb - 1)) // tpb, 1)
 
-        _corr_at_indices_cuda[bpg,tpb](flat_inds, x, int(nfft), int(ncp), norm, out)
+        _corr_at_indices_cuda[bpg, tpb](flat_inds, x, int(nfft), int(ncp), norm, out)
 
     return out

@@ -35,11 +35,12 @@ def open_store(path: str | Path, *, mode: str):
     elif str(path).endswith('.shelf'):
         # see for example https://github.com/zarr-developers/zarr-python/issues/129s
         import shelve
+
         path = str(path)
         if mode.startswith('w'):
             for extra_suffix in ('.dat', '.bak', '.dir'):
                 try:
-                    os.unlink(path+extra_suffix)
+                    os.unlink(path + extra_suffix)
                 except FileNotFoundError:
                     pass
         store = shelve.open(path, protocol=pickle.HIGHEST_PROTOCOL)
@@ -49,7 +50,7 @@ def open_store(path: str | Path, *, mode: str):
     return store
 
 
-def _build_encodings(data, compression=None, filter: bool=True):
+def _build_encodings(data, compression=None, filter: bool = True):
     if compression is None:
         compressor = numcodecs.Blosc('zlib', clevel=6)
     elif compression is False:
@@ -80,7 +81,7 @@ def _build_encodings(data, compression=None, filter: bool=True):
             encodings[name]['dtype'] = 'float32'
 
     return encodings
-    
+
 
 def dump(
     store: zarr.storage.Store,
@@ -109,7 +110,7 @@ def dump(
 
     # take object dtypes to mean variable length strings for coordinates
     # and make fixed length now
-    
+
     for name in dict(data.coords).keys():
         if data[name].dtype == np.dtype('object'):
             data = data.assign({name: data[name].astype('str')})
@@ -123,6 +124,7 @@ def dump(
     else:
         encodings = _build_encodings(data, compression=compression, filter=filter)
         return data.chunk(chunks).to_zarr(store, encoding=encodings, mode='w')
+
 
 def load(path: str | Path) -> type_stubs.DataArrayType | type_stubs.DatasetType:
     """load a dataset or data array"""
