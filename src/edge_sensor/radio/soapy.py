@@ -143,6 +143,11 @@ class SoapyRadioDevice(RadioDevice):
     @backend_sample_rate.setter
     @_verify_channel_for_setter
     def _(self, backend_sample_rate):
+        mcr = self.master_clock_rate
+        if np.isclose(backend_sample_rate, mcr):
+            # avoid exceptions due to rounding error
+            backend_sample_rate = mcr
+
         self.backend.setSampleRate(
             soapy.SOAPY_SDR_RX, self.channel(), backend_sample_rate
         )

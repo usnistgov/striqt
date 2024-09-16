@@ -213,7 +213,6 @@ def _corr_at_indices_cpu(inds, x, nfft: int, ncp: int, norm: bool, out):
             ix = inds[i] + j
 
             if ix > x.shape[0]:
-                out[j] = float('nan')
                 break
 
             a = x[ix]

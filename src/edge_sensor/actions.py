@@ -95,8 +95,7 @@ class _RadioCaptureAnalyzer:
         analysis[TIMESTAMP_NAME].attrs.update(label='Capture start time')
 
         if pickled:
-            with lb.stopwatch('pickle.dump'):
-                return pickle.dumps(analysis)
+            return pickle.dumps(analysis)
         else:
             return analysis
 
@@ -231,7 +230,6 @@ def iter_sweep(
             ret = lb.concurrently(**calls, flatten=False)
 
         if 'analyze' in ret:
-            print(type(ret['analyze']))
             yield ret['analyze']
         elif always_yield:
             yield None
