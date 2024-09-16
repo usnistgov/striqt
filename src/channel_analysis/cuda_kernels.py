@@ -19,26 +19,36 @@ import math
     #     # (nb.int64[:,:], nb.complex64[:], nb.int64, nb.boolean, nb.complex64[:]),
     # ],
 )
-def _corr_at_indices_cuda(inds, x, nfft, norm, out):
+def _corr_at_indices_cuda(inds, x, nfft: int, ncp: int, norm: bool, out):
     # iterate on parallel across the points in the output correlation
     j = nb.cuda.grid(1)
 
-    if j < inds.shape[1]:
+    if j < nfft+ncp:
+        # from here on, the numba code is identical to _corr_at_indices_cpu
         accum_corr = nb.complex128(0+0j)
         accum_power_a = nb.float64(0.0)
         accum_power_b = nb.float64(0.0)
+
+        # i: the sample index of each waveform sample to compare against its cyclic shift
         for i in range(inds.shape[0]):
-            ix = inds[i,j]
+            ix = inds[i] + j
+
+            if ix > x.shape[0]:
+                out[j] = float('nan')
+                break
+
             a = x[ix]
-            b = x[ix+nfft].conjugate()
-            accum_corr += a*b
+            b = x[ix+nfft]
+            bconj = b.conjugate()
+            accum_corr += a*bconj
             if norm:
-                accum_power_a += a.real*a.real+a.imag*a.imag
-                accum_power_b += b.real*b.real+b.imag*b.imag
+                accum_power_a += (a*a.conjugate()).real
+                accum_power_b += (b*bconj).real
 
         if norm:
-            # normalized by the standard deviation, assuming zero-mean 
-            accum_corr /= math.sqrt(accum_power_a*accum_power_b)/inds.shape[0]
+            # normalize by the standard deviation under the assumption
+            # that the voltage has a mean of zero
+            accum_corr /= math.sqrt(accum_power_a*accum_power_b)
 
         out[j] = accum_corr
 

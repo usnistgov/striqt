@@ -190,30 +190,44 @@ except ModuleNotFoundError:
 
 @nb.njit(
     [
-        (nb.int32[:,:], nb.complex64[:], nb.int32, nb.boolean, nb.complex64[:]),
-        (nb.int32[:,:], nb.complex64[:], nb.int64, nb.boolean, nb.complex64[:]),
-        (nb.int64[:,:], nb.complex64[:], nb.int32, nb.boolean, nb.complex64[:]),
-        (nb.int64[:,:], nb.complex64[:], nb.int64, nb.boolean, nb.complex64[:]),
+        (nb.int32[:], nb.complex64[:], nb.int32, nb.int32, nb.boolean, nb.complex64[:]),
+        (nb.int32[:], nb.complex64[:], nb.int64, nb.int32, nb.boolean, nb.complex64[:]),
+        (nb.int64[:], nb.complex64[:], nb.int32, nb.int32, nb.boolean, nb.complex64[:]),
+        (nb.int64[:], nb.complex64[:], nb.int64, nb.int32, nb.boolean, nb.complex64[:]),
+        (nb.int32[:], nb.complex64[:], nb.int32, nb.int64, nb.boolean, nb.complex64[:]),
+        (nb.int32[:], nb.complex64[:], nb.int64, nb.int64, nb.boolean, nb.complex64[:]),
+        (nb.int64[:], nb.complex64[:], nb.int32, nb.int64, nb.boolean, nb.complex64[:]),
+        (nb.int64[:], nb.complex64[:], nb.int64, nb.int64, nb.boolean, nb.complex64[:]),
     ],
     parallel=True
 )
-def _corr_at_indices_cpu(inds, x, nfft, norm, out):
-    for j in nb.prange(inds.shape[1]):
+def _corr_at_indices_cpu(inds, x, nfft: int, ncp: int, norm: bool, out):
+    # j: autocorrelation sequence (output) index    
+    for j in nb.prange(nfft+ncp):
         accum_corr = nb.complex128(0+0j)
         accum_power_a = nb.float64(0.0)
         accum_power_b = nb.float64(0.0)
+
+        # i: the sample index of each waveform sample to compare against its cyclic shift
         for i in range(inds.shape[0]):
-            ix = inds[i,j]
+            ix = inds[i] + j
+
+            if ix > x.shape[0]:
+                out[j] = float('nan')
+                break
+
             a = x[ix]
-            b = x[ix+nfft].conjugate()
-            accum_corr += a*b
+            b = x[ix+nfft]
+            bconj = b.conjugate()
+            accum_corr += a*bconj
             if norm:
-                accum_power_a += a.real*a.real+a.imag*a.imag
-                accum_power_b += b.real*b.real+b.imag*b.imag
+                accum_power_a += (a*a.conjugate()).real
+                accum_power_b += (b*bconj).real
 
         if norm:
-            # normalized by the standard deviation, assuming zero-mean 
-            accum_corr /= math.sqrt(accum_power_a*accum_power_b)/inds.shape[0]
+            # normalize by the standard deviation under the assumption
+            # that the voltage has a mean of zero
+            accum_corr /= math.sqrt(accum_power_a*accum_power_b)
 
         out[j] = accum_corr
 
@@ -221,21 +235,21 @@ def _corr_at_indices_cpu(inds, x, nfft, norm, out):
 def corr_at_indices(inds, x, nfft, norm=True, out=None):
     xp = iqwaveform.util.array_namespace(x)
 
+    # the number of waveform samples per cyclic prefix    
+    ncp = inds.shape[-1]
+    flat_inds = inds.flatten()
+
     if out is None:
-        out = xp.empty(inds.shape[-1], dtype=x.dtype)
-
-    if inds.ndim > 2:
-        new_shape = np.prod(inds.shape[:-1]), inds.shape[-1]
-        inds = inds.reshape(new_shape)
-
+        out = xp.empty(nfft+ncp, dtype=x.dtype)
+    
     if xp is array_api_compat.numpy:
-        _corr_at_indices_cpu(inds, x, nfft, norm, out)
+        _corr_at_indices_cpu(flat_inds, x, nfft, ncp, norm, out)
 
     else:
         tpb = 32
         bpg = (x.size + (tpb - 1)) // tpb
 
-        _corr_at_indices_cuda[bpg,tpb](inds, x, np.int32(nfft), norm, out)
+        _corr_at_indices_cuda[bpg,tpb](inds, x, np.int32(nfft), ncp, norm, out)
 
     out /= inds.shape[0]
 
