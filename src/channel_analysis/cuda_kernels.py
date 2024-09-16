@@ -9,16 +9,7 @@ import numba as nb
 import numba.cuda
 import math
 
-@nb.cuda.jit(
-    # [
-    #     nb.void(nb.int32[:,:], nb.complex64[:], nb.int32, nb.boolean, nb.complex64[:]),
-    #     nb.void(nb.int32[:,::-1], nb.complex64[:], nb.int32, nb.boolean, nb.complex64[:]),
-    #     nb.void(nb.int32[::-1,:], nb.complex64[:], nb.int32, nb.boolean, nb.complex64[:]),
-    #     # (nb.int32[:,:], nb.complex64[:], nb.int64, nb.boolean, nb.complex64[:]),
-    #     # (nb.int64[:,:], nb.complex64[:], nb.int32, nb.boolean, nb.complex64[:]),
-    #     # (nb.int64[:,:], nb.complex64[:], nb.int64, nb.boolean, nb.complex64[:]),
-    # ],
-)
+@nb.cuda.jit
 def _corr_at_indices_cuda(inds, x, nfft: int, ncp: int, norm: bool, out):
     # iterate on parallel across the points in the output correlation
     j = nb.cuda.grid(1)
@@ -34,7 +25,6 @@ def _corr_at_indices_cuda(inds, x, nfft: int, ncp: int, norm: bool, out):
             ix = inds[i] + j
 
             if ix > x.shape[0]:
-                out[j] = float('nan')
                 break
 
             a = x[ix]
@@ -51,21 +41,6 @@ def _corr_at_indices_cuda(inds, x, nfft: int, ncp: int, norm: bool, out):
             accum_corr /= math.sqrt(accum_power_a*accum_power_b)
 
         out[j] = accum_corr
-
-
-@cupy.fuse()
-def _cupy_indexed_cp_product(x, inds, fft_size, a, b, summand, power):
-    """accelerated evaluation of the inner cyclic prefix indexing loop"""
-
-
-    a = x[fft_size:][inds]
-    b = x[inds]
-    summand = a * cupy.conj(b)
-
-    if power is not None:
-        power = 0.5 * (cupy.abs(a) ** 2 + cupy.abs(b) ** 2)
-
-    return a, b, summand, power
 
 
 IIR_SOS_KERNEL = r"""
