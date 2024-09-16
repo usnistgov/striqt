@@ -11,7 +11,7 @@ channel_kwarg = attr.method_kwarg.int(
 
 
 class _AirT7x01B(SoapyRadioDevice):
-    resource = attr.value.dict(default={'driver': 'SoapyAIRT'}, inherit=True)
+    resource = attr.value.dict(default={}, inherit=True)
 
     # adjust bounds based on the hardware
     duration = attr.value.float(100e-3, inherit=True)
@@ -21,6 +21,13 @@ class _AirT7x01B(SoapyRadioDevice):
     backend_sample_rate = attr.method.float(min=3.906250e6, max=125e6, inherit=True)
     gain = attr.method.float(min=-30, max=0, step=0.5, inherit=True)
     tx_gain = attr.method.float(min=-41.95, max=0, step=0.1, inherit=True)
+
+    def open(self):
+        # in some cases specifying the driver has caused exceptions on connect
+        # validate it after the fact instead
+        driver = self.backend.getDriverKey()
+        if driver != 'SoapyAIRT':
+            raise IOError(f'connected to {driver}, but expected SoapyAirT')
 
     @attr.property.str(inherit=True)
     def id(self):

@@ -66,7 +66,7 @@ class SoapyRadioDevice(RadioDevice):
     _outbuf = None
 
     resource: dict = attr.value.dict(
-        default={}, help='SoapySDR resource dictionary to specify the device connection'
+            default={}, help='SoapySDR resource dictionary to specify the device connection'
     )
 
     on_overflow = attr.value.str(
@@ -195,8 +195,11 @@ class SoapyRadioDevice(RadioDevice):
             self.backend.setGain(soapy.SOAPY_SDR_TX, channel, gain)
 
     def open(self):
-        self.backend = soapy.Device(self.resource)
-        self._logger.info('connected')
+        if self.resource:
+            self.backend = soapy.Device(self.resource)
+        else:
+            self.backend = soapy.Device()
+        self._logger.info(f'connected with driver {self.backend.getDriverKey()}')
 
         self._reset_stats()
 

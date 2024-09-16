@@ -249,6 +249,8 @@ def corr_at_indices(inds, x, nfft, norm=True, out=None):
         tpb = 32
         bpg = (x.size + (tpb - 1)) // tpb
 
-        _corr_at_indices_cuda[bpg,tpb](flat_inds, x, np.int32(nfft), norm, out)
+        _corr_at_indices_cuda[bpg,tpb](inds, x, np.int32(nfft), ncp, norm, out)
+
+    out /= inds.shape[0]
 
     return out

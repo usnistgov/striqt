@@ -13,7 +13,6 @@ dependencies:
   - ruff
 
   # hard-coded on behalf of pip for iqwaveform
-  - numba
   - pandas<2
   - scipy>=1.9.2
   - seaborn>=0.12
@@ -52,7 +51,7 @@ dependencies:
   - pip:
       - iqwaveform @ git+https://github.com/usnistgov/iqwaveform
       - xarray_dataclasses
-      - ssmdevices
+        #   - ssmdevices
 
       # allows imports from the src/ directory in this repo
       - -e ..
