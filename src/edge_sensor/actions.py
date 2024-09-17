@@ -24,7 +24,7 @@ else:
     pd = lb.util.lazy_import('pandas')
     xr = lb.util.lazy_import('xarray')
 
-
+lb.util.lazy_import
 CAPTURE_DIM = 'capture'
 TIMESTAMP_NAME = 'timestamp'
 
@@ -163,7 +163,7 @@ def iter_sweep(
     always_yield=False,
     quiet=False,
     pickled=False,
-    close_after=False
+    close_after=False,
 ) -> Generator[xr.Dataset | None]:
     """iterate through sweep captures on the specified radio, yielding a dataset for each.
 

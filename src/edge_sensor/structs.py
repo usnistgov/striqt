@@ -37,7 +37,7 @@ class RadioCapture(channel_analysis.Capture):
     gpu_resample: bool = True
 
     # hooks for external devices (switches, noise diodes, etc)
-    external: A[frozendict[str, Any],meta('External device states')] = frozendict()
+    external: A[frozendict[str, Any], meta('External device states')] = frozendict()
 
 
 class RadioSetup(msgspec.Struct):
@@ -86,9 +86,8 @@ class Sweep(msgspec.Struct):
 
 @functools.lru_cache
 def get_shared_capture_fields(captures: tuple[RadioCapture, ...]):
-
     base = set(RadioCapture.__struct_fields__) - {'external'}
     external_keys = (set(c.external.keys()) for c in captures)
     external = set.intersection(*external_keys)
 
-    return tuple(sorted(base|external))
+    return tuple(sorted(base | external))

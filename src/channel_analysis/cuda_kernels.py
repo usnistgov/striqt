@@ -40,6 +40,9 @@ def _corr_at_indices_cuda(inds, x, nfft: int, ncp: int, norm: bool, out):
             # normalize by the standard deviation under the assumption
             # that the voltage has a mean of zero
             accum_corr /= math.sqrt(accum_power_a * accum_power_b)
+        else:
+            # power normalization: scale by number of indices
+            accum_corr /= inds.shape[0]
 
         out[j] = accum_corr
 
