@@ -32,7 +32,7 @@ class _AirT7x01B(SoapyRadioDevice):
     @attr.property.str(inherit=True)
     def id(self):
         # Jetson UUID - AirStack doesn't seem to return serial through Soapy
-        return hex(uuid.getnode())
+        return hex(uuid.getnode())[2:]
 
 
 class Air7201B(_AirT7x01B):
