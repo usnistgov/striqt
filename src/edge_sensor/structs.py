@@ -1,6 +1,8 @@
 """data structures for configuration of hardware and experiments"""
 
 from __future__ import annotations
+from frozendict import frozendict
+import functools
 import msgspec
 from typing import Optional, Literal, Any
 from typing import Annotated as A
@@ -10,14 +12,6 @@ from msgspec import to_builtins, convert
 import channel_analysis
 import channel_analysis.dataarrays
 from channel_analysis.structs import meta, get_attrs, ChannelAnalysis
-
-
-def make_default_analysis():
-    return channel_analysis.dataarrays.as_registered_channel_analysis.spec_type()()
-
-
-def describe_capture(capture: RadioCapture, swept_fields):
-    return ', '.join([f'{k}={getattr(capture, k)}' for k in swept_fields])
 
 
 _TShift = Literal['left', 'right', 'none']
@@ -43,7 +37,7 @@ class RadioCapture(channel_analysis.Capture):
     gpu_resample: bool = True
 
     # hooks for external devices (switches, noise diodes, etc)
-    external_devices: A[dict[str, Any],meta('External device states')] = {}
+    external: A[frozendict[str, Any],meta('External device states')] = frozendict()
 
 
 class RadioSetup(msgspec.Struct):
@@ -74,9 +68,27 @@ class Description(msgspec.Struct):
     signal_chain: tuple[str, ...] = ()
 
 
+def _make_default_analysis():
+    return channel_analysis.dataarrays.as_registered_channel_analysis.spec_type()()
+
+
+def describe_capture(capture: RadioCapture, swept_fields):
+    return ', '.join([f'{k}={getattr(capture, k)}' for k in swept_fields])
+
+
 class Sweep(msgspec.Struct):
     captures: tuple[RadioCapture, ...]
     radio_setup: RadioSetup = msgspec.field(default_factory=RadioSetup)
     defaults: RadioCapture = msgspec.field(default_factory=RadioCapture)
-    channel_analysis: dict = msgspec.field(default_factory=make_default_analysis)
+    channel_analysis: dict = msgspec.field(default_factory=_make_default_analysis)
     description: Description = msgspec.field(default_factory=Description)
+
+
+@functools.lru_cache
+def get_shared_capture_fields(captures: tuple[RadioCapture, ...]):
+
+    base = set(RadioCapture.__struct_fields__) - {'external'}
+    external_keys = (set(c.external.keys()) for c in captures)
+    external = set.intersection(*external_keys)
+
+    return tuple(sorted(base|external))
