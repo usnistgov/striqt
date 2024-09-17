@@ -42,6 +42,9 @@ class RadioCapture(channel_analysis.Capture):
     lo_shift: A[_TShift, meta('LO shift direction')] = 'none'
     gpu_resample: bool = True
 
+    # hooks for external devices (switches, noise diodes, etc)
+    external_devices: A[dict[str, Any],meta('External device states')] = {}
+
 
 class RadioSetup(msgspec.Struct):
     """run-time characteristics of the radio that are invariant during a test"""
