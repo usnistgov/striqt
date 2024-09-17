@@ -3,10 +3,19 @@
 from __future__ import annotations
 from channel_analysis import load, dump, open_store
 import msgspec
+from frozendict import frozendict
 from .structs import Sweep
 from pathlib import Path
+import typing
 
 __all__ = ['load', 'dump', 'read_yaml_sweep']
+
+
+def _dec_hook(type_, obj):
+    if typing.get_origin(type_) is frozendict:
+        return frozendict(obj)
+    else:
+        return obj
 
 
 def read_yaml_sweep(
@@ -18,7 +27,7 @@ def read_yaml_sweep(
         text = fd.read()
 
     # validate first
-    msgspec.yaml.decode(text, type=Sweep, strict=False)
+    msgspec.yaml.decode(text, type=Sweep, strict=False, dec_hook=_dec_hook)
 
     # build a dict to extract the list of sweep fields and apply defaults
     tree = msgspec.yaml.decode(text, type=dict, strict=False)
@@ -43,6 +52,6 @@ def read_yaml_sweep(
         dict(defaults, **c, **adjust_captures) for c in tree['captures']
     ]
 
-    run = msgspec.convert(tree, type=Sweep, strict=False)
+    run = msgspec.convert(tree, type=Sweep, strict=False, dec_hook=_dec_hook)
 
     return run, sweep_fields
