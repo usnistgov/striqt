@@ -70,7 +70,7 @@ def _y_factor_power_corrections(
     enr = 10 ** (enr_dB / 10.0)
 
     power = (
-        dataset.power_time_series.sel(power_detector='rms', drop=True)
+        dataset.channel_power_time_series.sel(power_detector='rms', drop=True)
         .pipe(lambda x: 10 ** (x / 10.0))
         .mean(dim='time_elapsed')
     )
