@@ -114,6 +114,8 @@ class _RadioCaptureAnalyzer:
 
         # for speed, update the values, rather than instantiating new coords from scratch
         for field in capture.__struct_fields__:
+            if field == 'external':
+                continue
             value = getattr(capture, field)
             if isinstance(value, str):
                 # to coerce strings as variable-length types later for storage
