@@ -96,7 +96,7 @@ class _RadioCaptureAnalyzer:
 
             # these are coordinates - drop from attrs
             for name in coords.keys():
-                del analysis.attrs[name]
+                analysis.attrs.pop(name, None)
 
         if self.extra_attrs is not None:
             analysis.attrs.update(self.extra_attrs)
