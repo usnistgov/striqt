@@ -1,5 +1,7 @@
 """evaluation of IQ data into analysis products packaged into xarray.DataArray and xarray.Dataset"""
 
+from . import io
+
 from . import dataarrays, source, structs, type_stubs
 
 from .io import load, dump, open_store

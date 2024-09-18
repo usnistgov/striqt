@@ -1,50 +1,47 @@
-"""IIR filter functions backported from cupy 13.x"""
+"""cupyx.scipy IIR filter functions backported from cupy 13.x"""
 
 import cupy
 from cupy._core._scalar import get_typename
 from cupy._core.internal import _normalize_axis_index
 from itertools import product
 from cupy_backends.cuda.api import runtime
-import numba as nb
-import numba.cuda
-import math
 
 
-@nb.cuda.jit
-def _corr_at_indices_cuda(inds, x, nfft: int, ncp: int, norm: bool, out):
-    # iterate on parallel across the points in the output correlation
-    j = nb.cuda.grid(1)
+# @nb.cuda.jit
+# def _corr_at_indices_cuda(inds, x, nfft: int, ncp: int, norm: bool, out):
+#     # iterate on parallel across the points in the output correlation
+#     j = nb.cuda.grid(1)
 
-    if j < nfft + ncp:
-        # from here on, the numba code is identical to _corr_at_indices_cpu
-        accum_corr = nb.complex128(0 + 0j)
-        accum_power_a = nb.float64(0.0)
-        accum_power_b = nb.float64(0.0)
+#     if j < nfft + ncp:
+#         # from here on, the numba code is identical to _corr_at_indices_cpu
+#         accum_corr = nb.complex128(0 + 0j)
+#         accum_power_a = nb.float64(0.0)
+#         accum_power_b = nb.float64(0.0)
 
-        # i: the sample index of each waveform sample to compare against its cyclic shift
-        for i in range(inds.shape[0]):
-            ix = inds[i] + j
+#         # i: the sample index of each waveform sample to compare against its cyclic shift
+#         for i in range(inds.shape[0]):
+#             ix = inds[i] + j
 
-            if ix > x.shape[0]:
-                break
+#             if ix > x.shape[0]:
+#                 break
 
-            a = x[ix]
-            b = x[ix + nfft]
-            bconj = b.conjugate()
-            accum_corr += a * bconj
-            if norm:
-                accum_power_a += (a * a.conjugate()).real
-                accum_power_b += (b * bconj).real
+#             a = x[ix]
+#             b = x[ix + nfft]
+#             bconj = b.conjugate()
+#             accum_corr += a * bconj
+#             if norm:
+#                 accum_power_a += (a * a.conjugate()).real
+#                 accum_power_b += (b * bconj).real
 
-        if norm:
-            # normalize by the standard deviation under the assumption
-            # that the voltage has a mean of zero
-            accum_corr /= math.sqrt(accum_power_a * accum_power_b)
-        else:
-            # power normalization: scale by number of indices
-            accum_corr /= inds.shape[0]
+#         if norm:
+#             # normalize by the standard deviation under the assumption
+#             # that the voltage has a mean of zero
+#             accum_corr /= math.sqrt(accum_power_a * accum_power_b)
+#         else:
+#             # power normalization: scale by number of indices
+#             accum_corr /= inds.shape[0]
 
-        out[j] = accum_corr
+#         out[j] = accum_corr
 
 
 IIR_SOS_KERNEL = r"""

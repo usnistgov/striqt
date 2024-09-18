@@ -1,6 +1,5 @@
 from __future__ import annotations
 import typing
-
 import labbench as lb
 
 from . import structs, type_stubs

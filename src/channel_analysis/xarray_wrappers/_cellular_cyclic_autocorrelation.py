@@ -1,17 +1,24 @@
 from __future__ import annotations
+import numbers
 import typing
-from functools import lru_cache
-import numpy as np
-import numba as nb
+import functools
 from dataclasses import dataclass
-from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
-import iqwaveform
-from .. import structs, dataarrays
-import array_api_compat
-import math
 
-ofdm = iqwaveform.util.lazy_import('iqwaveform.ofdm')
-pd = iqwaveform.util.lazy_import('pandas')
+
+import numpy as np
+from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
+
+import iqwaveform
+from .. import structs, dataarrays, type_stubs
+
+
+if typing.TYPE_CHECKING:
+    from iqwaveform import ofdm
+    import pandas as pd
+
+else:
+    ofdm = iqwaveform.util.lazy_import('iqwaveform.ofdm')
+    pd = iqwaveform.util.lazy_import('pandas')
 
 
 ### Time elapsed dimension and coordinates
@@ -25,11 +32,11 @@ class CyclicSampleLagCoords:
     # units: Attr[str] = 's'
 
     @staticmethod
-    @lru_cache
+    @functools.lru_cache
     def factory(
         capture: structs.Capture, *, subcarrier_spacings: tuple[float, ...], **_
     ) -> dict[str, np.ndarray]:
-        max_len = _get_correlation_length(
+        max_len = _get_max_corr_size(
             capture, subcarrier_spacings=subcarrier_spacings
         )
         axis_name = typing.get_args(CyclicSampleLagAxis)[0]
@@ -47,7 +54,7 @@ class SubcarrierSpacingCoords:
     units: Attr[str] = 'Hz'
 
     @staticmethod
-    @lru_cache
+    @functools.lru_cache
     def factory(
         capture: structs.Capture, *, subcarrier_spacings: tuple[float, ...], **_
     ):
@@ -64,40 +71,72 @@ class CellularCyclicAutocorrelation(AsDataArray):
     subcarrier_spacing: Coordof[SubcarrierSpacingCoords]
     cyclic_sample_lag: Coordof[CyclicSampleLagCoords]
 
-
 ### iqwaveform wrapper
 @dataarrays.as_registered_channel_analysis(CellularCyclicAutocorrelation)
 def cellular_cyclic_autocorrelation(
-    iq,
+    iq: type_stubs.ArrayLike,
     capture: structs.Capture,
     *,
-    subcarrier_spacings: tuple[float, ...] = (15e3, 30e3, 60e3),
-    frame_range: tuple[int, typing.Optional[int]] = (0, 1),
-    slot_range: tuple[int, typing.Optional[int]] = (0, None),
-    symbol_range: tuple[int, typing.Optional[int]] = (0, None),
+    subcarrier_spacings: typing.Union[float,tuple[float, ...]] = (15e3, 30e3, 60e3),
+    frame_range: typing.Union[int,tuple[int, typing.Optional[int]]] = (0, 1),
+    slot_range: typing.Union[int,tuple[int, typing.Optional[int]]] = (0, None),
+    symbol_range: typing.Union[int,tuple[int, typing.Optional[int]]] = (0, None),
     normalize: bool = True,
-):
+) -> type_stubs.ArrayLike:
+    """evaluate the cyclic autocorrelation of the IQ sequence based on 4G or 5G cellular
+    cyclic prefix sample lag offsets.
+
+    The correlation can be configured to evaluate across specified ranges of frame
+    indices, slot indices (across the frames), and symbol indices (across the slots).
+    Each range may be specified as a single number ("first $N$ indices") or as a
+    tuple that is passed to the python builtin `range`.
+
+    Args:
+        iq: the input waveform
+        capture: the waveform capture specification
+        subcarrier_spacings: cellular SCS to evaluate (currently supports 15e3, 30e3, or 60e3)
+        frame_range: the frame indices to evaluate
+        slot_range: the slots to evaluate within all indexed frames
+        symbol_range: the symbols to evaluate within all indexed slots
+        normalize: if True, results are normalized as autocorrelation (0 to 1);
+            otherwise, autocovariance (power)
+
+    Returns:
+        an float32-valued array with matching the array type of `iq`
+    """
+    
     RANGE_MAP = {'frames': frame_range, 'slots': slot_range, 'symbols': symbol_range}
+
     xp = iqwaveform.util.array_namespace(iq)
     subcarrier_spacings = tuple(subcarrier_spacings)
     phy_scs = _get_phy_mappings(capture.analysis_bandwidth, subcarrier_spacings, xp=xp)
     metadata = {}
 
-    kws = {'norm': normalize}
+    if isinstance(subcarrier_spacings, numbers.Number):
+        subcarrier_spacings = tuple(subcarrier_spacings,)
+
+    # transform the indexing arguments into the form expected by phy.index_cyclic_prefix
+    idx_kws = {}
     for name, field_range in RANGE_MAP.items():
-        field_range = tuple(field_range)
+        if isinstance(field_range, numbers.Number):
+            field_range = (field_range,)
+        else:
+            field_range = tuple(field_range)
         metadata[name] = field_range
 
         if field_range in ((0,), (None, None), (0, None)):
-            kws[name] = 'all'
+            idx_kws[name] = 'all'
         else:
-            kws[name] = tuple(range(*field_range))
+            idx_kws[name] = tuple(range(*field_range))
 
-    max_len = _get_correlation_length(capture, subcarrier_spacings=subcarrier_spacings)
+    max_len = _get_max_corr_size(capture, subcarrier_spacings=subcarrier_spacings)
 
     result = xp.full((len(subcarrier_spacings), max_len), np.nan, dtype=np.float32)
     for i, phy in enumerate(phy_scs.values()):
-        R = _correlate_cyclic_prefixes(iq, phy, **kws)
+        # R = _correlate_cyclic_prefixes(iq, phy, **kws)
+        cp_inds = phy.index_cyclic_prefix(**idx_kws)
+        R = ofdm.corr_at_indices(cp_inds, iq, phy.nfft, norm=normalize)
+
         result[i][: R.size] = xp.abs(R)
 
     if normalize:
@@ -108,7 +147,7 @@ def cellular_cyclic_autocorrelation(
     return result, metadata
 
 
-@lru_cache
+@functools.lru_cache
 def _get_phy_mappings(
     channel_bandwidth: float, subcarrier_spacings: tuple[float, ...], xp=np
 ) -> dict[str]:
@@ -117,140 +156,9 @@ def _get_phy_mappings(
     }
 
 
-@lru_cache
-def _get_correlation_length(
+@functools.lru_cache
+def _get_max_corr_size(
     capture: structs.Capture, *, subcarrier_spacings: tuple[float, ...]
 ):
     phy_scs = _get_phy_mappings(capture.analysis_bandwidth, subcarrier_spacings)
     return max([np.diff(phy.cp_start_idx).min() for phy in phy_scs.values()])
-
-
-def _correlate_cyclic_prefixes(
-    iq,
-    phy,
-    *,
-    frames: tuple = (0,),
-    sample_rate_error: float = 0.0,
-    norm: bool = False,
-    idx_reduction: str = 'corr',
-    **idx_kwargs,
-):
-    """perform correlation at the all CP index offsets as used in maximum likelihood detection.
-
-    Args:
-        iq (_type_): _description_
-        phy (PhyOFDM): _description_
-        frames (tuple, optional): _description_. Defaults to (0,).
-        sample_rate_error (float, optional): _description_. Defaults to 0.0.
-        norm (bool, optional): _description_. Defaults to False.
-        idx_reduction: how to reduce additional indexing axes:
-            'corr' to correlate along the index, or None to return the np.ndarray for analysis
-        idx_kwargs: keyword arguments passed to phy.index_cyclic_prefix
-
-    Returns:
-        _type_: _description_
-    """
-
-    xp = iqwaveform.util.array_namespace(iq)
-
-    frames = iqwaveform.ofdm._index_or_all(
-        frames,
-        '"frames" argument',
-        size=round(iq.size / phy.frame_size),
-    )
-
-    cp_inds = phy.index_cyclic_prefix(frames=tuple(frames), **idx_kwargs)
-
-    if sample_rate_error != 0:
-        cp_inds = (cp_inds * (1 + sample_rate_error)).round().astype(int)
-
-    # if idx_reduction == 'corr':
-    #     corr_axes = tuple(range(cp_inds.ndim - 1))
-    # elif idx_reduction in ('peak', None):
-    #     corr_axes = (-3, -2)
-    # else:
-    #     raise ValueError('idx_reduction must be one of "corr", "peak", or None')
-
-    # R = -_correlate_along_axis(a, b, axes=corr_axes, norm=norm, _summand=summand)
-    R = corr_at_indices(cp_inds, iq, phy.nfft, norm=norm)
-
-    # corr_size = np.prod([cp_inds.shape[i] for i in corr_axes])
-    # R /= corr_size
-
-    # power = xp.mean(power, axis=corr_axes) / cp_inds.shape[-1]
-
-    return R  # , power
-
-
-try:
-    from ..cuda_kernels import _corr_at_indices_cuda
-except ModuleNotFoundError:
-    pass
-
-
-@nb.njit(
-    [
-        (nb.int32[:], nb.complex64[:], nb.int32, nb.int32, nb.boolean, nb.complex64[:]),
-        (nb.int32[:], nb.complex64[:], nb.int64, nb.int32, nb.boolean, nb.complex64[:]),
-        (nb.int64[:], nb.complex64[:], nb.int32, nb.int32, nb.boolean, nb.complex64[:]),
-        (nb.int64[:], nb.complex64[:], nb.int64, nb.int32, nb.boolean, nb.complex64[:]),
-        (nb.int32[:], nb.complex64[:], nb.int32, nb.int64, nb.boolean, nb.complex64[:]),
-        (nb.int32[:], nb.complex64[:], nb.int64, nb.int64, nb.boolean, nb.complex64[:]),
-        (nb.int64[:], nb.complex64[:], nb.int32, nb.int64, nb.boolean, nb.complex64[:]),
-        (nb.int64[:], nb.complex64[:], nb.int64, nb.int64, nb.boolean, nb.complex64[:]),
-    ],
-    parallel=True,
-)
-def _corr_at_indices_cpu(inds, x, nfft: int, ncp: int, norm: bool, out):
-    # j: autocorrelation sequence (output) index
-    for j in nb.prange(nfft + ncp):
-        accum_corr = nb.complex128(0 + 0j)
-        accum_power_a = nb.float64(0.0)
-        accum_power_b = nb.float64(0.0)
-
-        # i: the sample index of each waveform sample to compare against its cyclic shift
-        for i in range(inds.shape[0]):
-            ix = inds[i] + j
-
-            if ix > x.shape[0]:
-                break
-
-            a = x[ix]
-            b = x[ix + nfft]
-            bconj = b.conjugate()
-            accum_corr += a * bconj
-            if norm:
-                accum_power_a += (a * a.conjugate()).real
-                accum_power_b += (b * bconj).real
-
-        if norm:
-            # normalize by the standard deviation under the assumption
-            # that the voltage has a mean of zero
-            accum_corr /= math.sqrt(accum_power_a * accum_power_b)
-        else:
-            # power normalization: scale by number of indices
-            accum_corr /= inds.shape[0]
-
-        out[j] = accum_corr
-
-
-def corr_at_indices(inds, x, nfft, norm=True, out=None):
-    xp = iqwaveform.util.array_namespace(x)
-
-    # the number of waveform samples per cyclic prefix
-    ncp = inds.shape[-1]
-    flat_inds = inds.flatten()
-
-    if out is None:
-        out = xp.empty(nfft + ncp, dtype=x.dtype)
-
-    if xp is array_api_compat.numpy:
-        _corr_at_indices_cpu(flat_inds, x, nfft, ncp, norm, out)
-
-    else:
-        tpb = 32
-        bpg = max((x.size + (tpb - 1)) // tpb, 1)
-
-        _corr_at_indices_cuda[bpg, tpb](flat_inds, x, int(nfft), int(ncp), norm, out)
-
-    return out
