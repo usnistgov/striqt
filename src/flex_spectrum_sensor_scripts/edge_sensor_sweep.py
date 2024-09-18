@@ -1,8 +1,49 @@
 """this is installed into the shell PATH environment as configured by pyproject.toml"""
-
+from __future__ import annotations
 import click
 from pathlib import Path
-from typing import Optional
+import typing
+import sys
+import importlib.util
+
+
+def lazy_import(module_name: str):
+    """postponed imports of the module with the specified name.
+
+    The import is not performed until the module is accessed in the code. This
+    reduces the total time to import labbench by waiting to import the module
+    until it is used.
+    """
+
+    # see https://docs.python.org/3/library/importlib.html#implementing-lazy-imports
+    try:
+        ret = sys.modules[module_name]
+        return ret
+    except KeyError:
+        pass
+
+    spec = importlib.util.find_spec(module_name)
+    if spec is None:
+        raise ImportError(f'no module found named "{module_name}"')
+    spec.loader = importlib.util.LazyLoader(spec.loader)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+if typing.TYPE_CHECKING:
+    import edge_sensor
+    import labbench as lb
+    import channel_analysis
+    import xarray as xr
+    import pickle
+else:
+    edge_sensor = lazy_import('edge_sensor')
+    lb = lazy_import('labbench')
+    channel_analysis = lazy_import('channel_analysis')
+    xr = lazy_import('xarray')
+    pickle = lazy_import('pickle')
 
 
 @click.command(
@@ -42,26 +83,15 @@ from typing import Optional
 )
 def run(
     yaml_path: Path,
-    output_path: Optional[str],
-    remote: Optional[str],
+    output_path: str|None,
+    remote: str|None,
     force: bool,
     verbose: bool,
 ):
     if output_path is None:
         output_path = Path(yaml_path).with_suffix('.zarr.zip')
 
-    # defer imports to here to make the command line --help snappier
-    from edge_sensor.actions import CAPTURE_DIM
-    from edge_sensor import read_yaml_sweep
-
-    sweep_spec = read_yaml_sweep(yaml_path)
-
-    from edge_sensor.controller import SweepController, connect
-    from edge_sensor.iq_corrections import read_calibration_corrections
-
-    import labbench as lb
-    import xarray as xr
-    from channel_analysis import dump
+    sweep_spec = edge_sensor.read_yaml_sweep(yaml_path)
 
     if verbose:
         lb.show_messages('debug')
@@ -69,18 +99,18 @@ def run(
         lb.show_messages('info')
 
     if remote is None:
-        controller = SweepController()
+        controller = edge_sensor.SweepController()
     else:
-        controller = connect(remote).root
+        controller = edge_sensor.connect(remote).root
 
     if sweep_spec.radio_setup.calibration is None:
         calibration = None
     else:
-        calibration = read_calibration_corrections(sweep_spec.radio_setup.calibration)
+        calibration = edge_sensor.read_calibration_corrections(sweep_spec.radio_setup.calibration)
 
-    generator = list(controller.iter_sweep(sweep_spec, calibration))
-    data = xr.concat(generator, CAPTURE_DIM)
+    results = list(controller.iter_sweep(sweep_spec, calibration))
+    dataset = xr.concat(results, edge_sensor.CAPTURE_DIM)
 
-    dump(output_path, data, mode='w' if force else 'a')
+    edge_sensor.dump(output_path, dataset, mode='w' if force else 'a')
 
-    click.echo(f'wrote to {output_path}')
+    lb.logger.info(f'wrote to {output_path}')
