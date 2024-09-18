@@ -129,10 +129,6 @@ class _RadioCaptureAnalyzer:
                 coords[field] = coords[field].astype('object')
             coords[field].values[:] = value
 
-        if capture_time is not None:
-            coords[CAPTURE_TIMESTAMP_NAME].values[:] = capture_time
-            coords[SWEEP_TIMESTAMP_NAME].values[:] = sweep_time
-
         return coords
 
 
