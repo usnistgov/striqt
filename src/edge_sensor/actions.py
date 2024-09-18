@@ -66,7 +66,7 @@ class _RadioCaptureAnalyzer:
     calibration: Optional[xr.Dataset] = None
 
     def __call__(
-        self, iq: type_stubs.ArrayType, timestamp, capture: RadioCapture, pickled=False
+        self, iq: type_stubs.ArrayType, capture_time, sweep_time, capture: RadioCapture, pickled=False
     ) -> xr.Dataset:
         """analyze iq from a capture and package it into a dataset"""
 
@@ -75,7 +75,7 @@ class _RadioCaptureAnalyzer:
             iq = iq_corrections.resampling_correction(
                 iq, capture, self.radio, force_calibration=self.calibration
             )
-            coords = self.get_coords(capture, timestamp=timestamp)
+            coords = self.get_coords(capture, capture_time=capture_time, sweep_time=sweep_time)
 
             analysis = channel_analysis.analyze_by_spec(
                 iq, capture, spec=self.analysis_spec
@@ -105,7 +105,7 @@ class _RadioCaptureAnalyzer:
         if self.remove_attrs is not None:
             self.remove_attrs = tuple(self.remove_attrs)
 
-    def get_coords(self, capture: RadioCapture, timestamp):
+    def get_coords(self, capture: RadioCapture, capture_time):
         coords = _capture_coord_template(self.remove_attrs).copy(deep=True)
         for field in self.remove_attrs:
             value = getattr(capture, field)
@@ -114,8 +114,8 @@ class _RadioCaptureAnalyzer:
                 coords[field] = coords[field].astype('object')
             coords[field].values[:] = value
 
-        if timestamp is not None:
-            coords[CAPTURE_TIMESTAMP_NAME].values[:] = timestamp
+        if capture_time is not None:
+            coords[CAPTURE_TIMESTAMP_NAME].values[:] = capture_time
 
         return coords
 
@@ -166,7 +166,7 @@ def iter_sweep(
     quiet=False,
     pickled=False,
     close_after=False,
-) -> Generator[xr.Dataset | None]:
+) -> Generator[xr.Dataset | bytes | None]:
     """iterate through sweep captures on the specified radio, yielding a dataset for each.
 
     Normally, for performance reasons, the first iteration consists of
@@ -181,6 +181,9 @@ def iter_sweep(
         swept_fields: the list of fields that were explicitly specified in the sweep
         calibration: if specified, the calibration data used to scale the output from full-scale to physical power
         always_yield: if `True`, yield `None` before the second capture
+        quiet: if True, log at the debug level, and show 'info' level log messages or higher only to the screen
+        pickled: if True, yield pickled `bytes` instead of xr.Datasets
+        close_after: if True, close the radio after the last capture
 
     Returns:
         An iterator of analyzed data
@@ -204,32 +207,34 @@ def iter_sweep(
     if len(sweep.captures) == 0:
         return
 
-    iq, timestamp = None, None
+    iq = None
+    capture_time = None
+    sweep_time = None
 
     # iterate across (previous, current, next) captures to support concurrency
     offset_captures = zip_offsets(sweep.captures, (-1, 0, 1), fill=None)
 
     try:
-        for cap_prev, cap_this, cap_next in offset_captures:
+        for capture_prev, capture_this, capture_next in offset_captures:
             calls = {}
 
-            if cap_this is not None:
+            if capture_this is not None:
                 # extra iteration at the end for the last analysis
                 calls['acquire'] = lb.Call(
-                    radio.acquire, cap_this, next_capture=cap_next, correction=False
+                    radio.acquire, capture_this, next_capture=capture_next, correction=False
                 )
 
-            if cap_prev is not None:
+            if capture_prev is not None:
                 # iq is only available after the first iteration
                 calls['analyze'] = lb.Call(
-                    analyze, iq, timestamp, cap_prev, pickled=pickled
+                    analyze, iq, capture_time=capture_time, sweep_time=sweep_time, capture=capture_prev, pickled=pickled
                 )
 
-            if cap_this is None:
+            if capture_this is None:
                 desc = 'last analysis'
             else:
                 # treat swept fields as coordinates/indices
-                desc = describe_capture(cap_this, swept_fields)
+                desc = describe_capture(capture_this, swept_fields)
 
             with lb.stopwatch(f'{desc} •', logger_level='debug' if quiet else 'info'):
                 ret = lb.concurrently(**calls, flatten=False)
@@ -240,7 +245,10 @@ def iter_sweep(
                 yield None
 
             if 'acquire' in ret:
-                iq, timestamp = ret['acquire']
+                iq, capture_time = ret['acquire']
+                if sweep_time is None:
+                    sweep_time = capture_time
+
     finally:
         if close_after:
             radio.close()
