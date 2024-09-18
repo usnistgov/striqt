@@ -1,9 +1,7 @@
 from __future__ import annotations
-
-from functools import lru_cache
-from dataclasses import dataclass
+import dataclasses
+import functools
 import pickle
-from typing import Optional, Generator, Any
 import typing
 
 import labbench as lb
@@ -11,8 +9,7 @@ from frozendict import frozendict
 
 from .radio import RadioDevice, NullRadio
 from .structs import Sweep, RadioCapture, get_attrs, to_builtins, describe_capture
-from .util import zip_offsets
-from . import iq_corrections, structs
+from . import iq_corrections, structs, util
 
 import channel_analysis
 from channel_analysis import type_stubs
@@ -24,6 +21,7 @@ else:
     pd = lb.util.lazy_import('pandas')
     xr = lb.util.lazy_import('xarray')
 
+
 CAPTURE_DIM = 'capture'
 SWEEP_DIM = 'sweep'
 
@@ -31,7 +29,7 @@ CAPTURE_TIMESTAMP_NAME = 'capture_time'
 SWEEP_TIMESTAMP_NAME = 'sweep_time'
 
 
-@lru_cache
+@functools.lru_cache
 def _capture_coord_template(sweep_fields: tuple[str, ...]):
     """returns a cached set of xarray coordinate for the given list of swept fields"""
 
@@ -53,7 +51,7 @@ def _capture_coord_template(sweep_fields: tuple[str, ...]):
     return xr.Coordinates(coords)
 
 
-@dataclass
+@dataclasses.dataclass
 class _RadioCaptureAnalyzer:
     """an IQ data analysis/packaging manager given a radio and desired channel analyses"""
 
@@ -61,9 +59,9 @@ class _RadioCaptureAnalyzer:
 
     radio: RadioDevice
     analysis_spec: list[channel_analysis.ChannelAnalysis]
-    remove_attrs: Optional[tuple[str, ...]] = None
-    extra_attrs: Optional[dict[str, Any]] = None
-    calibration: Optional[xr.Dataset] = None
+    remove_attrs: tuple[str, ...]|None = None
+    extra_attrs: dict[str, typing.Any]|None = None
+    calibration: xr.Dataset|None = None
 
     def __call__(
         self,
@@ -175,7 +173,7 @@ def iter_sweep(
     quiet=False,
     pickled=False,
     close_after=False,
-) -> Generator[xr.Dataset | bytes | None]:
+) -> typing.Generator[xr.Dataset | bytes | None]:
     """iterate through sweep captures on the specified radio, yielding a dataset for each.
 
     Normally, for performance reasons, the first iteration consists of
@@ -221,7 +219,7 @@ def iter_sweep(
     sweep_time = None
 
     # iterate across (previous, current, next) captures to support concurrency
-    offset_captures = zip_offsets(sweep.captures, (-1, 0, 1), fill=None)
+    offset_captures = util.zip_offsets(sweep.captures, (-1, 0, 1), fill=None)
 
     try:
         for capture_prev, capture_this, capture_next in offset_captures:
