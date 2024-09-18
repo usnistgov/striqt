@@ -36,6 +36,8 @@ def _capture_coord_template(external_fields: frozendict[str, typing.Any]):
     coords = {}
 
     for field in structs.RadioCapture.__struct_fields__:
+        if field == 'external':
+            continue
         value = getattr(capture, field)
 
         coords[field] = xr.Variable(
@@ -114,9 +116,12 @@ class _RadioCaptureAnalyzer:
 
         # for speed, update the values, rather than instantiating new coords from scratch
         for field in capture.__struct_fields__:
-            if field == 'external':
+            if field in capture.__struct_fields__:
+                value = getattr(capture, field)
+            elif field in capture.external:
+                value = capture[value]
+            else:
                 continue
-            value = getattr(capture, field)
             if isinstance(value, str):
                 # to coerce strings as variable-length types later for storage
                 coords[field] = coords[field].astype('object')
