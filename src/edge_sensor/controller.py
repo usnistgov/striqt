@@ -1,22 +1,20 @@
 from __future__ import annotations
 
-import rpyc
-import labbench as lb
-
 from itertools import zip_longest
 import pickle
 import typing
-from typing import Generator, Optional, Any
+
+import rpyc
+import labbench as lb
 
 from channel_analysis import type_stubs
-from edge_sensor import actions, util
-from edge_sensor.structs import Sweep, RadioCapture, RadioSetup, describe_capture
-from edge_sensor.radio import find_radio_cls_by_name, is_same_resource, RadioDevice
+from . import actions, util, structs
+from .radio import find_radio_cls_by_name, is_same_resource, RadioDevice
 
 if typing.TYPE_CHECKING:
     import xarray as xr
 else:
-    xr = lb.util.lazy_import('xarray')
+    xr = util.lazy_import('xarray')
 
 
 _PROTOCOL_CONFIG = {'logger': lb.logger, 'allow_pickle': True}
@@ -28,10 +26,10 @@ class SweepController:
     This is also used by `start_sensor_server` to serve remote operations.
     """
 
-    def __init__(self, radio_setup: RadioSetup = None):
+    def __init__(self, radio_setup: structs.RadioSetup = None):
         self.radios: dict[str, RadioDevice] = {}
-        self.warmed_captures: set[RadioCapture] = set()
-        self.handlers: dict[rpyc.Connection, Any] = {}
+        self.warmed_captures: set[structs.RadioCapture] = set()
+        self.handlers: dict[rpyc.Connection, typing.Any] = {}
         util.set_cuda_mem_limit()
 
         if radio_setup is not None:
@@ -49,7 +47,7 @@ class SweepController:
         if last_ex is not None:
             raise last_ex
 
-    def open_radio(self, radio_setup: RadioSetup):
+    def open_radio(self, radio_setup: structs.RadioSetup):
         driver_name = radio_setup.driver
         radio_cls = find_radio_cls_by_name(driver_name)
 
@@ -77,10 +75,10 @@ class SweepController:
 
         return radio
 
-    def close_radio(self, radio_setup: RadioSetup):
+    def close_radio(self, radio_setup: structs.RadioSetup):
         self.radios[radio_setup.driver].close()
 
-    def _describe_preparation(self, sweep: Sweep) -> str:
+    def _describe_preparation(self, sweep: structs.Sweep) -> str:
         warmup_sweep = actions.design_warmup_sweep(
             sweep, skip=tuple(self.warmed_captures)
         )
@@ -92,7 +90,7 @@ class SweepController:
         return ' and '.join(msgs)
 
     def prepare_sweep(
-        self, sweep_spec: Sweep, calibration, pickled=False
+        self, sweep_spec: structs.Sweep, calibration, pickled=False
     ):
         """open the radio while warming up the GPU"""
 
@@ -116,13 +114,13 @@ class SweepController:
 
     def iter_sweep(
         self,
-        sweep: Sweep,
+        sweep: structs.Sweep,
         calibration: type_stubs.DatasetType = None,
         always_yield: bool = False,
         quiet: bool = False,
         pickled: bool = False,
         prepare: bool = True,
-    ) -> Generator[xr.Dataset]:
+    ) -> typing.Generator[xr.Dataset]:
         # take args {3,4...N}
         kwargs = dict(locals())
         del kwargs['self'], kwargs['prepare']
@@ -164,10 +162,10 @@ class _ServerService(rpyc.Service, SweepController):
 
     def exposed_iter_sweep(
         self,
-        sweep: Sweep,
+        sweep: structs.Sweep,
         calibration: type_stubs.DatasetType = None,
         always_yield: bool = False,
-    ) -> Generator[xr.Dataset]:
+    ) -> typing.Generator[xr.Dataset]:
         """wraps actions.sweep_iter to run on the remote server.
 
         For clients, rpyc exposes this in a connection object `conn` as as `conn.root.iter_sweep`.
@@ -192,17 +190,17 @@ class _ServerService(rpyc.Service, SweepController):
 
         capture_pairs = util.zip_offsets(sweep.captures, (-1, 0), fill=None)
         descs = (
-            f'{i+1}/{len(sweep.captures)} {describe_capture(c1, c2)}'
+            f'{i+1}/{len(sweep.captures)} {actions.describe_capture(c1, c2)}'
             for i, (c1,c2) in enumerate(capture_pairs)
         )
 
-        generator = self.iter_sweep(
+        typing.Generator = self.iter_sweep(
             sweep, calibration, always_yield, pickled=True, prepare=False
         )
 
-        desc_pairs = zip_longest(generator, descs, fillvalue='last analysis')
+        desc_pairs = zip_longest(typing.Generator, descs, fillvalue='last analysis')
 
-        if generator == []:
+        if typing.Generator == []:
             return []
         else:
             return (conn.root.deliver(r, d) for r, d in desc_pairs)
@@ -218,7 +216,7 @@ class _ClientService(rpyc.Service):
         lb.logger.info('disconnected from server')
 
     def exposed_deliver(
-        self, pickled_dataset: type_stubs.DatasetType, description: Optional[str] = None
+        self, pickled_dataset: type_stubs.DatasetType, description: str|None = None
     ):
         """serialize an object back to the client via pickling"""
         if description is not None:
@@ -230,13 +228,13 @@ class _ClientService(rpyc.Service):
                 return pickle.loads(pickled_dataset)
 
 
-def start_server(host=None, port=4567, default_driver: Optional[str] = None):
+def start_server(host=None, port=4567, default_driver: str|None = None):
     """start a server to run on a sensor (blocking)"""
 
     if default_driver is None:
         default_setup = None
     else:
-        default_setup = RadioSetup(driver=default_driver)
+        default_setup = structs.RadioSetup(driver=default_driver)
 
     t = rpyc.ThreadedServer(
         _ServerService(default_setup),
