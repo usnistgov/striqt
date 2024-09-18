@@ -131,6 +131,8 @@ def describe_capture(this: structs.RadioCapture, prev: structs.RadioCapture|None
     diffs = {}
 
     for name in type(this).__struct_fields__:
+        if name == 'external':
+            continue
         value = getattr(this, name)
         if prev is None or value != getattr(prev, name):
             diffs[name] = value
