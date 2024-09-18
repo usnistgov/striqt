@@ -7,17 +7,17 @@ import msgspec
 from typing import Optional, Literal, Any
 from typing import Annotated as A
 from pathlib import Path
-from msgspec import to_builtins, convert
+from msgspec import convert
 
 import channel_analysis
 import channel_analysis.dataarrays
-from channel_analysis.structs import meta, get_attrs, ChannelAnalysis
+from channel_analysis.structs import meta, get_attrs, ChannelAnalysis, to_builtins
 
 
 _TShift = Literal['left', 'right', 'none']
 
 
-class RadioCapture(channel_analysis.Capture):
+class RadioCapture(channel_analysis.Capture, forbid_unknown_fields=True):
     """configuration for a single waveform capture"""
 
     # RF and leveling
@@ -40,7 +40,7 @@ class RadioCapture(channel_analysis.Capture):
     external: A[frozendict[str, Any], meta('External device states')] = frozendict()
 
 
-class RadioSetup(msgspec.Struct):
+class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):
     """run-time characteristics of the radio that are invariant during a test"""
 
     driver: str = 'Air7201B'
@@ -62,7 +62,7 @@ class RadioSetup(msgspec.Struct):
     ] = 0
 
 
-class Description(msgspec.Struct):
+class Description(msgspec.Struct, forbid_unknown_fields=True):
     summary: Optional[str] = None
     location: Optional[tuple[float, float, float]] = None
     signal_chain: tuple[str, ...] = ()
@@ -76,7 +76,7 @@ def describe_capture(capture: RadioCapture, swept_fields):
     return ', '.join([f'{k}={getattr(capture, k)}' for k in swept_fields])
 
 
-class Sweep(msgspec.Struct):
+class Sweep(msgspec.Struct, forbid_unknown_fields=True):
     captures: tuple[RadioCapture, ...]
     radio_setup: RadioSetup = msgspec.field(default_factory=RadioSetup)
     defaults: RadioCapture = msgspec.field(default_factory=RadioCapture)
