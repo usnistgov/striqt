@@ -86,10 +86,10 @@ class SweepController:
         )
         msgs = []
         if sweep.radio_setup.driver not in self.radios:
-            msgs += [f'opening {sweep.radio_setup.driver} radio']
+            msgs += ['opening radio']
         if len(warmup_sweep.captures) > 0:
             msgs += [
-                f'warming GPU DSP with {len(warmup_sweep.captures)} empty captures'
+                f'warming GPU ({len(warmup_sweep.captures)} empty captures)'
             ]
         return ' and '.join(msgs)
 
@@ -124,10 +124,17 @@ class SweepController:
         always_yield: bool = False,
         quiet: bool = False,
         pickled: bool = False,
+        prepare: bool = True
     ) -> Generator[xr.Dataset]:
         # take args {3,4...N}
         kwargs = dict(locals())
         del kwargs['self']
+
+        if prepare:
+            prep_msg = self._describe_preparation(sweep)
+            if prep_msg:
+                lb.logger.info(prep_msg)
+            self.prepare_sweep(sweep, swept_fields, calibration, pickled=True)
 
         radio = self.open_radio(sweep.radio_setup)
         radio.setup(sweep.radio_setup)
@@ -160,7 +167,7 @@ class _ServerService(rpyc.Service, SweepController):
 
     def exposed_iter_sweep(
         self,
-        sweep_spec: Sweep,
+        sweep: Sweep,
         swept_fields: list[str],
         calibration: type_stubs.DatasetType = None,
         always_yield: bool = False,
@@ -173,28 +180,28 @@ class _ServerService(rpyc.Service, SweepController):
         accessed by the server.
         """
 
-        conn = sweep_spec.____conn__
-        sweep_spec = rpyc.utils.classic.obtain(sweep_spec)
+        conn = sweep.____conn__
+        sweep = rpyc.utils.classic.obtain(sweep)
         swept_fields = rpyc.utils.classic.obtain(swept_fields)
 
         with lb.stopwatch(
-            f'obtaining calibration data {str(sweep_spec.radio_setup.calibration)}'
+            f'obtaining calibration data {str(sweep.radio_setup.calibration)}'
         ):
             calibration = rpyc.utils.classic.obtain(calibration)
 
-        prep_msg = self._describe_preparation(sweep_spec)
+        prep_msg = self._describe_preparation(sweep)
         if prep_msg:
             conn.root.deliver(None, prep_msg)
             lb.logger.info(prep_msg)
-        self.prepare_sweep(sweep_spec, swept_fields, calibration, pickled=True)
+        self.prepare_sweep(sweep, swept_fields, calibration, pickled=True)
 
         descs = (
-            f'{i+1}/{len(sweep_spec.captures)} {describe_capture(c, swept_fields)}'
-            for i, c in enumerate(sweep_spec.captures)
+            f'{i+1}/{len(sweep.captures)} {describe_capture(c, swept_fields)}'
+            for i, c in enumerate(sweep.captures)
         )
 
         generator = self.iter_sweep(
-            sweep_spec, swept_fields, calibration, always_yield, pickled=True
+            sweep, swept_fields, calibration, always_yield, pickled=True, prepare=False
         )
 
         desc_pairs = zip_longest(generator, descs, fillvalue='last analysis')
