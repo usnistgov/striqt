@@ -8,7 +8,6 @@ import labbench as lb
 from frozendict import frozendict
 
 from .radio import RadioDevice, NullRadio
-from .structs import Sweep, RadioCapture, get_attrs, to_builtins, describe_capture
 from . import iq_corrections, structs, util
 
 import channel_analysis
@@ -30,15 +29,22 @@ SWEEP_TIMESTAMP_NAME = 'sweep_time'
 
 
 @functools.lru_cache
-def _capture_coord_template(sweep_fields: tuple[str, ...]):
+def _capture_coord_template(external_fields: frozendict[str, typing.Any]):
     """returns a cached set of xarray coordinate for the given list of swept fields"""
 
-    capture = RadioCapture()
+    capture = structs.RadioCapture()
     coords = {}
 
-    for field in sweep_fields:
+    for field in structs.RadioCapture.__struct_fields__:
+        value = getattr(capture, field)
+
         coords[field] = xr.Variable(
-            (CAPTURE_DIM, SWEEP_DIM), [[getattr(capture, field)]], fastpath=True
+            (CAPTURE_DIM, SWEEP_DIM), [[value]], fastpath=True
+        )
+
+    for field, value in external_fields.items():
+        coords[field] = xr.Variable(
+            (CAPTURE_DIM, SWEEP_DIM), [[value]], fastpath=True
         )
 
     coords[CAPTURE_TIMESTAMP_NAME] = xr.Variable(
@@ -59,7 +65,6 @@ class _RadioCaptureAnalyzer:
 
     radio: RadioDevice
     analysis_spec: list[channel_analysis.ChannelAnalysis]
-    remove_attrs: tuple[str, ...]|None = None
     extra_attrs: dict[str, typing.Any]|None = None
     calibration: xr.Dataset|None = None
 
@@ -68,7 +73,7 @@ class _RadioCaptureAnalyzer:
         iq: type_stubs.ArrayType,
         capture_time,
         sweep_time,
-        capture: RadioCapture,
+        capture: structs.RadioCapture,
         pickled=False,
     ) -> xr.Dataset:
         """analyze iq from a capture and package it into a dataset"""
@@ -86,16 +91,8 @@ class _RadioCaptureAnalyzer:
                 iq, capture, spec=self.analysis_spec
             )
 
-            analysis = analysis.expand_dims((CAPTURE_DIM, SWEEP_DIM)).assign_coords(
-                coords
-            )
-
-        if self.remove_attrs is not None:
-            for f in self.remove_attrs:
-                del analysis.attrs[f]
-
-        for k in tuple(self.remove_attrs):
-            analysis[k].attrs.update(get_attrs(RadioCapture, k))
+            extra_dims = (CAPTURE_DIM, SWEEP_DIM)
+            analysis = analysis.expand_dims(extra_dims).assign_coords(coords)
 
         if self.extra_attrs is not None:
             analysis.attrs.update(self.extra_attrs)
@@ -108,13 +105,11 @@ class _RadioCaptureAnalyzer:
         else:
             return analysis
 
-    def __post_init__(self):
-        if self.remove_attrs is not None:
-            self.remove_attrs = tuple(self.remove_attrs)
+    def get_coords(self, capture: structs.RadioCapture, capture_time, sweep_time):
+        coords = _capture_coord_template(capture.external).copy(deep=True)
 
-    def get_coords(self, capture: RadioCapture, capture_time, sweep_time):
-        coords = _capture_coord_template(self.remove_attrs).copy(deep=True)
-        for field in self.remove_attrs:
+        # for speed, update the values, rather than instantiating new coords from scratch
+        for field in capture.__struct_fields__:
             value = getattr(capture, field)
             if isinstance(value, str):
                 # to coerce strings as variable-length types later for storage
@@ -124,7 +119,6 @@ class _RadioCaptureAnalyzer:
         if capture_time is not None:
             coords[CAPTURE_TIMESTAMP_NAME].values[:] = capture_time
             coords[SWEEP_TIMESTAMP_NAME].values[:] = sweep_time
-
 
         return coords
 
@@ -168,7 +162,7 @@ def design_warmup_sweep(
 
 def iter_sweep(
     radio: RadioDevice,
-    sweep: Sweep,
+    sweep: structs.Sweep,
     swept_fields: list[str],
     calibration: type_stubs.DatasetType = None,
     always_yield=False,
@@ -201,14 +195,13 @@ def iter_sweep(
     attrs = {
         # metadata fields
         'radio_id': radio.id,
-        'radio_setup': to_builtins(sweep.radio_setup),
-        'description': to_builtins(sweep.description),
+        'radio_setup': structs.to_builtins(sweep.radio_setup),
+        'description': structs.to_builtins(sweep.description),
     }
 
     analyze = _RadioCaptureAnalyzer(
         radio=radio,
         analysis_spec=sweep.channel_analysis,
-        remove_attrs=swept_fields,
         extra_attrs=attrs,
         calibration=calibration,
     )
@@ -251,7 +244,7 @@ def iter_sweep(
                 desc = 'last analysis'
             else:
                 # treat swept fields as coordinates/indices
-                desc = describe_capture(capture_this, swept_fields)
+                desc = structs.describe_capture(capture_this, swept_fields)
 
             with lb.stopwatch(f'{desc} •', logger_level='debug' if quiet else 'info'):
                 ret = lb.concurrently(**calls, flatten=False)
