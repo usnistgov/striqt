@@ -25,26 +25,29 @@ else:
     xr = lb.util.lazy_import('xarray')
 
 CAPTURE_DIM = 'capture'
-TIMESTAMP_NAME = 'timestamp'
+SWEEP_DIM = 'sweep'
+
+CAPTURE_TIMESTAMP_NAME = 'capture_time'
+SWEEP_TIMESTAMP_NAME = 'sweep_time'
 
 
 @lru_cache
 def _capture_coord_template(sweep_fields: tuple[str, ...]):
-    """returns a valid cached xarray coordinate for the given list of swept fields.
-
-    the
-    """
+    """returns a cached set of xarray coordinate for the given list of swept fields"""
 
     capture = RadioCapture()
     coords = {}
 
     for field in sweep_fields:
         coords[field] = xr.Variable(
-            (CAPTURE_DIM,), [getattr(capture, field)], fastpath=True
+            (CAPTURE_DIM,SWEEP_DIM), [getattr(capture, field)], fastpath=True
         )
 
-    coords[TIMESTAMP_NAME] = xr.Variable(
+    coords[CAPTURE_TIMESTAMP_NAME] = xr.Variable(
         (CAPTURE_DIM,), [pd.Timestamp('now')], fastpath=True
+    )
+    coords[SWEEP_TIMESTAMP_NAME] = xr.Variable(
+        (SWEEP_DIM,), [pd.Timestamp('now')], fastpath=True
     )
 
     return xr.Coordinates(coords)
@@ -78,7 +81,7 @@ class _RadioCaptureAnalyzer:
                 iq, capture, spec=self.analysis_spec
             )
 
-            analysis = analysis.expand_dims(CAPTURE_DIM).assign_coords(coords)
+            analysis = analysis.expand_dims((CAPTURE_DIM, SWEEP_DIM)).assign_coords(coords)
 
         if self.remove_attrs is not None:
             for f in self.remove_attrs:
@@ -90,7 +93,8 @@ class _RadioCaptureAnalyzer:
         if self.extra_attrs is not None:
             analysis.attrs.update(self.extra_attrs)
 
-        analysis[TIMESTAMP_NAME].attrs.update(label='Capture start time')
+        analysis[CAPTURE_TIMESTAMP_NAME].attrs.update(label='Capture start time')
+        analysis[SWEEP_TIMESTAMP_NAME].attrs.update(label='Sweep start time')
 
         if pickled:
             return pickle.dumps(analysis)
@@ -111,7 +115,7 @@ class _RadioCaptureAnalyzer:
             coords[field].values[:] = value
 
         if timestamp is not None:
-            coords[TIMESTAMP_NAME].values[:] = timestamp
+            coords[CAPTURE_TIMESTAMP_NAME].values[:] = timestamp
 
         return coords
 
