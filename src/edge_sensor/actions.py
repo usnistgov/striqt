@@ -94,6 +94,10 @@ class _RadioCaptureAnalyzer:
             extra_dims = (CAPTURE_DIM, SWEEP_DIM)
             analysis = analysis.expand_dims(extra_dims).assign_coords(coords)
 
+            # these are coordinates - drop from attrs
+            for name in coords.keys():
+                del analysis.attrs[name]
+
         if self.extra_attrs is not None:
             analysis.attrs.update(self.extra_attrs)
 
