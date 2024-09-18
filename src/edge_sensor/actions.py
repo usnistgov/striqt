@@ -112,7 +112,7 @@ class _RadioCaptureAnalyzer:
         if self.remove_attrs is not None:
             self.remove_attrs = tuple(self.remove_attrs)
 
-    def get_coords(self, capture: RadioCapture, capture_time):
+    def get_coords(self, capture: RadioCapture, capture_time, sweep_time):
         coords = _capture_coord_template(self.remove_attrs).copy(deep=True)
         for field in self.remove_attrs:
             value = getattr(capture, field)
@@ -123,6 +123,8 @@ class _RadioCaptureAnalyzer:
 
         if capture_time is not None:
             coords[CAPTURE_TIMESTAMP_NAME].values[:] = capture_time
+            coords[SWEEP_TIMESTAMP_NAME].values[:] = sweep_time
+
 
         return coords
 
