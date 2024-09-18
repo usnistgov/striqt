@@ -31,7 +31,6 @@ def read_yaml_sweep(
 
     # build a dict to extract the list of sweep fields and apply defaults
     tree = msgspec.yaml.decode(text, type=dict, strict=False)
-    sweep_fields = sorted(set.union(*[set(c) for c in tree['captures']]) - {'external'})
 
     # apply default capture settings
     defaults = tree['defaults']
@@ -54,4 +53,4 @@ def read_yaml_sweep(
 
     run = msgspec.convert(tree, type=Sweep, strict=False, dec_hook=_dec_hook)
 
-    return run, sweep_fields
+    return run

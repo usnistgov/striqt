@@ -17,6 +17,10 @@ from channel_analysis.structs import meta, get_attrs, ChannelAnalysis, to_builti
 _TShift = Literal['left', 'right', 'none']
 
 
+def _make_default_analysis():
+    return channel_analysis.dataarrays.as_registered_channel_analysis.spec_type()()
+
+
 class RadioCapture(channel_analysis.Capture, forbid_unknown_fields=True):
     """configuration for a single waveform capture"""
 
@@ -66,14 +70,6 @@ class Description(msgspec.Struct, forbid_unknown_fields=True):
     summary: Optional[str] = None
     location: Optional[tuple[float, float, float]] = None
     signal_chain: tuple[str, ...] = ()
-
-
-def _make_default_analysis():
-    return channel_analysis.dataarrays.as_registered_channel_analysis.spec_type()()
-
-
-def describe_capture(capture: RadioCapture, swept_fields):
-    return ', '.join([f'{k}={getattr(capture, k)}' for k in swept_fields])
 
 
 class Sweep(msgspec.Struct, forbid_unknown_fields=True):

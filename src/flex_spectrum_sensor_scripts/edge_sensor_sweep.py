@@ -54,7 +54,7 @@ def run(
     from edge_sensor.actions import CAPTURE_DIM
     from edge_sensor import read_yaml_sweep
 
-    sweep_spec, sweep_fields = read_yaml_sweep(yaml_path)
+    sweep_spec = read_yaml_sweep(yaml_path)
 
     from edge_sensor.controller import SweepController, connect
     from edge_sensor.iq_corrections import read_calibration_corrections
@@ -78,7 +78,7 @@ def run(
     else:
         calibration = read_calibration_corrections(sweep_spec.radio_setup.calibration)
 
-    generator = list(controller.iter_sweep(sweep_spec, sweep_fields, calibration))
+    generator = list(controller.iter_sweep(sweep_spec, calibration))
     data = xr.concat(generator, CAPTURE_DIM)
 
     dump(output_path, data, mode='w' if force else 'a')

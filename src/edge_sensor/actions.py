@@ -127,6 +127,25 @@ def _frozensubset(d: dict | frozendict, keys: list[str]) -> frozendict:
     return frozendict({k: d[k] for k in keys})
 
 
+def describe_capture(this: structs.RadioCapture, prev: structs.RadioCapture|None = None):
+    diffs = {}
+
+    for name in type(this).__struct_fields__:
+        value = getattr(this, name)
+        if prev is None or value != getattr(prev, name):
+            diffs[name] = value
+
+    this_external = set(this.external.keys())
+    prev_external = set() if prev is None else set(prev.external.keys())
+    for name in this_external|prev_external:
+        value = this.external.get(name, None)
+
+        if prev is None or value != prev.external.get(name, None):
+            diffs['external.'+name] = value
+
+    return ', '.join([f'{k}={getattr(this, k)}' for k in diffs])
+
+
 def design_warmup_sweep(
     sweep: structs.Sweep, skip: tuple[structs.RadioCapture, ...]
 ) -> structs.Sweep:
@@ -163,7 +182,6 @@ def design_warmup_sweep(
 def iter_sweep(
     radio: RadioDevice,
     sweep: structs.Sweep,
-    swept_fields: list[str],
     calibration: type_stubs.DatasetType = None,
     always_yield=False,
     quiet=False,
@@ -181,7 +199,6 @@ def iter_sweep(
     Args:
         radio: the device that runs the sweep
         sweep: the specification that configures the sweep
-        swept_fields: the list of fields that were explicitly specified in the sweep
         calibration: if specified, the calibration data used to scale the output from full-scale to physical power
         always_yield: if `True`, yield `None` before the second capture
         quiet: if True, log at the debug level, and show 'info' level log messages or higher only to the screen
@@ -244,7 +261,7 @@ def iter_sweep(
                 desc = 'last analysis'
             else:
                 # treat swept fields as coordinates/indices
-                desc = structs.describe_capture(capture_this, swept_fields)
+                desc = structs.describe_capture(capture_this, capture_prev)
 
             with lb.stopwatch(f'{desc} •', logger_level='debug' if quiet else 'info'):
                 ret = lb.concurrently(**calls, flatten=False)

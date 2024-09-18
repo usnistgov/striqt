@@ -92,7 +92,7 @@ class SweepController:
         return ' and '.join(msgs)
 
     def prepare_sweep(
-        self, sweep_spec: Sweep, swept_fields: list[str], calibration, pickled=False
+        self, sweep_spec: Sweep, calibration, pickled=False
     ):
         """open the radio while warming up the GPU"""
 
@@ -102,7 +102,7 @@ class SweepController:
         self.warmed_captures = self.warmed_captures | set(warmup_sweep.captures)
         if len(warmup_sweep.captures) > 0:
             warmup_iter = self.iter_sweep(
-                warmup_sweep, swept_fields, calibration, quiet=True, pickled=pickled
+                warmup_sweep, calibration, quiet=True, pickled=pickled
             )
         else:
             return []
@@ -117,7 +117,6 @@ class SweepController:
     def iter_sweep(
         self,
         sweep: Sweep,
-        swept_fields: list[str],
         calibration: type_stubs.DatasetType = None,
         always_yield: bool = False,
         quiet: bool = False,
@@ -132,7 +131,7 @@ class SweepController:
             prep_msg = self._describe_preparation(sweep)
             if prep_msg:
                 lb.logger.info(prep_msg)
-            self.prepare_sweep(sweep, swept_fields, calibration, pickled=True)
+            self.prepare_sweep(sweep, calibration, pickled=True)
 
         radio = self.open_radio(sweep.radio_setup)
         radio.setup(sweep.radio_setup)
@@ -166,7 +165,6 @@ class _ServerService(rpyc.Service, SweepController):
     def exposed_iter_sweep(
         self,
         sweep: Sweep,
-        swept_fields: list[str],
         calibration: type_stubs.DatasetType = None,
         always_yield: bool = False,
     ) -> Generator[xr.Dataset]:
@@ -180,7 +178,6 @@ class _ServerService(rpyc.Service, SweepController):
 
         conn = sweep.____conn__
         sweep = rpyc.utils.classic.obtain(sweep)
-        swept_fields = rpyc.utils.classic.obtain(swept_fields)
 
         with lb.stopwatch(
             f'obtaining calibration data {str(sweep.radio_setup.calibration)}'
@@ -191,15 +188,16 @@ class _ServerService(rpyc.Service, SweepController):
         if prep_msg:
             conn.root.deliver(None, prep_msg)
             lb.logger.info(prep_msg)
-        self.prepare_sweep(sweep, swept_fields, calibration, pickled=True)
+        self.prepare_sweep(sweep, calibration, pickled=True)
 
+        capture_pairs = util.zip_offsets(sweep.captures, (-1, 0), fill=None)
         descs = (
-            f'{i+1}/{len(sweep.captures)} {describe_capture(c, swept_fields)}'
-            for i, c in enumerate(sweep.captures)
+            f'{i+1}/{len(sweep.captures)} {describe_capture(c1, c2)}'
+            for i, (c1,c2) in enumerate(capture_pairs)
         )
 
         generator = self.iter_sweep(
-            sweep, swept_fields, calibration, always_yield, pickled=True, prepare=False
+            sweep, calibration, always_yield, pickled=True, prepare=False
         )
 
         desc_pairs = zip_longest(generator, descs, fillvalue='last analysis')
