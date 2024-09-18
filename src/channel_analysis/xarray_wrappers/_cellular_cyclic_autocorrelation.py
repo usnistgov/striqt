@@ -36,9 +36,7 @@ class CyclicSampleLagCoords:
     def factory(
         capture: structs.Capture, *, subcarrier_spacings: tuple[float, ...], **_
     ) -> dict[str, np.ndarray]:
-        max_len = _get_max_corr_size(
-            capture, subcarrier_spacings=subcarrier_spacings
-        )
+        max_len = _get_max_corr_size(capture, subcarrier_spacings=subcarrier_spacings)
         axis_name = typing.get_args(CyclicSampleLagAxis)[0]
         return pd.RangeIndex(0, max_len, name=axis_name)
 
@@ -71,16 +69,17 @@ class CellularCyclicAutocorrelation(AsDataArray):
     subcarrier_spacing: Coordof[SubcarrierSpacingCoords]
     cyclic_sample_lag: Coordof[CyclicSampleLagCoords]
 
+
 ### iqwaveform wrapper
 @dataarrays.as_registered_channel_analysis(CellularCyclicAutocorrelation)
 def cellular_cyclic_autocorrelation(
     iq: type_stubs.ArrayLike,
     capture: structs.Capture,
     *,
-    subcarrier_spacings: typing.Union[float,tuple[float, ...]] = (15e3, 30e3, 60e3),
-    frame_range: typing.Union[int,tuple[int, typing.Optional[int]]] = (0, 1),
-    slot_range: typing.Union[int,tuple[int, typing.Optional[int]]] = (0, None),
-    symbol_range: typing.Union[int,tuple[int, typing.Optional[int]]] = (0, None),
+    subcarrier_spacings: typing.Union[float, tuple[float, ...]] = (15e3, 30e3, 60e3),
+    frame_range: typing.Union[int, tuple[int, typing.Optional[int]]] = (0, 1),
+    slot_range: typing.Union[int, tuple[int, typing.Optional[int]]] = (0, None),
+    symbol_range: typing.Union[int, tuple[int, typing.Optional[int]]] = (0, None),
     normalize: bool = True,
 ) -> type_stubs.ArrayLike:
     """evaluate the cyclic autocorrelation of the IQ sequence based on 4G or 5G cellular
@@ -104,7 +103,7 @@ def cellular_cyclic_autocorrelation(
     Returns:
         an float32-valued array with matching the array type of `iq`
     """
-    
+
     RANGE_MAP = {'frames': frame_range, 'slots': slot_range, 'symbols': symbol_range}
 
     xp = iqwaveform.util.array_namespace(iq)
@@ -113,7 +112,9 @@ def cellular_cyclic_autocorrelation(
     metadata = {}
 
     if isinstance(subcarrier_spacings, numbers.Number):
-        subcarrier_spacings = tuple(subcarrier_spacings,)
+        subcarrier_spacings = tuple(
+            subcarrier_spacings,
+        )
 
     # transform the indexing arguments into the form expected by phy.index_cyclic_prefix
     idx_kws = {}

@@ -40,7 +40,7 @@ def _capture_coord_template(sweep_fields: tuple[str, ...]):
 
     for field in sweep_fields:
         coords[field] = xr.Variable(
-            (CAPTURE_DIM,SWEEP_DIM), [getattr(capture, field)], fastpath=True
+            (CAPTURE_DIM, SWEEP_DIM), [getattr(capture, field)], fastpath=True
         )
 
     coords[CAPTURE_TIMESTAMP_NAME] = xr.Variable(
@@ -66,7 +66,12 @@ class _RadioCaptureAnalyzer:
     calibration: Optional[xr.Dataset] = None
 
     def __call__(
-        self, iq: type_stubs.ArrayType, capture_time, sweep_time, capture: RadioCapture, pickled=False
+        self,
+        iq: type_stubs.ArrayType,
+        capture_time,
+        sweep_time,
+        capture: RadioCapture,
+        pickled=False,
     ) -> xr.Dataset:
         """analyze iq from a capture and package it into a dataset"""
 
@@ -75,13 +80,17 @@ class _RadioCaptureAnalyzer:
             iq = iq_corrections.resampling_correction(
                 iq, capture, self.radio, force_calibration=self.calibration
             )
-            coords = self.get_coords(capture, capture_time=capture_time, sweep_time=sweep_time)
+            coords = self.get_coords(
+                capture, capture_time=capture_time, sweep_time=sweep_time
+            )
 
             analysis = channel_analysis.analyze_by_spec(
                 iq, capture, spec=self.analysis_spec
             )
 
-            analysis = analysis.expand_dims((CAPTURE_DIM, SWEEP_DIM)).assign_coords(coords)
+            analysis = analysis.expand_dims((CAPTURE_DIM, SWEEP_DIM)).assign_coords(
+                coords
+            )
 
         if self.remove_attrs is not None:
             for f in self.remove_attrs:
@@ -173,7 +182,7 @@ def iter_sweep(
     `(capture 1) ➔ concurrent(capture 2, analysis 1) ➔ (yield analysis 1)`.
     The `always_yield` argument is provided to allow synchronization of hardware between capture 1 and capture 2:
     `(capture 1) ➔ yield None ➔ concurrent(capture 2, analysis 1) ➔ (yield analysis 1)`.
-    Added checks are needed to filter out the `None` before recording data.
+    Added checks are needed to handle `None` before recording data.
 
     Args:
         radio: the device that runs the sweep
@@ -221,13 +230,21 @@ def iter_sweep(
             if capture_this is not None:
                 # extra iteration at the end for the last analysis
                 calls['acquire'] = lb.Call(
-                    radio.acquire, capture_this, next_capture=capture_next, correction=False
+                    radio.acquire,
+                    capture_this,
+                    next_capture=capture_next,
+                    correction=False,
                 )
 
             if capture_prev is not None:
                 # iq is only available after the first iteration
                 calls['analyze'] = lb.Call(
-                    analyze, iq, capture_time=capture_time, sweep_time=sweep_time, capture=capture_prev, pickled=pickled
+                    analyze,
+                    iq,
+                    capture_time=capture_time,
+                    sweep_time=sweep_time,
+                    capture=capture_prev,
+                    pickled=pickled,
                 )
 
             if capture_this is None:

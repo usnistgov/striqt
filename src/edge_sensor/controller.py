@@ -88,9 +88,7 @@ class SweepController:
         if sweep.radio_setup.driver not in self.radios:
             msgs += ['opening radio']
         if len(warmup_sweep.captures) > 0:
-            msgs += [
-                f'warming GPU ({len(warmup_sweep.captures)} empty captures)'
-            ]
+            msgs += [f'warming GPU ({len(warmup_sweep.captures)} empty captures)']
         return ' and '.join(msgs)
 
     def prepare_sweep(
@@ -124,7 +122,7 @@ class SweepController:
         always_yield: bool = False,
         quiet: bool = False,
         pickled: bool = False,
-        prepare: bool = True
+        prepare: bool = True,
     ) -> Generator[xr.Dataset]:
         # take args {3,4...N}
         kwargs = dict(locals())
