@@ -114,14 +114,16 @@ class _RadioCaptureAnalyzer:
     def get_coords(self, capture: structs.RadioCapture, capture_time, sweep_time):
         coords = _capture_coord_template(capture.external).copy(deep=True)
 
-        # for speed, update the values, rather than instantiating new coords from scratch
-        for field in capture.__struct_fields__:
+        for field in coords.keys():
             if field in capture.__struct_fields__:
                 value = getattr(capture, field)
             elif field in capture.external:
                 value = capture[value]
-            else:
-                continue
+            elif field == CAPTURE_TIMESTAMP_NAME:
+                value = capture_time
+            elif field == SWEEP_TIMESTAMP_NAME:
+                value = sweep_time
+
             if isinstance(value, str):
                 # to coerce strings as variable-length types later for storage
                 coords[field] = coords[field].astype('object')
