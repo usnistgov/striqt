@@ -38,7 +38,7 @@ def _capture_coord_template(sweep_fields: tuple[str, ...]):
 
     for field in sweep_fields:
         coords[field] = xr.Variable(
-            (CAPTURE_DIM, SWEEP_DIM), [getattr(capture, field)], fastpath=True
+            (CAPTURE_DIM, SWEEP_DIM), [[getattr(capture, field)]], fastpath=True
         )
 
     coords[CAPTURE_TIMESTAMP_NAME] = xr.Variable(
