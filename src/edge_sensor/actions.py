@@ -261,7 +261,7 @@ def iter_sweep(
                 desc = 'last analysis'
             else:
                 # treat swept fields as coordinates/indices
-                desc = structs.describe_capture(capture_this, capture_prev)
+                desc = describe_capture(capture_this, capture_prev)
 
             with lb.stopwatch(f'{desc} •', logger_level='debug' if quiet else 'info'):
                 ret = lb.concurrently(**calls, flatten=False)
