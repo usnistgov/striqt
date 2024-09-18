@@ -118,7 +118,7 @@ class _RadioCaptureAnalyzer:
             if field in capture.__struct_fields__:
                 value = getattr(capture, field)
             elif field in capture.external:
-                value = capture[value]
+                value = capture[field]
             elif field == CAPTURE_TIMESTAMP_NAME:
                 value = capture_time
             elif field == SWEEP_TIMESTAMP_NAME:
