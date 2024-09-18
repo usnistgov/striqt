@@ -90,7 +90,7 @@ def _y_factor_power_corrections(
 
     power_correction = (k * (T + enr * Tref) * B) / Pon
     power_correction.name = 'Input power scaling correction'
-    power_correction.attrs = {'units': 'mW'}
+    power_correction.attrs = {'units': 'mW/fs'}
 
     return xr.Dataset(
         {
@@ -131,9 +131,9 @@ def compute_y_factor_corrections(
 ) -> xr.Dataset:
     kwargs = locals()
     ret = _y_factor_power_corrections(**kwargs)
-    ret['baseband_frequency_response'] = _y_factor_frequency_response_correction(
-        **kwargs, fc_temperatures=ret.temperature
-    )
+    # ret['baseband_frequency_response'] = _y_factor_frequency_response_correction(
+    #     **kwargs, fc_temperatures=ret.temperature
+    # )
     return ret
 
 
