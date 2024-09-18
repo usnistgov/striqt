@@ -24,7 +24,6 @@ else:
     pd = lb.util.lazy_import('pandas')
     xr = lb.util.lazy_import('xarray')
 
-lb.util.lazy_import
 CAPTURE_DIM = 'capture'
 TIMESTAMP_NAME = 'timestamp'
 
@@ -113,7 +112,7 @@ class _RadioCaptureAnalyzer:
 
         if timestamp is not None:
             coords[TIMESTAMP_NAME].values[:] = timestamp
-        
+
         return coords
 
 
