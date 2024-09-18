@@ -143,7 +143,7 @@ def describe_capture(this: structs.RadioCapture, prev: structs.RadioCapture|None
         if prev is None or value != prev.external.get(name, None):
             diffs['external.'+name] = value
 
-    return ', '.join([f'{k}={getattr(this, k)}' for k in diffs])
+    return ', '.join([f'{k}={repr(v)}' for k,v in diffs.items()])
 
 
 def design_warmup_sweep(
