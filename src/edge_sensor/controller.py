@@ -126,7 +126,7 @@ class SweepController:
     ) -> Generator[xr.Dataset]:
         # take args {3,4...N}
         kwargs = dict(locals())
-        del kwargs['self']
+        del kwargs['self'], kwargs['prepare']
 
         if prepare:
             prep_msg = self._describe_preparation(sweep)
