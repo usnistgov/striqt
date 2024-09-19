@@ -149,6 +149,9 @@ def design_capture_filter(
     else:
         lo_shift = capture.lo_shift
 
+    if capture.analysis_bandwidth > capture.sample_rate:
+        raise ValueError(f'analysis bandwidth must be smaller than sample rate in {capture}')
+
     if capture.gpu_resample:
         # use GPU DSP to resample from integer divisor of the MCR
         fs_sdr, lo_offset, kws = iqwaveform.fourier.design_cola_resampler(

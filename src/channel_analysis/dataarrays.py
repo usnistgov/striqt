@@ -14,6 +14,7 @@ from xarray_dataclasses.datamodel import AnyEntry, DataModel
 
 from array_api_compat import is_cupy_array, is_numpy_array, is_torch_array
 from frozendict import frozendict
+import matplotlib
 import iqwaveform
 import labbench as lb
 import msgspec
