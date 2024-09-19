@@ -39,6 +39,13 @@ def open_store(path: str | Path, *, mode: str):
     elif str(path).endswith('.db'):
         if mode == 'a':
             flag = 'c'
+        elif mode == 'w':
+            flag = 'c'
+            for extra_suffix in ('.dat', '.bak', '.dir'):
+                try:
+                    os.unlink(path + extra_suffix)
+                except FileNotFoundError:
+                    pass
         else:
             flag = mode
         warnings.simplefilter('ignore')
