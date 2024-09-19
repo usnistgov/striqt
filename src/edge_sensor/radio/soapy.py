@@ -126,7 +126,7 @@ class SoapyRadioDevice(RadioDevice):
 
     center_frequency = lo_frequency.corrected_from_expression(
         lo_frequency + lo_offset,
-        help='RF frequency at the center of the RX baseband',
+        help='RF frequency at the center of the analysis bandwidth',
         label='Hz',
     )
 

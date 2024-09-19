@@ -9,9 +9,13 @@ import numpy as np
 from .. import structs
 from channel_analysis import type_stubs
 
-iqwaveform = lb.util.lazy_import('iqwaveform')
-pd = lb.util.lazy_import('pandas')
-
+if typing.TYPE_CHECKING:
+    import iqwaveform
+    import pandas as pd
+else:
+    iqwaveform = lb.util.lazy_import('iqwaveform')
+    pd = lb.util.lazy_import('pandas')
+    
 
 TRANSIENT_HOLDOFF_WINDOWS = 1
 
@@ -133,7 +137,8 @@ class RadioDevice(lb.Device):
 
 @lru_cache(30000)
 def design_capture_filter(
-    master_clock_rate: float, capture: structs.RadioCapture
+    master_clock_rate: float, capture: structs.RadioCapture, 
+    bw_lo=0.25e6, min_oversampling=1.09
 ) -> tuple[float, float, dict]:
     """design a filter specified by the capture for a radio with the specified MCR.
 
@@ -150,9 +155,10 @@ def design_capture_filter(
             fs_base=master_clock_rate,
             fs_target=capture.sample_rate,
             bw=capture.analysis_bandwidth,
-            bw_lo=0.75e6,
+            bw_lo=bw_lo,
             shift=lo_shift,
             min_fft_size=4 * 4096 - 1,
+            min_oversampling=min_oversampling
         )
 
         return fs_sdr, lo_offset, kws
@@ -164,7 +170,7 @@ def design_capture_filter(
             f'upsampling above {master_clock_rate/1e6:f} MHz requires gpu_resample=True'
         )
     else:
-        # use the SDR firmware to set the desired sample rate
+        # use the SDR firmware to implement the desired sample rate
         return iqwaveform.fourier.design_cola_resampler(
             fs_base=capture.sample_rate,
             fs_target=capture.sample_rate,
