@@ -22,10 +22,10 @@ else:
 
 
 CAPTURE_DIM = 'capture'
-SWEEP_DIM = 'sweep'
 
 CAPTURE_TIMESTAMP_NAME = 'capture_time'
 SWEEP_TIMESTAMP_NAME = 'sweep_time'
+RADIO_ID_NAME = 'radio_id'
 
 
 @functools.lru_cache
@@ -41,20 +41,23 @@ def _capture_coord_template(external_fields: frozendict[str, typing.Any]):
         value = getattr(capture, field)
 
         coords[field] = xr.Variable(
-            (CAPTURE_DIM, SWEEP_DIM), [[value]], fastpath=True
+            (CAPTURE_DIM,), [[value]], fastpath=True
         )
 
     for field, value in external_fields.items():
         coords[field] = xr.Variable(
-            (CAPTURE_DIM, SWEEP_DIM), [[value]], fastpath=True
+            (CAPTURE_DIM,), [[value]], fastpath=True
         )
 
     coords[CAPTURE_TIMESTAMP_NAME] = xr.Variable(
         (CAPTURE_DIM,), [pd.Timestamp('now')], fastpath=True
     )
     coords[SWEEP_TIMESTAMP_NAME] = xr.Variable(
-        (SWEEP_DIM,), [pd.Timestamp('now')], fastpath=True
+        (CAPTURE_DIM,), [pd.Timestamp('now')], fastpath=True
     )
+    coords[RADIO_ID_NAME] = xr.Variable(
+        (CAPTURE_DIM,), ['unspecified'], fastpath=True
+    ).astype('object')
 
     return xr.Coordinates(coords)
 
@@ -93,8 +96,7 @@ class _RadioCaptureAnalyzer:
                 iq, capture, spec=self.analysis_spec
             )
 
-            extra_dims = (CAPTURE_DIM, SWEEP_DIM)
-            analysis = analysis.expand_dims(extra_dims).assign_coords(coords)
+            analysis = analysis.expand_dims((CAPTURE_DIM,)).assign_coords(coords)
 
             # these are coordinates - drop from attrs
             for name in coords.keys():
@@ -128,6 +130,8 @@ class _RadioCaptureAnalyzer:
                 # to coerce strings as variable-length types later for storage
                 coords[field] = coords[field].astype('object')
             coords[field].values[:] = value
+
+        coords[RADIO_ID_NAME].values[:] = self.radio.id
 
         return coords
 
@@ -222,7 +226,6 @@ def iter_sweep(
 
     attrs = {
         # metadata fields
-        'radio_id': radio.id,
         'radio_setup': structs.to_builtins(sweep.radio_setup),
         'description': structs.to_builtins(sweep.description),
     }
