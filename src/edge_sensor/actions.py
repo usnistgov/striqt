@@ -41,12 +41,12 @@ def _capture_coord_template(external_fields: frozendict[str, typing.Any]):
         value = getattr(capture, field)
 
         coords[field] = xr.Variable(
-            (CAPTURE_DIM,), [[value]], fastpath=True
+            (CAPTURE_DIM,), [value], fastpath=True
         )
 
     for field, value in external_fields.items():
         coords[field] = xr.Variable(
-            (CAPTURE_DIM,), [[value]], fastpath=True
+            (CAPTURE_DIM,), [value], fastpath=True
         )
 
     coords[CAPTURE_TIMESTAMP_NAME] = xr.Variable(
@@ -56,7 +56,7 @@ def _capture_coord_template(external_fields: frozendict[str, typing.Any]):
         (CAPTURE_DIM,), [pd.Timestamp('now')], fastpath=True
     )
     coords[RADIO_ID_NAME] = xr.Variable(
-        (CAPTURE_DIM,), ['unspecified'], fastpath=True
+        (CAPTURE_DIM,), ['unspecified-radio'], fastpath=True
     ).astype('object')
 
     return xr.Coordinates(coords)
