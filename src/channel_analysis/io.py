@@ -5,8 +5,12 @@ from pathlib import Path
 from collections import defaultdict
 import pickle
 import os
-
+import warnings
 import labbench as lb
+
+import warnings
+
+warnings.filterwarnings('ignore', category=FutureWarning, message='is deprecated and will be removed in a Zarr-Python version 3')
 
 from . import type_stubs, xarray_wrappers
 from .xarray_wrappers._iq_waveform import IQSampleIndexAxis
@@ -32,18 +36,14 @@ def open_store(path: str | Path, *, mode: str):
         raise ValueError('must pass a string or Path savefile or zarr.Store object')
     elif str(path).endswith('.zip'):
         store = zarr.ZipStore(path, mode=mode, compression=0)
-    elif str(path).endswith('.shelf'):
-        # see for example https://github.com/zarr-developers/zarr-python/issues/129s
-        import shelve
-
-        path = str(path)
-        if mode.startswith('w'):
-            for extra_suffix in ('.dat', '.bak', '.dir'):
-                try:
-                    os.unlink(path + extra_suffix)
-                except FileNotFoundError:
-                    pass
-        store = shelve.open(path, protocol=pickle.HIGHEST_PROTOCOL)
+    elif str(path).endswith('.db'):
+        if mode == 'a':
+            flag = 'c'
+        else:
+            flag = mode
+        warnings.simplefilter('ignore')
+        store = zarr.DBMStore(path, flag=flag, write_lock=False)
+        warnings.resetwarnings()
     else:
         store = zarr.DirectoryStore(path, mode=mode)
 
