@@ -3,7 +3,7 @@
 # work around a dynamic library loading packaging quirk on jetson aarch64
 from . import radio, structs, iq_corrections, util
 
-from .results import CAPTURE_DIM
+from .analysis import CAPTURE_DIM
 from .controller import connect, SweepController
 from .io import load, dump, read_yaml_sweep
 from .iq_corrections import read_calibration_corrections

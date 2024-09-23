@@ -18,8 +18,8 @@ else:
     xr = util.lazy_import('xarray')
     lb = util.lazy_import('labbench')
 
-CAPTURE_DIM = 'capture'
 
+CAPTURE_DIM = 'capture'
 CAPTURE_TIMESTAMP_NAME = 'capture_time'
 SWEEP_TIMESTAMP_NAME = 'sweep_time'
 RADIO_ID_NAME = 'radio_id'

@@ -3,7 +3,7 @@ import importlib
 import sys
 
 
-def lazy_import(module_name: str):
+def lazy_import(module_name: str, package=None):
     """postponed import of the module with the specified name.
 
     The import is not performed until the module is accessed in the code. This
@@ -18,7 +18,7 @@ def lazy_import(module_name: str):
     except KeyError:
         pass
 
-    spec = importlib.util.find_spec(module_name)
+    spec = importlib.util.find_spec(module_name, package=package)
     if spec is None:
         raise ImportError(f'no module found named "{module_name}"')
     spec.loader = importlib.util.LazyLoader(spec.loader)

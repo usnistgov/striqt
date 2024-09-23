@@ -21,15 +21,13 @@ if typing.TYPE_CHECKING:
     import numpy as np
     import scipy
     import xarray as xr
-    from array_api_compat import is_cupy_array, is_numpy_array, is_torch_array
+    import array_api_compat
     import iqwaveform
 else:
     np = util.lazy_import('numpy')
     scipy = util.lazy_import('scipy')
     xr = util.lazy_import('xarray')
-    is_cupy_array = util.lazy_import('array_api_compat.is_cupy_array')
-    is_numpy_array = util.lazy_import('array_api_compat.is_numpy_array')
-    is_torch_array = util.lazy_import('array_api_compat.is_torch_array')
+    array_api_compat = util.lazy_import('array_api_compat')
     iqwaveform = util.lazy_import('iqwaveform')
 
 
@@ -134,11 +132,6 @@ as_registered_channel_analysis = _ChannelAnalysisRegistry(structs.ChannelAnalysi
 def shaped(
     cls: type[OptionedClass[PInit, TDataArray]],
 ) -> TDataArray: ...
-@typing.overload
-@classmethod
-def shaped(
-    cls: type[DataClass[PInit]],
-) -> xr.DataArray: ...
 @functools.lru_cache
 def dataarray_stub(cls: typing.Any) -> typing.Any:
     """return an empty array of type `cls`"""
@@ -188,7 +181,7 @@ def channel_dataarray(
 
 
 @dataclasses.dataclass
-class ChannelAnalysisResult(UserDict):
+class ChannelAnalysisResult(collections.UserDict):
     """represents the return result from a channel analysis function.
 
     This includes a method to convert to `xarray.DataArray`, which is
@@ -218,11 +211,11 @@ def _to_maybe_nested_numpy(obj: tuple | list | dict | type_stubs.ArrayType):
         return [_to_maybe_nested_numpy(item) for item in obj]
     elif isinstance(obj, dict):
         return [_to_maybe_nested_numpy(item) for item in obj.values()]
-    elif is_torch_array(obj):
+    elif array_api_compat.is_torch_array(obj):
         return obj.cpu()
-    elif is_cupy_array(obj):
+    elif array_api_compat.is_cupy_array(obj):
         return obj.get()
-    elif is_numpy_array(obj):
+    elif array_api_compat.is_numpy_array(obj):
         return obj
     else:
         raise TypeError(f'obj type {type(obj)} is unrecognized')
@@ -295,7 +288,7 @@ def iir_filter(
 
     xp = iqwaveform.util.array_namespace(iq)
 
-    if is_cupy_array(iq):
+    if array_api_compat.is_cupy_array(iq):
         from . import cuda_kernels
 
         sos = xp.asarray(sos)

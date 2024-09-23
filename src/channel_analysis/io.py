@@ -35,6 +35,8 @@ def open_store(path: str | Path, *, mode: str):
     elif str(path).endswith('.db'):
         if mode == 'a':
             flag = 'c'
+        elif mode == 'w':
+            flag = 'n'
         else:
             flag = mode
         warnings.simplefilter('ignore')
@@ -83,7 +85,6 @@ def dump(
     store: zarr.storage.Store,
     data: typing.Optional[type_stubs.DataArrayType | type_stubs.DatasetType] = None,
     append_dim=None,
-    # mode='a',
     compression=None,
     filter=True,
 ) -> zarr.storage.Store:
