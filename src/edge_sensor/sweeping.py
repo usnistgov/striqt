@@ -1,5 +1,6 @@
 from __future__ import annotations
 import typing
+import itertools
 
 from frozendict import frozendict
 
@@ -175,3 +176,89 @@ def iter_sweep(
     finally:
         if close_after:
             radio.close()
+
+
+def return_on_stopiter(iter):
+    try:
+        return next(iter)
+    except StopIteration:
+        return StopIteration
+
+
+def iter_callbacks(
+    sweep_iter: xr.Dataset | bytes | None,
+    sweep_spec: structs.Sweep,
+    *,
+    setup: callable[[structs.Capture], None] | None = None,
+    acquire: callable[[structs.Capture], None] | None = None,
+    save: callable[[channel_analysis.DatasetType, structs.Capture], typing.Any] | None = None,
+):
+    """trigger callbacks on each sweep iteration.
+
+    This can add support for external device setup and acquisition.
+
+    Args:
+        sweep_iter: a generator returned by `iter_sweep`
+        sweep_spec: the sweep specification for `sweep_iter`
+        setup: function to be called during before the start of each capture
+        acquire: function to be called during the acquisition of each capture
+        save: function to be called after the acquisition and analysis of each capture
+
+    Returns:
+        Generator
+    """
+    if setup is None:
+
+        def setup(capture):
+            pass
+    elif not hasattr(setup, '__name__'):
+        setup.__name__ = 'setup'
+
+    if acquire is None:
+
+        def acquire(capture):
+            pass
+    elif not hasattr(acquire, '__name__'):
+        acquire.__name__ = 'acquire'
+
+    if save is None:
+
+        def save(data):
+            return data
+    elif not hasattr(save, '__name__'):
+        save.__name__ = 'save'
+
+    # pairs of (data, capture) from the controller
+    data_spec_pairs = itertools.zip_longest(
+        sweep_iter, sweep_spec.captures, fillvalue=None
+    )
+
+    data = None
+    capture = sweep_spec.captures[0]
+    last_data = None
+
+    while True:
+        if capture is not None:
+            setup(capture)
+
+        returns = lb.concurrently(
+            lb.Call(return_on_stopiter, data_spec_pairs).rename('data'),
+            lb.Call(acquire, capture).rename('acquire'),
+            lb.Call(save, last_data).rename('save'),
+            flatten=False,
+        )
+
+        yield returns.get('save', None)
+
+        if returns['next_returnstop'] is StopIteration:
+            break
+        else:
+            (data, capture) = returns['next_returnstop']
+            ext_data = returns['acquire']
+
+        if data is not None:
+            ext_dataarrays = {
+                k: xr.DataArray(v).expand_dims(analysis.CAPTURE_DIM)
+                for k, v in ext_data.items()
+            }
+            last_data = data.assign(ext_dataarrays)

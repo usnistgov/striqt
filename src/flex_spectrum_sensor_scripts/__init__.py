@@ -58,7 +58,7 @@ def _chain_decorators(decorators: list[callable], func: callable) -> callable:
     return func
 
 
-#%% Sweep script
+# %% Sweep script
 _CLICK_SENSOR_SWEEP = (
     click.command(
         'Run a radio spectrum sensor acquisition sweep according to a configuration file.'
@@ -104,6 +104,7 @@ _CLICK_SENSOR_SWEEP = (
         help='print debug',
     ),
 )
+
 
 def click_sensor_sweep(func):
     return _chain_decorators(_CLICK_SENSOR_SWEEP, func)
@@ -156,7 +157,8 @@ def init_sensor_sweep(
 
     return store, controller, sweep_spec, calibration
 
-#%% Server scripts
+
+# %% Server scripts
 _CLICK_SERVER = (
     click.command('Host a server for remote control over the spectrum sensor'),
     click.argument('host', type=str, default=HOSTNAME),
@@ -183,8 +185,9 @@ _CLICK_SERVER = (
         show_default=True,
         default=False,
         help='print debug',
-    )
+    ),
 )
+
 
 def click_server(func):
     return _chain_decorators(_CLICK_SERVER, func)

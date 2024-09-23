@@ -2,6 +2,7 @@
 
 from flex_spectrum_sensor_scripts import click_server, run_server
 
+
 @click_server
 def run(**kws):
     run_server(**kws)
