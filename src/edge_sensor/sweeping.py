@@ -1,6 +1,8 @@
 from __future__ import annotations
 import typing
+import functools
 import itertools
+import msgspec
 
 from frozendict import frozendict
 
@@ -21,14 +23,17 @@ def _frozensubset(d: dict | frozendict, keys: list[str]) -> frozendict:
     return frozendict({k: d[k] for k in keys})
 
 
+@functools.lru_cache
+def list_fields(struct_cls):
+    return [f.name for f in msgspec.structs.fields(struct_cls)]
+
+
 def describe_capture(
     this: structs.RadioCapture, prev: structs.RadioCapture | None = None
 ):
     diffs = {}
 
-    print(type(this))
-
-    for name in type(this).__struct_fields__:
+    for name in list_fields(type(this)):
         if name == 'external':
             continue
         value = getattr(this, name)
