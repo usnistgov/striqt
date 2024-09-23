@@ -14,7 +14,9 @@ def meta(standard_name: str, unit: str | None = None) -> msgspec.Meta:
         description=standard_name, extra={'standard_name': standard_name, 'units': unit}
     )
 
+
 to_builtins = functools.partial(msgspec.to_builtins, builtin_types=(frozendict,))
+
 
 @functools.lru_cache
 def get_attrs(struct: typing.Type[msgspec.Struct], field: str) -> dict[str, str]:

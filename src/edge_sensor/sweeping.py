@@ -20,7 +20,9 @@ def _frozensubset(d: dict | frozendict, keys: list[str]) -> frozendict:
     return frozendict({k: d[k] for k in keys})
 
 
-def describe_capture(this: structs.RadioCapture, prev: structs.RadioCapture|None = None):
+def describe_capture(
+    this: structs.RadioCapture, prev: structs.RadioCapture | None = None
+):
     diffs = {}
 
     for name in type(this).__struct_fields__:
@@ -32,13 +34,13 @@ def describe_capture(this: structs.RadioCapture, prev: structs.RadioCapture|None
 
     this_external = set(this.external.keys())
     prev_external = set() if prev is None else set(prev.external.keys())
-    for name in this_external|prev_external:
+    for name in this_external | prev_external:
         value = this.external.get(name, None)
 
         if prev is None or value != prev.external.get(name, None):
-            diffs['external.'+name] = value
+            diffs['external.' + name] = value
 
-    return ', '.join([f'{k}={repr(v)}' for k,v in diffs.items()])
+    return ', '.join([f'{k}={repr(v)}' for k, v in diffs.items()])
 
 
 def design_warmup_sweep(

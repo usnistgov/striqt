@@ -37,14 +37,10 @@ def _capture_coord_template(external_fields: frozendict[str, typing.Any]):
             continue
         value = getattr(capture, field)
 
-        coords[field] = xr.Variable(
-            (CAPTURE_DIM,), [value], fastpath=True
-        )
+        coords[field] = xr.Variable((CAPTURE_DIM,), [value], fastpath=True)
 
     for field, value in external_fields.items():
-        coords[field] = xr.Variable(
-            (CAPTURE_DIM,), [value], fastpath=True
-        )
+        coords[field] = xr.Variable((CAPTURE_DIM,), [value], fastpath=True)
 
     coords[CAPTURE_TIMESTAMP_NAME] = xr.Variable(
         (CAPTURE_DIM,), [pd.Timestamp('now')], fastpath=True
@@ -61,14 +57,14 @@ def _capture_coord_template(external_fields: frozendict[str, typing.Any]):
 
 @dataclasses.dataclass
 class ChannelAnalysisWrapper:
-    """Inject radio device and capture info into a channel analysis result"""
+    """Inject radio device and capture metadata and coordinates into a channel analysis result"""
 
     __name__ = 'analyze'
 
     radio: radio.RadioDevice
     analysis_spec: list[channel_analysis.ChannelAnalysis]
-    extra_attrs: dict[str, typing.Any]|None = None
-    calibration: xr.Dataset|None = None
+    extra_attrs: dict[str, typing.Any] | None = None
+    calibration: xr.Dataset | None = None
 
     def __call__(
         self,
@@ -78,8 +74,7 @@ class ChannelAnalysisWrapper:
         capture: structs.RadioCapture,
         pickled=False,
     ) -> xr.Dataset:
-        """Inject radio device and capture info into a channel analysis result.
-        """
+        """Inject radio device and capture info into a channel analysis result."""
 
         with lb.stopwatch('analyze', logger_level='debug'):
             # for performance, GPU operations are all here in the same thread

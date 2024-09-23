@@ -20,7 +20,11 @@ else:
     zarr = util.lazy_import('zarr')
 
 
-warnings.filterwarnings('ignore', category=FutureWarning, message='is deprecated and will be removed in a Zarr-Python version 3')
+warnings.filterwarnings(
+    'ignore',
+    category=FutureWarning,
+    message='is deprecated and will be removed in a Zarr-Python version 3',
+)
 
 IQ_WAVEFORM_INDEX_NAME = typing.get_args(IQSampleIndexAxis)[0]
 

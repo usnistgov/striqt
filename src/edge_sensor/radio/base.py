@@ -15,7 +15,7 @@ if typing.TYPE_CHECKING:
 else:
     iqwaveform = lb.util.lazy_import('iqwaveform')
     pd = lb.util.lazy_import('pandas')
-    
+
 
 TRANSIENT_HOLDOFF_WINDOWS = 1
 
@@ -137,8 +137,10 @@ class RadioDevice(lb.Device):
 
 @lru_cache(30000)
 def design_capture_filter(
-    master_clock_rate: float, capture: structs.RadioCapture, 
-    bw_lo=0.25e6, min_oversampling=1.09
+    master_clock_rate: float,
+    capture: structs.RadioCapture,
+    bw_lo=0.25e6,
+    min_oversampling=1.09,
 ) -> tuple[float, float, dict]:
     """design a filter specified by the capture for a radio with the specified MCR.
 
@@ -150,7 +152,9 @@ def design_capture_filter(
         lo_shift = capture.lo_shift
 
     if capture.analysis_bandwidth > capture.sample_rate:
-        raise ValueError(f'analysis bandwidth must be smaller than sample rate in {capture}')
+        raise ValueError(
+            f'analysis bandwidth must be smaller than sample rate in {capture}'
+        )
 
     if capture.gpu_resample:
         # use GPU DSP to resample from integer divisor of the MCR
@@ -161,7 +165,7 @@ def design_capture_filter(
             bw_lo=bw_lo,
             shift=lo_shift,
             min_fft_size=4 * 4096 - 1,
-            min_oversampling=min_oversampling
+            min_oversampling=min_oversampling,
         )
 
         return fs_sdr, lo_offset, kws
