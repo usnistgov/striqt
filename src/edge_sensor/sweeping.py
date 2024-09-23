@@ -178,7 +178,7 @@ def iter_sweep(
             radio.close()
 
 
-def return_on_stopiter(iter):
+def _return_on_stopiter(iter):
     try:
         return next(iter)
     except StopIteration:
@@ -242,7 +242,7 @@ def iter_callbacks(
             setup(capture)
 
         returns = lb.concurrently(
-            lb.Call(return_on_stopiter, data_spec_pairs).rename('data'),
+            lb.Call(_return_on_stopiter, data_spec_pairs).rename('data'),
             lb.Call(acquire, capture).rename('acquire'),
             lb.Call(save, last_data).rename('save'),
             flatten=False,
