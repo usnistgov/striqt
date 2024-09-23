@@ -10,8 +10,8 @@ def lazy_import(module_name: str):
     """postponed import of the module with the specified name.
 
     The import is not performed until the module is accessed in the code. This
-    reduces the total time to import labbench by waiting to import the module
-    until it is used.
+    reduces the total time to import the module by waiting to import submodules
+    until they are used.
     """
 
     # see https://docs.python.org/3/library/importlib.html#implementing-lazy-imports

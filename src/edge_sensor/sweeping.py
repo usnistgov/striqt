@@ -1,146 +1,29 @@
 from __future__ import annotations
-import dataclasses
-import functools
-import pickle
 import typing
+import itertools
 
-import labbench as lb
 from frozendict import frozendict
 
 from .radio import RadioDevice, NullRadio
-from . import iq_corrections, structs, util
+from . import analysis, structs, util
 
 import channel_analysis
-from channel_analysis import type_stubs
 
 if typing.TYPE_CHECKING:
-    import pandas as pd
     import xarray as xr
+    import labbench as lb
 else:
-    pd = lb.util.lazy_import('pandas')
-    xr = lb.util.lazy_import('xarray')
-
-
-CAPTURE_DIM = 'capture'
-
-CAPTURE_TIMESTAMP_NAME = 'capture_time'
-SWEEP_TIMESTAMP_NAME = 'sweep_time'
-RADIO_ID_NAME = 'radio_id'
-
-
-@functools.lru_cache
-def _capture_coord_template(external_fields: frozendict[str, typing.Any]):
-    """returns a cached set of xarray coordinate for the given list of swept fields"""
-
-    capture = structs.RadioCapture()
-    coords = {}
-
-    for field in structs.RadioCapture.__struct_fields__:
-        if field == 'external':
-            continue
-        value = getattr(capture, field)
-
-        coords[field] = xr.Variable(
-            (CAPTURE_DIM,), [value], fastpath=True
-        )
-
-    for field, value in external_fields.items():
-        coords[field] = xr.Variable(
-            (CAPTURE_DIM,), [value], fastpath=True
-        )
-
-    coords[CAPTURE_TIMESTAMP_NAME] = xr.Variable(
-        (CAPTURE_DIM,), [pd.Timestamp('now')], fastpath=True
-    )
-    coords[SWEEP_TIMESTAMP_NAME] = xr.Variable(
-        (CAPTURE_DIM,), [pd.Timestamp('now')], fastpath=True
-    )
-    coords[RADIO_ID_NAME] = xr.Variable(
-        (CAPTURE_DIM,), ['unspecified-radio'], fastpath=True
-    ).astype('object')
-
-    return xr.Coordinates(coords)
-
-
-@dataclasses.dataclass
-class _RadioCaptureAnalyzer:
-    """an IQ data analysis/packaging manager given a radio and desired channel analyses"""
-
-    __name__ = 'analyze'
-
-    radio: RadioDevice
-    analysis_spec: list[channel_analysis.ChannelAnalysis]
-    extra_attrs: dict[str, typing.Any]|None = None
-    calibration: xr.Dataset|None = None
-
-    def __call__(
-        self,
-        iq: type_stubs.ArrayType,
-        capture_time,
-        sweep_time,
-        capture: structs.RadioCapture,
-        pickled=False,
-    ) -> xr.Dataset:
-        """analyze iq from a capture and package it into a dataset"""
-
-        with lb.stopwatch('analyze', logger_level='debug'):
-            # for performance, GPU operations are all here in the same thread
-            iq = iq_corrections.resampling_correction(
-                iq, capture, self.radio, force_calibration=self.calibration
-            )
-            coords = self.get_coords(
-                capture, capture_time=capture_time, sweep_time=sweep_time
-            )
-
-            analysis = channel_analysis.analyze_by_spec(
-                iq, capture, spec=self.analysis_spec
-            )
-
-            analysis = analysis.expand_dims((CAPTURE_DIM,)).assign_coords(coords)
-
-            # these are coordinates - drop from attrs
-            for name in coords.keys():
-                analysis.attrs.pop(name, None)
-
-        if self.extra_attrs is not None:
-            analysis.attrs.update(self.extra_attrs)
-
-        analysis[CAPTURE_TIMESTAMP_NAME].attrs.update(label='Capture start time')
-        analysis[SWEEP_TIMESTAMP_NAME].attrs.update(label='Sweep start time')
-
-        if pickled:
-            return pickle.dumps(analysis)
-        else:
-            return analysis
-
-    def get_coords(self, capture: structs.RadioCapture, capture_time, sweep_time):
-        coords = _capture_coord_template(capture.external).copy(deep=True)
-
-        for field in coords.keys():
-            if field in capture.__struct_fields__:
-                value = getattr(capture, field)
-            elif field in capture.external:
-                value = capture.external[field]
-            elif field == CAPTURE_TIMESTAMP_NAME:
-                value = capture_time
-            elif field == SWEEP_TIMESTAMP_NAME:
-                value = sweep_time
-
-            if isinstance(value, str):
-                # to coerce strings as variable-length types later for storage
-                coords[field] = coords[field].astype('object')
-            coords[field].values[:] = value
-
-        coords[RADIO_ID_NAME].values[:] = self.radio.id
-
-        return coords
+    xr = util.lazy_import('xarray')
+    lb = util.lazy_import('labbench')
 
 
 def _frozensubset(d: dict | frozendict, keys: list[str]) -> frozendict:
     return frozendict({k: d[k] for k in keys})
 
 
-def describe_capture(this: structs.RadioCapture, prev: structs.RadioCapture|None = None):
+def describe_capture(
+    this: structs.RadioCapture, prev: structs.RadioCapture | None = None
+):
     diffs = {}
 
     for name in type(this).__struct_fields__:
@@ -152,13 +35,13 @@ def describe_capture(this: structs.RadioCapture, prev: structs.RadioCapture|None
 
     this_external = set(this.external.keys())
     prev_external = set() if prev is None else set(prev.external.keys())
-    for name in this_external|prev_external:
+    for name in this_external | prev_external:
         value = this.external.get(name, None)
 
         if prev is None or value != prev.external.get(name, None):
-            diffs['external.'+name] = value
+            diffs['external.' + name] = value
 
-    return ', '.join([f'{k}={repr(v)}' for k,v in diffs.items()])
+    return ', '.join([f'{k}={repr(v)}' for k, v in diffs.items()])
 
 
 def design_warmup_sweep(
@@ -197,7 +80,7 @@ def design_warmup_sweep(
 def iter_sweep(
     radio: RadioDevice,
     sweep: structs.Sweep,
-    calibration: type_stubs.DatasetType = None,
+    calibration: channel_analysis.DatasetType = None,
     always_yield=False,
     quiet=False,
     pickled=False,
@@ -230,7 +113,7 @@ def iter_sweep(
         'description': structs.to_builtins(sweep.description),
     }
 
-    analyze = _RadioCaptureAnalyzer(
+    analyze = analysis.ChannelAnalysisWrapper(
         radio=radio,
         analysis_spec=sweep.channel_analysis,
         extra_attrs=attrs,
@@ -293,3 +176,91 @@ def iter_sweep(
     finally:
         if close_after:
             radio.close()
+
+
+def _return_on_stopiter(iter):
+    try:
+        return next(iter)
+    except StopIteration:
+        return StopIteration
+
+
+def iter_callbacks(
+    sweep_iter: xr.Dataset | bytes | None,
+    sweep_spec: structs.Sweep,
+    *,
+    setup: callable[[structs.Capture], None] | None = None,
+    acquire: callable[[structs.Capture], None] | None = None,
+    save: callable[[channel_analysis.DatasetType, structs.Capture], typing.Any] | None = None,
+):
+    """trigger callbacks on each sweep iteration.
+
+    This can add support for external device setup and acquisition. Each callback should be able
+    to accommodate `None` values as sentinels to indicate that no data is available yet (for `save`)
+    or no data being acquired (for `setup` and `acquire`).
+
+    Args:
+        sweep_iter: a generator returned by `iter_sweep`
+        sweep_spec: the sweep specification for `sweep_iter`
+        setup: function to be called during before the start of each capture
+        acquire: function to be called during the acquisition of each capture
+        save: function to be called after the acquisition and analysis of each capture
+
+    Returns:
+        Generator
+    """
+    if setup is None:
+
+        def setup(capture):
+            pass
+    elif not hasattr(setup, '__name__'):
+        setup.__name__ = 'setup'
+
+    if acquire is None:
+
+        def acquire(capture):
+            pass
+    elif not hasattr(acquire, '__name__'):
+        acquire.__name__ = 'acquire'
+
+    if save is None:
+
+        def save(data):
+            return data
+    elif not hasattr(save, '__name__'):
+        save.__name__ = 'save'
+
+    # pairs of (data, capture) from the controller
+    data_spec_pairs = itertools.zip_longest(
+        sweep_iter, sweep_spec.captures, fillvalue=None
+    )
+
+    data = None
+    capture = sweep_spec.captures[0]
+    last_data = None
+
+    while True:
+        if capture is not None:
+            setup(capture)
+
+        returns = lb.concurrently(
+            lb.Call(_return_on_stopiter, data_spec_pairs).rename('data'),
+            lb.Call(acquire, capture).rename('acquire'),
+            lb.Call(save, last_data).rename('save'),
+            flatten=False,
+        )
+
+        yield returns.get('save', None)
+
+        if returns['next_returnstop'] is StopIteration:
+            break
+        else:
+            (data, capture) = returns['next_returnstop']
+            ext_data = returns['acquire']
+
+        if data is not None:
+            ext_dataarrays = {
+                k: xr.DataArray(v).expand_dims(analysis.CAPTURE_DIM)
+                for k, v in ext_data.items()
+            }
+            last_data = data.assign(ext_dataarrays)

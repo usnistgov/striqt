@@ -1,18 +1,13 @@
 from __future__ import annotations
 
+import os
 import typing
+import warnings
+
 from pathlib import Path
 from collections import defaultdict
-import pickle
-import os
-import warnings
-import labbench as lb
 
-import warnings
-
-warnings.filterwarnings('ignore', category=FutureWarning, message='is deprecated and will be removed in a Zarr-Python version 3')
-
-from . import type_stubs, xarray_wrappers
+from . import type_stubs, util, xarray_wrappers
 from .xarray_wrappers._iq_waveform import IQSampleIndexAxis
 
 if typing.TYPE_CHECKING:
@@ -21,10 +16,17 @@ if typing.TYPE_CHECKING:
     import xarray as xr
     import zarr
 else:
-    np = lb.util.lazy_import('numpy')
-    numcodecs = lb.util.lazy_import('numcodecs')
-    xr = lb.util.lazy_import('xarray')
-    zarr = lb.util.lazy_import('zarr')
+    np = util.lazy_import('numpy')
+    numcodecs = util.lazy_import('numcodecs')
+    xr = util.lazy_import('xarray')
+    zarr = util.lazy_import('zarr')
+
+
+warnings.filterwarnings(
+    'ignore',
+    category=FutureWarning,
+    message='is deprecated and will be removed in a Zarr-Python version 3',
+)
 
 IQ_WAVEFORM_INDEX_NAME = typing.get_args(IQSampleIndexAxis)[0]
 
@@ -40,7 +42,7 @@ def open_store(path: str | Path, *, mode: str):
         if mode == 'a':
             flag = 'c'
         elif mode == 'w':
-            flag = 'c'
+            flag = 'n'
             for extra_suffix in ('.dat', '.bak', '.dir'):
                 try:
                     os.unlink(path + extra_suffix)
@@ -94,7 +96,6 @@ def dump(
     store: zarr.storage.Store,
     data: typing.Optional[type_stubs.DataArrayType | type_stubs.DatasetType] = None,
     append_dim=None,
-    # mode='a',
     compression=None,
     filter=True,
 ) -> zarr.storage.Store:

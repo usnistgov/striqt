@@ -5,19 +5,17 @@ import pickle
 import typing
 
 import rpyc
-import labbench as lb
 
 from channel_analysis import type_stubs
-from . import actions, util, structs
+from . import sweeping, util, structs
 from .radio import find_radio_cls_by_name, is_same_resource, RadioDevice
 
 if typing.TYPE_CHECKING:
     import xarray as xr
+    import labbench as lb
 else:
     xr = util.lazy_import('xarray')
-
-
-_PROTOCOL_CONFIG = {'logger': lb.logger, 'allow_pickle': True}
+    lb = util.lazy_import('labbench')
 
 
 class SweepController:
@@ -79,7 +77,7 @@ class SweepController:
         self.radios[radio_setup.driver].close()
 
     def _describe_preparation(self, sweep: structs.Sweep) -> str:
-        warmup_sweep = actions.design_warmup_sweep(
+        warmup_sweep = sweeping.design_warmup_sweep(
             sweep, skip=tuple(self.warmed_captures)
         )
         msgs = []
@@ -89,12 +87,10 @@ class SweepController:
             msgs += [f'warming GPU ({len(warmup_sweep.captures)} empty captures)']
         return ' and '.join(msgs)
 
-    def prepare_sweep(
-        self, sweep_spec: structs.Sweep, calibration, pickled=False
-    ):
+    def prepare_sweep(self, sweep_spec: structs.Sweep, calibration, pickled=False):
         """open the radio while warming up the GPU"""
 
-        warmup_sweep = actions.design_warmup_sweep(
+        warmup_sweep = sweeping.design_warmup_sweep(
             sweep_spec, skip=tuple(self.warmed_captures)
         )
         self.warmed_captures = self.warmed_captures | set(warmup_sweep.captures)
@@ -134,7 +130,7 @@ class SweepController:
         radio = self.open_radio(sweep.radio_setup)
         radio.setup(sweep.radio_setup)
 
-        return actions.iter_sweep(radio, close_after=True, **kwargs)
+        return sweeping.iter_sweep(radio, close_after=True, **kwargs)
 
     def __del__(self):
         self.close()
@@ -190,8 +186,8 @@ class _ServerService(rpyc.Service, SweepController):
 
         capture_pairs = util.zip_offsets(sweep.captures, (-1, 0), fill=None)
         descs = (
-            f'{i+1}/{len(sweep.captures)} {actions.describe_capture(c1, c2)}'
-            for i, (c1,c2) in enumerate(capture_pairs)
+            f'{i+1}/{len(sweep.captures)} {sweeping.describe_capture(c1, c2)}'
+            for i, (c1, c2) in enumerate(capture_pairs)
         )
 
         typing.Generator = self.iter_sweep(
@@ -216,7 +212,7 @@ class _ClientService(rpyc.Service):
         lb.logger.info('disconnected from server')
 
     def exposed_deliver(
-        self, pickled_dataset: type_stubs.DatasetType, description: str|None = None
+        self, pickled_dataset: type_stubs.DatasetType, description: str | None = None
     ):
         """serialize an object back to the client via pickling"""
         if description is not None:
@@ -228,7 +224,7 @@ class _ClientService(rpyc.Service):
                 return pickle.loads(pickled_dataset)
 
 
-def start_server(host=None, port=4567, default_driver: str|None = None):
+def start_server(host=None, port=4567, default_driver: str | None = None):
     """start a server to run on a sensor (blocking)"""
 
     if default_driver is None:
@@ -240,7 +236,7 @@ def start_server(host=None, port=4567, default_driver: str|None = None):
         _ServerService(default_setup),
         hostname=host,
         port=port,
-        protocol_config=_PROTOCOL_CONFIG,
+        protocol_config={'logger': lb.logger, 'allow_pickle': True},
     )
     lb.logger.info(f'hosting at {t.host}:{t.port}')
     t.start()
@@ -264,5 +260,8 @@ def connect(host='localhost', port=4567) -> rpyc.Connection:
         port = int(extra[0])
 
     return rpyc.connect(
-        host=host, port=port, config=_PROTOCOL_CONFIG, service=_ClientService
+        host=host,
+        port=port,
+        config={'logger': lb.logger, 'allow_pickle': True},
+        service=_ClientService,
     )

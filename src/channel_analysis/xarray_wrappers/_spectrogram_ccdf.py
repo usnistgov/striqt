@@ -16,7 +16,7 @@ SpectrogramPowerBinAxis = typing.Literal['spectrogram_power_bin']
 
 
 @dataclass
-class SpectrogramPowerCoords:
+class SpectrogramCoords:
     data: Data[SpectrogramPowerBinAxis, np.float32]
     standard_name: Attr[str] = 'Spectrogram bin power'
     units: Attr[str] = 'dBm'
@@ -25,14 +25,14 @@ class SpectrogramPowerCoords:
 
 
 @dataclass
-class SpectrogramPowerCCDF(AsDataArray):
+class SpectrogramCCDF(AsDataArray):
     ccdf: Data[SpectrogramPowerBinAxis, np.float32]
-    spectrogram_power_bin: Coordof[SpectrogramPowerCoords]
+    spectrogram_power_bin: Coordof[SpectrogramCoords]
     standard_name: Attr[str] = 'CCDF'
 
 
-@dataarrays.as_registered_channel_analysis(SpectrogramPowerCCDF)
-def spectrogram_power_ccdf(
+@dataarrays.as_registered_channel_analysis(SpectrogramCCDF)
+def spectrogram_ccdf(
     iq: type_stubs.ArrayType,
     capture: structs.Capture,
     *,
