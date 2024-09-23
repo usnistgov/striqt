@@ -195,7 +195,9 @@ def iter_callbacks(
 ):
     """trigger callbacks on each sweep iteration.
 
-    This can add support for external device setup and acquisition.
+    This can add support for external device setup and acquisition. Each callback should be able
+    to accommodate `None` values as sentinels to indicate that no data is available yet (for `save`)
+    or no data being acquired (for `setup` and `acquire`).
 
     Args:
         sweep_iter: a generator returned by `iter_sweep`
