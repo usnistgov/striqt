@@ -26,6 +26,8 @@ def describe_capture(
 ):
     diffs = {}
 
+    print(type(this))
+
     for name in type(this).__struct_fields__:
         if name == 'external':
             continue
