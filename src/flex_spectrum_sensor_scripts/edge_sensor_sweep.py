@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from flex_spectrum_sensor_scripts.scripts import (
-    base_sensor_sweep_cli,
+from flex_spectrum_sensor_scripts import (
+    click_sensor_sweep,
     init_sensor_sweep,
     edge_sensor,
     lb,
@@ -11,7 +11,7 @@ from flex_spectrum_sensor_scripts.scripts import (
 )
 
 
-@base_sensor_sweep_cli
+@click_sensor_sweep
 def run(**kws):
     # instantiate sweep objects
     store, controller, sweep_spec, calibration = init_sensor_sweep(**kws)
