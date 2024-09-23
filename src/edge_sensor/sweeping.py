@@ -252,10 +252,10 @@ def iter_callbacks(
 
         yield returns.get('save', None)
 
-        if returns['next_returnstop'] is StopIteration:
+        if returns['data'] is StopIteration:
             break
         else:
-            (data, capture) = returns['next_returnstop']
+            (data, capture) = returns['data']
             ext_data = returns['acquire']
 
         if data is not None:
