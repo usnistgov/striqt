@@ -1,5 +1,5 @@
 from __future__ import annotations
-from functools import lru_cache
+import functools
 import typing
 import pickle
 import gzip
@@ -11,10 +11,8 @@ from channel_analysis import dataarrays, type_stubs
 
 from .radio import RadioDevice, get_capture_buffer_sizes, design_capture_filter
 from .radio.base import TRANSIENT_HOLDOFF_WINDOWS
-from . import structs
-from .util import import_cupy_with_fallback
+from . import structs, util
 
-import labbench as lb
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -22,13 +20,13 @@ if typing.TYPE_CHECKING:
     import scipy
     import iqwaveform
 else:
-    np = lb.util.lazy_import('numpy')
-    xr = lb.util.lazy_import('xarray')
-    scipy = lb.util.lazy_import('scipy')
-    iqwaveform = lb.util.lazy_import('iqwaveform')
+    np = util.lazy_import('numpy')
+    xr = util.lazy_import('xarray')
+    scipy = util.lazy_import('scipy')
+    iqwaveform = util.lazy_import('iqwaveform')
 
 
-@lru_cache
+@functools.lru_cache
 def read_calibration_corrections(path):
     with gzip.GzipFile(path, 'rb') as fd:
         return pickle.load(fd)
@@ -170,7 +168,7 @@ def resampling_correction(
         extend=True,
     )
 
-    xp = import_cupy_with_fallback()
+    xp = util.import_cupy_with_fallback()
 
     # create a buffer large enough for post-processing seeded with a copy of the IQ
     _, buf_size = get_capture_buffer_sizes(radio, capture)

@@ -1,9 +1,9 @@
 """this module deals with the integration of sensor operation on sensor hardware"""
 
 # work around a dynamic library loading packaging quirk on jetson aarch64
-from . import radio, structs, iq_corrections
+from . import radio, structs, iq_corrections, util
 
-from .actions import CAPTURE_DIM
+from .results import CAPTURE_DIM
 from .controller import connect, SweepController
 from .io import load, dump, read_yaml_sweep
 from .iq_corrections import read_calibration_corrections

@@ -13,7 +13,7 @@ from .xarray_wrappers import (
     cyclic_channel_power,
     iq_waveform,
     persistence_spectrum,
-    spectrogram_power_ccdf,
+    spectrogram_ccdf,
 )
 
 from .dataarrays import (
@@ -23,3 +23,4 @@ from .dataarrays import (
 from .source import simulated_awgn, filter_iq_capture
 
 from .structs import Capture, FilteredCapture
+from .type_stubs import ArrayType, DatasetType

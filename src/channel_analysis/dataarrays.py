@@ -2,37 +2,35 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import collections
+import functools
+import dataclasses
 import inspect
 import typing
-
-from functools import lru_cache, wraps
-from collections import UserDict
 
 from xarray_dataclasses.dataarray import OptionedClass, TDataArray, DataClass, PInit
 from xarray_dataclasses.datamodel import AnyEntry, DataModel
 
-from array_api_compat import is_cupy_array, is_numpy_array, is_torch_array
 from frozendict import frozendict
-import matplotlib
-import iqwaveform
-import labbench as lb
 import msgspec
-import numpy as np
 
-from . import structs, type_stubs
+from . import structs, type_stubs, util
 
 
 if typing.TYPE_CHECKING:
     import numpy as np
     import scipy
-    import pandas as pd
     import xarray as xr
+    from array_api_compat import is_cupy_array, is_numpy_array, is_torch_array
+    import iqwaveform
 else:
-    np = lb.util.lazy_import('numpy')
-    scipy = lb.util.lazy_import('scipy')
-    pd = lb.util.lazy_import('pandas')
-    xr = lb.util.lazy_import('xarray')
+    np = util.lazy_import('numpy')
+    scipy = util.lazy_import('scipy')
+    xr = util.lazy_import('xarray')
+    is_cupy_array = util.lazy_import('array_api_compat.is_cupy_array')
+    is_numpy_array = util.lazy_import('array_api_compat.is_numpy_array')
+    is_torch_array = util.lazy_import('array_api_compat.is_torch_array')
+    iqwaveform = util.lazy_import('iqwaveform')
 
 
 TFunc = typing.Callable[..., typing.Any]
@@ -46,7 +44,7 @@ class KeywordArguments(msgspec.Struct):
     """base class for the keyword argument parameters of an analysis function"""
 
 
-class _ChannelAnalysisRegistry(UserDict):
+class _ChannelAnalysisRegistry(collections.UserDict):
     """a registry of keyword-only arguments for decorated functions"""
 
     def __init__(self, base_struct=None):
@@ -74,7 +72,7 @@ class _ChannelAnalysisRegistry(UserDict):
             sig = inspect.signature(func)
             params = sig.parameters
 
-            @wraps(func)
+            @functools.wraps(func)
             def wrapped(iq, capture, **kws):
                 bound = sig.bind(iq=iq, capture=capture, **kws)
                 call_params = bound.kwargs
@@ -141,7 +139,7 @@ def shaped(
 def shaped(
     cls: type[DataClass[PInit]],
 ) -> xr.DataArray: ...
-@lru_cache
+@functools.lru_cache
 def dataarray_stub(cls: typing.Any) -> typing.Any:
     """return an empty array of type `cls`"""
 
@@ -158,7 +156,7 @@ def dataarray_stub(cls: typing.Any) -> typing.Any:
     return stub.isel(slices)
 
 
-@lru_cache
+@functools.lru_cache
 def get_data_model(dataclass: typing.Any):
     return DataModel.from_dataclass(dataclass)
 
@@ -189,7 +187,7 @@ def channel_dataarray(
     return da
 
 
-@dataclass
+@dataclasses.dataclass
 class ChannelAnalysisResult(UserDict):
     """represents the return result from a channel analysis function.
 
@@ -237,7 +235,7 @@ def select_parameter_kws(locals_: dict, omit=('capture', 'out')) -> dict:
     return {k: v for k, v in items[1:] if k not in omit}
 
 
-@lru_cache(8)
+@functools.lru_cache(8)
 def _generate_iir_lpf(
     capture: structs.Capture,
     *,

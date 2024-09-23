@@ -1,35 +1,47 @@
 from __future__ import annotations
-from numbers import Number
-from enum import Enum
+import enum
+import functools
+import numbers
 import psutil
-import xarray as xr
-from functools import lru_cache
+import socket
+import typing
+import uuid
+
+from pathlib import Path
+import dulwich
 
 from channel_analysis import type_stubs
-from dulwich.repo import Repo, NotGitRepository
-from dulwich import porcelain
-from pathlib import Path
-import socket
-import uuid
-from labbench._host import Host
+from . import util
+
+if typing.TYPE_CHECKING:
+    import labbench as lb
+    import xarray as xr
+    import dulwich.repo
+    import dulwich.porcelain
+else:
+    lb = util.lazy_import('labbench')
+    xr = util.lazy_import('xarray')
+    dulwich.repo = util.lazy_import('dulwich.repo')
+    dulwich.porcelain = util.lazy_import('dulwich.porcelain')
+
 
 METADATA_VERSION = '0.0'
 
 
-@lru_cache(8)
-def _find_repo_in_parents(path: Path) -> Repo:
+@functools.lru_cache(8)
+def _find_repo_in_parents(path: Path) -> 'dulwich.repo.Repo':
     """find a git repository in path, or in the first parent to contain one"""
     path = Path(path).absolute()
 
     try:
-        return Repo(str(path))
-    except NotGitRepository as ex:
+        return dulwich.repo.Repo(str(path))
+    except dulwich.repo.NotGitRepository as ex:
         if not path.is_dir() or path.parent is path:
             raise
 
         try:
             return _find_repo_in_parents(path.parent)
-        except NotGitRepository:
+        except dulwich.repo.NotGitRepository:
             ex.args = ex.args[0] + ' (and parent directories)'
             raise ex
 
@@ -39,9 +51,9 @@ def _filter_types(obj: dict | list | tuple):
         return {k: _filter_types(v) for k, v in obj.items()}
     elif isinstance(obj, (list, tuple)):
         return [_filter_types(v) for v in obj]
-    elif isinstance(obj, Enum) or obj is None:
+    elif isinstance(obj, enum.Enum) or obj is None:
         return None
-    elif isinstance(obj, (Number, bool, str)):
+    elif isinstance(obj, (numbers.Number, bool, str)):
         return obj
     else:
         raise TypeError(f'object "{repr(obj)}" has unsupported type')
@@ -69,7 +81,7 @@ def _psutil_to_dict(name, *args, **kws):
     return _asdict(ret)
 
 
-@lru_cache(8)
+@functools.lru_cache(8)
 def _compute_status_meta(keys: tuple):
     return {
         'coords': type_stubs.CoordinatesType({'compute_status_category': list(keys)}),
@@ -82,7 +94,7 @@ def _compute_status_meta(keys: tuple):
     }
 
 
-def package_log_messages(host: Host) -> dict[str, xr.DataArray]:
+def package_log_messages(host: 'lb.Host') -> dict[str, xr.DataArray]:
     """package logger messages from labbench._host.Host.log into xarray DataArrays"""
 
     messages = host.log
@@ -118,7 +130,7 @@ def git_unstaged_changes(repo_or_path='.') -> list[str]:
     if repo is None:
         return []
 
-    names = porcelain.status(repo, untracked_files='no').unstaged
+    names = dulwich.porcelain.status(repo, untracked_files='no').unstaged
     return [n.decode() for n in names]
 
 
@@ -142,12 +154,12 @@ def host_metadata(search_path='.'):
     return repo_info
 
 
-@lru_cache(8)
+@functools.lru_cache(8)
 def _temperature_coords(keys: tuple):
     return xr.Coordinates({'temperature_sensor': list(keys)})
 
 
-@lru_cache(8)
+@functools.lru_cache(8)
 def _temperature_coords(keys: tuple):
     return xr.Coordinates({'temperature_sensor': list(keys)})
 

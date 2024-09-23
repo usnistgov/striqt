@@ -3,16 +3,9 @@ from __future__ import annotations
 import typing
 from pathlib import Path
 from collections import defaultdict
-import pickle
-import os
-import warnings
-import labbench as lb
-
 import warnings
 
-warnings.filterwarnings('ignore', category=FutureWarning, message='is deprecated and will be removed in a Zarr-Python version 3')
-
-from . import type_stubs, xarray_wrappers
+from . import type_stubs, util, xarray_wrappers
 from .xarray_wrappers._iq_waveform import IQSampleIndexAxis
 
 if typing.TYPE_CHECKING:
@@ -21,10 +14,13 @@ if typing.TYPE_CHECKING:
     import xarray as xr
     import zarr
 else:
-    np = lb.util.lazy_import('numpy')
-    numcodecs = lb.util.lazy_import('numcodecs')
-    xr = lb.util.lazy_import('xarray')
-    zarr = lb.util.lazy_import('zarr')
+    np = util.lazy_import('numpy')
+    numcodecs = util.lazy_import('numcodecs')
+    xr = util.lazy_import('xarray')
+    zarr = util.lazy_import('zarr')
+
+
+warnings.filterwarnings('ignore', category=FutureWarning, message='is deprecated and will be removed in a Zarr-Python version 3')
 
 IQ_WAVEFORM_INDEX_NAME = typing.get_args(IQSampleIndexAxis)[0]
 

@@ -1,16 +1,15 @@
 from __future__ import annotations
 import typing
-import labbench as lb
 
-from . import structs, type_stubs
+from . import structs, type_stubs, util
 from .io import load, dump
 
 if typing.TYPE_CHECKING:
     import numpy as np
     import iqwaveform
 else:
-    np = lb.util.lazy_import('numpy')
-    iqwaveform = lb.util.lazy_import('iqwaveform')
+    np = util.lazy_import('numpy')
+    iqwaveform = util.lazy_import('iqwaveform')
 
 
 def filter_iq_capture(

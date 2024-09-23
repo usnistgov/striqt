@@ -11,12 +11,10 @@ from .. import structs
 
 if typing.TYPE_CHECKING:
     import numpy as np
-    import pandas as pd
     import SoapySDR as soapy
     import iqwaveform
 else:
     np = lb.util.lazy_import('numpy')
-    pd = lb.util.lazy_import('pandas')
     soapy = lb.util.lazy_import('SoapySDR')
     iqwaveform = lb.util.lazy_import('iqwaveform')
 
