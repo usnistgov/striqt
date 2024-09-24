@@ -1,0 +1,174 @@
+"""wrap lower-level iqwaveform DSP calls to accept physical inputs and return xarray.DataArray"""
+
+from __future__ import annotations
+
+import collections
+import functools
+import dataclasses
+import inspect
+import typing
+
+from frozendict import frozendict
+import msgspec
+
+from xarray_dataclasses.dataarray import OptionedClass, TDataArray, PInit
+from xarray_dataclasses.datamodel import AnyEntry, DataModel
+
+from ..._api import structs, util
+
+from ..._api import type_stubs
+
+
+if typing.TYPE_CHECKING:
+    import numpy as np
+    import xarray as xr
+    import array_api_compat
+else:
+    np = util.lazy_import('numpy')
+    xr = util.lazy_import('xarray')
+    array_api_compat = util.lazy_import('array_api_compat')
+
+
+TFunc = typing.Callable[..., typing.Any]
+
+
+def _entry_stub(entry: AnyEntry):
+    return np.empty(len(entry.dims) * (1,), dtype=entry.dtype)
+
+
+@typing.overload
+def shaped(
+    cls: type[OptionedClass[PInit, TDataArray]],
+) -> TDataArray: ...
+@functools.lru_cache
+def dataarray_stub(cls: typing.Any) -> typing.Any:
+    """return an empty array of type `cls`"""
+
+    entries = get_data_model(cls).entries
+    params = inspect.signature(cls.new).parameters
+    kws = {
+        name: _entry_stub(entries[name])
+        for name, param in params.items()
+        if param.default is param.empty
+    }
+
+    stub = cls.new(**kws)
+    slices = dict.fromkeys(stub.dims, slice(None, 0))
+    return stub.isel(slices)
+
+
+@functools.lru_cache
+def get_data_model(dataclass: typing.Any):
+    return DataModel.from_dataclass(dataclass)
+
+
+def freezevalues(parameters: dict) -> dict:
+    return {
+        k: (tuple(v) if isinstance(v, (list, np.ndarray)) else v)
+        for k, v in parameters.items()
+    }
+
+
+def channel_dataarray(
+    cls, data: np.ndarray, capture, parameters: dict[str, typing.Any]
+) -> xr.DataArray:
+    """build an `xarray.DataArray` from an ndarray, capture information, and channel analysis keyword arguments"""
+    template = dataarray_stub(cls)
+    data = np.asarray(data)
+    parameters = freezevalues(parameters)
+
+    # to bypass initialization overhead, grow from the empty template
+    da = template.pad({dim: [0, data.shape[i]] for i, dim in enumerate(template.dims)})
+    da.values[:] = data
+
+    for entry in get_data_model(cls).coords:
+        arr = entry.base.factory(capture, **parameters)
+        da[entry.name].indexes[entry.dims[0]].values[:] = arr
+
+    return da
+
+
+@dataclasses.dataclass
+class ChannelAnalysisResult(collections.UserDict):
+    """represents the return result from a channel analysis function.
+
+    This includes a method to convert to `xarray.DataArray`, which is
+    delayed to leave the GPU time to initiate the evaluation of multiple
+    analyses before we materialize them on the CPU.
+    """
+
+    datacls: type
+    data: typing.Union[type_stubs.ArrayType, dict]
+    capture: structs.RadioCapture
+    parameters: dict[str, typing.Any]
+    attrs: list[str] = frozendict()
+
+    def to_xarray(self) -> type_stubs.DataArrayType:
+        return channel_dataarray(
+            cls=self.datacls,
+            data=_to_maybe_nested_numpy(self.data),
+            capture=self.capture,
+            parameters=self.parameters,
+        ).assign_attrs(self.attrs)
+
+
+def _to_maybe_nested_numpy(obj: tuple | list | dict | type_stubs.ArrayType):
+    """convert an array, or a container of arrays, into a numpy array (or container of numpy arrays)"""
+
+    if isinstance(obj, (tuple, list)):
+        return [_to_maybe_nested_numpy(item) for item in obj]
+    elif isinstance(obj, dict):
+        return [_to_maybe_nested_numpy(item) for item in obj.values()]
+    elif array_api_compat.is_torch_array(obj):
+        return obj.cpu()
+    elif array_api_compat.is_cupy_array(obj):
+        return obj.get()
+    elif array_api_compat.is_numpy_array(obj):
+        return obj
+    else:
+        raise TypeError(f'obj type {type(obj)} is unrecognized')
+
+
+def select_parameter_kws(locals_: dict, omit=('capture', 'out')) -> dict:
+    """return the analysis parameters from the locals() evaluated at the beginning of analysis function"""
+
+    items = list(locals_.items())
+    return {k: v for k, v in items[1:] if k not in omit}
+
+
+def evaluate_channel_analysis(
+    iq: type_stubs.ArrayType,
+    capture: structs.Capture,
+    *,
+    spec: str | dict | structs.ChannelAnalysis,
+    registry,
+):
+    """evaluate the specified channel analysis for the given IQ waveform and
+    its capture information"""
+    # round-trip for type conversion and validation
+    spec = msgspec.convert(spec, registry.spec_type())
+    spec_dict = msgspec.to_builtins(spec)
+
+    results = {}
+
+    # evaluate each possible analysis function if specified
+    for name, func_kws in spec_dict.items():
+        func = registry[type(getattr(spec, name))]
+
+        if func_kws:
+            results[name] = func(iq, capture, **func_kws)
+
+    return results
+
+
+def package_channel_analysis(
+    capture: structs.Capture, results: dict[str, structs.ChannelAnalysis]
+) -> type_stubs.DatasetType:
+    # materialize as xarrays
+    xarrays = {name: res.to_xarray() for name, res in results.items()}
+    # capture.analysis_filter = dict(capture.analysis_filter)
+    # capture = msgspec.convert(capture, type=type(capture))
+    attrs = msgspec.to_builtins(capture, builtin_types=(frozendict,))
+    if isinstance(capture, structs.FilteredCapture):
+        attrs['analysis_filter'] = dict(capture.analysis_filter)
+    return xr.Dataset(xarrays, attrs=attrs)
