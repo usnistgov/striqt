@@ -45,11 +45,6 @@ def open_store(path: str | Path, *, mode: str):
             flag = 'c'
         elif mode == 'w':
             flag = 'n'
-            for extra_suffix in ('.dat', '.bak', '.dir'):
-                try:
-                    os.unlink(path + extra_suffix)
-                except FileNotFoundError:
-                    pass
         else:
             flag = mode
         warnings.simplefilter('ignore')
