@@ -203,4 +203,4 @@ def run_server(host: str, port: int, driver: str, verbose: bool):
     else:
         lb.show_messages('info')
 
-    edge_sensor._controller.start_server(host=host, port=port, default_driver=driver)
+    edge_sensor.start_server(host=host, port=port, default_driver=driver)
