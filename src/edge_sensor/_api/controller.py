@@ -185,20 +185,20 @@ class _ServerService(rpyc.Service, SweepController):
             lb.logger.info(prep_msg)
         self.prepare_sweep(sweep, calibration, pickled=True)
 
-        capture_pairs = util.zip_offsets(sweep.captures, (-1, 0), fill=None)
+        capture_pairs = util.zip_offsets(sweep.captures, (0, 1), fill=None)
 
         descs = (
             sweeps.describe_capture(i, len(sweep.captures), c1, c2)
             for i, (c1, c2) in enumerate(capture_pairs)
         )
 
-        typing.Generator = self.iter_sweep(
+        sweep_iter = self.iter_sweep(
             sweep, calibration, always_yield, pickled=True, prepare=False
         )
 
-        desc_pairs = zip_longest(typing.Generator, descs, fillvalue='last analysis')
+        desc_pairs = zip_longest(sweep_iter, descs, fillvalue='last analysis')
 
-        if typing.Generator == []:
+        if sweep_iter == []:
             return []
         else:
             return (conn.root.deliver(r, d) for r, d in desc_pairs)
