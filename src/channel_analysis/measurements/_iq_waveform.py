@@ -7,9 +7,8 @@ import numpy as np
 import iqwaveform
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
-from .._api import structs
+from .._api import structs, type_stubs
 from ._common import as_registered_channel_analysis
-from .._api import type_stubs
 
 if typing.TYPE_CHECKING:
     import pandas as pd
