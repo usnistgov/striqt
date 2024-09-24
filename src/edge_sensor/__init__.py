@@ -15,3 +15,5 @@ from ._api.radio import (
 )
 from ._api.structs import RadioCapture, RadioSetup, Sweep, Description
 from ._api.sweeps import iter_sweep, iter_callbacks
+
+from . import radios
