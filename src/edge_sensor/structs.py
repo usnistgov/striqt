@@ -4,8 +4,7 @@ from __future__ import annotations
 from frozendict import frozendict
 import functools
 import msgspec
-from typing import Optional, Literal, Any
-from typing import Annotated as A
+from typing import Annotated, Optional, Literal, Any
 from pathlib import Path
 from msgspec import convert
 
@@ -25,23 +24,25 @@ class RadioCapture(channel_analysis.Capture, forbid_unknown_fields=True):
     """configuration for a single waveform capture"""
 
     # RF and leveling
-    center_frequency: A[float, meta('RF center frequency', 'Hz')] = 3710e6
-    channel: A[int, meta('Input port index')] = 0
-    gain: A[float, meta('Gain setting', 'dB')] = -10
+    center_frequency: Annotated[float, meta('RF center frequency', 'Hz')] = 3710e6
+    channel: Annotated[int, meta('Input port index')] = 0
+    gain: Annotated[float, meta('Gain setting', 'dB')] = -10
 
     # acquisition
-    duration: A[float, meta('duration of the capture', 's')] = 0.1
-    sample_rate: A[float, meta('Sample rate', 'S/s')] = 15.36e6
+    duration: Annotated[float, meta('duration of the capture', 's')] = 0.1
+    sample_rate: Annotated[float, meta('Sample rate', 'S/s')] = 15.36e6
 
     # filtering and resampling
-    analysis_bandwidth: A[Optional[float], meta('Waveform filter bandwidth', 'Hz')] = (
-        10e6
-    )
-    lo_shift: A[_TShift, meta('LO shift direction')] = 'none'
+    analysis_bandwidth: Annotated[
+        Optional[float], meta('Waveform filter bandwidth', 'Hz')
+    ] = 10e6
+    lo_shift: Annotated[_TShift, meta('LO shift direction')] = 'none'
     gpu_resample: bool = True
 
     # hooks for external devices (switches, noise diodes, etc)
-    external: A[frozendict[str, Any], meta('External device states')] = frozendict()
+    external: Annotated[frozendict[str, Any], meta('External device states')] = (
+        frozendict()
+    )
 
 
 class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):
@@ -55,13 +56,13 @@ class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):
     calibration: Optional[str] = None
 
     # external frequency conversion disabled when if_frequency is None
-    preselect_if_frequency: A[
+    preselect_if_frequency: Annotated[
         Optional[float], meta('preselector IF filter center frequency')
     ] = None  # Hz (or none, for no ext frontend)
-    preselect_lo_gain: A[
+    preselect_lo_gain: Annotated[
         Optional[float], meta('preselector LO path gain setting', 'dB')
     ] = 0  # dB (ignored when if_frequency is None)
-    preselect_rf_gain: A[
+    preselect_rf_gain: Annotated[
         Optional[float], meta('preselector RF path gain setting', 'dB')
     ] = 0
 

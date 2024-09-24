@@ -37,22 +37,31 @@ def set_cuda_mem_limit(fraction=0.75):
     except ModuleNotFoundError:
         return
 
-    import psutil
-    from cupy.fft.config import get_plan_cache
-
-    #    cupy.cuda.set_allocator(None)
-
-    available = psutil.virtual_memory().available
+    # Alternative: select an absolute amount of memory 
+    # 
+    # import psutil
+    # available = psutil.virtual_memory().available
 
     cupy.get_default_memory_pool().set_limit(fraction=fraction)
 
 
-def zip_offsets(
-    seq: typing.Iterable, shifts: tuple | list, fill: typing.Any, squeeze=True
-):
-    """return an iterator that yields tuples of length `len(shifts)` consisting of delayed or advanced iterations of `seq`.
+TGen = type[typing.Any]
 
-    Shifts that would yield an invalid index (negative or beyond the end of `seq`) are replaced with the `fill` value.
+def zip_offsets(
+    seq: typing.Iterable[TGen], shifts: tuple[int, ...] | list[int], fill: typing.Any, *, squeeze=True
+) -> typing.Generator[tuple[TGen, ...]]:
+    """a generator that yields from `seq` at multiple index shifts.
+
+    Shifts that would yield an invalid index (i.e., before or beyond the end of `seq`) are
+    replaced with `fill`.
+
+    Args:
+        seq: iterable of values to shift
+        shifts: a sequence of integers indicating the index shifts to apply
+        fill: the value to yield before or after `seq` yields values
+
+    Yields:
+        tuples of length `shifts` composed of delayed/advanced values from `seq`
     """
     lo = min(shifts)
 

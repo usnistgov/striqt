@@ -24,7 +24,10 @@ def _frozensubset(d: dict | frozendict, keys: list[str]) -> frozendict:
 
 
 def describe_capture(
-    index: int, count: int, this: structs.RadioCapture | None, prev: structs.RadioCapture | None = None
+    index: int,
+    count: int,
+    this: structs.RadioCapture | None,
+    prev: structs.RadioCapture | None = None,
 ) -> str:
     """generate a description of a capture to log progress"""
     if this is None:
@@ -52,7 +55,6 @@ def describe_capture(
 
     capture_diff = ', '.join([f'{k}={repr(v)}' for k, v in diffs.items()])
     return f'{index+1 if index<count else count}/{count} {capture_diff}'
-
 
 
 def design_warmup_sweep(
@@ -198,7 +200,8 @@ def iter_callbacks(
     *,
     setup: callable[[structs.Capture], None] | None = None,
     acquire: callable[[structs.Capture], None] | None = None,
-    save: callable[[channel_analysis.DatasetType, structs.Capture], typing.Any] | None = None,
+    save: callable[[channel_analysis.DatasetType, structs.Capture], typing.Any]
+    | None = None,
 ):
     """trigger callbacks on each sweep iteration.
 
