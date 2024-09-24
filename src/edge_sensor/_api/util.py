@@ -37,8 +37,8 @@ def set_cuda_mem_limit(fraction=0.75):
     except ModuleNotFoundError:
         return
 
-    # Alternative: select an absolute amount of memory 
-    # 
+    # Alternative: select an absolute amount of memory
+    #
     # import psutil
     # available = psutil.virtual_memory().available
 
@@ -47,8 +47,13 @@ def set_cuda_mem_limit(fraction=0.75):
 
 TGen = type[typing.Any]
 
+
 def zip_offsets(
-    seq: typing.Iterable[TGen], shifts: tuple[int, ...] | list[int], fill: typing.Any, *, squeeze=True
+    seq: typing.Iterable[TGen],
+    shifts: tuple[int, ...] | list[int],
+    fill: typing.Any,
+    *,
+    squeeze=True,
 ) -> typing.Generator[tuple[TGen, ...]]:
     """a generator that yields from `seq` at multiple index shifts.
 

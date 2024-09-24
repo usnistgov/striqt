@@ -7,8 +7,10 @@ import warnings
 from pathlib import Path
 from collections import defaultdict
 
-from . import type_stubs, util, xarray_wrappers
-from .xarray_wrappers._iq_waveform import IQSampleIndexAxis
+from . import type_stubs, util
+
+from .. import measurements
+from ..measurements._iq_waveform import IQSampleIndexAxis
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -80,7 +82,7 @@ def _build_encodings(data, compression=None, filter: bool = True):
     for name in data.data_vars.keys():
         # skip compression of iq waveforms, which is slow and
         # ineffective due to high entropy
-        if name != xarray_wrappers.iq_waveform.__name__:
+        if name != measurements.iq_waveform.__name__:
             if compressor is not None:
                 encodings[name]['compressor'] = compressor
 

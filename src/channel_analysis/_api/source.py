@@ -1,7 +1,9 @@
 from __future__ import annotations
 import typing
 
-from . import structs, type_stubs, util
+from . import structs, util
+
+from . import type_stubs
 from .io import load, dump
 
 if typing.TYPE_CHECKING:

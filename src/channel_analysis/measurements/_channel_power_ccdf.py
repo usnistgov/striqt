@@ -6,7 +6,9 @@ from dataclasses import dataclass
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 import iqwaveform
 
-from .. import dataarrays, structs
+from ._api import as_registered_channel_analysis
+
+from .._api import structs
 
 
 @lru_cache
@@ -48,7 +50,7 @@ class ChannelPowerCCDF(AsDataArray):
     standard_name: Attr[str] = 'CCDF'
 
 
-@dataarrays.as_registered_channel_analysis(ChannelPowerCCDF)
+@as_registered_channel_analysis(ChannelPowerCCDF)
 def channel_power_ccdf(
     iq,
     capture: structs.Capture,

@@ -6,7 +6,11 @@ import iqwaveform
 from dataclasses import dataclass
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
-from .. import structs, dataarrays, type_stubs
+from .._api import structs
+
+from ._api import as_registered_channel_analysis
+
+from .._api import type_stubs
 
 pd = iqwaveform.util.lazy_import('pandas')
 
@@ -74,7 +78,7 @@ class IQWaveform(AsDataArray):
     units: Attr[str] = 'V/√Ω'
 
 
-@dataarrays.as_registered_channel_analysis(IQWaveform)
+@as_registered_channel_analysis(IQWaveform)
 def iq_waveform(
     iq: type_stubs.ArrayType,
     capture: structs.Capture,

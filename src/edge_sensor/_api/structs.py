@@ -1,23 +1,22 @@
-"""data structures for configuration of hardware and experiments"""
+"""data structures for configuration of radio hardware, captures, and sweeps"""
 
 from __future__ import annotations
 from frozendict import frozendict
 import functools
 import msgspec
 from typing import Annotated, Optional, Literal, Any
-from pathlib import Path
 from msgspec import convert
 
 import channel_analysis
-import channel_analysis.dataarrays
-from channel_analysis.structs import meta, get_attrs, ChannelAnalysis, to_builtins
+import channel_analysis._api.filters
+from channel_analysis._api.structs import meta, get_attrs, ChannelAnalysis, to_builtins
 
 
 _TShift = Literal['left', 'right', 'none']
 
 
 def _make_default_analysis():
-    return channel_analysis.dataarrays.as_registered_channel_analysis.spec_type()()
+    return channel_analysis.filters.as_registered_channel_analysis.spec_type()()
 
 
 class RadioCapture(channel_analysis.Capture, forbid_unknown_fields=True):

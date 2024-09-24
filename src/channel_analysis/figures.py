@@ -2,7 +2,7 @@ from __future__ import annotations
 import xarray as xr
 import matplotlib as mpl
 from typing import Optional
-from .structs import Capture
+from ._api.structs import Capture
 
 
 def summarize_metadata(

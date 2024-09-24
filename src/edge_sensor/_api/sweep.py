@@ -4,8 +4,10 @@ import itertools
 
 from frozendict import frozendict
 
-from .radio import RadioDevice, NullRadio
-from . import _capture_data, _util, structs
+from . import capture, util
+
+from ..radio import RadioDevice, NullRadio
+from . import structs
 
 
 if typing.TYPE_CHECKING:
@@ -13,9 +15,9 @@ if typing.TYPE_CHECKING:
     import labbench as lb
     import channel_analysis
 else:
-    xr = _util.lazy_import('xarray')
-    lb = _util.lazy_import('labbench')
-    lb = _util.lazy_import('channel_analysis')
+    xr = util.lazy_import('xarray')
+    lb = util.lazy_import('labbench')
+    lb = util.lazy_import('channel_analysis')
 
 
 def freezefromkeys(d: dict | frozendict, keys: list[str]) -> frozendict:
@@ -125,7 +127,7 @@ def iter_sweep(
         'description': structs.to_builtins(sweep.description),
     }
 
-    analyze = _capture_data.ChannelAnalysisWrapper(
+    analyze = capture.ChannelAnalysisWrapper(
         radio=radio,
         analysis_spec=sweep.channel_analysis,
         extra_attrs=attrs,
@@ -140,7 +142,7 @@ def iter_sweep(
     sweep_time = None
 
     # iterate across (previous, current, next) captures to support concurrency
-    offset_captures = _util.zip_offsets(sweep.captures, (-1, 0, 1), fill=None)
+    offset_captures = util.zip_offsets(sweep.captures, (-1, 0, 1), fill=None)
 
     try:
         for i, (capture_prev, capture_this, capture_next) in enumerate(offset_captures):
@@ -269,7 +271,7 @@ def iter_callbacks(
 
         if data is not None:
             ext_dataarrays = {
-                k: xr.DataArray(v).expand_dims(_capture_data.CAPTURE_DIM)
+                k: xr.DataArray(v).expand_dims(capture.CAPTURE_DIM)
                 for k, v in ext_data.items()
             }
             last_data = data.assign(ext_dataarrays)

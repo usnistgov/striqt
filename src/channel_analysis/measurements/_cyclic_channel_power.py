@@ -6,8 +6,10 @@ import numpy as np
 import iqwaveform
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
-from .. import structs, dataarrays
-from ..type_stubs import StatisticListType
+from ._api import as_registered_channel_analysis
+
+from .._api import structs
+from .._api.type_stubs import StatisticListType
 from ._channel_power_time_series import PowerDetectorAxis, PowerDetectorCoords
 
 
@@ -70,7 +72,7 @@ class CyclicChannelPower(AsDataArray):
     units: Attr[str] = 'dBm'
 
 
-@dataarrays.as_registered_channel_analysis(CyclicChannelPower)
+@as_registered_channel_analysis(CyclicChannelPower)
 def cyclic_channel_power(
     iq,
     capture: structs.Capture,

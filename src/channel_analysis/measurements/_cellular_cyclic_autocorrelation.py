@@ -9,7 +9,11 @@ import numpy as np
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
 import iqwaveform
-from .. import structs, dataarrays, type_stubs
+
+from .._api import structs
+
+from ._api import as_registered_channel_analysis
+from .._api import type_stubs
 
 
 if typing.TYPE_CHECKING:
@@ -71,7 +75,7 @@ class CellularCyclicAutocorrelation(AsDataArray):
 
 
 ### iqwaveform wrapper
-@dataarrays.as_registered_channel_analysis(CellularCyclicAutocorrelation)
+@as_registered_channel_analysis(CellularCyclicAutocorrelation)
 def cellular_cyclic_autocorrelation(
     iq: type_stubs.ArrayLike,
     capture: structs.Capture,

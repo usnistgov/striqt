@@ -5,7 +5,11 @@ import numpy as np
 import iqwaveform
 from dataclasses import dataclass
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
-from .. import type_stubs, structs, dataarrays
+
+from .._api import structs
+
+from ._api import as_registered_channel_analysis
+from .._api import type_stubs
 
 
 @lru_cache
@@ -86,7 +90,7 @@ class PersistenceSpectrum(AsDataArray):
     standard_name: Attr[str] = 'Power spectral density'
 
 
-@dataarrays.as_registered_channel_analysis(PersistenceSpectrum)
+@as_registered_channel_analysis(PersistenceSpectrum)
 def persistence_spectrum(
     iq: type_stubs.ArrayType,
     capture: structs.Capture,

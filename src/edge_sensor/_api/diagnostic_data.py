@@ -10,7 +10,7 @@ import uuid
 from pathlib import Path
 import dulwich
 
-from channel_analysis import type_stubs
+from channel_analysis._api import type_stubs
 from . import util
 
 if typing.TYPE_CHECKING:

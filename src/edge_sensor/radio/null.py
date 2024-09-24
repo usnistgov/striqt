@@ -5,7 +5,7 @@ from labbench import paramattr as attr
 
 from .soapy import SoapyRadioDevice
 from .base import RadioDevice
-from ..util import import_cupy_with_fallback
+from .._api.util import import_cupy_with_fallback
 
 if typing.TYPE_CHECKING:
     import numpy as np

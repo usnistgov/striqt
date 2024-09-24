@@ -6,9 +6,10 @@ import typing
 
 import rpyc
 
-from channel_analysis import type_stubs
-from . import _sweeping, util, structs
-from .radio import find_radio_cls_by_name, is_same_resource, RadioDevice
+from channel_analysis._api import type_stubs
+from . import sweep, util
+from . import structs
+from ..radio import find_radio_cls_by_name, is_same_resource, RadioDevice
 
 if typing.TYPE_CHECKING:
     import xarray as xr
@@ -77,7 +78,7 @@ class SweepController:
         self.radios[radio_setup.driver].close()
 
     def _describe_preparation(self, sweep: structs.Sweep) -> str:
-        warmup_sweep = _sweeping.design_warmup_sweep(
+        warmup_sweep = sweep.design_warmup_sweep(
             sweep, skip=tuple(self.warmed_captures)
         )
         msgs = []
@@ -90,7 +91,7 @@ class SweepController:
     def prepare_sweep(self, sweep_spec: structs.Sweep, calibration, pickled=False):
         """open the radio while warming up the GPU"""
 
-        warmup_sweep = _sweeping.design_warmup_sweep(
+        warmup_sweep = sweep.design_warmup_sweep(
             sweep_spec, skip=tuple(self.warmed_captures)
         )
         self.warmed_captures = self.warmed_captures | set(warmup_sweep.captures)
@@ -130,7 +131,7 @@ class SweepController:
         radio = self.open_radio(sweep.radio_setup)
         radio.setup(sweep.radio_setup)
 
-        return _sweeping.iter_sweep(radio, close_after=True, **kwargs)
+        return sweep.iter_sweep(radio, close_after=True, **kwargs)
 
     def __del__(self):
         self.close()
@@ -187,7 +188,7 @@ class _ServerService(rpyc.Service, SweepController):
         capture_pairs = util.zip_offsets(sweep.captures, (-1, 0), fill=None)
 
         descs = (
-            _sweeping.describe_capture(i, len(sweep.capture), c1, c2)
+            sweep.describe_capture(i, len(sweep.capture), c1, c2)
             for i, (c1, c2) in enumerate(capture_pairs)
         )
 

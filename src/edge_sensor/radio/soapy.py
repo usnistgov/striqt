@@ -5,9 +5,9 @@ import typing
 import labbench as lb
 from labbench import paramattr as attr
 
-from channel_analysis import type_stubs
+from channel_analysis._api import type_stubs
 from .base import RadioDevice, design_capture_filter
-from .. import structs
+from .._api import structs
 
 if typing.TYPE_CHECKING:
     import numpy as np

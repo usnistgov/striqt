@@ -8,7 +8,9 @@ import numpy as np
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 import iqwaveform
 
-from .. import structs, dataarrays
+from ._api import as_registered_channel_analysis
+
+from .._api import structs
 
 
 ### Time elapsed dimension and coordinates
@@ -60,7 +62,7 @@ class ChannelPowerTimeSeries(AsDataArray):
 
 
 ### iqwaveform implementation
-@dataarrays.as_registered_channel_analysis(ChannelPowerTimeSeries)
+@as_registered_channel_analysis(ChannelPowerTimeSeries)
 def channel_power_time_series(
     iq,
     capture: structs.Capture,

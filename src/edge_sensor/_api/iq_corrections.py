@@ -7,11 +7,13 @@ from math import ceil
 
 import iqwaveform.type_stubs
 
-from channel_analysis import dataarrays, type_stubs
+from channel_analysis._api import type_stubs
+from channel_analysis._api import filters
+from . import util
 
-from .radio import RadioDevice, get_capture_buffer_sizes, design_capture_filter
-from .radio.base import TRANSIENT_HOLDOFF_WINDOWS
-from . import _util, structs
+from ..radio import RadioDevice, get_capture_buffer_sizes, design_capture_filter
+from ..radio.base import TRANSIENT_HOLDOFF_WINDOWS
+from . import structs
 
 
 if typing.TYPE_CHECKING:
@@ -20,10 +22,10 @@ if typing.TYPE_CHECKING:
     import scipy
     import iqwaveform
 else:
-    np = _util.lazy_import('numpy')
-    xr = _util.lazy_import('xarray')
-    scipy = _util.lazy_import('scipy')
-    iqwaveform = _util.lazy_import('iqwaveform')
+    np = util.lazy_import('numpy')
+    xr = util.lazy_import('xarray')
+    scipy = util.lazy_import('scipy')
+    iqwaveform = util.lazy_import('iqwaveform')
 
 
 @functools.lru_cache
@@ -168,7 +170,7 @@ def resampling_correction(
         extend=True,
     )
 
-    xp = _util.import_cupy_with_fallback()
+    xp = util.import_cupy_with_fallback()
 
     # create a buffer large enough for post-processing seeded with a copy of the IQ
     _, buf_size = get_capture_buffer_sizes(radio, capture)
@@ -214,7 +216,7 @@ def resampling_correction(
 
         # nothing to do here
         if analysis_filter['passband'] != (None, None):
-            iq = dataarrays.iir_filter(
+            iq = filters.iir_filter(
                 iq,
                 capture,
                 passband_ripple=0.5,

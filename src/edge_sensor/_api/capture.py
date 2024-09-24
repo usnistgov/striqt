@@ -9,7 +9,8 @@ import typing
 from frozendict import frozendict
 
 import channel_analysis
-from . import _iq_corrections, radio, structs, util
+from . import iq_corrections, structs, util
+from .. import radio
 
 if typing.TYPE_CHECKING:
     import pandas as pd
@@ -80,7 +81,7 @@ class ChannelAnalysisWrapper:
 
         with lb.stopwatch('analyze', logger_level='debug'):
             # for performance, GPU operations are all here in the same thread
-            iq = _iq_corrections.resampling_correction(
+            iq = iq_corrections.resampling_correction(
                 iq, capture, self.radio, force_calibration=self.calibration
             )
             coords = self.get_coords(
