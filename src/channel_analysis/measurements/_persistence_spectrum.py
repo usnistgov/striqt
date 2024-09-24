@@ -1,18 +1,17 @@
 from __future__ import annotations
-from functools import lru_cache
+import dataclasses
+import functools
 import typing
+
 import numpy as np
 import iqwaveform
-from dataclasses import dataclass
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
-from .._api import structs
-
-from ._api import as_registered_channel_analysis
-from .._api import type_stubs
+from ._common import as_registered_channel_analysis
+from .._api import structs, type_stubs
 
 
-@lru_cache
+@functools.lru_cache
 def equivalent_noise_bandwidth(window: typing.Union[str, tuple[str, float]], N: int):
     """return the equivalent noise bandwidth (ENBW) of a window, in bins"""
     w = iqwaveform.fourier._get_window(window, N)
@@ -23,13 +22,13 @@ def equivalent_noise_bandwidth(window: typing.Union[str, tuple[str, float]], N: 
 PersistenceStatisticAxis = typing.Literal['persistence_statistic']
 
 
-@dataclass
+@dataclasses.dataclass
 class PersistenceStatisticCoords:
     data: Data[PersistenceStatisticAxis, str]
     standard_name: Attr[str] = 'Persistence statistic'
 
     @staticmethod
-    @lru_cache
+    @functools.lru_cache
     def factory(
         capture: structs.Capture,
         *,
@@ -44,14 +43,14 @@ class PersistenceStatisticCoords:
 BasebandFrequencyAxis = typing.Literal['baseband_frequency']
 
 
-@dataclass
+@dataclasses.dataclass
 class BasebandFrequencyCoords:
     data: Data[BasebandFrequencyAxis, np.float64]
     standard_name: Attr[str] = 'Baseband frequency'
     units: Attr[str] = 'Hz'
 
     @staticmethod
-    @lru_cache
+    @functools.lru_cache
     def factory(
         capture: structs.Capture,
         *,
@@ -78,7 +77,7 @@ class BasebandFrequencyCoords:
 
 
 ### Dataarray
-@dataclass
+@dataclasses.dataclass
 class PersistenceSpectrum(AsDataArray):
     power_time_series: Data[
         tuple[PersistenceStatisticAxis, BasebandFrequencyAxis], np.float32

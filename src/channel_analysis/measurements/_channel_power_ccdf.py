@@ -1,17 +1,17 @@
 from __future__ import annotations
+import functools
+import dataclasses
 import typing
-from functools import lru_cache
+
 import numpy as np
-from dataclasses import dataclass
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 import iqwaveform
 
-from ._api import as_registered_channel_analysis
-
+from ._common import as_registered_channel_analysis
 from .._api import structs
 
 
-@lru_cache
+@functools.lru_cache
 def make_power_bins(power_low, power_high, power_resolution, xp=np):
     """generate the list of power bins"""
     ret = xp.arange(power_low, power_high, power_resolution)
@@ -23,14 +23,14 @@ def make_power_bins(power_low, power_high, power_resolution, xp=np):
 ChannelPowerBinAxis = typing.Literal['channel_power_bin']
 
 
-@dataclass
+@dataclasses.dataclass
 class ChannelPowerCoords:
     data: Data[ChannelPowerBinAxis, np.float32]
     standard_name: Attr[str] = 'Channel power'
     units: Attr[str] = 'dBm'
 
     @staticmethod
-    @lru_cache
+    @functools.lru_cache
     def factory(
         capture: structs.Capture,
         *,
@@ -43,7 +43,7 @@ class ChannelPowerCoords:
         return make_power_bins(power_low, power_high, power_resolution)
 
 
-@dataclass
+@dataclasses.dataclass
 class ChannelPowerCCDF(AsDataArray):
     ccdf: Data[ChannelPowerBinAxis, np.float32]
     channel_power_bin: Coordof[ChannelPowerCoords]

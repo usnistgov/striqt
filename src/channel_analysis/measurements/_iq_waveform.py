@@ -1,18 +1,20 @@
 from __future__ import annotations
+import dataclasses
+import functools
 import typing
-from functools import lru_cache
+
 import numpy as np
 import iqwaveform
-from dataclasses import dataclass
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
 from .._api import structs
-
-from ._api import as_registered_channel_analysis
-
+from ._common import as_registered_channel_analysis
 from .._api import type_stubs
 
-pd = iqwaveform.util.lazy_import('pandas')
+if typing.TYPE_CHECKING:
+    import pandas as pd
+else:
+    pd = iqwaveform.util.lazy_import('pandas')
 
 
 def _get_start_stop_index(
@@ -44,14 +46,14 @@ def _get_start_stop_index(
 IQSampleIndexAxis = typing.Literal['iq_index']
 
 
-@dataclass
+@dataclasses.dataclass
 class IQSampleIndexCoords:
     data: Data[IQSampleIndexAxis, int]
     standard_name: Attr[str] = 'IQ waveform'
     units: Attr[str] = 'V/√Ω'
 
     @staticmethod
-    @lru_cache
+    @functools.lru_cache
     def factory(
         capture: structs.Capture,
         *,
@@ -69,7 +71,7 @@ class IQSampleIndexCoords:
 
 
 ### DataArray definition
-@dataclass
+@dataclasses.dataclass
 class IQWaveform(AsDataArray):
     power_time_series: Data[IQSampleIndexAxis, np.complex64]
     iq_index: Coordof[IQSampleIndexCoords]

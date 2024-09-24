@@ -1,25 +1,20 @@
 from __future__ import annotations
+import dataclasses
+import functools
 import numbers
 import typing
-import functools
-from dataclasses import dataclass
-
 
 import numpy as np
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
-
 import iqwaveform
 
-from .._api import structs
-
-from ._api import as_registered_channel_analysis
-from .._api import type_stubs
+from ._common import as_registered_channel_analysis
+from .._api import structs, type_stubs
 
 
 if typing.TYPE_CHECKING:
     from iqwaveform import ofdm
     import pandas as pd
-
 else:
     ofdm = iqwaveform.util.lazy_import('iqwaveform.ofdm')
     pd = iqwaveform.util.lazy_import('pandas')
@@ -29,7 +24,7 @@ else:
 CyclicSampleLagAxis = typing.Literal['cyclic_sample_lag']
 
 
-@dataclass
+@dataclasses.dataclass
 class CyclicSampleLagCoords:
     data: Data[CyclicSampleLagAxis, np.float32]
     standard_name: Attr[str] = 'Cyclic symbol index offset'
@@ -49,7 +44,7 @@ class CyclicSampleLagCoords:
 SubcarrierSpacingAxis = typing.Literal['subcarrier_spacing']
 
 
-@dataclass
+@dataclasses.dataclass
 class SubcarrierSpacingCoords:
     data: Data[SubcarrierSpacingAxis, np.float32]
     standard_name: Attr[str] = 'Subcarrier spacing'
@@ -64,7 +59,7 @@ class SubcarrierSpacingCoords:
 
 
 ### Dataarray definition
-@dataclass
+@dataclasses.dataclass
 class CellularCyclicAutocorrelation(AsDataArray):
     power_time_series: Data[
         tuple[SubcarrierSpacingAxis, CyclicSampleLagAxis], np.float32

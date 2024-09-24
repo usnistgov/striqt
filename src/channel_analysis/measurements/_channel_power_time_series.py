@@ -1,30 +1,29 @@
 from __future__ import annotations
-from typing import Literal
-from functools import lru_cache
+import dataclasses
+import functools
+import typing
 
-from dataclasses import dataclass
 import numpy as np
-
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 import iqwaveform
 
-from ._api import as_registered_channel_analysis
+from ._common import as_registered_channel_analysis
 
 from .._api import structs
 
 
 ### Time elapsed dimension and coordinates
-TimeElapsedAxis = Literal['time_elapsed']
+TimeElapsedAxis = typing.Literal['time_elapsed']
 
 
-@dataclass
+@dataclasses.dataclass
 class TimeElapsedCoords:
     data: Data[TimeElapsedAxis, np.float32]
     standard_name: Attr[str] = 'Time elapsed'
     units: Attr[str] = 's'
 
     @staticmethod
-    @lru_cache
+    @functools.lru_cache
     def factory(
         capture: structs.Capture, *, power_detectors: tuple[str], detector_period: float
     ) -> dict[str, np.ndarray]:
@@ -33,16 +32,16 @@ class TimeElapsedCoords:
 
 
 ### Power detector dimension and coordinates
-PowerDetectorAxis = Literal['power_detector']
+PowerDetectorAxis = typing.Literal['power_detector']
 
 
-@dataclass
+@dataclasses.dataclass
 class PowerDetectorCoords:
     data: Data[PowerDetectorAxis, object]
     standard_name: Attr[str] = 'Power detector'
 
     @staticmethod
-    @lru_cache
+    @functools.lru_cache
     def factory(
         capture: structs.Capture, *, power_detectors: tuple[str], **kws
     ) -> dict[str, list]:
@@ -50,7 +49,7 @@ class PowerDetectorCoords:
 
 
 ### Dataarray definition
-@dataclass
+@dataclasses.dataclass
 class ChannelPowerTimeSeries(AsDataArray):
     power_time_series: Data[tuple[PowerDetectorAxis, TimeElapsedAxis], np.float32]
 

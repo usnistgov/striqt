@@ -1,15 +1,14 @@
 from __future__ import annotations
-import typing
+import dataclasses
 import functools
-from dataclasses import dataclass
+import typing
+
 import numpy as np
 import iqwaveform
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
-from ._api import as_registered_channel_analysis
-
-from .._api import structs
-from .._api.type_stubs import StatisticListType
+from ._common import as_registered_channel_analysis
+from .._api import structs, type_stubs
 from ._channel_power_time_series import PowerDetectorAxis, PowerDetectorCoords
 
 
@@ -17,7 +16,7 @@ from ._channel_power_time_series import PowerDetectorAxis, PowerDetectorCoords
 CyclicStatisticAxis = typing.Literal['cyclic_statistic']
 
 
-@dataclass
+@dataclasses.dataclass
 class CyclicStatisticCoords:
     data: Data[CyclicStatisticAxis, object]
     standard_name: Attr[str] = 'Cyclic statistic'
@@ -27,7 +26,7 @@ class CyclicStatisticCoords:
     def factory(
         capture: structs.Capture,
         *,
-        cyclic_statistics: StatisticListType = ('min', 'mean', 'max'),
+        cyclic_statistics: type_stubs.StatisticListType = ('min', 'mean', 'max'),
         **_,
     ):
         return list(cyclic_statistics)
@@ -37,7 +36,7 @@ class CyclicStatisticCoords:
 CyclicLagAxis = typing.Literal['cyclic_lag']
 
 
-@dataclass
+@dataclasses.dataclass
 class CyclicLagCoords:
     data: Data[CyclicLagAxis, np.float32]
     standard_name: Attr[str] = 'Cyclic lag'
@@ -58,7 +57,7 @@ class CyclicLagCoords:
 
 
 ### Define the data structure of the returned DataArray
-@dataclass
+@dataclasses.dataclass
 class CyclicChannelPower(AsDataArray):
     power_time_series: Data[
         tuple[PowerDetectorAxis, CyclicStatisticAxis, CyclicLagAxis], np.float32

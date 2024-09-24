@@ -1,17 +1,14 @@
 from __future__ import annotations
+import dataclasses
 import typing
-from dataclasses import dataclass
 
 import numpy as np
 
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 import iqwaveform
 
-from .._api import structs
-
-from ._api import as_registered_channel_analysis
-
-from .._api import type_stubs
+from .._api import structs, type_stubs
+from ._common import as_registered_channel_analysis
 from ._persistence_spectrum import equivalent_noise_bandwidth
 from ._channel_power_ccdf import make_power_bins, ChannelPowerCoords
 
@@ -19,7 +16,7 @@ from ._channel_power_ccdf import make_power_bins, ChannelPowerCoords
 SpectrogramPowerBinAxis = typing.Literal['spectrogram_power_bin']
 
 
-@dataclass
+@dataclasses.dataclass
 class SpectrogramCoords:
     data: Data[SpectrogramPowerBinAxis, np.float32]
     standard_name: Attr[str] = 'Spectrogram bin power'
@@ -28,7 +25,7 @@ class SpectrogramCoords:
     factory = ChannelPowerCoords.factory
 
 
-@dataclass
+@dataclasses.dataclass
 class SpectrogramCCDF(AsDataArray):
     ccdf: Data[SpectrogramPowerBinAxis, np.float32]
     spectrogram_power_bin: Coordof[SpectrogramCoords]
