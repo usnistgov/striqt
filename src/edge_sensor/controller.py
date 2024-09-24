@@ -185,8 +185,9 @@ class _ServerService(rpyc.Service, SweepController):
         self.prepare_sweep(sweep, calibration, pickled=True)
 
         capture_pairs = util.zip_offsets(sweep.captures, (-1, 0), fill=None)
+
         descs = (
-            f'{i+1}/{len(sweep.captures)}'# {sweeping.describe_capture(c1, c2)}'
+            sweeping.describe_capture(i, len(sweep.capture), c1, c2)
             for i, (c1, c2) in enumerate(capture_pairs)
         )
 

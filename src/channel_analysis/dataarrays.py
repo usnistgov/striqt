@@ -323,6 +323,8 @@ def _evaluate_raw_channel_analysis(
     *,
     spec: str | dict | structs.ChannelAnalysis,
 ):
+    """evaluate the specified channel analysis for the given IQ waveform and
+    its capture information"""
     # round-trip for type conversion and validation
     spec = msgspec.convert(spec, as_registered_channel_analysis.spec_type())
     spec_dict = msgspec.to_builtins(spec)

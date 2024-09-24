@@ -23,17 +23,19 @@ def _frozensubset(d: dict | frozendict, keys: list[str]) -> frozendict:
     return frozendict({k: d[k] for k in keys})
 
 
-@functools.lru_cache
-def list_fields(struct_cls):
-    return [f.name for f in msgspec.structs.fields(struct_cls)]
-
-
 def describe_capture(
-    this: structs.RadioCapture, prev: structs.RadioCapture | None = None
-):
+    index: int, count: int, this: structs.RadioCapture | None, prev: structs.RadioCapture | None = None
+) -> str:
+    """generate a description of a capture to log progress"""
+    if this is None:
+        if prev is None:
+            return 'saving last analysis'
+        else:
+            return 'performing last analysis'
+
     diffs = {}
 
-    for name in list_fields(type(this)):
+    for name in type(this).__struct_fields__:
         if name == 'external':
             continue
         value = getattr(this, name)
@@ -46,9 +48,11 @@ def describe_capture(
         value = this.external.get(name, None)
 
         if prev is None or value != prev.external.get(name, None):
-            diffs['external.' + name] = value
+            diffs[f'external[{repr(name)}]'] = value
 
-    return ', '.join([f'{k}={repr(v)}' for k, v in diffs.items()])
+    capture_diff = ', '.join([f'{k}={repr(v)}' for k, v in diffs.items()])
+    return f'{index+1 if index<count else count}/{count} {capture_diff}'
+
 
 
 def design_warmup_sweep(
@@ -138,7 +142,7 @@ def iter_sweep(
     offset_captures = util.zip_offsets(sweep.captures, (-1, 0, 1), fill=None)
 
     try:
-        for capture_prev, capture_this, capture_next in offset_captures:
+        for i, (capture_prev, capture_this, capture_next) in enumerate(offset_captures):
             calls = {}
 
             if capture_this is not None:
@@ -161,11 +165,7 @@ def iter_sweep(
                     pickled=pickled,
                 )
 
-            if capture_this is None:
-                desc = 'last analysis'
-            else:
-                # treat swept fields as coordinates/indices
-                desc = describe_capture(capture_this, capture_prev)
+            desc = describe_capture(i, len(sweep.captures), capture_this, capture_prev)
 
             with lb.stopwatch(f'{desc} •', logger_level='debug' if quiet else 'info'):
                 ret = lb.concurrently(**calls, flatten=False)
