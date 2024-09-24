@@ -7,7 +7,7 @@ import typing
 import rpyc
 
 from channel_analysis._api import type_stubs
-from . import sweep, util
+from . import sweeps, util
 from . import structs
 from .radio import find_radio_cls_by_name, is_same_resource, RadioDevice
 
@@ -91,7 +91,7 @@ class SweepController:
     def prepare_sweep(self, sweep_spec: structs.Sweep, calibration, pickled=False):
         """open the radio while warming up the GPU"""
 
-        warmup_sweep = sweep.design_warmup_sweep(
+        warmup_sweep = sweeps.design_warmup_sweep(
             sweep_spec, skip=tuple(self.warmed_captures)
         )
         self.warmed_captures = self.warmed_captures | set(warmup_sweep.captures)

@@ -4,7 +4,7 @@ import itertools
 
 from frozendict import frozendict
 
-from . import capture, util
+from . import captures, util
 
 from .radio import RadioDevice, NullRadio
 from . import structs
@@ -127,7 +127,7 @@ def iter_sweep(
         'description': structs.to_builtins(sweep.description),
     }
 
-    analyze = capture.ChannelAnalysisWrapper(
+    analyze = captures.ChannelAnalysisWrapper(
         radio=radio,
         analysis_spec=sweep.channel_analysis,
         extra_attrs=attrs,
