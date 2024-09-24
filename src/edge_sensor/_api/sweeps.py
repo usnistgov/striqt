@@ -17,7 +17,7 @@ if typing.TYPE_CHECKING:
 else:
     xr = util.lazy_import('xarray')
     lb = util.lazy_import('labbench')
-    lb = util.lazy_import('channel_analysis')
+    channel_analysis = util.lazy_import('channel_analysis')
 
 
 def freezefromkeys(d: dict | frozendict, keys: list[str]) -> frozendict:
