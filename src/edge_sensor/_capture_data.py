@@ -1,3 +1,5 @@
+"""Integrate radio capture information with channel_analysis evaluation and results"""
+
 from __future__ import annotations
 import dataclasses
 import functools
@@ -7,7 +9,7 @@ import typing
 from frozendict import frozendict
 
 import channel_analysis
-from . import iq_corrections, radio, structs, util
+from . import _iq_corrections, radio, structs, util
 
 if typing.TYPE_CHECKING:
     import pandas as pd
@@ -26,8 +28,8 @@ RADIO_ID_NAME = 'radio_id'
 
 
 @functools.lru_cache
-def _capture_coord_template(external_fields: frozendict[str, typing.Any]):
-    """returns a cached set of xarray coordinate for the given list of swept fields"""
+def coord_template(external_fields: frozendict[str, typing.Any]):
+    """returns a cached xr.Coordinates object to use as a template for data results"""
 
     capture = structs.RadioCapture()
     coords = {}
@@ -78,7 +80,7 @@ class ChannelAnalysisWrapper:
 
         with lb.stopwatch('analyze', logger_level='debug'):
             # for performance, GPU operations are all here in the same thread
-            iq = iq_corrections.resampling_correction(
+            iq = _iq_corrections.resampling_correction(
                 iq, capture, self.radio, force_calibration=self.calibration
             )
             coords = self.get_coords(
@@ -107,7 +109,7 @@ class ChannelAnalysisWrapper:
             return analysis
 
     def get_coords(self, capture: structs.RadioCapture, capture_time, sweep_time):
-        coords = _capture_coord_template(capture.external).copy(deep=True)
+        coords = coord_template(capture.external).copy(deep=True)
 
         for field in coords.keys():
             if field in capture.__struct_fields__:

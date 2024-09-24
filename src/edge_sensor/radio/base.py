@@ -70,7 +70,7 @@ class RadioDevice(lb.Device):
         next_capture: typing.Union[structs.RadioCapture, None] = None,
         correction: bool = True,
     ) -> tuple[np.array, type_stubs.TimestampType]:
-        from .. import iq_corrections
+        from .. import _iq_corrections
 
         count, _ = get_capture_buffer_sizes(self, capture)
 
@@ -86,7 +86,7 @@ class RadioDevice(lb.Device):
                 self.arm(next_capture)
 
             if correction:
-                iq = iq_corrections.resampling_correction(iq, capture, self)
+                iq = _iq_corrections.resampling_correction(iq, capture, self)
 
             return iq, timestamp
 

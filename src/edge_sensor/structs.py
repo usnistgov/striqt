@@ -46,7 +46,7 @@ class RadioCapture(channel_analysis.Capture, forbid_unknown_fields=True):
 
 
 class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):
-    """run-time characteristics of the radio that are invariant during a test"""
+    """run-time characteristics of the radio that are left invariant during a sweep"""
 
     driver: str = 'Air7201B'
     resource: Any = None

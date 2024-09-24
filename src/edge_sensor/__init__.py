@@ -1,17 +1,16 @@
-"""this module deals with the integration of sensor operation on sensor hardware"""
+"""integrate channel_analysis into captures on sensor hardware"""
 
 # work around a dynamic library loading packaging quirk on jetson aarch64
-from . import radio, structs, iq_corrections, util
+from . import _iq_corrections, _util, radio, structs
 
-from .analysis import CAPTURE_DIM
-from .controller import connect, SweepController
-from .io import load, dump, read_yaml_sweep
-from .iq_corrections import read_calibration_corrections
+from ._capture_data import CAPTURE_DIM
+from ._controller import connect, start_server, SweepController
+from ._io import load, dump, open_store, read_yaml_sweep
+from ._iq_corrections import read_calibration_corrections
 from .radio import (
     RadioDevice,
     NullRadio,
-    get_capture_buffer_sizes,
     design_capture_filter,
 )
 from .structs import RadioCapture, RadioSetup, Sweep, Description
-from .sweeping import iter_sweep, iter_callbacks
+from ._sweeping import iter_sweep, iter_callbacks

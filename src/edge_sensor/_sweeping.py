@@ -1,25 +1,24 @@
 from __future__ import annotations
 import typing
-import functools
 import itertools
-import msgspec
 
 from frozendict import frozendict
 
 from .radio import RadioDevice, NullRadio
-from . import analysis, structs, util
+from . import _capture_data, _util, structs
 
-import channel_analysis
 
 if typing.TYPE_CHECKING:
     import xarray as xr
     import labbench as lb
+    import channel_analysis
 else:
-    xr = util.lazy_import('xarray')
-    lb = util.lazy_import('labbench')
+    xr = _util.lazy_import('xarray')
+    lb = _util.lazy_import('labbench')
+    lb = _util.lazy_import('channel_analysis')
 
 
-def _frozensubset(d: dict | frozendict, keys: list[str]) -> frozendict:
+def freezefromkeys(d: dict | frozendict, keys: list[str]) -> frozendict:
     return frozendict({k: d[k] for k in keys})
 
 
@@ -61,9 +60,9 @@ def design_warmup_sweep(
     sweep: structs.Sweep, skip: tuple[structs.RadioCapture, ...]
 ) -> structs.Sweep:
     """returns a Sweep object for a NullRadio consisting of capture combinations from
-    `sweep` with unique combinations of GPU analysis topologies.
+    `sweep` with all unique combinations of data shapes.
 
-    This is meant to be run with fake data to warm up GPU operations and avoid
+    This is meant to be run with fake data to warm up JIT caches and avoid
     analysis slowdowns during sweeps.
     """
 
@@ -77,13 +76,13 @@ def design_warmup_sweep(
 
     sweep_map = structs.to_builtins(sweep)
     capture_maps = structs.to_builtins(sweep_map['captures'])
-    skip = {_frozensubset(structs.to_builtins(s), FIELDS) for s in skip}
+    skip = {freezefromkeys(structs.to_builtins(s), FIELDS) for s in skip}
 
     sweep_map['radio_setup']['driver'] = NullRadio.__name__
     sweep_map['radio_setup']['resource'] = 'empty'
 
     # the set of unique combinations. frozendict enables comparisons for the set ops.
-    warmup_captures = {_frozensubset(d, FIELDS) for d in capture_maps}
+    warmup_captures = {freezefromkeys(d, FIELDS) for d in capture_maps}
 
     sweep_map['captures'] = warmup_captures - skip
 
@@ -126,7 +125,7 @@ def iter_sweep(
         'description': structs.to_builtins(sweep.description),
     }
 
-    analyze = analysis.ChannelAnalysisWrapper(
+    analyze = _capture_data.ChannelAnalysisWrapper(
         radio=radio,
         analysis_spec=sweep.channel_analysis,
         extra_attrs=attrs,
@@ -141,7 +140,7 @@ def iter_sweep(
     sweep_time = None
 
     # iterate across (previous, current, next) captures to support concurrency
-    offset_captures = util.zip_offsets(sweep.captures, (-1, 0, 1), fill=None)
+    offset_captures = _util.zip_offsets(sweep.captures, (-1, 0, 1), fill=None)
 
     try:
         for i, (capture_prev, capture_this, capture_next) in enumerate(offset_captures):
@@ -187,7 +186,7 @@ def iter_sweep(
             radio.close()
 
 
-def _return_on_stopiter(iter):
+def stopiter_as_return(iter):
     try:
         return next(iter)
     except StopIteration:
@@ -254,7 +253,7 @@ def iter_callbacks(
             setup(capture)
 
         returns = lb.concurrently(
-            lb.Call(_return_on_stopiter, data_spec_pairs).rename('data'),
+            lb.Call(stopiter_as_return, data_spec_pairs).rename('data'),
             lb.Call(acquire, capture).rename('acquire'),
             lb.Call(save, last_data).rename('save'),
             flatten=False,
@@ -270,7 +269,7 @@ def iter_callbacks(
 
         if data is not None:
             ext_dataarrays = {
-                k: xr.DataArray(v).expand_dims(analysis.CAPTURE_DIM)
+                k: xr.DataArray(v).expand_dims(_capture_data.CAPTURE_DIM)
                 for k, v in ext_data.items()
             }
             last_data = data.assign(ext_dataarrays)
