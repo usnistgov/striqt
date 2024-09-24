@@ -185,7 +185,7 @@ class _ServerService(rpyc.Service, SweepController):
             lb.logger.info(prep_msg)
         self.prepare_sweep(sweep, calibration, pickled=True)
 
-        capture_pairs = util.zip_offsets(sweep.captures, (0, 1), fill=None)
+        capture_pairs = util.zip_offsets(sweep.captures, (0, -1), fill=None)
 
         descs = (
             sweeps.describe_capture(i, len(sweep.captures), c1, c2)
