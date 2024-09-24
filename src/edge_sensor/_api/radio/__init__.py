@@ -6,6 +6,5 @@ from .base import (
     design_capture_filter,
 )
 
-# from .soapy import SoapyRadioDevice
-from .deepwave import Air7201B, Air7101B
+from .soapy import SoapyRadioDevice
 from .null import NullRadio

@@ -2,15 +2,13 @@
 
 # start with this to work around a dynamic library loading
 # packaging quirk on jetson aarch64
-from ._api import iq_corrections, structs, util
-
-from . import radio
+from ._api import iq_corrections, radio, structs, util
 
 from ._api.capture import CAPTURE_DIM
 from ._api.controller import connect, start_server, SweepController
 from ._api.io import load, dump, open_store, read_yaml_sweep
 from ._api.iq_corrections import read_calibration_corrections
-from .radio import (
+from ._api.radio import (
     RadioDevice,
     NullRadio,
     design_capture_filter,

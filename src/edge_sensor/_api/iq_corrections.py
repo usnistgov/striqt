@@ -11,8 +11,8 @@ from channel_analysis._api import type_stubs
 from channel_analysis._api import filters
 from . import util
 
-from ..radio import RadioDevice, get_capture_buffer_sizes, design_capture_filter
-from ..radio.base import TRANSIENT_HOLDOFF_WINDOWS
+from .radio import RadioDevice, get_capture_buffer_sizes, design_capture_filter
+from .radio.base import TRANSIENT_HOLDOFF_WINDOWS
 from . import structs
 
 

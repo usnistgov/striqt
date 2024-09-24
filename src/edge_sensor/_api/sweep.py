@@ -6,7 +6,7 @@ from frozendict import frozendict
 
 from . import capture, util
 
-from ..radio import RadioDevice, NullRadio
+from .radio import RadioDevice, NullRadio
 from . import structs
 
 

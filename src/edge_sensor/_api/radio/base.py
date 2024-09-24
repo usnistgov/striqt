@@ -6,7 +6,7 @@ import typing
 import labbench as lb
 from labbench import paramattr as attr
 import numpy as np
-from .._api import structs
+from .. import structs
 from channel_analysis._api import type_stubs
 
 if typing.TYPE_CHECKING:
@@ -70,7 +70,7 @@ class RadioDevice(lb.Device):
         next_capture: typing.Union[structs.RadioCapture, None] = None,
         correction: bool = True,
     ) -> tuple[np.array, type_stubs.TimestampType]:
-        from .._api import iq_corrections
+        from .. import iq_corrections
 
         count, _ = get_capture_buffer_sizes(self, capture)
 

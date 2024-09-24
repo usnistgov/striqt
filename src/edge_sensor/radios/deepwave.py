@@ -1,7 +1,7 @@
 from __future__ import annotations
 import labbench.paramattr as attr
 
-from .soapy import SoapyRadioDevice
+from .._api.radio import SoapyRadioDevice
 import uuid
 
 # for TX only (RX channel is accessed through the AirT7201B.channel method)

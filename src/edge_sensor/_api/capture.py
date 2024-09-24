@@ -10,7 +10,7 @@ from frozendict import frozendict
 
 import channel_analysis
 from . import iq_corrections, structs, util
-from .. import radio
+from . import radio
 
 if typing.TYPE_CHECKING:
     import pandas as pd

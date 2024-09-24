@@ -9,7 +9,7 @@ import rpyc
 from channel_analysis._api import type_stubs
 from . import sweep, util
 from . import structs
-from ..radio import find_radio_cls_by_name, is_same_resource, RadioDevice
+from .radio import find_radio_cls_by_name, is_same_resource, RadioDevice
 
 if typing.TYPE_CHECKING:
     import xarray as xr
