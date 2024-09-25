@@ -76,9 +76,9 @@ def design_warmup_sweep(
         'gpu_resample',
     ]
 
-    sweep_map = structs.to_builtins(sweep)
-    capture_maps = structs.to_builtins(sweep_map['captures'])
-    skip = {freezefromkeys(structs.to_builtins(s), FIELDS) for s in skip}
+    sweep_map = structs.struct_to_builtins(sweep)
+    capture_maps = structs.struct_to_builtins(sweep_map['captures'])
+    skip = {freezefromkeys(structs.struct_to_builtins(s), FIELDS) for s in skip}
 
     sweep_map['radio_setup']['driver'] = NullRadio.__name__
     sweep_map['radio_setup']['resource'] = 'empty'
@@ -88,7 +88,7 @@ def design_warmup_sweep(
 
     sweep_map['captures'] = warmup_captures - skip
 
-    return structs.convert(sweep_map, type(sweep))
+    return structs.builtins_to_struct(sweep_map, type(sweep))
 
 
 def iter_sweep(
@@ -123,8 +123,8 @@ def iter_sweep(
 
     attrs = {
         # metadata fields
-        'radio_setup': structs.to_builtins(sweep.radio_setup),
-        'description': structs.to_builtins(sweep.description),
+        'radio_setup': structs.struct_to_builtins(sweep.radio_setup),
+        'description': structs.struct_to_builtins(sweep.description),
     }
 
     analyze = captures.ChannelAnalysisWrapper(
@@ -138,14 +138,15 @@ def iter_sweep(
         return
 
     iq = None
-    capture_time = None
+    acquired_capture = None
     sweep_time = None
+    capture_prev = None
 
     # iterate across (previous, current, next) captures to support concurrency
     offset_captures = util.zip_offsets(sweep.captures, (-1, 0, 1), fill=None)
 
     try:
-        for i, (capture_prev, capture_this, capture_next) in enumerate(offset_captures):
+        for i, (_, capture_this, capture_next) in enumerate(offset_captures):
             calls = {}
 
             if capture_this is not None:
@@ -162,7 +163,7 @@ def iter_sweep(
                 calls['analyze'] = lb.Call(
                     analyze,
                     iq,
-                    capture_time=capture_time,
+                    capture_time=acquired_capture,
                     sweep_time=sweep_time,
                     capture=capture_prev,
                     pickled=pickled,
@@ -179,9 +180,9 @@ def iter_sweep(
                 yield None
 
             if 'acquire' in ret:
-                iq, capture_time = ret['acquire']
+                iq, capture_prev = ret['acquire']
                 if sweep_time is None:
-                    sweep_time = capture_time
+                    sweep_time = capture_prev.start_time
 
     finally:
         if close_after:

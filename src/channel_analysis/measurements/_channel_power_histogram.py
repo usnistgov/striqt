@@ -7,7 +7,11 @@ import numpy as np
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 import iqwaveform
 
-from ._channel_power_ccdf import ChannelPowerCoords, ChannelPowerBinAxis, make_power_bins
+from ._channel_power_ccdf import (
+    ChannelPowerCoords,
+    ChannelPowerBinAxis,
+    make_power_bins,
+)
 from ._common import as_registered_channel_analysis
 from .._api import structs
 
@@ -16,14 +20,19 @@ from .._api import structs
 def make_power_histogram_bin_edges(power_low, power_high, power_resolution, xp=np):
     """generate the list of power bins"""
 
-    bin_centers = make_power_bins(
-        power_low=power_low,
-        power_high=power_high,
-        power_resolution=power_resolution,
-        xp=xp,
-    ) + power_resolution/2
+    bin_centers = (
+        make_power_bins(
+            power_low=power_low,
+            power_high=power_high,
+            power_resolution=power_resolution,
+            xp=xp,
+        )
+        + power_resolution / 2
+    )
 
-    return xp.concatenate([bin_centers-power_resolution, [power_high+power_resolution/2]])
+    return xp.concatenate(
+        [bin_centers - power_resolution, [power_high + power_resolution / 2]]
+    )
 
 
 @dataclasses.dataclass
@@ -43,7 +52,7 @@ def channel_power_histogram(
     power_resolution: float,
 ):
     """evaluate the fraction of channel power readings binned on a uniform grid spacing.
-    
+
     The outputs correspond to bin centers.
     """
 

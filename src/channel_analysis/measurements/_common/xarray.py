@@ -146,8 +146,8 @@ def evaluate_channel_analysis(
     """evaluate the specified channel analysis for the given IQ waveform and
     its capture information"""
     # round-trip for type conversion and validation
-    spec = msgspec.convert(spec, registry.spec_type())
-    spec_dict = msgspec.to_builtins(spec)
+    spec = structs.builtins_to_struct(spec, registry.spec_type())
+    spec_dict = structs.struct_to_builtins(spec)
 
     results = {}
 
@@ -167,8 +167,8 @@ def package_channel_analysis(
     # materialize as xarrays
     xarrays = {name: res.to_xarray() for name, res in results.items()}
     # capture.analysis_filter = dict(capture.analysis_filter)
-    # capture = msgspec.convert(capture, type=type(capture))
-    attrs = msgspec.to_builtins(capture, builtin_types=(frozendict,))
+    # capture = structs.builtins_to_struct(capture, type=type(capture))
+    attrs = structs.struct_to_builtins(capture)
     if isinstance(capture, structs.FilteredCapture):
         attrs['analysis_filter'] = dict(capture.analysis_filter)
     return xr.Dataset(xarrays, attrs=attrs)

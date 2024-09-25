@@ -1,19 +1,29 @@
 """just a stub for now in case we change this in the future"""
 
 from __future__ import annotations
-from channel_analysis import load, dump, open_store
-import msgspec
-from frozendict import frozendict
-from .structs import Sweep
-from pathlib import Path
 import typing
+from pathlib import Path
 
-__all__ = ['load', 'dump', 'read_yaml_sweep']
+from channel_analysis import load, dump, open_store
+from frozendict import frozendict
+import msgspec
+
+from .structs import Sweep
+from . import util
+import channel_analysis
+
+
+if typing.TYPE_CHECKING:
+    import pandas as pd
+else:
+    pd = util.lazy_import('pandas')
 
 
 def _dec_hook(type_, obj):
     if typing.get_origin(type_) is frozendict:
         return frozendict(obj)
+    elif typing.get_origin(type_) is pd.Timestamp:
+        return pd.to_datetime(obj)
     else:
         return obj
 
@@ -51,6 +61,8 @@ def read_yaml_sweep(
         dict(defaults, **c, **adjust_captures) for c in tree['captures']
     ]
 
-    run = msgspec.convert(tree, type=Sweep, strict=False, dec_hook=_dec_hook)
+    run = channel_analysis.builtins_to_struct(
+        tree, type=Sweep, strict=False, dec_hook=_dec_hook
+    )
 
     return run

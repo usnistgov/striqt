@@ -88,7 +88,8 @@ class RadioDevice(lb.Device):
             if correction:
                 iq = iq_corrections.resampling_correction(iq, capture, self)
 
-            return iq, timestamp
+            acquired_capture = structs.copy_struct(capture, start_time=timestamp)
+            return iq, acquired_capture
 
     def setup(self, radio_config: structs.RadioSetup):
         # TODO: the other parameters too

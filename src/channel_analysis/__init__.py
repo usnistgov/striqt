@@ -6,7 +6,13 @@ from ._api import filters
 from ._api.io import load, dump, open_store
 from ._api.filters import iir_filter, ola_filter
 from ._api.source import simulated_awgn, filter_iq_capture
-from ._api.structs import Capture, FilteredCapture
+from ._api.structs import (
+    Capture,
+    FilteredCapture,
+    struct_to_builtins,
+    builtins_to_struct,
+    copy_struct,
+)
 from ._api.type_stubs import ArrayType, DatasetType
 
 from .measurements import *
