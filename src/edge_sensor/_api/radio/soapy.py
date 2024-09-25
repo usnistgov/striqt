@@ -211,8 +211,8 @@ class SoapyRadioDevice(RadioDevice):
         self.channel(0)
         self.channel_enabled(False)
 
-        # eventually: replace this with GPS time sync
-        # self.backend.setHardwareTime(1, 'now')
+        # eventually: support GPS time sync here
+        self.backend.setHardwareTime(round(time.time()*1e9), 'now')
 
     @property
     def master_clock_rate(self):
