@@ -48,6 +48,7 @@ class ChannelPowerCCDF(AsDataArray):
     ccdf: Data[ChannelPowerBinAxis, np.float32]
     channel_power_bin: Coordof[ChannelPowerCoords]
     standard_name: Attr[str] = 'CCDF'
+    long_name: Attr[str] = r'Exceedance fraction'
 
 
 @as_registered_channel_analysis(ChannelPowerCCDF)

@@ -10,31 +10,19 @@ import iqwaveform
 from .._api import structs, type_stubs
 from ._common import as_registered_channel_analysis
 from ._persistence_spectrum import equivalent_noise_bandwidth
-from ._channel_power_ccdf import make_power_bins, ChannelPowerCoords
-
-# Axis and coordinates
-SpectrogramPowerBinAxis = typing.Literal['spectrogram_power_bin']
+from ._spectrogram_ccdf import SpectrogramCoords, SpectrogramPowerBinAxis
+from ._channel_power_histogram import make_power_histogram_bin_edges
 
 
 @dataclasses.dataclass
-class SpectrogramCoords:
-    data: Data[SpectrogramPowerBinAxis, np.float32]
-    standard_name: Attr[str] = 'Spectrogram bin power'
-    units: Attr[str] = 'dBm'
-
-    factory = ChannelPowerCoords.factory
-
-
-@dataclasses.dataclass
-class SpectrogramCCDF(AsDataArray):
+class SpectrogramHistogram(AsDataArray):
     ccdf: Data[SpectrogramPowerBinAxis, np.float32]
     spectrogram_power_bin: Coordof[SpectrogramCoords]
-    standard_name: Attr[str] = 'CCDF'
-    long_name: Attr[str] = r'Fraction of counts centered in bin channel power level'
+    standard_name: Attr[str] = 'Fraction of counts'
 
 
-@as_registered_channel_analysis(SpectrogramCCDF)
-def spectrogram_ccdf(
+@as_registered_channel_analysis(SpectrogramHistogram)
+def spectrogram_histogram(
     iq: type_stubs.ArrayType,
     capture: structs.Capture,
     *,
@@ -93,13 +81,15 @@ def spectrogram_ccdf(
 
     spg = iqwaveform.powtodB(spg, eps=1e-25, out=spg)
 
-    bins = make_power_bins(
+    bin_edges = make_power_histogram_bin_edges(
         power_low=power_low,
         power_high=power_high,
         power_resolution=power_resolution,
         xp=xp,
     )
-    data = iqwaveform.sample_ccdf(spg.flatten(), bins).astype(dtype)
+
+    counts, _ = xp.histogram(spg.flatten(), bin_edges)
+    data = counts.astype(dtype) / xp.sum(counts)
 
     metadata = {
         'window': window,

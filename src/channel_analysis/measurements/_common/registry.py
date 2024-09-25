@@ -53,6 +53,8 @@ class ChannelAnalysisRegistryDecorator(collections.UserDict):
 
         def wrapper(func: TFunc):
             name = func.__name__
+            if name in self:
+                raise TypeError(f'another function named {repr(name)} has already been registered')
             sig = inspect.signature(func)
             params = sig.parameters
 
