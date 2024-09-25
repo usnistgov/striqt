@@ -21,7 +21,7 @@ from channel_analysis._api.structs import (
 if TYPE_CHECKING:
     import pandas as pd
 else:
-    pd = util.lazy_loader('pandas')
+    pd = util.lazy_import('pandas')
 
 _TShift = Literal['left', 'right', 'none']
 
