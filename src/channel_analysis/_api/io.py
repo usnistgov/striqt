@@ -17,8 +17,10 @@ if typing.TYPE_CHECKING:
     import numcodecs
     import xarray as xr
     import zarr
+    import pandas as pd
 else:
     np = util.lazy_import('numpy')
+    pd = util.lazy_import('pandas')
     numcodecs = util.lazy_import('numcodecs')
     xr = util.lazy_import('xarray')
     zarr = util.lazy_import('zarr')
@@ -117,8 +119,18 @@ def dump(
     # and make fixed length now
 
     for name in dict(data.coords).keys():
-        if data[name].dtype == np.dtype('object'):
-            data = data.assign({name: data[name].astype('str')})
+        if data[name].size == 0:
+            continue
+
+        if isinstance(data[name].values[0], str):
+            # avoid potential truncation due to fixed-length strings
+            target_dtype = 'str'
+        elif isinstance(data[name].values[0], pd.Timestamp):
+            target_dtype = 'datetime64[ns]'
+        else:
+            continue
+
+        data = data.assign({name: data[name].astype(target_dtype)})
 
     if append_dim is None:
         append_dim = 'capture'
