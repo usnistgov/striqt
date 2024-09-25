@@ -13,6 +13,6 @@ from ._api.structs import (
     builtins_to_struct,
     copy_struct,
 )
-from ._api.type_stubs import ArrayType, DatasetType
+from ._api.type_stubs import ArrayType, DatasetType, TimestampType
 
 from .measurements import *

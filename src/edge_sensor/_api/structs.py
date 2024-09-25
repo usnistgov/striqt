@@ -33,7 +33,7 @@ class RadioCapture(channel_analysis.Capture, forbid_unknown_fields=True):
     gain: Annotated[float, meta('Gain setting', 'dB')] = -10
 
     # acquisition
-    start_time: Optional[Annotated[float, meta('Acquisition start time')]] = None
+    start_time: Optional[Annotated[channel_analysis.TimestampType, meta('Acquisition start time')]] = None
     duration: Annotated[float, meta('Acquisition duration', 's', gt=0)] = 0.1
     sample_rate: Annotated[float, meta('Sample rate', 'S/s', gt=0)] = 15.36e6
 
