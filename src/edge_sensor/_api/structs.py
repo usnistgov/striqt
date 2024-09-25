@@ -4,7 +4,9 @@ from __future__ import annotations
 from frozendict import frozendict
 import functools
 import msgspec
-from typing import Annotated, Optional, Literal, Any
+from typing import TYPE_CHECKING, Annotated, Optional, Literal, Any
+
+from . import util
 
 import channel_analysis
 import channel_analysis._api.filters
@@ -16,6 +18,10 @@ from channel_analysis._api.structs import (
     copy_struct,
 )
 
+if TYPE_CHECKING:
+    import pandas as pd
+else:
+    pd = util.lazy_loader('pandas')
 
 _TShift = Literal['left', 'right', 'none']
 
@@ -48,6 +54,9 @@ class RadioCapture(channel_analysis.Capture, forbid_unknown_fields=True):
     external: Annotated[frozendict[str, Any], meta('External device states')] = (
         frozendict()
     )
+
+    # def __post_init__(self):
+    #     type(self).__annotations__['start_time'] = Optional[Annotated[pd.Timestamp, meta('Acquisition start time')]]
 
 
 class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):
