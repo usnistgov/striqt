@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 import typing
+from . import util
 
 if typing.TYPE_CHECKING:
-    from typing_extensions import TypeAlias
-
     import xarray as xr
     import iqwaveform
     import pandas as pd
+else:
+    pd = util.lazy_import('pandas')
+    iqwaveform = util.lazy_import('iqwaveform')
+    xr = util.lazy_import('xarray')
 
-DataArrayType: TypeAlias = 'xr.DataArray'
-DatasetType: TypeAlias = 'xr.Dataset'
-CooordinatesType: TypeAlias = 'xr.Coordinates'
-TimestampType: TypeAlias = 'pd.Timestamp'
-ArrayType: TypeAlias = 'iqwaveform.util.Array'
-StatisticListType: TypeAlias = tuple[typing.Union[str, float], ...]
+DataArrayType: typing.TypeAlias = 'xr.DataArray'
+DatasetType: typing.TypeAlias = 'xr.Dataset'
+CooordinatesType: typing.TypeAlias = 'xr.Coordinates'
+TimestampType: typing.TypeAlias = 'pd.Timestamp'
+ArrayType: typing.TypeAlias = 'iqwaveform.util.Array'
+StatisticListType: typing.TypeAlias = tuple[typing.Union[str, float], ...]

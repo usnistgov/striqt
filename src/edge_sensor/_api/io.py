@@ -39,6 +39,8 @@ def read_yaml_sweep(
     # validate first
     msgspec.yaml.decode(text, type=Sweep, strict=False, dec_hook=_dec_hook)
 
+    import pandas as pd
+
     # build a dict to extract the list of sweep fields and apply defaults
     tree = msgspec.yaml.decode(text, type=dict, strict=False)
 
