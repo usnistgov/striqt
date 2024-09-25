@@ -163,7 +163,6 @@ def iter_sweep(
                 calls['analyze'] = lb.Call(
                     analyze,
                     iq,
-                    capture_time=acquired_capture,
                     sweep_time=sweep_time,
                     capture=capture_prev,
                     pickled=pickled,
