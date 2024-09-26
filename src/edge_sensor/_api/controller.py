@@ -196,7 +196,7 @@ class _ServerService(rpyc.Service, SweepController):
             sweep, calibration, always_yield, pickled=True, prepare=False
         )
 
-        desc_pairs = zip_longest(sweep_iter, descs, fillvalue='last analysis')
+        desc_pairs = zip_longest(sweep_iter, descs, fillvalue=None)
 
         if sweep_iter == []:
             return []
@@ -222,8 +222,11 @@ class _ClientService(rpyc.Service):
         with lb.stopwatch('data transfer', logger_level='debug'):
             if pickled_dataset is None:
                 return None
-            else:
+            elif isinstance(pickled_dataset, bytes):
                 return pickle.loads(pickled_dataset)
+            elif isinstance(pickled_dataset, str):
+                print(pickled_dataset, description)
+                raise TypeError('expected bytes but got str')
 
 
 def start_server(host=None, port=4567, default_driver: str | None = None):
