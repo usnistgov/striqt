@@ -84,6 +84,7 @@ class SweepController:
         msgs = []
         if target_sweep.radio_setup.driver not in self.radios:
             msgs += ['opening radio']
+            print(target_sweep.radio_setup.driver, self.radios.keys())
         if len(warmup_sweep.captures) > 0:
             msgs += [f'warming GPU ({len(warmup_sweep.captures)} empty captures)']
         return ' and '.join(msgs)
@@ -226,7 +227,7 @@ class _ClientService(rpyc.Service):
                 return pickle.loads(pickled_dataset)
             elif isinstance(pickled_dataset, str):
                 print(pickled_dataset, description)
-                raise TypeError('expected bytes but got str')
+                raise TypeError('expected pickle bytes but got str')
 
 
 def start_server(host=None, port=4567, default_driver: str | None = None):
