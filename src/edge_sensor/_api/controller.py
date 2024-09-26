@@ -84,7 +84,6 @@ class SweepController:
         msgs = []
         if target_sweep.radio_setup.driver not in self.radios:
             msgs += ['opening radio']
-            print(target_sweep.radio_setup.driver, self.radios.keys())
         if len(warmup_sweep.captures) > 0:
             msgs += [f'warming GPU ({len(warmup_sweep.captures)} empty captures)']
         return ' and '.join(msgs)

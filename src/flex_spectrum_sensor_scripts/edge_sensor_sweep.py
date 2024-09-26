@@ -22,7 +22,7 @@ def run(**kws):
 
     edge_sensor.dump(store, dataset)
 
-    lb.logger.info(f'wrote to {store}')
+    lb.logger.info(f'wrote to {store.path}')
 
 
 if __name__ == '__main__':
