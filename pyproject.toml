@@ -49,6 +49,10 @@ edge-sensor-server = "flex_spectrum_sensor_scripts.edge_sensor_server:run"
 channels = ["conda-forge"]
 platforms = ["linux-64", "linux-aarch64", "osx-arm64", "osx-64", "win-64"]
 
+[tool.pixi.system-requirements]
+linux = "4.9"
+libc = { family="glibc", version="2.27" }
+
 [tool.pixi.pypi-dependencies]
 flex_spectrum_sensor = { path = ".", editable = true }
 
@@ -59,23 +63,24 @@ soapysdr = "*"
 
 [tool.pixi.feature.dev.dependencies]
 
-[tool.pixi.feature.cupy.target.win-64.dependencies]
+[tool.pixi.feature.cuda.target.win-64.dependencies]
 cupy = "*"
 cython = "*"
 
-[tool.pixi.feature.cupy.target.win-64.host-dependencies]
+[tool.pixi.feature.cuda.target.win-64.host-dependencies]
 cuda = "12"
 
-[tool.pixi.feature.cupy.target.linux-64.dependencies]
+[tool.pixi.feature.cuda.target.linux-64.dependencies]
 cupy = "*"
 cython = "*"
 
-[tool.pixi.feature.cupy.target.linux-64.host-dependencies]
+[tool.pixi.feature.cuda.target.linux-64.host-dependencies]
 cuda = "12"
 
 [tool.pixi.environments]
 dev = ["dev"]
-#cupy = ["cupy"]
+cuda = ["cuda"]
+all = ["dev","cuda"]
 
 [tool.ruff]
 target-version = "py39"
