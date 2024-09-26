@@ -131,7 +131,7 @@ class SweepController:
         radio = self.open_radio(sweep.radio_setup)
         radio.setup(sweep.radio_setup)
 
-        return sweeps.iter_sweep(radio, close_after=True, **kwargs)
+        return sweeps.iter_sweep(radio, close_after=False, **kwargs)
 
     def __del__(self):
         self.close()
