@@ -153,7 +153,7 @@ def init_sensor_sweep(
             sweep_spec.radio_setup.calibration
         )
 
-    timestamp = datetime.now().strftime('%Y%m%d-%Hh%Mm%Ss.%f')[:-3]
+    timestamp = datetime.now().strftime('%Y%m%d-%Hh%Mm%S.%f')[:-3]+'s'
     if output_path is None:
         adjusted_path = Path(yaml_path).with_name(f'{Path(yaml_path).stem}-{timestamp}.zarr.db')
     elif Path(output_path).is_dir():
