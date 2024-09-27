@@ -1,5 +1,6 @@
 import time
 from functools import wraps
+import traceback
 import typing
 
 import labbench as lb
@@ -292,29 +293,32 @@ class SoapyRadioDevice(RadioDevice):
         if self.backend is None:
             return
 
-        if SoapySDR._SoapySDR is None or SoapySDR._SoapySDR.Device_deactivateStream is None:
-            # occurs sometimes when soapy's underlying libraries
-            # have been deconstructed too far to proceed
-            return
-
         try:
-            self.channel_enabled(False)
-        except ValueError:
-            # channel not yet set
-            raise
-            pass
+            if SoapySDR._SoapySDR is None or SoapySDR._SoapySDR.Device_deactivateStream is None:
+                # occurs sometimes when soapy's underlying libraries
+                # have been deconstructed too far to proceed
+                return
 
-        try:
-            self.backend.closeStream(self.rx_stream)
-        except ValueError as ex:
-            raise
-            if 'invalid parameter' in str(ex):
-                # already closed
-                pass
-            else:
+            try:
+                self.channel_enabled(False)
+            except ValueError:
+                # channel not yet set
                 raise
+                pass
 
-        self.backend.close()
+            try:
+                self.backend.closeStream(self.rx_stream)
+            except ValueError as ex:
+                raise
+                if 'invalid parameter' in str(ex):
+                    # already closed
+                    pass
+                else:
+                    raise
+
+            self.backend.close()
+        except:
+            traceback.print_exc()
 
     @attr.property.str(
         sets=False, cache=True, help='radio hardware UUID or serial number'
