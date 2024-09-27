@@ -84,9 +84,9 @@ _CLICK_SENSOR_SWEEP = (
         '--store/',
         '-s',
         show_default=True,
-        type=click.Choice(['zip', 'zarr', 'db'], case_sensitive=True),
+        type=click.Choice(['zip', 'directory', 'db'], case_sensitive=True),
         default='zip',
-        help='output data store: "zip" for single acquisition, "zarr" to support appending acquisitions',
+        help='output data store: "zip" for single acquisition, "directory" to support appending acquisitions',
     ),
     click.option(
         '--force/',
@@ -163,16 +163,15 @@ def init_sensor_sweep(
         )
 
     store = store.lower()
-    if store == 'zarr':
-        suffix = 'zarr'
-    elif store in ('db', 'zip'):
-        suffix = f'zarr.{store}'
-
+    yaml_path = Path(yaml_path)
     timestamp = datetime.now().strftime('%Y%m%d-%Hh%Mm%S.%f')[:-3]+'s'
     if output_path is None:
-        adjusted_path = Path(yaml_path).with_name(f'{Path(yaml_path).stem}-{timestamp}.{suffix}')
-    elif Path(output_path).is_dir() and not (store == 'zarr' and output_path.name.endswith(suffix)):
-        adjusted_path = Path(output_path)/f'{Path(yaml_path).stem}-{timestamp}.zarr.{suffix}'
+        if store == 'directory':
+            adjusted_path = yaml_path.with_name(yaml_path.stem)
+        else:
+            adjusted_path = yaml_path.with_name(f'{yaml_path.stem}-{timestamp}.zarr.{store}')
+    elif Path(output_path).is_dir() and store in ('db', 'zip'):
+        adjusted_path = Path(output_path)/f'{yaml_path.stem}-{timestamp}.zarr.{store}'
     else:
         adjusted_path = output_path
 
