@@ -40,7 +40,9 @@ class SweepController:
 
         for radio in self.radios.values():
             try:
+                print('radio: ', radio)
                 radio.close()
+                print('...closed')
             except BaseException as ex:
                 traceback.print_exc()
                 last_ex = ex

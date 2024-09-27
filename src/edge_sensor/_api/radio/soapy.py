@@ -317,7 +317,8 @@ class SoapyRadioDevice(RadioDevice):
                     raise
 
             self.backend.close()
-        except:
+        except BaseException as ex:
+            print('exception!', ex)
             traceback.print_exc()
             raise
 
