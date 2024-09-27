@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from itertools import zip_longest
 import pickle
+import traceback        
 import typing
 
 import rpyc
@@ -35,7 +36,6 @@ class SweepController:
             self.open_radio(radio_setup)
 
     def close(self):
-        import traceback        
         last_ex = None
 
         for radio in self.radios.values():
