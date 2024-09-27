@@ -130,6 +130,7 @@ def init_sensor_sweep(
     sweep_spec = edge_sensor.read_yaml_sweep(yaml_path)
 
     if verbose:
+        lb.util.force_full_traceback(True)
         lb.show_messages('debug')
     else:
         lb.show_messages('info')
@@ -140,6 +141,7 @@ def init_sensor_sweep(
         controller = edge_sensor.connect(remote).root
 
     if debug:
+        lb.util.force_full_traceback(True)
         sys.excepthook = ultratb.FormattedTB(
             mode='Verbose', color_scheme='Linux', call_pdb=1
         )
@@ -205,6 +207,7 @@ def run_server(host: str, port: int, driver: str, verbose: bool):
     import labbench as lb
 
     if verbose:
+        lb.util.force_full_traceback(True)
         lb.show_messages('debug')
     else:
         lb.show_messages('info')
