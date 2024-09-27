@@ -35,13 +35,13 @@ class SweepController:
             self.open_radio(radio_setup)
 
     def close(self):
+        import traceback        
         last_ex = None
 
         for radio in self.radios.values():
             try:
                 radio.close()
             except BaseException as ex:
-                import traceback
                 traceback.print_exc()
                 last_ex = ex
 
