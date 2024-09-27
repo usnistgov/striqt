@@ -319,6 +319,7 @@ class SoapyRadioDevice(RadioDevice):
             self.backend.close()
         except:
             traceback.print_exc()
+            raise
 
     @attr.property.str(
         sets=False, cache=True, help='radio hardware UUID or serial number'
