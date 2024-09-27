@@ -263,12 +263,13 @@ def resampling_correction(
         pad_left = (nfft_out - nfft) // 2
         pad_right = pad_left + (nfft_out - nfft) % 2
 
-        iqwaveform.fourier.zero_stft_by_freq(
-            freqs,
-            xstft,
-            passband=(passband[0] + enbw / 2, passband[1] - enbw / 2),
-            axis=axis,
-        )
+        if capture.analysis_bandwidth is not None:
+            iqwaveform.fourier.zero_stft_by_freq(
+                freqs,
+                xstft,
+                passband=(passband[0] + enbw / 2, passband[1] - enbw / 2),
+                axis=axis,
+            )
 
         xstft = iqwaveform.util.pad_along_axis(
             xstft, [[pad_left, pad_right]], axis=axis + 1
