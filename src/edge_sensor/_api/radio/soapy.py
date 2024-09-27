@@ -293,34 +293,27 @@ class SoapyRadioDevice(RadioDevice):
         if self.backend is None:
             return
 
+        if SoapySDR._SoapySDR is None or SoapySDR.Device_deactivateStream is None:
+            # occurs sometimes when soapy's underlying libraries
+            # have been deconstructed too far to proceed
+            return
+
         try:
-            if self.backend._SoapySDR is None or self.backend._SoapySDR.Device_deactivateStream is None:
-                # occurs sometimes when soapy's underlying libraries
-                # have been deconstructed too far to proceed
-                return
+            self.channel_enabled(False)
+        except ValueError:
+            # channel not yet set
+            pass
 
-            try:
-                self.channel_enabled(False)
-            except ValueError:
-                # channel not yet set
-                raise
+        try:
+            self.backend.closeStream(self.rx_stream)
+        except ValueError as ex:
+            if 'invalid parameter' in str(ex):
+                # already closed
                 pass
-
-            try:
-                self.backend.closeStream(self.rx_stream)
-            except ValueError as ex:
+            else:
                 raise
-                if 'invalid parameter' in str(ex):
-                    # already closed
-                    pass
-                else:
-                    raise
 
-            self.backend.close()
-        except BaseException as ex:
-            print('exception!', ex)
-            traceback.print_exc()
-            raise
+        self.backend.close()
 
     @attr.property.str(
         sets=False, cache=True, help='radio hardware UUID or serial number'
