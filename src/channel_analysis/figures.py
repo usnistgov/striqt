@@ -43,7 +43,7 @@ def label_axis(
     """
 
     if dimension is None:
-        # label = a.attrs.get('label', None)
+        # label = a.attrs.get('standard_name', None)
         units = a.attrs.get('units', None)
     else:
         # label = a[dimension].attrs.get('label', None)
@@ -56,6 +56,11 @@ def label_axis(
     if units is not None and tick_units:
         axis.set_major_formatter(mpl.ticker.EngFormatter(unit=units))
         axis.set_label_text(a.standard_name or a.name)
+    elif units is not None:
+        axis.set_label_text(f'{a.standard_name or a.name} ({units})')
+    else:
+        axis.set_label_text(a.standard_name or a.name)
+
 
 
 def label_legend(
