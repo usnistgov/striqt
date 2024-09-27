@@ -294,7 +294,7 @@ class SoapyRadioDevice(RadioDevice):
             return
 
         try:
-            if SoapySDR._SoapySDR is None or SoapySDR._SoapySDR.Device_deactivateStream is None:
+            if self.backend._SoapySDR is None or self.backend._SoapySDR.Device_deactivateStream is None:
                 # occurs sometimes when soapy's underlying libraries
                 # have been deconstructed too far to proceed
                 return
