@@ -81,6 +81,14 @@ _CLICK_SENSOR_SWEEP = (
         help='run on the specified remote host (at host or host:port)',
     ),
     click.option(
+        '--store/',
+        '-s',
+        show_default=True,
+        type=click.Choice(['zip', 'zarr', 'db'], case_sensitive=True),
+        default='db',
+        help='run on the specified remote host (at host or host:port)',
+    ),
+    click.option(
         '--force/',
         '-f',
         is_flag=True,
@@ -121,6 +129,7 @@ def init_sensor_sweep(
     *,
     yaml_path: Path,
     output_path: str | None,
+    store: str,
     remote: str | None,
     force: bool,
     verbose: bool,
@@ -153,11 +162,17 @@ def init_sensor_sweep(
             sweep_spec.radio_setup.calibration
         )
 
+    store = store.lower()
+    if store == 'zarr':
+        suffix = 'zarr'
+    elif store in ('db', 'zip'):
+        suffix = f'zarr.{store}'
+
     timestamp = datetime.now().strftime('%Y%m%d-%Hh%Mm%S.%f')[:-3]+'s'
     if output_path is None:
-        adjusted_path = Path(yaml_path).with_name(f'{Path(yaml_path).stem}-{timestamp}.zarr.db')
-    elif Path(output_path).is_dir():
-        adjusted_path = Path(output_path)/f'{Path(yaml_path).stem}-{timestamp}.zarr.db'
+        adjusted_path = Path(yaml_path).with_name(f'{Path(yaml_path).stem}-{timestamp}.{suffix}')
+    elif Path(output_path).is_dir() and not (store == 'zarr' and output_path.name.endswith(suffix)):
+        adjusted_path = Path(output_path)/f'{Path(yaml_path).stem}-{timestamp}.zarr.{suffix}'
     else:
         adjusted_path = output_path
 

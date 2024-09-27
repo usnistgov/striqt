@@ -55,7 +55,7 @@ def label_axis(
     #     axis.set_label_text(label)
     if units is not None and tick_units:
         axis.set_major_formatter(mpl.ticker.EngFormatter(unit=units))
-        axis.set_label_text(a.name or a.standard_name or a.long_name)
+        axis.set_label_text(a.standard_name or a.name)
 
 
 def label_legend(
