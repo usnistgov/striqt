@@ -117,6 +117,7 @@ class SweepController:
         self,
         sweep: structs.Sweep,
         calibration: type_stubs.DatasetType = None,
+        close_after: bool = True,
         always_yield: bool = False,
         quiet: bool = False,
         pickled: bool = False,
@@ -135,7 +136,7 @@ class SweepController:
         radio = self.open_radio(sweep.radio_setup)
         radio.setup(sweep.radio_setup)
 
-        return sweeps.iter_sweep(radio, close_after=False, **kwargs)
+        return sweeps.iter_sweep(radio, **kwargs)
 
     def __del__(self):
         self.close()
@@ -197,7 +198,7 @@ class _ServerService(rpyc.Service, SweepController):
         )
 
         sweep_iter = self.iter_sweep(
-            sweep, calibration, always_yield, pickled=True, prepare=False
+            sweep, calibration, always_yield, pickled=True, close_after=False, prepare=False
         )
 
         desc_pairs = zip_longest(sweep_iter, descs, fillvalue=None)
