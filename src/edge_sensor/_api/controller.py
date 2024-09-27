@@ -41,6 +41,8 @@ class SweepController:
             try:
                 radio.close()
             except BaseException as ex:
+                import traceback
+                traceback.print_exc()
                 last_ex = ex
 
         if last_ex is not None:
