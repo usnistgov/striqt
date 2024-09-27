@@ -301,11 +301,13 @@ class SoapyRadioDevice(RadioDevice):
             self.channel_enabled(False)
         except ValueError:
             # channel not yet set
+            raise
             pass
 
         try:
             self.backend.closeStream(self.rx_stream)
         except ValueError as ex:
+            raise
             if 'invalid parameter' in str(ex):
                 # already closed
                 pass
