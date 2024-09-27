@@ -86,7 +86,7 @@ _CLICK_SENSOR_SWEEP = (
         show_default=True,
         type=click.Choice(['zip', 'zarr', 'db'], case_sensitive=True),
         default='db',
-        help='run on the specified remote host (at host or host:port)',
+        help='output data store: "zip" for single acquisition, "zarr" to support appending acquisitions',
     ),
     click.option(
         '--force/',
