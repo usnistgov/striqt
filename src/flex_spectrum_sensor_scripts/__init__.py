@@ -4,6 +4,7 @@ import click
 from pathlib import Path
 import typing
 import sys
+from datetime import datetime
 import importlib.util
 from socket import gethostname
 
@@ -126,9 +127,6 @@ def init_sensor_sweep(
     debug: bool,
     **kws,
 ) -> tuple[Store, Controller, Sweep, Dataset]:
-    if output_path is None:
-        output_path = Path(yaml_path).with_suffix('.zarr.db')
-
     sweep_spec = edge_sensor.read_yaml_sweep(yaml_path)
 
     if verbose:
@@ -153,7 +151,15 @@ def init_sensor_sweep(
             sweep_spec.radio_setup.calibration
         )
 
-    store = channel_analysis.open_store(output_path, mode='w' if force else 'a')
+    timestamp = datetime.now().strftime('%Y%m%d-%Hh%Mm%Ss.%f')[:-3]
+    if output_path is None:
+        adjusted_path = Path(yaml_path).with_name(f'{yaml_path.stem}-{timestamp}.zarr.db')
+    elif Path(output_path).is_dir():
+        adjusted_path = Path(output_path)/f'{yaml_path.stem}-{timestamp}.zarr.db'
+    else:
+        adjusted_path = output_path
+
+    store = channel_analysis.open_store(adjusted_path, mode='w' if force else 'a')
 
     return store, controller, sweep_spec, calibration
 
