@@ -85,7 +85,7 @@ _CLICK_SENSOR_SWEEP = (
         '-s',
         show_default=True,
         type=click.Choice(['zip', 'zarr', 'db'], case_sensitive=True),
-        default='db',
+        default='zip',
         help='output data store: "zip" for single acquisition, "zarr" to support appending acquisitions',
     ),
     click.option(
