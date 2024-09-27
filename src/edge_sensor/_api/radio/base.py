@@ -152,7 +152,7 @@ def design_capture_filter(
     else:
         lo_shift = capture.lo_shift
 
-    if capture.analysis_bandwidth > capture.sample_rate:
+    if capture.analysis_bandwidth is not None and capture.analysis_bandwidth > capture.sample_rate:
         raise ValueError(
             f'analysis bandwidth must be smaller than sample rate in {capture}'
         )
