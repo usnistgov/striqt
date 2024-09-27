@@ -153,9 +153,9 @@ def init_sensor_sweep(
 
     timestamp = datetime.now().strftime('%Y%m%d-%Hh%Mm%Ss.%f')[:-3]
     if output_path is None:
-        adjusted_path = Path(yaml_path).with_name(f'{yaml_path.stem}-{timestamp}.zarr.db')
+        adjusted_path = Path(yaml_path).with_name(f'{Path(yaml_path).stem}-{timestamp}.zarr.db')
     elif Path(output_path).is_dir():
-        adjusted_path = Path(output_path)/f'{yaml_path.stem}-{timestamp}.zarr.db'
+        adjusted_path = Path(output_path)/f'{Path(yaml_path).stem}-{timestamp}.zarr.db'
     else:
         adjusted_path = output_path
 
