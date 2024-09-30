@@ -40,19 +40,9 @@ def describe_capture(
     diffs = {}
 
     for name in type(this).__struct_fields__:
-        if name == 'external':
-            continue
         value = getattr(this, name)
         if prev is None or value != getattr(prev, name):
             diffs[name] = value
-
-    this_external = set(this.external.keys())
-    prev_external = set() if prev is None else set(prev.external.keys())
-    for name in this_external | prev_external:
-        value = this.external.get(name, None)
-
-        if prev is None or value != prev.external.get(name, None):
-            diffs[f'external[{repr(name)}]'] = value
 
     capture_diff = ', '.join([f'{k}={repr(v)}' for k, v in diffs.items()])
     return f'{index+1 if index<count else count}/{count} {capture_diff}'

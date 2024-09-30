@@ -54,11 +54,6 @@ class RadioCapture(channel_analysis.Capture, forbid_unknown_fields=True):
     lo_shift: Annotated[_TShift, meta('LO shift direction')] = 'none'
     gpu_resample: bool = True
 
-    # hooks for external devices (switches, noise diodes, etc)
-    external: Annotated[frozendict[str, Any], meta('External device states')] = (
-        frozendict()
-    )
-
 
 class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):
     """run-time characteristics of the radio that are left invariant during a sweep"""
@@ -94,15 +89,6 @@ class Sweep(msgspec.Struct, forbid_unknown_fields=True):
     defaults: RadioCapture = msgspec.field(default_factory=RadioCapture)
     channel_analysis: dict = msgspec.field(default_factory=_make_default_analysis)
     description: Description = msgspec.field(default_factory=Description)
-
-
-@functools.lru_cache
-def get_shared_capture_fields(captures: tuple[RadioCapture, ...]):
-    base = set(RadioCapture.__struct_fields__) - {'external'}
-    external_keys = (set(c.external.keys()) for c in captures)
-    external = set.intersection(*external_keys)
-
-    return tuple(sorted(base | external))
 
 
 @functools.lru_cache

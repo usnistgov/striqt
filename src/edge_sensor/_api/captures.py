@@ -30,7 +30,6 @@ RADIO_ID_NAME = 'radio_id'
 @functools.lru_cache
 def coord_template(
     capture_cls: type[structs.RadioCapture],
-    external_fields: frozendict[str, typing.Any],
 ):
     """returns a cached xr.Coordinates object to use as a template for data results"""
 
@@ -38,18 +37,8 @@ def coord_template(
     vars = {}
 
     for field in capture_cls.__struct_fields__:
-        if field == 'external':
-            continue
         value = getattr(capture, field)
 
-        vars[field] = xr.Variable(
-            (CAPTURE_DIM,),
-            [value],
-            fastpath=True,
-            attrs=structs.get_attrs(capture_cls, field),
-        )
-
-    for field, value in external_fields.items():
         vars[field] = xr.Variable(
             (CAPTURE_DIM,),
             [value],
@@ -68,13 +57,11 @@ def coord_template(
 
 
 def build_coords(capture: structs.RadioCapture, radio_id, sweep_time):
-    coords = coord_template(type(capture), capture.external).copy(deep=True)
+    coords = coord_template(type(capture)).copy(deep=True)
 
     for field in coords.keys():
         if field in capture.__struct_fields__:
             value = getattr(capture, field)
-        elif field in capture.external:
-            value = capture.external[field]
         elif field == SWEEP_TIMESTAMP_NAME:
             value = sweep_time
 
