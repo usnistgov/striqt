@@ -112,6 +112,8 @@ class ChannelAnalysisWrapper:
 
             # these are coordinates - drop from attrs
             for name in coords.keys():
+                if name == 'center_frequency':
+                    print(name, analysis.attrs[name])
                 analysis.attrs.pop(name, None)
 
         if self.extra_attrs is not None:
