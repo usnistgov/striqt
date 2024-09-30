@@ -61,67 +61,69 @@ def _chain_decorators(decorators: list[callable], func: callable) -> callable:
 
 
 # %% Sweep script
-_CLICK_SENSOR_SWEEP = (
-    click.command(
-        'Run a radio spectrum sensor acquisition sweep according to a configuration file.'
-    ),
-    click.argument('yaml_path', type=click.Path(exists=True, dir_okay=False)),
-    click.option(
-        '--output-path/',
-        '-o',
-        default=None,
-        type=click.Path(),
-        help='output file path (default: YAML_PATH with .zarr.db suffix)',
-    ),
-    click.option(
-        '--remote/',
-        '-r',
-        show_default=True,
-        type=str,
-        default=None,
-        help='run on the specified remote host (at host or host:port)',
-    ),
-    click.option(
-        '--store/',
-        '-s',
-        show_default=True,
-        type=click.Choice(['zip', 'directory', 'db'], case_sensitive=True),
-        default='zip',
-        help='output data store: "zip" for single acquisition, "directory" to support appending acquisitions',
-    ),
-    click.option(
-        '--force/',
-        '-f',
-        is_flag=True,
-        show_default=True,
-        default=False,
-        help='overwrite an existing output; otherwise, attempt append on existing data',
-    ),
-    click.option(
-        '--debug/',
-        '-d',
-        is_flag=True,
-        show_default=True,
-        default=False,
-        help='if set, drop to an IPython debug on exception',
-    ),
-    click.option(
-        '--verbose/',
-        '-v',
-        is_flag=True,
-        show_default=True,
-        default=False,
-        help='print debug',
-    ),
-)
+def click_sensor_sweep(description:typing.Optional[str]=None):
+    """decorates a function to serve as the main function in a sweep CLI with click"""
 
+    if description is None:
+        description = 'Run a radio spectrum sensor acquisition sweep according to a configuration file.'
 
-def click_sensor_sweep(**kws):
-    """wraps a function with base command line argument decorators and keyword arguments"""
+    click_decorators = (
+        click.command(
+            description
+        ),
+        click.argument('yaml_path', type=click.Path(exists=True, dir_okay=False)),
+        click.option(
+            '--output-path/',
+            '-o',
+            default=None,
+            type=click.Path(),
+            help='output file path (default: YAML_PATH with .zarr.db suffix)',
+        ),
+        click.option(
+            '--remote/',
+            '-r',
+            show_default=True,
+            type=str,
+            default=None,
+            help='run on the specified remote host (at host or host:port)',
+        ),
+        click.option(
+            '--store/',
+            '-s',
+            show_default=True,
+            type=click.Choice(['zip', 'directory', 'db'], case_sensitive=True),
+            default='zip',
+            help='output data store: "zip" for single acquisition, "directory" to support appending acquisitions',
+        ),
+        click.option(
+            '--force/',
+            '-f',
+            is_flag=True,
+            show_default=True,
+            default=False,
+            help='overwrite an existing output; otherwise, attempt append on existing data',
+        ),
+        click.option(
+            '--debug/',
+            '-d',
+            is_flag=True,
+            show_default=True,
+            default=False,
+            help='if set, drop to an IPython debug on exception',
+        ),
+        click.option(
+            '--verbose/',
+            '-v',
+            is_flag=True,
+            show_default=True,
+            default=False,
+            help='print debug',
+        ),
+    )
+
     def decorate(func):
-        partial = functools.partial(func, **kws)
-        return _chain_decorators(_CLICK_SENSOR_SWEEP, partial)
-    
+        return _chain_decorators(click_decorators, func)
+
     return decorate
 
 
@@ -140,10 +142,15 @@ def init_sensor_sweep(
     force: bool,
     verbose: bool,
     debug: bool,
-    capture_cls: type,
-    **kws,
+    sweep_cls: type = None,
+    adjust_captures: dict = {},
+    open_store: bool = True
 ) -> tuple[Store, Controller, Sweep, Dataset]:
-    sweep_spec = edge_sensor.read_yaml_sweep(yaml_path, capture_cls=capture_cls)
+    
+    if sweep_cls is None:
+        sweep_cls = edge_sensor.Sweep
+
+    sweep_spec = edge_sensor.read_yaml_sweep(yaml_path, sweep_cls=sweep_cls, adjust_captures=adjust_captures)
 
     if verbose:
         lb.util.force_full_traceback(True)
@@ -168,6 +175,9 @@ def init_sensor_sweep(
         calibration = edge_sensor.read_calibration_corrections(
             sweep_spec.radio_setup.calibration
         )
+
+    if not open_store:
+        return None, controller, sweep_spec, calibration
 
     store = store.lower()
     yaml_path = Path(yaml_path)

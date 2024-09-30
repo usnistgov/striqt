@@ -28,18 +28,18 @@ def _dec_hook(type_, obj):
         return obj
 
 
+SweepType = typing.TypeVar(Sweep)
+
 def read_yaml_sweep(
-    path: str | Path, adjust_captures={}, capture_cls=RadioCapture
-) -> tuple[Sweep, tuple[str, ...]]:
+    path: str | Path, adjust_captures={}, sweep_cls:type[SweepType]=Sweep
+) -> tuple[SweepType, tuple[str, ...]]:
     """build a Sweep struct from the contents of specified yaml file"""
 
     with open(path, 'rb') as fd:
         text = fd.read()
 
     # validate first
-    msgspec.yaml.decode(text, type=Sweep, strict=False, dec_hook=_dec_hook)
-
-    import pandas as pd
+    msgspec.yaml.decode(text, type=sweep_cls, strict=False, dec_hook=_dec_hook)
 
     # build a dict to extract the list of sweep fields and apply defaults
     tree = msgspec.yaml.decode(text, type=dict, strict=False)
@@ -59,13 +59,12 @@ def read_yaml_sweep(
         # # read to validate the data and warm the calibration cache
         # iq_corrections.read_calibration_corrections(cal_path)
 
-    captures = [
+    tree['captures'] = [
         dict(defaults, **c, **adjust_captures) for c in tree['captures']
     ]
-    tree['captures'] = channel_analysis.builtins_to_struct(captures, type=list[capture_cls])
 
     run = channel_analysis.builtins_to_struct(
-        tree, type=Sweep, strict=False, dec_hook=_dec_hook
+        tree, type=sweep_cls, strict=False, dec_hook=_dec_hook
     )
 
     return run
