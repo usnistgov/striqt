@@ -4,7 +4,8 @@ from __future__ import annotations
 from frozendict import frozendict
 import functools
 import msgspec
-from typing import TYPE_CHECKING, Annotated, Optional, Literal, Any
+import typing
+from typing import Annotated, Optional, Literal, Any
 
 from . import util
 
@@ -18,7 +19,7 @@ from channel_analysis._api.structs import (
     copy_struct,
 )
 
-if TYPE_CHECKING:
+if typing.TYPE_CHECKING:
     import pandas as pd
 else:
     # this is needed to resolve the TimestampType stub at runtime
@@ -40,7 +41,9 @@ class RadioCapture(channel_analysis.Capture, forbid_unknown_fields=True):
     gain: Annotated[float, meta('Gain setting', 'dB')] = -10
 
     # acquisition
-    start_time: Optional[Annotated[channel_analysis.TimestampType, meta('Acquisition start time')]] = None
+    start_time: Optional[
+        Annotated[channel_analysis.TimestampType, meta('Acquisition start time')]
+    ] = None
     duration: Annotated[float, meta('Acquisition duration', 's', gt=0)] = 0.1
     sample_rate: Annotated[float, meta('Sample rate', 'S/s', gt=0)] = 15.36e6
 
@@ -100,3 +103,23 @@ def get_shared_capture_fields(captures: tuple[RadioCapture, ...]):
     external = set.intersection(*external_keys)
 
     return tuple(sorted(base | external))
+
+
+@functools.lru_cache
+def get_attrs(struct: type[msgspec.Struct], field: str) -> dict[str, str]:
+    """get an attrs dict for xarray based on Annotated type hints with `meta`"""
+    hints = typing.get_type_hints(struct, include_extras=True)
+
+    try:
+        metas = hints[field].__metadata__
+    except AttributeError:
+        return {}
+
+    if len(metas) == 0:
+        return {}
+    elif len(metas) == 1 and isinstance(metas[0], msgspec.Meta):
+        return metas[0].extra
+    else:
+        raise TypeError(
+            'Annotated[] type hints must contain exactly one msgspec.Meta object'
+        )

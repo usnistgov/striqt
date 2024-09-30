@@ -164,14 +164,16 @@ def init_sensor_sweep(
 
     store = store.lower()
     yaml_path = Path(yaml_path)
-    timestamp = datetime.now().strftime('%Y%m%d-%Hh%Mm%S.%f')[:-3]+'s'
+    timestamp = datetime.now().strftime('%Y%m%d-%Hh%Mm%S.%f')[:-3] + 's'
     if output_path is None:
         if store == 'directory':
             adjusted_path = yaml_path.with_name(yaml_path.stem)
         else:
-            adjusted_path = yaml_path.with_name(f'{yaml_path.stem}-{timestamp}.zarr.{store}')
+            adjusted_path = yaml_path.with_name(
+                f'{yaml_path.stem}-{timestamp}.zarr.{store}'
+            )
     elif Path(output_path).is_dir() and store in ('db', 'zip'):
-        adjusted_path = Path(output_path)/f'{yaml_path.stem}-{timestamp}.zarr.{store}'
+        adjusted_path = Path(output_path) / f'{yaml_path.stem}-{timestamp}.zarr.{store}'
     else:
         adjusted_path = output_path
 

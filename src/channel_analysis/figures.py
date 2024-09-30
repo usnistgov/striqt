@@ -62,7 +62,6 @@ def label_axis(
         axis.set_label_text(a.standard_name or a.name)
 
 
-
 def label_legend(
     ax: mpl.axes._axes.Axes,
     a: xr.DataArray | xr.Dataset,

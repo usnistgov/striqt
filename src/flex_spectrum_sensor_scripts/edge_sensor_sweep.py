@@ -17,7 +17,11 @@ def run(**kws):
     store, controller, sweep_spec, calibration = init_sensor_sweep(**kws)
 
     # acquire and analyze each capture in the sweep
-    results = [result for result in controller.iter_sweep(sweep_spec, calibration) if result is not None]
+    results = [
+        result
+        for result in controller.iter_sweep(sweep_spec, calibration)
+        if result is not None
+    ]
     dataset = xr.concat(results, edge_sensor.CAPTURE_DIM)
 
     edge_sensor.dump(store, dataset)

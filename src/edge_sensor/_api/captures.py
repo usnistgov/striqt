@@ -28,34 +28,47 @@ RADIO_ID_NAME = 'radio_id'
 
 
 @functools.lru_cache
-def coord_template(external_fields: frozendict[str, typing.Any]):
+def coord_template(
+    capture_cls: type[structs.RadioCapture],
+    external_fields: frozendict[str, typing.Any],
+):
     """returns a cached xr.Coordinates object to use as a template for data results"""
 
-    capture = structs.RadioCapture()
-    coords = {}
+    capture = capture_cls()
+    vars = {}
 
-    for field in structs.RadioCapture.__struct_fields__:
+    for field in capture_cls.__struct_fields__:
         if field == 'external':
             continue
         value = getattr(capture, field)
 
-        coords[field] = xr.Variable((CAPTURE_DIM,), [value], fastpath=True)
+        vars[field] = xr.Variable(
+            (CAPTURE_DIM,),
+            [value],
+            fastpath=True,
+            attrs=structs.get_attrs(capture_cls, field),
+        )
 
     for field, value in external_fields.items():
-        coords[field] = xr.Variable((CAPTURE_DIM,), [value], fastpath=True)
+        vars[field] = xr.Variable(
+            (CAPTURE_DIM,),
+            [value],
+            fastpath=True,
+            attrs=structs.get_attrs(capture_cls, field),
+        )
 
-    coords[SWEEP_TIMESTAMP_NAME] = xr.Variable(
-        (CAPTURE_DIM,), [pd.Timestamp('now')], fastpath=True
+    vars[SWEEP_TIMESTAMP_NAME] = xr.Variable(
+        (CAPTURE_DIM,), [pd.Timestamp('now')], fastpath=True, attrs={'standard_name': 'Sweep start time'}
     )
-    coords[RADIO_ID_NAME] = xr.Variable(
-        (CAPTURE_DIM,), ['unspecified-radio'], fastpath=True
+    vars[RADIO_ID_NAME] = xr.Variable(
+        (CAPTURE_DIM,), ['unspecified-radio'], fastpath=True, attrs={'standard_name': 'Radio hardware ID'}
     ).astype('object')
 
-    return xr.Coordinates(coords)
+    return xr.Coordinates(vars)
 
 
 def build_coords(capture: structs.RadioCapture, radio_id, sweep_time):
-    coords = coord_template(capture.external).copy(deep=True)
+    coords = coord_template(type(capture), capture.external).copy(deep=True)
 
     for field in coords.keys():
         if field in capture.__struct_fields__:
@@ -112,8 +125,6 @@ class ChannelAnalysisWrapper:
 
             # these are coordinates - drop from attrs
             for name in coords.keys():
-                if name == 'center_frequency':
-                    print(name, analysis.attrs[name])
                 analysis.attrs.pop(name, None)
 
         if self.extra_attrs is not None:

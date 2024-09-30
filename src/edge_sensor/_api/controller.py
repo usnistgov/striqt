@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from itertools import zip_longest
 import pickle
-import traceback        
+import traceback
 import typing
 
 import rpyc
@@ -195,7 +195,12 @@ class _ServerService(rpyc.Service, SweepController):
         )
 
         sweep_iter = self.iter_sweep(
-            sweep, calibration, always_yield, pickled=True, close_after=False, prepare=False
+            sweep,
+            calibration,
+            always_yield,
+            pickled=True,
+            close_after=False,
+            prepare=False,
         )
 
         desc_pairs = zip_longest(sweep_iter, descs, fillvalue=None)

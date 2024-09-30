@@ -123,7 +123,9 @@ class SoapyRadioDevice(RadioDevice):
     @_verify_channel_for_setter
     def _(self, center_frequency):
         # there is only one RX LO, shared by both channels
-        self.backend.setFrequency(SoapySDR.SOAPY_SDR_RX, self.channel(), center_frequency)
+        self.backend.setFrequency(
+            SoapySDR.SOAPY_SDR_RX, self.channel(), center_frequency
+        )
 
     center_frequency = lo_frequency.corrected_from_expression(
         lo_frequency + lo_offset,
@@ -223,7 +225,7 @@ class SoapyRadioDevice(RadioDevice):
         self.channel_enabled(False)
 
         # eventually: support GPS time sync here
-        self.backend.setHardwareTime(round(time.time()*1e9), 'now')
+        self.backend.setHardwareTime(round(time.time() * 1e9), 'now')
 
     @property
     def master_clock_rate(self):
@@ -293,7 +295,10 @@ class SoapyRadioDevice(RadioDevice):
         if self.backend is None:
             return
 
-        if SoapySDR._SoapySDR is None or SoapySDR._SoapySDR.Device_deactivateStream is None:
+        if (
+            SoapySDR._SoapySDR is None
+            or SoapySDR._SoapySDR.Device_deactivateStream is None
+        ):
             # occurs sometimes when soapy's underlying libraries
             # have been deconstructed too far to proceed
             return
