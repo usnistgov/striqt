@@ -8,7 +8,7 @@ from channel_analysis import load, dump, open_store
 from frozendict import frozendict
 import msgspec
 
-from .structs import Sweep
+from .structs import Sweep, RadioCapture
 from . import util
 import channel_analysis
 
@@ -29,7 +29,7 @@ def _dec_hook(type_, obj):
 
 
 def read_yaml_sweep(
-    path: str | Path, adjust_captures={}
+    path: str | Path, adjust_captures={}, capture_cls=RadioCapture
 ) -> tuple[Sweep, tuple[str, ...]]:
     """build a Sweep struct from the contents of specified yaml file"""
 
@@ -59,9 +59,10 @@ def read_yaml_sweep(
         # # read to validate the data and warm the calibration cache
         # iq_corrections.read_calibration_corrections(cal_path)
 
-    tree['captures'] = [
+    captures = [
         dict(defaults, **c, **adjust_captures) for c in tree['captures']
     ]
+    tree['captures'] = channel_analysis.builtins_to_struct(captures, type=list[capture_cls])
 
     run = channel_analysis.builtins_to_struct(
         tree, type=Sweep, strict=False, dec_hook=_dec_hook

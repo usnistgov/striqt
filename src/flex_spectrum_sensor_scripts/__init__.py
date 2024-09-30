@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import click
+import functools
 from pathlib import Path
 import typing
 import sys
@@ -115,8 +116,13 @@ _CLICK_SENSOR_SWEEP = (
 )
 
 
-def click_sensor_sweep(func):
-    return _chain_decorators(_CLICK_SENSOR_SWEEP, func)
+def click_sensor_sweep(**kws):
+    """wraps a function with base command line argument decorators and keyword arguments"""
+    def decorate(func):
+        partial = functools.partial(func, **kws)
+        return _chain_decorators(_CLICK_SENSOR_SWEEP, partial)
+    
+    return decorate
 
 
 Store = typing.TypeVar('Store', bound='zarr.storage.Store')
@@ -134,9 +140,10 @@ def init_sensor_sweep(
     force: bool,
     verbose: bool,
     debug: bool,
+    capture_cls: type,
     **kws,
 ) -> tuple[Store, Controller, Sweep, Dataset]:
-    sweep_spec = edge_sensor.read_yaml_sweep(yaml_path)
+    sweep_spec = edge_sensor.read_yaml_sweep(yaml_path, capture_cls=capture_cls)
 
     if verbose:
         lb.util.force_full_traceback(True)
