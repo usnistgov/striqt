@@ -1,9 +1,12 @@
 from __future__ import annotations
 import xarray as xr
-import matplotlib as mpl
-from typing import Optional
-from ._api.structs import Capture
 
+import typing
+import matplotlib as mpl
+from matplotlib import pyplot as plt
+import numpy as np
+
+from ._api.structs import Capture
 
 def summarize_metadata(
     source: xr.Dataset,
@@ -30,24 +33,62 @@ def summarize_metadata(
     else:
         return meta
 
+def plot_cyclic_channel_power(cyclic_channel_power: xr.DataArray, center_statistic='mean', bound_statistics=('min', 'max'), ax=None):
+    if ax is None:
+        _, ax = plt.subplots()
+
+    time = cyclic_channel_power.cyclic_lag
+
+    for i, detector in enumerate(cyclic_channel_power.power_detector.values):
+        a = cyclic_channel_power.sel(power_detector=detector)
+
+        ax.plot(time, (a.sel(cyclic_statistic=center_statistic)), color=f'C{i}')
+
+    for i, detector in enumerate(cyclic_channel_power.power_detector.values):
+        a = cyclic_channel_power.sel(power_detector=detector)
+
+        ax.fill_between(
+            time,
+            a.sel(cyclic_statistic=bound_statistics[0]),
+            a.sel(cyclic_statistic=bound_statistics[1]),
+            color=f'C{i}',
+            alpha=0.25,
+            lw=0,
+            rasterized=True,
+        )
+
+    label_axis('x', cyclic_channel_power.cyclic_lag, ax=ax)
+    label_axis('y', cyclic_channel_power, tick_units=False, ax=ax)
+    label_legend(cyclic_channel_power.power_detector, ax=ax)
+
 
 def label_axis(
-    axis: mpl.axis.Axis,
-    a: xr.DataArray | xr.Dataset,
-    dimension: Optional[str] = None,
+    which_axis: typing.Literal['x']|typing.Literal['y'],
+    data: xr.DataArray | xr.Dataset,
+    *,
+    coord_name: typing.Optional[xr.Coordinates] = None,
     tick_units=True,
+    ax:typing.Optional[mpl.axes.Ax]=None
 ):
     """apply axis labeling based on label and unit metadata in the specified dimension of `a`.
 
     If dimension is None, then labeling is applied from metadata in a.attrs
     """
 
-    if dimension is None:
+    if ax is None:
+        ax = plt.gca()
+
+    if which_axis == 'x':
+        axis = ax.xaxis
+    elif which_axis == 'y':
+        axis = ax.yaxis
+
+    if coord_name is None:
         # label = a.attrs.get('standard_name', None)
-        units = a.attrs.get('units', None)
+        units = data.attrs.get('units', None)
     else:
         # label = a[dimension].attrs.get('label', None)
-        units = a[dimension].attrs.get('units', None)
+        units = data[coord_name].attrs.get('units', None)
 
     # if label is not None:
     #     if units is not None and not tick_units:
@@ -55,24 +96,32 @@ def label_axis(
     #     axis.set_label_text(label)
     if units is not None and tick_units:
         axis.set_major_formatter(mpl.ticker.EngFormatter(unit=units))
-        axis.set_label_text(a.standard_name or a.name)
+        axis.set_label_text(data.standard_name or data.name)
     elif units is not None:
-        axis.set_label_text(f'{a.standard_name or a.name} ({units})')
+        axis.set_label_text(f'{data.standard_name or data.name} ({units})')
     else:
-        axis.set_label_text(a.standard_name or a.name)
+        axis.set_label_text(data.standard_name or data.name)
 
 
 def label_legend(
-    ax: mpl.axes._axes.Axes,
-    a: xr.DataArray | xr.Dataset,
-    dimension: str,
+    data: xr.DataArray | xr.Dataset,
+    *,
+    coord_name: str = None,
     tick_units=True,
+    ax:typing.Optional[mpl.axes._axes.Axes]=None
 ):
     """apply legend labeling based on label and unit metadata in the specified dimension of `a`"""
 
-    standard_name = a[dimension].attrs.get('standard_name', None)
-    units = a[dimension].attrs.get('units', None)
-    values = a[dimension].values
+    if ax is None:
+        ax = plt.gca()
+
+    if coord_name is None:
+        obj = data
+    else:
+        obj = data[coord_name]
+    standard_name = obj.attrs.get('standard_name', None)
+    units = obj.attrs.get('units', None)
+    values = obj.values
 
     if standard_name is not None:
         if units is not None and not tick_units:
@@ -83,3 +132,26 @@ def label_legend(
         values = [formatter(v) for v in values]
 
     ax.legend(values, title=standard_name)
+
+
+def label_selection(sel: xr.Dataset|xr.DataArray,
+                    ax:typing.Optional[mpl.axes._axes.Axes]=None
+                    ):
+    if ax is None:
+        ax = plt.gca()
+    coord_names = {}
+    for name, coord in sel.coords.items():
+        if name == 'capture' or name in sel.indexes or coord.values.size == 0:
+            continue
+
+        units = coord.attrs.get('units', None)
+
+        label = coord.attrs.get('standard_name', coord.attrs.get('name', name))
+        values = np.atleast_1d(coord.values)
+        if units is not None:
+            formatter = mpl.ticker.EngFormatter(unit=units)
+            coord_names[label] = ', '.join([formatter(v) for v in values])
+        else:
+            coord_names[label] = ', '.join([str(v) for v in values])
+
+    ax.set_title(', '.join(f'{k}: {v}' for k,v in coord_names.items()))
