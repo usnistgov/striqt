@@ -27,8 +27,8 @@ CyclicSampleLagAxis = typing.Literal['cyclic_sample_lag']
 @dataclasses.dataclass
 class CyclicSampleLagCoords:
     data: Data[CyclicSampleLagAxis, np.float32]
-    standard_name: Attr[str] = 'Cyclic symbol index offset'
-    # units: Attr[str] = 's'
+    standard_name: Attr[str] = 'Cyclic sample lag'
+    units: Attr[str] = 's'
 
     @staticmethod
     @functools.lru_cache
@@ -37,7 +37,7 @@ class CyclicSampleLagCoords:
     ) -> dict[str, np.ndarray]:
         max_len = _get_max_corr_size(capture, subcarrier_spacings=subcarrier_spacings)
         axis_name = typing.get_args(CyclicSampleLagAxis)[0]
-        return pd.RangeIndex(0, max_len, name=axis_name)
+        return pd.RangeIndex(0, max_len, name=axis_name)/capture.sample_rate
 
 
 ### Subcarrier spacing label axis

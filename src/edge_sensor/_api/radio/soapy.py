@@ -218,12 +218,16 @@ class SoapyRadioDevice(RadioDevice):
 
         self._logger.info(f'connected with driver {self.backend.getDriverKey()}')
 
+        self._post_connect()
         self._reset_stats()
 
         for channel in 0, 1:
             self.backend.setGainMode(SoapySDR.SOAPY_SDR_RX, channel, False)
         self.channel(0)
         self.channel_enabled(False)
+
+    def _post_connect(self):
+        pass
 
     @property
     def master_clock_rate(self):

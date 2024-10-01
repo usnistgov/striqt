@@ -29,6 +29,42 @@ class _AirT7x01B(SoapyRadioDevice):
         if driver != 'SoapyAIRT':
             raise IOError(f'connected to {driver}, but expected SoapyAirT')
 
+    def _post_connect(self):
+        self.set_jesd_sysref_delay()
+
+    def set_jesd_sysref_delay(self, val=15):
+        '''
+        SYSREF delay: add additional delay to SYSREF re-alignment of LMFC counter
+        1111 = 15 core_clk cycles delay
+        ....
+        0000 = 0 core_clk cycles delay
+        In order to move away from the LFMC rollover we need to set bits 11:8
+        of the SYSREF handling register which is at address 0x0004_0010.
+        This register needs to be set before we try to sync the JESD204B bus.
+
+        Ref: https://docs.deepwavedigital.com/Tutorials/8_triggered_signal_stream/#maintaining-fixed-delay-between-calibrations
+        '''
+        addr = 0x00040010;
+        start_bit = 8
+        field_size = 4
+        bit_range = range(start_bit,start_bit+field_size)
+        field_mask = 0
+        for bit in bit_range:
+            field_mask |= 1<<bit;
+
+        # Read curr value
+        reg = self.backend.readRegister('FPGA', addr)
+        # Clear the bit field
+        reg &= ~field_mask
+        # Set values of mask, dropping extra bits
+        field_val_mask = (val << start_bit) & field_mask
+
+        # Set the bits
+        reg |= field_val_mask
+        # Write reg back
+        self.backend.writeRegister('FPGA', addr, reg)
+
+
     @attr.property.str(inherit=True)
     def id(self):
         # Jetson UUID - AirStack doesn't seem to return serial through Soapy
