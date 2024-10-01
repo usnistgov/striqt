@@ -51,11 +51,11 @@ def channel_power_histogram(
     iq,
     capture: structs.Capture,
     *,
-    detector_period: typing.Optional[float] = None,
-    power_detectors: tuple[str, ...] = ('rms',),
     power_low: float,
     power_high: float,
     power_resolution: float,
+    detector_period: typing.Optional[float] = None,
+    power_detectors: tuple[str, ...] = ('rms',),
 ):
     """evaluate the fraction of channel power readings binned on a uniform grid spacing.
 
