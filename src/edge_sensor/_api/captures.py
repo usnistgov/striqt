@@ -47,10 +47,16 @@ def coord_template(
         )
 
     vars[SWEEP_TIMESTAMP_NAME] = xr.Variable(
-        (CAPTURE_DIM,), [pd.Timestamp('now')], fastpath=True, attrs={'standard_name': 'Sweep start time'}
+        (CAPTURE_DIM,),
+        [pd.Timestamp('now')],
+        fastpath=True,
+        attrs={'standard_name': 'Sweep start time'},
     )
     vars[RADIO_ID_NAME] = xr.Variable(
-        (CAPTURE_DIM,), ['unspecified-radio'], fastpath=True, attrs={'standard_name': 'Radio hardware ID'}
+        (CAPTURE_DIM,),
+        ['unspecified-radio'],
+        fastpath=True,
+        attrs={'standard_name': 'Radio hardware ID'},
     ).astype('object')
 
     return xr.Coordinates(vars)

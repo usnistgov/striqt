@@ -7,10 +7,7 @@ import numpy as np
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 import iqwaveform
 
-from ._channel_power_time_series import (
-    PowerDetectorCoords,
-    PowerDetectorAxis
-)
+from ._channel_power_time_series import PowerDetectorCoords, PowerDetectorAxis
 from ._channel_power_ccdf import (
     ChannelPowerCoords,
     ChannelPowerBinAxis,

@@ -61,16 +61,14 @@ def _chain_decorators(decorators: list[callable], func: callable) -> callable:
 
 
 # %% Sweep script
-def click_sensor_sweep(description:typing.Optional[str]=None):
+def click_sensor_sweep(description: typing.Optional[str] = None):
     """decorates a function to serve as the main function in a sweep CLI with click"""
 
     if description is None:
         description = 'Run a radio spectrum sensor acquisition sweep according to a configuration file.'
 
     click_decorators = (
-        click.command(
-            description
-        ),
+        click.command(description),
         click.argument('yaml_path', type=click.Path(exists=True, dir_okay=False)),
         click.option(
             '--output-path/',
@@ -144,13 +142,14 @@ def init_sensor_sweep(
     debug: bool,
     sweep_cls: type = None,
     adjust_captures: dict = {},
-    open_store: bool = True
+    open_store: bool = True,
 ) -> tuple[Store, Controller, Sweep, Dataset]:
-    
     if sweep_cls is None:
         sweep_cls = edge_sensor.Sweep
 
-    sweep_spec = edge_sensor.read_yaml_sweep(yaml_path, sweep_cls=sweep_cls, adjust_captures=adjust_captures)
+    sweep_spec = edge_sensor.read_yaml_sweep(
+        yaml_path, sweep_cls=sweep_cls, adjust_captures=adjust_captures
+    )
 
     if verbose:
         lb.util.force_full_traceback(True)
