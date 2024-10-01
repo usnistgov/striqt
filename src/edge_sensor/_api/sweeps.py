@@ -67,16 +67,17 @@ def design_warmup_sweep(
     ]
 
     sweep_map = structs.struct_to_builtins(sweep)
-    capture_maps = structs.struct_to_builtins(sweep_map['captures'])
-    skip = {freezefromkeys(structs.struct_to_builtins(s), FIELDS) for s in skip}
+    capture_maps = [frozendict(d) for d in structs.struct_to_builtins(sweep_map['captures'])]
+    skip = {frozendict(structs.struct_to_builtins(s)) for s in skip}
 
     sweep_map['radio_setup']['driver'] = NullRadio.__name__
     sweep_map['radio_setup']['resource'] = 'empty'
 
-    # the set of unique combinations. frozendict enables comparisons for the set ops.
-    warmup_captures = {freezefromkeys(d, FIELDS) for d in capture_maps}
+    # key on unique combinations of the desired fields.
+    # we are left with only one capture for each combination.
+    warmup_mapping = {freezefromkeys(d, FIELDS): d for d in capture_maps}
 
-    sweep_map['captures'] = warmup_captures - skip
+    sweep_map['captures'] = set(warmup_mapping.values()) - set(skip)
 
     return structs.builtins_to_struct(sweep_map, type(sweep))
 

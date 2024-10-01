@@ -140,7 +140,11 @@ class RadioDevice(lb.Device):
 def design_capture_filter(
     master_clock_rate: float,
     capture: structs.RadioCapture,
+<<<<<<< HEAD
     bw_lo=0.75e6,
+=======
+    bw_lo=0.25e6,
+>>>>>>> 156e9e723d7f3854b1031ad8d1774126bfa97e39
     min_oversampling=1.1,
 ) -> tuple[float, float, dict]:
     """design a filter specified by the capture for a radio with the specified MCR.
