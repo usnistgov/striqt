@@ -128,7 +128,6 @@ def iter_sweep(
         return
 
     iq = None
-    acquired_capture = None
     sweep_time = None
     capture_prev = None
 
