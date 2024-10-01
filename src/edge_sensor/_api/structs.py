@@ -112,7 +112,7 @@ def get_attrs(struct: type[msgspec.Struct], field: str) -> dict[str, str]:
 
     try:
         metas = hints[field].__metadata__
-    except AttributeError:
+    except (AttributeError, KeyError):
         return {}
 
     if len(metas) == 0:

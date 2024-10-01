@@ -190,6 +190,7 @@ def resampling_correction(
     if corrections is None:
         power_scale = None
     else:
+        
         # these fields must match the calibration conditions exactly
         capture_dict = dict(
             channel=capture.channel,
@@ -201,9 +202,15 @@ def resampling_correction(
         )
 
         sel = corrections.power_correction.sel(**capture_dict, drop=True)
+        
+        if 'duration' in sel.coords:
+            sel = sel.drop('duration')
+
+        if 'radio_id' in sel.coords:
+            sel = sel.drop('radio_id')
 
         # allow interpolation between sample points in these fields
-        sel = sel.interp(center_frequency=capture.center_frequency)
+        sel = sel.squeeze(drop=True).interp(center_frequency=capture.center_frequency)
 
         if not np.isfinite(sel):
             raise ValueError('no calibration data available for this capture')
