@@ -82,6 +82,28 @@ class SoapyRadioDevice(RadioDevice):
         help='digital frequency shift of the RX center frequency',
     )
 
+    @attr.method.float(
+        min=0,
+        cache=True,
+        label='Hz',
+        help='sample rate before resampling',
+    )
+    @_verify_channel_for_getter
+    def backend_sample_rate(self):
+        return self.backend.getSampleRate(SoapySDR.SOAPY_SDR_RX, self.channel())
+
+    @backend_sample_rate.setter
+    @_verify_channel_for_setter
+    def _(self, backend_sample_rate):
+        mcr = self.master_clock_rate
+        if np.isclose(backend_sample_rate, mcr):
+            # avoid exceptions due to rounding error
+            backend_sample_rate = mcr
+
+        self.backend.setSampleRate(
+            SoapySDR.SOAPY_SDR_RX, self.channel(), backend_sample_rate
+        )
+
     _downsample = attr.value.float(1.0, min=0, help='backend_sample_rate/sample_rate')
 
     @attr.method.int(
