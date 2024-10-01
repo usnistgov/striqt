@@ -235,8 +235,10 @@ class SoapyRadioDevice(RadioDevice):
     def setup(self, radio_config: structs.RadioSetup):
         self.backend.setTimeSource(radio_config.time_source)
 
-        if radio_config.time_source == 'external':
+        if radio_config.time_source != 'internal':
             self._sync_to_external_time_source()
+
+        super().setup(radio_config)
 
     def _sync_to_external_time_source(self):
         # We first wait for a PPS transition to avoid race conditions involving
