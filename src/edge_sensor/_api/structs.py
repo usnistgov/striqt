@@ -61,7 +61,7 @@ class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):
     driver: str = 'Air7201B'
     resource: Any = None
     gps: bool = False
-    timebase: Literal['internal', 'gpsdo'] = 'internal'
+    time_source: Literal['internal', 'external'] = 'internal'
     periodic_trigger: Optional[float] = None
     calibration: Optional[str] = None
 

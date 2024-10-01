@@ -142,19 +142,7 @@ class SoapyRadioDevice(RadioDevice):
     @_verify_channel_for_getter
     def backend_sample_rate(self):
         return self.backend.getSampleRate(SoapySDR.SOAPY_SDR_RX, self.channel())
-
-    @backend_sample_rate.setter
-    @_verify_channel_for_setter
-    def _(self, backend_sample_rate):
-        mcr = self.master_clock_rate
-        if np.isclose(backend_sample_rate, mcr):
-            # avoid exceptions due to rounding error
-            backend_sample_rate = mcr
-
-        self.backend.setSampleRate(
-            SoapySDR.SOAPY_SDR_RX, self.channel(), backend_sample_rate
-        )
-
+    
     sample_rate = backend_sample_rate.corrected_from_expression(
         backend_sample_rate / _downsample,
         label='Hz',
@@ -202,6 +190,7 @@ class SoapyRadioDevice(RadioDevice):
         else:
             self.backend.setGain(SoapySDR.SOAPY_SDR_TX, channel, gain)
 
+
     def open(self):
         class _SoapySDRDevice(SoapySDR.Device):
             def close(self):
@@ -224,15 +213,39 @@ class SoapyRadioDevice(RadioDevice):
         self.channel(0)
         self.channel_enabled(False)
 
-        # eventually: support GPS time sync here
-        self.backend.setHardwareTime(round(time.time() * 1e9), 'now')
-
     @property
     def master_clock_rate(self):
         return type(self).backend_sample_rate.max
 
     def _reset_stats(self):
         self._stream_stats = {'overflow': 0, 'exceptions': 0, 'total': 0}
+
+    def setup(self, radio_config: structs.RadioSetup):
+        self.backend.setTimeSource(radio_config.time_source)
+
+        if radio_config.time_source == 'external':
+            self._sync_to_external_time_source()
+
+    def _sync_to_external_time_source(self):
+        # We first wait for a PPS transition to avoid race conditions involving
+        # applying the time of the next PPS
+        with lb.stopwatch('synchronize radio clock to pps'):
+            init_pps_time = self.backend.getHardwareTime("pps")
+            while init_pps_time == self.backend.getHardwareTime("pps"):
+                continue
+
+        # PPS transition occurred, should be safe to snag system time and apply it
+        sys_time_now = time.time()
+        full_secs = int(sys_time_now)
+        frac_secs = sys_time_now - full_secs
+        if frac_secs > 0.8:
+            # System time is lagging behind the PPS transition
+            full_secs += 1
+        elif frac_secs > 0.25:
+            # System time and PPS are off, warn caller
+            self._logger.warning("System time and PPS not synced, check NTP settings")
+        time_to_set_ns = int((full_secs + 1) * 1e9)
+        self.backend.setHardwareTime(time_to_set_ns, "pps")
 
     @_verify_channel_setting
     def acquire(

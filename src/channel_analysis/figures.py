@@ -161,4 +161,10 @@ def label_selection(
         else:
             coord_names[label] = ', '.join([str(v) for v in values])
 
-    ax.set_title(', '.join(f'{k}: {v}' for k, v in coord_names.items()))
+    coord_title = ', '.join(f'{k}: {v}' for k, v in coord_names.items())
+    attr_title = ', '.join(
+        [f'{k}: {v}' for k,v in sel.attrs.items() if k not in ('units', 'name', 'standard_name')]
+    )
+    if len(attr_title) > 0:
+        attr_title = f'\nAnalysis: {attr_title}'
+    ax.set_title(f'{coord_title}{attr_title}')
