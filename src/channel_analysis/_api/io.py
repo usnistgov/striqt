@@ -53,7 +53,7 @@ def open_store(path: str | Path, *, mode: str):
         store = zarr.DBMStore(path, flag=flag, write_lock=False)
         warnings.resetwarnings()
     else:
-        store = zarr.DirectoryStore(path, mode=mode)
+        store = zarr.DirectoryStore(path)
 
     return store
 
