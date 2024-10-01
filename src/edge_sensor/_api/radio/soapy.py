@@ -154,16 +154,6 @@ class SoapyRadioDevice(RadioDevice):
         help='RF frequency at the center of the analysis bandwidth',
         label='Hz',
     )
-
-    @attr.method.float(
-        min=0,
-        cache=True,
-        label='Hz',
-        help='sample rate before resampling',
-    )
-    @_verify_channel_for_getter
-    def backend_sample_rate(self):
-        return self.backend.getSampleRate(SoapySDR.SOAPY_SDR_RX, self.channel())
     
     sample_rate = backend_sample_rate.corrected_from_expression(
         backend_sample_rate / _downsample,
