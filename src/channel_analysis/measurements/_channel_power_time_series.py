@@ -78,7 +78,6 @@ def channel_power_time_series(
 
     metadata = {
         'detector_period': detector_period,
-        'standard_name': 'Channel power',
         'units': f'dBm/{(capture.analysis_bandwidth or capture.sample_rate)/1e6} MHz',
     }
 

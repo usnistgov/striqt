@@ -7,6 +7,10 @@ import numpy as np
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 import iqwaveform
 
+from ._channel_power_time_series import (
+    PowerDetectorCoords,
+    PowerDetectorAxis
+)
 from ._channel_power_ccdf import (
     ChannelPowerCoords,
     ChannelPowerBinAxis,
@@ -36,8 +40,12 @@ def make_power_histogram_bin_edges(power_low, power_high, power_resolution, xp=n
 
 @dataclasses.dataclass
 class ChannelPowerHistogram(AsDataArray):
-    ccdf: Data[ChannelPowerBinAxis, np.float32]
+    histogram: Data[tuple[PowerDetectorAxis, ChannelPowerBinAxis], np.float32]
+
+    # Coordinates: matching the number and order of axes in the data
+    power_detector: Coordof[PowerDetectorCoords]
     channel_power_bin: Coordof[ChannelPowerCoords]
+
     standard_name: Attr[str] = 'Fraction of counts'
 
 
@@ -46,6 +54,8 @@ def channel_power_histogram(
     iq,
     capture: structs.Capture,
     *,
+    detector_period: typing.Optional[float] = None,
+    power_detectors: tuple[str, ...] = ('rms',),
     power_low: float,
     power_high: float,
     power_resolution: float,
@@ -61,8 +71,6 @@ def channel_power_histogram(
         xp = iqwaveform.util.array_namespace(iq)
 
     dtype = xp.finfo(iq.dtype).dtype
-
-    power = iqwaveform.envtodB(iq)
     bin_edges = make_power_histogram_bin_edges(
         power_low=power_low,
         power_high=power_high,
@@ -70,5 +78,20 @@ def channel_power_histogram(
         xp=xp,
     )
 
-    counts, _ = xp.histogram(power, bin_edges)
-    return counts.astype(dtype) / xp.sum(counts)
+    kws = {'iq': iq, 'Ts': 1 / capture.sample_rate, 'Tbin': detector_period}
+
+    data = []
+    for detector in power_detectors:
+        if detector_period is None:
+            power_dB = iqwaveform.envtodB(iq)
+        else:
+            power = iqwaveform.iq_to_bin_power(kind=detector, **kws).astype('float32')
+            power_dB = iqwaveform.powtodB(power, out=power)
+        counts, _ = xp.histogram(power_dB, bin_edges)
+        data.append(counts.astype(dtype) / xp.sum(counts))
+
+    metadata = {
+        'detector_period': detector_period,
+    }
+
+    return data, metadata
