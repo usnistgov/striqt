@@ -157,7 +157,7 @@ class SingleToneSource(NullSource):
 
         t = np.arange(N) / self.sample_rate()
         f_cw = self.sample_rate() * self.resource
-        ret[:] = xp.sin((2 * np.pi * f_cw) * t)
+        ret[:] = xp.cos((2 * np.pi * f_cw) * t)
 
         return ret
 

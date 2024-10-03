@@ -109,3 +109,20 @@ def get_attrs(struct: type[msgspec.Struct], field: str) -> dict[str, str]:
         raise TypeError(
             'Annotated[] type hints must contain exactly one msgspec.Meta object'
         )
+
+
+def reset_nonsampling_fields(capture: RadioCapture) -> RadioCapture:
+    """return a struct containing only the sampling-related fields of the RadioCapture"""
+
+    SAMPLING_FIELDS = (
+        'duration',
+        'sample_rate',
+        'analysis_bandwidth',
+        'lo_shift',
+        'gpu_resample'
+    )
+    
+    mapping = struct_to_builtins(capture)
+    mapping = {k: mapping[k] for k in SAMPLING_FIELDS}
+
+    return msgspec.convert(mapping, RadioCapture)

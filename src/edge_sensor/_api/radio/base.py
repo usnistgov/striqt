@@ -1,5 +1,5 @@
 from __future__ import annotations
-from functools import lru_cache
+import functools
 from math import ceil
 import typing
 
@@ -143,8 +143,8 @@ class RadioDevice(lb.Device):
         self._inbuf = None
 
 
-@lru_cache(30000)
-def design_capture_filter(
+@functools.lru_cache(30000)
+def _design_capture_filter(
     master_clock_rate: float,
     capture: structs.RadioCapture,
     bw_lo=0.25e6,
@@ -197,7 +197,13 @@ def design_capture_filter(
         )
 
 
-@lru_cache(30000)
+@functools.wraps(_design_capture_filter)
+def design_capture_filter(master_clock_rate, capture, *args, **kws):
+    fixed_capture = structs.reset_nonsampling_fields(capture)
+    return _design_capture_filter(master_clock_rate, fixed_capture, *args, **kws)
+
+
+@functools.lru_cache(30000)
 def _get_capture_buffer_sizes_cached(
     master_clock_rate: float,
     periodic_trigger: float | None,
