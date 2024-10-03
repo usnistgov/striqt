@@ -76,12 +76,6 @@ class SoapyRadioDevice(RadioDevice):
         help='configure behavior on receive buffer overflow',
     )
 
-    lo_offset = attr.value.float(
-        0.0,
-        label='Hz',
-        help='digital frequency shift of the RX center frequency',
-    )
-
     @attr.method.float(
         min=0,
         cache=True,
@@ -150,11 +144,11 @@ class SoapyRadioDevice(RadioDevice):
         )
 
     center_frequency = lo_frequency.corrected_from_expression(
-        lo_frequency + lo_offset,
+        lo_frequency + RadioDevice.lo_offset,
         help='RF frequency at the center of the analysis bandwidth',
         label='Hz',
     )
-    
+
     sample_rate = backend_sample_rate.corrected_from_expression(
         backend_sample_rate / _downsample,
         label='Hz',

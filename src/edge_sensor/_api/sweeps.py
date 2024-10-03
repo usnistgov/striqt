@@ -6,7 +6,7 @@ from frozendict import frozendict
 
 from . import captures, util
 
-from .radio import RadioDevice, NullRadio
+from .radio import RadioDevice, NullSource
 from . import structs
 
 
@@ -70,7 +70,7 @@ def design_warmup_sweep(
     capture_maps = [frozendict(d) for d in structs.struct_to_builtins(sweep_map['captures'])]
     skip = {frozendict(structs.struct_to_builtins(s)) for s in skip}
 
-    sweep_map['radio_setup']['driver'] = NullRadio.__name__
+    sweep_map['radio_setup']['driver'] = NullSource.__name__
     sweep_map['radio_setup']['resource'] = 'empty'
 
     # key on unique combinations of the desired fields.

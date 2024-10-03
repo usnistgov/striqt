@@ -10,7 +10,7 @@ from ._api.io import load, dump, open_store, read_yaml_sweep
 from ._api.iq_corrections import read_calibration_corrections
 from ._api.radio import (
     RadioDevice,
-    NullRadio,
+    NullSource,
     design_capture_filter,
 )
 from ._api.structs import RadioCapture, RadioSetup, Sweep, Description

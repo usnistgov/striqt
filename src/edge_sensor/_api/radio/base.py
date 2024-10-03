@@ -43,6 +43,12 @@ class RadioDevice(lb.Device):
         help='if specified, acquisition start times will begin at even multiples of this',
     )
 
+    lo_offset = attr.value.float(
+        0.0,
+        label='Hz',
+        help='digital frequency shift of the RX center frequency',
+    )
+
     @attr.property.str(sets=False, cache=True, help='unique radio hardware identifier')
     def id(self):
         raise NotImplementedError
@@ -108,6 +114,7 @@ class RadioDevice(lb.Device):
 
     def get_capture_struct(self) -> structs.RadioCapture:
         """generate the currently armed capture configuration for the specified channel"""
+
         if self.lo_offset == 0:
             lo_shift = 'none'
         elif self.lo_offset < 0:
@@ -269,7 +276,7 @@ def find_radio_cls_by_name(
 
 
 def is_same_resource(r1: str | dict, r2: str | dict):
-    if isinstance(r1, str):
-        return r1 == r2
-    else:
+    if hasattr(r1, 'items'):
         return set(r1.items()) == set(r2.items())
+    else:
+        return r1 == r2

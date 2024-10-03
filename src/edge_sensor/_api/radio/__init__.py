@@ -7,4 +7,4 @@ from .base import (
 )
 
 from .soapy import SoapyRadioDevice
-from .null import NullRadio
+from .null import NullSource

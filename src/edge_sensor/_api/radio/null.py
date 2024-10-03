@@ -15,14 +15,10 @@ else:
 channel_kwarg = attr.method_kwarg.int('channel', min=0, help='hardware port number')
 
 
-class NullRadio(RadioDevice):
+class NullSource(RadioDevice):
     """emulate a radio with fake data"""
 
     _inbuf = None
-
-    resource: str = attr.value.str(
-        default='tone', only=('empty', 'tone', 'noise'), help='waveform to return'
-    )
 
     on_overflow = attr.value.str(
         'ignore',
@@ -32,11 +28,6 @@ class NullRadio(RadioDevice):
 
     _downsample = attr.value.float(1.0, min=0, help='backend_sample_rate/sample_rate')
 
-    lo_offset = attr.value.float(
-        0.0,
-        label='Hz',
-        help='digital frequency shift of the RX center frequency',
-    )
     analysis_bandwidth = attr.value.float(
         None,
         min=1,
@@ -73,7 +64,7 @@ class NullRadio(RadioDevice):
         self.backend['lo_frequency'] = value
 
     center_frequency = lo_frequency.corrected_from_expression(
-        lo_frequency + lo_offset,
+        lo_frequency + RadioDevice.lo_offset,
         help='RF frequency at the center of the RX baseband',
         label='Hz',
     )
@@ -145,25 +136,45 @@ class NullRadio(RadioDevice):
     def _prepare_buffer(self, capture):
         pass
 
-    def _read_stream(self, N) -> np.ndarray:
+    def _read_stream(self, N):
+        xp = import_cupy_with_fallback()
+        return xp.empty(N, dtype='complex64')
+
+
+class NullRadio(NullSource):
+    # eventually, deprecate this
+    pass
+
+
+class SingleToneSource(NullSource):
+    resource: float = attr.value.float(
+        default=0.2, min=-1, max=1, help='normalized tone frequency (between -1 and 1)'
+    )
+
+    def _read_stream(self, N):
         xp = import_cupy_with_fallback()
         ret = xp.empty(N, dtype='complex64')
-        if self.resource == 'empty':
-            pass
-        elif self.resource == 'noise':
-            ret[:] = (
-                xp.random.normal(scale=1e-3, size=2 * N)
-                .astype('float32')
-                .view('complex64')
-            )
-        elif self.resource == 'tone':
-            ret[:] = (
-                xp.random.normal(scale=1e-3, size=2 * N)
-                .astype('float32')
-                .view('complex64')
-            )
-            t = np.arange(N) / self.sample_rate()
-            f_cw = self.sample_rate() / 5
-            ret[:] += xp.sin((2 * np.pi * f_cw) * t)
+
+        t = np.arange(N) / self.sample_rate()
+        f_cw = self.sample_rate() * self.resource
+        ret[:] = xp.sin((2 * np.pi * f_cw) * t)
+
+        return ret
+
+
+class NoiseSource(NullSource):
+    resource: float = attr.value.float(
+        default=1e-3, min=0, help='noise waveform variance'
+    )
+
+    def _read_stream(self, N):
+        xp = import_cupy_with_fallback()
+        ret = xp.empty(N, dtype='complex64')
+
+        ret[:] = (
+            xp.random.normal(scale=np.sqrt(self.resource), size=2 * N)
+            .astype('float32')
+            .view('complex64')
+        )
 
         return ret

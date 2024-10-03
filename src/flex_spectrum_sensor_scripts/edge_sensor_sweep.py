@@ -11,7 +11,7 @@ from flex_spectrum_sensor_scripts import (
 )
 
 
-@click_sensor_sweep
+@click_sensor_sweep('Run a sensor sweep with a software-defined radio')
 def run(**kws):
     # instantiate sweep objects
     store, controller, sweep_spec, calibration = init_sensor_sweep(**kws)
