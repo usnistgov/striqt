@@ -50,7 +50,7 @@ class _AirT7x01B(SoapyRadioDevice):
         bit_range = range(start_bit,start_bit+field_size)
         field_mask = 0
         for bit in bit_range:
-            field_mask |= 1<<bit;
+            field_mask |= 1<<bit
 
         # Read curr value
         reg = self.backend.readRegister('FPGA', addr)
