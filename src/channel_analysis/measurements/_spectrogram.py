@@ -1,6 +1,7 @@
 from __future__ import annotations
 import dataclasses
 import functools
+from math import ceil
 import typing
 
 import numpy as np
@@ -69,12 +70,19 @@ class SpectrogramFrequencyCoords:
             xp=np,
         )
 
-        if truncate and capture.analysis_bandwidth is not None:
-            which_freqs = np.abs(freqs) <= capture.analysis_bandwidth / 2
-            freqs = freqs[which_freqs]
+        if capture.analysis_bandwidth is not None:
+            bw_args = (-capture.analysis_bandwidth / 2, +capture.analysis_bandwidth / 2)
+            ilo, ihi = iqwaveform.fourier._freq_band_edges(
+                freqs[0], freqs[-1], freqs.size, *bw_args
+            )
+            freqs = freqs[ilo:ihi]
 
-        freq_step = round(freqs.size/frequency_bin_averaging/2)
-        freqs = freqs[freq_step::frequency_bin_averaging]
+        if frequency_bin_averaging is not None:
+            trim = freqs.size % (2 * frequency_bin_averaging)
+            if trim > 0:
+                freqs = freqs[trim // 2 : -trim // 2 :]
+            freqs = iqwaveform.fourier.to_blocks(freqs, frequency_bin_averaging)
+            freqs = freqs.mean(axis=1)
 
         return freqs
 
