@@ -25,10 +25,12 @@ class TimeElapsedCoords:
     @staticmethod
     @functools.lru_cache
     def factory(
-        capture: structs.Capture, *, power_detectors: tuple[str], detector_period: float
+        capture: structs.Capture, *, detector_period: float, **_
     ) -> dict[str, np.ndarray]:
+        import pandas as pd
+
         length = round(capture.duration / detector_period)
-        return np.arange(length) * detector_period
+        return pd.RangeIndex(length) * detector_period
 
 
 ### Power detector dimension and coordinates

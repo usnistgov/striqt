@@ -40,6 +40,7 @@ def plot_cyclic_channel_power(
     center_statistic='mean',
     bound_statistics=('min', 'max'),
     ax=None,
+    colors=None,
 ):
     if ax is None:
         _, ax = plt.subplots()
@@ -49,7 +50,11 @@ def plot_cyclic_channel_power(
     for i, detector in enumerate(cyclic_channel_power.power_detector.values):
         a = cyclic_channel_power.sel(power_detector=detector)
 
-        ax.plot(time, (a.sel(cyclic_statistic=center_statistic)), color=f'C{i}')
+        ax.plot(
+            time,
+            (a.sel(cyclic_statistic=center_statistic)),
+            color=f'C{i}' if colors is None else colors[i],
+        )
 
     for i, detector in enumerate(cyclic_channel_power.power_detector.values):
         a = cyclic_channel_power.sel(power_detector=detector)
@@ -58,7 +63,7 @@ def plot_cyclic_channel_power(
             time,
             a.sel(cyclic_statistic=bound_statistics[0]),
             a.sel(cyclic_statistic=bound_statistics[1]),
-            color=f'C{i}',
+            color=f'C{i}' if colors is None else colors[i],
             alpha=0.25,
             lw=0,
             rasterized=True,
@@ -142,7 +147,9 @@ def label_legend(
 
 
 def label_selection(
-    sel: xr.Dataset | xr.DataArray, ax: typing.Optional[mpl.axes._axes.Axes] = None
+    sel: xr.Dataset | xr.DataArray,
+    ax: typing.Optional[mpl.axes._axes.Axes] = None,
+    attrs=True,
 ):
     if ax is None:
         ax = plt.gca()
@@ -162,9 +169,18 @@ def label_selection(
             coord_names[label] = ', '.join([str(v) for v in values])
 
     coord_title = ', '.join(f'{k}: {v}' for k, v in coord_names.items())
-    attr_title = ', '.join(
-        [f'{k}: {v}' for k,v in sel.attrs.items() if k not in ('units', 'name', 'standard_name')]
-    )
+
+    if attrs:
+        attr_title = ', '.join(
+            [
+                f'{k}: {v}'
+                for k, v in sel.attrs.items()
+                if k not in ('units', 'name', 'standard_name')
+            ]
+        )
+    else:
+        attr_title = ''
+
     if len(attr_title) > 0:
         attr_title = f'\nAnalysis: {attr_title}'
     ax.set_title(f'{coord_title}{attr_title}')

@@ -2,7 +2,7 @@
 
 # start with this to work around a dynamic library loading
 # packaging quirk on jetson aarch64
-from ._api import iq_corrections, radio, structs, util
+from ._api import iq_corrections, structs, util
 
 from ._api.captures import CAPTURE_DIM
 from ._api.controller import connect, start_server, SweepController
@@ -17,3 +17,5 @@ from ._api.structs import RadioCapture, RadioSetup, Sweep, Description
 from ._api.sweeps import iter_sweep, iter_callbacks
 
 from . import radios
+
+from iqwaveform import powtodB, dBtopow

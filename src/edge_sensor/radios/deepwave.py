@@ -33,7 +33,7 @@ class _AirT7x01B(SoapyRadioDevice):
         self.set_jesd_sysref_delay()
 
     def set_jesd_sysref_delay(self, val=15):
-        '''
+        """
         SYSREF delay: add additional delay to SYSREF re-alignment of LMFC counter
         1111 = 15 core_clk cycles delay
         ....
@@ -43,14 +43,14 @@ class _AirT7x01B(SoapyRadioDevice):
         This register needs to be set before we try to sync the JESD204B bus.
 
         Ref: https://docs.deepwavedigital.com/Tutorials/8_triggered_signal_stream/#maintaining-fixed-delay-between-calibrations
-        '''
-        addr = 0x00040010;
+        """
+        addr = 0x00040010
         start_bit = 8
         field_size = 4
-        bit_range = range(start_bit,start_bit+field_size)
+        bit_range = range(start_bit, start_bit + field_size)
         field_mask = 0
         for bit in bit_range:
-            field_mask |= 1<<bit
+            field_mask |= 1 << bit
 
         # Read curr value
         reg = self.backend.readRegister('FPGA', addr)
@@ -63,7 +63,6 @@ class _AirT7x01B(SoapyRadioDevice):
         reg |= field_val_mask
         # Write reg back
         self.backend.writeRegister('FPGA', addr, reg)
-
 
     @attr.property.str(inherit=True)
     def id(self):

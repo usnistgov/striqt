@@ -8,3 +8,4 @@ from .base import (
 
 from .soapy import SoapyRadioDevice
 from .null import NullSource
+from .testing import SingleToneSource, NoiseSource

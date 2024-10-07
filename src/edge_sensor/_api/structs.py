@@ -119,9 +119,9 @@ def reset_nonsampling_fields(capture: RadioCapture) -> RadioCapture:
         'sample_rate',
         'analysis_bandwidth',
         'lo_shift',
-        'gpu_resample'
+        'gpu_resample',
     )
-    
+
     mapping = struct_to_builtins(capture)
     mapping = {k: mapping[k] for k in SAMPLING_FIELDS}
 

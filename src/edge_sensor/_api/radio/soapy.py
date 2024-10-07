@@ -98,8 +98,6 @@ class SoapyRadioDevice(RadioDevice):
             SoapySDR.SOAPY_SDR_RX, self.channel(), backend_sample_rate
         )
 
-    _downsample = attr.value.float(1.0, min=0, help='backend_sample_rate/sample_rate')
-
     @attr.method.int(
         min=0,
         allow_none=True,
@@ -150,7 +148,7 @@ class SoapyRadioDevice(RadioDevice):
     )
 
     sample_rate = backend_sample_rate.corrected_from_expression(
-        backend_sample_rate / _downsample,
+        backend_sample_rate / RadioDevice._downsample,
         label='Hz',
         help='sample rate of acquired waveform',
     )
@@ -195,7 +193,6 @@ class SoapyRadioDevice(RadioDevice):
             return self.backend.getGain(SoapySDR.SOAPY_SDR_TX, channel)
         else:
             self.backend.setGain(SoapySDR.SOAPY_SDR_TX, channel, gain)
-
 
     def open(self):
         class _SoapySDRDevice(SoapySDR.Device):
@@ -242,8 +239,8 @@ class SoapyRadioDevice(RadioDevice):
         # We first wait for a PPS transition to avoid race conditions involving
         # applying the time of the next PPS
         with lb.stopwatch('synchronize radio clock to pps'):
-            init_pps_time = self.backend.getHardwareTime("pps")
-            while init_pps_time == self.backend.getHardwareTime("pps"):
+            init_pps_time = self.backend.getHardwareTime('pps')
+            while init_pps_time == self.backend.getHardwareTime('pps'):
                 continue
 
         # PPS transition occurred, should be safe to snag system time and apply it
@@ -255,9 +252,9 @@ class SoapyRadioDevice(RadioDevice):
             full_secs += 1
         elif frac_secs > 0.25:
             # System time and PPS are off, warn caller
-            self._logger.warning("System time and PPS not synced, check NTP settings")
+            self._logger.warning('System time and PPS not synced, check NTP settings')
         time_to_set_ns = int((full_secs + 1) * 1e9)
-        self.backend.setHardwareTime(time_to_set_ns, "pps")
+        self.backend.setHardwareTime(time_to_set_ns, 'pps')
 
     @_verify_channel_setting
     def acquire(

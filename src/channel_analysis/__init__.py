@@ -16,3 +16,5 @@ from ._api.structs import (
 from ._api.type_stubs import ArrayType, DatasetType, TimestampType
 
 from .measurements import *
+
+from iqwaveform import powtodB, dBtopow

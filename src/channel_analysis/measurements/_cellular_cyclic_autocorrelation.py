@@ -37,7 +37,7 @@ class CyclicSampleLagCoords:
     ) -> dict[str, np.ndarray]:
         max_len = _get_max_corr_size(capture, subcarrier_spacings=subcarrier_spacings)
         axis_name = typing.get_args(CyclicSampleLagAxis)[0]
-        return pd.RangeIndex(0, max_len, name=axis_name)/capture.sample_rate
+        return pd.RangeIndex(0, max_len, name=axis_name) / capture.sample_rate
 
 
 ### Subcarrier spacing label axis
@@ -107,7 +107,9 @@ def cellular_cyclic_autocorrelation(
 
     xp = iqwaveform.util.array_namespace(iq)
     subcarrier_spacings = tuple(subcarrier_spacings)
-    phy_scs = _get_phy_mappings(capture.analysis_bandwidth, subcarrier_spacings, xp=xp)
+    phy_scs = _get_phy_mappings(
+        capture.analysis_bandwidth, capture.sample_rate, subcarrier_spacings, xp=xp
+    )
     metadata = {}
 
     if isinstance(subcarrier_spacings, numbers.Number):
@@ -149,10 +151,14 @@ def cellular_cyclic_autocorrelation(
 
 @functools.lru_cache
 def _get_phy_mappings(
-    channel_bandwidth: float, subcarrier_spacings: tuple[float, ...], xp=np
+    channel_bandwidth: float,
+    sample_rate: float,
+    subcarrier_spacings: tuple[float, ...],
+    xp=np,
 ) -> dict[str]:
     return {
-        scs: ofdm.Phy3GPP(channel_bandwidth, scs, xp=xp) for scs in subcarrier_spacings
+        scs: ofdm.Phy3GPP(channel_bandwidth, scs, sample_rate=sample_rate, xp=xp)
+        for scs in subcarrier_spacings
     }
 
 
@@ -160,5 +166,7 @@ def _get_phy_mappings(
 def _get_max_corr_size(
     capture: structs.Capture, *, subcarrier_spacings: tuple[float, ...]
 ):
-    phy_scs = _get_phy_mappings(capture.analysis_bandwidth, subcarrier_spacings)
+    phy_scs = _get_phy_mappings(
+        capture.analysis_bandwidth, capture.sample_rate, subcarrier_spacings
+    )
     return max([np.diff(phy.cp_start_idx).min() for phy in phy_scs.values()])

@@ -66,11 +66,12 @@ def spectrogram_histogram(
     )
 
     # truncate to the analysis bandwidth
-    bw_args = (-capture.analysis_bandwidth / 2, +capture.analysis_bandwidth / 2)
-    ilo, ihi = iqwaveform.fourier._freq_band_edges(
-        freqs[0], freqs[-1], freqs.size, *bw_args
-    )
-    spg = spg[:, ilo:ihi]
+    if capture.analysis_bandwidth is not None:
+        bw_args = (-capture.analysis_bandwidth / 2, +capture.analysis_bandwidth / 2)
+        ilo, ihi = iqwaveform.fourier._freq_band_edges(
+            freqs[0], freqs[-1], freqs.size, *bw_args
+        )
+        spg = spg[:, ilo:ihi]
 
     if frequency_bin_averaging is not None:
         trim = spg.shape[1] % (2 * frequency_bin_averaging)

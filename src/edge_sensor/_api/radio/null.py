@@ -3,7 +3,6 @@ import typing
 import labbench as lb
 from labbench import paramattr as attr
 
-from .soapy import SoapyRadioDevice
 from .base import RadioDevice
 from ..util import import_cupy_with_fallback
 
@@ -19,21 +18,6 @@ class NullSource(RadioDevice):
     """emulate a radio with fake data"""
 
     _inbuf = None
-
-    on_overflow = attr.value.str(
-        'ignore',
-        only=['ignore', 'except', 'log'],
-        help='configure behavior on receive buffer overflow',
-    )
-
-    _downsample = attr.value.float(1.0, min=0, help='backend_sample_rate/sample_rate')
-
-    analysis_bandwidth = attr.value.float(
-        None,
-        min=1,
-        label='Hz',
-        help='bandwidth of the digital bandpass filter (or None to bypass)',
-    )
 
     @attr.method.int(
         min=0,
@@ -83,7 +67,7 @@ class NullSource(RadioDevice):
         self.backend['backend_sample_rate'] = value
 
     sample_rate = backend_sample_rate.corrected_from_expression(
-        backend_sample_rate / _downsample,
+        backend_sample_rate / RadioDevice._downsample,
         label='Hz',
         help='sample rate of acquired waveform',
     )
@@ -131,8 +115,6 @@ class NullSource(RadioDevice):
     def master_clock_rate(self):
         return 125e6
 
-    arm = SoapyRadioDevice.arm
-
     def _prepare_buffer(self, capture):
         pass
 
@@ -144,37 +126,3 @@ class NullSource(RadioDevice):
 class NullRadio(NullSource):
     # eventually, deprecate this
     pass
-
-
-class SingleToneSource(NullSource):
-    resource: float = attr.value.float(
-        default=0.2, min=-1, max=1, help='normalized tone frequency (between -1 and 1)'
-    )
-
-    def _read_stream(self, N):
-        xp = import_cupy_with_fallback()
-        ret = xp.empty(N, dtype='complex64')
-
-        t = np.arange(N) / self.sample_rate()
-        f_cw = self.sample_rate() * self.resource
-        ret[:] = xp.cos((2 * np.pi * f_cw) * t)
-
-        return ret
-
-
-class NoiseSource(NullSource):
-    resource: float = attr.value.float(
-        default=1e-3, min=0, help='noise waveform variance'
-    )
-
-    def _read_stream(self, N):
-        xp = import_cupy_with_fallback()
-        ret = xp.empty(N, dtype='complex64')
-
-        ret[:] = (
-            xp.random.normal(scale=np.sqrt(self.resource), size=2 * N)
-            .astype('float32')
-            .view('complex64')
-        )
-
-        return ret

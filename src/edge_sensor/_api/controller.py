@@ -95,7 +95,7 @@ class SweepController:
         warmup_sweep = sweeps.design_warmup_sweep(
             sweep_spec, skip=tuple(self.warmed_captures)
         )
-        
+
         self.warmed_captures = self.warmed_captures | set(warmup_sweep.captures)
         if len(warmup_sweep.captures) > 0:
             warmup_iter = self.iter_sweep(

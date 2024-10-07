@@ -49,6 +49,21 @@ class RadioDevice(lb.Device):
         help='digital frequency shift of the RX center frequency',
     )
 
+    _downsample = attr.value.float(1.0, min=0, help='backend_sample_rate/sample_rate')
+
+    # these must be implemented by child classes
+    channel = attr.method.int(min=0)
+    center_frequency = attr.method.float(
+        min=0, label='Hz', help='RF frequency at the center of the RX baseband'
+    )
+    backend_sample_rate = attr.method.float(
+        min=0,
+        label='Hz',
+        help='sample rate before resampling',
+    )
+    channel_enabled = attr.method.bool()
+    gain = attr.method.float(label='dB', help='SDR hardware gain')
+
     @attr.property.str(sets=False, cache=True, help='unique radio hardware identifier')
     def id(self):
         raise NotImplementedError
@@ -105,8 +120,50 @@ class RadioDevice(lb.Device):
             raise IOError('external frequency conversion is not yet supported')
 
     def arm(self, capture: structs.RadioCapture):
-        """to be implemented in subclasses"""
-        raise NotImplementedError
+        """apply a capture configuration"""
+
+        if capture == self.get_capture_struct():
+            return
+
+        if iqwaveform.power_analysis.isroundmod(
+            capture.duration * capture.sample_rate, 1
+        ):
+            self.duration = capture.duration
+        else:
+            raise ValueError(
+                f'duration {capture.duration} is not an integer multiple of sample period'
+            )
+
+        if capture.channel != self.channel():
+            self.channel(capture.channel)
+
+        if self.gain() != capture.gain:
+            self.gain(capture.gain)
+
+        fs_backend, lo_offset, analysis_filter = design_capture_filter(
+            self.master_clock_rate, capture
+        )
+
+        nfft_out = analysis_filter.get('nfft_out', analysis_filter['nfft'])
+
+        downsample = analysis_filter['nfft'] / nfft_out
+
+        if fs_backend != self.backend_sample_rate() or downsample != self._downsample:
+            with attr.hold_attr_notifications(self):
+                self._downsample = 1  # temporarily avoid a potential bounding error
+            self.backend_sample_rate(fs_backend)
+            self._downsample = downsample
+
+        if capture.sample_rate != self.sample_rate():
+            self.sample_rate(capture.sample_rate)
+
+        if lo_offset != self.lo_offset:
+            self.lo_offset = lo_offset  # hold update on this one?
+
+        if capture.center_frequency != self.center_frequency():
+            self.center_frequency(capture.center_frequency)
+
+        self.analysis_bandwidth = capture.analysis_bandwidth
 
     def _read_stream(self, samples: int) -> np.ndarray:
         """to be implemented in subclasses"""

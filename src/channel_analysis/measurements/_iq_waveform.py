@@ -66,7 +66,7 @@ class IQSampleIndexCoords:
             allow_none=False,
         )
         name = typing.get_args(IQSampleIndexAxis)[0]
-        return pd.RangeIndex(start, stop, name=name)/capture.sample_rate
+        return pd.RangeIndex(start, stop, name=name) / capture.sample_rate
 
 
 ### DataArray definition
