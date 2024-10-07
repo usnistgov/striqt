@@ -36,8 +36,7 @@ class SpectrogramTimeCoords:
         hop_size = nfft-round(fractional_overlap*nfft)
         scale = nfft/hop_size
         size = int(scale * (capture.sample_rate * capture.duration / nfft - 1) + 1)
-        print('times: ', size)
-        return pd.RangeIndex(size) * hop_size
+        return pd.RangeIndex(size) * hop_size / capture.sample_rate
 
 ### Baseband frequency axis and coordinates
 SpectrogramFrequencyAxis = typing.Literal['spectrogram_baseband_frequency']
@@ -77,7 +76,6 @@ class SpectrogramFrequencyCoords:
         freq_step = round(freqs.size/frequency_bin_averaging/2)
         freqs = freqs[freq_step::frequency_bin_averaging]
 
-        print('freqs: ', freqs.size)
         return freqs
 
 
@@ -86,7 +84,8 @@ class Spectrogram(AsDataArray):
     spectrogram: Data[tuple[SpectrogramTimeAxis, SpectrogramFrequencyAxis], np.float16]
     spectrogram_time: Coordof[SpectrogramTimeCoords]
     spectrogram_baseband_frequency: Coordof[SpectrogramFrequencyCoords]
-    standard_name: Attr[str] = 'Spectrogram'
+    standard_name: Attr[str] = 'PSD'
+    long_name: Attr[str] = 'Power spectral density'
 
 
 @as_registered_channel_analysis(Spectrogram)
@@ -136,7 +135,6 @@ def spectrogram(
             freqs[0], freqs[-1], freqs.size, *bw_args
         )
         spg = spg[:, ilo:ihi]
-        print(nfft, ihi-ilo, spg.shape)
 
     if frequency_bin_averaging is not None:
         trim = spg.shape[1] % (2 * frequency_bin_averaging)
