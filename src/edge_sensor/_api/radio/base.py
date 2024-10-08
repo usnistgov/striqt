@@ -222,7 +222,7 @@ def _design_capture_filter(
             f'analysis bandwidth must be smaller than sample rate in {capture}'
         )
 
-    if capture.gpu_resample:
+    if capture.host_resample:
         # use GPU DSP to resample from integer divisor of the MCR
         fs_sdr, lo_offset, kws = iqwaveform.fourier.design_cola_resampler(
             fs_base=master_clock_rate,
@@ -230,17 +230,17 @@ def _design_capture_filter(
             bw=capture.analysis_bandwidth,
             bw_lo=bw_lo,
             shift=lo_shift,
-            min_fft_size=8 * 4096 - 1,
+            min_fft_size=4 * 4096 - 1,
             min_oversampling=min_oversampling,
         )
 
         return fs_sdr, lo_offset, kws
 
     elif lo_shift:
-        raise ValueError('lo_shift requires gpu_resample=True')
+        raise ValueError('lo_shift requires host_resample=True')
     elif master_clock_rate < capture.sample_rate:
         raise ValueError(
-            f'upsampling above {master_clock_rate/1e6:f} MHz requires gpu_resample=True'
+            f'upsampling above {master_clock_rate/1e6:f} MHz requires host_resample=True'
         )
     else:
         # use the SDR firmware to implement the desired sample rate
@@ -281,7 +281,7 @@ def _get_capture_buffer_sizes_cached(
         # add holdoff samples needed for the periodic trigger
         samples_in += ceil(analysis_filter['fs'] * periodic_trigger)
 
-    if analysis_filter and capture.gpu_resample:
+    if analysis_filter and capture.host_resample:
         samples_in += TRANSIENT_HOLDOFF_WINDOWS * analysis_filter['nfft']
         samples_out = iqwaveform.fourier._istft_buffer_size(
             samples_in,

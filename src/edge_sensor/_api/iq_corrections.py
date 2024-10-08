@@ -197,7 +197,7 @@ def resampling_correction(
             lo_shift=capture.lo_shift,
             sample_rate=capture.sample_rate,
             analysis_bandwidth=capture.analysis_bandwidth,
-            gpu_resample=capture.gpu_resample,
+            host_resample=capture.host_resample,
         )
 
         sel = corrections.power_correction.sel(**capture_dict, drop=True)

@@ -63,7 +63,7 @@ def design_warmup_sweep(
         'sample_rate',
         'analysis_bandwidth',
         'lo_shift',
-        'gpu_resample',
+        'host_resample',
     ]
 
     sweep_map = structs.struct_to_builtins(sweep)

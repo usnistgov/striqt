@@ -52,7 +52,7 @@ class RadioCapture(channel_analysis.Capture, forbid_unknown_fields=True):
         Annotated[float, meta('Waveform filter bandwidth', 'Hz', gt=0)]
     ] = 10e6
     lo_shift: Annotated[_TShift, meta('LO shift direction')] = 'none'
-    gpu_resample: bool = True
+    host_resample: bool = True
 
 
 class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):
@@ -108,7 +108,7 @@ def reset_nonsampling_fields(capture: RadioCapture) -> RadioCapture:
         'sample_rate',
         'analysis_bandwidth',
         'lo_shift',
-        'gpu_resample',
+        'host_resample',
     )
 
     mapping = struct_to_builtins(capture)
