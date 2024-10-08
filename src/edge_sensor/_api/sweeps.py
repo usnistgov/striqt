@@ -116,8 +116,8 @@ def iter_sweep(
 
     attrs = {
         # metadata fields
-        'radio_setup': structs.struct_to_builtins(sweep.radio_setup),
-        'description': structs.struct_to_builtins(sweep.description),
+        **structs.struct_to_builtins(sweep.radio_setup),
+        **structs.struct_to_builtins(sweep.description),
     }
 
     analyze = captures.ChannelAnalysisWrapper(

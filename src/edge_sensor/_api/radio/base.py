@@ -116,8 +116,6 @@ class RadioDevice(lb.Device):
         # TODO: the other parameters too
         self.calibration = radio_config.calibration
         self.periodic_trigger = radio_config.periodic_trigger
-        if radio_config.preselect_if_frequency is not None:
-            raise IOError('external frequency conversion is not yet supported')
 
     def arm(self, capture: structs.RadioCapture):
         """apply a capture configuration"""

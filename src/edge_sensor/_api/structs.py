@@ -65,17 +65,6 @@ class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):
     periodic_trigger: Optional[float] = None
     calibration: Optional[str] = None
 
-    # external frequency conversion disabled when if_frequency is None
-    preselect_if_frequency: Optional[
-        Annotated[float, meta('preselector IF filter center frequency', gt=0)]
-    ] = None  # Hz (or none, for no ext frontend)
-    preselect_lo_gain: Optional[
-        Annotated[float, meta('preselector LO path gain setting', 'dB')]
-    ] = 0  # dB (ignored when if_frequency is None)
-    preselect_rf_gain: Optional[
-        Annotated[float, meta('preselector RF path gain setting', 'dB')]
-    ] = 0
-
 
 class Description(msgspec.Struct, forbid_unknown_fields=True):
     summary: Optional[str] = None
