@@ -32,7 +32,7 @@ SweepType = typing.TypeVar(Sweep)
 
 
 def read_yaml_sweep(
-    path: str | Path, adjust_captures={}, sweep_cls: type[SweepType] = Sweep
+    path: str | Path, *, adjust_captures={}, sweep_cls: type[SweepType] = Sweep
 ) -> tuple[SweepType, tuple[str, ...]]:
     """build a Sweep struct from the contents of specified yaml file"""
 

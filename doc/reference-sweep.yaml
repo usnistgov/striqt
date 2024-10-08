@@ -17,7 +17,7 @@ description:
   - -105.26457779333897   # long (deg)
   - 1783.4   # ASL (m)
 
-  external_signal_chain:
+  signal_chain:
   - Signal generator, 3710 MHz CW with 10 ms square pulse modulation
 
 
@@ -27,9 +27,8 @@ radio_setup:
   # (must match a class name that subclasses edge_sensor.radio.RadioDevice)
   driver: Air7201B
 
-  # eventually: "builtin" or "gps"
-  # (not yet implemented)
-  # timebase: internal
+  # sample timestamp source {"internal", "external"}
+  time_source: internal
 
   # Acquisition start times will only occur at this fixed time modulus (s)
   # This can for example start all acquisitions at the same time within a
@@ -66,6 +65,12 @@ defaults:
 
   # digitally shift the LO out of the acquisition band: 'left', 'right', 'none'
   lo_shift: none
+
+  # whether to apply computation-intensive resampling on the host
+  # from a divisor of the radio's master clock rate.
+  #
+  # if false, radio firmware will perform the resampling
+  host_resample: true
 
 
 # A list of dictionaries that specify the characteristics of the sweep captures to acquire.
