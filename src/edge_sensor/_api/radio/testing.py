@@ -64,19 +64,42 @@ class TDMSFileSource(NullSource):
     def master_clock_rate(self):
         return self.backend['header_fd']['IQ_samples_per_second'][0]
 
+    @attr.method.float(
+        min=0,
+        cache=True,
+        label='Hz',
+        help='sample rate before resampling',
+    )
+    def backend_sample_rate(self):
+        return self.master_clock_rate
+
+    @backend_sample_rate.setter
+    def _(self, value):
+        if value != self.master_clock_rate:
+            raise ValueError(
+                f'file sample rate must match capture ({self.master_clock_rate})'
+            )
+        
+    @attr.method.float(
+        min=0,
+        cache=True,
+        label='Hz',
+        help='center frequency',
+    )
+    def center_frequency(self):
+        return self.backend['header_fd']['carrier_frequency'][0]
+
+    @center_frequency.setter
+    def _(self, value):
+        actual = self.center_frequency()
+        if value != actual:
+            self._logger.warning(f'center frequency ignored, using {actual/1e6} MHz from file')
+
     def _read_stream(self, N):
         xp = import_cupy_with_fallback()
 
         size = int(self.backend['header_fd']['total_samples'][0])
         ref_level = self.backend['header_fd']['reference_level_dBm'][0]
-
-        if self.backend_sample_rate() != self.master_clock_rate:
-            raise ValueError(
-                f'file sample rate must match capture ({self.master_clock_rate})'
-            )
-
-        if self.center_frequency() != self.backend['header_fd']['carrier_frequency'][0]:
-            self._logger.warning('capture center frequency does not match TDMS file')
 
         if size < N:
             raise ValueError(
