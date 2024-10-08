@@ -82,8 +82,20 @@ def channel_dataarray(
     da.values[:] = data
 
     for entry in get_data_model(cls).coords:
-        arr = entry.base.factory(capture, **parameters)
-        da[entry.name].indexes[entry.dims[0]].values[:] = arr
+        ret = entry.base.factory(capture, **parameters)
+
+        try:
+            if isinstance(ret, tuple):
+                arr, metadata = ret
+            else:
+                arr = ret
+                metadata = {}
+
+            da[entry.name].indexes[entry.dims[0]].values[:] = arr
+            da[entry.name].attrs.update(metadata)
+
+        except BaseException as ex:
+            raise ValueError(f'error building xarray from {cls.__qualname__}') from ex
 
     return da
 

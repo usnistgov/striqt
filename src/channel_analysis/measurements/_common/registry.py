@@ -84,7 +84,7 @@ class ChannelAnalysisRegistryDecorator(collections.UserDict):
             sig_kws = [
                 self._param_to_field(k, p)
                 for k, p in params.items()
-                if p.kind is inspect.Parameter.KEYWORD_ONLY
+                if p.kind is inspect.Parameter.KEYWORD_ONLY and not k.startswith('_')
             ]
 
             struct_type = msgspec.defstruct(name, sig_kws, bases=(KeywordArguments,))

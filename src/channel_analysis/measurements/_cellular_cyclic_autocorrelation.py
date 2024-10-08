@@ -55,7 +55,7 @@ class SubcarrierSpacingCoords:
     def factory(
         capture: structs.Capture, *, subcarrier_spacings: tuple[float, ...], **_
     ):
-        return tuple(subcarrier_spacings)
+        return list(subcarrier_spacings)
 
 
 ### Dataarray definition

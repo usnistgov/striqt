@@ -1,5 +1,6 @@
 from __future__ import annotations
 import dataclasses
+import functools
 import typing
 
 import numpy as np
@@ -9,7 +10,7 @@ import iqwaveform
 
 from .._api import structs, type_stubs
 from ._common import as_registered_channel_analysis
-from ._persistence_spectrum import equivalent_noise_bandwidth
+from ._spectrogram import equivalent_noise_bandwidth
 from ._channel_power_ccdf import make_power_bins, ChannelPowerCoords
 
 # Axis and coordinates
@@ -17,18 +18,50 @@ SpectrogramPowerBinAxis = typing.Literal['spectrogram_power_bin']
 
 
 @dataclasses.dataclass
-class SpectrogramCoords:
+class SpectrogramPowerBinCoords:
     data: Data[SpectrogramPowerBinAxis, np.float32]
     standard_name: Attr[str] = 'Spectrogram bin power'
     units: Attr[str] = 'dBm'
 
-    factory = ChannelPowerCoords.factory
+    @staticmethod
+    @functools.lru_cache
+    def factory(
+        capture: structs.Capture,
+        *,
+        window: typing.Union[str, tuple[str, float]],
+        frequency_resolution: float,
+        power_low: float,
+        power_high: float,
+        power_resolution: float,
+        **_,
+    ) -> dict[str, np.ndarray]:
+        """returns a dictionary of coordinate values, keyed by axis dimension name"""
+        bins = ChannelPowerCoords.factory(
+            capture,
+            power_low=power_low,
+            power_high=power_high,
+            power_resolution=power_resolution,
+        )
+
+        if iqwaveform.isroundmod(capture.sample_rate, frequency_resolution):
+            # need capture.sample_rate/resolution to give us a counting number
+            nfft = round(capture.sample_rate / frequency_resolution)
+        else:
+            raise ValueError('sample_rate/resolution must be a counting number')
+
+        if isinstance(window, list):
+            # lists break lru_cache
+            window = tuple(window)
+
+        enbw = frequency_resolution * equivalent_noise_bandwidth(window, nfft)
+
+        return bins, {'units': f'dBm/{enbw/1e3:0.0f} kHz'}
 
 
 @dataclasses.dataclass
 class SpectrogramCCDF(AsDataArray):
     ccdf: Data[SpectrogramPowerBinAxis, np.float32]
-    spectrogram_power_bin: Coordof[SpectrogramCoords]
+    spectrogram_power_bin: Coordof[SpectrogramPowerBinCoords]
     standard_name: Attr[str] = 'CCDF'
     long_name: Attr[str] = r'Fraction of counts centered in bin channel power level'
 

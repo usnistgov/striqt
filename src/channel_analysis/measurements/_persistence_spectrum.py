@@ -8,14 +8,8 @@ import iqwaveform
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
 from ._common import as_registered_channel_analysis
+from ._spectrogram import _centered_trim, _binned_mean, equivalent_noise_bandwidth
 from .._api import structs, type_stubs
-
-
-@functools.lru_cache
-def equivalent_noise_bandwidth(window: typing.Union[str, tuple[str, float]], N: int):
-    """return the equivalent noise bandwidth (ENBW) of a window, in bins"""
-    w = iqwaveform.fourier._get_window(window, N)
-    return len(w) * np.sum(w**2) / np.sum(w) ** 2
 
 
 ### Persistence statistics dimension and coordinates
@@ -56,6 +50,7 @@ class BasebandFrequencyCoords:
         *,
         frequency_resolution: float,
         fractional_overlap: float = 0,
+        frequency_bin_averaging: float = None,
         truncate: bool = True,
         **_,
     ) -> dict[str, np.ndarray]:
@@ -69,9 +64,11 @@ class BasebandFrequencyCoords:
             xp=np,
         )
 
-        if truncate and capture.analysis_bandwidth is not None:
-            which_freqs = np.abs(freqs) <= capture.analysis_bandwidth / 2
-            freqs = freqs[which_freqs]
+        if capture.analysis_bandwidth is not None and truncate:
+            freqs, _ = _centered_trim(freqs, freqs, capture.analysis_bandwidth, axis=0)
+
+        if frequency_bin_averaging is not None:
+            freqs = _binned_mean(freqs, frequency_bin_averaging, axis=0)
 
         return freqs
 
@@ -130,7 +127,6 @@ def persistence_spectrum(
         'frequency_resolution': frequency_resolution,
         'fractional_overlap': fractional_overlap,
         'noise_bandwidth': enbw,
-        'fft_size': nfft,
         'units': f'dBm/{round(enbw/1e3, 1):0.0f} kHz',
     }
 

@@ -10,9 +10,47 @@ from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 import iqwaveform
 
 from .._api import structs, type_stubs
+from .._api.util import lazy_import
 from ._common import as_registered_channel_analysis
-from ._persistence_spectrum import equivalent_noise_bandwidth, BasebandFrequencyCoords, BasebandFrequencyAxis
-from ._channel_power_ccdf import make_power_bins, ChannelPowerCoords
+
+if typing.TYPE_CHECKING:
+    from scipy import signal
+else:
+    signal = lazy_import('scipy.signal')
+
+
+@functools.lru_cache
+def equivalent_noise_bandwidth(window: typing.Union[str, tuple[str, float]], N: int):
+    """return the equivalent noise bandwidth (ENBW) of a window, in bins"""
+    w = iqwaveform.fourier._get_window(window, N)
+    return len(w) * np.sum(w**2) / np.sum(w) ** 2
+
+
+def _centered_trim(x, freqs, bandwidth, axis=0):
+    """trim an array outside of the specified bandwidth on a frequency axis"""
+    axis_slice = signal._arraytools.axis_slice
+
+    edges = iqwaveform.fourier._freq_band_edges(
+        freqs[0],
+        freqs[-1],
+        freqs.size,
+        cutoff_low=-bandwidth / 2,
+        cutoff_hi=+bandwidth / 2,
+    )
+
+    return axis_slice(x, *edges, axis=axis), freqs[edges[0] : edges[1]]
+
+
+def _binned_mean(x, count, *, axis=0, truncate=True):
+    """reduce an array by averaging into bins on the specified axis"""
+    axis_slice = signal._arraytools.axis_slice
+
+    if truncate:
+        trim = x.shape[axis] % (2 * count)
+        if trim > 0:
+            x = axis_slice(x, trim // 2, -trim // 2, axis=axis)
+    x = iqwaveform.fourier.to_blocks(x, count, axis=axis)
+    return x.mean(axis=axis + 1)
 
 
 # Axis and coordinates
@@ -28,24 +66,29 @@ class SpectrogramTimeCoords:
     @staticmethod
     @functools.lru_cache
     def factory(
-        capture: structs.Capture, *, frequency_resolution: float, fractional_overlap: float, **_
+        capture: structs.Capture,
+        *,
+        frequency_resolution: float,
+        fractional_overlap: float,
+        **_,
     ) -> dict[str, np.ndarray]:
         import pandas as pd
 
         # validation of these is handled inside iqwaveform
         nfft = round(capture.sample_rate / frequency_resolution)
-        hop_size = nfft-round(fractional_overlap*nfft)
-        scale = nfft/hop_size
+        hop_size = nfft - round(fractional_overlap * nfft)
+        scale = nfft / hop_size
         size = int(scale * (capture.sample_rate * capture.duration / nfft - 1) + 1)
         return pd.RangeIndex(size) * hop_size / capture.sample_rate
 
+
 ### Baseband frequency axis and coordinates
-SpectrogramFrequencyAxis = typing.Literal['spectrogram_baseband_frequency']
+SpectrogramBasebandFrequencyAxis = typing.Literal['spectrogram_baseband_frequency']
 
 
 @dataclasses.dataclass
-class SpectrogramFrequencyCoords:
-    data: Data[SpectrogramFrequencyAxis, np.float64]
+class SpectrogramBasebandFrequencyCoords:
+    data: Data[SpectrogramBasebandFrequencyAxis, np.float64]
     standard_name: Attr[str] = 'Baseband frequency'
     units: Attr[str] = 'Hz'
 
@@ -56,7 +99,7 @@ class SpectrogramFrequencyCoords:
         *,
         frequency_resolution: float,
         fractional_overlap: float = 0,
-        frequency_bin_averaging: float = 1,
+        frequency_bin_averaging: float = None,
         truncate: bool = True,
         **_,
     ) -> dict[str, np.ndarray]:
@@ -70,34 +113,27 @@ class SpectrogramFrequencyCoords:
             xp=np,
         )
 
-        if capture.analysis_bandwidth is not None:
-            bw_args = (-capture.analysis_bandwidth / 2, +capture.analysis_bandwidth / 2)
-            ilo, ihi = iqwaveform.fourier._freq_band_edges(
-                freqs[0], freqs[-1], freqs.size, *bw_args
-            )
-            freqs = freqs[ilo:ihi]
+        if capture.analysis_bandwidth is not None and truncate:
+            freqs, _ = _centered_trim(freqs, freqs, capture.analysis_bandwidth, axis=0)
 
         if frequency_bin_averaging is not None:
-            trim = freqs.size % (2 * frequency_bin_averaging)
-            if trim > 0:
-                freqs = freqs[trim // 2 : -trim // 2 :]
-            freqs = iqwaveform.fourier.to_blocks(freqs, frequency_bin_averaging)
-            freqs = freqs.mean(axis=1)
+            freqs = _binned_mean(freqs, frequency_bin_averaging, axis=0)
 
         return freqs
 
 
 @dataclasses.dataclass
 class Spectrogram(AsDataArray):
-    spectrogram: Data[tuple[SpectrogramTimeAxis, SpectrogramFrequencyAxis], np.float16]
+    spectrogram: Data[
+        tuple[SpectrogramTimeAxis, SpectrogramBasebandFrequencyAxis], np.float16
+    ]
     spectrogram_time: Coordof[SpectrogramTimeCoords]
-    spectrogram_baseband_frequency: Coordof[SpectrogramFrequencyCoords]
+    spectrogram_baseband_frequency: Coordof[SpectrogramBasebandFrequencyCoords]
     standard_name: Attr[str] = 'PSD'
     long_name: Attr[str] = 'Power spectral density'
 
 
-@as_registered_channel_analysis(Spectrogram)
-def spectrogram(
+def _do_spectrogram(
     iq: type_stubs.ArrayType,
     capture: structs.Capture,
     *,
@@ -105,9 +141,8 @@ def spectrogram(
     frequency_resolution: float,
     fractional_overlap: float = 0,
     frequency_bin_averaging: int = None,
+    dtype='float16',
 ):
-    xp = iqwaveform.util.array_namespace(iq)
-
     # TODO: integrate this back into iqwaveform
     if iqwaveform.isroundmod(capture.sample_rate, frequency_resolution):
         nfft = round(capture.sample_rate / frequency_resolution)
@@ -138,30 +173,35 @@ def spectrogram(
 
     # truncate to the analysis bandwidth
     if capture.analysis_bandwidth is not None:
-        bw_args = (-capture.analysis_bandwidth / 2, +capture.analysis_bandwidth / 2)
-        ilo, ihi = iqwaveform.fourier._freq_band_edges(
-            freqs[0], freqs[-1], freqs.size, *bw_args
+        spg, freqs = _centered_trim(
+            spg, freqs, bandwidth=capture.analysis_bandwidth, axis=1
         )
-        spg = spg[:, ilo:ihi]
 
     if frequency_bin_averaging is not None:
-        trim = spg.shape[1] % (2 * frequency_bin_averaging)
-        if trim > 0:
-            spg = spg[:, trim // 2 : -trim // 2 :]
-        spg = iqwaveform.fourier.to_blocks(spg, frequency_bin_averaging, axis=1)
-        spg = spg.mean(axis=2)
+        spg = _binned_mean(spg, frequency_bin_averaging, axis=1)
 
     spg = iqwaveform.powtodB(spg, eps=1e-25, out=spg)
-
-    spg = spg.astype('float16')
+    spg = spg.astype(dtype)
 
     metadata = {
         'window': window,
         'frequency_resolution': frequency_resolution,
         'fractional_overlap': fractional_overlap,
-        'noise_bandwidth': enbw,
-        'fft_size': nfft,
-        'units': f'dBm/{enbw/1e3:0.3f} kHz',
+        # 'noise_bandwidth': enbw,
+        'units': f'dBm/{enbw/1e3:0.0f} kHz',
     }
 
     return spg, metadata
+
+
+@as_registered_channel_analysis(Spectrogram)
+def spectrogram(
+    iq: type_stubs.ArrayType,
+    capture: structs.Capture,
+    *,
+    window: typing.Union[str, tuple[str, float]],
+    frequency_resolution: float,
+    fractional_overlap: float = 0,
+    frequency_bin_averaging: int = None,
+):
+    return _do_spectrogram(**locals(), dtype='float16')
