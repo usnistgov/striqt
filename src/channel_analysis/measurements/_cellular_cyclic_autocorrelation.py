@@ -58,13 +58,31 @@ class SubcarrierSpacingCoords:
         return list(subcarrier_spacings)
 
 
+### Up/down link category
+LinkDirectionAxis = typing.Literal['link_direction']
+
+
+@dataclasses.dataclass
+class LinkDirectionCoords:
+    data: Data[LinkDirectionAxis, str]
+    standard_name: Attr[str] = 'Link direction'
+
+    @staticmethod
+    @functools.lru_cache
+    def factory(
+        capture: structs.Capture, *, downlink_slots='all', uplink_slots=tuple(), **_
+    ):
+        return ['downlink', 'uplink'], {'downlink_slots': downlink_slots, 'uplink_slots': uplink_slots}
+
+
 ### Dataarray definition
 @dataclasses.dataclass
 class CellularCyclicAutocorrelation(AsDataArray):
     power_time_series: Data[
-        tuple[SubcarrierSpacingAxis, CyclicSampleLagAxis], np.float32
+        tuple[LinkDirectionAxis,SubcarrierSpacingAxis, CyclicSampleLagAxis], np.float32
     ]
 
+    link_direction: Coordof[LinkDirectionCoords]
     subcarrier_spacing: Coordof[SubcarrierSpacingCoords]
     cyclic_sample_lag: Coordof[CyclicSampleLagCoords]
 
@@ -77,7 +95,8 @@ def cellular_cyclic_autocorrelation(
     *,
     subcarrier_spacings: typing.Union[float, tuple[float, ...]] = (15e3, 30e3, 60e3),
     frame_range: typing.Union[int, tuple[int, typing.Optional[int]]] = (0, 1),
-    slot_range: typing.Union[int, tuple[int, typing.Optional[int]]] = (0, None),
+    downlink_slots: typing.Union[None, tuple[int, ...]] = None,
+    uplink_slots: typing.Union[tuple[int, ...]] = tuple(),
     symbol_range: typing.Union[int, tuple[int, typing.Optional[int]]] = (0, None),
     normalize: bool = True,
 ) -> type_stubs.ArrayLike:
@@ -94,7 +113,8 @@ def cellular_cyclic_autocorrelation(
         capture: the waveform capture specification
         subcarrier_spacings: cellular SCS to evaluate (currently supports 15e3, 30e3, or 60e3)
         frame_range: the frame indices to evaluate
-        slot_range: the slots to evaluate within all indexed frames
+        downlink_slots: slot indexes to attribute to the downlink (or all, if None)
+        uplink_slots: slot indexes to attribute to the uplink
         symbol_range: the symbols to evaluate within all indexed slots
         normalize: if True, results are normalized as autocorrelation (0 to 1);
             otherwise, autocovariance (power)
@@ -103,7 +123,7 @@ def cellular_cyclic_autocorrelation(
         an float32-valued array with matching the array type of `iq`
     """
 
-    RANGE_MAP = {'frames': frame_range, 'slots': slot_range, 'symbols': symbol_range}
+    RANGE_MAP = {'frames': frame_range, 'symbols': symbol_range}
 
     xp = iqwaveform.util.array_namespace(iq)
     subcarrier_spacings = tuple(subcarrier_spacings)
@@ -116,6 +136,13 @@ def cellular_cyclic_autocorrelation(
         subcarrier_spacings = tuple(
             subcarrier_spacings,
         )
+
+    if downlink_slots is None:
+        downlink_slots = 'all'
+    else:
+        downlink_slots = tuple(downlink_slots)
+
+    uplink_slots = tuple(uplink_slots)
 
     # transform the indexing arguments into the form expected by phy.index_cyclic_prefix
     idx_kws = {}
@@ -133,13 +160,17 @@ def cellular_cyclic_autocorrelation(
 
     max_len = _get_max_corr_size(capture, subcarrier_spacings=subcarrier_spacings)
 
-    result = xp.full((len(subcarrier_spacings), max_len), np.nan, dtype=np.float32)
+    result = xp.full((2, len(subcarrier_spacings), max_len), np.nan, dtype=np.float32)
     for i, phy in enumerate(phy_scs.values()):
         # R = _correlate_cyclic_prefixes(iq, phy, **kws)
-        cp_inds = phy.index_cyclic_prefix(**idx_kws)
+        cp_inds = phy.index_cyclic_prefix(**idx_kws, slots=downlink_slots)
         R = ofdm.corr_at_indices(cp_inds, iq, phy.nfft, norm=normalize)
+        result[0][i][: R.size] = xp.abs(R)
 
-        result[i][: R.size] = xp.abs(R)
+        if len(uplink_slots) > 0:
+            cp_inds = phy.index_cyclic_prefix(**idx_kws, slots=uplink_slots)
+            R = ofdm.corr_at_indices(cp_inds, iq, phy.nfft, norm=normalize)
+            result[1][i][: R.size] = xp.abs(R)
 
     if normalize:
         metadata.update(standard_name='Cyclic Autocorrelation')

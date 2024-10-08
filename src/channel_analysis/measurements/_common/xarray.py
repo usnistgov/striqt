@@ -95,7 +95,7 @@ def channel_dataarray(
             da[entry.name].attrs.update(metadata)
 
         except BaseException as ex:
-            raise ValueError(f'error building xarray from {cls.__qualname__}') from ex
+            raise ValueError(f'error building xarray {cls.__qualname__}.{entry.name}') from ex
 
     return da
 
