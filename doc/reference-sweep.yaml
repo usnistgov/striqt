@@ -5,10 +5,9 @@
 # monitoring sweep executed by the `edge-sensor-sweep` script.            #
 ###########################################################################
 
-# Metadata added as-is to the `attrs` attribute of a saved xarray Dataset
+# The following metadata is added as-is to attrs in each saved xarray Dataset
 description:
-  # optional description of the capture
-  summary: 
+  summary: Brief description of the capture
 
   # manual specification of GPS location coordinates
   # (in the future, automatic GPS location via gpsd may be implemented)
@@ -21,11 +20,12 @@ description:
   - Signal generator, 3710 MHz CW with 10 ms square pulse modulation
 
 output:
-  path: ~/Documents/data/{site_name}/{start_time}
+  path: ~/Documents/data/{radio_id}/{start_time}.zarr.zip
   store: zip
 
   coord_aliases:
     antenna_name:
+      # category names and dependent values
       reference:
         channel: 0
       lpda:
