@@ -130,12 +130,13 @@ Sweep = typing.TypeVar('Sweep', bound='edge_sensor.Sweep')
 Dataset = typing.TypeVar('Dataset', bound='xr.Dataset')
 
 
-def get_file_format_fields(sweep_spec, controller):
+def get_file_format_fields(sweep_spec, controller, yaml_path):
     radio_id = controller.radio_id(sweep_spec.radio_setup.driver)
     fields = edge_sensor._api.captures.capture_fields_with_aliases(
         sweep_spec.captures[0], radio_id, sweep_spec.output.coord_aliases
     )
     fields['start_time'] = datetime.now().strftime('%Y%m%d-%Hh%Mm%S')
+    fields['yaml_name'] = Path(yaml_path).stem
 
     return fields
 
@@ -177,8 +178,7 @@ def init_sensor_sweep(
             mode='Verbose', color_scheme='Linux', call_pdb=1
         )
 
-    path_fields = get_file_format_fields(sweep_spec, controller)
-    path_fields['yaml_name'] = Path(yaml_path).stem
+    path_fields = get_file_format_fields(sweep_spec, controller, yaml_path)
 
     if sweep_spec.radio_setup.calibration is None:
         calibration = None
