@@ -88,10 +88,9 @@ def click_sensor_sweep(description: typing.Optional[str] = None):
         click.option(
             '--store/',
             '-s',
-            show_default=True,
             type=click.Choice(['zip', 'directory', 'db'], case_sensitive=True),
-            default='zip',
-            help='output data store: "zip" for single acquisition, "directory" to support appending acquisitions',
+            default=None,
+            help='override config file data store setting: "zip" for single acquisition, "directory" to support appending acquisitions',
         ),
         click.option(
             '--force/',
@@ -131,11 +130,21 @@ Sweep = typing.TypeVar('Sweep', bound='edge_sensor.Sweep')
 Dataset = typing.TypeVar('Dataset', bound='xr.Dataset')
 
 
+def get_file_format_fields(sweep_spec, controller):
+    radio_id = controller.radio_id(sweep_spec.radio_setup.driver)
+    fields = edge_sensor._api.captures.capture_fields_with_aliases(
+        sweep_spec.captures[0], radio_id, sweep_spec.output.coord_aliases
+    )
+    fields['start_time'] = datetime.now().strftime('%Y%m%d-%Hh%Mm%S')
+
+    return fields
+
+
 def init_sensor_sweep(
     *,
     yaml_path: Path,
     output_path: str | None,
-    store: str,
+    store: str | None,
     remote: str | None,
     force: bool,
     verbose: bool,
@@ -158,7 +167,7 @@ def init_sensor_sweep(
         lb.show_messages('info')
 
     if remote is None:
-        controller = edge_sensor.SweepController()
+        controller = edge_sensor.SweepController(sweep_spec.radio_setup)
     else:
         controller = edge_sensor.connect(remote).root
 
@@ -168,30 +177,47 @@ def init_sensor_sweep(
             mode='Verbose', color_scheme='Linux', call_pdb=1
         )
 
+    path_fields = get_file_format_fields(sweep_spec, controller)
+    path_fields['yaml_name'] = Path(yaml_path).stem
+
     if sweep_spec.radio_setup.calibration is None:
         calibration = None
     else:
         calibration = edge_sensor.read_calibration_corrections(
-            sweep_spec.radio_setup.calibration
+            sweep_spec.radio_setup.calibration.format(**path_fields)
         )
 
     if not open_store:
         return None, controller, sweep_spec, calibration
 
-    store = store.lower()
-    yaml_path = Path(yaml_path)
-    timestamp = datetime.now().strftime('%Y%m%d-%Hh%Mm%S.%f')[:-3] + 's'
-    if output_path is None:
-        if store == 'directory':
-            adjusted_path = yaml_path.with_name(yaml_path.stem)
-        else:
-            adjusted_path = yaml_path.with_name(
-                f'{yaml_path.stem}-{timestamp}.zarr.{store}'
+    if store is None:
+        if sweep_spec.output.store is None:
+            click.echo(
+                'specify output.store in the yaml file or use -s NAME on the command line'
             )
-    elif Path(output_path).is_dir() and store in ('db', 'zip'):
-        adjusted_path = Path(output_path) / f'{yaml_path.stem}-{timestamp}.zarr.{store}'
+            sys.exit(1)
+
+        store = sweep_spec.output.store.lower()
     else:
-        adjusted_path = output_path
+        store = store.lower()
+
+    yaml_path = Path(yaml_path)
+    if output_path is None:
+        spec_path = sweep_spec.output.path
+        if spec_path is None:
+            click.echo(
+                'specify output.path in the yaml file or use -o PATH on the command line'
+            )
+            sys.exit(1)
+        spec_path = Path(spec_path.format(**path_fields))
+
+        if store == 'directory':
+            adjusted_path = spec_path.with_suffix('.zarr')
+        else:
+            adjusted_path = spec_path.with_suffix('.zarr.zip')
+
+    else:
+        adjusted_path = str(output_path).format(**path_fields)
 
     store = channel_analysis.open_store(adjusted_path, mode='w' if force else 'a')
 

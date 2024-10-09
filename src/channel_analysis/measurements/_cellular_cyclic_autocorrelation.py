@@ -72,14 +72,17 @@ class LinkDirectionCoords:
     def factory(
         capture: structs.Capture, *, downlink_slots='all', uplink_slots=tuple(), **_
     ):
-        return ['downlink', 'uplink'], {'downlink_slots': downlink_slots, 'uplink_slots': uplink_slots}
+        return ['downlink', 'uplink'], {
+            'downlink_slots': downlink_slots,
+            'uplink_slots': uplink_slots,
+        }
 
 
 ### Dataarray definition
 @dataclasses.dataclass
 class CellularCyclicAutocorrelation(AsDataArray):
     power_time_series: Data[
-        tuple[LinkDirectionAxis,SubcarrierSpacingAxis, CyclicSampleLagAxis], np.float32
+        tuple[LinkDirectionAxis, SubcarrierSpacingAxis, CyclicSampleLagAxis], np.float32
     ]
 
     link_direction: Coordof[LinkDirectionCoords]

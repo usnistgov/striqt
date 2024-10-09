@@ -79,7 +79,7 @@ class TDMSFileSource(NullSource):
             raise ValueError(
                 f'file sample rate must match capture ({self.master_clock_rate})'
             )
-        
+
     @attr.method.float(
         min=0,
         cache=True,
@@ -93,7 +93,9 @@ class TDMSFileSource(NullSource):
     def _(self, value):
         actual = self.center_frequency()
         if value != actual:
-            self._logger.warning(f'center frequency ignored, using {actual/1e6} MHz from file')
+            self._logger.warning(
+                f'center frequency ignored, using {actual/1e6} MHz from file'
+            )
 
     def _read_stream(self, N):
         xp = import_cupy_with_fallback()

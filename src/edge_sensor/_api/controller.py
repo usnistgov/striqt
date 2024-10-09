@@ -75,6 +75,9 @@ class SweepController:
 
         return radio
 
+    def radio_id(self, driver_name: str) -> str:
+        return self.radios[driver_name].id
+
     def close_radio(self, radio_setup: structs.RadioSetup):
         self.radios[radio_setup.driver].close()
 
@@ -159,6 +162,9 @@ class _ServerService(rpyc.Service, SweepController):
             source = 'unknown address'
 
         lb.logger.info(f'client at {source} disconnected')
+
+    def exposed_radio_id(self, driver_name: str) -> str:
+        return self.radios[driver_name].id
 
     def exposed_iter_sweep(
         self,

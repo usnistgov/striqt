@@ -74,7 +74,7 @@ class Description(msgspec.Struct, forbid_unknown_fields=True):
 
 class Output(msgspec.Struct, forbid_unknown_fields=True):
     path: Optional[str] = None
-    store: typing.Union[Literal['zip'],Literal['directory']] = 'zip'
+    store: typing.Union[Literal['zip'], Literal['directory']] = 'zip'
     coord_aliases: dict[str, dict[str, dict[str, Any]]] = {}
 
 
