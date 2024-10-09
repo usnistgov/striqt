@@ -122,6 +122,7 @@ def iter_sweep(
 
     analyze = captures.ChannelAnalysisWrapper(
         radio=radio,
+        sweep=sweep,
         analysis_spec=sweep.channel_analysis,
         extra_attrs=attrs,
         calibration=calibration,

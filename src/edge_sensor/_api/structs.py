@@ -72,12 +72,19 @@ class Description(msgspec.Struct, forbid_unknown_fields=True):
     signal_chain: tuple[str, ...] = ()
 
 
+class Output(msgspec.Struct, forbid_unknown_fields=True):
+    path: Optional[str] = None
+    store: typing.Union[Literal['zip'],Literal['directory']] = 'zip'
+    coord_aliases: dict[str, dict[str, dict[str, Any]]] = {}
+
+
 class Sweep(msgspec.Struct, forbid_unknown_fields=True):
     captures: tuple[RadioCapture, ...]
     radio_setup: RadioSetup = msgspec.field(default_factory=RadioSetup)
     defaults: RadioCapture = msgspec.field(default_factory=RadioCapture)
     channel_analysis: dict = msgspec.field(default_factory=_make_default_analysis)
     description: Description = msgspec.field(default_factory=Description)
+    output: Output = msgspec.field(default_factory=Output)
 
 
 @functools.lru_cache

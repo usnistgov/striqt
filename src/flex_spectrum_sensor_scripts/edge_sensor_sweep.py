@@ -22,8 +22,8 @@ def run(**kws):
         for result in controller.iter_sweep(sweep_spec, calibration)
         if result is not None
     ]
-    dataset = xr.concat(results, edge_sensor.CAPTURE_DIM)
 
+    dataset = xr.concat(results, edge_sensor.CAPTURE_DIM)
     edge_sensor.dump(store, dataset)
 
     lb.logger.info(f'wrote to {store.path}')

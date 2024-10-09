@@ -20,6 +20,16 @@ description:
   signal_chain:
   - Signal generator, 3710 MHz CW with 10 ms square pulse modulation
 
+output:
+  path: ~/Documents/data/{site_name}/{start_time}
+  store: zip
+
+  coord_aliases:
+    antenna_name:
+      reference:
+        channel: 0
+      lpda:
+        channel: 1
 
 # Radio setup parameters that apply to all captures
 radio_setup:
@@ -38,7 +48,7 @@ radio_setup:
   # calibration data path
   # - if a relative path, it is interpreted as relative to this yaml
   # - if not specified, IQ is normalized as ADC full scale
-  calibration: ../calibration-sweeps/Air7201B-calibration.p
+  calibration: ../../calibrations/Air7201B-{radio_id}.p
 
 
 # These settings are used unless specified otherwise for each capture
