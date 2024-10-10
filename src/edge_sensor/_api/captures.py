@@ -1,4 +1,4 @@
-"""Integrate radio capture information with channel_analysis evaluation and results"""
+"""wrap channel_analysis for _radio_ captures, together with utility functions for RadioCapture"""
 
 from __future__ import annotations
 import dataclasses
