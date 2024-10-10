@@ -216,16 +216,16 @@ def iter_callbacks(
     )
 
     data = None
-    capture = sweep_spec.captures[0]
+    this_capture = sweep_spec.captures[0]
     last_data = None
 
     while True:
-        if capture is not None:
-            setup(capture)
+        if this_capture is not None:
+            setup(this_capture)
 
         returns = lb.concurrently(
             lb.Call(stopiter_as_return, data_spec_pairs).rename('data'),
-            lb.Call(acquire, capture).rename('acquire'),
+            lb.Call(acquire, this_capture).rename('acquire'),
             lb.Call(save, last_data).rename('save'),
             flatten=False,
         )
@@ -235,12 +235,12 @@ def iter_callbacks(
         if returns['data'] is StopIteration:
             break
         else:
-            (data, capture) = returns['data']
+            (data, this_capture) = returns['data']
             ext_data = returns['acquire']
 
         if data is not None:
             ext_dataarrays = {
-                k: xr.DataArray(v).expand_dims(capture.CAPTURE_DIM)
+                k: xr.DataArray(v).expand_dims(captures.CAPTURE_DIM)
                 for k, v in ext_data.items()
             }
             last_data = data.assign(ext_dataarrays)
