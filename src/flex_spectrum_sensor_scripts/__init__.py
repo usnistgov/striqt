@@ -184,9 +184,11 @@ def init_sensor_sweep(
     if sweep_spec.radio_setup.calibration is None:
         calibration = None
     else:
-        calibration = edge_sensor.read_calibration_corrections(
-            sweep_spec.radio_setup.calibration.format(**path_fields)
-        )
+        path = Path(sweep_spec.radio_setup.calibration.format(**path_fields))
+        if not path.absolute():
+            path = Path(yaml_path).parent.absolute()/path
+        path = str(path.absolute())
+        calibration = edge_sensor.read_calibration_corrections(path)
 
     if not open_store:
         return None, controller, sweep_spec, calibration
