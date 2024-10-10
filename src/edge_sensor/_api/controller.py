@@ -8,7 +8,7 @@ import typing
 import rpyc
 
 from channel_analysis._api import type_stubs
-from . import sweeps, util
+from . import captures, sweeps, util
 from . import structs
 from .radio import find_radio_cls_by_name, is_same_resource, RadioDevice
 
@@ -197,7 +197,7 @@ class _ServerService(rpyc.Service, SweepController):
         capture_pairs = util.zip_offsets(sweep.captures, (0, -1), fill=None)
 
         descs = (
-            sweeps.describe_capture(i, len(sweep.captures), c1, c2)
+            captures.describe_capture(c1, c2, index=i, count=len(sweep.captures))
             for i, (c1, c2) in enumerate(capture_pairs)
         )
 

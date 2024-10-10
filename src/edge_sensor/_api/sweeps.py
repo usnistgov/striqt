@@ -24,30 +24,6 @@ def freezefromkeys(d: dict | frozendict, keys: list[str]) -> frozendict:
     return frozendict({k: d[k] for k in keys})
 
 
-def describe_capture(
-    index: int,
-    count: int,
-    this: structs.RadioCapture | None,
-    prev: structs.RadioCapture | None = None,
-) -> str:
-    """generate a description of a capture to log progress"""
-    if this is None:
-        if prev is None:
-            return 'saving last analysis'
-        else:
-            return 'performing last analysis'
-
-    diffs = {}
-
-    for name in type(this).__struct_fields__:
-        value = getattr(this, name)
-        if prev is None or value != getattr(prev, name):
-            diffs[name] = value
-
-    capture_diff = ', '.join([f'{k}={repr(v)}' for k, v in diffs.items()])
-    return f'{index+1 if index<count else count}/{count} {capture_diff}'
-
-
 def design_warmup_sweep(
     sweep: structs.Sweep, skip: tuple[structs.RadioCapture, ...]
 ) -> structs.Sweep:
@@ -161,7 +137,7 @@ def iter_sweep(
                     pickled=pickled,
                 )
 
-            desc = describe_capture(i, len(sweep.captures), capture_this, capture_prev)
+            desc = captures.describe_capture(capture_this, capture_prev, index=i, count=len(sweep.captures))
 
             with lb.stopwatch(f'{desc} •', logger_level='debug' if quiet else 'info'):
                 ret = lb.concurrently(**calls, flatten=False)

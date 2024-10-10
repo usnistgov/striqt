@@ -7,6 +7,7 @@ import pickle
 import typing
 
 from frozendict import frozendict
+import msgspec
 
 import channel_analysis
 from . import iq_corrections, structs, util
@@ -17,15 +18,72 @@ if typing.TYPE_CHECKING:
     import pandas as pd
     import xarray as xr
     import labbench as lb
+    from matplotlib import ticker
 else:
     pd = util.lazy_import('pandas')
     xr = util.lazy_import('xarray')
     lb = util.lazy_import('labbench')
+    ticker = util.lazy_import('matplotlib.ticker')
 
 
 CAPTURE_DIM = 'capture'
 SWEEP_TIMESTAMP_NAME = 'sweep_start_time'
 RADIO_ID_NAME = 'radio_id'
+
+
+@functools.lru_cache
+def _get_unit_formatter(units: str) -> ticker.EngFormatter:
+    return ticker.EngFormatter(unit=units)
+
+
+def _describe_field(capture: channel_analysis.Capture, name: str):
+    meta = channel_analysis.structs.get_capture_type_attrs(type(capture))
+    attrs = meta[name]
+    value = getattr(capture, name)
+
+    if attrs.get('units', None) is not None:
+        print(name, value, repr(attrs['units']))
+        value_str = _get_unit_formatter(attrs['units'])(value)
+    else:
+        value_str = repr(value)
+
+    return f'{name}={value_str}'
+
+
+def describe_capture(
+    this: structs.RadioCapture | None,
+    prev: structs.RadioCapture | None = None,
+    *,
+    index: int,
+    count: int,
+) -> str:
+    """generate a description of a capture"""
+    if this is None:
+        if prev is None:
+            return 'saving last analysis'
+        else:
+            return 'performing last analysis'
+
+    diffs = []
+
+    for name in type(this).__struct_fields__:
+        value = getattr(this, name)
+        if prev is None or value != getattr(prev, name):
+            diffs.append(_describe_field(this, name))
+
+    capture_diff = ', '.join(diffs)
+
+    if index is not None:
+        progress = str(index+1)
+
+        if count is not None:
+            progress = f'{progress}/{count}'
+
+        progress = progress + ' '
+    else:
+        progress = ''
+
+    return progress + capture_diff
 
 
 @functools.lru_cache

@@ -61,3 +61,27 @@ class FilteredCapture(Capture):
 
 class ChannelAnalysis(msgspec.Struct):
     """base class for groups of keyword arguments that define calls to multiple analysis functions"""
+
+
+@functools.lru_cache
+def get_capture_type_attrs(capture_cls: type[Capture]) -> dict[str]:
+    """return attrs metadata for each field in `capture`"""
+    info = msgspec.inspect.type_info(capture_cls)
+    
+    attrs = {}
+    
+    for field in info.fields:
+        if isinstance(field.type, msgspec.inspect.UnionType):
+            types = field.type.types
+        else:
+            types = [field.type]
+
+        for type_ in types:
+            type_extra = getattr(type_, 'extra', {})
+            if len(type_extra) > 0:
+                attrs[field.name] = type_extra
+                break
+        else:
+            attrs[field.name] = {}
+
+    return attrs
