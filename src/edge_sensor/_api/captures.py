@@ -66,6 +66,8 @@ def describe_capture(
     diffs = []
 
     for name in type(this).__struct_fields__:
+        if name == 'start_time':
+            continue
         value = getattr(this, name)
         if prev is None or value != getattr(prev, name):
             diffs.append(_describe_field(this, name))
