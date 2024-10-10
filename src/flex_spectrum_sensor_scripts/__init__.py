@@ -185,7 +185,7 @@ def init_sensor_sweep(
         calibration = None
     else:
         path = Path(sweep_spec.radio_setup.calibration.format(**path_fields))
-        if not path.absolute():
+        if not path.is_absolute():
             path = Path(yaml_path).parent.absolute()/path
         path = str(path.absolute())
         calibration = edge_sensor.read_calibration_corrections(path)
