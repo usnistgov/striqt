@@ -58,7 +58,7 @@ class RadioCapture(channel_analysis.Capture, forbid_unknown_fields=True):
 class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):
     """run-time characteristics of the radio that are left invariant during a sweep"""
 
-    driver: str = 'Air7201B'
+    driver: str = 'AirT7x01B'
     resource: Any = None
     gps: bool = False
     time_source: Literal['internal', 'external'] = 'internal'
