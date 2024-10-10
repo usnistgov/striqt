@@ -213,7 +213,7 @@ def init_sensor_sweep(
                 'specify output.path in the yaml file or use -o PATH on the command line'
             )
             sys.exit(1)
-        spec_path = Path(spec_path.format(**path_fields))
+        spec_path = Path(str(spec_path).format(**path_fields))
 
         if store == 'directory':
             fixed_path = spec_path.with_suffix('.zarr')
