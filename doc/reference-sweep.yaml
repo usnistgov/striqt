@@ -20,15 +20,27 @@ description:
   - Signal generator, 3710 MHz CW with 10 ms square pulse modulation
 
 output:
+  # Rules:
+  # - Relative paths are relative to the command line working directory
+  # - Allowed string format fields:
+  #   * Any capture field
+  #   * {yaml_name} (the file name stem of this file)
+  #   * Coordinate aliases (see below)
+  #   * {start_time} is system time before the sweep begins
   path: ~/Documents/data/{radio_id}/{start_time}.zarr.zip
+
+  # File format for the zarr data save: 'directory' or 'zip'
   store: zip
 
+  # A list of new alias to add. In this example, a new
+  # coordinate 'antenna_name' in the capture dimension, containing a string label
+  # determined by the value of the 'channel' field
   coord_aliases:
     antenna_name:
       # category names and dependent values
-      reference:
+      Reference:
         channel: 0
-      lpda:
+      LPDA:
         channel: 1
 
 # Radio setup parameters that apply to all captures
