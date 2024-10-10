@@ -215,14 +215,16 @@ def init_sensor_sweep(
         spec_path = Path(spec_path.format(**path_fields))
 
         if store == 'directory':
-            adjusted_path = spec_path.with_suffix('.zarr')
+            fixed_path = spec_path.with_suffix('.zarr')
         else:
-            adjusted_path = spec_path.with_suffix('.zarr.zip')
+            fixed_path = spec_path.with_suffix('.zarr.zip')
 
     else:
-        adjusted_path = str(output_path).format(**path_fields)
+        fixed_path = str(output_path).format(**path_fields)
 
-    store = channel_analysis.open_store(adjusted_path, mode='w' if force else 'a')
+    Path(fixed_path).parent.mkdir(parents=True, exist_ok=True)
+
+    store = channel_analysis.open_store(fixed_path, mode='w' if force else 'a')
 
     return store, controller, sweep_spec, calibration
 
