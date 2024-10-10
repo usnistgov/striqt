@@ -69,7 +69,7 @@ class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):
 class Description(msgspec.Struct, forbid_unknown_fields=True):
     summary: Optional[str] = None
     location: Optional[tuple[float, float, float]] = None
-    signal_chain: tuple[str, ...] = ()
+    signal_chain: Optional[tuple[str, ...]] = tuple()
 
 
 class Output(msgspec.Struct, forbid_unknown_fields=True):
