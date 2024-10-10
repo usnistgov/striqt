@@ -130,6 +130,31 @@ captures:
 #   matching the name of each of these analysis
 channel_analysis:
 
+    # channel power vs time
+    channel_power_time_series:
+        # time bin size
+        detector_period: 0.0005
+
+        # list of statistics to evaluate in each detector time bin:
+        # 'min', 'max' (or equivalent 'peak'), 'mean' (or equivalent 'rms'), or a quantile number
+        power_detectors:
+        - rms
+        - peak
+
+    # cyclic autocorrelation function for cellular OFDM cyclic prefixes
+    cellular_cyclic_autocorrelation:
+        # evaluate for the following cellular SCS
+        subcarrier_spacings:
+        - 15e3
+        - 30e3
+        - 60e3
+
+        # the evaluation can be expensive; limit to this number of frames
+        frame_limit: 2
+
+        # if true, return a correlation; otherwise, return a covariance (power)
+        normalize: true
+
     # ccdf evaluated on channel power in the time domain
     channel_power_ccdf:
         # binning is performed on the power axis to allow aggregation across captures
@@ -164,42 +189,47 @@ channel_analysis:
         - 0.999
         - max
 
-        # the step size in the frequency domain (Hz) 
+        # Step size in the frequency domain (Hz).
+        # This sets the FFT size based on the capture sample rate
         frequency_resolution: 15000
 
-        # the fractional overlap in the STFT.
+        # Fractional overlap in the STFT.
         # (Examples: 0: no overlap, 0.5: 50% overlap)
         fractional_overlap: 0.
 
-        # the spectrum analysis window to apply to the FFT
+        # The spectrum analysis window to apply to the FFT. 
+        # Valid values are documented here:
+        #    https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.get_window.html
         window:
             - dpss
             - 3.87638403 # for enbw:resolution == 2:1
 
-    # channel power vs time
-    power_time_series:
-        # time bin size
-        detector_period: 0.0005
+    # A spectrogram 
+    spectrogram:
+        # Same sampling and windowing persistence_spectrum
+        frequency_resolution: 15000
+        fractional_overlap: 0.
+        window: 
+            - dpss
+            - 3.87638403
 
-        # list of statistics to evaluate in each detector time bin:
-        # 'min', 'max' (or equivalent 'peak'), 'mean' (or equivalent 'rms'), or a quantile number
-        power_detectors:
-        - rms
-        - peak
+        # Report the frequency bin average of this size
+        frequency_bin_averaging: 12 # default: None (no averaging)
 
-    # cyclic autocorrelation function for cellular OFDM cyclic prefixes
-    cellular_cyclic_autocorrelation:
-        # evaluate for the following cellular SCS
-        subcarrier_spacings:
-        - 15e3
-        - 30e3
-        - 60e3
+    # a histogram of all spectrogram power bins
+    spectrogram_histogram:
+        # Same spectrogram parameters as above
+        frequency_resolution: 15000
+        fractional_overlap: 0.
+        window:
+            - dpss
+            - 3.87638403 # enbw/resolution ≈ 2
+        frequency_bin_averaging: 12
 
-        # the evaluation can be expensive; limit to this number of frames
-        frame_limit: 2
-
-        # if true, return a correlation; otherwise, return a covariance (power)
-        normalize: true
+        # Same power bin parameters as channel_power_histogram
+        power_low: -150
+        power_high: 0
+        power_resolution: 0.1
 
     # save a clipping of the received IQ waveform
     iq_waveform:

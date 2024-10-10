@@ -48,8 +48,7 @@ IQSampleIndexAxis = typing.Literal['iq_index']
 @dataclasses.dataclass
 class IQSampleIndexCoords:
     data: Data[IQSampleIndexAxis, int]
-    standard_name: Attr[str] = 'Time elapsed'
-    units: Attr[str] = 's'
+    standard_name: Attr[str] = 'Sample Index'
 
     @staticmethod
     @functools.lru_cache
@@ -66,7 +65,7 @@ class IQSampleIndexCoords:
             allow_none=False,
         )
         name = typing.get_args(IQSampleIndexAxis)[0]
-        return pd.RangeIndex(start, stop, name=name) / capture.sample_rate
+        return pd.RangeIndex(start, stop, name=name)
 
 
 ### DataArray definition
