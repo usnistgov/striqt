@@ -176,6 +176,65 @@ def iter_sweep(
             radio.close()
 
 
+def iter_raw_iq_captures(
+    radio: RadioDevice,
+    sweep: structs.Sweep,
+    quiet=False,
+    close_after=False,
+) -> typing.Generator[xr.Dataset | bytes | None]:
+    """iterate through sweep captures on the specified radio, yielding a dataset for each.
+
+    Normally, for performance reasons, the first iteration consists of
+    `(capture 1) ➔ concurrent(capture 2, analysis 1) ➔ (yield analysis 1)`.
+    The `always_yield` argument is provided to allow synchronization of hardware between capture 1 and capture 2:
+    `(capture 1) ➔ yield None ➔ concurrent(capture 2, analysis 1) ➔ (yield analysis 1)`.
+    Added checks are needed to handle `None` before recording data.
+
+    Args:
+        radio: the device that runs the sweep
+        sweep: the specification that configures the sweep
+        calibration: if specified, the calibration data used to scale the output from full-scale to physical power
+        always_yield: if `True`, yield `None` before the second capture
+        quiet: if True, log at the debug level, and show 'info' level log messages or higher only to the screen
+        pickled: if True, yield pickled `bytes` instead of xr.Datasets
+        close_after: if True, close the radio after the last capture
+
+    Returns:
+        An iterator of analyzed data
+    """
+
+    if len(sweep.captures) == 0:
+        return
+
+    iq = None
+    sweep_time = None
+    capture_prev = None
+
+    # iterate across (previous, current, next) captures to support concurrency
+    offset_captures = util.zip_offsets(sweep.captures, (0, 1), fill=None)
+
+    try:
+        for i, (capture_this, capture_next) in enumerate(offset_captures):
+            desc = captures.describe_capture(capture_this, capture_prev, index=i, count=len(sweep.captures))
+
+            with lb.stopwatch(f'{desc} •', logger_level='debug' if quiet else 'info'):
+                # extra iteration at the end for the last analysis
+                iq = radio.acquire(
+                    capture_this,
+                    next_capture=capture_next,
+                    correction=False,
+                )
+
+            yield iq
+
+            if sweep_time is None:
+                sweep_time = capture_prev.start_time
+
+    finally:
+        if close_after:
+            radio.close()
+
+
 def stopiter_as_return(iter):
     try:
         return next(iter)
@@ -216,7 +275,6 @@ def iter_callbacks(
         setup.__name__ = 'setup'
 
     if acquire is None:
-
         def acquire(capture):
             pass
     elif not hasattr(acquire, '__name__'):
