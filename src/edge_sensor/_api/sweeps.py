@@ -176,13 +176,13 @@ def iter_sweep(
             radio.close()
 
 
-def iter_raw_iq_captures(
+def iter_raw_iq(
     radio: RadioDevice,
     sweep: structs.Sweep,
     quiet=False,
     close_after=False,
 ) -> typing.Generator[xr.Dataset | bytes | None]:
-    """iterate through sweep captures on the specified radio, yielding a dataset for each.
+    """iterate through the sweep and yield the raw IQ vector for each.
 
     Normally, for performance reasons, the first iteration consists of
     `(capture 1) ➔ concurrent(capture 2, analysis 1) ➔ (yield analysis 1)`.
