@@ -207,7 +207,6 @@ def iter_raw_iq(
         return
 
     iq = None
-    sweep_time = None
     capture_prev = None
 
     # iterate across (previous, current, next) captures to support concurrency
@@ -226,9 +225,6 @@ def iter_raw_iq(
                 )
 
             yield iq
-
-            if sweep_time is None:
-                sweep_time = capture_prev.start_time
 
     finally:
         if close_after:
