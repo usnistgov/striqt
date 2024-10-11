@@ -24,6 +24,23 @@ def freezefromkeys(d: dict | frozendict, keys: list[str]) -> frozendict:
     return frozendict({k: d[k] for k in keys})
 
 
+def sweep_touches_gpu(sweep: structs.Sweep):
+    IQ_MEAS_NAME = channel_analysis.measurements.iq_waveform.__name__
+
+    if sweep.radio_setup.calibration is not None:
+        return True
+
+    if tuple(sweep.channel_analysis.keys()) != (IQ_MEAS_NAME,):
+        # everything except iq_clipping requires a warmup
+        return True
+    
+    for capture in sweep.captures:
+        if capture.host_resample or capture.analysis_bandwidth is not None:
+            return True
+        
+    return False
+
+
 def design_warmup_sweep(
     sweep: structs.Sweep, skip: tuple[structs.RadioCapture, ...]
 ) -> structs.Sweep:
@@ -41,6 +58,7 @@ def design_warmup_sweep(
         'lo_shift',
         'host_resample',
     ]
+
 
     sweep_map = structs.struct_to_builtins(sweep)
     capture_maps = [

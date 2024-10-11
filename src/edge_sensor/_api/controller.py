@@ -82,18 +82,25 @@ class SweepController:
         self.radios[radio_setup.driver].close()
 
     def _describe_preparation(self, target_sweep: structs.Sweep) -> str:
-        warmup_sweep = sweeps.design_warmup_sweep(
-            target_sweep, skip=tuple(self.warmed_captures)
-        )
+        if sweeps.sweep_touches_gpu(target_sweep):
+            warmup_sweep = sweeps.design_warmup_sweep(
+                target_sweep, skip=tuple(self.warmed_captures)
+            )
+        else:
+            warmup_sweep = None
+
         msgs = []
         if target_sweep.radio_setup.driver not in self.radios:
             msgs += ['opening radio']
-        if len(warmup_sweep.captures) > 0:
+        if warmup_sweep is not None and len(warmup_sweep.captures) > 0:
             msgs += [f'warming GPU ({len(warmup_sweep.captures)} empty captures)']
         return ' and '.join(msgs)
 
     def prepare_sweep(self, sweep_spec: structs.Sweep, calibration, pickled=False):
         """open the radio while warming up the GPU"""
+
+        if not sweeps.sweep_touches_gpu(sweep_spec):
+            return
 
         warmup_sweep = sweeps.design_warmup_sweep(
             sweep_spec, skip=tuple(self.warmed_captures)
