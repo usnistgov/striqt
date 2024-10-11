@@ -97,11 +97,17 @@ class RadioDevice(lb.Device):
 
         with lb.stopwatch('acquire', logger_level='debug'):
             self.arm(capture)
-            self.channel_enabled(True)
+            if not self.channel_enabled():
+                self.channel_enabled(True)
             timestamp = pd.Timestamp('now')
             self._prepare_buffer(capture)
             iq = self._read_stream(count)
-            self.channel_enabled(False)
+
+            if next_capture is None or next_capture != capture:
+                print('disable')
+                self.channel_enabled(False)
+            else:
+                print('no disable')
 
             if next_capture is not None:
                 self.arm(next_capture)
