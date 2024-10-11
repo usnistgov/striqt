@@ -174,6 +174,7 @@ def resampling_correction(
 
     # create a buffer large enough for post-processing seeded with a copy of the IQ
     _, buf_size = get_capture_buffer_sizes(radio, capture)
+
     if nfft_out > nfft:
         buf_size = ceil(buf_size * nfft_out / nfft)
     buf = xp.empty(buf_size, dtype='complex64')
@@ -217,10 +218,10 @@ def resampling_correction(
         power_scale = float(sel)
 
     if nfft == nfft_out:
+        # no resample
         if power_scale is not None:
             iq *= np.sqrt(power_scale)
 
-        # nothing to do here
         if analysis_filter['passband'] != (None, None):
             iq = filters.iir_filter(
                 iq,
@@ -231,7 +232,7 @@ def resampling_correction(
                 out=iq,
             )
 
-        return iq[TRANSIENT_HOLDOFF_WINDOWS * nfft_out :]
+        return iq
 
     w = iqwaveform.fourier._get_window(
         analysis_filter['window'], nfft, fftbins=False, xp=xp
