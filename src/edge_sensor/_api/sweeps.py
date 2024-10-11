@@ -315,7 +315,7 @@ def iter_callbacks(
             (data, this_capture) = returns['data']
             ext_data = returns['acquire']
 
-        if data is not None:
+        if isinstance(data, xr.Dataset):
             ext_dataarrays = {
                 k: xr.DataArray(v).expand_dims(captures.CAPTURE_DIM)
                 for k, v in ext_data.items()
