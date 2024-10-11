@@ -41,6 +41,8 @@ def _describe_field(capture: channel_analysis.Capture, name: str):
     attrs = meta[name]
     value = getattr(capture, name)
 
+    if value is None:
+        value_str = 'None'
     if attrs.get('units', None) is not None:
         value_str = _get_unit_formatter(attrs['units'])(value)
     else:
