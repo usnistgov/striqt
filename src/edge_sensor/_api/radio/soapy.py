@@ -381,7 +381,7 @@ class SoapyRadioDevice(RadioDevice):
                 raise OverflowError(msg)
             elif self.on_overflow == 'log':
                 self._logger.info(msg)
-            return 0
+            return 0, remaining
         elif sr.ret < 0:
             self._stream_stats['exceptions'] += 1
             raise IOError(f'Error {sr.ret}: {SoapySDR.errToStr(sr.ret)}')
