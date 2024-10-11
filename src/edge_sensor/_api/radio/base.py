@@ -104,10 +104,7 @@ class RadioDevice(lb.Device):
             iq = self._read_stream(count)
 
             if next_capture is None or next_capture != capture:
-                print('disable')
                 self.channel_enabled(False)
-            else:
-                print('no disable')
 
             if next_capture is not None:
                 self.arm(next_capture)
