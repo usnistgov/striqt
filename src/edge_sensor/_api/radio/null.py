@@ -106,6 +106,7 @@ class NullSource(RadioDevice):
         self._logger.propagate = False
         self.backend = {}
         self.channel(0)
+        self.channel_enabled(False)
 
     @attr.property.str(inherit=True)
     def id(self):
