@@ -90,7 +90,7 @@ class SweepController:
             warmup_sweep = None
 
         msgs = []
-        if target_sweep.radio_setup.driver not in self.radios:
+        if not target_sweep.radio_setup.driver.startswith('Null') and target_sweep.radio_setup.driver not in self.radios:
             msgs += ['opening radio']
         if warmup_sweep is not None and len(warmup_sweep.captures) > 0:
             msgs += [f'warming GPU ({len(warmup_sweep.captures)} empty captures)']
@@ -145,6 +145,31 @@ class SweepController:
         radio.setup(sweep.radio_setup)
 
         return sweeps.iter_sweep(radio, **kwargs)
+
+    def iter_raw_iq(
+        self,
+        sweep: structs.Sweep,
+        calibration: type_stubs.DatasetType = None,
+        close_after: bool = True,
+        always_yield: bool = False,
+        quiet: bool = False,
+        pickled: bool = False,
+        prepare: bool = True,
+    ) -> typing.Generator[xr.Dataset]:
+        # take args {3,4...N}
+        kwargs = dict(locals())
+        del kwargs['self'], kwargs['prepare']
+
+        if prepare:
+            prep_msg = self._describe_preparation(sweep)
+            if prep_msg:
+                lb.logger.info(prep_msg)
+            self.prepare_sweep(sweep, calibration, pickled=True)
+
+        radio = self.open_radio(sweep.radio_setup)
+        radio.setup(sweep.radio_setup)
+
+        return sweeps.iter_raw_iq(radio, sweep)
 
     def __del__(self):
         self.close()
