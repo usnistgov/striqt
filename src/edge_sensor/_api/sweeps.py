@@ -25,6 +25,7 @@ def freezefromkeys(d: dict | frozendict, keys: list[str]) -> frozendict:
 
 
 def sweep_touches_gpu(sweep: structs.Sweep):
+    """returns True if the sweep would benefit from the GPU"""
     IQ_MEAS_NAME = channel_analysis.measurements.iq_waveform.__name__
 
     if sweep.radio_setup.calibration is not None:
@@ -33,7 +34,7 @@ def sweep_touches_gpu(sweep: structs.Sweep):
     if tuple(sweep.channel_analysis.keys()) != (IQ_MEAS_NAME,):
         # everything except iq_clipping requires a warmup
         return True
-    
+
     for capture in sweep.captures:
         if capture.host_resample or capture.analysis_bandwidth is not None:
             return True

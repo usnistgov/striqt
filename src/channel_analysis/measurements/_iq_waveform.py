@@ -106,6 +106,6 @@ def iq_waveform(
     start, stop = _get_start_stop_index(
         capture, start_time_sec=start_time_sec, stop_time_sec=stop_time_sec
     )
-    data = iq[start:stop].copy()
+    data = iq[start:stop]
 
     return data, metadata
