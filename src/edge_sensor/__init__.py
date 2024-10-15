@@ -4,7 +4,7 @@
 # packaging quirk on jetson aarch64
 from ._api import iq_corrections, structs, util
 
-from ._api.captures import CAPTURE_DIM
+from ._api.captures import CAPTURE_DIM, concat_time_dim
 from ._api.controller import connect, start_server, SweepController
 from ._api.io import load, dump, open_store, read_yaml_sweep
 from ._api.iq_corrections import read_calibration_corrections

@@ -53,7 +53,7 @@ def _describe_field(capture: channel_analysis.Capture, name: str):
     return f'{name}={value_str}'
 
 
-def concat_time_dim(datasets: list[xr.Dataset], time_dim: str):
+def concat_time_dim(datasets: list[xr.Dataset], time_dim: str) -> xr.Dataset:
     """concatenate captured datasets into one along a time axis.
 
     This can be used to e.g. transform a contiguous sequence
