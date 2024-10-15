@@ -18,11 +18,13 @@ if typing.TYPE_CHECKING:
     import pandas as pd
     import xarray as xr
     import labbench as lb
+    import numpy as np
     from matplotlib import ticker
 else:
     pd = util.lazy_import('pandas')
     xr = util.lazy_import('xarray')
     lb = util.lazy_import('labbench')
+    np = util.lazy_import('numpy')
     ticker = util.lazy_import('matplotlib.ticker')
 
 
@@ -51,6 +53,40 @@ def _describe_field(capture: channel_analysis.Capture, name: str):
     return f'{name}={value_str}'
 
 
+def concat_time_dim(datasets: list[xr.Dataset], time_dim: str):
+    """concatenate captured datasets into one along a time axis.
+
+    This can be used to e.g. transform a contiguous sequence
+    of spectrogram captures into a single spectrogram.
+
+    Preconditions:
+    - all datasets share the same dimension and type.
+    - time coordinates based on time_dim are uniformly spaced
+
+    """
+    pad_dims = {time_dim: (0, len(datasets[0][time_dim]) * (len(datasets) - 1))}
+    ds = datasets[0].pad(pad_dims, constant_values=float('nan'))
+
+    for data_name, var in ds.data_vars.items():
+        if time_dim not in var.dims:
+            continue
+        else:
+            axis = var.dims[1:].index(time_dim)
+
+        values = np.concatenate(
+            [sub[data_name].isel(capture=0).values for sub in datasets], axis=axis
+        )
+        var.values[:] = values
+
+    for coord_name, coord in ds.coords.items():
+        if time_dim not in coord.dims:
+            continue
+        time_step = float(coord[1] - coord[0])
+        ds[coord_name] = pd.RangeIndex(ds.sizes[coord_name]) * time_step
+
+    return ds
+
+
 def describe_capture(
     this: structs.RadioCapture | None,
     prev: structs.RadioCapture | None = None,
@@ -77,7 +113,7 @@ def describe_capture(
     capture_diff = ', '.join(diffs)
 
     if index is not None:
-        progress = str(index+1)
+        progress = str(index + 1)
 
         if count is not None:
             progress = f'{progress}/{count}'

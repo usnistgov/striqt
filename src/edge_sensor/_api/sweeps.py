@@ -38,7 +38,7 @@ def sweep_touches_gpu(sweep: structs.Sweep):
     for capture in sweep.captures:
         if capture.host_resample or capture.analysis_bandwidth is not None:
             return True
-        
+
     return False
 
 
@@ -59,7 +59,6 @@ def design_warmup_sweep(
         'lo_shift',
         'host_resample',
     ]
-
 
     sweep_map = structs.struct_to_builtins(sweep)
     capture_maps = [
@@ -156,7 +155,9 @@ def iter_sweep(
                     pickled=pickled,
                 )
 
-            desc = captures.describe_capture(capture_this, capture_prev, index=i, count=len(sweep.captures))
+            desc = captures.describe_capture(
+                capture_this, capture_prev, index=i, count=len(sweep.captures)
+            )
 
             with lb.stopwatch(f'{desc} •', logger_level='debug' if quiet else 'info'):
                 ret = lb.concurrently(**calls, flatten=False)
@@ -214,7 +215,9 @@ def iter_raw_iq(
 
     try:
         for i, (capture_this, capture_next) in enumerate(offset_captures):
-            desc = captures.describe_capture(capture_this, capture_prev, index=i, count=len(sweep.captures))
+            desc = captures.describe_capture(
+                capture_this, capture_prev, index=i, count=len(sweep.captures)
+            )
 
             with lb.stopwatch(f'{desc} •', logger_level='debug' if quiet else 'info'):
                 # extra iteration at the end for the last analysis
@@ -271,6 +274,7 @@ def iter_callbacks(
         setup.__name__ = 'setup'
 
     if acquire is None:
+
         def acquire(capture):
             pass
     elif not hasattr(acquire, '__name__'):

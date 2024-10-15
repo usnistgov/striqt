@@ -238,7 +238,7 @@ class SoapyRadioDevice(RadioDevice):
     def _sync_to_external_time_source(self):
         # We first wait for a PPS transition to avoid race conditions involving
         # applying the time of the next PPS
-        with lb.stopwatch('synchronize radio clock to pps'):
+        with lb.stopwatch('synchronize sample clock to pps'):
             init_pps_time = self.backend.getHardwareTime('pps')
             while init_pps_time == self.backend.getHardwareTime('pps'):
                 continue

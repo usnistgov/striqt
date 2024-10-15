@@ -67,9 +67,9 @@ class ChannelAnalysis(msgspec.Struct):
 def get_capture_type_attrs(capture_cls: type[Capture]) -> dict[str]:
     """return attrs metadata for each field in `capture`"""
     info = msgspec.inspect.type_info(capture_cls)
-    
+
     attrs = {}
-    
+
     for field in info.fields:
         if isinstance(field.type, msgspec.inspect.UnionType):
             types = field.type.types

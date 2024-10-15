@@ -186,7 +186,7 @@ def init_sensor_sweep(
     else:
         path = Path(sweep_spec.radio_setup.calibration.format(**path_fields))
         if not path.is_absolute():
-            path = Path(yaml_path).parent.absolute()/path
+            path = Path(yaml_path).parent.absolute() / path
         path = str(path.absolute())
         calibration = edge_sensor.read_calibration_corrections(path)
 
@@ -207,7 +207,7 @@ def init_sensor_sweep(
     yaml_path = Path(yaml_path)
     if output_path is None:
         spec_path = Path(sweep_spec.output.path)
-        spec_path = spec_path.expanduser() # e.g., "~/" -> "/home/user/"
+        spec_path = spec_path.expanduser()  # e.g., "~/" -> "/home/user/"
         if spec_path is None:
             click.echo(
                 'specify output.path in the yaml file or use -o PATH on the command line'
