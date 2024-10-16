@@ -3,6 +3,7 @@ import typing
 import itertools
 
 from frozendict import frozendict
+import msgspec
 
 from . import captures, util
 
@@ -42,6 +43,12 @@ def sweep_touches_gpu(sweep: structs.Sweep):
     return False
 
 
+def _convert_captures(captures: list[channel_analysis.Capture], type_: type[channel_analysis.Capture]):
+    return [
+        msgspec.convert(c, type_, from_attributes=True) for c in captures
+    ]
+
+
 def design_warmup_sweep(
     sweep: structs.Sweep, skip: tuple[structs.RadioCapture, ...]
 ) -> structs.Sweep:
@@ -52,30 +59,19 @@ def design_warmup_sweep(
     analysis slowdowns during sweeps.
     """
 
-    FIELDS = [
-        'duration',
-        'sample_rate',
-        'analysis_bandwidth',
-        'lo_shift',
-        'host_resample',
-    ]
+    # captures that have unique sampling parameters, which are those
+    # specified in structs.WaveformCapture
+    capture_set = set(_convert_captures(sweep.captures, structs.WaveformCapture))
+    skip_set = set(_convert_captures(skip, structs.WaveformCapture))
+    captures = _convert_captures(capture_set - skip_set, structs.RadioCapture)
 
-    sweep_map = structs.struct_to_builtins(sweep)
-    capture_maps = [
-        frozendict(d) for d in structs.struct_to_builtins(sweep_map['captures'])
-    ]
-    skip = {frozendict(structs.struct_to_builtins(s)) for s in skip}
+    radio_setup = structs.RadioSetup(driver=NullSource.__name__, resource='empty')
 
-    sweep_map['radio_setup']['driver'] = NullSource.__name__
-    sweep_map['radio_setup']['resource'] = 'empty'
-
-    # key on unique combinations of the desired fields.
-    # we are left with only one capture for each combination.
-    warmup_mapping = {freezefromkeys(d, FIELDS): d for d in capture_maps}
-
-    sweep_map['captures'] = set(warmup_mapping.values()) - set(skip)
-
-    return structs.builtins_to_struct(sweep_map, type(sweep))
+    return structs.Sweep(
+        captures=captures,
+        radio_setup=radio_setup,
+        channel_analysis=sweep.channel_analysis
+    )
 
 
 def iter_sweep(

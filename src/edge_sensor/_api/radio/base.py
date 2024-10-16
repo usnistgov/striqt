@@ -5,6 +5,7 @@ import typing
 
 import labbench as lb
 from labbench import paramattr as attr
+import msgspec
 import numpy as np
 from .. import structs
 from channel_analysis._api import type_stubs
@@ -204,7 +205,7 @@ class RadioDevice(lb.Device):
 @functools.lru_cache(30000)
 def _design_capture_filter(
     master_clock_rate: float,
-    capture: structs.RadioCapture,
+    capture: structs.WaveformCapture,
     bw_lo=0.25e6,
     min_oversampling=1.1,
 ) -> tuple[float, float, dict]:
@@ -254,10 +255,9 @@ def _design_capture_filter(
             shift=False,
         )
 
-
 @functools.wraps(_design_capture_filter)
-def design_capture_filter(master_clock_rate, capture, *args, **kws):
-    fixed_capture = structs.reset_nonsampling_fields(capture)
+def design_capture_filter(master_clock_rate, capture: structs.RadioCapture, *args, **kws):
+    fixed_capture = msgspec.convert(capture, structs.WaveformCapture, from_attributes=True)
     return _design_capture_filter(master_clock_rate, fixed_capture, *args, **kws)
 
 

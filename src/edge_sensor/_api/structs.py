@@ -32,18 +32,14 @@ def _make_default_analysis():
     return channel_analysis.filters.as_registered_channel_analysis.spec_type()()
 
 
-class RadioCapture(channel_analysis.Capture, forbid_unknown_fields=True):
-    """configuration for a single waveform capture"""
-
-    # RF and leveling
-    center_frequency: Annotated[float, meta('RF center frequency', 'Hz', gt=0)] = 3710e6
-    channel: Annotated[int, meta('Input port index', ge=0)] = 0
-    gain: Annotated[float, meta('Gain setting', 'dB')] = -10
+class WaveformCapture(channel_analysis.Capture, forbid_unknown_fields=True):
+    """Capture specification structure for a generic waveform.
+    
+    This subset of RadioCapture is broken out here to simplify the evaluation of
+    sampling parameters independent from 
+    """
 
     # acquisition
-    start_time: Optional[
-        Annotated[channel_analysis.TimestampType, meta('Acquisition start time')]
-    ] = None
     duration: Annotated[float, meta('Acquisition duration', 's', gt=0)] = 0.1
     sample_rate: Annotated[float, meta('Sample rate', 'S/s', gt=0)] = 15.36e6
 
@@ -53,6 +49,19 @@ class RadioCapture(channel_analysis.Capture, forbid_unknown_fields=True):
     ] = 10e6
     lo_shift: Annotated[_TShift, meta('LO shift direction')] = 'none'
     host_resample: bool = True
+
+
+class RadioCapture(WaveformCapture, forbid_unknown_fields=True):
+    """Capture specification for a single radio waveform"""
+
+    # RF and leveling
+    center_frequency: Annotated[float, meta('RF center frequency', 'Hz', gt=0)] = 3710e6
+    channel: Annotated[int, meta('Input port index', ge=0)] = 0
+    gain: Annotated[float, meta('Gain setting', 'dB')] = -10
+
+    start_time: Optional[
+        Annotated[channel_analysis.TimestampType, meta('Acquisition start time')]
+    ] = None
 
 
 class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):
@@ -105,20 +114,3 @@ def get_attrs(struct: type[msgspec.Struct], field: str) -> dict[str, str]:
         raise TypeError(
             'Annotated[] type hints must contain exactly one msgspec.Meta object'
         )
-
-
-def reset_nonsampling_fields(capture: RadioCapture) -> RadioCapture:
-    """return a struct containing only the sampling-related fields of the RadioCapture"""
-
-    SAMPLING_FIELDS = (
-        'duration',
-        'sample_rate',
-        'analysis_bandwidth',
-        'lo_shift',
-        'host_resample',
-    )
-
-    mapping = struct_to_builtins(capture)
-    mapping = {k: mapping[k] for k in SAMPLING_FIELDS}
-
-    return msgspec.convert(mapping, RadioCapture)

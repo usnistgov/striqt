@@ -121,6 +121,26 @@ captures:
     analysis_bandwidth: 40e6 # Hz
     gain: -10 # dB
 
+  - center_frequency: 3750e6 # Hz
+    analysis_bandwidth: 100e6 # Hz
+    sample_rate: 153.6e6 # Hz
+    gain: 0 # dB
+
+  - center_frequency: 3830e6 # Hz
+    analysis_bandwidth: 60e6 # Hz
+    sample_rate: 92.16e6 # Hz
+    gain: 0 # dB
+
+  - center_frequency: 3900e6 # Hz
+    analysis_bandwidth: 80e6 # Hz
+    sample_rate: 122.88e6 # Hz
+    gain: 0 # dB
+
+  - center_frequency: 3960e6 # Hz
+    sample_rate: 61.44e6 # Hz
+    analysis_bandwidth: 40e6 # Hz
+    gain: 0 # dB
+
 
 # Specify the output analyses performed for each capture.
 # - Each analysis key name corresponds with a function
