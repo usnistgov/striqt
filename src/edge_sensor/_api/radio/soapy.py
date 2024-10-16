@@ -234,14 +234,14 @@ class SoapyRadioDevice(RadioDevice):
         if radio_config.time_source == 'internal':
             self._sync_to_os_time_source()
         else:
-            self._sync_to_external_time_source()        
+            self._sync_to_external_time_source()
 
         super().setup(radio_config)
 
     def _sync_to_os_time_source(self):
-        hardware_time = self.backend.getHardwareTime('now')/1e9
+        hardware_time = self.backend.getHardwareTime('now') / 1e9
         if abs(hardware_time - time.time()) >= 0.2:
-            self.backend.setHardwareTime(round(time.time()*1e9), 'now')
+            self.backend.setHardwareTime(round(time.time() * 1e9), 'now')
 
     def _sync_to_external_time_source(self):
         # We first wait for a PPS transition to avoid race conditions involving
@@ -449,7 +449,7 @@ class SoapyRadioDevice(RadioDevice):
                         * (self.periodic_trigger - excess_time)
                     )
                     remaining = remaining + skip
-                    timestamp = timestamp + skip/1e9
+                    timestamp = timestamp + skip / 1e9
 
             received, remaining = self._validate_remaining_samples(rx_result, remaining)
             next_start += received

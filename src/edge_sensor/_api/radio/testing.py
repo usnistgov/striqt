@@ -47,7 +47,7 @@ class NoiseSource(NullSource):
             .view('complex64')
         )
 
-        return ret, pd.Timestamp('now') 
+        return ret, pd.Timestamp('now')
 
 
 class TDMSFileSource(NullSource):

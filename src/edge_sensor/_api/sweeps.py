@@ -43,10 +43,10 @@ def sweep_touches_gpu(sweep: structs.Sweep):
     return False
 
 
-def _convert_captures(captures: list[channel_analysis.Capture], type_: type[channel_analysis.Capture]):
-    return [
-        msgspec.convert(c, type_, from_attributes=True) for c in captures
-    ]
+def _convert_captures(
+    captures: list[channel_analysis.Capture], type_: type[channel_analysis.Capture]
+):
+    return [msgspec.convert(c, type_, from_attributes=True) for c in captures]
 
 
 def design_warmup_sweep(
@@ -70,7 +70,7 @@ def design_warmup_sweep(
     return structs.Sweep(
         captures=captures,
         radio_setup=radio_setup,
-        channel_analysis=sweep.channel_analysis
+        channel_analysis=sweep.channel_analysis,
     )
 
 

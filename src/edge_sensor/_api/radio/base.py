@@ -255,9 +255,14 @@ def _design_capture_filter(
             shift=False,
         )
 
+
 @functools.wraps(_design_capture_filter)
-def design_capture_filter(master_clock_rate, capture: structs.RadioCapture, *args, **kws):
-    fixed_capture = msgspec.convert(capture, structs.WaveformCapture, from_attributes=True)
+def design_capture_filter(
+    master_clock_rate, capture: structs.RadioCapture, *args, **kws
+):
+    fixed_capture = msgspec.convert(
+        capture, structs.WaveformCapture, from_attributes=True
+    )
     return _design_capture_filter(master_clock_rate, fixed_capture, *args, **kws)
 
 

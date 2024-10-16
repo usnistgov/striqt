@@ -34,9 +34,9 @@ def _make_default_analysis():
 
 class WaveformCapture(channel_analysis.Capture, forbid_unknown_fields=True):
     """Capture specification structure for a generic waveform.
-    
+
     This subset of RadioCapture is broken out here to simplify the evaluation of
-    sampling parameters independent from 
+    sampling parameters independent from
     """
 
     # acquisition
