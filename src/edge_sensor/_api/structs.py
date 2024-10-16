@@ -29,14 +29,14 @@ _TShift = Literal['left', 'right', 'none']
 
 
 def _make_default_analysis():
-    return channel_analysis.filters.as_registered_channel_analysis.spec_type()()
+    return channel_analysis.as_registered_channel_analysis.spec_type()()
 
 
 class WaveformCapture(channel_analysis.Capture, forbid_unknown_fields=True):
     """Capture specification structure for a generic waveform.
 
     This subset of RadioCapture is broken out here to simplify the evaluation of
-    sampling parameters independent from
+    sampling parameters that are independent from other radio parameters.
     """
 
     # acquisition

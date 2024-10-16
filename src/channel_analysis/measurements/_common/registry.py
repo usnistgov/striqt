@@ -87,7 +87,9 @@ class ChannelAnalysisRegistryDecorator(collections.UserDict):
                 if p.kind is inspect.Parameter.KEYWORD_ONLY and not k.startswith('_')
             ]
 
-            struct_type = msgspec.defstruct(name, sig_kws, bases=(KeywordArguments,))
+            struct_type = msgspec.defstruct(
+                name, sig_kws, bases=(KeywordArguments,), forbid_unknown_fields=True
+            )
 
             # validate the struct
             msgspec.json.schema(struct_type)
