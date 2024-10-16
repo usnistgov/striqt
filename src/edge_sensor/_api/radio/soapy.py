@@ -14,10 +14,12 @@ import SoapySDR
 
 if typing.TYPE_CHECKING:
     import numpy as np
+    import pandas as pd
     import SoapySDR
     import iqwaveform
 else:
     np = lb.util.lazy_import('numpy')
+    pd = lb.util.lazy_import('pandas')
     SoapySDR = lb.util.lazy_import('SoapySDR')
     iqwaveform = lb.util.lazy_import('iqwaveform')
 
@@ -238,7 +240,7 @@ class SoapyRadioDevice(RadioDevice):
     def _sync_to_external_time_source(self):
         # We first wait for a PPS transition to avoid race conditions involving
         # applying the time of the next PPS
-        with lb.stopwatch('synchronize sample clock to pps'):
+        with lb.stopwatch('synchronize sample time to pps'):
             init_pps_time = self.backend.getHardwareTime('pps')
             while init_pps_time == self.backend.getHardwareTime('pps'):
                 continue
@@ -413,7 +415,7 @@ class SoapyRadioDevice(RadioDevice):
                 raise IOError(f'Error {sr.ret}: {SoapySDR.errToStr(sr.ret)}')
 
     @_verify_channel_setting
-    def _read_stream(self, samples: int) -> np.ndarray:
+    def _read_stream(self, samples: int) -> tuple[np.ndarray, pd.Timestamp]:
         timeout = max(round(samples / self.backend_sample_rate() * 1.5), 50e-3)
 
         timestamp = None
@@ -441,6 +443,7 @@ class SoapyRadioDevice(RadioDevice):
                         * (self.periodic_trigger - excess_time)
                     )
                     remaining = remaining + skip
+                    timestamp = timestamp + skip/1e9
 
             received, remaining = self._validate_remaining_samples(rx_result, remaining)
             next_start += received
@@ -458,4 +461,5 @@ class SoapyRadioDevice(RadioDevice):
         # cp.copyto(buff_float32, buff_int16, casting='unsafe')
 
         # 3. last, re-interpret each interleaved (float32 I, float32 Q) as a complex value
-        return self._inbuf.view('complex64')[skip : samples + skip]
+        samples = self._inbuf.view('complex64')[skip : samples + skip]
+        return samples, pd.Timestamp(timestamp)

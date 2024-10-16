@@ -99,9 +99,9 @@ class RadioDevice(lb.Device):
             self.arm(capture)
             if not self.channel_enabled():
                 self.channel_enabled(True)
-            timestamp = pd.Timestamp('now')
+
             self._prepare_buffer(capture)
-            iq = self._read_stream(count)
+            iq, timestamp = self._read_stream(count)
 
             if next_capture is None or next_capture != capture:
                 self.channel_enabled(False)
@@ -166,7 +166,7 @@ class RadioDevice(lb.Device):
 
         self.analysis_bandwidth = capture.analysis_bandwidth
 
-    def _read_stream(self, samples: int) -> np.ndarray:
+    def _read_stream(self, samples: int) -> tuple[np.ndarray, pd.Timestamp]:
         """to be implemented in subclasses"""
         raise NotImplementedError
 

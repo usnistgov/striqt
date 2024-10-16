@@ -10,8 +10,10 @@ from labbench import paramattr as attr
 
 if typing.TYPE_CHECKING:
     import numpy as np
+    import pandas as pd
 else:
     np = lb.util.lazy_import('numpy')
+    pd = lb.util.lazy_import('pandas')
 
 
 class SingleToneSource(NullSource):
@@ -27,7 +29,7 @@ class SingleToneSource(NullSource):
         f_cw = self.sample_rate() * self.resource
         ret[:] = xp.cos((2 * np.pi * f_cw) * t)
 
-        return ret
+        return ret, pd.Timestamp('now')
 
 
 class NoiseSource(NullSource):
@@ -45,7 +47,7 @@ class NoiseSource(NullSource):
             .view('complex64')
         )
 
-        return ret
+        return ret, pd.Timestamp('now') 
 
 
 class TDMSFileSource(NullSource):
@@ -114,4 +116,5 @@ class TDMSFileSource(NullSource):
         iq[::2] = i[:N]
         iq[1::2] = q[:N]
 
-        return (iq * xp.float32(scale)).view('complex64').copy()
+        samples = (iq * xp.float32(scale)).view('complex64').copy()
+        return samples, pd.Timestamp('now')

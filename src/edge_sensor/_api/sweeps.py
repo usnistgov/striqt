@@ -221,13 +221,13 @@ def iter_raw_iq(
 
             with lb.stopwatch(f'{desc} •', logger_level='debug' if quiet else 'info'):
                 # extra iteration at the end for the last analysis
-                iq = radio.acquire(
+                iq, capture = radio.acquire(
                     capture_this,
                     next_capture=capture_next,
                     correction=False,
                 )
 
-            yield iq
+            yield iq, capture
 
     finally:
         if close_after:

@@ -8,8 +8,11 @@ from ..util import import_cupy_with_fallback
 
 if typing.TYPE_CHECKING:
     import numpy as np
+    import pandas as pd
 else:
     np = lb.util.lazy_import('numpy')
+    pd = lb.util.lazy_import('pandas')
+
 
 channel_kwarg = attr.method_kwarg.int('channel', min=0, help='hardware port number')
 
@@ -121,7 +124,7 @@ class NullSource(RadioDevice):
 
     def _read_stream(self, N):
         xp = import_cupy_with_fallback()
-        return xp.empty(N, dtype='complex64')
+        return xp.empty(N, dtype='complex64'), pd.Timestamp('now')
 
 
 class NullRadio(NullSource):
