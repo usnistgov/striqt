@@ -11,7 +11,6 @@ import msgspec
 from xarray_dataclasses.dataarray import DataClass
 
 from ..._api import structs
-
 from ..._api import util
 from .xarray import ChannelAnalysisResult
 
