@@ -6,9 +6,6 @@ import functools
 import pickle
 import typing
 
-from frozendict import frozendict
-import msgspec
-
 import channel_analysis
 from . import iq_corrections, structs, util
 from . import radio

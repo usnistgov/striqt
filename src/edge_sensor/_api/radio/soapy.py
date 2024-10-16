@@ -1,6 +1,5 @@
 import time
 from functools import wraps
-import traceback
 import typing
 
 import labbench as lb

@@ -93,5 +93,7 @@ line-ending = "lf"
 docstring-code-format = true
 docstring-code-line-length = "dynamic"
 
+[tool.ruff.lint]
+
 [tool.ruff.lint.extend-per-file-ignores]
 "**/__init__.py" = ["F401", "F403", "E402"]
