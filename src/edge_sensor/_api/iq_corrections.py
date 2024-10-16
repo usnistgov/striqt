@@ -210,7 +210,11 @@ def resampling_correction(
             sel = sel.drop('radio_id')
 
         # allow interpolation between sample points in these fields
-        sel = sel.squeeze(drop=True).interp(center_frequency=capture.center_frequency)
+        sel = (
+            sel.squeeze(drop=True)
+            .dropna('center_frequency')
+            .interp(center_frequency=capture.center_frequency)
+        )
 
         if not np.isfinite(sel):
             raise ValueError('no calibration data available for this capture')
