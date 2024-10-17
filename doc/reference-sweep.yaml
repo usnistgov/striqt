@@ -49,7 +49,21 @@ radio_setup:
   # (must match a class name that subclasses edge_sensor.radio.RadioDevice)
   driver: Air7201B
 
-  # sample timestamp source {"internal", "external"}
+  # time source for triggering and timestamps.
+  # "host":
+  # - free triggering
+  # - overloads between identical captures are ignored
+  # - the time base for saved capture timestamps is the host OS
+  # "internal":
+  # - free or periodic (strobe) triggering
+  # - any overload between identical captures raises an exception
+  # - the radio sample clock is synchronized to the host once at the start of sweep
+  # - the time base for saved capture timestamps is the radio sample clock
+  # "external":
+  # - free or periodic (strobe) triggering
+  # - any overload between identical captures raises an exception
+  # - the radio sample clock is synchronized to the external PPS signal once at the sweep start
+  # - the time base for saved capture timestamps is the radio sample clock
   time_source: internal
 
   # Acquisition start times will only occur at this fixed time modulus (s)
