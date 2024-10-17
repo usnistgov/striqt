@@ -66,6 +66,7 @@ class SoapyRadioDevice(RadioDevice):
 
     _inbuf = None
     _outbuf = None
+    _next_timestamp = None
 
     resource: dict = attr.value.dict(
         default={}, help='SoapySDR resource dictionary to specify the device connection'
@@ -169,6 +170,7 @@ class SoapyRadioDevice(RadioDevice):
     @_verify_channel_for_setter
     def _(self, enable: bool):
         if enable:
+            self._next_timestamp = None
             self.backend.activateStream(
                 self.rx_stream,
                 flags=SoapySDR.SOAPY_SDR_HAS_TIME,
@@ -424,38 +426,42 @@ class SoapyRadioDevice(RadioDevice):
     def _read_stream(self, samples: int) -> tuple[np.ndarray, pd.Timestamp]:
         timeout = max(round(samples / self.backend_sample_rate() * 1.5), 50e-3)
 
-        timestamp = None
+        timestamp = self._next_timestamp
         remaining = samples
-        skip = 0
-        next_start = 0
+        skip = None
+        total_received = 0
 
         self.on_overflow = 'ignore'
         while remaining > 0:
             # Read the samples from the data buffer
             rx_result = self.backend.readStream(
                 self.rx_stream,
-                [self._inbuf[next_start * 2 :]],
+                [self._inbuf[total_received * 2 :]],
                 remaining,
                 timeoutUs=int(timeout * 1e6),
             )
 
             if timestamp is None:
                 timestamp = rx_result.timeNs / 1e9
+                if timestamp == 0:
+                    raise RuntimeError('radio did not return a timestamp')
 
-                if self.periodic_trigger is not None:
-                    excess_time = timestamp % self.periodic_trigger
-                    skip = round(
-                        self.backend_sample_rate()
-                        * (self.periodic_trigger - excess_time)
-                    )
-                    remaining = remaining + skip
-                    timestamp = timestamp + skip / 1e9
+            if self.periodic_trigger is not None and skip is None:
+                # determine the number of holdoff samples to reject
+                excess_time = timestamp % self.periodic_trigger
+                skip = round(
+                    self.backend_sample_rate()
+                    * (self.periodic_trigger - excess_time)
+                )
+                remaining = remaining + skip
+                timestamp = timestamp + skip / 1e9
 
             received, remaining = self._validate_remaining_samples(rx_result, remaining)
-            next_start += received
+            total_received += received
             self.on_overflow = 'except'
 
         self._stream_stats['total'] += 1
+        self._next_timestamp = timestamp + samples/self.backend_sample_rate()
 
         # # what follows is some acrobatics to minimize new memory allocation and copy
         # buff_int16 = cp.array(self._inbuf, copy=False)[: 2 * N]
