@@ -90,7 +90,7 @@ class SoapyRadioDevice(RadioDevice):
     @backend_sample_rate.setter
     @_verify_channel_for_setter
     def _(self, backend_sample_rate):
-        mcr = self.master_clock_rate
+        mcr = self.base_clock_rate
         if np.isclose(backend_sample_rate, mcr):
             # avoid exceptions due to rounding error
             backend_sample_rate = mcr
@@ -222,7 +222,7 @@ class SoapyRadioDevice(RadioDevice):
         pass
 
     @property
-    def master_clock_rate(self):
+    def base_clock_rate(self):
         return type(self).backend_sample_rate.max
 
     def _reset_stats(self):
@@ -297,7 +297,7 @@ class SoapyRadioDevice(RadioDevice):
             self.gain(capture.gain)
 
         fs_backend, lo_offset, analysis_filter = design_capture_filter(
-            self.master_clock_rate, capture
+            self.base_clock_rate, capture
         )
 
         nfft_out = analysis_filter.get('nfft_out', analysis_filter['nfft'])

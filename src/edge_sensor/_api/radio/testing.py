@@ -63,7 +63,7 @@ class TDMSFileSource(NullSource):
         self.backend = dict(header_fd=header_fd, iq_fd=iq_fd)
 
     @property
-    def master_clock_rate(self):
+    def base_clock_rate(self):
         return self.backend['header_fd']['IQ_samples_per_second'][0]
 
     @attr.method.float(
@@ -73,13 +73,13 @@ class TDMSFileSource(NullSource):
         help='sample rate before resampling',
     )
     def backend_sample_rate(self):
-        return self.master_clock_rate
+        return self.base_clock_rate
 
     @backend_sample_rate.setter
     def _(self, value):
-        if value != self.master_clock_rate:
+        if value != self.base_clock_rate:
             raise ValueError(
-                f'file sample rate must match capture ({self.master_clock_rate})'
+                f'file sample rate must match capture ({self.base_clock_rate})'
             )
 
     @attr.method.float(

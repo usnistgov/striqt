@@ -116,7 +116,7 @@ class NullSource(RadioDevice):
         return 'null'
 
     @property
-    def master_clock_rate(self):
+    def base_clock_rate(self):
         return 125e6
 
     def _prepare_buffer(self, capture):

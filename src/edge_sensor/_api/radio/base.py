@@ -70,7 +70,7 @@ class RadioDevice(lb.Device):
         raise NotImplementedError
 
     @property
-    def master_clock_rate(self):
+    def base_clock_rate(self):
         return type(self).backend_sample_rate.max
 
     def _prepare_buffer(self, capture: structs.RadioCapture):
@@ -143,7 +143,7 @@ class RadioDevice(lb.Device):
             self.gain(capture.gain)
 
         fs_backend, lo_offset, analysis_filter = design_capture_filter(
-            self.master_clock_rate, capture
+            self.base_clock_rate, capture
         )
 
         nfft_out = analysis_filter.get('nfft_out', analysis_filter['nfft'])
@@ -204,7 +204,7 @@ class RadioDevice(lb.Device):
 
 @functools.lru_cache(30000)
 def _design_capture_filter(
-    master_clock_rate: float,
+    base_clock_rate: float,
     capture: structs.WaveformCapture,
     bw_lo=0.25e6,
     min_oversampling=1.1,
@@ -229,7 +229,7 @@ def _design_capture_filter(
     if capture.host_resample:
         # use GPU DSP to resample from integer divisor of the MCR
         fs_sdr, lo_offset, kws = iqwaveform.fourier.design_cola_resampler(
-            fs_base=master_clock_rate,
+            fs_base=base_clock_rate,
             fs_target=capture.sample_rate,
             bw=capture.analysis_bandwidth,
             bw_lo=bw_lo,
@@ -242,9 +242,9 @@ def _design_capture_filter(
 
     elif lo_shift:
         raise ValueError('lo_shift requires host_resample=True')
-    elif master_clock_rate < capture.sample_rate:
+    elif base_clock_rate < capture.sample_rate:
         raise ValueError(
-            f'upsampling above {master_clock_rate/1e6:f} MHz requires host_resample=True'
+            f'upsampling above {base_clock_rate/1e6:f} MHz requires host_resample=True'
         )
     else:
         # use the SDR firmware to implement the desired sample rate
@@ -258,12 +258,13 @@ def _design_capture_filter(
 
 @functools.wraps(_design_capture_filter)
 def design_capture_filter(
-    master_clock_rate, capture: structs.RadioCapture, *args, **kws
+    base_clock_rate, capture: structs.WaveformCapture, *args, **kws
 ):
+    # cast the struct in case it's a subclass
     fixed_capture = msgspec.convert(
         capture, structs.WaveformCapture, from_attributes=True
     )
-    return _design_capture_filter(master_clock_rate, fixed_capture, *args, **kws)
+    return _design_capture_filter(base_clock_rate, fixed_capture, *args, **kws)
 
 
 @functools.lru_cache(30000)
@@ -309,20 +310,20 @@ def get_capture_buffer_sizes(
         capture = radio.get_capture_struct()
 
     return _get_capture_buffer_sizes_cached(
-        master_clock_rate=radio.master_clock_rate,
+        master_clock_rate=radio.base_clock_rate,
         periodic_trigger=radio.periodic_trigger,
         capture=capture,
         include_holdoff=include_holdoff,
     )
 
 
-def radio_subclasses(subclass=RadioDevice):
+def _list_radio_classes(subclass=RadioDevice):
     """returns a list of radio subclasses that have been imported"""
 
     subs = {c.__name__: c for c in subclass.__subclasses__()}
 
     for sub in list(subs.values()):
-        subs.update(radio_subclasses(sub))
+        subs.update(_list_radio_classes(sub))
 
     subs = {name: c for name, c in subs.items() if not name.startswith('_')}
 
@@ -330,11 +331,11 @@ def radio_subclasses(subclass=RadioDevice):
 
 
 def find_radio_cls_by_name(
-    name, parent_cls: type[RadioDevice] = RadioDevice
+    name: str, parent_cls: type[RadioDevice] = RadioDevice
 ) -> RadioDevice:
     """returns a list of radio subclasses that have been imported"""
 
-    mapping = radio_subclasses(parent_cls)
+    mapping = _list_radio_classes(parent_cls)
 
     if name in mapping:
         return mapping[name]

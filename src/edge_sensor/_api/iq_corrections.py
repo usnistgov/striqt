@@ -192,7 +192,7 @@ def resampling_correction(
         power_scale = None
     else:
         # these fields must match the calibration conditions exactly
-        capture_dict = dict(
+        exact_matches = dict(
             channel=capture.channel,
             gain=capture.gain,
             lo_shift=capture.lo_shift,
@@ -201,7 +201,7 @@ def resampling_correction(
             host_resample=capture.host_resample,
         )
 
-        sel = corrections.power_correction.sel(**capture_dict, drop=True)
+        sel = corrections.power_correction.sel(**exact_matches, drop=True)
 
         if 'duration' in sel.coords:
             sel = sel.drop('duration')

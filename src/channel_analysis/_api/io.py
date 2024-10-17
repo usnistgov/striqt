@@ -110,7 +110,7 @@ def dump(
             # sample rate is a variate
             sample_rate = data.sample_rate.values.flatten()[0]
 
-        chunks = {IQ_WAVEFORM_INDEX_NAME: round(sample_rate * 10e-3)}
+        chunks = {IQ_WAVEFORM_INDEX_NAME: round(sample_rate * 100e-3)}
     else:
         chunks = {}
 
