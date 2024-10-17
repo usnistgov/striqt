@@ -269,7 +269,7 @@ def design_capture_filter(
 
 @functools.lru_cache(30000)
 def _get_capture_buffer_sizes_cached(
-    master_clock_rate: float,
+    base_clock_rate: float,
     periodic_trigger: float | None,
     capture: structs.RadioCapture,
     include_holdoff: bool = False,
@@ -280,7 +280,7 @@ def _get_capture_buffer_sizes_cached(
         msg = f'duration must be an integer multiple of the sample period (1/{capture.sample_rate} s)'
         raise ValueError(msg)
 
-    _, _, analysis_filter = design_capture_filter(master_clock_rate, capture)
+    _, _, analysis_filter = design_capture_filter(base_clock_rate, capture)
 
     samples_in = ceil(
         samples_out * analysis_filter['nfft'] / analysis_filter['nfft_out']
@@ -310,7 +310,7 @@ def get_capture_buffer_sizes(
         capture = radio.get_capture_struct()
 
     return _get_capture_buffer_sizes_cached(
-        master_clock_rate=radio.base_clock_rate,
+        base_clock_rate=radio.base_clock_rate,
         periodic_trigger=radio.periodic_trigger,
         capture=capture,
         include_holdoff=include_holdoff,

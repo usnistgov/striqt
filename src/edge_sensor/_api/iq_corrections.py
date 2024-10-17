@@ -159,7 +159,7 @@ def resampling_correction(
     """
 
     fs_backend, _, analysis_filter = design_capture_filter(
-        radio.master_clock_rate, capture
+        radio.base_clock_rate, capture
     )
     nfft = analysis_filter['nfft']
     nfft_out, noverlap, overlap_scale, _ = iqwaveform.fourier._ola_filter_parameters(
