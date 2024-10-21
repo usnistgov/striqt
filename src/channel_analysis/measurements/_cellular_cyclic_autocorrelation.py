@@ -9,7 +9,7 @@ from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 import iqwaveform
 
 from ._common import as_registered_channel_analysis
-from .._api import structs, type_stubs
+from .._api import structs
 
 
 if typing.TYPE_CHECKING:
@@ -93,7 +93,7 @@ class CellularCyclicAutocorrelation(AsDataArray):
 ### iqwaveform wrapper
 @as_registered_channel_analysis(CellularCyclicAutocorrelation)
 def cellular_cyclic_autocorrelation(
-    iq: type_stubs.ArrayLike,
+    iq: 'iqwaveform.util.Array',
     capture: structs.Capture,
     *,
     subcarrier_spacings: typing.Union[float, tuple[float, ...]] = (15e3, 30e3, 60e3),
@@ -102,7 +102,7 @@ def cellular_cyclic_autocorrelation(
     uplink_slots: typing.Union[tuple[int, ...]] = tuple(),
     symbol_range: typing.Union[int, tuple[int, typing.Optional[int]]] = (0, None),
     normalize: bool = True,
-) -> type_stubs.ArrayLike:
+) -> 'iqwaveform.util.Array':
     """evaluate the cyclic autocorrelation of the IQ sequence based on 4G or 5G cellular
     cyclic prefix sample lag offsets.
 

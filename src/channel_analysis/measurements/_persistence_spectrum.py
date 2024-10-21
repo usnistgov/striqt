@@ -9,7 +9,7 @@ from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
 from ._common import as_registered_channel_analysis
 from ._spectrogram import _centered_trim, _binned_mean, equivalent_noise_bandwidth
-from .._api import structs, type_stubs
+from .._api import structs
 
 
 ### Persistence statistics dimension and coordinates
@@ -26,7 +26,7 @@ class PersistenceStatisticCoords:
     def factory(
         capture: structs.Capture,
         *,
-        persistence_statistics: type_stubs.StatisticListType,
+        persistence_statistics: tuple[typing.Union[str, float], ...],
         **_,
     ) -> np.ndarray:
         persistence_statistics = [str(s) for s in persistence_statistics]
@@ -88,7 +88,7 @@ class PersistenceSpectrum(AsDataArray):
 
 @as_registered_channel_analysis(PersistenceSpectrum)
 def persistence_spectrum(
-    iq: type_stubs.ArrayType,
+    iq: 'iqwaveform.util.Array',
     capture: structs.Capture,
     *,
     window: typing.Union[str, tuple[str, float]],

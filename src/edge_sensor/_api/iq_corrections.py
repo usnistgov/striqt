@@ -5,14 +5,10 @@ import pickle
 import gzip
 from math import ceil
 
-import iqwaveform.type_stubs
-
-from channel_analysis._api import type_stubs
 from channel_analysis._api import filters
 from . import util
 
 from .radio import RadioDevice, get_capture_buffer_sizes, design_capture_filter
-from .radio.base import TRANSIENT_HOLDOFF_WINDOWS
 from . import structs
 
 
@@ -34,13 +30,13 @@ def read_calibration_corrections(path):
         return pickle.load(fd)
 
 
-def save_calibration_corrections(path, corrections: type_stubs.DatasetType):
+def save_calibration_corrections(path, corrections: 'xr.DatasetType'):
     with gzip.GzipFile(path, 'wb') as fd:
         pickle.dump(corrections, fd)
 
 
 def _y_factor_temperature(
-    power: type_stubs.DataArrayType, enr_dB: float, Tamb: float, Tref=290.0
+    power: 'xr.DataArray', enr_dB: float, Tamb: float, Tref=290.0
 ) -> xr.Dataset:
     Toff = Tamb
     Ton = Tref * 10 ** (enr_dB / 10.0)
@@ -59,7 +55,7 @@ def _y_factor_temperature(
 
 
 def _y_factor_power_corrections(
-    dataset: type_stubs.DatasetType, enr_dB: float, Tamb: float, Tref=290.0
+    dataset: 'xr.DatasetType', enr_dB: float, Tamb: float, Tref=290.0
 ) -> xr.Dataset:
     # TODO: check that this works for xr.DataArray inputs in (enr_dB, Tamb)
 
@@ -102,8 +98,8 @@ def _y_factor_power_corrections(
 
 
 def _y_factor_frequency_response_correction(
-    dataset: type_stubs.DataArrayType,
-    fc_temperatures: type_stubs.DataArrayType,
+    dataset: 'xr.DataArray',
+    fc_temperatures: 'xr.DataArray',
     enr_dB: float,
     Tamb: float,
     Tref=290,
@@ -127,7 +123,7 @@ def _y_factor_frequency_response_correction(
 
 
 def compute_y_factor_corrections(
-    dataset: type_stubs.DatasetType, enr_dB: float, Tamb: float, Tref=290.0
+    dataset: 'xr.DatasetType', enr_dB: float, Tamb: float, Tref=290.0
 ) -> xr.Dataset:
     kwargs = locals()
     ret = _y_factor_power_corrections(**kwargs)
@@ -138,7 +134,7 @@ def compute_y_factor_corrections(
 
 
 def resampling_correction(
-    iq: iqwaveform.type_stubs.ArrayType,
+    iq: 'iqwaveform.util.Array',
     capture: structs.RadioCapture,
     radio: RadioDevice,
     force_calibration: typing.Optional[xr.Dataset] = None,

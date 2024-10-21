@@ -9,24 +9,23 @@ import inspect
 import typing
 
 from frozendict import frozendict
-import msgspec
 
 from xarray_dataclasses.dataarray import OptionedClass, TDataArray, PInit
 from xarray_dataclasses.datamodel import AnyEntry, DataModel
 
 from ..._api import structs, util
 
-from ..._api import type_stubs
-
 
 if typing.TYPE_CHECKING:
     import numpy as np
     import xarray as xr
     import array_api_compat
+    import iqwaveform
 else:
     np = util.lazy_import('numpy')
     xr = util.lazy_import('xarray')
     array_api_compat = util.lazy_import('array_api_compat')
+    iqwaveform = util.lazy_import('iqwaveform')
 
 
 TFunc = typing.Callable[..., typing.Any]
@@ -112,12 +111,12 @@ class ChannelAnalysisResult(collections.UserDict):
     """
 
     datacls: type
-    data: typing.Union[type_stubs.ArrayType, dict]
+    data: typing.Union['iqwaveform.util.Array', dict]
     capture: structs.RadioCapture
     parameters: dict[str, typing.Any]
     attrs: list[str] = frozendict()
 
-    def to_xarray(self) -> type_stubs.DataArrayType:
+    def to_xarray(self) -> 'xr.DataArray':
         return channel_dataarray(
             cls=self.datacls,
             data=_to_maybe_nested_numpy(self.data),
@@ -126,7 +125,7 @@ class ChannelAnalysisResult(collections.UserDict):
         ).assign_attrs(self.attrs)
 
 
-def _to_maybe_nested_numpy(obj: tuple | list | dict | type_stubs.ArrayType):
+def _to_maybe_nested_numpy(obj: tuple | list | dict | 'iqwaveform.util.Array'):
     """convert an array, or a container of arrays, into a numpy array (or container of numpy arrays)"""
 
     if isinstance(obj, (tuple, list)):
@@ -151,7 +150,7 @@ def select_parameter_kws(locals_: dict, omit=('capture', 'out')) -> dict:
 
 
 def evaluate_channel_analysis(
-    iq: type_stubs.ArrayType,
+    iq: 'iqwaveform.util.Array',
     capture: structs.Capture,
     *,
     spec: str | dict | structs.ChannelAnalysis,
@@ -177,7 +176,7 @@ def evaluate_channel_analysis(
 
 def package_channel_analysis(
     capture: structs.Capture, results: dict[str, structs.ChannelAnalysis]
-) -> type_stubs.DatasetType:
+) -> 'xr.DatasetType':
     # materialize as xarrays
     xarrays = {name: res.to_xarray() for name, res in results.items()}
     # capture.analysis_filter = dict(capture.analysis_filter)

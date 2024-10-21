@@ -7,8 +7,6 @@ import typing
 
 from . import structs, util
 
-from . import type_stubs
-
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -79,7 +77,7 @@ def _generate_iir_lpf(
 
 
 def iir_filter(
-    iq: type_stubs.ArrayType,
+    iq: 'iqwaveform.util.Array',
     capture: structs.Capture,
     *,
     passband_ripple: float | int,
@@ -103,7 +101,7 @@ def iir_filter(
 
 
 def ola_filter(
-    iq: type_stubs.ArrayType,
+    iq: 'iqwaveform.util.Array',
     capture: structs.Capture,
     *,
     nfft: int,

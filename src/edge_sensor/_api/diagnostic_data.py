@@ -10,7 +10,6 @@ import uuid
 from pathlib import Path
 import dulwich
 
-from channel_analysis._api import type_stubs
 from . import util
 
 if typing.TYPE_CHECKING:
@@ -84,7 +83,7 @@ def _psutil_to_dict(name, *args, **kws):
 @functools.lru_cache(8)
 def _compute_status_meta(keys: tuple):
     return {
-        'coords': type_stubs.CoordinatesType({'compute_status_category': list(keys)}),
+        'coords': 'xr.Coordinates'({'compute_status_category': list(keys)}),
         'attrs': {
             'hostname': socket.gethostname(),
             'disk_size': _psutil_to_dict('disk_usage', '.')['total'],
@@ -124,7 +123,7 @@ def git_unstaged_changes(repo_or_path='.') -> list[str]:
     """
     try:
         repo = _find_repo_in_parents(repo_or_path)
-    except NotGitRepository:
+    except dulwich.NotGitRepository:
         return []
 
     if repo is None:
@@ -137,7 +136,7 @@ def git_unstaged_changes(repo_or_path='.') -> list[str]:
 def host_metadata(search_path='.'):
     try:
         repo = _find_repo_in_parents(search_path)
-    except NotGitRepository:
+    except dulwich.NotGitRepository:
         return {}
 
     if repo is None:
@@ -164,7 +163,7 @@ def _temperature_coords(keys: tuple):
     return xr.Coordinates({'temperature_sensor': list(keys)})
 
 
-def package_host_resources(host: Host) -> dict[str, xr.DataArray]:
+def package_host_resources(host: 'lb._host.Host') -> dict[str, xr.DataArray]:
     compute_status = {
         'disk_usage_percentage': _psutil_to_dict('disk_usage', '.')['percent'],
         'swap_usage_percentage': _psutil_to_dict('swap_memory')['percent'],

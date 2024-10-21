@@ -1,9 +1,17 @@
 from __future__ import annotations
+import typing
 
-from ..._api import structs
+from ..._api import structs, util
 from .xarray import evaluate_channel_analysis, package_channel_analysis
 from .registry import ChannelAnalysisRegistryDecorator
-from ..._api import type_stubs
+
+
+if typing.TYPE_CHECKING:
+    import iqwaveform
+    import xarray as xr
+else:
+    iqwaveform = util.lazy_import('iqwaveform')
+    xr = util.lazy_import('xarray')
 
 
 as_registered_channel_analysis = ChannelAnalysisRegistryDecorator(
@@ -12,11 +20,11 @@ as_registered_channel_analysis = ChannelAnalysisRegistryDecorator(
 
 
 def analyze_by_spec(
-    iq: type_stubs.ArrayType,
+    iq: 'iqwaveform.util.Array',
     capture: structs.Capture,
     *,
     spec: str | dict | structs.ChannelAnalysis,
-) -> type_stubs.DatasetType:
+) -> 'xr.DatasetType':
     """evaluate a set of different channel analyses on the iq waveform as specified by spec"""
 
     results = evaluate_channel_analysis(

@@ -2,12 +2,10 @@ from __future__ import annotations
 
 from itertools import zip_longest
 import pickle
-import traceback
 import typing
 
 import rpyc
 
-from channel_analysis._api import type_stubs
 from . import captures, sweeps, util
 from . import structs
 from .radio import find_radio_cls_by_name, is_same_resource, RadioDevice
@@ -127,7 +125,7 @@ class SweepController:
     def iter_sweep(
         self,
         sweep: structs.Sweep,
-        calibration: type_stubs.DatasetType = None,
+        calibration: 'xr.DatasetType' = None,
         close_after: bool = True,
         always_yield: bool = False,
         quiet: bool = False,
@@ -152,7 +150,7 @@ class SweepController:
     def iter_raw_iq(
         self,
         sweep: structs.Sweep,
-        calibration: type_stubs.DatasetType = None,
+        calibration: 'xr.DatasetType' = None,
         close_after: bool = True,
         always_yield: bool = False,
         quiet: bool = False,
@@ -204,7 +202,7 @@ class _ServerService(rpyc.Service, SweepController):
     def exposed_iter_sweep(
         self,
         sweep: structs.Sweep,
-        calibration: type_stubs.DatasetType = None,
+        calibration: 'xr.DatasetType' = None,
         always_yield: bool = False,
     ) -> typing.Generator[xr.Dataset]:
         """wraps actions.sweep_iter to run on the remote server.
@@ -263,7 +261,7 @@ class _ClientService(rpyc.Service):
         lb.logger.info('disconnected from server')
 
     def exposed_deliver(
-        self, pickled_dataset: type_stubs.DatasetType, description: str | None = None
+        self, pickled_dataset: 'xr.DatasetType', description: str | None = None
     ):
         """serialize an object back to the client via pickling"""
         if description is not None:

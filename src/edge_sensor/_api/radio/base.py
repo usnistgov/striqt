@@ -8,7 +8,6 @@ from labbench import paramattr as attr
 import msgspec
 import numpy as np
 from .. import structs
-from channel_analysis._api import type_stubs
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -91,7 +90,7 @@ class RadioDevice(lb.Device):
         capture: structs.RadioCapture,
         next_capture: typing.Union[structs.RadioCapture, None] = None,
         correction: bool = True,
-    ) -> tuple[np.array, type_stubs.TimestampType]:
+    ) -> tuple[np.array, 'pd.Timestamp']:
         from .. import iq_corrections
 
         count, _ = get_capture_buffer_sizes(self, capture)

@@ -1,7 +1,7 @@
 """data structures for configuration of radio hardware, captures, and sweeps"""
 
 from __future__ import annotations
-from frozendict import frozendict
+from frozendict import frozendict  # noqa: F401
 import functools
 import msgspec
 import typing
@@ -13,16 +13,16 @@ import channel_analysis
 import channel_analysis._api.filters
 from channel_analysis._api.structs import (
     meta,
-    ChannelAnalysis,
-    struct_to_builtins,
-    builtins_to_struct,
-    copy_struct,
+    ChannelAnalysis,  # noqa: F401
+    struct_to_builtins,  # noqa: F401
+    builtins_to_struct,  # noqa: F401
+    copy_struct,  # noqa: F401
 )
 
 if typing.TYPE_CHECKING:
     import pandas as pd
 else:
-    # this is needed to resolve the TimestampType stub at runtime
+    # this is needed to resolve the 'pd.Timestamp' stub at runtime
     pd = util.lazy_import('pandas')
 
 _TShift = Literal['left', 'right', 'none']
@@ -59,9 +59,9 @@ class RadioCapture(WaveformCapture, forbid_unknown_fields=True):
     channel: Annotated[int, meta('Input port index', ge=0)] = 0
     gain: Annotated[float, meta('Gain setting', 'dB')] = -10
 
-    start_time: Optional[
-        Annotated[channel_analysis.TimestampType, meta('Acquisition start time')]
-    ] = None
+    start_time: Optional[Annotated['pd.Timestamp', meta('Acquisition start time')]] = (
+        None
+    )
 
 
 class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):

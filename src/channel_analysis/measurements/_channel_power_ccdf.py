@@ -8,7 +8,6 @@ from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 import iqwaveform
 
 from ._common import as_registered_channel_analysis
-from ._spectrogram import equivalent_noise_bandwidth
 from .._api import structs
 
 

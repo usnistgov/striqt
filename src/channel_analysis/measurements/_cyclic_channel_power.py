@@ -8,7 +8,7 @@ import iqwaveform
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
 from ._common import as_registered_channel_analysis
-from .._api import structs, type_stubs
+from .._api import structs
 from ._channel_power_time_series import PowerDetectorAxis, PowerDetectorCoords
 
 
@@ -26,7 +26,11 @@ class CyclicStatisticCoords:
     def factory(
         capture: structs.Capture,
         *,
-        cyclic_statistics: type_stubs.StatisticListType = ('min', 'mean', 'max'),
+        cyclic_statistics: tuple[typing.Union[str, float], ...] = (
+            'min',
+            'mean',
+            'max',
+        ),
         **_,
     ):
         return list(cyclic_statistics)

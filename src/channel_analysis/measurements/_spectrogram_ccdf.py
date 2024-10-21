@@ -8,7 +8,7 @@ import numpy as np
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 import iqwaveform
 
-from .._api import structs, type_stubs
+from .._api import structs
 from ._common import as_registered_channel_analysis
 from ._spectrogram import equivalent_noise_bandwidth
 from ._channel_power_ccdf import make_power_bins, ChannelPowerCoords
@@ -68,7 +68,7 @@ class SpectrogramCCDF(AsDataArray):
 
 @as_registered_channel_analysis(SpectrogramCCDF)
 def spectrogram_ccdf(
-    iq: type_stubs.ArrayType,
+    iq: 'iqwaveform.util.Array',
     capture: structs.Capture,
     *,
     window: typing.Union[str, tuple[str, float]],

@@ -5,7 +5,6 @@ import typing
 import labbench as lb
 from labbench import paramattr as attr
 
-from channel_analysis._api import type_stubs
 from .base import RadioDevice, design_capture_filter
 from .. import structs
 
@@ -272,7 +271,7 @@ class SoapyRadioDevice(RadioDevice):
         capture: structs.RadioCapture,
         next_capture: typing.Union[structs.RadioCapture, None] = None,
         correction: bool = True,
-    ) -> tuple[np.array, type_stubs.TimestampType]:
+    ) -> tuple[np.array, 'pd.Timestamp']:
         return super().acquire(
             capture=capture, next_capture=next_capture, correction=correction
         )
@@ -450,8 +449,7 @@ class SoapyRadioDevice(RadioDevice):
                 # determine the number of holdoff samples to reject
                 excess_time = timestamp % self.periodic_trigger
                 skip = round(
-                    self.backend_sample_rate()
-                    * (self.periodic_trigger - excess_time)
+                    self.backend_sample_rate() * (self.periodic_trigger - excess_time)
                 )
                 remaining = remaining + skip
                 timestamp = timestamp + skip / 1e9
@@ -461,7 +459,7 @@ class SoapyRadioDevice(RadioDevice):
             self.on_overflow = 'except'
 
         self._stream_stats['total'] += 1
-        self._next_timestamp = timestamp + samples/self.backend_sample_rate()
+        self._next_timestamp = timestamp + samples / self.backend_sample_rate()
 
         # # what follows is some acrobatics to minimize new memory allocation and copy
         # buff_int16 = cp.array(self._inbuf, copy=False)[: 2 * N]

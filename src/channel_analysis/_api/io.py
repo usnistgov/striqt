@@ -6,7 +6,7 @@ import warnings
 from pathlib import Path
 from collections import defaultdict
 
-from . import type_stubs, util
+from . import util
 
 from .. import measurements
 from ..measurements._iq_waveform import IQSampleIndexAxis
@@ -92,7 +92,7 @@ def _build_encodings(data, compression=None, filter: bool = True):
 
 def dump(
     store: zarr.storage.Store,
-    data: typing.Optional[type_stubs.DataArrayType | type_stubs.DatasetType] = None,
+    data: typing.Optional['xr.DataArray' | 'xr.Dataset'] = None,
     append_dim=None,
     compression=None,
     filter=True,
@@ -142,7 +142,7 @@ def dump(
         return data.chunk(chunks).to_zarr(store, encoding=encodings, mode='w')
 
 
-def load(path: str | Path) -> type_stubs.DataArrayType | type_stubs.DatasetType:
+def load(path: str | Path) -> 'xr.DataArray' | 'xr.DatasetType':
     """load a dataset or data array"""
 
     if isinstance(path, (str, Path)):

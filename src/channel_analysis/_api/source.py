@@ -3,8 +3,7 @@ import typing
 
 from . import structs, util
 
-from . import type_stubs
-from .io import load, dump
+from .io import load, dump  # noqa: F401
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -15,12 +14,12 @@ else:
 
 
 def filter_iq_capture(
-    iq: type_stubs.ArrayType,
+    iq: 'iqwaveform.util.Array',
     capture: structs.FilteredCapture,
     *,
     axis=0,
     out=None,
-) -> type_stubs.ArrayType:
+) -> 'iqwaveform.util.Array':
     """apply a bandpass filter implemented through STFT overlap-and-add.
 
     Args:
@@ -93,7 +92,7 @@ def filter_iq_capture(
 
 def simulated_awgn(
     capture: structs.Capture, *, power: float = 1, xp=np, pinned_cuda=False, out=None
-) -> type_stubs.ArrayType:
+) -> 'iqwaveform.util.Array':
     try:
         # e.g., numpy
         bitgen = xp.random.PCG64()
@@ -152,7 +151,8 @@ def read_tdms(path, analysis_bandwidth: float = None):
     size = int(header_fd['total_samples'][0])
     ref_level = header_fd['reference_level_dBm'][0]
     fs = header_fd['IQ_samples_per_second'][0]
-    fc = header_fd['carrier_frequency'][0]
+    # Support this in the future?
+    # fc = header_fd['carrier_frequency'][0]
 
     scale = 10 ** (float(ref_level) / 20.0) / np.iinfo(np.int16).max
     i, q = iq_fd.channels()

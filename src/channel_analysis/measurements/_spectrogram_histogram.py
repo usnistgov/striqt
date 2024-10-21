@@ -7,7 +7,7 @@ import numpy as np
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 import iqwaveform
 
-from .._api import structs, type_stubs
+from .._api import structs
 from ._common import as_registered_channel_analysis
 from ._spectrogram import _do_spectrogram
 from ._spectrogram_ccdf import SpectrogramPowerBinCoords, SpectrogramPowerBinAxis
@@ -23,7 +23,7 @@ class SpectrogramHistogram(AsDataArray):
 
 @as_registered_channel_analysis(SpectrogramHistogram)
 def spectrogram_histogram(
-    iq: type_stubs.ArrayType,
+    iq: 'iqwaveform.util.Array',
     capture: structs.Capture,
     *,
     window: typing.Union[str, tuple[str, float]],

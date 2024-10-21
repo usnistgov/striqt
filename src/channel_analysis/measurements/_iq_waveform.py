@@ -7,7 +7,7 @@ import numpy as np
 import iqwaveform
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
-from .._api import structs, type_stubs
+from .._api import structs
 from ._common import as_registered_channel_analysis
 
 if typing.TYPE_CHECKING:
@@ -80,12 +80,12 @@ class IQWaveform(AsDataArray):
 
 @as_registered_channel_analysis(IQWaveform)
 def iq_waveform(
-    iq: type_stubs.ArrayType,
+    iq: 'iqwaveform.util.Array',
     capture: structs.Capture,
     *,
     start_time_sec: typing.Optional[float] = None,
     stop_time_sec: typing.Optional[float] = None,
-) -> type_stubs.ArrayType:
+) -> 'iqwaveform.util.Array':
     """package a clipping of the IQ waveform"""
 
     metadata = {

@@ -1,7 +1,6 @@
 from __future__ import annotations
 import dataclasses
 import functools
-from math import ceil
 import typing
 
 import numpy as np
@@ -9,7 +8,7 @@ import numpy as np
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 import iqwaveform
 
-from .._api import structs, type_stubs
+from .._api import structs
 from .._api.util import lazy_import
 from ._common import as_registered_channel_analysis
 
@@ -134,7 +133,7 @@ class Spectrogram(AsDataArray):
 
 
 def _do_spectrogram(
-    iq: type_stubs.ArrayType,
+    iq: 'iqwaveform.util.Array',
     capture: structs.Capture,
     *,
     window: typing.Union[str, tuple[str, float]],
@@ -196,7 +195,7 @@ def _do_spectrogram(
 
 @as_registered_channel_analysis(Spectrogram)
 def spectrogram(
-    iq: type_stubs.ArrayType,
+    iq: 'iqwaveform.util.Array',
     capture: structs.Capture,
     *,
     window: typing.Union[str, tuple[str, float]],
