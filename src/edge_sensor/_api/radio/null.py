@@ -86,6 +86,9 @@ class NullSource(RadioDevice):
     def channel_enabled(self):
         # this is only called at most once, due to cache=True
         raise ValueError('must set channel_enabled once before reading')
+    
+    def sync_time_source(self):
+        pass
 
     @channel_enabled.setter
     def _(self, enable: bool):
