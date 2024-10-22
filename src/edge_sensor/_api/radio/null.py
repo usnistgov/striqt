@@ -80,15 +80,18 @@ class NullSource(RadioDevice):
         """the self-reported "actual" sample rate of the radio"""
         return self.sample_rate()
 
-    time_source = attr.value.str(default='internal', inherit=True)
+    @attr.method.str(inherit=True, sets=True, gets=True)
+    def time_source(self):
+        return self.backend.setdefault('time_source', 'internal')
+
+    @time_source.setter
+    def _(self, time_source: str):
+        self.backend['time_source'] = time_source
 
     @attr.method.bool(cache=True)
     def channel_enabled(self):
         # this is only called at most once, due to cache=True
         raise ValueError('must set channel_enabled once before reading')
-    
-    def sync_time_source(self):
-        pass
 
     @channel_enabled.setter
     def _(self, enable: bool):
