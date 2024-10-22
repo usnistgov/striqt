@@ -83,7 +83,7 @@ class Description(msgspec.Struct, forbid_unknown_fields=True):
 
 
 class Output(msgspec.Struct, forbid_unknown_fields=True):
-    path: Optional[str] = None
+    path: Optional[str] = '{yaml_name}-{start_time}'
     store: typing.Union[Literal['zip'], Literal['directory']] = 'zip'
     coord_aliases: dict[str, dict[str, dict[str, Any]]] = {}
 
