@@ -49,6 +49,16 @@ class RadioDevice(lb.Device):
         help='digital frequency shift of the RX center frequency',
     )
 
+    gapless_repeats = attr.value.bool(
+        False,
+        help='whether to skip stream disable->renable between identical captures'
+    )
+
+    time_sync_each_capture = attr.value.bool(
+        False,
+        help='whether to synchronize sample timestamps external PPS on each capture'
+    )
+
     _downsample = attr.value.float(1.0, min=0, help='backend_sample_rate/sample_rate')
 
     # these must be implemented by child classes
@@ -63,6 +73,10 @@ class RadioDevice(lb.Device):
     )
     channel_enabled = attr.method.bool()
     gain = attr.method.float(label='dB', help='SDR hardware gain')
+    time_source = attr.method.str(
+        only=['host', 'internal', 'external', 'gps'],
+        help='time base for sample timestamps'
+    )
 
     @attr.property.str(sets=False, cache=True, help='unique radio hardware identifier')
     def id(self):
@@ -103,7 +117,7 @@ class RadioDevice(lb.Device):
             self._prepare_buffer(capture)
             iq, timestamp = self._read_stream(count)
 
-            if next_capture is None or next_capture != capture:
+            if not self.gapless_repeats or next_capture != capture:
                 self.channel_enabled(False)
 
             if next_capture is not None:
@@ -119,11 +133,20 @@ class RadioDevice(lb.Device):
         # TODO: the other parameters too
         self.calibration = radio_config.calibration
         self.periodic_trigger = radio_config.periodic_trigger
+        self.gapless_repeats = radio_config.gapless_repeats
+        self.time_sync_each_capture = radio_config.time_sync_each_capture
+        self.time_source(radio_config.time_source)
+
+        if not self.time_sync_each_capture:
+            self.sync_time_source()
 
     def arm(self, capture: structs.RadioCapture):
         """apply a capture configuration"""
 
         if capture == self.get_capture_struct():
+            if self.time_sync_each_capture:
+                self.sync_time_source()
+
             return
 
         if iqwaveform.power_analysis.isroundmod(
@@ -166,8 +189,14 @@ class RadioDevice(lb.Device):
 
         self.analysis_bandwidth = capture.analysis_bandwidth
 
+        if self.time_sync_each_capture:
+            self.sync_time_source()
+
     def _read_stream(self, samples: int) -> tuple[np.ndarray, pd.Timestamp]:
         """to be implemented in subclasses"""
+        raise NotImplementedError
+
+    def sync_time_source(self):
         raise NotImplementedError
 
     def get_capture_struct(self) -> structs.RadioCapture:

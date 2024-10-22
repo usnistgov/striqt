@@ -159,6 +159,28 @@ class SoapyRadioDevice(RadioDevice):
         """the self-reported "actual" sample rate of the radio"""
         return self.backend.getSampleRate(SoapySDR.SOAPY_SDR_RX, 0) / self._downsample
 
+    @attr.method.str(inherit=True)
+    def time_source(self):
+        # there is only one RX LO, shared by both channels
+        backend_result = self.backend.getTimeSource()
+        if backend_result == 'internal' and self.on_overflow == 'log':
+            return 'host'
+        else:
+            return backend_result
+
+    @time_source.setter
+    def _(self, time_source: str):
+        if time_source == 'host':
+            self.backend.setTimeSource('internal')
+            self.on_overflow = 'log'
+            if self.periodic_trigger is not None:
+                self._logger.warning(
+                    'periodic trigger with host time will suffer from inaccuracy on overflow'
+                )
+        else:
+            self.backend.setTimeSource(time_source)
+            self.on_overflow = 'except'
+
     @attr.method.bool(cache=True)
     @_verify_channel_for_getter
     def channel_enabled(self):
@@ -229,24 +251,11 @@ class SoapyRadioDevice(RadioDevice):
     def _reset_stats(self):
         self._stream_stats = {'overflow': 0, 'exceptions': 0, 'total': 0}
 
-    def setup(self, radio_config: structs.RadioSetup):
-        if radio_config.time_source == 'host':
-            self.backend.setTimeSource('internal')
-            self.on_overflow = 'log'
-            if radio_config.periodic_trigger is not None:
-                self._logger.warning(
-                    'periodic trigger with host time will suffer from inaccuracy on overflow'
-                )
-        else:
-            self.backend.setTimeSource(radio_config.time_source)
-            self.on_overflow = 'except'
-
-        if radio_config.time_source in ('internal', 'host'):
+    def sync_time_source(self):
+        if self.time_source in ('internal', 'host'):
             self._sync_to_os_time_source()
         else:
             self._sync_to_external_time_source()
-
-        super().setup(radio_config)
 
     def _sync_to_os_time_source(self):
         hardware_time = self.backend.getHardwareTime('now') / 1e9
