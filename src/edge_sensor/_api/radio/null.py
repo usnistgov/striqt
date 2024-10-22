@@ -80,6 +80,8 @@ class NullSource(RadioDevice):
         """the self-reported "actual" sample rate of the radio"""
         return self.sample_rate()
 
+    time_source = attr.value.str(default='internal', inherit=True)
+
     @attr.method.bool(cache=True)
     def channel_enabled(self):
         # this is only called at most once, due to cache=True
