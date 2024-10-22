@@ -159,7 +159,7 @@ class SoapyRadioDevice(RadioDevice):
         """the self-reported "actual" sample rate of the radio"""
         return self.backend.getSampleRate(SoapySDR.SOAPY_SDR_RX, 0) / self._downsample
 
-    @attr.method.str(inherit=True)
+    @attr.method.str(inherit=True, sets=True, gets=True)
     def time_source(self):
         # there is only one RX LO, shared by both channels
         backend_result = self.backend.getTimeSource()
