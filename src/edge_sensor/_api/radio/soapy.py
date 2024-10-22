@@ -166,7 +166,7 @@ class SoapyRadioDevice(RadioDevice):
         if backend_result == 'internal' and self.on_overflow == 'log':
             return 'host'
         else:
-            return backend_result
+            return backend_result.lower()
 
     @time_source.setter
     def _(self, time_source: str):
