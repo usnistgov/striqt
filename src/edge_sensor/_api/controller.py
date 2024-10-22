@@ -151,7 +151,7 @@ class SweepController:
     def iter_raw_iq(
         self,
         sweep: structs.Sweep,
-        calibration: 'xr.DatasetType' = None,
+        calibration: 'xr.Dataset' = None,
         close_after: bool = True,
         always_yield: bool = False,
         quiet: bool = False,
@@ -203,10 +203,10 @@ class _ServerService(rpyc.Service, SweepController):
     def exposed_iter_sweep(
         self,
         sweep: structs.Sweep,
-        calibration: 'xr.DatasetType' = None,
+        calibration: 'xr.Dataset' = None,
         *,
         always_yield: bool = False,
-    ) -> typing.Generator[xr.Dataset]:
+    ) -> typing.Generator['xr.Dataset']:
         """wraps actions.sweep_iter to run on the remote server.
 
         For clients, rpyc exposes this in a connection object `conn` as as `conn.root.iter_sweep`.
@@ -263,7 +263,7 @@ class _ClientService(rpyc.Service):
         lb.logger.info('disconnected from server')
 
     def exposed_deliver(
-        self, pickled_dataset: 'xr.DatasetType', description: str | None = None
+        self, pickled_dataset: 'xr.Dataset', description: str | None = None
     ):
         """serialize an object back to the client via pickling"""
         if description is not None:
