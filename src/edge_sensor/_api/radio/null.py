@@ -88,6 +88,9 @@ class NullSource(RadioDevice):
     def _(self, time_source: str):
         self.backend['time_source'] = time_source
 
+    def sync_time_source(self):
+        pass
+
     @attr.method.bool(cache=True)
     def channel_enabled(self):
         # this is only called at most once, due to cache=True
