@@ -234,7 +234,9 @@ class SoapyRadioDevice(RadioDevice):
             self.backend.setTimeSource('internal')
             self.on_overflow = 'log'
             if radio_config.periodic_trigger is not None:
-                self._logger.warning('periodic trigger with host time will suffer from inaccuracy on overflow')
+                self._logger.warning(
+                    'periodic trigger with host time will suffer from inaccuracy on overflow'
+                )
         else:
             self.backend.setTimeSource(radio_config.time_source)
             self.on_overflow = 'except'
@@ -368,7 +370,9 @@ class SoapyRadioDevice(RadioDevice):
     def __del__(self):
         self.close()
 
-    def _validate_remaining_samples(self, sr, remaining: int, on_overflow='except') -> int:
+    def _validate_remaining_samples(
+        self, sr, remaining: int, on_overflow='except'
+    ) -> int:
         """validate the stream response after reading.
 
         Args:
@@ -439,7 +443,9 @@ class SoapyRadioDevice(RadioDevice):
                 raise IOError(f'Error {sr.ret}: {SoapySDR.errToStr(sr.ret)}')
 
         if self._next_timestamp is not None:
-            self._next_timestamp = self._next_timestamp + total_samples/self.backend_sample_rate()
+            self._next_timestamp = (
+                self._next_timestamp + total_samples / self.backend_sample_rate()
+            )
 
     @_verify_channel_setting
     def _read_stream(self, samples: int) -> tuple[np.ndarray, pd.Timestamp]:
@@ -484,7 +490,9 @@ class SoapyRadioDevice(RadioDevice):
             elif skip is None:
                 skip = 0
 
-            received, remaining = self._validate_remaining_samples(rx_result, remaining, on_overflow=on_overflow)
+            received, remaining = self._validate_remaining_samples(
+                rx_result, remaining, on_overflow=on_overflow
+            )
             total_received += received
 
             # never allow overflow within a capture

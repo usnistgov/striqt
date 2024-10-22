@@ -319,14 +319,14 @@ def get_capture_buffer_sizes(
 def _list_radio_classes(subclass=RadioDevice):
     """returns a list of radio subclasses that have been imported"""
 
-    subs = {c.__name__: c for c in subclass.__subclasses__()}
+    clsmap = {c.__name__: c for c in subclass.__subclasses__()}
 
-    for sub in list(subs.values()):
-        subs.update(_list_radio_classes(sub))
+    for subcls in list(clsmap.values()):
+        clsmap.update(_list_radio_classes(subcls))
 
-    subs = {name: c for name, c in subs.items() if not name.startswith('_')}
+    clsmap = {name: cls for name, cls in clsmap.items() if not name.startswith('_')}
 
-    return subs
+    return clsmap
 
 
 def find_radio_cls_by_name(
