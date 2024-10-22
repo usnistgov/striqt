@@ -135,6 +135,7 @@ class RadioDevice(lb.Device):
         self.periodic_trigger = radio_config.periodic_trigger
         self.gapless_repeats = radio_config.gapless_repeats
         self.time_sync_each_capture = radio_config.time_sync_each_capture
+        
         self.time_source(radio_config.time_source)
 
         if not self.time_sync_each_capture:

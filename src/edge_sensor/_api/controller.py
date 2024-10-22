@@ -125,13 +125,14 @@ class SweepController:
     def iter_sweep(
         self,
         sweep: structs.Sweep,
-        calibration: 'xr.DatasetType' = None,
+        calibration: 'xr.Dataset' = None,
+        *,
         close_after: bool = True,
         always_yield: bool = False,
         quiet: bool = False,
         pickled: bool = False,
         prepare: bool = True,
-    ) -> typing.Generator[xr.Dataset]:
+    ) -> typing.Generator['xr.Dataset']:
         # take args {3,4...N}
         kwargs = dict(locals())
         del kwargs['self'], kwargs['prepare']
@@ -202,9 +203,10 @@ class _ServerService(rpyc.Service, SweepController):
     def exposed_iter_sweep(
         self,
         sweep: structs.Sweep,
-        calibration: 'xr.DatasetType' = None,
+        calibration: 'xr.Dataset' = None,
+        *,
         always_yield: bool = False,
-    ) -> typing.Generator[xr.Dataset]:
+    ) -> typing.Generator['xr.Dataset']:
         """wraps actions.sweep_iter to run on the remote server.
 
         For clients, rpyc exposes this in a connection object `conn` as as `conn.root.iter_sweep`.
@@ -237,7 +239,7 @@ class _ServerService(rpyc.Service, SweepController):
         sweep_iter = self.iter_sweep(
             sweep,
             calibration,
-            always_yield,
+            always_yield=always_yield,
             pickled=True,
             close_after=False,
             prepare=False,
