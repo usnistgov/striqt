@@ -110,7 +110,9 @@ class RadioDevice(lb.Device):
         count, _ = get_capture_buffer_sizes(self, capture)
 
         with lb.stopwatch('acquire', logger_level='debug'):
-            self.arm(capture)
+            if self.get_capture_struct(type(capture)) != capture:
+                self.arm(capture)
+
             if not self.channel_enabled():
                 self.channel_enabled(True)
 
@@ -130,7 +132,6 @@ class RadioDevice(lb.Device):
             return iq, acquired_capture
 
     def setup(self, radio_config: structs.RadioSetup):
-        # TODO: the other parameters too
         self.calibration = radio_config.calibration
         self.periodic_trigger = radio_config.periodic_trigger
         self.gapless_repeats = radio_config.gapless_repeats
@@ -200,7 +201,7 @@ class RadioDevice(lb.Device):
     def sync_time_source(self):
         raise NotImplementedError
 
-    def get_capture_struct(self) -> structs.RadioCapture:
+    def get_capture_struct(self, cls=structs.RadioCapture) -> structs.RadioCapture:
         """generate the currently armed capture configuration for the specified channel"""
 
         if self.lo_offset == 0:
@@ -210,7 +211,7 @@ class RadioDevice(lb.Device):
         elif self.lo_offset > 0:
             lo_shift = 'right'
 
-        return structs.RadioCapture(
+        return cls(
             # RF and leveling
             center_frequency=self.center_frequency(),
             channel=self.channel(),

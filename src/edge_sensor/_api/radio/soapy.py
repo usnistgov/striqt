@@ -252,7 +252,7 @@ class SoapyRadioDevice(RadioDevice):
         self._stream_stats = {'overflow': 0, 'exceptions': 0, 'total': 0}
 
     def sync_time_source(self):
-        if self.time_source in ('internal', 'host'):
+        if self.time_source() in ('internal', 'host'):
             self._sync_to_os_time_source()
         else:
             self._sync_to_external_time_source()
