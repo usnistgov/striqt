@@ -75,7 +75,7 @@ def click_sensor_sweep(description: typing.Optional[str] = None):
             '-o',
             default=None,
             type=click.Path(),
-            help='output file path (default: YAML_PATH with .zarr.db suffix)',
+            help='override the output file path in the yaml specification',
         ),
         click.option(
             '--remote/',
@@ -90,7 +90,7 @@ def click_sensor_sweep(description: typing.Optional[str] = None):
             '-s',
             type=click.Choice(['zip', 'directory', 'db'], case_sensitive=True),
             default=None,
-            help='override config file data store setting: "zip" for single acquisition, "directory" to support appending acquisitions',
+            help='override yaml file data store setting: "zip" for single acquisition, "directory" to support appending acquisitions',
         ),
         click.option(
             '--force/',
