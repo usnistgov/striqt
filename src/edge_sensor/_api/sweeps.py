@@ -61,9 +61,11 @@ def design_warmup_sweep(
 
     # captures that have unique sampling parameters, which are those
     # specified in structs.WaveformCapture
-    capture_set = set(_convert_captures(sweep.captures, structs.WaveformCapture))
-    skip_set = set(_convert_captures(skip, structs.WaveformCapture))
-    captures = _convert_captures(capture_set - skip_set, structs.RadioCapture)
+    wcaptures = _convert_captures(sweep.captures, structs.WaveformCapture)
+    unique_map = dict(zip(wcaptures, sweep.captures))
+    skip_wcaptures = set(_convert_captures(skip, structs.WaveformCapture))
+    unique_wcaptures = unique_map.keys() - skip_wcaptures
+    captures = [unique_map[c] for c in unique_wcaptures]
 
     radio_setup = structs.RadioSetup(driver=NullSource.__name__, resource='empty')
 
@@ -308,7 +310,7 @@ def iter_callbacks(
             break
         else:
             (data, this_capture) = returns['data']
-            ext_data = returns['acquire']
+            ext_data = returns.get('acquire', {})
 
         if isinstance(data, xr.Dataset):
             ext_dataarrays = {

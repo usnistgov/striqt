@@ -55,13 +55,13 @@ def open_store(path: str | Path, *, mode: str):
 
 @functools.cache
 def _get_iq_index_name():
-    from . import measurements
+    from .. import measurements
 
     return typing.get_args(measurements.IQSampleIndexAxis)[0]
 
 
 def _build_encodings(data, compression=None, filter: bool = True):
-    from . import measurements
+    from .. import measurements
 
     if compression is None:
         compressor = numcodecs.Blosc('zlib', clevel=6)

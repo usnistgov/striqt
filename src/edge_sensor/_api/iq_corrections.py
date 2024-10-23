@@ -133,6 +133,33 @@ def compute_y_factor_corrections(
     return ret
 
 
+def _describe_missing_data(corrections: 'xr.Dataset', exact_matches: dict):
+    misses = []
+    cal = corrections.power_correction.copy()
+
+    invalid_matches = dict(exact_matches)
+    # remove the valid matches
+    for field, value in exact_matches.items():
+        try:
+            cal = cal.sel({field: value}, drop=True)
+        except KeyError:
+            pass
+        else:
+            del invalid_matches[field]
+
+    # now note the remainder
+    for field, value in invalid_matches.items():
+        try:
+            cal.sel({field: value})
+        except KeyError:
+            misses += [
+                f'{repr(value)} in {repr(field)} (available: '
+                + ', '.join([str(v) for v in cal[field].values])
+                + ')'
+            ]
+    return '; '.join(misses)
+
+
 def resampling_correction(
     iq: 'iqwaveform.util.Array',
     capture: structs.RadioCapture,
@@ -200,8 +227,13 @@ def resampling_correction(
         try:
             sel = corrections.power_correction.sel(**exact_matches, drop=True)
         except KeyError as ex:
-            print(exact_matches)
-            raise
+            misses = _describe_missing_data(corrections, exact_matches)
+            exc = KeyError(f'missing calibration data: {misses}')
+        else:
+            exc = None
+
+        if exc is not None:
+            raise exc
 
         if 'duration' in sel.coords:
             sel = sel.drop('duration')
