@@ -7,10 +7,10 @@ from pathlib import Path
 from frozendict import frozendict
 import msgspec
 
-from .structs import Sweep, RadioCapture # noqa: F401
+from .structs import Sweep, RadioCapture  # noqa: F401
 from . import util
 import channel_analysis
-from channel_analysis import load, dump, open_store # noqa: F401
+from channel_analysis import load, dump, open_store  # noqa: F401
 
 if typing.TYPE_CHECKING:
     import pandas as pd

@@ -243,8 +243,7 @@ def iter_callbacks(
     *,
     setup_func: callable[[structs.Capture], None] | None = None,
     acquire_func: callable[[structs.Capture], None] | None = None,
-    intake_func: callable[['xr.Dataset', structs.Capture], typing.Any]
-    | None = None,
+    intake_func: callable[['xr.Dataset', structs.Capture], typing.Any] | None = None,
 ):
     """trigger callbacks on each sweep iteration.
 

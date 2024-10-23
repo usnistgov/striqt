@@ -15,7 +15,7 @@ if typing.TYPE_CHECKING:
 
 else:
     iqwaveform = util.lazy_import('iqwaveform')
-    pd = util.lazy_import('pandas')    
+    pd = util.lazy_import('pandas')
     np = util.lazy_import('numpy')
 
 

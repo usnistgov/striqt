@@ -21,6 +21,7 @@ else:
     iqwaveform = util.lazy_import('iqwaveform')
     np = util.lazy_import('numpy')
 
+
 @functools.lru_cache
 def make_power_histogram_bin_edges(power_low, power_high, power_resolution, xp=np):
     """generate the list of power bins"""

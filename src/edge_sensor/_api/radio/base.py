@@ -51,13 +51,12 @@ class RadioDevice(lb.Device):
     )
 
     gapless_repeats = attr.value.bool(
-        False,
-        help='whether to skip stream disable->renable between identical captures'
+        False, help='whether to skip stream disable->renable between identical captures'
     )
 
     time_sync_each_capture = attr.value.bool(
         False,
-        help='whether to synchronize sample timestamps external PPS on each capture'
+        help='whether to synchronize sample timestamps external PPS on each capture',
     )
 
     _downsample = attr.value.float(1.0, min=0, help='backend_sample_rate/sample_rate')
@@ -76,7 +75,7 @@ class RadioDevice(lb.Device):
     gain = attr.method.float(label='dB', help='SDR hardware gain')
     time_source = attr.method.str(
         only=['host', 'internal', 'external', 'gps'],
-        help='time base for sample timestamps'
+        help='time base for sample timestamps',
     )
 
     @attr.property.str(sets=False, cache=True, help='unique radio hardware identifier')
@@ -137,7 +136,7 @@ class RadioDevice(lb.Device):
         self.periodic_trigger = radio_config.periodic_trigger
         self.gapless_repeats = radio_config.gapless_repeats
         self.time_sync_each_capture = radio_config.time_sync_each_capture
-        
+
         self.time_source(radio_config.time_source)
 
         if not self.time_sync_each_capture:

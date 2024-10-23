@@ -30,7 +30,6 @@ warnings.filterwarnings(
 )
 
 
-
 def open_store(path: str | Path, *, mode: str):
     if isinstance(path, zarr.storage.Store):
         store = path
@@ -57,6 +56,7 @@ def open_store(path: str | Path, *, mode: str):
 @functools.cache
 def _get_iq_index_name():
     from . import measurements
+
     return typing.get_args(measurements.IQSampleIndexAxis)[0]
 
 

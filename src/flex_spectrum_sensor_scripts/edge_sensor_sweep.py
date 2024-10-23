@@ -19,7 +19,9 @@ def get_file_format_fields(dataset: 'xr.Dataset'):
     }
 
 
-@click_sensor_sweep('Run an acquisition and analysis sweep with a software-defined radio')
+@click_sensor_sweep(
+    'Run an acquisition and analysis sweep with a software-defined radio'
+)
 def run(**kws):
     # instantiate sweep objects
     store, controller, sweep_spec, calibration = init_sensor_sweep(**kws)

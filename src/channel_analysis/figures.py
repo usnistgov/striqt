@@ -16,10 +16,11 @@ else:
     plt = util.lazy_import('matplotlib.pyplot')
     np = util.lazy_import('numpy')
 
+
 def summarize_metadata(
     source: 'xr.Dataset',
     capture_type: type[Capture],
-    array: 'xr.DataArray '= None,
+    array: 'xr.DataArray ' = None,
     *,
     as_str: bool = False,
 ):

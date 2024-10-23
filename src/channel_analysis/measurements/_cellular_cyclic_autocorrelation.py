@@ -12,7 +12,7 @@ from .._api import structs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
-    import numpy as np    
+    import numpy as np
     import pandas as pd
 else:
     iqwaveform = util.lazy_import('iqwaveform')
@@ -191,7 +191,9 @@ def _get_phy_mappings(
     xp=np,
 ) -> dict[str]:
     return {
-        scs: iqwaveform.ofdm.Phy3GPP(channel_bandwidth, scs, sample_rate=sample_rate, xp=xp)
+        scs: iqwaveform.ofdm.Phy3GPP(
+            channel_bandwidth, scs, sample_rate=sample_rate, xp=xp
+        )
         for scs in subcarrier_spacings
     }
 
