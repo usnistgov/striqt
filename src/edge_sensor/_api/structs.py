@@ -69,10 +69,11 @@ class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):
 
     driver: str = 'AirT7x01B'
     resource: Any = None
-    gps: bool = False
-    time_source: Literal['host', 'internal', 'external'] = 'host'
+    time_source: Literal['host', 'internal', 'external', 'gps'] = 'host'
     periodic_trigger: Optional[float] = None
     calibration: Optional[str] = None
+    gapless_repeats: bool = False
+    time_sync_each_capture: bool = False
 
 
 class Description(msgspec.Struct, forbid_unknown_fields=True):
@@ -82,7 +83,7 @@ class Description(msgspec.Struct, forbid_unknown_fields=True):
 
 
 class Output(msgspec.Struct, forbid_unknown_fields=True):
-    path: Optional[str] = None
+    path: Optional[str] = '{yaml_name}-{start_time}'
     store: typing.Union[Literal['zip'], Literal['directory']] = 'zip'
     coord_aliases: dict[str, dict[str, dict[str, Any]]] = {}
 

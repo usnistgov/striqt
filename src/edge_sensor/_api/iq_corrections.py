@@ -197,7 +197,11 @@ def resampling_correction(
             host_resample=capture.host_resample,
         )
 
-        sel = corrections.power_correction.sel(**exact_matches, drop=True)
+        try:
+            sel = corrections.power_correction.sel(**exact_matches, drop=True)
+        except KeyError as ex:
+            print(exact_matches)
+            raise
 
         if 'duration' in sel.coords:
             sel = sel.drop('duration')
