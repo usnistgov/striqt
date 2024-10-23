@@ -10,9 +10,6 @@ import typing
 
 from frozendict import frozendict
 
-from xarray_dataclasses.dataarray import OptionedClass, TDataArray, PInit
-from xarray_dataclasses.datamodel import AnyEntry, DataModel
-
 from ..._api import structs, util
 
 
@@ -21,24 +18,27 @@ if typing.TYPE_CHECKING:
     import xarray as xr
     import array_api_compat
     import iqwaveform
+    from xarray_dataclasses import datamodel, dataarray
 else:
     np = util.lazy_import('numpy')
     xr = util.lazy_import('xarray')
     array_api_compat = util.lazy_import('array_api_compat')
     iqwaveform = util.lazy_import('iqwaveform')
+    datamodel = util.lazy_import('xarray_dataclasses.datamodel')
+    dataarray = util.lazy_import('xarray_dataclasses.dataarray')
 
 
 TFunc = typing.Callable[..., typing.Any]
 
 
-def _entry_stub(entry: AnyEntry):
+def _entry_stub(entry: 'datamodel.AnyEntry'):
     return np.empty(len(entry.dims) * (1,), dtype=entry.dtype)
 
 
 @typing.overload
 def shaped(
-    cls: type[OptionedClass[PInit, TDataArray]],
-) -> TDataArray: ...
+    cls: type['dataarray.OptionedClass[dataarray.PInit, dataarray.TDataArray]'],
+) -> 'dataarray.TDataArray': ...
 @functools.lru_cache
 def dataarray_stub(cls: typing.Any) -> typing.Any:
     """return an empty array of type `cls`"""
@@ -58,7 +58,7 @@ def dataarray_stub(cls: typing.Any) -> typing.Any:
 
 @functools.lru_cache
 def get_data_model(dataclass: typing.Any):
-    return DataModel.from_dataclass(dataclass)
+    return datamodel.DataModel.from_dataclass(dataclass)
 
 
 def freezevalues(parameters: dict) -> dict:
@@ -69,8 +69,8 @@ def freezevalues(parameters: dict) -> dict:
 
 
 def channel_dataarray(
-    cls, data: np.ndarray, capture, parameters: dict[str, typing.Any]
-) -> xr.DataArray:
+    cls, data: 'np.ndarray', capture, parameters: dict[str, typing.Any]
+) -> 'xr.DataArray':
     """build an `xarray.DataArray` from an ndarray, capture information, and channel analysis keyword arguments"""
     template = dataarray_stub(cls)
     data = np.asarray(data)
@@ -176,7 +176,7 @@ def evaluate_channel_analysis(
 
 def package_channel_analysis(
     capture: structs.Capture, results: dict[str, structs.ChannelAnalysis]
-) -> 'xr.DatasetType':
+) -> 'xr.Dataset':
     # materialize as xarrays
     xarrays = {name: res.to_xarray() for name, res in results.items()}
     # capture.analysis_filter = dict(capture.analysis_filter)

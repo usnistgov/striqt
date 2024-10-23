@@ -3,15 +3,20 @@ import dataclasses
 import functools
 import typing
 
-import numpy as np
-
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
-import iqwaveform
 
-from .._api import structs
 from ._common import as_registered_channel_analysis
 from ._spectrogram import equivalent_noise_bandwidth
 from ._channel_power_ccdf import make_power_bins, ChannelPowerCoords
+
+from .._api import structs, util
+
+if typing.TYPE_CHECKING:
+    import iqwaveform
+    import numpy as np
+else:
+    iqwaveform = util.lazy_import('iqwaveform')
+    np = util.lazy_import('numpy')
 
 # Axis and coordinates
 SpectrogramPowerBinAxis = typing.Literal['spectrogram_power_bin']

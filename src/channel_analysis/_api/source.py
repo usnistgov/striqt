@@ -3,8 +3,6 @@ import typing
 
 from . import structs, util
 
-from .io import load, dump  # noqa: F401
-
 if typing.TYPE_CHECKING:
     import numpy as np
     import iqwaveform

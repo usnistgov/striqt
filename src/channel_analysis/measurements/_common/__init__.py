@@ -24,7 +24,7 @@ def analyze_by_spec(
     capture: structs.Capture,
     *,
     spec: str | dict | structs.ChannelAnalysis,
-) -> 'xr.DatasetType':
+) -> 'xr.Dataset':
     """evaluate a set of different channel analyses on the iq waveform as specified by spec"""
 
     results = evaluate_channel_analysis(

@@ -1,18 +1,25 @@
 from __future__ import annotations
-import xarray as xr
 
 import typing
-import matplotlib as mpl
-from matplotlib import pyplot as plt
-import numpy as np
 
 from ._api.structs import Capture
+from ._api import util
 
+if typing.TYPE_CHECKING:
+    import matplotlib as mpl
+    from matplotlib import pyplot as plt
+    import numpy as np
+    import xarray as xr
+else:
+    xr = util.lazy_import('xarray')
+    mpl = util.lazy_import('matplotlib')
+    plt = util.lazy_import('matplotlib.pyplot')
+    np = util.lazy_import('numpy')
 
 def summarize_metadata(
-    source: xr.Dataset,
+    source: 'xr.Dataset',
     capture_type: type[Capture],
-    array: xr.DataArray = None,
+    array: 'xr.DataArray '= None,
     *,
     as_str: bool = False,
 ):
@@ -36,7 +43,7 @@ def summarize_metadata(
 
 
 def plot_cyclic_channel_power(
-    cyclic_channel_power: xr.DataArray,
+    cyclic_channel_power: 'xr.DataArray',
     center_statistic='mean',
     bound_statistics=('min', 'max'),
     ax=None,
@@ -76,11 +83,11 @@ def plot_cyclic_channel_power(
 
 def label_axis(
     which_axis: typing.Literal['x'] | typing.Literal['y'],
-    data: xr.DataArray | xr.Dataset,
+    data: typing.Union['xr.DataArray', 'xr.Dataset'],
     *,
-    coord_name: typing.Optional[xr.Coordinates] = None,
+    coord_name: typing.Optional['xr.Coordinates'] = None,
     tick_units=True,
-    ax: typing.Optional[mpl.axes.Ax] = None,
+    ax: typing.Optional['mpl.axes.Ax'] = None,
 ):
     """apply axis labeling based on label and unit metadata in the specified dimension of `a`.
 
@@ -116,11 +123,11 @@ def label_axis(
 
 
 def label_legend(
-    data: xr.DataArray | xr.Dataset,
+    data: typing.Union['xr.DataArray', 'xr.Dataset'],
     *,
     coord_name: str = None,
     tick_units=True,
-    ax: typing.Optional[mpl.axes._axes.Axes] = None,
+    ax: typing.Optional['mpl.axes._axes.Axes'] = None,
 ):
     """apply legend labeling based on label and unit metadata in the specified dimension of `a`"""
 
@@ -147,8 +154,8 @@ def label_legend(
 
 
 def label_selection(
-    sel: xr.Dataset | xr.DataArray,
-    ax: typing.Optional[mpl.axes._axes.Axes] = None,
+    sel: typing.Union['xr.DataArray', 'xr.Dataset'],
+    ax: typing.Optional['mpl.axes._axes.Axes'] = None,
     attrs=True,
 ):
     if ax is None:

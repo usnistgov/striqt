@@ -2,16 +2,21 @@ from __future__ import annotations
 import dataclasses
 import typing
 
-import numpy as np
-
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
-import iqwaveform
 
-from .._api import structs
 from ._common import as_registered_channel_analysis
 from ._spectrogram import _do_spectrogram
 from ._spectrogram_ccdf import SpectrogramPowerBinCoords, SpectrogramPowerBinAxis
 from ._channel_power_histogram import make_power_histogram_bin_edges
+
+from .._api import structs, util
+
+if typing.TYPE_CHECKING:
+    import iqwaveform
+    import numpy as np
+else:
+    iqwaveform = util.lazy_import('iqwaveform')
+    np = util.lazy_import('numpy')
 
 
 @dataclasses.dataclass

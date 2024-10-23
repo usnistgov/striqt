@@ -3,13 +3,19 @@ import dataclasses
 import functools
 import typing
 
-import numpy as np
-import iqwaveform
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
 from ._common import as_registered_channel_analysis
-from .._api import structs
 from ._channel_power_time_series import PowerDetectorAxis, PowerDetectorCoords
+
+from .._api import structs, util
+
+if typing.TYPE_CHECKING:
+    import iqwaveform
+    import numpy as np
+else:
+    iqwaveform = util.lazy_import('iqwaveform')
+    np = util.lazy_import('numpy')
 
 
 ### Cyclic statistic axis and coordinate labels

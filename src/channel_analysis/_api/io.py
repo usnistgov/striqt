@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import typing
 import warnings
 
@@ -7,9 +8,6 @@ from pathlib import Path
 from collections import defaultdict
 
 from . import util
-
-from .. import measurements
-from ..measurements._iq_waveform import IQSampleIndexAxis
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -31,7 +29,6 @@ warnings.filterwarnings(
     message='is deprecated and will be removed in a Zarr-Python version 3',
 )
 
-IQ_WAVEFORM_INDEX_NAME = typing.get_args(IQSampleIndexAxis)[0]
 
 
 def open_store(path: str | Path, *, mode: str):
@@ -57,7 +54,15 @@ def open_store(path: str | Path, *, mode: str):
     return store
 
 
+@functools.cache
+def _get_iq_index_name():
+    from . import measurements
+    return typing.get_args(measurements.IQSampleIndexAxis)[0]
+
+
 def _build_encodings(data, compression=None, filter: bool = True):
+    from . import measurements
+
     if compression is None:
         compressor = numcodecs.Blosc('zlib', clevel=6)
     elif compression is False:
@@ -91,18 +96,18 @@ def _build_encodings(data, compression=None, filter: bool = True):
 
 
 def dump(
-    store: zarr.storage.Store,
+    store: 'zarr.storage.Store',
     data: typing.Optional['xr.DataArray' | 'xr.Dataset'] = None,
     append_dim=None,
     compression=None,
     filter=True,
-) -> zarr.storage.Store:
+) -> 'zarr.storage.Store':
     """serialize a dataset into a zarr directory structure"""
 
     # if not isinstance(store, zarr.storage.Store):
     #     raise TypeError('must pass a zarr store object')
 
-    if hasattr(data, IQ_WAVEFORM_INDEX_NAME):
+    if hasattr(data, _get_iq_index_name()):
         if 'sample_rate' in data.attrs:
             # sample rate is metadata
             sample_rate = data.attrs['sample_rate']
@@ -110,7 +115,7 @@ def dump(
             # sample rate is a variate
             sample_rate = data.sample_rate.values.flatten()[0]
 
-        chunks = {IQ_WAVEFORM_INDEX_NAME: round(sample_rate * 100e-3)}
+        chunks = {_get_iq_index_name(): round(sample_rate * 100e-3)}
     else:
         chunks = {}
 
@@ -142,7 +147,7 @@ def dump(
         return data.chunk(chunks).to_zarr(store, encoding=encodings, mode='w')
 
 
-def load(path: str | Path) -> 'xr.DataArray' | 'xr.DatasetType':
+def load(path: str | Path) -> 'xr.DataArray' | 'xr.Dataset':
     """load a dataset or data array"""
 
     if isinstance(path, (str, Path)):

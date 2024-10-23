@@ -7,10 +7,8 @@ from .base import RadioDevice
 from ..util import import_cupy_with_fallback
 
 if typing.TYPE_CHECKING:
-    import numpy as np
     import pandas as pd
 else:
-    np = lb.util.lazy_import('numpy')
     pd = lb.util.lazy_import('pandas')
 
 
@@ -86,7 +84,7 @@ class NullSource(RadioDevice):
 
     @time_source.setter
     def _(self, time_source: str):
-        self.backend['time_source'] = time_source
+        self.backend['time_source'] = time_source.lower()
 
     def sync_time_source(self):
         pass

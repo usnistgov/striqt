@@ -6,15 +6,16 @@ import typing
 import labbench as lb
 from labbench import paramattr as attr
 import msgspec
-import numpy as np
-from .. import structs
+from .. import structs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
     import pandas as pd
+    import numpy as np
 else:
-    iqwaveform = lb.util.lazy_import('iqwaveform')
-    pd = lb.util.lazy_import('pandas')
+    iqwaveform = util.lazy_import('iqwaveform')
+    pd = util.lazy_import('pandas')
+    np = util.lazy_import('numpy')
 
 
 TRANSIENT_HOLDOFF_WINDOWS = 1

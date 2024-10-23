@@ -42,7 +42,7 @@ dependencies:
 - numba~=0.56.0
 - pip:
   - iqwaveform @ git+https://github.com/usnistgov/iqwaveform
-  - xarray_dataclasses
+  - xarray_dataclasses @ git+https://github.com/dgkuester/xarray-dataclasses@lazy-imports
   - -e ..
   - https://archive.deepwavedigital.com/pycuda/pycuda-2020.1-cp39-cp39-linux_aarch64.whl
   - https://archive.deepwavedigital.com/pytools/pytools-2022.1.12-py2.py3-none-any.whl

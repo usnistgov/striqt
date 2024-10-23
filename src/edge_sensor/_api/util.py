@@ -5,6 +5,8 @@ import typing
 from functools import cache
 import sys
 
+TGen = type[typing.Any]
+
 
 def lazy_import(module_name: str):
     """postponed import of the module with the specified name.
@@ -43,9 +45,6 @@ def set_cuda_mem_limit(fraction=0.75):
     # available = psutil.virtual_memory().available
 
     cupy.get_default_memory_pool().set_limit(fraction=fraction)
-
-
-TGen = type[typing.Any]
 
 
 def zip_offsets(

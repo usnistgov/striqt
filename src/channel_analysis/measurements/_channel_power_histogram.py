@@ -3,9 +3,7 @@ import functools
 import dataclasses
 import typing
 
-import numpy as np
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
-import iqwaveform
 
 from ._channel_power_time_series import PowerDetectorCoords, PowerDetectorAxis
 from ._channel_power_ccdf import (
@@ -14,8 +12,14 @@ from ._channel_power_ccdf import (
     make_power_bins,
 )
 from ._common import as_registered_channel_analysis
-from .._api import structs
+from .._api import structs, util
 
+if typing.TYPE_CHECKING:
+    import iqwaveform
+    import numpy as np
+else:
+    iqwaveform = util.lazy_import('iqwaveform')
+    np = util.lazy_import('numpy')
 
 @functools.lru_cache
 def make_power_histogram_bin_edges(power_low, power_high, power_resolution, xp=np):

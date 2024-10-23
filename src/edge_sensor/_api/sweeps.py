@@ -77,12 +77,12 @@ def design_warmup_sweep(
 def iter_sweep(
     radio: RadioDevice,
     sweep: structs.Sweep,
-    calibration: channel_analysis.DatasetType = None,
+    calibration: 'xr.Dataset' = None,
     always_yield=False,
     quiet=False,
     pickled=False,
     close_after=False,
-) -> typing.Generator[xr.Dataset | bytes | None]:
+) -> typing.Generator['xr.Dataset' | bytes | None]:
     """iterate through sweep captures on the specified radio, yielding a dataset for each.
 
     Normally, for performance reasons, the first iteration consists of
@@ -178,7 +178,7 @@ def iter_raw_iq(
     sweep: structs.Sweep,
     quiet=False,
     close_after=False,
-) -> typing.Generator[xr.Dataset | bytes | None]:
+) -> typing.Generator['xr.Dataset' | bytes | None]:
     """iterate through the sweep and yield the raw IQ vector for each.
 
     Normally, for performance reasons, the first iteration consists of
@@ -238,12 +238,12 @@ def stopiter_as_return(iter):
 
 
 def iter_callbacks(
-    sweep_iter: xr.Dataset | bytes | None,
+    sweep_iter: 'xr.Dataset' | bytes | None,
     sweep_spec: structs.Sweep,
     *,
-    setup: callable[[structs.Capture], None] | None = None,
-    acquire: callable[[structs.Capture], None] | None = None,
-    save: callable[[channel_analysis.DatasetType, structs.Capture], typing.Any]
+    setup_func: callable[[structs.Capture], None] | None = None,
+    acquire_func: callable[[structs.Capture], None] | None = None,
+    intake_func: callable[['xr.Dataset', structs.Capture], typing.Any]
     | None = None,
 ):
     """trigger callbacks on each sweep iteration.
@@ -262,26 +262,26 @@ def iter_callbacks(
     Returns:
         Generator
     """
-    if setup is None:
+    if setup_func is None:
 
-        def setup(capture):
+        def setup_func(capture):
             pass
-    elif not hasattr(setup, '__name__'):
-        setup.__name__ = 'setup'
+    elif not hasattr(setup_func, '__name__'):
+        setup_func.__name__ = 'setup'
 
-    if acquire is None:
+    if acquire_func is None:
 
-        def acquire(capture):
+        def acquire_func(capture):
             pass
-    elif not hasattr(acquire, '__name__'):
-        acquire.__name__ = 'acquire'
+    elif not hasattr(acquire_func, '__name__'):
+        acquire_func.__name__ = 'acquire'
 
-    if save is None:
+    if intake_func is None:
 
-        def save(data):
+        def intake_func(data):
             return data
-    elif not hasattr(save, '__name__'):
-        save.__name__ = 'save'
+    elif not hasattr(intake_func, '__name__'):
+        intake_func.__name__ = 'save'
 
     # pairs of (data, capture) from the controller
     data_spec_pairs = itertools.zip_longest(
@@ -294,12 +294,12 @@ def iter_callbacks(
 
     while True:
         if this_capture is not None:
-            setup(this_capture)
+            setup_func(this_capture)
 
         returns = lb.concurrently(
             lb.Call(stopiter_as_return, data_spec_pairs).rename('data'),
-            lb.Call(acquire, this_capture).rename('acquire'),
-            lb.Call(save, last_data).rename('save'),
+            lb.Call(acquire_func, this_capture).rename('acquire'),
+            lb.Call(intake_func, last_data).rename('save'),
             flatten=False,
         )
 

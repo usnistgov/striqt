@@ -157,7 +157,7 @@ class SweepController:
         quiet: bool = False,
         pickled: bool = False,
         prepare: bool = True,
-    ) -> typing.Generator[xr.Dataset]:
+    ) -> typing.Generator['xr.Dataset']:
         # take args {3,4...N}
         kwargs = dict(locals())
         del kwargs['self'], kwargs['prepare']

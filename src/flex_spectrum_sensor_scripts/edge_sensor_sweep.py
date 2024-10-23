@@ -11,7 +11,7 @@ from flex_spectrum_sensor_scripts import (
 )
 
 
-def get_file_format_fields(dataset: xr.Dataset):
+def get_file_format_fields(dataset: 'xr.Dataset'):
     return {
         name: coord.values[0]
         for name, coord in dataset.coords.items()
@@ -32,9 +32,7 @@ def run(**kws):
     ]
 
     dataset = xr.concat(results, edge_sensor.CAPTURE_DIM)
-
     edge_sensor.dump(store, dataset)
-
     lb.logger.info(f'wrote to {store.path}')
 
 

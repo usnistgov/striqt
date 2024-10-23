@@ -3,19 +3,19 @@ import dataclasses
 import functools
 import typing
 
-import numpy as np
-
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
-import iqwaveform
 
-from .._api import structs
-from .._api.util import lazy_import
 from ._common import as_registered_channel_analysis
+from .._api import structs, util
 
 if typing.TYPE_CHECKING:
+    import iqwaveform
     from scipy import signal
+    import numpy as np
 else:
-    signal = lazy_import('scipy.signal')
+    iqwaveform = util.lazy_import('iqwaveform')
+    signal = util.lazy_import('scipy.signal')
+    np = util.lazy_import('numpy')
 
 
 @functools.lru_cache

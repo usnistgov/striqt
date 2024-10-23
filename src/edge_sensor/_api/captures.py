@@ -6,7 +6,6 @@ import functools
 import pickle
 import typing
 
-import channel_analysis
 from . import iq_corrections, structs, util
 from . import radio
 
@@ -17,12 +16,14 @@ if typing.TYPE_CHECKING:
     import labbench as lb
     import numpy as np
     from matplotlib import ticker
+    import channel_analysis
 else:
     pd = util.lazy_import('pandas')
     xr = util.lazy_import('xarray')
     lb = util.lazy_import('labbench')
     np = util.lazy_import('numpy')
     ticker = util.lazy_import('matplotlib.ticker')
+    channel_analysis = util.lazy_import('channel_analysis')
 
 
 CAPTURE_DIM = 'capture'
@@ -35,7 +36,7 @@ def _get_unit_formatter(units: str) -> ticker.EngFormatter:
     return ticker.EngFormatter(unit=units)
 
 
-def _describe_field(capture: channel_analysis.Capture, name: str):
+def _describe_field(capture: 'channel_analysis.Capture', name: str):
     meta = channel_analysis.structs.get_capture_type_attrs(type(capture))
     attrs = meta[name]
     value = getattr(capture, name)
@@ -50,7 +51,7 @@ def _describe_field(capture: channel_analysis.Capture, name: str):
     return f'{name}={value_str}'
 
 
-def concat_time_dim(datasets: list[xr.Dataset], time_dim: str) -> xr.Dataset:
+def concat_time_dim(datasets: list['xr.Dataset'], time_dim: str) -> 'xr.Dataset':
     """concatenate captured datasets into one along a time axis.
 
     This can be used to e.g. transform a contiguous sequence
@@ -215,7 +216,7 @@ def _alias_is_in_coord(dataset, alias_spec) -> bool:
         return True
 
 
-def _assign_alias_coords(capture_data: xr.Dataset, aliases):
+def _assign_alias_coords(capture_data: 'xr.Dataset', aliases):
     for coord_name, coord_spec in aliases.items():
         for alias_value, alias_spec in coord_spec.items():
             if _alias_is_in_coord(capture_data, alias_spec):
@@ -271,15 +272,15 @@ class ChannelAnalysisWrapper:
     sweep: structs.Sweep
     analysis_spec: list[channel_analysis.ChannelAnalysis]
     extra_attrs: dict[str, typing.Any] | None = None
-    calibration: xr.Dataset | None = None
+    calibration: typing.Optional['xr.Dataset'] = None
 
     def __call__(
         self,
-        iq: channel_analysis.ArrayType,
+        iq: 'channel_analysis.ArrayType',
         sweep_time,
         capture: structs.RadioCapture,
         pickled=False,
-    ) -> xr.Dataset:
+    ) -> 'xr.Dataset':
         """Inject radio device and capture info into a channel analysis result."""
 
         with lb.stopwatch('analyze', logger_level='debug'):

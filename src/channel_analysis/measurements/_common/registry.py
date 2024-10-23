@@ -8,7 +8,6 @@ import inspect
 import typing
 
 import msgspec
-from xarray_dataclasses.dataarray import DataClass
 
 from ..._api import structs
 from ..._api import util
@@ -16,8 +15,10 @@ from .xarray import ChannelAnalysisResult
 
 if typing.TYPE_CHECKING:
     import numpy as np
+    from xarray_dataclasses import dataarray
 else:
     np = util.lazy_import('numpy')
+    dataarray = util.lazy_import('xarray_dataclasses.dataarray')
 
 
 TFunc = typing.Callable[..., typing.Any]
@@ -47,7 +48,7 @@ class ChannelAnalysisRegistryDecorator(collections.UserDict):
         else:
             return (name, p.annotation, p.default)
 
-    def __call__(self, xarray_datacls: DataClass, metadata={}) -> TFunc:
+    def __call__(self, xarray_datacls: 'dataarray.DataClass', metadata={}) -> TFunc:
         """add decorated `func` and its keyword arguments in the self.tostruct() schema"""
 
         def wrapper(func: TFunc):

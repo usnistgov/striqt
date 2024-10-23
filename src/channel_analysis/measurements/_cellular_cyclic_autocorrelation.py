@@ -4,20 +4,20 @@ import functools
 import numbers
 import typing
 
-import numpy as np
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
-import iqwaveform
 
 from ._common import as_registered_channel_analysis
-from .._api import structs
+from .._api import structs, util
 
 
 if typing.TYPE_CHECKING:
-    from iqwaveform import ofdm
+    import iqwaveform
+    import numpy as np    
     import pandas as pd
 else:
-    ofdm = iqwaveform.util.lazy_import('iqwaveform.ofdm')
-    pd = iqwaveform.util.lazy_import('pandas')
+    iqwaveform = util.lazy_import('iqwaveform')
+    np = util.lazy_import('numpy')
+    pd = util.lazy_import('pandas')
 
 
 ### Time elapsed dimension and coordinates
@@ -167,12 +167,12 @@ def cellular_cyclic_autocorrelation(
     for i, phy in enumerate(phy_scs.values()):
         # R = _correlate_cyclic_prefixes(iq, phy, **kws)
         cp_inds = phy.index_cyclic_prefix(**idx_kws, slots=downlink_slots)
-        R = ofdm.corr_at_indices(cp_inds, iq, phy.nfft, norm=normalize)
+        R = iqwaveform.ofdm.corr_at_indices(cp_inds, iq, phy.nfft, norm=normalize)
         result[0][i][: R.size] = xp.abs(R)
 
         if len(uplink_slots) > 0:
             cp_inds = phy.index_cyclic_prefix(**idx_kws, slots=uplink_slots)
-            R = ofdm.corr_at_indices(cp_inds, iq, phy.nfft, norm=normalize)
+            R = iqwaveform.ofdm.corr_at_indices(cp_inds, iq, phy.nfft, norm=normalize)
             result[1][i][: R.size] = xp.abs(R)
 
     if normalize:
@@ -191,7 +191,7 @@ def _get_phy_mappings(
     xp=np,
 ) -> dict[str]:
     return {
-        scs: ofdm.Phy3GPP(channel_bandwidth, scs, sample_rate=sample_rate, xp=xp)
+        scs: iqwaveform.ofdm.Phy3GPP(channel_bandwidth, scs, sample_rate=sample_rate, xp=xp)
         for scs in subcarrier_spacings
     }
 
