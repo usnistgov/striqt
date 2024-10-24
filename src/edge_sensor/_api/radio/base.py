@@ -23,7 +23,8 @@ TRANSIENT_HOLDOFF_WINDOWS = 1
 
 class RadioDevice(lb.Device):
     analysis_bandwidth = attr.value.float(
-        None,
+        float('inf'),
+        allow_none=False,
         min=1e-6,
         label='Hz',
         help='bandwidth of the digital bandpass filter (or None to bypass)',
@@ -249,7 +250,7 @@ def _design_capture_filter(
         lo_shift = capture.lo_shift
 
     if (
-        capture.analysis_bandwidth is not None
+        capture.analysis_bandwidth != float('inf')
         and capture.analysis_bandwidth > capture.sample_rate
     ):
         raise ValueError(
