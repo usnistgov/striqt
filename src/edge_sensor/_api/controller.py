@@ -136,7 +136,6 @@ class SweepController:
         # take args {3,4...N}
         kwargs = dict(locals())
         del kwargs['self'], kwargs['prepare']
-        print('sweep 0 captures: ', sweep.captures)
 
         if prepare:
             prep_msg = self._describe_preparation(sweep)
