@@ -195,9 +195,9 @@ def build_coords(
             # to coerce strings as variable-length types later for storage
             coords[field] = coords[field].astype('object')
         elif value is None and coords[field].dtype.type in (np.float16, np.float32, np.float64):
+            # we need to special-case None as np.nan, or the xarray omits the coordinate value
             if value is None:
                 value = np.nan
-                print(field, 'None to nan')
 
         coords[field].values[:] = value
 

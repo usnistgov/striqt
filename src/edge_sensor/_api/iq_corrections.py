@@ -220,13 +220,13 @@ def resampling_correction(
             gain=capture.gain,
             lo_shift=capture.lo_shift,
             sample_rate=capture.sample_rate,
-            analysis_bandwidth=capture.analysis_bandwidth,
+            analysis_bandwidth=capture.analysis_bandwidth or np.nan,
             host_resample=capture.host_resample,
         )
 
         try:
             sel = corrections.power_correction.sel(**exact_matches, drop=True)
-        except KeyError as ex:
+        except KeyError:
             misses = _describe_missing_data(corrections, exact_matches)
             exc = KeyError(f'missing calibration data: {misses}')
         else:
