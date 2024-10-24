@@ -267,8 +267,12 @@ class SoapyRadioDevice(RadioDevice):
         # applying the time of the next PPS
         with lb.stopwatch('synchronize sample time to pps'):
             init_pps_time = self.backend.getHardwareTime('pps')
+            start_time = time.perf_counter()
             while init_pps_time == self.backend.getHardwareTime('pps'):
-                continue
+                if time.perf_counter() - start_time > 1.5:
+                    raise RuntimeError('no external time source pps input detected')
+                else:
+                    time.sleep(10e-3)
 
         # PPS transition occurred, should be safe to snag system time and apply it
         sys_time_now = time.time()
