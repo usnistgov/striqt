@@ -57,8 +57,8 @@ def _limit_nyquist_bandwidth(dataset: 'xr.Dataset') -> 'xr.DataArray':
     """replace float('inf') analysis bandwidth with the Nyquist bandwidth"""
 
     # return bandwidth with same shape as dataset.channel_power_time_series
-    bw = dataset.analysis_bandwidth.broadcast_like(dataset.channel_power_time_series).copy()
-    sample_rate = dataset.sample_rate.broadcast_like(dataset.channel_power_time_series)
+    bw = dataset.analysis_bandwidth.broadcast_like(dataset.channel_power_time_series).copy().squeeze()
+    sample_rate = dataset.sample_rate.broadcast_like(dataset.channel_power_time_series).squeeze()
     where = (bw == float('inf'))
     bw[where] = sample_rate[where]
     return bw
