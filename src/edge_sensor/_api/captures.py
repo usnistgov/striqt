@@ -43,7 +43,7 @@ def _describe_field(capture: 'channel_analysis.Capture', name: str):
 
     if value is None:
         value_str = 'None'
-    elif attrs.get('units', None) is not None:
+    elif attrs.get('units', None) is not None and np.isfinite(value):
         value_str = _get_unit_formatter(attrs['units'])(value)
     else:
         value_str = repr(value)
@@ -194,10 +194,6 @@ def build_coords(
         if isinstance(value, str):
             # to coerce strings as variable-length types later for storage
             coords[field] = coords[field].astype('object')
-        elif value is None and coords[field].dtype.type in (np.float16, np.float32, np.float64):
-            # we need to special-case None as np.nan, or the xarray omits the coordinate value
-            if value is None:
-                value = np.nan
 
         coords[field].values[:] = value
 

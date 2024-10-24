@@ -53,6 +53,12 @@ def _y_factor_temperature(
 
     return T
 
+def _limit_nyquist_bandwidth(dataset: 'xr.Dataset') -> 'xr.DataArray':
+    """replace float('inf') analysis bandwidth with the Nyquist bandwidth"""
+    bw = dataset.analysis_bandwidth.copy()
+    where = bw == float('inf')
+    bw[where] = dataset.sample_rate[where]
+    return bw
 
 def _y_factor_power_corrections(
     dataset: 'xr.Dataset', enr_dB: float, Tamb: float, Tref=290.0
@@ -62,7 +68,7 @@ def _y_factor_power_corrections(
     kwargs = dict(list(locals().items())[1:])
 
     k = scipy.constants.Boltzmann * 1000  # scaled from W/K to mW/K
-    B = dataset.analysis_bandwidth
+    B = _limit_nyquist_bandwidth(dataset)
     enr = 10 ** (enr_dB / 10.0)
 
     power = (
@@ -306,7 +312,7 @@ def resampling_correction(
         pad_left = (nfft_out - nfft) // 2
         pad_right = pad_left + (nfft_out - nfft) % 2
 
-        if capture.analysis_bandwidth is not None:
+        if capture.analysis_bandwidth != float('inf'):
             iqwaveform.fourier.zero_stft_by_freq(
                 freqs,
                 xstft,

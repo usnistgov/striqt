@@ -28,7 +28,7 @@ dependencies:
 - methodtools
 
   # for SoapySDR device wrappers and remote control
-- labbench
+- labbench>=0.41.0
 - rpyc
 - soapysdr
 
