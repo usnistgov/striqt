@@ -55,9 +55,12 @@ def _y_factor_temperature(
 
 def _limit_nyquist_bandwidth(dataset: 'xr.Dataset') -> 'xr.DataArray':
     """replace float('inf') analysis bandwidth with the Nyquist bandwidth"""
-    bw = dataset.analysis_bandwidth.copy()
-    where = bw == float('inf')
-    bw[where] = dataset.sample_rate[where]
+
+    # return bandwidth with same shape as dataset.channel_power_time_series
+    bw = dataset.analysis_bandwidth.broadcast_like(dataset.channel_power_time_series).copy()
+    sample_rate = dataset.sample_rate.broadcast_like(dataset.channel_power_time_series)
+    where = (bw == float('inf'))
+    bw[where] = sample_rate[where]
     return bw
 
 def _y_factor_power_corrections(
@@ -68,7 +71,7 @@ def _y_factor_power_corrections(
     kwargs = dict(list(locals().items())[1:])
 
     k = scipy.constants.Boltzmann * 1000  # scaled from W/K to mW/K
-    B = _limit_nyquist_bandwidth(dataset)
+    B =_limit_nyquist_bandwidth(dataset)
     enr = 10 ** (enr_dB / 10.0)
 
     power = (
@@ -226,13 +229,13 @@ def resampling_correction(
             gain=capture.gain,
             lo_shift=capture.lo_shift,
             sample_rate=capture.sample_rate,
-            analysis_bandwidth=capture.analysis_bandwidth,
+            analysis_bandwidth=capture.analysis_bandwidth or np.nan,
             host_resample=capture.host_resample,
         )
 
         try:
             sel = corrections.power_correction.sel(**exact_matches, drop=True)
-        except KeyError as ex:
+        except KeyError:
             misses = _describe_missing_data(corrections, exact_matches)
             exc = KeyError(f'calibration is not available for this capture: {misses}')
         else:
