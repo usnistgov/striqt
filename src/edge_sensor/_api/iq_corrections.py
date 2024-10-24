@@ -228,7 +228,7 @@ def resampling_correction(
             sel = corrections.power_correction.sel(**exact_matches, drop=True)
         except KeyError as ex:
             misses = _describe_missing_data(corrections, exact_matches)
-            exc = KeyError(f'missing calibration data: {misses}')
+            exc = KeyError(f'calibration is not available for this capture: {misses}')
         else:
             exc = None
 
