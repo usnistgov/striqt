@@ -53,12 +53,12 @@ def _y_factor_temperature(
 
     return T
 
-def _limit_nyquist_bandwidth(dataset: 'xr.Dataset') -> 'xr.DataArray':
+def _limit_nyquist_bandwidth(data: 'xr.DataArray') -> 'xr.DataArray':
     """replace float('inf') analysis bandwidth with the Nyquist bandwidth"""
 
     # return bandwidth with same shape as dataset.channel_power_time_series
-    bw = dataset.analysis_bandwidth.broadcast_like(dataset.channel_power_time_series).copy().squeeze()
-    sample_rate = dataset.sample_rate.broadcast_like(dataset.channel_power_time_series).squeeze()
+    bw = data.analysis_bandwidth.broadcast_like(data).copy().squeeze()
+    sample_rate = data.sample_rate.broadcast_like(data).squeeze()
     where = (bw.values == float('inf'))
     bw.values[where] = sample_rate.values[where]
     return bw
@@ -71,7 +71,6 @@ def _y_factor_power_corrections(
     kwargs = dict(list(locals().items())[1:])
 
     k = scipy.constants.Boltzmann * 1000  # scaled from W/K to mW/K
-    B =_limit_nyquist_bandwidth(dataset)
     enr = 10 ** (enr_dB / 10.0)
 
     power = (
@@ -92,6 +91,8 @@ def _y_factor_power_corrections(
     T = Tref * (10 ** (noise_figure / 10) - 1)  # _y_factor_temperature(power, **kwargs)
     T.name = 'Noise temperature'
     T.attrs = {'units': 'K'}
+
+    B =_limit_nyquist_bandwidth(T)
 
     power_correction = (k * (T + enr * Tref) * B) / Pon
     power_correction.name = 'Input power scaling correction'
