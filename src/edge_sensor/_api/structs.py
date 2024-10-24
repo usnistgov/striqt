@@ -44,9 +44,7 @@ class WaveformCapture(channel_analysis.Capture, forbid_unknown_fields=True):
     sample_rate: Annotated[float, meta('Sample rate', 'S/s', gt=0)] = 15.36e6
 
     # filtering and resampling
-    analysis_bandwidth: Optional[
-        Annotated[float, meta('Waveform filter bandwidth', 'Hz', gt=0)]
-    ] = 10e6
+    analysis_bandwidth: Annotated[float, meta('Bandwidth of the analysis filter (or inf to disable)', 'Hz', gt=0)] = float('inf')
     lo_shift: Annotated[_TShift, meta('LO shift direction')] = 'none'
     host_resample: bool = True
 

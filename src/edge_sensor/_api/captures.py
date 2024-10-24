@@ -194,10 +194,6 @@ def build_coords(
         if isinstance(value, str):
             # to coerce strings as variable-length types later for storage
             coords[field] = coords[field].astype('object')
-        elif value is None and coords[field].dtype.type in (np.float16, np.float32, np.float64):
-            if value is None:
-                value = np.nan
-                print(field, 'None to nan')
 
         coords[field].values[:] = value
 

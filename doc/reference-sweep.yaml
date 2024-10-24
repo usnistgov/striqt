@@ -91,13 +91,15 @@ defaults:
   gain: -10 # dB
 
   # acquisition duration (s)
-  duration: 0.5 
+  duration: 0.1
 
   # waveform sample rate (samples/s)
   sample_rate: 15.36e6
 
-  # filter bandwidth
-  analysis_bandwidth: 10e6
+  # filter bandwidth:
+  # - bandwidth of a digital filter to apply to the waveform (Hz), or
+  # - 'inf' to skip filtering
+  analysis_bandwidth: inf
 
   # digitally shift the LO out of the acquisition band: 'left', 'right', 'none'
   lo_shift: none
