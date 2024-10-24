@@ -24,7 +24,7 @@ dependencies:
 - humanfriendly
 - array-api-compat
 - methodtools
-- labbench
+- labbench>=0.41.0
 - rpyc
 - soapysdr
 - xarray
