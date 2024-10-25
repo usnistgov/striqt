@@ -7,11 +7,13 @@ channels:
 - nvidia
 - file://opt/deepwave/conda-channels/airstack-conda
 dependencies:
-  # python3.9 is the most recent supported by the air-t platform board
+  # python3.9 is the most recent supported by the Air-T Jetson stack
 - python=3.9
 - pip
 - jupyter
 - ruff
+- conda-lock
+- ensureconda=1.4.3
 - pandas<2
 - scipy>=1.9.2
 - seaborn>=0.12

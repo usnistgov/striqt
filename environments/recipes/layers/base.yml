@@ -6,11 +6,13 @@ channels:
   - conda-forge
 
 dependencies:
-  # python3.9 is the most recent supported by the air-t platform board
+  # python3.9 is the most recent supported by the Air-T Jetson stack
   - python=3.9
   - pip
   - jupyter
   - ruff
+  - conda-lock
+  - ensureconda=1.4.3  
 
   # hard-coded on behalf of pip for iqwaveform
   - pandas<2
@@ -26,6 +28,7 @@ dependencies:
   - humanfriendly
   - array-api-compat
   - methodtools
+
 
   # for SoapySDR device wrappers and remote control
   - labbench
