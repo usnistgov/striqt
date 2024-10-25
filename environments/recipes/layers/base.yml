@@ -52,7 +52,6 @@ dependencies:
   - pip:
       - iqwaveform @ git+https://github.com/usnistgov/iqwaveform
       - xarray_dataclasses @ git+https://github.com/dgkuester/xarray-dataclasses@lazy-imports
-        #   - ssmdevices
 
       # allows imports from the src/ directory in this repo
       - -e ..
