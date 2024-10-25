@@ -2,7 +2,6 @@ from __future__ import annotations
 import typing
 import itertools
 
-from frozendict import frozendict
 import msgspec
 
 from . import captures, util
@@ -12,17 +11,19 @@ from . import structs
 
 
 if typing.TYPE_CHECKING:
+    import frozendict
     import xarray as xr
     import labbench as lb
     import channel_analysis
 else:
+    frozendict = util.lazy_import('frozendict')
     xr = util.lazy_import('xarray')
     lb = util.lazy_import('labbench')
     channel_analysis = util.lazy_import('channel_analysis')
 
 
-def freezefromkeys(d: dict | frozendict, keys: list[str]) -> frozendict:
-    return frozendict({k: d[k] for k in keys})
+def freezefromkeys(d: dict | 'frozendict.frozendict', keys: list[str]) -> 'frozendict.frozendict':
+    return frozendict.frozendict({k: d[k] for k in keys})
 
 
 def sweep_touches_gpu(sweep: structs.Sweep):
