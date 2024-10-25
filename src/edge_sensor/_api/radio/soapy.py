@@ -8,8 +8,6 @@ from labbench import paramattr as attr
 from .base import RadioDevice, design_capture_filter
 from .. import structs
 
-import SoapySDR
-
 if typing.TYPE_CHECKING:
     import numpy as np
     import pandas as pd
@@ -461,7 +459,7 @@ class SoapyRadioDevice(RadioDevice):
             )
 
     @_verify_channel_setting
-    def _read_stream(self, samples: int) -> tuple[np.ndarray, pd.Timestamp]:
+    def _read_stream(self, samples: int) -> tuple['np.ndarray', 'pd.Timestamp']:
         timeout = max(round(samples / self.backend_sample_rate() * 1.5), 50e-3)
 
         timestamp = self._next_timestamp
