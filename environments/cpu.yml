@@ -11,11 +11,9 @@ dependencies:
 - pip
 - jupyter
 - ruff
-- conda-lock
-- ensureconda=1.4.3
 
   # hard-coded on behalf of pip for iqwaveform
-- pandas<2
+- pandas>=1.5,<2
 - scipy>=1.9.2
 - seaborn>=0.12
 - numpy>=1.21,<2
@@ -31,13 +29,13 @@ dependencies:
 
 
   # for SoapySDR device wrappers and remote control
-- labbench
-- rpyc
+- labbench>=0.42.0,<1
+- rpyc>=5.3,<6
 - soapysdr
 
   # data management (including zarr and data chunking in xarray)
 - xarray
-- zarr
+- zarr>=2.18,<3
 - dask
 - msgspec
 - frozendict
