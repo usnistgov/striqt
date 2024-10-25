@@ -32,7 +32,7 @@ RADIO_ID_NAME = 'radio_id'
 
 
 @functools.lru_cache
-def _get_unit_formatter(units: str) -> ticker.EngFormatter:
+def _get_unit_formatter(units: str) -> 'ticker.EngFormatter':
     return ticker.EngFormatter(unit=units)
 
 
