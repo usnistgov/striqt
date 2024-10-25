@@ -11,18 +11,18 @@ from . import radio
 
 
 if typing.TYPE_CHECKING:
+    import labbench as lb
+    import matplotlib
+    import numpy as np
     import pandas as pd
     import xarray as xr
-    import labbench as lb
-    import numpy as np
-    from matplotlib import ticker
     import channel_analysis
 else:
+    lb = util.lazy_import('labbench')
+    matplotlib = util.lazy_import('matplotlib')
+    np = util.lazy_import('numpy')
     pd = util.lazy_import('pandas')
     xr = util.lazy_import('xarray')
-    lb = util.lazy_import('labbench')
-    np = util.lazy_import('numpy')
-    ticker = util.lazy_import('matplotlib.ticker')
     channel_analysis = util.lazy_import('channel_analysis')
 
 
@@ -32,8 +32,8 @@ RADIO_ID_NAME = 'radio_id'
 
 
 @functools.lru_cache
-def _get_unit_formatter(units: str) -> 'ticker.EngFormatter':
-    return ticker.EngFormatter(unit=units)
+def _get_unit_formatter(units: str) -> 'matplotlib.ticker.EngFormatter':
+    return matplotlib.ticker.EngFormatter(unit=units)
 
 
 def _describe_field(capture: 'channel_analysis.Capture', name: str):
