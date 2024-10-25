@@ -270,7 +270,7 @@ class SoapyRadioDevice(RadioDevice):
             start_time = time.perf_counter()
             while init_pps_time == self.backend.getHardwareTime('pps'):
                 if time.perf_counter() - start_time > 1.5:
-                    raise RuntimeError('no external time source pps input detected')
+                    raise RuntimeError('no pps input detected for external time source')
                 else:
                     time.sleep(10e-3)
 

@@ -3,14 +3,16 @@
 name: flex-spectrum-sensor
 
 channels:
-- nvidia
 - conda-forge
+
 dependencies:
   # python3.9 is the most recent supported by the air-t platform board
 - python=3.9
 - pip
 - jupyter
 - ruff
+
+  # hard-coded on behalf of pip for iqwaveform
 - pandas<2
 - scipy>=1.9.2
 - seaborn>=0.12
@@ -24,19 +26,28 @@ dependencies:
 - humanfriendly
 - array-api-compat
 - methodtools
-- labbench>=0.41.0
+
+  # for SoapySDR device wrappers and remote control
+- labbench
 - rpyc
 - soapysdr
+
+  # data management (including zarr and data chunking in xarray)
 - xarray
 - zarr
 - dask
 - msgspec
 - frozendict
+
+  # git repository introspection support for metadata
 - dulwich
+
+  # for environment.yml autogeneration
 - ruamel.yaml
+
+  # for documentation
 - schemdraw
-- cupy ~= 12.2
-- cython
+
 - pip:
   - iqwaveform @ git+https://github.com/usnistgov/iqwaveform
   - xarray_dataclasses @ git+https://github.com/dgkuester/xarray-dataclasses@lazy-imports

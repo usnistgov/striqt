@@ -10,9 +10,9 @@ In order to accommodate broad support for legacy CUDA platforms, the required ve
 1. Ensure that `conda` is installed (or `mamba`/`micromamba`, substituted in what follows)
 2. Clone this repository
 3. Select a predefined environment based on use-case and hardware:
-    - `environments/channel-analysis-cpu.yml`: Analyze pre-recorded IQ (cross-platform, CPU only)
-    - `environments/channel-analysis-cpu-cuda.yml`: Analyze pre-recorded IQ (cross-platform, CPU or CUDA GPU)
-    - `environments/edge-sensor-airt.yml`: Real-time sensing and analysis running on AirT/AirStack radios
+    - `environments/cpu.yml`: Analyze pre-recorded IQ or run remote control (cross-platform, CPU only)
+    - `environments/gpu-cpu.yml`: Analyze pre-recorded IQ or run remote control (cross-platform, CPU or CUDA GPU)
+    - `environments/edge-airt.yml`: Signal acquisition and analysis to run on AirT/AirStack radios
 4. Create the chosen environment:
     ```sh
         conda env create -f <path-to-environment-here.yml>

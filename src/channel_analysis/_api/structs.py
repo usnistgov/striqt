@@ -4,14 +4,15 @@ import typing
 from typing import Annotated
 from typing import Optional
 from . import util
-from frozendict import frozendict
 import msgspec
 
 
 if typing.TYPE_CHECKING:
+    from frozendict import frozendict
     import pandas as pd
 else:
     pd = util.lazy_import('pandas')
+    frozendict = util.lazy_import('frozendict')
 
 
 def meta(standard_name: str, unit: str | None = None, **kws) -> msgspec.Meta:
