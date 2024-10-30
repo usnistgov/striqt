@@ -26,10 +26,12 @@ def _verify_channel_setting(func: callable) -> callable:
     # TODO: fix typing
     @wraps(func)
     def wrapper(self, *args, **kws):
+        if not self.isopen:
+            raise RuntimeError('open radio first')
         if self.channel() is None:
-            raise ValueError(f'set {self}.channel first')
-        else:
-            return func(self, *args, **kws)
+            raise RuntimeError(f'set {self}.channel first')
+        
+        return func(self, *args, **kws)
 
     return wrapper
 
