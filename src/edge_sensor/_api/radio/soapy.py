@@ -281,9 +281,9 @@ class SoapyRadioDevice(RadioDevice):
         if frac_secs > 0.8:
             # System time is lagging behind the PPS transition
             full_secs += 1
-        elif frac_secs > 0.25:
+        elif frac_secs > 0.2:
             # System time and PPS are off, warn caller
-            self._logger.warning('System time and PPS not synced, check NTP settings')
+            self._logger.warning(f'system time and PPS out of sync by {frac_secs:0.3f}s, check NTP')
         time_to_set_ns = int((full_secs + 1) * 1e9)
         self.backend.setHardwareTime(time_to_set_ns, 'pps')
 
