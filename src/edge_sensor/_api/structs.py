@@ -1,7 +1,6 @@
 """data structures for configuration of radio hardware, captures, and sweeps"""
 
 from __future__ import annotations
-from frozendict import frozendict  # noqa: F401
 import functools
 import msgspec
 import typing

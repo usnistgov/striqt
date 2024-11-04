@@ -8,8 +8,6 @@ import dataclasses
 import inspect
 import typing
 
-from frozendict import frozendict
-
 from ..._api import structs, util
 
 
@@ -114,7 +112,7 @@ class ChannelAnalysisResult(collections.UserDict):
     data: typing.Union['iqwaveform.util.Array', dict]
     capture: structs.RadioCapture
     parameters: dict[str, typing.Any]
-    attrs: list[str] = frozendict()
+    attrs: list[str] = {}
 
     def to_xarray(self) -> 'xr.DataArray':
         return channel_dataarray(
