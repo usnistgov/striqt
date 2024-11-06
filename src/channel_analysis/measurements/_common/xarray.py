@@ -14,13 +14,11 @@ from ..._api import structs, util
 if typing.TYPE_CHECKING:
     import numpy as np
     import xarray as xr
-    import array_api_compat
     import iqwaveform
     from xarray_dataclasses import datamodel, dataarray
 else:
     np = util.lazy_import('numpy')
     xr = util.lazy_import('xarray')
-    array_api_compat = util.lazy_import('array_api_compat')
     iqwaveform = util.lazy_import('iqwaveform')
     datamodel = util.lazy_import('xarray_dataclasses.datamodel')
     dataarray = util.lazy_import('xarray_dataclasses.dataarray')
@@ -109,35 +107,18 @@ class ChannelAnalysisResult(collections.UserDict):
     """
 
     datacls: type
-    data: typing.Union['iqwaveform.util.Array', dict]
+    data: typing.Union['np.ndarray', dict]
     capture: structs.RadioCapture
     parameters: dict[str, typing.Any]
-    attrs: list[str] = {}
+    attrs: dict[str] = dataclasses.field(default_factory=dict)
 
     def to_xarray(self) -> 'xr.DataArray':
         return channel_dataarray(
             cls=self.datacls,
-            data=_to_maybe_nested_numpy(self.data),
+            data=self.data,
             capture=self.capture,
             parameters=self.parameters,
         ).assign_attrs(self.attrs)
-
-
-def _to_maybe_nested_numpy(obj: tuple | list | dict | 'iqwaveform.util.Array'):
-    """convert an array, or a container of arrays, into a numpy array (or container of numpy arrays)"""
-
-    if isinstance(obj, (tuple, list)):
-        return [_to_maybe_nested_numpy(item) for item in obj]
-    elif isinstance(obj, dict):
-        return [_to_maybe_nested_numpy(item) for item in obj.values()]
-    elif array_api_compat.is_torch_array(obj):
-        return obj.cpu()
-    elif array_api_compat.is_cupy_array(obj):
-        return obj.get()
-    elif array_api_compat.is_numpy_array(obj):
-        return obj
-    else:
-        raise TypeError(f'obj type {type(obj)} is unrecognized')
 
 
 def select_parameter_kws(locals_: dict, omit=('capture', 'out')) -> dict:

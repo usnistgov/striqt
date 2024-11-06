@@ -6,16 +6,15 @@ import typing
 import labbench as lb
 from labbench import paramattr as attr
 import msgspec
+import numpy as np
 from .. import structs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
-    import pandas as pd
-    import numpy as np
+    import pandas as pd    
 else:
     iqwaveform = util.lazy_import('iqwaveform')
     pd = util.lazy_import('pandas')
-    np = util.lazy_import('numpy')
 
 
 TRANSIENT_HOLDOFF_WINDOWS = 1
@@ -94,10 +93,12 @@ class RadioDevice(lb.Device):
         size_in = 2 * samples_in
 
         if self._inbuf is None or self._inbuf.size < size_in:
+            if self._inbuf is not None:
+                self._inbuf.shm.unlink()
             self._logger.debug(
                 f'allocating input sample buffer ({size_in * 2 /1e6:0.2f} MB)'
             )
-            self._inbuf = np.empty((size_in,), dtype=np.float32)
+            self._inbuf = util.empty_shared_array((size_in,), dtype=np.float32, free_on_del=True)
             self._logger.debug('done')
 
     def acquire(
@@ -115,10 +116,11 @@ class RadioDevice(lb.Device):
                 self.arm(capture)
 
             if not self.channel_enabled():
+                self._prepare_buffer(capture)
                 self.channel_enabled(True)
 
-            self._prepare_buffer(capture)
             iq, timestamp = self._read_stream(count)
+            timestamp = pd.Timestamp(timestamp, unit='s')
 
             if not self.gapless_repeats or next_capture != capture:
                 self.channel_enabled(False)

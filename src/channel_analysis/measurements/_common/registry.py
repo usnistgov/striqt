@@ -16,12 +16,39 @@ from .xarray import ChannelAnalysisResult
 if typing.TYPE_CHECKING:
     import numpy as np
     from xarray_dataclasses import dataarray
+    import array_api_compat
+    import iqwaveform
+    from ..._api import shmarray
 else:
     np = util.lazy_import('numpy')
     dataarray = util.lazy_import('xarray_dataclasses.dataarray')
+    array_api_compat = util.lazy_import('array_api_compat')
+    iqwaveform = util.lazy_import('iqwaveform')
+
+    # TODO: figure out a proper relative import here to work properly
+    shmarray = util.lazy_import('channel_analysis._api.shmarray')
 
 
 TFunc = typing.Callable[..., typing.Any]
+
+
+def _results_as_shared_arrays(obj: tuple | list | dict | 'iqwaveform.util.Array'):
+    """convert an array, or a container of arrays, into a numpy array (or container of numpy arrays)"""
+
+    if isinstance(obj, (tuple, list)):
+        return [_results_as_shared_arrays(item) for item in obj]
+    elif isinstance(obj, dict):
+        return [_results_as_shared_arrays(item) for item in obj.values()]
+    elif array_api_compat.is_torch_array(obj):
+        array = obj.cpu()
+    elif array_api_compat.is_cupy_array(obj):
+        array = obj.get()
+    elif array_api_compat.is_numpy_array(obj) or isinstance(obj, shmarray.NDSharedArray):
+        array = obj
+    else:
+        raise TypeError(f'obj type {type(obj)} is unrecognized')
+
+    return shmarray.NDSharedArray(array)
 
 
 class KeywordArguments(msgspec.Struct):
@@ -75,7 +102,7 @@ class ChannelAnalysisRegistryDecorator(collections.UserDict):
 
                 return ChannelAnalysisResult(
                     xarray_datacls,
-                    result,
+                    _results_as_shared_arrays(result),
                     capture,
                     parameters=call_params,
                     attrs=ret_metadata,
