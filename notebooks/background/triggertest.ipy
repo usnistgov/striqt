@@ -13,7 +13,9 @@ sdr.open()
 sdr.arm(capture)
 
 size, _ = base.get_capture_buffer_sizes(sdr, capture, include_holdoff=True)
-%timeit -n1 -r1 trigger.empty_shared_array(size)
+a, info = trigger.empty_shared_array(size)
+
+%timeit trigger.get_shared_array(*info)
 
 # remaining = int(capture.duration*capture.sample_rate)
 # timeout = 0.25

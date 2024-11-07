@@ -16,12 +16,11 @@ if typing.TYPE_CHECKING:
     import pandas as pd
     import SoapySDR
     import iqwaveform
-    from channel_analysis._api import shmarray
 else:
     np = lb.util.lazy_import('numpy')
     pd = lb.util.lazy_import('pandas')
     SoapySDR = lb.util.lazy_import('SoapySDR')
-    shmarray = lb.util.lazy_import('channel_analysis._api.shmarray')
+    iqwaveform = lb.util.lazy_import('iqwaveform')
 
 
 channel_kwarg = attr.method_kwarg.int('channel', min=0, help='hardware port number')
@@ -302,7 +301,8 @@ class SoapyRadioDevice(RadioDevice):
                 # timeNs=self.backend.getHardwareTime('now'),
             )
         else:
-            self.backend.deactivateStream(self.rx_stream)
+            if self.rx_stream is not None:
+                self.backend.deactivateStream(self.rx_stream)
 
     @attr.method.float(label='dB', help='SDR hardware gain')
     @_verify_channel_for_getter
@@ -341,8 +341,8 @@ class SoapyRadioDevice(RadioDevice):
 
         for channel in 0, 1:
             self.backend.setGainMode(SoapySDR.SOAPY_SDR_RX, channel, False)
-        self.channel(0)
-        self.channel_enabled(False)
+        # self.channel(0)
+        # self.channel_enabled(False)
 
     def _post_connect(self):
         pass
@@ -401,9 +401,13 @@ class SoapyRadioDevice(RadioDevice):
     def arm(self, capture: structs.RadioCapture):
         """apply a capture configuration"""
 
+        if self.channel() is None:
+            # current channel was unset
+            self.channel(capture.channel)
+
         if capture == self.get_capture_struct():
             return
-
+        
         if iqwaveform.power_analysis.isroundmod(
             capture.duration * capture.sample_rate, 1
         ):
@@ -413,8 +417,8 @@ class SoapyRadioDevice(RadioDevice):
                 f'duration {capture.duration} is not an integer multiple of sample period'
             )
 
-        if capture.channel != self.channel():
-            self.channel(capture.channel)
+        # if capture.channel != self.channel():
+        #     self.channel(capture.channel)
 
         if self.gain() != capture.gain:
             self.gain(capture.gain)
@@ -462,8 +466,10 @@ class SoapyRadioDevice(RadioDevice):
             # channel not yet set
             pass
 
+
         try:
-            self.backend.closeStream(self.rx_stream)
+            if getattr(self, 'rx_stream', None) is not None:
+                self.backend.closeStream(self.rx_stream)
         except ValueError as ex:
             if 'invalid parameter' in str(ex):
                 # already closed

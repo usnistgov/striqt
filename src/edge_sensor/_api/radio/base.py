@@ -11,10 +11,12 @@ from .. import structs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
-    import pandas as pd    
+    import pandas as pd
+    from channel_analysis._api import shmarray    
 else:
     iqwaveform = util.lazy_import('iqwaveform')
     pd = util.lazy_import('pandas')
+    shmarray = lb.util.lazy_import('channel_analysis._api.shmarray')
 
 
 TRANSIENT_HOLDOFF_WINDOWS = 1
@@ -98,7 +100,7 @@ class RadioDevice(lb.Device):
             self._logger.debug(
                 f'allocating input sample buffer ({size_in * 2 /1e6:0.2f} MB)'
             )
-            self._inbuf = util.empty_shared_array((size_in,), dtype=np.float32, free_on_del=True)
+            self._inbuf = np.empty((size_in,), dtype=np.float32)
             self._logger.debug('done')
 
     def acquire(

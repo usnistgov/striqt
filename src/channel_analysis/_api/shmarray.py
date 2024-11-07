@@ -45,12 +45,19 @@ class NDSharedArray(np.ndarray):
         if self.shm is None:
             return
         elif self._free_on_del:
-            try:
-                self.shm.unlink()
-            except FileNotFoundError:
-                pass
+            self.free()
         else:
             self.shm.close()
+
+    def persist(self):
+        self._free_on_del = False
+
+    def free(self):
+        try:
+            print('free')
+            self.shm.unlink()
+        except FileNotFoundError:
+            pass
 
     def __reduce__(self):
         # return the shared memory reference info for pickling
