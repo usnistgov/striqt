@@ -42,38 +42,44 @@ def find_trigger_holdoff(start_time, sample_rate, periodic_trigger: float|None):
 
 
 class ThreadedRXStream:
-    def __init__(self, radio: RadioDevice, capture: structs.RadioCapture, xp=np):
+    def __init__(self, radio: RadioDevice, xp=np):
         self._thread = None
         self.radio = radio
         self._xp = xp
-        self.arm(capture)
+
+        self._result = None, None, None
+        self._running = threading.Event()
+        self._acquired = threading.Event()
+        self._acq_request = threading.Event()
+        self._stop_req = threading.Event()
+        self._trigger_interrupt_req = threading.Event()
 
     def arm(self, capture: structs.RadioCapture):
+        if self.is_running():
+            self.stop()
+
         self.capture = capture
 
         buf_size_in, self._buf_out_size = get_capture_buffer_sizes(self.radio, capture, include_holdoff=True)
         self.sample_count, _ = get_capture_buffer_sizes(self.radio, capture, include_holdoff=False)
 
         self._buf_in = np.empty((2*buf_size_in,), dtype=np.float32)
-        self._result = None, None
-        self._running = threading.Event()
-        self._acquired = threading.Event()
-        self._request = threading.Event()
-        self._stop = threading.Event()
-        self._trigger = threading.Event()
+        
         self._thread_exc = None
 
-    def _fill_buffer(self, start_time=None, holdover_samples: 'np.ndarray[np.complex64]'=None) -> tuple['np.ndarray[np.complex64]', float]:
+        self.start()
+
+    def _fill_buffer(self, buf_time_ns=None, holdover_samples: 'np.ndarray[np.complex64]'=None) -> tuple['np.ndarray[np.complex64]', float]:
         fs = self.radio.backend_sample_rate()
         chunk_size = min(int(50e-3*fs), self.sample_count)
 
-        if start_time is None and holdover_samples is not None:
+        if buf_time_ns is None and holdover_samples is not None:
             raise ValueError('when start time is None, holdover_samples must also be None')
 
-        holdoff = 0
+        holdoff_size = 0
         streamed_count = 0
         timeout_sec = chunk_size / fs + 50e-3
-        timestamp_ns = start_time
+        acq_start_ns = buf_time_ns
 
         if holdover_samples is None:
             holdover_count = 0
@@ -83,14 +89,14 @@ class ThreadedRXStream:
             self._buf_in[:2*holdover_count] = holdover_samples.view(self._buf_in.dtype)
 
         remaining = self.sample_count - holdover_count
-        first = True
+        awaiting_timestamp = True
 
         while remaining > 0:
-            if self._stop.is_set() or self._trigger.is_set():
-                if start_time is None:
-                    return None, start_time
+            if self._stop_req.is_set() or self._trigger_interrupt_req.is_set():
+                if buf_time_ns is None:
+                    return None, buf_time_ns
                 else:
-                    return None, start_time + round(1e9*streamed_count/fs)
+                    return None, buf_time_ns + round((streamed_count * 1_000_000_000)/fs)
 
             if streamed_count > 0 or self.radio.gapless_repeats:
                 on_overflow='except'
@@ -106,26 +112,23 @@ class ThreadedRXStream:
                 on_overflow=on_overflow
             )
 
-            if start_time is None:
+            if buf_time_ns is None:
                 # special case for the first read in the stream, since
                 # devices may not always return timestamps
-                start_time = ret_time_ns
+                buf_time_ns = ret_time_ns
 
-                if start_time == 0:
-                    raise RuntimeError('no timestamp')
+            if awaiting_timestamp:
+                holdoff_size = find_trigger_holdoff(buf_time_ns, fs, self.radio.periodic_trigger)
+                remaining = remaining + holdoff_size
+                
+                acq_start_ns = buf_time_ns + round((holdoff_size * 1_000_000_000) / fs)
+                awaiting_timestamp = False
 
-            if first:
-                holdoff = find_trigger_holdoff(start_time, fs, self.radio.periodic_trigger)
-
-                remaining = remaining + holdoff
-                timestamp_ns = start_time + round(1e9*holdoff / fs)
-
-                first = False
-
+            remaining = remaining - this_count
             streamed_count += this_count
 
-        samples = self._buf_in.view('complex64')[holdoff : self.sample_count + holdoff]
-        return samples, timestamp_ns
+        samples = self._buf_in.view('complex64')[holdoff_size : self.sample_count + holdoff_size]
+        return samples, acq_start_ns
 
     def _background_loop(self):
         """acquire samples in a loop"""
@@ -138,63 +141,69 @@ class ThreadedRXStream:
             holdover_size = self.sample_count - round(self.capture.duration * self.radio.backend_sample_rate())
         else:
             holdover_size = None
+
+        global holdover_samples
         holdover_samples = None
 
         try:
             while True:
                 samples, time_ns = self._fill_buffer(next_time_ns, holdover_samples)
-                if holdover_size is not None:
+                if holdover_size not in (None, 0):
                     holdover_samples = samples[-holdover_size:]
 
-                if self._stop.is_set():
+                if self._stop_req.is_set():
                     break
-                elif self._trigger.is_set():
+                elif self._trigger_interrupt_req.is_set():
                     # on trigger, _read_buffer returns the timestamp is at the
                     # end of its (likely incomplete) buffer read
                     # TODO: adjust the holdover buffer appropriately
                     next_time_ns = time_ns
-                    self._trigger.clear()
+                    self._trigger_interrupt_req.clear()
                     continue
 
                 try:
                     # TODO: revisit this constant
-                    self._request.wait(timeout=20e-3)
+                    self._acq_request.wait(timeout=20e-3)
                 except TimeoutError:
                     if self.radio.gapless_repeats:
                         raise OverflowError('gapless repeat acquisition failed')
                 else:
-                    # this runs if the request flag has been set by get(). copy and allocate
+                    # the request flag has been set by get(). copy and allocate
                     # first to ensure proper sequencing with the main thread
                     buf_out = self._xp.empty(self._buf_out_size, dtype=np.complex64)
+
                     buf_out[:samples.size] = self._xp.asarray(samples)
-                    self._result = buf_out, time_ns/1e9
+                    self._result = buf_out[:samples.size], buf_out, time_ns
                     self._acquired.set()
-                    self._request.clear()
+                    self._acq_request.clear()
 
                 next_time_ns = time_ns + round(1e9*self.capture.duration)
 
         except BaseException as ex:
-            self._stop.set()
             self._thread_exc = ex
+            self._stop_req.set()
 
     def start(self):
-        if self._thread is not None:
-            raise RuntimeError('already armed')
+        if self.is_running():
+            return
+
         self._acquired.clear()
-        self._request.set()
+        self._acq_request.set()
         self._running.clear()
-        self._stop.clear()
-        self._trigger.clear()
+        self._stop_req.clear()
+        self._trigger_interrupt_req.clear()
         self._thread_exc = None
         self._thread = threading.Thread(target=self._background_loop)
 
-        with lb.stopwatch('enable'):
-            self.radio.channel_enabled(True)
+        self.radio.channel_enabled(True)
 
         self._thread.start()
 
     def is_running(self):
-        running = self._thread.is_alive() and not self._stop.is_set()
+        thread = self._thread
+        if thread is None:
+            return False
+        running = thread.is_alive() and not self._stop_req.is_set()
         if not running and self._thread_exc is not None:
             raise self._thread_exc
         return running
@@ -202,7 +211,7 @@ class ThreadedRXStream:
     def get(self) -> tuple['np.ndarray', float]:
         if not self.is_running():
             raise RuntimeError('start acquisition with start() before call to get()')
-        self._request.set()
+        self._acq_request.set()
         timeout = 50e-3+self.sample_count / self.radio.backend_sample_rate()
 
         try:
@@ -215,7 +224,7 @@ class ThreadedRXStream:
         if exc:
             raise TimeoutError('receive stream buffer underflow')
 
-        samples, timestamp = self._result
+        samples, out, timestamp = self._result
 
         self._acquired.clear()
 
@@ -225,12 +234,12 @@ class ThreadedRXStream:
             else:
                 raise TimeoutError('no data')
 
-        return samples, timestamp
+        return samples, out, timestamp
 
     def stop(self):
         if self._thread is None:
             return
-        self._stop.set()
+        self._stop_req.set()
         self._thread.join()
         self._thread = None
         if self.radio.isopen:
@@ -240,7 +249,7 @@ class ThreadedRXStream:
         self.stop()
 
     def trigger(self):
-        self._trigger.set()
+        self._trigger_interrupt_req.set()
 
 
 class RadioDevice(lb.Device):
@@ -311,6 +320,9 @@ class RadioDevice(lb.Device):
     def base_clock_rate(self):
         return type(self).backend_sample_rate.max
 
+    def open(self):
+        self.stream = ThreadedRXStream(self, xp=util.import_cupy_with_fallback())
+
     def acquire(
         self,
         capture: structs.RadioCapture,
@@ -325,24 +337,20 @@ class RadioDevice(lb.Device):
             if self.get_capture_struct(type(capture)) != capture:
                 self.arm(capture)
 
-            if not self.channel_enabled():
+            elif not self.channel_enabled():
                 self.stream.start()
-                self.stream.trigger()
 
-            # TODO: pull from trigger object
-            iq, timestamp = self._read_stream*5
-            timestamp = pd.Timestamp(timestamp, unit='s')
+            iq, out, timestamp = self.stream.get()
+            timestamp = pd.Timestamp(timestamp, unit='ns')
 
             if not self.gapless_repeats or next_capture != capture:
                 self.channel_enabled(False)
 
             if next_capture is not None:
                 self.arm(next_capture)
-                self.stream.start()
-                self.stream.trigger()
 
             if correction:
-                iq = iq_corrections.resampling_correction(iq, capture, self)
+                iq = iq_corrections.resampling_correction(iq, capture, self, out=out)
 
             acquired_capture = structs.copy_struct(capture, start_time=timestamp)
             return iq, acquired_capture
@@ -366,9 +374,6 @@ class RadioDevice(lb.Device):
                 self.sync_time_source()
 
             return
-
-        if self.stream is not None:
-            self.stream.stop()
 
         if iqwaveform.power_analysis.isroundmod(
             capture.duration * capture.sample_rate, 1
@@ -402,6 +407,12 @@ class RadioDevice(lb.Device):
         if capture.sample_rate != self.sample_rate():
             self.sample_rate(capture.sample_rate)
 
+        if self.periodic_trigger is not None and capture.duration < self.periodic_trigger:
+            self._logger.warning(
+                'periodic trigger duration exceeds capture duration, '
+                'which creates a large buffer of unused samples'
+            )
+
         if lo_offset != self.lo_offset:
             self.lo_offset = lo_offset  # hold update on this one?
 
@@ -413,7 +424,7 @@ class RadioDevice(lb.Device):
         if self.time_sync_each_capture:
             self.sync_time_source()
 
-        self.stream = ThreadedRXStream(self, capture, xp=util.import_cupy_with_fallback())
+        self.stream.arm(capture)
 
     def _read_stream(self, buffers, offset, count, timeout_sec, *, on_overflow='except') -> tuple[int, int]:
         """to be implemented in subclasses"""

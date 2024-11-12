@@ -177,6 +177,7 @@ def resampling_correction(
     force_calibration: typing.Optional['xr.Dataset'] = None,
     *,
     axis=0,
+    out=None
 ):
     """apply a bandpass filter implemented through STFT overlap-and-add.
 
@@ -205,14 +206,19 @@ def resampling_correction(
 
     xp = util.import_cupy_with_fallback()
 
-    # create a buffer large enough for post-processing seeded with a copy of the IQ
     _, buf_size = get_capture_buffer_sizes(radio, capture)
 
-    if nfft_out > nfft:
-        buf_size = ceil(buf_size * nfft_out / nfft)
-    buf = xp.empty(buf_size, dtype='complex64')
-    buf[: iq.size] = xp.asarray(iq)
-    iq = buf[: iq.size]
+    if out is None:
+        # create a buffer large enough for post-processing seeded with a copy of the IQ
+        if nfft_out > nfft:
+            buf_size = ceil(buf_size * nfft_out / nfft)
+        buf = xp.empty(buf_size, dtype='complex64')
+        buf[: iq.size] = xp.asarray(iq)
+        iq = buf[: iq.size]
+    else:
+        if out.size < buf_size:
+            raise ValueError('resampling output buffer is too small')
+        buf = out
 
     if force_calibration is not None:
         corrections = force_calibration

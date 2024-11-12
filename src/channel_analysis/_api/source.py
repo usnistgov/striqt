@@ -89,14 +89,14 @@ def filter_iq_capture(
 
 
 def simulated_awgn(
-    capture: structs.Capture, *, power: float = 1, xp=np, pinned_cuda=False, out=None
+    capture: structs.Capture, *, power: float = 1, xp=np, pinned_cuda=False, seed=None, out=None
 ) -> 'iqwaveform.util.Array':
     try:
         # e.g., numpy
-        bitgen = xp.random.PCG64()
+        bitgen = xp.random.PCG64(seed=seed)
     except AttributeError:
         # e.g., cupy
-        bitgen = xp.random.MRG32k3a()
+        bitgen = xp.random.MRG32k3a(seed=seed)
 
     generator = xp.random.Generator(bitgen)
     size = round(capture.duration * capture.sample_rate)
