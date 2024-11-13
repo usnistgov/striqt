@@ -68,10 +68,11 @@ class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):
     driver: str = 'AirT7x01B'
     resource: Any = None
     time_source: Literal['host', 'internal', 'external', 'gps'] = 'host'
+    continuous_trigger: Annotated[bool, meta('Whether to trigger immediately after each call to acquire() when armed')] = True
     periodic_trigger: Optional[float] = None
     calibration: Optional[str] = None
     gapless_repeats: bool = False
-    time_sync_each_capture: bool = False
+    time_sync_every_capture: bool = False
 
 
 class Description(msgspec.Struct, forbid_unknown_fields=True):

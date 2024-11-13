@@ -54,7 +54,6 @@ class NDSharedArray(np.ndarray):
 
     def free(self):
         try:
-            print('free')
             self.shm.unlink()
         except FileNotFoundError:
             pass

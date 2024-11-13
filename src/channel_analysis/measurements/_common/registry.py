@@ -48,7 +48,7 @@ def _results_as_shared_arrays(obj: tuple | list | dict | 'iqwaveform.util.Array'
     else:
         raise TypeError(f'obj type {type(obj)} is unrecognized')
 
-    return array#shmarray.NDSharedArray(array)
+    return shmarray.NDSharedArray(array)
 
 
 class KeywordArguments(msgspec.Struct):

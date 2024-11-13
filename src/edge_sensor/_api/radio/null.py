@@ -98,7 +98,7 @@ class NullSource(RadioDevice):
 
     @channel_enabled.setter
     def _(self, enable: bool):
-        self.reset_timestamp()
+        self.reset_sample_counter()
         self.backend['channel_enabled'] = enable
 
     @attr.method.float(label='dB', help='SDR hardware gain')
@@ -119,10 +119,8 @@ class NullSource(RadioDevice):
 
     def open(self):
         self._logger.propagate = False
-        self.reset_timestamp()
+        self.reset_sample_counter()
         self.backend = {}
-        self.channel(0)
-        self.channel_enabled(False)
 
     @attr.property.str(inherit=True)
     def id(self):
@@ -134,19 +132,21 @@ class NullSource(RadioDevice):
 
     def _read_stream(self, buffers, offset, count, timeout_sec=None, *, on_overflow='except') -> tuple[int,int]:
         xp = iqwaveform.util.array_namespace(buffers[0])
-        timestamp = offset / self.backend_sample_rate()
+        timestamp_ns = (1_000_000_000 * self._sample_count) / float(self.backend_sample_rate())
 
         for channel, buf in zip([self.channel], buffers):
-            values = self.get_waveform(count, timestamp, channel=channel, xp=xp)
+            values = self.get_waveform(count, self._sample_count, channel=channel, xp=xp)
             buf[2*offset : 2*(offset + count)] = values.view('float32')
 
-        return count, round(timestamp * 1_000_000_000)
+        self._sample_count += count
 
-    def get_waveform(self, count, timestamp_sec: float, *, channel: int = 0, xp):
+        return count, round(timestamp_ns)
+
+    def get_waveform(self, count, start_index: int, *, channel: int = 0, xp):
         return xp.empty(count, dtype='complex64')
     
-    def reset_timestamp(self):
-        self._time_ns = 0
+    def reset_sample_counter(self):
+        self._sample_count = 0
 
 
 class NullRadio(NullSource):

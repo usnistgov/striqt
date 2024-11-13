@@ -145,9 +145,11 @@ class SoapyRadioDevice(RadioDevice):
         else:
             if getattr(self, '_rx_stream', None) is not None:
                 self.backend.closeStream(self._rx_stream)
-            self._rx_stream = self.backend.setupStream(
-                SoapySDR.SOAPY_SDR_RX, SoapySDR.SOAPY_SDR_CF32, [channel]
-            )
+
+            with lb.stopwatch('stream setup', logger_level='debug'):
+                self._rx_stream = self.backend.setupStream(
+                    SoapySDR.SOAPY_SDR_RX, SoapySDR.SOAPY_SDR_CF32, [channel]
+                )
 
     @attr.method.float(
         min=0,
@@ -224,6 +226,7 @@ class SoapyRadioDevice(RadioDevice):
                 # timeNs=self.backend.getHardwareTime('now'),
             )
         else:
+            self.stream.stop()
             if self._rx_stream is not None:
                 self.backend.deactivateStream(self._rx_stream)
 
@@ -277,7 +280,7 @@ class SoapyRadioDevice(RadioDevice):
     @_verify_channel_setting
     def _read_stream(self, buffers, offset, count, timeout_sec, *, on_overflow='except') -> tuple[int,int]:
         # Read the samples from the data buffer
-        rx_result = self.radio.backend.readStream(
+        rx_result = self.backend.readStream(
             self._rx_stream,
             [buf[offset * 2 :] for buf in buffers],
             count,
@@ -330,56 +333,6 @@ class SoapyRadioDevice(RadioDevice):
         return super().acquire(
             capture=capture, next_capture=next_capture, correction=correction
         )
-
-    def arm(self, capture: structs.RadioCapture):
-        """apply a capture configuration"""
-
-        if self.channel() is None:
-            # current channel was unset
-            self.channel(capture.channel)
-
-        if capture == self.get_capture_struct():
-            return
-        
-        if iqwaveform.power_analysis.isroundmod(
-            capture.duration * capture.sample_rate, 1
-        ):
-            self.duration = capture.duration
-        else:
-            raise ValueError(
-                f'duration {capture.duration} is not an integer multiple of sample period'
-            )
-
-        # if capture.channel != self.channel():
-        #     self.channel(capture.channel)
-
-        if self.gain() != capture.gain:
-            self.gain(capture.gain)
-
-        fs_backend, lo_offset, analysis_filter = design_capture_filter(
-            self.base_clock_rate, capture
-        )
-
-        nfft_out = analysis_filter.get('nfft_out', analysis_filter['nfft'])
-
-        downsample = analysis_filter['nfft'] / nfft_out
-
-        if fs_backend != self.backend_sample_rate() or downsample != self._downsample:
-            with attr.hold_attr_notifications(self):
-                self._downsample = 1  # temporarily avoid a potential bounding error
-            self.backend_sample_rate(fs_backend)
-            self._downsample = downsample
-
-        if capture.sample_rate != self.sample_rate():
-            self.sample_rate(capture.sample_rate)
-
-        if lo_offset != self.lo_offset:
-            self.lo_offset = lo_offset  # hold update on this one?
-
-        if capture.center_frequency != self.center_frequency():
-            self.center_frequency(capture.center_frequency)
-
-        self.analysis_bandwidth = capture.analysis_bandwidth
 
     def _needs_reenable(self, next_capture: structs.RadioCapture):
         """returns True if the channel needs to be disabled and re-enabled between the specified capture"""

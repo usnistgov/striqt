@@ -25,10 +25,10 @@ class SingleToneSource(NullSource):
         default=0.2, min=-1, max=1, help='normalized tone frequency (between -1 and 1)'
     )
 
-    def get_waveform(self, count: int, timestamp_sec: float, *, channel: int = 0, xp=np):
-        t = timestamp_sec + xp.arange(count, dtype='complex64')/self.backend_sample_rate()
+    def get_waveform(self, count, start_index: int, *, channel: int = 0, xp=np):
+        i = xp.arange(start_index, count+start_index, dtype='uint64')
         f_cw = self.sample_rate() * self.resource
-        return xp.exp((2j * np.pi * f_cw) * t + np.pi/2)
+        return xp.exp((2j * np.pi * f_cw)/self.backend_sample_rate()*i + np.pi/2).astype('complex64')
 
 
 class SawtoothSource(NullSource):
@@ -36,11 +36,11 @@ class SawtoothSource(NullSource):
         default=0.5, min=0, help='duration of the ramp normalized by acquisition duration', label='s'
     )
 
-    def get_waveform(self, count: int, timestamp_sec: float, *, channel: int = 0, xp=np):
+    def get_waveform(self, count, start_index: int, *, channel: int = 0, xp=np):
         ret = xp.empty(count, dtype='complex64')
 
         period = self.duration * self.resource
-        t = timestamp_sec + xp.arange(count, dtype='uint64')/self.backend_sample_rate()
+        t = xp.arange(start_index, count+start_index, dtype='uint64')/self.backend_sample_rate()
         ret.real[:] = (t%period)/period
         ret.imag[:] = 0
         return ret
@@ -56,14 +56,13 @@ class NoiseSource(NullSource):
         default=1e-3, min=0, help='noise waveform variance'
     )
 
-    def get_waveform(self, count: int, timestamp_sec: float, *, channel: int = 0, xp=np):
-        total_size, _ = base.get_capture_buffer_sizes(self, self.get_capture_struct())
-        capture = channel_analysis.Capture(duration=total_size/self.backend_sample_rate(), sample_rate=self.backend_sample_rate())
-        samples_elapsed = round(timestamp_sec * self.backend_sample_rate())
+    def get_waveform(self, count, start_index: int, *, channel: int = 0, xp=np):
+        count = round(self.backend_sample_rate * self.duration)
+        ii = xp.arange(start_index, count+start_index, dtype='uint64') % count
+        capture = channel_analysis.Capture(duration=self.duration, sample_rate=self.backend_sample_rate())
         x = cached_noise(capture, xp=xp)
 
-        ret = x[samples_elapsed:samples_elapsed+count]
-        return ret
+        return x[ii]
 
 
 class TDMSFileSource(NullSource):
@@ -115,7 +114,7 @@ class TDMSFileSource(NullSource):
                 f'center frequency ignored, using {actual/1e6} MHz from file'
             )
 
-    def get_waveform(self, count: int, timestamp: float, *, channel: int = 0, xp=np):
+    def get_waveform(self, count: int, offset: int, *, channel: int = 0, xp=np):
         size = int(self.backend['header_fd']['total_samples'][0])
         ref_level = self.backend['header_fd']['reference_level_dBm'][0]
 
@@ -123,8 +122,6 @@ class TDMSFileSource(NullSource):
             raise ValueError(
                 f'requested {count} samples but file capture length is {size} samples'
             )
-
-        offset = round(timestamp * self.backend_sample_rate())
 
         scale = 10 ** (float(ref_level) / 20.0) / np.iinfo(xp.int16).max
         i, q = self.backend['iq_fd'].channels()
