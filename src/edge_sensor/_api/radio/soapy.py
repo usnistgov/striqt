@@ -31,9 +31,11 @@ def _verify_channel_setting(func: callable) -> callable:
     @wraps(func)
     def wrapper(self, *args, **kws):
         if not self.isopen:
-            raise RuntimeError('open radio first')
+            name = getattr(func, '__name__', repr(func))
+            raise RuntimeError(f'open radio before calling {name}')
         if self.channel() is None:
-            raise RuntimeError(f'set {self}.channel first')
+            name = getattr(func, '__name__', repr(func))
+            raise RuntimeError(f'set {self}.channel before calling {name}')
         
         return func(self, *args, **kws)
 
@@ -45,7 +47,8 @@ def _verify_channel_for_getter(func: callable) -> callable:
     @wraps(func)
     def wrapper(self):
         if self.channel() is None:
-            raise ValueError(f'set {self}.channel first')
+            name = getattr(func, '__name__', repr(func))
+            raise RuntimeError(f'set {self}.channel before calling {name}')
         else:
             return func(self)
 
@@ -287,8 +290,9 @@ class SoapyRadioDevice(RadioDevice):
     @attr.method.bool(cache=True)
     @_verify_channel_for_getter
     def channel_enabled(self):
-        # this is only called at most once, due to cache=True
-        raise ValueError('must set channel_enabled once before reading')
+        # due to cache=True, this is only called at most once, if the first access is a set.
+        # the default in this condition is then False
+        return False
 
     @channel_enabled.setter
     @_verify_channel_for_setter
@@ -387,7 +391,6 @@ class SoapyRadioDevice(RadioDevice):
         time_to_set_ns = int((full_secs + 1) * 1e9)
         self.backend.setHardwareTime(time_to_set_ns, 'pps')
 
-    @_verify_channel_setting
     def acquire(
         self,
         capture: structs.RadioCapture,

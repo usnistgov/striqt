@@ -206,9 +206,13 @@ class RadioDevice(lb.Device):
     def sync_time_source(self):
         raise NotImplementedError
 
-    def get_capture_struct(self, cls=structs.RadioCapture) -> structs.RadioCapture:
+    def get_capture_struct(self, cls=structs.RadioCapture) -> structs.RadioCapture|None:
         """generate the currently armed capture configuration for the specified channel"""
 
+        if self.channel() is None:
+            # unset
+            return None
+        
         if self.lo_offset == 0:
             lo_shift = 'none'
         elif self.lo_offset < 0:
