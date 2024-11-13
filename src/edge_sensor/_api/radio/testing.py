@@ -57,7 +57,6 @@ class NoiseSource(NullSource):
     )
 
     def get_waveform(self, count, start_index: int, *, channel: int = 0, xp=np):
-        count = round(self.backend_sample_rate * self.duration)
         ii = xp.arange(start_index, count+start_index, dtype='uint64') % count
         capture = channel_analysis.Capture(duration=self.duration, sample_rate=self.backend_sample_rate())
         x = cached_noise(capture, xp=xp)
