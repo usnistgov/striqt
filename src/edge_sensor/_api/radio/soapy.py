@@ -1,14 +1,13 @@
 import time
 from functools import wraps
-from logging import Logger
 import typing
 
 import labbench as lb
 from labbench import paramattr as attr
+import msgspec
 
 from .base import RadioDevice, design_capture_filter
-from .. import structs, util
-from multiprocessing import Event
+from .. import structs
 
 
 if typing.TYPE_CHECKING:
@@ -67,9 +66,7 @@ def _verify_channel_for_setter(func: callable) -> callable:
     return wrapper
 
 
-def track_read_progress(
-    sr: SoapySDR.StreamResult, remaining: int, on_overflow='except', logger: Logger=None
-) -> tuple[int,int]:
+def get_stream_result(sr: SoapySDR.StreamResult, on_overflow='except') -> tuple[int,int]:
     """track the number of samples received and remaining in a read stream.
 
     Args:
@@ -77,101 +74,24 @@ def track_read_progress(
         count: the expected number of samples (1 (I,Q) pair each)
 
     Returns:
-        (samples received, samples remaining)
+        (samples received, start clock timestamp (ns))
     """
     msg = None
 
-    if logger is None:
-        logger = lb.util.logger
-
     # ensure the proper number of waveform samples was read
-    if sr.ret == remaining:
-        logger.debug(f'received all {sr.ret} samples')
-        return sr.ret, 0
-    elif sr.ret > 0:
-        logger.debug(f'received {sr.ret} samples')
-        return sr.ret, remaining - sr.ret
+    if sr.ret >= 0:
+        return sr.ret, sr.timeNs
     elif sr.ret == SoapySDR.SOAPY_SDR_OVERFLOW:
-        msg = f'{time.perf_counter()}: overflow'
         if on_overflow == 'except':
+            msg = f'{time.perf_counter()}: overflow'
             raise OverflowError(msg)
-        elif on_overflow == 'log':
-            logger._logger.debug(msg)
-        return 0, remaining
-    elif sr.ret < 0:
+        return 0, sr.timeNs
+    else:
         raise IOError(f'{SoapySDR.errToStr(sr.ret)} (error code {sr.ret})')
-    elif sr.ret == 0:
-        # no samples received
-        return 0, remaining
-
-
-def read_samples(
-    count: int,
-    *,
-    radio: SoapySDR.Device,
-    stream,
-    buffer: 'shmarray.NDSharedArray',
-    start_time=None,
-    gapless=False,
-    periodic_trigger: typing.Optional[float]=None,
-    channel=0,
-    stop_event: Event = None
-) -> tuple['shmarray.NDSharedArray', float]:
-
-    fs = radio.getSampleRate(SoapySDR.SOAPY_SDR_RX, channel)
-    timeout = max(round(count / fs * 1.5), 50e-3)
-    timestamp = start_time
-
-    remaining = count
-    block_size = int(50e-3*fs)
-    holdoff_count = None
-    total_received = 0
-
-    while remaining > 0:
-        if stop_event is not None and stop_event.is_set():
-            return None
-
-        if total_received > 0 or gapless:
-            on_overflow='except'
-        else:
-            on_overflow='ignore'
-
-        # Read the samples from the data buffer
-        rx_result = radio.readStream(
-            stream,
-            [buffer[total_received * 2 :]],
-            min(block_size, remaining),
-            timeoutUs=int(timeout * 1e6),
-        )
-
-        if timestamp is None:
-            timestamp = rx_result.timeNs / 1e9
-            if timestamp == 0:
-                raise RuntimeError('no timestamp')
-
-        if periodic_trigger not in (None, 0) and holdoff_count is None:
-            # determine the number of holdoff samples to reject
-            excess_time = timestamp % periodic_trigger
-            holdoff_count = round(fs * (periodic_trigger - excess_time))
-            remaining = remaining + holdoff_count
-            timestamp = timestamp + holdoff_count / fs
-
-        elif holdoff_count is None:
-            holdoff_count = 0
-
-        received, remaining = track_read_progress(rx_result, remaining, on_overflow=on_overflow)
-        total_received += received
-
-    samples = buffer.view('complex64')[holdoff_count : count + (holdoff_count or 0)]
-    return samples, timestamp
 
 
 class SoapyRadioDevice(RadioDevice):
     """single-channel sensor waveform acquisition through SoapySDR and pre-processed with iqwaveform"""
-
-    _inbuf = None
-    _outbuf = None
-    _next_timestamp = None
 
     resource: dict = attr.value.dict(
         default={}, help='SoapySDR resource dictionary to specify the device connection'
@@ -220,12 +140,12 @@ class SoapyRadioDevice(RadioDevice):
         if self.channel() == channel:
             return
 
-        if channel is None and self.rx_stream is not None:
+        if channel is None and self._rx_stream is not None:
             self.channel_enabled(False)
         else:
-            if getattr(self, 'rx_stream', None) is not None:
-                self.backend.closeStream(self.rx_stream)
-            self.rx_stream = self.backend.setupStream(
+            if getattr(self, '_rx_stream', None) is not None:
+                self.backend.closeStream(self._rx_stream)
+            self._rx_stream = self.backend.setupStream(
                 SoapySDR.SOAPY_SDR_RX, SoapySDR.SOAPY_SDR_CF32, [channel]
             )
 
@@ -297,16 +217,15 @@ class SoapyRadioDevice(RadioDevice):
     @channel_enabled.setter
     @_verify_channel_for_setter
     def _(self, enable: bool):
-        self._next_timestamp = None
         if enable:
             self.backend.activateStream(
-                self.rx_stream,
+                self._rx_stream,
                 flags=SoapySDR.SOAPY_SDR_HAS_TIME,
                 # timeNs=self.backend.getHardwareTime('now'),
             )
         else:
-            if self.rx_stream is not None:
-                self.backend.deactivateStream(self.rx_stream)
+            if self._rx_stream is not None:
+                self.backend.deactivateStream(self._rx_stream)
 
     @attr.method.float(label='dB', help='SDR hardware gain')
     @_verify_channel_for_getter
@@ -354,6 +273,17 @@ class SoapyRadioDevice(RadioDevice):
     @property
     def base_clock_rate(self):
         return type(self).backend_sample_rate.max
+
+    @_verify_channel_setting
+    def _read_stream(self, buffers, offset, count, timeout_sec, *, on_overflow='except') -> tuple[int,int]:
+        # Read the samples from the data buffer
+        rx_result = self.radio.backend.readStream(
+            self._rx_stream,
+            [buf[offset * 2 :] for buf in buffers],
+            count,
+            timeoutUs=int(timeout_sec * 1e6),
+        )
+        return get_stream_result(rx_result, on_overflow=on_overflow)
 
     def sync_time_source(self):
         if self.time_source() in ('internal', 'host'):
@@ -451,6 +381,21 @@ class SoapyRadioDevice(RadioDevice):
 
         self.analysis_bandwidth = capture.analysis_bandwidth
 
+    def _needs_reenable(self, next_capture: structs.RadioCapture):
+        """returns True if the channel needs to be disabled and re-enabled between the specified capture"""
+
+        current = self.get_capture_struct()
+
+        for field in ('center_frequency', 'channel'):
+            if getattr(next_capture, field) != getattr(current, field):
+                return True
+
+        next_backend_sample_rate = design_capture_filter(self.base_clock_rate, next_capture)[2]['fs']
+        if next_backend_sample_rate != self.backend_sample_rate():
+            return True
+
+        return False
+
     def close(self):
         if self.backend is None:
             return
@@ -469,10 +414,9 @@ class SoapyRadioDevice(RadioDevice):
             # channel not yet set
             pass
 
-
         try:
-            if getattr(self, 'rx_stream', None) is not None:
-                self.backend.closeStream(self.rx_stream)
+            if getattr(self, '_rx_stream', None) is not None:
+                self.backend.closeStream(self._rx_stream)
         except ValueError as ex:
             if 'invalid parameter' in str(ex):
                 # already closed
@@ -491,67 +435,3 @@ class SoapyRadioDevice(RadioDevice):
 
     def __del__(self):
         self.close()
-
-    @_verify_channel_setting
-    def _flush_stream(self, read_duration=None):
-        """attempt to flush the buffer of the receive stream without a slower disable/enable cycle"""
-
-        if read_duration is None:
-            if self._next_timestamp is not None:
-                read_duration = time.time() - self._next_timestamp
-            else:
-                read_duration = self.duration
-        expected_samples = round(read_duration * self.backend_sample_rate())
-        total_samples = 0
-
-        on_overflow = self.on_overflow
-        while True:
-            # Read the samples from the data buffer
-            sr = self.backend.readStream(
-                self.rx_stream,
-                [self._inbuf],
-                round(read_duration * self.backend_sample_rate()),
-                timeoutUs=1,
-            )
-
-            if sr.ret == expected_samples:
-                total_samples += expected_samples
-            elif sr.ret > 0:
-                total_samples += sr.ret
-                break
-            elif sr.ret == SoapySDR.SOAPY_SDR_TIMEOUT:
-                break
-            elif sr.ret == SoapySDR.SOAPY_SDR_OVERFLOW and on_overflow != 'except':
-                pass
-            elif sr.ret < -1:
-                raise IOError(f'Error {sr.ret}: {SoapySDR.errToStr(sr.ret)}')
-
-        if self._next_timestamp is not None:
-            self._next_timestamp = (
-                self._next_timestamp + total_samples / self.backend_sample_rate()
-            )
-
-    @_verify_channel_setting
-    def _read_stream(self, samples: int) -> tuple['np.ndarray', 'pd.Timestamp']:
-        if self.on_overflow != 'except':
-            # this is when the radio_setup is configured as 'host';
-            # use the host time to allow overflows between captures,
-            # thus avoiding loss of timestamp on overflow
-            start_time = time.time()
-        else:
-            start_time = self._next_timestamp
-
-        iq, timestamp = read_samples(
-            samples,
-            radio=self.backend,
-            stream=self.rx_stream,
-            buffer=self._inbuf,
-            start_time=start_time,
-            periodic_trigger=self.periodic_trigger,
-            gapless=self.gapless_repeats,
-            channel=self.channel(),
-        )
-
-        self._next_timestamp = timestamp + samples / self.backend_sample_rate()
-
-        return iq, timestamp
