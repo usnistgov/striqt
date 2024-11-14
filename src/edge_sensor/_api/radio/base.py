@@ -10,6 +10,7 @@ import msgspec
 import numpy as np
 from queue import Queue, Empty
 import threading
+import os
 
 from .. import structs, util
 
@@ -86,7 +87,7 @@ class ThreadedRXStream:
             samples[: 2 * holdover_count] = holdover_samples.view(samples.dtype)
 
         fs = self.radio.backend_sample_rate()
-        chunk_size = min(int(200e-3 * fs), self.sample_count + holdover_count)
+        chunk_size = min(int(20e-3 * fs), self.sample_count + holdover_count)
         timeout_sec = chunk_size / fs + 50e-3
         remaining = self.sample_count - holdover_count
 
@@ -156,6 +157,10 @@ class ThreadedRXStream:
             holdover_size = None
 
         holdover_samples = None
+
+        if hasattr(os, 'nice'):
+            # establish priority in this thread to avoid overflow
+            os.nice(0)
 
         try:
             while True:
