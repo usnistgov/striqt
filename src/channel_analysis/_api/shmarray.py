@@ -1,6 +1,5 @@
 """shared memory arrays"""
 
-
 import functools
 import numpy as np
 import pickle
@@ -8,13 +7,13 @@ from multiprocessing import shared_memory
 
 
 class NDSharedArray(np.ndarray):
-    '''an ndarray subclass for inter-process communication that serializes to shared memory
+    """an ndarray subclass for inter-process communication that serializes to shared memory
     reference information instead of raw values.
 
     Notes:
     * If pickled, the shared memory backing will be freed _only if the object is deserialized and deleted_
     * Processes that deserialize this object must share memory with the process that creates the NDSharedArray
-    '''
+    """
 
     # References:
     #   https://numpy.org/doc/stable/user/basics.subclassing.html#slightly-more-realistic-example-attribute-added-to-existing-array
@@ -22,7 +21,7 @@ class NDSharedArray(np.ndarray):
     shm: 'shared_memory.SharedMemory'
     _free_on_del: bool = True
 
-    def __new__(cls, input_array, shm: 'shared_memory.SharedMemory'=None):
+    def __new__(cls, input_array, shm: 'shared_memory.SharedMemory' = None):
         if shm is not None:
             obj = np.asarray(input_array).view(cls)
             obj.shm = shm
@@ -67,7 +66,7 @@ class NDSharedArray(np.ndarray):
     @classmethod
     def from_pickle(cls, s: str):
         """instantiate a new NDSharedArray referenced from a pickle.
-        
+
         if last_access is True, the underlying shared memory will be freed
         when this array instance is deleted.
         """

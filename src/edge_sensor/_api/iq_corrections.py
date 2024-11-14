@@ -53,15 +53,17 @@ def _y_factor_temperature(
 
     return T
 
+
 def _limit_nyquist_bandwidth(data: 'xr.DataArray') -> 'xr.DataArray':
     """replace float('inf') analysis bandwidth with the Nyquist bandwidth"""
 
     # return bandwidth with same shape as dataset.channel_power_time_series
     bw = data.analysis_bandwidth.broadcast_like(data).copy().squeeze()
     sample_rate = data.sample_rate.broadcast_like(data).squeeze()
-    where = (bw.values == float('inf'))
+    where = bw.values == float('inf')
     bw.values[where] = sample_rate.values[where]
     return bw
+
 
 def _y_factor_power_corrections(
     dataset: 'xr.Dataset', enr_dB: float, Tamb: float, Tref=290.0
@@ -92,7 +94,7 @@ def _y_factor_power_corrections(
     T.name = 'Noise temperature'
     T.attrs = {'units': 'K'}
 
-    B =_limit_nyquist_bandwidth(T)
+    B = _limit_nyquist_bandwidth(T)
 
     power_correction = (k * (T + enr * Tref) * B) / Pon
     power_correction.name = 'Input power scaling correction'
@@ -177,7 +179,7 @@ def resampling_correction(
     force_calibration: typing.Optional['xr.Dataset'] = None,
     *,
     axis=0,
-    out=None
+    out=None,
 ):
     """apply a bandpass filter implemented through STFT overlap-and-add.
 
@@ -213,7 +215,6 @@ def resampling_correction(
         if nfft_out > nfft:
             buf_size = ceil(buf_size * nfft_out / nfft)
         buf = xp.empty(buf_size, dtype='complex64')
-        print(buf.size, iq.size)
         buf[: iq.size] = xp.asarray(iq)
         iq = buf[: iq.size]
     else:

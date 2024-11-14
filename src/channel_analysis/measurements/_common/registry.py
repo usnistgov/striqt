@@ -43,12 +43,14 @@ def _results_as_shared_arrays(obj: tuple | list | dict | 'iqwaveform.util.Array'
         array = obj.cpu()
     elif array_api_compat.is_cupy_array(obj):
         array = obj.get()
-    elif array_api_compat.is_numpy_array(obj) or isinstance(obj, shmarray.NDSharedArray):
+    elif array_api_compat.is_numpy_array(obj) or isinstance(
+        obj, shmarray.NDSharedArray
+    ):
         array = obj
     else:
         raise TypeError(f'obj type {type(obj)} is unrecognized')
 
-    return array#shmarray.NDSharedArray(array)
+    return array  # shmarray.NDSharedArray(array)
 
 
 class KeywordArguments(msgspec.Struct):

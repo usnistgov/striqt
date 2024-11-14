@@ -89,7 +89,13 @@ def filter_iq_capture(
 
 
 def simulated_awgn(
-    capture: structs.Capture, *, power: float = 1, xp=np, pinned_cuda=False, seed=None, out=None
+    capture: structs.Capture,
+    *,
+    power: float = 1,
+    xp=np,
+    pinned_cuda=False,
+    seed=None,
+    out=None,
 ) -> 'iqwaveform.util.Array':
     try:
         # e.g., numpy

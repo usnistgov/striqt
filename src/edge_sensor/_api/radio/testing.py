@@ -26,22 +26,30 @@ class SingleToneSource(NullSource):
     )
 
     def get_waveform(self, count, start_index: int, *, channel: int = 0, xp=np):
-        i = xp.arange(start_index, count+start_index, dtype='uint64')
+        i = xp.arange(start_index, count + start_index, dtype='uint64')
         f_cw = self.sample_rate() * self.resource
-        return xp.exp((2j * np.pi * f_cw)/self.backend_sample_rate()*i + np.pi/2).astype('complex64')
+        return xp.exp(
+            (2j * np.pi * f_cw) / self.backend_sample_rate() * i + np.pi / 2
+        ).astype('complex64')
 
 
 class SawtoothSource(NullSource):
     resource: float = attr.value.float(
-        default=0.5, min=0, help='duration of the ramp normalized by acquisition duration', label='s'
+        default=0.5,
+        min=0,
+        help='duration of the ramp normalized by acquisition duration',
+        label='s',
     )
 
     def get_waveform(self, count, start_index: int, *, channel: int = 0, xp=np):
         ret = xp.empty(count, dtype='complex64')
 
         period = self.duration * self.resource
-        t = xp.arange(start_index, count+start_index, dtype='uint64')/self.backend_sample_rate()
-        ret.real[:] = (t%period)/period
+        t = (
+            xp.arange(start_index, count + start_index, dtype='uint64')
+            / self.backend_sample_rate()
+        )
+        ret.real[:] = (t % period) / period
         ret.imag[:] = 0
         return ret
 
@@ -57,8 +65,10 @@ class NoiseSource(NullSource):
     )
 
     def get_waveform(self, count, start_index: int, *, channel: int = 0, xp=np):
-        ii = xp.arange(start_index, count+start_index, dtype='uint64') % count
-        capture = channel_analysis.Capture(duration=self.duration, sample_rate=self.backend_sample_rate())
+        ii = xp.arange(start_index, count + start_index, dtype='uint64') % count
+        capture = channel_analysis.Capture(
+            duration=self.duration, sample_rate=self.backend_sample_rate()
+        )
         x = cached_noise(capture, xp=xp)
 
         return x[ii]
@@ -125,7 +135,7 @@ class TDMSFileSource(NullSource):
         scale = 10 ** (float(ref_level) / 20.0) / np.iinfo(xp.int16).max
         i, q = self.backend['iq_fd'].channels()
         iq = xp.empty((2 * count,), dtype=xp.int16)
-        iq[offset*2::2] = xp.asarray(i[offset:count+offset])
-        iq[1+offset*2::2] = xp.asarray(q[offset:count+offset])
+        iq[offset * 2 :: 2] = xp.asarray(i[offset : count + offset])
+        iq[1 + offset * 2 :: 2] = xp.asarray(q[offset : count + offset])
 
         return (iq * xp.float32(scale)).view('complex64').copy()

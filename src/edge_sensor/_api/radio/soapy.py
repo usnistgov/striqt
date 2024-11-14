@@ -35,7 +35,7 @@ def _verify_channel_setting(func: callable) -> callable:
         if self.channel() is None:
             name = getattr(func, '__name__', repr(func))
             raise RuntimeError(f'set {self}.channel before calling {name}')
-        
+
         return func(self, *args, **kws)
 
     return wrapper
@@ -66,7 +66,9 @@ def _verify_channel_for_setter(func: callable) -> callable:
     return wrapper
 
 
-def get_stream_result(sr: SoapySDR.StreamResult, on_overflow='except') -> tuple[int,int]:
+def get_stream_result(
+    sr: SoapySDR.StreamResult, on_overflow='except'
+) -> tuple[int, int]:
     """track the number of samples received and remaining in a read stream.
 
     Args:
@@ -224,9 +226,7 @@ class SoapyRadioDevice(RadioDevice):
                 flags=SoapySDR.SOAPY_SDR_HAS_TIME,
                 # timeNs=self.backend.getHardwareTime('now'),
             )
-            lb.logger.info('start')
             self.stream.start()
-            lb.logger.info('done')
         else:
             self.stream.stop()
             if self._rx_stream is not None:
@@ -281,7 +281,9 @@ class SoapyRadioDevice(RadioDevice):
         return type(self).backend_sample_rate.max
 
     @_verify_channel_setting
-    def _read_stream(self, buffers, offset, count, timeout_sec, *, on_overflow='except') -> tuple[int,int]:
+    def _read_stream(
+        self, buffers, offset, count, timeout_sec, *, on_overflow='except'
+    ) -> tuple[int, int]:
         # Read the samples from the data buffer
         rx_result = self.backend.readStream(
             self._rx_stream,
@@ -323,7 +325,9 @@ class SoapyRadioDevice(RadioDevice):
             full_secs += 1
         elif frac_secs > 0.2:
             # System time and PPS are off, warn caller
-            self._logger.warning(f'system time and PPS out of sync by {frac_secs:0.3f}s, check NTP')
+            self._logger.warning(
+                f'system time and PPS out of sync by {frac_secs:0.3f}s, check NTP'
+            )
         time_to_set_ns = int((full_secs + 1) * 1e9)
         self.backend.setHardwareTime(time_to_set_ns, 'pps')
 
@@ -346,7 +350,9 @@ class SoapyRadioDevice(RadioDevice):
             if getattr(next_capture, field) != getattr(current, field):
                 return True
 
-        next_backend_sample_rate = design_capture_filter(self.base_clock_rate, next_capture)[2]['fs']
+        next_backend_sample_rate = design_capture_filter(
+            self.base_clock_rate, next_capture
+        )[2]['fs']
         if next_backend_sample_rate != self.backend_sample_rate():
             return True
 

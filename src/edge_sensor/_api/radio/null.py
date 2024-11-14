@@ -137,13 +137,19 @@ class NullSource(RadioDevice):
     def base_clock_rate(self):
         return 125e6
 
-    def _read_stream(self, buffers, offset, count, timeout_sec=None, *, on_overflow='except') -> tuple[int,int]:
+    def _read_stream(
+        self, buffers, offset, count, timeout_sec=None, *, on_overflow='except'
+    ) -> tuple[int, int]:
         xp = iqwaveform.util.array_namespace(buffers[0])
-        timestamp_ns = (1_000_000_000 * self._sample_count) / float(self.backend_sample_rate())
+        timestamp_ns = (1_000_000_000 * self._sample_count) / float(
+            self.backend_sample_rate()
+        )
 
         for channel, buf in zip([self.channel], buffers):
-            values = self.get_waveform(count, self._sample_count, channel=channel, xp=xp)
-            buf[2*offset : 2*(offset + count)] = values.view('float32')
+            values = self.get_waveform(
+                count, self._sample_count, channel=channel, xp=xp
+            )
+            buf[2 * offset : 2 * (offset + count)] = values.view('float32')
 
         self._sample_count += count
 
@@ -151,7 +157,7 @@ class NullSource(RadioDevice):
 
     def get_waveform(self, count, start_index: int, *, channel: int = 0, xp):
         return xp.empty(count, dtype='complex64')
-    
+
     def reset_sample_counter(self):
         self._sample_count = 0
 
