@@ -219,8 +219,6 @@ class SoapyRadioDevice(RadioDevice):
     @_verify_channel_for_setter
     def _(self, enable: bool):
         if enable:
-            lb.logger.info(f'activate - was {self.channel_enabled()} {self.stream.is_running()}')
-            lb.logger.info(f'{repr(self._rx_stream)}')
             self.backend.activateStream(
                 self._rx_stream,
                 flags=SoapySDR.SOAPY_SDR_HAS_TIME,
