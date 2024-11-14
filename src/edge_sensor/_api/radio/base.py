@@ -15,11 +15,9 @@ from .. import structs, util
 if typing.TYPE_CHECKING:
     import iqwaveform
     import pandas as pd
-    from channel_analysis._api import shmarray    
 else:
     iqwaveform = util.lazy_import('iqwaveform')
     pd = util.lazy_import('pandas')
-    shmarray = lb.util.lazy_import('channel_analysis._api.shmarray')
 
 
 TRANSIENT_HOLDOFF_WINDOWS = 1
@@ -164,7 +162,7 @@ class ThreadedRXStream:
 
                 try:
                     # TODO: revisit this constant
-                    self._return_request.wait(timeout=10e-3)
+                    self._return_request.wait(timeout=20e-3)
                 except TimeoutError:
                     if self.radio.gapless_repeats:
                         raise OverflowError('gapless repeat acquisition failed')
@@ -182,7 +180,7 @@ class ThreadedRXStream:
 
     def start(self):
         if self.is_running():
-            self.radio._logger.info('stream thread is already running')
+            self.radio._logger.warning('tried to start stream thread, but one is already running')
         self._acquired.clear()
         self._return_request.clear()
         self._running.clear()
@@ -191,9 +189,6 @@ class ThreadedRXStream:
         self._thread_exc = None
         self._thread = threading.Thread(target=self._background_loop)
 
-        if not self.radio.channel_enabled():
-            self.radio.channel_enabled(True)
-        
         self._thread.start()
 
     @contextlib.contextmanager
@@ -211,9 +206,9 @@ class ThreadedRXStream:
 
         if self._thread is None:
             return
-        
-        if self._thread.is_alive():
+        elif self._thread.is_alive():
             self._thread.join()
+
         self._thread = None
 
     def is_running(self):
@@ -227,11 +222,11 @@ class ThreadedRXStream:
 
     def get(self) -> tuple['np.ndarray', float]:
         if not self.is_running():
-            raise RuntimeError('start acquisition with start() before call to get()')
+            raise RuntimeError('stream acquisition is not running')
 
         self._return_request.set()
 
-        timeout = 1#50e-3+self.sample_count / self.radio.backend_sample_rate()
+        timeout = max(50e-3+self.sample_count / self.radio.backend_sample_rate(), 10)
 
         try:
             self._acquired.wait(timeout=timeout)
@@ -256,9 +251,6 @@ class ThreadedRXStream:
                 raise TimeoutError('no data')
 
         return samples, out, timestamp
-
-    def __del__(self):
-        self.stop()
 
     def trigger(self):
         self._trigger_interrupt_req.set()
@@ -352,21 +344,17 @@ class RadioDevice(lb.Device):
         from .. import iq_corrections
 
         with lb.stopwatch('acquire', logger_level='debug'):
-            if self.get_capture_struct(type(capture)) != capture:
+            if self.channel() is None or not self.channel_enabled():
                 self.arm(capture)
-
-            elif not self.channel_enabled():
-                self.channel_enabled(True)
-                self.stream.start()
 
             with lb.stopwatch('stream get'):
                 iq, out, timestamp = self.stream.get()
                 timestamp = pd.Timestamp(timestamp, unit='ns')
 
-            if not self.gapless_repeats or next_capture != capture:
+            if next_capture is None:
                 self.channel_enabled(False)
-
-            if next_capture is not None:
+            elif capture != next_capture:
+                self.channel_enabled(False)
                 self.arm(next_capture)
 
             if correction:
@@ -386,21 +374,16 @@ class RadioDevice(lb.Device):
         self.periodic_trigger = radio_config.periodic_trigger
         self.gapless_repeats = radio_config.gapless_repeats
         self.time_sync_every_capture = radio_config.time_sync_every_capture
-
         self.time_source(radio_config.time_source)
 
         if not self.time_sync_every_capture:
             self.sync_time_source()
 
     def arm(self, capture: structs.RadioCapture):
-        """apply a capture configuration"""
+        """stop the stream, apply a capture configuration, and start it"""
 
-        if capture == self.get_capture_struct(type(capture)):
-            if self.time_sync_every_capture:
-                with self.stream.pause:
-                    self.sync_time_source()
-
-            return
+        if self.channel() is not None:
+            self.channel_enabled(False)
 
         if iqwaveform.power_analysis.isroundmod(
             capture.duration * capture.sample_rate, 1
@@ -454,7 +437,6 @@ class RadioDevice(lb.Device):
             self.sync_time_source()
 
         self.channel_enabled(True)
-        self.stream.arm(capture)
 
     # def arm(self, capture: structs.RadioCapture):
     #     """apply a capture configuration"""
@@ -517,7 +499,7 @@ class RadioDevice(lb.Device):
 
         if self.channel() is None:
             return None
-        
+
         if self.lo_offset == 0:
             lo_shift = 'none'
         elif self.lo_offset < 0:
@@ -536,10 +518,6 @@ class RadioDevice(lb.Device):
             # filtering and resampling
             analysis_bandwidth=self.analysis_bandwidth,
             lo_shift=lo_shift,
-            # future: external frequency conversion support
-            # if_frequency=None,
-            # lo_gain=0,
-            # rf_gain=0,
         )
 
 
