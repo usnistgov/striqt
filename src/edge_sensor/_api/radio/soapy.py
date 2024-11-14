@@ -226,8 +226,6 @@ class SoapyRadioDevice(RadioDevice):
                 flags=SoapySDR.SOAPY_SDR_HAS_TIME,
                 # timeNs=self.backend.getHardwareTime('now'),
             )
-            lb.logger.info('arm')
-            self.stream.arm(self.get_capture_struct())
             lb.logger.info('start')
             self.stream.start()
             lb.logger.info('done')

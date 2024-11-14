@@ -97,11 +97,8 @@ class NullSource(RadioDevice):
 
     @channel_enabled.setter
     def _(self, enable: bool):
-        if enable == self.channel_enabled():
-            return
         if enable:
             self.backend['channel_enabled'] = True
-            self.stream.arm(self.get_capture_struct())
             self.stream.start()
         else:
             self.stream.stop()

@@ -61,7 +61,14 @@ class ThreadedRXStream:
             self._thread_exc = None
 
     def _fill_buffer(self, buf_time_ns=None, holdover_samples: 'np.ndarray[np.complex64]'=None) -> tuple['np.ndarray[np.complex64]', float]:
+        holdoff_size = 0
+        streamed_count = 0
+        awaiting_timestamp = True
+        acq_start_ns = buf_time_ns
         samples = np.empty((2*self.buf_size,), dtype=np.float32)
+
+        if buf_time_ns is None and holdover_samples is not None:
+            raise ValueError('when start time is None, holdover_samples must also be None')
 
         if holdover_samples is None:
             holdover_count = 0
@@ -72,19 +79,8 @@ class ThreadedRXStream:
 
         fs = self.radio.backend_sample_rate()
         chunk_size = min(int(200e-3*fs), self.sample_count + holdover_count)
-
-        if buf_time_ns is None and holdover_samples is not None:
-            raise ValueError('when start time is None, holdover_samples must also be None')
-
-        holdoff_size = 0
-        streamed_count = 0
         timeout_sec = chunk_size / fs + 50e-3
-        acq_start_ns = buf_time_ns
-
-        
-
         remaining = self.sample_count - holdover_count
-        awaiting_timestamp = True
 
         while remaining > 0:
             if self._stop_req.is_set() or self._trigger_interrupt_req.is_set():
@@ -122,6 +118,7 @@ class ThreadedRXStream:
             remaining = remaining - this_count
             streamed_count += this_count
 
+        print('finish: ', self.sample_count, holdoff_size)
         samples = samples.view('complex64')[holdoff_size : self.sample_count + holdoff_size]
         return samples, acq_start_ns
 
@@ -438,6 +435,7 @@ class RadioDevice(lb.Device):
         if self.time_sync_every_capture:
             self.sync_time_source()
 
+        self.stream.arm(capture)
         self.channel_enabled(True)
 
     # def arm(self, capture: structs.RadioCapture):
