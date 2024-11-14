@@ -122,6 +122,9 @@ class NullSource(RadioDevice):
         self.reset_sample_counter()
         self.backend = {}
 
+    def close(self):
+        self.stream.stop()
+
     @attr.property.str(inherit=True)
     def id(self):
         return 'null'

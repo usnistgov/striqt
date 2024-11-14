@@ -43,10 +43,9 @@ def find_trigger_holdoff(start_time, sample_rate, periodic_trigger: float|None):
 
 
 class ThreadedRXStream:
-    def __init__(self, radio: RadioDevice, xp=np):
+    def __init__(self, radio: RadioDevice):
         self._thread = None
         self.radio = radio
-        self._xp = xp
 
         self._result = None, None, None
         self._running = threading.Event()
@@ -57,21 +56,11 @@ class ThreadedRXStream:
         self.sample_count = None
 
     def arm(self, capture: structs.RadioCapture):
-        if self.is_running():
-            self.stop()
-
-        self.capture = capture
-
-        buf_size_in, self._buf_out_size = get_capture_buffer_sizes(self.radio, capture, include_holdoff=True)
-        self.sample_count, _ = get_capture_buffer_sizes(self.radio, capture, include_holdoff=False)
-
-        self._buf_in = np.empty((2*buf_size_in,), dtype=np.float32)
-        self._thread_exc = None
-
-        # ensure the array library has been imported
-        self._xp.empty(1, dtype=np.complex64)
-
-        self.start()
+        with self.pause:
+            self.capture = capture
+            self.buf_size, _ = get_capture_buffer_sizes(self.radio, capture, include_holdoff=True)
+            self.sample_count, _ = get_capture_buffer_sizes(self.radio, capture, include_holdoff=False)
+            self._thread_exc = None
 
     def _fill_buffer(self, buf_time_ns=None, holdover_samples: 'np.ndarray[np.complex64]'=None) -> tuple['np.ndarray[np.complex64]', float]:
         fs = self.radio.backend_sample_rate()
@@ -85,12 +74,14 @@ class ThreadedRXStream:
         timeout_sec = chunk_size / fs + 50e-3
         acq_start_ns = buf_time_ns
 
+        samples = np.empty((2*self.buf_size,), dtype=np.float32)
+
         if holdover_samples is None:
             holdover_count = 0
         else:
-            # note: holdover_count.dtype is np.complex64, while self._buf_in.dtype is np.float32
+            # note: holdover_count.dtype is np.complex64, samples.dtype is np.float32
             holdover_count = holdover_samples.size
-            self._buf_in[:2*holdover_count] = holdover_samples.view(self._buf_in.dtype)
+            samples[:2*holdover_count] = holdover_samples.view(samples.dtype)
 
         remaining = self.sample_count - holdover_count
         awaiting_timestamp = True
@@ -109,7 +100,7 @@ class ThreadedRXStream:
 
             # Read the samples from the data buffer
             this_count, ret_time_ns = self.radio._read_stream(
-                [self._buf_in],
+                [samples],
                 offset=holdover_count + streamed_count,
                 count=min(chunk_size, remaining),
                 timeout_sec=timeout_sec,
@@ -131,7 +122,7 @@ class ThreadedRXStream:
             remaining = remaining - this_count
             streamed_count += this_count
 
-        samples = self._buf_in.view('complex64')[holdoff_size : self.sample_count + holdoff_size]
+        samples = samples.view('complex64')[holdoff_size : self.sample_count + holdoff_size]
         return samples, acq_start_ns
 
     def _background_loop(self):
@@ -180,9 +171,6 @@ class ThreadedRXStream:
                 else:
                     # the request flag has been set by get(). copy and allocate
                     # first to ensure proper sequencing with the main thread
-                    buf_out = self._xp.empty(self._buf_out_size, dtype=np.complex64)
-                    buf_out[:samples.size] = self._xp.asarray(samples)
-                    self._result = buf_out[:samples.size], buf_out, time_ns
                     self._acquired.set()
                     self._return_request.clear()
 
@@ -211,7 +199,8 @@ class ThreadedRXStream:
     @contextlib.contextmanager
     def pause(self):
         restart = self.is_running()
-        self.stop()
+        if restart:
+            self.stop()
         yield
         if restart:
             self.start()
@@ -349,7 +338,7 @@ class RadioDevice(lb.Device):
         return type(self).backend_sample_rate.max
 
     def open(self):
-        self.stream = ThreadedRXStream(self, xp=np)#util.import_cupy_with_fallback())
+        self.stream = ThreadedRXStream(self)
 
     def close(self):
         self.stream.stop()
