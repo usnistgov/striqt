@@ -10,6 +10,11 @@ from flex_spectrum_sensor_scripts import (
     xr,
 )
 
+import pandas
+import xarray
+import labbench
+import zarr
+import matplotlib
 
 def get_file_format_fields(dataset: 'xr.Dataset'):
     return {
@@ -29,14 +34,13 @@ def run(**kws):
     # acquire and analyze each capture in the sweep
     results = [
         result
-        for result in controller.iter_sweep(sweep_spec, calibration)
+        for result in controller.iter_sweep(sweep_spec, calibration, prepare=False)
         if result is not None
     ]
 
     dataset = xr.concat(results, edge_sensor.CAPTURE_DIM)
     edge_sensor.dump(store, dataset)
     lb.logger.info(f'wrote to {store.path}')
-
 
 if __name__ == '__main__':
     run()

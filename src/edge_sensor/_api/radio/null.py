@@ -91,15 +91,22 @@ class NullSource(RadioDevice):
     def sync_time_source(self):
         pass
 
-    @attr.method.bool(cache=True)
+    @attr.method.bool(sets=True, gets=True)
     def channel_enabled(self):
-        # this is only called at most once, due to cache=True
-        raise ValueError('must set channel_enabled once before reading')
+        return self.backend.get('channel_enabled', False)
 
     @channel_enabled.setter
     def _(self, enable: bool):
-        self.reset_sample_counter()
-        self.backend['channel_enabled'] = enable
+        if enable == self.channel_enabled():
+            return
+        if enable:
+            self.backend['channel_enabled'] = True
+            self.stream.arm(self.get_capture_struct())
+            self.stream.start()
+        else:
+            self.stream.stop()
+            self.backend['channel_enabled'] = False
+            self.reset_sample_counter()
 
     @attr.method.float(label='dB', help='SDR hardware gain')
     def gain(self):

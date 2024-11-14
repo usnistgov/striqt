@@ -210,7 +210,6 @@ class SoapyRadioDevice(RadioDevice):
             self.on_overflow = 'except'
 
     @attr.method.bool(cache=True)
-    @_verify_channel_for_getter
     def channel_enabled(self):
         # due to cache=True, this is only called at most once, if the first access is a set.
         # the default in this condition is then False
@@ -220,11 +219,18 @@ class SoapyRadioDevice(RadioDevice):
     @_verify_channel_for_setter
     def _(self, enable: bool):
         if enable:
+            lb.logger.info(f'activate - was {self.channel_enabled()} {self.stream.is_running()}')
+            lb.logger.info(f'{repr(self._rx_stream)}')
             self.backend.activateStream(
                 self._rx_stream,
                 flags=SoapySDR.SOAPY_SDR_HAS_TIME,
                 # timeNs=self.backend.getHardwareTime('now'),
             )
+            lb.logger.info('arm')
+            self.stream.arm(self.get_capture_struct())
+            lb.logger.info('start')
+            self.stream.start()
+            lb.logger.info('done')
         else:
             self.stream.stop()
             if self._rx_stream is not None:
@@ -257,6 +263,7 @@ class SoapyRadioDevice(RadioDevice):
                     super().close()
 
         if self.resource:
+            # prevent race conditions in threaded accesses to the Soapy driver
             self.backend = _SoapySDRDevice(self.resource)
         else:
             self.backend = _SoapySDRDevice()
