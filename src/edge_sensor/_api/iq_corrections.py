@@ -213,6 +213,7 @@ def resampling_correction(
         if nfft_out > nfft:
             buf_size = ceil(buf_size * nfft_out / nfft)
         buf = xp.empty(buf_size, dtype='complex64')
+        print(buf.size, iq.size)
         buf[: iq.size] = xp.asarray(iq)
         iq = buf[: iq.size]
     else:
