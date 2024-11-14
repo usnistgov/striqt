@@ -50,7 +50,7 @@ class ThreadedRXStream:
         self._running = threading.Event()
         self._return_request = threading.Event()
         self._stop_req = threading.Event()
-        self._trigger_interrupt_req = threading.Event()
+        self._trigger_req = Queue(1)
         self.sample_count = None
 
     def arm(self, capture: structs.RadioCapture):
@@ -64,7 +64,7 @@ class ThreadedRXStream:
             )
             self._thread_exc = None
 
-    def _accumulate_buffer(
+    def _fill_buffer(
         self, buf_time_ns=None, holdover_samples: 'np.ndarray[np.complex64]' = None
     ) -> tuple['np.ndarray[np.complex64]', float]:
         holdoff_size = 0
@@ -91,7 +91,13 @@ class ThreadedRXStream:
         remaining = self.sample_count - holdover_count
 
         while remaining > 0:
-            if self._stop_req.is_set() or self._trigger_interrupt_req.is_set():
+            try:
+                trigger_requested = self._trigger_req.get_nowait()
+                self._trigger_req.put(trigger_requested)
+            except Empty:
+                trigger_requested = None
+
+            if self._stop_req.is_set() or trigger_requested is not None:
                 if buf_time_ns is None:
                     return None, buf_time_ns
                 else:
@@ -154,7 +160,7 @@ class ThreadedRXStream:
         try:
             while True:
                 try:
-                    samples, time_ns = self._accumulate_buffer(
+                    samples, time_ns = self._fill_buffer(
                         next_time_ns, holdover_samples
                     )
                 except BaseException:
@@ -168,12 +174,17 @@ class ThreadedRXStream:
 
                 if self._stop_req.is_set():
                     break
-                elif self._trigger_interrupt_req.is_set():
+
+                try:
+                    self._trigger_req.get_nowait()
+                except Empty:
+                    pass
+                else:
                     # on trigger, _read_buffer returns the timestamp is at the
                     # end of its (likely incomplete) buffer read
-                    # TODO: adjust the holdover buffer appropriately
+                    # TODO: actually implement the trigger
                     next_time_ns = time_ns
-                    self._trigger_interrupt_req.clear()
+                    self._trigger_req.clear()
                     continue
 
                 try:
@@ -202,11 +213,11 @@ class ThreadedRXStream:
         self._return_request.clear()
         self._running.clear()
         self._stop_req.clear()
-        try:
-            self._result.get_nowait()
-        except Empty:
-            pass
-        self._trigger_interrupt_req.clear()
+        for q in self._result, self._trigger_req:
+            try:
+                q.get_nowait()
+            except Empty:
+                pass
         self._thread_exc = None
         self._thread = threading.Thread(target=self._background_loop)
 
@@ -247,7 +258,7 @@ class ThreadedRXStream:
 
         self._return_request.set()
 
-        timeout = max(50e-3 + self.sample_count / self.radio.backend_sample_rate(), 1)
+        timeout = max(50e-3 + self.buf_size / self.radio.backend_sample_rate(), 3)
 
         try:
             samples, time_ns = self._result.get(timeout=timeout)
@@ -271,7 +282,7 @@ class ThreadedRXStream:
         return samples, time_ns
 
     def trigger(self):
-        self._trigger_interrupt_req.set()
+        self._trigger_req.set()
 
 
 class RadioDevice(lb.Device):
@@ -402,9 +413,12 @@ class RadioDevice(lb.Device):
         if self.channel() is not None:
             self.channel_enabled(False)
 
+        retrigger = False
+
         if iqwaveform.power_analysis.isroundmod(
             capture.duration * capture.sample_rate, 1
         ):
+            retrigger = True
             self.duration = capture.duration
         else:
             raise ValueError(
@@ -417,6 +431,7 @@ class RadioDevice(lb.Device):
             self.channel_enabled(False)
 
         if self.gain() != capture.gain:
+            retrigger = True
             self.gain(capture.gain)
 
         fs_backend, lo_offset, analysis_filter = design_capture_filter(
@@ -424,16 +439,17 @@ class RadioDevice(lb.Device):
         )
 
         nfft_out = analysis_filter.get('nfft_out', analysis_filter['nfft'])
-
         downsample = analysis_filter['nfft'] / nfft_out
 
         if fs_backend != self.backend_sample_rate() or downsample != self._downsample:
+            self.channel_enabled(False)
             with attr.hold_attr_notifications(self):
                 self._downsample = 1  # temporarily avoid a potential bounding error
             self.backend_sample_rate(fs_backend)
             self._downsample = downsample
 
         if capture.sample_rate != self.sample_rate():
+            # in this case, it's only a post-processing (GPU resampling) change
             self.sample_rate(capture.sample_rate)
 
         if (
@@ -449,64 +465,23 @@ class RadioDevice(lb.Device):
             self.lo_offset = lo_offset  # hold update on this one?
 
         if capture.center_frequency != self.center_frequency():
+            self.channel_enabled(False)
             self.center_frequency(capture.center_frequency)
 
         self.analysis_bandwidth = capture.analysis_bandwidth
 
         if self.time_sync_every_capture:
+            self.channel_enabled(False)
             self.sync_time_source()
 
-        self.stream.arm(capture)
+        if retrigger or not self.channel_enabled() or not self.stream.is_running():
+            self.stream.arm(capture)
+            # TODO: implement smarter triggering
+            # # a retrigger should not be flagged on a repeat
+            # assert not self.gapless_repeats
+            # self.stream.trigger()
+
         self.channel_enabled(True)
-
-    # def arm(self, capture: structs.RadioCapture):
-    #     """apply a capture configuration"""
-
-    #     if self.channel() is None:
-    #         # current channel was unset
-    #         self.channel(capture.channel)
-
-    #     if capture == self.get_capture_struct():
-    #         return
-
-    #     if iqwaveform.power_analysis.isroundmod(
-    #         capture.duration * capture.sample_rate, 1
-    #     ):
-    #         self.duration = capture.duration
-    #     else:
-    #         raise ValueError(
-    #             f'duration {capture.duration} is not an integer multiple of sample period'
-    #         )
-
-    #     if self.gain() != capture.gain:
-    #         self.gain(capture.gain)
-
-    #     fs_backend, lo_offset, analysis_filter = design_capture_filter(
-    #         self.base_clock_rate, capture
-    #     )
-
-    #     nfft_out = analysis_filter.get('nfft_out', analysis_filter['nfft'])
-
-    #     downsample = analysis_filter['nfft'] / nfft_out
-
-    #     if fs_backend != self.backend_sample_rate() or downsample != self._downsample:
-    #         with attr.hold_attr_notifications(self):
-    #             self._downsample = 1  # temporarily avoid a potential bounding error
-    #         self.backend_sample_rate(fs_backend)
-    #         self._downsample = downsample
-
-    #     if capture.sample_rate != self.sample_rate():
-    #         self.sample_rate(capture.sample_rate)
-
-    #     if lo_offset != self.lo_offset:
-    #         self.lo_offset = lo_offset  # hold update on this one?
-
-    #     if capture.center_frequency != self.center_frequency():
-    #         self.center_frequency(capture.center_frequency)
-
-    #     self.analysis_bandwidth = capture.analysis_bandwidth
-
-    #     self.stream.arm(capture)
 
     def _read_stream(
         self, buffers, offset, count, timeout_sec, *, on_overflow='except'

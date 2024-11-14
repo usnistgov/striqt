@@ -221,6 +221,8 @@ class SoapyRadioDevice(RadioDevice):
     @_verify_channel_for_setter
     def _(self, enable: bool):
         if enable:
+            if self.channel_enabled():
+                return
             self.backend.activateStream(
                 self._rx_stream,
                 flags=SoapySDR.SOAPY_SDR_HAS_TIME,
@@ -228,6 +230,8 @@ class SoapyRadioDevice(RadioDevice):
             )
             self.stream.start()
         else:
+            if not self.channel_enabled():
+                return
             self.stream.stop()
             if self._rx_stream is not None:
                 self.backend.deactivateStream(self._rx_stream)

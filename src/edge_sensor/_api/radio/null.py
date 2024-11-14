@@ -97,6 +97,8 @@ class NullSource(RadioDevice):
 
     @channel_enabled.setter
     def _(self, enable: bool):
+        if enable == self.channel_enabled():
+            return
         if enable:
             self.backend['channel_enabled'] = True
             self.stream.start()
