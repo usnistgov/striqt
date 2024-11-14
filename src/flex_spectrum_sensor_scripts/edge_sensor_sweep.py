@@ -34,7 +34,7 @@ def run(**kws):
     # acquire and analyze each capture in the sweep
     results = [
         result
-        for result in controller.iter_sweep(sweep_spec, calibration, prepare=False)
+        for result in controller.iter_sweep(sweep_spec, calibration)
         if result is not None
     ]
 
