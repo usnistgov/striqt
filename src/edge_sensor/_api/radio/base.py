@@ -67,7 +67,7 @@ class ThreadedRXStream:
             )
             self._thread_exc = None
 
-    def receive(
+    def _fill_buffer(
         self, buf_time_ns=None, holdover_samples: 'np.ndarray[np.complex64]' = None, 
     ) -> tuple['np.ndarray[np.complex64]', float]:
         holdoff_size = 0
@@ -163,7 +163,7 @@ class ThreadedRXStream:
         try:
             while True:
                 try:
-                    samples, time_ns = self.receive(
+                    samples, time_ns = self._fill_buffer(
                         next_time_ns, holdover_samples
                     )
                 except BaseException:
@@ -374,9 +374,10 @@ class RadioDevice(lb.Device):
         with lb.stopwatch('acquire', logger_level='debug'):
             if self.channel() is None or not self.channel_enabled():
                 self.arm(capture)
+                self.channel_enabled(True)
 
-            iq, timestamp = self.stream.get()
-            timestamp = pd.Timestamp(timestamp, unit='ns')
+            iq, time_ns = self.read_iq(capture)
+            time_ns = pd.Timestamp(time_ns, unit='ns')
 
             if next_capture is None:
                 self.channel_enabled(False)
@@ -388,7 +389,7 @@ class RadioDevice(lb.Device):
                 with lb.stopwatch('resampling', logger_level='debug'):
                     iq = iq_corrections.resampling_correction(iq, capture, self)
 
-            acquired_capture = structs.copy_struct(capture, start_time=timestamp)
+            acquired_capture = structs.copy_struct(capture, start_time=time_ns)
             return iq, acquired_capture
 
     def setup(self, radio_config: structs.RadioSetup):
@@ -473,14 +474,80 @@ class RadioDevice(lb.Device):
             self.channel_enabled(False)
             self.sync_time_source()
 
-        if retrigger or not self.channel_enabled() or not self.stream.is_running():
-            self.stream.arm(capture)
-            # TODO: implement smarter triggering
-            # # a retrigger should not be flagged on a repeat
-            # assert not self.gapless_repeats
-            # self.stream.trigger()
+        if not self.channel_enabled():
+            self._holdover_samples = None
 
-        self.channel_enabled(True)
+
+    def read_iq(
+        self, capture, buf_time_ns=None, 
+    ) -> tuple['np.ndarray[np.complex64]', float]:
+        holdoff_size = 0
+        streamed_count = 0
+        awaiting_timestamp = True
+        acq_start_ns = buf_time_ns
+
+        buf_size, _ = get_capture_buffer_sizes(self, capture, include_holdoff=True)
+        sample_count, _ = get_capture_buffer_sizes(self, capture, include_holdoff=False)
+        samples = np.empty((2 * buf_size,), dtype=np.float32)
+
+        if buf_time_ns is None and self._holdover_samples is not None:
+            raise ValueError(
+                'when start time is None, holdover_samples must also be None'
+            )
+
+        if self._holdover_samples is None:
+            holdover_count = 0
+        else:
+            # note: holdover_count.dtype is np.complex64, samples.dtype is np.float32
+            holdover_count = self._holdover_samples.size
+            samples[: 2 * holdover_count] = self._holdover_samples.view(samples.dtype)
+
+        holdover_size = sample_count - round(self.capture.duration * self.radio.backend_sample_rate())
+        
+        fs = self.backend_sample_rate()
+        chunk_size = sample_count + holdover_count
+        timeout_sec = chunk_size / fs + self.CHUNK_DURATION
+        remaining = sample_count - holdover_count
+
+        while remaining > 0:
+            if streamed_count > 0 or self.radio.gapless_repeats:
+                on_overflow = 'except'
+            else:
+                on_overflow = 'ignore'
+
+            # Read the samples from the data buffer
+            this_count, ret_time_ns = self._read_stream(
+                [samples],
+                offset=holdover_count + streamed_count,
+                count=min(chunk_size, remaining),
+                timeout_sec=timeout_sec,
+                on_overflow=on_overflow,
+            )
+
+            if buf_time_ns is None:
+                # special case for the first read in the stream, since
+                # devices may not always return timestamps
+                buf_time_ns = ret_time_ns
+
+            if awaiting_timestamp:
+                holdoff_size = find_trigger_holdoff(
+                    buf_time_ns, fs, self.periodic_trigger
+                )
+                remaining = remaining + holdoff_size
+
+                acq_start_ns = buf_time_ns + round((holdoff_size * 1_000_000_000) / fs)
+                awaiting_timestamp = False
+
+            remaining = remaining - this_count
+            streamed_count += this_count
+
+        samples = samples.view('complex64')[
+            holdoff_size : sample_count + holdoff_size
+        ]
+
+        self._holdover_samples = samples[-holdover_size:]
+
+        return samples, acq_start_ns
 
     def _read_stream(
         self, buffers, offset, count, timeout_sec, *, on_overflow='except'
@@ -661,7 +728,6 @@ def find_radio_cls_by_name(
         raise AttributeError(
             f'invalid driver {repr(name)}. valid names: {tuple(mapping.keys())}'
         )
-
 
 def is_same_resource(r1: str | dict, r2: str | dict):
     if hasattr(r1, 'items'):
