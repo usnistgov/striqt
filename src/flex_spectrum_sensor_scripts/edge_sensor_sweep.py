@@ -10,12 +10,6 @@ from flex_spectrum_sensor_scripts import (
     xr,
 )
 
-import pandas
-import xarray
-import labbench
-import zarr
-import matplotlib
-
 
 def get_file_format_fields(dataset: 'xr.Dataset'):
     return {

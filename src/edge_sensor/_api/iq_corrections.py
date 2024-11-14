@@ -217,6 +217,7 @@ def resampling_correction(
         buf = xp.empty(buf_size, dtype='complex64')
         buf[: iq.size] = xp.asarray(iq)
         iq = buf[: iq.size]
+
     else:
         if out.size < buf_size:
             raise ValueError('resampling output buffer is too small')

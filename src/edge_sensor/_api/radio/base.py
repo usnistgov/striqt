@@ -10,7 +10,7 @@ import msgspec
 import numpy as np
 from queue import Queue, Empty
 import threading
-import os
+import channel_analysis
 
 from .. import structs, util
 
@@ -43,6 +43,8 @@ def find_trigger_holdoff(start_time, sample_rate, periodic_trigger: float | None
 
 
 class ThreadedRXStream:
+    CHUNK_DURATION = 50e-3
+
     def __init__(self, radio: RadioDevice):
         self._thread = None
         self.radio = radio
@@ -65,8 +67,8 @@ class ThreadedRXStream:
             )
             self._thread_exc = None
 
-    def _fill_buffer(
-        self, buf_time_ns=None, holdover_samples: 'np.ndarray[np.complex64]' = None
+    def receive(
+        self, buf_time_ns=None, holdover_samples: 'np.ndarray[np.complex64]' = None, 
     ) -> tuple['np.ndarray[np.complex64]', float]:
         holdoff_size = 0
         streamed_count = 0
@@ -87,14 +89,14 @@ class ThreadedRXStream:
             samples[: 2 * holdover_count] = holdover_samples.view(samples.dtype)
 
         fs = self.radio.backend_sample_rate()
-        chunk_size = min(int(20e-3 * fs), self.sample_count + holdover_count)
-        timeout_sec = chunk_size / fs + 50e-3
+        chunk_size = min(int(self.CHUNK_DURATION * fs), self.sample_count + holdover_count)
+        timeout_sec = chunk_size / fs + self.CHUNK_DURATION
         remaining = self.sample_count - holdover_count
 
         while remaining > 0:
             try:
                 trigger_requested = self._trigger_req.get_nowait()
-                self._trigger_req.put(trigger_requested)
+                self._trigger_req.put_nowait(trigger_requested)
             except Empty:
                 trigger_requested = None
 
@@ -158,14 +160,10 @@ class ThreadedRXStream:
 
         holdover_samples = None
 
-        if hasattr(os, 'nice'):
-            # establish priority in this thread to avoid overflow
-            os.nice(0)
-
         try:
             while True:
                 try:
-                    samples, time_ns = self._fill_buffer(
+                    samples, time_ns = self.receive(
                         next_time_ns, holdover_samples
                     )
                 except BaseException:
@@ -192,17 +190,13 @@ class ThreadedRXStream:
                     self._trigger_req.clear()
                     continue
 
-                try:
-                    # TODO: revisit this constant
-                    self._return_request.wait(timeout=20e-3)
-                except TimeoutError:
-                    if self.radio.gapless_repeats:
-                        raise OverflowError('gapless repeat acquisition failed')
-                else:
-                    self._result.put((samples, time_ns))
+                if self._return_request.is_set():
+                    self._result.put_nowait((samples, time_ns))
                     # the request flag has been set by get(). copy and allocate
                     # first to ensure proper sequencing with the main thread
                     self._return_request.clear()
+                elif self.radio.gapless_repeats:
+                    raise OverflowError('gapless repeat acquisition failed')
 
                 next_time_ns = time_ns + round(1e9 * self.capture.duration)
 
