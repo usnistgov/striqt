@@ -1,5 +1,4 @@
 from __future__ import annotations
-import contextlib
 import functools
 from math import ceil
 import typing
@@ -8,9 +7,6 @@ import labbench as lb
 from labbench import paramattr as attr
 import msgspec
 import numpy as np
-from queue import Queue, Empty
-import threading
-import channel_analysis
 
 from .. import structs, util
 
@@ -40,248 +36,6 @@ def find_trigger_holdoff(start_time, sample_rate, periodic_trigger: float | None
         lb.logger.info(f'snapping to periodic trigger with {holdoff}-sample holdoff')
 
     return holdoff
-
-
-# class ThreadedRXStream:
-#     CHUNK_DURATION = 50e-3
-
-#     def __init__(self, radio: RadioDevice):
-#         self._thread = None
-#         self.radio = radio
-
-#         self._result = Queue(1)
-#         self._running = threading.Event()
-#         self._return_request = threading.Event()
-#         self._stop_req = threading.Event()
-#         self._trigger_req = Queue(1)
-#         self.sample_count = None
-
-#     def arm(self, capture: structs.RadioCapture):
-#         with self.pause():
-#             self.capture = capture
-#             self.buf_size, _ = get_capture_buffer_sizes(
-#                 self.radio, capture, include_holdoff=True
-#             )
-#             self.sample_count, _ = get_capture_buffer_sizes(
-#                 self.radio, capture, include_holdoff=False
-#             )
-#             self._thread_exc = None
-
-#     def _fill_buffer(
-#         self, buf_time_ns=None, holdover_samples: 'np.ndarray[np.complex64]' = None, 
-#     ) -> tuple['np.ndarray[np.complex64]', float]:
-#         holdoff_size = 0
-#         streamed_count = 0
-#         awaiting_timestamp = True
-#         acq_start_ns = buf_time_ns
-#         samples = np.empty((2 * self.buf_size,), dtype=np.float32)
-
-#         if buf_time_ns is None and holdover_samples is not None:
-#             raise ValueError(
-#                 'when start time is None, holdover_samples must also be None'
-#             )
-
-#         if holdover_samples is None:
-#             holdover_count = 0
-#         else:
-#             # note: holdover_count.dtype is np.complex64, samples.dtype is np.float32
-#             holdover_count = holdover_samples.size
-#             samples[: 2 * holdover_count] = holdover_samples.view(samples.dtype)
-
-#         fs = self.radio.backend_sample_rate()
-#         chunk_size = min(int(self.CHUNK_DURATION * fs), self.sample_count + holdover_count)
-#         timeout_sec = chunk_size / fs + self.CHUNK_DURATION
-#         remaining = self.sample_count - holdover_count
-
-#         while remaining > 0:
-#             try:
-#                 trigger_requested = self._trigger_req.get_nowait()
-#                 self._trigger_req.put_nowait(trigger_requested)
-#             except Empty:
-#                 trigger_requested = None
-
-#             if self._stop_req.is_set() or trigger_requested is not None:
-#                 if buf_time_ns is None:
-#                     return None, buf_time_ns
-#                 else:
-#                     return None, buf_time_ns + round(
-#                         (streamed_count * 1_000_000_000) / fs
-#                     )
-
-#             if streamed_count > 0 or self.radio.gapless_repeats:
-#                 on_overflow = 'except'
-#             else:
-#                 on_overflow = 'ignore'
-
-#             # Read the samples from the data buffer
-#             this_count, ret_time_ns = self.radio._read_stream(
-#                 [samples],
-#                 offset=holdover_count + streamed_count,
-#                 count=min(chunk_size, remaining),
-#                 timeout_sec=timeout_sec,
-#                 on_overflow=on_overflow,
-#             )
-
-#             if buf_time_ns is None:
-#                 # special case for the first read in the stream, since
-#                 # devices may not always return timestamps
-#                 buf_time_ns = ret_time_ns
-
-#             if awaiting_timestamp:
-#                 holdoff_size = find_trigger_holdoff(
-#                     buf_time_ns, fs, self.radio.periodic_trigger
-#                 )
-#                 remaining = remaining + holdoff_size
-
-#                 acq_start_ns = buf_time_ns + round((holdoff_size * 1_000_000_000) / fs)
-#                 awaiting_timestamp = False
-
-#             remaining = remaining - this_count
-#             streamed_count += this_count
-
-#         samples = samples.view('complex64')[
-#             holdoff_size : self.sample_count + holdoff_size
-#         ]
-#         return samples, acq_start_ns
-
-#     def _background_loop(self):
-#         """acquire samples in a loop"""
-
-#         next_time_ns = None
-
-#         # to skip transients in the resampler, pass in extra samples from the
-#         # previous acquisition allow for settling.
-#         if self.capture.host_resample:
-#             holdover_size = self.sample_count - round(
-#                 self.capture.duration * self.radio.backend_sample_rate()
-#             )
-#         else:
-#             holdover_size = None
-
-#         holdover_samples = None
-
-#         try:
-#             while True:
-#                 try:
-#                     samples, time_ns = self._fill_buffer(
-#                         next_time_ns, holdover_samples
-#                     )
-#                 except BaseException:
-#                     if self._stop_req.is_set():
-#                         break
-#                     else:
-#                         raise
-
-#                 if holdover_size not in (None, 0):
-#                     holdover_samples = samples[-holdover_size:]
-
-#                 if self._stop_req.is_set():
-#                     break
-
-#                 try:
-#                     self._trigger_req.get_nowait()
-#                 except Empty:
-#                     pass
-#                 else:
-#                     # on trigger, _read_buffer returns the timestamp is at the
-#                     # end of its (likely incomplete) buffer read
-#                     # TODO: actually implement the trigger
-#                     next_time_ns = time_ns
-#                     self._trigger_req.clear()
-#                     continue
-
-#                 if self._return_request.is_set():
-#                     self._result.put_nowait((samples, time_ns))
-#                     # the request flag has been set by get(). copy and allocate
-#                     # first to ensure proper sequencing with the main thread
-#                     self._return_request.clear()
-#                 elif self.radio.gapless_repeats:
-#                     raise OverflowError('gapless repeat acquisition failed')
-
-#                 next_time_ns = time_ns + round(1e9 * self.capture.duration)
-
-#         except BaseException as ex:
-#             self._thread_exc = ex
-#             self._stop_req.set()
-
-#     def start(self):
-#         if self.is_running():
-#             self.radio._logger.warning(
-#                 'tried to start stream thread, but one is already running'
-#             )
-#         self._return_request.clear()
-#         self._running.clear()
-#         self._stop_req.clear()
-#         for q in self._result, self._trigger_req:
-#             try:
-#                 q.get_nowait()
-#             except Empty:
-#                 pass
-#         self._thread_exc = None
-#         self._thread = threading.Thread(target=self._background_loop)
-
-#         self._thread.start()
-
-#     @contextlib.contextmanager
-#     def pause(self):
-#         restart = self.is_running()
-#         if restart:
-#             self.stop()
-#         yield
-#         if restart:
-#             self.start()
-
-#     def stop(self):
-#         self._stop_req.set()
-#         self._return_request.clear()
-
-#         if self._thread is None:
-#             return
-#         elif self._thread.is_alive():
-#             self._thread.join()
-
-#         self._thread = None
-
-#     def is_running(self):
-#         thread = self._thread
-#         if thread is None:
-#             return False
-#         running = thread.is_alive() and not self._stop_req.is_set()
-#         if not running and self._thread_exc is not None:
-#             raise self._thread_exc
-#         return running
-
-#     def get(self) -> tuple['np.ndarray', float]:
-#         if not self.is_running():
-#             raise RuntimeError('stream acquisition is not running')
-
-#         self._return_request.set()
-
-#         timeout = max(50e-3 + self.buf_size / self.radio.backend_sample_rate(), 3)
-
-#         try:
-#             samples, time_ns = self._result.get(timeout=timeout)
-#         except Empty:
-#             exc = TimeoutError('stream thread returned no data')
-#         else:
-#             exc = None
-
-#         if exc:
-#             raise exc
-
-#         self._return_request.clear()
-
-#         if samples is None:
-#             self.stop()
-#             if self._thread_exc is not None:
-#                 raise self._thread_exc
-#             else:
-#                 raise TimeoutError('stream thread returned no data')
-
-#         return samples, time_ns
-
-#     def trigger(self):
-#         self._trigger_req.set()
 
 
 class RadioDevice(lb.Device):
@@ -523,6 +277,10 @@ class RadioDevice(lb.Device):
         next_capture: typing.Union[structs.RadioCapture, None] = None,
         correction: bool = True,
     ) -> tuple[np.array, 'pd.Timestamp']:
+        """arm a capture and enable the channel (if necessary), read the resulting IQ waveform.
+        
+        Optionally, calibration corrections can be applied, and the radio can be left ready for the next capture.
+        """
         from .. import iq_corrections
 
         with lb.stopwatch('acquire', logger_level='debug'):
