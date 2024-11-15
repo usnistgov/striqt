@@ -101,9 +101,7 @@ class NullSource(RadioDevice):
             return
         if enable:
             self.backend['channel_enabled'] = True
-            self.stream.start()
         else:
-            self.stream.stop()
             self.backend['channel_enabled'] = False
             self.reset_sample_counter()
 
@@ -127,9 +125,6 @@ class NullSource(RadioDevice):
         self._logger.propagate = False
         self.reset_sample_counter()
         self.backend = {}
-
-    def close(self):
-        self.stream.stop()
 
     @attr.property.str(inherit=True)
     def id(self):

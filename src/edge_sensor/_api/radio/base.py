@@ -360,10 +360,6 @@ class RadioDevice(lb.Device):
     def open(self):
         self._armed_capture: structs.RadioCapture|None = None
 
-    def close(self):
-        self.stream.stop()
-
-
     def setup(self, radio_config: structs.RadioSetup):
         """disarm acquisition and apply the given radio setup"""
 
@@ -446,15 +442,16 @@ class RadioDevice(lb.Device):
             self._holdover_samples = None
 
         self._armed_capture = capture
-
+        self._next_time_ns = None
 
     def read_iq(
-        self, capture, buf_time_ns=None, 
+        self, capture 
     ) -> tuple['np.ndarray[np.complex64]', float]:
         holdoff_size = 0
         streamed_count = 0
         awaiting_timestamp = True
-        acq_start_ns = buf_time_ns
+        buf_time_ns = self._next_time_ns
+        acq_start_ns = self._next_time_ns
 
         buf_size, _ = get_capture_buffer_sizes(self, capture, include_holdoff=True)
         sample_count, _ = get_capture_buffer_sizes(self, capture, include_holdoff=False)
@@ -462,7 +459,7 @@ class RadioDevice(lb.Device):
 
         if buf_time_ns is None and self._holdover_samples is not None:
             raise ValueError(
-                'when start time is None, holdover_samples must also be None'
+                'holdover samples are missing timestamp'
             )
 
         if self._holdover_samples is None:
@@ -472,15 +469,15 @@ class RadioDevice(lb.Device):
             holdover_count = self._holdover_samples.size
             samples[: 2 * holdover_count] = self._holdover_samples.view(samples.dtype)
 
-        holdover_size = sample_count - round(self.capture.duration * self.radio.backend_sample_rate())
+        holdover_size = sample_count - round(capture.duration * self.backend_sample_rate())
         
         fs = self.backend_sample_rate()
         chunk_size = sample_count + holdover_count
-        timeout_sec = chunk_size / fs + self.CHUNK_DURATION
+        timeout_sec = chunk_size / fs + 50e-3
         remaining = sample_count - holdover_count
 
         while remaining > 0:
-            if streamed_count > 0 or self.radio.gapless_repeats:
+            if streamed_count > 0 or self.gapless_repeats:
                 on_overflow = 'except'
             else:
                 on_overflow = 'ignore'
@@ -516,6 +513,7 @@ class RadioDevice(lb.Device):
         ]
 
         self._holdover_samples = samples[-holdover_size:]
+        self._next_time_ns = acq_start_ns + round(1e9 * capture.duration)
 
         return samples, acq_start_ns
 
@@ -538,7 +536,7 @@ class RadioDevice(lb.Device):
             if next_capture is None:
                 self.channel_enabled(False)
             elif next_capture == capture and self.gapless_repeats:
-                # leave it running
+                # the one case where we leave it running
                 pass
             elif next_capture != next_capture:
                 self.channel_enabled(False)
