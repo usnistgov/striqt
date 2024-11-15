@@ -87,7 +87,7 @@ def channel_power_histogram(
         if detector_period is None:
             power_dB = iqwaveform.envtodB(iq)
         else:
-            power = iqwaveform.iq_to_bin_power(kind=detector, **kws).astype('float32')
+            power = iqwaveform.iq_to_bin_power(kind=detector, **kws).astype(dtype)
             power_dB = iqwaveform.powtodB(power, out=power)
         counts, _ = xp.histogram(power_dB, bin_edges)
         data.append(counts.astype(dtype) / xp.sum(counts))

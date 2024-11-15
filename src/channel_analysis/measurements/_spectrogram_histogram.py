@@ -46,7 +46,7 @@ def spectrogram_histogram(
         frequency_resolution=frequency_resolution,
         fractional_overlap=fractional_overlap,
         frequency_bin_averaging=frequency_bin_averaging,
-        dtype='float32',
+        dtype=np.finfo(iq.dtype).dtype,
     )
 
     metadata = dict(metadata)

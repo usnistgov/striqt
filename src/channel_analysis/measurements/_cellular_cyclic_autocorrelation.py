@@ -123,7 +123,7 @@ def cellular_cyclic_autocorrelation(
             otherwise, autocovariance (power)
 
     Returns:
-        an float32-valued array with matching the array type of `iq`
+        a floating point array with matching the array type of `iq.real`
     """
 
     RANGE_MAP = {'frames': frame_range, 'symbols': symbol_range}
@@ -163,7 +163,8 @@ def cellular_cyclic_autocorrelation(
 
     max_len = _get_max_corr_size(capture, subcarrier_spacings=subcarrier_spacings)
 
-    result = xp.full((2, len(subcarrier_spacings), max_len), np.nan, dtype=np.float32)
+    out_dtype = iq.dtype(0).real.dtype
+    result = xp.full((2, len(subcarrier_spacings), max_len), np.nan, dtype=out_dtype)
     for i, phy in enumerate(phy_scs.values()):
         # R = _correlate_cyclic_prefixes(iq, phy, **kws)
         cp_inds = phy.index_cyclic_prefix(**idx_kws, slots=downlink_slots)

@@ -123,7 +123,7 @@ class TDMSFileSource(NullSource):
                 f'center frequency ignored, using {actual/1e6} MHz from file'
             )
 
-    def get_waveform(self, count: int, offset: int, *, channel: int = 0, xp=np):
+    def get_waveform(self, count: int, offset: int, *, channel: int = 0, xp=np, dtype='complex64'):
         size = int(self.backend['header_fd']['total_samples'][0])
         ref_level = self.backend['header_fd']['reference_level_dBm'][0]
 
@@ -138,4 +138,6 @@ class TDMSFileSource(NullSource):
         iq[offset * 2 :: 2] = xp.asarray(i[offset : count + offset])
         iq[1 + offset * 2 :: 2] = xp.asarray(q[offset : count + offset])
 
-        return (iq * xp.float32(scale)).view('complex64').copy()
+        float_dtype = np.finfo(np.dtype(dtype)).dtype
+
+        return (iq * float_dtype(scale)).view(dtype).copy()
