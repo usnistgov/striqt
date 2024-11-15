@@ -32,9 +32,6 @@ def find_trigger_holdoff(start_time, sample_rate, periodic_trigger: float | None
     holdoff_ns = (periodic_trigger_ns - excess_time_ns) % periodic_trigger_ns
     holdoff = round(holdoff_ns / 1e9 * sample_rate)
 
-    if holdoff != 0:
-        lb.logger.info(f'snapping to periodic trigger with {holdoff}-sample holdoff')
-
     return holdoff
 
 
@@ -132,75 +129,77 @@ class RadioDevice(lb.Device):
     def arm(self, capture: structs.RadioCapture):
         """stop the stream, apply a capture configuration, and start it"""
 
-        if self.channel() is not None:
-            self.channel_enabled(False)
+        with lb.stopwatch('arm', logger_level='debug'):
+            if self.channel() is not None:
+                self.channel_enabled(False)
 
-        if iqwaveform.power_analysis.isroundmod(
-            capture.duration * capture.sample_rate, 1
-        ):
-            self.duration = capture.duration
-        else:
-            raise ValueError(
-                f'duration {capture.duration} is not an integer multiple of sample period'
+            if iqwaveform.power_analysis.isroundmod(
+                capture.duration * capture.sample_rate, 1
+            ):
+                self.duration = capture.duration
+            else:
+                raise ValueError(
+                    f'duration {capture.duration} is not an integer multiple of sample period'
+                )
+
+            if capture.channel != self.channel():
+                self.channel(capture.channel)
+            else:
+                self.channel_enabled(False)
+
+            if self.gain() != capture.gain:
+                self.gain(capture.gain)
+
+            fs_backend, lo_offset, analysis_filter = design_capture_filter(
+                self.base_clock_rate, capture
             )
 
-        if capture.channel != self.channel():
-            self.channel(capture.channel)
-        else:
-            self.channel_enabled(False)
+            nfft_out = analysis_filter.get('nfft_out', analysis_filter['nfft'])
+            downsample = analysis_filter['nfft'] / nfft_out
 
-        if self.gain() != capture.gain:
-            self.gain(capture.gain)
+            if fs_backend != self.backend_sample_rate() or downsample != self._downsample:
+                self.channel_enabled(False)
+                with attr.hold_attr_notifications(self):
+                    self._downsample = 1  # temporarily avoid a potential bounding error
+                self.backend_sample_rate(fs_backend)
+                self._downsample = downsample
 
-        fs_backend, lo_offset, analysis_filter = design_capture_filter(
-            self.base_clock_rate, capture
-        )
+            if capture.sample_rate != self.sample_rate():
+                # in this case, it's only a post-processing (GPU resampling) change
+                self.sample_rate(capture.sample_rate)
 
-        nfft_out = analysis_filter.get('nfft_out', analysis_filter['nfft'])
-        downsample = analysis_filter['nfft'] / nfft_out
+            if (
+                self.periodic_trigger is not None
+                and capture.duration < self.periodic_trigger
+            ):
+                self._logger.warning(
+                    'periodic trigger duration exceeds capture duration, '
+                    'which creates a large buffer of unused samples'
+                )
 
-        if fs_backend != self.backend_sample_rate() or downsample != self._downsample:
-            self.channel_enabled(False)
-            with attr.hold_attr_notifications(self):
-                self._downsample = 1  # temporarily avoid a potential bounding error
-            self.backend_sample_rate(fs_backend)
-            self._downsample = downsample
+            if lo_offset != self.lo_offset:
+                self.lo_offset = lo_offset  # hold update on this one?
 
-        if capture.sample_rate != self.sample_rate():
-            # in this case, it's only a post-processing (GPU resampling) change
-            self.sample_rate(capture.sample_rate)
+            if capture.center_frequency != self.center_frequency():
+                self.channel_enabled(False)
+                self.center_frequency(capture.center_frequency)
 
-        if (
-            self.periodic_trigger is not None
-            and capture.duration < self.periodic_trigger
-        ):
-            self._logger.warning(
-                'periodic trigger duration exceeds capture duration, '
-                'which creates a large buffer of unused samples'
-            )
+            self.analysis_bandwidth = capture.analysis_bandwidth
 
-        if lo_offset != self.lo_offset:
-            self.lo_offset = lo_offset  # hold update on this one?
+            if self.time_sync_every_capture:
+                self.channel_enabled(False)
+                self.sync_time_source()
 
-        if capture.center_frequency != self.center_frequency():
-            self.channel_enabled(False)
-            self.center_frequency(capture.center_frequency)
+            if not self.channel_enabled():
+                self._holdover_samples = None
 
-        self.analysis_bandwidth = capture.analysis_bandwidth
-
-        if self.time_sync_every_capture:
-            self.channel_enabled(False)
-            self.sync_time_source()
-
-        if not self.channel_enabled():
-            self._holdover_samples = None
-
-        self._armed_capture = capture
-        self._next_time_ns = None
+            self._armed_capture = capture
+            self._next_time_ns = None
 
     def read_iq(
         self, capture 
     ) -> tuple['np.ndarray[np.complex64]', float]:
+    
         holdoff_size = 0
         streamed_count = 0
         awaiting_timestamp = True
@@ -284,20 +283,22 @@ class RadioDevice(lb.Device):
         from .. import iq_corrections
 
         with lb.stopwatch('acquire', logger_level='debug'):
-            if capture != self._armed_capture or self.channel() is None or not self.channel_enabled():
+            if capture != self._armed_capture:
                 self.arm(capture)
+
+            if self.channel() is None or not self.channel_enabled():
                 self.channel_enabled(True)
 
             iq, time_ns = self.read_iq(capture)
             time_ns = pd.Timestamp(time_ns, unit='ns')
 
-            if next_capture is None:
-                self.channel_enabled(False)
-            elif next_capture == capture and self.gapless_repeats:
+            if next_capture == capture and self.gapless_repeats:
                 # the one case where we leave it running
                 pass
-            elif next_capture != next_capture:
+            else:
                 self.channel_enabled(False)
+
+            if next_capture is not None and next_capture != next_capture:
                 self.arm(next_capture)
 
             if correction:
