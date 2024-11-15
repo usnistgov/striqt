@@ -8,8 +8,10 @@ from ..util import import_cupy_with_fallback
 
 if typing.TYPE_CHECKING:
     import pandas as pd
+    import iqwaveform
 else:
     pd = lb.util.lazy_import('pandas')
+    iqwaveform = lb.util.lazy_import('iqwaveform')
 
 
 channel_kwarg = attr.method_kwarg.int('channel', min=0, help='hardware port number')
@@ -89,14 +91,19 @@ class NullSource(RadioDevice):
     def sync_time_source(self):
         pass
 
-    @attr.method.bool(cache=True)
+    @attr.method.bool(sets=True, gets=True)
     def channel_enabled(self):
-        # this is only called at most once, due to cache=True
-        raise ValueError('must set channel_enabled once before reading')
+        return self.backend.get('channel_enabled', False)
 
     @channel_enabled.setter
     def _(self, enable: bool):
-        self.backend['channel_enabled'] = enable
+        if enable == self.channel_enabled():
+            return
+        if enable:
+            self.backend['channel_enabled'] = True
+        else:
+            self.backend['channel_enabled'] = False
+            self.reset_sample_counter()
 
     @attr.method.float(label='dB', help='SDR hardware gain')
     def gain(self):
@@ -116,9 +123,8 @@ class NullSource(RadioDevice):
 
     def open(self):
         self._logger.propagate = False
+        self.reset_sample_counter()
         self.backend = {}
-        self.channel(0)
-        self.channel_enabled(False)
 
     @attr.property.str(inherit=True)
     def id(self):
@@ -128,12 +134,29 @@ class NullSource(RadioDevice):
     def base_clock_rate(self):
         return 125e6
 
-    def _prepare_buffer(self, capture):
-        pass
+    def _read_stream(
+        self, buffers, offset, count, timeout_sec=None, *, on_overflow='except'
+    ) -> tuple[int, int]:
+        xp = iqwaveform.util.array_namespace(buffers[0])
+        timestamp_ns = (1_000_000_000 * self._sample_count) / float(
+            self.backend_sample_rate()
+        )
 
-    def _read_stream(self, N):
-        xp = import_cupy_with_fallback()
-        return xp.empty(N, dtype='complex64'), pd.Timestamp('now')
+        for channel, buf in zip([self.channel], buffers):
+            values = self.get_waveform(
+                count, self._sample_count, channel=channel, xp=xp
+            )
+            buf[2 * offset : 2 * (offset + count)] = values.view('float32')
+
+        self._sample_count += count
+
+        return count, round(timestamp_ns)
+
+    def get_waveform(self, count, start_index: int, *, channel: int = 0, xp):
+        return xp.empty(count, dtype='complex64')
+
+    def reset_sample_counter(self):
+        self._sample_count = 0
 
 
 class NullRadio(NullSource):

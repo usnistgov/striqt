@@ -8,11 +8,9 @@ import msgspec
 
 
 if typing.TYPE_CHECKING:
-    import frozendict
     import pandas as pd
 else:
     pd = util.lazy_import('pandas')
-    frozendict = util.lazy_import('frozendict')
 
 
 def meta(standard_name: str, unit: str | None = None, **kws) -> msgspec.Meta:
@@ -26,7 +24,7 @@ def meta(standard_name: str, unit: str | None = None, **kws) -> msgspec.Meta:
 
 @functools.wraps(functools.partial(msgspec.to_builtins, builtin_types=[]))
 def struct_to_builtins(*args, **kws):
-    kws = dict(kws, builtin_types=(frozendict.frozendict, pd.Timestamp))
+    kws = dict(kws, builtin_types=(pd.Timestamp,))
     return msgspec.to_builtins(*args, **kws)
 
 
@@ -56,7 +54,7 @@ class Capture(msgspec.Struct, kw_only=True, frozen=True):
 class FilteredCapture(Capture):
     # filtering and resampling
     analysis_filter: dict = msgspec.field(
-        default_factory=lambda: frozendict.frozendict({'nfft': 8192, 'window': 'hamming'})
+        default_factory=lambda: {'nfft': 8192, 'window': 'hamming'}
     )
 
 

@@ -4,7 +4,6 @@ from __future__ import annotations
 import typing
 from pathlib import Path
 
-from frozendict import frozendict
 import msgspec
 
 from .structs import Sweep, RadioCapture  # noqa: F401
@@ -19,9 +18,7 @@ else:
 
 
 def _dec_hook(type_, obj):
-    if typing.get_origin(type_) is frozendict:
-        return frozendict(obj)
-    elif typing.get_origin(type_) is pd.Timestamp:
+    if typing.get_origin(type_) is pd.Timestamp:
         return pd.to_datetime(obj)
     else:
         return obj

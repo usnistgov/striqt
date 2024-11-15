@@ -33,9 +33,11 @@ def run(**kws):
         if result is not None
     ]
 
-    dataset = xr.concat(results, edge_sensor.CAPTURE_DIM)
-    edge_sensor.dump(store, dataset)
-    lb.logger.info(f'wrote to {store.path}')
+    with lb.stopwatch('merging results', logger_level='debug'):
+        dataset = xr.concat(results, edge_sensor.CAPTURE_DIM)
+
+    with lb.stopwatch(f'write to {store.path}'):
+        edge_sensor.dump(store, dataset)
 
 
 if __name__ == '__main__':

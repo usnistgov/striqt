@@ -77,10 +77,11 @@ def channel_power_time_series(
 ):
     kws = {'iq': iq, 'Ts': 1 / capture.sample_rate, 'Tbin': detector_period}
 
+    dtype = np.finfo(iq.dtype).dtype
     data = []
     for detector in power_detectors:
         power = iqwaveform.iq_to_bin_power(kind=detector, **kws)
-        data.append(iqwaveform.powtodB(power.astype('float32')))
+        data.append(iqwaveform.powtodB(power.astype(dtype)))
 
     metadata = {
         'detector_period': detector_period,

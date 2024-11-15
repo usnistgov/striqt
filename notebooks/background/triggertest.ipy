@@ -1,0 +1,46 @@
+from edge_sensor import radios
+from edge_sensor._api.radio import trigger, base
+from edge_sensor import RadioCapture
+import labbench as lb
+import time
+from SoapySDR import SOAPY_SDR_HAS_TIME
+lb.show_messages('info')
+capture = RadioCapture(center_frequency=3710e6, gain=-10, duration=0.2, sample_rate=15.36e6, channel=0, analysis_bandwidth=10e6)
+
+# %timeit -n1 -r1 
+sdr = radios.Air7201B()
+sdr.open()
+sdr.arm(capture)
+
+size, _ = base.get_capture_buffer_sizes(sdr, capture, include_holdoff=True)
+a, info = trigger.empty_shared_array(size)
+
+%timeit trigger.get_shared_array(*info)
+
+# remaining = int(capture.duration*capture.sample_rate)
+# timeout = 0.25
+
+# sdr._prepare_buffer(capture)
+
+# for i in range(2):
+#     t0 = time.time()
+#     sdr.backend.activateStream(
+#         sdr.rx_stream,
+#         flags=SOAPY_SDR_HAS_TIME,
+#         timeNs=sdr.backend.getHardwareTime('now')+int(50e-3*1e9),
+#     )
+#     print('enabled after ', time.time()-t0)
+
+#     rx_result = sdr.backend.readStream(
+#          sdr.rx_stream,
+#          [sdr._inbuf],
+#          remaining,
+#          timeoutUs=int(timeout * 1e6),
+#     )
+
+#     now = sdr.backend.getHardwareTime('now')
+#     print(rx_result.ret, 'stream start: ', rx_result.timeNs/1e9, 'stream now: ', now/1e9)
+#     print('finished after ', time.time()-t0)
+#     sdr.backend.deactivateStream(
+#         sdr.rx_stream
+#     )

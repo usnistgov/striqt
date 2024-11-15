@@ -1,7 +1,6 @@
 """data structures for configuration of radio hardware, captures, and sweeps"""
 
 from __future__ import annotations
-from frozendict import frozendict  # noqa: F401
 import functools
 import msgspec
 import typing
@@ -44,7 +43,9 @@ class WaveformCapture(channel_analysis.Capture, forbid_unknown_fields=True):
     sample_rate: Annotated[float, meta('Sample rate', 'S/s', gt=0)] = 15.36e6
 
     # filtering and resampling
-    analysis_bandwidth: Annotated[float, meta('Bandwidth of the analysis filter (or inf to disable)', 'Hz', gt=0)] = float('inf')
+    analysis_bandwidth: Annotated[
+        float, meta('Bandwidth of the analysis filter (or inf to disable)', 'Hz', gt=0)
+    ] = float('inf')
     lo_shift: Annotated[_TShift, meta('LO shift direction')] = 'none'
     host_resample: bool = True
 
@@ -57,6 +58,9 @@ class RadioCapture(WaveformCapture, forbid_unknown_fields=True):
     channel: Annotated[int, meta('Input port index', ge=0)] = 0
     gain: Annotated[float, meta('Gain setting', 'dB')] = -10
 
+    delay: Optional[
+        Annotated[float, meta('Delay in acquisition start time', 's', gt=0)]
+    ] = None
     start_time: Optional[Annotated['pd.Timestamp', meta('Acquisition start time')]] = (
         None
     )
@@ -68,10 +72,14 @@ class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):
     driver: str = 'AirT7x01B'
     resource: Any = None
     time_source: Literal['host', 'internal', 'external', 'gps'] = 'host'
+    continuous_trigger: Annotated[
+        bool,
+        meta('Whether to trigger immediately after each call to acquire() when armed'),
+    ] = True
     periodic_trigger: Optional[float] = None
     calibration: Optional[str] = None
     gapless_repeats: bool = False
-    time_sync_each_capture: bool = False
+    time_sync_every_capture: bool = False
 
 
 class Description(msgspec.Struct, forbid_unknown_fields=True):

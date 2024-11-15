@@ -15,15 +15,11 @@ dependencies:
   # hard-coded on behalf of pip for iqwaveform
 - pandas>=1.5,<2
 - scipy>=1.9.2
-- seaborn>=0.12
 - numpy>=1.21,<2
 - matplotlib-base>=3.7
 - numexpr>=2.7
 - scikit-learn>=1.1,<2.0
-- pyppeteer
-- ipympl
 - numexpr>=2.8.4
-- humanfriendly
 - array-api-compat
 - methodtools
 
@@ -38,7 +34,6 @@ dependencies:
 - zarr>=2.18,<3
 - dask
 - msgspec
-- frozendict
 
   # git repository introspection support for metadata
 - dulwich
@@ -52,7 +47,6 @@ dependencies:
 - pip:
   - iqwaveform @ git+https://github.com/usnistgov/iqwaveform
   - xarray_dataclasses @ git+https://github.com/dgkuester/xarray-dataclasses@lazy-imports
-        #   - ssmdevices
 
       # allows imports from the src/ directory in this repo
   - -e ..
