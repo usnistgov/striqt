@@ -5,9 +5,9 @@ import typing
 
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
-from ._common import as_registered_channel_analysis
+from ..api.registry import register_xarray_measurement
 
-from .._api import structs, util
+from ..api import structs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -67,7 +67,7 @@ class ChannelPowerTimeSeries(AsDataArray):
 
 
 ### iqwaveform implementation
-@as_registered_channel_analysis(ChannelPowerTimeSeries)
+@register_xarray_measurement(ChannelPowerTimeSeries)
 def channel_power_time_series(
     iq,
     capture: structs.Capture,

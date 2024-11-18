@@ -11,8 +11,8 @@ from ._channel_power_ccdf import (
     ChannelPowerBinAxis,
     make_power_bins,
 )
-from ._common import as_registered_channel_analysis
-from .._api import structs, util
+from ..api.registry import register_xarray_measurement
+from ..api import structs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -51,7 +51,7 @@ class ChannelPowerHistogram(AsDataArray):
     standard_name: Attr[str] = 'Fraction of counts'
 
 
-@as_registered_channel_analysis(ChannelPowerHistogram)
+@register_xarray_measurement(ChannelPowerHistogram)
 def channel_power_histogram(
     iq,
     capture: structs.Capture,

@@ -6,8 +6,8 @@ import typing
 
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
-from ._common import as_registered_channel_analysis
-from .._api import structs, util
+from ..api.registry import register_xarray_measurement
+from ..api import structs, util
 
 
 if typing.TYPE_CHECKING:
@@ -91,7 +91,7 @@ class CellularCyclicAutocorrelation(AsDataArray):
 
 
 ### iqwaveform wrapper
-@as_registered_channel_analysis(CellularCyclicAutocorrelation)
+@register_xarray_measurement(CellularCyclicAutocorrelation)
 def cellular_cyclic_autocorrelation(
     iq: 'iqwaveform.util.Array',
     capture: structs.Capture,

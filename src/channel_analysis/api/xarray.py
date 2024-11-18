@@ -8,7 +8,7 @@ import dataclasses
 import inspect
 import typing
 
-from ..._api import structs, util
+from . import structs, util
 
 
 if typing.TYPE_CHECKING:

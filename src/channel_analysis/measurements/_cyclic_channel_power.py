@@ -5,10 +5,10 @@ import typing
 
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
-from ._common import as_registered_channel_analysis
+from ..api.registry import register_xarray_measurement
 from ._channel_power_time_series import PowerDetectorAxis, PowerDetectorCoords
 
-from .._api import structs, util
+from ..api import structs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -81,7 +81,7 @@ class CyclicChannelPower(AsDataArray):
     units: Attr[str] = 'dBm'
 
 
-@as_registered_channel_analysis(CyclicChannelPower)
+@register_xarray_measurement(CyclicChannelPower)
 def cyclic_channel_power(
     iq,
     capture: structs.Capture,

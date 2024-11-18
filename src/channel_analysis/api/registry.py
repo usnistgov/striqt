@@ -1,4 +1,6 @@
-"""wrap lower-level iqwaveform DSP calls to accept physical inputs and return xarray.DataArray"""
+"""Implement a registry to track and wrap measurement functions that to convert numpy return values
+and transform the results into xarray DataArray objects with labeled dimensions and coordinates.
+"""
 
 from __future__ import annotations
 
@@ -9,30 +11,33 @@ import typing
 
 import msgspec
 
-from ..._api import structs
-from ..._api import util
-from .xarray import ChannelAnalysisResult
+from . import structs
+from . import util
+from .xarray import ChannelAnalysisResult, evaluate_channel_analysis, package_channel_analysis
+
 
 if typing.TYPE_CHECKING:
     import numpy as np
     from xarray_dataclasses import dataarray
     import array_api_compat
     import iqwaveform
-    from ..._api import shmarray
+    from . import shmarray
+    import xarray as xr
 else:
     np = util.lazy_import('numpy')
     dataarray = util.lazy_import('xarray_dataclasses.dataarray')
     array_api_compat = util.lazy_import('array_api_compat')
     iqwaveform = util.lazy_import('iqwaveform')
+    xr = util.lazy_import('xarray')
 
     # TODO: figure out a proper relative import here to work properly
-    shmarray = util.lazy_import('channel_analysis._api.shmarray')
+    shmarray = util.lazy_import('channel_analysis.api.shmarray')
 
 
 TFunc = typing.Callable[..., typing.Any]
 
 
-def _results_as_shared_arrays(obj: tuple | list | dict | 'iqwaveform.util.Array'):
+def _results_as_shared_arrays(obj: tuple | list | dict | 'iqwaveform.util.Array', as_shmarray=False):
     """convert an array, or a container of arrays, into a numpy array (or container of numpy arrays)"""
 
     if isinstance(obj, (tuple, list)):
@@ -50,7 +55,10 @@ def _results_as_shared_arrays(obj: tuple | list | dict | 'iqwaveform.util.Array'
     else:
         raise TypeError(f'obj type {type(obj)} is unrecognized')
 
-    return array  # shmarray.NDSharedArray(array)
+    if as_shmarray:
+        return shmarray.NDSharedArray(array)
+    else:
+        return array
 
 
 class KeywordArguments(msgspec.Struct):
@@ -91,24 +99,32 @@ class ChannelAnalysisRegistryDecorator(collections.UserDict):
 
             @functools.wraps(func)
             def wrapped(iq, capture, **kws):
+                # a "secret" argument, delay_xarray, allows the return of a
+                # ChannelAnalysis result for speed"""
+                delay_xarray = kws.pop('delay_xarray', False)
                 bound = sig.bind(iq=iq, capture=capture, **kws)
                 call_params = bound.kwargs
                 ret = func(*bound.args, **bound.kwargs)
 
                 if isinstance(ret, (list, tuple)) and len(ret) == 2:
-                    result, ret_metadata = ret
+                    delayed_result, ret_metadata = ret
                     ret_metadata = dict(metadata, **ret_metadata)
                 else:
-                    result = ret
+                    delayed_result = ret
                     ret_metadata = metadata
 
-                return ChannelAnalysisResult(
+                delayed_result = ChannelAnalysisResult(
                     xarray_datacls,
-                    _results_as_shared_arrays(result),
+                    _results_as_shared_arrays(delayed_result),
                     capture,
                     parameters=call_params,
                     attrs=ret_metadata,
                 )
+
+                if delay_xarray:
+                    return delayed_result
+                else:
+                    return delayed_result.to_xarray()
 
             sig_kws = [
                 self._param_to_field(k, p)
@@ -144,3 +160,19 @@ class ChannelAnalysisRegistryDecorator(collections.UserDict):
             forbid_unknown_fields=True,
             omit_defaults=True,
         )
+
+register_xarray_measurement = ChannelAnalysisRegistryDecorator(structs.ChannelAnalysis)
+
+
+def analyze_by_spec(
+    iq: 'iqwaveform.util.Array',
+    capture: structs.Capture,
+    *,
+    spec: str | dict | structs.ChannelAnalysis,
+) -> 'xr.Dataset':
+    """evaluate a set of different channel analyses on the iq waveform as specified by spec"""
+
+    results = evaluate_channel_analysis(
+        iq, capture, spec=spec, registry=register_xarray_measurement
+    )
+    return package_channel_analysis(capture, results)

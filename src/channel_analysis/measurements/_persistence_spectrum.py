@@ -5,9 +5,9 @@ import typing
 
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
-from ._common import as_registered_channel_analysis
+from ..api.registry import register_xarray_measurement
 from ._spectrogram import _centered_trim, _binned_mean, equivalent_noise_bandwidth
-from .._api import structs, util
+from ..api import structs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -91,7 +91,7 @@ class PersistenceSpectrum(AsDataArray):
     standard_name: Attr[str] = 'Power spectral density'
 
 
-@as_registered_channel_analysis(PersistenceSpectrum)
+@register_xarray_measurement(PersistenceSpectrum)
 def persistence_spectrum(
     iq: 'iqwaveform.util.Array',
     capture: structs.Capture,

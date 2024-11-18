@@ -5,8 +5,8 @@ import typing
 
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
-from ._common import as_registered_channel_analysis
-from .._api import structs, util
+from ..api.registry import register_xarray_measurement
+from ..api import structs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -193,7 +193,7 @@ def _do_spectrogram(
     return spg, metadata
 
 
-@as_registered_channel_analysis(Spectrogram)
+@register_xarray_measurement(Spectrogram)
 def spectrogram(
     iq: 'iqwaveform.util.Array',
     capture: structs.Capture,

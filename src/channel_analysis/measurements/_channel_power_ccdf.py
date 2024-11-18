@@ -5,8 +5,8 @@ import typing
 
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
-from ._common import as_registered_channel_analysis
-from .._api import structs, util
+from ..api.registry import register_xarray_measurement
+from ..api import structs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -56,7 +56,7 @@ class ChannelPowerCCDF(AsDataArray):
     long_name: Attr[str] = r'Exceedance fraction'
 
 
-@as_registered_channel_analysis(ChannelPowerCCDF)
+@register_xarray_measurement(ChannelPowerCCDF)
 def channel_power_ccdf(
     iq,
     capture: structs.Capture,

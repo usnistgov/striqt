@@ -5,11 +5,11 @@ import typing
 
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
-from ._common import as_registered_channel_analysis
+from ..api.registry import register_xarray_measurement
 from ._spectrogram import equivalent_noise_bandwidth
 from ._channel_power_ccdf import make_power_bins, ChannelPowerCoords
 
-from .._api import structs, util
+from ..api import structs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -71,7 +71,7 @@ class SpectrogramCCDF(AsDataArray):
     long_name: Attr[str] = r'Fraction of counts centered in bin channel power level'
 
 
-@as_registered_channel_analysis(SpectrogramCCDF)
+@register_xarray_measurement(SpectrogramCCDF)
 def spectrogram_ccdf(
     iq: 'iqwaveform.util.Array',
     capture: structs.Capture,
