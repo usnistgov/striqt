@@ -99,31 +99,33 @@ class ChannelAnalysisRegistryDecorator(collections.UserDict):
             @functools.wraps(func)
             def wrapped(iq, capture, **kws):
                 # a "secret" argument, delay_xarray, allows the return of a
-                # ChannelAnalysis result for speed"""
+                # ChannelAnalysis result for fast serialization and xarray object
+                # instantiation
                 delay_xarray = kws.pop('delay_xarray', False)
+
                 bound = sig.bind(iq=iq, capture=capture, **kws)
                 call_params = bound.kwargs
                 ret = func(*bound.args, **bound.kwargs)
 
                 if isinstance(ret, (list, tuple)) and len(ret) == 2:
-                    delayed_result, ret_metadata = ret
+                    result, ret_metadata = ret
                     ret_metadata = dict(metadata, **ret_metadata)
                 else:
-                    delayed_result = ret
+                    result = ret
                     ret_metadata = metadata
 
-                delayed_result = ChannelAnalysisResult(
+                result_obj = ChannelAnalysisResult(
                     xarray_datacls,
-                    _results_as_shared_arrays(delayed_result),
+                    _results_as_shared_arrays(result, as_shmarray=delay_xarray),
                     capture,
                     parameters=call_params,
                     attrs=ret_metadata,
                 )
 
                 if delay_xarray:
-                    return delayed_result
+                    return result_obj
                 else:
-                    return delayed_result.to_xarray()
+                    return result_obj.to_xarray()
 
             sig_kws = [
                 self._param_to_field(k, p)
