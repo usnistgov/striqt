@@ -9,8 +9,8 @@ from typing import Annotated, Optional, Literal, Any
 from . import util
 
 import channel_analysis
-import channel_analysis._api.filters
-from channel_analysis._api.structs import (
+import channel_analysis.api.filters
+from channel_analysis.api.structs import (
     meta,
     ChannelAnalysis,  # noqa: F401
     struct_to_builtins,  # noqa: F401

@@ -5,7 +5,7 @@ import pickle
 import gzip
 from math import ceil
 
-from channel_analysis._api import filters
+from channel_analysis.api import filters
 from . import util
 
 from .radio import RadioDevice, get_capture_buffer_sizes, design_capture_filter
