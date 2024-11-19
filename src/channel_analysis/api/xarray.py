@@ -6,9 +6,10 @@ import collections
 import functools
 import dataclasses
 import inspect
+import msgspec
 import typing
 
-from ..._api import structs, util
+from . import structs, util
 
 
 if typing.TYPE_CHECKING:
@@ -148,7 +149,7 @@ def evaluate_channel_analysis(
         func = registry[type(getattr(spec, name))]
 
         if func_kws:
-            results[name] = func(iq, capture, **func_kws)
+            results[name] = func(iq, capture, delay_xarray=True, **func_kws)
 
     return results
 
@@ -162,5 +163,5 @@ def package_channel_analysis(
     # capture = structs.builtins_to_struct(capture, type=type(capture))
     attrs = structs.struct_to_builtins(capture)
     if isinstance(capture, structs.FilteredCapture):
-        attrs['analysis_filter'] = dict(capture.analysis_filter)
+        attrs['analysis_filter'] = msgspec.to_builtins(capture.analysis_filter)
     return xr.Dataset(xarrays, attrs=attrs)

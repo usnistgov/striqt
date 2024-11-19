@@ -32,25 +32,25 @@ def filter_iq_capture(
 
     xp = iqwaveform.fourier.array_namespace(iq)
 
-    nfft = capture.analysis_filter['nfft']
+    nfft = capture.analysis_filter.nfft
 
     nfft_out, noverlap, overlap_scale, _ = iqwaveform.fourier._ola_filter_parameters(
         iq.size,
-        window=capture.analysis_filter['window'],
-        nfft_out=capture.analysis_filter.get('nfft_out', nfft),
+        window=capture.analysis_filter.window,
+        nfft_out=capture.analysis_filter.nfft_out,
         nfft=nfft,
         extend=True,
     )
 
     w = iqwaveform.fourier._get_window(
-        capture.analysis_filter['window'], nfft, fftbins=False, xp=xp
+        capture.analysis_filter.window, nfft, fftbins=False, xp=xp
     )
     freqs, _, xstft = iqwaveform.fourier.stft(
         iq,
         fs=capture.sample_rate,
         window=w,
-        nperseg=capture.analysis_filter['nfft'],
-        noverlap=round(capture.analysis_filter['nfft'] * overlap_scale),
+        nperseg=capture.analysis_filter.nfft,
+        noverlap=round(capture.analysis_filter.nfft * overlap_scale),
         axis=axis,
         truncate=False,
         out=out,
@@ -58,7 +58,7 @@ def filter_iq_capture(
 
     freq_res = capture.sample_rate / nfft
     enbw = freq_res * iqwaveform.fourier.equivalent_noise_bandwidth(
-        capture.analysis_filter['window'], nfft, fftbins=False
+        capture.analysis_filter.window, nfft, fftbins=False
     )
 
     passband = (
@@ -66,11 +66,11 @@ def filter_iq_capture(
         capture.analysis_bandwidth / 2 - enbw,
     )
 
-    if nfft_out != capture.analysis_filter['nfft']:
+    if nfft_out != capture.analysis_filter.nfft:
         freqs, xstft = iqwaveform.fourier.downsample_stft(
             freqs,
             xstft,
-            nfft_out=nfft_out,
+            nfft_out=capture.analysis_filter.nfft_out or capture.analysis_filter.nfft,
             passband=passband,
             axis=axis,
             out=xstft,
@@ -95,7 +95,6 @@ def simulated_awgn(
     xp=np,
     pinned_cuda=False,
     seed=None,
-    dtype='float32',
     out=None,
 ) -> 'iqwaveform.util.Array':
     try:
@@ -109,7 +108,7 @@ def simulated_awgn(
     size = round(capture.duration * capture.sample_rate)
 
     if isinstance(capture, structs.FilteredCapture):
-        size = size + 2 * capture.analysis_filter['nfft']
+        size = size + 2 * capture.analysis_filter.nfft
 
     if pinned_cuda:
         import numba
@@ -130,7 +129,7 @@ def simulated_awgn(
         samples = xp.empty((size,), dtype=xp.complex64)
 
     generator.standard_normal(
-        size=2 * size, dtype=dtype, out=samples.view(dtype)
+        size=2 * size, dtype=xp.float32, out=samples.view(xp.float32)
     )
 
     if capture.analysis_bandwidth is not None:
@@ -140,13 +139,13 @@ def simulated_awgn(
 
     if isinstance(capture, structs.FilteredCapture):
         return filter_iq_capture(samples, capture)[
-            capture.analysis_filter['nfft'] : -capture.analysis_filter['nfft']
+            capture.analysis_filter.nfft : -capture.analysis_filter.nfft
         ]
     else:
         return samples
 
 
-def read_tdms(path, analysis_bandwidth: float = None, dtype='float32'):
+def read_tdms(path, analysis_bandwidth: float = None):
     from nptdms import TdmsFile
 
     fd = TdmsFile.read(path)
@@ -169,7 +168,7 @@ def read_tdms(path, analysis_bandwidth: float = None, dtype='float32'):
     if iq.shape[0] % frame_size != 0:
         iq = iq[: (iq.shape[0] // frame_size) * frame_size]
 
-    iq = (iq * np.dtype(dtype)(scale)).view('complex64')
+    iq = (iq * np.float32(scale)).view('complex64')
     capture = structs.FilteredCapture(
         duration=iq.size / fs, sample_rate=fs, analysis_bandwidth=analysis_bandwidth
     )

@@ -51,11 +51,18 @@ class Capture(msgspec.Struct, kw_only=True, frozen=True):
     )
 
 
-class FilteredCapture(Capture):
+class AnalysisFilter(msgspec.Struct, kw_only=True, frozen=True):
+    nfft: int = 8192
+    window: typing.Union[tuple[str, ...], str] = 'hamming'
+    nfft_out: int = None
+
+
+class FilteredCapture(Capture, kw_only=True, frozen=True):
     # filtering and resampling
-    analysis_filter: dict = msgspec.field(
-        default_factory=lambda: {'nfft': 8192, 'window': 'hamming'}
-    )
+    analysis_filter: AnalysisFilter = msgspec.field(default_factory=AnalysisFilter)
+    # analysis_filter: dict = msgspec.field(
+    #     default_factory=lambda: {'nfft': 8192, 'window': 'hamming'}
+    # )
 
 
 class ChannelAnalysis(msgspec.Struct):

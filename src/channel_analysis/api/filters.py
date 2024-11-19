@@ -94,10 +94,10 @@ def iir_filter(
         from . import cuda_kernels
 
         sos = xp.asarray(sos)
-        return cuda_kernels.sosfilt(sos.astype(iq.dtype), iq)
+        return cuda_kernels.sosfilt(sos.astype('float32'), iq)
 
     else:
-        return scipy.signal.sosfilt(sos.astype(iq.dtype), iq)
+        return scipy.signal.sosfilt(sos.astype('float32'), iq)
 
 
 def ola_filter(

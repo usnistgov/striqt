@@ -4,12 +4,12 @@ import typing
 
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
-from ._common import as_registered_channel_analysis
+from ..api.registry import register_xarray_measurement
 from ._spectrogram import _do_spectrogram
 from ._spectrogram_ccdf import SpectrogramPowerBinCoords, SpectrogramPowerBinAxis
 from ._channel_power_histogram import make_power_histogram_bin_edges
 
-from .._api import structs, util
+from ..api import structs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -26,7 +26,7 @@ class SpectrogramHistogram(AsDataArray):
     standard_name: Attr[str] = 'Fraction of counts'
 
 
-@as_registered_channel_analysis(SpectrogramHistogram)
+@register_xarray_measurement(SpectrogramHistogram)
 def spectrogram_histogram(
     iq: 'iqwaveform.util.Array',
     capture: structs.Capture,
@@ -46,7 +46,7 @@ def spectrogram_histogram(
         frequency_resolution=frequency_resolution,
         fractional_overlap=fractional_overlap,
         frequency_bin_averaging=frequency_bin_averaging,
-        dtype=np.finfo(iq.dtype).dtype,
+        dtype='float32',
     )
 
     metadata = dict(metadata)

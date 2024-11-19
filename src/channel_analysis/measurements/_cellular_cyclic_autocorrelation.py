@@ -6,8 +6,8 @@ import typing
 
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
-from ._common import as_registered_channel_analysis
-from .._api import structs, util
+from ..api.registry import register_xarray_measurement
+from ..api import structs, util
 
 
 if typing.TYPE_CHECKING:
@@ -91,7 +91,7 @@ class CellularCyclicAutocorrelation(AsDataArray):
 
 
 ### iqwaveform wrapper
-@as_registered_channel_analysis(CellularCyclicAutocorrelation)
+@register_xarray_measurement(CellularCyclicAutocorrelation)
 def cellular_cyclic_autocorrelation(
     iq: 'iqwaveform.util.Array',
     capture: structs.Capture,
@@ -123,7 +123,7 @@ def cellular_cyclic_autocorrelation(
             otherwise, autocovariance (power)
 
     Returns:
-        a floating point array with matching the array type of `iq.real`
+        an float32-valued array with matching the array type of `iq`
     """
 
     RANGE_MAP = {'frames': frame_range, 'symbols': symbol_range}
@@ -163,8 +163,7 @@ def cellular_cyclic_autocorrelation(
 
     max_len = _get_max_corr_size(capture, subcarrier_spacings=subcarrier_spacings)
 
-    out_dtype = iq.dtype(0).real.dtype
-    result = xp.full((2, len(subcarrier_spacings), max_len), np.nan, dtype=out_dtype)
+    result = xp.full((2, len(subcarrier_spacings), max_len), np.nan, dtype=np.float32)
     for i, phy in enumerate(phy_scs.values()):
         # R = _correlate_cyclic_prefixes(iq, phy, **kws)
         cp_inds = phy.index_cyclic_prefix(**idx_kws, slots=downlink_slots)

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import typing
 
-from ._api.structs import Capture
-from ._api import util
+from .api.structs import Capture
+from .api import util
 
 if typing.TYPE_CHECKING:
     import matplotlib as mpl
