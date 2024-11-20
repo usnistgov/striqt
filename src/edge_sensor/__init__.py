@@ -19,4 +19,5 @@ from .api.sweeps import iter_sweep, iter_callbacks
 from . import radios
 
 # support legacy namespacing until the _api -> api change propagates through dependent libraries
-from . import api as _api
+from . import api
+_api = api

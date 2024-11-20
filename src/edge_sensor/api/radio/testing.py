@@ -10,6 +10,7 @@ import functools
 import labbench as lb
 from labbench import paramattr as attr
 
+
 if typing.TYPE_CHECKING:
     import numpy as np
     import pandas as pd
@@ -20,17 +21,35 @@ else:
     channel_analysis = lb.util.lazy_import('channel_analysis')
 
 
+def lo_shift_tone(inds, radio: base.RadioDevice, xp):
+    _, lo_offset, _ = base.design_capture_filter(radio.base_clock_rate, radio.get_capture_struct())
+    return xp.exp((2j * np.pi * lo_offset) / radio.backend_sample_rate() * inds).astype('complex64')
+
+
 class SingleToneSource(NullSource):
     resource: float = attr.value.float(
-        default=0.2, min=-1, max=1, help='normalized tone frequency (between -1 and 1)'
+        default=0, help='normalized tone frequency (between -1 and 1)', label='Hz'
     )
+
+    noise_snr: float = attr.value.float(None, help='add noise at the specified power level')
 
     def get_waveform(self, count, start_index: int, *, channel: int = 0, xp=np):
         i = xp.arange(start_index, count + start_index, dtype='uint64')
-        f_cw = self.sample_rate() * self.resource
-        return xp.exp(
-            (2j * np.pi * f_cw) / self.backend_sample_rate() * i + np.pi / 2
-        ).astype('complex64')
+        f_cw = self.resource
+        lo = lo_shift_tone(i, self, xp)
+
+        ret = lo*xp.exp((2j * np.pi * f_cw) / self.backend_sample_rate() * i + np.pi / 2)
+        ret = ret.astype('complex64')
+
+        if self.noise_snr is not None:
+            capture = channel_analysis.Capture(
+                duration=self.duration, sample_rate=self.backend_sample_rate()
+            )
+            noise = cached_noise(capture, xp=xp, power=10**(-self.noise_snr/10))
+            noise = noise[i % noise.size]
+            ret += noise
+
+        return ret
 
 
 class SawtoothSource(NullSource):
@@ -43,20 +62,18 @@ class SawtoothSource(NullSource):
 
     def get_waveform(self, count, start_index: int, *, channel: int = 0, xp=np):
         ret = xp.empty(count, dtype='complex64')
-
         period = self.duration * self.resource
-        t = (
-            xp.arange(start_index, count + start_index, dtype='uint64')
-            / self.backend_sample_rate()
-        )
+        ii = xp.arange(start_index, count + start_index, dtype='uint64')
+        t = ii / self.backend_sample_rate()
         ret.real[:] = (t % period) / period
         ret.imag[:] = 0
+        ret *= lo_shift_tone(ii, self, xp)
         return ret
 
 
 @functools.lru_cache(1)
-def cached_noise(capture, xp):
-    return channel_analysis.simulated_awgn(capture, xp=xp, seed=0)
+def cached_noise(capture, xp, **kwargs):
+    return channel_analysis.simulated_awgn(capture, xp=xp, seed=0, **kwargs)
 
 
 class NoiseSource(NullSource):
@@ -65,13 +82,15 @@ class NoiseSource(NullSource):
     )
 
     def get_waveform(self, count, start_index: int, *, channel: int = 0, xp=np):
-        ii = xp.arange(start_index, count + start_index, dtype='uint64') % count
         capture = channel_analysis.Capture(
             duration=self.duration, sample_rate=self.backend_sample_rate()
         )
         x = cached_noise(capture, xp=xp)
+        ii = xp.arange(start_index, count + start_index, dtype='uint64') % x.size
 
-        return x[ii]
+        ret = x[ii]
+        ret *= lo_shift_tone(ii, self, xp)
+        return ret
 
 
 class TDMSFileSource(NullSource):
