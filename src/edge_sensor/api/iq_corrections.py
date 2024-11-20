@@ -312,7 +312,7 @@ def resampling_correction(
     passband = analysis_filter['passband']
 
     if nfft_out < nfft:
-        # downsample already does the filter
+        # downsample applies the filter as well
         freqs, xstft = iqwaveform.fourier.downsample_stft(
             freqs,
             xstft,
@@ -322,6 +322,7 @@ def resampling_correction(
             out=buf,
         )
     elif nfft_out > nfft:
+        # upsample
         pad_left = (nfft_out - nfft) // 2
         pad_right = pad_left + (nfft_out - nfft) % 2
 

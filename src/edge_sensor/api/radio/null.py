@@ -4,14 +4,16 @@ import labbench as lb
 from labbench import paramattr as attr
 
 from .base import RadioDevice
-from ..util import import_cupy_with_fallback
+from ..util import import_cupy_with_fallback, lazy_import
 
 if typing.TYPE_CHECKING:
     import pandas as pd
+    import numpy as np
     import iqwaveform
 else:
-    pd = lb.util.lazy_import('pandas')
-    iqwaveform = lb.util.lazy_import('iqwaveform')
+    pd = lazy_import('pandas')
+    iqwaveform = lazy_import('iqwaveform')
+    np = lazy_import('numpy')
 
 
 channel_kwarg = attr.method_kwarg.int('channel', min=0, help='hardware port number')
@@ -134,17 +136,19 @@ class NullSource(RadioDevice):
     def base_clock_rate(self):
         return 125e6
 
+    def set_array_module(self, xp):
+        self.xp = xp
+
     def _read_stream(
         self, buffers, offset, count, timeout_sec=None, *, on_overflow='except'
     ) -> tuple[int, int]:
-        xp = iqwaveform.util.array_namespace(buffers[0])
         timestamp_ns = (1_000_000_000 * self._sample_count) / float(
             self.backend_sample_rate()
         )
 
         for channel, buf in zip([self.channel], buffers):
             values = self.get_waveform(
-                count, self._sample_count, channel=channel, xp=xp
+                count, self._sample_count, channel=channel, xp=getattr(self, 'xp', np)
             )
             buf[2 * offset : 2 * (offset + count)] = values.view('float32')
 
