@@ -9,6 +9,7 @@ from channel_analysis.api import filters
 from . import util
 
 from .radio import RadioDevice, get_capture_buffer_sizes, design_capture_filter
+from .radio.base import _needs_stft
 from . import structs
 
 
@@ -272,21 +273,10 @@ def resampling_correction(
 
         power_scale = float(sel)
 
-    if nfft == nfft_out:
-        # no resample
+    if not _needs_stft(analysis_filter, capture):
+        # no filtering or resampling needed
         if power_scale is not None:
             iq *= np.sqrt(power_scale)
-
-        if analysis_filter['passband'] != (None, None):
-            iq = filters.iir_filter(
-                iq,
-                capture,
-                passband_ripple=0.5,
-                stopband_attenuation=80,
-                transition_bandwidth=500e3,
-                out=iq,
-            )
-
         return iq
 
     w = iqwaveform.fourier._get_window(
@@ -326,7 +316,7 @@ def resampling_correction(
         pad_left = (nfft_out - nfft) // 2
         pad_right = pad_left + (nfft_out - nfft) % 2
 
-        if capture.analysis_bandwidth != float('inf'):
+        if np.isfinite(capture.analysis_bandwidth):
             iqwaveform.fourier.zero_stft_by_freq(
                 freqs,
                 xstft,
@@ -339,7 +329,7 @@ def resampling_correction(
         )
 
     else:
-        # filter
+        # nfft_out == nfft
         iqwaveform.fourier.zero_stft_by_freq(
             freqs,
             xstft,
@@ -356,7 +346,10 @@ def resampling_correction(
         axis=axis,
     )
 
-    if power_scale is not None:
-        iq *= np.sqrt(power_scale)
+    if power_scale is None and nfft == nfft_out:
+        pass
+    else:
+        # voltage_scale = (power_scale or 1) * nfft_out / nfft
+        iq *= np.sqrt(power_scale or 1) * nfft_out / nfft
 
     return iq
