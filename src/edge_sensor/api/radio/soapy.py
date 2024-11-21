@@ -222,7 +222,7 @@ class SoapyRadioDevice(RadioDevice):
     def _(self, enable: bool):
         if enable == self.channel_enabled():
             return
-        
+
         if enable:
             self.backend.activateStream(
                 self._rx_stream,

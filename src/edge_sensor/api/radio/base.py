@@ -18,7 +18,8 @@ else:
     pd = util.lazy_import('pandas')
 
 
-TRANSIENT_HOLDOFF_WINDOWS = 1
+# 1 window for hardware transients plus 1 for resampling
+TRANSIENT_HOLDOFF_WINDOWS = 2
 
 
 def find_trigger_holdoff(start_time, sample_rate, periodic_trigger: float | None):
@@ -109,7 +110,7 @@ class RadioDevice(lb.Device):
         return type(self).backend_sample_rate.max
 
     def open(self):
-        self._armed_capture: structs.RadioCapture|None = None
+        self._armed_capture: structs.RadioCapture | None = None
 
     def setup(self, radio_config: structs.RadioSetup):
         """disarm acquisition and apply the given radio setup"""
@@ -157,7 +158,10 @@ class RadioDevice(lb.Device):
             nfft_out = analysis_filter.get('nfft_out', analysis_filter['nfft'])
             downsample = analysis_filter['nfft'] / nfft_out
 
-            if fs_backend != self.backend_sample_rate() or downsample != self._downsample:
+            if (
+                fs_backend != self.backend_sample_rate()
+                or downsample != self._downsample
+            ):
                 self.channel_enabled(False)
                 with attr.hold_attr_notifications(self):
                     self._downsample = 1  # temporarily avoid a potential bounding error
@@ -196,10 +200,7 @@ class RadioDevice(lb.Device):
             self._armed_capture = capture
             self._next_time_ns = None
 
-    def read_iq(
-        self, capture 
-    ) -> tuple['np.ndarray[np.complex64]', float]:
-    
+    def read_iq(self, capture) -> tuple['np.ndarray[np.complex64]', float]:
         holdoff_size = 0
         streamed_count = 0
         awaiting_timestamp = True
@@ -211,9 +212,7 @@ class RadioDevice(lb.Device):
         samples = np.empty((2 * buf_size,), dtype=np.float32)
 
         if buf_time_ns is None and self._holdover_samples is not None:
-            raise ValueError(
-                'holdover samples are missing timestamp'
-            )
+            raise ValueError('holdover samples are missing timestamp')
 
         if self._holdover_samples is None:
             holdover_count = 0
@@ -222,8 +221,10 @@ class RadioDevice(lb.Device):
             holdover_count = self._holdover_samples.size
             samples[: 2 * holdover_count] = self._holdover_samples.view(samples.dtype)
 
-        holdover_size = sample_count - round(capture.duration * self.backend_sample_rate())
-        
+        holdover_size = sample_count - round(
+            capture.duration * self.backend_sample_rate()
+        )
+
         fs = self.backend_sample_rate()
         chunk_size = sample_count + holdover_count
         timeout_sec = chunk_size / fs + 50e-3
@@ -261,9 +262,7 @@ class RadioDevice(lb.Device):
             remaining = remaining - this_count
             streamed_count += this_count
 
-        samples = samples.view('complex64')[
-            holdoff_size : sample_count + holdoff_size
-        ]
+        samples = samples.view('complex64')[holdoff_size : sample_count + holdoff_size]
 
         self._holdover_samples = samples[-holdover_size:]
         self._next_time_ns = acq_start_ns + round(1e9 * capture.duration)
@@ -277,7 +276,7 @@ class RadioDevice(lb.Device):
         correction: bool = True,
     ) -> tuple[np.array, 'pd.Timestamp']:
         """arm a capture and enable the channel (if necessary), read the resulting IQ waveform.
-        
+
         Optionally, calibration corrections can be applied, and the radio can be left ready for the next capture.
         """
         from .. import iq_corrections
@@ -487,6 +486,7 @@ def find_radio_cls_by_name(
         raise AttributeError(
             f'invalid driver {repr(name)}. valid names: {tuple(mapping.keys())}'
         )
+
 
 def is_same_resource(r1: str | dict, r2: str | dict):
     if hasattr(r1, 'items'):

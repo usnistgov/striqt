@@ -12,7 +12,11 @@ import typing
 
 from . import structs
 from . import util
-from .xarray import ChannelAnalysisResult, evaluate_channel_analysis, package_channel_analysis
+from .xarray import (
+    ChannelAnalysisResult,
+    evaluate_channel_analysis,
+    package_channel_analysis,
+)
 
 
 if typing.TYPE_CHECKING:
@@ -36,7 +40,9 @@ else:
 TFunc = typing.Callable[..., typing.Any]
 
 
-def _results_as_shared_arrays(obj: tuple | list | dict | 'iqwaveform.util.Array', as_shmarray=False):
+def _results_as_shared_arrays(
+    obj: tuple | list | dict | 'iqwaveform.util.Array', as_shmarray=False
+):
     """convert an array, or a container of arrays, into a numpy array (or container of numpy arrays)"""
 
     if isinstance(obj, (tuple, list)):
@@ -161,6 +167,7 @@ class ChannelAnalysisRegistryDecorator(collections.UserDict):
             forbid_unknown_fields=True,
             omit_defaults=True,
         )
+
 
 register_xarray_measurement = ChannelAnalysisRegistryDecorator(structs.ChannelAnalysis)
 
