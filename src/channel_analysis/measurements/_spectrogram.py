@@ -31,11 +31,13 @@ def _centered_trim(x, freqs, bandwidth, axis=0):
 
     edges = iqwaveform.fourier._freq_band_edges(
         freqs[0],
-        freqs[-1],
+        freqs[1] - freqs[0],
         freqs.size,
         cutoff_low=-bandwidth / 2,
         cutoff_hi=+bandwidth / 2,
     )
+
+    print(freqs.size, edges, bandwidth)
 
     return axis_slice(x, *edges, axis=axis), freqs[edges[0] : edges[1]]
 
