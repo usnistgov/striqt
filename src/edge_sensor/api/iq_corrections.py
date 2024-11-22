@@ -9,7 +9,7 @@ from channel_analysis.api import filters
 from . import util
 
 from .radio import RadioDevice, get_capture_buffer_sizes, design_capture_filter
-from .radio.base import _needs_stft
+from .radio.base import needs_stft
 from . import structs
 
 
@@ -240,7 +240,7 @@ def resampling_correction(
             gain=capture.gain,
             lo_shift=capture.lo_shift,
             sample_rate=capture.sample_rate,
-            analysis_bandwidth=capture.analysis_bandwidth or np.nan,
+            analysis_bandwidth=capture.analysis_bandwidth or np.inf,
             host_resample=capture.host_resample,
         )
 
@@ -273,7 +273,7 @@ def resampling_correction(
 
         power_scale = float(sel)
 
-    if not _needs_stft(analysis_filter, capture):
+    if not needs_stft(analysis_filter, capture):
         # no filtering or resampling needed
         if power_scale is not None:
             iq *= np.sqrt(power_scale)

@@ -409,7 +409,8 @@ def design_capture_filter(
     )
     return _design_capture_filter(base_clock_rate, fixed_capture, *args, **kws)
 
-def _needs_stft(analysis_filter: dict, capture: structs.RadioCapture):
+
+def needs_stft(analysis_filter: dict, capture: structs.RadioCapture):
     is_resample = analysis_filter['nfft'] != analysis_filter['nfft_out']
     return (
         analysis_filter and (
@@ -441,7 +442,7 @@ def _get_capture_buffer_sizes_cached(
         # add holdoff samples needed for the periodic trigger
         samples_in += ceil(analysis_filter['fs'] * periodic_trigger)
 
-    if _needs_stft(analysis_filter, capture):
+    if needs_stft(analysis_filter, capture):
         samples_in += TRANSIENT_HOLDOFF_WINDOWS * analysis_filter['nfft']
         samples_out = iqwaveform.fourier._istft_buffer_size(
             samples_in,
