@@ -255,11 +255,10 @@ def resampling_correction(
         if exc is not None:
             raise exc
 
-        if 'duration' in sel.coords:
-            sel = sel.drop('duration')
 
-        if 'radio_id' in sel.coords:
-            sel = sel.drop('radio_id')
+        for name in ('duration', 'radio_id', 'delay'):
+            if name in sel.coords:
+                sel = sel.drop(name)
 
         # allow interpolation between sample points in these fields
         sel = (
