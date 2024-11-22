@@ -49,7 +49,9 @@ def _binned_mean(x, count, *, axis=0, truncate=True):
         if trim > 0:
             x = axis_slice(x, trim // 2, -trim // 2, axis=axis)
     x = iqwaveform.fourier.to_blocks(x, count, axis=axis)
-    return x.mean(axis=axis + 1)
+    ret = x.mean(axis=axis + 1)
+    ret -= ret[ret.shape[axis]//2]
+    return ret
 
 
 # Axis and coordinates
@@ -162,7 +164,7 @@ def _do_spectrogram(
         raise ValueError('sample_rate_Hz/resolution must be a counting number')
 
     freqs, _, spg = iqwaveform.fourier.spectrogram(
-        iq,
+        iq.copy(),
         window=window,
         fs=capture.sample_rate,
         nperseg=nfft,
@@ -176,10 +178,13 @@ def _do_spectrogram(
             spg, freqs, bandwidth=capture.analysis_bandwidth, axis=1
         )
 
+        import pickle
+
     if frequency_bin_averaging is not None:
         spg = _binned_mean(spg, frequency_bin_averaging, axis=1)
 
     spg = iqwaveform.powtodB(spg, eps=1e-25, out=spg)
+    
     spg = spg.astype(dtype)
 
     metadata = {
