@@ -37,8 +37,6 @@ def _centered_trim(x, freqs, bandwidth, axis=0):
         cutoff_hi=+bandwidth / 2,
     )
 
-    print(freqs.size, edges, bandwidth)
-
     return axis_slice(x, *edges, axis=axis), freqs[edges[0] : edges[1]]
 
 
