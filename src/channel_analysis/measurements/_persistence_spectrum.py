@@ -6,7 +6,7 @@ import typing
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
 from ..api.registry import register_xarray_measurement
-from ._spectrogram import _centered_trim, _binned_mean, equivalent_noise_bandwidth
+from ._spectrogram import freq_axis_values, equivalent_noise_bandwidth
 from ..api import structs, util
 
 if typing.TYPE_CHECKING:
@@ -55,27 +55,10 @@ class BasebandFrequencyCoords:
         *,
         frequency_resolution: float,
         fractional_overlap: float = 0,
-        frequency_bin_averaging: float = None,
         truncate: bool = True,
         **_,
     ) -> dict[str, np.ndarray]:
-        nfft = round(capture.sample_rate / frequency_resolution)
-
-        freqs, _ = iqwaveform.fourier._get_stft_axes(
-            fs=capture.sample_rate,
-            nfft=nfft,
-            time_size=1,
-            overlap_frac=fractional_overlap,
-            xp=np,
-        )
-
-        if capture.analysis_bandwidth is not None and truncate:
-            freqs, _ = _centered_trim(freqs, freqs, capture.analysis_bandwidth, axis=0)
-
-        if frequency_bin_averaging is not None:
-            freqs = _binned_mean(freqs, frequency_bin_averaging, axis=0)
-
-        return freqs
+        return freq_axis_values(capture, fres=frequency_resolution, truncate=truncate)
 
 
 ### Dataarray

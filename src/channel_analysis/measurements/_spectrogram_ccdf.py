@@ -6,7 +6,7 @@ import typing
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
 from ..api.registry import register_xarray_measurement
-from ._spectrogram import equivalent_noise_bandwidth
+from ._spectrogram import equivalent_noise_bandwidth, truncate_freqs
 from ._channel_power_ccdf import make_power_bins, ChannelPowerCoords
 
 from ..api import structs, util
@@ -115,12 +115,8 @@ def spectrogram_ccdf(
         axis=0,
     )
 
-    # truncate to the analysis bandwidth
-    bw_args = (-capture.analysis_bandwidth / 2, +capture.analysis_bandwidth / 2)
-    ilo, ihi = iqwaveform.fourier._freq_band_edges(
-        freqs[0], freqs[1]-freqs[0], freqs.size, *bw_args
-    )
-    spg = spg[:, ilo:ihi]
+    if np.isfinite(capture.analysis_bandwidth):
+        spg = truncate_freqs(spg, nfft, capture.sample_rate, capture.analysis_bandwidth, axis=0)
 
     if frequency_bin_averaging is not None:
         trim = spg.shape[1] % (2 * frequency_bin_averaging)

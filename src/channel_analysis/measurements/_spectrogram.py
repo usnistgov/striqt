@@ -25,19 +25,11 @@ def equivalent_noise_bandwidth(window: typing.Union[str, tuple[str, float]], N: 
     return len(w) * np.sum(w**2) / np.sum(w) ** 2
 
 
-def _centered_trim(x, freqs, bandwidth, axis=0):
+def truncate_freqs(x, nfft, fs, bandwidth, axis=0):
     """trim an array outside of the specified bandwidth on a frequency axis"""
     axis_slice = signal._arraytools.axis_slice
-
-    edges = iqwaveform.fourier._freq_band_edges(
-        freqs[0],
-        freqs[1] - freqs[0],
-        freqs.size,
-        cutoff_low=-bandwidth / 2,
-        cutoff_hi=+bandwidth / 2,
-    )
-
-    return axis_slice(x, *edges, axis=axis), freqs[edges[0] : edges[1]]
+    edges = iqwaveform.fourier._freq_band_edges(nfft, 1./fs, cutoff_low=-bandwidth / 2, cutoff_hi=+bandwidth / 2)
+    return axis_slice(x, *edges, axis=axis)
 
 
 def _binned_mean(x, count, *, axis=0, truncate=True):
@@ -52,6 +44,24 @@ def _binned_mean(x, count, *, axis=0, truncate=True):
     ret = x.mean(axis=axis + 1)
     ret -= ret[ret.shape[axis]//2]
     return ret
+
+
+def freq_axis_values(capture, fres: int, navg: int = None, truncate=False):
+    nfft = round(capture.sample_rate / fres)
+    freqs = iqwaveform.fourier.fftfreq(nfft, 1/capture.sample_rate)
+
+    if navg is None:
+        fs = capture.sample_rate
+    else:
+        divisor = round(nfft/navg)
+        fs = capture.sample_rate / divisor
+
+    freqs = iqwaveform.fourier.fftfreq(nfft, 1.0/fs)
+
+    if truncate:
+        freqs = truncate_freqs(freqs, nfft, capture.sample_rate, capture.analysis_bandwidth, axis=0)
+
+    return freqs
 
 
 # Axis and coordinates
@@ -104,23 +114,7 @@ class SpectrogramBasebandFrequencyCoords:
         truncate: bool = True,
         **_,
     ) -> dict[str, np.ndarray]:
-        nfft = round(capture.sample_rate / frequency_resolution)
-
-        freqs, _ = iqwaveform.fourier._get_stft_axes(
-            fs=capture.sample_rate,
-            nfft=nfft,
-            time_size=1,
-            overlap_frac=fractional_overlap,
-            xp=np,
-        )
-
-        if capture.analysis_bandwidth is not None and truncate:
-            freqs, _ = _centered_trim(freqs, freqs, capture.analysis_bandwidth, axis=0)
-
-        if frequency_bin_averaging is not None:
-            freqs = _binned_mean(freqs, frequency_bin_averaging, axis=0)
-
-        return freqs
+        return freq_axis_values(capture, fres=frequency_resolution, navg=frequency_bin_averaging, truncate=truncate)
 
 
 @dataclasses.dataclass
@@ -173,10 +167,8 @@ def _do_spectrogram(
     )
 
     # truncate to the analysis bandwidth
-    if capture.analysis_bandwidth is not None:
-        spg, freqs = _centered_trim(
-            spg, freqs, bandwidth=capture.analysis_bandwidth, axis=1
-        )
+    if np.isfinite(capture.analysis_bandwidth):
+        spg = truncate_freqs(spg, nfft, capture.sample_rate, bandwidth=capture.analysis_bandwidth, axis=1)
 
     if frequency_bin_averaging is not None:
         spg = _binned_mean(spg, frequency_bin_averaging, axis=1)
