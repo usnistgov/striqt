@@ -116,7 +116,9 @@ def spectrogram_ccdf(
     )
 
     if np.isfinite(capture.analysis_bandwidth):
-        spg = truncate_freqs(spg, nfft, capture.sample_rate, capture.analysis_bandwidth, axis=0)
+        spg = truncate_freqs(
+            spg, nfft, capture.sample_rate, capture.analysis_bandwidth, axis=0
+        )
 
     if frequency_bin_averaging is not None:
         trim = spg.shape[1] % (2 * frequency_bin_averaging)
