@@ -164,7 +164,7 @@ def _do_spectrogram(
         raise ValueError('sample_rate_Hz/resolution must be a counting number')
 
     freqs, _, spg = iqwaveform.fourier.spectrogram(
-        iq.copy(),
+        iq,
         window=window,
         fs=capture.sample_rate,
         nperseg=nfft,
@@ -178,13 +178,11 @@ def _do_spectrogram(
             spg, freqs, bandwidth=capture.analysis_bandwidth, axis=1
         )
 
-        import pickle
-
     if frequency_bin_averaging is not None:
         spg = _binned_mean(spg, frequency_bin_averaging, axis=1)
 
     spg = iqwaveform.powtodB(spg, eps=1e-25, out=spg)
-    
+
     spg = spg.astype(dtype)
 
     metadata = {
