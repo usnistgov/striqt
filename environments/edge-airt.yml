@@ -36,7 +36,7 @@ dependencies:
 - cython<3
 - pytools==2022.1.12
 - numba~=0.56.0
-- 7zip
+- p7zip
 - pip:
   - iqwaveform @ git+https://github.com/usnistgov/iqwaveform
   - xarray_dataclasses @ git+https://github.com/dgkuester/xarray-dataclasses@lazy-imports
