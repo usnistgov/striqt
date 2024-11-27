@@ -255,7 +255,6 @@ def resampling_correction(
         if exc is not None:
             raise exc
 
-
         for name in ('duration', 'radio_id', 'delay'):
             if name in sel.coords:
                 sel = sel.drop(name)

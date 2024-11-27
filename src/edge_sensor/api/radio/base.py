@@ -412,12 +412,11 @@ def design_capture_filter(
 
 def needs_stft(analysis_filter: dict, capture: structs.RadioCapture):
     is_resample = analysis_filter['nfft'] != analysis_filter['nfft_out']
-    return (
-        analysis_filter and (
-            np.isfinite(capture.analysis_bandwidth)
-            or (is_resample and capture.host_resample)
-        )
+    return analysis_filter and (
+        np.isfinite(capture.analysis_bandwidth)
+        or (is_resample and capture.host_resample)
     )
+
 
 @functools.lru_cache(30000)
 def _get_capture_buffer_sizes_cached(

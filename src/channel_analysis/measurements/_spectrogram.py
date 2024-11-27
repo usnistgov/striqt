@@ -28,7 +28,9 @@ def equivalent_noise_bandwidth(window: typing.Union[str, tuple[str, float]], N: 
 def truncate_freqs(x, nfft, fs, bandwidth, axis=0):
     """trim an array outside of the specified bandwidth on a frequency axis"""
     axis_slice = signal._arraytools.axis_slice
-    edges = iqwaveform.fourier._freq_band_edges(nfft, 1./fs, cutoff_low=-bandwidth / 2, cutoff_hi=+bandwidth / 2)
+    edges = iqwaveform.fourier._freq_band_edges(
+        nfft, 1.0 / fs, cutoff_low=-bandwidth / 2, cutoff_hi=+bandwidth / 2
+    )
     return axis_slice(x, *edges, axis=axis)
 
 
@@ -42,26 +44,33 @@ def _binned_mean(x, count, *, axis=0, truncate=True):
             x = axis_slice(x, trim // 2, -trim // 2, axis=axis)
     x = iqwaveform.fourier.to_blocks(x, count, axis=axis)
     ret = x.mean(axis=axis + 1)
-    ret -= ret[ret.shape[axis]//2]
+    ret -= ret[ret.shape[axis] // 2]
     return ret
 
 
 def freq_axis_values(capture, fres: int, navg: int = None, truncate=False):
     nfft = round(capture.sample_rate / fres)
-    freqs = iqwaveform.fourier.fftfreq(nfft, 1/capture.sample_rate)
+
+    # otherwise negligible rounding errors lead to headaches when merging
+    # spectra with different sampling parameters. start with long floats
+    # to minimize this problem
+    dtype = np.dtype('float128')
 
     if navg is None:
-        fs = capture.sample_rate
+        fs = dtype.type(capture.sample_rate)
     else:
-        divisor = round(nfft/navg)
-        fs = capture.sample_rate / divisor
+        divisor = round(nfft / navg)
+        fs = dtype.type(capture.sample_rate) / divisor
 
-    freqs = iqwaveform.fourier.fftfreq(nfft, 1.0/fs)
+    freqs = iqwaveform.fourier.fftfreq(nfft, 1.0 / fs, dtype=dtype)
 
     if truncate:
-        freqs = truncate_freqs(freqs, nfft, capture.sample_rate, capture.analysis_bandwidth, axis=0)
+        freqs = truncate_freqs(
+            freqs, nfft, capture.sample_rate, capture.analysis_bandwidth, axis=0
+        )
 
-    return freqs
+    # only now downconvert and round
+    return freqs.astype('float64').round(16)
 
 
 # Axis and coordinates
@@ -114,7 +123,12 @@ class SpectrogramBasebandFrequencyCoords:
         truncate: bool = True,
         **_,
     ) -> dict[str, np.ndarray]:
-        return freq_axis_values(capture, fres=frequency_resolution, navg=frequency_bin_averaging, truncate=truncate)
+        return freq_axis_values(
+            capture,
+            fres=frequency_resolution,
+            navg=frequency_bin_averaging,
+            truncate=truncate,
+        )
 
 
 @dataclasses.dataclass
@@ -168,7 +182,9 @@ def _do_spectrogram(
 
     # truncate to the analysis bandwidth
     if np.isfinite(capture.analysis_bandwidth):
-        spg = truncate_freqs(spg, nfft, capture.sample_rate, bandwidth=capture.analysis_bandwidth, axis=1)
+        spg = truncate_freqs(
+            spg, nfft, capture.sample_rate, bandwidth=capture.analysis_bandwidth, axis=1
+        )
 
     if frequency_bin_averaging is not None:
         spg = _binned_mean(spg, frequency_bin_averaging, axis=1)
