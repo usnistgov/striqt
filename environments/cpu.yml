@@ -23,7 +23,6 @@ dependencies:
 - array-api-compat
 - methodtools
 
-
   # for SoapySDR device wrappers and remote control
 - labbench>=0.42.0,<1
 - rpyc>=5.3,<6
@@ -41,8 +40,9 @@ dependencies:
   # for environment.yml autogeneration
 - ruamel.yaml
 
-  # for documentation
+  # for documentation and plotting
 - schemdraw
+- mscorefonts
 
 - pip:
   - iqwaveform @ git+https://github.com/usnistgov/iqwaveform

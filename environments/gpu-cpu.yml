@@ -30,6 +30,7 @@ dependencies:
 - dulwich
 - ruamel.yaml
 - schemdraw
+- mscorefonts
 - cupy ~= 12.2
 - cython
 - pip:

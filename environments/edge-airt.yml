@@ -4,6 +4,7 @@ name: flex-spectrum-sensor
 
 channels:
 - conda-forge
+- 7zip
 - nvidia
 - file://opt/deepwave/conda-channels/airstack-conda
 dependencies:
@@ -31,6 +32,7 @@ dependencies:
 - dulwich
 - ruamel.yaml
 - schemdraw
+- mscorefonts
 - soapysdr-module-airt
 - cython<3
 - pytools==2022.1.12

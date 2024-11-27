@@ -2,6 +2,7 @@
 
 channels:
   - conda-forge
+  - 7zip
 
 dependencies:
   - pip:
