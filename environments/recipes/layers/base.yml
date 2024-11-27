@@ -26,13 +26,13 @@ dependencies:
   # for SoapySDR device wrappers and remote control
   - labbench>=0.42.0,<1
   - rpyc>=5.3,<6
-  - soapysdr
+  - soapysdr~=0.8.1
 
   # data management (including zarr and data chunking in xarray)
-  - xarray
+  - xarray~=2024.3
   - zarr>=2.18,<3
   - dask
-  - msgspec
+  - msgspec~=0.18.0
 
   # git repository introspection support for metadata
   - dulwich

@@ -23,11 +23,11 @@ dependencies:
 - methodtools
 - labbench>=0.42.0,<1
 - rpyc>=5.3,<6
-- soapysdr
+- soapysdr~=0.8.1
 - xarray
 - zarr>=2.18,<3
 - dask
-- msgspec
+- msgspec~=0.18.0
 - dulwich
 - ruamel.yaml
 - schemdraw
