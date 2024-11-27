@@ -349,6 +349,6 @@ def resampling_correction(
         pass
     else:
         # voltage_scale = (power_scale or 1) * nfft_out / nfft
-        iq *= np.sqrt(power_scale or 1) * nfft_out / nfft
+        iq *= np.sqrt(power_scale or 1) * np.sqrt(nfft_out / nfft)
 
     return iq

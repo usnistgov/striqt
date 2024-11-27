@@ -41,8 +41,9 @@ dependencies:
   # for environment.yml autogeneration
   - ruamel.yaml
 
-  # for documentation
+  # for documentation and plotting
   - schemdraw
+  - mscorefonts
 
   - pip:
       - iqwaveform @ git+https://github.com/usnistgov/iqwaveform
