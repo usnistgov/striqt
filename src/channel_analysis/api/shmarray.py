@@ -44,7 +44,11 @@ class NDSharedArray(np.ndarray):
         if self.shm is None:
             return
         elif self._free_on_del:
-            self.free()
+            try:
+                self.free()
+            except ImportError:
+                # arises on exceptions during python shutdown
+                pass
         else:
             self.shm.close()
 

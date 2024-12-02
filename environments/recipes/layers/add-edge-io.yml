@@ -4,7 +4,5 @@ channels:
   - conda-forge
 
 dependencies:
-  # 7zip is not available on linux-aarch64
-  - p7zip
   - pip:
     - ssmdevices

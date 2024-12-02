@@ -6,7 +6,7 @@ import typing
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
 from ..api.registry import register_xarray_measurement
-from ._spectrogram import equivalent_noise_bandwidth, truncate_freqs
+from ._spectrogram import equivalent_noise_bandwidth, truncate_spectrogram_bandwidth
 from ._channel_power_ccdf import make_power_bins, ChannelPowerCoords
 
 from ..api import structs, util
@@ -116,7 +116,7 @@ def spectrogram_ccdf(
     )
 
     if np.isfinite(capture.analysis_bandwidth):
-        spg = truncate_freqs(
+        spg = truncate_spectrogram_bandwidth(
             spg, nfft, capture.sample_rate, capture.analysis_bandwidth, axis=0
         )
 
