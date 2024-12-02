@@ -25,11 +25,11 @@ def equivalent_noise_bandwidth(window: typing.Union[str, tuple[str, float]], N: 
     return len(w) * np.sum(w**2) / np.sum(w) ** 2
 
 
-def truncate_freqs(x, nfft, fs, bandwidth, axis=0):
+def truncate_spectrogram_bandwidth(x, nfft, fs, bandwidth, axis=0):
     """trim an array outside of the specified bandwidth on a frequency axis"""
     axis_slice = signal._arraytools.axis_slice
     edges = iqwaveform.fourier._freq_band_edges(
-        nfft, 1.0 / fs, cutoff_low=-bandwidth / 2, cutoff_hi=+bandwidth / 2
+        nfft, 1.0 / fs, cutoff_low=-bandwidth / 2, cutoff_hi=bandwidth / 2
     )
     return axis_slice(x, *edges, axis=axis)
 
@@ -39,38 +39,110 @@ def _binned_mean(x, count, *, axis=0, truncate=True):
     axis_slice = signal._arraytools.axis_slice
 
     if truncate:
-        trim = x.shape[axis] % (2 * count)
+        trim = x.shape[axis] % (count)
+        dimsize = (x.shape[axis] // count) * count
         if trim > 0:
-            x = axis_slice(x, trim // 2, -trim // 2, axis=axis)
+            x = axis_slice(x, trim // 2, trim // 2 + dimsize, axis=axis)
     x = iqwaveform.fourier.to_blocks(x, count, axis=axis)
     ret = x.mean(axis=axis + 1)
-    ret -= ret[ret.shape[axis] // 2]
     return ret
 
 
-def freq_axis_values(capture, fres: int, navg: int = None, truncate=False):
-    nfft = round(capture.sample_rate / fres)
+def freq_axis_values(
+    capture: structs.RadioCapture, fres: int, navg: int = None, truncate=False
+):
+    if iqwaveform.isroundmod(capture.sample_rate, fres):
+        nfft = round(capture.sample_rate / fres)
+    else:
+        raise ValueError('sample_rate/resolution must be a counting number')
 
-    # otherwise negligible rounding errors lead to headaches when merging
+    # otherwise negligible rounding errors lead to h~eadaches when merging
     # spectra with different sampling parameters. start with long floats
     # to minimize this problem
-    dtype = np.dtype('float128')
+    fs = np.float128(capture.sample_rate)
+    freqs = iqwaveform.fourier.fftfreq(nfft, 1.0 / fs, dtype='float128')
 
-    if navg is None:
-        fs = dtype.type(capture.sample_rate)
-    else:
-        divisor = round(nfft / navg)
-        fs = dtype.type(capture.sample_rate) / divisor
-
-    freqs = iqwaveform.fourier.fftfreq(nfft, 1.0 / fs, dtype=dtype)
-
-    if truncate:
-        freqs = truncate_freqs(
+    if truncate and np.isfinite(capture.analysis_bandwidth):
+        # stick with python arithmetic here for numpy/cupy consistency
+        freqs = truncate_spectrogram_bandwidth(
             freqs, nfft, capture.sample_rate, capture.analysis_bandwidth, axis=0
         )
 
-    # only now downconvert and round
+    if navg is not None:
+        freqs = _binned_mean(freqs, navg)
+        freqs -= freqs[freqs.size // 2]
+
+    # only now downconvert. round to a still large number of digits
     return freqs.astype('float64').round(16)
+
+
+def _do_spectrogram(
+    iq: 'iqwaveform.util.Array',
+    capture: structs.Capture,
+    *,
+    window: typing.Union[str, tuple[str, float]],
+    frequency_resolution: float,
+    fractional_overlap: float = 0,
+    frequency_bin_averaging: int = None,
+    limit_digits: int = None,
+    truncate_to_bandwidth: bool = True,
+    dtype='float16',
+):
+    # TODO: integrate this back into iqwaveform
+    if iqwaveform.isroundmod(capture.sample_rate, frequency_resolution):
+        nfft = round(capture.sample_rate / frequency_resolution)
+    else:
+        raise ValueError('sample_rate/resolution must be a counting number')
+
+    xp = iqwaveform.util.array_namespace(iq)
+
+    if isinstance(window, list):
+        # lists break lru_cache
+        window = tuple(window)
+
+    enbw = frequency_resolution * equivalent_noise_bandwidth(window, nfft)
+
+    if iqwaveform.isroundmod(capture.sample_rate, frequency_resolution):
+        noverlap = round(fractional_overlap * nfft)
+    else:
+        # need sample_rate_Hz/resolution to give us a counting number
+        raise ValueError('sample_rate_Hz/resolution must be a counting number')
+
+    _, _, spg = iqwaveform.fourier.spectrogram(
+        iq,
+        window=window,
+        fs=capture.sample_rate,
+        nperseg=nfft,
+        noverlap=noverlap,
+        axis=0,
+    )
+
+    # truncate to the analysis bandwidth
+    if truncate_to_bandwidth and np.isfinite(capture.analysis_bandwidth):
+        # stick with python arithmetic to ensure consistency with axis bounds calculations
+        spg = truncate_spectrogram_bandwidth(
+            spg, nfft, capture.sample_rate, bandwidth=capture.analysis_bandwidth, axis=1
+        )
+
+    if frequency_bin_averaging is not None:
+        spg = _binned_mean(spg, frequency_bin_averaging, axis=1)
+
+    spg = iqwaveform.powtodB(spg, eps=1e-25, out=spg)
+
+    if limit_digits is not None:
+        xp.round(spg, limit_digits, out=spg)
+
+    spg = spg.astype(dtype)
+
+    metadata = {
+        'window': window,
+        'frequency_resolution': frequency_resolution,
+        'fractional_overlap': fractional_overlap,
+        'noise_bandwidth': enbw,
+        'units': f'dBm/{enbw/1e3:0.0f} kHz',
+    }
+
+    return spg, metadata
 
 
 # Axis and coordinates
@@ -142,68 +214,6 @@ class Spectrogram(AsDataArray):
     long_name: Attr[str] = 'Power spectral density'
 
 
-def _do_spectrogram(
-    iq: 'iqwaveform.util.Array',
-    capture: structs.Capture,
-    *,
-    window: typing.Union[str, tuple[str, float]],
-    frequency_resolution: float,
-    fractional_overlap: float = 0,
-    frequency_bin_averaging: int = None,
-    dtype='float16',
-):
-    # TODO: integrate this back into iqwaveform
-    if iqwaveform.isroundmod(capture.sample_rate, frequency_resolution):
-        nfft = round(capture.sample_rate / frequency_resolution)
-    else:
-        raise ValueError('sample_rate/resolution must be a counting number')
-
-    if isinstance(window, list):
-        # lists break lru_cache
-        window = tuple(window)
-
-    enbw = frequency_resolution * equivalent_noise_bandwidth(window, nfft)
-
-    if iqwaveform.isroundmod(capture.sample_rate, frequency_resolution):
-        nfft = round(capture.sample_rate / frequency_resolution)
-        noverlap = round(fractional_overlap * nfft)
-    else:
-        # need sample_rate_Hz/resolution to give us a counting number
-        raise ValueError('sample_rate_Hz/resolution must be a counting number')
-
-    freqs, _, spg = iqwaveform.fourier.spectrogram(
-        iq,
-        window=window,
-        fs=capture.sample_rate,
-        nperseg=nfft,
-        noverlap=noverlap,
-        axis=0,
-    )
-
-    # truncate to the analysis bandwidth
-    if np.isfinite(capture.analysis_bandwidth):
-        spg = truncate_freqs(
-            spg, nfft, capture.sample_rate, bandwidth=capture.analysis_bandwidth, axis=1
-        )
-
-    if frequency_bin_averaging is not None:
-        spg = _binned_mean(spg, frequency_bin_averaging, axis=1)
-
-    spg = iqwaveform.powtodB(spg, eps=1e-25, out=spg)
-
-    spg = spg.astype(dtype)
-
-    metadata = {
-        'window': window,
-        'frequency_resolution': frequency_resolution,
-        'fractional_overlap': fractional_overlap,
-        # 'noise_bandwidth': enbw,
-        'units': f'dBm/{enbw/1e3:0.0f} kHz',
-    }
-
-    return spg, metadata
-
-
 @register_xarray_measurement(Spectrogram)
 def spectrogram(
     iq: 'iqwaveform.util.Array',
@@ -214,4 +224,4 @@ def spectrogram(
     fractional_overlap: float = 0,
     frequency_bin_averaging: int = None,
 ):
-    return _do_spectrogram(**locals(), dtype='float16')
+    return _do_spectrogram(**locals(), limit_digits=3, dtype='float16')
