@@ -88,12 +88,13 @@ def channel_dataarray(
                 metadata = {}
 
             da[entry.name].indexes[entry.dims[0]].values[:] = arr
-            da[entry.name].attrs.update(metadata)
 
         except BaseException as ex:
             raise ValueError(
                 f'error building xarray {cls.__qualname__}.{entry.name}'
             ) from ex
+
+        da[entry.name].attrs.update(metadata)
 
     return da
 

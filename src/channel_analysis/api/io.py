@@ -70,14 +70,6 @@ def _build_encodings(data, compression=None, filter: bool = True):
     else:
         compressor = compression
 
-    if isinstance(filter, (list, tuple)):
-        filters = filter
-    elif filter:
-        # round in dBs, tolerate max error +/- 0.005 dB
-        filters = [numcodecs.Quantize(3, dtype='float32')]
-    else:
-        filters = None
-
     encodings = defaultdict(dict)
 
     for name in data.data_vars.keys():
@@ -86,11 +78,6 @@ def _build_encodings(data, compression=None, filter: bool = True):
         if name != measurements.iq_waveform.__name__:
             if compressor is not None:
                 encodings[name]['compressor'] = compressor
-
-        if data[name].attrs.get('units', '').startswith('dB'):
-            if filters is not None:
-                encodings[name]['filters'] = filters
-            encodings[name]['dtype'] = 'float32'
 
     return encodings
 

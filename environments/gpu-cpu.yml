@@ -26,6 +26,7 @@ dependencies:
 - zarr~=2.18.2
 - dask
 - msgspec~=0.18.0
+- pigz
 - dulwich
 - ruamel.yaml
 - schemdraw

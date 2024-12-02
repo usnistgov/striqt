@@ -60,10 +60,12 @@ def _results_as_shared_arrays(
     else:
         raise TypeError(f'obj type {type(obj)} is unrecognized')
 
-    if as_shmarray:
-        return shmarray.NDSharedArray(array)
-    else:
-        return array
+    return array
+    # TODO: something like the following to implement IPC for file storage
+    # if as_shmarray:
+    #     return shmarray.NDSharedArray(array)
+    # else:
+    #     return array
 
 
 class KeywordArguments(msgspec.Struct):
