@@ -59,7 +59,7 @@ class RadioCapture(WaveformCapture, forbid_unknown_fields=True):
     gain: Annotated[float, meta('Gain setting', 'dB')] = -10
 
     delay: Optional[
-        Annotated[float, meta('Delay in acquisition start time', 's', gt=0)]
+        Annotated[float, meta('Start time relative to the previous capture start', 's', gt=0)]
     ] = None
     start_time: Optional[Annotated['pd.Timestamp', meta('Acquisition start time')]] = (
         None

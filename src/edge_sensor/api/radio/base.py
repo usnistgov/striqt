@@ -111,9 +111,11 @@ class RadioDevice(lb.Device):
 
     def open(self):
         self._armed_capture: structs.RadioCapture | None = None
+        self._prev_time_ns: int | None = None
+        self._next_time_ns: int | None = None
 
     def setup(self, radio_config: structs.RadioSetup):
-        """disarm acquisition and apply the given radio setup"""
+        """disarm acquisition and apply the given radio setup for a new sweep"""
 
         if self.channel() is not None:
             self.channel_enabled(False)
@@ -123,6 +125,7 @@ class RadioDevice(lb.Device):
         self.gapless_repeats = radio_config.gapless_repeats
         self.time_sync_every_capture = radio_config.time_sync_every_capture
         self.time_source(radio_config.time_source)
+        self._prev_time_ns = None
 
         if not self.time_sync_every_capture:
             self.sync_time_source()
@@ -266,6 +269,7 @@ class RadioDevice(lb.Device):
 
         self._holdover_samples = samples[-holdover_size:]
         self._next_time_ns = acq_start_ns + round(1e9 * capture.duration)
+        self._prev_time_ns = acq_start_ns
 
         return samples, acq_start_ns
 
@@ -289,6 +293,7 @@ class RadioDevice(lb.Device):
                 self.channel_enabled(True)
 
             iq, time_ns = self.read_iq(capture)
+            self._prev_time_ns = time_ns
             time_ns = pd.Timestamp(time_ns, unit='ns')
 
             if next_capture == capture and self.gapless_repeats:
