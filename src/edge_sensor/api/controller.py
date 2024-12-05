@@ -14,6 +14,7 @@ if typing.TYPE_CHECKING:
     import numpy as np
     import xarray as xr
     import labbench as lb
+    import pandas as pd
 else:
     np = util.lazy_import('numpy')
     xr = util.lazy_import('xarray')

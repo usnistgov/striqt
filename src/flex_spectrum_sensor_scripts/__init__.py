@@ -267,7 +267,7 @@ def click_server(func):
 
 def run_server(host: str, port: int, driver: str, verbose: bool):
     # defer imports to here to make the command line --help snappier
-    from edge_sensor._api.controller import start_server
+    from edge_sensor.api.controller import start_server
     import labbench as lb
 
     if verbose:
