@@ -78,8 +78,16 @@ class SweepController:
     def radio_id(self, driver_name: str) -> str:
         return self.radios[driver_name].id
 
-    def close_radio(self, radio_setup: structs.RadioSetup):
-        self.radios[radio_setup.driver].close()
+    def close_radio(self, radio_setup: structs.RadioSetup=None):
+        if radio_setup is None:
+            # close all
+            for name, radio in self.radios.items():
+                try:
+                    radio.close()
+                except BaseException as ex:
+                    lb.logger.warning(f'failed to close radio {name}: {str(ex)}')
+        else:
+            self.radios[radio_setup.driver].close()
 
     def _describe_preparation(self, target_sweep: structs.Sweep) -> str:
         if sweeps.sweep_touches_gpu(target_sweep):
@@ -270,6 +278,9 @@ class _ServerService(rpyc.Service, SweepController):
     def exposed_read_stream(self, samples: int):
         return self.radio._read_stream(samples)
 
+    def exposed_close_radio(self, radio_setup: structs.RadioSetup=None):
+        radio_setup = rpyc.utils.classic.obtain(radio_setup)
+        self.close_radio(radio_setup)
 
 class _ClientService(rpyc.Service):
     """API exposed to a server by clients"""

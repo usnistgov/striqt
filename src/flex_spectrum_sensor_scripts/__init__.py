@@ -125,7 +125,7 @@ def click_sensor_sweep(description: typing.Optional[str] = None):
 
 
 Store = typing.TypeVar('Store', bound='zarr.storage.Store')
-Controller = typing.TypeVar('Controller', bound='zarr.storage.Store')
+Controller = typing.TypeVar('Controller', bound='edge_sensor.SweepController')
 Sweep = typing.TypeVar('Sweep', bound='edge_sensor.Sweep')
 Dataset = typing.TypeVar('Dataset', bound='xr.Dataset')
 
