@@ -265,7 +265,7 @@ class SoapyRadioDevice(RadioDevice):
         else:
             self.backend = _SoapySDRDevice()
 
-        self._logger.info(f'connected with driver {self.backend.getDriverKey()}')
+        self._logger.info(f'opened with {self.backend.getDriverKey()}')
 
         self._post_connect()
 
@@ -388,7 +388,7 @@ class SoapyRadioDevice(RadioDevice):
                 raise
 
         self.backend.close()
-        self._logger.info('closed backend')
+        self._logger.info('closed')
 
     @attr.property.str(
         sets=False, cache=True, help='radio hardware UUID or serial number'
