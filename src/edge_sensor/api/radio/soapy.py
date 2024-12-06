@@ -388,6 +388,7 @@ class SoapyRadioDevice(RadioDevice):
                 raise
 
         self.backend.close()
+        self._logger.info('closed backend')
 
     @attr.property.str(
         sets=False, cache=True, help='radio hardware UUID or serial number'
