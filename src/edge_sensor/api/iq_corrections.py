@@ -18,13 +18,11 @@ if typing.TYPE_CHECKING:
     import xarray as xr
     import scipy
     import iqwaveform
-    import labbench as lb
 else:
     np = util.lazy_import('numpy')
     xr = util.lazy_import('xarray')
     scipy = util.lazy_import('scipy')
     iqwaveform = util.lazy_import('iqwaveform')
-    lb = util.lazy_import('labbench')
 
 
 @functools.lru_cache
