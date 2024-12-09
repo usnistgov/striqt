@@ -163,7 +163,7 @@ def package_channel_analysis(
     capture: structs.Capture, results: dict[str, structs.ChannelAnalysis]
 ) -> 'xr.Dataset':
     # materialize as xarrays
-    with lb.logger.stopwatch('package analyses into xarray', logger_level='debug'):
+    with lb.stopwatch('package analyses into xarray', logger_level='debug'):
         xarrays = {name: res.to_xarray() for name, res in results.items()}
         # capture.analysis_filter = dict(capture.analysis_filter)
         # capture = structs.builtins_to_struct(capture, type=type(capture))
