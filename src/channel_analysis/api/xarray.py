@@ -149,7 +149,7 @@ def evaluate_channel_analysis(
 
     # evaluate each possible analysis function if specified
     for name, func_kws in spec_dict.items():
-        with lb.stopwatch('evalaute channel analysis {name}', logger_level='debug'):
+        with lb.stopwatch(f'evalaute channel analysis {name}', logger_level='debug'):
             func = registry[type(getattr(spec, name))]
 
             if func_kws:
