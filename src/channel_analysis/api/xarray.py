@@ -17,12 +17,14 @@ if typing.TYPE_CHECKING:
     import xarray as xr
     import iqwaveform
     from xarray_dataclasses import datamodel, dataarray
+    import labbench as lb
 else:
     np = util.lazy_import('numpy')
     xr = util.lazy_import('xarray')
     iqwaveform = util.lazy_import('iqwaveform')
     datamodel = util.lazy_import('xarray_dataclasses.datamodel')
     dataarray = util.lazy_import('xarray_dataclasses.dataarray')
+    lb = util.lazy_import('labbench')
 
 
 TFunc = typing.Callable[..., typing.Any]
@@ -147,11 +149,13 @@ def evaluate_channel_analysis(
 
     # evaluate each possible analysis function if specified
     for name, func_kws in spec_dict.items():
-        func = registry[type(getattr(spec, name))]
+        with lb.stopwatch('evalaute channel analysis {name}', logger_level='debug'):
+            func = registry[type(getattr(spec, name))]
 
-        if func_kws:
-            results[name] = func(iq, capture, delay_xarray=True, **func_kws)
+            if func_kws:
+                results[name] = func(iq, capture, delay_xarray=True, **func_kws)
 
+    lb.logger.debug('finished channel analyses')
     return results
 
 
@@ -159,10 +163,13 @@ def package_channel_analysis(
     capture: structs.Capture, results: dict[str, structs.ChannelAnalysis]
 ) -> 'xr.Dataset':
     # materialize as xarrays
-    xarrays = {name: res.to_xarray() for name, res in results.items()}
-    # capture.analysis_filter = dict(capture.analysis_filter)
-    # capture = structs.builtins_to_struct(capture, type=type(capture))
-    attrs = structs.struct_to_builtins(capture)
-    if isinstance(capture, structs.FilteredCapture):
-        attrs['analysis_filter'] = msgspec.to_builtins(capture.analysis_filter)
-    return xr.Dataset(xarrays, attrs=attrs)
+    with lb.logger.stopwatch('package analyses into xarray', logger_level='debug'):
+        xarrays = {name: res.to_xarray() for name, res in results.items()}
+        # capture.analysis_filter = dict(capture.analysis_filter)
+        # capture = structs.builtins_to_struct(capture, type=type(capture))
+        attrs = structs.struct_to_builtins(capture)
+        if isinstance(capture, structs.FilteredCapture):
+            attrs['analysis_filter'] = msgspec.to_builtins(capture.analysis_filter)
+        ret = xr.Dataset(xarrays, attrs=attrs)
+    
+    return ret
