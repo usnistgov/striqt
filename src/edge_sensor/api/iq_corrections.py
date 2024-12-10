@@ -9,7 +9,7 @@ from channel_analysis.api import filters
 from . import util
 
 from .radio import RadioDevice, get_capture_buffer_sizes, design_capture_filter
-from .radio.base import needs_stft
+from .radio.base import needs_stft, TRANSIENT_HOLDOFF_WINDOWS
 from . import structs
 
 
@@ -280,7 +280,7 @@ def resampling_correction(
     w = iqwaveform.fourier._get_window(
         analysis_filter['window'], nfft, fftbins=False, xp=xp
     )
-    
+
     freqs, _, xstft = iqwaveform.fourier.stft(
         iq,
         fs=fs_backend,
@@ -337,12 +337,16 @@ def resampling_correction(
 
     iq = iqwaveform.fourier.istft(
         xstft,
-        size=round(capture.duration * capture.sample_rate),
         nfft=nfft_out,
         noverlap=noverlap,
         out=buf,
         axis=axis,
     )
+
+    # start the capture after the transient holdoff window
+    iq_size_out = round(capture.duration * capture.sample_rate)
+    i0 = TRANSIENT_HOLDOFF_WINDOWS * nfft_out
+    iq = iq[i0 : i0 + iq_size_out]
 
     if power_scale is None and nfft == nfft_out:
         pass
