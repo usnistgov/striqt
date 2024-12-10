@@ -33,6 +33,7 @@ dependencies:
 - mscorefonts
 - cupy ~= 12.2
 - cython
+- nsight-compute
 - pip:
   - iqwaveform @ git+https://github.com/usnistgov/iqwaveform
   - xarray_dataclasses @ git+https://github.com/dgkuester/xarray-dataclasses@lazy-imports
