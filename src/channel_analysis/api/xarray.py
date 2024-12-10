@@ -171,5 +171,5 @@ def package_channel_analysis(
         if isinstance(capture, structs.FilteredCapture):
             attrs['analysis_filter'] = msgspec.to_builtins(capture.analysis_filter)
         ret = xr.Dataset(xarrays, attrs=attrs)
-    
+
     return ret
