@@ -11,7 +11,7 @@ OUTPUT_DIR = Path(__file__).parent
 yaml = YAML()
 
 
-@lru_cache
+@lru_cache(100)
 def read_layer(recipe_path, layer_relative_path):
     return yaml.load(open(recipe_path.parent / layer_relative_path, 'r'))
 
