@@ -149,7 +149,7 @@ def evaluate_channel_analysis(
 
     # evaluate each possible analysis function if specified
     for name, func_kws in spec_dict.items():
-        with lb.stopwatch(f'evalaute channel analysis {name}', logger_level='debug'):
+        with lb.stopwatch(f'analysis: {name}', logger_level='debug'):
             func = registry[type(getattr(spec, name))]
 
             if func_kws:
@@ -171,5 +171,5 @@ def package_channel_analysis(
         if isinstance(capture, structs.FilteredCapture):
             attrs['analysis_filter'] = msgspec.to_builtins(capture.analysis_filter)
         ret = xr.Dataset(xarrays, attrs=attrs)
-    
+
     return ret

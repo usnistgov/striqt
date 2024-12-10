@@ -9,7 +9,7 @@ from channel_analysis.api import filters
 from . import util
 
 from .radio import RadioDevice, get_capture_buffer_sizes, design_capture_filter
-from .radio.base import needs_stft
+from .radio.base import needs_stft, TRANSIENT_HOLDOFF_WINDOWS
 from . import structs
 
 
@@ -18,13 +18,11 @@ if typing.TYPE_CHECKING:
     import xarray as xr
     import scipy
     import iqwaveform
-    import labbench as lb
 else:
     np = util.lazy_import('numpy')
     xr = util.lazy_import('xarray')
     scipy = util.lazy_import('scipy')
     iqwaveform = util.lazy_import('iqwaveform')
-    lb = util.lazy_import('labbench')
 
 
 @functools.lru_cache
@@ -197,8 +195,6 @@ def resampling_correction(
         the filtered IQ capture
     """
 
-    lb.logger.debug('start resample')
-
     fs_backend, _, analysis_filter = design_capture_filter(
         radio.base_clock_rate, capture
     )
@@ -222,7 +218,6 @@ def resampling_correction(
         buf = xp.empty(buf_size, dtype='complex64')
         buf[: iq.size] = xp.asarray(iq)
         iq = buf[: iq.size]
-        lb.logger.debug('allocated resampling buffer')
 
     else:
         if out.size < buf_size:
@@ -286,8 +281,6 @@ def resampling_correction(
         analysis_filter['window'], nfft, fftbins=False, xp=xp
     )
 
-    lb.logger.debug('resampling stft')
-    
     freqs, _, xstft = iqwaveform.fourier.stft(
         iq,
         fs=fs_backend,
@@ -299,8 +292,6 @@ def resampling_correction(
         out=buf,
     )
 
-    lb.logger.debug('finished stft')
-
     # set the passband roughly equal to the 3 dB bandwidth based on ENBW
     freq_res = fs_backend / nfft
     enbw = freq_res * iqwaveform.fourier.equivalent_noise_bandwidth(
@@ -309,7 +300,6 @@ def resampling_correction(
     passband = analysis_filter['passband']
 
     if nfft_out < nfft:
-        lb.logger.debug('started downsample')
         # downsample applies the filter as well
         freqs, xstft = iqwaveform.fourier.downsample_stft(
             freqs,
@@ -319,13 +309,11 @@ def resampling_correction(
             axis=axis,
             out=buf,
         )
-        lb.logger.debug('finished downsample')
     elif nfft_out > nfft:
         # upsample
         pad_left = (nfft_out - nfft) // 2
         pad_right = pad_left + (nfft_out - nfft) % 2
 
-        lb.logger.debug('start upsample')        
         if np.isfinite(capture.analysis_bandwidth):
             iqwaveform.fourier.zero_stft_by_freq(
                 freqs,
@@ -334,11 +322,9 @@ def resampling_correction(
                 axis=axis,
             )
 
-        lb.logger.debug('padding')
         xstft = iqwaveform.util.pad_along_axis(
             xstft, [[pad_left, pad_right]], axis=axis + 1
         )
-        lb.logger.debug('finished pad')
 
     else:
         # nfft_out == nfft
@@ -349,15 +335,18 @@ def resampling_correction(
             axis=axis,
         )
 
-    lb.logger.debug('inverting stft')
     iq = iqwaveform.fourier.istft(
         xstft,
-        size=round(capture.duration * capture.sample_rate),
         nfft=nfft_out,
         noverlap=noverlap,
         out=buf,
         axis=axis,
     )
+
+    # start the capture after the transient holdoff window
+    iq_size_out = round(capture.duration * capture.sample_rate)
+    i0 = TRANSIENT_HOLDOFF_WINDOWS * nfft_out
+    iq = iq[i0 : i0 + iq_size_out]
 
     if power_scale is None and nfft == nfft_out:
         pass
@@ -365,5 +354,4 @@ def resampling_correction(
         # voltage_scale = (power_scale or 1) * nfft_out / nfft
         iq *= np.sqrt(power_scale or 1) * np.sqrt(nfft_out / nfft)
 
-    lb.logger.debug('finished resample')
     return iq
