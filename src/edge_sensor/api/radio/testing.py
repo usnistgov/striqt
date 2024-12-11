@@ -62,20 +62,19 @@ class SingleToneSource(NullSource):
 
 class SawtoothSource(NullSource):
     resource: float = attr.value.float(
-        default=0.5,
+        default=0.01,
         min=0,
-        help='duration of the ramp normalized by acquisition duration',
+        help='sawtooth period',
         label='s',
     )
 
     def get_waveform(self, count, start_index: int, *, channel: int = 0, xp=np):
         ret = xp.empty(count, dtype='complex64')
-        period = self.duration * self.resource
+        period = self.resource
         ii = xp.arange(start_index, count + start_index, dtype='uint64')
         t = ii / self.backend_sample_rate()
         ret.real[:] = (t % period) / period
         ret.imag[:] = 0
-        ret *= lo_shift_tone(ii, self, xp)
         return ret
 
 

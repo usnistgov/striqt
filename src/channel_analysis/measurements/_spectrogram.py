@@ -59,8 +59,8 @@ def freq_axis_values(
     # otherwise negligible rounding errors lead to h~eadaches when merging
     # spectra with different sampling parameters. start with long floats
     # to minimize this problem
-    fs = np.float128(capture.sample_rate)
-    freqs = iqwaveform.fourier.fftfreq(nfft, 1.0 / fs, dtype='float128')
+    fs = np.float64(capture.sample_rate)
+    freqs = iqwaveform.fourier.fftfreq(nfft, 1.0 / fs, dtype='float64')
 
     if truncate and np.isfinite(capture.analysis_bandwidth):
         # stick with python arithmetic here for numpy/cupy consistency

@@ -432,22 +432,27 @@ def _get_capture_buffer_sizes_cached(
         raise ValueError(msg)
 
     _, _, analysis_filter = design_capture_filter(base_clock_rate, capture)
+    nfft = analysis_filter['nfft']
 
-    samples_in = ceil(
-        samples_out * analysis_filter['nfft'] / analysis_filter['nfft_out']
+    min_samples_in = ceil(
+        samples_out * nfft / analysis_filter['nfft_out']
     )
+
+    # round up to an even number of FFT windows
+    samples_in = ceil(min_samples_in/nfft) * nfft
 
     if include_holdoff and periodic_trigger is not None:
         # add holdoff samples needed for the periodic trigger
         samples_in += ceil(analysis_filter['fs'] * periodic_trigger)
 
+    samples_in += TRANSIENT_HOLDOFF_WINDOWS * nfft
     if needs_stft(analysis_filter, capture):
-        samples_in += TRANSIENT_HOLDOFF_WINDOWS * analysis_filter['nfft']
+        samples_in += nfft//2
         samples_out = iqwaveform.fourier._istft_buffer_size(
             samples_in,
             window=analysis_filter['window'],
             nfft_out=analysis_filter['nfft_out'],
-            nfft=analysis_filter['nfft'],
+            nfft=nfft,
             extend=True,
         )
 

@@ -10,11 +10,13 @@ if typing.TYPE_CHECKING:
     from matplotlib import pyplot as plt
     import numpy as np
     import xarray as xr
+    import iqwaveform
 else:
     xr = util.lazy_import('xarray')
     mpl = util.lazy_import('matplotlib')
     plt = util.lazy_import('matplotlib.pyplot')
     np = util.lazy_import('numpy')
+    iqwaveform = util.lazy_import('iqwaveform')
 
 
 def summarize_metadata(
@@ -47,6 +49,7 @@ def plot_cyclic_channel_power(
     cyclic_channel_power: 'xr.DataArray',
     center_statistic='mean',
     bound_statistics=('min', 'max'),
+    dB=True,
     ax=None,
     colors=None,
 ):
@@ -58,6 +61,9 @@ def plot_cyclic_channel_power(
     for i, detector in enumerate(cyclic_channel_power.power_detector.values):
         a = cyclic_channel_power.sel(power_detector=detector)
 
+        if not dB:
+            a = iqwaveform.dBtopow(a)
+
         ax.plot(
             time,
             (a.sel(cyclic_statistic=center_statistic)),
@@ -66,6 +72,9 @@ def plot_cyclic_channel_power(
 
     for i, detector in enumerate(cyclic_channel_power.power_detector.values):
         a = cyclic_channel_power.sel(power_detector=detector)
+
+        if not dB:
+            a = iqwaveform.dBtopow(a)
 
         ax.fill_between(
             time,

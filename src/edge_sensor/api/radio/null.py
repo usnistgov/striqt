@@ -3,7 +3,7 @@ import typing
 import labbench as lb
 from labbench import paramattr as attr
 
-from .base import RadioDevice
+from . import base
 from ..util import import_cupy_with_fallback, lazy_import
 
 if typing.TYPE_CHECKING:
@@ -19,7 +19,7 @@ else:
 channel_kwarg = attr.method_kwarg.int('channel', min=0, help='hardware port number')
 
 
-class NullSource(RadioDevice):
+class NullSource(base.RadioDevice):
     """emulate a radio with fake data"""
 
     _inbuf = None
@@ -53,7 +53,7 @@ class NullSource(RadioDevice):
         self.backend['lo_frequency'] = value
 
     center_frequency = lo_frequency.corrected_from_expression(
-        lo_frequency + RadioDevice.lo_offset,
+        lo_frequency + base.RadioDevice.lo_offset,
         help='RF frequency at the center of the RX baseband',
         label='Hz',
     )
@@ -72,7 +72,7 @@ class NullSource(RadioDevice):
         self.backend['backend_sample_rate'] = value
 
     sample_rate = backend_sample_rate.corrected_from_expression(
-        backend_sample_rate / RadioDevice._downsample,
+        backend_sample_rate / base.RadioDevice._downsample,
         label='Hz',
         help='sample rate of acquired waveform',
     )
@@ -142,17 +142,21 @@ class NullSource(RadioDevice):
     def _read_stream(
         self, buffers, offset, count, timeout_sec=None, *, on_overflow='except'
     ) -> tuple[int, int]:
-        timestamp_ns = (1_000_000_000 * self._sample_count) / float(
+        capture = self.get_capture_struct()
+        _, _, analysis_filter = base.design_capture_filter(self.base_clock_rate, capture)
+        sample_time_offset = -base.TRANSIENT_HOLDOFF_WINDOWS * analysis_filter['nfft']
+
+        timestamp_ns = (1_000_000_000 * (self._samples_elapsed - sample_time_offset)) / float(
             self.backend_sample_rate()
         )
 
         for channel, buf in zip([self.channel], buffers):
             values = self.get_waveform(
-                count, self._sample_count, channel=channel, xp=getattr(self, 'xp', np)
+                count, self._samples_elapsed, channel=channel, xp=getattr(self, 'xp', np)
             )
             buf[2 * offset : 2 * (offset + count)] = values.view('float32')
 
-        self._sample_count += count
+        self._samples_elapsed += count
 
         return count, round(timestamp_ns)
 
@@ -160,7 +164,7 @@ class NullSource(RadioDevice):
         return xp.empty(count, dtype='complex64')
 
     def reset_sample_counter(self):
-        self._sample_count = 0
+        self._samples_elapsed = 0
 
 
 class NullRadio(NullSource):

@@ -345,8 +345,9 @@ def resampling_correction(
 
     # start the capture after the transient holdoff window
     iq_size_out = round(capture.duration * capture.sample_rate)
-    i0 = min(TRANSIENT_HOLDOFF_WINDOWS * nfft_out, iq.shape[axis] - iq_size_out)
-    iq = iq[i0 : i0 + iq_size_out]
+    i0 = round(TRANSIENT_HOLDOFF_WINDOWS * nfft_out)
+    assert i0 + iq_size_out <= iq.shape[axis]
+    iq = iq[i0:i0+iq_size_out]
 
     if power_scale is None and nfft == nfft_out:
         pass

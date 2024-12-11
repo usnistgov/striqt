@@ -285,10 +285,10 @@ class ChannelAnalysisWrapper:
         """Inject radio device and capture info into a channel analysis result."""
 
         with lb.stopwatch('analysis', logger_level='debug'):
-            # for performance, GPU operations are all here in the same thread
             iq = iq_corrections.resampling_correction(
                 iq, capture, self.radio, force_calibration=self.calibration
             )
+
             coords = build_coords(
                 capture,
                 aliases=self.sweep.output.coord_aliases,
