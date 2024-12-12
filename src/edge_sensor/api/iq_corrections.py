@@ -214,7 +214,7 @@ def resampling_correction(
     if out is None:
         # create a buffer large enough for post-processing seeded with a copy of the IQ
         if nfft_out > nfft:
-            buf_size = ceil(buf_size * nfft_out / nfft)
+            buf_size = max(ceil(buf_size * nfft_out / nfft), iq.shape[axis])
         buf = xp.empty(buf_size, dtype='complex64')
         buf[: iq.size] = xp.asarray(iq)
         iq = buf[: iq.size]
