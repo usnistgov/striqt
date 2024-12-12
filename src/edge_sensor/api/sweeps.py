@@ -124,14 +124,14 @@ def iter_sweep(
     capture_prev = None
 
     if loop:
-        captures = itertools.cycle(sweep.captures)
+        capture_iter = itertools.cycle(sweep.captures)
         count = float('inf')
     else:
-        captures = sweep.captures
+        capture_iter = sweep.captures
         count = len(sweep.captures)
 
     # iterate across (previous, current, next) captures to support concurrency
-    offset_captures = util.zip_offsets(captures, (-1, 0, 1), fill=None)
+    offset_captures = util.zip_offsets(capture_iter, (-1, 0, 1), fill=None)
 
     try:
         for i, (_, capture_this, capture_next) in enumerate(offset_captures):
