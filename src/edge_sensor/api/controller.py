@@ -142,6 +142,7 @@ class SweepController:
         always_yield: bool = False,
         quiet: bool = False,
         pickled: bool = False,
+        loop: bool = False,
         prepare: bool = True,
     ) -> typing.Generator['xr.Dataset']:
         # take args {3,4...N}
@@ -216,6 +217,7 @@ class _ServerService(rpyc.Service, SweepController):
         sweep: structs.Sweep,
         calibration: 'xr.Dataset' = None,
         *,
+        loop: bool = False,
         always_yield: bool = False,
     ) -> typing.Generator['xr.Dataset']:
         """wraps actions.sweep_iter to run on the remote server.
@@ -253,6 +255,7 @@ class _ServerService(rpyc.Service, SweepController):
             always_yield=always_yield,
             pickled=True,
             close_after=False,
+            loop=loop,
             prepare=False,
         )
 

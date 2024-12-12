@@ -78,6 +78,7 @@ def iter_sweep(
     always_yield=False,
     quiet=False,
     pickled=False,
+    loop=False,
     close_after=False,
 ) -> typing.Generator['xr.Dataset' | bytes | None]:
     """iterate through sweep captures on the specified radio, yielding a dataset for each.
@@ -122,8 +123,15 @@ def iter_sweep(
     sweep_time = None
     capture_prev = None
 
+    if loop:
+        captures = itertools.cycle(sweep.captures)
+        count = float('inf')
+    else:
+        captures = sweep.captures
+        count = len(sweep.captures)
+
     # iterate across (previous, current, next) captures to support concurrency
-    offset_captures = util.zip_offsets(sweep.captures, (-1, 0, 1), fill=None)
+    offset_captures = util.zip_offsets(captures, (-1, 0, 1), fill=None)
 
     try:
         for i, (_, capture_this, capture_next) in enumerate(offset_captures):
@@ -149,7 +157,7 @@ def iter_sweep(
                 )
 
             desc = captures.describe_capture(
-                capture_this, capture_prev, index=i, count=len(sweep.captures)
+                capture_this, capture_prev, index=i, count=count
             )
 
             with lb.stopwatch(f'{desc} •', logger_level='debug' if quiet else 'info'):
