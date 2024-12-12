@@ -86,6 +86,7 @@ class Description(msgspec.Struct, forbid_unknown_fields=True):
     summary: Optional[str] = None
     location: Optional[tuple[float, float, float]] = None
     signal_chain: Optional[tuple[str, ...]] = tuple()
+    version: str = 'unversioned'
 
 
 class Output(msgspec.Struct, forbid_unknown_fields=True):
