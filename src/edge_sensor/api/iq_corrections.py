@@ -9,7 +9,7 @@ from channel_analysis.api import filters
 from . import util
 
 from .radio import RadioDevice, get_capture_buffer_sizes, design_capture_filter
-from .radio.base import needs_stft, TRANSIENT_HOLDOFF_WINDOWS
+from .radio.base import needs_stft
 from . import structs
 
 
@@ -274,6 +274,7 @@ def resampling_correction(
 
     if not needs_stft(analysis_filter, capture):
         # no filtering or resampling needed
+        iq = iq[:round(capture.duration * capture.sample_rate)]
         if power_scale is not None:
             iq *= np.sqrt(power_scale)
         return iq
@@ -346,7 +347,7 @@ def resampling_correction(
 
     # start the capture after the transient holdoff window
     iq_size_out = round(capture.duration * capture.sample_rate)
-    i0 = round(TRANSIENT_HOLDOFF_WINDOWS * nfft_out)
+    i0 = nfft_out//2
     assert i0 + iq_size_out <= iq.shape[axis]
     iq = iq[i0:i0+iq_size_out]
 

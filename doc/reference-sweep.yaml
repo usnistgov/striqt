@@ -76,6 +76,9 @@ radio_setup:
   # - if not specified, IQ is normalized as ADC full scale
   calibration: ../../calibrations/Air7201B-{radio_id}.p
 
+  # if true, sync to PPS before each capture; otherwise, only once before the sweep
+  time_sync_every_capture: False
+
 
 # These settings are used unless specified otherwise for each capture
 defaults:

@@ -72,6 +72,10 @@ class SweepController:
         radio = self.radios[driver_name] = radio_cls()
         if resource is not None:
             radio.resource = resource
+
+        if radio_setup.transient_holdoff_time is not None:
+            radio.transient_holdoff_time = radio_setup.transient_holdoff_time
+
         radio.open()
 
         return radio

@@ -10,7 +10,7 @@ channel_kwarg = attr.method_kwarg.int(
 )
 
 
-class AirT7x01B(SoapyRadioDevice):
+class AirT7x01B(SoapyRadioDevice):    
     resource = attr.value.dict(default={}, inherit=True)
 
     # adjust bounds based on the hardware
@@ -21,6 +21,9 @@ class AirT7x01B(SoapyRadioDevice):
     backend_sample_rate = attr.method.float(min=3.906250e6, max=125e6, inherit=True)
     gain = attr.method.float(min=-30, max=0, step=0.5, inherit=True)
     tx_gain = attr.method.float(min=-41.95, max=0, step=0.1, inherit=True)
+
+    # this was set based on gain setting sweep tests
+    transient_holdoff_time = attr.value.float(250e-6, inherit=True)
 
     def open(self):
         # in some cases specifying the driver has caused exceptions on connect

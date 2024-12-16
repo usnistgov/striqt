@@ -24,6 +24,8 @@ class NullSource(base.RadioDevice):
 
     _inbuf = None
 
+    transient_holdoff_time: float = attr.value.float(0.0, sets=True, inherit=True)
+
     @attr.method.int(
         min=0,
         allow_none=True,
@@ -144,7 +146,7 @@ class NullSource(base.RadioDevice):
     ) -> tuple[int, int]:
         capture = self.get_capture_struct()
         _, _, analysis_filter = base.design_capture_filter(self.base_clock_rate, capture)
-        sample_time_offset = -base.TRANSIENT_HOLDOFF_WINDOWS * analysis_filter['nfft']
+        sample_time_offset = -analysis_filter['nfft']//2
 
         timestamp_ns = (1_000_000_000 * (self._samples_elapsed - sample_time_offset)) / float(
             self.backend_sample_rate()

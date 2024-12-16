@@ -78,6 +78,7 @@ class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):
     ] = True
     periodic_trigger: Optional[float] = None
     calibration: Optional[str] = None
+    transient_holdoff_time: Optional[float] = None
     gapless_repeats: bool = False
     time_sync_every_capture: bool = False
 
