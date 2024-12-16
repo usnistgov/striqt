@@ -10,7 +10,7 @@ channel_kwarg = attr.method_kwarg.int(
 )
 
 
-class AirT7x01B(SoapyRadioDevice):    
+class AirT7x01B(SoapyRadioDevice):
     resource = attr.value.dict(default={}, inherit=True)
 
     # adjust bounds based on the hardware

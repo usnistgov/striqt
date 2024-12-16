@@ -51,21 +51,21 @@ def _binned_mean(x, count, *, axis=0, truncate=True):
 
 def fftfreq(nfft, fs, dtype='float64') -> 'np.ndarray':
     """compute fftfreq for a specified sample rate.
-    
+
     This is meant to produce higher-precision results based on
     rational sample rates in order to avoid rounding errors
     when merging captures with different sample rates.
     """
     # high resolution period
-    fres = decimal.Decimal(fs)/nfft
+    fres = decimal.Decimal(fs) / nfft
     # if fs_digits is not None:
-    #     fs_fixed = 
+    #     fs_fixed =
     # fres = round(, fs_digits)/nfft
-    span = range(-nfft//2, -nfft//2+nfft)
+    span = range(-nfft // 2, -nfft // 2 + nfft)
     if nfft % 2 == 0:
-        values = [fres*n for n in span]
+        values = [fres * n for n in span]
     else:
-        values = [fres*(n+1) for n in span]
+        values = [fres * (n + 1) for n in span]
     return np.array(values, dtype=dtype)
 
 

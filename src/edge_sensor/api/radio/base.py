@@ -83,7 +83,9 @@ class RadioDevice(lb.Device):
         help='time base for sample timestamps',
     )
 
-    transient_holdoff_time = attr.value.float(0.0, sets=False, label='s', help='holdoff time before valid data after enable')
+    transient_holdoff_time = attr.value.float(
+        0.0, sets=False, label='s', help='holdoff time before valid data after enable'
+    )
 
     @attr.property.str(sets=False, cache=True, help='unique radio hardware identifier')
     def id(self):
@@ -240,7 +242,9 @@ class RadioDevice(lb.Device):
 
             if awaiting_timestamp:
                 # min_holdoff = round(self.transient_holdoff_time*self.backend_sample_rate()) + holdoff_stft
-                holdoff_size = find_trigger_holdoff(self, buf_time_ns, stft_pad=stft_pad)
+                holdoff_size = find_trigger_holdoff(
+                    self, buf_time_ns, stft_pad=stft_pad
+                )
                 #     start_time_ns=buf_time_ns, sample_rate=fs, periodic_trigger=self.periodic_trigger, min_holdoff=min_holdoff
                 # )
 
@@ -252,7 +256,9 @@ class RadioDevice(lb.Device):
             remaining = remaining - this_count
             streamed_count += this_count
 
-        samples = samples.view('complex64')[holdoff_size - stft_pad: holdoff_size - stft_pad + sample_count]
+        samples = samples.view('complex64')[
+            holdoff_size - stft_pad : holdoff_size - stft_pad + sample_count
+        ]
 
         self._holdover_samples = samples[-holdover_size:]
         self._next_time_ns = acq_start_ns + round(1e9 * capture.duration)
@@ -352,10 +358,12 @@ def find_trigger_holdoff(radio: RadioDevice, start_time_ns: int, stft_pad: int =
 
     # wait long enough to meet the fulfill the radio's transient time and any
     # needed stft padding samples
-    min_holdoff = round(radio.transient_holdoff_time*sample_rate) + stft_pad
+    min_holdoff = round(radio.transient_holdoff_time * sample_rate) + stft_pad
     if holdoff < min_holdoff:
         periodic_trigger_samples = round(periodic_trigger * sample_rate)
-        holdoff += ceil(min_holdoff/periodic_trigger_samples) * periodic_trigger_samples
+        holdoff += (
+            ceil(min_holdoff / periodic_trigger_samples) * periodic_trigger_samples
+        )
 
     return holdoff
 
@@ -434,22 +442,22 @@ def needs_stft(analysis_filter: dict, capture: structs.RadioCapture):
 
 
 @functools.lru_cache(30000)
-def _get_stft_padding(base_clock_rate: float, capture: structs.RadioCapture) -> tuple[int, int]:
+def _get_stft_padding(
+    base_clock_rate: float, capture: structs.RadioCapture
+) -> tuple[int, int]:
     """returns the padding before and after a waveform to achieve an integral number of FFT windows"""
     samples_out = round(capture.duration * capture.sample_rate)
 
     _, _, analysis_filter = design_capture_filter(base_clock_rate, capture)
     nfft = analysis_filter['nfft']
 
-    min_samples_in = ceil(
-        samples_out * nfft / analysis_filter['nfft_out']
-    )
+    min_samples_in = ceil(samples_out * nfft / analysis_filter['nfft_out'])
 
     # round up to an integral number of FFT windows
-    samples_in = ceil(min_samples_in/nfft) * nfft
+    samples_in = ceil(min_samples_in / nfft) * nfft
 
     if needs_stft(analysis_filter, capture):
-        return nfft//2, nfft//2 + (samples_in-min_samples_in)
+        return nfft // 2, nfft // 2 + (samples_in - min_samples_in)
     else:
         return 0, 0
 
@@ -460,7 +468,7 @@ def _get_capture_buffer_sizes_cached(
     periodic_trigger: float | None,
     capture: structs.RadioCapture,
     transient_holdoff: float = 0,
-    include_holdoff: bool = False
+    include_holdoff: bool = False,
 ):
     if iqwaveform.power_analysis.isroundmod(capture.duration * capture.sample_rate, 1):
         samples_out = round(capture.duration * capture.sample_rate)
@@ -475,9 +483,7 @@ def _get_capture_buffer_sizes_cached(
 
         pad_before, pad_after = _get_stft_padding(base_clock_rate, capture)
 
-        min_samples_in = ceil(
-            samples_out * nfft / analysis_filter['nfft_out']
-        )
+        min_samples_in = ceil(samples_out * nfft / analysis_filter['nfft_out'])
 
         samples_in = min_samples_in + pad_before + pad_after
 
@@ -493,7 +499,9 @@ def _get_capture_buffer_sizes_cached(
 
     if include_holdoff:
         # accommmodate holdoff samples as needed for the periodic trigger and transient holdoff durations
-        samples_in += ceil(analysis_filter['fs'] * (transient_holdoff+(periodic_trigger or 0)))
+        samples_in += ceil(
+            analysis_filter['fs'] * (transient_holdoff + (periodic_trigger or 0))
+        )
 
     return samples_in, samples_out
 
@@ -509,7 +517,7 @@ def get_capture_buffer_sizes(
         periodic_trigger=radio.periodic_trigger,
         capture=capture,
         transient_holdoff=radio.transient_holdoff_time,
-        include_holdoff=include_holdoff
+        include_holdoff=include_holdoff,
     )
 
 

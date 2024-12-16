@@ -274,7 +274,7 @@ def resampling_correction(
 
     if not needs_stft(analysis_filter, capture):
         # no filtering or resampling needed
-        iq = iq[:round(capture.duration * capture.sample_rate)]
+        iq = iq[: round(capture.duration * capture.sample_rate)]
         if power_scale is not None:
             iq *= np.sqrt(power_scale)
         return iq
@@ -347,9 +347,9 @@ def resampling_correction(
 
     # start the capture after the transient holdoff window
     iq_size_out = round(capture.duration * capture.sample_rate)
-    i0 = nfft_out//2
+    i0 = nfft_out // 2
     assert i0 + iq_size_out <= iq.shape[axis]
-    iq = iq[i0:i0+iq_size_out]
+    iq = iq[i0 : i0 + iq_size_out]
 
     if power_scale is None and nfft == nfft_out:
         pass

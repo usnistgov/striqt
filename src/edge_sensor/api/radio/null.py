@@ -145,16 +145,21 @@ class NullSource(base.RadioDevice):
         self, buffers, offset, count, timeout_sec=None, *, on_overflow='except'
     ) -> tuple[int, int]:
         capture = self.get_capture_struct()
-        _, _, analysis_filter = base.design_capture_filter(self.base_clock_rate, capture)
-        sample_time_offset = -analysis_filter['nfft']//2
-
-        timestamp_ns = (1_000_000_000 * (self._samples_elapsed - sample_time_offset)) / float(
-            self.backend_sample_rate()
+        _, _, analysis_filter = base.design_capture_filter(
+            self.base_clock_rate, capture
         )
+        sample_time_offset = -analysis_filter['nfft'] // 2
+
+        timestamp_ns = (
+            1_000_000_000 * (self._samples_elapsed - sample_time_offset)
+        ) / float(self.backend_sample_rate())
 
         for channel, buf in zip([self.channel], buffers):
             values = self.get_waveform(
-                count, self._samples_elapsed, channel=channel, xp=getattr(self, 'xp', np)
+                count,
+                self._samples_elapsed,
+                channel=channel,
+                xp=getattr(self, 'xp', np),
             )
             buf[2 * offset : 2 * (offset + count)] = values.view('float32')
 
