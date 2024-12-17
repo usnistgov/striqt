@@ -33,9 +33,9 @@ class AirT7x01B(SoapyRadioDevice):
             raise IOError(f'connected to {driver}, but expected SoapyAirT')
 
     def _post_connect(self):
-        self.set_jesd_sysref_delay()
+        self._set_jesd_sysref_delay(0)
 
-    def set_jesd_sysref_delay(self, val=15):
+    def _set_jesd_sysref_delay(self, value: int):
         """
         SYSREF delay: add additional delay to SYSREF re-alignment of LMFC counter
         1111 = 15 core_clk cycles delay
@@ -60,7 +60,7 @@ class AirT7x01B(SoapyRadioDevice):
         # Clear the bit field
         reg &= ~field_mask
         # Set values of mask, dropping extra bits
-        field_val_mask = (val << start_bit) & field_mask
+        field_val_mask = (value << start_bit) & field_mask
 
         # Set the bits
         reg |= field_val_mask
@@ -69,7 +69,8 @@ class AirT7x01B(SoapyRadioDevice):
 
     @attr.property.str(inherit=True)
     def id(self):
-        # Jetson UUID - AirStack doesn't seem to return serial through Soapy
+        # this is the Jetson hardware UUID. as of 1.0.0, AirStack doesn't seem to
+        # return a serial through Soapy
         return hex(uuid.getnode())[2:]
 
 
