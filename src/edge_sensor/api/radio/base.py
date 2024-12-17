@@ -190,7 +190,7 @@ class RadioDevice(lb.Device):
         streamed_count = 0
         awaiting_timestamp = True
         buf_time_ns = self._next_time_ns
-        acq_start_ns = self._next_time_ns
+        start_ns = self._next_time_ns
 
         buf_size, _ = get_capture_buffer_sizes(self, capture, include_holdoff=True)
         sample_count, _ = get_capture_buffer_sizes(self, capture, include_holdoff=False)
@@ -241,29 +241,22 @@ class RadioDevice(lb.Device):
                 buf_time_ns = ret_time_ns
 
             if awaiting_timestamp:
-                # min_holdoff = round(self.transient_holdoff_time*self.backend_sample_rate()) + holdoff_stft
-                holdoff_size = find_trigger_holdoff(
-                    self, buf_time_ns, stft_pad=stft_pad
-                )
-                #     start_time_ns=buf_time_ns, sample_rate=fs, periodic_trigger=self.periodic_trigger, min_holdoff=min_holdoff
-                # )
-
+                holdoff_size = find_trigger_holdoff(self, buf_time_ns, stft_pad=stft_pad)
                 remaining = remaining + holdoff_size
 
-                acq_start_ns = buf_time_ns + round(holdoff_size * 1e9 / fs)
+                start_ns = buf_time_ns + round(holdoff_size * 1e9 / fs)
                 awaiting_timestamp = False
 
             remaining = remaining - this_count
             streamed_count += this_count
 
-        samples = samples.view('complex64')[
-            holdoff_size - stft_pad : holdoff_size - stft_pad + sample_count
-        ]
+        sample_offs = holdoff_size - stft_pad
+        samples = samples.view('complex64')[sample_offs: sample_offs + sample_count]
 
         self._holdover_samples = samples[-holdover_size:]
-        self._next_time_ns = acq_start_ns + round(1e9 * capture.duration)
+        self._next_time_ns = start_ns + round(1e9 * capture.duration)
 
-        return samples, acq_start_ns
+        return samples, start_ns
 
     def acquire(
         self,
