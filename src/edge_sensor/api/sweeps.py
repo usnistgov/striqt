@@ -252,7 +252,7 @@ def iter_callbacks(
     sweep_spec: structs.Sweep,
     *,
     arm_func: callable[[structs.Capture, structs.RadioSetup], None] | None = None,
-    acquire_func: callable[[structs.Capture], None] | None = None,
+    acquire_func: callable[[structs.Capture, structs.RadioSetup], None] | None = None,
     intake_func: callable[['xr.Dataset', structs.Capture], typing.Any] | None = None,
 ):
     """trigger callbacks on each sweep iteration.
@@ -309,7 +309,7 @@ def iter_callbacks(
 
         returns = lb.concurrently(
             lb.Call(stopiter_as_return, data_spec_pairs).rename('data'),
-            lb.Call(acquire_func, this_capture).rename('acquire'),
+            lb.Call(acquire_func, this_capture, sweep_spec.radio_setup).rename('acquire'),
             lb.Call(intake_func, last_data).rename('save'),
             flatten=False,
         )
