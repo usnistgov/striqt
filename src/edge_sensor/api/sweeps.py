@@ -251,7 +251,7 @@ def iter_callbacks(
     sweep_iter: 'xr.Dataset' | bytes | None,
     sweep_spec: structs.Sweep,
     *,
-    setup_func: callable[[structs.Capture], None] | None = None,
+    arm_func: callable[[structs.Capture, structs.RadioSetup], None] | None = None,
     acquire_func: callable[[structs.Capture], None] | None = None,
     intake_func: callable[['xr.Dataset', structs.Capture], typing.Any] | None = None,
 ):
@@ -271,12 +271,13 @@ def iter_callbacks(
     Returns:
         Generator
     """
-    if setup_func is None:
 
-        def setup_func(capture):
+    if arm_func is None:
+
+        def arm_func(capture):
             pass
-    elif not hasattr(setup_func, '__name__'):
-        setup_func.__name__ = 'setup'
+    elif not hasattr(arm_func, '__name__'):
+        arm_func.__name__ = 'arm'
 
     if acquire_func is None:
 
@@ -289,6 +290,7 @@ def iter_callbacks(
 
         def intake_func(data):
             return data
+        
     elif not hasattr(intake_func, '__name__'):
         intake_func.__name__ = 'save'
 
@@ -303,7 +305,7 @@ def iter_callbacks(
 
     while True:
         if this_capture is not None:
-            setup_func(this_capture)
+            arm_func(this_capture, sweep_spec.radio_setup)
 
         returns = lb.concurrently(
             lb.Call(stopiter_as_return, data_spec_pairs).rename('data'),
