@@ -11,7 +11,7 @@ from . import util
 from .radio import RadioDevice, get_capture_buffer_sizes, design_capture_filter
 from .radio.base import needs_stft
 from . import structs
-
+from scipy.signal._arraytools import axis_slice
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -209,21 +209,19 @@ def resampling_correction(
 
     xp = util.import_cupy_with_fallback()
 
-    _, buf_size = get_capture_buffer_sizes(radio, capture)
+    # _, buf_size = get_capture_buffer_sizes(radio, capture)
+    # if out is None:
+    #     # create a buffer large enough for post-processing seeded with a copy of the IQ
+    #     if nfft_out > nfft:
+    #         buf_size = ceil(buf_size * nfft_out / nfft)
+    #     buf_size = max(buf_size, iq.shape[axis])
+    #     buf = xp.empty(buf_size, dtype=iq.dtype)
+    # else:
+    #     if out.size < buf.size:
+    #         raise ValueError('resampling output buffer is too small')
+    #     buf = out
 
-    if out is None:
-        # create a buffer large enough for post-processing seeded with a copy of the IQ
-        if nfft_out > nfft:
-            buf_size = ceil(buf_size * nfft_out / nfft)
-        buf_size = max(buf_size, iq.shape[axis])
-        buf = xp.empty(buf_size, dtype='complex64')
-        buf[: iq.size] = xp.asarray(iq)
-        iq = buf[: iq.size]
-
-    else:
-        if out.size < buf.size:
-            raise ValueError('resampling output buffer is too small')
-        buf = out
+    iq = xp.asarray(iq)
 
     if force_calibration is not None:
         corrections = force_calibration
@@ -283,6 +281,13 @@ def resampling_correction(
         analysis_filter['window'], nfft, fftbins=False, xp=xp
     )
 
+    # set the passband roughly equal to the 3 dB bandwidth based on ENBW
+    freq_res = fs_backend / nfft
+    enbw = freq_res * iqwaveform.fourier.equivalent_noise_bandwidth(
+        analysis_filter['window'], nfft, fftbins=False
+    )
+    passband = analysis_filter['passband']
+
     freqs, _, xstft = iqwaveform.fourier.stft(
         iq,
         fs=fs_backend,
@@ -291,15 +296,8 @@ def resampling_correction(
         noverlap=round(nfft * overlap_scale),
         axis=axis,
         truncate=False,
-        out=buf,
+        # out=buf,
     )
-
-    # set the passband roughly equal to the 3 dB bandwidth based on ENBW
-    freq_res = fs_backend / nfft
-    enbw = freq_res * iqwaveform.fourier.equivalent_noise_bandwidth(
-        analysis_filter['window'], nfft, fftbins=False
-    )
-    passband = analysis_filter['passband']
 
     if nfft_out < nfft:
         # downsample applies the filter as well
@@ -309,13 +307,10 @@ def resampling_correction(
             nfft_out=nfft_out,
             passband=passband,
             axis=axis,
-            out=buf,
+            # out=buf,
         )
     elif nfft_out > nfft:
         # upsample
-        pad_left = (nfft_out - nfft) // 2
-        pad_right = pad_left + (nfft_out - nfft) % 2
-
         if np.isfinite(capture.analysis_bandwidth):
             iqwaveform.fourier.zero_stft_by_freq(
                 freqs,
@@ -323,6 +318,20 @@ def resampling_correction(
                 passband=(passband[0] + enbw / 2, passband[1] - enbw / 2),
                 axis=axis,
             )
+
+        # padded_shape = list(xstft.shape)
+        # padded_shape[axis+1] += pad_left+pad_right
+        # padded_xstft = iqwaveform.fourier._truncated_buffer(buf, padded_shape)
+
+        # start with the actual data, to make sure we don't overwrite it in the underlying buffer
+        # axis_slice(padded_xstft, pad_left, padded_xstft.shape[axis+1] - pad_right, axis=axis+1)[:] = xstft
+        # axis_slice(padded_xstft, 0, pad_left, axis=axis+1)[:] = 0
+        # axis_slice(padded_xstft, padded_xstft.shape[axis+1] - pad_right, None, axis=axis+1)[:] = 0
+
+        # xstft = padded_xstft
+
+        pad_left = (nfft_out - nfft) // 2
+        pad_right = pad_left + (nfft_out - nfft) % 2
 
         xstft = iqwaveform.util.pad_along_axis(
             xstft, [[pad_left, pad_right]], axis=axis + 1
@@ -341,7 +350,7 @@ def resampling_correction(
         xstft,
         nfft=nfft_out,
         noverlap=noverlap,
-        out=buf,
+        # out=buf,
         axis=axis,
     )
 

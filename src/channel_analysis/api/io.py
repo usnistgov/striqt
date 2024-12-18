@@ -132,8 +132,10 @@ def dump(
             warnings.simplefilter('ignore', UserWarning)
             return data.chunk(chunks).to_zarr(store, mode='a', append_dim=append_dim)
     else:
-        encodings = _build_encodings(data, compression=compression, filter=filter)
-        return data.chunk(chunks).to_zarr(store, encoding=encodings, mode='w')
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', xr.SerializationWarning)
+            encodings = _build_encodings(data, compression=compression, filter=filter)
+            return data.chunk(chunks).to_zarr(store, encoding=encodings, mode='w')
 
 
 def load(path: str | Path) -> 'xr.DataArray' | 'xr.Dataset':

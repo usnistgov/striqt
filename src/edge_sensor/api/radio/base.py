@@ -226,14 +226,25 @@ class RadioDevice(lb.Device):
             else:
                 on_overflow = 'ignore'
 
+            request_count = min(chunk_size, remaining)
+
+            if 2*(streamed_count + request_count) > samples.size:
+                # this should never happen if samples are tracked and allocated properly
+                raise MemoryError(f'about to request {request_count} samples, but buffer has capacity for only {samples.size//2 - streamed_count}')
+
             # Read the samples from the data buffer
             this_count, ret_time_ns = self._read_stream(
                 [samples],
                 offset=holdover_count + streamed_count,
-                count=min(chunk_size, remaining),
+                count=request_count,
                 timeout_sec=timeout_sec,
                 on_overflow=on_overflow,
             )
+
+            if 2*(this_count + streamed_count) > samples.size:
+                # this should never happen
+                print(f'requested {min(chunk_size, remaining)} samples, but got {remaining}')
+                raise MemoryError(f'overfilled receive buffer by {2*(this_count + streamed_count) - samples.size}')
 
             if buf_time_ns is None:
                 # special case for the first read in the stream, since
@@ -243,6 +254,12 @@ class RadioDevice(lb.Device):
             if awaiting_timestamp:
                 holdoff_size = find_trigger_holdoff(self, buf_time_ns, stft_pad=stft_pad)
                 remaining = remaining + holdoff_size
+
+                if 2*(remaining + this_count) < samples.size:
+                    want = 2*(remaining + this_count)
+                    raise MemoryError(
+                        f'want {want} entries for a buffer of size {samples.size}'
+                    )
 
                 start_ns = buf_time_ns + round(holdoff_size * 1e9 / fs)
                 awaiting_timestamp = False
@@ -447,7 +464,7 @@ def _get_stft_padding(
     min_samples_in = ceil(samples_out * nfft / analysis_filter['nfft_out'])
 
     # round up to an integral number of FFT windows
-    samples_in = ceil(min_samples_in / nfft) * nfft
+    samples_in = ceil(min_samples_in / nfft) * nfft + nfft
 
     if needs_stft(analysis_filter, capture):
         return nfft // 2, nfft // 2 + (samples_in - min_samples_in)
@@ -478,7 +495,7 @@ def _get_capture_buffer_sizes_cached(
 
         min_samples_in = ceil(samples_out * nfft / analysis_filter['nfft_out'])
 
-        samples_in = min_samples_in + pad_before + pad_after
+        samples_in = min_samples_in + (pad_before + pad_after)
 
         samples_out = iqwaveform.fourier._istft_buffer_size(
             samples_in,
@@ -493,7 +510,7 @@ def _get_capture_buffer_sizes_cached(
     if include_holdoff:
         # accommmodate holdoff samples as needed for the periodic trigger and transient holdoff durations
         samples_in += ceil(
-            analysis_filter['fs'] * (transient_holdoff + (periodic_trigger or 0))
+            analysis_filter['fs'] * (transient_holdoff + 2*(periodic_trigger or 0))
         )
 
     return samples_in, samples_out

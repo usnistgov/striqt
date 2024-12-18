@@ -95,7 +95,7 @@ class SweepController:
             self.radios[radio_setup.driver].close()
 
     def _describe_preparation(self, target_sweep: structs.Sweep) -> str:
-        if sweeps.sweep_touches_gpu(target_sweep):
+        if sweeps.sweep_touches_gpu(target_sweep) and target_sweep.radio_setup.warmup_sweep:
             warmup_sweep = sweeps.design_warmup_sweep(
                 target_sweep, skip=tuple(self.warmed_captures)
             )
@@ -118,24 +118,29 @@ class SweepController:
         if not sweeps.sweep_touches_gpu(sweep_spec):
             return
 
-        warmup_sweep = sweeps.design_warmup_sweep(
-            sweep_spec, skip=tuple(self.warmed_captures)
-        )
+        warmup_iter = []
+        warmup_sweep = None
 
-        self.warmed_captures = self.warmed_captures | set(warmup_sweep.captures)
-        if len(warmup_sweep.captures) > 0:
-            warmup_iter = self.iter_sweep(
-                warmup_sweep, calibration, quiet=True, pickled=pickled
+        if sweep_spec.radio_setup.warmup_sweep:
+            # maybe lead to a sweep iterator
+            warmup_sweep = sweeps.design_warmup_sweep(
+                sweep_spec, skip=tuple(self.warmed_captures)
             )
-        else:
-            return []
+            self.warmed_captures = self.warmed_captures | set(warmup_sweep.captures)
 
-        lb.concurrently(
-            warmup=lb.Call(list, warmup_iter),
-            open_radio=lb.Call(self.open_radio, sweep_spec.radio_setup),
-        )
+            if len(warmup_sweep.captures) > 0:
+                warmup_iter = self.iter_sweep(
+                    warmup_sweep, calibration, quiet=True, pickled=pickled
+                )
 
-        self.close_radio(warmup_sweep.radio_setup)
+        try:
+            lb.concurrently(
+                warmup=lb.Call(list, warmup_iter),
+                open_radio=lb.Call(self.open_radio, sweep_spec.radio_setup),
+            )
+        finally:
+            if warmup_sweep is not None:
+                self.close_radio(warmup_sweep.radio_setup)
 
     def iter_sweep(
         self,

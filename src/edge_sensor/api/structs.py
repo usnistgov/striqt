@@ -79,8 +79,9 @@ class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):
     periodic_trigger: Optional[float] = None
     calibration: Optional[str] = None
     transient_holdoff_time: Optional[float] = None
-    gapless_repeats: bool = False
-    time_sync_every_capture: bool = False
+    gapless_repeats: Annotated[bool, meta('whether to raise an exception on overflows between identical captures')] = False
+    time_sync_every_capture: Annotated[bool, meta('whether to sync to PPS before each capture in a sweep')] = False
+    warmup_sweep: Annotated[bool, meta('whether to run the GPU compute on empty buffers before sweeping for more even run time')] = True
 
 
 class Description(msgspec.Struct, forbid_unknown_fields=True):
