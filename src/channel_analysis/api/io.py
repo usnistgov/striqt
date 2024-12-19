@@ -75,6 +75,7 @@ def _build_encodings(data, compression=None, filter: bool = True):
     for name in data.data_vars.keys():
         # skip compression of iq waveforms, which is slow and
         # ineffective due to high entropy
+        print(name)
         if name != measurements.iq_waveform.__name__:
             if compressor is not None:
                 encodings[name]['compressor'] = compressor
