@@ -182,6 +182,8 @@ def _get_capture_field(
     elif name == SWEEP_TIMESTAMP_NAME:
         value = sweep_time
     else:
+        if name in aliases:
+            lb.logger.warning(f'warning: no hits for this capture in alias "{name}"')
         raise KeyError
     return value
 
