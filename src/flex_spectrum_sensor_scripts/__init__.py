@@ -132,7 +132,7 @@ Dataset = typing.TypeVar('Dataset', bound='xr.Dataset')
 
 def get_file_format_fields(sweep_spec, controller, yaml_path):
     radio_id = controller.radio_id(sweep_spec.radio_setup.driver)
-    fields = edge_sensor._api.captures.capture_fields_with_aliases(
+    fields = edge_sensor.api.captures.capture_fields_with_aliases(
         sweep_spec.captures[0], radio_id, sweep_spec.output.coord_aliases
     )
     fields['start_time'] = datetime.now().strftime('%Y%m%d-%Hh%Mm%S')

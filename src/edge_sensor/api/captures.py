@@ -252,8 +252,10 @@ def _evaluate_aliases(capture: structs.Capture, radio_id: str, alias_spec: dict)
     for coord_name, coord_spec in alias_spec.items():
         for alias_value, alias_spec in coord_spec.items():
             if _alias_is_in_capture(capture, radio_id, ret, alias_spec):
+                print('get alias: ', coord_name, alias_value)
                 ret[coord_name] = alias_value
                 break
+    print('got: ', ret)
     return ret
 
 
