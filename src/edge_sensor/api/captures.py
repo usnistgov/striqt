@@ -141,6 +141,7 @@ def coord_template(capture_cls: type[structs.RadioCapture], **alias_types: dict[
         )
 
     for field in alias_types.keys():
+        print('make type: ', field, alias_types[field])
         vars[field] = xr.Variable(
             (CAPTURE_DIM,),
             [''],
