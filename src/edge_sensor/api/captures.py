@@ -173,6 +173,7 @@ def _get_capture_field(
     if hasattr(capture, name):
         value = getattr(capture, name)
     elif name in aliases:
+        print('get alias: ', name, aliases[name])
         value = aliases[name]
     elif name == 'radio_id':
         value = radio_id
@@ -187,8 +188,6 @@ def build_coords(
     capture: structs.RadioCapture, aliases: dict, radio_id: str, sweep_time
 ):
     coords = coord_template(type(capture), tuple(aliases.keys())).copy(deep=True)
-
-    print('template: ', coords)
 
     for field in coords.keys():
         value = _get_capture_field(field, capture, radio_id, aliases, sweep_time)
