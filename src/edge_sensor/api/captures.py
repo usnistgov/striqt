@@ -175,9 +175,8 @@ def _get_capture_field(
     if hasattr(capture, name):
         value = getattr(capture, name)
     elif name in aliases:
-        if name in alias_hits:
-            print('get alias: ', name, alias_hits[name])
-            value = alias_hits[name]
+        value = alias_hits.get(name, None)
+        print('get alias: ', name, alias_hits[name])
     elif name == 'radio_id':
         value = radio_id
     elif name == SWEEP_TIMESTAMP_NAME:
