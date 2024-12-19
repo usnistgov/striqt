@@ -68,17 +68,17 @@ def _build_encodings(data, compression=None, filter: bool = True):
     elif compression is False:
         compressor = None
     else:
-        compressor = compression
+        compressor = zarr.compressors.NoCompressor
 
     encodings = defaultdict(dict)
 
     for name in data.data_vars.keys():
         # skip compression of iq waveforms, which is slow and
         # ineffective due to high entropy
-        if name != measurements.iq_waveform.__name__:
-            if compressor is not None:
-                encodings[name]['compressor'] = compressor
-    print(encodings)
+        if name == measurements.iq_waveform.__name__:
+            encodings[name]['compressor'] = None
+        else:
+            encodings[name]['compressor'] = compressor
 
     return encodings
 
