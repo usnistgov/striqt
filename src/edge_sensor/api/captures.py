@@ -124,7 +124,7 @@ def describe_capture(
 
 
 @functools.lru_cache
-def coord_template(capture_cls: type[structs.RadioCapture], aliases: tuple[str, ...]):
+def coord_template(capture_cls: type[structs.RadioCapture], **alias_types: dict[str, type]):
     """returns a cached xr.Coordinates object to use as a template for data results"""
 
     capture = capture_cls()
@@ -140,15 +140,12 @@ def coord_template(capture_cls: type[structs.RadioCapture], aliases: tuple[str, 
             attrs=structs.get_attrs(capture_cls, field),
         )
 
-    for field in aliases:
-        first = next(iter(aliases[field].values()))
-        print(f'{field} type: ', type(first))
-
+    for field in alias_types.keys():
         vars[field] = xr.Variable(
             (CAPTURE_DIM,),
             [''],
             fastpath=True,
-        ).astype(type(first))
+        ).astype(alias_types[field])
 
     vars[SWEEP_TIMESTAMP_NAME] = xr.Variable(
         (CAPTURE_DIM,),
@@ -193,7 +190,13 @@ def _get_capture_field(
 def build_coords(
     capture: structs.RadioCapture, aliases: dict, radio_id: str, sweep_time
 ):
-    coords = coord_template(type(capture), tuple(aliases.keys())).copy(deep=True)
+    alias_types = {}
+    for field in aliases.keys():
+        first = next(iter(alias_types[field].values()))
+        alias_types[field] = type(first)
+        print(f'{field} type: ', type(first))
+    
+    coords = coord_template(type(capture), **alias_types).copy(deep=True)
 
     for field in coords.keys():
         value = _get_capture_field(field, capture, radio_id, aliases, sweep_time)
