@@ -175,7 +175,7 @@ def _get_capture_field(
 
     if hasattr(capture, name):
         value = getattr(capture, name)
-    elif name in aliases:
+    elif name in alias_hits:
         default_type = type(next(iter(aliases[name].values())))
         value = alias_hits.get(name, default_type())
         print('get alias: ', name, value)
@@ -204,11 +204,13 @@ def build_coords(
 ):
     alias_types = _guess_alias_types(aliases)
     print('aliases: ', aliases, alias_types)
-    1//0
     coords = coord_template(type(capture), **alias_types).copy(deep=True)
 
     for field in coords.keys():
-        value = _get_capture_field(field, capture, radio_id, aliases, sweep_time)
+        try:
+            value = _get_capture_field(field, capture, radio_id, aliases, sweep_time)
+        except KeyError:
+            continue
 
         if isinstance(value, str):
             # to coerce strings as variable-length types later for storage

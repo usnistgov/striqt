@@ -69,10 +69,11 @@ def design_warmup_sweep(
     radio_setup.resource = 'empty'
     radio_setup.transient_holdoff_time = radio_cls.transient_holdoff_time.default
 
-    return structs.Sweep(
+    return type(sweep)(
         captures=captures,
         radio_setup=radio_setup,
         channel_analysis=sweep.channel_analysis,
+        output=sweep.output
     )
 
 
