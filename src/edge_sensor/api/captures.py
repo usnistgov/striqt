@@ -175,7 +175,8 @@ def _get_capture_field(
     if hasattr(capture, name):
         value = getattr(capture, name)
     elif name in aliases:
-        value = alias_hits.get(name, None)
+        default_type = type(next(iter(aliases[name].values())))
+        value = alias_hits.get(name, default_type())
         print('get alias: ', name, value)
     elif name == 'radio_id':
         value = radio_id
