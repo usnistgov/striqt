@@ -310,6 +310,8 @@ class ChannelAnalysisWrapper:
                 iq, capture, self.radio, force_calibration=self.calibration
             )
 
+            print('aliases input: ', self.sweep.output.coord_aliases)
+
             coords = build_coords(
                 capture,
                 aliases=self.sweep.output.coord_aliases,
