@@ -170,11 +170,13 @@ def _get_capture_field(
     aliases: dict[str, typing.Any],
     sweep_time=None,
 ):
+    alias_hits = _evaluate_aliases(capture, radio_id, aliases)
+
     if hasattr(capture, name):
         value = getattr(capture, name)
-    elif name in aliases:
-        # this is filled in later
-        value = None
+    elif name in alias_hits:
+        print('get alias: ', name, alias_hits[name])
+        value = alias_hits[name]
     elif name == 'radio_id':
         value = radio_id
     elif name == SWEEP_TIMESTAMP_NAME:
