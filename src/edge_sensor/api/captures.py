@@ -221,6 +221,7 @@ def _assign_alias_coords(capture_data: 'xr.Dataset', aliases):
     for coord_name, coord_spec in aliases.items():
         for alias_value, alias_spec in coord_spec.items():
             if _alias_is_in_coord(capture_data, alias_spec):
+                print('get: ', {coord_name: (CAPTURE_DIM, [alias_value])})
                 capture_data = capture_data.assign_coords(
                     {coord_name: (CAPTURE_DIM, [alias_value])}
                 )
