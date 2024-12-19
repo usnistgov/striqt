@@ -203,7 +203,7 @@ def build_coords(
     capture: structs.RadioCapture, aliases: dict, radio_id: str, sweep_time
 ):
     alias_types = _guess_alias_types(aliases)
-    print('aliases: ', alias_types)
+    print('aliases: ', aliases, alias_types)
     1//0
     coords = coord_template(type(capture), **alias_types).copy(deep=True)
 
