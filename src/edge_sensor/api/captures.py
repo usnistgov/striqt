@@ -213,8 +213,6 @@ def _alias_is_in_coord(dataset, alias_spec) -> bool:
         if match_coord.values[0] != match_value:
             # no match
             return False
-        else:
-            return True
     else:
         return False
 
@@ -228,6 +226,8 @@ def _assign_alias_coords(capture_data: 'xr.Dataset', aliases):
                     {coord_name: (CAPTURE_DIM, [alias_value])}
                 )
                 break
+
+    print('got aliases: ', capture_data)
 
     return capture_data
 
