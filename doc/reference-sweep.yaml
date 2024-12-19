@@ -45,8 +45,16 @@ output:
 
 # Radio setup parameters that apply to all captures
 radio_setup:
-  # python radio driver to use to connect to hardware
-  # (must match a class name that subclasses edge_sensor.radio.RadioDevice)
+  # python radio source driver to use to connect to hardware
+  # (must match a class name that subclasses edge_sensor.radio.RadioDevice).
+  #
+  # Supported radio hardware and testing sources:
+  # - Air7201B
+  # - Air7101B
+  # - SingleToneSource
+  # - SawtoothSource
+  # - NoiseSource
+  # - TDMSFileSource
   driver: Air7201B
 
   # time source for triggering and timestamps.
