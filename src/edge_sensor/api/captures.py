@@ -188,6 +188,8 @@ def build_coords(
 ):
     coords = coord_template(type(capture), tuple(aliases.keys())).copy(deep=True)
 
+    print('template: ', coords)
+
     for field in coords.keys():
         value = _get_capture_field(field, capture, radio_id, aliases, sweep_time)
 
