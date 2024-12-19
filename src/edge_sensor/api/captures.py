@@ -203,7 +203,7 @@ def build_coords(
 
 
 def _alias_is_in_coord(dataset, alias_spec) -> bool:
-    """return whether or not the given mapping matches coordinate values in dataset"""
+    """return whether the given mapping matches coordinate values in dataset"""
     for match_name, match_value in alias_spec.items():
         if match_name in dataset.coords:
             match_coord = dataset.coords[match_name]
@@ -213,8 +213,10 @@ def _alias_is_in_coord(dataset, alias_spec) -> bool:
         if match_coord.values[0] != match_value:
             # no match
             return False
+        else:
+            return True
     else:
-        return True
+        return False
 
 
 def _assign_alias_coords(capture_data: 'xr.Dataset', aliases):
