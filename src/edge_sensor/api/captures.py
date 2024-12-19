@@ -141,7 +141,6 @@ def coord_template(capture_cls: type[structs.RadioCapture], **alias_types: dict[
         )
 
     for field, type_ in alias_types.items():
-        print('make type: ', field, alias_types[field])
         vars[field] = xr.Variable(
             (CAPTURE_DIM,),
             [type_()],
@@ -178,7 +177,6 @@ def _get_capture_field(
     elif name in alias_hits:
         default_type = type(next(iter(aliases[name].values())))
         value = alias_hits.get(name, default_type())
-        print('get alias: ', name, value)
     elif name == 'radio_id':
         value = radio_id
     elif name == SWEEP_TIMESTAMP_NAME:
@@ -187,15 +185,15 @@ def _get_capture_field(
         raise KeyError
     return value
 
-def _first_value(d: dict):
-    return next(iter(d.values()))
 
 def _guess_alias_types(aliases: dict[str, dict]):
+    def _first_value(d: dict):
+        return next(iter(d.values()))
+
     alias_types = {}
     for field, entries in aliases.items():
         first = _first_value(_first_value(entries))
         alias_types[field] = type(first)
-        print(f'{field} type: ', type(first))
     return alias_types
 
 
@@ -203,7 +201,6 @@ def build_coords(
     capture: structs.RadioCapture, aliases: dict, radio_id: str, sweep_time
 ):
     alias_types = _guess_alias_types(aliases)
-    print('aliases: ', aliases, alias_types)
     coords = coord_template(type(capture), **alias_types).copy(deep=True)
 
     for field in coords.keys():
@@ -281,8 +278,6 @@ def capture_fields_with_aliases(
     attrs = structs.struct_to_builtins(capture)
     aliases = _evaluate_aliases(capture, radio_id, alias_spec)
 
-    print('attrs: ', dict(attrs, **aliases))
-
     return dict(attrs, **aliases)
 
 
@@ -311,8 +306,6 @@ class ChannelAnalysisWrapper:
             iq = iq_corrections.resampling_correction(
                 iq, capture, self.radio, force_calibration=self.calibration
             )
-
-            print('aliases input: ', self.sweep.output)
 
             coords = build_coords(
                 capture,
