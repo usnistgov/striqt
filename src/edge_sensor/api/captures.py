@@ -262,6 +262,8 @@ def capture_fields_with_aliases(
     attrs = structs.struct_to_builtins(capture)
     aliases = _evaluate_aliases(capture, radio_id, alias_spec)
 
+    print('attrs: ', dict(attrs, **aliases))
+
     return dict(attrs, **aliases)
 
 
