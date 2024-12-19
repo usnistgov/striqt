@@ -126,7 +126,9 @@ def dump(
     if append_dim is None:
         append_dim = 'capture'
 
-    # data = data.chunk(chunks)
+
+    data = data.chunk(chunks)
+
     # write/append only
     if len(store) > 0:
         with warnings.catch_warnings():
