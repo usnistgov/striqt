@@ -141,11 +141,14 @@ def coord_template(capture_cls: type[structs.RadioCapture], aliases: tuple[str, 
         )
 
     for field in aliases:
+        first = next(iter(aliases[field].values()))
+        print(f'{field} type: ', type(first))
+
         vars[field] = xr.Variable(
             (CAPTURE_DIM,),
             [''],
             fastpath=True,
-        ).astype('object')
+        ).astype(type(first))
 
     vars[SWEEP_TIMESTAMP_NAME] = xr.Variable(
         (CAPTURE_DIM,),
