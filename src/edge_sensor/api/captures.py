@@ -140,13 +140,13 @@ def coord_template(capture_cls: type[structs.RadioCapture], **alias_types: dict[
             attrs=structs.get_attrs(capture_cls, field),
         )
 
-    for field in alias_types.keys():
+    for field, type_ in alias_types.items():
         print('make type: ', field, alias_types[field])
         vars[field] = xr.Variable(
             (CAPTURE_DIM,),
-            [''],
+            [type_()],
             fastpath=True,
-        ).astype(alias_types[field])
+        ).astype(type_)
 
     vars[SWEEP_TIMESTAMP_NAME] = xr.Variable(
         (CAPTURE_DIM,),
@@ -187,11 +187,13 @@ def _get_capture_field(
         raise KeyError
     return value
 
+def _first_value(d: dict):
+    return next(iter(d.values()))
 
 def _guess_alias_types(aliases: dict[str, dict]):
     alias_types = {}
     for field, entries in aliases.items():
-        first = next(iter(entries.values()))
+        first = _first_value(_first_value(entries))
         alias_types[field] = type(first)
         print(f'{field} type: ', type(first))
     return alias_types
