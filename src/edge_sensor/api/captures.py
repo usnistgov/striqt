@@ -187,8 +187,7 @@ def _get_capture_field(
     return value
 
 
-@functools.lru_cache
-def _guess_alias_types(**aliases: dict[str, dict]):
+def _guess_alias_types(aliases: dict[str, dict]):
     alias_types = {}
     for field, entries in aliases.items():
         first = next(iter(entries.values()))
@@ -200,7 +199,7 @@ def _guess_alias_types(**aliases: dict[str, dict]):
 def build_coords(
     capture: structs.RadioCapture, aliases: dict, radio_id: str, sweep_time
 ):
-    alias_types = _guess_alias_types(**aliases)
+    alias_types = _guess_alias_types(aliases)
     coords = coord_template(type(capture), **alias_types).copy(deep=True)
 
     for field in coords.keys():
