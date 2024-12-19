@@ -45,16 +45,18 @@ output:
 
 # Radio setup parameters that apply to all captures
 radio_setup:
-  # python radio source driver to use to connect to hardware
-  # (must match a class name that subclasses edge_sensor.radio.RadioDevice).
+  # The streaming source that generates IQ samples.
   #
   # Supported radio hardware and testing sources:
-  # - Air7201B
   # - Air7101B
+  # - Air7201B
   # - SingleToneSource
   # - SawtoothSource
   # - NoiseSource
   # - TDMSFileSource
+  # 
+  # Additional drivers can be implemented by subclassing edge_sensor.RadioDevice
+  # and importing the new class in the runner script.
   driver: Air7201B
 
   # time source for triggering and timestamps.
