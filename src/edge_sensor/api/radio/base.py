@@ -255,12 +255,6 @@ class RadioDevice(lb.Device):
                 holdoff_size = find_trigger_holdoff(self, buf_time_ns, stft_pad=stft_pad)
                 remaining = remaining + holdoff_size
 
-                if 2*(remaining + this_count) < samples.size:
-                    want = 2*(remaining + this_count)
-                    raise MemoryError(
-                        f'want {want} entries for a buffer of size {samples.size}'
-                    )
-
                 start_ns = buf_time_ns + round(holdoff_size * 1e9 / fs)
                 awaiting_timestamp = False
 
@@ -487,8 +481,13 @@ def _get_capture_buffer_sizes_cached(
         raise ValueError(msg)
 
     _, _, analysis_filter = design_capture_filter(base_clock_rate, capture)
+    if capture.host_resample:
+        sample_rate = analysis_filter['fs']
+    else:
+        sample_rate = capture.sample_rate
 
-    if needs_stft(analysis_filter, capture):
+    if capture.host_resample and needs_stft(analysis_filter, capture):
+        print('host resample!')
         nfft = analysis_filter['nfft']
 
         pad_before, pad_after = _get_stft_padding(base_clock_rate, capture)
@@ -510,8 +509,11 @@ def _get_capture_buffer_sizes_cached(
     if include_holdoff:
         # accommmodate holdoff samples as needed for the periodic trigger and transient holdoff durations
         samples_in += ceil(
-            analysis_filter['fs'] * (transient_holdoff + 2*(periodic_trigger or 0))
+            sample_rate * (transient_holdoff + 2*(periodic_trigger or 0))
         )
+        print('add holdoff: ', ceil(
+            sample_rate * (transient_holdoff + 2*(periodic_trigger or 0))
+        ))
 
     return samples_in, samples_out
 

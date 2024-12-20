@@ -270,8 +270,6 @@ def _evaluate_aliases(capture: structs.Capture, radio_id: str, alias_spec: dict)
             if _match_capture_fields(capture, field_spec, radio_id):
                 ret[coord_name] = alias_value
                 break
-        else:
-            lb.logger.warning(f'alias field {coord_name} did not match for this capture')
     return ret
 
 
