@@ -173,8 +173,7 @@ def _get_capture_field(
     if len(aliases) > 0:
         alias_hits = _evaluate_aliases(capture, radio_id, aliases)
     else:
-        alias_hits = [}
-    print('alias hits: ', alias_hits)
+        alias_hits = {}
 
     if hasattr(capture, name):
         value = getattr(capture, name)
@@ -253,33 +252,26 @@ def _assign_alias_coords(capture_data: 'xr.Dataset', aliases):
     return capture_data
 
 
-def _alias_is_in_capture(
-    capture: structs.Capture, radio_id: str, aliases: dict[str, typing.Any], alias_spec
-) -> bool:
-    """return whether or not the given mapping matches coordinate values in dataset"""
-
-    for match_name, match_value in alias_spec.items():
-        print('loop: ', match_name, match_value)
-        capture_value = _get_capture_field(match_name, capture, radio_id, {})
-
-        if capture_value != match_value:
-            # no match
-            print('no match')
+def _match_capture_fields(capture: structs.RadioCapture, fields: dict[str], radio_id: str):
+    for name, value in fields.items():
+        if name == 'radio_id' and value == radio_id:
+            continue
+        if not hasattr(capture, name) or getattr(capture, name) != value:
             return False
-    else:
-        return True
+
+    return True
 
 
 def _evaluate_aliases(capture: structs.Capture, radio_id: str, alias_spec: dict):
     """evaluate the field values"""
     ret = {}
     for coord_name, coord_spec in alias_spec.items():
-        print('coord: ', coord_name, coord_spec)
         for alias_value, field_spec in coord_spec.items():
-            print(alias_value, field_spec)
-            if _alias_is_in_capture(capture, radio_id, ret, alias_spec):
+            if _match_capture_fields(capture, field_spec, radio_id):
                 ret[coord_name] = alias_value
                 break
+        else:
+            lb.logger.warning(f'alias field {coord_name} did not match for this capture')
     return ret
 
 
