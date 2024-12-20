@@ -68,16 +68,17 @@ def _build_encodings(data, compression=None, filter: bool = True):
     elif compression is False:
         compressor = None
     else:
-        compressor = compression
+        compressor = zarr.compressors.NoCompressor
 
     encodings = defaultdict(dict)
 
     for name in data.data_vars.keys():
         # skip compression of iq waveforms, which is slow and
         # ineffective due to high entropy
-        if name != measurements.iq_waveform.__name__:
-            if compressor is not None:
-                encodings[name]['compressor'] = compressor
+        if name == measurements.iq_waveform.__name__:
+            encodings[name]['compressor'] = None
+        else:
+            encodings[name]['compressor'] = compressor
 
     return encodings
 
@@ -126,14 +127,19 @@ def dump(
     if append_dim is None:
         append_dim = 'capture'
 
+
+    data = data.chunk(chunks)
+
     # write/append only
     if len(store) > 0:
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', UserWarning)
-            return data.chunk(chunks).to_zarr(store, mode='a', append_dim=append_dim)
+            return data.to_zarr(store, mode='a', append_dim=append_dim)
     else:
-        encodings = _build_encodings(data, compression=compression, filter=filter)
-        return data.chunk(chunks).to_zarr(store, encoding=encodings, mode='w')
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', xr.SerializationWarning)
+            encodings = _build_encodings(data, compression=compression, filter=filter)
+            return data.to_zarr(store, encoding=encodings, mode='w')
 
 
 def load(path: str | Path) -> 'xr.DataArray' | 'xr.Dataset':

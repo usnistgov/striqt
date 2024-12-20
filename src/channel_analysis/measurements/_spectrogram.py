@@ -1,5 +1,6 @@
 from __future__ import annotations
 import dataclasses
+import decimal
 import functools
 import typing
 
@@ -48,6 +49,26 @@ def _binned_mean(x, count, *, axis=0, truncate=True):
     return ret
 
 
+def fftfreq(nfft, fs, dtype='float64') -> 'np.ndarray':
+    """compute fftfreq for a specified sample rate.
+
+    This is meant to produce higher-precision results based on
+    rational sample rates in order to avoid rounding errors
+    when merging captures with different sample rates.
+    """
+    # high resolution period
+    fres = decimal.Decimal(fs) / nfft
+    # if fs_digits is not None:
+    #     fs_fixed =
+    # fres = round(, fs_digits)/nfft
+    span = range(-nfft // 2, -nfft // 2 + nfft)
+    if nfft % 2 == 0:
+        values = [fres * n for n in span]
+    else:
+        values = [fres * (n + 1) for n in span]
+    return np.array(values, dtype=dtype)
+
+
 def freq_axis_values(
     capture: structs.RadioCapture, fres: int, navg: int = None, truncate=False
 ):
@@ -59,8 +80,9 @@ def freq_axis_values(
     # otherwise negligible rounding errors lead to h~eadaches when merging
     # spectra with different sampling parameters. start with long floats
     # to minimize this problem
-    fs = np.float128(capture.sample_rate)
-    freqs = iqwaveform.fourier.fftfreq(nfft, 1.0 / fs, dtype='float128')
+    # fs = np.longdouble(capture.sample_rate)
+    freqs = fftfreq(nfft, capture.sample_rate)
+    # freqs = iqwaveform.fourier.fftfreq(nfft, 1.0 / fs, dtype='longdouble')
 
     if truncate and np.isfinite(capture.analysis_bandwidth):
         # stick with python arithmetic here for numpy/cupy consistency

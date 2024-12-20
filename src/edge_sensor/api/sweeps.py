@@ -1,4 +1,5 @@
 from __future__ import annotations
+import copy
 import typing
 import itertools
 
@@ -6,7 +7,7 @@ import msgspec
 
 from . import captures, util
 
-from .radio import RadioDevice, NullSource
+from .radio import RadioDevice, NullSource, find_radio_cls_by_name
 from . import structs
 
 
@@ -62,12 +63,17 @@ def design_warmup_sweep(
     unique_wcaptures = unique_map.keys() - skip_wcaptures
     captures = [unique_map[c] for c in unique_wcaptures]
 
-    radio_setup = structs.RadioSetup(driver=NullSource.__name__, resource='empty')
+    radio_cls = find_radio_cls_by_name(sweep.radio_setup.driver)
+    radio_setup = copy.copy(sweep.radio_setup)
+    radio_setup.driver = NullSource.__name__
+    radio_setup.resource = 'empty'
+    radio_setup.transient_holdoff_time = radio_cls.transient_holdoff_time.default
 
-    return structs.Sweep(
+    return type(sweep)(
         captures=captures,
         radio_setup=radio_setup,
         channel_analysis=sweep.channel_analysis,
+        output=sweep.output
     )
 
 
@@ -78,6 +84,7 @@ def iter_sweep(
     always_yield=False,
     quiet=False,
     pickled=False,
+    loop=False,
     close_after=False,
 ) -> typing.Generator['xr.Dataset' | bytes | None]:
     """iterate through sweep captures on the specified radio, yielding a dataset for each.
@@ -122,8 +129,15 @@ def iter_sweep(
     sweep_time = None
     capture_prev = None
 
+    if loop:
+        capture_iter = itertools.cycle(sweep.captures)
+        count = float('inf')
+    else:
+        capture_iter = sweep.captures
+        count = len(sweep.captures)
+
     # iterate across (previous, current, next) captures to support concurrency
-    offset_captures = util.zip_offsets(sweep.captures, (-1, 0, 1), fill=None)
+    offset_captures = util.zip_offsets(capture_iter, (-1, 0, 1), fill=None)
 
     try:
         for i, (_, capture_this, capture_next) in enumerate(offset_captures):
@@ -149,7 +163,7 @@ def iter_sweep(
                 )
 
             desc = captures.describe_capture(
-                capture_this, capture_prev, index=i, count=len(sweep.captures)
+                capture_this, capture_prev, index=i, count=count
             )
 
             with lb.stopwatch(f'{desc} •', logger_level='debug' if quiet else 'info'):
@@ -238,8 +252,8 @@ def iter_callbacks(
     sweep_iter: 'xr.Dataset' | bytes | None,
     sweep_spec: structs.Sweep,
     *,
-    setup_func: callable[[structs.Capture], None] | None = None,
-    acquire_func: callable[[structs.Capture], None] | None = None,
+    arm_func: callable[[structs.Capture, structs.RadioSetup], None] | None = None,
+    acquire_func: callable[[structs.Capture, structs.RadioSetup], None] | None = None,
     intake_func: callable[['xr.Dataset', structs.Capture], typing.Any] | None = None,
 ):
     """trigger callbacks on each sweep iteration.
@@ -258,12 +272,13 @@ def iter_callbacks(
     Returns:
         Generator
     """
-    if setup_func is None:
 
-        def setup_func(capture):
+    if arm_func is None:
+
+        def arm_func(capture):
             pass
-    elif not hasattr(setup_func, '__name__'):
-        setup_func.__name__ = 'setup'
+    elif not hasattr(arm_func, '__name__'):
+        arm_func.__name__ = 'arm'
 
     if acquire_func is None:
 
@@ -276,6 +291,7 @@ def iter_callbacks(
 
         def intake_func(data):
             return data
+        
     elif not hasattr(intake_func, '__name__'):
         intake_func.__name__ = 'save'
 
@@ -290,11 +306,11 @@ def iter_callbacks(
 
     while True:
         if this_capture is not None:
-            setup_func(this_capture)
+            arm_func(this_capture, sweep_spec.radio_setup)
 
         returns = lb.concurrently(
             lb.Call(stopiter_as_return, data_spec_pairs).rename('data'),
-            lb.Call(acquire_func, this_capture).rename('acquire'),
+            lb.Call(acquire_func, this_capture, sweep_spec.radio_setup).rename('acquire'),
             lb.Call(intake_func, last_data).rename('save'),
             flatten=False,
         )

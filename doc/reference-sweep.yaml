@@ -45,8 +45,18 @@ output:
 
 # Radio setup parameters that apply to all captures
 radio_setup:
-  # python radio driver to use to connect to hardware
-  # (must match a class name that subclasses edge_sensor.radio.RadioDevice)
+  # The streaming source that generates IQ samples.
+  #
+  # Supported radio hardware and testing sources:
+  # - Air7101B
+  # - Air7201B
+  # - SingleToneSource
+  # - SawtoothSource
+  # - NoiseSource
+  # - TDMSFileSource
+  # 
+  # Additional drivers can be implemented by subclassing edge_sensor.RadioDevice
+  # and importing the new class in the runner script.
   driver: Air7201B
 
   # time source for triggering and timestamps.
@@ -75,6 +85,9 @@ radio_setup:
   # - if a relative path, it is interpreted as relative to this yaml
   # - if not specified, IQ is normalized as ADC full scale
   calibration: ../../calibrations/Air7201B-{radio_id}.p
+
+  # if true, sync to PPS before each capture; otherwise, only once before the sweep
+  time_sync_every_capture: False
 
 
 # These settings are used unless specified otherwise for each capture

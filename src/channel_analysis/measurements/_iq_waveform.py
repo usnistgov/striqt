@@ -75,7 +75,10 @@ class IQSampleIndexCoords:
 @dataclasses.dataclass
 class IQWaveform(AsDataArray):
     power_time_series: Data[IQSampleIndexAxis, np.complex64]
-    iq_index: Coordof[IQSampleIndexCoords]
+
+    # Including this leads to serialized data with an 
+    # index vector of the same size as the IQ waveform.
+    # iq_index: Coordof[IQSampleIndexCoords]
 
     standard_name: Attr[str] = 'IQ waveform'
     units: Attr[str] = 'V/√Ω'

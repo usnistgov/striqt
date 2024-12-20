@@ -124,7 +124,7 @@ def describe_capture(
 
 
 @functools.lru_cache
-def coord_template(capture_cls: type[structs.RadioCapture], aliases: tuple[str, ...]):
+def coord_template(capture_cls: type[structs.RadioCapture], **alias_types: dict[str, type]):
     """returns a cached xr.Coordinates object to use as a template for data results"""
 
     capture = capture_cls()
@@ -140,12 +140,12 @@ def coord_template(capture_cls: type[structs.RadioCapture], aliases: tuple[str, 
             attrs=structs.get_attrs(capture_cls, field),
         )
 
-    for field in aliases:
+    for field, type_ in alias_types.items():
         vars[field] = xr.Variable(
             (CAPTURE_DIM,),
-            [''],
+            [type_()],
             fastpath=True,
-        ).astype('object')
+        ).astype(type_)
 
     vars[SWEEP_TIMESTAMP_NAME] = xr.Variable(
         (CAPTURE_DIM,),
@@ -170,26 +170,49 @@ def _get_capture_field(
     aliases: dict[str, typing.Any],
     sweep_time=None,
 ):
+    if len(aliases) > 0:
+        alias_hits = _evaluate_aliases(capture, radio_id, aliases)
+    else:
+        alias_hits = {}
+
     if hasattr(capture, name):
         value = getattr(capture, name)
-    elif name in aliases:
-        value = aliases[name]
+    elif name in alias_hits:
+        default_type = type(next(iter(aliases[name].values())))
+        value = alias_hits.get(name, default_type())
     elif name == 'radio_id':
         value = radio_id
     elif name == SWEEP_TIMESTAMP_NAME:
         value = sweep_time
     else:
+        if name in aliases:
+            lb.logger.warning(f'warning: no hits for this capture in alias "{name}"')
         raise KeyError
     return value
+
+
+def _guess_alias_types(aliases: dict[str, dict]):
+    def _first_value(d: dict):
+        return next(iter(d.values()))
+
+    alias_types = {}
+    for field, entries in aliases.items():
+        first = _first_value(_first_value(entries))
+        alias_types[field] = type(first)
+    return alias_types
 
 
 def build_coords(
     capture: structs.RadioCapture, aliases: dict, radio_id: str, sweep_time
 ):
-    coords = coord_template(type(capture), tuple(aliases.keys())).copy(deep=True)
+    alias_types = _guess_alias_types(aliases)
+    coords = coord_template(type(capture), **alias_types).copy(deep=True)
 
     for field in coords.keys():
-        value = _get_capture_field(field, capture, radio_id, aliases, sweep_time)
+        try:
+            value = _get_capture_field(field, capture, radio_id, aliases, sweep_time)
+        except KeyError:
+            continue
 
         if isinstance(value, str):
             # to coerce strings as variable-length types later for storage
@@ -203,7 +226,7 @@ def build_coords(
 
 
 def _alias_is_in_coord(dataset, alias_spec) -> bool:
-    """return whether or not the given mapping matches coordinate values in dataset"""
+    """return whether the given mapping matches coordinate values in dataset"""
     for match_name, match_value in alias_spec.items():
         if match_name in dataset.coords:
             match_coord = dataset.coords[match_name]
@@ -214,7 +237,7 @@ def _alias_is_in_coord(dataset, alias_spec) -> bool:
             # no match
             return False
     else:
-        return True
+        return False
 
 
 def _assign_alias_coords(capture_data: 'xr.Dataset', aliases):
@@ -229,26 +252,22 @@ def _assign_alias_coords(capture_data: 'xr.Dataset', aliases):
     return capture_data
 
 
-def _alias_is_in_capture(
-    capture: structs.Capture, radio_id: str, aliases: dict[str, typing.Any], alias_spec
-) -> bool:
-    """return whether or not the given mapping matches coordinate values in dataset"""
-
-    for match_name, match_value in alias_spec.items():
-        capture_value = _get_capture_field(match_name, capture, radio_id, aliases)
-        if capture_value != match_value:
-            # no match
+def _match_capture_fields(capture: structs.RadioCapture, fields: dict[str], radio_id: str):
+    for name, value in fields.items():
+        if name == 'radio_id' and value == radio_id:
+            continue
+        if not hasattr(capture, name) or getattr(capture, name) != value:
             return False
-    else:
-        return True
+
+    return True
 
 
 def _evaluate_aliases(capture: structs.Capture, radio_id: str, alias_spec: dict):
     """evaluate the field values"""
     ret = {}
     for coord_name, coord_spec in alias_spec.items():
-        for alias_value, alias_spec in coord_spec.items():
-            if _alias_is_in_capture(capture, radio_id, ret, alias_spec):
+        for alias_value, field_spec in coord_spec.items():
+            if _match_capture_fields(capture, field_spec, radio_id):
                 ret[coord_name] = alias_value
                 break
     return ret
@@ -285,10 +304,10 @@ class ChannelAnalysisWrapper:
         """Inject radio device and capture info into a channel analysis result."""
 
         with lb.stopwatch('analysis', logger_level='debug'):
-            # for performance, GPU operations are all here in the same thread
             iq = iq_corrections.resampling_correction(
                 iq, capture, self.radio, force_calibration=self.calibration
             )
+
             coords = build_coords(
                 capture,
                 aliases=self.sweep.output.coord_aliases,
