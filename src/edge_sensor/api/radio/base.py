@@ -487,7 +487,6 @@ def _get_capture_buffer_sizes_cached(
         sample_rate = capture.sample_rate
 
     if capture.host_resample and needs_stft(analysis_filter, capture):
-        print('host resample!')
         nfft = analysis_filter['nfft']
 
         pad_before, pad_after = _get_stft_padding(base_clock_rate, capture)
@@ -511,9 +510,6 @@ def _get_capture_buffer_sizes_cached(
         samples_in += ceil(
             sample_rate * (transient_holdoff + 2*(periodic_trigger or 0))
         )
-        print('add holdoff: ', ceil(
-            sample_rate * (transient_holdoff + 2*(periodic_trigger or 0))
-        ))
 
     return samples_in, samples_out
 
