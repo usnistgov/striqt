@@ -49,13 +49,15 @@ class WaveformCapture(channel_analysis.Capture, forbid_unknown_fields=True):
     lo_shift: Annotated[_TShift, meta('LO shift direction')] = 'none'
     host_resample: bool = True
 
+SingleChannelType = Annotated[int, meta('Input port index', ge=0)]
+MultiChannelType = Annotated[tuple[SingleChannelType, ...], meta('Input port indices')]
 
 class RadioCapture(WaveformCapture, forbid_unknown_fields=True):
     """Capture specification for a single radio waveform"""
 
     # RF and leveling
     center_frequency: Annotated[float, meta('RF center frequency', 'Hz', gt=0)] = 3710e6
-    channel: Annotated[int, meta('Input port index', ge=0)] = 0
+    channel: typing.Union[SingleChannelType, MultiChannelType] = 0
     gain: Annotated[float, meta('Gain setting', 'dB')] = -10
 
     delay: Optional[

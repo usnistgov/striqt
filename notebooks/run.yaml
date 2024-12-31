@@ -1,44 +1,23 @@
 description:
   summary: Description of the conditions under test
-  location:
-    - 39.99394274565336 # lat (deg)
-    - -105.26294066791989 # long (deg)
-    - 1657 # ASL (m)
-  signal_chain:
-    - Antenna make and model
-    - Cable make and model
-    - etc.
-
 
 radio_setup:
-  location:
-    - 39.991746624418745 # lat (deg)
-    - -105.26457779333897 # long (deg)
-    - 1783.4 # ASL (m)
-
-  # eventually: "internal", "external", "gps"
-  timebase: internal
-
-  # start acquisition at a fixed time modulus (requires GPS sync)
-  periodic_trigger: 10e-3 # none (eventually: also float)
-
-  # # calibration data path
-  calibration: # insert path here
-
+  time_source: internal
+  periodic_trigger: 10e-3
 
 # any of these can be overridden by sweep settings
 defaults:
   # RF
-  center_frequency: 3710e6
-  channel: 0 # (index)
+  center_frequency: 3750e6
+  channel: [0,-1] # (index)
   gain: -10 # dB
 
   # acquisition
   duration: 0.1 # acquisition duration (sec)
-  sample_rate: 15.36e6
+  sample_rate: 134.4e6
 
   # filtering and resampling
-  analysis_bandwidth: 10e6
+  analysis_bandwidth: 100e6
   lo_shift: none # digitally shift the LO out of the acquisition band: 'left', 'right', False
 
   # if_frequency: none # Hz (or none, for no external frequency conversion)
@@ -47,73 +26,79 @@ defaults:
 
 captures:
   - center_frequency: 3750e6 # Hz
-    analysis_bandwidth: 100e6 # Hz
-    sample_rate: 153.6e6 # Hz
+    # analysis_bandwidth: 100e6 # Hz
+    sample_rate: 125e6 # Hz
+    host_resample: false
     gain: -10 # dB
 
-  - center_frequency: 3830e6 # Hz
-    analysis_bandwidth: 60e6 # Hz
-    sample_rate: 92.16e6 # Hz
-    gain: -10 # dB
+  # - center_frequency: 3750e6 # Hz
+  #   analysis_bandwidth: 100e6 # Hz
+  #   sample_rate: 134.4e6 # Hz
+  #   gain: -10 # dB
 
-  - center_frequency: 3900e6 # Hz
-    analysis_bandwidth: 80e6 # Hz
-    sample_rate: 122.88e6 # Hz
-    gain: -10 # dB
+  # - center_frequency: 3830e6 # Hz
+  #   analysis_bandwidth: 60e6 # Hz
+  #   sample_rate: 92.16e6 # Hz
+  #   gain: -10 # dB
 
-  - center_frequency: 3960e6 # Hz
-    sample_rate: 61.44e6 # Hz
-    analysis_bandwidth: 40e6 # Hz
-    gain: -10 # dB
+  # - center_frequency: 3900e6 # Hz
+  #   analysis_bandwidth: 80e6 # Hz
+  #   sample_rate: 122.88e6 # Hz
+  #   gain: -10 # dB
+
+  # - center_frequency: 3960e6 # Hz
+  #   sample_rate: 61.44e6 # Hz
+  #   analysis_bandwidth: 40e6 # Hz
+  #   gain: -10 # dB
 
 
 channel_analysis:
-    amplitude_probability_distribution:
-        power_low: -40 # dBm
-        power_high: 15 # dBm
-        power_resolution: 0.25
+    # amplitude_probability_distribution:
+    #     power_low: -40 # dBm
+    #     power_high: 15 # dBm
+    #     power_resolution: 0.25
 
-    cyclic_channel_power:
-        cyclic_period: 0.01
-        cyclic_statistics:
-        # any of "min", "mean", "max", or a quantile number 
-        - min
-        - mean
-        - max
-        detector_period: 1.6666666666666667e-05
-        power_detectors:
-        - rms
-        - peak
+    # cyclic_channel_power:
+    #     cyclic_period: 0.01
+    #     cyclic_statistics:
+    #     # any of "min", "mean", "max", or a quantile number 
+    #     - min
+    #     - mean
+    #     - max
+    #     detector_period: 1.6666666666666667e-05
+    #     power_detectors:
+    #     - rms
+    #     - peak
 
-    persistence_spectrum:
-        statistics:
-        - mean
-        - 0.5
-        - 0.75
-        - 0.9
-        - 0.95
-        - 0.99
-        - 0.999
-        - max
-        frequency_resolution: 15000.0
-        window:
-            - dpss
-            - 3.87638403         # for enbw:resolution == 2:1
+    # persistence_spectrum:
+    #     statistics:
+    #     - mean
+    #     - 0.5
+    #     - 0.75
+    #     - 0.9
+    #     - 0.95
+    #     - 0.99
+    #     - 0.999
+    #     - max
+    #     frequency_resolution: 15000.0
+    #     window:
+    #         - dpss
+    #         - 3.87638403         # for enbw:resolution == 2:1
 
-    power_time_series:
-        detector_period: 0.01
-        power_detectors:
-        - rms
-        - peak
+    # power_time_series:
+    #     detector_period: 0.01
+    #     power_detectors:
+    #     - rms
+    #     - peak
 
-    cellular_cyclic_autocorrelation:
-        subcarrier_spacings:
-        - 15e3
-        - 30e3
-        - 60e3
-        frame_limit: 1
-        normalize: true
+    # cellular_cyclic_autocorrelation:
+    #     subcarrier_spacings:
+    #     - 15e3
+    #     - 30e3
+    #     - 60e3
+    #     frame_limit: 1
+    #     normalize: true
 
-    # iq_waveform:
-    #     start_time_sec: 0
-    #     stop_time_sec: 0.1
+    iq_waveform:
+        start_time_sec: 0
+        stop_time_sec: 0.1
