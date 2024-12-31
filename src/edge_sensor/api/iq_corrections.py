@@ -3,15 +3,12 @@ import functools
 import typing
 import pickle
 import gzip
-from math import ceil
 
-from channel_analysis.api import filters
 from . import util
 
-from .radio import RadioDevice, get_capture_buffer_sizes, design_capture_filter
+from .radio import RadioDevice, design_capture_filter
 from .radio.base import needs_stft
 from . import structs
-from scipy.signal._arraytools import axis_slice
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -208,18 +205,6 @@ def resampling_correction(
     )
 
     xp = util.import_cupy_with_fallback()
-
-    # _, buf_size = get_capture_buffer_sizes(radio, capture)
-    # if out is None:
-    #     # create a buffer large enough for post-processing seeded with a copy of the IQ
-    #     if nfft_out > nfft:
-    #         buf_size = ceil(buf_size * nfft_out / nfft)
-    #     buf_size = max(buf_size, iq.shape[axis])
-    #     buf = xp.empty(buf_size, dtype=iq.dtype)
-    # else:
-    #     if out.size < buf.size:
-    #         raise ValueError('resampling output buffer is too small')
-    #     buf = out
 
     iq = xp.asarray(iq)
 

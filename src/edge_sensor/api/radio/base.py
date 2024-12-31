@@ -192,8 +192,8 @@ class RadioDevice(lb.Device):
         buf_time_ns = self._next_time_ns
         start_ns = self._next_time_ns
 
-        buf_size, _ = get_capture_buffer_sizes(self, capture, include_holdoff=True)
-        sample_count, _ = get_capture_buffer_sizes(self, capture, include_holdoff=False)
+        buf_size = get_input_iq_buffer_size(self, capture, include_holdoff=True)
+        sample_count = get_input_iq_buffer_size(self, capture, include_holdoff=False)
 
         samples = np.empty((2 * buf_size,), dtype=np.float32)
 
@@ -488,20 +488,9 @@ def _get_capture_buffer_sizes_cached(
 
     if capture.host_resample and needs_stft(analysis_filter, capture):
         nfft = analysis_filter['nfft']
-
         pad_before, pad_after = _get_stft_padding(base_clock_rate, capture)
-
         min_samples_in = ceil(samples_out * nfft / analysis_filter['nfft_out'])
-
         samples_in = min_samples_in + (pad_before + pad_after)
-
-        samples_out = iqwaveform.fourier._istft_buffer_size(
-            samples_in,
-            window=analysis_filter['window'],
-            nfft_out=analysis_filter['nfft_out'],
-            nfft=nfft,
-            extend=True,
-        )
     else:
         samples_in = round(capture.sample_rate * capture.duration)
 
@@ -511,12 +500,12 @@ def _get_capture_buffer_sizes_cached(
             sample_rate * (transient_holdoff + 2*(periodic_trigger or 0))
         )
 
-    return samples_in, samples_out
+    return samples_in
 
 
-def get_capture_buffer_sizes(
+def get_input_iq_buffer_size(
     radio: RadioDevice, capture=None, include_holdoff=False
-) -> tuple[int, int]:
+) -> int:
     if capture is None:
         capture = radio.get_capture_struct()
 

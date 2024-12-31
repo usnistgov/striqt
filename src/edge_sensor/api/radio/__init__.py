@@ -2,7 +2,7 @@ from .base import (
     RadioDevice,
     find_radio_cls_by_name,
     is_same_resource,
-    get_capture_buffer_sizes,
+    get_input_iq_buffer_size,
     design_capture_filter,
 )
 
