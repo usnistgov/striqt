@@ -24,7 +24,7 @@ class NullSource(base.RadioDevice):
 
     _inbuf = None
 
-    transient_holdoff_time: float = attr.value.float(0.0, sets=True, inherit=True)
+    _transient_holdoff_time: float = attr.value.float(0.0, sets=True, inherit=True)
 
     @attr.method.int(
         min=0,
@@ -32,12 +32,12 @@ class NullSource(base.RadioDevice):
         cache=True,
         help='RX input port index',
     )
-    def channel(self):
+    def channels(self):
         # return none until this is set, then the cached value is returned
-        return None
+        return tuple()
 
-    @channel.setter
-    def _(self, channel: int):
+    @channels.setter
+    def _(self, channels: int):
         pass
 
     @attr.method.float(
@@ -96,24 +96,24 @@ class NullSource(base.RadioDevice):
         pass
 
     @attr.method.bool(sets=True, gets=True)
-    def channel_enabled(self):
-        return self.backend.get('channel_enabled', False)
+    def rx_enabled(self):
+        return self.backend.get('rx_enabled', False)
 
-    @channel_enabled.setter
+    @rx_enabled.setter
     def _(self, enable: bool):
-        if enable == self.channel_enabled():
+        if enable == self.rx_enabled():
             return
         if enable:
-            self.backend['channel_enabled'] = True
+            self.backend['rx_enabled'] = True
         else:
-            self.backend['channel_enabled'] = False
+            self.backend['rx_enabled'] = False
             self.reset_sample_counter()
 
     @attr.method.float(label='dB', help='SDR hardware gain')
-    def gain(self):
+    def gains(self):
         return self.backend.setdefault('gain', 0)
 
-    @gain.setter
+    @gains.setter
     def _(self, gain: float):
         self.backend['gain'] = gain
 
@@ -154,7 +154,7 @@ class NullSource(base.RadioDevice):
             1_000_000_000 * (self._samples_elapsed - sample_time_offset)
         ) / float(self.backend_sample_rate())
 
-        for channel, buf in zip([self.channel], buffers):
+        for channel, buf in zip([self.channels], buffers):
             values = self.get_waveform(
                 count,
                 self._samples_elapsed,

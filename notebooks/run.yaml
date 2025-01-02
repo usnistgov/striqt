@@ -9,8 +9,8 @@ radio_setup:
 defaults:
   # RF
   center_frequency: 3750e6
-  channel: [0,-1] # (index)
-  gain: -10 # dB
+  channels: [0,1] # (index)
+  gains: [-10] # dB
 
   # acquisition
   duration: 0.1 # acquisition duration (sec)
@@ -29,7 +29,7 @@ captures:
     # analysis_bandwidth: 100e6 # Hz
     sample_rate: 125e6 # Hz
     host_resample: false
-    gain: -10 # dB
+    gains: [-10] # dB
 
   # - center_frequency: 3750e6 # Hz
   #   analysis_bandwidth: 100e6 # Hz

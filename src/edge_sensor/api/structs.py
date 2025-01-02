@@ -50,15 +50,15 @@ class WaveformCapture(channel_analysis.Capture, forbid_unknown_fields=True):
     host_resample: bool = True
 
 SingleChannelType = Annotated[int, meta('Input port index', ge=0)]
-MultiChannelType = Annotated[tuple[SingleChannelType, ...], meta('Input port indices')]
+SingleGainType = Annotated[float, meta('Gain setting', 'dB')]
 
 class RadioCapture(WaveformCapture, forbid_unknown_fields=True):
     """Capture specification for a single radio waveform"""
 
     # RF and leveling
     center_frequency: Annotated[float, meta('RF center frequency', 'Hz', gt=0)] = 3710e6
-    channel: typing.Union[SingleChannelType, MultiChannelType] = 0
-    gain: Annotated[float, meta('Gain setting', 'dB')] = -10
+    channels: Annotated[tuple[SingleChannelType, ...], meta('Input port indices')] = (0,)
+    gains: Annotated[tuple[SingleGainType, ...], meta('Gain setting for each channel', 'dB')] = (-10,)
 
     delay: Optional[
         Annotated[float, meta('Delay in acquisition start time', 's', gt=0)]
@@ -80,7 +80,7 @@ class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):
     ] = True
     periodic_trigger: Optional[float] = None
     calibration: Optional[str] = None
-    transient_holdoff_time: Optional[float] = None
+    _transient_holdoff_time: Optional[float] = None
     gapless_repeats: Annotated[bool, meta('whether to raise an exception on overflows between identical captures')] = False
     time_sync_every_capture: Annotated[bool, meta('whether to sync to PPS before each capture in a sweep')] = False
     warmup_sweep: Annotated[bool, meta('whether to run the GPU compute on empty buffers before sweeping for more even run time')] = True

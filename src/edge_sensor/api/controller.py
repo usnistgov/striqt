@@ -73,8 +73,8 @@ class SweepController:
         if resource is not None:
             radio.resource = resource
 
-        if radio_setup.transient_holdoff_time is not None:
-            radio.transient_holdoff_time = radio_setup.transient_holdoff_time
+        if radio_setup._transient_holdoff_time is not None:
+            radio._transient_holdoff_time = radio_setup._transient_holdoff_time
 
         radio.open()
 

@@ -6,7 +6,7 @@ import uuid
 
 # for TX only (RX channel is accessed through the AirT7201B.channel method)
 channel_kwarg = attr.method_kwarg.int(
-    'channel', min=0, max=1, help='hardware port number'
+    'channel', min=0, help='hardware port number'
 )
 
 
@@ -14,16 +14,22 @@ class Air7x01B(SoapyRadioDevice):
     resource = attr.value.dict(default={}, inherit=True)
 
     # adjust bounds based on the hardware
-    duration = attr.value.float(100e-3, inherit=True)
     lo_offset = attr.value.float(0.0, min=-125e6, max=125e6, inherit=True)
-    channel = attr.method.int(min=0, max=1, inherit=True)
     lo_frequency = attr.method.float(min=300e6, max=6000e6, inherit=True)
     backend_sample_rate = attr.method.float(min=3.906250e6, max=125e6, inherit=True)
-    gain = attr.method.float(min=-30, max=0, step=0.5, inherit=True)
+    gains = type(SoapyRadioDevice.gains)(min=-30, max=0, step=0.5, inherit=True)
     tx_gain = attr.method.float(min=-41.95, max=0, step=0.1, inherit=True)
 
     # this was set based on gain setting sweep tests
-    transient_holdoff_time = attr.value.float(20e-3, inherit=True)
+    _transient_holdoff_time = attr.value.float(20e-3, inherit=True)
+
+    # stream setup and teardown for channel configuration are slow;
+    # instead, stream all RX channels
+    _stream_all_rx_channels = attr.value.bool(True, inherit=True)
+
+    # without this, multichannel acquisition start time will vary
+    # across channels, resulting in streaming errors
+    _rx_enable_delay = attr.value.float(0.25, inherit=True)
 
     def open(self):
         # in some cases specifying the driver has caused exceptions on connect

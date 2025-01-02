@@ -67,7 +67,7 @@ def design_warmup_sweep(
     radio_setup = copy.copy(sweep.radio_setup)
     radio_setup.driver = NullSource.__name__
     radio_setup.resource = 'empty'
-    radio_setup.transient_holdoff_time = radio_cls.transient_holdoff_time.default
+    radio_setup._transient_holdoff_time = radio_cls._transient_holdoff_time.default
 
     return type(sweep)(
         captures=captures,

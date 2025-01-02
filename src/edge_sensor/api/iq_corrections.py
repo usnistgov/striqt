@@ -220,8 +220,8 @@ def resampling_correction(
     else:
         # these fields must match the calibration conditions exactly
         exact_matches = dict(
-            channel=capture.channel,
-            gain=capture.gain,
+            channels=capture.channels,
+            gain=capture.gains,
             lo_shift=capture.lo_shift,
             sample_rate=capture.sample_rate,
             analysis_bandwidth=capture.analysis_bandwidth or np.inf,
