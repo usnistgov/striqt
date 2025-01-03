@@ -101,6 +101,7 @@ def cyclic_channel_power(
         detector_period=detector_period,
         detectors=power_detectors,
         cycle_stats=cyclic_statistics,
+        axis=1,
     )
 
     result = {}

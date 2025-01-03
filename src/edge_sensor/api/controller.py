@@ -95,7 +95,10 @@ class SweepController:
             self.radios[radio_setup.driver].close()
 
     def _describe_preparation(self, target_sweep: structs.Sweep) -> str:
-        if sweeps.sweep_touches_gpu(target_sweep) and target_sweep.radio_setup.warmup_sweep:
+        if (
+            sweeps.sweep_touches_gpu(target_sweep)
+            and target_sweep.radio_setup.warmup_sweep
+        ):
             warmup_sweep = sweeps.design_warmup_sweep(
                 target_sweep, skip=tuple(self.warmed_captures)
             )

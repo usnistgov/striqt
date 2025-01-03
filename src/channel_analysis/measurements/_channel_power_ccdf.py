@@ -78,4 +78,10 @@ def channel_power_ccdf(
         xp=xp,
     )
 
-    return iqwaveform.sample_ccdf(power, bins).astype(dtype)
+    return xp.asarray(
+        [
+            iqwaveform.sample_ccdf(power[i], bins).astype(dtype)
+            for i in range(power.shape[0])
+        ],
+        dtype=dtype,
+    )

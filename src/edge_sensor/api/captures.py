@@ -124,7 +124,9 @@ def describe_capture(
 
 
 @functools.lru_cache
-def coord_template(capture_cls: type[structs.RadioCapture], **alias_types: dict[str, type]):
+def coord_template(
+    capture_cls: type[structs.RadioCapture], **alias_types: dict[str, type]
+):
     """returns a cached xr.Coordinates object to use as a template for data results"""
 
     capture = capture_cls()
@@ -252,7 +254,9 @@ def _assign_alias_coords(capture_data: 'xr.Dataset', aliases):
     return capture_data
 
 
-def _match_capture_fields(capture: structs.RadioCapture, fields: dict[str], radio_id: str):
+def _match_capture_fields(
+    capture: structs.RadioCapture, fields: dict[str], radio_id: str
+):
     for name, value in fields.items():
         if name == 'radio_id' and value == radio_id:
             continue
@@ -292,7 +296,6 @@ class ChannelAnalysisWrapper:
     sweep: structs.Sweep
     analysis_spec: list[channel_analysis.ChannelAnalysis]
     extra_attrs: dict[str, typing.Any] | None = None
-    calibration: typing.Optional['xr.Dataset'] = None
 
     def __call__(
         self,
@@ -304,9 +307,7 @@ class ChannelAnalysisWrapper:
         """Inject radio device and capture info into a channel analysis result."""
 
         with lb.stopwatch('analysis', logger_level='debug'):
-            iq = iq_corrections.resampling_correction(
-                iq, capture, self.radio, force_calibration=self.calibration
-            )
+            iq = iq_corrections.resampling_correction(iq, capture, self.radio)
 
             coords = build_coords(
                 capture,

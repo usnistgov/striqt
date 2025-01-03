@@ -108,6 +108,7 @@ def persistence_spectrum(
         statistics=persistence_statistics,
         truncate=truncate,
         dB=True,
+        axis=1,
     )
 
     metadata = {

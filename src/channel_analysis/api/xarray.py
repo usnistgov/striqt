@@ -137,6 +137,9 @@ def evaluate_channel_analysis(
     capture: structs.Capture,
     *,
     spec: str | dict | structs.ChannelAnalysis,
+    as_xarray: typing.Literal[True]
+    | typing.Literal[False]
+    | typing.Literal['delayed'] = 'delayed',
     registry,
 ):
     """evaluate the specified channel analysis for the given IQ waveform and
@@ -153,7 +156,7 @@ def evaluate_channel_analysis(
             func = registry[type(getattr(spec, name))]
 
             if func_kws:
-                results[name] = func(iq, capture, delay_xarray=True, **func_kws)
+                results[name] = func(iq, capture, as_xarray=as_xarray, **func_kws)
 
     lb.logger.debug('finished channel analyses')
     return results

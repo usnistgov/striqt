@@ -80,7 +80,7 @@ def channel_power_histogram(
         xp=xp,
     )
 
-    kws = {'iq': iq, 'Ts': 1 / capture.sample_rate, 'Tbin': detector_period}
+    kws = {'iq': iq, 'Ts': 1 / capture.sample_rate, 'Tbin': detector_period, 'axis': 1}
 
     data = []
     for detector in power_detectors:
@@ -89,7 +89,12 @@ def channel_power_histogram(
         else:
             power = iqwaveform.iq_to_bin_power(kind=detector, **kws).astype('float32')
             power_dB = iqwaveform.powtodB(power, out=power)
-        counts, _ = xp.histogram(power_dB, bin_edges)
+
+        count_dtype = xp.finfo(iq.dtype).dtype
+        counts = xp.asarray(
+            [xp.histogram(power_dB[i], bin_edges)[0] for i in range(power_dB.shape[0])],
+            dtype=count_dtype,
+        )
         data.append(counts.astype(dtype) / xp.sum(counts))
 
     metadata = {

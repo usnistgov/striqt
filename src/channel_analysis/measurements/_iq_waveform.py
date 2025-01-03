@@ -76,7 +76,7 @@ class IQSampleIndexCoords:
 class IQWaveform(AsDataArray):
     power_time_series: Data[IQSampleIndexAxis, np.complex64]
 
-    # Including this leads to serialized data with an 
+    # Including this leads to serialized data with an
     # index vector of the same size as the IQ waveform.
     # iq_index: Coordof[IQSampleIndexCoords]
 
@@ -112,6 +112,5 @@ def iq_waveform(
     start, stop = _get_start_stop_index(
         capture, start_time_sec=start_time_sec, stop_time_sec=stop_time_sec
     )
-    data = iq[start:stop]
 
-    return data, metadata
+    return iq[:, start:stop], metadata

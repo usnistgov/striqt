@@ -117,15 +117,15 @@ def spectrogram_ccdf(
 
     if np.isfinite(capture.analysis_bandwidth):
         spg = truncate_spectrogram_bandwidth(
-            spg, nfft, capture.sample_rate, capture.analysis_bandwidth, axis=0
+            spg, nfft, capture.sample_rate, capture.analysis_bandwidth, axis=1
         )
 
     if frequency_bin_averaging is not None:
         trim = spg.shape[1] % (2 * frequency_bin_averaging)
         if trim > 0:
             spg = spg[:, trim // 2 : -trim // 2 :]
-        spg = iqwaveform.fourier.to_blocks(spg, frequency_bin_averaging, axis=1)
-        spg = spg.mean(axis=2)
+        spg = iqwaveform.fourier.to_blocks(spg, frequency_bin_averaging, axis=-1)
+        spg = spg.mean(axis=-1)
 
     spg = iqwaveform.powtodB(spg, eps=1e-25, out=spg)
 
@@ -135,7 +135,13 @@ def spectrogram_ccdf(
         power_resolution=power_resolution,
         xp=xp,
     )
-    data = iqwaveform.sample_ccdf(spg.flatten(), bins).astype(dtype)
+
+    data = xp.asarray(
+        [
+            iqwaveform.sample_ccdf(spg[i].flatten(), bins).astype(dtype)
+            for i in range(spg.shape[0])
+        ]
+    )
 
     metadata = {
         'window': window,

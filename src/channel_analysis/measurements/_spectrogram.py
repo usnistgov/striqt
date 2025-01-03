@@ -28,22 +28,20 @@ def equivalent_noise_bandwidth(window: typing.Union[str, tuple[str, float]], N: 
 
 def truncate_spectrogram_bandwidth(x, nfft, fs, bandwidth, axis=0):
     """trim an array outside of the specified bandwidth on a frequency axis"""
-    axis_slice = signal._arraytools.axis_slice
     edges = iqwaveform.fourier._freq_band_edges(
         nfft, 1.0 / fs, cutoff_low=-bandwidth / 2, cutoff_hi=bandwidth / 2
     )
-    return axis_slice(x, *edges, axis=axis)
+    return iqwaveform.util.axis_slice(x, *edges, axis=axis)
 
 
 def _binned_mean(x, count, *, axis=0, truncate=True):
     """reduce an array by averaging into bins on the specified axis"""
-    axis_slice = signal._arraytools.axis_slice
 
     if truncate:
         trim = x.shape[axis] % (count)
         dimsize = (x.shape[axis] // count) * count
         if trim > 0:
-            x = axis_slice(x, trim // 2, trim // 2 + dimsize, axis=axis)
+            x = iqwaveform.util.axis_slice(x, trim // 2, trim // 2 + dimsize, axis=axis)
     x = iqwaveform.fourier.to_blocks(x, count, axis=axis)
     ret = x.mean(axis=axis + 1)
     return ret
@@ -136,7 +134,7 @@ def _do_spectrogram(
         fs=capture.sample_rate,
         nperseg=nfft,
         noverlap=noverlap,
-        axis=0,
+        axis=1,
     )
 
     # truncate to the analysis bandwidth

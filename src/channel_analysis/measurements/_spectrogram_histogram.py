@@ -61,7 +61,11 @@ def spectrogram_histogram(
     )
 
     count_dtype = xp.finfo(iq.dtype).dtype
-    counts, _ = xp.histogram(spg.flatten(), bin_edges)
-    data = counts.astype(count_dtype) / xp.sum(counts)
+    counts = xp.asarray(
+        [xp.histogram(spg[i].flatten(), bin_edges)[0] for i in range(spg.shape[0])],
+        dtype=count_dtype,
+    )
+
+    data = counts / xp.sum(counts[0])
 
     return data, metadata

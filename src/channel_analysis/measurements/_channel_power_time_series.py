@@ -75,7 +75,7 @@ def channel_power_time_series(
     detector_period: float,
     power_detectors: tuple[str, ...] = ('rms', 'peak'),
 ):
-    kws = {'iq': iq, 'Ts': 1 / capture.sample_rate, 'Tbin': detector_period}
+    kws = {'iq': iq, 'Ts': 1 / capture.sample_rate, 'Tbin': detector_period, 'axis': 1}
 
     data = []
     for detector in power_detectors:

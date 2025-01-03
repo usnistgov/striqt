@@ -3,6 +3,7 @@ import functools
 import typing
 import pickle
 import gzip
+from pathlib import Path
 
 from . import util
 
@@ -15,11 +16,13 @@ if typing.TYPE_CHECKING:
     import xarray as xr
     import scipy
     import iqwaveform
+    import labbench as lb
 else:
     np = util.lazy_import('numpy')
     xr = util.lazy_import('xarray')
     scipy = util.lazy_import('scipy')
     iqwaveform = util.lazy_import('iqwaveform')
+    lb = util.lazy_import('labbench')
 
 
 @functools.lru_cache
@@ -170,13 +173,82 @@ def _describe_missing_data(corrections: 'xr.Dataset', exact_matches: dict):
     return '; '.join(misses)
 
 
+functools.lru_cache()
+
+
+def lookup_power_correction(
+    cal_data: Path | 'xr.Dataset' | None, capture: structs.RadioCapture, xp
+):
+    if isinstance(cal_data, xr.Dataset):
+        corrections = cal_data
+    elif cal_data:
+        corrections = read_calibration_corrections(cal_data)
+    else:
+        return None
+
+    power_scale = []
+
+    if len(capture.gains) == 1:
+        gains = capture.gains * len(capture.channels)
+    else:
+        gains = capture.gains
+
+    for channel, gain in zip(capture.channels, gains):
+        # these fields must match the calibration conditions exactly
+        exact_matches = dict(
+            channel=channel,
+            gain=gain,
+            lo_shift=capture.lo_shift,
+            sample_rate=capture.sample_rate,
+            analysis_bandwidth=capture.analysis_bandwidth or np.inf,
+            host_resample=capture.host_resample,
+        )
+
+        try:
+            sel = corrections.power_correction.sel(**exact_matches, drop=True)
+        except KeyError:
+            misses = _describe_missing_data(corrections, exact_matches)
+            exc = KeyError(f'calibration is not available for this capture: {misses}')
+        else:
+            exc = None
+
+        if exc is not None:
+            raise exc
+
+        for name in ('duration', 'radio_id', 'delay'):
+            if name in sel.coords:
+                sel = sel.drop(name)
+
+        sel = sel.squeeze(drop=True).dropna('center_frequency')
+
+        if sel.size == 0:
+            raise ValueError(
+                'no calibration data is available for this combination of sampling parameters'
+            )
+        elif capture.center_frequency > sel.center_frequency.max():
+            raise ValueError(
+                f'center_frequency {capture.center_frequency/1e6} MHz exceeds calibration max {sel.center_frequency.max()/1e6} MHz'
+            )
+        elif capture.center_frequency < sel.center_frequency.min():
+            raise ValueError(
+                f'center_frequency {capture.center_frequency/1e6} MHz is below calibration min {sel.center_frequency.min()/1e6} MHz'
+            )
+
+        # allow interpolation between sample points in these fields
+        sel = sel.interp(center_frequency=capture.center_frequency)
+
+        power_scale.append(float(sel))
+
+    return xp.asarray(power_scale, dtype='float32')[:, np.newaxis]
+
+
 def resampling_correction(
     iq: 'iqwaveform.util.Array',
     capture: structs.RadioCapture,
     radio: RadioDevice,
     force_calibration: typing.Optional['xr.Dataset'] = None,
     *,
-    axis=0,
+    axis=1,
     out=None,
 ):
     """apply a bandpass filter implemented through STFT overlap-and-add.
@@ -208,52 +280,8 @@ def resampling_correction(
 
     iq = xp.asarray(iq)
 
-    if force_calibration is not None:
-        corrections = force_calibration
-    elif radio.calibration:
-        corrections = read_calibration_corrections(radio.calibration)
-    else:
-        corrections = None
-
-    if corrections is None:
-        power_scale = None
-    else:
-        # these fields must match the calibration conditions exactly
-        exact_matches = dict(
-            channels=capture.channels,
-            gain=capture.gains,
-            lo_shift=capture.lo_shift,
-            sample_rate=capture.sample_rate,
-            analysis_bandwidth=capture.analysis_bandwidth or np.inf,
-            host_resample=capture.host_resample,
-        )
-
-        try:
-            sel = corrections.power_correction.sel(**exact_matches, drop=True)
-        except KeyError:
-            misses = _describe_missing_data(corrections, exact_matches)
-            exc = KeyError(f'calibration is not available for this capture: {misses}')
-        else:
-            exc = None
-
-        if exc is not None:
-            raise exc
-
-        for name in ('duration', 'radio_id', 'delay'):
-            if name in sel.coords:
-                sel = sel.drop(name)
-
-        # allow interpolation between sample points in these fields
-        sel = (
-            sel.squeeze(drop=True)
-            .dropna('center_frequency')
-            .interp(center_frequency=capture.center_frequency)
-        )
-
-        if not np.isfinite(sel):
-            raise ValueError('no calibration data available for this capture')
-
-        power_scale = float(sel)
+    with lb.stopwatch('power correction lookup', threshold=10e-3, logger_level='debug'):
+        power_scale = lookup_power_correction(radio.calibration, capture, xp)
 
     if not needs_stft(analysis_filter, capture):
         # no filtering or resampling needed
@@ -343,12 +371,13 @@ def resampling_correction(
     iq_size_out = round(capture.duration * capture.sample_rate)
     i0 = nfft_out // 2
     assert i0 + iq_size_out <= iq.shape[axis]
-    iq = iq[i0 : i0 + iq_size_out]
+    iq = iqwaveform.util.axis_slice(iq, i0, i0 + iq_size_out, axis=axis)
 
     if power_scale is None and nfft == nfft_out:
         pass
+    elif power_scale is None:
+        iq *= np.sqrt(nfft_out / nfft)
     else:
-        # voltage_scale = (power_scale or 1) * nfft_out / nfft
-        iq *= np.sqrt(power_scale or 1) * np.sqrt(nfft_out / nfft)
+        iq *= np.sqrt(power_scale) * np.sqrt(nfft_out / nfft)
 
     return iq

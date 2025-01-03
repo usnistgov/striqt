@@ -127,7 +127,6 @@ def dump(
     if append_dim is None:
         append_dim = 'capture'
 
-
     data = data.chunk(chunks)
 
     # write/append only

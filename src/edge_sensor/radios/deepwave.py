@@ -5,9 +5,7 @@ from ..api.radio import SoapyRadioDevice
 import uuid
 
 # for TX only (RX channel is accessed through the AirT7201B.channel method)
-channel_kwarg = attr.method_kwarg.int(
-    'channel', min=0, help='hardware port number'
-)
+channel_kwarg = attr.method_kwarg.int('channel', min=0, help='hardware port number')
 
 
 class Air7x01B(SoapyRadioDevice):
@@ -38,8 +36,8 @@ class Air7x01B(SoapyRadioDevice):
         if driver != 'SoapyAIRT':
             raise IOError(f'connected to {driver}, but expected SoapyAirT')
 
-    def _post_connect(self):
-        self._set_jesd_sysref_delay(0)
+    # def _post_connect(self):
+    #     self._set_jesd_sysref_delay(0)
 
     def _set_jesd_sysref_delay(self, value: int):
         """

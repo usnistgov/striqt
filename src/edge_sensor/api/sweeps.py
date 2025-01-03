@@ -73,7 +73,7 @@ def design_warmup_sweep(
         captures=captures,
         radio_setup=radio_setup,
         channel_analysis=sweep.channel_analysis,
-        output=sweep.output
+        output=sweep.output,
     )
 
 
@@ -291,7 +291,7 @@ def iter_callbacks(
 
         def intake_func(data):
             return data
-        
+
     elif not hasattr(intake_func, '__name__'):
         intake_func.__name__ = 'save'
 
@@ -310,7 +310,9 @@ def iter_callbacks(
 
         returns = lb.concurrently(
             lb.Call(stopiter_as_return, data_spec_pairs).rename('data'),
-            lb.Call(acquire_func, this_capture, sweep_spec.radio_setup).rename('acquire'),
+            lb.Call(acquire_func, this_capture, sweep_spec.radio_setup).rename(
+                'acquire'
+            ),
             lb.Call(intake_func, last_data).rename('save'),
             flatten=False,
         )
