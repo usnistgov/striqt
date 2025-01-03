@@ -38,8 +38,10 @@ def _entry_stub(entry: 'datamodel.AnyEntry'):
 def shaped(
     cls: type['dataarray.OptionedClass[dataarray.PInit, dataarray.TDataArray]'],
 ) -> 'dataarray.TDataArray': ...
+
+
 @functools.lru_cache
-def dataarray_stub(cls: typing.Any) -> typing.Any:
+def dataarray_stub(cls: typing.Any, expand_dims=None) -> typing.Any:
     """return an empty array of type `cls`"""
 
     entries = get_data_model(cls).entries
@@ -52,7 +54,12 @@ def dataarray_stub(cls: typing.Any) -> typing.Any:
 
     stub = cls.new(**kws)
     slices = dict.fromkeys(stub.dims, slice(None, 0))
-    return stub.isel(slices)
+    stub = stub.isel(slices)
+
+    if expand_dims is not None:
+        stub = stub.expand_dims({n: 0 for n in expand_dims}, axis=0)
+
+    return stub
 
 
 @functools.lru_cache
@@ -68,10 +75,10 @@ def freezevalues(parameters: dict) -> dict:
 
 
 def channel_dataarray(
-    cls, data: 'np.ndarray', capture, parameters: dict[str, typing.Any]
+    cls, data: 'np.ndarray', capture, parameters: dict[str, typing.Any], expand_dims=None
 ) -> 'xr.DataArray':
     """build an `xarray.DataArray` from an ndarray, capture information, and channel analysis keyword arguments"""
-    template = dataarray_stub(cls)
+    template = dataarray_stub(cls, expand_dims)
     data = np.asarray(data)
     parameters = freezevalues(parameters)
 
@@ -116,12 +123,13 @@ class ChannelAnalysisResult(collections.UserDict):
     parameters: dict[str, typing.Any]
     attrs: dict[str] = dataclasses.field(default_factory=dict)
 
-    def to_xarray(self) -> 'xr.DataArray':
+    def to_xarray(self, expand_dims=None) -> 'xr.DataArray':
         return channel_dataarray(
             cls=self.datacls,
             data=self.data,
             capture=self.capture,
             parameters=self.parameters,
+            expand_dims=expand_dims
         ).assign_attrs(self.attrs)
 
 
@@ -163,11 +171,11 @@ def evaluate_channel_analysis(
 
 
 def package_channel_analysis(
-    capture: structs.Capture, results: dict[str, structs.ChannelAnalysis]
+    capture: structs.Capture, results: dict[str, structs.ChannelAnalysis], expand_dims=None
 ) -> 'xr.Dataset':
     # materialize as xarrays
     with lb.stopwatch('package analyses into xarray', logger_level='debug'):
-        xarrays = {name: res.to_xarray() for name, res in results.items()}
+        xarrays = {name: res.to_xarray(expand_dims) for name, res in results.items()}
         # capture.analysis_filter = dict(capture.analysis_filter)
         # capture = structs.builtins_to_struct(capture, type=type(capture))
         attrs = structs.struct_to_builtins(capture)

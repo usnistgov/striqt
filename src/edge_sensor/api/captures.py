@@ -3,6 +3,7 @@
 from __future__ import annotations
 import dataclasses
 import functools
+import msgspec
 import pickle
 import typing
 
@@ -30,6 +31,8 @@ CAPTURE_DIM = 'capture'
 SWEEP_TIMESTAMP_NAME = 'sweep_start_time'
 RADIO_ID_NAME = 'radio_id'
 
+CHANNEL_TO_CAPTURE_MAP = {'channel': 'channels', 'gain': 'gains'}
+CAPTURE_TO_CHANNEL_MAP = dict(zip(CHANNEL_TO_CAPTURE_MAP.values(), CHANNEL_TO_CAPTURE_MAP.keys()))
 
 @functools.lru_cache
 def _get_unit_formatter(units: str) -> 'matplotlib.ticker.EngFormatter':
@@ -85,6 +88,26 @@ def concat_time_dim(datasets: list['xr.Dataset'], time_dim: str) -> 'xr.Dataset'
     return ds
 
 
+@functools.lru_cache(10000)
+def broadcast_to_channels(channels: tuple[int, ...], *params, allow_mismatch=False) -> list[list]:
+    """broadcast sequences of length 1 up to the length of capture.channels"""
+
+    res = []
+    for p in params:
+        if not isinstance(p, (tuple, list)):
+            res.append([p,] * len(channels))
+        elif len(p) == 1:
+            res.append(list(p) * len(channels))
+        elif len(p) == len(channels):
+            res.append(list(p))
+        elif allow_mismatch:
+            res.append(list(p[:1]) * len(channels))
+        else:
+            raise ValueError(f'cannot broadcast tuple of length {len(p)} to channel count {len(channels)}')
+
+    return res
+
+
 def describe_capture(
     this: structs.RadioCapture | None,
     prev: structs.RadioCapture | None = None,
@@ -125,39 +148,47 @@ def describe_capture(
 
 @functools.lru_cache
 def coord_template(
-    capture_cls: type[structs.RadioCapture], **alias_types: dict[str, type]
+    capture_cls: type[structs.RadioCapture], channels: tuple[int, ...], **alias_dtypes: dict[str, type]
 ):
     """returns a cached xr.Coordinates object to use as a template for data results"""
 
+    CHANNEL_TO_CAPTURE_RENAME = {'channels': 'channel', 'gains': 'gain'}
+                                 
     capture = capture_cls()
     vars = {}
 
     for field in capture_cls.__struct_fields__:
-        value = getattr(capture, field)
+        if field == 'channels':
+            value = list(channels) 
+        else:
+            entry = getattr(capture, field)
+            (value,) = broadcast_to_channels(channels, entry, allow_mismatch=True)
 
-        vars[field] = xr.Variable(
+        capture_field = CHANNEL_TO_CAPTURE_RENAME.get(field, field)
+
+        vars[capture_field] = xr.Variable(
             (CAPTURE_DIM,),
-            [value],
+            value,
             fastpath=True,
             attrs=structs.get_attrs(capture_cls, field),
         )
 
-    for field, type_ in alias_types.items():
+    for field, dtype in alias_dtypes.items():
         vars[field] = xr.Variable(
             (CAPTURE_DIM,),
-            [type_()],
+            broadcast_to_channels(channels, ('',))[0],
             fastpath=True,
-        ).astype(type_)
+        ).astype(dtype)
 
     vars[SWEEP_TIMESTAMP_NAME] = xr.Variable(
         (CAPTURE_DIM,),
-        [pd.Timestamp('now')],
+        broadcast_to_channels(channels, (pd.Timestamp('now'),))[0],
         fastpath=True,
         attrs={'standard_name': 'Sweep start time'},
     )
     vars[RADIO_ID_NAME] = xr.Variable(
         (CAPTURE_DIM,),
-        ['unspecified-radio'],
+        broadcast_to_channels(channels, ('unspecified-radio',))[0],
         fastpath=True,
         attrs={'standard_name': 'Radio hardware ID'},
     ).astype('object')
@@ -169,60 +200,71 @@ def _get_capture_field(
     name,
     capture: structs.Capture,
     radio_id: str,
-    aliases: dict[str, typing.Any],
+    alias_hits: dict,
     sweep_time=None,
 ):
-    if len(aliases) > 0:
-        alias_hits = _evaluate_aliases(capture, radio_id, aliases)
-    else:
-        alias_hits = {}
+    if len(capture.channels) > 1:
+        raise ValueError('split the capture before the call to _get_capture_field')
+
+    # aliases = output.coord_aliases
+    # if len(aliases) > 0:
+    #     alias_hits = _evaluate_aliases(capture, radio_id, output)
 
     if hasattr(capture, name):
         value = getattr(capture, name)
+        if isinstance(value, tuple):
+            value = value[0]
     elif name in alias_hits:
-        default_type = type(next(iter(aliases[name].values())))
-        value = alias_hits.get(name, default_type())
+        # default_type = type(next(iter(aliases[name].values())))
+        value = alias_hits[name]
     elif name == 'radio_id':
         value = radio_id
     elif name == SWEEP_TIMESTAMP_NAME:
         value = sweep_time
     else:
-        if name in aliases:
-            lb.logger.warning(f'warning: no hits for this capture in alias "{name}"')
         raise KeyError
     return value
 
 
-def _guess_alias_types(aliases: dict[str, dict]):
-    def _first_value(d: dict):
-        return next(iter(d.values()))
+@functools.lru_cache
+def _get_alias_dtypes(output: structs.Output):
+    aliases = output.coord_aliases
 
-    alias_types = {}
+    alias_dtypes = {}
     for field, entries in aliases.items():
-        first = _first_value(_first_value(entries))
-        alias_types[field] = type(first)
-    return alias_types
+        alias_dtypes[field] = np.array(list(entries.keys())).dtype
+    return alias_dtypes
 
 
 def build_coords(
-    capture: structs.RadioCapture, aliases: dict, radio_id: str, sweep_time
+    capture: structs.RadioCapture, output: structs.Output, radio_id: str, sweep_time
 ):
-    alias_types = _guess_alias_types(aliases)
-    coords = coord_template(type(capture), **alias_types).copy(deep=True)
+    alias_dtypes = _get_alias_dtypes(output)
+    coords = coord_template(type(capture), tuple(capture.channels), **alias_dtypes).copy(deep=True)
 
-    for field in coords.keys():
-        try:
-            value = _get_capture_field(field, capture, radio_id, aliases, sweep_time)
-        except KeyError:
-            continue
+    updates = {}
 
-        if isinstance(value, str):
-            # to coerce strings as variable-length types later for storage
-            coords[field] = coords[field].astype('object')
+    for c in split_capture_channels(capture):
+        alias_hits = _evaluate_aliases(c, radio_id, output)
 
-        coords[field].values[:] = value
+        for field in coords.keys():
+            if field == RADIO_ID_NAME:
+                updates.setdefault(field, []).append(radio_id)
+                continue
 
-    coords[RADIO_ID_NAME].values[:] = radio_id
+            capture_field = CHANNEL_TO_CAPTURE_MAP.get(field, field)
+
+            try:
+                value = _get_capture_field(capture_field, c, radio_id, alias_hits, sweep_time)
+            except KeyError:
+                if field in output.coord_aliases:
+                    lb.logger.warning(f'warning: no alias name matches in "{field}"')
+                continue
+
+            updates.setdefault(field, []).append(value)
+
+    for field, values in updates.items():
+        coords[field].values[:] = np.array(values)
 
     return coords
 
@@ -257,19 +299,36 @@ def _assign_alias_coords(capture_data: 'xr.Dataset', aliases):
 def _match_capture_fields(
     capture: structs.RadioCapture, fields: dict[str], radio_id: str
 ):
-    for name, value in fields.items():
+    if len(capture.channels) > 1:
+        raise ValueError('split the capture to evaluate alias matches')
+    
+    for capture_name, value in fields.items():
+        name = CHANNEL_TO_CAPTURE_MAP.get(capture_name, capture_name)
+
         if name == 'radio_id' and value == radio_id:
             continue
-        if not hasattr(capture, name) or getattr(capture, name) != value:
+        
+        if not hasattr(capture, name):
+            return False
+
+        capture_value = getattr(capture, name)
+
+        if isinstance(capture_value, tuple):
+            capture_value = capture_value[0]
+
+        if capture_value != value:
             return False
 
     return True
 
 
-def _evaluate_aliases(capture: structs.Capture, radio_id: str, alias_spec: dict):
+@functools.lru_cache()
+def _evaluate_aliases(capture: structs.RadioCapture, radio_id: str, output: structs.Output):
     """evaluate the field values"""
+
     ret = {}
-    for coord_name, coord_spec in alias_spec.items():
+
+    for coord_name, coord_spec in output.coord_aliases.items():
         for alias_value, field_spec in coord_spec.items():
             if _match_capture_fields(capture, field_spec, radio_id):
                 ret[coord_name] = alias_value
@@ -277,13 +336,36 @@ def _evaluate_aliases(capture: structs.Capture, radio_id: str, alias_spec: dict)
     return ret
 
 
+@functools.lru_cache()
+def split_capture_channels(capture: structs.RadioCapture) -> list[structs.RadioCapture]:
+    """split each channel in a capture into a separate capture as if were acquired separately"""
+
+    capture_map = msgspec.to_builtins(capture)
+    
+    def match_capture_tuples(k, v):
+        if isinstance(capture_map[k], tuple):
+            return (v,)
+        else:
+            return v
+
+    broadcast_values = broadcast_to_channels(capture.channels, *capture_map.values())
+    broadcast_map = dict(zip(capture_map.keys(), broadcast_values))
+
+    result = []
+    for i in range(len(capture.channels)):
+        mapping = {k: match_capture_tuples(k, v[i]) for k,v in broadcast_map.items()}
+        result.append(msgspec.convert(mapping, type=type(capture)))
+
+    return result
+
+
 def capture_fields_with_aliases(
-    capture: structs.Capture, radio_id: str, alias_spec: dict
+    capture: structs.Capture, radio_id: str, output: structs.Output
 ) -> dict:
     attrs = structs.struct_to_builtins(capture)
-    aliases = _evaluate_aliases(capture, radio_id, alias_spec)
+    aliases = _evaluate_aliases(capture, radio_id, output)
 
-    return dict(attrs, **aliases)
+    return [dict(attrs, **a) for a in aliases]
 
 
 @dataclasses.dataclass
@@ -311,17 +393,16 @@ class ChannelAnalysisWrapper:
 
             coords = build_coords(
                 capture,
-                aliases=self.sweep.output.coord_aliases,
+                output=self.sweep.output,
                 radio_id=self.radio.id,
                 sweep_time=sweep_time,
             )
 
             analysis = channel_analysis.analyze_by_spec(
-                iq, capture, spec=self.analysis_spec
+                iq, capture, spec=self.analysis_spec, expand_dims=(CAPTURE_DIM,)
             )
 
-            analysis = analysis.expand_dims((CAPTURE_DIM,)).assign_coords(coords)
-            analysis = _assign_alias_coords(analysis, self.sweep.output.coord_aliases)
+            analysis = analysis.assign_coords(coords)
 
             # these are coordinates - drop from attrs
             for name in coords.keys():

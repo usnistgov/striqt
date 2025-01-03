@@ -6,6 +6,16 @@ radio_setup:
   periodic_trigger: 10e-3
   calibration: cal.p
 
+output:
+  coord_aliases:
+    antenna_name:
+      # update these if the antennas are changed.
+      # this one may require different yamls per site
+      reference:
+        channel: 0
+      small_dish:
+        channel: 1
+
 # any of these can be overridden by sweep settings
 defaults:
   # RF

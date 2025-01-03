@@ -190,7 +190,8 @@ def analyze_by_spec(
     capture: structs.Capture,
     *,
     spec: str | dict | structs.ChannelAnalysis,
-    as_xarray: typing.Literal[True] | typing.Literal[False] = True,
+    as_xarray: typing.Literal[True] | typing.Literal[False] | typing.Literal['delayed']= True,
+    expand_dims=None
 ) -> 'xr.Dataset':
     """evaluate a set of different channel analyses on the iq waveform as specified by spec"""
 
@@ -202,7 +203,7 @@ def analyze_by_spec(
         as_xarray='delayed' if as_xarray else False,
     )
 
-    if as_xarray:
-        return package_channel_analysis(capture, results)
+    if as_xarray and as_xarray != 'delayed':
+        return package_channel_analysis(capture, results, expand_dims=expand_dims)
     else:
         return results

@@ -27,6 +27,14 @@ else:
 _TShift = Literal['left', 'right', 'none']
 
 
+def _dict_hash(d):
+    key_hash = frozenset(d.keys())
+    value_hash = tuple(
+        [_dict_hash(v) if isinstance(v, dict) else v for v in d.values()]
+    )
+    return hash(key_hash) ^ hash(value_hash)
+
+
 def _make_default_analysis():
     return channel_analysis.as_registered_channel_analysis.spec_type()()
 
@@ -109,10 +117,14 @@ class Description(msgspec.Struct, forbid_unknown_fields=True):
     version: str = 'unversioned'
 
 
-class Output(msgspec.Struct, forbid_unknown_fields=True):
+class Output(msgspec.Struct, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     path: Optional[str] = '{yaml_name}-{start_time}'
     store: typing.Union[Literal['zip'], Literal['directory']] = 'zip'
     coord_aliases: dict[str, dict[str, dict[str, Any]]] = {}
+
+    def __hash__(self):
+        # hashing coordinate aliases greatly speeds up xarray coordinate generation
+        return hash(self.path) ^ hash(self.store) ^ _dict_hash(self.coord_aliases)
 
 
 class Sweep(msgspec.Struct, forbid_unknown_fields=True):

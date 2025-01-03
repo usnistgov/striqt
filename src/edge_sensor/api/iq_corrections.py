@@ -6,6 +6,7 @@ import gzip
 from pathlib import Path
 
 from . import util
+from .captures import broadcast_to_channels
 
 from .radio import RadioDevice, design_capture_filter
 from .radio.base import needs_stft
@@ -174,8 +175,6 @@ def _describe_missing_data(corrections: 'xr.Dataset', exact_matches: dict):
 
 
 functools.lru_cache()
-
-
 def lookup_power_correction(
     cal_data: Path | 'xr.Dataset' | None, capture: structs.RadioCapture, xp
 ):
@@ -188,10 +187,7 @@ def lookup_power_correction(
 
     power_scale = []
 
-    if len(capture.gains) == 1:
-        gains = capture.gains * len(capture.channels)
-    else:
-        gains = capture.gains
+    (gains,) = broadcast_to_channels(capture.channels, capture.gains)
 
     for channel, gain in zip(capture.channels, gains):
         # these fields must match the calibration conditions exactly
