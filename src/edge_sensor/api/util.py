@@ -86,11 +86,14 @@ def zip_offsets(
     else:
         return itertools.zip_longest(*iters, fillvalue=fill)
 
-
 @cache
 def import_cupy_with_fallback():
     try:
         import cupy as xp
+
+        # the FFT plan sets up large caches that don't help us
+        xp.fft.config.get_plan_cache().set_size(0)
+
     except ModuleNotFoundError:
         # warn only once due to @cache
         import labbench as lb

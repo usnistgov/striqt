@@ -8,8 +8,7 @@ from pathlib import Path
 from . import util
 from .captures import broadcast_to_channels
 
-from .radio import RadioDevice, design_capture_filter
-from .radio.base import needs_stft
+from .radio import base, RadioDevice, design_capture_filter
 from . import structs
 
 if typing.TYPE_CHECKING:
@@ -238,6 +237,12 @@ def lookup_power_correction(
     return xp.asarray(power_scale, dtype='float32')[:, np.newaxis]
 
 
+def as_cupy_mapped_array(x, xp, stream=None):
+    out = xp.empty_like(x)
+    out.data.copy_from_host_async(x.ctypes.data, x.data.nbytes, stream=stream)
+    return out
+
+
 def resampling_correction(
     iq: 'iqwaveform.util.Array',
     capture: structs.RadioCapture,
@@ -260,6 +265,12 @@ def resampling_correction(
         the filtered IQ capture
     """
 
+    xp = util.import_cupy_with_fallback()
+    with lb.stopwatch('power correction lookup', threshold=10e-3, logger_level='debug'):
+        power_scale = lookup_power_correction(radio.calibration, capture, xp)
+
+    iq = as_cupy_mapped_array(iq, xp)
+
     fs_backend, _, analysis_filter = design_capture_filter(
         radio.base_clock_rate, capture
     )
@@ -272,14 +283,7 @@ def resampling_correction(
         extend=True,
     )
 
-    xp = util.import_cupy_with_fallback()
-
-    iq = xp.asarray(iq)
-
-    with lb.stopwatch('power correction lookup', threshold=10e-3, logger_level='debug'):
-        power_scale = lookup_power_correction(radio.calibration, capture, xp)
-
-    if not needs_stft(analysis_filter, capture):
+    if not base.needs_stft(analysis_filter, capture):
         # no filtering or resampling needed
         iq = iq[: round(capture.duration * capture.sample_rate)]
         if power_scale is not None:
@@ -305,7 +309,6 @@ def resampling_correction(
         noverlap=round(nfft * overlap_scale),
         axis=axis,
         truncate=False,
-        # out=buf,
     )
 
     if nfft_out < nfft:
@@ -316,7 +319,6 @@ def resampling_correction(
             nfft_out=nfft_out,
             passband=passband,
             axis=axis,
-            # out=buf,
         )
     elif nfft_out > nfft:
         # upsample
@@ -327,17 +329,6 @@ def resampling_correction(
                 passband=(passband[0] + enbw / 2, passband[1] - enbw / 2),
                 axis=axis,
             )
-
-        # padded_shape = list(xstft.shape)
-        # padded_shape[axis+1] += pad_left+pad_right
-        # padded_xstft = iqwaveform.fourier._truncated_buffer(buf, padded_shape)
-
-        # start with the actual data, to make sure we don't overwrite it in the underlying buffer
-        # axis_slice(padded_xstft, pad_left, padded_xstft.shape[axis+1] - pad_right, axis=axis+1)[:] = xstft
-        # axis_slice(padded_xstft, 0, pad_left, axis=axis+1)[:] = 0
-        # axis_slice(padded_xstft, padded_xstft.shape[axis+1] - pad_right, None, axis=axis+1)[:] = 0
-
-        # xstft = padded_xstft
 
         pad_left = (nfft_out - nfft) // 2
         pad_right = pad_left + (nfft_out - nfft) % 2
@@ -359,9 +350,10 @@ def resampling_correction(
         xstft,
         nfft=nfft_out,
         noverlap=noverlap,
-        # out=buf,
         axis=axis,
     )
+
+    del xstft
 
     # start the capture after the transient holdoff window
     iq_size_out = round(capture.duration * capture.sample_rate)

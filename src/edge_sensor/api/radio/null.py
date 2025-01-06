@@ -26,12 +26,9 @@ class NullSource(base.RadioDevice):
 
     _transient_holdoff_time: float = attr.value.float(0.0, sets=True, inherit=True)
 
-    @attr.method.int(
-        min=0,
-        allow_none=True,
-        cache=True,
-        help='RX input port index',
-    )
+    rx_channel_count = attr.value.int(2, cache=True, help='number of input ports')
+
+    @base.ChannelListMethod(inherit=True)
     def channels(self):
         # return none until this is set, then the cached value is returned
         return tuple()
@@ -109,7 +106,7 @@ class NullSource(base.RadioDevice):
             self.backend['rx_enabled'] = False
             self.reset_sample_counter()
 
-    @attr.method.float(label='dB', help='SDR hardware gain')
+    @base.FloatTupleMethod(inherit=True)
     def gains(self):
         return self.backend.setdefault('gain', 0)
 
@@ -154,7 +151,7 @@ class NullSource(base.RadioDevice):
             1_000_000_000 * (self._samples_elapsed - sample_time_offset)
         ) / float(self.backend_sample_rate())
 
-        for channel, buf in zip([self.channels], buffers):
+        for channel, buf in zip(self.channels(), buffers):
             values = self.get_waveform(
                 count,
                 self._samples_elapsed,

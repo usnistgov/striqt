@@ -294,7 +294,7 @@ class RadioDevice(lb.Device):
             )
 
         # the return buffer
-        sample_count = get_channel_read_buffer_size(
+        sample_count = get_channel_read_buffer_count(
             self, capture, include_holdoff=False
         )
         samples, buffers = _allocate_iq_buffer(self, capture)
@@ -307,7 +307,7 @@ class RadioDevice(lb.Device):
         else:
             # note: holdover_count.dtype is np.complex64, samples.dtype is np.float32
             holdover_count = self._holdover_samples.size
-            samples[:, : 2 * holdover_count] = self._holdover_samples.view(
+            samples[:, : holdover_count] = self._holdover_samples.view(
                 samples.dtype
             )
 
@@ -380,6 +380,8 @@ class RadioDevice(lb.Device):
         self._holdover_samples = samples[:, -holdover_size:]
         self._next_time_ns = start_ns + round(1e9 * capture.duration)
 
+        self._logger.debug(f'total acquisition duration: {(sample_offs + sample_count)/fs:0.3f} s')
+
         return samples, start_ns
 
     def acquire(
@@ -398,7 +400,8 @@ class RadioDevice(lb.Device):
             if capture != self._armed_capture:
                 self.arm(capture)
 
-            self.rx_enabled(True)
+            with lb.stopwatch('enable', logger_level='debug'):
+                self.rx_enabled(True)
 
             iq, time_ns = self.read_iq(capture)
             time_ns = pd.Timestamp(time_ns, unit='ns')
@@ -579,7 +582,7 @@ def _get_stft_padding(
 
 
 @functools.lru_cache(30000)
-def _get_capture_buffer_sizes_cached(
+def _get_input_buffer_count_cached(
     base_clock_rate: float,
     periodic_trigger: float | None,
     capture: structs.RadioCapture,
@@ -615,13 +618,31 @@ def _get_capture_buffer_sizes_cached(
     return samples_in
 
 
-def get_channel_read_buffer_size(
+def get_channel_resample_buffer_count(radio: RadioDevice, capture):
+    _, _, analysis_filter = design_capture_filter(radio.base_clock_rate, capture)
+
+    if capture.host_resample and needs_stft(analysis_filter, capture):
+        input_size = get_channel_read_buffer_count(radio, capture, True)
+        buf_size = iqwaveform.fourier._istft_buffer_size(
+            input_size,
+            window=analysis_filter['window'],
+            nfft_out=analysis_filter['nfft_out'],
+            nfft=analysis_filter['nfft'],
+            extend=True,
+        )
+    else:
+        buf_size = round(capture.duration * capture.sample_rate)
+
+    return buf_size
+
+
+def get_channel_read_buffer_count(
     radio: RadioDevice, capture=None, include_holdoff=False
 ) -> int:
     if capture is None:
         capture = radio.get_capture_struct()
 
-    return _get_capture_buffer_sizes_cached(
+    return _get_input_buffer_count_cached(
         base_clock_rate=radio.base_clock_rate,
         periodic_trigger=radio.periodic_trigger,
         capture=capture,
@@ -629,6 +650,16 @@ def get_channel_read_buffer_size(
         include_holdoff=include_holdoff,
     )
 
+        # mem = cuda.alloc_pinned_memory(8*100)
+        # # ...then wrap it with numpy and it's ready to use
+        # a = np.ndarray((100,), dtype=np.float64, buffer=mem)
+
+# def empty_pinned(shape, dtype):
+#     import cupy
+
+#     itemsize = np.dtype(dtype).itemsize
+#     mem = cupy.cuda.alloc_pinned_memory(np.prod(shape) * itemsize)
+#     return np.ndarray(shape, dtype=dtype, buffer=mem)
 
 def _allocate_iq_buffer(
     radio: RadioDevice, capture: structs.RadioCapture
@@ -638,10 +669,15 @@ def _allocate_iq_buffer(
     Returns:
         The buffer and the list of buffer references for streaming.
     """
-    buf_size = get_channel_read_buffer_size(radio, capture, include_holdoff=True)
+    buf_size = get_channel_read_buffer_count(radio, capture, include_holdoff=True)
 
-    # fast reinterpretation to np.complex64 require the waveform to be in the last axis
-    samples = np.empty((len(radio.channels()), 2 * buf_size), dtype=np.float32)
+    try:
+        from cupyx import empty_pinned as empty
+    except ImportError:
+        from numpy import empty
+
+    # fast reinterpretation to np.complex64 requires the waveform to be in the last axis
+    samples = empty((len(radio.channels()), 2 * buf_size), dtype=np.float32)
 
     if (
         radio._stream_all_rx_channels
