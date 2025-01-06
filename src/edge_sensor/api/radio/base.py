@@ -307,9 +307,7 @@ class RadioDevice(lb.Device):
         else:
             # note: holdover_count.dtype is np.complex64, samples.dtype is np.float32
             holdover_count = self._holdover_samples.size
-            samples[:, : holdover_count] = self._holdover_samples.view(
-                samples.dtype
-            )
+            samples[:, :holdover_count] = self._holdover_samples.view(samples.dtype)
 
         holdover_size = sample_count - round(
             capture.duration * self.backend_sample_rate()
@@ -380,7 +378,9 @@ class RadioDevice(lb.Device):
         self._holdover_samples = samples[:, -holdover_size:]
         self._next_time_ns = start_ns + round(1e9 * capture.duration)
 
-        self._logger.debug(f'total acquisition duration: {(sample_offs + sample_count)/fs:0.3f} s')
+        self._logger.debug(
+            f'total acquisition duration: {(sample_offs + sample_count)/fs:0.3f} s'
+        )
 
         return samples, start_ns
 
@@ -650,9 +650,10 @@ def get_channel_read_buffer_count(
         include_holdoff=include_holdoff,
     )
 
-        # mem = cuda.alloc_pinned_memory(8*100)
-        # # ...then wrap it with numpy and it's ready to use
-        # a = np.ndarray((100,), dtype=np.float64, buffer=mem)
+    # mem = cuda.alloc_pinned_memory(8*100)
+    # # ...then wrap it with numpy and it's ready to use
+    # a = np.ndarray((100,), dtype=np.float64, buffer=mem)
+
 
 # def empty_pinned(shape, dtype):
 #     import cupy
@@ -660,6 +661,7 @@ def get_channel_read_buffer_count(
 #     itemsize = np.dtype(dtype).itemsize
 #     mem = cupy.cuda.alloc_pinned_memory(np.prod(shape) * itemsize)
 #     return np.ndarray(shape, dtype=dtype, buffer=mem)
+
 
 def _allocate_iq_buffer(
     radio: RadioDevice, capture: structs.RadioCapture

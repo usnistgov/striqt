@@ -32,7 +32,10 @@ SWEEP_TIMESTAMP_NAME = 'sweep_start_time'
 RADIO_ID_NAME = 'radio_id'
 
 CHANNEL_TO_CAPTURE_MAP = {'channel': 'channels', 'gain': 'gains'}
-CAPTURE_TO_CHANNEL_MAP = dict(zip(CHANNEL_TO_CAPTURE_MAP.values(), CHANNEL_TO_CAPTURE_MAP.keys()))
+CAPTURE_TO_CHANNEL_MAP = dict(
+    zip(CHANNEL_TO_CAPTURE_MAP.values(), CHANNEL_TO_CAPTURE_MAP.keys())
+)
+
 
 @functools.lru_cache
 def _get_unit_formatter(units: str) -> 'matplotlib.ticker.EngFormatter':
@@ -89,13 +92,20 @@ def concat_time_dim(datasets: list['xr.Dataset'], time_dim: str) -> 'xr.Dataset'
 
 
 @functools.lru_cache(10000)
-def broadcast_to_channels(channels: tuple[int, ...], *params, allow_mismatch=False) -> list[list]:
+def broadcast_to_channels(
+    channels: tuple[int, ...], *params, allow_mismatch=False
+) -> list[list]:
     """broadcast sequences of length 1 up to the length of capture.channels"""
 
     res = []
     for p in params:
         if not isinstance(p, (tuple, list)):
-            res.append([p,] * len(channels))
+            res.append(
+                [
+                    p,
+                ]
+                * len(channels)
+            )
         elif len(p) == 1:
             res.append(list(p) * len(channels))
         elif len(p) == len(channels):
@@ -103,7 +113,9 @@ def broadcast_to_channels(channels: tuple[int, ...], *params, allow_mismatch=Fal
         elif allow_mismatch:
             res.append(list(p[:1]) * len(channels))
         else:
-            raise ValueError(f'cannot broadcast tuple of length {len(p)} to channel count {len(channels)}')
+            raise ValueError(
+                f'cannot broadcast tuple of length {len(p)} to channel count {len(channels)}'
+            )
 
     return res
 
@@ -148,18 +160,20 @@ def describe_capture(
 
 @functools.lru_cache
 def coord_template(
-    capture_cls: type[structs.RadioCapture], channels: tuple[int, ...], **alias_dtypes: dict[str, type]
+    capture_cls: type[structs.RadioCapture],
+    channels: tuple[int, ...],
+    **alias_dtypes: dict[str, type],
 ):
     """returns a cached xr.Coordinates object to use as a template for data results"""
 
     CHANNEL_TO_CAPTURE_RENAME = {'channels': 'channel', 'gains': 'gain'}
-                                 
+
     capture = capture_cls()
     vars = {}
 
     for field in capture_cls.__struct_fields__:
         if field == 'channels':
-            value = list(channels) 
+            value = list(channels)
         else:
             entry = getattr(capture, field)
             (value,) = broadcast_to_channels(channels, entry, allow_mismatch=True)
@@ -240,7 +254,9 @@ def build_coords(
     capture: structs.RadioCapture, output: structs.Output, radio_id: str, sweep_time
 ):
     alias_dtypes = _get_alias_dtypes(output)
-    coords = coord_template(type(capture), tuple(capture.channels), **alias_dtypes).copy(deep=True)
+    coords = coord_template(
+        type(capture), tuple(capture.channels), **alias_dtypes
+    ).copy(deep=True)
 
     updates = {}
 
@@ -255,7 +271,9 @@ def build_coords(
             capture_field = CHANNEL_TO_CAPTURE_MAP.get(field, field)
 
             try:
-                value = _get_capture_field(capture_field, c, radio_id, alias_hits, sweep_time)
+                value = _get_capture_field(
+                    capture_field, c, radio_id, alias_hits, sweep_time
+                )
             except KeyError:
                 if field in output.coord_aliases:
                     lb.logger.warning(f'warning: no alias name matches in "{field}"')
@@ -301,13 +319,13 @@ def _match_capture_fields(
 ):
     if len(capture.channels) > 1:
         raise ValueError('split the capture to evaluate alias matches')
-    
+
     for capture_name, value in fields.items():
         name = CHANNEL_TO_CAPTURE_MAP.get(capture_name, capture_name)
 
         if name == 'radio_id' and value == radio_id:
             continue
-        
+
         if not hasattr(capture, name):
             return False
 
@@ -323,7 +341,9 @@ def _match_capture_fields(
 
 
 @functools.lru_cache()
-def _evaluate_aliases(capture: structs.RadioCapture, radio_id: str, output: structs.Output):
+def _evaluate_aliases(
+    capture: structs.RadioCapture, radio_id: str, output: structs.Output
+):
     """evaluate the field values"""
 
     ret = {}
@@ -341,7 +361,7 @@ def split_capture_channels(capture: structs.RadioCapture) -> list[structs.RadioC
     """split each channel in a capture into a separate capture as if were acquired separately"""
 
     capture_map = msgspec.to_builtins(capture)
-    
+
     def match_capture_tuples(k, v):
         if isinstance(capture_map[k], tuple):
             return (v,)
@@ -353,7 +373,7 @@ def split_capture_channels(capture: structs.RadioCapture) -> list[structs.RadioC
 
     result = []
     for i in range(len(capture.channels)):
-        mapping = {k: match_capture_tuples(k, v[i]) for k,v in broadcast_map.items()}
+        mapping = {k: match_capture_tuples(k, v[i]) for k, v in broadcast_map.items()}
         result.append(msgspec.convert(mapping, type=type(capture)))
 
     return result

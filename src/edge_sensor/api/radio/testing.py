@@ -30,7 +30,28 @@ def lo_shift_tone(inds, radio: base.RadioDevice, xp):
     )
 
 
-class SingleToneSource(NullSource):
+class TestSource(NullSource):
+    def _read_stream(
+        self, buffers, offset, count, timeout_sec=None, *, on_overflow='except'
+    ) -> tuple[int, int]:
+        for channel, buf in zip(self.channels(), buffers):
+            values = self.get_waveform(
+                count,
+                self._samples_elapsed,
+                channel=channel,
+                xp=getattr(self, 'xp', np),
+            )
+            buf[2 * offset : 2 * (offset + count)] = values.view('float32')
+
+        return super()._read_stream(
+            buffers, offset, count, timeout_sec=timeout_sec, on_overflow=on_overflow
+        )
+
+    def get_waveform(self, count, start_index: int, *, channel: int = 0, xp):
+        raise NotImplementedError
+
+
+class SingleToneSource(TestSource):
     resource: float = attr.value.float(
         default=0, help='normalized tone frequency (between -1 and 1)', label='Hz'
     )
@@ -60,7 +81,7 @@ class SingleToneSource(NullSource):
         return ret
 
 
-class SawtoothSource(NullSource):
+class SawtoothSource(TestSource):
     resource: float = attr.value.float(
         default=0.01,
         min=0,
@@ -83,7 +104,7 @@ def cached_noise(capture, xp, **kwargs):
     return channel_analysis.simulated_awgn(capture, xp=xp, seed=0, **kwargs)
 
 
-class NoiseSource(NullSource):
+class NoiseSource(TestSource):
     resource: float = attr.value.float(
         default=1e-3, min=0, help='noise waveform variance'
     )
@@ -100,7 +121,7 @@ class NoiseSource(NullSource):
         return ret
 
 
-class TDMSFileSource(NullSource):
+class TDMSFileSource(TestSource):
     """returns IQ waveforms from a TDMS file"""
 
     resource: str = attr.value.str(default=None, help='path to the tdms file')

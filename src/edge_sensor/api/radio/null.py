@@ -26,7 +26,7 @@ class NullSource(base.RadioDevice):
 
     _transient_holdoff_time: float = attr.value.float(0.0, sets=True, inherit=True)
 
-    rx_channel_count = attr.value.int(2, cache=True, help='number of input ports')
+    rx_channel_count: int = attr.value.int(2, cache=True, help='number of input ports')
 
     @base.ChannelListMethod(inherit=True)
     def channels(self):
@@ -151,21 +151,9 @@ class NullSource(base.RadioDevice):
             1_000_000_000 * (self._samples_elapsed - sample_time_offset)
         ) / float(self.backend_sample_rate())
 
-        for channel, buf in zip(self.channels(), buffers):
-            values = self.get_waveform(
-                count,
-                self._samples_elapsed,
-                channel=channel,
-                xp=getattr(self, 'xp', np),
-            )
-            buf[2 * offset : 2 * (offset + count)] = values.view('float32')
-
         self._samples_elapsed += count
 
         return count, round(timestamp_ns)
-
-    def get_waveform(self, count, start_index: int, *, channel: int = 0, xp):
-        return xp.empty(count, dtype='complex64')
 
     def reset_sample_counter(self):
         self._samples_elapsed = 0

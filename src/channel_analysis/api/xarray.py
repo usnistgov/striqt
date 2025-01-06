@@ -75,7 +75,11 @@ def freezevalues(parameters: dict) -> dict:
 
 
 def channel_dataarray(
-    cls, data: 'np.ndarray', capture, parameters: dict[str, typing.Any], expand_dims=None
+    cls,
+    data: 'np.ndarray',
+    capture,
+    parameters: dict[str, typing.Any],
+    expand_dims=None,
 ) -> 'xr.DataArray':
     """build an `xarray.DataArray` from an ndarray, capture information, and channel analysis keyword arguments"""
     template = dataarray_stub(cls, expand_dims)
@@ -129,7 +133,7 @@ class ChannelAnalysisResult(collections.UserDict):
             data=self.data,
             capture=self.capture,
             parameters=self.parameters,
-            expand_dims=expand_dims
+            expand_dims=expand_dims,
         ).assign_attrs(self.attrs)
 
 
@@ -171,7 +175,9 @@ def evaluate_channel_analysis(
 
 
 def package_channel_analysis(
-    capture: structs.Capture, results: dict[str, structs.ChannelAnalysis], expand_dims=None
+    capture: structs.Capture,
+    results: dict[str, structs.ChannelAnalysis],
+    expand_dims=None,
 ) -> 'xr.Dataset':
     # materialize as xarrays
     with lb.stopwatch('package analyses into xarray', logger_level='debug'):
