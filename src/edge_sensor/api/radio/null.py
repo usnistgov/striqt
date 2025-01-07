@@ -4,6 +4,7 @@ import labbench as lb
 from labbench import paramattr as attr
 
 from . import base
+from .. import structs
 from ..util import import_cupy_with_fallback, lazy_import
 
 if typing.TYPE_CHECKING:
@@ -25,15 +26,14 @@ class NullSource(base.RadioDevice):
     _inbuf = None
 
     _transient_holdoff_time: float = attr.value.float(0.0, sets=True, inherit=True)
-
     rx_channel_count: int = attr.value.int(2, cache=True, help='number of input ports')
 
-    @base.ChannelListMethod(inherit=True)
-    def channels(self):
+    @base.ChannelTupleMethod(inherit=True)
+    def channel(self):
         # return none until this is set, then the cached value is returned
         return tuple()
 
-    @channels.setter
+    @channel.setter
     def _(self, channels: int):
         pass
 
@@ -106,11 +106,17 @@ class NullSource(base.RadioDevice):
             self.backend['rx_enabled'] = False
             self.reset_sample_counter()
 
+    def setup(self, setup: structs.RadioSetup):
+        super().setup(setup)
+
+        if setup._rx_channel_count is not None:
+            self.rx_channel_count = setup._rx_channel_count
+
     @base.FloatTupleMethod(inherit=True)
-    def gains(self):
+    def gain(self):
         return self.backend.setdefault('gain', 0)
 
-    @gains.setter
+    @gain.setter
     def _(self, gain: float):
         self.backend['gain'] = gain
 

@@ -170,7 +170,6 @@ def evaluate_channel_analysis(
             if func_kws:
                 results[name] = func(iq, capture, as_xarray=as_xarray, **func_kws)
 
-    lb.logger.debug('finished channel analyses')
     return results
 
 

@@ -188,9 +188,9 @@ def lookup_power_correction(
 
     power_scale = []
 
-    (gains,) = broadcast_to_channels(capture.channels, capture.gains)
+    (gain,) = broadcast_to_channels(capture.channel, capture.gain)
 
-    for channel, gain in zip(capture.channels, gains):
+    for channel, gain in zip(capture.channel, gain):
         # these fields must match the calibration conditions exactly
         exact_matches = dict(
             channel=channel,

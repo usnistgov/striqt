@@ -67,10 +67,10 @@ class RadioCapture(WaveformCapture, forbid_unknown_fields=True):
 
     # RF and leveling
     center_frequency: Annotated[float, meta('RF center frequency', 'Hz', gt=0)] = 3710e6
-    channels: Annotated[tuple[SingleChannelType, ...], meta('Input port indices')] = (
+    channel: Annotated[tuple[SingleChannelType, ...], meta('Input port indices')] = (
         0,
     )
-    gains: Annotated[
+    gain: Annotated[
         tuple[SingleGainType, ...], meta('Gain setting for each channel', 'dB')
     ] = (-10,)
 
@@ -94,7 +94,6 @@ class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):
     ] = True
     periodic_trigger: Optional[float] = None
     calibration: Optional[str] = None
-    _transient_holdoff_time: Optional[float] = None
     gapless_repeats: Annotated[
         bool,
         meta('whether to raise an exception on overflows between identical captures'),
@@ -108,6 +107,9 @@ class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):
             'whether to run the GPU compute on empty buffers before sweeping for more even run time'
         ),
     ] = True
+
+    _transient_holdoff_time: Optional[float] = None
+    _rx_channel_count: Optional[int] = None
 
 
 class Description(msgspec.Struct, forbid_unknown_fields=True):

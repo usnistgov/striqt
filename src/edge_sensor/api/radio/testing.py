@@ -34,7 +34,7 @@ class TestSource(NullSource):
     def _read_stream(
         self, buffers, offset, count, timeout_sec=None, *, on_overflow='except'
     ) -> tuple[int, int]:
-        for channel, buf in zip(self.channels(), buffers):
+        for channel, buf in zip(self.channel(), buffers):
             values = self.get_waveform(
                 count,
                 self._samples_elapsed,
@@ -121,7 +121,7 @@ class NoiseSource(TestSource):
         return ret
 
 
-class TDMSFileSource(TestSource):
+class TDMSFileSource(NullSource):
     """returns IQ waveforms from a TDMS file"""
 
     resource: str = attr.value.str(default=None, help='path to the tdms file')

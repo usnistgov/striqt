@@ -95,13 +95,13 @@ defaults:
   # RF Center frequency (Hz)
   center_frequency: 3710e6
 
-  # Channel index, e.g., 0 -> RX1, 1 -> RX2
-  channels: [0]
+  # A list of channel indices, [0,1] for both RX1 and RX2
+  channel: [0]
 
   # hardware gain setting (dB)
   # Range is hardware-dependent - see the gain limits specified by
   #   src/edge_sensor/radio/*.py
-  gains: [-10] # dB
+  gain: [-10] # dB
 
   # acquisition duration (s)
   duration: 0.1
@@ -133,42 +133,42 @@ captures:
   - center_frequency: 3750e6 # Hz
     analysis_bandwidth: 100e6 # Hz
     sample_rate: 153.6e6 # Hz
-    gains: [-10] # dB
+    gain: [-10] # dB
 
   - center_frequency: 3830e6 # Hz
     analysis_bandwidth: 60e6 # Hz
     sample_rate: 92.16e6 # Hz
-    gains: [-10] # dB
+    gain: [-10] # dB
 
   - center_frequency: 3900e6 # Hz
     analysis_bandwidth: 80e6 # Hz
     sample_rate: 122.88e6 # Hz
-    gains: [-10] # dB
+    gain: [-10] # dB
 
   - center_frequency: 3960e6 # Hz
     sample_rate: 61.44e6 # Hz
     analysis_bandwidth: 40e6 # Hz
-    gains: [-10] # dB
+    gain: [-10] # dB
 
   - center_frequency: 3750e6 # Hz
     analysis_bandwidth: 100e6 # Hz
     sample_rate: 153.6e6 # Hz
-    gains: [0] # dB
+    gain: [0] # dB
 
   - center_frequency: 3830e6 # Hz
     analysis_bandwidth: 60e6 # Hz
     sample_rate: 92.16e6 # Hz
-    gains: [0] # dB
+    gain: [0] # dB
 
   - center_frequency: 3900e6 # Hz
     analysis_bandwidth: 80e6 # Hz
     sample_rate: 122.88e6 # Hz
-    gains: [0] # dB
+    gain: [0] # dB
 
   - center_frequency: 3960e6 # Hz
     sample_rate: 61.44e6 # Hz
     analysis_bandwidth: 40e6 # Hz
-    gains: [0] # dB
+    gain: [0] # dB
 
 
 # Specify the output analyses performed for each capture.

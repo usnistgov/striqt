@@ -36,7 +36,7 @@ def _validate_tuple_elements(type_, values: tuple, min, max, step):
     for value in values:
         if not isinstance(value, (bytes, str, bool, numbers.Number)):
             raise ValueError(
-                f"a '{ChannelListMethod.__qualname__}' attribute supports only numerical, str, or bytes types"
+                f"a '{ChannelTupleMethod.__qualname__}' attribute supports only numerical, str, or bytes types"
             )
 
         if max is not None and value > max:
@@ -80,7 +80,7 @@ class FloatTupleMethod(BoundedNumberTupleMethod[tuple[float, ...]]):
     contained_type: ElementType = float
 
 
-class ChannelListMethod(IntTupleMethod):
+class ChannelTupleMethod(IntTupleMethod):
     min: int = 0
 
     def validate(self, values: tuple[int, ...], owner=None):
@@ -144,13 +144,13 @@ class RadioDevice(lb.Device):
     _downsample = attr.value.float(1.0, min=0, help='backend_sample_rate/sample_rate')
 
     # these must be implemented by child classes
-    channels = ChannelListMethod(
+    channel = ChannelTupleMethod(
         cache=True,
         contained_type=int,
         min=0,
         help='list of RX channel port indexes to acquire',
     )
-    gains = FloatTupleMethod(
+    gain = FloatTupleMethod(
         label='dB', help='receive gain for each channel in hardware'
     )
     center_frequency = attr.method.float(
@@ -168,8 +168,8 @@ class RadioDevice(lb.Device):
         only=['host', 'internal', 'external', 'gps'],
         help='time base for sample timestamps',
     )
-    rx_channel_count = attr.property.int(
-        sets=False, cache=True, help='number of input ports'
+    rx_channel_count = attr.value.int(1, 
+        sets=False, min=1, cache=True, help='number of input ports'
     )
 
     # constants that can be adjusted by device-specific classes to tune streaming behavior
@@ -197,7 +197,7 @@ class RadioDevice(lb.Device):
     def setup(self, radio_config: structs.RadioSetup):
         """disarm acquisition and apply the given radio setup"""
 
-        if len(self.channels()) != 0:
+        if len(self.channel()) != 0:
             self.rx_enabled(False)
 
         self.calibration = radio_config.calibration
@@ -213,8 +213,10 @@ class RadioDevice(lb.Device):
         """stop the stream, apply a capture configuration, and start it"""
 
         with lb.stopwatch('arm', logger_level='debug'):
-            if len(self.channels()) != 0:
-                self.rx_enabled(False)
+            invalidate_state = False
+
+            if len(self.channel()) != 0:
+                invalidate_state = True
 
             if iqwaveform.power_analysis.isroundmod(
                 capture.duration * capture.sample_rate, 1
@@ -225,13 +227,13 @@ class RadioDevice(lb.Device):
                     f'duration {capture.duration} is not an integer multiple of sample period'
                 )
 
-            if capture.channels != self.channels():
-                self.channels(capture.channels)
+            if capture.channel != self.channel():
+                self.channel(capture.channel)
             else:
-                self.rx_enabled(False)
+                invalidate_state = True
 
-            if self.gains() != capture.gains:
-                self.gains(capture.gains)
+            if self.gain() != capture.gain:
+                self.gain(capture.gain)
 
             fs_backend, lo_offset, analysis_filter = design_capture_filter(
                 self.base_clock_rate, capture
@@ -244,7 +246,7 @@ class RadioDevice(lb.Device):
                 fs_backend != self.backend_sample_rate()
                 or downsample != self._downsample
             ):
-                self.rx_enabled(False)
+                invalidate_state = True
                 with attr.hold_attr_notifications(self):
                     self._downsample = 1  # temporarily avoid a potential bounding error
                 self.backend_sample_rate(fs_backend)
@@ -267,13 +269,17 @@ class RadioDevice(lb.Device):
                 self.lo_offset = lo_offset  # hold update on this one?
 
             if capture.center_frequency != self.center_frequency():
-                self.rx_enabled(False)
+                invalidate_state = True
                 self.center_frequency(capture.center_frequency)
 
             self.analysis_bandwidth = capture.analysis_bandwidth
 
-            if self.time_sync_every_capture:
+            if invalidate_state:
                 self.rx_enabled(False)
+
+            if self.time_sync_every_capture:
+                if not invalidate_state:
+                    self.rx_enabled(False)
                 self.sync_time_source()
 
             if not self.rx_enabled():
@@ -282,45 +288,46 @@ class RadioDevice(lb.Device):
             self._armed_capture = capture
             self._next_time_ns = None
 
-    def read_iq(self, capture) -> tuple['np.ndarray[np.complex64]', float]:
+    def read_iq(self, capture: structs.RadioCapture, buffers: tuple['np.ndarray', 'np.ndarray']=None) -> tuple['np.ndarray[np.complex64]', float]:
         streamed_count = 0
         awaiting_timestamp = True
         buf_time_ns = self._next_time_ns
         start_ns = self._next_time_ns
 
-        if len(self.channels()) == 0:
-            raise AttributeError(
-                f'call {type(self).__qualname__}.channels() first to select an acquisition channel'
+        with lb.stopwatch('prepare iq read'):
+            if len(self.channel()) == 0:
+                raise AttributeError(
+                    f'call {type(self).__qualname__}.channel() first to select an acquisition channel'
+                )
+
+            # the return buffer
+            sample_count = get_channel_read_buffer_count(
+                self, capture, include_holdoff=False
             )
 
-        # the return buffer
-        sample_count = get_channel_read_buffer_count(
-            self, capture, include_holdoff=False
-        )
-        samples, buffers = _allocate_iq_buffer(self, capture)
+            if buffers is None:
+                samples, stream_bufs = alloc_empty_iq(self, capture, out=buffers)
+            else:
+                samples, stream_bufs = buffers
 
-        if buf_time_ns is None and self._holdover_samples is not None:
-            raise ValueError('holdover samples are missing timestamp')
+            if buf_time_ns is None and self._holdover_samples is not None:
+                raise ValueError('holdover samples are missing timestamp')
 
-        if self._holdover_samples is None:
-            holdover_count = 0
-        else:
-            # note: holdover_count.dtype is np.complex64, samples.dtype is np.float32
-            holdover_count = self._holdover_samples.size
-            samples[:, :holdover_count] = self._holdover_samples.view(samples.dtype)
+            if self._holdover_samples is None:
+                holdover_count = 0
+            else:
+                # note: holdover_count.dtype is np.complex64, samples.dtype is np.float32
+                holdover_count = self._holdover_samples.size
+                samples[:, :holdover_count] = self._holdover_samples.view(samples.dtype)
 
-        holdover_size = sample_count - round(
-            capture.duration * self.backend_sample_rate()
-        )
+            # default holdoffs parameters, valid when we already have a clock reading
+            stft_pad, _ = _get_stft_padding(self.base_clock_rate, capture)
+            holdoff_size = stft_pad
 
-        # default holdoffs parameters, valid when we already have a clock reading
-        stft_pad, _ = _get_stft_padding(self.base_clock_rate, capture)
-        holdoff_size = stft_pad
-
-        fs = self.backend_sample_rate()
-        chunk_size = sample_count + holdover_count
-        timeout_sec = chunk_size / fs + 50e-3
-        remaining = sample_count - holdover_count
+            fs = self.backend_sample_rate()
+            chunk_size = sample_count + holdover_count
+            timeout_sec = chunk_size / fs + 50e-3
+            remaining = sample_count - holdover_count
 
         while remaining > 0:
             if streamed_count > 0 or self.gapless_repeats:
@@ -338,7 +345,7 @@ class RadioDevice(lb.Device):
 
             # Read the samples from the data buffer
             this_count, ret_time_ns = self._read_stream(
-                buffers,
+                stream_bufs,
                 offset=holdover_count + streamed_count,
                 count=request_count,
                 timeout_sec=timeout_sec,
@@ -375,6 +382,7 @@ class RadioDevice(lb.Device):
 
         samples = samples.view('complex64')[:, sample_offs : sample_offs + sample_count]
 
+        holdover_size = sample_count - round(capture.duration * fs)
         self._holdover_samples = samples[:, -holdover_size:]
         self._next_time_ns = start_ns + round(1e9 * capture.duration)
 
@@ -400,11 +408,14 @@ class RadioDevice(lb.Device):
             if capture != self._armed_capture:
                 self.arm(capture)
 
-            with lb.stopwatch('enable', logger_level='debug'):
-                self.rx_enabled(True)
+            with lb.stopwatch('enable and allocate', logger_level='debug'):
+                buffers = lb.concurrently(
+                    rx_enabled=lambda: self.rx_enabled(True),
+                    buffers=lb.Call(alloc_empty_iq, self, capture)
+                )['buffers']
 
-            iq, time_ns = self.read_iq(capture)
-            time_ns = pd.Timestamp(time_ns, unit='ns')
+            iq, time_ns = self.read_iq(capture, buffers=buffers)
+            del buffers
 
             if next_capture == capture and self.gapless_repeats:
                 # the one case where we leave it running
@@ -416,10 +427,10 @@ class RadioDevice(lb.Device):
                 self.arm(next_capture)
 
             if correction:
-                with lb.stopwatch('resampling', logger_level='debug'):
+                with lb.stopwatch('resample and calibrate', logger_level='debug'):
                     iq = iq_corrections.resampling_correction(iq, capture, self)
 
-            acquired_capture = structs.copy_struct(capture, start_time=time_ns)
+            acquired_capture = structs.copy_struct(capture, start_time=pd.Timestamp(time_ns, unit='ns'))
             return iq, acquired_capture
 
     def _read_stream(
@@ -436,7 +447,7 @@ class RadioDevice(lb.Device):
     ) -> structs.RadioCapture | None:
         """generate the currently armed capture configuration for the specified channel"""
 
-        if len(self.channels()) == 0:
+        if len(self.channel()) == 0:
             return None
 
         if self.lo_offset == 0:
@@ -449,8 +460,8 @@ class RadioDevice(lb.Device):
         return cls(
             # RF and leveling
             center_frequency=self.center_frequency(),
-            channels=self.channels(),
-            gains=self.gains(),
+            channel=self.channel(),
+            gain=self.gain(),
             # acquisition
             duration=self.duration,
             sample_rate=self.sample_rate(),
@@ -650,20 +661,8 @@ def get_channel_read_buffer_count(
         include_holdoff=include_holdoff,
     )
 
-    # mem = cuda.alloc_pinned_memory(8*100)
-    # # ...then wrap it with numpy and it's ready to use
-    # a = np.ndarray((100,), dtype=np.float64, buffer=mem)
 
-
-# def empty_pinned(shape, dtype):
-#     import cupy
-
-#     itemsize = np.dtype(dtype).itemsize
-#     mem = cupy.cuda.alloc_pinned_memory(np.prod(shape) * itemsize)
-#     return np.ndarray(shape, dtype=dtype, buffer=mem)
-
-
-def _allocate_iq_buffer(
+def alloc_empty_iq(
     radio: RadioDevice, capture: structs.RadioCapture
 ) -> tuple[np.ndarray, np.ndarray]:
     """allocate a buffer of IQ return values.
@@ -671,35 +670,35 @@ def _allocate_iq_buffer(
     Returns:
         The buffer and the list of buffer references for streaming.
     """
-    buf_size = get_channel_read_buffer_count(radio, capture, include_holdoff=True)
+    count = get_channel_read_buffer_count(radio, capture, include_holdoff=True)
 
     try:
         from cupyx import empty_pinned as empty
     except ImportError:
         from numpy import empty
 
-    # fast reinterpretation to np.complex64 requires the waveform to be in the last axis
-    samples = empty((len(radio.channels()), 2 * buf_size), dtype=np.float32)
-
-    if (
-        radio._stream_all_rx_channels
-        and len(radio.channels()) != radio.rx_channel_count
-    ):
-        # a throwaway buffer for samples that won't be returned
-        unused_samples = np.empty(2 * buf_size, dtype=np.float32)
-    else:
-        unused_samples = None
+    # fast reinterpretation to complex64 requires the waveform to be in the last axis
+    samples = empty((len(radio.channel()), 2 * count), dtype=np.float32)
 
     # build the list of channel buffers, including references to the throwaway
     # in case of radio._stream_all_rx_channels
+    if (
+        radio._stream_all_rx_channels
+        and len(radio.channel()) != radio.rx_channel_count
+    ):
+        # a throwaway buffer for samples that won't be returned
+        extra = np.empty(2 * count, dtype=samples.dtype)
+    else:
+        extra = None
+
     buffers = []
     i = 0
     for channel in range(radio.rx_channel_count):
-        if channel in radio.channels():
+        if channel in radio.channel():
             buffers.append(samples[i, :])
             i += 1
         elif radio._stream_all_rx_channels:
-            buffers.append(unused_samples)
+            buffers.append(extra)
 
     return samples, buffers
 

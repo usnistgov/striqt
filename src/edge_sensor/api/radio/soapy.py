@@ -36,7 +36,7 @@ def _verify_channel_setting(func: callable) -> callable:
             raise RuntimeError(f'open radio before calling {name}')
         elif not self._stream_all_rx_channels:
             pass
-        elif len(self.channels()) == 0:
+        elif len(self.channel()) == 0:
             name = getattr(func, '__name__', repr(func))
             raise RuntimeError(f'set {self}.channel before calling {name}')
 
@@ -49,7 +49,7 @@ def _verify_channel_for_getter(func: callable) -> callable:
     # TODO: fix typing
     @wraps(func)
     def wrapper(self):
-        if len(self.channels()) == 0:
+        if len(self.channel()) == 0:
             name = getattr(func, '__name__', repr(func))
             raise RuntimeError(f'set {self}.channel before calling {name}')
         else:
@@ -62,7 +62,7 @@ def _verify_channel_for_setter(func: callable) -> callable:
     # TODO: fix typing
     @wraps(func)
     def wrapper(self, argument):
-        if len(self.channels()) == 0:
+        if len(self.channel()) == 0:
             raise ValueError(f'set {self}.channel first')
         else:
             return func(self, argument)
@@ -116,7 +116,7 @@ class SoapyRadioDevice(base.RadioDevice):
     @attr.method.float(inherit=True)
     @_verify_channel_for_getter
     def backend_sample_rate(self):
-        for channel in self.channels():
+        for channel in self.channel():
             return self.backend.getSampleRate(SoapySDR.SOAPY_SDR_RX, channel)
 
     @backend_sample_rate.setter
@@ -127,14 +127,10 @@ class SoapyRadioDevice(base.RadioDevice):
             # avoid exceptions due to rounding error
             backend_sample_rate = rate
 
-        for channel in self.channels():
+        for channel in self.channel():
             self.backend.setSampleRate(
                 SoapySDR.SOAPY_SDR_RX, channel, backend_sample_rate
             )
-
-    @attr.property.int(inherit=True)
-    def rx_channel_count(self):
-        return self.backend.getNumChannels(SoapySDR.SOAPY_SDR_RX)
 
     def _setup_rx_stream(self, channels):
         with lb.stopwatch(
@@ -144,19 +140,19 @@ class SoapyRadioDevice(base.RadioDevice):
                 SoapySDR.SOAPY_SDR_RX, SoapySDR.SOAPY_SDR_CF32, list(channels)
             )
 
-    @base.ChannelListMethod(inherit=True)
-    def channels(self):
+    @base.ChannelTupleMethod(inherit=True)
+    def channel(self):
         # return none until this is set, then the cached value is returned
         return None
 
-    @channels.setter
+    @channel.setter
     def _(self, channels: tuple[int, ...] | None):
         if self._stream_all_rx_channels:
             # in this case, the stream is controlled only on open
             return
 
         elif getattr(self, '_rx_stream', None) is not None:
-            if self.channels() == channels:
+            if self.channel() == channels:
                 # already set up
                 return
             else:
@@ -174,7 +170,7 @@ class SoapyRadioDevice(base.RadioDevice):
     @_verify_channel_for_getter
     def lo_frequency(self):
         # there is only one RX LO, shared by both channels
-        for channel in self.channels():
+        for channel in self.channel():
             ret = self.backend.getFrequency(SoapySDR.SOAPY_SDR_RX, channel)
             return ret
 
@@ -182,7 +178,7 @@ class SoapyRadioDevice(base.RadioDevice):
     @_verify_channel_for_setter
     def _(self, center_frequency):
         # there is only one RX LO, shared by both channels
-        for channel in self.channels():
+        for channel in self.channel():
             self.backend.setFrequency(SoapySDR.SOAPY_SDR_RX, channel, center_frequency)
 
     center_frequency = lo_frequency.corrected_from_expression(
@@ -250,27 +246,27 @@ class SoapyRadioDevice(base.RadioDevice):
 
     @base.FloatTupleMethod(inherit=True)
     @_verify_channel_for_getter
-    def gains(self):
-        gains = [
-            self.backend.getGain(SoapySDR.SOAPY_SDR_RX, c) for c in self.channels()
+    def gain(self):
+        values = [
+            self.backend.getGain(SoapySDR.SOAPY_SDR_RX, c) for c in self.channel()
         ]
-        return tuple(gains)
+        return tuple(values)
 
-    @gains.setter
+    @gain.setter
     @_verify_channel_for_setter
-    def _(self, gains: float | tuple[float, ...]):
-        channels = self.channels()
+    def _(self, gain: float | tuple[float, ...]):
+        channels = self.channel()
 
-        if isinstance(gains, numbers.Number):
-            gains = (gains,) * len(channels)
-        elif len(gains) == 1:
-            gains = gains * len(channels)
-        elif len(gains) != len(channels):
+        if isinstance(gain, numbers.Number):
+            gain = (gain,) * len(channels)
+        elif len(gain) == 1:
+            gain = gain * len(channels)
+        elif len(gain) != len(channels):
             raise ValueError(
                 f'number of gain values mismatches the number of RX channels ({len(channels)})'
             )
 
-        for channel, gain in zip(channels, gains):
+        for channel, gain in zip(channels, gain):
             self._logger.debug(f'set channel {channel} gain: {gain} dB')
             self.backend.setGain(SoapySDR.SOAPY_SDR_RX, channel, gain)
 

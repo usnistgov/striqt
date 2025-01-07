@@ -15,8 +15,9 @@ class Air7x01B(SoapyRadioDevice):
     lo_offset = attr.value.float(0.0, min=-125e6, max=125e6, inherit=True)
     lo_frequency = attr.method.float(min=300e6, max=6000e6, inherit=True)
     backend_sample_rate = attr.method.float(min=3.906250e6, max=125e6, inherit=True)
-    gains = type(SoapyRadioDevice.gains)(min=-30, max=0, step=0.5, inherit=True)
+    gain = type(SoapyRadioDevice.gain)(min=-30, max=0, step=0.5, inherit=True)
     tx_gain = attr.method.float(min=-41.95, max=0, step=0.1, inherit=True)
+    rx_channel_count = attr.value.int(2, inherit=True)
 
     # this was set based on gain setting sweep tests
     _transient_holdoff_time = attr.value.float(2e-3, inherit=True)
@@ -27,7 +28,7 @@ class Air7x01B(SoapyRadioDevice):
 
     # without this, multichannel acquisition start time will vary
     # across channels, resulting in streaming errors
-    _rx_enable_delay = attr.value.float(0.4, inherit=True)
+    _rx_enable_delay = attr.value.float(0.28, inherit=True)
 
     def open(self):
         # in some cases specifying the driver has caused exceptions on connect

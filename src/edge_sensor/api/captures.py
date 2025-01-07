@@ -31,11 +31,6 @@ CAPTURE_DIM = 'capture'
 SWEEP_TIMESTAMP_NAME = 'sweep_start_time'
 RADIO_ID_NAME = 'radio_id'
 
-CHANNEL_TO_CAPTURE_MAP = {'channel': 'channels', 'gain': 'gains'}
-CAPTURE_TO_CHANNEL_MAP = dict(
-    zip(CHANNEL_TO_CAPTURE_MAP.values(), CHANNEL_TO_CAPTURE_MAP.keys())
-)
-
 
 @functools.lru_cache
 def _get_unit_formatter(units: str) -> 'matplotlib.ticker.EngFormatter':
@@ -95,7 +90,7 @@ def concat_time_dim(datasets: list['xr.Dataset'], time_dim: str) -> 'xr.Dataset'
 def broadcast_to_channels(
     channels: tuple[int, ...], *params, allow_mismatch=False
 ) -> list[list]:
-    """broadcast sequences of length 1 up to the length of capture.channels"""
+    """broadcast sequences of length 1 up to the length of capture.channel"""
 
     res = []
     for p in params:
@@ -166,21 +161,17 @@ def coord_template(
 ):
     """returns a cached xr.Coordinates object to use as a template for data results"""
 
-    CHANNEL_TO_CAPTURE_RENAME = {'channels': 'channel', 'gains': 'gain'}
-
     capture = capture_cls()
     vars = {}
 
     for field in capture_cls.__struct_fields__:
-        if field == 'channels':
+        if field == 'channel':
             value = list(channels)
         else:
             entry = getattr(capture, field)
             (value,) = broadcast_to_channels(channels, entry, allow_mismatch=True)
 
-        capture_field = CHANNEL_TO_CAPTURE_RENAME.get(field, field)
-
-        vars[capture_field] = xr.Variable(
+        vars[field] = xr.Variable(
             (CAPTURE_DIM,),
             value,
             fastpath=True,
@@ -217,7 +208,7 @@ def _get_capture_field(
     alias_hits: dict,
     sweep_time=None,
 ):
-    if len(capture.channels) > 1:
+    if len(capture.channel) > 1:
         raise ValueError('split the capture before the call to _get_capture_field')
 
     # aliases = output.coord_aliases
@@ -255,7 +246,7 @@ def build_coords(
 ):
     alias_dtypes = _get_alias_dtypes(output)
     coords = coord_template(
-        type(capture), tuple(capture.channels), **alias_dtypes
+        type(capture), tuple(capture.channel), **alias_dtypes
     ).copy(deep=True)
 
     updates = {}
@@ -268,11 +259,9 @@ def build_coords(
                 updates.setdefault(field, []).append(radio_id)
                 continue
 
-            capture_field = CHANNEL_TO_CAPTURE_MAP.get(field, field)
-
             try:
                 value = _get_capture_field(
-                    capture_field, c, radio_id, alias_hits, sweep_time
+                    field, c, radio_id, alias_hits, sweep_time
                 )
             except KeyError:
                 if field in output.coord_aliases:
@@ -317,12 +306,10 @@ def _assign_alias_coords(capture_data: 'xr.Dataset', aliases):
 def _match_capture_fields(
     capture: structs.RadioCapture, fields: dict[str], radio_id: str
 ):
-    if len(capture.channels) > 1:
+    if len(capture.channel) > 1:
         raise ValueError('split the capture to evaluate alias matches')
 
-    for capture_name, value in fields.items():
-        name = CHANNEL_TO_CAPTURE_MAP.get(capture_name, capture_name)
-
+    for name, value in fields.items():
         if name == 'radio_id' and value == radio_id:
             continue
 
@@ -368,11 +355,11 @@ def split_capture_channels(capture: structs.RadioCapture) -> list[structs.RadioC
         else:
             return v
 
-    broadcast_values = broadcast_to_channels(capture.channels, *capture_map.values())
+    broadcast_values = broadcast_to_channels(capture.channel, *capture_map.values())
     broadcast_map = dict(zip(capture_map.keys(), broadcast_values))
 
     result = []
-    for i in range(len(capture.channels)):
+    for i in range(len(capture.channel)):
         mapping = {k: match_capture_tuples(k, v[i]) for k, v in broadcast_map.items()}
         result.append(msgspec.convert(mapping, type=type(capture)))
 

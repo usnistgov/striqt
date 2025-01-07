@@ -20,8 +20,8 @@ output:
 defaults:
   # RF
   center_frequency: 3750e6
-  channels: [0,1] # (index)
-  gains: [0] # dB
+  channel: [0,1] # (index)
+  gain: [0] # dB
 
   # acquisition
   duration: 0.1 # acquisition duration (sec)
