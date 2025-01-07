@@ -1,5 +1,6 @@
 from __future__ import annotations
 import functools
+import msgspec
 import typing
 import pickle
 import gzip
@@ -7,6 +8,7 @@ from pathlib import Path
 
 from . import util
 from .captures import broadcast_to_channels
+from channel_analysis.api.util import pinned_array_as_cupy, free_mempool_on_low_memory
 
 from .radio import base, RadioDevice, design_capture_filter
 from . import structs
@@ -17,6 +19,7 @@ if typing.TYPE_CHECKING:
     import scipy
     import iqwaveform
     import labbench as lb
+
 else:
     np = util.lazy_import('numpy')
     xr = util.lazy_import('xarray')
@@ -173,9 +176,7 @@ def _describe_missing_data(corrections: 'xr.Dataset', exact_matches: dict):
     return '; '.join(misses)
 
 
-functools.lru_cache()
-
-
+@functools.lru_cache()
 def lookup_power_correction(
     cal_data: Path | 'xr.Dataset' | None, capture: structs.RadioCapture, xp
 ):
@@ -239,12 +240,6 @@ def lookup_power_correction(
     return xp.asarray(power_scale, dtype='float32')[:, np.newaxis]
 
 
-def as_cupy_mapped_array(x, xp, stream=None):
-    out = xp.empty_like(x)
-    out.data.copy_from_host_async(x.ctypes.data, x.data.nbytes, stream=stream)
-    return out
-
-
 def resampling_correction(
     iq: 'iqwaveform.util.Array',
     capture: structs.RadioCapture,
@@ -252,12 +247,11 @@ def resampling_correction(
     force_calibration: typing.Optional['xr.Dataset'] = None,
     *,
     axis=1,
-    out=None,
 ):
     """apply a bandpass filter implemented through STFT overlap-and-add.
 
     Args:
-        iq: the input waveform
+        iq: the input waveform, as a pinned array
         capture: the capture filter specification structure
         radio: the radio instance that performed the capture
         force_calibration: if specified, this calibration dataset is used rather than loading from file
@@ -268,10 +262,14 @@ def resampling_correction(
     """
 
     xp = util.import_cupy_with_fallback()
-    with lb.stopwatch('power correction lookup', threshold=10e-3, logger_level='debug'):
-        power_scale = lookup_power_correction(radio.calibration, capture, xp)
 
-    iq = as_cupy_mapped_array(iq, xp)
+    with lb.stopwatch('power correction lookup', threshold=10e-3, logger_level='debug'):
+        bare_capture = msgspec.structs.replace(capture, start_time=None)
+        power_scale = lookup_power_correction(radio.calibration, bare_capture, xp)
+
+    if hasattr(xp, 'get_default_memory_pool'):        
+        iq = pinned_array_as_cupy(iq)
+        free_mempool_on_low_memory()
 
     fs_backend, _, analysis_filter = design_capture_filter(
         radio.base_clock_rate, capture
@@ -311,7 +309,10 @@ def resampling_correction(
         noverlap=round(nfft * overlap_scale),
         axis=axis,
         truncate=False,
+        # out=buf
     )
+
+    free_mempool_on_low_memory()
 
     if nfft_out < nfft:
         # downsample applies the filter as well
@@ -348,6 +349,10 @@ def resampling_correction(
             axis=axis,
         )
 
+    del iq
+
+    free_mempool_on_low_memory()
+
     iq = iqwaveform.fourier.istft(
         xstft,
         nfft=nfft_out,
@@ -356,6 +361,8 @@ def resampling_correction(
     )
 
     del xstft
+
+    free_mempool_on_low_memory()
 
     # start the capture after the transient holdoff window
     iq_size_out = round(capture.duration * capture.sample_rate)

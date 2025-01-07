@@ -119,8 +119,7 @@ def iter_sweep(
         radio=radio,
         sweep=sweep,
         analysis_spec=sweep.channel_analysis,
-        extra_attrs=attrs,
-        calibration=calibration,
+        extra_attrs=attrs
     )
 
     if len(sweep.captures) == 0:

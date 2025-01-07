@@ -26,3 +26,24 @@ def lazy_import(module_name: str, package=None):
     sys.modules[module_name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def pinned_array_as_cupy(x, stream=None):
+    import cupy as cp
+    out = cp.empty_like(x)
+    out.data.copy_from_host_async(x.ctypes.data, x.data.nbytes, stream=stream)
+    return out
+
+
+def free_mempool_on_low_memory(threshold_bytes=1_000_000_000):
+    import psutil
+
+    if psutil.virtual_memory().available >= threshold_bytes:
+        return
+    else:
+        import labbench as lb
+        lb.logger.warning(f'low_memory, freeing GPU caches (threshold {threshold_bytes/1e9:0.1f} GB)')
+    
+    import cupy as cp
+    mempool = cp.get_default_memory_pool()
+    mempool.free_all_blocks()

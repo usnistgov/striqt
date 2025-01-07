@@ -45,7 +45,11 @@ def _describe_field(capture: 'channel_analysis.Capture', name: str):
     if value is None:
         value_str = 'None'
     elif attrs.get('units', None) is not None and np.isfinite(value):
-        value_str = _get_unit_formatter(attrs['units'])(value)
+        if isinstance(value, tuple):
+            value_tup = [_get_unit_formatter(attrs['units'])(v) for v in value]
+            value_str = f"({', '.join(value_tup)})"
+        else:
+            value_str = _get_unit_formatter(attrs['units'])(value)
     else:
         value_str = repr(value)
 
@@ -347,7 +351,7 @@ def _evaluate_aliases(
 def split_capture_channels(capture: structs.RadioCapture) -> list[structs.RadioCapture]:
     """split each channel in a capture into a separate capture as if were acquired separately"""
 
-    capture_map = msgspec.to_builtins(capture)
+    capture_map = channel_analysis.struct_to_builtins(capture)
 
     def match_capture_tuples(k, v):
         if isinstance(capture_map[k], tuple):
@@ -367,12 +371,13 @@ def split_capture_channels(capture: structs.RadioCapture) -> list[structs.RadioC
 
 
 def capture_fields_with_aliases(
-    capture: structs.Capture, radio_id: str, output: structs.Output
+    capture: structs.RadioCapture, radio_id: str, output: structs.Output
 ) -> dict:
     attrs = structs.struct_to_builtins(capture)
-    aliases = _evaluate_aliases(capture, radio_id, output)
+    c = split_capture_channels(capture)[0]
+    aliases = _evaluate_aliases(c, radio_id, output)
 
-    return [dict(attrs, **a) for a in aliases]
+    return dict(attrs, **aliases)
 
 
 @dataclasses.dataclass
@@ -396,14 +401,16 @@ class ChannelAnalysisWrapper:
         """Inject radio device and capture info into a channel analysis result."""
 
         with lb.stopwatch('analysis', logger_level='debug'):
-            iq = iq_corrections.resampling_correction(iq, capture, self.radio)
+            with lb.stopwatch('analysis: resample/calibrate', logger_level='debug'):
+                iq = iq_corrections.resampling_correction(iq, capture, self.radio)
 
-            coords = build_coords(
-                capture,
-                output=self.sweep.output,
-                radio_id=self.radio.id,
-                sweep_time=sweep_time,
-            )
+            with lb.stopwatch('build coords', threshold=10e-3, logger_level='debug'):
+                coords = build_coords(
+                    capture,
+                    output=self.sweep.output,
+                    radio_id=self.radio.id,
+                    sweep_time=sweep_time,
+                )
 
             analysis = channel_analysis.analyze_by_spec(
                 iq, capture, spec=self.analysis_spec, expand_dims=(CAPTURE_DIM,)

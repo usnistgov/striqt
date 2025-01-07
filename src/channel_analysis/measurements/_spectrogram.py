@@ -147,6 +147,13 @@ def _do_spectrogram(
     if frequency_bin_averaging is not None:
         spg = _binned_mean(spg, frequency_bin_averaging, axis=1)
 
+    if iqwaveform.util.is_cupy_array(spg):
+        import cupyx
+        out = cupyx.empty_pinned(spg.shape, dtype='float32')
+        out = util.pinned_array_as_cupy(out)
+    else:
+        out = None
+
     spg = iqwaveform.powtodB(spg, eps=1e-25, out=spg)
 
     if limit_digits is not None:

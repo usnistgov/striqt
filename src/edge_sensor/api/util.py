@@ -94,6 +94,7 @@ def import_cupy_with_fallback():
 
         # the FFT plan sets up large caches that don't help us
         xp.fft.config.get_plan_cache().set_size(0)
+        xp.cuda.set_pinned_memory_allocator(None)
 
     except ModuleNotFoundError:
         # warn only once due to @cache
