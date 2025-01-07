@@ -80,20 +80,20 @@ channel_analysis:
     #     - rms
     #     - peak
 
-    # persistence_spectrum:
-    #     persistence_statistics:
-    #     - mean
-    #     - 0.5
-    #     - 0.75
-    #     - 0.9
-    #     - 0.95
-    #     - 0.99
-    #     - 0.999
-    #     - max
-    #     frequency_resolution: 15000.0
-    #     window:
-    #         - dpss
-    #         - 3.87638403         # for enbw:resolution == 2:1
+    persistence_spectrum:
+        persistence_statistics:
+        - mean
+        - 0.5
+        - 0.75
+        - 0.9
+        - 0.95
+        - 0.99
+        - 0.999
+        - max
+        frequency_resolution: 15000.0
+        window:
+            - dpss
+            - 3.87638403         # for enbw:resolution == 2:1
 
     # cellular_cyclic_autocorrelation:
     #     subcarrier_spacings:
@@ -112,7 +112,7 @@ channel_analysis:
     #     power_high: 0 # dBm
     #     power_resolution: 0.25
 
-    # # A spectrogram 
+    # A spectrogram 
     # spectrogram:
     #     # Same sampling and windowing persistence_spectrum
     #     frequency_resolution: 15000
@@ -124,20 +124,20 @@ channel_analysis:
     #     # Report the frequency bin average of this size
     #     frequency_bin_averaging: 12 # default: None (no averaging)
 
-    # a histogram of all spectrogram power bins
-    spectrogram_histogram:
-        # Same spectrogram parameters as above
-        frequency_resolution: 15000
-        fractional_overlap: 0.
-        window:
-            - dpss
-            - 3.87638403 # enbw/resolution ≈ 2
-        frequency_bin_averaging: 12
+    # # a histogram of all spectrogram power bins
+    # spectrogram_histogram:
+    #     # Same spectrogram parameters as above
+    #     frequency_resolution: 15000
+    #     fractional_overlap: 0.
+    #     window:
+    #         - dpss
+    #         - 3.87638403 # enbw/resolution ≈ 2
+    #     frequency_bin_averaging: 12
 
-        # Same power bin parameters as channel_power_histogram
-        power_low: -150
-        power_high: 0
-        power_resolution: 0.1
+    #     # Same power bin parameters as channel_power_histogram
+    #     power_low: -150
+    #     power_high: 0
+    #     power_resolution: 0.1
 
     # channel_power_time_series:
     #     # time bin size
@@ -163,6 +163,6 @@ channel_analysis:
     #     frame_limit: 1
     #     normalize: true
 
-    iq_waveform:
-        start_time_sec: 0
-        stop_time_sec: 0.01
+    # iq_waveform:
+    #     start_time_sec: 0
+    #     stop_time_sec: 0.01

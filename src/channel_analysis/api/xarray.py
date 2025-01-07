@@ -103,9 +103,8 @@ def channel_dataarray(
             da[entry.name].indexes[entry.dims[0]].values[:] = arr
 
         except BaseException as ex:
-            raise ValueError(
-                f'error building xarray {cls.__qualname__}.{entry.name}'
-            ) from ex
+            name = f'{cls.__qualname__}.{entry.name}'
+            raise ValueError(f'error building coordinate index {name}') from ex
 
         da[entry.name].attrs.update(metadata)
 
@@ -181,7 +180,10 @@ def package_channel_analysis(
 ) -> 'xr.Dataset':
     # materialize as xarrays
     with lb.stopwatch('package analyses into xarray', logger_level='debug'):
-        xarrays = {name: res.to_xarray(expand_dims) for name, res in results.items()}
+        xarrays = {}
+        for name, res in results.items():
+            xarrays[name] = res.to_xarray(expand_dims)
+
         # capture.analysis_filter = dict(capture.analysis_filter)
         # capture = structs.builtins_to_struct(capture, type=type(capture))
         attrs = structs.struct_to_builtins(capture)

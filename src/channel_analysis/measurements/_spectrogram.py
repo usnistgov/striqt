@@ -125,7 +125,6 @@ def _do_spectrogram(
     if iqwaveform.isroundmod(capture.sample_rate, frequency_resolution):
         noverlap = round(fractional_overlap * nfft)
     else:
-        # need sample_rate_Hz/resolution to give us a counting number
         raise ValueError('sample_rate_Hz/resolution must be a counting number')
 
     _, _, spg = iqwaveform.fourier.spectrogram(
@@ -141,18 +140,18 @@ def _do_spectrogram(
     if truncate_to_bandwidth and np.isfinite(capture.analysis_bandwidth):
         # stick with python arithmetic to ensure consistency with axis bounds calculations
         spg = truncate_spectrogram_bandwidth(
-            spg, nfft, capture.sample_rate, bandwidth=capture.analysis_bandwidth, axis=1
+            spg, nfft, capture.sample_rate, bandwidth=capture.analysis_bandwidth, axis=2
         )
 
     if frequency_bin_averaging is not None:
-        spg = _binned_mean(spg, frequency_bin_averaging, axis=1)
+        spg = _binned_mean(spg, frequency_bin_averaging, axis=2)
 
-    if iqwaveform.util.is_cupy_array(spg):
-        import cupyx
-        out = cupyx.empty_pinned(spg.shape, dtype='float32')
-        out = util.pinned_array_as_cupy(out)
-    else:
-        out = None
+    # if iqwaveform.util.is_cupy_array(spg):
+    #     import cupyx
+    #     out = cupyx.empty_pinned(spg.shape, dtype='float32')
+    #     out = util.pinned_array_as_cupy(out)
+    # else:
+    #     out = None
 
     spg = iqwaveform.powtodB(spg, eps=1e-25, out=spg)
 
