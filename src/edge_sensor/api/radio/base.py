@@ -294,40 +294,39 @@ class RadioDevice(lb.Device):
         buf_time_ns = self._next_time_ns
         start_ns = self._next_time_ns
 
-        with lb.stopwatch('prepare iq read'):
-            if len(self.channel()) == 0:
-                raise AttributeError(
-                    f'call {type(self).__qualname__}.channel() first to select an acquisition channel'
-                )
-
-            # the return buffer
-            sample_count = get_channel_read_buffer_count(
-                self, capture, include_holdoff=False
+        if len(self.channel()) == 0:
+            raise AttributeError(
+                f'call {type(self).__qualname__}.channel() first to select an acquisition channel'
             )
 
-            if buffers is None:
-                samples, stream_bufs = alloc_empty_iq(self, capture, out=buffers)
-            else:
-                samples, stream_bufs = buffers
+        # the return buffer
+        sample_count = get_channel_read_buffer_count(
+            self, capture, include_holdoff=False
+        )
 
-            if buf_time_ns is None and self._holdover_samples is not None:
-                raise ValueError('holdover samples are missing timestamp')
+        if buffers is None:
+            samples, stream_bufs = alloc_empty_iq(self, capture, out=buffers)
+        else:
+            samples, stream_bufs = buffers
 
-            if self._holdover_samples is None:
-                holdover_count = 0
-            else:
-                # note: holdover_count.dtype is np.complex64, samples.dtype is np.float32
-                holdover_count = self._holdover_samples.size
-                samples[:, :holdover_count] = self._holdover_samples.view(samples.dtype)
+        if buf_time_ns is None and self._holdover_samples is not None:
+            raise ValueError('holdover samples are missing timestamp')
 
-            # default holdoffs parameters, valid when we already have a clock reading
-            stft_pad, _ = _get_stft_padding(self.base_clock_rate, capture)
-            holdoff_size = stft_pad
+        if self._holdover_samples is None:
+            holdover_count = 0
+        else:
+            # note: holdover_count.dtype is np.complex64, samples.dtype is np.float32
+            holdover_count = self._holdover_samples.size
+            samples[:, :holdover_count] = self._holdover_samples.view(samples.dtype)
 
-            fs = self.backend_sample_rate()
-            chunk_size = sample_count + holdover_count
-            timeout_sec = chunk_size / fs + 50e-3
-            remaining = sample_count - holdover_count
+        # default holdoffs parameters, valid when we already have a clock reading
+        stft_pad, _ = _get_stft_padding(self.base_clock_rate, capture)
+        holdoff_size = stft_pad
+
+        fs = self.backend_sample_rate()
+        chunk_size = sample_count + holdover_count
+        timeout_sec = chunk_size / fs + 50e-3
+        remaining = sample_count - holdover_count
 
         while remaining > 0:
             if streamed_count > 0 or self.gapless_repeats:
