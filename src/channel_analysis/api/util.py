@@ -30,6 +30,7 @@ def lazy_import(module_name: str, package=None):
 
 def pinned_array_as_cupy(x, stream=None):
     import cupy as cp
+
     out = cp.empty_like(x)
     out.data.copy_from_host_async(x.ctypes.data, x.data.nbytes, stream=stream)
     return out
@@ -48,6 +49,7 @@ def free_mempool_on_low_memory(threshold_bytes=1_000_000_000):
         return
 
     import labbench as lb
+
     if mempool is None:
         lb.logger.warning('still low on memory')
         return

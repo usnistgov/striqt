@@ -102,9 +102,23 @@ def channel_dataarray(
 
             da[entry.name].indexes[entry.dims[0]].values[:] = arr
 
-        except BaseException as ex:
-            name = f'{cls.__qualname__}.{entry.name}'
-            raise ValueError(f'error building coordinate index {name}') from ex
+        except ValueError as ex:
+            exc = ex
+        else:
+            exc = None
+
+        if exc is not None:
+            template_shape = da[entry.name].indexes[entry.dims[0]].shape
+            data_shape = np.array(arr).shape
+
+            if template_shape == data_shape:
+                raise exc
+            else:
+                problem = f'expected {template_shape} from template, but factory gave {data_shape}'
+                name = f'{cls.__qualname__}.{entry.name}'
+                raise ValueError(
+                    f'unexpected {name} coordinate shape: {problem}'
+                )
 
         da[entry.name].attrs.update(metadata)
 

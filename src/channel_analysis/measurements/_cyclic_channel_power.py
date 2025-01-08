@@ -91,10 +91,12 @@ def cyclic_channel_power(
     power_detectors: tuple[str, ...] = ('rms', 'peak'),
     cyclic_statistics: tuple[str, ...] = ('min', 'mean', 'max'),
 ):
+    xp = iqwaveform.util.array_namespace(iq)
+
     power_detectors = tuple(power_detectors)
     cyclic_statistics = tuple(cyclic_statistics)
 
-    nested_ret: dict = iqwaveform.iq_to_cyclic_power(
+    nested_ret = iqwaveform.iq_to_cyclic_power(
         iq,
         1 / capture.sample_rate,
         cyclic_period=cyclic_period,
@@ -104,10 +106,10 @@ def cyclic_channel_power(
         axis=1,
     )
 
-    result = {}
-    for det_name, cyc_stats in nested_ret.items():
-        for cyc_name, power in cyc_stats.items():
-            power_dB = iqwaveform.powtodB(power)
-            result.setdefault(det_name, {}).setdefault(cyc_name, power_dB)
+    # pull arrays from the returned nested dict and combine into one ndarray
+    x = xp.array([list(d.values()) for d in nested_ret.values()])
 
-    return result
+    # move the capture axis to the front
+    x = xp.moveaxis(x, -2, 0)
+
+    return iqwaveform.powtodB(x).astype('float32')

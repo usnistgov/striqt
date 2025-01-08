@@ -168,8 +168,8 @@ class RadioDevice(lb.Device):
         only=['host', 'internal', 'external', 'gps'],
         help='time base for sample timestamps',
     )
-    rx_channel_count = attr.value.int(1, 
-        sets=False, min=1, cache=True, help='number of input ports'
+    rx_channel_count = attr.value.int(
+        1, sets=False, min=1, cache=True, help='number of input ports'
     )
 
     # constants that can be adjusted by device-specific classes to tune streaming behavior
@@ -288,7 +288,11 @@ class RadioDevice(lb.Device):
             self._armed_capture = capture
             self._next_time_ns = None
 
-    def read_iq(self, capture: structs.RadioCapture, buffers: tuple['np.ndarray', 'np.ndarray']=None) -> tuple['np.ndarray[np.complex64]', float]:
+    def read_iq(
+        self,
+        capture: structs.RadioCapture,
+        buffers: tuple['np.ndarray', 'np.ndarray'] = None,
+    ) -> tuple['np.ndarray[np.complex64]', float]:
         streamed_count = 0
         awaiting_timestamp = True
         buf_time_ns = self._next_time_ns
@@ -410,7 +414,7 @@ class RadioDevice(lb.Device):
             with lb.stopwatch('enable and allocate', logger_level='debug'):
                 buffers = lb.concurrently(
                     rx_enabled=lambda: self.rx_enabled(True),
-                    buffers=lb.Call(alloc_empty_iq, self, capture)
+                    buffers=lb.Call(alloc_empty_iq, self, capture),
                 )['buffers']
 
             iq, time_ns = self.read_iq(capture, buffers=buffers)
@@ -429,7 +433,9 @@ class RadioDevice(lb.Device):
                 with lb.stopwatch('resample and calibrate', logger_level='debug'):
                     iq = iq_corrections.resampling_correction(iq, capture, self)
 
-            acquired_capture = structs.copy_struct(capture, start_time=pd.Timestamp(time_ns, unit='ns'))
+            acquired_capture = structs.copy_struct(
+                capture, start_time=pd.Timestamp(time_ns, unit='ns')
+            )
             return iq, acquired_capture
 
     def _read_stream(
@@ -681,10 +687,7 @@ def alloc_empty_iq(
 
     # build the list of channel buffers, including references to the throwaway
     # in case of radio._stream_all_rx_channels
-    if (
-        radio._stream_all_rx_channels
-        and len(radio.channel()) != radio.rx_channel_count
-    ):
+    if radio._stream_all_rx_channels and len(radio.channel()) != radio.rx_channel_count:
         # a throwaway buffer for samples that won't be returned
         extra = np.empty(2 * count, dtype=samples.dtype)
     else:

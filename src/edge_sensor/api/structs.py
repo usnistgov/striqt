@@ -67,9 +67,7 @@ class RadioCapture(WaveformCapture, forbid_unknown_fields=True):
 
     # RF and leveling
     center_frequency: Annotated[float, meta('RF center frequency', 'Hz', gt=0)] = 3710e6
-    channel: Annotated[tuple[SingleChannelType, ...], meta('Input port indices')] = (
-        0,
-    )
+    channel: Annotated[tuple[SingleChannelType, ...], meta('Input port indices')] = (0,)
     gain: Annotated[
         tuple[SingleGainType, ...], meta('Gain setting for each channel', 'dB')
     ] = (-10,)

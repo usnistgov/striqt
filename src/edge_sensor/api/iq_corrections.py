@@ -267,7 +267,7 @@ def resampling_correction(
         bare_capture = msgspec.structs.replace(capture, start_time=None)
         power_scale = lookup_power_correction(radio.calibration, bare_capture, xp)
 
-    if hasattr(xp, 'get_default_memory_pool'):        
+    if hasattr(xp, 'get_default_memory_pool'):
         iq = pinned_array_as_cupy(iq)
         free_mempool_on_low_memory()
 

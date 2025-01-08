@@ -249,9 +249,9 @@ def build_coords(
     capture: structs.RadioCapture, output: structs.Output, radio_id: str, sweep_time
 ):
     alias_dtypes = _get_alias_dtypes(output)
-    coords = coord_template(
-        type(capture), tuple(capture.channel), **alias_dtypes
-    ).copy(deep=True)
+    coords = coord_template(type(capture), tuple(capture.channel), **alias_dtypes).copy(
+        deep=True
+    )
 
     updates = {}
 
@@ -264,9 +264,7 @@ def build_coords(
                 continue
 
             try:
-                value = _get_capture_field(
-                    field, c, radio_id, alias_hits, sweep_time
-                )
+                value = _get_capture_field(field, c, radio_id, alias_hits, sweep_time)
             except KeyError:
                 if field in output.coord_aliases:
                     lb.logger.warning(f'warning: no alias name matches in "{field}"')

@@ -68,100 +68,86 @@ captures:
 
 
 channel_analysis:
-    # cyclic_channel_power:
-    #     cyclic_period: 0.01
-    #     cyclic_statistics:
-    #     # any of "min", "mean", "max", or a quantile number 
-    #     - min
-    #     - mean
-    #     - max
-    #     detector_period: 1.6666666666666667e-05
-    #     power_detectors:
-    #     - rms
-    #     - peak
+    cyclic_channel_power:
+        cyclic_period: 0.01
+        cyclic_statistics:
+        # any of "min", "mean", "max", or a quantile number 
+        - min
+        - mean
+        - max
+        detector_period: 1.6666666666666667e-05
+        power_detectors:
+        - rms
+        - peak
 
     persistence_spectrum:
         persistence_statistics:
         - mean
-        - 0.5
-        - 0.75
-        - 0.9
-        - 0.95
-        - 0.99
-        - 0.999
+        # - 0.5
+        # - 0.75
+        # - 0.9
+        # - 0.95
+        # - 0.99
+        # - 0.999
         - max
         frequency_resolution: 15000.0
         window:
             - dpss
             - 3.87638403         # for enbw:resolution == 2:1
 
-    # cellular_cyclic_autocorrelation:
-    #     subcarrier_spacings:
-    #     - 30000 # Hz
-    #     # note: downlink 1 and 11 and uplink 4 and 14 might be added back
-    #     # if the trigger accuracy is further tightened
-    #     downlink_slots: [0,  5,  6,  7,  8,  9, 10, 15, 16, 17, 18, 19]
-    #     uplink_slots: [3, 13]
-    #     frame_range: [0, 1]
-    #     normalize: false
+    cellular_cyclic_autocorrelation:
+        subcarrier_spacings:
+        - 30000 # Hz
+        # note: downlink 1 and 11 and uplink 4 and 14 might be added back
+        # if the trigger accuracy is further tightened
+        downlink_slots: [0,  5,  6,  7,  8,  9, 10, 15, 16, 17, 18, 19]
+        uplink_slots: [3, 13]
+        frame_range: [0, 1]
+        normalize: false
 
-    # # ccdf evaluated on channel power in the time domain
-    # channel_power_ccdf:
-    #     # binning is performed on the power axis to allow aggregation across captures
-    #     power_low: -100 # dBm
-    #     power_high: 0 # dBm
-    #     power_resolution: 0.25
+    # ccdf evaluated on channel power in the time domain
+    channel_power_ccdf:
+        # binning is performed on the power axis to allow aggregation across captures
+        power_low: -100 # dBm
+        power_high: 0 # dBm
+        power_resolution: 0.25
 
     # A spectrogram 
-    # spectrogram:
-    #     # Same sampling and windowing persistence_spectrum
-    #     frequency_resolution: 15000
-    #     fractional_overlap: 0.
-    #     window: 
-    #         - dpss
-    #         - 3.87638403
+    spectrogram:
+        # Same sampling and windowing persistence_spectrum
+        frequency_resolution: 15000
+        fractional_overlap: 0.
+        window: 
+            - dpss
+            - 3.87638403
 
-    #     # Report the frequency bin average of this size
-    #     frequency_bin_averaging: 12 # default: None (no averaging)
+        # Report the frequency bin average of this size
+        frequency_bin_averaging: 12 # default: None (no averaging)
 
     # # a histogram of all spectrogram power bins
-    # spectrogram_histogram:
-    #     # Same spectrogram parameters as above
-    #     frequency_resolution: 15000
-    #     fractional_overlap: 0.
-    #     window:
-    #         - dpss
-    #         - 3.87638403 # enbw/resolution ≈ 2
-    #     frequency_bin_averaging: 12
+    spectrogram_histogram:
+        # Same spectrogram parameters as above
+        frequency_resolution: 15000
+        fractional_overlap: 0.
+        window:
+            - dpss
+            - 3.87638403 # enbw/resolution ≈ 2
+        frequency_bin_averaging: 12
 
-    #     # Same power bin parameters as channel_power_histogram
-    #     power_low: -150
-    #     power_high: 0
-    #     power_resolution: 0.1
+        # Same power bin parameters as channel_power_histogram
+        power_low: -150
+        power_high: 0
+        power_resolution: 0.1
 
-    # channel_power_time_series:
-    #     # time bin size
-    #     detector_period: 0.5e-3
+    channel_power_time_series:
+        # time bin size
+        detector_period: 0.5e-3
 
-    #     # list of statistics to evaluate in each detector time bin:
-    #     # 'min', 'max' (or equivalent 'peak'), 'mean' (or equivalent 'rms'), or a quantile number
-    #     power_detectors:
-    #     - rms
-    #     - peak
-
-    # power_time_series:
-    #     detector_period: 0.01
-    #     power_detectors:
-    #     - rms
-    #     - peak
-
-    # cellular_cyclic_autocorrelation:
-    #     subcarrier_spacings:
-    #     - 15e3
-    #     - 30e3
-    #     - 60e3
-    #     frame_limit: 1
-    #     normalize: true
+        # list of statistics to evaluate in each detector time bin:
+        # 'min', 'max' (or equivalent 'peak'), 'mean' (or equivalent 'rms'), or a quantile number
+        power_detectors:
+        - rms
+        - peak
 
     # iq_waveform:
     #     start_time_sec: 0

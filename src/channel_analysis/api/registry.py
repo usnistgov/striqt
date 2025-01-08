@@ -45,11 +45,7 @@ def _results_as_arrays(
 ):
     """convert an array, or a container of arrays, into a numpy array (or container of numpy arrays)"""
 
-    if isinstance(obj, (tuple, list)):
-        return [_results_as_arrays(item) for item in obj]
-    elif isinstance(obj, dict):
-        return [_results_as_arrays(item) for item in obj.values()]
-    elif array_api_compat.is_torch_array(obj):
+    if array_api_compat.is_torch_array(obj):
         array = obj.cpu()
     elif array_api_compat.is_cupy_array(obj):
         array = obj.get()
