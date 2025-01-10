@@ -15,7 +15,6 @@ from channel_analysis.api.structs import (
     ChannelAnalysis,  # noqa: F401
     struct_to_builtins,  # noqa: F401
     builtins_to_struct,  # noqa: F401
-    copy_struct,  # noqa: F401
 )
 
 if typing.TYPE_CHECKING:

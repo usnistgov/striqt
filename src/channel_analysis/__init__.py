@@ -10,7 +10,6 @@ from .api.structs import (
     FilteredCapture,
     struct_to_builtins,
     builtins_to_struct,
-    copy_struct,
 )
 from .api.registry import analyze_by_spec
 

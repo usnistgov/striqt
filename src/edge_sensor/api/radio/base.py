@@ -433,7 +433,7 @@ class RadioDevice(lb.Device):
                 with lb.stopwatch('resample and calibrate', logger_level='debug'):
                     iq = iq_corrections.resampling_correction(iq, capture, self)
 
-            acquired_capture = structs.copy_struct(
+            acquired_capture = msgspec.structs.replace(
                 capture, start_time=pd.Timestamp(time_ns, unit='ns')
             )
             return iq, acquired_capture
