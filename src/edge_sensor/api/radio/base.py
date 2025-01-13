@@ -149,12 +149,12 @@ class RadioDevice(lb.Device):
                     f'duration {capture.duration} is not an integer multiple of sample period'
                 )
 
-            if method_attr._first_if_not_unique(capture.channel) != self.channel():
+            if method_attr._number_if_single(capture.channel) != self.channel():
                 self.channel(capture.channel)
             else:
                 invalidate_state = True
 
-            if method_attr._first_if_not_unique(capture.gain) != self.gain():
+            if method_attr._number_if_single(capture.gain) != self.gain():
                 self.gain(capture.gain)
 
             fs_backend, lo_offset, analysis_filter = design_capture_filter(

@@ -13,17 +13,17 @@ ElementType = typing.TypeVar('ElementType')
 
 
 @functools.lru_cache()
-def _first_if_not_unique(seq):
+def _number_if_single(seq):
     if isinstance(seq, numbers.Number):
         return seq
-    elif len(frozenset(seq)) == 1:
+    elif len(seq) == 1:
         return seq[0]
     else:
         return seq
 
 
 @functools.lru_cache()
-def _validate_tuple_numbers(type_, values: numbers.Number | tuple, min, max, step):
+def _validate_tuple_numbers(type_, values: numbers.Number | tuple, min, max, step, allow_duplicates=True):
     """return a sorted unique tuple of 0-indexed channel ports, or raise a ValueError"""
 
     if isinstance(values, (bytes, str, bool, numbers.Number)):
@@ -48,7 +48,10 @@ def _validate_tuple_numbers(type_, values: numbers.Number | tuple, min, max, ste
 
         ret.append(type_(value))
 
-    return _first_if_not_unique(tuple(ret))
+    if not allow_duplicates and len(frozenset(ret)) != len(ret):
+        raise ValueError('duplicate values are not allowed')
+
+    return _number_if_single(tuple(ret))
 
 
 class BoundedNumberMaybeTupleMethod(
@@ -59,13 +62,14 @@ class BoundedNumberMaybeTupleMethod(
     min: ElementType = None
     max: ElementType = None
     step: ElementType = None
+    allow_duplicates: bool = True
 
     def validate(self, obj: ElementType | tuple[ElementType, ...], owner=None):
         if hasattr(obj, '__len__'):
             obj = tuple(obj)
 
         return _validate_tuple_numbers(
-            self.contained_type, obj, self.min, self.max, self.step
+            self.contained_type, obj, self.min, self.max, self.step, self.allow_duplicates
         )
 
     def to_pythonic(self, values: tuple[int, ...]):
@@ -82,6 +86,7 @@ class IntMaybeTupleMethod(BoundedNumberMaybeTupleMethod[tuple[int, ...]]):
 
 class ChannelMaybeTupleMethod(IntMaybeTupleMethod):
     min: int = 0
+    allow_duplicates: bool = False
 
     def validate(self, obj: int | tuple[int, ...], owner=None):
         if self.max is None and owner is not None:
@@ -93,5 +98,5 @@ class ChannelMaybeTupleMethod(IntMaybeTupleMethod):
             obj = tuple(obj)
 
         return _validate_tuple_numbers(
-            self.contained_type, obj, self.min, max_, self.step
+            self.contained_type, obj, self.min, max_, self.step, self.allow_duplicates
         )
