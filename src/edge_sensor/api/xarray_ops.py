@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import functools
+import msgspec
 import numbers
 import pickle
 import typing
@@ -124,6 +125,24 @@ def _get_alias_dtypes(output: structs.Output):
         alias_dtypes[field] = np.array(list(entries.keys())).dtype
     return alias_dtypes
 
+@functools.lru_cache
+def get_attrs(struct: type[msgspec.Struct], field: str) -> dict[str, str]:
+    """get an attrs dict for xarray based on Annotated type hints with `meta`"""
+    hints = typing.get_type_hints(struct, include_extras=True)
+
+    try:
+        metas = hints[field].__metadata__
+    except (AttributeError, KeyError):
+        return {}
+
+    if len(metas) == 0:
+        return {}
+    elif len(metas) == 1 and isinstance(metas[0], msgspec.Meta):
+        return metas[0].extra
+    else:
+        raise TypeError(
+            'Annotated[] type hints must contain exactly one msgspec.Meta object'
+        )
 
 def build_coords(
     capture: structs.RadioCapture, output: structs.Output, radio_id: str, sweep_time

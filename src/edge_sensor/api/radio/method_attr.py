@@ -12,8 +12,20 @@ import labbench as lb
 ElementType = typing.TypeVar('ElementType')
 
 
+@typing.overload
+def _number_if_single(seq: ElementType) -> ElementType:
+    pass
+
+@typing.overload
+def _number_if_single(seq: tuple[ElementType]) -> ElementType:
+    pass
+
+@typing.overload
+def _number_if_single(seq: tuple[ElementType, ...]) -> tuple[ElementType]:
+    pass
+
 @functools.lru_cache()
-def _number_if_single(seq):
+def _number_if_single(seq: ElementType | tuple[ElementType, ...]):
     if isinstance(seq, numbers.Number):
         return seq
     elif len(seq) == 1:
