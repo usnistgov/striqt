@@ -23,7 +23,7 @@ def _first_if_not_unique(seq):
 
 
 @functools.lru_cache()
-def _validate_tuple_numbers(type_, values: numbers.Number|tuple, min, max, step):
+def _validate_tuple_numbers(type_, values: numbers.Number | tuple, min, max, step):
     """return a sorted unique tuple of 0-indexed channel ports, or raise a ValueError"""
 
     if isinstance(values, (bytes, str, bool, numbers.Number)):
