@@ -265,7 +265,7 @@ class RadioDevice(lb.Device):
             if 2 * (streamed_count + request_count) > samples.shape[1]:
                 # this should never happen if samples are tracked and allocated properly
                 raise MemoryError(
-                    f'about to request {request_count} samples, but buffer has capacity for only {samples.size//2 - streamed_count}'
+                    f'about to request {request_count} samples, but buffer has capacity for only {samples.size // 2 - streamed_count}'
                 )
 
             # Read the samples from the data buffer
@@ -283,7 +283,7 @@ class RadioDevice(lb.Device):
                     f'requested {min(chunk_size, remaining)} samples, but got {remaining}'
                 )
                 raise MemoryError(
-                    f'overfilled receive buffer by {2*(this_count + streamed_count) - samples.size}'
+                    f'overfilled receive buffer by {2 * (this_count + streamed_count) - samples.size}'
                 )
 
             if buf_time_ns is None:
@@ -312,7 +312,7 @@ class RadioDevice(lb.Device):
         self._next_time_ns = start_ns + round(1e9 * capture.duration)
 
         self._logger.debug(
-            f'total acquisition duration: {(sample_offs + sample_count)/fs:0.3f} s'
+            f'total acquisition duration: {(sample_offs + sample_count) / fs:0.3f} s'
         )
 
         return samples, start_ns
@@ -467,7 +467,7 @@ def _design_capture_filter(
         raise ValueError('lo_shift requires host_resample=True')
     elif base_clock_rate < capture.sample_rate:
         raise ValueError(
-            f'upsampling above {base_clock_rate/1e6:f} MHz requires host_resample=True'
+            f'upsampling above {base_clock_rate / 1e6:f} MHz requires host_resample=True'
         )
     else:
         # use the SDR firmware to implement the desired sample rate

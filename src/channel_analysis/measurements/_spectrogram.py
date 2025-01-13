@@ -158,7 +158,7 @@ def _do_spectrogram(
         'frequency_resolution': frequency_resolution,
         'fractional_overlap': fractional_overlap,
         'noise_bandwidth': enbw,
-        'units': f'dBm/{enbw/1e3:0.0f} kHz',
+        'units': f'dBm/{enbw / 1e3:0.0f} kHz',
     }
 
     return spg, metadata

@@ -60,7 +60,7 @@ class SpectrogramPowerBinCoords:
 
         enbw = frequency_resolution * equivalent_noise_bandwidth(window, nfft)
 
-        return bins, {'units': f'dBm/{enbw/1e3:0.0f} kHz'}
+        return bins, {'units': f'dBm/{enbw / 1e3:0.0f} kHz'}
 
 
 @dataclasses.dataclass

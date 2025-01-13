@@ -29,7 +29,7 @@ def summarize_sensor_performance(
     print(f'\tOIP3: {frontend.oip3_dBm:0.1f} dBm')
     print(f'\tIM3 overload level: {acp_max:0.1f} dBm')
     print(
-        f'\tAdjacent-channel rejection ratio (ACRR) @ overload: {acp_max-imd3_power_max:0.1f} dB'
+        f'\tAdjacent-channel rejection ratio (ACRR) @ overload: {acp_max - imd3_power_max:0.1f} dB'
     )
     print('Inside IF BW:')
     print(f'\tGain: {frontend.G_dB:0.1f} dB')

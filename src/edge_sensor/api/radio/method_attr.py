@@ -16,13 +16,16 @@ ElementType = typing.TypeVar('ElementType')
 def _number_if_single(seq: ElementType) -> ElementType:
     pass
 
+
 @typing.overload
 def _number_if_single(seq: tuple[ElementType]) -> ElementType:
     pass
 
+
 @typing.overload
 def _number_if_single(seq: tuple[ElementType, ...]) -> tuple[ElementType]:
     pass
+
 
 @functools.lru_cache()
 def _number_if_single(seq: ElementType | tuple[ElementType, ...]):

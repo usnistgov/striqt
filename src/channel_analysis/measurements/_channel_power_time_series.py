@@ -84,7 +84,7 @@ def channel_power_time_series(
 
     metadata = {
         'detector_period': detector_period,
-        'units': f'dBm/{(capture.analysis_bandwidth or capture.sample_rate)/1e6} MHz',
+        'units': f'dBm/{(capture.analysis_bandwidth or capture.sample_rate) / 1e6} MHz',
     }
 
     power = iqwaveform.powtodB(power).astype('float32')

@@ -130,7 +130,7 @@ def _describe_field(capture: structs.RadioCapture, name: str):
     elif attrs.get('units', None) is not None and np.isfinite(value):
         if isinstance(value, tuple):
             value_tup = [format_units(v, attrs['units']) for v in value]
-            value_str = f"({', '.join(value_tup)})"
+            value_str = f'({", ".join(value_tup)})'
         else:
             value_str = format_units(value, attrs['units'])
     else:

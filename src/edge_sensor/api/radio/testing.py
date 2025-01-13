@@ -171,7 +171,7 @@ class TDMSFileSource(NullSource):
         actual = self.center_frequency()
         if value != actual:
             self._logger.warning(
-                f'center frequency ignored, using {actual/1e6} MHz from file'
+                f'center frequency ignored, using {actual / 1e6} MHz from file'
             )
 
     def get_waveform(

@@ -62,6 +62,21 @@ SingleChannelType = Annotated[int, meta('Input port index', ge=0)]
 SingleGainType = Annotated[float, meta('Gain setting', 'dB')]
 
 
+@functools.lru_cache
+def _validate_multichannel(channel, gain):
+    """guarantee that self.gain is a number or matches the length of self.channel"""
+    if isinstance(channel, numbers.Number):
+        if isinstance(gain, tuple):
+            raise ValueError(
+                'gain must be a single number unless multiple channels are specified'
+            )
+    else:
+        if isinstance(gain, tuple) and len(gain) != len(channel):
+            raise ValueError(
+                'gain, when specified as a tuple, must match channel count'
+            )
+
+
 class RadioCapture(WaveformCapture, forbid_unknown_fields=True):
     """Capture specification for a single radio waveform"""
 
@@ -84,17 +99,7 @@ class RadioCapture(WaveformCapture, forbid_unknown_fields=True):
     )
 
     def __post_init__(self):
-        # guarantee that self.gain is a number or matches the length of self.channel
-        if isinstance(self.channel, numbers.Number):
-            if isinstance(self.gain, tuple):
-                raise ValueError(
-                    'gain must be a single number unless multiple channels are specified'
-                )
-        else:
-            if isinstance(self.gain, tuple) and len(self.gain) != len(self.channel):
-                raise ValueError(
-                    'gain, when specified as a tuple, must match channel count'
-                )
+        _validate_multichannel(self.channel, self.gain)
 
 
 class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):
@@ -151,23 +156,3 @@ class Sweep(msgspec.Struct, forbid_unknown_fields=True):
     channel_analysis: dict = msgspec.field(default_factory=_make_default_analysis)
     description: Description = msgspec.field(default_factory=Description)
     output: Output = msgspec.field(default_factory=Output)
-
-
-@functools.lru_cache
-def get_attrs(struct: type[msgspec.Struct], field: str) -> dict[str, str]:
-    """get an attrs dict for xarray based on Annotated type hints with `meta`"""
-    hints = typing.get_type_hints(struct, include_extras=True)
-
-    try:
-        metas = hints[field].__metadata__
-    except (AttributeError, KeyError):
-        return {}
-
-    if len(metas) == 0:
-        return {}
-    elif len(metas) == 1 and isinstance(metas[0], msgspec.Meta):
-        return metas[0].extra
-    else:
-        raise TypeError(
-            'Annotated[] type hints must contain exactly one msgspec.Meta object'
-        )

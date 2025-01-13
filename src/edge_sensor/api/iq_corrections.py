@@ -223,11 +223,11 @@ def lookup_power_correction(
             )
         elif capture_chan.center_frequency > sel.center_frequency.max():
             raise ValueError(
-                f'center_frequency {capture_chan.center_frequency/1e6} MHz exceeds calibration max {sel.center_frequency.max()/1e6} MHz'
+                f'center_frequency {capture_chan.center_frequency / 1e6} MHz exceeds calibration max {sel.center_frequency.max() / 1e6} MHz'
             )
         elif capture_chan.center_frequency < sel.center_frequency.min():
             raise ValueError(
-                f'center_frequency {capture_chan.center_frequency/1e6} MHz is below calibration min {sel.center_frequency.min()/1e6} MHz'
+                f'center_frequency {capture_chan.center_frequency / 1e6} MHz is below calibration min {sel.center_frequency.min() / 1e6} MHz'
             )
 
         # allow interpolation between sample points in these fields

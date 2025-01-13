@@ -245,7 +245,7 @@ class _ServerService(rpyc.Service, SweepController):
 
         with lb.stopwatch(
             f'obtaining calibration data {str(sweep.radio_setup.calibration)}',
-            threshold=10e-3
+            threshold=10e-3,
         ):
             calibration = rpyc.utils.classic.obtain(calibration)
 
