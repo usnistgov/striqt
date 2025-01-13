@@ -116,9 +116,7 @@ def channel_dataarray(
             else:
                 problem = f'expected {template_shape} from template, but factory gave {data_shape}'
                 name = f'{cls.__qualname__}.{entry.name}'
-                raise ValueError(
-                    f'unexpected {name} coordinate shape: {problem}'
-                )
+                raise ValueError(f'unexpected {name} coordinate shape: {problem}')
 
         da[entry.name].attrs.update(metadata)
 

@@ -7,7 +7,7 @@ import gzip
 from pathlib import Path
 
 from . import util
-from .captures import broadcast_to_channels
+from .captures import split_capture_channels
 from channel_analysis.api.util import pinned_array_as_cupy, free_mempool_on_low_memory
 
 from .radio import base, RadioDevice, design_capture_filter
@@ -189,17 +189,15 @@ def lookup_power_correction(
 
     power_scale = []
 
-    (gain,) = broadcast_to_channels(capture.channel, capture.gain)
-
-    for channel, gain in zip(capture.channel, gain):
+    for capture_chan in split_capture_channels(capture):
         # these fields must match the calibration conditions exactly
         exact_matches = dict(
-            channel=channel,
-            gain=gain,
-            lo_shift=capture.lo_shift,
-            sample_rate=capture.sample_rate,
-            analysis_bandwidth=capture.analysis_bandwidth or np.inf,
-            host_resample=capture.host_resample,
+            channel=capture_chan.channel,
+            gain=capture_chan.gain,
+            lo_shift=capture_chan.lo_shift,
+            sample_rate=capture_chan.sample_rate,
+            analysis_bandwidth=capture_chan.analysis_bandwidth or np.inf,
+            host_resample=capture_chan.host_resample,
         )
 
         try:
@@ -223,17 +221,17 @@ def lookup_power_correction(
             raise ValueError(
                 'no calibration data is available for this combination of sampling parameters'
             )
-        elif capture.center_frequency > sel.center_frequency.max():
+        elif capture_chan.center_frequency > sel.center_frequency.max():
             raise ValueError(
-                f'center_frequency {capture.center_frequency/1e6} MHz exceeds calibration max {sel.center_frequency.max()/1e6} MHz'
+                f'center_frequency {capture_chan.center_frequency/1e6} MHz exceeds calibration max {sel.center_frequency.max()/1e6} MHz'
             )
-        elif capture.center_frequency < sel.center_frequency.min():
+        elif capture_chan.center_frequency < sel.center_frequency.min():
             raise ValueError(
-                f'center_frequency {capture.center_frequency/1e6} MHz is below calibration min {sel.center_frequency.min()/1e6} MHz'
+                f'center_frequency {capture_chan.center_frequency/1e6} MHz is below calibration min {sel.center_frequency.min()/1e6} MHz'
             )
 
         # allow interpolation between sample points in these fields
-        sel = sel.interp(center_frequency=capture.center_frequency)
+        sel = sel.interp(center_frequency=capture_chan.center_frequency)
 
         power_scale.append(float(sel))
 

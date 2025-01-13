@@ -1,12 +1,12 @@
 """Fake radios for testing"""
 
+import functools
+import numbers
 import typing
 
 from . import base
 from .null import NullSource
-from ..util import import_cupy_with_fallback
 
-import functools
 import labbench as lb
 from labbench import paramattr as attr
 
@@ -34,7 +34,11 @@ class TestSource(NullSource):
     def _read_stream(
         self, buffers, offset, count, timeout_sec=None, *, on_overflow='except'
     ) -> tuple[int, int]:
-        for channel, buf in zip(self.channel(), buffers):
+        channels = self.channel()
+        if isinstance(channels, numbers.Number):
+            channels = (channels,)
+
+        for channel, buf in zip(channels, buffers):
             values = self.get_waveform(
                 count,
                 self._samples_elapsed,

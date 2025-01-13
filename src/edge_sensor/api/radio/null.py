@@ -3,9 +3,9 @@ import typing
 import labbench as lb
 from labbench import paramattr as attr
 
-from . import base
+from . import base, method_attr
 from .. import structs
-from ..util import import_cupy_with_fallback, lazy_import
+from ..util import lazy_import
 
 if typing.TYPE_CHECKING:
     import pandas as pd
@@ -28,7 +28,7 @@ class NullSource(base.RadioDevice):
     _transient_holdoff_time: float = attr.value.float(0.0, sets=True, inherit=True)
     rx_channel_count: int = attr.value.int(2, cache=True, help='number of input ports')
 
-    @base.ChannelTupleMethod(inherit=True)
+    @method_attr.ChannelMaybeTupleMethod(inherit=True)
     def channel(self):
         # return none until this is set, then the cached value is returned
         return tuple()
@@ -112,7 +112,7 @@ class NullSource(base.RadioDevice):
         if setup._rx_channel_count is not None:
             self.rx_channel_count = setup._rx_channel_count
 
-    @base.FloatTupleMethod(inherit=True)
+    @method_attr.FloatMaybeTupleMethod(inherit=True)
     def gain(self):
         return self.backend.setdefault('gain', 0)
 

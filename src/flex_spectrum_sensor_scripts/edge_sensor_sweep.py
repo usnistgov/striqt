@@ -42,5 +42,6 @@ def run(**kws):
     finally:
         store.close()
 
+
 if __name__ == '__main__':
     run()

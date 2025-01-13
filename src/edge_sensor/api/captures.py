@@ -4,12 +4,12 @@ from __future__ import annotations
 import dataclasses
 import functools
 import msgspec
+import numbers
 import pickle
 import typing
 
 from . import iq_corrections, structs, util
 from . import radio
-
 
 if typing.TYPE_CHECKING:
     import labbench as lb
@@ -88,35 +88,6 @@ def concat_time_dim(datasets: list['xr.Dataset'], time_dim: str) -> 'xr.Dataset'
         ds[coord_name] = pd.RangeIndex(ds.sizes[coord_name]) * time_step
 
     return ds
-
-
-@functools.lru_cache(10000)
-def broadcast_to_channels(
-    channels: tuple[int, ...], *params, allow_mismatch=False
-) -> list[list]:
-    """broadcast sequences of length 1 up to the length of capture.channel"""
-
-    res = []
-    for p in params:
-        if not isinstance(p, (tuple, list)):
-            res.append(
-                [
-                    p,
-                ]
-                * len(channels)
-            )
-        elif len(p) == 1:
-            res.append(list(p) * len(channels))
-        elif len(p) == len(channels):
-            res.append(list(p))
-        elif allow_mismatch:
-            res.append(list(p[:1]) * len(channels))
-        else:
-            raise ValueError(
-                f'cannot broadcast tuple of length {len(p)} to channel count {len(channels)}'
-            )
-
-    return res
 
 
 def describe_capture(
@@ -212,7 +183,7 @@ def _get_capture_field(
     alias_hits: dict,
     sweep_time=None,
 ):
-    if len(capture.channel) > 1:
+    if isinstance(capture.channel, tuple):
         raise ValueError('split the capture before the call to _get_capture_field')
 
     # aliases = output.coord_aliases
@@ -245,13 +216,46 @@ def _get_alias_dtypes(output: structs.Output):
     return alias_dtypes
 
 
+@functools.lru_cache(10000)
+def broadcast_to_channels(
+    channels: int | tuple[int, ...], *params, allow_mismatch=False
+) -> list[list]:
+    """broadcast sequences in each element in `params` up to the
+    length of capture.channel.
+    """
+
+    res = []
+    if isinstance(channels, numbers.Number):
+        count = 1
+    else:
+        count = len(channels)
+
+    for p in params:
+        if not isinstance(p, (tuple, list)):
+            res.append((p,) * count)
+        elif len(p) == count:
+            res.append(tuple(p))
+        elif allow_mismatch:
+            res.append(tuple(p[:1]) * count)
+        else:
+            raise ValueError(
+                f'cannot broadcast tuple of length {len(p)} to {count} channels'
+            )
+
+    return res
+
+
 def build_coords(
     capture: structs.RadioCapture, output: structs.Output, radio_id: str, sweep_time
 ):
     alias_dtypes = _get_alias_dtypes(output)
-    coords = coord_template(type(capture), tuple(capture.channel), **alias_dtypes).copy(
-        deep=True
-    )
+
+    if isinstance(capture.channel, numbers.Number):
+        channels = (capture.channel,)
+    else:
+        channels = tuple(capture.channel)
+
+    coords = coord_template(type(capture), channels, **alias_dtypes).copy(deep=True)
 
     updates = {}
 
@@ -308,7 +312,7 @@ def _assign_alias_coords(capture_data: 'xr.Dataset', aliases):
 def _match_capture_fields(
     capture: structs.RadioCapture, fields: dict[str], radio_id: str
 ):
-    if len(capture.channel) > 1:
+    if isinstance(capture.channel, tuple):
         raise ValueError('split the capture to evaluate alias matches')
 
     for name, value in fields.items():
@@ -347,25 +351,26 @@ def _evaluate_aliases(
 
 @functools.lru_cache()
 def split_capture_channels(capture: structs.RadioCapture) -> list[structs.RadioCapture]:
-    """split each channel in a capture into a separate capture as if were acquired separately"""
+    """split a multi-channel capture into a list of single-channel captures.
 
-    capture_map = channel_analysis.struct_to_builtins(capture)
+    If capture is not a multi-channel capture (its channel field is just a number),
+    then the returned list will be [capture].
+    """
 
-    def match_capture_tuples(k, v):
-        if isinstance(capture_map[k], tuple):
-            return (v,)
-        else:
-            return v
+    if isinstance(capture.channel, numbers.Number):
+        return [capture]
 
-    broadcast_values = broadcast_to_channels(capture.channel, *capture_map.values())
-    broadcast_map = dict(zip(capture_map.keys(), broadcast_values))
+    remaps = [dict() for i in range(len(capture.channel))]
 
-    result = []
-    for i in range(len(capture.channel)):
-        mapping = {k: match_capture_tuples(k, v[i]) for k, v in broadcast_map.items()}
-        result.append(msgspec.convert(mapping, type=type(capture)))
+    for field in capture.__struct_fields__:
+        values = getattr(capture, field)
+        if not isinstance(values, tuple):
+            continue
 
-    return result
+        for remap, value in zip(remaps, values):
+            remap[field] = value
+
+    return [msgspec.structs.replace(capture, **remap) for remap in remaps]
 
 
 def capture_fields_with_aliases(

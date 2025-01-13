@@ -3,8 +3,9 @@
 from __future__ import annotations
 import functools
 import msgspec
+import numbers
 import typing
-from typing import Annotated, Optional, Literal, Any
+from typing import Annotated, Optional, Literal, Any, Union
 
 from . import util
 
@@ -66,10 +67,14 @@ class RadioCapture(WaveformCapture, forbid_unknown_fields=True):
 
     # RF and leveling
     center_frequency: Annotated[float, meta('RF center frequency', 'Hz', gt=0)] = 3710e6
-    channel: Annotated[tuple[SingleChannelType, ...], meta('Input port indices')] = (0,)
+    channel: Annotated[
+        Union[SingleChannelType, tuple[SingleChannelType, ...]],
+        meta('Input port indices'),
+    ] = 0
     gain: Annotated[
-        tuple[SingleGainType, ...], meta('Gain setting for each channel', 'dB')
-    ] = (-10,)
+        Union[SingleGainType, tuple[SingleGainType, ...]],
+        meta('Gain setting for each channel', 'dB'),
+    ] = -10
 
     delay: Optional[
         Annotated[float, meta('Delay in acquisition start time', 's', gt=0)]
@@ -77,6 +82,19 @@ class RadioCapture(WaveformCapture, forbid_unknown_fields=True):
     start_time: Optional[Annotated['pd.Timestamp', meta('Acquisition start time')]] = (
         None
     )
+
+    def __post_init__(self):
+        # guarantee that self.gain is a number or matches the length of self.channel
+        if isinstance(self.channel, numbers.Number):
+            if isinstance(self.gain, tuple):
+                raise ValueError(
+                    'gain must be a single number unless multiple channels are specified'
+                )
+        else:
+            if isinstance(self.gain, tuple) and len(self.gain) != len(self.channel):
+                raise ValueError(
+                    'gain, when specified as a tuple, must match channel count'
+                )
 
 
 class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):

@@ -1,7 +1,6 @@
 from __future__ import annotations
 import functools
 from math import ceil
-import numbers
 import typing
 
 import labbench as lb
@@ -10,6 +9,7 @@ import msgspec
 import numpy as np
 
 from .. import structs, util
+from . import method_attr
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -17,84 +17,6 @@ if typing.TYPE_CHECKING:
 else:
     iqwaveform = util.lazy_import('iqwaveform')
     pd = util.lazy_import('pandas')
-
-
-ElementType = typing.TypeVar('ElementType')
-
-
-@functools.lru_cache()
-def _validate_tuple_elements(type_, values: tuple, min, max, step):
-    """return a sorted unique tuple of 0-indexed channel ports, or raise a ValueError"""
-
-    if values is None:
-        return tuple()
-    elif isinstance(values, (bytes, str, bool, numbers.Number)):
-        return (int(values),)
-
-    ret = []
-
-    for value in values:
-        if not isinstance(value, (bytes, str, bool, numbers.Number)):
-            raise ValueError(
-                f"a '{ChannelTupleMethod.__qualname__}' attribute supports only numerical, str, or bytes types"
-            )
-
-        if max is not None and value > max:
-            raise ValueError(f'{value} is greater than the max limit {max}')
-
-        if min is not None and value < min:
-            raise ValueError(f'{value} is less than the min limit {min}')
-
-        if step is not None:
-            value = value - (value % step)
-
-        ret.append(type_(value))
-
-    return tuple(sorted(set(ret)))
-
-
-class BoundedNumberTupleMethod(lb.paramattr.method.Method, lb.paramattr._types.Tuple):
-    contained_type: ElementType = object
-    sets: bool = True
-    min: ElementType = None
-    max: ElementType = None
-    step: ElementType = None
-
-    def validate(self, values: tuple[ElementType, ...], owner=None):
-        if hasattr(values, '__len__'):
-            values = tuple(values)
-
-        return _validate_tuple_elements(
-            self.contained_type, values, self.min, self.max, self.step
-        )
-
-    def to_pythonic(self, values: tuple[int, ...]):
-        return self.validate(values)
-
-
-class IntTupleMethod(BoundedNumberTupleMethod[tuple[int, ...]]):
-    contained_type: ElementType = int
-
-
-class FloatTupleMethod(BoundedNumberTupleMethod[tuple[float, ...]]):
-    contained_type: ElementType = float
-
-
-class ChannelTupleMethod(IntTupleMethod):
-    min: int = 0
-
-    def validate(self, values: tuple[int, ...], owner=None):
-        if self.max is None and owner is not None:
-            max_ = owner.rx_channel_count - 1
-        else:
-            max_ = None
-
-        if hasattr(values, '__len__'):
-            values = tuple(values)
-
-        return _validate_tuple_elements(
-            self.contained_type, values, self.min, max_, self.step
-        )
 
 
 class RadioDevice(lb.Device):
@@ -144,13 +66,13 @@ class RadioDevice(lb.Device):
     _downsample = attr.value.float(1.0, min=0, help='backend_sample_rate/sample_rate')
 
     # these must be implemented by child classes
-    channel = ChannelTupleMethod(
+    channel = method_attr.ChannelMaybeTupleMethod(
         cache=True,
         contained_type=int,
         min=0,
         help='list of RX channel port indexes to acquire',
     )
-    gain = FloatTupleMethod(
+    gain = method_attr.FloatMaybeTupleMethod(
         label='dB', help='receive gain for each channel in hardware'
     )
     center_frequency = attr.method.float(
@@ -197,7 +119,7 @@ class RadioDevice(lb.Device):
     def setup(self, radio_config: structs.RadioSetup):
         """disarm acquisition and apply the given radio setup"""
 
-        if len(self.channel()) != 0:
+        if self.channel() != ():
             self.rx_enabled(False)
 
         self.calibration = radio_config.calibration
@@ -215,7 +137,7 @@ class RadioDevice(lb.Device):
         with lb.stopwatch('arm', logger_level='debug'):
             invalidate_state = False
 
-            if len(self.channel()) != 0:
+            if self.channel() != ():
                 invalidate_state = True
 
             if iqwaveform.power_analysis.isroundmod(
@@ -227,12 +149,12 @@ class RadioDevice(lb.Device):
                     f'duration {capture.duration} is not an integer multiple of sample period'
                 )
 
-            if capture.channel != self.channel():
+            if method_attr._first_if_not_unique(capture.channel) != self.channel():
                 self.channel(capture.channel)
             else:
                 invalidate_state = True
 
-            if self.gain() != capture.gain:
+            if method_attr._first_if_not_unique(capture.gain) != self.gain():
                 self.gain(capture.gain)
 
             fs_backend, lo_offset, analysis_filter = design_capture_filter(
@@ -298,7 +220,7 @@ class RadioDevice(lb.Device):
         buf_time_ns = self._next_time_ns
         start_ns = self._next_time_ns
 
-        if len(self.channel()) == 0:
+        if self.channel() == ():
             raise AttributeError(
                 f'call {type(self).__qualname__}.channel() first to select an acquisition channel'
             )
@@ -452,7 +374,7 @@ class RadioDevice(lb.Device):
     ) -> structs.RadioCapture | None:
         """generate the currently armed capture configuration for the specified channel"""
 
-        if len(self.channel()) == 0:
+        if self.channel() == ():
             return None
 
         if self.lo_offset == 0:
