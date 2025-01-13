@@ -263,7 +263,7 @@ class SoapyRadioDevice(base.RadioDevice):
         if isinstance(channels, numbers.Number):
             channels = (channels,)
         values = [self.backend.getGain(SoapySDR.SOAPY_SDR_RX, c) for c in channels]
-        return base._first_if_not_unique(tuple(values))
+        return method_attr._number_if_single(tuple(values))
 
     @gain.setter
     @_verify_channel_for_setter
@@ -294,7 +294,7 @@ class SoapyRadioDevice(base.RadioDevice):
 
         if self.resource:
             # prevent race conditions in threaded accesses to the Soapy driver
-            self.backend = _SoapySDRDevice(self.resource)
+            self.backend = _SoapySDRDevice(dict(self.resource))
         else:
             self.backend = _SoapySDRDevice()
 

@@ -23,7 +23,9 @@ def _number_if_single(seq):
 
 
 @functools.lru_cache()
-def _validate_tuple_numbers(type_, values: numbers.Number | tuple, min, max, step, allow_duplicates=True):
+def _validate_tuple_numbers(
+    type_, values: numbers.Number | tuple, min, max, step, allow_duplicates=True
+):
     """return a sorted unique tuple of 0-indexed channel ports, or raise a ValueError"""
 
     if isinstance(values, (bytes, str, bool, numbers.Number)):
@@ -69,7 +71,12 @@ class BoundedNumberMaybeTupleMethod(
             obj = tuple(obj)
 
         return _validate_tuple_numbers(
-            self.contained_type, obj, self.min, self.max, self.step, self.allow_duplicates
+            self.contained_type,
+            obj,
+            self.min,
+            self.max,
+            self.step,
+            self.allow_duplicates,
         )
 
     def to_pythonic(self, values: tuple[int, ...]):

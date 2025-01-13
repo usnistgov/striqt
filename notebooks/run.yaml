@@ -2,6 +2,7 @@ description:
   summary: Description of the conditions under test
 
 radio_setup:
+  driver: Air7201B
   time_source: internal
   periodic_trigger: 10e-3
   calibration: cal.p

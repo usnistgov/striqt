@@ -13,8 +13,6 @@ dependencies:
   # eventual support for real-time HUD
   - pyside6
   - pyqtgraph    
-  # nvidia profiling
-  - nsight-compute
   - pip:
     - https://archive.deepwavedigital.com/pycuda/pycuda-2020.1-cp39-cp39-linux_aarch64.whl
     - https://archive.deepwavedigital.com/pytools/pytools-2022.1.12-py2.py3-none-any.whl

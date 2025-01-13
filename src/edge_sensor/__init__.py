@@ -4,7 +4,6 @@
 # packaging quirk on jetson aarch64
 from .api import iq_corrections, structs, util
 
-from .api.captures import CAPTURE_DIM, concat_time_dim
 from .api.controller import connect, start_server, SweepController
 from .api.io import load, dump, open_store, read_yaml_sweep
 from .api.iq_corrections import read_calibration_corrections
@@ -15,6 +14,7 @@ from .api.radio import (
 )
 from .api.structs import RadioCapture, RadioSetup, Sweep, Description
 from .api.sweeps import iter_sweep, iter_callbacks
+from .api.xarray_ops import CAPTURE_DIM, concat_time_dim
 
 from . import radios
 

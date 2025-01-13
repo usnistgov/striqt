@@ -9,7 +9,7 @@ channel_kwarg = attr.method_kwarg.int('channel', min=0, help='hardware port numb
 
 
 class Air7x01B(SoapyRadioDevice):
-    resource = attr.value.dict(default={}, inherit=True)
+    resource = attr.value.dict({}, inherit=True)
 
     # adjust bounds based on the hardware
     lo_offset = attr.value.float(0.0, min=-125e6, max=125e6, inherit=True)

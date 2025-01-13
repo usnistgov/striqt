@@ -5,7 +5,7 @@ import itertools
 
 import msgspec
 
-from . import captures, util
+from . import captures, util, xarray_ops
 
 from .radio import RadioDevice, NullSource, find_radio_cls_by_name
 from . import structs
@@ -115,7 +115,7 @@ def iter_sweep(
         **structs.struct_to_builtins(sweep.description),
     }
 
-    analyze = captures.ChannelAnalysisWrapper(
+    analyze = xarray_ops.ChannelAnalysisWrapper(
         radio=radio,
         sweep=sweep,
         analysis_spec=sweep.channel_analysis,
@@ -327,7 +327,7 @@ def iter_callbacks(
 
         if isinstance(data, xr.Dataset):
             ext_dataarrays = {
-                k: xr.DataArray(v).expand_dims(captures.CAPTURE_DIM)
+                k: xr.DataArray(v).expand_dims(xarray_ops.CAPTURE_DIM)
                 for k, v in ext_data.items()
             }
             last_data = data.assign(ext_dataarrays)

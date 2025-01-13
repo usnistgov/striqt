@@ -38,7 +38,6 @@ dependencies:
 - numba~=0.56.0
 - pyside6
 - pyqtgraph
-- nsight-compute
 - pip:
   - iqwaveform @ git+https://github.com/usnistgov/iqwaveform
   - xarray_dataclasses @ git+https://github.com/dgkuester/xarray-dataclasses@lazy-imports
