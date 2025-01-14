@@ -8,6 +8,7 @@ from pathlib import Path
 
 from . import util
 from .captures import split_capture_channels
+import channel_analysis
 from channel_analysis.api.util import pinned_array_as_cupy, free_mempool_on_low_memory
 
 from .radio import base, RadioDevice, design_capture_filter
@@ -283,7 +284,7 @@ def resampling_correction(
 
     if not base.needs_stft(analysis_filter, capture):
         # no filtering or resampling needed
-        iq = iq[: round(capture.duration * capture.sample_rate)]
+        iq = iq[:, :round(capture.duration * capture.sample_rate)]
         if power_scale is not None:
             iq *= np.sqrt(power_scale)
         return iq

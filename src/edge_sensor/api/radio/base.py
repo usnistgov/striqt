@@ -246,7 +246,7 @@ class RadioDevice(lb.Device):
             samples[:, :holdover_count] = self._holdover_samples.view(samples.dtype)
 
         # default holdoffs parameters, valid when we already have a clock reading
-        stft_pad, _ = _get_stft_padding(self.base_clock_rate, capture)
+        stft_pad = _get_stft_padding(self.base_clock_rate, capture)[0]
         holdoff_size = stft_pad
 
         fs = self.backend_sample_rate()
@@ -265,7 +265,7 @@ class RadioDevice(lb.Device):
             if 2 * (streamed_count + request_count) > samples.shape[1]:
                 # this should never happen if samples are tracked and allocated properly
                 raise MemoryError(
-                    f'about to request {request_count} samples, but buffer has capacity for only {samples.size // 2 - streamed_count}'
+                    f'request may exceed {streamed_count + request_count} samples, exceeding buffer capacity for {samples.size // 2 - streamed_count}'
                 )
 
             # Read the samples from the data buffer
@@ -279,9 +279,6 @@ class RadioDevice(lb.Device):
 
             if 2 * (this_count + streamed_count) > samples.shape[1]:
                 # this should never happen
-                print(
-                    f'requested {min(chunk_size, remaining)} samples, but got {remaining}'
-                )
                 raise MemoryError(
                     f'overfilled receive buffer by {2 * (this_count + streamed_count) - samples.size}'
                 )
@@ -295,7 +292,7 @@ class RadioDevice(lb.Device):
                 holdoff_size = find_trigger_holdoff(
                     self, buf_time_ns, stft_pad=stft_pad
                 )
-                remaining = remaining + holdoff_size
+                remaining = remaining + holdoff_size - stft_pad
 
                 start_ns = buf_time_ns + round(holdoff_size * 1e9 / fs)
                 awaiting_timestamp = False
@@ -400,22 +397,19 @@ class RadioDevice(lb.Device):
 
 def find_trigger_holdoff(radio: RadioDevice, start_time_ns: int, stft_pad: int = 0):
     sample_rate = radio.backend_sample_rate()
-    periodic_trigger = radio.periodic_trigger
+    min_holdoff = round(radio._transient_holdoff_time * sample_rate) + stft_pad
 
+    periodic_trigger = radio.periodic_trigger
     if periodic_trigger in (0, None):
-        return 0
+        return min_holdoff
 
     periodic_trigger_ns = round(periodic_trigger * 1e9)
 
     # float rounding errors cause problems here; evaluate based on the 1-ns resolution
     excess_time_ns = start_time_ns % periodic_trigger_ns
     holdoff_ns = (periodic_trigger_ns - excess_time_ns) % periodic_trigger_ns
-
     holdoff = round(holdoff_ns / 1e9 * sample_rate)
-
-    # wait long enough to meet the fulfill the radio's transient time and any
-    # needed stft padding samples
-    min_holdoff = round(radio._transient_holdoff_time * sample_rate) + stft_pad
+    
     if holdoff < min_holdoff:
         periodic_trigger_samples = round(periodic_trigger * sample_rate)
         holdoff += (
@@ -491,11 +485,10 @@ def design_capture_filter(
 
 
 def needs_stft(analysis_filter: dict, capture: structs.RadioCapture):
+    if np.isfinite(capture.analysis_bandwidth):
+        return True
     is_resample = analysis_filter['nfft'] != analysis_filter['nfft_out']
-    return analysis_filter and (
-        np.isfinite(capture.analysis_bandwidth)
-        or (is_resample and capture.host_resample)
-    )
+    return is_resample and capture.host_resample
 
 
 @functools.lru_cache(30000)
@@ -539,7 +532,7 @@ def _get_input_buffer_count_cached(
     else:
         sample_rate = capture.sample_rate
 
-    if capture.host_resample and needs_stft(analysis_filter, capture):
+    if needs_stft(analysis_filter, capture):
         nfft = analysis_filter['nfft']
         pad_before, pad_after = _get_stft_padding(base_clock_rate, capture)
         min_samples_in = ceil(samples_out * nfft / analysis_filter['nfft_out'])
@@ -605,11 +598,14 @@ def alloc_empty_iq(
         from numpy import empty
 
     # fast reinterpretation to complex64 requires the waveform to be in the last axis
-    samples = empty((len(radio.channel()), 2 * count), dtype=np.float32)
+    channels = radio.channel()
+    if not isinstance(channels, tuple):
+        channels = (channels,)
+    samples = empty((len(channels), 2 * count), dtype=np.float32)
 
     # build the list of channel buffers, including references to the throwaway
     # in case of radio._stream_all_rx_channels
-    if radio._stream_all_rx_channels and len(radio.channel()) != radio.rx_channel_count:
+    if radio._stream_all_rx_channels and len(channels) != radio.rx_channel_count:
         # a throwaway buffer for samples that won't be returned
         extra = np.empty(2 * count, dtype=samples.dtype)
     else:
@@ -618,7 +614,7 @@ def alloc_empty_iq(
     buffers = []
     i = 0
     for channel in range(radio.rx_channel_count):
-        if channel in radio.channel():
+        if channel in channels:
             buffers.append(samples[i, :])
             i += 1
         elif radio._stream_all_rx_channels:

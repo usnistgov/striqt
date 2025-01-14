@@ -20,7 +20,7 @@ class Air7x01B(SoapyRadioDevice):
     rx_channel_count = attr.value.int(2, inherit=True)
 
     # this was set based on gain setting sweep tests
-    _transient_holdoff_time = attr.value.float(2e-3, inherit=True)
+    _transient_holdoff_time = attr.value.float(10e-3, inherit=True)
 
     # stream setup and teardown for channel configuration are slow;
     # instead, stream all RX channels

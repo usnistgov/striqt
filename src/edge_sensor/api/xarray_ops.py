@@ -89,7 +89,7 @@ def coord_template(
             (CAPTURE_DIM,),
             broadcast_defaults(entry, allow_mismatch=True),
             fastpath=True,
-            attrs=structs.get_attrs(capture_cls, field),
+            attrs=get_attrs(capture_cls, field),
         )
 
     for field, dtype in alias_dtypes.items():

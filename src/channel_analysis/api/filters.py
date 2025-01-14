@@ -83,6 +83,7 @@ def iir_filter(
     passband_ripple: float | int,
     stopband_attenuation: float | int,
     transition_bandwidth: float | int,
+    axis=0,
     out=None,
 ):
     filter_kws = select_parameter_kws(locals())
@@ -94,10 +95,10 @@ def iir_filter(
         from . import cuda_kernels
 
         sos = xp.asarray(sos)
-        return cuda_kernels.sosfilt(sos.astype('float32'), iq)
+        return cuda_kernels.sosfilt(sos.astype('float32'), iq, axis=axis)
 
     else:
-        return scipy.signal.sosfilt(sos.astype('float32'), iq)
+        return scipy.signal.sosfilt(sos.astype('float32'), iq, axis=axis)
 
 
 def ola_filter(
