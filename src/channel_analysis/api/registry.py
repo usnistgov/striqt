@@ -130,7 +130,8 @@ class ChannelAnalysisRegistryDecorator(collections.UserDict):
                     as_shmarray = delay_xarray and not as_xarray
                     result = _results_as_arrays(result, as_shmarray=as_shmarray)
                 except TypeError as ex:
-                    raise TypeError('improper return type from {func.__name__}') from ex
+                    msg = f'improper return type from {func.__name__}'
+                    raise TypeError(msg) from ex
 
                 if not as_xarray:
                     return result

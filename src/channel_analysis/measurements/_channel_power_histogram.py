@@ -5,7 +5,7 @@ import typing
 
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
-from ._channel_power_time_series import PowerDetectorCoords, PowerDetectorAxis
+from ._channel_power_time_series import PowerDetectorCoords, PowerDetectorAxis, channel_power_time_series
 from ._channel_power_ccdf import (
     ChannelPowerCoords,
     ChannelPowerBinAxis,
@@ -72,7 +72,6 @@ def channel_power_histogram(
     else:
         xp = iqwaveform.util.array_namespace(iq)
 
-    dtype = xp.finfo(iq.dtype).dtype
     bin_edges = make_power_histogram_bin_edges(
         power_low=power_low,
         power_high=power_high,
@@ -80,22 +79,24 @@ def channel_power_histogram(
         xp=xp,
     )
 
-    kws = {'iq': iq, 'Ts': 1 / capture.sample_rate, 'Tbin': detector_period, 'axis': 1}
+    power_dB, _ = channel_power_time_series(
+        iq,
+        capture,
+        power_detectors=power_detectors,
+        detector_period=detector_period
+    )
+
+    count_dtype = xp.finfo(iq.dtype).dtype
 
     data = []
-    for detector in power_detectors:
-        if detector_period is None:
-            power_dB = iqwaveform.envtodB(iq)
-        else:
-            power = iqwaveform.iq_to_bin_power(kind=detector, **kws).astype('float32')
-            power_dB = iqwaveform.powtodB(power, out=power)
-
-        count_dtype = xp.finfo(iq.dtype).dtype
-        counts = xp.asarray(
-            [xp.histogram(power_dB[i], bin_edges)[0] for i in range(power_dB.shape[0])],
-            dtype=count_dtype,
-        )
-        data.append(counts.astype(dtype) / xp.sum(counts))
+    for i_chan in range(iq.shape[0]):
+        counts = []
+        for i_detector in range(iq.shape[1]):
+            hist = xp.histogram(power_dB[i_chan, i_detector], bin_edges)[0]
+            counts = xp.asarray(hist, dtype=count_dtype)
+        counts = xp.asarray(counts,dtype=count_dtype)
+        data.append(counts / xp.sum(counts))
+    data = xp.asarray(data, dtype=count_dtype)
 
     metadata = {
         'detector_period': detector_period,
