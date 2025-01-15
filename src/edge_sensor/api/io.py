@@ -127,9 +127,6 @@ def read_yaml_sweep(
         cal_path = str(cal_path)
         tree['radio_setup']['calibration'] = cal_path
 
-        # # read to validate the data and warm the calibration cache
-        # iq_corrections.read_calibration_corrections(cal_path)
-
     tree['captures'] = [
         dict(defaults, **c, **adjust_captures) for c in tree['captures']
     ]
@@ -138,11 +135,15 @@ def read_yaml_sweep(
         tree, type=sweep_cls, strict=False, dec_hook=_dec_hook
     )
 
-    sweep.output.path = expand_path(
-        sweep.output.path, sweep, radio_id=radio_id, yaml_path=path
-    )
-    sweep.radio_setup.calibration = expand_path(
-        sweep.radio_setup.calibration, sweep, radio_id=radio_id, yaml_path=path
-    )
+    # fill formatting fields in paths
+    kws = dict(sweep=sweep, radio_id=radio_id, yaml_path=path)
+
+    output_path = expand_path(sweep.output.path, **kws)
+    output_spec = msgspec.structs.replace(sweep.output, path=output_path)
+
+    cal_path = expand_path(sweep.radio_setup.calibration, **kws)
+    setup_spec = msgspec.structs.replace(sweep.radio_setup, calibration=cal_path)
+
+    sweep = msgspec.structs.replace(sweep, output=output_spec, radio_setup=setup_spec)
 
     return sweep
