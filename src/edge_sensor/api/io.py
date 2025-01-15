@@ -57,7 +57,7 @@ def expand_path(
 
     if not path.is_absolute():
         path = Path(path).parent.absolute() / path
-    print('formatted calibration path: ', str(path.absolute()))
+    print('formatted path: ', str(path.absolute()))
     return str(path.absolute())
 
 

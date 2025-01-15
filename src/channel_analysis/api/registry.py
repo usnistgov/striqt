@@ -126,7 +126,7 @@ class ChannelAnalysisRegistryDecorator(collections.UserDict):
                     result = ret
                     ret_metadata = metadata
 
-                if as_xarray:
+                try:
                     as_shmarray = delay_xarray and not as_xarray
                     result = _results_as_arrays(result, as_shmarray=as_shmarray)
                 except TypeError as ex:
