@@ -83,7 +83,8 @@ def channel_power_histogram(
         iq,
         capture,
         power_detectors=power_detectors,
-        detector_period=detector_period
+        detector_period=detector_period,
+        as_xarray=False
     )
 
     count_dtype = xp.finfo(iq.dtype).dtype
