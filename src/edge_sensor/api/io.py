@@ -139,10 +139,10 @@ def read_yaml_sweep(
     )
 
     sweep.output.path = expand_path(
-        sweep.output.path, radio_id=radio_id, yaml_path=path
+        sweep.output.path, sweep, radio_id=radio_id, yaml_path=path
     )
     sweep.radio_setup.calibration = expand_path(
-        sweep.radio_setup.calibration, radio_id=radio_id, yaml_path=path
+        sweep.radio_setup.calibration, sweep, radio_id=radio_id, yaml_path=path
     )
 
     return sweep
