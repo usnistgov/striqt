@@ -84,7 +84,7 @@ def click_sensor_sweep(description: typing.Optional[str] = None):
             help='run on the specified remote host (at host or host:port)',
         ),
         click.option(
-            '--store/',
+            '--store-backend/',
             '-s',
             type=click.Choice(['zip', 'directory', 'db'], case_sensitive=True),
             default=None,
@@ -203,7 +203,8 @@ def init_sensor_sweep(
             force=force,
         )
 
-    import xarray # needed for both tasks
+    import xarray  # needed for both tasks
+
     opened = lb.concurrently(calls)
 
     if not open_store:
