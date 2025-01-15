@@ -204,11 +204,8 @@ class SoapyRadioDevice(base.RadioDevice):
 
             self.backend.activateStream(self._rx_stream, **kws)
 
-
         elif self._rx_stream is not None:
             self.backend.deactivateStream(self._rx_stream)
-
-
 
     @method_attr.FloatMaybeTupleMethod(inherit=True)
     def gain(self):

@@ -169,13 +169,13 @@ def broadcast_to_channels(
 
 
 def _match_capture_fields(
-    capture: structs.RadioCapture, fields: dict[str], radio_id: str
+    capture: structs.RadioCapture, fields: dict[str], radio_id: str | None = None
 ):
     if isinstance(capture.channel, tuple):
         raise ValueError('split the capture to evaluate alias matches')
 
     for name, value in fields.items():
-        if name == 'radio_id' and value == radio_id:
+        if name == 'radio_id' and radio_id is not None and value == radio_id:
             continue
 
         if not hasattr(capture, name):
@@ -194,7 +194,7 @@ def _match_capture_fields(
 
 @functools.lru_cache()
 def evaluate_aliases(
-    capture: structs.RadioCapture, radio_id: str, output: structs.Output
+    capture: structs.RadioCapture, *, radio_id: str = None, output: structs.Output
 ):
     """evaluate the field values"""
 
@@ -233,11 +233,11 @@ def split_capture_channels(capture: structs.RadioCapture) -> list[structs.RadioC
 
 
 def capture_fields_with_aliases(
-    capture: structs.RadioCapture, radio_id: str, output: structs.Output
+    capture: structs.RadioCapture, *, radio_id: str = None, output: structs.Output
 ) -> dict:
     attrs = structs.struct_to_builtins(capture)
     c = split_capture_channels(capture)[0]
-    aliases = evaluate_aliases(c, radio_id, output)
+    aliases = evaluate_aliases(c, radio_id=radio_id, output=output)
 
     return dict(attrs, **aliases)
 

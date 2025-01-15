@@ -8,7 +8,6 @@ from pathlib import Path
 
 from . import util
 from .captures import split_capture_channels
-import channel_analysis
 from channel_analysis.api.util import pinned_array_as_cupy, free_mempool_on_low_memory
 
 from .radio import base, RadioDevice, design_capture_filter
@@ -31,6 +30,9 @@ else:
 
 @functools.lru_cache
 def read_calibration_corrections(path):
+    if path is None:
+        return None
+
     with gzip.GzipFile(path, 'rb') as fd:
         return pickle.load(fd)
 
@@ -264,7 +266,7 @@ def resampling_correction(
 
     with lb.stopwatch('power correction lookup', threshold=10e-3, logger_level='debug'):
         bare_capture = msgspec.structs.replace(capture, start_time=None)
-        power_scale = lookup_power_correction(radio.calibration, bare_capture, xp)
+        power_scale = lookup_power_correction(force_calibration or radio.calibration, bare_capture, xp)
 
     if hasattr(xp, 'get_default_memory_pool'):
         iq = pinned_array_as_cupy(iq)
@@ -284,7 +286,7 @@ def resampling_correction(
 
     if not base.needs_stft(analysis_filter, capture):
         # no filtering or resampling needed
-        iq = iq[:, :round(capture.duration * capture.sample_rate)]
+        iq = iq[:, : round(capture.duration * capture.sample_rate)]
         if power_scale is not None:
             iq *= np.sqrt(power_scale)
         return iq

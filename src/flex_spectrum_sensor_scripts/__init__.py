@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import click
-import functools
 from pathlib import Path
 import typing
 import sys
-from datetime import datetime
 import importlib.util
 from socket import gethostname
 
@@ -130,23 +128,11 @@ Sweep = typing.TypeVar('Sweep', bound='edge_sensor.Sweep')
 Dataset = typing.TypeVar('Dataset', bound='xr.Dataset')
 
 
-def get_file_format_fields(sweep_spec, controller, yaml_path):
-    radio_id = controller.radio_id(sweep_spec.radio_setup.driver)
-    fields = edge_sensor.api.captures.capture_fields_with_aliases(
-        sweep_spec.captures[0], radio_id, sweep_spec.output
-    )
-    fields['start_time'] = datetime.now().strftime('%Y%m%d-%Hh%Mm%S')
-    fields['yaml_name'] = Path(yaml_path).stem
-    fields['radio_id'] = radio_id
-
-    return fields
-
-
 def init_sensor_sweep(
     *,
     yaml_path: Path,
     output_path: str | None,
-    store: str | None,
+    store_backend: str | None,
     remote: str | None,
     force: bool,
     verbose: bool,
@@ -158,9 +144,21 @@ def init_sensor_sweep(
     if sweep_cls is None:
         sweep_cls = edge_sensor.Sweep
 
-    sweep_spec = edge_sensor.read_yaml_sweep(
+    sweep = edge_sensor.read_yaml_sweep(
         yaml_path, sweep_cls=sweep_cls, adjust_captures=adjust_captures
     )
+
+    if store_backend is None and sweep.output.store is None:
+        click.echo(
+            'specify output.store in the yaml file or use -s <NAME> on the command line'
+        )
+        sys.exit(1)
+
+    if output_path is None and sweep.output.path is None:
+        click.echo(
+            'specify output.path in the yaml file or use -o PATH on the command line'
+        )
+        sys.exit(1)
 
     if verbose:
         lb.util.force_full_traceback(True)
@@ -169,7 +167,7 @@ def init_sensor_sweep(
         lb.show_messages('info')
 
     if remote is None:
-        controller = edge_sensor.SweepController(sweep_spec.radio_setup)
+        controller = edge_sensor.SweepController(sweep.radio_setup)
     else:
         controller = edge_sensor.connect(remote).root
 
@@ -179,55 +177,39 @@ def init_sensor_sweep(
             mode='Verbose', color_scheme='Linux', call_pdb=1
         )
 
-    path_fields = get_file_format_fields(sweep_spec, controller, yaml_path)
+    # reload the yaml now that radio_id can be known to fully format any filenames
+    radio_id = controller.radio_id(sweep.radio_setup.driver)
+    sweep = edge_sensor.read_yaml_sweep(
+        yaml_path,
+        sweep_cls=sweep_cls,
+        adjust_captures=adjust_captures,
+        radio_id=radio_id,
+    )
 
-    if sweep_spec.radio_setup.calibration is None:
-        calibration = None
-    else:
-        path = Path(sweep_spec.radio_setup.calibration.format(**path_fields))
-        if not path.is_absolute():
-            path = Path(yaml_path).parent.absolute() / path
-        path = str(path.absolute())
-        calibration = edge_sensor.read_calibration_corrections(path)
+    calls = {}
+
+    calls['calibration'] = lb.Call(
+        edge_sensor.read_calibration_corrections, sweep.radio_setup.calibration
+    )
+
+    if open_store:
+        calls['store'] = lb.Call(
+            edge_sensor.open_store,
+            sweep,
+            radio_id=radio_id,
+            yaml_path=yaml_path,
+            output_path=output_path,
+            store_backend=store_backend,
+            force=force,
+        )
+
+    import xarray # needed for both tasks
+    opened = lb.concurrently(calls)
 
     if not open_store:
-        return None, controller, sweep_spec, calibration
+        opened['store'] = None
 
-    if store is None:
-        if sweep_spec.output.store is None:
-            click.echo(
-                'specify output.store in the yaml file or use -s NAME on the command line'
-            )
-            sys.exit(1)
-
-        store = sweep_spec.output.store.lower()
-    else:
-        store = store.lower()
-
-    yaml_path = Path(yaml_path)
-    if output_path is None:
-        spec_path = Path(sweep_spec.output.path)
-        spec_path = spec_path.expanduser()  # e.g., "~/" -> "/home/user/"
-        if spec_path is None:
-            click.echo(
-                'specify output.path in the yaml file or use -o PATH on the command line'
-            )
-            sys.exit(1)
-        spec_path = Path(str(spec_path).format(**path_fields))
-
-        if store == 'directory':
-            fixed_path = spec_path.with_suffix('.zarr')
-        else:
-            fixed_path = spec_path.with_suffix('.zarr.zip')
-
-    else:
-        fixed_path = str(output_path).format(**path_fields)
-
-    Path(fixed_path).parent.mkdir(parents=True, exist_ok=True)
-
-    store = channel_analysis.open_store(fixed_path, mode='w' if force else 'a')
-
-    return store, controller, sweep_spec, calibration
+    return opened['store'], controller, sweep, opened['calibration']
 
 
 # %% Server scripts

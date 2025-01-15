@@ -161,7 +161,7 @@ def build_coords(
     updates = {}
 
     for c in captures.split_capture_channels(capture):
-        alias_hits = captures.evaluate_aliases(c, radio_id, output)
+        alias_hits = captures.evaluate_aliases(c, radio_id=radio_id, output=output)
 
         for field in coords.keys():
             if field == RADIO_ID_NAME:

@@ -54,7 +54,7 @@ class Air7x01B(SoapyRadioDevice):
             return
 
         if enable:
-            # improved the IQ imbalance (and its repeatability) 
+            # improved the IQ imbalance (and its repeatability)
             # by about 15 dB in lab tests
             for _ in range(self._reenable_cycles):
                 self.backend.activateStream(self._rx_stream)
@@ -70,7 +70,6 @@ class Air7x01B(SoapyRadioDevice):
 
             self.backend.activateStream(self._rx_stream, **kws)
 
-
         elif self._rx_stream is not None:
             self.backend.deactivateStream(self._rx_stream)
 
@@ -79,9 +78,9 @@ class Air7x01B(SoapyRadioDevice):
         if capture.center_frequency != fc_current:
             # empirical thresholds for the number of reenable cycles
             # needed to establish IQ balancing (about 60 dB, in one unit)
-            ratio = capture.center_frequency/fc_current
+            ratio = capture.center_frequency / fc_current
 
-            if max(1/ratio,ratio) >= 4.5:
+            if max(1 / ratio, ratio) >= 4.5:
                 self._reenable_cycles = 4
             else:
                 self._reenable_cycles = 3

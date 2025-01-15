@@ -31,25 +31,33 @@ class _ReceiveBufferCarryover:
 
         self.clear()
 
-    def apply(self, samples: 'np.ndarray') -> tuple[int|None, int]:
+    def apply(self, samples: 'np.ndarray') -> tuple[int | None, int]:
         """carry over samples into `samples` from the previous capture.
 
         Returns:
             (start_time_ns, number of samples)
         """
         if self.start_time_ns is None and self.samples is not None:
-            raise ValueError('carryover time information present, but missing timestamp')
+            raise ValueError(
+                'carryover time information present, but missing timestamp'
+            )
 
         if self.samples is None:
             carryover_count = 0
         else:
             # note: carryover.samples.dtype is np.complex64, samples.dtype is np.float32
             carryover_count = self.samples.shape[1]
-            samples[:, :2 * carryover_count] = self.samples.view(samples.dtype)
-        
+            samples[:, : 2 * carryover_count] = self.samples.view(samples.dtype)
+
         return self.start_time_ns, carryover_count
 
-    def stash(self, samples: 'np.ndarray', sample_start_ns, unused_sample_count: int, capture: structs.RadioCapture):
+    def stash(
+        self,
+        samples: 'np.ndarray',
+        sample_start_ns,
+        unused_sample_count: int,
+        capture: structs.RadioCapture,
+    ):
         """stash data needed to carry over extra samples into the next capture"""
         carryover_count = unused_sample_count
         self.samples = samples[:, -carryover_count:].copy()
@@ -65,7 +73,7 @@ class _ReceiveBufferCarryover:
         if msg['type'] != 'set' or self.samples is None:
             return
 
-        # TODO: proper gapless capturing will to manage this case, but 
+        # TODO: proper gapless capturing will to manage this case, but
         # there is troubleshooting to do
         # elif msg['name'] == RadioDevice.rx_enabled.name:
         #     return
@@ -173,7 +181,6 @@ class RadioDevice(lb.Device):
     def open(self):
         self._armed_capture: structs.RadioCapture | None = None
         self._carryover = _ReceiveBufferCarryover(self)
-        
 
     def setup(self, radio_config: structs.RadioSetup):
         """disarm acquisition and apply the given radio setup"""
@@ -217,7 +224,10 @@ class RadioDevice(lb.Device):
             self.base_clock_rate, capture
         )
 
-        if lo_offset != self.lo_offset or capture.center_frequency != self.center_frequency():
+        if (
+            lo_offset != self.lo_offset
+            or capture.center_frequency != self.center_frequency()
+        ):
             self.rx_enabled(False)
             self.center_frequency(capture.center_frequency)
             self.lo_offset = lo_offset
@@ -225,10 +235,7 @@ class RadioDevice(lb.Device):
         nfft_out = analysis_filter.get('nfft_out', analysis_filter['nfft'])
         downsample = analysis_filter['nfft'] / nfft_out
 
-        if (
-            fs_backend != self.backend_sample_rate()
-            or downsample != self._downsample
-        ):
+        if fs_backend != self.backend_sample_rate() or downsample != self._downsample:
             self.rx_enabled(False)
             with attr.hold_attr_notifications(self):
                 self._downsample = 1  # temporarily avoid a potential bounding error
@@ -278,7 +285,7 @@ class RadioDevice(lb.Device):
         buf_time_ns = start_ns
 
         # the number of holdoff samples from the end of the holdoff period
-        # to include with the returned waveform 
+        # to include with the returned waveform
         include_holdoff_count = stft_pad_before
 
         fs = self.backend_sample_rate()
@@ -341,7 +348,9 @@ class RadioDevice(lb.Device):
         samples = samples.view('complex64')[:, sample_offs : sample_offs + sample_count]
 
         unused_count = sample_count - round(capture.duration * fs)
-        self._carryover.stash(samples, start_ns, unused_sample_count=unused_count, capture=capture)
+        self._carryover.stash(
+            samples, start_ns, unused_sample_count=unused_count, capture=capture
+        )
 
         return samples, start_ns
 
@@ -423,7 +432,9 @@ class RadioDevice(lb.Device):
         )
 
 
-def find_trigger_holdoff(radio: RadioDevice, start_time_ns: int, stft_pad_before: int = 0):
+def find_trigger_holdoff(
+    radio: RadioDevice, start_time_ns: int, stft_pad_before: int = 0
+):
     sample_rate = radio.backend_sample_rate()
     min_holdoff = stft_pad_before
 
@@ -530,7 +541,7 @@ def _get_stft_pad_size(
     """returns the padding before and after a waveform to achieve an integral number of FFT windows"""
     _, _, analysis_filter = design_capture_filter(base_clock_rate, capture)
     if not needs_stft(analysis_filter, capture):
-        return (0,0)
+        return (0, 0)
 
     nfft = analysis_filter['nfft']
 
