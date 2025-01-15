@@ -52,7 +52,7 @@ def expand_path(
 
     fields = _get_default_format_fields(sweep, radio_id=radio_id, yaml_path=yaml_path)
     path = Path(path).expanduser()
-    path = Path(str(path).format(fields))
+    path = Path(str(path).format(**fields))
 
     if not path.is_absolute():
         path = Path(path).parent.absolute() / path
