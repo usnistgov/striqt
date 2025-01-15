@@ -65,7 +65,7 @@ class _ReceiveBufferCarryover:
         if msg['type'] != 'set' or self.samples is None:
             return
 
-        # TODO: proper gapless capture will need this, but 
+        # TODO: proper gapless capturing will to manage this case, but 
         # there is troubleshooting to do
         # elif msg['name'] == RadioDevice.rx_enabled.name:
         #     return
@@ -178,9 +178,6 @@ class RadioDevice(lb.Device):
     def setup(self, radio_config: structs.RadioSetup):
         """disarm acquisition and apply the given radio setup"""
 
-        if self.channel() != ():
-            self.rx_enabled(False)
-
         self.calibration = radio_config.calibration
         self.periodic_trigger = radio_config.periodic_trigger
         self.gapless_repeats = radio_config.gapless_repeats
@@ -188,16 +185,12 @@ class RadioDevice(lb.Device):
         self.time_source(radio_config.time_source)
 
         if not self.time_sync_every_capture:
+            self.rx_enabled(False)
             self.sync_time_source()
 
     @lb.stopwatch('arm', logger_level='debug')
     def arm(self, capture: structs.RadioCapture):
         """stop the stream, apply a capture configuration, and start it"""
-
-        invalidate_state = False
-
-        if self.channel() != ():
-            invalidate_state = True
 
         if iqwaveform.power_analysis.isroundmod(
             capture.duration * capture.sample_rate, 1
@@ -208,17 +201,26 @@ class RadioDevice(lb.Device):
                 f'duration {capture.duration} is not an integer multiple of sample period'
             )
 
+        if not self.gapless_repeats:
+            self.rx_enabled(False)
+
         if method_attr._number_if_single(capture.channel) != self.channel():
+            # TODO: support the case of multichannel -> single channel elegantly
+            self.rx_enabled(False)
             self.channel(capture.channel)
-        else:
-            invalidate_state = True
 
         if method_attr._number_if_single(capture.gain) != self.gain():
+            self.rx_enabled(False)
             self.gain(capture.gain)
 
         fs_backend, lo_offset, analysis_filter = design_capture_filter(
             self.base_clock_rate, capture
         )
+
+        if lo_offset != self.lo_offset or capture.center_frequency != self.center_frequency():
+            self.rx_enabled(False)
+            self.center_frequency(capture.center_frequency)
+            self.lo_offset = lo_offset
 
         nfft_out = analysis_filter.get('nfft_out', analysis_filter['nfft'])
         downsample = analysis_filter['nfft'] / nfft_out
@@ -227,7 +229,7 @@ class RadioDevice(lb.Device):
             fs_backend != self.backend_sample_rate()
             or downsample != self._downsample
         ):
-            invalidate_state = True
+            self.rx_enabled(False)
             with attr.hold_attr_notifications(self):
                 self._downsample = 1  # temporarily avoid a potential bounding error
             self.backend_sample_rate(fs_backend)
@@ -235,6 +237,7 @@ class RadioDevice(lb.Device):
 
         if capture.sample_rate != self.sample_rate():
             # in this case, it's only a post-processing (GPU resampling) change
+            self.rx_enabled(False)
             self.sample_rate(capture.sample_rate)
 
         if (
@@ -246,28 +249,13 @@ class RadioDevice(lb.Device):
                 'which creates a large buffer of unused samples'
             )
 
-        if lo_offset != self.lo_offset:
-            self.lo_offset = lo_offset  # hold update on this one?
-
-        if capture.center_frequency != self.center_frequency():
-            invalidate_state = True
-            self.center_frequency(capture.center_frequency)
-
         self.analysis_bandwidth = capture.analysis_bandwidth
 
-        if invalidate_state:
-            self.rx_enabled(False)
-
         if self.time_sync_every_capture:
-            if not invalidate_state:
-                self.rx_enabled(False)
+            self.rx_enabled(False)
             self.sync_time_source()
 
-        if not self.rx_enabled():
-            self._carryover.samples = None
-
         self._armed_capture = capture
-        self._carryover.start_time_ns = None
 
     @lb.stopwatch('read_iq', logger_level='debug')
     def read_iq(
@@ -275,11 +263,6 @@ class RadioDevice(lb.Device):
         capture: structs.RadioCapture,
         buffers: tuple['np.ndarray', 'np.ndarray'] = None,
     ) -> tuple['np.ndarray[np.complex64]', float]:
-        if self.channel() == ():
-            raise AttributeError(
-                f'call {type(self).__qualname__}.channel() first to select an acquisition channel'
-            )
-
         # the return buffer
         if buffers is None:
             samples, stream_bufs = alloc_empty_iq(self, capture, out=buffers)
@@ -360,13 +343,6 @@ class RadioDevice(lb.Device):
         unused_count = sample_count - round(capture.duration * fs)
         self._carryover.stash(samples, start_ns, unused_sample_count=unused_count, capture=capture)
 
-        extra_duration = (received_count - sample_count) / fs
-
-        if extra_duration > 0:
-            self._logger.info(
-                f'total extra sample duration: {extra_duration/1e-3:0.2f} ms'
-            )
-
         return samples, start_ns
 
     @lb.stopwatch('acquire', logger_level='debug')
@@ -426,9 +402,6 @@ class RadioDevice(lb.Device):
     ) -> structs.RadioCapture | None:
         """generate the currently armed capture configuration for the specified channel"""
 
-        if self.channel() == ():
-            return None
-
         if self.lo_offset == 0:
             lo_shift = 'none'
         elif self.lo_offset < 0:
@@ -468,7 +441,7 @@ def find_trigger_holdoff(radio: RadioDevice, start_time_ns: int, stft_pad_before
     excess_time_ns = start_time_ns % periodic_trigger_ns
     holdoff_ns = (periodic_trigger_ns - excess_time_ns) % periodic_trigger_ns
     holdoff = round(holdoff_ns / 1e9 * sample_rate)
-    
+
     if holdoff < min_holdoff:
         periodic_trigger_samples = round(periodic_trigger * sample_rate)
         holdoff += (

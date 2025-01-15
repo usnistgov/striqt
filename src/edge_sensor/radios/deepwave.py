@@ -1,8 +1,13 @@
 from __future__ import annotations
-import labbench.paramattr as attr
+import labbench as lb
+from math import sqrt, ceil
+import SoapySDR
+from labbench import paramattr as attr
 
 from ..api.radio import SoapyRadioDevice
+from ..api import structs
 import uuid
+
 
 # for TX only (RX channel is accessed through the AirT7201B.channel method)
 channel_kwarg = attr.method_kwarg.int('channel', min=0, help='hardware port number')
@@ -19,8 +24,8 @@ class Air7x01B(SoapyRadioDevice):
     tx_gain = attr.method.float(min=-41.95, max=0, step=0.1, inherit=True)
     rx_channel_count = attr.value.int(2, inherit=True)
 
-    # this was set based on gain setting sweep tests
-    _transient_holdoff_time = attr.value.float(10e-3, inherit=True)
+    # set based on gain setting sweep tests
+    _transient_holdoff_time = attr.value.float(2e-3, inherit=True)
 
     # stream setup and teardown for channel configuration are slow;
     # instead, stream all RX channels
@@ -28,7 +33,8 @@ class Air7x01B(SoapyRadioDevice):
 
     # without this, multichannel acquisition start time will vary
     # across channels, resulting in streaming errors
-    _rx_enable_delay = attr.value.float(0.35, inherit=True)
+    _rx_enable_delay = attr.value.float(0.3, inherit=True)
+    _reenable_cycles = 0
 
     def open(self):
         # in some cases specifying the driver has caused exceptions on connect
@@ -37,8 +43,52 @@ class Air7x01B(SoapyRadioDevice):
         if driver != 'SoapyAIRT':
             raise IOError(f'connected to {driver}, but expected SoapyAirT')
 
-    # def _post_connect(self):
-    #     self._set_jesd_sysref_delay(0)
+    @attr.method.bool(cache=True, inherit=True)
+    def rx_enabled(self):
+        # with cache=True, this behaves as the default before the first set
+        return False
+
+    @rx_enabled.setter
+    def _(self, enable: bool):
+        if enable == self.rx_enabled():
+            return
+
+        if enable:
+            # improved the IQ imbalance (and its repeatability) 
+            # by about 15 dB in lab tests
+            for _ in range(self._reenable_cycles):
+                self.backend.activateStream(self._rx_stream)
+                self.backend.deactivateStream(self._rx_stream)
+                lb.sleep(0.1)
+
+            delay = self._rx_enable_delay
+            kws = {'flags': SoapySDR.SOAPY_SDR_HAS_TIME}
+
+            if delay is not None:
+                timeNs = self.backend.getHardwareTime('now') + round(delay * 1e9)
+                kws['timeNs'] = timeNs
+
+            self.backend.activateStream(self._rx_stream, **kws)
+
+
+        elif self._rx_stream is not None:
+            self.backend.deactivateStream(self._rx_stream)
+
+    def arm(self, capture: structs.RadioCapture):
+        fc_current = self.center_frequency()
+        if capture.center_frequency != fc_current:
+            # empirical thresholds for the number of reenable cycles
+            # needed to establish IQ balancing (about 60 dB, in one unit)
+            ratio = capture.center_frequency/fc_current
+
+            if max(1/ratio,ratio) >= 4.5:
+                self._reenable_cycles = 4
+            else:
+                self._reenable_cycles = 3
+        else:
+            self._reenable_cycles = 0
+
+        super().arm(capture)
 
     def _set_jesd_sysref_delay(self, value: int):
         """

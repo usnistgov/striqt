@@ -152,10 +152,11 @@ class NullSource(base.RadioDevice):
             self.base_clock_rate, capture
         )
         sample_time_offset = -analysis_filter['nfft'] // 2
+        fs = float(self.backend_sample_rate())
 
         timestamp_ns = (
             1_000_000_000 * (self._samples_elapsed - sample_time_offset)
-        ) / float(self.backend_sample_rate())
+        ) / fs
 
         self._samples_elapsed += count
 
