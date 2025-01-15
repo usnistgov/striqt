@@ -44,7 +44,7 @@ def _get_default_format_fields(
 
 
 def expand_path(
-    path: str | Path, sweep: Sweep, *, radio_id: str | None = None, yaml_path
+    path: str | Path, sweep: Sweep, *, radio_id: str | None = 'undefined_radio', yaml_path
 ) -> str:
     """return an absolute path, allowing for user tokens (~) and {field} in the input."""
     if path is None:
