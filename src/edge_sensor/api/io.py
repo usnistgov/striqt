@@ -37,6 +37,7 @@ def _get_default_format_fields(
     )
     fields['start_time'] = datetime.now().strftime('%Y%m%d-%Hh%Mm%S')
     fields['yaml_name'] = Path(yaml_path).stem
+    fields['radio_id'] = radio_id
 
     print('fields: ', fields)
 
@@ -44,7 +45,7 @@ def _get_default_format_fields(
 
 
 def expand_path(
-    path: str | Path, sweep: Sweep, *, radio_id: str | None = 'unspecified-radio', yaml_path
+    path: str | Path, sweep: Sweep, *, radio_id: str | None = None, yaml_path=None
 ) -> str:
     """return an absolute path, allowing for user tokens (~) and {field} in the input."""
     if path is None:
