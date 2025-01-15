@@ -126,12 +126,17 @@ class ChannelAnalysisRegistryDecorator(collections.UserDict):
                     result = ret
                     ret_metadata = metadata
 
-                if not as_xarray:
-                    return _results_as_arrays(result)
+                if as_xarray:
+                    result = _results_as_arrays(result)
+
+                try:
+                    result = _results_as_arrays(result, as_shmarray=delay_xarray)
+                except TypeError as ex:
+                    raise TypeError('improper return type from {func.__name__}') from ex
 
                 result_obj = ChannelAnalysisResult(
                     xarray_datacls,
-                    _results_as_arrays(result, as_shmarray=delay_xarray),
+                    result,
                     capture,
                     parameters=call_params,
                     attrs=ret_metadata,
