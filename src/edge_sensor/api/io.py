@@ -44,7 +44,7 @@ def _get_default_format_fields(
 
 
 def expand_path(
-    path: str | Path, sweep: Sweep, *, radio_id: str | None = None, yaml_path=None
+    path: str | Path, sweep: Sweep, *, radio_id: str | None = None, yaml_path=None, yaml_relative=False
 ) -> str:
     """return an absolute path, allowing for user tokens (~) and {field} in the input."""
     if path is None:
@@ -54,8 +54,8 @@ def expand_path(
     path = Path(path).expanduser()
     path = Path(str(path).format(**fields))
 
-    if not path.is_absolute():
-        path = Path(path).parent.absolute() / path
+    if yaml_relative and not path.is_absolute():
+        path = Path(yaml_path).parent.absolute() / path
     return str(path.absolute())
 
 
@@ -140,7 +140,7 @@ def read_yaml_sweep(
     output_path = expand_path(sweep.output.path, **kws)
     output_spec = msgspec.structs.replace(sweep.output, path=output_path)
 
-    cal_path = expand_path(sweep.radio_setup.calibration, **kws)
+    cal_path = expand_path(sweep.radio_setup.calibration, yaml_relative=True, **kws)
     setup_spec = msgspec.structs.replace(sweep.radio_setup, calibration=cal_path)
 
     sweep = msgspec.structs.replace(sweep, output=output_spec, radio_setup=setup_spec)
