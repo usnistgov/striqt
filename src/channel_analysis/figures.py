@@ -59,7 +59,7 @@ def plot_cyclic_channel_power(
     time = cyclic_channel_power.cyclic_lag
 
     for i, detector in enumerate(cyclic_channel_power.power_detector.values):
-        a = cyclic_channel_power.sel(power_detector=detector)
+        a = cyclic_channel_power.sel(power_detector=detector).squeeze('capture')
 
         if not dB:
             a = iqwaveform.dBtopow(a)
@@ -71,7 +71,7 @@ def plot_cyclic_channel_power(
         )
 
     for i, detector in enumerate(cyclic_channel_power.power_detector.values):
-        a = cyclic_channel_power.sel(power_detector=detector)
+        a = cyclic_channel_power.sel(power_detector=detector).squeeze('capture')
 
         if not dB:
             a = iqwaveform.dBtopow(a)
