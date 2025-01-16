@@ -173,8 +173,6 @@ def build_coords(
                     field, c, radio_id, alias_hits, {SWEEP_TIMESTAMP_NAME: sweep_time}
                 )
             except KeyError:
-                if field in output.coord_aliases and radio_id is not None:
-                    lb.logger.warning(f'warning: no alias name matches in "{field}"')
                 continue
 
             updates.setdefault(field, []).append(value)
