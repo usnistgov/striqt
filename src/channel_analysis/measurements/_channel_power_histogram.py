@@ -90,9 +90,9 @@ def channel_power_histogram(
     count_dtype = xp.finfo(iq.dtype).dtype
 
     data = []
-    for i_chan in range(iq.shape[0]):
+    for i_chan in range(power_dB.shape[0]):
         counts = []
-        for i_detector in range(iq.shape[1]):
+        for i_detector in range(power_dB.shape[1]):
             hist = xp.histogram(power_dB[i_chan, i_detector], bin_edges)[0]
             counts.append(hist)
         counts = xp.asarray(counts,dtype=count_dtype)

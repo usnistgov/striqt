@@ -39,8 +39,6 @@ def _get_default_format_fields(
     fields['yaml_name'] = Path(yaml_path).stem
     fields['radio_id'] = radio_id
 
-    print('fields: ', fields)
-
     return fields
 
 
@@ -57,7 +55,6 @@ def expand_path(
 
     if not path.is_absolute():
         path = Path(path).parent.absolute() / path
-    print('formatted path: ', str(path.absolute()))
     return str(path.absolute())
 
 
