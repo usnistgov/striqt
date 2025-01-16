@@ -119,6 +119,9 @@ class ChannelAnalysisRegistryDecorator(collections.UserDict):
                 call_params = bound.kwargs
                 ret = func(*bound.args, **bound.kwargs)
 
+                if not as_xarray:
+                    return ret
+
                 if isinstance(ret, (list, tuple)) and len(ret) == 2:
                     result, ret_metadata = ret
                     ret_metadata = dict(metadata, **ret_metadata)
@@ -127,14 +130,11 @@ class ChannelAnalysisRegistryDecorator(collections.UserDict):
                     ret_metadata = metadata
 
                 try:
-                    as_shmarray = delay_xarray and not as_xarray
-                    result = _results_as_arrays(result, as_shmarray=as_shmarray)
+                    result = _results_as_arrays(result, as_shmarray=delay_xarray)
                 except TypeError as ex:
                     msg = f'improper return type from {func.__name__}'
                     raise TypeError(msg) from ex
 
-                if not as_xarray:
-                    return result
                 
                 result_obj = ChannelAnalysisResult(
                     xarray_datacls,
