@@ -19,7 +19,7 @@ dependencies:
 - methodtools
 - labbench>=0.42.0,<1
 - xarray>=2024.3
-- zarr<4
+- zarr>=2.18,<4
 - dask
 - msgspec~=0.18
 - dulwich
