@@ -9,4 +9,3 @@ dependencies:
   - rpyc~=5.3
   - pip:
     - ssmdevices
-    - xarray_dataclasses @ git+https://github.com/dgkuester/xarray-dataclasses@lazy-imports

@@ -15,6 +15,16 @@ if typing.TYPE_CHECKING:
     import xarray as xr
     import zarr
     import pandas as pd
+
+    if hasattr(zarr.storage, 'Store'):
+        # zarr 2.x
+        StoreBase = zarr.storage.Store
+        LocalStore = zarr.storage.DirectoryStore
+    else:
+        # zarr 3.x
+        StoreBase = zarr.abc.store.Store
+        LocalStore = zarr.storage.LocalStore
+
 else:
     np = util.lazy_import('numpy')
     pd = util.lazy_import('pandas')
@@ -31,24 +41,23 @@ warnings.filterwarnings(
 
 
 def open_store(path: str | Path, *, mode: str):
-    if isinstance(path, zarr.storage.Store):
+    if hasattr(zarr.storage, 'Store'):
+        # zarr 2.x
+        StoreBase = zarr.storage.Store
+        LocalStore = zarr.storage.DirectoryStore
+    else:
+        # zarr 3.x
+        StoreBase = zarr.abc.store.Store
+        LocalStore = zarr.storage.LocalStore
+
+    if isinstance(path, StoreBase):
         store = path
     elif not isinstance(path, (str, Path)):
-        raise ValueError('must pass a string or Path savefile or zarr.Store object')
+        raise ValueError('must pass a string or Path savefile or zarr Store')
     elif str(path).endswith('.zip'):
-        store = zarr.ZipStore(path, mode=mode, compression=0)
-    elif str(path).endswith('.db'):
-        if mode == 'a':
-            flag = 'c'
-        elif mode == 'w':
-            flag = 'n'
-        else:
-            flag = mode
-        warnings.simplefilter('ignore')
-        store = zarr.DBMStore(path, flag=flag, write_lock=False)
-        warnings.resetwarnings()
+        store = zarr.storage.ZipStore(path, mode=mode, compression=0)
     else:
-        store = zarr.DirectoryStore(path)
+        store = LocalStore(path)
 
     return store
 
@@ -61,6 +70,8 @@ def _get_iq_index_name():
 
 
 def _build_encodings(data, compression=None, filter: bool = True):
+    # todo: this will need to be updated to work with zarr 3
+    
     from .. import measurements
 
     if compression is None:
@@ -84,16 +95,13 @@ def _build_encodings(data, compression=None, filter: bool = True):
 
 
 def dump(
-    store: 'zarr.storage.Store',
+    store: 'StoreBase',
     data: typing.Optional['xr.DataArray' | 'xr.Dataset'] = None,
     append_dim=None,
     compression=None,
     filter=True,
-) -> 'zarr.storage.Store':
+) -> 'StoreBase':
     """serialize a dataset into a zarr directory structure"""
-
-    # if not isinstance(store, zarr.storage.Store):
-    #     raise TypeError('must pass a zarr store object')
 
     if hasattr(data, _get_iq_index_name()):
         if 'sample_rate' in data.attrs:
