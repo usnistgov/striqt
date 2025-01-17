@@ -7,7 +7,7 @@ description = "exploring the analysis of IQ in aggregate waveforms"
 authors = [
     {name = "Dan Kuester", email = "daniel.kuester@nist.gov"},
 ]
-requires-python = "~=3.9.0"
+requires-python = ">=3.9"
 
 # TODO: SoapySDR doesn't exist as a pypi dependency
 # dependencies = [
@@ -44,43 +44,6 @@ dev = ["ipykernel", "jupyter", "ruff"]
 [project.scripts]
 edge-sensor-sweep = "flex_spectrum_sensor_scripts.edge_sensor_sweep:run"
 edge-sensor-server = "flex_spectrum_sensor_scripts.edge_sensor_server:run"
-
-[tool.pixi.project]
-channels = ["conda-forge"]
-platforms = ["linux-64", "linux-aarch64", "osx-arm64", "osx-64", "win-64"]
-
-[tool.pixi.system-requirements]
-linux = "4.9"
-libc = { family="glibc", version="2.27" }
-
-[tool.pixi.pypi-dependencies]
-flex_spectrum_sensor = { path = ".", editable = true }
-
-[tool.pixi.dependencies]
-# bring in these dependencies from conda to take advantage of hardware drivers
-labbench = "*"
-soapysdr = "*"
-
-[tool.pixi.feature.dev.dependencies]
-
-[tool.pixi.feature.cuda.target.win-64.dependencies]
-cupy = "*"
-cython = "*"
-
-[tool.pixi.feature.cuda.target.win-64.host-dependencies]
-cuda = "12"
-
-[tool.pixi.feature.cuda.target.linux-64.dependencies]
-cupy = "*"
-cython = "*"
-
-[tool.pixi.feature.cuda.target.linux-64.host-dependencies]
-cuda = "12"
-
-[tool.pixi.environments]
-dev = ["dev"]
-cuda = ["cuda"]
-all = ["dev","cuda"]
 
 [tool.ruff]
 target-version = "py39"

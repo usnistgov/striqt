@@ -4,5 +4,9 @@ channels:
   - conda-forge
 
 dependencies:
+  - soapysdr~=0.8.1
+  - pigz
+  - rpyc~=5.3
   - pip:
     - ssmdevices
+    - xarray_dataclasses @ git+https://github.com/dgkuester/xarray-dataclasses@lazy-imports

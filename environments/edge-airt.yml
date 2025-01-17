@@ -7,7 +7,6 @@ channels:
 - nvidia
 - file://opt/deepwave/conda-channels/airstack-conda
 dependencies:
-  # python3.9 is the most recent supported by the Air-T Jetson stack
 - python=3.9
 - pip
 - jupyter
@@ -16,18 +15,14 @@ dependencies:
 - scipy~=1.9
 - numpy>=1.21,<2
 - matplotlib-base>=3.7,<3.10
-- scikit-learn~=1.5
 - numexpr~=2.8
 - array-api-compat
 - methodtools
 - labbench>=0.42.0,<1
-- rpyc~=5.3
-- soapysdr~=0.8.1
-- xarray~=2024.3
+- xarray>=2024.3
 - zarr~=2.18.2
 - dask
-- msgspec~=0.18.0
-- pigz
+- msgspec~=0.18
 - dulwich
 - ruamel.yaml
 - schemdraw
@@ -38,6 +33,9 @@ dependencies:
 - numba~=0.56.0
 - pyside6
 - pyqtgraph
+- soapysdr~=0.8.1
+- pigz
+- rpyc~=5.3
 - pip:
   - iqwaveform @ git+https://github.com/usnistgov/iqwaveform
   - xarray_dataclasses @ git+https://github.com/dgkuester/xarray-dataclasses@lazy-imports
