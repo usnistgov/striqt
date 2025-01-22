@@ -206,9 +206,9 @@ def init_sensor_sweep(
     import xarray  # needed for both tasks
 
     opened = lb.concurrently(**calls)
+    opened.setdefault('store', None)
+    opened.setdefault('calibration', None)
 
-    if not open_store:
-        opened['store'] = None
 
     return opened['store'], controller, sweep, opened['calibration']
 

@@ -79,10 +79,7 @@ class _ReceiveBufferCarryover:
         #     return
 
         if msg['new'] != msg['old']:
-            print('clear carryover')
             self.clear()
-        else:
-            print('no clear carryover')
 
 
 class RadioDevice(lb.Device):
@@ -348,7 +345,6 @@ class RadioDevice(lb.Device):
             received_count += this_count
 
         sample_offs = include_holdoff_count - stft_pad_before
-        print('offs: ', sample_offs / self.backend_sample_rate())
         samples = samples.view('complex64')[:, sample_offs : sample_offs + sample_count]
 
         unused_count = sample_count - round(capture.duration * fs)
