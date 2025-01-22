@@ -79,7 +79,10 @@ class _ReceiveBufferCarryover:
         #     return
 
         if msg['new'] != msg['old']:
+            print('clear carryover')
             self.clear()
+        else:
+            print('no clear carryover')
 
 
 class RadioDevice(lb.Device):
@@ -441,7 +444,6 @@ def find_trigger_holdoff(
 
     # transient holdoff if we've rearmed as indicated by the presence of carryover samples
     if radio._carryover.start_time_ns is None:
-        print('taking carryover from previous capture')
         min_holdoff = min_holdoff + round(radio._transient_holdoff_time * sample_rate)
 
     periodic_trigger = radio.periodic_trigger
