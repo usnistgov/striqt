@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 import functools
-import math
 import msgspec
 import numbers
 import typing
@@ -11,132 +10,8 @@ from . import structs, util
 
 if typing.TYPE_CHECKING:
     import numpy as np
-    import channel_analysis
 else:
     np = util.lazy_import('numpy')
-    channel_analysis = util.lazy_import('channel_analysis')
-
-
-_ENG_PREFIXES = {
-    -30: 'q',
-    -27: 'r',
-    -24: 'y',
-    -21: 'z',
-    -18: 'a',
-    -15: 'f',
-    -12: 'p',
-    -9: 'n',
-    -6: '\N{MICRO SIGN}',
-    -3: 'm',
-    0: '',
-    3: 'k',
-    6: 'M',
-    9: 'G',
-    12: 'T',
-    15: 'P',
-    18: 'E',
-    21: 'Z',
-    24: 'Y',
-    27: 'R',
-    30: 'Q',
-}
-
-
-@functools.lru_cache
-def describe_capture(
-    this: structs.RadioCapture | None,
-    prev: structs.RadioCapture | None = None,
-    *,
-    index: int,
-    count: int,
-) -> str:
-    """generate a description of a capture"""
-    if this is None:
-        if prev is None:
-            return 'saving last analysis'
-        else:
-            return 'performing last analysis'
-
-    diffs = []
-
-    for name in type(this).__struct_fields__:
-        if name == 'start_time':
-            continue
-        value = getattr(this, name)
-        if prev is None or value != getattr(prev, name):
-            diffs.append(_describe_field(this, name))
-
-    capture_diff = ', '.join(diffs)
-
-    if index is not None:
-        progress = str(index + 1)
-
-        if count is not None:
-            progress = f'{progress}/{count}'
-
-        progress = progress + ' '
-    else:
-        progress = ''
-
-    return progress + capture_diff
-
-
-@functools.lru_cache()
-def format_units(value, unit='', places=None, sep=' ') -> str:
-    """Format a number with SI unit prefixes"""
-
-    sign = 1
-    fmt = 'g' if places is None else f'.{places:d}f'
-
-    if value < 0:
-        sign = -1
-        value = -value
-
-    if value != 0:
-        pow10 = int(math.floor(math.log10(value) / 3) * 3)
-    else:
-        pow10 = 0
-        # Force value to zero, to avoid inconsistencies like
-        # format_eng(-0) = "0" and format_eng(0.0) = "0"
-        # but format_eng(-0.0) = "-0.0"
-        value = 0.0
-
-    pow10 = np.clip(pow10, min(_ENG_PREFIXES), max(_ENG_PREFIXES))
-
-    mant = sign * value / (10.0**pow10)
-    # Taking care of the cases like 999.9..., which may be rounded to 1000
-    # instead of 1 k.  Beware of the corner case of values that are beyond
-    # the range of SI prefixes (i.e. > 'Y').
-    if abs(float(format(mant, fmt))) >= 1000 and pow10 < max(_ENG_PREFIXES):
-        mant /= 1000
-        pow10 += 3
-
-    unit_prefix = _ENG_PREFIXES[int(pow10)]
-    if unit or unit_prefix:
-        suffix = f'{sep}{unit_prefix}{unit}'
-    else:
-        suffix = ''
-
-    return f'{mant:{fmt}}{suffix}'
-
-
-def _describe_field(capture: structs.RadioCapture, name: str):
-    meta = channel_analysis.structs.get_capture_type_attrs(type(capture))
-    attrs = meta[name]
-    value = getattr(capture, name)
-
-    if value is None:
-        value_str = 'None'
-    elif attrs.get('units', None) is not None and np.isfinite(value):
-        if isinstance(value, tuple):
-            value_tup = [format_units(v, attrs['units']) for v in value]
-            value_str = f'({", ".join(value_tup)})'
-        else:
-            value_str = format_units(value, attrs['units'])
-    else:
-        value_str = repr(value)
-
-    return f'{name}={value_str}'
 
 
 @functools.lru_cache(10000)

@@ -12,7 +12,7 @@ import typing
 
 from . import structs
 from . import util
-from .xarray import (
+from .xarray_ops import (
     ChannelAnalysisResult,
     evaluate_channel_analysis,
     package_channel_analysis,

@@ -15,10 +15,12 @@ if typing.TYPE_CHECKING:
     import xarray as xr
     import labbench as lb
     import pandas as pd
+    import channel_analysis
 else:
     np = util.lazy_import('numpy')
     xr = util.lazy_import('xarray')
     lb = util.lazy_import('labbench')
+    channel_analysis = util.lazy_import('channel_analysis')
 
 
 class SweepController:
