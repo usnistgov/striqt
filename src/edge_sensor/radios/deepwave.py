@@ -89,6 +89,9 @@ class Air7x01B(SoapyRadioDevice):
 
         super().arm(capture)
 
+    def _post_connect(self):
+        self._set_jesd_sysref_delay(0)
+
     def _set_jesd_sysref_delay(self, value: int):
         """
         SYSREF delay: add additional delay to SYSREF re-alignment of LMFC counter
