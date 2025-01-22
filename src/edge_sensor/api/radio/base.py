@@ -345,6 +345,7 @@ class RadioDevice(lb.Device):
             received_count += this_count
 
         sample_offs = include_holdoff_count - stft_pad_before
+        print('offs: ', sample_offs / self.backend_sample_rate())
         samples = samples.view('complex64')[:, sample_offs : sample_offs + sample_count]
 
         unused_count = sample_count - round(capture.duration * fs)
@@ -440,6 +441,7 @@ def find_trigger_holdoff(
 
     # transient holdoff if we've rearmed as indicated by the presence of carryover samples
     if radio._carryover.start_time_ns is None:
+        print('taking carryover from previous capture')
         min_holdoff = min_holdoff + round(radio._transient_holdoff_time * sample_rate)
 
     periodic_trigger = radio.periodic_trigger

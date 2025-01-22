@@ -131,6 +131,10 @@ class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):
     _transient_holdoff_time: Optional[float] = None
     _rx_channel_count: Optional[int] = None
 
+    def __post_init__(self):
+        if self.gapless_repeats and self.time_sync_every_capture:
+            raise ValueError('time_sync_every_capture and gapless_repeats are mutually exclusive')
+
 
 class Description(msgspec.Struct, forbid_unknown_fields=True):
     summary: Optional[str] = None
