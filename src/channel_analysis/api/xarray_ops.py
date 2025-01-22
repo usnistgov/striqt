@@ -102,8 +102,8 @@ _ENG_PREFIXES = {
 
 @functools.lru_cache
 def describe_capture(
-    this: structs.RadioCapture | None,
-    prev: structs.RadioCapture | None = None,
+    this: structs.Capture | None,
+    prev: structs.Capture | None = None,
     *,
     index: int,
     count: int,

@@ -162,7 +162,7 @@ def iter_sweep(
                     pickled=pickled,
                 )
 
-            desc = captures.describe_capture(
+            desc = channel_analysis.describe_capture(
                 capture_this, capture_prev, index=i, count=count
             )
 
