@@ -328,7 +328,6 @@ def iter_callbacks(
         if isinstance(data, xr.Dataset):
             new_dims = {xarray_ops.CAPTURE_DIM: data.capture.size}
             ext_dataarrays = {
-                k: xr.DataArray(v).expand_dims(new_dims)
-                for k, v in ext_data.items()
+                k: xr.DataArray(v).expand_dims(new_dims) for k, v in ext_data.items()
             }
             last_data = data.assign(ext_dataarrays)

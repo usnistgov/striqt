@@ -204,6 +204,7 @@ def init_sensor_sweep(
         )
 
     import xarray  # needed for both tasks
+
     opened = lb.concurrently(**calls)
 
     if not open_store:

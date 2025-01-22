@@ -27,16 +27,16 @@ class CapturePlotter:
     def __init__(
         self,
         interactive: bool = True,
-        output_dir: str|Path = None,
+        output_dir: str | Path = None,
         subplot_by_channel: bool = True,
         col_wrap=2,
-        title_fmt="Channel {channel}",
-        suptitle_fmt="{center_frequency}",
-        filename_fmt="{name} {center_frequency}.svg"
+        title_fmt='Channel {channel}',
+        suptitle_fmt='{center_frequency}',
+        filename_fmt='{name} {center_frequency}.svg',
     ):
         self.interactive: bool = interactive
         if subplot_by_channel:
-            self.facet_col = "capture"
+            self.facet_col = 'capture'
         else:
             self.facet_col = None
         self.col_wrap = col_wrap
@@ -46,7 +46,9 @@ class CapturePlotter:
         self._filename_fmt = filename_fmt
 
     @contextlib.contextmanager
-    def _plot_context(self, data, name: str, x: str = None, y: str = None, hue: str = None):
+    def _plot_context(
+        self, data, name: str, x: str = None, y: str = None, hue: str = None
+    ):
         if self.facet_col is None:
             fig, axs = plt.subplots()
         else:
@@ -54,7 +56,9 @@ class CapturePlotter:
 
         warning_ctx = warnings.catch_warnings()
         warning_ctx.__enter__()
-        warnings.filterwarnings('ignore', category=UserWarning, message=r'.*figure layout has changed.*')
+        warnings.filterwarnings(
+            'ignore', category=UserWarning, message=r'.*figure layout has changed.*'
+        )
 
         yield
 
@@ -66,35 +70,43 @@ class CapturePlotter:
             axs = [axs]
 
         if self._suptitle_fmt is not None:
-            suptitle = label_by_coord(data, self._suptitle_fmt, title_case=True, name=name)[0]
+            suptitle = label_by_coord(
+                data, self._suptitle_fmt, title_case=True, name=name
+            )[0]
             fig.suptitle(suptitle)
 
         if self._title_fmt is not None:
             titles = label_by_coord(data, self._title_fmt, title_case=True, name=name)
             if len(titles) > len(axs):
-                raise ValueError(f'data has {len(titles)} captures but plotted {len(axs)} plots')
+                raise ValueError(
+                    f'data has {len(titles)} captures but plotted {len(axs)} plots'
+                )
             for ax, title in zip(axs, titles):
                 ax.set_title(title)
 
         if self.output_dir is not None:
-            filename = set(label_by_coord(data, self._filename_fmt, name=name, title_case=True))
+            filename = set(
+                label_by_coord(data, self._filename_fmt, name=name, title_case=True)
+            )
             if len(filename) > 1:
-                raise ValueError('select a filename format that does not depend on channel index')
+                raise ValueError(
+                    'select a filename format that does not depend on channel index'
+                )
             path = Path(self.output_dir) / list(filename)[0]
             plt.savefig(path, dpi=300)
 
         if x is not None:
             for ax in axs:
-                label_axis("x", data[x], ax=ax)
+                label_axis('x', data[x], ax=ax)
 
         if y is not None:
-            label_axis("y", data[y])
+            label_axis('y', data[y])
 
         if hue is not None:
             label_legend(data, coord_name=hue)
 
         warning_ctx.__exit__(None, None, None)
-        
+
         if not self.interactive:
             plt.close()
 
@@ -136,7 +148,7 @@ class CapturePlotter:
         rasterized: bool = True,
         sharey: bool = True,
         transpose: bool = True,
-        **kws
+        **kws,
     ):
         kws.update(x=x, y=y, rasterized=rasterized)
 
@@ -157,12 +169,14 @@ class CapturePlotter:
                     spg = spg.T
                 spg.dropna(x).dropna(y).plot(**kws)
 
-    def cellular_cyclic_autocorrelation(self, data: xr.Dataset, hue='link_direction', **sel):
+    def cellular_cyclic_autocorrelation(
+        self, data: xr.Dataset, hue='link_direction', **sel
+    ):
         key = self.cellular_cyclic_autocorrelation.__name__
         return self._line(
             data[key].sel(sel),
             name=key,
-            x="cyclic_sample_lag",
+            x='cyclic_sample_lag',
             hue=hue,
         )
 
@@ -171,7 +185,7 @@ class CapturePlotter:
         return self._line(
             data[key].sel(sel),
             name=key,
-            x="channel_power_bin",
+            x='channel_power_bin',
             hue=hue,
         )
 
@@ -180,16 +194,18 @@ class CapturePlotter:
         return self._line(
             data[key].sel(sel),
             name=key,
-            x="time_elapsed",
+            x='time_elapsed',
             hue=hue,
         )
 
-    def persistence_spectrum(self, data: xr.Dataset, hue='persistence_statistic', **sel):
+    def persistence_spectrum(
+        self, data: xr.Dataset, hue='persistence_statistic', **sel
+    ):
         key = self.persistence_spectrum.__name__
         return self._line(
             data[key].sel(sel),
             name=key,
-            x="baseband_frequency",
+            x='baseband_frequency',
             hue=hue,
         )
 
@@ -198,8 +214,8 @@ class CapturePlotter:
         self._heatmap(
             data[key].sel(sel),
             name=key,
-            x="spectrogram_time",
-            y="spectrogram_baseband_frequency",
+            x='spectrogram_time',
+            y='spectrogram_baseband_frequency',
         )
 
     def spectrogram_histogram(self, data: xr.Dataset, **sel):
@@ -207,16 +223,16 @@ class CapturePlotter:
         return self._line(
             data[key].sel(sel),
             name=key,
-            x="spectrogram_power_bin",
+            x='spectrogram_power_bin',
             # hue=hue,
         )
 
     def cyclic_channel_power(self, data: xr.Dataset, **sel):
         data_across_facets = data.cyclic_channel_power.sel(**sel)
-        with self._plot_context(data, name="cyclic_channel_power", x='cyclic_lag'):
+        with self._plot_context(data, name='cyclic_channel_power', x='cyclic_lag'):
             if self.facet_col is not None:
                 facets = data[self.facet_col]
-                fig, axs = plt.subplots(1, len(facets))
+                fig, axs = plt.subplots(1, len(facets), sharey=True)
             else:
                 facets = [None]
                 fig = plt.gcf()
@@ -235,17 +251,17 @@ def capture_to_dicts(capture: xr.DataArray, title_case=False) -> dict[str]:
     if capture.ndim > 0:
         return [capture_to_dicts(c, title_case)[0] for c in capture]
 
-    coords = capture.coords.to_dataset().to_dict("list")["coords"]
+    coords = capture.coords.to_dataset().to_dict('list')['coords']
     d = {}
     for k, v in coords.items():
-        if isinstance(v["data"], numbers.Number):
-            d[k] = xarray_ops.describe_value(v["data"], v["attrs"])
-        elif isinstance(v["data"], str):
-            d[k] = v["data"].replace("_", " ")
+        if isinstance(v['data'], numbers.Number):
+            d[k] = xarray_ops.describe_value(v['data'], v['attrs'])
+        elif isinstance(v['data'], str):
+            d[k] = v['data'].replace('_', ' ')
             if title_case:
                 d[k] = d[k].title()
         else:
-            d[k] = v["data"]
+            d[k] = v['data']
 
     return [d]
 

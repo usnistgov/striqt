@@ -35,7 +35,7 @@ def _get_default_format_fields(
     fields = captures.capture_fields_with_aliases(
         sweep.captures[0], radio_id=radio_id, output=sweep.output
     )
-    
+
     fields['start_time'] = datetime.now().strftime('%Y%m%d-%Hh%Mm%S')
     fields['yaml_name'] = Path(yaml_path).stem
     fields['radio_id'] = radio_id
@@ -44,7 +44,12 @@ def _get_default_format_fields(
 
 
 def expand_path(
-    path: str | Path, sweep: Sweep, *, radio_id: str | None = None, yaml_path=None, yaml_relative=False
+    path: str | Path,
+    sweep: Sweep,
+    *,
+    radio_id: str | None = None,
+    yaml_path=None,
+    yaml_relative=False,
 ) -> str:
     """return an absolute path, allowing for user tokens (~) and {field} in the input."""
     if path is None:

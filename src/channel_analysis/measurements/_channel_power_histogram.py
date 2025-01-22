@@ -5,7 +5,11 @@ import typing
 
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
-from ._channel_power_time_series import PowerDetectorCoords, PowerDetectorAxis, channel_power_time_series
+from ._channel_power_time_series import (
+    PowerDetectorCoords,
+    PowerDetectorAxis,
+    channel_power_time_series,
+)
 from ._channel_power_ccdf import (
     ChannelPowerCoords,
     ChannelPowerBinAxis,
@@ -84,7 +88,7 @@ def channel_power_histogram(
         capture,
         power_detectors=power_detectors,
         detector_period=detector_period,
-        as_xarray=False
+        as_xarray=False,
     )
 
     count_dtype = xp.finfo(iq.dtype).dtype
@@ -95,7 +99,7 @@ def channel_power_histogram(
         for i_detector in range(power_dB.shape[1]):
             hist = xp.histogram(power_dB[i_chan, i_detector], bin_edges)[0]
             counts.append(hist)
-        counts = xp.asarray(counts,dtype=count_dtype)
+        counts = xp.asarray(counts, dtype=count_dtype)
         data.append(counts / xp.sum(counts))
 
     data = xp.asarray(data, dtype=count_dtype)

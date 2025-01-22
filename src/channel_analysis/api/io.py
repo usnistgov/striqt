@@ -71,7 +71,7 @@ def _get_iq_index_name():
 
 def _build_encodings(data, compression=None, filter: bool = True):
     # todo: this will need to be updated to work with zarr 3
-    
+
     from .. import measurements
 
     if compression is None:

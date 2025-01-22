@@ -135,7 +135,6 @@ class ChannelAnalysisRegistryDecorator(collections.UserDict):
                     msg = f'improper return type from {func.__name__}'
                     raise TypeError(msg) from ex
 
-                
                 result_obj = ChannelAnalysisResult(
                     xarray_datacls,
                     result,
