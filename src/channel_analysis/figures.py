@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import math
 import numbers
 from pathlib import Path
 import typing
@@ -21,6 +22,84 @@ else:
     plt = util.lazy_import('matplotlib.pyplot')
     np = util.lazy_import('numpy')
     iqwaveform = util.lazy_import('iqwaveform')
+
+
+class FixedEngFormatter(mpl.ticker.EngFormatter):
+    """Behave as mpl.ticker.EngFormatter, but also support an
+    invariant the unit suffix across the entire axis"""
+
+    def __init__(
+        self,
+        unit='',
+        unitInTick=True,
+        places=None,
+        sep=' ',
+        *,
+        usetex=None,
+        useMathText=None,
+        useOffset=False,
+    ):
+        self.unitInTick = unitInTick
+        super().__init__(
+            unit,
+            places,
+            sep,
+            usetex=usetex,
+            useMathText=useMathText,
+            useOffset=useOffset,
+        )
+
+    def format_data(self, value):
+        sign = 1
+        fmt = 'g' if self.places is None else f'.{self.places:d}f'
+
+        if value < 0:
+            sign = -1
+            value = -value
+
+        if value != 0:
+            pow10 = int(math.floor(math.log10(value) / 3) * 3)
+        else:
+            pow10 = 0
+            # Force value to zero, to avoid inconsistencies like
+            # format_eng(-0) = "0" and format_eng(0.0) = "0"
+            # but format_eng(-0.0) = "-0.0"
+            value = 0.0
+
+        if self.unitInTick:
+            pow10 = np.clip(pow10, min(self.ENG_PREFIXES), max(self.ENG_PREFIXES))
+        else:
+            pow10 = self.orderOfMagnitude
+
+        mant = sign * value / (10.0**pow10)
+        # Taking care of the cases like 999.9..., which may be rounded to 1000
+        # instead of 1 k.  Beware of the corner case of values that are beyond
+        # the range of SI prefixes (i.e. > 'Y').
+        if (
+            abs(float(format(mant, fmt))) >= 1000
+            and pow10 < max(self.ENG_PREFIXES)
+            and self.unitInTick
+        ):
+            mant /= 1000
+            pow10 += 3
+
+        unit_prefix = self.ENG_PREFIXES[int(pow10)]
+        if self.unitInTick and (self.unit or unit_prefix):
+            suffix = f'{self.sep}{unit_prefix}{self.unit}'
+        else:
+            suffix = ''
+        if self._usetex or self._useMathText:
+            return f'${mant:{fmt}}${suffix}'
+        else:
+            return f'{mant:{fmt}}{suffix}'
+
+    def get_axis_unit_suffix(self, vmin, vmax):
+        if self.unitInTick:
+            return ''
+
+        orderOfMagnitude = math.floor(math.log(vmax - vmin, 1000)) * 3
+        unit_prefix = self.ENG_PREFIXES[int(orderOfMagnitude)]
+        return f'{self.sep}({unit_prefix}{self.unit})'
 
 
 class CapturePlotter:
@@ -100,10 +179,10 @@ class CapturePlotter:
                 label_axis('x', data[x], ax=ax)
 
         if y is not None:
-            label_axis('y', data[y])
+            label_axis('y', data[y], ax=axs[0], tick_units=False)
 
         if hue is not None:
-            label_legend(data, coord_name=hue)
+            label_legend(data, coord_name=hue, ax=axs[0])
 
         warning_ctx.__exit__(None, None, None)
 
@@ -348,7 +427,7 @@ def plot_cyclic_channel_power(
 
 def label_axis(
     which_axis: typing.Literal['x'] | typing.Literal['y'],
-    data: typing.Union['xr.DataArray', 'xr.Dataset'],
+    ax_data: typing.Union['xr.DataArray', 'xr.Dataset'],
     *,
     coord_name: typing.Optional['xr.Coordinates'] = None,
     tick_units=True,
@@ -369,22 +448,18 @@ def label_axis(
 
     if coord_name is None:
         # label = a.attrs.get('standard_name', None)
-        units = data.attrs.get('units', None)
+        units = ax_data.attrs.get('units', None)
     else:
         # label = a[dimension].attrs.get('label', None)
-        units = data[coord_name].attrs.get('units', None)
+        units = ax_data[coord_name].attrs.get('units', None)
 
-    # if label is not None:
-    #     if units is not None and not tick_units:
-    #         label = f'{label} ({units})'
-    #     axis.set_label_text(label)
-    if units is not None and tick_units:
-        axis.set_major_formatter(mpl.ticker.EngFormatter(unit=units))
-        axis.set_label_text(data.standard_name or data.name)
-    elif units is not None:
-        axis.set_label_text(f'{data.standard_name or data.name} ({units})')
+    if units is not None:
+        formatter = FixedEngFormatter(unit=units, unitInTick=tick_units)
+        axis.set_major_formatter(formatter)
+        unit_suffix = formatter.get_axis_unit_suffix(ax_data.min(), ax_data.max())
+        axis.set_label_text(f'{ax_data.standard_name or ax_data.name}{unit_suffix}')
     else:
-        axis.set_label_text(data.standard_name or data.name)
+        axis.set_label_text(ax_data.standard_name or ax_data.name)
 
 
 def label_legend(
