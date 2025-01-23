@@ -651,7 +651,7 @@ def alloc_empty_iq(
     channels = radio.channel()
     if not isinstance(channels, tuple):
         channels = (channels,)
-    samples = empty((len(channels), 2 * count), dtype=np.float32, order='F')
+    samples = empty((len(channels), 2 * count), dtype=np.float32)
 
     # build the list of channel buffers, including references to the throwaway
     # in case of radio._stream_all_rx_channels
