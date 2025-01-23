@@ -8,7 +8,7 @@ from labbench import paramattr as attr
 import msgspec
 import numpy as np
 
-from channel_analysis.api.util import pinned_array_as_cupy
+from channel_analysis.api.util import pinned_array_as_cupy, compute_lock
 
 from .. import structs, util
 from . import method_attr
@@ -186,14 +186,15 @@ class RadioDevice(lb.Device):
         self._armed_capture: structs.RadioCapture | None = None
         self._carryover = _ReceiveBufferCarryover(self)
 
-    def setup(self, radio_config: structs.RadioSetup):
+    def setup(self, radio_setup: structs.RadioSetup):
         """disarm acquisition and apply the given radio setup"""
 
-        self.calibration = radio_config.calibration
-        self.periodic_trigger = radio_config.periodic_trigger
-        self.gapless_repeats = radio_config.gapless_repeats
-        self.time_sync_every_capture = radio_config.time_sync_every_capture
-        self.time_source(radio_config.time_source)
+        self.calibration = radio_setup.calibration
+        self.periodic_trigger = radio_setup.periodic_trigger
+        self.gapless_repeats = radio_setup.gapless_repeats
+        self.array_backend = radio_setup.array_backend
+        self.time_sync_every_capture = radio_setup.time_sync_every_capture
+        self.time_source(radio_setup.time_source)
 
         if not self.time_sync_every_capture:
             self.rx_enabled(False)
@@ -350,26 +351,24 @@ class RadioDevice(lb.Device):
 
         samples = samples.view('complex64')
         sample_offs = include_holdoff_count - stft_pad_before
+        sample_span = slice(sample_offs, sample_offs + sample_count)
+
+        unused_count = sample_count - round(capture.duration * fs)
+        self._carryover.stash(
+            samples[:, sample_span], start_ns, unused_sample_count=unused_count, capture=capture
+        )
 
         # it seems to be important to convert to cupy here in order
         # to get a full view of the underlying pinned memory. cuda
         # memory corruption has been observed when waiting until after
         if self.array_backend == 'cupy':
-            samples_out = pinned_array_as_cupy(samples)
+            with compute_lock:
+                samples = pinned_array_as_cupy(samples)
         else:
-            samples_out = samples
+            xp = self.get_array_namespace()
+            samples = xp.array(samples)
 
-        # stash samples for the start of the next capture
-        samples = samples[:, sample_offs : sample_offs + sample_count]
-        unused_count = sample_count - round(capture.duration * fs)
-        self._carryover.stash(
-            samples, start_ns, unused_sample_count=unused_count, capture=capture
-        )
-
-        # select the output samples
-        samples_out = samples_out[:, sample_offs : sample_offs + sample_count]
-
-        return samples_out, start_ns
+        return samples[:, sample_span], start_ns
 
     @lb.stopwatch('acquire', logger_level='debug')
     def acquire(

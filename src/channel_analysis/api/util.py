@@ -1,8 +1,10 @@
+import array_api_compat
+import contextlib
 import functools
 import importlib
 import importlib.util
 import sys
-
+import threading
 
 def lazy_import(module_name: str, package=None):
     """postponed import of the module with the specified name.
@@ -28,16 +30,6 @@ def lazy_import(module_name: str, package=None):
     spec.loader.exec_module(module)
     return module
 
-
-@functools.cache
-def import_configured_cupy():
-    import cupy as xp
-
-    # the FFT plan sets up large caches that don't help us
-    xp.fft.config.get_plan_cache().set_size(0)
-    xp.cuda.set_pinned_memory_allocator(None)
-
-    return xp
 
 def pinned_array_as_cupy(x, stream=None):
     import cupy as cp
@@ -71,3 +63,13 @@ def free_mempool_on_low_memory(threshold_bytes=1_000_000_000):
         mempool.free_all_blocks()
 
     cp.cuda.set_allocator(None)
+
+
+_compute_lock = threading.RLock()
+
+
+@contextlib.contextmanager
+def compute_lock():
+    _compute_lock.acquire()
+    yield
+    _compute_lock.release()
