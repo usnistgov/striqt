@@ -356,8 +356,8 @@ class RadioDevice(lb.Device):
         )
 
         import cupy as cp
-        samples = cp.asarray(samples)#pinned_array_as_cupy(samples)
-        
+        samples = cp.asarray(samples, copy=True)#pinned_array_as_cupy(samples)
+
         return samples, start_ns
 
     @lb.stopwatch('acquire', logger_level='debug')
