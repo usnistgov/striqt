@@ -346,6 +346,10 @@ class RadioDevice(lb.Device):
             remaining = remaining - this_count
             received_count += this_count
 
+        with lb.stopwatch('convert'):
+            import cupy as cp
+            samples = pinned_array_as_cupy(samples)
+
         sample_offs = include_holdoff_count - stft_pad_before
         samples = samples.view('complex64')[:, sample_offs : sample_offs + sample_count]
         print('samples hot off the press: ', samples[:,:10])
@@ -355,9 +359,9 @@ class RadioDevice(lb.Device):
             samples, start_ns, unused_sample_count=unused_count, capture=capture
         )
 
-        with lb.stopwatch('convert'):
-            import cupy as cp
-            samples = cp.asarray(samples)#pinned_array_as_cupy(samples)
+        # with lb.stopwatch('convert'):
+        #     import cupy as cp
+        #     samples = cp.asarray(samples)#pinned_array_as_cupy(samples)
 
         return samples, start_ns
 
