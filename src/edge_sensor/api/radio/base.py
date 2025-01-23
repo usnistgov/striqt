@@ -47,7 +47,7 @@ class _ReceiveBufferCarryover:
         else:
             # note: carryover.samples.dtype is np.complex64, samples.dtype is np.float32
             carryover_count = self.samples.shape[1]
-            samples[:, : 2 * carryover_count] = self.samples.view(samples.dtype)
+            samples[:, : 2 * carryover_count] = self.samples.view(samples.dtype).copy()
 
         return self.start_time_ns, carryover_count
 
@@ -660,9 +660,11 @@ def alloc_empty_iq(
     i = 0
     for channel in range(radio.rx_channel_count):
         if channel in channels:
+            print('add buffer ', i)
             buffers.append(samples[i, :])
             i += 1
         elif radio._stream_all_rx_channels:
+            print('add throwaway buffer')
             buffers.append(extra)
 
     return samples, buffers
