@@ -356,7 +356,7 @@ class RadioDevice(lb.Device):
         )
 
         import cupy as cp
-        samples = cp.asarray(samples, copy=True)#pinned_array_as_cupy(samples)
+        samples = cp.array(samples, copy=True)#pinned_array_as_cupy(samples)
 
         return samples, start_ns
 
@@ -651,7 +651,7 @@ def alloc_empty_iq(
     channels = radio.channel()
     if not isinstance(channels, tuple):
         channels = (channels,)
-    samples = empty((len(channels), 2 * count), dtype=np.float32)
+    samples = empty((len(channels), 2 * count), dtype=np.float32, order='F')
 
     # build the list of channel buffers, including references to the throwaway
     # in case of radio._stream_all_rx_channels
