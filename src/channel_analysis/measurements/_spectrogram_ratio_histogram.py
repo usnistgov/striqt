@@ -1,5 +1,6 @@
 from __future__ import annotations
 import dataclasses
+import functools
 import typing
 
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
