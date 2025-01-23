@@ -355,6 +355,8 @@ class RadioDevice(lb.Device):
             samples, start_ns, unused_sample_count=unused_count, capture=capture
         )
 
+        samples = pinned_array_as_cupy(samples)
+        
         return samples, start_ns
 
     @lb.stopwatch('acquire', logger_level='debug')
@@ -668,8 +670,6 @@ def alloc_empty_iq(
         elif radio._stream_all_rx_channels:
             print('add throwaway buffer')
             buffers.append(extra)
-
-    samples = pinned_array_as_cupy(samples)
 
     return samples, buffers
 
