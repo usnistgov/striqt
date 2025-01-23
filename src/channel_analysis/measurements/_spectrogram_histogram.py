@@ -21,7 +21,7 @@ else:
 
 @dataclasses.dataclass
 class SpectrogramHistogram(AsDataArray):
-    ccdf: Data[SpectrogramPowerBinAxis, np.float32]
+    counts: Data[SpectrogramPowerBinAxis, np.float32]
     spectrogram_power_bin: Coordof[SpectrogramPowerBinCoords]
     standard_name: Attr[str] = 'Fraction of counts'
 

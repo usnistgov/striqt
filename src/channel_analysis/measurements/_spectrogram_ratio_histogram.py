@@ -19,20 +19,22 @@ else:
     np = util.lazy_import('numpy')
 
 
-SpectrogramRatioPowerBinAxis = typing.Literal['spectrogram_ratio_power_bin']
+SpectrogramRatioPowerBinAxis = typing.Literal['spectrogram_bin_power_ratio']
 
 
 @dataclasses.dataclass
-class SpectrogramRatioPowerBinCoords(SpectrogramPowerBinCoords):
+class SpectrogramRatioPowerBinCoords:
     data: Data[SpectrogramPowerBinAxis, np.float32]
     standard_name: Attr[str] = 'Spectrogram bin power ratio'
     units: Attr[str] = 'dB'
 
+    factory = SpectrogramPowerBinCoords.factory
+
 
 @dataclasses.dataclass
 class SpectrogramRatioHistogram(AsDataArray):
-    ccdf: Data[SpectrogramRatioPowerBinAxis, np.float32]
-    spectrogram_ratio_power_bin: Coordof[SpectrogramRatioPowerBinCoords]
+    counts: Data[SpectrogramRatioPowerBinAxis, np.float32]
+    spectrogram_power_bin_ratio: Coordof[SpectrogramRatioPowerBinCoords]
     standard_name: Attr[str] = 'Fraction of counts'
 
 
