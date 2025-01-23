@@ -127,6 +127,9 @@ class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):
             'whether to run the GPU compute on empty buffers before sweeping for more even run time'
         ),
     ] = True
+    array_backend: Annotated[
+        Literal['numpy'] | Literal['cupy'], meta('array module to use, which sets the type of compute device (numpy = cpu, cupy = gpu)')
+    ] = 'cupy'
 
     _transient_holdoff_time: Optional[float] = None
     _rx_channel_count: Optional[int] = None

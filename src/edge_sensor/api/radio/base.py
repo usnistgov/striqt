@@ -161,6 +161,8 @@ class RadioDevice(lb.Device):
         1, sets=False, min=1, cache=True, help='number of input ports'
     )
 
+    array_backend = attr.value.str('cupy', only=('numpy', 'cupy'), help='array module to use, which sets the type of compute device (numpy = cpu, cupy = gpu)')
+
     # constants that can be adjusted by device-specific classes to tune streaming behavior
     _stream_all_rx_channels = attr.value.bool(
         False,
@@ -179,7 +181,7 @@ class RadioDevice(lb.Device):
     @property
     def base_clock_rate(self):
         return type(self).backend_sample_rate.max
-
+    
     def open(self):
         self._armed_capture: structs.RadioCapture | None = None
         self._carryover = _ReceiveBufferCarryover(self)
@@ -346,24 +348,28 @@ class RadioDevice(lb.Device):
             remaining = remaining - this_count
             received_count += this_count
 
-        with lb.stopwatch('convert'):
-            import cupy as cp
-            samples = pinned_array_as_cupy(samples)
-
+        samples = samples.view('complex64')
         sample_offs = include_holdoff_count - stft_pad_before
-        samples = samples.view('complex64')[:, sample_offs : sample_offs + sample_count]
-        print('samples hot off the press: ', samples[:,:10])
 
+        # it seems to be important to convert to cupy here in order
+        # to get a full view of the underlying pinned memory. cuda
+        # memory corruption has been observed when waiting until after
+        if self.array_backend == 'cupy':
+            samples_out = pinned_array_as_cupy(samples)
+        else:
+            samples_out = samples
+
+        # stash samples for the start of the next capture
+        samples = samples[:, sample_offs : sample_offs + sample_count]
         unused_count = sample_count - round(capture.duration * fs)
         self._carryover.stash(
             samples, start_ns, unused_sample_count=unused_count, capture=capture
         )
 
-        # with lb.stopwatch('convert'):
-        #     import cupy as cp
-        #     samples = cp.asarray(samples)#pinned_array_as_cupy(samples)
+        # select the output samples
+        samples_out = samples_out[:, sample_offs : sample_offs + sample_count]
 
-        return samples, start_ns
+        return samples_out, start_ns
 
     @lb.stopwatch('acquire', logger_level='debug')
     def acquire(
@@ -406,7 +412,6 @@ class RadioDevice(lb.Device):
         acquired_capture = msgspec.structs.replace(
             capture, start_time=pd.Timestamp(time_ns, unit='ns')
         )
-        print('samples out of acquire: ', iq[:,:10])
 
         return iq, acquired_capture
 
@@ -443,6 +448,15 @@ class RadioDevice(lb.Device):
             analysis_bandwidth=self.analysis_bandwidth,
             lo_shift=lo_shift,
         )
+
+    def get_array_namespace(self: RadioDevice):
+        if self.array_backend == 'cupy':
+            import cupy
+            return cupy
+        elif self.array_backend == 'numpy':
+            import numpy
+            return numpy
+
 
 
 def find_trigger_holdoff(
@@ -647,10 +661,10 @@ def alloc_empty_iq(
     """
     count = get_channel_read_buffer_count(radio, capture, include_holdoff=True)
 
-    try:
+    if radio.array_backend == 'cupy':
         from cupyx import empty_pinned as empty
-    except ImportError:
-        from numpy import empty
+    else:
+        empty = np.empty
 
     # fast reinterpretation to complex64 requires the waveform to be in the last axis
     channels = radio.channel()
@@ -670,11 +684,9 @@ def alloc_empty_iq(
     i = 0
     for channel in range(radio.rx_channel_count):
         if channel in channels:
-            print('add buffer ', i)
             buffers.append(samples[i, :])
             i += 1
         elif radio._stream_all_rx_channels:
-            print('add throwaway buffer')
             buffers.append(extra)
 
     return samples, buffers
