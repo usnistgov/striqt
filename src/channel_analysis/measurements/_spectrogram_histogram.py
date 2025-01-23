@@ -5,7 +5,7 @@ import typing
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
 from ..api.registry import register_xarray_measurement
-from ._spectrogram import _do_spectrogram, binned_mean
+from ._spectrogram import _do_spectrogram
 from ._spectrogram_ccdf import SpectrogramPowerBinCoords, SpectrogramPowerBinAxis
 from ._channel_power_histogram import make_power_histogram_bin_edges
 

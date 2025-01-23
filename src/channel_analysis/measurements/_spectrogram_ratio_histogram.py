@@ -7,7 +7,7 @@ from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
 from ..api.registry import register_xarray_measurement
 from ._spectrogram import _do_spectrogram
-from ._spectrogram_ccdf import SpectrogramPowerBinCoords, SpectrogramPowerBinAxis
+from ._spectrogram_ccdf import SpectrogramPowerBinCoords
 from ._channel_power_histogram import make_power_histogram_bin_edges
 
 from ..api import structs, util
@@ -24,8 +24,8 @@ SpectrogramPowerRatioBinAxis = typing.Literal['spectrogram_power_ratio_bin']
 
 
 @dataclasses.dataclass
-class SpectrogramRatioPowerBinCoords:
-    data: Data[SpectrogramPowerBinAxis, np.float32]
+class SpectrogramPowerRatioBinCoords:
+    data: Data[SpectrogramPowerRatioBinAxis, np.float32]
     standard_name: Attr[str] = 'Spectrogram power ratio bin'
     units: Attr[str] = 'dB'
 
@@ -47,7 +47,7 @@ class SpectrogramRatioPowerBinCoords:
 @dataclasses.dataclass
 class SpectrogramRatioHistogram(AsDataArray):
     counts: Data[SpectrogramPowerRatioBinAxis, np.float32]
-    spectrogram_power_ratio_bin: Coordof[SpectrogramRatioPowerBinCoords]
+    spectrogram_power_ratio_bin: Coordof[SpectrogramPowerRatioBinCoords]
     standard_name: Attr[str] = 'Fraction of counts'
 
 
