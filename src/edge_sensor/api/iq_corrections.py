@@ -241,7 +241,7 @@ def lookup_power_correction(
     return xp.asarray(power_scale, dtype='float32')[:, np.newaxis]
 
 
-@compute_lock
+@compute_lock()
 def resampling_correction(
     iq: 'iqwaveform.util.Array',
     capture: structs.RadioCapture,
