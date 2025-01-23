@@ -140,7 +140,7 @@ def describe_capture(
 
 
 @functools.lru_cache()
-def format_units(value, unit='', places=None, sep=' ') -> str:
+def format_units(value, unit='', places=None, force_prefix=None, sep=' ') -> str:
     """Format a number with SI unit prefixes"""
 
     sign = 1
@@ -150,7 +150,12 @@ def format_units(value, unit='', places=None, sep=' ') -> str:
         sign = -1
         value = -value
 
-    if value != 0:
+    if unit.lower().startswith('db'):
+        pow10 = 0
+    elif force_prefix is not None:
+        remap = dict(zip(_ENG_PREFIXES.values(), _ENG_PREFIXES.keys()))
+        pow10 = remap[force_prefix]
+    elif value != 0:
         pow10 = int(math.floor(math.log10(value) / 3) * 3)
     else:
         pow10 = 0
@@ -165,7 +170,11 @@ def format_units(value, unit='', places=None, sep=' ') -> str:
     # Taking care of the cases like 999.9..., which may be rounded to 1000
     # instead of 1 k.  Beware of the corner case of values that are beyond
     # the range of SI prefixes (i.e. > 'Y').
-    if abs(float(format(mant, fmt))) >= 1000 and pow10 < max(_ENG_PREFIXES):
+    if (
+        force_prefix is None
+        and abs(float(format(mant, fmt))) >= 1000
+        and pow10 < max(_ENG_PREFIXES)
+    ):
         mant /= 1000
         pow10 += 3
 
@@ -187,15 +196,16 @@ def describe_field(capture: structs.Capture, name: str):
     return f'{name}={value_str}'
 
 
-def describe_value(value, attrs: dict):
+def describe_value(value, attrs: dict, unit_prefix=None):
     if value is None:
         value_str = 'None'
     elif attrs.get('units', None) is not None and np.isfinite(value):
+        unit_kws = {'force_prefix': unit_prefix, 'unit': attrs['units']}
         if isinstance(value, tuple):
-            value_tup = [format_units(v, attrs['units']) for v in value]
+            value_tup = [format_units(v, **unit_kws) for v in value]
             value_str = f'({", ".join(value_tup)})'
         else:
-            value_str = format_units(value, attrs['units'])
+            value_str = format_units(value, **unit_kws)
     else:
         value_str = repr(value)
 

@@ -161,7 +161,11 @@ class RadioDevice(lb.Device):
         1, sets=False, min=1, cache=True, help='number of input ports'
     )
 
-    array_backend = attr.value.str('cupy', only=('numpy', 'cupy'), help='array module to use, which sets the type of compute device (numpy = cpu, cupy = gpu)')
+    array_backend = attr.value.str(
+        'cupy',
+        only=('numpy', 'cupy'),
+        help='array module to use, which sets the type of compute device (numpy = cpu, cupy = gpu)',
+    )
 
     # constants that can be adjusted by device-specific classes to tune streaming behavior
     _stream_all_rx_channels = attr.value.bool(
@@ -181,7 +185,7 @@ class RadioDevice(lb.Device):
     @property
     def base_clock_rate(self):
         return type(self).backend_sample_rate.max
-    
+
     def open(self):
         self._armed_capture: structs.RadioCapture | None = None
         self._carryover = _ReceiveBufferCarryover(self)
@@ -355,7 +359,10 @@ class RadioDevice(lb.Device):
 
         unused_count = sample_count - round(capture.duration * fs)
         self._carryover.stash(
-            samples[:, sample_span], start_ns, unused_sample_count=unused_count, capture=capture
+            samples[:, sample_span],
+            start_ns,
+            unused_sample_count=unused_count,
+            capture=capture,
         )
 
         # it seems to be important to convert to cupy here in order
@@ -451,11 +458,12 @@ class RadioDevice(lb.Device):
     def get_array_namespace(self: RadioDevice):
         if self.array_backend == 'cupy':
             import cupy
+
             return cupy
         elif self.array_backend == 'numpy':
             import numpy
-            return numpy
 
+            return numpy
 
 
 def find_trigger_holdoff(

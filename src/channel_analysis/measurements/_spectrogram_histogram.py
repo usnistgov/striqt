@@ -5,7 +5,7 @@ import typing
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
 from ..api.registry import register_xarray_measurement
-from ._spectrogram import _do_spectrogram
+from ._spectrogram import _do_spectrogram, binned_mean
 from ._spectrogram_ccdf import SpectrogramPowerBinCoords, SpectrogramPowerBinAxis
 from ._channel_power_histogram import make_power_histogram_bin_edges
 
@@ -38,6 +38,7 @@ def spectrogram_histogram(
     power_resolution: float,
     fractional_overlap: float = 0,
     frequency_bin_averaging: int = None,
+    time_bin_averaging: int = None
 ):
     spg, metadata = _do_spectrogram(
         iq,
@@ -46,6 +47,7 @@ def spectrogram_histogram(
         frequency_resolution=frequency_resolution,
         fractional_overlap=fractional_overlap,
         frequency_bin_averaging=frequency_bin_averaging,
+        time_bin_averaging=time_bin_averaging,
         dtype='float32',
     )
 

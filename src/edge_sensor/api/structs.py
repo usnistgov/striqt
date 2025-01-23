@@ -129,7 +129,9 @@ class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):
     ] = True
     array_backend: Annotated[
         Union[Literal['numpy'], Literal['cupy']],
-        meta('array module to use, which sets the type of compute device (numpy = cpu, cupy = gpu)')
+        meta(
+            'array module to use, which sets the type of compute device (numpy = cpu, cupy = gpu)'
+        ),
     ] = 'cupy'
 
     _transient_holdoff_time: Optional[float] = None
@@ -137,7 +139,9 @@ class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):
 
     def __post_init__(self):
         if self.gapless_repeats and self.time_sync_every_capture:
-            raise ValueError('time_sync_every_capture and gapless_repeats are mutually exclusive')
+            raise ValueError(
+                'time_sync_every_capture and gapless_repeats are mutually exclusive'
+            )
 
 
 class Description(msgspec.Struct, forbid_unknown_fields=True):

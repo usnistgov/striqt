@@ -209,7 +209,6 @@ def init_sensor_sweep(
     opened.setdefault('store', None)
     opened.setdefault('calibration', None)
 
-
     return opened['store'], controller, sweep, opened['calibration']
 
 

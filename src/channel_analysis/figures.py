@@ -24,6 +24,9 @@ else:
     iqwaveform = util.lazy_import('iqwaveform')
 
 
+_FIXED_UNIT_PREFIXES = {'center_frequency': 'M'}
+
+
 class FixedEngFormatter(mpl.ticker.EngFormatter):
     """Behave as mpl.ticker.EngFormatter, but also support an
     invariant the unit suffix across the entire axis"""
@@ -118,6 +121,11 @@ class CapturePlotter:
             self.facet_col = 'capture'
         else:
             self.facet_col = None
+
+        if output_dir is not None:
+            output_dir = Path(output_dir)
+            output_dir.mkdir(parents=True, exist_ok=True)
+
         self.col_wrap = col_wrap
         self.output_dir = output_dir
         self._suptitle_fmt = suptitle_fmt
@@ -126,12 +134,20 @@ class CapturePlotter:
 
     @contextlib.contextmanager
     def _plot_context(
-        self, data, name: str, x: str = None, y: str = None, hue: str = None
+        self,
+        data,
+        name: str,
+        x: str = None,
+        y: str = None,
+        hue: str = None,
+        xticklabelunits=True,
     ):
         if self.facet_col is None:
             fig, axs = plt.subplots()
+            facet_count = 1
         else:
             fig, axs = None, []
+            facet_count = data[self.facet_col].shape[0]
 
         warning_ctx = warnings.catch_warnings()
         warning_ctx.__enter__()
@@ -144,7 +160,9 @@ class CapturePlotter:
         if fig is None:
             fig = plt.gcf()
             axs = fig.get_axes()
+        else:
             fig.tight_layout()
+
         if not isinstance(axs, (list, tuple)):
             axs = [axs]
 
@@ -163,6 +181,19 @@ class CapturePlotter:
             for ax, title in zip(axs, titles):
                 ax.set_title(title)
 
+        if x is not None:
+            for ax in axs[:facet_count]:
+                label_axis('x', data[x], ax=ax, tick_units=xticklabelunits)
+
+        if y is not None:
+            label_axis('y', data[y], ax=axs[0], tick_units=False)
+
+        if hue is not None:
+            fig.legends[0].remove()
+            label_legend(data, coord_name=hue, ax=axs[0])
+
+        warning_ctx.__exit__(None, None, None)
+
         if self.output_dir is not None:
             filename = set(
                 label_by_coord(data, self._filename_fmt, name=name, title_case=True)
@@ -173,18 +204,6 @@ class CapturePlotter:
                 )
             path = Path(self.output_dir) / list(filename)[0]
             plt.savefig(path, dpi=300)
-
-        if x is not None:
-            for ax in axs:
-                label_axis('x', data[x], ax=ax)
-
-        if y is not None:
-            label_axis('y', data[y], ax=axs[0], tick_units=False)
-
-        if hue is not None:
-            label_legend(data, coord_name=hue, ax=axs[0])
-
-        warning_ctx.__exit__(None, None, None)
 
         if not self.interactive:
             plt.close()
@@ -199,8 +218,10 @@ class CapturePlotter:
         hue: str | None = None,
         rasterized: bool = True,
         sharey: bool = True,
+        xticklabelunits: bool = True,
     ):
         kws = dict(x=x, hue=hue, rasterized=rasterized)
+        ctx_kws = dict(name=name, x=x, hue=hue, xticklabelunits=xticklabelunits)
 
         if data.capture.size == 1:
             # iterate across the one capture
@@ -213,7 +234,7 @@ class CapturePlotter:
             seq = data
 
         for sub in seq:
-            with self._plot_context(sub, name=name, x=x, hue=hue):
+            with self._plot_context(sub, **ctx_kws):
                 data.sel(sel).plot.line(**kws)
 
     def _heatmap(
@@ -246,7 +267,7 @@ class CapturePlotter:
                 spg = data.sel(sel)
                 if transpose:
                     spg = spg.T
-                spg.dropna(x).dropna(y).plot(**kws)
+                spg.plot.pcolormesh(**kws)
 
     def cellular_cyclic_autocorrelation(
         self, data: xr.Dataset, hue='link_direction', **sel
@@ -266,6 +287,7 @@ class CapturePlotter:
             name=key,
             x='channel_power_bin',
             hue=hue,
+            xticklabelunits=False,
         )
 
     def channel_power_time_series(self, data: xr.Dataset, hue='power_detector', **sel):
@@ -291,7 +313,7 @@ class CapturePlotter:
     def spectrogram(self, data: xr.Dataset, **sel):
         key = self.spectrogram.__name__
         self._heatmap(
-            data[key].sel(sel),
+            data[key].sel(sel).dropna('spectrogram_baseband_frequency'),
             name=key,
             x='spectrogram_time',
             y='spectrogram_baseband_frequency',
@@ -303,6 +325,7 @@ class CapturePlotter:
             data[key].sel(sel),
             name=key,
             x='spectrogram_power_bin',
+            xticklabelunits=False,
             # hue=hue,
         )
 
@@ -334,7 +357,8 @@ def capture_to_dicts(capture: xr.DataArray, title_case=False) -> dict[str]:
     d = {}
     for k, v in coords.items():
         if isinstance(v['data'], numbers.Number):
-            d[k] = xarray_ops.describe_value(v['data'], v['attrs'])
+            prefix = _FIXED_UNIT_PREFIXES.get(k, None)
+            d[k] = xarray_ops.describe_value(v['data'], v['attrs'], unit_prefix=prefix)
         elif isinstance(v['data'], str):
             d[k] = v['data'].replace('_', ' ')
             if title_case:

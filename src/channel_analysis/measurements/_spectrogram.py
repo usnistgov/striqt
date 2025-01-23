@@ -34,7 +34,7 @@ def truncate_spectrogram_bandwidth(x, nfft, fs, bandwidth, axis=0):
     return iqwaveform.util.axis_slice(x, *edges, axis=axis)
 
 
-def _binned_mean(x, count, *, axis=0, truncate=True):
+def binned_mean(x, count, *, axis=0, truncate=True):
     """reduce an array by averaging into bins on the specified axis"""
 
     if truncate:
@@ -89,7 +89,7 @@ def freq_axis_values(
         )
 
     if navg is not None:
-        freqs = _binned_mean(freqs, navg)
+        freqs = binned_mean(freqs, navg)
         freqs -= freqs[freqs.size // 2]
 
     # only now downconvert. round to a still large number of digits
@@ -104,6 +104,7 @@ def _do_spectrogram(
     frequency_resolution: float,
     fractional_overlap: float = 0,
     frequency_bin_averaging: int = None,
+    time_bin_averaging: int = None,
     limit_digits: int = None,
     truncate_to_bandwidth: bool = True,
     dtype='float16',
@@ -144,7 +145,10 @@ def _do_spectrogram(
         )
 
     if frequency_bin_averaging is not None:
-        spg = _binned_mean(spg, frequency_bin_averaging, axis=2)
+        spg = binned_mean(spg, frequency_bin_averaging, axis=2)
+
+    if time_bin_averaging is not None:
+        spg = binned_mean(spg, time_bin_averaging, axis=1)
 
     spg = iqwaveform.powtodB(spg, eps=1e-25, out=spg)
 
