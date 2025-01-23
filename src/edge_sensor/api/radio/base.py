@@ -345,7 +345,8 @@ class RadioDevice(lb.Device):
             received_count += this_count
 
         sample_offs = include_holdoff_count - stft_pad_before
-        samples = samples[:, 2 * sample_offs : 2 * (sample_offs + sample_count)].view('complex64')
+        samples = samples.view('complex64')[:, sample_offs : sample_offs + sample_count]
+        print(samples[:,:10])
 
         unused_count = sample_count - round(capture.duration * fs)
         self._carryover.stash(
