@@ -28,7 +28,19 @@ class SpectrogramRatioPowerBinCoords:
     standard_name: Attr[str] = 'Spectrogram power ratio bin'
     units: Attr[str] = 'dB'
 
-    factory = SpectrogramPowerBinCoords.factory
+    @staticmethod
+    @functools.lru_cache
+    def factory(
+        capture: structs.Capture,
+        *,
+        window: typing.Union[str, tuple[str, float]],
+        frequency_resolution: float,
+        power_low: float,
+        power_high: float,
+        power_resolution: float,
+        **_,
+    ) -> dict[str, np.ndarray]:
+        return SpectrogramPowerBinCoords.factory(**locals())
 
 
 @dataclasses.dataclass
