@@ -355,8 +355,9 @@ class RadioDevice(lb.Device):
             samples, start_ns, unused_sample_count=unused_count, capture=capture
         )
 
-        import cupy as cp
-        samples = cp.array(samples)#pinned_array_as_cupy(samples)
+        with lb.stopwatch('convert'):
+            import cupy as cp
+            samples = cp.array(samples)#pinned_array_as_cupy(samples)
 
         return samples, start_ns
 
