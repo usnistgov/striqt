@@ -100,7 +100,6 @@ class ChannelAnalysisRegistryDecorator(collections.UserDict):
             sig = inspect.signature(func)
             params = sig.parameters
 
-            @util.exclusive_cuda_access
             @functools.wraps(func)
             def wrapped(iq, capture, **kws):
                 # injects and handles an additional argument, 'as_xarray', which allows
@@ -118,7 +117,9 @@ class ChannelAnalysisRegistryDecorator(collections.UserDict):
 
                 bound = sig.bind(iq=iq, capture=capture, **kws)
                 call_params = bound.kwargs
-                ret = func(*bound.args, **bound.kwargs)
+
+                with util.compute_lock:
+                    ret = func(*bound.args, **bound.kwargs)
 
                 if not as_xarray:
                     return ret
