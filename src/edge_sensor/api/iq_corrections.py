@@ -270,9 +270,12 @@ def resampling_correction(
             force_calibration or radio.calibration, bare_capture, xp
         )
 
+    print('iq before get pinned array: ', iq[:,:10])
     if hasattr(xp, 'get_default_memory_pool'):
         iq = pinned_array_as_cupy(iq)
         free_mempool_on_low_memory()
+
+    print('iq after get: ', iq[:,:10])
 
     fs_backend, _, analysis_filter = design_capture_filter(
         radio.base_clock_rate, capture
@@ -286,12 +289,7 @@ def resampling_correction(
         extend=True,
     )
 
-    print('start iq: ', iq[:,:10])
-    if power_scale is not None:
-        print('power_scale shape: ', power_scale.shape)
-
     if not base.needs_stft(analysis_filter, capture):
-        print('fast out')
         # no filtering or resampling needed
         iq = iq[:, : round(capture.duration * capture.sample_rate)]
         if power_scale is not None:
