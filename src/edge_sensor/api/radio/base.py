@@ -667,6 +667,8 @@ def alloc_empty_iq(
             print('add throwaway buffer')
             buffers.append(extra)
 
+    samples = util.pinned_array_as_cupy(samples)
+
     return samples, buffers
 
 
