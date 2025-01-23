@@ -128,7 +128,8 @@ class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):
         ),
     ] = True
     array_backend: Annotated[
-        Literal['numpy'] | Literal['cupy'], meta('array module to use, which sets the type of compute device (numpy = cpu, cupy = gpu)')
+        Union[Literal['numpy'], Literal['cupy']],
+        meta('array module to use, which sets the type of compute device (numpy = cpu, cupy = gpu)')
     ] = 'cupy'
 
     _transient_holdoff_time: Optional[float] = None
