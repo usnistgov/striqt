@@ -396,6 +396,8 @@ class RadioDevice(lb.Device):
         acquired_capture = msgspec.structs.replace(
             capture, start_time=pd.Timestamp(time_ns, unit='ns')
         )
+        print('samples out of acquire: ', iq[:,:10])
+
         return iq, acquired_capture
 
     def _read_stream(
