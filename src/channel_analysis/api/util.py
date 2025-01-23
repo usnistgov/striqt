@@ -32,7 +32,7 @@ def pinned_array_as_cupy(x, stream=None):
     import cupy as cp
 
     out = cp.empty_like(x)
-    out.data.copy_from(x.ctypes.data, x.data.nbytes, stream=stream)
+    out.data.copy_from(x.ctypes.data, x.data.nbytes)
     return out
 
 
