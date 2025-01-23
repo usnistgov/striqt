@@ -264,15 +264,15 @@ def resampling_correction(
 
     xp = util.import_cupy_with_fallback()
 
+    print('iq before get pinned array: ', iq[:,:10])
+    if hasattr(xp, 'get_default_memory_pool'):
+        iq = pinned_array_as_cupy(iq)
+
     with lb.stopwatch('power correction lookup', threshold=10e-3, logger_level='debug'):
         bare_capture = msgspec.structs.replace(capture, start_time=None)
         power_scale = lookup_power_correction(
             force_calibration or radio.calibration, bare_capture, xp
         )
-
-    print('iq before get pinned array: ', iq[:,:10])
-    if hasattr(xp, 'get_default_memory_pool'):
-        iq = pinned_array_as_cupy(iq)
 
     print('iq after get: ', iq[:,:10])
 
