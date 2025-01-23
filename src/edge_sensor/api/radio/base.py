@@ -8,7 +8,7 @@ from labbench import paramattr as attr
 import msgspec
 import numpy as np
 
-from channel_analysis.util import pinned_array_as_cupy
+from channel_analysis.api.util import pinned_array_as_cupy
 
 from .. import structs, util
 from . import method_attr
