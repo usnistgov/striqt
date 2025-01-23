@@ -266,7 +266,7 @@ def resampling_correction(
 
     print('iq before get pinned array: ', iq[:,:10])
     if hasattr(xp, 'get_default_memory_pool'):
-        iq = pinned_array_as_cupy(iq)
+        iq2 = pinned_array_as_cupy(iq)
 
     with lb.stopwatch('power correction lookup', threshold=10e-3, logger_level='debug'):
         bare_capture = msgspec.structs.replace(capture, start_time=None)
@@ -274,7 +274,9 @@ def resampling_correction(
             force_calibration or radio.calibration, bare_capture, xp
         )
 
-    print('iq after get: ', iq[:,:10])
+    print('iq after get: ', iq2[:,:10])
+
+    iq = iq2
 
     fs_backend, _, analysis_filter = design_capture_filter(
         radio.base_clock_rate, capture
