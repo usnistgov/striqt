@@ -38,7 +38,8 @@ def spectrogram_histogram(
     power_resolution: float,
     fractional_overlap: float = 0,
     frequency_bin_averaging: int = None,
-    time_bin_averaging: int = None
+    time_bin_averaging: int = None,
+    ratio: bool = True,
 ):
     spg, metadata = _do_spectrogram(
         iq,
@@ -50,6 +51,12 @@ def spectrogram_histogram(
         time_bin_averaging=time_bin_averaging,
         dtype='float32',
     )
+
+    if ratio and spg.shape[0] != 2:
+        raise ValueError('ratio can only be evaluated for 2-channel measurements')
+
+    if ratio:
+        spg[0], spg[1] = spg[0] - spg[1], spg[1] - spg[0]
 
     metadata = dict(metadata)
     metadata.pop('units')
