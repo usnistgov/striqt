@@ -41,7 +41,9 @@ class SpectrogramPowerRatioBinCoords:
         power_resolution: float,
         **_,
     ) -> dict[str, np.ndarray]:
-        return SpectrogramPowerBinCoords.factory(**locals())
+        kws = locals()
+        del kws['_']
+        return SpectrogramPowerBinCoords.factory(**kws)
 
 
 @dataclasses.dataclass
