@@ -8,6 +8,8 @@ from labbench import paramattr as attr
 import msgspec
 import numpy as np
 
+from channel_analysis.util import pinned_array_as_cupy
+
 from .. import structs, util
 from . import method_attr
 
@@ -667,7 +669,7 @@ def alloc_empty_iq(
             print('add throwaway buffer')
             buffers.append(extra)
 
-    samples = util.pinned_array_as_cupy(samples)
+    samples = pinned_array_as_cupy(samples)
 
     return samples, buffers
 
