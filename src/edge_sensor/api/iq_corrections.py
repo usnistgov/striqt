@@ -273,7 +273,7 @@ def resampling_correction(
     print('iq before get pinned array: ', iq[:,:10])
     if hasattr(xp, 'get_default_memory_pool'):
         with xp.cuda.Stream(non_blocking=False) as stream:
-            iq = pinned_array_as_cupy(iq, stream=stream)
+            iq = pinned_array_as_cupy(iq.copy(), stream=stream)
             stream.synchronize()            
 
     print('iq after get: ', iq[:,:10])
