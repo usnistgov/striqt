@@ -287,7 +287,8 @@ def resampling_correction(
     )
 
     print('start iq: ', iq[:,:10])
-    print('power_scale shape: ', power_scale.shape)
+    if power_scale is not None:
+        print('power_scale shape: ', power_scale.shape)
 
     if not base.needs_stft(analysis_filter, capture):
         print('fast out')
