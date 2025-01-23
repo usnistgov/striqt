@@ -356,7 +356,7 @@ class RadioDevice(lb.Device):
         )
 
         import cupy as cp
-        samples = cp.array(samples, copy=True)#pinned_array_as_cupy(samples)
+        samples = cp.array(samples)#pinned_array_as_cupy(samples)
 
         return samples, start_ns
 
