@@ -8,3 +8,4 @@ from ._persistence_spectrum import persistence_spectrum
 from ._spectrogram import spectrogram
 from ._spectrogram_ccdf import spectrogram_ccdf
 from ._spectrogram_histogram import spectrogram_histogram
+from ._spectrogram_ratio_histogram import spectrogram_ratio_histogram

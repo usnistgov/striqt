@@ -5,7 +5,7 @@ import typing
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
 from ..api.registry import register_xarray_measurement
-from ._spectrogram import _do_spectrogram, binned_mean
+from ._spectrogram import _do_spectrogram
 from ._spectrogram_ccdf import SpectrogramPowerBinCoords, SpectrogramPowerBinAxis
 from ._channel_power_histogram import make_power_histogram_bin_edges
 
@@ -19,15 +19,25 @@ else:
     np = util.lazy_import('numpy')
 
 
+SpectrogramRatioPowerBinAxis = typing.Literal['spectrogram_ratio_power_bin']
+
+
 @dataclasses.dataclass
-class SpectrogramHistogram(AsDataArray):
-    ccdf: Data[SpectrogramPowerBinAxis, np.float32]
-    spectrogram_power_bin: Coordof[SpectrogramPowerBinCoords]
+class SpectrogramRatioPowerBinCoords(SpectrogramPowerBinCoords):
+    data: Data[SpectrogramPowerBinAxis, np.float32]
+    standard_name: Attr[str] = 'Spectrogram bin power ratio'
+    units: Attr[str] = 'dB'
+
+
+@dataclasses.dataclass
+class SpectrogramRatioHistogram(AsDataArray):
+    ccdf: Data[SpectrogramRatioPowerBinAxis, np.float32]
+    spectrogram_ratio_power_bin: Coordof[SpectrogramRatioPowerBinCoords]
     standard_name: Attr[str] = 'Fraction of counts'
 
 
-@register_xarray_measurement(SpectrogramHistogram)
-def spectrogram_histogram(
+@register_xarray_measurement(SpectrogramRatioHistogram)
+def spectrogram_ratio_histogram(
     iq: 'iqwaveform.util.Array',
     capture: structs.Capture,
     *,
@@ -50,6 +60,11 @@ def spectrogram_histogram(
         time_bin_averaging=time_bin_averaging,
         dtype='float32',
     )
+
+    if spg.shape[0] != 2:
+        raise ValueError('ratio histograms are only supported for 2-channel measurements')
+
+    spg[0], spg[1] = spg[0] - spg[1], spg[1] - spg[0]
 
     metadata = dict(metadata)
     metadata.pop('units')

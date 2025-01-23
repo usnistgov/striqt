@@ -163,6 +163,9 @@ def _do_spectrogram(
         'fractional_overlap': fractional_overlap,
         'noise_bandwidth': enbw,
         'units': f'dBm/{enbw / 1e3:0.0f} kHz',
+        'frequency_bin_averaging': frequency_bin_averaging,
+        'time_bin_averaging': time_bin_averaging,
+        'limit_digits': limit_digits,
     }
 
     return spg, metadata
