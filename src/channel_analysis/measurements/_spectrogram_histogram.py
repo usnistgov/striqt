@@ -56,7 +56,10 @@ def spectrogram_histogram(
         raise ValueError('ratio can only be evaluated for 2-channel measurements')
 
     if ratio:
-        spg[0], spg[1] = spg[0] - spg[1], spg[1] - spg[0]
+        d0 = spg[0] - spg[1]
+        d1 = spg[1] - spg[0]
+        spg[0] = d0
+        spg[1] = d1
 
     metadata = dict(metadata)
     metadata.pop('units')

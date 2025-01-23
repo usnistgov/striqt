@@ -185,6 +185,7 @@ class SpectrogramTimeCoords:
         *,
         frequency_resolution: float,
         fractional_overlap: float,
+        time_bin_averaging: int,
         **_,
     ) -> dict[str, np.ndarray]:
         import pandas as pd
@@ -194,6 +195,15 @@ class SpectrogramTimeCoords:
         hop_size = nfft - round(fractional_overlap * nfft)
         scale = nfft / hop_size
         size = int(scale * (capture.sample_rate * capture.duration / nfft - 1) + 1)
+
+        if not time_bin_averaging:
+            pass
+        elif size % time_bin_averaging == 0:
+            size = size // time_bin_averaging
+            hop_size = hop_size * time_bin_averaging
+        else:
+            raise ValueError('spectrogram time bin count must be an whole multiple of time_bin_averaging')
+
         return pd.RangeIndex(size) * hop_size / capture.sample_rate
 
 
@@ -246,5 +256,6 @@ def spectrogram(
     frequency_resolution: float,
     fractional_overlap: float = 0,
     frequency_bin_averaging: int = None,
+    time_bin_averaging: int = None
 ):
     return _do_spectrogram(**locals(), limit_digits=3, dtype='float16')
