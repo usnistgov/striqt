@@ -1,3 +1,4 @@
+import functools
 import importlib
 import importlib.util
 import sys
@@ -27,6 +28,16 @@ def lazy_import(module_name: str, package=None):
     spec.loader.exec_module(module)
     return module
 
+
+@functools.cache
+def import_configured_cupy():
+    import cupy as xp
+
+    # the FFT plan sets up large caches that don't help us
+    xp.fft.config.get_plan_cache().set_size(0)
+    xp.cuda.set_pinned_memory_allocator(None)
+
+    return xp
 
 def pinned_array_as_cupy(x, stream=None):
     import cupy as cp
