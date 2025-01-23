@@ -273,7 +273,6 @@ def resampling_correction(
     print('iq before get pinned array: ', iq[:,:10])
     if hasattr(xp, 'get_default_memory_pool'):
         iq = pinned_array_as_cupy(iq)
-        free_mempool_on_low_memory()
 
     print('iq after get: ', iq[:,:10])
 
