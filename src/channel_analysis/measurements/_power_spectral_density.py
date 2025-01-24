@@ -131,7 +131,8 @@ def power_spectral_density(
     print(q_out.max(axis=-1))
 
     # everything else
-    for i in np.where(~isquantile)[0]:
+    non_quantile_inds = np.where(~np.array(isquantile))[0]
+    for i in non_quantile_inds:
         ufunc = stat_ufunc_from_shorthand(frequency_statistic[i], xp=xp)
         axis_index(psd, i, axis=axis)[:] = ufunc(spg, axis=axis)
 
