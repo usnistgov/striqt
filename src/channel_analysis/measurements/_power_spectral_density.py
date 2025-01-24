@@ -115,11 +115,10 @@ def power_spectral_density(
 
     newshape = list(spg.shape)
     newshape[axis] = len(frequency_statistic)
-    psd = xp.empty(tuple(newshape), dtype=dtype)
+    psd = xp.empty(newshape, dtype=dtype)
 
     # evaluate all of the quantiles as a group
     q = np.asarray(frequency_statistic)[isquantile].astype(dtype)
-    print(q)
     q_out = axis_index(psd, isquantile, axis=axis)
     q_out[:] = (
         xp.quantile(spg, xp.array(q), axis=axis)
@@ -136,6 +135,10 @@ def power_spectral_density(
         ufunc = stat_ufunc_from_shorthand(frequency_statistic[i], xp=xp)
         axis_index(psd, i, axis=axis)[:] = ufunc(spg, axis=axis)
 
-    psd = iqwaveform.powtodB(psd)
+    print(psd.max(axis=-1))
+
+    psd = iqwaveform.powtodB(psd).copy()
+
+    print(psd.max(axis=-1))
 
     return psd, metadata
