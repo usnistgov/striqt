@@ -100,6 +100,7 @@ def power_spectral_density(
         frequency_bin_averaging=frequency_bin_averaging,
         truncate_to_bandwidth=truncate,
         fractional_overlap=fractional_overlap,
+        dB=False
     )
 
     xp = iqwaveform.fourier.array_namespace(iq)
@@ -123,19 +124,6 @@ def power_spectral_density(
             )
             axis_index(psd, i, axis=axis)[...] = ufunc(spg, axis=axis)
 
-    psd = iqwaveform.powtodB(psd, eps=1e-25, out=psd)
-
-    # data = iqwaveform.fourier.power_spectral_density(
-    #     iq,
-    #     fs=capture.sample_rate,
-    #     bandwidth=capture.analysis_bandwidth,
-    #     window=window,
-    #     resolution=frequency_resolution,
-    #     fractional_overlap=fractional_overlap,
-    #     statistics=frequency_statistic,
-    #     truncate=truncate,
-    #     dB=True,
-    #     axis=1,
-    # )
+    psd = iqwaveform.powtodB(psd, eps=1e-25)
 
     return psd, metadata
