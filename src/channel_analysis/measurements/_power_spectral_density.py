@@ -119,7 +119,7 @@ def power_spectral_density(
     psd = xp.empty(newshape, dtype=dtype)
 
     # evaluate all of the quantiles as a group
-    q = np.asarray(frequency_statistic)[isquantile].astype(dtype)
+    q = xp.asarray(frequency_statistic)[isquantile].astype(dtype)
     q_out = axis_index(psd, xp.where(isquantile)[0], axis=axis)
     q_out[:] = (
         xp.quantile(spg, xp.array(q), axis=axis)
