@@ -311,14 +311,17 @@ def evaluate_channel_analysis(
 
     results = {}
 
-    # evaluate each possible analysis function if specified
-    for name, func_kws in spec_dict.items():
-        util.free_mempool_on_low_memory()
-        with lb.stopwatch(f'analysis: {name}', logger_level='debug'):
-            func = registry[type(getattr(spec, name))]
+    from ..measurements._spectrogram import cached_spectrograms
 
-            if func_kws:
-                results[name] = func(iq, capture, as_xarray=as_xarray, **func_kws)
+    with cached_spectrograms():
+        # evaluate each possible analysis function if specified
+        for name, func_kws in spec_dict.items():
+            util.free_mempool_on_low_memory()
+            with lb.stopwatch(f'analysis: {name}', logger_level='debug'):
+                func = registry[type(getattr(spec, name))]
+
+                if func_kws:
+                    results[name] = func(iq, capture, as_xarray=as_xarray, **func_kws)
 
     return results
 

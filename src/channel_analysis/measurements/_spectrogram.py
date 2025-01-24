@@ -146,7 +146,7 @@ class _spectrogram_cache:
 
 
 @contextlib.contextmanager
-def cache_spectrogram():
+def cached_spectrograms():
     global _spectrogram_cache
     _spectrogram_cache.enabled = True
     yield
