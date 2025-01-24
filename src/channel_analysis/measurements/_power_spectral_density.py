@@ -118,20 +118,22 @@ def power_spectral_density(
     psd = xp.empty(tuple(newshape), dtype=dtype)
 
     # evaluate all of the quantiles as a group
-    # q = np.asarray(frequency_statistic)[isquantile].astype(dtype)
-    # print(q)
-    # q_out = axis_index(psd, isquantile, axis=axis)
-    # q_out[:] = (
-    #     xp.quantile(spg, xp.array(q), axis=axis)
-    #     .swapaxes(0, axis)  # quantile bumps the output result to axis 0
-    #     .astype(dtype)  #
-    # )    
+    q = np.asarray(frequency_statistic)[isquantile].astype(dtype)
+    print(q)
+    q_out = axis_index(psd, isquantile, axis=axis)
+    q_out[:] = (
+        xp.quantile(spg, xp.array(q), axis=axis)
+        .swapaxes(0, axis)  # quantile bumps the output result to axis 0
+        .astype(dtype)  #
+        .copy()
+    )
+
+    print(q_out.max(axis=-1))
 
     # everything else
-    for i, isquantile in enumerate(isquantile):
-        # if not isquantile:
-            ufunc = stat_ufunc_from_shorthand(frequency_statistic[i], xp=xp)
-            axis_index(psd, i, axis=axis)[:] = ufunc(spg, axis=axis)
+    for i in np.where(~isquantile)[0]:
+        ufunc = stat_ufunc_from_shorthand(frequency_statistic[i], xp=xp)
+        axis_index(psd, i, axis=axis)[:] = ufunc(spg, axis=axis)
 
     psd = iqwaveform.powtodB(psd)
 
