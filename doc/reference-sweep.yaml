@@ -95,12 +95,20 @@ defaults:
   # RF Center frequency (Hz)
   center_frequency: 3710e6
 
-  # A list of channel indices, [0,1] for both RX1 and RX2
+  # A channel index, or list of channel indexes for multichannel acquisition
+  # Examples:
+  #    0 # for RX1
+  #    [0,1] # for both RX1 and RX2
   channel: 0
 
-  # hardware gain setting (dB)
+  # Hardware RX gain setting, or a list of gain settings for each channel matching the
+  # length of channel (above)
+  #
   # Range is hardware-dependent - see the gain limits specified by
   #   src/edge_sensor/radio/*.py
+  # Examples:
+  #    -10 # apply -10 dB gain to all channels
+  #    [-10, 0] # -10 dB on RX1 and 0 dB on RX2
   gain: -10 # dB
 
   # acquisition duration (s)
