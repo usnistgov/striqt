@@ -358,6 +358,7 @@ def resampling_correction(
         nfft=nfft_out,
         noverlap=noverlap,
         axis=axis,
+        overwrite_x=True
     )
 
     del xstft
