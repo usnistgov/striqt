@@ -163,7 +163,6 @@ def _evaluate(
     window: typing.Union[str, tuple[str, float]],
     frequency_resolution: float,
     fractional_overlap: float = 0,
-    frequency_bin_averaging: int = None,
     truncate_to_bandwidth: bool = True,
 ):
     # TODO: integrate this back into iqwaveform
@@ -198,16 +197,12 @@ def _evaluate(
             spg, nfft, capture.sample_rate, bandwidth=capture.analysis_bandwidth, axis=2
         )
 
-    if frequency_bin_averaging is not None:
-        spg = binned_mean(spg, frequency_bin_averaging, axis=2)
-
     metadata = {
         'window': window,
         'frequency_resolution': frequency_resolution,
         'fractional_overlap': fractional_overlap,
         'noise_bandwidth': enbw,
         'units': f'dBm/{enbw / 1e3:0.0f} kHz',
-        'frequency_bin_averaging': frequency_bin_averaging,
     }
 
     return spg, metadata
@@ -224,26 +219,38 @@ def compute_spectrogram(
     time_bin_averaging: int = None,
     limit_digits: int = None,
     truncate_to_bandwidth: bool = True,
+    dB: bool = True,
     dtype='float16',
 ):
-    eval_kws = locals()
-    del eval_kws['dtype'], eval_kws['time_bin_averaging'], eval_kws['limit_digits']
-    spg, metadata = _evaluate(**eval_kws)
+    eval_kws = dict(
+        window=window,
+        frequency_resolution=frequency_resolution,
+        fractional_overlap=fractional_overlap,
+        truncate_to_bandwidth=truncate_to_bandwidth,
+    )
+    spg, metadata = _evaluate(iq, capture, **eval_kws)
 
     xp = iqwaveform.util.array_namespace(iq)
+
+    if frequency_bin_averaging is not None:
+        spg = binned_mean(spg, frequency_bin_averaging, axis=2)
 
     if time_bin_averaging is not None:
         spg = binned_mean(spg, time_bin_averaging, axis=1)
 
-    spg = iqwaveform.powtodB(spg, eps=1e-25, out=spg)
+    if dB:
+        spg = iqwaveform.powtodB(spg, eps=1e-25)
 
     if limit_digits is not None:
-        xp.round(spg, limit_digits, out=spg)
+        xp.round(spg, limit_digits, spg)
 
     spg = spg.astype(dtype)
 
     metadata = dict(
-        metadata, time_bin_averaging=time_bin_averaging, limit_digits=limit_digits
+        metadata,
+        time_bin_averaging=time_bin_averaging,
+        limit_digits=limit_digits,
+        frequency_bin_averaging=frequency_bin_averaging,
     )
 
     return spg, metadata
