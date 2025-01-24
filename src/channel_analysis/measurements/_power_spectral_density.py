@@ -121,7 +121,7 @@ def power_spectral_density(
     # all of the quantiles, evaluated together
     i_is_quantile = xp.where(findquantile)[0]
     print(repr(i_is_quantile))
-    q = xp.array([float(frequency_statistic[i]) for i in i_is_quantile], dtype=dtype)
+    q = xp.array(frequency_statistic)[i_is_quantile].astype(dtype)
     q_out = axis_index(psd, i_is_quantile, axis=axis)
     q_out[:] = (
         xp.quantile(spg, xp.array(q), axis=axis)
@@ -134,7 +134,7 @@ def power_spectral_density(
 
     # everything else
     i_isnt_quantile = xp.where(~findquantile)[0]
-    for i in i_isnt_quantile:
+    for i in i_isnt_quantile.get():
         ufunc = stat_ufunc_from_shorthand(frequency_statistic[i], xp=xp)
         axis_index(psd, i, axis=axis)[:] = ufunc(spg, axis=axis)
 
