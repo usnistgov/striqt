@@ -22,7 +22,7 @@ PersistenceStatisticAxis = typing.Literal['frequency_statistic']
 
 
 @dataclasses.dataclass
-class PeriodogramStatisticCoords:
+class FrequencyStatisticCoords:
     data: Data[PersistenceStatisticAxis, str]
     standard_name: Attr[str] = 'Frequency statistic'
 
@@ -31,11 +31,11 @@ class PeriodogramStatisticCoords:
     def factory(
         capture: structs.Capture,
         *,
-        frequency_statistics: tuple[typing.Union[str, float], ...],
+        frequency_statistic: tuple[typing.Union[str, float], ...],
         **_,
     ) -> np.ndarray:
-        frequency_statistics = [str(s) for s in frequency_statistics]
-        return np.asarray(frequency_statistics, dtype=object)
+        frequency_statistic = [str(s) for s in frequency_statistic]
+        return np.asarray(frequency_statistic, dtype=object)
 
 
 ### Baseband frequency axis and coordinates
@@ -68,7 +68,7 @@ class PowerSpectralDensity(AsDataArray):
         tuple[PersistenceStatisticAxis, BasebandFrequencyAxis], np.float32
     ]
 
-    persistence_statistic: Coordof[PeriodogramStatisticCoords]
+    frequency_statistic: Coordof[FrequencyStatisticCoords]
     baseband_frequency: Coordof[BasebandFrequencyCoords]
 
     standard_name: Attr[str] = 'Power spectral density'
@@ -81,7 +81,7 @@ def power_spectral_density(
     *,
     window: typing.Union[str, tuple[str, float]],
     frequency_resolution: float,
-    frequency_statistics: tuple[typing.Union[str, float], ...] = ('mean',),
+    frequency_statistic: tuple[typing.Union[str, float], ...] = ('mean',),
     fractional_overlap: float = 0,
     frequency_bin_averaging: typing.Optional[float]=None,
     truncate: bool = True,
@@ -105,13 +105,13 @@ def power_spectral_density(
     xp = iqwaveform.fourier.array_namespace(iq)
     axis=1
     axis_index = iqwaveform.util.axis_index
-    isquantile = iqwaveform.util.find_float_inds(tuple(frequency_statistics))
+    isquantile = iqwaveform.util.find_float_inds(tuple(frequency_statistic))
 
     newshape = list(spg.shape)
-    newshape[axis] = len(frequency_statistics)
+    newshape[axis] = len(frequency_statistic)
     psd = xp.empty(tuple(newshape), dtype='float32')
 
-    quantiles = list(np.asarray(frequency_statistics)[isquantile].astype('float32'))
+    quantiles = list(np.asarray(frequency_statistic)[isquantile].astype('float32'))
 
     out_quantiles = axis_index(psd, isquantile, axis=axis).swapaxes(0, 1)
     out_quantiles[:] = xp.quantile(spg, xp.array(quantiles), axis=axis)
@@ -119,7 +119,7 @@ def power_spectral_density(
     for i, isquantile in enumerate(isquantile):
         if not isquantile:
             ufunc = iqwaveform.fourier.stat_ufunc_from_shorthand(
-                frequency_statistics[i], xp=xp
+                frequency_statistic[i], xp=xp
             )
             axis_index(psd, i, axis=axis)[...] = ufunc(spg, axis=axis)
 
@@ -130,7 +130,7 @@ def power_spectral_density(
     #     window=window,
     #     resolution=frequency_resolution,
     #     fractional_overlap=fractional_overlap,
-    #     statistics=frequency_statistics,
+    #     statistics=frequency_statistic,
     #     truncate=truncate,
     #     dB=True,
     #     axis=1,

@@ -307,12 +307,12 @@ class CapturePlotter:
         if (
             key not in data.data_vars
             and 'persistence_spectrum' in data.data_vars
-            and 'persistence_statistic' in data
+            and 'persistence_statistics' in data
             and hue == 'frequency_statistic'
         ):
             # legacy
 
-            hue = 'persistence_statistic'
+            hue = 'persistence_statistics'
             key = 'persistence_spectrum'
 
         return self._line(
