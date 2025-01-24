@@ -73,6 +73,7 @@ class PowerSpectralDensity(AsDataArray):
 
     standard_name: Attr[str] = 'Power spectral density'
 
+total = 0
 
 @register_xarray_measurement(PowerSpectralDensity)
 def power_spectral_density(
@@ -128,7 +129,9 @@ def power_spectral_density(
     print(q_out.max(axis=-1))
     print(psd.max(axis=-1))
 
-    1//0
+    global total
+    if total == 1:
+        1//0
     # everything else
     i_isnt_quantile = np.where(~np.array(findquantile))[0]
     for i in i_isnt_quantile:
@@ -140,5 +143,7 @@ def power_spectral_density(
     psd = iqwaveform.powtodB(psd).copy()
 
     print(psd.max(axis=-1))
+
+    total += 1
 
     return psd, metadata
