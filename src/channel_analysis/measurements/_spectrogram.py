@@ -227,7 +227,7 @@ def capture_spectrogram(
     dtype='float16',
 ):
     eval_kws = locals()
-    del eval_kws['dtype', 'time_bin_averaging', 'limit_digits']
+    del eval_kws['dtype'], eval_kws['time_bin_averaging'], eval_kws['limit_digits']
     spg, metadata = _evaluate(**eval_kws)
 
     xp = iqwaveform.util.array_namespace(iq)
