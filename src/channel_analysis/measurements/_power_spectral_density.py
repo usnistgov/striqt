@@ -126,6 +126,8 @@ def power_spectral_density(
         .astype(dtype)  #
     )
 
+    print(q_out.max(axis=-1))
+
     # everything else
     for i, isquantile in enumerate(isquantile):
         if not isquantile:
