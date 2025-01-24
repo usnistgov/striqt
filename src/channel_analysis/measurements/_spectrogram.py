@@ -7,7 +7,7 @@ import typing
 
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
-from ..api.registry import register_analysis_to_xarray
+from ..api.registry import register_xarray_measurement
 from ..api import structs, util
 
 if typing.TYPE_CHECKING:
@@ -330,7 +330,7 @@ class Spectrogram(AsDataArray):
     long_name: Attr[str] = 'Power spectral density'
 
 
-@register_analysis_to_xarray(Spectrogram)
+@register_xarray_measurement(Spectrogram)
 def spectrogram(
     iq: 'iqwaveform.util.Array',
     capture: structs.Capture,

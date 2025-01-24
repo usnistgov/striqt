@@ -10,7 +10,7 @@ from ._channel_power_time_series import (
     PowerDetectorAxis,
     channel_power_time_series,
 )
-from ..api.registry import register_analysis_to_xarray
+from ..api.registry import register_xarray_measurement
 from ..api import structs, util
 
 if typing.TYPE_CHECKING:
@@ -82,7 +82,7 @@ class ChannelPowerHistogram(AsDataArray):
     standard_name: Attr[str] = 'Fraction of counts'
 
 
-@register_analysis_to_xarray(ChannelPowerHistogram)
+@register_xarray_measurement(ChannelPowerHistogram)
 def channel_power_histogram(
     iq,
     capture: structs.Capture,

@@ -5,7 +5,7 @@ import typing
 
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
-from ..api.registry import register_analysis_to_xarray
+from ..api.registry import register_xarray_measurement
 from ..api import structs, util
 
 if typing.TYPE_CHECKING:
@@ -84,7 +84,7 @@ class IQWaveform(AsDataArray):
     units: Attr[str] = 'V/√Ω'
 
 
-@register_analysis_to_xarray(IQWaveform)
+@register_xarray_measurement(IQWaveform)
 def iq_waveform(
     iq: 'iqwaveform.util.Array',
     capture: structs.Capture,

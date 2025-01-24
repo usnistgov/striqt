@@ -4,7 +4,7 @@ import typing
 
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
-from ..api.registry import register_analysis_to_xarray
+from ..api.registry import register_xarray_measurement
 from ._spectrogram import compute_spectrogram
 from ._spectrogram_histogram import SpectrogramPowerBinCoords
 from ._channel_power_histogram import make_power_histogram_bin_edges
@@ -38,7 +38,7 @@ class SpectrogramRatioHistogram(AsDataArray):
     standard_name: Attr[str] = 'Fraction of counts'
 
 
-@register_analysis_to_xarray(SpectrogramRatioHistogram)
+@register_xarray_measurement(SpectrogramRatioHistogram)
 def spectrogram_ratio_histogram(
     iq: 'iqwaveform.util.Array',
     capture: structs.Capture,
