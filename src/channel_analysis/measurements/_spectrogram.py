@@ -137,11 +137,11 @@ class _spectrogram_cache:
                 return match
             else:
                 print('evaluating spg from scratch')
-            
-            ret = wrapped(**kws)
+
+            ret = func(**kws)
             cls.update(kws, ret)
             return ret
-        
+
         return wrapped
 
 
