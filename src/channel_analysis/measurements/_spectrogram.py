@@ -102,6 +102,9 @@ class _spectrogram_cache:
 
     @staticmethod
     def kw_key(kws):
+        if kws is None:
+            return None
+        
         kws = dict(kws)
         del kws['iq']
         return frozenset(kws.items())
