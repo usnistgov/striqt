@@ -1,4 +1,5 @@
 from __future__ import annotations
+import contextlib
 import dataclasses
 import decimal
 import functools
@@ -54,11 +55,8 @@ def fftfreq(nfft, fs, dtype='float64') -> 'np.ndarray':
     rational sample rates in order to avoid rounding errors
     when merging captures with different sample rates.
     """
-    # high resolution period
+    # high resolution rational representation of frequency resolution
     fres = decimal.Decimal(fs) / nfft
-    # if fs_digits is not None:
-    #     fs_fixed =
-    # fres = round(, fs_digits)/nfft
     span = range(-nfft // 2, -nfft // 2 + nfft)
     if nfft % 2 == 0:
         values = [fres * n for n in span]
@@ -75,8 +73,8 @@ def freq_axis_values(
     else:
         raise ValueError('sample_rate/resolution must be a counting number')
 
-    # otherwise negligible rounding errors lead to h~eadaches when merging
-    # spectra with different sampling parameters. start with long floats
+    # otherwise negligible rounding errors lead to headaches when merging
+    # spectra with different sampling parameters. start here with long floats
     # to minimize this problem
     # fs = np.longdouble(capture.sample_rate)
     freqs = fftfreq(nfft, capture.sample_rate)
@@ -92,11 +90,72 @@ def freq_axis_values(
         freqs = binned_mean(freqs, navg)
         freqs -= freqs[freqs.size // 2]
 
-    # only now downconvert. round to a still large number of digits
+    # only now downconvert. round to a still-large number of digits
     return freqs.astype('float64').round(16)
 
 
-def _do_spectrogram(
+class _spectrogram_cache:
+    """A single-element cache keyed on arguments to _evaluate"""
+    _key: frozenset = None
+    _value = None
+    enabled = False
+
+    @staticmethod
+    def kw_key(kws):
+        kws = dict(kws)
+        del kws['iq']
+        return frozenset(kws.items())
+
+    @classmethod
+    def clear(cls):
+        cls.update(None, None)
+
+    @classmethod
+    def lookup(cls, kws: dict):
+        if cls._key is None or not cls.enabled:
+            return None
+
+        if cls.kw_key(kws) == cls._key:
+            return cls._value
+        else:
+            return None
+
+    @classmethod
+    def update(cls, kws: dict, value):
+        if not cls.enabled:
+            return
+        cls._key = cls.kw_key(kws)
+        cls._value = value
+
+    @classmethod
+    def cached_calls(cls, func):
+        @functools.wraps(func)
+        def wrapped(**kws):
+            match = cls.lookup(kws)
+            if match is not None:
+                print('returning cached spg')
+                return match
+            else:
+                print('evaluating spg from scratch')
+            
+            ret = wrapped(**kws)
+            cls.update(kws, ret)
+            return ret
+        
+        return wrapped
+
+
+@contextlib.contextmanager
+def cache_spectrogram():
+    global _spectrogram_cache
+    _spectrogram_cache.enabled = True
+    yield
+    _spectrogram_cache.clear()
+    _spectrogram_cache.enabled = False
+
+
+@_spectrogram_cache.cached_calls
+def _evaluate(
     iq: 'iqwaveform.util.Array',
     capture: structs.Capture,
     *,
@@ -104,24 +163,18 @@ def _do_spectrogram(
     frequency_resolution: float,
     fractional_overlap: float = 0,
     frequency_bin_averaging: int = None,
-    time_bin_averaging: int = None,
-    limit_digits: int = None,
     truncate_to_bandwidth: bool = True,
-    dtype='float16',
 ):
     # TODO: integrate this back into iqwaveform
     if iqwaveform.isroundmod(capture.sample_rate, frequency_resolution):
         nfft = round(capture.sample_rate / frequency_resolution)
     else:
         raise ValueError('sample_rate/resolution must be a counting number')
-
-    xp = iqwaveform.util.array_namespace(iq)
+    enbw = frequency_resolution * equivalent_noise_bandwidth(window, nfft)
 
     if isinstance(window, list):
         # lists break lru_cache
         window = tuple(window)
-
-    enbw = frequency_resolution * equivalent_noise_bandwidth(window, nfft)
 
     if iqwaveform.isroundmod(capture.sample_rate, frequency_resolution):
         noverlap = round(fractional_overlap * nfft)
@@ -147,6 +200,38 @@ def _do_spectrogram(
     if frequency_bin_averaging is not None:
         spg = binned_mean(spg, frequency_bin_averaging, axis=2)
 
+
+    metadata = {
+        'window': window,
+        'frequency_resolution': frequency_resolution,
+        'fractional_overlap': fractional_overlap,
+        'noise_bandwidth': enbw,
+        'units': f'dBm/{enbw / 1e3:0.0f} kHz',
+        'frequency_bin_averaging': frequency_bin_averaging,
+    }
+
+    return spg, metadata
+
+
+def capture_spectrogram(
+    iq: 'iqwaveform.util.Array',
+    capture: structs.Capture,
+    *,
+    window: typing.Union[str, tuple[str, float]],
+    frequency_resolution: float,
+    fractional_overlap: float = 0,
+    frequency_bin_averaging: int = None,
+    time_bin_averaging: int = None,
+    limit_digits: int = None,
+    truncate_to_bandwidth: bool = True,
+    dtype='float16',
+):
+    eval_kws = locals()
+    del eval_kws['dtype', 'time_bin_averaging', 'limit_digits']
+    spg, metadata = _evaluate(**eval_kws)
+
+    xp = iqwaveform.util.array_namespace(iq)
+
     if time_bin_averaging is not None:
         spg = binned_mean(spg, time_bin_averaging, axis=1)
 
@@ -157,16 +242,11 @@ def _do_spectrogram(
 
     spg = spg.astype(dtype)
 
-    metadata = {
-        'window': window,
-        'frequency_resolution': frequency_resolution,
-        'fractional_overlap': fractional_overlap,
-        'noise_bandwidth': enbw,
-        'units': f'dBm/{enbw / 1e3:0.0f} kHz',
-        'frequency_bin_averaging': frequency_bin_averaging,
-        'time_bin_averaging': time_bin_averaging,
-        'limit_digits': limit_digits,
-    }
+    metadata = dict(
+        metadata,
+        time_bin_averaging=time_bin_averaging,
+        limit_digits=limit_digits
+    )
 
     return spg, metadata
 
@@ -261,4 +341,4 @@ def spectrogram(
     frequency_bin_averaging: int = None,
     time_bin_averaging: int = None
 ):
-    return _do_spectrogram(**locals(), limit_digits=3, dtype='float16')
+    return capture_spectrogram(**locals(), limit_digits=3, dtype='float16')

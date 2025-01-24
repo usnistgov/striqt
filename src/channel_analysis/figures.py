@@ -328,6 +328,16 @@ class CapturePlotter:
             xticklabelunits=False,
             # hue=hue,
         )
+    
+    def spectrogram_ratio_histogram(self, data: xr.Dataset, **sel):
+        key = self.spectrogram_ratio_histogram.__name__
+        return self._line(
+            data[key].sel(sel),
+            name=key,
+            x='spectrogram_power_ratio_bin',
+            xticklabelunits=False,
+            # hue=hue,
+        )
 
     def cyclic_channel_power(self, data: xr.Dataset, **sel):
         data_across_facets = data.cyclic_channel_power.sel(**sel)
