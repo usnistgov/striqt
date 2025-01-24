@@ -528,7 +528,7 @@ def _design_capture_filter(
             bw=capture.analysis_bandwidth,
             bw_lo=bw_lo,
             shift=lo_shift,
-            min_fft_size=4 * 4096 - 1,
+            min_fft_size=4096 - 1,
             min_oversampling=min_oversampling,
         )
 

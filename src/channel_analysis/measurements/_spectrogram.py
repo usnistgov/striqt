@@ -136,10 +136,7 @@ class _spectrogram_cache:
         def wrapped(**kws):
             match = cls.lookup(kws)
             if match is not None:
-                print('returning cached spg')
                 return match
-            else:
-                print('evaluating spg from scratch')
 
             ret = func(**kws)
             cls.update(kws, ret)
