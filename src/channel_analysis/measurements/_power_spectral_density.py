@@ -92,6 +92,13 @@ def power_spectral_density(
     including 'mean' as applied in the original method.
     """
 
+    from iqwaveform.util import axis_index, array_namespace
+    from iqwaveform.fourier import stat_ufunc_from_shorthand
+
+    xp = array_namespace(iq)
+    axis = 1
+    dtype = 'float32'
+
     spg, metadata = compute_spectrogram(
         iq,
         capture,
@@ -101,25 +108,21 @@ def power_spectral_density(
         truncate_to_bandwidth=truncate,
         fractional_overlap=fractional_overlap,
         dB=False,
+        dtype=dtype
     )
-
-    from iqwaveform.util import axis_index, array_namespace
-    from iqwaveform.fourier import stat_ufunc_from_shorthand
-
-    xp = array_namespace(iq)
-    axis = 1
 
     isquantile = iqwaveform.util.find_float_inds(tuple(frequency_statistic))
 
     newshape = list(spg.shape)
     newshape[axis] = len(frequency_statistic)
-    psd = xp.empty(tuple(newshape), dtype='float16')
+    psd = xp.empty(tuple(newshape), dtype=dtype)
 
-    quantiles = list(np.asarray(frequency_statistic)[isquantile].astype('float16'))
+    # evaluate all of the quantiles as a group
+    quantiles = list(np.asarray(frequency_statistic)[isquantile].astype(dtype))
+    q = axis_index(psd, isquantile, axis=axis).swapaxes(0, axis)
+    q[:] = xp.quantile(spg, xp.array(quantiles), axis=axis)
 
-    out_quantiles = axis_index(psd, isquantile, axis=axis).swapaxes(0, axis)
-    out_quantiles[:] = xp.quantile(spg, xp.array(quantiles), axis=axis)
-
+    # everything else
     for i, isquantile in enumerate(isquantile):
         if not isquantile:
             ufunc = stat_ufunc_from_shorthand(frequency_statistic[i], xp=xp)
