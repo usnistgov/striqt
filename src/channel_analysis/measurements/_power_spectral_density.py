@@ -100,28 +100,29 @@ def power_spectral_density(
         frequency_bin_averaging=frequency_bin_averaging,
         truncate_to_bandwidth=truncate,
         fractional_overlap=fractional_overlap,
-        dB=False
+        dB=False,
     )
 
-    xp = iqwaveform.fourier.array_namespace(iq)
+    from iqwaveform.util import axis_index, array_namespace
+    from iqwaveform.fourier import stat_ufunc_from_shorthand
+
+    xp = array_namespace(iq)
     axis = 1
-    axis_index = iqwaveform.util.axis_index
+
     isquantile = iqwaveform.util.find_float_inds(tuple(frequency_statistic))
 
     newshape = list(spg.shape)
     newshape[axis] = len(frequency_statistic)
-    psd = xp.empty(tuple(newshape), dtype='float32')
+    psd = xp.empty(tuple(newshape), dtype='float16')
 
-    quantiles = list(np.asarray(frequency_statistic)[isquantile].astype('float32'))
+    quantiles = list(np.asarray(frequency_statistic)[isquantile].astype('float16'))
 
-    out_quantiles = axis_index(psd, isquantile, axis=axis).swapaxes(0, 1)
+    out_quantiles = axis_index(psd, isquantile, axis=axis).swapaxes(0, axis)
     out_quantiles[:] = xp.quantile(spg, xp.array(quantiles), axis=axis)
 
     for i, isquantile in enumerate(isquantile):
         if not isquantile:
-            ufunc = iqwaveform.fourier.stat_ufunc_from_shorthand(
-                frequency_statistic[i], xp=xp
-            )
+            ufunc = stat_ufunc_from_shorthand(frequency_statistic[i], xp=xp)
             axis_index(psd, i, axis=axis)[...] = ufunc(spg, axis=axis)
 
     psd = iqwaveform.powtodB(psd, eps=1e-25)
