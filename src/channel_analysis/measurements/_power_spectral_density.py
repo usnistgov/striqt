@@ -85,7 +85,6 @@ def power_spectral_density(
     fractional_overlap: float = 0,
     frequency_bin_averaging: typing.Optional[float]=None,
     truncate: bool = True,
-    axis=1,
 ):
     """estimate power spectral density using the Welch method.
 
@@ -104,6 +103,7 @@ def power_spectral_density(
     )
 
     xp = iqwaveform.fourier.array_namespace(iq)
+    axis=1
     axis_index = iqwaveform.util.axis_index
     isquantile = iqwaveform.util.find_float_inds(tuple(frequency_statistics))
 
