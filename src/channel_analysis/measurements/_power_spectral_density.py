@@ -121,7 +121,7 @@ def power_spectral_density(
     # all of the quantiles, evaluated together
     i_is_quantile = xp.where(findquantile)[0][0]
     q = xp.array([float(frequency_statistic[i]) for i in i_is_quantile], dtype=dtype)
-    q_out = axis_index(psd, xp.where(i_is_quantile)[0], axis=axis)
+    q_out = axis_index(psd, i_is_quantile, axis=axis)
     q_out[:] = (
         xp.quantile(spg, xp.array(q), axis=axis)
         .swapaxes(0, axis)  # quantile bumps the output result to axis 0
