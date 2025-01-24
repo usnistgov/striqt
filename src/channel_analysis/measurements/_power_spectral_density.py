@@ -112,17 +112,14 @@ def power_spectral_density(
     )
 
     findquantile = iqwaveform.util.find_float_inds(tuple(frequency_statistic))
-    findquantile = xp.array(findquantile)
-    
+
     newshape = list(spg.shape)
     newshape[axis] = len(frequency_statistic)
     psd = xp.empty(newshape, dtype=dtype)
 
     # all of the quantiles, evaluated together
-    i_is_quantile = xp.where(findquantile)[0]
-    print(repr(i_is_quantile))
-    q = xp.array(frequency_statistic)[i_is_quantile].astype(dtype)
-    q_out = axis_index(psd, i_is_quantile, axis=axis)
+    q = np.array(frequency_statistic)[findquantile].astype(dtype)
+    q_out = axis_index(psd, findquantile, axis=axis)
     q_out[:] = (
         xp.quantile(spg, xp.array(q), axis=axis)
         .swapaxes(0, axis)  # quantile bumps the output result to axis 0
