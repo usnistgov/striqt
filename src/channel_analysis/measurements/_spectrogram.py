@@ -7,7 +7,7 @@ import typing
 
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
-from ..api.registry import register_xarray_measurement
+from ..api.registry import register_analysis_to_xarray
 from ..api import structs, util
 
 if typing.TYPE_CHECKING:
@@ -96,6 +96,7 @@ def freq_axis_values(
 
 class _spectrogram_cache:
     """A single-element cache keyed on arguments to _evaluate"""
+
     _key: frozenset = None
     _value = None
     enabled = False
@@ -104,7 +105,7 @@ class _spectrogram_cache:
     def kw_key(kws):
         if kws is None:
             return None
-        
+
         kws = dict(kws)
         del kws['iq']
         return frozenset(kws.items())
@@ -200,7 +201,6 @@ def _evaluate(
     if frequency_bin_averaging is not None:
         spg = binned_mean(spg, frequency_bin_averaging, axis=2)
 
-
     metadata = {
         'window': window,
         'frequency_resolution': frequency_resolution,
@@ -213,7 +213,7 @@ def _evaluate(
     return spg, metadata
 
 
-def capture_spectrogram(
+def compute_spectrogram(
     iq: 'iqwaveform.util.Array',
     capture: structs.Capture,
     *,
@@ -243,9 +243,7 @@ def capture_spectrogram(
     spg = spg.astype(dtype)
 
     metadata = dict(
-        metadata,
-        time_bin_averaging=time_bin_averaging,
-        limit_digits=limit_digits
+        metadata, time_bin_averaging=time_bin_averaging, limit_digits=limit_digits
     )
 
     return spg, metadata
@@ -285,7 +283,9 @@ class SpectrogramTimeCoords:
             size = size // time_bin_averaging
             hop_size = hop_size * time_bin_averaging
         else:
-            raise ValueError('spectrogram time bin count must be an whole multiple of time_bin_averaging')
+            raise ValueError(
+                'spectrogram time bin count must be an whole multiple of time_bin_averaging'
+            )
 
         return pd.RangeIndex(size) * hop_size / capture.sample_rate
 
@@ -330,7 +330,7 @@ class Spectrogram(AsDataArray):
     long_name: Attr[str] = 'Power spectral density'
 
 
-@register_xarray_measurement(Spectrogram)
+@register_analysis_to_xarray(Spectrogram)
 def spectrogram(
     iq: 'iqwaveform.util.Array',
     capture: structs.Capture,
@@ -339,6 +339,6 @@ def spectrogram(
     frequency_resolution: float,
     fractional_overlap: float = 0,
     frequency_bin_averaging: int = None,
-    time_bin_averaging: int = None
+    time_bin_averaging: int = None,
 ):
-    return capture_spectrogram(**locals(), limit_digits=3, dtype='float16')
+    return compute_spectrogram(**locals(), limit_digits=3, dtype='float16')

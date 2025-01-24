@@ -123,8 +123,8 @@ def _y_factor_frequency_response_correction(
     Tamb: float,
     Tref=290,
 ):
-    spectrum = dataset.persistence_spectrum.sel(
-        persistence_statistic='mean', drop=True
+    spectrum = dataset.power_spectral_density.sel(
+        frequency_statistic='mean', drop=True
     ).pipe(lambda x: 10 ** (x / 10.0))
 
     fc_T = fc_temperatures

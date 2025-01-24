@@ -6,7 +6,7 @@ import typing
 
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
-from ..api.registry import register_xarray_measurement
+from ..api.registry import register_analysis_to_xarray
 from ..api import structs, util
 
 
@@ -91,7 +91,7 @@ class CellularCyclicAutocorrelation(AsDataArray):
 
 
 ### iqwaveform wrapper
-@register_xarray_measurement(CellularCyclicAutocorrelation)
+@register_analysis_to_xarray(CellularCyclicAutocorrelation)
 def cellular_cyclic_autocorrelation(
     iq: 'iqwaveform.util.Array',
     capture: structs.Capture,

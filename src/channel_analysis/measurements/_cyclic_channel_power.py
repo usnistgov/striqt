@@ -5,7 +5,7 @@ import typing
 
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
-from ..api.registry import register_xarray_measurement
+from ..api.registry import register_analysis_to_xarray
 from ._channel_power_time_series import PowerDetectorAxis, PowerDetectorCoords
 
 from ..api import structs, util
@@ -81,7 +81,7 @@ class CyclicChannelPower(AsDataArray):
     units: Attr[str] = 'dBm'
 
 
-@register_xarray_measurement(CyclicChannelPower)
+@register_analysis_to_xarray(CyclicChannelPower)
 def cyclic_channel_power(
     iq,
     capture: structs.Capture,

@@ -10,12 +10,7 @@ from ._channel_power_time_series import (
     PowerDetectorAxis,
     channel_power_time_series,
 )
-from ._channel_power_ccdf import (
-    ChannelPowerCoords,
-    ChannelPowerBinAxis,
-    make_power_bins,
-)
-from ..api.registry import register_xarray_measurement
+from ..api.registry import register_analysis_to_xarray
 from ..api import structs, util
 
 if typing.TYPE_CHECKING:
@@ -24,6 +19,38 @@ if typing.TYPE_CHECKING:
 else:
     iqwaveform = util.lazy_import('iqwaveform')
     np = util.lazy_import('numpy')
+
+
+@functools.lru_cache
+def make_power_bins(power_low, power_high, power_resolution, xp=np):
+    """generate the list of power bins"""
+    ret = xp.arange(power_low, power_high, power_resolution)
+    if power_high - ret[-1] > power_resolution / 2:
+        ret = xp.pad(ret, [[0, 1]], mode='constant', constant_values=power_high).copy()
+    return ret
+
+
+ChannelPowerBinAxis = typing.Literal['channel_power_bin']
+
+
+@dataclasses.dataclass
+class ChannelPowerCoords:
+    data: Data[ChannelPowerBinAxis, np.float32]
+    standard_name: Attr[str] = 'Channel power'
+    units: Attr[str] = 'dBm'
+
+    @staticmethod
+    @functools.lru_cache
+    def factory(
+        capture: structs.Capture,
+        *,
+        power_low: float,
+        power_high: float,
+        power_resolution: float,
+        **_,
+    ) -> dict[str, np.ndarray]:
+        """returns a dictionary of coordinate values, keyed by axis dimension name"""
+        return make_power_bins(power_low, power_high, power_resolution)
 
 
 @functools.lru_cache
@@ -55,7 +82,7 @@ class ChannelPowerHistogram(AsDataArray):
     standard_name: Attr[str] = 'Fraction of counts'
 
 
-@register_xarray_measurement(ChannelPowerHistogram)
+@register_analysis_to_xarray(ChannelPowerHistogram)
 def channel_power_histogram(
     iq,
     capture: structs.Capture,

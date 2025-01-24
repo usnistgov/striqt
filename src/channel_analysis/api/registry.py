@@ -186,7 +186,7 @@ class ChannelAnalysisRegistryDecorator(collections.UserDict):
         )
 
 
-register_xarray_measurement = ChannelAnalysisRegistryDecorator(structs.ChannelAnalysis)
+register_analysis_to_xarray = ChannelAnalysisRegistryDecorator(structs.ChannelAnalysis)
 
 
 def analyze_by_spec(
@@ -205,7 +205,7 @@ def analyze_by_spec(
         iq,
         capture,
         spec=spec,
-        registry=register_xarray_measurement,
+        registry=register_analysis_to_xarray,
         as_xarray='delayed' if as_xarray else False,
     )
 

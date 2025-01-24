@@ -4,9 +4,9 @@ import typing
 
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
-from ..api.registry import register_xarray_measurement
-from ._spectrogram import capture_spectrogram
-from ._spectrogram_ccdf import SpectrogramPowerBinCoords
+from ..api.registry import register_analysis_to_xarray
+from ._spectrogram import compute_spectrogram
+from ._spectrogram_histogram import SpectrogramPowerBinCoords
 from ._channel_power_histogram import make_power_histogram_bin_edges
 
 from ..api import structs, util
@@ -38,7 +38,7 @@ class SpectrogramRatioHistogram(AsDataArray):
     standard_name: Attr[str] = 'Fraction of counts'
 
 
-@register_xarray_measurement(SpectrogramRatioHistogram)
+@register_analysis_to_xarray(SpectrogramRatioHistogram)
 def spectrogram_ratio_histogram(
     iq: 'iqwaveform.util.Array',
     capture: structs.Capture,
@@ -52,7 +52,7 @@ def spectrogram_ratio_histogram(
     frequency_bin_averaging: int = None,
     time_bin_averaging: int = None,
 ):
-    spg, metadata = capture_spectrogram(
+    spg, metadata = compute_spectrogram(
         iq,
         capture,
         window=window,
@@ -64,7 +64,9 @@ def spectrogram_ratio_histogram(
     )
 
     if spg.shape[0] != 2:
-        raise ValueError('ratio histograms are only supported for 2-channel measurements')
+        raise ValueError(
+            'ratio histograms are only supported for 2-channel measurements'
+        )
 
     spg[0], spg[1] = spg[0] - spg[1], spg[1] - spg[0]
 

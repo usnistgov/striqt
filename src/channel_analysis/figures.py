@@ -299,10 +299,22 @@ class CapturePlotter:
             hue=hue,
         )
 
-    def persistence_spectrum(
-        self, data: xr.Dataset, hue='persistence_statistic', **sel
+    def power_spectral_density(
+        self, data: xr.Dataset, hue='frequency_statistic', **sel
     ):
-        key = self.persistence_spectrum.__name__
+        key = self.power_spectral_density.__name__
+
+        if (
+            key not in data.data_vars
+            and 'persistence_spectrum' in data.data_vars
+            and 'persistence_statistic' in data
+            and hue == 'frequency_statistic'
+        ):
+            # legacy
+
+            hue = 'persistence_statistic'
+            key = 'persistence_spectrum'
+
         return self._line(
             data[key].sel(sel),
             name=key,
@@ -328,7 +340,7 @@ class CapturePlotter:
             xticklabelunits=False,
             # hue=hue,
         )
-    
+
     def spectrogram_ratio_histogram(self, data: xr.Dataset, **sel):
         key = self.spectrogram_ratio_histogram.__name__
         return self._line(
