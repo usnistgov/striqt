@@ -124,11 +124,11 @@ def power_spectral_density(
         xp.quantile(spg, list(q), axis=axis)
         .swapaxes(0, axis)  # quantile bumps the output result to axis 0
         .astype(dtype)  #
-        .copy()
     )
     print(q_out.max(axis=-1))
     print(psd.max(axis=-1))
 
+    1//0
     # everything else
     i_isnt_quantile = np.where(~np.array(findquantile))[0]
     for i in i_isnt_quantile:
