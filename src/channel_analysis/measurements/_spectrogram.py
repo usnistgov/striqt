@@ -228,7 +228,7 @@ def compute_spectrogram(
         fractional_overlap=fractional_overlap,
         truncate_to_bandwidth=truncate_to_bandwidth,
     )
-    spg, metadata = _evaluate(iq, capture, **eval_kws)
+    spg, metadata = _evaluate(iq=iq, capture=capture, **eval_kws)
 
     xp = iqwaveform.util.array_namespace(iq)
 
