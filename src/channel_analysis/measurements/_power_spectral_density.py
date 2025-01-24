@@ -31,11 +31,11 @@ class PeriodogramStatisticCoords:
     def factory(
         capture: structs.Capture,
         *,
-        persistence_statistics: tuple[typing.Union[str, float], ...],
+        frequency_statistics: tuple[typing.Union[str, float], ...],
         **_,
     ) -> np.ndarray:
-        persistence_statistics = [str(s) for s in persistence_statistics]
-        return np.asarray(persistence_statistics, dtype=object)
+        frequency_statistics = [str(s) for s in frequency_statistics]
+        return np.asarray(frequency_statistics, dtype=object)
 
 
 ### Baseband frequency axis and coordinates
