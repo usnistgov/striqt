@@ -83,7 +83,7 @@ def power_spectral_density(
     frequency_resolution: float,
     frequency_statistics: tuple[typing.Union[str, float], ...] = ('mean',),
     fractional_overlap: float = 0,
-    frequency_bin_averaging=None,
+    frequency_bin_averaging: typing.Optional[float]=None,
     truncate: bool = True,
     axis=1,
 ):
