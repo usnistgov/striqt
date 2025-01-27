@@ -43,7 +43,9 @@ def run(**kws):
             edge_sensor.dump(store, dataset)
 
     except BaseException:
+        # the radio is probably not closed if there was an exception
         sys.excepthook(*sys.exc_info())
+        print('closing radio after exception')
         controller.close_radio(sweep_spec.radio_setup)
 
 if __name__ == '__main__':
