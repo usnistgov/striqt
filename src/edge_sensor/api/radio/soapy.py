@@ -234,18 +234,11 @@ class SoapyRadioDevice(base.RadioDevice):
             self.backend.setGain(SoapySDR.SOAPY_SDR_TX, channel, gain)
 
     def open(self):
-        class _SoapySDRDevice(SoapySDR.Device):
-            def close(self):
-                if SoapySDR._SoapySDR is None:
-                    return
-                else:
-                    super().close()
-
         if self.resource:
             # prevent race conditions in threaded accesses to the Soapy driver
-            self.backend = _SoapySDRDevice(dict(self.resource))
+            self.backend = SoapySDR.Device(dict(self.resource))
         else:
-            self.backend = _SoapySDRDevice()
+            self.backend = SoapySDR.Device()
 
         self._logger.info(f'opened with {self.backend.getDriverKey()}')
 
