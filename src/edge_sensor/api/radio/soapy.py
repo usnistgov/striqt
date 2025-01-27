@@ -354,8 +354,9 @@ class SoapyRadioDevice(base.RadioDevice):
             or SoapySDR._SoapySDR.Device_deactivateStream is None
             or not hasattr(SoapySDR.Device, 'unmake')
         ):
-            # soapy's underlying libraries
-            # have been deconstructed too far to proceed
+            # soapy's underlying libraries have been deconstructed
+            # too far to proceed
+            SoapySDR.Device.__del__ = lambda: pass
             return
 
         try:
