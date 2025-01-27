@@ -46,7 +46,7 @@ def run(**kws):
         # the following will run the ipdb debug prompt if the
         # -d flag was passed in
         sys.excepthook(*sys.exc_info())
-        
+
         print('closing radio after exception')
         controller.close_radio(sweep_spec.radio_setup)
 
