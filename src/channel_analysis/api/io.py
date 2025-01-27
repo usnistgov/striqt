@@ -18,12 +18,10 @@ if typing.TYPE_CHECKING:
 
     if hasattr(zarr.storage, 'Store'):
         # zarr 2.x
-        StoreBase = zarr.storage.Store
-        LocalStore = zarr.storage.DirectoryStore
+        StoreType = typing.TypeVar('StoreType', bound=zarr.storage.Store)
     else:
         # zarr 3.x
-        StoreBase = zarr.abc.store.Store
-        LocalStore = zarr.storage.LocalStore
+        StoreType = typing.TypeVar('StoreType', bound=zarr.abc.store.Store)
 
 else:
     np = util.lazy_import('numpy')
@@ -97,12 +95,12 @@ def _build_encodings(data, compression=None, filter: bool = True):
 
 
 def dump(
-    store: 'StoreBase',
+    store: 'StoreType',
     data: typing.Optional['xr.DataArray' | 'xr.Dataset'] = None,
     append_dim=None,
     compression=None,
     filter=True,
-) -> 'StoreBase':
+) -> 'StoreType':
     """serialize a dataset into a zarr directory structure"""
 
     if hasattr(data, _get_iq_index_name()):
@@ -143,18 +141,20 @@ def dump(
     path = store.path if hasattr(store, 'path') else store.root
 
     if zarr.__version__.startswith('2'):
-        exists = len(store) > 0
-        kws = {}
+        append = len(store) > 0
+        kws = {'zarr_version': 2}
     else:
-        exists = Path(path).exists()
+        append = Path(path).exists()
         kws = {'zarr_format': 2}
 
-    if exists:
+    if append:
         with warnings.catch_warnings():
+            print('append')
             warnings.simplefilter('ignore', UserWarning)
             return data.to_zarr(store, mode='a', append_dim=append_dim, **kws)
     else:
         with warnings.catch_warnings():
+            print('write')
             warnings.simplefilter('ignore', xr.SerializationWarning)
             encodings = _build_encodings(data, compression=compression, filter=filter)
             return data.to_zarr(store, encoding=encodings, mode='w', **kws)
