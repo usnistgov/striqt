@@ -356,7 +356,7 @@ class SoapyRadioDevice(base.RadioDevice):
         ):
             # soapy's underlying libraries have been deconstructed
             # too far to proceed
-            SoapySDR.Device.__del__ = lambda: pass
+            SoapySDR.Device.__del__ = lambda: None
             return
 
         try:
