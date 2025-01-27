@@ -349,7 +349,8 @@ class SoapyRadioDevice(base.RadioDevice):
             return
 
         if (
-            SoapySDR._SoapySDR is None
+            SoapySDR is None
+            or SoapySDR._SoapySDR is None
             or SoapySDR._SoapySDR.Device_deactivateStream is None
         ):
             # occurs sometimes when soapy's underlying libraries

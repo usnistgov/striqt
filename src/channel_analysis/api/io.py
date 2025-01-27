@@ -141,7 +141,7 @@ def dump(
     # write/append only
     path = store.path if hasattr(store, 'path') else store.root
 
-    if path.exists():
+    if Path(path).exists():
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', UserWarning)
             return data.to_zarr(store, mode='a', append_dim=append_dim, zarr_format=2)
