@@ -141,15 +141,20 @@ def dump(
     # write/append only
     path = store.path if hasattr(store, 'path') else store.root
 
+    if zarr.__version__.startswith('2'):
+        kws = {}
+    else:
+        kws = {'zarr_format': 2}
+
     if Path(path).exists():
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', UserWarning)
-            return data.to_zarr(store, mode='a', append_dim=append_dim, zarr_format=2)
+            return data.to_zarr(store, mode='a', append_dim=append_dim, **kws)
     else:
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', xr.SerializationWarning)
             encodings = _build_encodings(data, compression=compression, filter=filter)
-            return data.to_zarr(store, encoding=encodings, mode='w', zarr_format=2)
+            return data.to_zarr(store, encoding=encodings, mode='w', **kws)
 
 
 def load(path: str | Path) -> 'xr.DataArray' | 'xr.Dataset':
