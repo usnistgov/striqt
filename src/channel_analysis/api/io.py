@@ -40,6 +40,7 @@ warnings.filterwarnings(
 warnings.filterwarnings(
     'ignore',
     category=UserWarning,
+    module='.*zipfile.*',
     message='.*Duplicate name.*'
 )
 
