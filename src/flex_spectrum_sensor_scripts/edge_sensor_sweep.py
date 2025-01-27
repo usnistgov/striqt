@@ -44,7 +44,7 @@ def run(**kws):
 
     except BaseException:
         sys.excepthook(*sys.exc_info())
-        controller.close_radio(sweep_spec.radio_setup.driver)
+        controller.close_radio(sweep_spec.radio_setup)
 
 if __name__ == '__main__':
     run()
