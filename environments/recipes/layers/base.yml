@@ -20,8 +20,9 @@ dependencies:
   - array-api-compat
   - methodtools
 
-  # for SoapySDR device wrappers and remote control
+  # for device wrappers and remote control
   - labbench>=0.42.0,<1
+  - rpyc~=5.3
 
   # data management (including zarr and data chunking in xarray)
   - xarray>=2024.3

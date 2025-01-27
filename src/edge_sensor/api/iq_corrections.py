@@ -248,6 +248,7 @@ def resampling_correction(
     radio: RadioDevice,
     force_calibration: typing.Optional['xr.Dataset'] = None,
     *,
+    overwrite_x=False,
     axis=1,
 ):
     """apply a bandpass filter implemented through STFT overlap-and-add.
@@ -296,12 +297,13 @@ def resampling_correction(
 
     # set the passband roughly equal to the 3 dB bandwidth based on ENBW
     freq_res = fs_backend / nfft
-    enbw = freq_res * iqwaveform.fourier.equivalent_noise_bandwidth(
+    enbw_bins = iqwaveform.fourier.equivalent_noise_bandwidth(
         analysis_filter['window'], nfft, fftbins=False
     )
+    enbw = enbw_bins * freq_res 
     passband = analysis_filter['passband']
 
-    freqs, _, xstft = iqwaveform.fourier.stft(
+    freqs, _, y = iqwaveform.fourier.stft(
         iq,
         fs=fs_backend,
         window=w,
@@ -309,26 +311,26 @@ def resampling_correction(
         noverlap=round(nfft * overlap_scale),
         axis=axis,
         truncate=False,
-        # out=buf
+        overwrite_x=overwrite_x
     )
 
     free_mempool_on_low_memory()
 
     if nfft_out < nfft:
         # downsample applies the filter as well
-        freqs, xstft = iqwaveform.fourier.downsample_stft(
+        freqs, y = iqwaveform.fourier.downsample_stft(
             freqs,
-            xstft,
+            y,
             nfft_out=nfft_out,
             passband=passband,
-            axis=axis,
+            axis=axis
         )
     elif nfft_out > nfft:
         # upsample
         if np.isfinite(capture.analysis_bandwidth):
             iqwaveform.fourier.zero_stft_by_freq(
                 freqs,
-                xstft,
+                y,
                 passband=(passband[0] + enbw / 2, passband[1] - enbw / 2),
                 axis=axis,
             )
@@ -336,15 +338,15 @@ def resampling_correction(
         pad_left = (nfft_out - nfft) // 2
         pad_right = pad_left + (nfft_out - nfft) % 2
 
-        xstft = iqwaveform.util.pad_along_axis(
-            xstft, [[pad_left, pad_right]], axis=axis + 1
+        y = iqwaveform.util.pad_along_axis(
+            y, [[pad_left, pad_right]], axis=axis + 1
         )
 
     else:
         # nfft_out == nfft
         iqwaveform.fourier.zero_stft_by_freq(
             freqs,
-            xstft,
+            y,
             passband=(passband[0] + enbw, passband[1] - enbw),
             axis=axis,
         )
@@ -354,14 +356,10 @@ def resampling_correction(
     free_mempool_on_low_memory()
 
     iq = iqwaveform.fourier.istft(
-        xstft,
-        nfft=nfft_out,
-        noverlap=noverlap,
-        axis=axis,
-        overwrite_x=True
+        y, nfft=nfft_out, noverlap=noverlap, axis=axis, overwrite_x=True
     )
 
-    del xstft
+    del y
 
     free_mempool_on_low_memory()
 

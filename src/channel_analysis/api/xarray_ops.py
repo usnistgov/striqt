@@ -224,9 +224,21 @@ def channel_dataarray(
     data = np.asarray(data)
     parameters = freezevalues(parameters)
 
+    # allow unused dimensions before those of the template
+    # (for e.g. multichannel acquisition)
+    target_shape = data.shape[-len(template.dims) :]
+
     # to bypass initialization overhead, grow from the empty template
-    da = template.pad({dim: [0, data.shape[i]] for i, dim in enumerate(template.dims)})
-    da.values[:] = data
+    da = template.pad(
+        {dim: [0, target_shape[i]] for i, dim in enumerate(template.dims)}
+    )
+
+    try:
+        da.values[:] = data
+    except ValueError as ex:
+        raise ValueError(
+            f'{cls.__name__} measurement data has unexpected shape {data.shape}'
+        ) from ex
 
     for entry in get_data_model(cls).coords:
         ret = entry.base.factory(capture, **parameters)

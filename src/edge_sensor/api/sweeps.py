@@ -139,49 +139,44 @@ def iter_sweep(
     # iterate across (previous, current, next) captures to support concurrency
     offset_captures = util.zip_offsets(capture_iter, (-1, 0, 1), fill=None)
 
-    try:
-        for i, (_, capture_this, capture_next) in enumerate(offset_captures):
-            calls = {}
+    for i, (_, capture_this, capture_next) in enumerate(offset_captures):
+        calls = {}
 
-            if capture_this is not None:
-                # extra iteration at the end for the last analysis
-                calls['acquire'] = lb.Call(
-                    radio.acquire,
-                    capture_this,
-                    next_capture=capture_next,
-                    correction=False,
-                )
-
-            if capture_prev is not None:
-                # iq is only available after the first iteration
-                calls['analyze'] = lb.Call(
-                    analyze,
-                    iq,
-                    sweep_time=sweep_time,
-                    capture=capture_prev,
-                    pickled=pickled,
-                )
-
-            desc = channel_analysis.describe_capture(
-                capture_this, capture_prev, index=i, count=count
+        if capture_this is not None:
+            # extra iteration at the end for the last analysis
+            calls['acquire'] = lb.Call(
+                radio.acquire,
+                capture_this,
+                next_capture=capture_next,
+                correction=False,
             )
 
-            with lb.stopwatch(f'{desc} •', logger_level='debug' if quiet else 'info'):
-                ret = lb.concurrently(**calls, flatten=False)
+        if capture_prev is not None:
+            # iq is only available after the first iteration
+            calls['analyze'] = lb.Call(
+                analyze,
+                iq,
+                sweep_time=sweep_time,
+                capture=capture_prev,
+                pickled=pickled,
+            )
 
-            if 'analyze' in ret:
-                yield ret['analyze']
-            elif always_yield:
-                yield None
+        desc = channel_analysis.describe_capture(
+            capture_this, capture_prev, index=i, count=count
+        )
 
-            if 'acquire' in ret:
-                iq, capture_prev = ret['acquire']
-                if sweep_time is None:
-                    sweep_time = capture_prev.start_time
+        with lb.stopwatch(f'{desc} •', logger_level='debug' if quiet else 'info'):
+            ret = lb.concurrently(**calls, flatten=False)
 
-    finally:
-        if close_after:
-            radio.close()
+        if 'analyze' in ret:
+            yield ret['analyze']
+        elif always_yield:
+            yield None
+
+        if 'acquire' in ret:
+            iq, capture_prev = ret['acquire']
+            if sweep_time is None:
+                sweep_time = capture_prev.start_time
 
 
 def iter_raw_iq(
@@ -220,25 +215,20 @@ def iter_raw_iq(
     # iterate across (previous, current, next) captures to support concurrency
     offset_captures = util.zip_offsets(sweep.captures, (0, 1), fill=None)
 
-    try:
-        for i, (capture_this, capture_next) in enumerate(offset_captures):
-            desc = captures.describe_capture(
-                capture_this, capture_prev, index=i, count=len(sweep.captures)
+    for i, (capture_this, capture_next) in enumerate(offset_captures):
+        desc = captures.describe_capture(
+            capture_this, capture_prev, index=i, count=len(sweep.captures)
+        )
+
+        with lb.stopwatch(f'{desc} •', logger_level='debug' if quiet else 'info'):
+            # extra iteration at the end for the last analysis
+            iq, capture = radio.acquire(
+                capture_this,
+                next_capture=capture_next,
+                correction=False,
             )
 
-            with lb.stopwatch(f'{desc} •', logger_level='debug' if quiet else 'info'):
-                # extra iteration at the end for the last analysis
-                iq, capture = radio.acquire(
-                    capture_this,
-                    next_capture=capture_next,
-                    correction=False,
-                )
-
-            yield iq, capture
-
-    finally:
-        if close_after:
-            radio.close()
+        yield iq, capture
 
 
 def stopiter_as_return(iter):

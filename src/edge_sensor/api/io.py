@@ -18,7 +18,7 @@ else:
     pd = util.lazy_import('pandas')
 
 
-SweepType = typing.TypeVar(Sweep)
+SweepType = typing.TypeVar('SweepType', bound=Sweep)
 
 
 def _dec_hook(type_, obj):

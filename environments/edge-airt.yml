@@ -19,6 +19,7 @@ dependencies:
 - array-api-compat
 - methodtools
 - labbench>=0.42.0,<1
+- rpyc~=5.3
 - xarray>=2024.3
 - zarr~=2.18.2
 - dask
@@ -35,7 +36,6 @@ dependencies:
 - pyqtgraph
 - soapysdr~=0.8.1
 - pigz
-- rpyc~=5.3
 - pip:
   - iqwaveform @ git+https://github.com/usnistgov/iqwaveform
   - xarray_dataclasses @ git+https://github.com/dgkuester/xarray-dataclasses@lazy-imports

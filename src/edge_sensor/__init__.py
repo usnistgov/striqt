@@ -16,8 +16,6 @@ from .api.structs import RadioCapture, RadioSetup, Sweep, Description
 from .api.sweeps import iter_sweep, iter_callbacks
 from .api.xarray_ops import CAPTURE_DIM, concat_time_dim
 
-from . import radios
-
 # support legacy namespacing until the _api -> api change propagates through dependent libraries
 from . import api
 

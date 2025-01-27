@@ -52,7 +52,15 @@ class SweepController:
 
     def open_radio(self, radio_setup: structs.RadioSetup):
         driver_name = radio_setup.driver
-        radio_cls = find_radio_cls_by_name(driver_name)
+
+        try:
+            radio_cls = find_radio_cls_by_name(driver_name)
+        except AttributeError:
+            from .radio import soapy
+            from .. import radios
+
+            radio_cls = find_radio_cls_by_name(driver_name)
+
 
         if radio_setup.resource is None:
             resource = radio_cls.resource.default
@@ -138,14 +146,10 @@ class SweepController:
                     warmup_sweep, calibration, quiet=True, pickled=pickled
                 )
 
-        try:
-            lb.concurrently(
-                warmup=lb.Call(list, warmup_iter),
-                open_radio=lb.Call(self.open_radio, sweep_spec.radio_setup),
-            )
-        finally:
-            if warmup_sweep is not None:
-                self.close_radio(warmup_sweep.radio_setup)
+        lb.concurrently(
+            warmup=lb.Call(list, warmup_iter),
+            open_radio=lb.Call(self.open_radio, sweep_spec.radio_setup),
+        )
 
     def iter_sweep(
         self,

@@ -6,6 +6,5 @@ channels:
 dependencies:
   - soapysdr~=0.8.1
   - pigz
-  - rpyc~=5.3
   - pip:
     - ssmdevices

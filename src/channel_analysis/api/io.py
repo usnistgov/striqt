@@ -6,12 +6,12 @@ import warnings
 
 from pathlib import Path
 from collections import defaultdict
+import numcodecs
 
 from . import util
 
 if typing.TYPE_CHECKING:
     import numpy as np
-    import numcodecs
     import xarray as xr
     import zarr
     import pandas as pd
@@ -28,17 +28,20 @@ if typing.TYPE_CHECKING:
 else:
     np = util.lazy_import('numpy')
     pd = util.lazy_import('pandas')
-    numcodecs = util.lazy_import('numcodecs')
     xr = util.lazy_import('xarray')
     zarr = util.lazy_import('zarr')
-
 
 warnings.filterwarnings(
     'ignore',
     category=FutureWarning,
-    message='is deprecated and will be removed in a Zarr-Python version 3',
+    message='.*is deprecated and will be removed in a Zarr-Python version 3.*',
 )
 
+warnings.filterwarnings(
+    'ignore',
+    category=UserWarning,
+    message='.*Duplicate name.*'
+)
 
 def open_store(path: str | Path, *, mode: str):
     if hasattr(zarr.storage, 'Store'):
@@ -78,8 +81,6 @@ def _build_encodings(data, compression=None, filter: bool = True):
         compressor = numcodecs.Blosc('zlib', clevel=6)
     elif compression is False:
         compressor = None
-    else:
-        compressor = zarr.compressors.NoCompressor
 
     encodings = defaultdict(dict)
 
@@ -138,15 +139,17 @@ def dump(
     data = data.chunk(chunks)
 
     # write/append only
-    if len(store) > 0:
+    path = store.path if hasattr(store, 'path') else store.root
+
+    if path.exists():
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', UserWarning)
-            return data.to_zarr(store, mode='a', append_dim=append_dim)
+            return data.to_zarr(store, mode='a', append_dim=append_dim, zarr_format=2)
     else:
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', xr.SerializationWarning)
             encodings = _build_encodings(data, compression=compression, filter=filter)
-            return data.to_zarr(store, encoding=encodings, mode='w')
+            return data.to_zarr(store, encoding=encodings, mode='w', zarr_format=2)
 
 
 def load(path: str | Path) -> 'xr.DataArray' | 'xr.Dataset':

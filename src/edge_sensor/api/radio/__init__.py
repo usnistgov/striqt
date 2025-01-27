@@ -6,6 +6,8 @@ from .base import (
     design_capture_filter,
 )
 
-from .soapy import SoapyRadioDevice
 from .null import NullSource
-from .testing import SingleToneSource, NoiseSource
+from .testing import SingleToneSource, SawtoothSource, NoiseSource, TDMSFileSource
+
+# soapy device is not imported here to allow edge_sensor imports
+# for testing when SoapySDR is not installed

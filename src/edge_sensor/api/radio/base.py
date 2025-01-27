@@ -162,7 +162,7 @@ class RadioDevice(lb.Device):
     )
 
     array_backend = attr.value.str(
-        'cupy',
+        'numpy',
         only=('numpy', 'cupy'),
         help='array module to use, which sets the type of compute device (numpy = cpu, cupy = gpu)',
     )
@@ -669,8 +669,13 @@ def alloc_empty_iq(
     count = get_channel_read_buffer_count(radio, capture, include_holdoff=True)
 
     if radio.array_backend == 'cupy':
-        util.configure_cupy()
-        from cupyx import empty_pinned as empty
+        try:
+            util.configure_cupy()
+            from cupyx import empty_pinned as empty
+        except ModuleNotFoundError as ex:
+            raise RuntimeError(
+                'could not import the configured array backend, "cupy"'
+            ) from ex
     else:
         empty = np.empty
 
