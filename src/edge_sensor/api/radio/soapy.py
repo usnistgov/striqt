@@ -348,11 +348,13 @@ class SoapyRadioDevice(base.RadioDevice):
         if self.backend is None:
             return
 
+        self.backend.__del__ = lambda: None
+
         if (
             SoapySDR is None
             or SoapySDR._SoapySDR is None
             or SoapySDR._SoapySDR.Device_deactivateStream is None
-            or not hasattr(SoapySDR.Device, 'unmake')
+            or SoapySDR.Device is None
         ):
             # soapy's underlying libraries have been deconstructed
             # too far to proceed

@@ -149,12 +149,10 @@ def dump(
 
     if append:
         with warnings.catch_warnings():
-            print('append')
             warnings.simplefilter('ignore', UserWarning)
             return data.to_zarr(store, mode='a', append_dim=append_dim, **kws)
     else:
         with warnings.catch_warnings():
-            print('write')
             warnings.simplefilter('ignore', xr.SerializationWarning)
             encodings = _build_encodings(data, compression=compression, filter=filter)
             return data.to_zarr(store, encoding=encodings, mode='w', **kws)
