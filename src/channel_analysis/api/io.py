@@ -142,11 +142,13 @@ def dump(
     path = store.path if hasattr(store, 'path') else store.root
 
     if zarr.__version__.startswith('2'):
+        exists = len(store) > 0
         kws = {}
     else:
+        exists = Path(path).exists()
         kws = {'zarr_format': 2}
 
-    if Path(path).exists():
+    if exists:
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', UserWarning)
             return data.to_zarr(store, mode='a', append_dim=append_dim, **kws)
