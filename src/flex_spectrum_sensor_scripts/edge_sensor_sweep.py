@@ -43,9 +43,14 @@ def run(**kws):
             edge_sensor.dump(store, dataset)
 
     except BaseException:
-        # the radio is probably not closed if there was an exception
+        # the following will run the ipdb debug prompt if the
+        # -d flag was passed in
         sys.excepthook(*sys.exc_info())
+        
         print('closing radio after exception')
+        controller.close_radio(sweep_spec.radio_setup)
+
+    else:
         controller.close_radio(sweep_spec.radio_setup)
 
 if __name__ == '__main__':
