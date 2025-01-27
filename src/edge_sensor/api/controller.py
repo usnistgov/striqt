@@ -156,7 +156,6 @@ class SweepController:
         sweep: structs.Sweep,
         calibration: 'xr.Dataset' = None,
         *,
-        close_after: bool = True,
         always_yield: bool = False,
         quiet: bool = False,
         pickled: bool = False,
@@ -182,7 +181,6 @@ class SweepController:
         self,
         sweep: structs.Sweep,
         calibration: 'xr.Dataset' = None,
-        close_after: bool = True,
         always_yield: bool = False,
         quiet: bool = False,
         pickled: bool = False,
@@ -273,7 +271,6 @@ class _ServerService(rpyc.Service, SweepController):
             calibration,
             always_yield=always_yield,
             pickled=True,
-            close_after=False,
             loop=loop,
             prepare=False,
         )
