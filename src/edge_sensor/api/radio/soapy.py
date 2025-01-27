@@ -348,8 +348,6 @@ class SoapyRadioDevice(base.RadioDevice):
         if self.backend is None:
             return
 
-        self.backend.__del__ = lambda: None
-
         if (
             SoapySDR is None
             or SoapySDR._SoapySDR is None
@@ -359,6 +357,8 @@ class SoapyRadioDevice(base.RadioDevice):
             # soapy's underlying libraries have been deconstructed
             # too far to proceed
             return
+
+        self.backend.__del__ = lambda: None
 
         try:
             self.rx_enabled(False)
