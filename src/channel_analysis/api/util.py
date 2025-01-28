@@ -71,6 +71,6 @@ _compute_lock = threading.RLock()
 
 @contextlib.contextmanager
 def compute_lock():
-    # _compute_lock.acquire()
+    _compute_lock.acquire()
     yield
-    # _compute_lock.release()
+    _compute_lock.release()
