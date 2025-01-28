@@ -8,7 +8,7 @@ from pathlib import Path
 
 from . import util
 from .captures import split_capture_channels
-from channel_analysis.api.util import free_mempool_on_low_memory, compute_lock
+from channel_analysis.api.util import free_mempool_on_low_memory, compute_lock, pinned_array_as_cupy
 
 from .radio import base, RadioDevice, design_capture_filter
 from . import structs
@@ -266,7 +266,11 @@ def resampling_correction(
 
     xp = iqwaveform.fourier.array_namespace(iq)
 
-    iq = iq.copy()
+    if radio.array_backend == 'cupy':
+        # with compute_lock():
+        iq = pinned_array_as_cupy(iq)
+    else:
+        iq = xp.array(iq)
 
     with lb.stopwatch('power correction lookup', threshold=10e-3, logger_level='debug'):
         bare_capture = msgspec.structs.replace(capture, start_time=None)

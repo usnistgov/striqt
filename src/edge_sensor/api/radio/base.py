@@ -368,12 +368,12 @@ class RadioDevice(lb.Device):
         # it seems to be important to convert to cupy here in order
         # to get a full view of the underlying pinned memory. cuda
         # memory corruption has been observed when waiting until after
-        if self.array_backend == 'cupy':
-            with compute_lock():
-                samples = pinned_array_as_cupy(samples)
-        else:
-            xp = self.get_array_namespace()
-            samples = xp.array(samples)
+        # if self.array_backend == 'cupy':
+        #     with compute_lock():
+        #         samples = pinned_array_as_cupy(samples)
+        # else:
+        #     xp = self.get_array_namespace()
+        #     samples = xp.array(samples)
 
         return samples[:, sample_span], start_ns
 
