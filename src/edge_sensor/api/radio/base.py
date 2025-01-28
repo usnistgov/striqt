@@ -393,9 +393,11 @@ class RadioDevice(lb.Device):
 
         if capture != self._armed_capture:
             self.arm(capture)
+        else:
+            print('***stay on')
 
         with lb.stopwatch('enable and allocate', logger_level='debug'):
-            buffers = lb.concurrently(
+            buffers = lb.sequentially(
                 rx_enabled=lambda: self.rx_enabled(True),
                 buffers=lb.Call(alloc_empty_iq, self, capture),
             )['buffers']
