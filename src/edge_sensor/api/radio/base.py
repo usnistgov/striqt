@@ -321,14 +321,13 @@ class RadioDevice(lb.Device):
                 )
 
             # Read the samples from the data buffer
-            with compute_lock():
-                this_count, ret_time_ns = self._read_stream(
-                    stream_bufs,
-                    offset=carryover_count + received_count,
-                    count=request_count,
-                    timeout_sec=request_count / fs + 50e-3,
-                    on_overflow=on_overflow,
-                )
+            this_count, ret_time_ns = self._read_stream(
+                stream_bufs,
+                offset=carryover_count + received_count,
+                count=request_count,
+                timeout_sec=request_count / fs + 50e-3,
+                on_overflow=on_overflow,
+            )
 
             if 2 * (this_count + received_count) > samples.shape[1]:
                 # this should never happen
