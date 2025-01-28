@@ -59,7 +59,7 @@ class Air7x01B(soapy.SoapyRadioDevice):
             for _ in range(self._reenable_cycles):
                 self.backend.activateStream(self._rx_stream)
                 self.backend.deactivateStream(self._rx_stream)
-                lb.sleep(0.1)
+                lb.sleep(0.15)
 
             delay = self._rx_enable_delay
             kws = {'flags': SoapySDR.SOAPY_SDR_HAS_TIME}
