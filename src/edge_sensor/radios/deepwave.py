@@ -9,9 +9,18 @@ from ..api import structs
 import uuid
 
 
+def _reenable_loop(radio, count):
+    import numpy as np
+    buf = np.empty((radio.rx_channel_count,2), dtype='float32')
+
+    for _ in range(count):
+        radio.backend.activateStream(radio._rx_stream)
+        radio._read_stream(buf, 0, 1, 10e-3)              
+        radio.backend.deactivateStream(radio._rx_stream)
+
+
 # for TX only (RX channel is accessed through the AirT7201B.channel method)
 channel_kwarg = attr.method_kwarg.int('channel', min=0, help='hardware port number')
-
 
 class Air7x01B(soapy.SoapyRadioDevice):
     resource = attr.value.dict({}, inherit=True)
@@ -48,11 +57,6 @@ class Air7x01B(soapy.SoapyRadioDevice):
         # with cache=True, this behaves as the default before the first set
         return False
 
-    def _single_read(self):
-        import numpy as np
-        buf = np.empty((self.rx_channel_count,2), dtype='float32')
-        self._read_stream(buf, 0, 1, 10e-3)
-
     @rx_enabled.setter
     def _(self, enable: bool):
         if enable == self.rx_enabled():
@@ -61,10 +65,7 @@ class Air7x01B(soapy.SoapyRadioDevice):
         if enable:
             # improved the IQ imbalance (and its repeatability)
             # by about 15 dB in lab tests
-            for _ in range(self._reenable_cycles):
-                self.backend.activateStream(self._rx_stream)
-                self._single_read()                
-                self.backend.deactivateStream(self._rx_stream)
+            _reenable_loop(self, self._reenable_cycles)
 
             delay = self._rx_enable_delay
             kws = {'flags': SoapySDR.SOAPY_SDR_HAS_TIME}
