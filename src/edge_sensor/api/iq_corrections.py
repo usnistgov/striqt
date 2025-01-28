@@ -307,7 +307,7 @@ def resampling_correction(
         noverlap=round(nfft * overlap_scale),
         axis=axis,
         truncate=False,
-        overwrite_x=False
+        overwrite_x=overwrite_x
     )
 
     free_mempool_on_low_memory()

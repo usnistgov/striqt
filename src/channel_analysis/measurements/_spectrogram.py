@@ -181,13 +181,14 @@ def _evaluate(
     else:
         raise ValueError('sample_rate_Hz/resolution must be a counting number')
 
-    _, _, spg = iqwaveform.fourier.spectrogram(
+    spg = iqwaveform.fourier.spectrogram(
         iq,
         window=window,
         fs=capture.sample_rate,
         nperseg=nfft,
         noverlap=noverlap,
         axis=1,
+        return_axis_arrays=False
     )
 
     # truncate to the analysis bandwidth
