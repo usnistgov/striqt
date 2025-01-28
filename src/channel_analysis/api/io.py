@@ -46,11 +46,11 @@ def open_store(path: str | Path, *, mode: str):
     if hasattr(zarr.storage, 'Store'):
         # zarr 2.x
         StoreBase = zarr.storage.Store
-        LocalStore = zarr.storage.DirectoryStore
+        DirectoryStore = zarr.storage.DirectoryStore
     else:
         # zarr 3.x
         StoreBase = zarr.abc.store.Store
-        LocalStore = zarr.storage.LocalStore
+        DirectoryStore = zarr.storage.LocalStore
 
     if isinstance(path, StoreBase):
         store = path
@@ -59,7 +59,7 @@ def open_store(path: str | Path, *, mode: str):
     elif str(path).endswith('.zip'):
         store = zarr.storage.ZipStore(path, mode=mode, compression=0)
     else:
-        store = LocalStore(path)
+        store = DirectoryStore(path)
 
     return store
 
@@ -94,12 +94,26 @@ def _build_encodings(data, compression=None, filter: bool = True):
     return encodings
 
 
+def _get_store_info(store: StoreType) -> tuple[bool, dict]:
+    path = store.path if hasattr(store, 'path') else store.root
+
+    if zarr.__version__.startswith('2'):
+        exists = len(store) > 0
+        kws = {'zarr_version': 2}
+    else:
+        exists = Path(path).exists()
+        kws = {'zarr_format': 2}
+
+    return exists, kws
+
+
 def dump(
     store: 'StoreType',
     data: typing.Optional['xr.DataArray' | 'xr.Dataset'] = None,
     append_dim=None,
     compression=None,
     filter=True,
+    overwrite=False
 ) -> 'StoreType':
     """serialize a dataset into a zarr directory structure"""
 
@@ -137,17 +151,9 @@ def dump(
 
     data = data.chunk(chunks)
 
-    # write/append only
-    path = store.path if hasattr(store, 'path') else store.root
+    exists, kws = _get_store_info(store)
 
-    if zarr.__version__.startswith('2'):
-        append = len(store) > 0
-        kws = {'zarr_version': 2}
-    else:
-        append = Path(path).exists()
-        kws = {'zarr_format': 2}
-
-    if append:
+    if exists:
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', UserWarning)
             return data.to_zarr(store, mode='a', append_dim=append_dim, **kws)
