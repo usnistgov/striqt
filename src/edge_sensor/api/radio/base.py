@@ -308,6 +308,7 @@ class RadioDevice(lb.Device):
         timeout_sec = chunk_count / fs + 50e-3
 
         while remaining > 0:
+            print(remaining)
             if received_count > 0 or self.gapless_repeats:
                 on_overflow = 'except'
             else:
@@ -352,7 +353,7 @@ class RadioDevice(lb.Device):
 
             remaining = remaining - this_count
             received_count += this_count
-
+        print('done')
         samples = samples.view('complex64')
         sample_offs = include_holdoff_count - stft_pad_before
         sample_span = slice(sample_offs, sample_offs + sample_count)
