@@ -389,7 +389,7 @@ class RadioDevice(lb.Device):
         from .. import iq_corrections
 
         if capture != self._armed_capture:
-            with lb.stopwatch('arm and allocate', logger_level='info'):
+            with lb.stopwatch('arm and allocate', logger_level='debug'):
                 iqwaveform.power_analysis.Any
                 returns = lb.concurrently(
                     arm=lb.Call(self.arm, capture),
@@ -397,8 +397,7 @@ class RadioDevice(lb.Device):
                 )
                 buffers = returns['buffers']
         else:
-            with lb.stopwatch('allocate'):
-                buffers = alloc_empty_iq(self, capture)
+            buffers = alloc_empty_iq(self, capture)
 
         with compute_lock():
             self.rx_enabled(True)
