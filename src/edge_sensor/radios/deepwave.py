@@ -57,12 +57,12 @@ class Air7x01B(soapy.SoapyRadioDevice):
             # improved the IQ imbalance (and its repeatability)
             # by about 15 dB in lab tests
             import numpy as np
-            buf = np.empty((2,2), dtype='float32')
+            buf = np.empty((self.rx_channel_count,2), dtype='float32')
+            
             for _ in range(self._reenable_cycles):
                 self.backend.activateStream(self._rx_stream)
-                self._read_stream([buf[0], buf[1]], 0, 1, 10e-3)
+                self._read_stream(buf, 0, 1, 10e-3)
                 self.backend.deactivateStream(self._rx_stream)
-                lb.sleep(0.1)
 
             delay = self._rx_enable_delay
             kws = {'flags': SoapySDR.SOAPY_SDR_HAS_TIME}
