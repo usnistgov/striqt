@@ -307,8 +307,11 @@ class RadioDevice(lb.Device):
         chunk_count = remaining = sample_count - carryover_count
         timeout_sec = chunk_count / fs + 50e-3
 
+        import time
+        t0 = time.time()
+
         while remaining > 0:
-            print(remaining)
+            print(time.time()-t0, remaining)
             if received_count > 0 or self.gapless_repeats:
                 on_overflow = 'except'
             else:
