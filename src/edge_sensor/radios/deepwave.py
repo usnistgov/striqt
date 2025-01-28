@@ -87,6 +87,8 @@ class Air7x01B(soapy.SoapyRadioDevice):
         else:
             self._reenable_cycles = 0
 
+        self._reenable_cycles = 0
+
         super().arm(capture)
 
     def _post_connect(self):
