@@ -328,8 +328,6 @@ def evaluate_channel_analysis(
     with cached_spectrograms():
         # evaluate each possible analysis function if specified
         for name, func_kws in spec_dict.items():
-            import time
-            time.sleep(0.1e-3)
             util.free_mempool_on_low_memory()
             with lb.stopwatch(f'analysis: {name}', logger_level='debug'):
                 func = registry[type(getattr(spec, name))]
