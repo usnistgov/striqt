@@ -274,7 +274,6 @@ class RadioDevice(lb.Device):
         self._armed_capture = capture
 
     @lb.stopwatch('read_iq', logger_level='debug')
-    @compute_lock()
     def read_iq(
         self,
         capture: structs.RadioCapture,
@@ -396,12 +395,15 @@ class RadioDevice(lb.Device):
             pass
 
         with lb.stopwatch('enable and allocate', logger_level='debug'):
-            buffers = lb.concurrently(
-                rx_enabled=lambda: self.rx_enabled(True),
-                buffers=lb.Call(alloc_empty_iq, self, capture),
-            )['buffers']
+            # buffers = lb.concurrently(
+            #     rx_enabled=lambda: self.rx_enabled(True),
+            #     buffers=lb.Call(alloc_empty_iq, self, capture),
+            # )['buffers']
+            buffers=alloc_empty_iq(self, capture)
 
-        iq, time_ns = self.read_iq(capture, buffers=buffers)
+        with compute_lock():
+            self.rx_enabled(True)
+            iq, time_ns = self.read_iq(capture, buffers=buffers)
         del buffers
 
         if next_capture == capture and self.gapless_repeats:
