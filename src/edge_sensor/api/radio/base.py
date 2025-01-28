@@ -306,6 +306,9 @@ class RadioDevice(lb.Device):
         received_count = 0
         chunk_count = remaining = sample_count - carryover_count
 
+        import time
+        t0 = time.time()
+        
         while remaining > 0:
             if received_count > 0 or self.gapless_repeats:
                 on_overflow = 'except'
@@ -328,6 +331,8 @@ class RadioDevice(lb.Device):
                 timeout_sec=request_count / fs + 1e-3,
                 on_overflow=on_overflow,
             )
+
+            print(time.time() - t0, received_count / fs)
 
             if 2 * (this_count + received_count) > samples.shape[1]:
                 # this should never happen
