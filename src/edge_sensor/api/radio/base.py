@@ -328,7 +328,7 @@ class RadioDevice(lb.Device):
                 stream_bufs,
                 offset=carryover_count + received_count,
                 count=request_count,
-                timeout_sec=request_count / fs + 1e-3,
+                timeout_sec=request_count / fs + 10e-3,
                 on_overflow=on_overflow,
             )
 
