@@ -266,11 +266,11 @@ def resampling_correction(
 
     xp = iqwaveform.fourier.array_namespace(iq)
 
-    if radio.array_backend == 'cupy':
-        # with compute_lock():
-        iq = pinned_array_as_cupy(iq)
-    else:
-        iq = xp.array(iq)
+    # if radio.array_backend == 'cupy':
+    #     # with compute_lock():
+    #     iq = pinned_array_as_cupy(iq)
+    # else:
+    iq = xp.array(iq, copy=False)
 
     with lb.stopwatch('power correction lookup', threshold=10e-3, logger_level='debug'):
         bare_capture = msgspec.structs.replace(capture, start_time=None)
