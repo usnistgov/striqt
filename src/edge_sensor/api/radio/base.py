@@ -389,7 +389,10 @@ class RadioDevice(lb.Device):
         from .. import iq_corrections
 
         if capture != self._armed_capture:
-            self.arm(capture)
+            buffers = lb.concurrently(
+                arm=lb.Call(self.arm, capture),
+                buffers=lb.Call(alloc_empty_iq, self, capture),
+            )['buffers']
 
         with compute_lock():
             pass
@@ -399,7 +402,8 @@ class RadioDevice(lb.Device):
             #     rx_enabled=lambda: self.rx_enabled(True),
             #     buffers=lb.Call(alloc_empty_iq, self, capture),
             # )['buffers']
-            buffers=alloc_empty_iq(self, capture)
+
+        with lb.stopwatch('enable'):
             self.rx_enabled(True)
 
         with compute_lock():
