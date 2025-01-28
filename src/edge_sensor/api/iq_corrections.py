@@ -289,7 +289,7 @@ def resampling_correction(
         print('return direct - ', type(iq))
         iq = iq[:, : round(capture.duration * capture.sample_rate)]
         if power_scale is not None:
-            iq *= np.sqrt(power_scale)
+            iq = iq * xp.asarray(np.sqrt(power_scale))
         return iq
 
     # set the passband roughly equal to the 3 dB bandwidth based on ENBW
