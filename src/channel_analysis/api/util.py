@@ -68,9 +68,19 @@ def free_mempool_on_low_memory(threshold_bytes=1_000_000_000):
 
 _compute_lock = threading.RLock()
 
-
 @contextlib.contextmanager
-def compute_lock():
-    _compute_lock.acquire()
-    yield
-    _compute_lock.release()
+def compute_lock(array=None):
+    is_cupy = array_api_compat.is_cupy_array(array)
+    get_lock = array is None or is_cupy
+    if get_lock:
+        _compute_lock.acquire()
+    if is_cupy:
+        import cupy as cp
+        stream = cp.cuda.Stream(non_blocking=False)
+        with stream:
+            yield
+        stream.synchronize()
+    else:
+        yield
+    if get_lock:
+        _compute_lock.release()

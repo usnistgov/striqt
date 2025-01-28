@@ -118,7 +118,7 @@ class ChannelAnalysisRegistryDecorator(collections.UserDict):
                 bound = sig.bind(iq=iq, capture=capture, **kws)
                 call_params = bound.kwargs
 
-                with util.compute_lock():
+                with util.compute_lock(iq):
                     ret = func(*bound.args, **bound.kwargs)
 
                 if not as_xarray:
