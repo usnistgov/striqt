@@ -286,6 +286,7 @@ def resampling_correction(
 
     if not base.needs_stft(analysis_filter, capture):
         # no filtering or resampling needed
+        print('return direct - ', type(iq))
         iq = iq[:, : round(capture.duration * capture.sample_rate)]
         if power_scale is not None:
             iq *= np.sqrt(power_scale)
