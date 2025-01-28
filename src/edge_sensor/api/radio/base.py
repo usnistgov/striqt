@@ -305,7 +305,6 @@ class RadioDevice(lb.Device):
         )
         received_count = 0
         chunk_count = remaining = sample_count - carryover_count
-        timeout_sec = chunk_count / fs + 50e-3
 
         while remaining > 0:
             if received_count > 0 or self.gapless_repeats:
@@ -322,13 +321,14 @@ class RadioDevice(lb.Device):
                 )
 
             # Read the samples from the data buffer
-            this_count, ret_time_ns = self._read_stream(
-                stream_bufs,
-                offset=carryover_count + received_count,
-                count=request_count,
-                timeout_sec=timeout_sec,
-                on_overflow=on_overflow,
-            )
+            with compute_lock():
+                this_count, ret_time_ns = self._read_stream(
+                    stream_bufs,
+                    offset=carryover_count + received_count,
+                    count=request_count,
+                    timeout_sec=request_count / fs + 50e-3,
+                    on_overflow=on_overflow,
+                )
 
             if 2 * (this_count + received_count) > samples.shape[1]:
                 # this should never happen
