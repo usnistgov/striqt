@@ -390,13 +390,12 @@ class RadioDevice(lb.Device):
 
         if capture != self._armed_capture:
             with lb.stopwatch('arm and allocate', logger_level='info'):
-                buffers = lb.concurrently(
+                iqwaveform.power_analysis.Any
+                returns = lb.concurrently(
                     arm=lb.Call(self.arm, capture),
                     buffers=lb.Call(alloc_empty_iq, self, capture),
-                )['buffers']
-
-        with compute_lock():
-            pass
+                )
+                buffers = returns['buffers']
 
         with lb.stopwatch('enable'):
             self.rx_enabled(True)
