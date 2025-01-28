@@ -266,6 +266,8 @@ def resampling_correction(
 
     xp = iqwaveform.fourier.array_namespace(iq)
 
+    iq = iq.copy()
+
     with lb.stopwatch('power correction lookup', threshold=10e-3, logger_level='debug'):
         bare_capture = msgspec.structs.replace(capture, start_time=None)
         power_scale = lookup_power_correction(
