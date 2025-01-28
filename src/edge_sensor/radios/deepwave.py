@@ -48,6 +48,11 @@ class Air7x01B(soapy.SoapyRadioDevice):
         # with cache=True, this behaves as the default before the first set
         return False
 
+    def _single_read(self):
+        import numpy as np
+        buf = np.empty((self.rx_channel_count,2), dtype='float32')
+        self._read_stream(buf, 0, 1, 10e-3)
+
     @rx_enabled.setter
     def _(self, enable: bool):
         if enable == self.rx_enabled():
@@ -56,12 +61,9 @@ class Air7x01B(soapy.SoapyRadioDevice):
         if enable:
             # improved the IQ imbalance (and its repeatability)
             # by about 15 dB in lab tests
-            import numpy as np
-            buf = np.empty((self.rx_channel_count,2), dtype='float32')
-            
             for _ in range(self._reenable_cycles):
                 self.backend.activateStream(self._rx_stream)
-                self._read_stream(buf, 0, 1, 10e-3)
+                self._single_read()                
                 self.backend.deactivateStream(self._rx_stream)
 
             delay = self._rx_enable_delay
