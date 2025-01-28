@@ -54,19 +54,19 @@ class Air7x01B(soapy.SoapyRadioDevice):
             return
 
         if enable:
-            # improved the IQ imbalance (and its repeatability)
-            # by about 15 dB in lab tests
-            for _ in range(self._reenable_cycles):
-                self.backend.activateStream(self._rx_stream)
-                self.backend.deactivateStream(self._rx_stream)
-                lb.sleep(0.15)
-
             delay = self._rx_enable_delay
             kws = {'flags': SoapySDR.SOAPY_SDR_HAS_TIME}
 
             if delay is not None:
                 timeNs = self.backend.getHardwareTime('now') + round(delay * 1e9)
                 kws['timeNs'] = timeNs
+
+            # improved the IQ imbalance (and its repeatability)
+            # by about 15 dB in lab tests
+            for _ in range(self._reenable_cycles):
+                self.backend.activateStream(self._rx_stream, **kws)
+                self.backend.deactivateStream(self._rx_stream)
+                lb.sleep(0.1)
 
             self.backend.activateStream(self._rx_stream, **kws)
 
@@ -86,8 +86,6 @@ class Air7x01B(soapy.SoapyRadioDevice):
                 self._reenable_cycles = 3
         else:
             self._reenable_cycles = 0
-
-        self._reenable_cycles = 0
 
         super().arm(capture)
 
