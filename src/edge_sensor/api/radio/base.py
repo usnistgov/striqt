@@ -325,7 +325,7 @@ class RadioDevice(lb.Device):
                 stream_bufs,
                 offset=carryover_count + received_count,
                 count=request_count,
-                timeout_sec=request_count / fs + 50e-3,
+                timeout_sec=request_count / fs + 1e-3,
                 on_overflow=on_overflow,
             )
 
@@ -646,7 +646,6 @@ def get_channel_resample_buffer_count(radio: RadioDevice, capture):
     return buf_size
 
 
-@lb.stopwatch('get buf count')
 def get_channel_read_buffer_count(
     radio: RadioDevice, capture=None, include_holdoff=False
 ) -> int:
