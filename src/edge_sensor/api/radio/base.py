@@ -408,6 +408,7 @@ class RadioDevice(lb.Device):
         if next_capture == capture and self.gapless_repeats:
             # the one case where we leave it running
             pass
+            print('***leave on!!')
         else:
             self.rx_enabled(False)
 
