@@ -413,7 +413,7 @@ class RadioDevice(lb.Device):
         else:
             self.rx_enabled(False)
 
-        if next_capture is not None and next_capture != next_capture:
+        if next_capture is not None and capture != next_capture:
             print('prepare next')
             self.arm(next_capture)
 
