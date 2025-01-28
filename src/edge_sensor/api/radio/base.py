@@ -394,7 +394,7 @@ class RadioDevice(lb.Device):
         with compute_lock():
             pass
 
-        with lb.stopwatch('enable and allocate', logger_level='debug'):
+        with lb.stopwatch('allocate', logger_level='info'):
             # buffers = lb.concurrently(
             #     rx_enabled=lambda: self.rx_enabled(True),
             #     buffers=lb.Call(alloc_empty_iq, self, capture),
