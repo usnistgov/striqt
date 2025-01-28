@@ -646,6 +646,7 @@ def get_channel_resample_buffer_count(radio: RadioDevice, capture):
     return buf_size
 
 
+@lb.stopwatch('get buf count')
 def get_channel_read_buffer_count(
     radio: RadioDevice, capture=None, include_holdoff=False
 ) -> int:
