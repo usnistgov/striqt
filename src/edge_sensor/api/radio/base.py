@@ -307,11 +307,7 @@ class RadioDevice(lb.Device):
         chunk_count = remaining = sample_count - carryover_count
         timeout_sec = chunk_count / fs + 50e-3
 
-        import time
-        t0 = time.time()
-
         while remaining > 0:
-            print(time.time()-t0, remaining)
             if received_count > 0 or self.gapless_repeats:
                 on_overflow = 'except'
             else:
@@ -356,7 +352,7 @@ class RadioDevice(lb.Device):
 
             remaining = remaining - this_count
             received_count += this_count
-        print('done')
+
         samples = samples.view('complex64')
         sample_offs = include_holdoff_count - stft_pad_before
         sample_span = slice(sample_offs, sample_offs + sample_count)
@@ -372,12 +368,12 @@ class RadioDevice(lb.Device):
         # it seems to be important to convert to cupy here in order
         # to get a full view of the underlying pinned memory. cuda
         # memory corruption has been observed when waiting until after
-        # if self.array_backend == 'cupy':
-        #     with compute_lock():
-        #         samples = pinned_array_as_cupy(samples)
-        # else:
-        #     xp = self.get_array_namespace()
-        #     samples = xp.array(samples)
+        if self.array_backend == 'cupy':
+            with compute_lock():
+                samples = pinned_array_as_cupy(samples)
+        else:
+            xp = self.get_array_namespace()
+            samples = xp.array(samples)
 
         return samples[:, sample_span], start_ns
 
@@ -396,13 +392,11 @@ class RadioDevice(lb.Device):
 
         if capture != self._armed_capture:
             self.arm(capture)
-        else:
-            print('***stay on')
 
         with lb.stopwatch('enable and allocate', logger_level='debug'):
-            buffers = lb.sequentially(
-                buffers=lb.Call(alloc_empty_iq, self, capture),
+            buffers = lb.concurrently(
                 rx_enabled=lambda: self.rx_enabled(True),
+                buffers=lb.Call(alloc_empty_iq, self, capture),
             )['buffers']
 
         iq, time_ns = self.read_iq(capture, buffers=buffers)
@@ -411,7 +405,6 @@ class RadioDevice(lb.Device):
         if next_capture == capture and self.gapless_repeats:
             # the one case where we leave it running
             pass
-            print('***leave on!!')
         else:
             self.rx_enabled(False)
 

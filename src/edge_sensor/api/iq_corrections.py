@@ -8,7 +8,7 @@ from pathlib import Path
 
 from . import util
 from .captures import split_capture_channels
-from channel_analysis.api.util import free_mempool_on_low_memory, compute_lock, pinned_array_as_cupy
+from channel_analysis.api.util import free_mempool_on_low_memory, compute_lock
 
 from .radio import base, RadioDevice, design_capture_filter
 from . import structs
@@ -266,12 +266,6 @@ def resampling_correction(
 
     xp = iqwaveform.fourier.array_namespace(iq)
 
-    # if radio.array_backend == 'cupy':
-    #     # with compute_lock():
-    #     iq = pinned_array_as_cupy(iq)
-    # else:
-    iq = xp.array(iq, copy=False)
-
     with lb.stopwatch('power correction lookup', threshold=10e-3, logger_level='debug'):
         bare_capture = msgspec.structs.replace(capture, start_time=None)
         power_scale = lookup_power_correction(
@@ -292,10 +286,9 @@ def resampling_correction(
 
     if not base.needs_stft(analysis_filter, capture):
         # no filtering or resampling needed
-        print('return direct - ', type(iq))
         iq = iq[:, : round(capture.duration * capture.sample_rate)]
         if power_scale is not None:
-            iq = iq * xp.asarray(np.sqrt(power_scale))
+            iq *= np.sqrt(power_scale)
         return iq
 
     # set the passband roughly equal to the 3 dB bandwidth based on ENBW
@@ -314,7 +307,7 @@ def resampling_correction(
         noverlap=round(nfft * overlap_scale),
         axis=axis,
         truncate=False,
-        overwrite_x=overwrite_x
+        overwrite_x=True
     )
 
     free_mempool_on_low_memory()
