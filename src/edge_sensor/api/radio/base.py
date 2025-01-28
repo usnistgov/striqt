@@ -274,6 +274,7 @@ class RadioDevice(lb.Device):
         self._armed_capture = capture
 
     @lb.stopwatch('read_iq', logger_level='debug')
+    @compute_lock()
     def read_iq(
         self,
         capture: structs.RadioCapture,
@@ -368,8 +369,7 @@ class RadioDevice(lb.Device):
         # to get a full view of the underlying pinned memory. cuda
         # memory corruption has been observed when waiting until after
         if self.array_backend == 'cupy':
-            with compute_lock():
-                samples = pinned_array_as_cupy(samples)
+            samples = pinned_array_as_cupy(samples)
         else:
             xp = self.get_array_namespace()
             samples = xp.array(samples)

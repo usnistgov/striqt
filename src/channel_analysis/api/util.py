@@ -76,10 +76,8 @@ def compute_lock(array=None):
         _compute_lock.acquire()
     if is_cupy:
         import cupy as cp
-        stream = cp.cuda.Stream(non_blocking=False)
-        with stream:
-            yield
-        stream.synchronize()
+        yield
+        cp.cuda.runtime.deviceSynchronize()
     else:
         yield
     if get_lock:
