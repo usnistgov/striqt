@@ -400,10 +400,8 @@ class RadioDevice(lb.Device):
             with lb.stopwatch('allocate'):
                 buffers = alloc_empty_iq(self, capture)
 
-        with compute_lock():
-            with lb.stopwatch('enable'):
-                self.rx_enabled(True)
-            iq, time_ns = self.read_iq(capture, buffers=buffers)
+        self.rx_enabled(True)
+        iq, time_ns = self.read_iq(capture, buffers=buffers)
 
         del buffers
 
@@ -414,7 +412,6 @@ class RadioDevice(lb.Device):
             self.rx_enabled(False)
 
         if next_capture is not None and capture != next_capture:
-            print('prepare next')
             self.arm(next_capture)
 
         if correction:
