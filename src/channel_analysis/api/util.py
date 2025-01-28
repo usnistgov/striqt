@@ -74,11 +74,6 @@ def compute_lock(array=None):
     get_lock = array is None or is_cupy
     if get_lock:
         _compute_lock.acquire()
-    if is_cupy:
-        import cupy as cp
-        yield
-        cp.cuda.runtime.deviceSynchronize()
-    else:
-        yield
+    yield
     if get_lock:
         _compute_lock.release()

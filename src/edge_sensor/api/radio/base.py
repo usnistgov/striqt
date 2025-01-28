@@ -400,8 +400,9 @@ class RadioDevice(lb.Device):
             with lb.stopwatch('allocate'):
                 buffers = alloc_empty_iq(self, capture)
 
-        self.rx_enabled(True)
-        iq, time_ns = self.read_iq(capture, buffers=buffers)
+        with compute_lock():
+            self.rx_enabled(True)
+            iq, time_ns = self.read_iq(capture, buffers=buffers)
 
         del buffers
 
