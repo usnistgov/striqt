@@ -67,16 +67,16 @@ class SingleToneSource(TestSource):
     def get_waveform(self, count, start_index: int, *, channel: int = 0, xp=np):
         i = xp.arange(start_index, count + start_index, dtype='uint64')
         f_cw = self.resource
+        fs = self.backend_sample_rate()
         lo = lo_shift_tone(i, self, xp)
 
-        ret = lo * xp.exp(
-            (2j * np.pi * f_cw) / self.backend_sample_rate() * i + np.pi / 2
-        )
+        phi = (2 * np.pi * f_cw) / fs * i + np.pi / 2
+        ret = lo * xp.exp(1j * phi)
         ret = ret.astype('complex64')
 
         if self.noise_snr is not None:
             capture = channel_analysis.Capture(
-                duration=self.duration, sample_rate=self.backend_sample_rate()
+                duration=self.duration, sample_rate=fs
             )
             noise = cached_noise(capture, xp=xp, power=10 ** (-self.noise_snr / 10))
             noise = noise[i % noise.size]

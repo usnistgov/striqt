@@ -231,7 +231,7 @@ class ChannelAnalysisWrapper:
 
         with lb.stopwatch('analysis', logger_level='debug'):
             with lb.stopwatch('analysis: resample/calibrate', logger_level='debug'):
-                iq = iq_corrections.resampling_correction(iq, capture, self.radio)
+                iq = iq_corrections.resampling_correction(iq, capture, self.radio, overwrite_x=True)
 
             with lb.stopwatch('build coords', threshold=10e-3, logger_level='debug'):
                 coords = build_coords(

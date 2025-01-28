@@ -291,10 +291,6 @@ def resampling_correction(
             iq *= np.sqrt(power_scale)
         return iq
 
-    w = iqwaveform.fourier._get_window(
-        analysis_filter['window'], nfft, fftbins=False, xp=xp
-    )
-
     # set the passband roughly equal to the 3 dB bandwidth based on ENBW
     freq_res = fs_backend / nfft
     enbw_bins = iqwaveform.fourier.equivalent_noise_bandwidth(
@@ -306,7 +302,7 @@ def resampling_correction(
     freqs, _, y = iqwaveform.fourier.stft(
         iq,
         fs=fs_backend,
-        window=w,
+        window=analysis_filter['window'],
         nperseg=nfft,
         noverlap=round(nfft * overlap_scale),
         axis=axis,

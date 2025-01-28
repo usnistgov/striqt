@@ -86,7 +86,6 @@ def iter_sweep(
     quiet=False,
     pickled=False,
     loop=False,
-    close_after=False,
 ) -> typing.Generator['xr.Dataset' | bytes | None]:
     """iterate through sweep captures on the specified radio, yielding a dataset for each.
 
@@ -103,7 +102,6 @@ def iter_sweep(
         always_yield: if `True`, yield `None` before the second capture
         quiet: if True, log at the debug level, and show 'info' level log messages or higher only to the screen
         pickled: if True, yield pickled `bytes` instead of xr.Datasets
-        close_after: if True, close the radio after the last capture
 
     Returns:
         An iterator of analyzed data
@@ -183,7 +181,6 @@ def iter_raw_iq(
     radio: RadioDevice,
     sweep: structs.Sweep,
     quiet=False,
-    close_after=False,
 ) -> typing.Generator['xr.Dataset' | bytes | None]:
     """iterate through the sweep and yield the raw IQ vector for each.
 
@@ -200,7 +197,6 @@ def iter_raw_iq(
         always_yield: if `True`, yield `None` before the second capture
         quiet: if True, log at the debug level, and show 'info' level log messages or higher only to the screen
         pickled: if True, yield pickled `bytes` instead of xr.Datasets
-        close_after: if True, close the radio after the last capture
 
     Returns:
         An iterator of analyzed data
