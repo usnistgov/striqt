@@ -398,8 +398,8 @@ class RadioDevice(lb.Device):
 
         with lb.stopwatch('enable and allocate', logger_level='debug'):
             buffers = lb.sequentially(
-                rx_enabled=lambda: self.rx_enabled(True),
                 buffers=lb.Call(alloc_empty_iq, self, capture),
+                rx_enabled=lambda: self.rx_enabled(True),
             )['buffers']
 
         iq, time_ns = self.read_iq(capture, buffers=buffers)
