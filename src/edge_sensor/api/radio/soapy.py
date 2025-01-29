@@ -69,7 +69,7 @@ class SoapyRadioDevice(base.RadioDevice):
         None, sets=False, label='s', help='channel activation wait time'
     )
 
-    _transport_dtype = attr.value.str('float32', inherit=True)
+    _transport_dtype = attr.value.str('int16', inherit=True)
 
     @attr.method.float(inherit=True)
     def backend_sample_rate(self):

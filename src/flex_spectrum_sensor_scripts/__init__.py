@@ -173,9 +173,8 @@ def init_sensor_sweep(
 
     if debug:
         lb.util.force_full_traceback(True)
-        sys.excepthook = ultratb.FormattedTB(
-            mode='Verbose', color_scheme='Linux', call_pdb=1
-        )
+        hook = ultratb.FormattedTB(mode='Verbose', color_scheme='Linux', call_pdb=1)
+        sys.excepthook = hook
 
     # reload the yaml now that radio_id can be known to fully format any filenames
     radio_id = controller.radio_id(sweep.radio_setup.driver)
