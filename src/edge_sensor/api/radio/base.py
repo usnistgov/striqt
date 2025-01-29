@@ -30,7 +30,7 @@ class _ReceiveBufferCarryover:
     def __init__(self, radio=None):
         self.radio = radio
         if radio is not None:
-            attr.observe(radio, self.on_radio_attr_change)
+            attr.observe(radio, self.on_radio_attr_change, type_='set')
 
         self.clear()
 
@@ -73,7 +73,7 @@ class _ReceiveBufferCarryover:
     def on_radio_attr_change(self, msg):
         """invalidate on notification of paramattr changes"""
 
-        if msg['type'] != 'set' or self.samples is None:
+        if self.samples is None:
             return
 
         # TODO: proper gapless capturing will to manage this case, but
