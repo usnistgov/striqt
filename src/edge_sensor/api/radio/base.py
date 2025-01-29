@@ -88,7 +88,7 @@ class _ReceiveBufferCarryover:
         self.unobserve()
 
     def unobserve(self):
-        attr.unobserve(self.radio, self.on_radio_attr_change)        
+        attr.unobserve(self.radio, self.on_radio_attr_change)
 
 
 def _cast_iq(

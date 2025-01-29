@@ -64,7 +64,9 @@ def _apply_exception_hooks(controller, sweep, debug: bool, remote: bool):
     def hook(*args):
         if debug:
             print('entering debugger')
-            debugger = ultratb.FormattedTB(mode='Verbose', color_scheme='Linux', call_pdb=1)
+            debugger = ultratb.FormattedTB(
+                mode='Verbose', color_scheme='Linux', call_pdb=1
+            )
             debugger(*args)
         else:
             print(args)

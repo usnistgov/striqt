@@ -8,10 +8,7 @@ from pathlib import Path
 
 from . import util
 from .captures import split_capture_channels
-from channel_analysis.api.util import (
-    free_mempool_on_low_memory,
-    pinned_array_as_cupy,
-)
+from channel_analysis.api.util import free_mempool_on_low_memory
 
 from .radio import base, RadioDevice, design_capture_filter
 from . import structs
@@ -247,7 +244,7 @@ def lookup_power_correction(
 def _power_scale(cal_power_scale, dtype_iq_scale):
     if cal_power_scale is None and dtype_iq_scale is None:
         return None
-    
+
     if dtype_iq_scale is None:
         dtype_iq_scale = 1
     if cal_power_scale is None:
