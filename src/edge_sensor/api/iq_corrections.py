@@ -5,6 +5,7 @@ import typing
 import pickle
 import gzip
 from pathlib import Path
+import array_api_compat
 
 from . import util
 from .captures import split_capture_channels
@@ -253,7 +254,7 @@ def _power_scale(cal_power_scale, dtype_iq_scale):
     return cal_power_scale * (dtype_iq_scale**2)
 
 
-@compute_lock()
+# @compute_locompute_lockck()
 def resampling_correction(
     iq: 'iqwaveform.util.Array',
     capture: structs.RadioCapture,
@@ -277,6 +278,9 @@ def resampling_correction(
     """
 
     xp = iqwaveform.fourier.array_namespace(iq)
+
+    if array_api_compat.is_cupy_array(iq):
+        util.configure_cupy()
 
     if radio._transport_dtype == 'int16':
         dtype_scale = 1.0 / float(np.iinfo(radio._transport_dtype).max)

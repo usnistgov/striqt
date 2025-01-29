@@ -12,6 +12,7 @@ import typing
 from . import iq_corrections, captures, structs, util
 from . import radio
 
+import array_api_compat
 from channel_analysis.api.util import free_cupy_mempool
 
 if typing.TYPE_CHECKING:
@@ -232,6 +233,9 @@ class ChannelAnalysisWrapper:
         """Inject radio device and capture info into a channel analysis result."""
 
         with lb.stopwatch('analysis', logger_level='debug'):
+            if array_api_compat.is_cupy_array(iq):
+                util.configure_cupy()
+
             with lb.stopwatch('analysis: resample/calibrate', logger_level='debug'):
                 iq = iq_corrections.resampling_correction(
                     iq, capture, self.radio, overwrite_x=True
