@@ -99,6 +99,7 @@ class SweepController:
                 try:
                     # TODO: fix this upstream
                     radio._attr_store.handlers = {}
+                    radio._carryover.unobserve(radio, radio._carryover.on_radio_attr_change)
                     radio.close()
                 except BaseException as ex:
                     lb.logger.warning(f'failed to close radio {name}: {str(ex)}')
