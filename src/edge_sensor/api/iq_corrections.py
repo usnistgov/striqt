@@ -8,7 +8,7 @@ from pathlib import Path
 
 from . import util
 from .captures import split_capture_channels
-from channel_analysis.api.util import free_mempool_on_low_memory
+from channel_analysis.api.util import free_mempool_on_low_memory, compute_lock
 
 from .radio import base, RadioDevice, design_capture_filter
 from . import structs
@@ -253,6 +253,7 @@ def _power_scale(cal_power_scale, dtype_iq_scale):
     return cal_power_scale * (dtype_iq_scale**2)
 
 
+@compute_lock()
 def resampling_correction(
     iq: 'iqwaveform.util.Array',
     capture: structs.RadioCapture,

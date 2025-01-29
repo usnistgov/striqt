@@ -358,6 +358,11 @@ class RadioDevice(lb.Device):
         received_count = 0
         chunk_count = remaining = sample_count - carryover_count
 
+        ctx = compute_lock()
+        ctx.__enter__()
+        if not self.rx_enabled():
+            self.rx_enabled(True)
+
         while remaining > 0:
             print(remaining)
             if received_count > 0 or self.gapless_repeats:
@@ -382,6 +387,9 @@ class RadioDevice(lb.Device):
                 timeout_sec=request_count / fs + 10e-3,
                 on_overflow=on_overflow,
             )
+
+            if ctx is not None:
+                ctx.__exit__(None, None, None)
 
             if (this_count + received_count) > samples.shape[1]:
                 # this should never happen
