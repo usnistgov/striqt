@@ -111,11 +111,12 @@ def _cast_iq(
     if dtype_in.kind == 'i':
         # 1. the same memory buffer, interpreted as int16 without casting
         buffer_int16 = buffer.view('int16')[:, : 2 * buffer.shape[1]]
-        buffer_float32 = buffer.view('float32')
+        # buffer_float32 = buffer.view('float32')
 
         # TODO: evaluate whether this is necessary, or if a copy is really so painful
         # 2. in-place casting from the int16 samples, filling in the extra allocation in self.buffer
-        xp.copyto(buffer_float32, buffer_int16, casting='unsafe')
+        # xp.copyto(buffer_float32, buffer_int16, casting='unsafe')
+        buffer_float32 = buffer_int16.astype('float32')
 
         # re-interpret the interleaved (float32 I, float32 Q) values as a complex value
         buffer_out = buffer_float32.view('complex64')
