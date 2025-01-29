@@ -240,7 +240,7 @@ class RadioDevice(lb.Device):
         self._carryover = _ReceiveBufferCarryover(self)
 
     def close(self):
-        del self._carryover
+        self._carryover.unobserve()
 
     def setup(self, radio_setup: structs.RadioSetup):
         """disarm acquisition and apply the given radio setup"""
