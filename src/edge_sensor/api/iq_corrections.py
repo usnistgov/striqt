@@ -275,8 +275,6 @@ def resampling_correction(
         the filtered IQ capture
     """
 
-    # get a
-    iq = _cast_iq(radio, iq)
     xp = iqwaveform.fourier.array_namespace(iq)
 
     if radio._transport_dtype == 'int16':
