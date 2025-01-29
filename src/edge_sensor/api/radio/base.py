@@ -292,6 +292,8 @@ class RadioDevice(lb.Device):
         else:
             samples, stream_bufs = buffers
 
+        print(samples.dtype, stream_bufs.dtype)
+
         # holdoffs parameters, valid when we already have a clock reading
         stft_pad_before, _ = _get_stft_pad_size(self.base_clock_rate, capture)
 
