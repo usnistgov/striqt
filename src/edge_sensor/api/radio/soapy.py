@@ -268,13 +268,15 @@ class SoapyRadioDevice(base.RadioDevice):
     def _read_stream(
         self, buffers, offset, count, timeout_sec, *, on_overflow='except'
     ) -> tuple[int, int]:
-        # Read the samples from the data buffer
+        total_timeout = self._rx_enable_delay + timeout_sec + 0.25
+
         rx_result = self.backend.readStream(
             self._rx_stream,
             [buf[offset * 2 :] for buf in buffers],
             count,
-            timeoutUs=int((self._rx_enable_delay + timeout_sec) * 1e6),
+            timeoutUs=round(total_timeout * 1e6),
         )
+
         return validate_stream_result(rx_result, on_overflow=on_overflow)
 
     def sync_time_source(self):
