@@ -28,18 +28,24 @@ def run(**kws):
     # instantiate sweep objects
     store, controller, sweep_spec, calibration = init_sensor_sweep(**kws)
 
-    # acquire and analyze each capture in the sweep
-    results = [
-        result
-        for result in controller.iter_sweep(sweep_spec, calibration)
-        if result is not None
-    ]
+    try:
+        # acquire and analyze each capture in the sweep
+        results = [
+            result
+            for result in controller.iter_sweep(sweep_spec, calibration)
+            if result is not None
+        ]
 
-    with lb.stopwatch('merging results', logger_level='debug'):
-        dataset = xr.concat(results, edge_sensor.CAPTURE_DIM)
+        with lb.stopwatch('merging results', logger_level='debug'):
+            dataset = xr.concat(results, edge_sensor.CAPTURE_DIM)
 
-    with lb.stopwatch(f'write to {sweep_spec.output.path}'):
-        edge_sensor.dump(store, dataset)
+        with lb.stopwatch(f'write to {sweep_spec.output.path}'):
+            edge_sensor.dump(store, dataset)
+    except:
+        # trigger the IPython debugger (if configured) and then close the radio
+        raise
+    else:
+        controller.close_radio(sweep_spec.radio_setup)
 
 
 if __name__ == '__main__':

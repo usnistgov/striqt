@@ -58,6 +58,23 @@ def _chain_decorators(decorators: list[callable], func: callable) -> callable:
     return func
 
 
+def _apply_exception_hooks(controller, sweep, debug: bool, remote: bool):
+    lb.util.force_full_traceback(True)
+
+    def hook(*args):
+        if debug:
+            print('entering debugger')
+            debugger = ultratb.FormattedTB(mode='Verbose', color_scheme='Linux', call_pdb=1)
+            debugger(*args)
+        else:
+            print(args)
+
+        if not remote:
+            controller.close_radio(sweep.radio_setup)
+
+    sys.excepthook = hook
+
+
 # %% Sweep script
 def click_sensor_sweep(description: typing.Optional[str] = None):
     """decorates a function to serve as the main function in a sweep CLI with click"""
@@ -171,10 +188,7 @@ def init_sensor_sweep(
     else:
         controller = edge_sensor.connect(remote).root
 
-    if debug:
-        lb.util.force_full_traceback(True)
-        hook = ultratb.FormattedTB(mode='Verbose', color_scheme='Linux', call_pdb=1)
-        sys.excepthook = hook
+    _apply_exception_hooks(controller, sweep, debug=debug, remote=remote)
 
     # reload the yaml now that radio_id can be known to fully format any filenames
     radio_id = controller.radio_id(sweep.radio_setup.driver)
