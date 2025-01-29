@@ -90,11 +90,11 @@ class Air7x01B(soapy.SoapyRadioDevice):
             ratio = capture.center_frequency / fc_current
 
             if max(1 / ratio, ratio) >= 4.5:
-                reenable_count = 4
+                reenable_count = 5
             else:
-                reenable_count = 3
+                reenable_count = 4
         else:
-            reenable_count = 0
+            reenable_count = 2
 
         super().arm(capture)
 
