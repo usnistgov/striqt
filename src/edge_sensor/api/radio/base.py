@@ -319,6 +319,8 @@ class RadioDevice(lb.Device):
 
         t0 = time.time()
 
+        1//0
+
         while remaining > 0:
             if received_count > 0 or self.gapless_repeats:
                 on_overflow = 'except'
@@ -330,7 +332,8 @@ class RadioDevice(lb.Device):
             if (received_count + request_count) > samples.shape[1]:
                 # this should never happen if samples are tracked and allocated properly
                 raise MemoryError(
-                    f'request may exceed {received_count + request_count} samples, exceeding buffer capacity for {samples.size // 2 - received_count}'
+                    f'request may exceed {received_count + request_count} samples, '
+                    f'exceeding buffer capacity for {samples.size - received_count}'
                 )
 
             # Read the samples from the data buffer
