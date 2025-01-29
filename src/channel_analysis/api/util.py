@@ -65,6 +65,13 @@ def free_mempool_on_low_memory(threshold_bytes=1_000_000_000):
     cp.cuda.set_allocator(None)
 
 
+def free_cupy_mempool():
+    import cupy as cp
+    mempool = cp.get_default_memory_pool()
+    if mempool is not None:
+        mempool.free_all_blocks()
+
+
 _compute_lock = threading.RLock()
 
 

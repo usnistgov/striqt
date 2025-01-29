@@ -12,6 +12,8 @@ import typing
 from . import iq_corrections, captures, structs, util
 from . import radio
 
+from channel_analysis.api.util import free_cupy_mempool
+
 if typing.TYPE_CHECKING:
     import labbench as lb
     import numpy as np
@@ -246,6 +248,8 @@ class ChannelAnalysisWrapper:
             analysis = channel_analysis.analyze_by_spec(
                 iq, capture, spec=self.analysis_spec, expand_dims=(CAPTURE_DIM,)
             )
+
+            free_cupy_mempool()
 
             analysis = analysis.assign_coords(coords)
 
