@@ -81,6 +81,9 @@ class _ReceiveBufferCarryover:
         if msg['new'] != msg['old']:
             self.clear()
 
+    def unobserve(self, radio):
+        attr.unobserve(radio, self.on_radio_attr_change)        
+
 
 class RadioDevice(lb.Device):
     _carryover = _ReceiveBufferCarryover()
@@ -194,6 +197,10 @@ class RadioDevice(lb.Device):
     def open(self):
         self._armed_capture: structs.RadioCapture | None = None
         self._carryover = _ReceiveBufferCarryover(self)
+
+    def close(self):
+        if self._carryover is not None:
+            self._carryover.unobserve(self)
 
     def setup(self, radio_setup: structs.RadioSetup):
         """disarm acquisition and apply the given radio setup"""
