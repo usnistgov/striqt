@@ -188,7 +188,7 @@ def _evaluate(
         nperseg=nfft,
         noverlap=noverlap,
         axis=1,
-        return_axis_arrays=False
+        return_axis_arrays=False,
     )
 
     # truncate to the analysis bandwidth

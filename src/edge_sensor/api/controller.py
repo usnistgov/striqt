@@ -61,7 +61,6 @@ class SweepController:
 
             radio_cls = find_radio_cls_by_name(driver_name)
 
-
         if radio_setup.resource is None:
             resource = radio_cls.resource.default
         else:

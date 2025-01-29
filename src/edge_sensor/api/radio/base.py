@@ -178,6 +178,13 @@ class RadioDevice(lb.Device):
         0.0, sets=False, label='s', help='holdoff time before valid data after enable'
     )
 
+    _transport_dtype = attr.value.str(
+        'complex64',
+        only=('int16', 'float32', 'complex64'),
+        sets=False,
+        help='buffer transport dtype',
+    )
+
     @attr.property.str(sets=False, cache=True, help='unique radio hardware identifier')
     def id(self):
         raise NotImplementedError
@@ -295,7 +302,7 @@ class RadioDevice(lb.Device):
 
         # the number of holdoff samples from the end of the holdoff period
         # to include with the returned waveform
-        include_holdoff_count = stft_pad_before
+        included_holdoff = stft_pad_before
 
         fs = self.backend_sample_rate()
 
@@ -307,8 +314,9 @@ class RadioDevice(lb.Device):
         chunk_count = remaining = sample_count - carryover_count
 
         import time
+
         t0 = time.time()
-        
+
         while remaining > 0:
             if received_count > 0 or self.gapless_repeats:
                 on_overflow = 'except'
@@ -317,7 +325,7 @@ class RadioDevice(lb.Device):
 
             request_count = min(chunk_count, remaining)
 
-            if 2 * (received_count + request_count) > samples.shape[1]:
+            if (received_count + request_count) > samples.shape[1]:
                 # this should never happen if samples are tracked and allocated properly
                 raise MemoryError(
                     f'request may exceed {received_count + request_count} samples, exceeding buffer capacity for {samples.size // 2 - received_count}'
@@ -334,10 +342,10 @@ class RadioDevice(lb.Device):
 
             print(time.time() - t0, received_count / fs)
 
-            if 2 * (this_count + received_count) > samples.shape[1]:
+            if (this_count + received_count) > samples.shape[1]:
                 # this should never happen
                 raise MemoryError(
-                    f'overfilled receive buffer by {2 * (this_count + received_count) - samples.size}'
+                    f'overfilled receive buffer by {(this_count + received_count) - samples.size}'
                 )
 
             if buf_time_ns is None:
@@ -346,19 +354,19 @@ class RadioDevice(lb.Device):
                 buf_time_ns = ret_time_ns
 
             if awaiting_timestamp:
-                include_holdoff_count = find_trigger_holdoff(
+                included_holdoff = find_trigger_holdoff(
                     self, buf_time_ns, stft_pad_before=stft_pad_before
                 )
-                remaining = remaining + include_holdoff_count - stft_pad_before
+                remaining = remaining + included_holdoff - stft_pad_before
 
-                start_ns = buf_time_ns + round(include_holdoff_count * 1e9 / fs)
+                start_ns = buf_time_ns + round(included_holdoff * 1e9 / fs)
                 awaiting_timestamp = False
 
             remaining = remaining - this_count
             received_count += this_count
 
         samples = samples.view('complex64')
-        sample_offs = include_holdoff_count - stft_pad_before
+        sample_offs = included_holdoff - stft_pad_before
         sample_span = slice(sample_offs, sample_offs + sample_count)
 
         unused_count = sample_count - round(capture.duration * fs)
@@ -369,14 +377,14 @@ class RadioDevice(lb.Device):
             capture=capture,
         )
 
-        # it seems to be important to convert to cupy here in order
-        # to get a full view of the underlying pinned memory. cuda
-        # memory corruption has been observed when waiting until after
-        if self.array_backend == 'cupy':
-            samples = pinned_array_as_cupy(samples)
-        else:
-            xp = self.get_array_namespace()
-            samples = xp.array(samples)
+        # # it seems to be important to convert to cupy here in order
+        # # to get a full view of the underlying pinned memory. cuda
+        # # memory corruption has been observed when waiting until after
+        # if self.array_backend == 'cupy':
+        #     samples = pinned_array_as_cupy(samples)
+        # else:
+        #     xp = self.get_array_namespace()
+        #     samples = xp.array(samples)
 
         return samples[:, sample_span], start_ns
 
@@ -421,7 +429,9 @@ class RadioDevice(lb.Device):
 
         if correction:
             with lb.stopwatch('resample and calibrate', logger_level='debug'):
-                iq = iq_corrections.resampling_correction(iq, capture, self, overwrite_x=True)
+                iq = iq_corrections.resampling_correction(
+                    iq, capture, self, overwrite_x=True
+                )
 
         acquired_capture = msgspec.structs.replace(
             capture, start_time=pd.Timestamp(time_ns, unit='ns')
@@ -687,17 +697,19 @@ def alloc_empty_iq(
     else:
         empty = np.empty
 
-    # fast reinterpretation to complex64 requires the waveform to be in the last axis
+    buf_dtype = np.dtype(radio._transport_dtype)
+
+    # fast reinterpretation between dtypes requires the waveform to be in the last axis
     channels = radio.channel()
     if not isinstance(channels, tuple):
         channels = (channels,)
-    samples = empty((len(channels), 2 * count), dtype=np.float32)
+    samples = empty((len(channels), count), dtype=np.complex64)
 
     # build the list of channel buffers, including references to the throwaway
     # in case of radio._stream_all_rx_channels
     if radio._stream_all_rx_channels and len(channels) != radio.rx_channel_count:
         # a throwaway buffer for samples that won't be returned
-        extra = np.empty(2 * count, dtype=samples.dtype)
+        extra = np.empty(count, dtype=buf_dtype)
     else:
         extra = None
 
@@ -705,7 +717,7 @@ def alloc_empty_iq(
     i = 0
     for channel in range(radio.rx_channel_count):
         if channel in channels:
-            buffers.append(samples[i, :])
+            buffers.append(samples[i, :].view(buf_dtype))
             i += 1
         elif radio._stream_all_rx_channels:
             buffers.append(extra)

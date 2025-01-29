@@ -36,11 +36,9 @@ warnings.filterwarnings(
 )
 
 warnings.filterwarnings(
-    'ignore',
-    category=UserWarning,
-    module='.*zipfile.*',
-    message='.*Duplicate name.*'
+    'ignore', category=UserWarning, module='.*zipfile.*', message='.*Duplicate name.*'
 )
+
 
 def open_store(path: str | Path, *, mode: str):
     if hasattr(zarr.storage, 'Store'):
@@ -113,7 +111,7 @@ def dump(
     append_dim=None,
     compression=None,
     filter=True,
-    overwrite=False
+    overwrite=False,
 ) -> 'StoreType':
     """serialize a dataset into a zarr directory structure"""
 

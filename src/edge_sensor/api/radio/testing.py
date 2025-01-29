@@ -45,7 +45,7 @@ class TestSource(NullSource):
                 channel=channel,
                 xp=getattr(self, 'xp', np),
             )
-            buf[2 * offset : 2 * (offset + count)] = values.view('float32')
+            buf[offset : (offset + count)] = values
 
         return super()._read_stream(
             buffers, offset, count, timeout_sec=timeout_sec, on_overflow=on_overflow
@@ -57,11 +57,11 @@ class TestSource(NullSource):
 
 class SingleToneSource(TestSource):
     resource: float = attr.value.float(
-        default=0, help='normalized tone frequency (between -1 and 1)', label='Hz'
+        default=0, help='baseband frequency of the tone to generate', label='Hz'
     )
 
-    noise_snr: float = attr.value.float(
-        None, help='add noise at the specified power level'
+    snr: float = attr.value.float(
+        None, label='dB', help='add circular white noise to achieve the specified SNR'
     )
 
     def get_waveform(self, count, start_index: int, *, channel: int = 0, xp=np):
@@ -74,11 +74,9 @@ class SingleToneSource(TestSource):
         ret = lo * xp.exp(1j * phi)
         ret = ret.astype('complex64')
 
-        if self.noise_snr is not None:
-            capture = channel_analysis.Capture(
-                duration=self.duration, sample_rate=fs
-            )
-            noise = cached_noise(capture, xp=xp, power=10 ** (-self.noise_snr / 10))
+        if self.snr is not None:
+            capture = channel_analysis.Capture(duration=self.duration, sample_rate=fs)
+            noise = cached_noise(capture, xp=xp, power=10 ** (-self.snr / 10))
             noise = noise[i % noise.size]
             ret += noise
 

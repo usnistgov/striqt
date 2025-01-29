@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import time
-from functools import wraps
 import numbers
 import typing
 
@@ -27,7 +26,7 @@ else:
 channel_kwarg = attr.method_kwarg.int('channel', min=0, help='hardware port number')
 
 
-def get_stream_result(
+def validate_stream_result(
     sr: SoapySDR.StreamResult, on_overflow='except'
 ) -> tuple[int, int]:
     """track the number of samples received and remaining in a read stream.
@@ -70,6 +69,8 @@ class SoapyRadioDevice(base.RadioDevice):
         None, sets=False, label='s', help='channel activation wait time'
     )
 
+    _transport_dtype = attr.value.str('float32', inherit=True)
+
     @attr.method.float(inherit=True)
     def backend_sample_rate(self):
         channels = self.channel()
@@ -104,13 +105,17 @@ class SoapyRadioDevice(base.RadioDevice):
         """the self-reported "actual" sample rate of the radio"""
         return self.backend.getSampleRate(SoapySDR.SOAPY_SDR_RX, 0) / self._downsample
 
+    @lb.stopwatch('stream initialization', logger_level='debug')
     def _setup_rx_stream(self, channels):
-        with lb.stopwatch(
-            f'setup stream for channels {channels}', logger_level='debug'
-        ):
-            self._rx_stream = self.backend.setupStream(
-                SoapySDR.SOAPY_SDR_RX, SoapySDR.SOAPY_SDR_CF32, list(channels)
-            )
+        if self._transport_dtype == 'int16':
+            soapy_type = SoapySDR.SOAPY_SDR_CS16
+        elif self._transport_dtype == 'float32':
+            soapy_type = SoapySDR.SOAPY_SDR_CF32
+        else:
+            raise ValueError(f'unsupported transport type {self._transport_type}')
+        self._rx_stream = self.backend.setupStream(
+            SoapySDR.SOAPY_SDR_RX, soapy_type, list(channels)
+        )
 
     @method_attr.ChannelMaybeTupleMethod(inherit=True)
     def channel(self):
@@ -270,7 +275,7 @@ class SoapyRadioDevice(base.RadioDevice):
             count,
             timeoutUs=int((self._rx_enable_delay + timeout_sec) * 1e6),
         )
-        return get_stream_result(rx_result, on_overflow=on_overflow)
+        return validate_stream_result(rx_result, on_overflow=on_overflow)
 
     def sync_time_source(self):
         if self.time_source() in ('internal', 'host'):

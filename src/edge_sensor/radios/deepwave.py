@@ -11,16 +11,18 @@ import uuid
 
 def _reenable_loop(radio, count):
     import numpy as np
-    buf = np.empty((radio.rx_channel_count,2), dtype='float32')
+
+    buf = np.empty((radio.rx_channel_count, 2), dtype='float32')
 
     for _ in range(count):
         radio.backend.activateStream(radio._rx_stream)
-        radio._read_stream(buf, 0, 1, 10e-3)              
+        radio._read_stream(buf, 0, 1, 10e-3)
         radio.backend.deactivateStream(radio._rx_stream)
 
 
 # for TX only (RX channel is accessed through the AirT7201B.channel method)
 channel_kwarg = attr.method_kwarg.int('channel', min=0, help='hardware port number')
+
 
 class Air7x01B(soapy.SoapyRadioDevice):
     resource = attr.value.dict({}, inherit=True)

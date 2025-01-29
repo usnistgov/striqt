@@ -26,6 +26,7 @@ class NullSource(base.RadioDevice):
     _inbuf = None
 
     _transient_holdoff_time: float = attr.value.float(0.0, sets=True, inherit=True)
+    _transport_dtype = attr.value.str('complex64', inherit=True)
     rx_channel_count: int = attr.value.int(2, cache=True, help='number of input ports')
 
     @method_attr.ChannelMaybeTupleMethod(inherit=True)

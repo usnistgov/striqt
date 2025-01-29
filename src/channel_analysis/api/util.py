@@ -1,6 +1,5 @@
 import array_api_compat
 import contextlib
-import functools
 import importlib
 import importlib.util
 import sys
@@ -67,6 +66,7 @@ def free_mempool_on_low_memory(threshold_bytes=1_000_000_000):
 
 
 _compute_lock = threading.RLock()
+
 
 @contextlib.contextmanager
 def compute_lock(array=None):
