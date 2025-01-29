@@ -8,7 +8,7 @@ from pathlib import Path
 
 from . import util
 from .captures import split_capture_channels
-from channel_analysis.api.util import free_mempool_on_low_memory, compute_lock
+from channel_analysis.api.util import except_on_low_memory, compute_lock
 
 from .radio import base, RadioDevice, design_capture_filter
 from . import structs
@@ -328,7 +328,7 @@ def resampling_correction(
         overwrite_x=overwrite_x,
     )
 
-    free_mempool_on_low_memory()
+    except_on_low_memory()
 
     if nfft_out < nfft:
         # downsample applies the filter as well
@@ -361,7 +361,7 @@ def resampling_correction(
 
     del iq
 
-    free_mempool_on_low_memory()
+    except_on_low_memory()
 
     iq = iqwaveform.fourier.istft(
         y, nfft=nfft_out, noverlap=noverlap, axis=axis, overwrite_x=True
@@ -369,7 +369,7 @@ def resampling_correction(
 
     del y
 
-    free_mempool_on_low_memory()
+    except_on_low_memory()
 
     # start the capture after the transient holdoff window
     iq_size_out = round(capture.duration * capture.sample_rate)

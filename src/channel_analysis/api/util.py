@@ -39,7 +39,7 @@ def pinned_array_as_cupy(x, stream=None):
     return out
 
 
-def free_mempool_on_low_memory(threshold_bytes=1_000_000_000):
+def except_on_low_memory(threshold_bytes=500_000_000):
     try:
         import cupy as cp
     except ModuleNotFoundError:
@@ -51,18 +51,7 @@ def free_mempool_on_low_memory(threshold_bytes=1_000_000_000):
     if psutil.virtual_memory().available >= threshold_bytes:
         return
 
-    import labbench as lb
-
-    if mempool is None:
-        lb.logger.warning('still low on memory')
-        return
-    else:
-        lb.logger.warning('low on memory, disabling GPU caching')
-
-    if mempool is not None:
-        mempool.free_all_blocks()
-
-    cp.cuda.set_allocator(None)
+    raise MemoryError('too little memory to proceed')
 
 
 def free_cupy_mempool():
