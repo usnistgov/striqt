@@ -323,7 +323,7 @@ class RadioDevice(lb.Device):
         self._armed_capture = capture
 
     @lb.stopwatch('read_iq', logger_level='debug')
-    @compute_lock
+    @compute_lock()
     def read_iq(
         self,
         capture: structs.RadioCapture,
