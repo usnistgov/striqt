@@ -376,6 +376,8 @@ def resampling_correction(
     assert i0 + iq_size_out <= iq.shape[axis]
     iq = iqwaveform.util.axis_slice(iq, i0, i0 + iq_size_out, axis=axis)
 
+    print(type(iq), type(power_scale))
+
     if power_scale is None and nfft == nfft_out:
         pass
     elif power_scale is None:
