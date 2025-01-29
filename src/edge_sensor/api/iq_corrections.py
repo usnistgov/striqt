@@ -288,9 +288,7 @@ def resampling_correction(
         cal_data = radio.calibration if force_calibration is None else force_calibration
         cal_scale = lookup_power_correction(cal_data, bare_capture, xp)
 
-    print(type(iq))
     power_scale = _power_scale(cal_scale, dtype_scale)
-    print(type(power_scale), power_scale)
 
     fs, _, analysis_filter = design_capture_filter(radio.base_clock_rate, capture)
     nfft = analysis_filter['nfft']
@@ -376,8 +374,6 @@ def resampling_correction(
     i0 = nfft_out // 2
     assert i0 + iq_size_out <= iq.shape[axis]
     iq = iqwaveform.util.axis_slice(iq, i0, i0 + iq_size_out, axis=axis)
-
-    print(type(iq), type(power_scale))
 
     if power_scale is None and nfft == nfft_out:
         pass

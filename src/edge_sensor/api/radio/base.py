@@ -101,7 +101,9 @@ def _cast_iq(
     if radio.array_backend == 'cupy':
         import cupy as xp
 
-        buffer = pinned_array_as_cupy(buffer)
+        # buffer = pinned_array_as_cupy(buffer)
+        buffer = xp.array(buffer)
+
     else:
         import numpy as xp
 
@@ -729,8 +731,9 @@ def alloc_empty_iq(
             raise RuntimeError(
                 'could not import the configured array backend, "cupy"'
             ) from ex
+        from cupy import empty
     else:
-        empty = np.empty
+        from numpy import empty
 
     buf_dtype = np.dtype(radio._transport_dtype)
 
