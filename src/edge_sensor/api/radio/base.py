@@ -319,8 +319,6 @@ class RadioDevice(lb.Device):
 
         t0 = time.time()
 
-        1//0
-
         while remaining > 0:
             if received_count > 0 or self.gapless_repeats:
                 on_overflow = 'except'
