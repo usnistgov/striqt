@@ -10,7 +10,6 @@ from . import util
 from .captures import split_capture_channels
 from channel_analysis.api.util import (
     free_mempool_on_low_memory,
-    compute_lock,
     pinned_array_as_cupy,
 )
 

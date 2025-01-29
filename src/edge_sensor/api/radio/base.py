@@ -8,8 +8,6 @@ from labbench import paramattr as attr
 import msgspec
 import numpy as np
 
-from channel_analysis.api.util import pinned_array_as_cupy, compute_lock
-
 from .. import structs, util
 from . import method_attr
 
@@ -413,9 +411,8 @@ class RadioDevice(lb.Device):
         else:
             buffers = alloc_empty_iq(self, capture)
 
-        with compute_lock():
-            self.rx_enabled(True)
-            iq, time_ns = self.read_iq(capture, buffers=buffers)
+        self.rx_enabled(True)
+        iq, time_ns = self.read_iq(capture, buffers=buffers)
 
         del buffers
 
