@@ -358,13 +358,13 @@ class RadioDevice(lb.Device):
         received_count = 0
         chunk_count = remaining = sample_count - carryover_count
 
-        ctx = compute_lock()
-        ctx.__enter__()
         if not self.rx_enabled():
             self.rx_enabled(True)
 
+        ctx = compute_lock()
+        ctx.__enter__()
+
         while remaining > 0:
-            print(remaining)
             if received_count > 0 or self.gapless_repeats:
                 on_overflow = 'except'
             else:
@@ -457,7 +457,6 @@ class RadioDevice(lb.Device):
         else:
             buffers = alloc_empty_iq(self, capture)
 
-        self.rx_enabled(True)
         iq, time_ns = self.read_iq(capture, buffers=buffers)
 
         del buffers
