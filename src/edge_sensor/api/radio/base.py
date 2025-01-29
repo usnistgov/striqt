@@ -731,7 +731,7 @@ def alloc_empty_iq(
             raise RuntimeError(
                 'could not import the configured array backend, "cupy"'
             ) from ex
-        from cupy import empty
+        from numpy import empty
     else:
         from numpy import empty
 
