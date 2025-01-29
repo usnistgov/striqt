@@ -246,7 +246,7 @@ def lookup_power_correction(
 
 
 def _cast_iq(
-    radio: RadioDevice, buffer: 'iqwaveform.util.ArrayType'
+    radio: RadioDevice, buffer: 'iqwaveform.util.ArrayType', axis=1
 ) -> 'iqwaveform.util.ArrayType':
     """cast the buffer to floating point, if necessary"""
     # array_namespace will categorize cupy pinned memory as numpy
@@ -264,7 +264,7 @@ def _cast_iq(
     # what follows is some acrobatics to minimize new memory allocation and copy
     if dtype_in.kind == 'i':
         # 1. the same memory buffer, interpreted as int16 without casting
-        buffer_int16 = buffer.view('int16')
+        buffer_int16 = buffer.view('int16')[:, :buffer.shape[1]]
         buffer_float32 = buffer.view('float32')
 
         # TODO: evaluate whether this is necessary, or if a copy is really so painful
