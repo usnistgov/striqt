@@ -278,9 +278,21 @@ def _cast_iq(
 
     else:
         buffer_out = buffer
-        scale = 1.0
+        scale = None
 
     return buffer_out, scale
+
+
+def _power_scale(cal_power_scale, dtype_iq_scale):
+    if cal_power_scale is None and dtype_iq_scale is None:
+        return None
+    
+    if dtype_iq_scale is None:
+        dtype_iq_scale = 1
+    if cal_power_scale is None:
+        cal_power_scale = 1
+
+    return cal_power_scale * (dtype_iq_scale**2)
 
 
 def resampling_correction(
@@ -306,18 +318,17 @@ def resampling_correction(
     """
 
     # get a
-    iq = _cast_iq(radio, iq)
+    iq, dtype_scale = _cast_iq(radio, iq)
     xp = iqwaveform.fourier.array_namespace(iq)
 
     with lb.stopwatch('power correction lookup', threshold=10e-3, logger_level='debug'):
         bare_capture = msgspec.structs.replace(capture, start_time=None)
-        power_scale = lookup_power_correction(
-            force_calibration or radio.calibration, bare_capture, xp
-        )
+        cal_data = radio.calibration if force_calibration is None else force_calibration
+        cal_scale = lookup_power_correction(cal_data, bare_capture, xp)
 
-    fs_backend, _, analysis_filter = design_capture_filter(
-        radio.base_clock_rate, capture
-    )
+    power_scale = _power_scale(cal_scale, dtype_scale)
+
+    fs, _, analysis_filter = design_capture_filter(radio.base_clock_rate, capture)
     nfft = analysis_filter['nfft']
     nfft_out, noverlap, overlap_scale, _ = iqwaveform.fourier._ola_filter_parameters(
         iq.size,
@@ -335,7 +346,7 @@ def resampling_correction(
         return iq
 
     # set the passband roughly equal to the 3 dB bandwidth based on ENBW
-    freq_res = fs_backend / nfft
+    freq_res = fs / nfft
     enbw_bins = iqwaveform.fourier.equivalent_noise_bandwidth(
         analysis_filter['window'], nfft, fftbins=False
     )
@@ -344,7 +355,7 @@ def resampling_correction(
 
     freqs, _, y = iqwaveform.fourier.stft(
         iq,
-        fs=fs_backend,
+        fs=fs,
         window=analysis_filter['window'],
         nperseg=nfft,
         noverlap=round(nfft * overlap_scale),
