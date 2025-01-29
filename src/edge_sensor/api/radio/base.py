@@ -101,9 +101,7 @@ def _cast_iq(
     if radio.array_backend == 'cupy':
         import cupy as xp
 
-        # buffer = pinned_array_as_cupy(buffer)
-        buffer = xp.array(buffer)
-
+        buffer = pinned_array_as_cupy(buffer)
     else:
         import numpy as xp
 
@@ -117,8 +115,7 @@ def _cast_iq(
 
         # TODO: evaluate whether this is necessary, or if a copy is really so painful
         # 2. in-place casting from the int16 samples, filling in the extra allocation in self.buffer
-        # xp.copyto(buffer_float32, buffer_int16, casting='unsafe')
-        buffer_float32 = buffer_int16.astype('float32')
+        xp.copyto(buffer_float32, buffer_int16, casting='unsafe')
 
         # re-interpret the interleaved (float32 I, float32 Q) values as a complex value
         buffer_out = buffer_float32.view('complex64')
@@ -326,7 +323,7 @@ class RadioDevice(lb.Device):
         self._armed_capture = capture
 
     @lb.stopwatch('read_iq', logger_level='debug')
-    @compute_lock()
+    @compute_lock
     def read_iq(
         self,
         capture: structs.RadioCapture,
@@ -732,9 +729,8 @@ def alloc_empty_iq(
             raise RuntimeError(
                 'could not import the configured array backend, "cupy"'
             ) from ex
-        from numpy import empty
     else:
-        from numpy import empty
+        empty = np.empty
 
     buf_dtype = np.dtype(radio._transport_dtype)
 
