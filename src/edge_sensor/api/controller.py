@@ -97,6 +97,8 @@ class SweepController:
             # close all
             for name, radio in self.radios.items():
                 try:
+                    # TODO: fix this upstream
+                    radio._attr_store.handlers = {}
                     radio.close()
                 except BaseException as ex:
                     lb.logger.warning(f'failed to close radio {name}: {str(ex)}')
