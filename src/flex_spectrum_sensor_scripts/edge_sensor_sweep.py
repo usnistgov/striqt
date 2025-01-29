@@ -42,13 +42,17 @@ def run(**kws):
         with lb.stopwatch(f'write to {sweep_spec.output.path}'):
             edge_sensor.dump(store, dataset)
 
-    except BaseException:
-        # the following will run the ipdb debug prompt if the
-        # -d flag was passed in
-        sys.excepthook(*sys.exc_info())
-        controller.close_radio(sweep_spec.radio_setup)
+    # except BaseException as ex:
+    #     exc = ex
+    #     # the following will run the ipdb debug prompt if the
+    #     # -d flag was passed in        
+        
+    #     controller.close_radio(sweep_spec.radio_setup)
+    # else:
+    #     exc = None
 
-    else:
+    # else:
+    finally:
         controller.close_radio(sweep_spec.radio_setup)
 
 
