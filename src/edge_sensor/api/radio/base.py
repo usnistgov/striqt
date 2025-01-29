@@ -323,6 +323,7 @@ class RadioDevice(lb.Device):
         self._armed_capture = capture
 
     @lb.stopwatch('read_iq', logger_level='debug')
+    @compute_lock()
     def read_iq(
         self,
         capture: structs.RadioCapture,
@@ -354,9 +355,6 @@ class RadioDevice(lb.Device):
         )
         received_count = 0
         chunk_count = remaining = sample_count - carryover_count
-
-        ctx = compute_lock()
-        ctx.__enter__()
 
         if not self.rx_enabled():
             self.rx_enabled(True)
@@ -407,8 +405,6 @@ class RadioDevice(lb.Device):
 
             remaining = remaining - this_count
             received_count += this_count
-
-        ctx.__exit__(None, None, None)
 
         samples = samples.view('complex64')
         sample_offs = included_holdoff - stft_pad_before
