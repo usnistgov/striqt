@@ -713,8 +713,13 @@ def alloc_empty_iq(
     # build the list of channel buffers, including references to the throwaway
     # in case of radio._stream_all_rx_channels
     if radio._stream_all_rx_channels and len(channels) != radio.rx_channel_count:
-        # a throwaway buffer for samples that won't be returned
-        extra = np.empty(count, dtype=buf_dtype)
+        if radio._transport_dtype == 'complex64':
+            # a throwaway buffer for samples that won't be returned
+            extra_count = count
+        else:
+            extra_count = 2 * count
+
+        extra = np.empty(extra_count, dtype=buf_dtype)
     else:
         extra = None
 

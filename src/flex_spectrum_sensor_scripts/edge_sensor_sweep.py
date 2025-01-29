@@ -28,32 +28,18 @@ def run(**kws):
     # instantiate sweep objects
     store, controller, sweep_spec, calibration = init_sensor_sweep(**kws)
 
-    try:
-        # acquire and analyze each capture in the sweep
-        results = [
-            result
-            for result in controller.iter_sweep(sweep_spec, calibration)
-            if result is not None
-        ]
+    # acquire and analyze each capture in the sweep
+    results = [
+        result
+        for result in controller.iter_sweep(sweep_spec, calibration)
+        if result is not None
+    ]
 
-        with lb.stopwatch('merging results', logger_level='debug'):
-            dataset = xr.concat(results, edge_sensor.CAPTURE_DIM)
+    with lb.stopwatch('merging results', logger_level='debug'):
+        dataset = xr.concat(results, edge_sensor.CAPTURE_DIM)
 
-        with lb.stopwatch(f'write to {sweep_spec.output.path}'):
-            edge_sensor.dump(store, dataset)
-
-    # except BaseException as ex:
-    #     exc = ex
-    #     # the following will run the ipdb debug prompt if the
-    #     # -d flag was passed in        
-        
-    #     controller.close_radio(sweep_spec.radio_setup)
-    # else:
-    #     exc = None
-
-    # else:
-    finally:
-        controller.close_radio(sweep_spec.radio_setup)
+    with lb.stopwatch(f'write to {sweep_spec.output.path}'):
+        edge_sensor.dump(store, dataset)
 
 
 if __name__ == '__main__':
