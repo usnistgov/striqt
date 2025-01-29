@@ -385,10 +385,6 @@ class RadioDevice(lb.Device):
                 on_overflow=on_overflow,
             )
 
-            if ctx is not None:
-                ctx.__exit__(None, None, None)
-                ctx = None
-
             if (this_count + received_count) > samples.shape[1]:
                 # this should never happen
                 raise MemoryError(
@@ -411,6 +407,8 @@ class RadioDevice(lb.Device):
 
             remaining = remaining - this_count
             received_count += this_count
+
+        ctx.__exit__(None, None, None)
 
         samples = samples.view('complex64')
         sample_offs = included_holdoff - stft_pad_before
