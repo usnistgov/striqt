@@ -68,8 +68,6 @@ def _apply_exception_hooks(controller, sweep, debug: bool, remote: bool):
                 mode='Verbose', color_scheme='Linux', call_pdb=1
             )
             debugger(*args)
-        else:
-            print(args)
 
         if not remote:
             controller.close_radio(sweep.radio_setup)
