@@ -331,8 +331,9 @@ def evaluate_channel_analysis(
             util.free_mempool_on_low_memory()
             with lb.stopwatch(f'analysis: {name}', logger_level='debug'):
                 func = registry[type(getattr(spec, name))]
-
-                if func_kws:
+                if not func_kws:
+                    continue
+                with util.compute_lock(iq):
                     results[name] = func(iq, capture, as_xarray=as_xarray, **func_kws)
 
     return results

@@ -11,7 +11,7 @@ import numpy as np
 from .. import structs, util
 from . import method_attr
 
-from channel_analysis.api.util import pinned_array_as_cupy
+from channel_analysis.api.util import pinned_array_as_cupy, compute_lock
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -359,6 +359,7 @@ class RadioDevice(lb.Device):
         chunk_count = remaining = sample_count - carryover_count
 
         while remaining > 0:
+            print(remaining)
             if received_count > 0 or self.gapless_repeats:
                 on_overflow = 'except'
             else:
