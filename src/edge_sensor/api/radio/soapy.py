@@ -268,7 +268,7 @@ class SoapyRadioDevice(base.RadioDevice):
     def _read_stream(
         self, buffers, offset, count, timeout_sec, *, on_overflow='except'
     ) -> tuple[int, int]:
-        total_timeout = self._rx_enable_delay + timeout_sec + 0.25
+        total_timeout = self._rx_enable_delay + timeout_sec + 0.5
 
         rx_result = self.backend.readStream(
             self._rx_stream,

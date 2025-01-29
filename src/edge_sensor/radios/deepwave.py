@@ -16,7 +16,7 @@ def _reenable_loop(radio, count):
 
     for _ in range(count):
         radio.backend.activateStream(radio._rx_stream)
-        radio._read_stream(buf, 0, 1, 10e-3)
+        radio._read_stream(buf, 0, 1, timeout_sec=200e-3, on_overflow='ignore')
         radio.backend.deactivateStream(radio._rx_stream)
 
 
