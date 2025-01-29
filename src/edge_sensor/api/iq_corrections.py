@@ -288,6 +288,7 @@ def resampling_correction(
         cal_data = radio.calibration if force_calibration is None else force_calibration
         cal_scale = lookup_power_correction(cal_data, bare_capture, xp)
 
+    print(type(iq))
     power_scale = _power_scale(cal_scale, dtype_scale)
     print(type(power_scale), power_scale)
 
