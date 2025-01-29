@@ -45,7 +45,8 @@ def run(**kws):
         # trigger the IPython debugger (if configured) and then close the radio
         raise
     else:
-        controller.close_radio(sweep_spec.radio_setup)
+        if not kws['remote']:
+            controller.close_radio(sweep_spec.radio_setup)
 
 
 if __name__ == '__main__':

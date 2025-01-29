@@ -283,6 +283,8 @@ def resampling_correction(
     else:
         dtype_scale = None
 
+    print(type(iq), iq.dtype)
+
     with lb.stopwatch('power correction lookup', threshold=10e-3, logger_level='debug'):
         bare_capture = msgspec.structs.replace(capture, start_time=None)
         cal_data = radio.calibration if force_calibration is None else force_calibration

@@ -58,7 +58,7 @@ def _chain_decorators(decorators: list[callable], func: callable) -> callable:
     return func
 
 
-def _apply_exception_hooks(controller, sweep, debug: bool, remote: bool):
+def _apply_exception_hooks(controller, sweep, debug: bool, remote: bool|None):
     lb.util.force_full_traceback(True)
 
     def hook(*args):
