@@ -244,44 +244,6 @@ def lookup_power_correction(
     return xp.asarray(power_scale, dtype='float32')[:, np.newaxis]
 
 
-def _cast_iq(
-    radio: RadioDevice, buffer: 'iqwaveform.util.ArrayType', axis=1
-) -> 'iqwaveform.util.ArrayType':
-    """cast the buffer to floating point, if necessary"""
-    # array_namespace will categorize cupy pinned memory as numpy
-    dtype_in = np.dtype(radio._transport_dtype)
-
-    if radio.array_backend == 'cupy':
-        import cupy as xp
-
-        buffer = pinned_array_as_cupy(buffer)
-    else:
-        import numpy as xp
-
-        buffer = xp.array(buffer)
-
-    # what follows is some acrobatics to minimize new memory allocation and copy
-    if dtype_in.kind == 'i':
-        # 1. the same memory buffer, interpreted as int16 without casting
-        buffer_int16 = buffer.view('int16')[:, : 2 * buffer.shape[1]]
-        buffer_float32 = buffer.view('float32')
-
-        # TODO: evaluate whether this is necessary, or if a copy is really so painful
-        # 2. in-place casting from the int16 samples, filling in the extra allocation in self.buffer
-        xp.copyto(buffer_float32, buffer_int16, casting='unsafe')
-
-        # re-interpret the interleaved (float32 I, float32 Q) values as a complex value
-        buffer_out = buffer_float32.view('complex64')
-
-        scale = 1.0 / float(np.iinfo(dtype_in).max)
-
-    else:
-        buffer_out = buffer
-        scale = None
-
-    return buffer_out, scale
-
-
 def _power_scale(cal_power_scale, dtype_iq_scale):
     if cal_power_scale is None and dtype_iq_scale is None:
         return None
@@ -317,8 +279,13 @@ def resampling_correction(
     """
 
     # get a
-    iq, dtype_scale = _cast_iq(radio, iq)
+    iq = _cast_iq(radio, iq)
     xp = iqwaveform.fourier.array_namespace(iq)
+
+    if radio._transport_dtype == 'int16':
+        dtype_scale = 1.0 / float(np.iinfo(radio._transport_dtype).max)
+    else:
+        dtype_scale = None
 
     with lb.stopwatch('power correction lookup', threshold=10e-3, logger_level='debug'):
         bare_capture = msgspec.structs.replace(capture, start_time=None)

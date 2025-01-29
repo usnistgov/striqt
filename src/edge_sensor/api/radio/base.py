@@ -11,6 +11,8 @@ import numpy as np
 from .. import structs, util
 from . import method_attr
 
+from channel_analysis.api.util import pinned_array_as_cupy
+
 if typing.TYPE_CHECKING:
     import iqwaveform
     import pandas as pd
@@ -87,6 +89,41 @@ class _ReceiveBufferCarryover:
 
     def unobserve(self):
         attr.unobserve(self.radio, self.on_radio_attr_change)        
+
+
+def _cast_iq(
+    radio: RadioDevice, buffer: 'iqwaveform.util.ArrayType'
+) -> 'iqwaveform.util.ArrayType':
+    """cast the buffer to floating point, if necessary"""
+    # array_namespace will categorize cupy pinned memory as numpy
+    dtype_in = np.dtype(radio._transport_dtype)
+
+    if radio.array_backend == 'cupy':
+        import cupy as xp
+
+        buffer = pinned_array_as_cupy(buffer)
+    else:
+        import numpy as xp
+
+        buffer = xp.array(buffer)
+
+    # what follows is some acrobatics to minimize new memory allocation and copy
+    if dtype_in.kind == 'i':
+        # 1. the same memory buffer, interpreted as int16 without casting
+        buffer_int16 = buffer.view('int16')[:, : 2 * buffer.shape[1]]
+        buffer_float32 = buffer.view('float32')
+
+        # TODO: evaluate whether this is necessary, or if a copy is really so painful
+        # 2. in-place casting from the int16 samples, filling in the extra allocation in self.buffer
+        xp.copyto(buffer_float32, buffer_int16, casting='unsafe')
+
+        # re-interpret the interleaved (float32 I, float32 Q) values as a complex value
+        buffer_out = buffer_float32.view('complex64')
+
+    else:
+        buffer_out = buffer
+
+    return buffer_out
 
 
 class RadioDevice(lb.Device):
@@ -380,14 +417,10 @@ class RadioDevice(lb.Device):
             capture=capture,
         )
 
-        # # it seems to be important to convert to cupy here in order
-        # # to get a full view of the underlying pinned memory. cuda
-        # # memory corruption has been observed when waiting until after
-        # if self.array_backend == 'cupy':
-        #     samples = pinned_array_as_cupy(samples)
-        # else:
-        #     xp = self.get_array_namespace()
-        #     samples = xp.array(samples)
+        # it seems to be important to convert to cupy here in order
+        # to get a full view of the underlying pinned memory. cuda
+        # memory corruption has been observed when waiting until after
+        samples = _cast_iq(self, samples)
 
         return samples[:, sample_span], start_ns
 
