@@ -96,10 +96,11 @@ class SweepController:
         if radio_setup is None:
             # close all
             for name, radio in self.radios.items():
+                if lb.paramattr._bases.get_class_attrs is None:
+                    # accommodate a strange side effect of partially
+                    # torn down python. TODO: proper fix for this
+                    continue
                 try:
-                    # TODO: fix this upstream
-                    radio._attr_store.handlers = {}
-                    radio._carryover.unobserve(radio, radio._carryover.on_radio_attr_change)
                     radio.close()
                 except BaseException as ex:
                     lb.logger.warning(f'failed to close radio {name}: {str(ex)}')
