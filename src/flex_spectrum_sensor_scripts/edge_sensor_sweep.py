@@ -27,10 +27,12 @@ def run(**kws):
     store, controller, sweep_spec, calibration = init_sensor_sweep(**kws)
 
     try:
+        prepare = kws.get('remote', None)
+
         # acquire and analyze each capture in the sweep
         results = [
             result
-            for result in controller.iter_sweep(sweep_spec, calibration)
+            for result in controller.iter_sweep(sweep_spec, calibration, prepare=prepare)
             if result is not None
         ]
 
