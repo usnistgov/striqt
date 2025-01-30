@@ -162,7 +162,8 @@ def _preload_calibrations(yaml_path, sweep_cls, radio_id, adjust_captures):
         radio_id=radio_id,
     )
 
-    data = edge_sensor.read_calibration_corrections(sweep.radio_setup.calibration)
+    cal_path = Path(sweep.radio_setup.calibration)
+    data = edge_sensor.read_calibration_corrections(cal_path)
 
     if sweep.radio_setup.array_backend == 'cupy':
         import cupy as xp
@@ -171,7 +172,7 @@ def _preload_calibrations(yaml_path, sweep_cls, radio_id, adjust_captures):
 
     for capture in sweep.captures:
         edge_sensor.api.iq_corrections.lookup_power_correction(
-            sweep.radio_setup.calibration, capture, xp=xp
+            cal_path, capture, xp=xp
         )
 
     return data
