@@ -184,6 +184,7 @@ def _describe_missing_data(corrections: 'xr.Dataset', exact_matches: dict):
 def lookup_power_correction(
     cal_data: Path | 'xr.Dataset' | None, capture: structs.RadioCapture, xp
 ):
+    print('!')
     if isinstance(cal_data, xr.Dataset):
         corrections = cal_data
     elif cal_data:

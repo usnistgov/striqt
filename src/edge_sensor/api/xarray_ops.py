@@ -13,7 +13,6 @@ from . import iq_corrections, captures, structs, util
 from . import radio
 
 import array_api_compat
-from channel_analysis.api.util import free_cupy_mempool
 
 if typing.TYPE_CHECKING:
     import labbench as lb
