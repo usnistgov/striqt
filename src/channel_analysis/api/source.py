@@ -30,7 +30,7 @@ def filter_iq_capture(
         the filtered IQ capture
     """
 
-    xp = iqwaveform.fourier.array_namespace(iq)
+    xp = iqwaveform.util.array_namespace(iq)
 
     nfft = capture.analysis_filter.nfft
 

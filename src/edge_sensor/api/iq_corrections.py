@@ -277,7 +277,7 @@ def resampling_correction(
         the filtered IQ capture
     """
 
-    xp = iqwaveform.fourier.array_namespace(iq)
+    xp = iqwaveform.util.array_namespace(iq)
 
     if array_api_compat.is_cupy_array(iq):
         util.configure_cupy()
