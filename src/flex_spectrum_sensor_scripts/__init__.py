@@ -170,7 +170,9 @@ def _preload_calibrations(yaml_path, sweep_cls, radio_id, adjust_captures):
         import numpy as xp
 
     for capture in sweep.captures:
-        edge_sensor.api.iq_corrections.lookup_power_correction(yaml_path, capture, xp=xp)
+        edge_sensor.api.iq_corrections.lookup_power_correction(
+            sweep.radio_setup.calibration, capture, xp=xp
+        )
 
     return data
 
