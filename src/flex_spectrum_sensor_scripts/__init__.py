@@ -162,7 +162,7 @@ def _preload_calibrations(yaml_path, sweep_cls, radio_id, adjust_captures):
         radio_id=radio_id,
     )
 
-    data = edge_sensor.read_calibration_corrections(sweep.radio_setup.calibration)
+    data = edge_sensor.read_calibration_corrections(str(sweep.radio_setup.calibration))
 
     return data
 
