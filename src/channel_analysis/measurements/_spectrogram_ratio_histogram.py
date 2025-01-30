@@ -31,8 +31,8 @@ class SpectrogramPowerRatioBinCoords:
 
     @staticmethod
     @functools.lru_cache
-    def factory(capture: structs.Capture, **kws) -> dict[str, np.ndarray]:
-        bins, attrs = SpectrogramPowerBinCoords.factory(**kws)[0]
+    def factory(capture: structs.Capture, **kws):
+        bins, attrs = SpectrogramPowerBinCoords.factory(capture, **kws)[0]
         attrs['units'] = attrs['units'].replace('dBm', 'dB')
         return bins, attrs
 
