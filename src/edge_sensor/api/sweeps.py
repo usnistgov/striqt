@@ -49,10 +49,10 @@ def design_warmup_sweep(
     sweep: structs.Sweep, skip: tuple[structs.RadioCapture, ...]
 ) -> structs.Sweep:
     """returns a Sweep object for a NullRadio consisting of capture combinations from
-    `sweep` with all unique combinations of data shapes.
+    `sweep`.
 
-    This is meant to be run with fake data to warm up JIT caches and avoid
-    analysis slowdowns during sweeps.
+    This is meant to trigger expensive python imports and warm up JIT caches
+    in order to avoid analysis slowdowns during sweeps.
     """
 
     # captures that have unique sampling parameters, which are those

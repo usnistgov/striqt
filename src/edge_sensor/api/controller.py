@@ -139,7 +139,7 @@ class SweepController:
 
             if len(warmup_sweep.captures) > 0:
                 warmup_iter = self.iter_sweep(
-                    warmup_sweep, calibration, quiet=True, pickled=pickled
+                    warmup_sweep, calibration=None, quiet=True, pickled=pickled
                 )
 
         lb.concurrently(
