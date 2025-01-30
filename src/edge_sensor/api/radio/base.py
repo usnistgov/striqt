@@ -425,8 +425,6 @@ class RadioDevice(lb.Device):
         # memory corruption has been observed when waiting until after
         samples = _cast_iq(self, samples)
 
-        print('read iq: ', type(self), capture, samples[:, sample_span].shape)
-
         return samples[:, sample_span], start_ns
 
     @lb.stopwatch('acquire', logger_level='debug')
@@ -764,8 +762,6 @@ def alloc_empty_iq(
             i += 1
         elif radio._stream_all_rx_channels:
             buffers.append(extra)
-
-    print('alloc: ', samples.shape, type(radio), capture.channel, radio.channel(), radio.rx_channel_count)
 
     return samples, buffers
 
