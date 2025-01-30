@@ -152,6 +152,24 @@ def _connect_controller(remote, sweep):
         return edge_sensor.connect(remote).root
 
 
+def _preload_calibrations(yaml_path, sweep_cls, radio_id, adjust_captures):
+    # re-read the sweep with the radio id, which allows us to resolve
+    # calibration path names that are formatted based on the radio ID
+    sweep = edge_sensor.read_yaml_sweep(
+        yaml_path,
+        sweep_cls=sweep_cls,
+        adjust_captures=adjust_captures,
+        radio_id=radio_id,
+    )
+
+    data = edge_sensor.read_calibration_corrections(sweep.radio_setup.calibration)
+
+    for capture in sweep.captures:
+        edge_sensor.api.iq_corrections.lookup_calibration(data, capture)
+
+    return data
+
+
 def init_sensor_sweep(
     *,
     yaml_path: Path,
@@ -205,7 +223,7 @@ def init_sensor_sweep(
     calls = {}
 
     calls['calibration'] = lb.Call(
-        edge_sensor.read_calibration_corrections, sweep.radio_setup.calibration
+        _preload_calibrations, yaml_path, sweep_cls=sweep_cls, radio_id=radio_id, adjust_captures=adjust_captures
     )
 
     if open_store:

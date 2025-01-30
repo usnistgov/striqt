@@ -441,9 +441,11 @@ class RadioDevice(lb.Device):
         from .. import iq_corrections
 
         # allocate (and arm the capture if necessary)
-        prep_calls = {'buffers': lb.Call(alloc_empty_iq, self, capture)}
         iqwaveform.power_analysis.Any # touch to work around a lazy loading bug
-        prep_calls['arm'] = lb.Call(self.arm, capture)
+        prep_calls = {
+            'buffers': lb.Call(alloc_empty_iq, self, capture),
+            'arm': lb.Call(self.arm, capture)
+        }
         buffers = lb.concurrently(**prep_calls)['buffers']
 
         # the low-level acquisition
