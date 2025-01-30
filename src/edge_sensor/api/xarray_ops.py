@@ -253,8 +253,6 @@ class ChannelAnalysisWrapper:
                 iq, capture, spec=self.analysis_spec, expand_dims=(CAPTURE_DIM,)
             )
 
-            free_cupy_mempool()
-
             analysis = analysis.assign_coords(coords)
 
             # these are coordinates - drop from attrs

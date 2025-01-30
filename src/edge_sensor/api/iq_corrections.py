@@ -318,7 +318,9 @@ def resampling_correction(
     enbw = enbw_bins * freq_res
     passband = analysis_filter['passband']
 
-    freqs, _, y = iqwaveform.fourier.stft(
+    except_on_low_memory()
+
+    y = iqwaveform.fourier.stft(
         iq,
         fs=fs,
         window=analysis_filter['window'],
@@ -327,7 +329,10 @@ def resampling_correction(
         axis=axis,
         truncate=False,
         overwrite_x=overwrite_x,
+        return_axis_arrays=False,
     )
+
+    freqs = iqwaveform.fourier.fftfreq(nfft, 1/fs, xp=xp)
 
     except_on_low_memory()
 

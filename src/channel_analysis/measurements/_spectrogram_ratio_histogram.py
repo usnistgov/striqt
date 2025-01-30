@@ -1,5 +1,6 @@
 from __future__ import annotations
 import dataclasses
+import functools
 import typing
 
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
@@ -25,10 +26,15 @@ SpectrogramPowerRatioBinAxis = typing.Literal['spectrogram_power_ratio_bin']
 @dataclasses.dataclass
 class SpectrogramPowerRatioBinCoords:
     data: Data[SpectrogramPowerRatioBinAxis, np.float32]
-    standard_name: Attr[str] = 'Spectrogram power ratio bin'
+    standard_name: Attr[str] = 'Spectrogram power ratio'
     units: Attr[str] = 'dB'
 
-    factory = SpectrogramPowerBinCoords.factory
+    @staticmethod
+    @functools.lru_cache
+    def factory(capture: structs.Capture, **kws) -> dict[str, np.ndarray]:
+        bins, attrs = SpectrogramPowerBinCoords.factory(**kws)[0]
+        attrs['units'] = attrs['units'].replace('dBm', 'dB')
+        return bins, attrs
 
 
 @dataclasses.dataclass
