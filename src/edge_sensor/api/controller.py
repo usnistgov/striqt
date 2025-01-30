@@ -60,6 +60,7 @@ class SweepController:
             resource = radio_setup.resource
 
         if driver_name in self.radios and self.radios[driver_name].isopen:
+            print('going to return open radio: ', driver_name, type(self.radios[driver_name]))
             if is_same_resource(self.radios[driver_name].resource, resource):
                 lb.logger.debug(f'reusing open {repr(driver_name)}')
                 return self.radios[driver_name]
@@ -79,6 +80,8 @@ class SweepController:
             radio._transient_holdoff_time = radio_setup._transient_holdoff_time
 
         radio.open()
+
+        print('***opened ', radio_setup.driver_name, type(radio))        
 
         return radio
 
