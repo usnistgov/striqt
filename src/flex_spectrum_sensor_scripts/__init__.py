@@ -216,8 +216,6 @@ def init_sensor_sweep(
             force=force,
         )
 
-    import xarray  # needed for both tasks
-
     opened = lb.concurrently(**calls)
     opened.setdefault('store', None)
     opened.setdefault('calibration', None)

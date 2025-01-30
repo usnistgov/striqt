@@ -238,7 +238,7 @@ class SoapyRadioDevice(base.RadioDevice):
         else:
             self.backend.setGain(SoapySDR.SOAPY_SDR_TX, channel, gain)
 
-    @lb.stopwatch('open soapy radio backend')
+    @lb.stopwatch('soapy radio backend opened')
     def open(self):
         if self.resource:
             # prevent race conditions in threaded accesses to the Soapy driver
