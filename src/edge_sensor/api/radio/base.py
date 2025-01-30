@@ -438,7 +438,7 @@ class RadioDevice(lb.Device):
         from .. import iq_corrections
 
         # allocate (and arm the capture if necessary)
-        prep_calls = {'buffers': lb.Call(alloc_empty_iq, capture)}
+        prep_calls = {'buffers': lb.Call(alloc_empty_iq, self, capture)}
         if capture != self._armed_capture:
             prep_calls['arm'] = lb.Call(self.arm, capture)
         buffers = lb.concurrently(**prep_calls)['buffers']
