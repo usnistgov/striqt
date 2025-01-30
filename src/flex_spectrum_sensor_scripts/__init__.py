@@ -152,7 +152,6 @@ def _connect_controller(remote, sweep):
         return edge_sensor.connect(remote).root
 
 
-
 def init_sensor_sweep(
     *,
     yaml_path: Path,
@@ -194,7 +193,6 @@ def init_sensor_sweep(
     controller = _connect_controller(remote, sweep)
     _apply_exception_hooks(controller, sweep, debug=debug, remote=remote)
 
-    lb.util.logger.info('done')
     # reload the yaml now that radio_id can be known to fully format any filenames
     radio_id = controller.radio_id(sweep.radio_setup.driver)
     sweep = edge_sensor.read_yaml_sweep(

@@ -443,8 +443,7 @@ class RadioDevice(lb.Device):
         # allocate (and arm the capture if necessary)
         prep_calls = {'buffers': lb.Call(alloc_empty_iq, self, capture)}
         iqwaveform.power_analysis.Any # touch to work around a lazy loading bug
-        if capture != self._armed_capture:
-            prep_calls['arm'] = lb.Call(self.arm, capture)
+        prep_calls['arm'] = lb.Call(self.arm, capture)
         buffers = lb.concurrently(**prep_calls)['buffers']
 
         # the low-level acquisition
@@ -456,9 +455,6 @@ class RadioDevice(lb.Device):
             pass
         else:
             self.rx_enabled(False)
-
-        if next_capture is not None and capture != next_capture:
-            self.arm(next_capture)
 
         if correction:
             with lb.stopwatch('resample and calibrate', logger_level='debug'):
