@@ -51,7 +51,7 @@ class SweepController:
         if last_ex is not None:
             raise last_ex
 
-    @compute_lock
+    @compute_lock()
     def open_radio(self, radio_setup: structs.RadioSetup):
         driver_name = radio_setup.driver
         radio_cls = find_radio_cls_by_name(driver_name)
@@ -132,6 +132,8 @@ class SweepController:
         warmup_iter = []
         warmup_sweep = None
 
+        calls = {}
+
         if sweep_spec.radio_setup.warmup_sweep:
             # maybe lead to a sweep iterator
             warmup_sweep = sweeps.design_warmup_sweep(
@@ -143,11 +145,11 @@ class SweepController:
                 warmup_iter = self.iter_sweep(
                     warmup_sweep, calibration=None, quiet=True, pickled=pickled
                 )
+                calls['warmup'] = lb.Call(list, warmup_iter)
 
-        lb.concurrently(
-            warmup=lb.Call(list, warmup_iter),
-            open_radio=lb.Call(self.open_radio, sweep_spec.radio_setup),
-        )
+        calls['open_radio'] = lb.Call(self.open_radio, sweep_spec.radio_setup)
+
+        lb.concurrently(**calls)
 
     def iter_sweep(
         self,
