@@ -737,6 +737,7 @@ def alloc_empty_iq(
     # fast reinterpretation between dtypes requires the waveform to be in the last axis
     channels = radio.channel()
     if not isinstance(channels, tuple):
+        print('cast from ', repr(channels))
         channels = (channels,)
     samples = empty((len(channels), count), dtype=np.complex64)
 
