@@ -774,7 +774,7 @@ def _list_radio_classes(subclass=RadioDevice):
     return clsmap
 
 
-def find_radio_cls_by_name(
+def _find_radio_cls_helper(
     name: str, parent_cls: type[RadioDevice] = RadioDevice
 ) -> RadioDevice:
     """returns a list of radio subclasses that have been imported"""
@@ -787,6 +787,19 @@ def find_radio_cls_by_name(
         raise AttributeError(
             f'invalid driver {repr(name)}. valid names: {tuple(mapping.keys())}'
         )
+    
+def find_radio_cls_by_name(
+    name: str, parent_cls: type[RadioDevice] = RadioDevice
+) -> RadioDevice:
+    """returns a list of radio subclasses that have been imported"""
+
+    try:
+        radio_cls = find_radio_cls_by_name(driver_name)
+    except AttributeError:
+        from .radio import soapy
+        from .. import radios
+
+        radio_cls = find_radio_cls_by_name(driver_name)
 
 
 def is_same_resource(r1: str | dict, r2: str | dict):

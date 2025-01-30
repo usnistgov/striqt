@@ -52,14 +52,7 @@ class SweepController:
 
     def open_radio(self, radio_setup: structs.RadioSetup):
         driver_name = radio_setup.driver
-
-        try:
-            radio_cls = find_radio_cls_by_name(driver_name)
-        except AttributeError:
-            from .radio import soapy
-            from .. import radios
-
-            radio_cls = find_radio_cls_by_name(driver_name)
+        radio_cls = find_radio_cls_by_name(driver_name)
 
         if radio_setup.resource is None:
             resource = radio_cls.resource.default

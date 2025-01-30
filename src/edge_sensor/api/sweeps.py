@@ -67,19 +67,19 @@ def design_warmup_sweep(
         captures = captures[:2]
 
     radio_cls = find_radio_cls_by_name(sweep.radio_setup.driver)
-    radio_setup = copy.copy(sweep.radio_setup)
-    radio_setup.driver = NullSource.__name__
-    radio_setup.resource = 'empty'
-    # radio_setup._transient_holdoff_time = radio_cls._transient_holdoff_time.default
-    radio_setup._rx_channel_count = radio_cls.rx_channel_count.default
 
-    return type(sweep)(
-        captures=captures,
-        radio_setup=radio_setup,
-        channel_analysis=sweep.channel_analysis,
-        output=sweep.output,
+    null_radio_setup = msgspec.structs.replace(
+        sweep.radio_setup,
+        driver=NullSource.__name__,
+        resource='empty',
+        _rx_channel_count = radio_cls.rx_channel_count.default
     )
 
+    return msgspec.structs.replace(
+        sweep, #
+        captures=captures, #
+        radio_setup=null_radio_setup
+    )
 
 def iter_sweep(
     radio: RadioDevice,
