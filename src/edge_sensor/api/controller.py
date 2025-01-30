@@ -81,7 +81,7 @@ class SweepController:
 
         radio.open()
 
-        print('***opened ', radio_setup.driver_name, type(radio))        
+        print('***opened ', driver_name, type(radio))        
 
         return radio
 
