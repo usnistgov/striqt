@@ -9,6 +9,7 @@ import rpyc
 from . import captures, sweeps, util
 from . import structs
 from .radio import find_radio_cls_by_name, is_same_resource, RadioDevice
+from channel_analysis.api.util import compute_lock
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -50,6 +51,7 @@ class SweepController:
         if last_ex is not None:
             raise last_ex
 
+    @compute_lock
     def open_radio(self, radio_setup: structs.RadioSetup):
         driver_name = radio_setup.driver
         radio_cls = find_radio_cls_by_name(driver_name)
@@ -79,8 +81,6 @@ class SweepController:
             radio._transient_holdoff_time = radio_setup._transient_holdoff_time
 
         radio.open()
-
-        print('***opened ', driver_name, type(radio))        
 
         return radio
 
