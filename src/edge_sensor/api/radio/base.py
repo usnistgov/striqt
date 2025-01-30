@@ -762,6 +762,8 @@ def alloc_empty_iq(
         elif radio._stream_all_rx_channels:
             buffers.append(extra)
 
+    print('alloc: ', samples.shape)
+
     return samples, buffers
 
 
