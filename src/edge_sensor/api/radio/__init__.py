@@ -33,9 +33,10 @@ def find_radio_cls_by_name(
     """returns a list of radio subclasses that have been imported"""
 
     try:
+        # first: without optional imports
         radio_cls = _find_radio_cls_helper(name)
     except AttributeError:
-        # try importing optional modules and repeat
+        # then: with optional imports
         from . import soapy
         from ... import radios
 
