@@ -147,7 +147,7 @@ Dataset = typing.TypeVar('Dataset', bound='xr.Dataset')
 
 def _connect_controller(remote, sweep):
     if remote is None:
-        return edge_sensor.SweepController(sweep.radio_setup)
+        return edge_sensor.SweepController(sweep)
     else:
         return edge_sensor.connect(remote).root
 

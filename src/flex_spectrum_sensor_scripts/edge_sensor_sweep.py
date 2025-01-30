@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import sys
-
 from flex_spectrum_sensor_scripts import (
     click_sensor_sweep,
     init_sensor_sweep,
