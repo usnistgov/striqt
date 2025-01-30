@@ -51,7 +51,6 @@ class SweepController:
         if last_ex is not None:
             raise last_ex
 
-    @compute_lock()
     def open_radio(self, radio_setup: structs.RadioSetup):
         driver_name = radio_setup.driver
         radio_cls = find_radio_cls_by_name(driver_name)

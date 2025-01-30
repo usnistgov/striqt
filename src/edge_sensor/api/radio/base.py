@@ -334,6 +334,8 @@ class RadioDevice(lb.Device):
         else:
             samples, stream_bufs = buffers
 
+        print('read iq: ', type(self), capture)
+
         # holdoffs parameters, valid when we already have a clock reading
         stft_pad_before, _ = _get_stft_pad_size(self.base_clock_rate, capture)
 
@@ -772,34 +774,6 @@ def _list_radio_classes(subclass=RadioDevice):
     clsmap = {name: cls for name, cls in clsmap.items() if not name.startswith('_')}
 
     return clsmap
-
-
-def _find_radio_cls_helper(
-    name: str, parent_cls: type[RadioDevice] = RadioDevice
-) -> RadioDevice:
-    """returns a list of radio subclasses that have been imported"""
-
-    mapping = _list_radio_classes(parent_cls)
-
-    if name in mapping:
-        return mapping[name]
-    else:
-        raise AttributeError(
-            f'invalid driver {repr(name)}. valid names: {tuple(mapping.keys())}'
-        )
-    
-def find_radio_cls_by_name(
-    name: str, parent_cls: type[RadioDevice] = RadioDevice
-) -> RadioDevice:
-    """returns a list of radio subclasses that have been imported"""
-
-    try:
-        radio_cls = find_radio_cls_by_name(driver_name)
-    except AttributeError:
-        from .radio import soapy
-        from .. import radios
-
-        radio_cls = find_radio_cls_by_name(driver_name)
 
 
 def is_same_resource(r1: str | dict, r2: str | dict):
