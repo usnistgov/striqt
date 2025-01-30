@@ -332,7 +332,7 @@ def resampling_correction(
         return_axis_arrays=False,
     )
 
-    freqs = iqwaveform.fourier.fftfreq(nfft, 1/fs, xp=xp)
+    freqs = iqwaveform.fourier.fftfreq(nfft, 1 / fs, xp=xp)
 
     except_on_low_memory()
 

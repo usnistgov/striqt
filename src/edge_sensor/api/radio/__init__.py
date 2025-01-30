@@ -13,6 +13,7 @@ from .testing import SingleToneSource, SawtoothSource, NoiseSource, TDMSFileSour
 # soapy device is not imported here to allow edge_sensor imports
 # for testing when SoapySDR is not installed
 
+
 def _find_radio_cls_helper(
     name: str, parent_cls: type[RadioDevice] = RadioDevice
 ) -> RadioDevice:
@@ -26,6 +27,7 @@ def _find_radio_cls_helper(
         raise AttributeError(
             f'invalid driver {repr(name)}. valid names: {tuple(mapping.keys())}'
         )
+
 
 def find_radio_cls_by_name(
     name: str, parent_cls: type[RadioDevice] = RadioDevice

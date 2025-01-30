@@ -58,7 +58,7 @@ def _chain_decorators(decorators: list[callable], func: callable) -> callable:
     return func
 
 
-def _apply_exception_hooks(controller, sweep, debug: bool, remote: bool|None):
+def _apply_exception_hooks(controller, sweep, debug: bool, remote: bool | None):
     lb.util.force_full_traceback(True)
 
     def hook(*args):
@@ -165,7 +165,7 @@ def _preload_calibrations(yaml_path, sweep_cls, radio_id, adjust_captures):
     data = edge_sensor.read_calibration_corrections(sweep.radio_setup.calibration)
 
     for capture in sweep.captures:
-        edge_sensor.api.iq_corrections.lookup_calibration(data, capture)
+        edge_sensor.api.iq_corrections.lookup_power_correction(data, capture)
 
     return data
 
@@ -223,7 +223,11 @@ def init_sensor_sweep(
     calls = {}
 
     calls['calibration'] = lb.Call(
-        _preload_calibrations, yaml_path, sweep_cls=sweep_cls, radio_id=radio_id, adjust_captures=adjust_captures
+        _preload_calibrations,
+        yaml_path,
+        sweep_cls=sweep_cls,
+        radio_id=radio_id,
+        adjust_captures=adjust_captures,
     )
 
     if open_store:
