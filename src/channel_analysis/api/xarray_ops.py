@@ -333,7 +333,6 @@ def evaluate_channel_analysis(
                 func = registry[type(getattr(spec, name))]
                 if not func_kws:
                     continue
-                # with util.compute_lock(iq):
                 results[name] = func(iq, capture, as_xarray=as_xarray, **func_kws)
 
     return results

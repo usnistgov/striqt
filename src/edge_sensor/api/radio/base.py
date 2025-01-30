@@ -11,7 +11,7 @@ import numpy as np
 from .. import structs, util
 from . import method_attr
 
-from channel_analysis.api.util import pinned_array_as_cupy, compute_lock
+from channel_analysis.api.util import pinned_array_as_cupy
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -323,7 +323,6 @@ class RadioDevice(lb.Device):
         self._armed_capture = capture
 
     @lb.stopwatch('read_iq', logger_level='debug')
-    @compute_lock()
     def read_iq(
         self,
         capture: structs.RadioCapture,
@@ -438,19 +437,14 @@ class RadioDevice(lb.Device):
         """
         from .. import iq_corrections
 
+        # allocate (and arm the capture if necessary)
+        prep_calls = {'buffers': lb.Call(alloc_empty_iq, capture)}
         if capture != self._armed_capture:
-            with lb.stopwatch('arm and allocate', logger_level='debug'):
-                iqwaveform.power_analysis.Any
-                returns = lb.concurrently(
-                    arm=lb.Call(self.arm, capture),
-                    buffers=lb.Call(alloc_empty_iq, self, capture),
-                )
-                buffers = returns['buffers']
-        else:
-            buffers = alloc_empty_iq(self, capture)
+            prep_calls['arm'] = lb.Call(self.arm, capture)
+        buffers = lb.concurrently(**prep_calls)['buffers']
 
+        # the low-level acquisition
         iq, time_ns = self.read_iq(capture, buffers=buffers)
-
         del buffers
 
         if next_capture == capture and self.gapless_repeats:
@@ -711,6 +705,7 @@ def get_channel_read_buffer_count(
     )
 
 
+@lb.stopwatch('allocate acquisition buffer', logger_level='debug')
 def alloc_empty_iq(
     radio: RadioDevice, capture: structs.RadioCapture
 ) -> tuple[np.ndarray, np.ndarray]:
