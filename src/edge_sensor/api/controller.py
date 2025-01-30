@@ -51,7 +51,6 @@ class SweepController:
         if last_ex is not None:
             raise last_ex
 
-    @compute_lock()
     def open_radio(self, radio_setup: structs.RadioSetup):
         driver_name = radio_setup.driver
         radio_cls = find_radio_cls_by_name(driver_name)
@@ -142,6 +141,10 @@ class SweepController:
             self.warmed_captures = self.warmed_captures | set(warmup_sweep.captures)
 
             if len(warmup_sweep.captures) > 0:
+                prep_msg = self._describe_preparation(sweep_spec)
+                if prep_msg:
+                    lb.logger.info(prep_msg)
+
                 warmup_iter = self.iter_sweep(
                     warmup_sweep, calibration=None, quiet=True, pickled=pickled
                 )
@@ -167,9 +170,6 @@ class SweepController:
         del kwargs['self'], kwargs['prepare']
 
         if prepare:
-            prep_msg = self._describe_preparation(sweep)
-            if prep_msg:
-                lb.logger.info(prep_msg)
             self.prepare_sweep(sweep, calibration, pickled=True)
 
         radio = self.open_radio(sweep.radio_setup)
