@@ -319,10 +319,6 @@ class RadioDevice(lb.Device):
 
         self.analysis_bandwidth = capture.analysis_bandwidth
 
-        if self.time_sync_every_capture:
-            self.rx_enabled(False)
-            self.sync_time_source()
-
         self._armed_capture = capture
 
     @lb.stopwatch('read_iq', logger_level='debug')
@@ -357,6 +353,10 @@ class RadioDevice(lb.Device):
         )
         received_count = 0
         chunk_count = remaining = sample_count - carryover_count
+
+        if self.time_sync_every_capture:
+            self.rx_enabled(False)
+            self.sync_time_source()
 
         if not self.rx_enabled():
             self.rx_enabled(True)
@@ -441,11 +441,10 @@ class RadioDevice(lb.Device):
         from .. import iq_corrections
 
         # allocate (and arm the capture if necessary)
-        iqwaveform.power_analysis.Any  # touch to work around a lazy loading bug
-        prep_calls = {
-            'buffers': lb.Call(alloc_empty_iq, self, capture),
-            'arm': lb.Call(self.arm, capture),
-        }
+        prep_calls = {'buffers': lb.Call(alloc_empty_iq, self, capture)}
+        iqwaveform.power_analysis.Any # touch to work around a lazy loading bug
+        if capture != self._armed_capture:
+            prep_calls['arm'] = lb.Call(self.arm, capture)
         buffers = lb.concurrently(**prep_calls)['buffers']
 
         # the low-level acquisition
@@ -457,6 +456,9 @@ class RadioDevice(lb.Device):
             pass
         else:
             self.rx_enabled(False)
+
+        if next_capture is not None and capture != next_capture:
+            self.arm(next_capture)
 
         if correction:
             with lb.stopwatch('resample and calibrate', logger_level='debug'):
