@@ -1,6 +1,7 @@
 from __future__ import annotations
 import functools
 from math import ceil
+import numbers
 import typing
 
 import labbench as lb
@@ -735,10 +736,11 @@ def alloc_empty_iq(
     buf_dtype = np.dtype(radio._transport_dtype)
 
     # fast reinterpretation between dtypes requires the waveform to be in the last axis
-    channels = radio.channel()
-    if not isinstance(channels, tuple):
-        print('cast from ', repr(channels))
+    channels = capture.channel
+    if isinstance(channels, numbers.Number):
         channels = (channels,)
+    else:
+        channels = tuple(channels)
     samples = empty((len(channels), count), dtype=np.complex64)
 
     # build the list of channel buffers, including references to the throwaway
