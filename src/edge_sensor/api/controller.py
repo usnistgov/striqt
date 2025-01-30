@@ -29,14 +29,14 @@ class SweepController:
     This is also used by `start_sensor_server` to serve remote operations.
     """
 
-    def __init__(self, radio_setup: structs.RadioSetup = None):
+    def __init__(self, sweep: structs.Sweep = None):
         self.radios: dict[str, RadioDevice] = {}
         self.warmed_captures: set[structs.RadioCapture] = set()
         self.handlers: dict[rpyc.Connection, typing.Any] = {}
         util.set_cuda_mem_limit()
 
-        if radio_setup is not None:
-            self.open_radio(radio_setup)
+        if sweep is not None:
+            self.prepare_sweep(sweep, calibration=None)
 
     def close(self):
         last_ex = None

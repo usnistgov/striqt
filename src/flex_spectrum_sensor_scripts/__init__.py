@@ -145,6 +145,14 @@ Sweep = typing.TypeVar('Sweep', bound='edge_sensor.Sweep')
 Dataset = typing.TypeVar('Dataset', bound='xr.Dataset')
 
 
+def _connect_controller(remote, sweep):
+    if remote is None:
+        return edge_sensor.SweepController(sweep.radio_setup)
+    else:
+        return edge_sensor.connect(remote).root
+
+
+
 def init_sensor_sweep(
     *,
     yaml_path: Path,
@@ -183,10 +191,7 @@ def init_sensor_sweep(
     else:
         lb.show_messages('info')
 
-    if remote is None:
-        controller = edge_sensor.SweepController(sweep.radio_setup)
-    else:
-        controller = edge_sensor.connect(remote).root
+    controller = _connect_controller(remote, sweep)
 
     _apply_exception_hooks(controller, sweep, debug=debug, remote=remote)
 
