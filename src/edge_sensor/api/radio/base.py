@@ -336,8 +336,6 @@ class RadioDevice(lb.Device):
         else:
             samples, stream_bufs = buffers
 
-        print('read iq: ', type(self), capture)
-
         # holdoffs parameters, valid when we already have a clock reading
         stft_pad_before, _ = _get_stft_pad_size(self.base_clock_rate, capture)
 
@@ -425,6 +423,8 @@ class RadioDevice(lb.Device):
         # to get a full view of the underlying pinned memory. cuda
         # memory corruption has been observed when waiting until after
         samples = _cast_iq(self, samples)
+
+        print('read iq: ', type(self), capture, samples[:, sample_span].shape)
 
         return samples[:, sample_span], start_ns
 
