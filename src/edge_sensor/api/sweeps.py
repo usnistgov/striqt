@@ -63,8 +63,8 @@ def design_warmup_sweep(
     unique_wcaptures = unique_map.keys() - skip_wcaptures
     captures = [unique_map[c] for c in unique_wcaptures]
 
-    if len(captures) > 2:
-        captures = captures[:2]
+    if len(captures) > 1:
+        captures = captures[:1]
 
     radio_cls = find_radio_cls_by_name(sweep.radio_setup.driver)
 
