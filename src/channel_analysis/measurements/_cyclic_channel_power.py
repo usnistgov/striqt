@@ -89,7 +89,7 @@ def cyclic_channel_power(
     cyclic_period: float,
     detector_period: float,
     power_detectors: tuple[str, ...] = ('rms', 'peak'),
-    cyclic_statistics: tuple[str, ...] = ('min', 'mean', 'max'),
+    cyclic_statistics: tuple[typing.Union[str, float], ...] = ('min', 'mean', 'max'),
 ):
     xp = iqwaveform.util.array_namespace(iq)
 
