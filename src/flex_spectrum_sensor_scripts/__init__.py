@@ -38,12 +38,10 @@ if typing.TYPE_CHECKING:
     import labbench as lb
     import xarray as xr
     import edge_sensor
-    import channel_analysis
     import zarr
 else:
     edge_sensor = lazy_import('edge_sensor')
     lb = lazy_import('labbench')
-    channel_analysis = lazy_import('channel_analysis')
     xr = lazy_import('xarray')
     ultratb = lazy_import('IPython.core.ultratb')
     zarr = lazy_import('zarr')
@@ -135,6 +133,151 @@ def click_sensor_sweep(description: typing.Optional[str] = None):
 
     def decorate(func):
         return _chain_decorators(click_decorators, func)
+
+    return decorate
+
+
+def _run_click_plotter(
+    plot_func: callable,
+    zarr_path: str,
+    center_frequency=None,
+    antenna=None,
+    interactive=False,
+    no_save=False,
+    data_variable=[],
+    sweep_index=-1,
+):
+    """handle keyword arguments passed in from click, and call plot_func()"""
+
+    from matplotlib import pyplot as plt
+    import channel_analysis
+    from pathlib import Path
+    import numpy as np
+
+    if interactive:
+        plt.ion()
+    else:
+        plt.ioff()
+
+    plt.style.use("iqwaveform.ieee_double_column")
+
+    # index on the following fields in order, matching the input options
+    dataset = channel_analysis.load(zarr_path).set_xindex(
+        ["antenna_name", "center_frequency", "start_time", "sweep_start_time"]
+    )
+
+    valid_antennas = tuple(dataset.indexes["antenna_name"].levels[0])
+    if antenna is None:
+        antenna_names = valid_antennas
+    elif antenna in valid_antennas:
+        antenna_names = [antenna]
+        dataset = dataset.sel(antenna_name=antenna_names)
+    else:
+        raise ValueError(
+            f"no antenna {antenna} in data set - must be one of {valid_antennas}"
+        )
+
+    valid_freqs = tuple(dataset.indexes["center_frequency"].levels[1])
+    if center_frequency is None:
+        fcs = valid_freqs
+    elif center_frequency in valid_freqs:
+        fcs = [center_frequency]
+        dataset = dataset.sel(center_frequency=fcs)
+    else:
+        raise ValueError(
+            f"no frequency {center_frequency} in data set - must be one of {valid_freqs}"
+        )
+
+    valid_vars = tuple(dataset.data_vars.keys())
+    if len(data_variable) == 0:
+        variables = valid_vars
+    elif len(set(data_variable) - set(valid_vars)) == 0:
+        variables = list(data_variable)
+        drop_set = set(dataset.data_vars.keys()) - set(variables)
+        dataset = dataset.drop_vars(list(drop_set))
+    else:
+        invalid = tuple(set(data_variable) - set(valid_vars))
+        raise ValueError(
+            f"data variables {invalid} are not in data set - must be one of {valid_vars}"
+        )
+
+    sweep_start_time = np.atleast_1d(dataset.sweep_start_time)[sweep_index]
+    dataset = dataset.sel(sweep_start_time=sweep_start_time).load()
+
+    if no_save:
+        output_path = None
+    else:
+        output_path = Path(zarr_path).parent / Path(zarr_path).name.split(".", 1)[0]
+        output_path.mkdir(exist_ok=True)
+
+    plot_func(dataset, output_path, interactive)
+
+    if interactive:
+        input("press enter to quit")
+
+
+def click_capture_plotter(description: typing.Optional[str] = None):
+    """decorate a function to handle single-capture plots of zarr or zarr.zip files"""
+
+    if description is None:
+        description = "plot signal analysis from zarr or zarr.zip files"
+
+    click_decorators = (
+        click.command(description),
+        click.argument("zarr_path", type=click.Path(exists=True, dir_okay=True)),
+        click.option(
+            "--interactive/",
+            "-i",
+            is_flag=True,
+            show_default=True,
+            default=False,
+            help="",
+        ),
+        click.option(
+            "--center-frequency/",
+            "-f",
+            type=float,
+            default=None,
+            help="if specified, plot for only this frequency",
+        ),
+        click.option(
+            "--antenna/",
+            "-a",
+            type=str,
+            default=None,
+            help="if specified, plot for only this antenna",
+        ),
+        click.option(
+            "--sweep-index/",
+            "-s",
+            type=int,
+            show_default=True,
+            default=-1,
+            help="sweep index to plot (-1 for last)",
+        ),
+        click.option(
+            "--data-variable",
+            "-d",
+            type=str,
+            multiple=True,
+            default=[],
+            help="plot only the specified variable if specified",
+        ),
+        click.option(
+            "--no-save/",
+            "-n",
+            is_flag=True,
+            show_default=True,
+            default=False,
+            help="don't save the resulting plots",
+        ),
+    )
+
+    def decorate(func):
+        def wrapped(*args, **kws):
+            return _run_click_plotter(func, *args, **kws)
+
+        return _chain_decorators(click_decorators, wrapped)
 
     return decorate
 

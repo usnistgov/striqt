@@ -128,7 +128,7 @@ class CapturePlotter:
         title_fmt='Channel {channel}',
         suptitle_fmt='{center_frequency}',
         filename_fmt='{name} {center_frequency}.svg',
-        ignore_missing=False,
+        ignore_missing=True,
     ):
         self.interactive: bool = interactive
         if subplot_by_channel:
