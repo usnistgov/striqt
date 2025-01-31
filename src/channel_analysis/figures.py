@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import functools
 import math
 import numbers
 from pathlib import Path
@@ -105,6 +106,18 @@ class FixedEngFormatter(mpl.ticker.EngFormatter):
         return f'{self.sep}({unit_prefix}{self.unit})'
 
 
+def _handle_missing(func):
+    """maybe skip runs on CapturePlotter methods that refer to missing data"""
+    @functools.wraps(func)
+    def wrapped(obj: CapturePlotter, data, *args, **kws):
+        if obj._ignore_missing and func.__name__ not in data.data_vars:
+            return
+        else:
+            func(obj, data, *args, **kws)
+
+    return wrapped 
+
+
 class CapturePlotter:
     def __init__(
         self,
@@ -115,6 +128,7 @@ class CapturePlotter:
         title_fmt='Channel {channel}',
         suptitle_fmt='{center_frequency}',
         filename_fmt='{name} {center_frequency}.svg',
+        ignore_missing=False,
     ):
         self.interactive: bool = interactive
         if subplot_by_channel:
@@ -131,6 +145,7 @@ class CapturePlotter:
         self._suptitle_fmt = suptitle_fmt
         self._title_fmt = title_fmt
         self._filename_fmt = filename_fmt
+        self._ignore_missing = ignore_missing
 
     @contextlib.contextmanager
     def _plot_context(
@@ -290,6 +305,7 @@ class CapturePlotter:
             xticklabelunits=False,
         )
 
+    @_handle_missing
     def channel_power_time_series(self, data: xr.Dataset, hue='power_detector', **sel):
         key = self.channel_power_time_series.__name__
         return self._line(
@@ -299,6 +315,7 @@ class CapturePlotter:
             hue=hue,
         )
 
+    @_handle_missing
     def power_spectral_density(
         self, data: xr.Dataset, hue='frequency_statistic', **sel
     ):
@@ -322,6 +339,7 @@ class CapturePlotter:
             hue=hue,
         )
 
+    @_handle_missing
     def spectrogram(self, data: xr.Dataset, **sel):
         key = self.spectrogram.__name__
         self._heatmap(
@@ -331,6 +349,7 @@ class CapturePlotter:
             y='spectrogram_baseband_frequency',
         )
 
+    @_handle_missing
     def spectrogram_histogram(self, data: xr.Dataset, **sel):
         key = self.spectrogram_histogram.__name__
         return self._line(
@@ -341,6 +360,7 @@ class CapturePlotter:
             # hue=hue,
         )
 
+    @_handle_missing
     def spectrogram_ratio_histogram(self, data: xr.Dataset, **sel):
         key = self.spectrogram_ratio_histogram.__name__
         return self._line(
@@ -351,6 +371,7 @@ class CapturePlotter:
             # hue=hue,
         )
 
+    @_handle_missing
     def cyclic_channel_power(self, data: xr.Dataset, **sel):
         data_across_facets = data.cyclic_channel_power.sel(**sel)
         with self._plot_context(data, name='cyclic_channel_power', x='cyclic_lag'):
