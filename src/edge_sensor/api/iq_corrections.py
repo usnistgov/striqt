@@ -187,7 +187,7 @@ def lookup_power_correction(
     if isinstance(cal_data, xr.Dataset):
         corrections = cal_data
     elif cal_data:
-        corrections = read_calibration_corrections(str(cal_data))
+        corrections = read_calibration_corrections(cal_data)
     else:
         return None
 
