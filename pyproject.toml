@@ -44,6 +44,7 @@ dev = ["ipykernel", "jupyter", "ruff"]
 [project.scripts]
 edge-sensor-sweep = "flex_spectrum_sensor_scripts.edge_sensor_sweep:run"
 edge-sensor-server = "flex_spectrum_sensor_scripts.edge_sensor_server:run"
+edge-capture-plotter = "flex_spectrum_sensor_scripts.edge_capture_plotter:run"
 
 [tool.ruff]
 target-version = "py39"

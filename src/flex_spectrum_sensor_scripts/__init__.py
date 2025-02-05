@@ -57,11 +57,10 @@ def _chain_decorators(decorators: list[callable], func: callable) -> callable:
 
 
 def _apply_exception_hooks(controller, sweep, debug: bool, remote: bool | None):
-    lb.util.force_full_traceback(True)
-
     def hook(*args):
         if debug:
             print('entering debugger')
+            lb.util.force_full_traceback(True)
             debugger = ultratb.FormattedTB(
                 mode='Verbose', color_scheme='Linux', call_pdb=1
             )
@@ -141,11 +140,11 @@ def _run_click_plotter(
     plot_func: callable,
     zarr_path: str,
     center_frequency=None,
-    antenna=None,
     interactive=False,
     no_save=False,
     data_variable=[],
     sweep_index=-1,
+    **plot_func_kws
 ):
     """handle keyword arguments passed in from click, and call plot_func()"""
 
@@ -165,17 +164,6 @@ def _run_click_plotter(
     dataset = channel_analysis.load(zarr_path).set_xindex(
         ["antenna_name", "center_frequency", "start_time", "sweep_start_time"]
     )
-
-    valid_antennas = tuple(dataset.indexes["antenna_name"].levels[0])
-    if antenna is None:
-        antenna_names = valid_antennas
-    elif antenna in valid_antennas:
-        antenna_names = [antenna]
-        dataset = dataset.sel(antenna_name=antenna_names)
-    else:
-        raise ValueError(
-            f"no antenna {antenna} in data set - must be one of {valid_antennas}"
-        )
 
     valid_freqs = tuple(dataset.indexes["center_frequency"].levels[1])
     if center_frequency is None:
@@ -210,7 +198,7 @@ def _run_click_plotter(
         output_path = Path(zarr_path).parent / Path(zarr_path).name.split(".", 1)[0]
         output_path.mkdir(exist_ok=True)
 
-    plot_func(dataset, output_path, interactive)
+    plot_func(dataset, output_path, interactive, **plot_func_kws)
 
     if interactive:
         input("press enter to quit")
@@ -239,13 +227,6 @@ def click_capture_plotter(description: typing.Optional[str] = None):
             type=float,
             default=None,
             help="if specified, plot for only this frequency",
-        ),
-        click.option(
-            "--antenna/",
-            "-a",
-            type=str,
-            default=None,
-            help="if specified, plot for only this antenna",
         ),
         click.option(
             "--sweep-index/",

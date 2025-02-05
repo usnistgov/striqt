@@ -128,7 +128,7 @@ class CapturePlotter:
         title_fmt='Channel {channel}',
         suptitle_fmt='{center_frequency}',
         filename_fmt='{name} {center_frequency}.svg',
-        ignore_missing=True,
+        ignore_missing=False,
     ):
         self.interactive: bool = interactive
         if subplot_by_channel:
@@ -238,10 +238,7 @@ class CapturePlotter:
         kws = dict(x=x, hue=hue, rasterized=rasterized)
         ctx_kws = dict(name=name, x=x, hue=hue, xticklabelunits=xticklabelunits)
 
-        if data.capture.size == 1:
-            # iterate across the one capture
-            seq = [data]
-        elif self.facet_col is not None:
+        if self.facet_col is not None:
             # treat the sequence of multiple captures in one plot
             seq = [data]
             kws.update(col=self.facet_col, sharey=sharey, col_wrap=self.col_wrap)
@@ -267,10 +264,7 @@ class CapturePlotter:
     ):
         kws.update(x=x, y=y, rasterized=rasterized)
 
-        if data.capture.size == 1:
-            # iterate across the one capture
-            seq = [data]
-        elif self.facet_col is not None:
+        if self.facet_col is not None:
             # treat the sequence of multiple captures in one plot
             seq = [data]
             kws.update(col=self.facet_col, sharey=sharey, col_wrap=self.col_wrap)
@@ -377,7 +371,7 @@ class CapturePlotter:
         with self._plot_context(data, name='cyclic_channel_power', x='cyclic_lag'):
             if self.facet_col is not None:
                 facets = data[self.facet_col]
-                fig, axs = plt.subplots(1, len(facets), sharey=True)
+                fig, (axs,) = plt.subplots(1, len(facets), squeeze=False, sharey=True)
             else:
                 facets = [None]
                 fig = plt.gcf()
