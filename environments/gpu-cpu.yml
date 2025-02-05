@@ -17,13 +17,13 @@ dependencies:
 - numexpr~=2.8
 - array-api-compat
 - methodtools
+- numba
 - labbench>=0.42.0,<1
 - rpyc~=5.3
 - xarray>=2024.3
 - zarr>=2.18,<4
 - dask
 - msgspec~=0.18
-- dulwich
 - ruamel.yaml
 - schemdraw
 - mscorefonts

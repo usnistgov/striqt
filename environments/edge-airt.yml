@@ -18,24 +18,24 @@ dependencies:
 - numexpr~=2.8
 - array-api-compat
 - methodtools
+- numba~=0.56.0
 - labbench>=0.42.0,<1
 - rpyc~=5.3
 - xarray>=2024.3
 - zarr~=2.18.2
 - dask
 - msgspec~=0.18
-- dulwich
 - ruamel.yaml
 - schemdraw
 - mscorefonts
 - soapysdr-module-airt
 - cython<3
 - pytools==2022.1.12
-- numba~=0.56.0
 - pyside6
 - pyqtgraph
 - soapysdr~=0.8.1
 - pigz
+- dulwich
 - pip:
   - iqwaveform @ git+https://github.com/usnistgov/iqwaveform
   - xarray_dataclasses @ git+https://github.com/dgkuester/xarray-dataclasses@lazy-imports

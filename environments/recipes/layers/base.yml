@@ -19,6 +19,7 @@ dependencies:
   - numexpr~=2.8
   - array-api-compat
   - methodtools
+  - numba
 
   # for device wrappers and remote control
   - labbench>=0.42.0,<1
@@ -29,9 +30,6 @@ dependencies:
   - zarr>=2.18,<4
   - dask
   - msgspec~=0.18
-
-  # git repository introspection support for metadata
-  - dulwich
 
   # for environment.yml autogeneration
   - ruamel.yaml
