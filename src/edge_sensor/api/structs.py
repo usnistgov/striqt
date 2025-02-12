@@ -106,6 +106,7 @@ class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):
     """run-time characteristics of the radio that are left invariant during a sweep"""
 
     driver: str = 'AirT7x01B'
+    device_args: dict = {}
     resource: Any = None
     time_source: Literal['host', 'internal', 'external', 'gps'] = 'host'
     continuous_trigger: Annotated[

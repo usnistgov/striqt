@@ -2,6 +2,7 @@
 
 import functools
 import numbers
+from pathlib import Path
 import typing
 
 from . import base
@@ -15,10 +16,12 @@ if typing.TYPE_CHECKING:
     import numpy as np
     import pandas as pd
     import channel_analysis
+    import xarray as xr
 else:
     np = lb.util.lazy_import('numpy')
     pd = lb.util.lazy_import('pandas')
     channel_analysis = lb.util.lazy_import('channel_analysis')
+    xr = lb.util.lazy_import('xarray')
 
 
 def lo_shift_tone(inds, radio: base.RadioDevice, xp):
@@ -123,7 +126,7 @@ class NoiseSource(TestSource):
         return ret
 
 
-class TDMSFileSource(NullSource):
+class TDMSFileSource(TestSource):
     """returns IQ waveforms from a TDMS file"""
 
     resource: str = attr.value.str(default=None, help='path to the tdms file')
@@ -192,3 +195,109 @@ class TDMSFileSource(NullSource):
         float_dtype = np.finfo(np.dtype(dtype)).dtype
 
         return (iq * float_dtype(scale)).view(dtype).copy()
+
+
+class ZarrIQSource(TestSource):
+    """SDR emulator that draws IQ samples from an xarray returned by
+    channel_analysis.iq_waveform, or from a yaml file defined to
+    save iq_waveform.
+    """
+
+    path: Path = attr.value.Path(help='path to zarr file')
+    select: dict = attr.value.dict(
+        default={}, help='dictionary to select in the data as .sel(**select)'
+    )
+
+    _waveform = None
+
+    def _read_coord(self, name):
+        return np.atleast_1d(self._waveform[name])[0]
+
+    def open(self):
+        """set the waveform from an xarray.DataArray containing a single capture of IQ samples"""
+
+        waveform = channel_analysis.load(self.path).iq_waveform
+
+        if len(self.select) > 0:
+            waveform = waveform.set_xindex(list(self.select.keys()))
+            waveform = waveform.sel(**self.select)
+
+        if waveform.ndim != 2:
+            raise ValueError('expected 2 dimensions (capture, iq_sample)')
+
+        self.rx_channel_count = waveform.shape[0]
+
+        self._waveform = waveform
+
+    @property
+    def base_clock_rate(self):
+        return self._read_coord('sample_rate')
+
+    @attr.method.float(
+        min=0,
+        cache=True,
+        label='Hz',
+        help='sample rate before resampling',
+    )
+    def backend_sample_rate(self):
+        return self.base_clock_rate
+
+    @backend_sample_rate.setter
+    def _(self, value):
+        if value != self.base_clock_rate:
+            raise ValueError(
+                f'file sample rate must match capture ({self.base_clock_rate})'
+            )
+
+    @attr.method.float(
+        min=0,
+        cache=True,
+        label='Hz',
+        help='center frequency',
+    )
+    def center_frequency(self):
+        return self._read_coord('center_frequency')
+
+    @center_frequency.setter
+    def _(self, value):
+        actual = self.center_frequency()
+        if value != actual:
+            self._logger.warning(
+                f'center frequency ignored, using {actual / 1e6} MHz from file'
+            )
+
+    def _read_stream(
+        self, buffers, offset, count, timeout_sec=None, *, on_overflow='except'
+    ) -> tuple[int, int]:
+        iq, _ = super()._read_stream(
+            buffers, offset, count, timeout_sec=timeout_sec, on_overflow=on_overflow
+        )
+
+        if offset == 0:
+            time_ns = int(self._waveform.start_time[0].values)
+        else:
+            time_ns = 0
+
+        return iq, time_ns
+
+    def get_waveform(
+        self, count: int, offset: int, *, channel: int = 0, xp=np, dtype='complex64'
+    ):
+        iq_size = self._waveform.shape[1]
+
+        if iq_size < count + offset:
+            raise ValueError(
+                f'requested {count} samples but file capture length is {iq_size} samples'
+            )
+
+        if channel > self._waveform.shape[0]:
+            raise ValueError(
+                f'requested channel exceeds data channel count of {self._waveform.shape[0]}'
+            )
+
+        iq = self._waveform.values[channel, offset : count + offset]
+
+        if dtype is None or self._waveform.dtype == dtype:
+            return iq.copy()
+        else:
+            return iq.astype(dtype)

@@ -329,7 +329,7 @@ class RadioDevice(lb.Device):
     ) -> tuple['np.ndarray[np.complex64]', float]:
         # the return buffer
         if buffers is None:
-            samples, stream_bufs = alloc_empty_iq(self, capture, out=buffers)
+            samples, stream_bufs = alloc_empty_iq(self, capture)
         else:
             samples, stream_bufs = buffers
 
@@ -442,7 +442,7 @@ class RadioDevice(lb.Device):
 
         # allocate (and arm the capture if necessary)
         prep_calls = {'buffers': lb.Call(alloc_empty_iq, self, capture)}
-        iqwaveform.power_analysis.Any # touch to work around a lazy loading bug
+        iqwaveform.power_analysis.Any  # touch to work around a lazy loading bug
         if capture != self._armed_capture:
             prep_calls['arm'] = lb.Call(self.arm, capture)
         buffers = lb.concurrently(**prep_calls)['buffers']
@@ -779,8 +779,16 @@ def _list_radio_classes(subclass=RadioDevice):
     return clsmap
 
 
-def is_same_resource(r1: str | dict, r2: str | dict):
-    if hasattr(r1, 'items'):
-        return set(r1.items()) == set(r2.items())
+def _find_radio_cls_helper(
+    name: str, parent_cls: type[RadioDevice] = RadioDevice
+) -> RadioDevice:
+    """returns a list of radio subclasses that have been imported"""
+
+    mapping = _list_radio_classes(parent_cls)
+
+    if name in mapping:
+        return mapping[name]
     else:
-        return r1 == r2
+        raise AttributeError(
+            f'invalid driver {repr(name)}. valid names: {tuple(mapping.keys())}'
+        )

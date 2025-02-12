@@ -70,6 +70,7 @@ def spectrogram_ratio_histogram(
     )
 
     if spg.shape[0] != 2:
+        print(spg.shape)
         raise ValueError(
             'ratio histograms are only supported for 2-channel measurements'
         )

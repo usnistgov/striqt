@@ -10,7 +10,7 @@ import pickle
 import typing
 
 from . import iq_corrections, captures, structs, util
-from . import radio
+from .radio import RadioDevice
 
 import array_api_compat
 
@@ -217,10 +217,11 @@ class ChannelAnalysisWrapper:
 
     __name__ = 'analyze'
 
-    radio: radio.RadioDevice
+    radio: RadioDevice
     sweep: structs.Sweep
     analysis_spec: list[structs.ChannelAnalysis]
     extra_attrs: dict[str, typing.Any] | None = None
+    correction: bool = False
 
     def __call__(
         self,
@@ -235,10 +236,11 @@ class ChannelAnalysisWrapper:
             if array_api_compat.is_cupy_array(iq):
                 util.configure_cupy()
 
-            with lb.stopwatch('analysis: resample/calibrate', logger_level='debug'):
-                iq = iq_corrections.resampling_correction(
-                    iq, capture, self.radio, overwrite_x=True
-                )
+            if self.correction:
+                with lb.stopwatch('analysis: resample/calibrate', logger_level='debug'):
+                    iq = iq_corrections.resampling_correction(
+                        iq, capture, self.radio, overwrite_x=True
+                    )
 
             with lb.stopwatch('build coords', threshold=10e-3, logger_level='debug'):
                 coords = build_coords(
@@ -267,3 +269,39 @@ class ChannelAnalysisWrapper:
             return pickle.dumps(analysis)
         else:
             return analysis
+
+
+def analyze_capture(
+    radio: RadioDevice,
+    iq: util.ArrayType,
+    capture: structs.Capture,
+    sweep: structs.Sweep,
+    *,
+    sweep_start_time=None,
+    correction: bool = False,
+) -> 'xr.Dataset':
+    """a convenience function to analyze the output of a radio.acquire().
+
+    Arguments:
+        iq: the array containing
+        capture: the specification structure the IQ capture returned from .acquire()
+        correction: set True if the corresponding argument to .acquire() was False
+
+    Returns:
+        an xarray dataset containing the analysis specified by sweep.channel_analysis
+    """
+    attrs = {
+        # metadata fields
+        **structs.struct_to_builtins(sweep.radio_setup),
+        **structs.struct_to_builtins(sweep.description),
+    }
+
+    func = ChannelAnalysisWrapper(
+        radio=radio,
+        sweep=sweep,
+        analysis_spec=sweep.channel_analysis,
+        extra_attrs=attrs,
+        correction=correction,
+    )
+
+    return func(iq, sweep_time=sweep_start_time, capture=capture)

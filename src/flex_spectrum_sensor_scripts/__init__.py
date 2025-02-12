@@ -144,7 +144,7 @@ def _run_click_plotter(
     no_save=False,
     data_variable=[],
     sweep_index=-1,
-    **plot_func_kws
+    **plot_func_kws,
 ):
     """handle keyword arguments passed in from click, and call plot_func()"""
 
@@ -158,14 +158,14 @@ def _run_click_plotter(
     else:
         plt.ioff()
 
-    plt.style.use("iqwaveform.ieee_double_column")
+    plt.style.use('iqwaveform.ieee_double_column')
 
     # index on the following fields in order, matching the input options
     dataset = channel_analysis.load(zarr_path).set_xindex(
-        ["antenna_name", "center_frequency", "start_time", "sweep_start_time"]
+        ['channel', 'center_frequency', 'start_time', 'sweep_start_time']
     )
 
-    valid_freqs = tuple(dataset.indexes["center_frequency"].levels[1])
+    valid_freqs = tuple(dataset.indexes['center_frequency'].levels[1])
     if center_frequency is None:
         fcs = valid_freqs
     elif center_frequency in valid_freqs:
@@ -173,7 +173,7 @@ def _run_click_plotter(
         dataset = dataset.sel(center_frequency=fcs)
     else:
         raise ValueError(
-            f"no frequency {center_frequency} in data set - must be one of {valid_freqs}"
+            f'no frequency {center_frequency} in data set - must be one of {valid_freqs}'
         )
 
     valid_vars = tuple(dataset.data_vars.keys())
@@ -186,7 +186,7 @@ def _run_click_plotter(
     else:
         invalid = tuple(set(data_variable) - set(valid_vars))
         raise ValueError(
-            f"data variables {invalid} are not in data set - must be one of {valid_vars}"
+            f'data variables {invalid} are not in data set - must be one of {valid_vars}'
         )
 
     sweep_start_time = np.atleast_1d(dataset.sweep_start_time)[sweep_index]
@@ -195,58 +195,58 @@ def _run_click_plotter(
     if no_save:
         output_path = None
     else:
-        output_path = Path(zarr_path).parent / Path(zarr_path).name.split(".", 1)[0]
+        output_path = Path(zarr_path).parent / Path(zarr_path).name.split('.', 1)[0]
         output_path.mkdir(exist_ok=True)
 
     plot_func(dataset, output_path, interactive, **plot_func_kws)
 
     if interactive:
-        input("press enter to quit")
+        input('press enter to quit')
 
 
 def click_capture_plotter(description: typing.Optional[str] = None):
     """decorate a function to handle single-capture plots of zarr or zarr.zip files"""
 
     if description is None:
-        description = "plot signal analysis from zarr or zarr.zip files"
+        description = 'plot signal analysis from zarr or zarr.zip files'
 
     click_decorators = (
         click.command(description),
-        click.argument("zarr_path", type=click.Path(exists=True, dir_okay=True)),
+        click.argument('zarr_path', type=click.Path(exists=True, dir_okay=True)),
         click.option(
-            "--interactive/",
-            "-i",
+            '--interactive/',
+            '-i',
             is_flag=True,
             show_default=True,
             default=False,
-            help="",
+            help='',
         ),
         click.option(
-            "--center-frequency/",
-            "-f",
+            '--center-frequency/',
+            '-f',
             type=float,
             default=None,
-            help="if specified, plot for only this frequency",
+            help='if specified, plot for only this frequency',
         ),
         click.option(
-            "--sweep-index/",
-            "-s",
+            '--sweep-index/',
+            '-s',
             type=int,
             show_default=True,
             default=-1,
-            help="sweep index to plot (-1 for last)",
+            help='sweep index to plot (-1 for last)',
         ),
         click.option(
-            "--data-variable",
-            "-d",
+            '--data-variable',
+            '-d',
             type=str,
             multiple=True,
             default=[],
-            help="plot only the specified variable if specified",
+            help='plot only the specified variable if specified',
         ),
         click.option(
-            "--no-save/",
-            "-n",
+            '--no-save/',
+            '-n',
             is_flag=True,
             show_default=True,
             default=False,
