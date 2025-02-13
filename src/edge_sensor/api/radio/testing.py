@@ -59,7 +59,7 @@ class TestSource(NullSource):
 
 
 class SingleToneSource(TestSource):
-    resource: float = attr.value.float(
+    baseband_frequency: float = attr.value.float(
         default=0, help='baseband frequency of the tone to generate', label='Hz'
     )
 
@@ -69,7 +69,7 @@ class SingleToneSource(TestSource):
 
     def get_waveform(self, count, start_index: int, *, channel: int = 0, xp=np):
         i = xp.arange(start_index, count + start_index, dtype='uint64')
-        f_cw = self.resource
+        f_cw = self.baseband_frequency
         fs = self.backend_sample_rate()
         lo = lo_shift_tone(i, self, xp)
 
@@ -79,7 +79,7 @@ class SingleToneSource(TestSource):
 
         if self.snr is not None:
             capture = channel_analysis.Capture(duration=self.duration, sample_rate=fs)
-            noise = cached_noise(capture, xp=xp, power=10 ** (-self.snr / 10))
+            noise = _cached_noise(capture, xp=xp, power=10 ** (-self.snr / 10))
             noise = noise[i % noise.size]
             ret += noise
 
@@ -87,38 +87,48 @@ class SingleToneSource(TestSource):
 
 
 class SawtoothSource(TestSource):
-    resource: float = attr.value.float(
+    period: float = attr.value.float(
         default=0.01,
         min=0,
         help='sawtooth period',
         label='s',
     )
 
+    power: float = attr.value.float(
+        default=0.01,
+        min=0,
+        help='average output RMS channel power',
+        label='mW',
+    )
+
     def get_waveform(self, count, start_index: int, *, channel: int = 0, xp=np):
         ret = xp.empty(count, dtype='complex64')
-        period = self.resource
+        period = self.period
         ii = xp.arange(start_index, count + start_index, dtype='uint64')
         t = ii / self.backend_sample_rate()
-        ret.real[:] = (t % period) / period
+        magnitude = 2 * np.sqrt(self.power)
+        ret.real[:] = (t % period) * (magnitude / period)
         ret.imag[:] = 0
         return ret
 
 
 @functools.lru_cache(1)
-def cached_noise(capture, xp, **kwargs):
-    return channel_analysis.simulated_awgn(capture, xp=xp, seed=0, **kwargs)
+def _cached_noise(capture, xp, power=1, **kwargs):
+    return channel_analysis.simulated_awgn(
+        capture, xp=xp, seed=0, power=power, **kwargs
+    )
 
 
 class NoiseSource(TestSource):
-    resource: float = attr.value.float(
-        default=1e-3, min=0, help='noise waveform variance'
+    power: float = attr.value.float(
+        default=1e-3, min=0, help='noise total channel power'
     )
 
     def get_waveform(self, count, start_index: int, *, channel: int = 0, xp=np):
         capture = channel_analysis.Capture(
             duration=self.duration, sample_rate=self.backend_sample_rate()
         )
-        x = cached_noise(capture, xp=xp)
+        x = _cached_noise(capture, power=self.power, xp=xp)
         ii = xp.arange(start_index, count + start_index, dtype='uint64') % x.size
 
         ret = x[ii]
@@ -129,12 +139,12 @@ class NoiseSource(TestSource):
 class TDMSFileSource(TestSource):
     """returns IQ waveforms from a TDMS file"""
 
-    resource: str = attr.value.str(default=None, help='path to the tdms file')
+    path: str = attr.value.str(default=None, help='path to the tdms file')
 
     def open(self):
         from nptdms import TdmsFile
 
-        fd = TdmsFile.read(self.resource)
+        fd = TdmsFile.read(self.path)
         header_fd, iq_fd = fd.groups()
         self.backend = dict(header_fd=header_fd, iq_fd=iq_fd)
 
@@ -198,9 +208,8 @@ class TDMSFileSource(TestSource):
 
 
 class ZarrIQSource(TestSource):
-    """SDR emulator that draws IQ samples from an xarray returned by
-    channel_analysis.iq_waveform, or from a yaml file defined to
-    save iq_waveform.
+    """Emulate an SDR by drawing IQ samples from an xarray returned by
+    a channel_analysis.iq_waveform measurement.
     """
 
     path: Path = attr.value.Path(help='path to zarr file')
@@ -287,7 +296,7 @@ class ZarrIQSource(TestSource):
 
         if iq_size < count + offset:
             raise ValueError(
-                f'requested {count} samples but file capture length is {iq_size} samples'
+                f'requested {count + offset} samples but file capture length is {iq_size} samples'
             )
 
         if channel > self._waveform.shape[0]:

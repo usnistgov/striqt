@@ -344,11 +344,13 @@ def resampling_correction(
     elif nfft_out > nfft:
         # upsample
         if np.isfinite(capture.analysis_bandwidth):
-            iqwaveform.fourier.zero_stft_by_freq(
-                freqs,
+            y = iqwaveform.fourier.stft_fir_lowpass(
                 y,
-                passband=(passband[0] + enbw / 2, passband[1] - enbw / 2),
+                sample_rate=fs,
+                bandwidth=capture.analysis_bandwidth,
+                transition_bandwidth=250e3,
                 axis=axis,
+                out=y,
             )
 
         pad_left = (nfft_out - nfft) // 2
@@ -358,11 +360,20 @@ def resampling_correction(
 
     else:
         # nfft_out == nfft
-        iqwaveform.fourier.zero_stft_by_freq(
-            freqs,
+        # iqwaveform.fourier.zero_stft_by_freq(
+        #     freqs,
+        #     y,
+        #     passband=(passband[0] + enbw, passband[1] - enbw),
+        #     axis=axis,
+        # )
+
+        y = iqwaveform.fourier.stft_fir_lowpass(
             y,
-            passband=(passband[0] + enbw, passband[1] - enbw),
+            sample_rate=fs,
+            bandwidth=capture.analysis_bandwidth,
+            transition_bandwidth=250e3,
             axis=axis,
+            out=y,
         )
 
     del iq
