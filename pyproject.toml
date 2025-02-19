@@ -31,8 +31,7 @@ dev = [ "jupyter",
  "ruff",
  "toml",
 ]
-gpu-cpu = [ "-e ..[gpu-cpu]",
- "cupy ~= 12.2",
+gpu-cpu = [ "cupy ~= 12.2",
  "cython",
 ]
 edge-airt = [ "cupy-cuda102",

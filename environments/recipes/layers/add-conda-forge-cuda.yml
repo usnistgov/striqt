@@ -7,4 +7,5 @@ channels:
 dependencies:
   - cupy ~= 12.2
   - cython
-  - -e ..[gpu-cpu]
+  - pip:
+    - -e ..[gpu-cpu]
