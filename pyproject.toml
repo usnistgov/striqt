@@ -34,7 +34,6 @@ dev = [ "jupyter",
 gpu-cpu = [ "-e ..[gpu-cpu]",
  "cupy ~= 12.2",
  "cython",
- "nsight-compute",
 ]
 edge-airt = [ "cupy-cuda102",
  "cython<3",

@@ -31,7 +31,6 @@ dependencies:
 - mscorefonts
 - cupy ~= 12.2
 - cython
-- nsight-compute
 - -e ..[gpu-cpu]
 - pip:
   - iqwaveform @ git+https://github.com/usnistgov/iqwaveform
