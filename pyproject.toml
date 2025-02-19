@@ -3,7 +3,8 @@ name = "flex-spectrum-sensor"
 version = "0.0"
 description = "exploring the analysis of IQ in aggregate waveforms"
 requires-python = ">=3.9"
-dependencies = [ "array-api-compat",
+dependencies = [ "--upgrade-strategy only-if-needed -e ..",
+ "array-api-compat",
  "dask",
  "iqwaveform @ git+https://github.com/usnistgov/iqwaveform",
  "labbench>=0.42.0,<1",
