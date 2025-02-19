@@ -6,10 +6,13 @@ channels:
   - conda-forge
 
 dependencies:
+  # development
   - python
   - pip
   - jupyter
   - ruff
+  - toml
+  - ruamel.yaml
 
   # hard-coded on behalf of pip for iqwaveform
   - pandas
@@ -30,9 +33,6 @@ dependencies:
   - zarr>=2.18,<4
   - dask
   - msgspec~=0.18
-
-  # for environment.yml autogeneration
-  - ruamel.yaml
 
   # for documentation and plotting
   - schemdraw

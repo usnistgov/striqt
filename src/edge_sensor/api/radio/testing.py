@@ -1,6 +1,5 @@
 """Fake radios for testing"""
 
-import functools
 import numbers
 from pathlib import Path
 import typing
@@ -67,6 +66,10 @@ class SingleToneSource(TestSource):
         None, label='dB', help='add circular white noise to achieve the specified SNR'
     )
 
+    base_clock_rate: float = attr.value.float(
+        default=125e6, min=0, help='base clock rate'
+    )
+
     def get_waveform(self, count, start_index: int, *, channel: int = 0, xp=np):
         i = xp.arange(start_index, count + start_index, dtype='uint64')
         f_cw = self.baseband_frequency
@@ -79,7 +82,10 @@ class SingleToneSource(TestSource):
 
         if self.snr is not None:
             capture = channel_analysis.Capture(duration=self.duration, sample_rate=fs)
-            noise = _cached_noise(capture, xp=xp, power=10 ** (-self.snr / 10))
+            power = 10 ** (-self.snr / 10)
+            noise = channel_analysis.simulated_awgn(
+                capture, xp=xp, seed=0, power_spectral_density=power
+            )
             noise = noise[i % noise.size]
             ret += noise
 
@@ -101,6 +107,10 @@ class SawtoothSource(TestSource):
         label='mW',
     )
 
+    base_clock_rate: float = attr.value.float(
+        default=125e6, min=0, help='base clock rate'
+    )
+
     def get_waveform(self, count, start_index: int, *, channel: int = 0, xp=np):
         ret = xp.empty(count, dtype='complex64')
         period = self.period
@@ -112,24 +122,26 @@ class SawtoothSource(TestSource):
         return ret
 
 
-@functools.lru_cache(1)
-def _cached_noise(capture, xp, power=1, **kwargs):
-    return channel_analysis.simulated_awgn(
-        capture, xp=xp, seed=0, power=power, **kwargs
+class NoiseSource(TestSource):
+    power_spectral_density: float = attr.value.float(
+        default=1e-17, min=0, help='noise total channel power'
     )
 
-
-class NoiseSource(TestSource):
-    power: float = attr.value.float(
-        default=1e-3, min=0, help='noise total channel power'
+    base_clock_rate: float = attr.value.float(
+        default=125e6, min=0, help='base clock rate'
     )
 
     def get_waveform(self, count, start_index: int, *, channel: int = 0, xp=np):
+        duration = (count + start_index) / self.backend_sample_rate()
         capture = channel_analysis.Capture(
-            duration=self.duration, sample_rate=self.backend_sample_rate()
+            duration=duration, sample_rate=self.backend_sample_rate()
         )
-        x = _cached_noise(capture, power=self.power, xp=xp)
-        ii = xp.arange(start_index, count + start_index, dtype='uint64') % x.size
+
+        x = channel_analysis.simulated_awgn(
+            capture, xp=xp, seed=0, power_spectral_density=self.power_spectral_density
+        )
+        x /= np.sqrt(self.backend_sample_rate() / self.sample_rate())
+        ii = xp.arange(start_index, count + start_index, dtype='uint64')
 
         ret = x[ii]
         ret *= lo_shift_tone(ii, self, xp)

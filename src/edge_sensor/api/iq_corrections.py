@@ -311,11 +311,11 @@ def resampling_correction(
         return iq
 
     # set the passband roughly equal to the 3 dB bandwidth based on ENBW
-    freq_res = fs / nfft
-    enbw_bins = iqwaveform.fourier.equivalent_noise_bandwidth(
-        analysis_filter['window'], nfft, fftbins=False
-    )
-    enbw = enbw_bins * freq_res
+    # freq_res = fs / nfft
+    # enbw_bins = iqwaveform.fourier.equivalent_noise_bandwidth(
+    # analysis_filter['window'], nfft, fftbins=False
+    # )
+    # enbw = enbw_bins * freq_res
     passband = analysis_filter['passband']
 
     except_on_low_memory()
@@ -359,14 +359,6 @@ def resampling_correction(
         y = iqwaveform.util.pad_along_axis(y, [[pad_left, pad_right]], axis=axis + 1)
 
     else:
-        # nfft_out == nfft
-        # iqwaveform.fourier.zero_stft_by_freq(
-        #     freqs,
-        #     y,
-        #     passband=(passband[0] + enbw, passband[1] - enbw),
-        #     axis=axis,
-        # )
-
         y = iqwaveform.fourier.stft_fir_lowpass(
             y,
             sample_rate=fs,

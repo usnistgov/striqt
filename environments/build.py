@@ -24,8 +24,10 @@ def package_name(s):
     else:
         return result
 
+
 def ordered_merge(l1, l2):
     return list(dict.fromkeys(l1 + l2).keys())
+
 
 def ordered_dependency_merge(l1, l2):
     # avoid duplicating a specific package name

@@ -91,7 +91,7 @@ def filter_iq_capture(
 def simulated_awgn(
     capture: structs.Capture,
     *,
-    power: float = 1,
+    power_spectral_density: float = 1,
     xp=np,
     pinned_cuda=False,
     seed=None,
@@ -132,8 +132,7 @@ def simulated_awgn(
         size=2 * size, dtype=xp.float32, out=samples.view(xp.float32)
     )
 
-    if capture.analysis_bandwidth is not None:
-        power = power * capture.sample_rate / capture.analysis_bandwidth
+    power = power_spectral_density * capture.sample_rate
 
     samples *= xp.sqrt(power / 2)
 

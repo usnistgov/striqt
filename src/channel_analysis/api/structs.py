@@ -38,8 +38,8 @@ class Capture(msgspec.Struct, kw_only=True, frozen=True):
     # acquisition
     duration: Annotated[float, meta('duration of the capture', 's')] = 0.1
     sample_rate: Annotated[float, meta('IQ sample rate', 'S/s')] = 15.36e6
-    analysis_bandwidth: Optional[Annotated[float, meta('Analysis bandwidth', 'Hz')]] = (
-        None
+    analysis_bandwidth: Annotated[float, meta('Analysis bandwidth', 'Hz')] = float(
+        'inf'
     )
 
 

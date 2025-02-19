@@ -6,10 +6,13 @@ channels:
 - nvidia
 - conda-forge
 dependencies:
+  # development
 - python
 - pip
 - jupyter
 - ruff
+- toml
+- ruamel.yaml
 - pandas
 - scipy~=1.15
 - numpy>=1.24,<3
@@ -24,7 +27,6 @@ dependencies:
 - zarr>=2.18,<4
 - dask
 - msgspec~=0.18
-- ruamel.yaml
 - schemdraw
 - mscorefonts
 - cupy ~= 12.2
