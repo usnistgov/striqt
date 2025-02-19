@@ -7,5 +7,4 @@ channels:
 dependencies:
   - cupy ~= 12.2
   - cython
-  - nsight-compute
   - -e ..[gpu-cpu]
