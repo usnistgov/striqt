@@ -9,7 +9,7 @@ import toml
 from pathlib import Path
 from functools import lru_cache
 
-PIP_SKIP = {'python', 'pip', 'mscorefonts'}
+PIP_SKIP = {'python', 'pip', 'mscorefonts', 'soapysdr', 'soapysdr-module-airt'}
 DEV_DEPENDENCIES = {'jupyter', 'ruff', 'toml', 'ruamel.yaml'}
 PYPI_RENAME = {'ruamel.yaml': 'ruamel_yaml', 'matplotlib-base': 'matplotlib'}
 
@@ -59,30 +59,38 @@ def rename_pypi_deps(dep_map):
 
 
 pyproject = toml.load(PYPROJECT_PATH)
-
+deps_base = None
 # merge layers in recipes
-for recipe_path in (ENV_DIR / 'cpu.yml',):
-    recipe = yaml.load(open(recipe_path, 'r'))
-    env = yaml.load(open(recipe_path, 'r'))
+for recipe_file in ('cpu.yml', 'gpu-cpu.yml', 'edge-airt.yml'):
+    recipe_name = recipe_file.rsplit('.', 1)[0]
+    env = yaml.load(open(ENV_DIR / recipe_file, 'r'))
 
     # list of pip dependencies, without any editable install lines
     pip_deps = pop_pip(env['dependencies']) or []
-    pip_deps = [s for s in pip_deps if not s.startswith('-e')]
+    pip_deps = [s for s in pip_deps if not s.startswith('-')]
 
     yml_deps = {package_name(p): p for p in env['dependencies']}
     yml_deps = {k: yml_deps[k] for k in yml_deps.keys() - PIP_SKIP}
 
     # split the packages into development and base dependencies
-    deps_dev = {k: yml_deps[k] for k in (yml_deps.keys() & DEV_DEPENDENCIES)}
-    deps_base = {k: yml_deps[k] for k in yml_deps.keys() - DEV_DEPENDENCIES}
+    deps = {k: yml_deps[k] for k in yml_deps.keys() - DEV_DEPENDENCIES}
+    deps = rename_pypi_deps(deps)
+    deps = sorted(list(deps.values()) + pip_deps)
 
-    deps_base = rename_pypi_deps(deps_base)
-    deps_base = sorted(list(deps_base.values()) + pip_deps)
-    pyproject['project'].update(dependencies=deps_base)
+    if deps_base is not None:
+        deps = sorted(set(deps) - set(deps_base))
 
-    deps_dev = rename_pypi_deps(deps_dev)
-    deps_dev_list = sorted(deps_dev.values())
-    pyproject['project']['optional-dependencies'].update(dev=deps_dev_list)
+    if recipe_file == 'cpu.yml':
+        pyproject['project'].update(dependencies=deps)
+        deps_base = deps
+    else:
+        pyproject['project']['optional-dependencies'][recipe_name] = deps
+
+    if recipe_file == 'cpu.yml':
+        deps_dev = {k: yml_deps[k] for k in (yml_deps.keys() & DEV_DEPENDENCIES)}
+        deps_dev = rename_pypi_deps(deps_dev)
+        deps_dev_list = sorted(deps_dev.values())
+        pyproject['project']['optional-dependencies'].update(dev=deps_dev_list)
 
 with open(PYPROJECT_PATH, 'w') as fd:
     encoder = toml.TomlArraySeparatorEncoder(separator=',\n')

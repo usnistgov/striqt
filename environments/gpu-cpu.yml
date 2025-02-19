@@ -32,9 +32,10 @@ dependencies:
 - cupy ~= 12.2
 - cython
 - nsight-compute
+- -e ..[gpu-cpu]
 - pip:
   - iqwaveform @ git+https://github.com/usnistgov/iqwaveform
   - xarray_dataclasses @ git+https://github.com/dgkuester/xarray-dataclasses@lazy-imports
 
       # allows imports from the src/ directory in this repo
-  - --upgrade-strategy only-if-needed -e ..
+  - -e ..
