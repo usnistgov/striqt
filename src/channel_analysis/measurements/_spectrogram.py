@@ -346,7 +346,7 @@ def spectrogram(
     window: typing.Union[str, tuple[str, float]],
     frequency_resolution: float,
     fractional_overlap: float = 0,
-    frequency_bin_averaging: int = None,
-    time_bin_averaging: int = None,
+    frequency_bin_averaging: typing.Optional[int] = None,
+    time_bin_averaging: typing.Optional[int] = None,
 ):
     return compute_spectrogram(**locals(), limit_digits=3, dtype='float16')
