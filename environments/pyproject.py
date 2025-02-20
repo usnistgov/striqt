@@ -3,7 +3,6 @@
 #!python3
 
 from ruamel.yaml import YAML  # use of ruamel.yaml preserves comments
-import sys
 import re
 import toml
 from pathlib import Path
