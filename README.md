@@ -3,7 +3,7 @@ This is a python-based platform for experimentation with high-fidelity real time
 ## Installation
 
 ### Option 1: Conda Environment
-The source code layout is oriented toward execution of notebooks or scripts in conda environments. Several variants of a `flex-spectrum-sensor` environment are provided here, targeted at different host computing environments.
+Installation with radio hardware and GPU support is provided via conda environments. Several variants of a `flex-spectrum-sensor` environment are provided here, targeted at different host computing environments.
 
 1. Ensure that `conda` is installed (or `mamba`/`micromamba`, substituted in what follows)
 2. Clone this repository
