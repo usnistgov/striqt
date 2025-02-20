@@ -44,15 +44,15 @@ Detailed usage instructions for each can be discovered with the `--help` flag.
 ### Module APIs
 This is alpha software. The API may still change without warning.
 
+The API is organized into two python modules that are importable as :
+
+* `channel_analysis`: Extensible library for signal analysis of IQ. These use [iqwaveform](https://github.com/dgkuester/iqwaveform) and [the python array API](https://data-apis.org/array-api/latest/) for interchangeable CPU or CUDA GPU compute, depending on whether `numpy` or `cupy` objects are passed in. Results are packaged into [xarray Dataset objects](https://docs.xarray.dev/en/stable/generated/xarray.Dataset.html).
+
+* `edge_sensor`: Methods for swept acquisition and analysis of field data with software-defined radios.
+
 Documentation:
 * The most up-to-date documentation is in the source-code as docstrings
 * A few examples are located in `tests` and `notebooks`. Some of these may not be up to date.
-
-The repository is organized into two python modules that are importable as :
-
-* `channel_analysis`: Methods for the analysis of an IQ recording. These use [iqwaveform](https://github.com/dgkuester/iqwaveform) and [the python array API](https://data-apis.org/array-api/latest/) for interchangeable CPU or CUDA GPU compute, depending on whether `numpy` or `cupy` objects are passed in. Results are packaged into [xarray Dataset objects](https://docs.xarray.dev/en/stable/generated/xarray.Dataset.html).
-
-* `edge_sensor`: Methods for swept acquisition and analysis of field data with software-defined radios.
 
 ### See Also
 * [Validation and calibration with hardware](https://github.com/usnistgov/flex-spectrum-sensor-tests)
