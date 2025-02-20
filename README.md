@@ -1,4 +1,4 @@
-This is a python-based platform for experimentation with radio environmental analysis in real time with software-defined radios. Baseband signal processing may be performed interchangeably on either CPU or CUDA GPUs.
+This is a python-based platform for experimentation with high-fidelity real time signal analysis (RTSA) with software-defined radios. Baseband signal processing may be performed interchangeably on either CPU or CUDA GPUs.
 
 ## Installation
 
