@@ -9,7 +9,7 @@ radio = Air7201B()
 radio_setup = edge_sensor.RadioSetup(
     time_source='internal',
     warmup_sweep=False,
-    array_backend='cupy', # or 'numpy' for cpu operations
+    array_backend='numpy'
 )
 
 capture = edge_sensor.RadioCapture(
@@ -25,3 +25,6 @@ with radio:
     radio.setup(radio_setup)
     radio.arm(capture)
     iq, _ = radio.acquire(capture)
+
+# iq is a 2-D numpy array with dimensions (channel index, IQ sample index).
+# can save or transfer data here
