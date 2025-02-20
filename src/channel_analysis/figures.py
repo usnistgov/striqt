@@ -503,11 +503,12 @@ def plot_cyclic_channel_power(
 
 
 def label_axis(
-    which_axis: typing.Literal['x'] | typing.Literal['y'],
+    which_axis: typing.Literal['x'] | typing.Literal['y'] | typing.Literal['colorbar'],
     ax_data: typing.Union['xr.DataArray', 'xr.Dataset'],
     *,
     coord_name: typing.Optional['xr.Coordinates'] = None,
     tick_units=True,
+    short=False,
     ax: typing.Optional['mpl.axes.Ax'] = None,
 ):
     """apply axis labeling based on label and unit metadata in the specified dimension of `a`.
@@ -516,12 +517,20 @@ def label_axis(
     """
 
     if ax is None:
-        ax = plt.gca()
+        if which_axis == 'colorbar':
+            fig = plt.gcf()
+            colorbars = [ax for ax in fig.axes if 'colorbar' in repr(ax)]
+            if len(colorbars) == 0:
+                raise ValueError('no colorbars found')
+            else:
+                ax = colorbars[0]
+        else:
+            ax = plt.gca()
 
     if which_axis == 'x':
-        axis = ax.xaxis
-    elif which_axis == 'y':
-        axis = ax.yaxis
+        target_ax = ax.xaxis
+    elif which_axis in ('y', 'colorbar'):
+        target_ax = ax.yaxis
 
     if coord_name is None:
         # label = a.attrs.get('standard_name', None)
@@ -530,13 +539,21 @@ def label_axis(
         # label = a[dimension].attrs.get('label', None)
         units = ax_data[coord_name].attrs.get('units', None)
 
+    standard_name = ax_data.attrs.get('standard_name', None) or ax_data.name
+    long_name = ax_data.attrs.get('long_name', None) or standard_name
+    
+    if short:
+        desc_text = standard_name
+    else:
+        desc_text = long_name
+
     if units is not None:
         formatter = FixedEngFormatter(unit=units, unitInTick=tick_units)
-        axis.set_major_formatter(formatter)
+        target_ax.set_major_formatter(formatter)
         unit_suffix = formatter.get_axis_unit_suffix(ax_data.min(), ax_data.max())
-        axis.set_label_text(f'{ax_data.standard_name or ax_data.name}{unit_suffix}')
+        target_ax.set_label_text(f'{desc_text}{unit_suffix}')
     else:
-        axis.set_label_text(ax_data.standard_name or ax_data.name)
+        target_ax.set_label_text(desc_text)
 
 
 def label_legend(
