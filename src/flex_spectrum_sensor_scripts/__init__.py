@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import click
-import functools
 from pathlib import Path
 import typing
 import sys
-from datetime import datetime
 import importlib.util
 from socket import gethostname
 
@@ -40,12 +38,10 @@ if typing.TYPE_CHECKING:
     import labbench as lb
     import xarray as xr
     import edge_sensor
-    import channel_analysis
     import zarr
 else:
     edge_sensor = lazy_import('edge_sensor')
     lb = lazy_import('labbench')
-    channel_analysis = lazy_import('channel_analysis')
     xr = lazy_import('xarray')
     ultratb = lazy_import('IPython.core.ultratb')
     zarr = lazy_import('zarr')
@@ -58,6 +54,22 @@ def _chain_decorators(decorators: list[callable], func: callable) -> callable:
     for option in decorators:
         func = option(func)
     return func
+
+
+def _apply_exception_hooks(controller, sweep, debug: bool, remote: bool | None):
+    def hook(*args):
+        if debug:
+            print('entering debugger')
+            lb.util.force_full_traceback(True)
+            debugger = ultratb.FormattedTB(
+                mode='Verbose', color_scheme='Linux', call_pdb=1
+            )
+            debugger(*args)
+
+        if not remote:
+            controller.close_radio(sweep.radio_setup)
+
+    sys.excepthook = hook
 
 
 # %% Sweep script
@@ -86,7 +98,7 @@ def click_sensor_sweep(description: typing.Optional[str] = None):
             help='run on the specified remote host (at host or host:port)',
         ),
         click.option(
-            '--store/',
+            '--store-backend/',
             '-s',
             type=click.Choice(['zip', 'directory', 'db'], case_sensitive=True),
             default=None,
@@ -124,29 +136,166 @@ def click_sensor_sweep(description: typing.Optional[str] = None):
     return decorate
 
 
+def _run_click_plotter(
+    plot_func: callable,
+    zarr_path: str,
+    center_frequency=None,
+    interactive=False,
+    no_save=False,
+    data_variable=[],
+    sweep_index=-1,
+    **plot_func_kws,
+):
+    """handle keyword arguments passed in from click, and call plot_func()"""
+
+    from matplotlib import pyplot as plt
+    import channel_analysis
+    from pathlib import Path
+    import numpy as np
+
+    if interactive:
+        plt.ion()
+    else:
+        plt.ioff()
+
+    plt.style.use('iqwaveform.ieee_double_column')
+
+    # index on the following fields in order, matching the input options
+    dataset = channel_analysis.load(zarr_path).set_xindex(
+        ['channel', 'center_frequency', 'start_time', 'sweep_start_time']
+    )
+
+    valid_freqs = tuple(dataset.indexes['center_frequency'].levels[1])
+    if center_frequency is None:
+        fcs = valid_freqs
+    elif center_frequency in valid_freqs:
+        fcs = [center_frequency]
+        dataset = dataset.sel(center_frequency=fcs)
+    else:
+        raise ValueError(
+            f'no frequency {center_frequency} in data set - must be one of {valid_freqs}'
+        )
+
+    valid_vars = tuple(dataset.data_vars.keys())
+    if len(data_variable) == 0:
+        variables = valid_vars
+    elif len(set(data_variable) - set(valid_vars)) == 0:
+        variables = list(data_variable)
+        drop_set = set(dataset.data_vars.keys()) - set(variables)
+        dataset = dataset.drop_vars(list(drop_set))
+    else:
+        invalid = tuple(set(data_variable) - set(valid_vars))
+        raise ValueError(
+            f'data variables {invalid} are not in data set - must be one of {valid_vars}'
+        )
+
+    sweep_start_time = np.atleast_1d(dataset.sweep_start_time)[sweep_index]
+    dataset = dataset.sel(sweep_start_time=sweep_start_time).load()
+
+    if no_save:
+        output_path = None
+    else:
+        output_path = Path(zarr_path).parent / Path(zarr_path).name.split('.', 1)[0]
+        output_path.mkdir(exist_ok=True)
+
+    plot_func(dataset, output_path, interactive, **plot_func_kws)
+
+    if interactive:
+        input('press enter to quit')
+
+
+def click_capture_plotter(description: typing.Optional[str] = None):
+    """decorate a function to handle single-capture plots of zarr or zarr.zip files"""
+
+    if description is None:
+        description = 'plot signal analysis from zarr or zarr.zip files'
+
+    click_decorators = (
+        click.command(description),
+        click.argument('zarr_path', type=click.Path(exists=True, dir_okay=True)),
+        click.option(
+            '--interactive/',
+            '-i',
+            is_flag=True,
+            show_default=True,
+            default=False,
+            help='',
+        ),
+        click.option(
+            '--center-frequency/',
+            '-f',
+            type=float,
+            default=None,
+            help='if specified, plot for only this frequency',
+        ),
+        click.option(
+            '--sweep-index/',
+            '-s',
+            type=int,
+            show_default=True,
+            default=-1,
+            help='sweep index to plot (-1 for last)',
+        ),
+        click.option(
+            '--data-variable',
+            '-d',
+            type=str,
+            multiple=True,
+            default=[],
+            help='plot only the specified variable if specified',
+        ),
+        click.option(
+            '--no-save/',
+            '-n',
+            is_flag=True,
+            show_default=True,
+            default=False,
+            help="don't save the resulting plots",
+        ),
+    )
+
+    def decorate(func):
+        def wrapped(*args, **kws):
+            return _run_click_plotter(func, *args, **kws)
+
+        return _chain_decorators(click_decorators, wrapped)
+
+    return decorate
+
+
 Store = typing.TypeVar('Store', bound='zarr.storage.Store')
 Controller = typing.TypeVar('Controller', bound='edge_sensor.SweepController')
 Sweep = typing.TypeVar('Sweep', bound='edge_sensor.Sweep')
 Dataset = typing.TypeVar('Dataset', bound='xr.Dataset')
 
 
-def get_file_format_fields(sweep_spec, controller, yaml_path):
-    radio_id = controller.radio_id(sweep_spec.radio_setup.driver)
-    fields = edge_sensor.api.captures.capture_fields_with_aliases(
-        sweep_spec.captures[0], radio_id, sweep_spec.output.coord_aliases
-    )
-    fields['start_time'] = datetime.now().strftime('%Y%m%d-%Hh%Mm%S')
-    fields['yaml_name'] = Path(yaml_path).stem
-    fields['radio_id'] = radio_id
+def _connect_controller(remote, sweep):
+    if remote is None:
+        return edge_sensor.SweepController(sweep)
+    else:
+        return edge_sensor.connect(remote).root
 
-    return fields
+
+def _preload_calibrations(yaml_path, sweep_cls, radio_id, adjust_captures):
+    # re-read the sweep with the radio id, which allows us to resolve
+    # calibration path names that are formatted based on the radio ID
+    sweep = edge_sensor.read_yaml_sweep(
+        yaml_path,
+        sweep_cls=sweep_cls,
+        adjust_captures=adjust_captures,
+        radio_id=radio_id,
+    )
+
+    data = edge_sensor.read_calibration_corrections(sweep.radio_setup.calibration)
+
+    return data
 
 
 def init_sensor_sweep(
     *,
     yaml_path: Path,
     output_path: str | None,
-    store: str | None,
+    store_backend: str | None,
     remote: str | None,
     force: bool,
     verbose: bool,
@@ -158,9 +307,21 @@ def init_sensor_sweep(
     if sweep_cls is None:
         sweep_cls = edge_sensor.Sweep
 
-    sweep_spec = edge_sensor.read_yaml_sweep(
+    sweep = edge_sensor.read_yaml_sweep(
         yaml_path, sweep_cls=sweep_cls, adjust_captures=adjust_captures
     )
+
+    if store_backend is None and sweep.output.store is None:
+        click.echo(
+            'specify output.store in the yaml file or use -s <NAME> on the command line'
+        )
+        sys.exit(1)
+
+    if output_path is None and sweep.output.path is None:
+        click.echo(
+            'specify output.path in the yaml file or use -o PATH on the command line'
+        )
+        sys.exit(1)
 
     if verbose:
         lb.util.force_full_traceback(True)
@@ -168,66 +329,46 @@ def init_sensor_sweep(
     else:
         lb.show_messages('info')
 
-    if remote is None:
-        controller = edge_sensor.SweepController(sweep_spec.radio_setup)
-    else:
-        controller = edge_sensor.connect(remote).root
+    controller = _connect_controller(remote, sweep)
+    _apply_exception_hooks(controller, sweep, debug=debug, remote=remote)
 
-    if debug:
-        lb.util.force_full_traceback(True)
-        sys.excepthook = ultratb.FormattedTB(
-            mode='Verbose', color_scheme='Linux', call_pdb=1
+    # reload the yaml now that radio_id can be known to fully format any filenames
+    radio_id = controller.radio_id(sweep.radio_setup.driver)
+    sweep = edge_sensor.read_yaml_sweep(
+        yaml_path,
+        sweep_cls=sweep_cls,
+        adjust_captures=adjust_captures,
+        radio_id=radio_id,
+    )
+
+    calls = {}
+
+    calls['calibration'] = lb.Call(
+        _preload_calibrations,
+        yaml_path,
+        sweep_cls=sweep_cls,
+        radio_id=radio_id,
+        adjust_captures=adjust_captures,
+    )
+
+    if open_store:
+        calls['store'] = lb.Call(
+            edge_sensor.open_store,
+            sweep,
+            radio_id=radio_id,
+            yaml_path=yaml_path,
+            output_path=output_path,
+            store_backend=store_backend,
+            force=force,
         )
 
-    path_fields = get_file_format_fields(sweep_spec, controller, yaml_path)
+    with lb.stopwatch('load store and prepare calibrations'):
+        opened = lb.concurrently(**calls)
 
-    if sweep_spec.radio_setup.calibration is None:
-        calibration = None
-    else:
-        path = Path(sweep_spec.radio_setup.calibration.format(**path_fields))
-        if not path.is_absolute():
-            path = Path(yaml_path).parent.absolute() / path
-        path = str(path.absolute())
-        calibration = edge_sensor.read_calibration_corrections(path)
+    opened.setdefault('store', None)
+    opened.setdefault('calibration', None)
 
-    if not open_store:
-        return None, controller, sweep_spec, calibration
-
-    if store is None:
-        if sweep_spec.output.store is None:
-            click.echo(
-                'specify output.store in the yaml file or use -s NAME on the command line'
-            )
-            sys.exit(1)
-
-        store = sweep_spec.output.store.lower()
-    else:
-        store = store.lower()
-
-    yaml_path = Path(yaml_path)
-    if output_path is None:
-        spec_path = Path(sweep_spec.output.path)
-        spec_path = spec_path.expanduser()  # e.g., "~/" -> "/home/user/"
-        if spec_path is None:
-            click.echo(
-                'specify output.path in the yaml file or use -o PATH on the command line'
-            )
-            sys.exit(1)
-        spec_path = Path(str(spec_path).format(**path_fields))
-
-        if store == 'directory':
-            fixed_path = spec_path.with_suffix('.zarr')
-        else:
-            fixed_path = spec_path.with_suffix('.zarr.zip')
-
-    else:
-        fixed_path = str(output_path).format(**path_fields)
-
-    Path(fixed_path).parent.mkdir(parents=True, exist_ok=True)
-
-    store = channel_analysis.open_store(fixed_path, mode='w' if force else 'a')
-
-    return store, controller, sweep_spec, calibration
+    return opened['store'], controller, sweep, opened['calibration']
 
 
 # %% Server scripts

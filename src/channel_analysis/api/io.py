@@ -6,49 +6,58 @@ import warnings
 
 from pathlib import Path
 from collections import defaultdict
+import numcodecs
 
 from . import util
-
+import xarray as xr
 if typing.TYPE_CHECKING:
     import numpy as np
-    import numcodecs
     import xarray as xr
     import zarr
     import pandas as pd
+
+    if hasattr(zarr.storage, 'Store'):
+        # zarr 2.x
+        StoreType = typing.TypeVar('StoreType', bound=zarr.storage.Store)
+    else:
+        # zarr 3.x
+        StoreType = typing.TypeVar('StoreType', bound=zarr.abc.store.Store)
+
 else:
     np = util.lazy_import('numpy')
     pd = util.lazy_import('pandas')
-    numcodecs = util.lazy_import('numcodecs')
     xr = util.lazy_import('xarray')
     zarr = util.lazy_import('zarr')
-
 
 warnings.filterwarnings(
     'ignore',
     category=FutureWarning,
-    message='is deprecated and will be removed in a Zarr-Python version 3',
+    message='.*is deprecated and will be removed in a Zarr-Python version 3.*',
+)
+
+warnings.filterwarnings(
+    'ignore', category=UserWarning, module='.*zipfile.*', message='.*Duplicate name.*'
 )
 
 
 def open_store(path: str | Path, *, mode: str):
-    if isinstance(path, zarr.storage.Store):
+    if hasattr(zarr.storage, 'Store'):
+        # zarr 2.x
+        StoreBase = zarr.storage.Store
+        DirectoryStore = zarr.storage.DirectoryStore
+    else:
+        # zarr 3.x
+        StoreBase = zarr.abc.store.Store
+        DirectoryStore = zarr.storage.LocalStore
+
+    if isinstance(path, StoreBase):
         store = path
     elif not isinstance(path, (str, Path)):
-        raise ValueError('must pass a string or Path savefile or zarr.Store object')
+        raise ValueError('must pass a string or Path savefile or zarr Store')
     elif str(path).endswith('.zip'):
-        store = zarr.ZipStore(path, mode=mode, compression=0)
-    elif str(path).endswith('.db'):
-        if mode == 'a':
-            flag = 'c'
-        elif mode == 'w':
-            flag = 'n'
-        else:
-            flag = mode
-        warnings.simplefilter('ignore')
-        store = zarr.DBMStore(path, flag=flag, write_lock=False)
-        warnings.resetwarnings()
+        store = zarr.storage.ZipStore(path, mode=mode, compression=0)
     else:
-        store = zarr.DirectoryStore(path)
+        store = DirectoryStore(path)
 
     return store
 
@@ -61,14 +70,14 @@ def _get_iq_index_name():
 
 
 def _build_encodings(data, compression=None, filter: bool = True):
+    # todo: this will need to be updated to work with zarr 3
+
     from .. import measurements
 
     if compression is None:
         compressor = numcodecs.Blosc('zlib', clevel=6)
     elif compression is False:
         compressor = None
-    else:
-        compressor = zarr.compressors.NoCompressor
 
     encodings = defaultdict(dict)
 
@@ -83,17 +92,28 @@ def _build_encodings(data, compression=None, filter: bool = True):
     return encodings
 
 
+def _get_store_info(store: StoreType) -> tuple[bool, dict]:
+    path = store.path if hasattr(store, 'path') else store.root
+
+    if zarr.__version__.startswith('2'):
+        exists = len(store) > 0
+        kws = {'zarr_version': 2}
+    else:
+        exists = Path(path).exists()
+        kws = {'zarr_format': 2}
+
+    return exists, kws
+
+
 def dump(
-    store: 'zarr.storage.Store',
+    store: 'StoreType',
     data: typing.Optional['xr.DataArray' | 'xr.Dataset'] = None,
     append_dim=None,
     compression=None,
     filter=True,
-) -> 'zarr.storage.Store':
+    overwrite=False,
+) -> 'StoreType':
     """serialize a dataset into a zarr directory structure"""
-
-    # if not isinstance(store, zarr.storage.Store):
-    #     raise TypeError('must pass a zarr store object')
 
     if hasattr(data, _get_iq_index_name()):
         if 'sample_rate' in data.attrs:
@@ -127,19 +147,19 @@ def dump(
     if append_dim is None:
         append_dim = 'capture'
 
-
     data = data.chunk(chunks)
 
-    # write/append only
-    if len(store) > 0:
+    exists, kws = _get_store_info(store)
+
+    if exists:
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', UserWarning)
-            return data.to_zarr(store, mode='a', append_dim=append_dim)
+            return data.to_zarr(store, mode='a', append_dim=append_dim, **kws)
     else:
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', xr.SerializationWarning)
             encodings = _build_encodings(data, compression=compression, filter=filter)
-            return data.to_zarr(store, encoding=encodings, mode='w')
+            return data.to_zarr(store, encoding=encodings, mode='w', **kws)
 
 
 def load(path: str | Path) -> 'xr.DataArray' | 'xr.Dataset':

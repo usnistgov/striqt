@@ -163,17 +163,24 @@ def cellular_cyclic_autocorrelation(
 
     max_len = _get_max_corr_size(capture, subcarrier_spacings=subcarrier_spacings)
 
-    result = xp.full((2, len(subcarrier_spacings), max_len), np.nan, dtype=np.float32)
-    for i, phy in enumerate(phy_scs.values()):
-        # R = _correlate_cyclic_prefixes(iq, phy, **kws)
-        cp_inds = phy.index_cyclic_prefix(**idx_kws, slots=downlink_slots)
-        R = iqwaveform.ofdm.corr_at_indices(cp_inds, iq, phy.nfft, norm=normalize)
-        result[0][i][: R.size] = xp.abs(R)
+    result = xp.full(
+        (iq.shape[0], 2, len(subcarrier_spacings), max_len), np.nan, dtype=np.float32
+    )
+    for chan in range(iq.shape[0]):
+        for iscs, phy in enumerate(phy_scs.values()):
+            # R = _correlate_cyclic_prefixes(iq, phy, **kws)
+            cp_inds = phy.index_cyclic_prefix(**idx_kws, slots=downlink_slots)
+            R = iqwaveform.ofdm.corr_at_indices(
+                cp_inds, iq[chan], phy.nfft, norm=normalize
+            )
+            result[chan][0][iscs][: R.size] = xp.abs(R)
 
-        if len(uplink_slots) > 0:
-            cp_inds = phy.index_cyclic_prefix(**idx_kws, slots=uplink_slots)
-            R = iqwaveform.ofdm.corr_at_indices(cp_inds, iq, phy.nfft, norm=normalize)
-            result[1][i][: R.size] = xp.abs(R)
+            if len(uplink_slots) > 0:
+                cp_inds = phy.index_cyclic_prefix(**idx_kws, slots=uplink_slots)
+                R = iqwaveform.ofdm.corr_at_indices(
+                    cp_inds, iq[chan], phy.nfft, norm=normalize
+                )
+                result[chan][1][iscs][: R.size] = xp.abs(R)
 
     if normalize:
         metadata.update(standard_name='Cyclic Autocorrelation')

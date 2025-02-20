@@ -1,6 +1,7 @@
 from __future__ import annotations
 import functools
 from math import ceil
+import numbers
 import typing
 
 import labbench as lb
@@ -9,6 +10,9 @@ import msgspec
 import numpy as np
 
 from .. import structs, util
+from . import method_attr
+
+from channel_analysis.api.util import pinned_array_as_cupy
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -18,8 +22,115 @@ else:
     pd = util.lazy_import('pandas')
 
 
+class _ReceiveBufferCarryover:
+    """remember unused samples from the previous IQ capture"""
+
+    samples: 'np.ndarray' | None
+    start_time_ns: int | None
+
+    def __init__(self, radio=None):
+        self.radio = radio
+        if radio is not None:
+            attr.observe(radio, self.on_radio_attr_change, type_='set')
+
+        self.clear()
+
+    def apply(self, samples: 'np.ndarray') -> tuple[int | None, int]:
+        """carry over samples into `samples` from the previous capture.
+
+        Returns:
+            (start_time_ns, number of samples)
+        """
+        if self.start_time_ns is None and self.samples is not None:
+            raise ValueError(
+                'carryover time information present, but missing timestamp'
+            )
+
+        if self.samples is None:
+            carryover_count = 0
+        else:
+            # note: carryover.samples.dtype is np.complex64, samples.dtype is np.float32
+            carryover_count = self.samples.shape[1]
+            samples[:, : 2 * carryover_count] = self.samples.view(samples.dtype).copy()
+
+        return self.start_time_ns, carryover_count
+
+    def stash(
+        self,
+        samples: 'np.ndarray',
+        sample_start_ns,
+        unused_sample_count: int,
+        capture: structs.RadioCapture,
+    ):
+        """stash data needed to carry over extra samples into the next capture"""
+        carryover_count = unused_sample_count
+        self.samples = samples[:, -carryover_count:].copy()
+        self.start_time_ns = sample_start_ns + round(1e9 * capture.duration)
+
+    def clear(self):
+        self.samples = None
+        self.start_time_ns = None
+
+    def on_radio_attr_change(self, msg):
+        """invalidate on notification of paramattr changes"""
+
+        if self.samples is None:
+            return
+
+        # TODO: proper gapless capturing will to manage this case, but
+        # there is troubleshooting to do
+        # elif msg['name'] == RadioDevice.rx_enabled.name:
+        #     return
+
+        if msg['new'] != msg['old']:
+            self.clear()
+
+    def __del__(self):
+        self.unobserve()
+
+    def unobserve(self):
+        if self.radio is None:
+            return
+        attr.unobserve(self.radio, self.on_radio_attr_change)
+
+
+def _cast_iq(
+    radio: RadioDevice, buffer: 'iqwaveform.util.ArrayType'
+) -> 'iqwaveform.util.ArrayType':
+    """cast the buffer to floating point, if necessary"""
+    # array_namespace will categorize cupy pinned memory as numpy
+    dtype_in = np.dtype(radio._transport_dtype)
+
+    if radio.array_backend == 'cupy':
+        import cupy as xp
+
+        buffer = pinned_array_as_cupy(buffer)
+    else:
+        import numpy as xp
+
+        buffer = xp.array(buffer)
+
+    # what follows is some acrobatics to minimize new memory allocation and copy
+    if dtype_in.kind == 'i':
+        # 1. the same memory buffer, interpreted as int16 without casting
+        buffer_int16 = buffer.view('int16')[:, : 2 * buffer.shape[1]]
+        buffer_float32 = buffer.view('float32')
+
+        # TODO: evaluate whether this is necessary, or if a copy is really so painful
+        # 2. in-place casting from the int16 samples, filling in the extra allocation in self.buffer
+        xp.copyto(buffer_float32, buffer_int16, casting='unsafe')
+
+        # re-interpret the interleaved (float32 I, float32 Q) values as a complex value
+        buffer_out = buffer_float32.view('complex64')
+
+    else:
+        buffer_out = buffer
+
+    return buffer_out
+
+
 class RadioDevice(lb.Device):
-    stream = None
+    _carryover = _ReceiveBufferCarryover()
 
     analysis_bandwidth = attr.value.float(
         float('inf'),
@@ -35,7 +146,7 @@ class RadioDevice(lb.Device):
     )
 
     duration = attr.value.float(
-        10e-3, min=0, label='s', help='receive waveform capture duration'
+        100e-3, min=0, label='s', help='receive waveform capture duration'
     )
 
     periodic_trigger = attr.value.float(
@@ -67,24 +178,56 @@ class RadioDevice(lb.Device):
     _downsample = attr.value.float(1.0, min=0, help='backend_sample_rate/sample_rate')
 
     # these must be implemented by child classes
-    channel = attr.method.int(min=0)
+    channel = method_attr.ChannelMaybeTupleMethod(
+        cache=True,
+        contained_type=int,
+        min=0,
+        help='list of RX channel port indexes to acquire',
+    )
+    gain = method_attr.FloatMaybeTupleMethod(
+        label='dB', help='receive gain for each channel in hardware'
+    )
     center_frequency = attr.method.float(
-        min=0, label='Hz', help='RF frequency at the center of the RX baseband'
+        min=0,
+        label='Hz',
+        help='RF frequency at the center of the RX baseband for all channels',
     )
     backend_sample_rate = attr.method.float(
         min=0,
         label='Hz',
         help='sample rate before resampling',
     )
-    channel_enabled = attr.method.bool()
-    gain = attr.method.float(label='dB', help='SDR hardware gain')
+    rx_enabled = attr.method.bool()
     time_source = attr.method.str(
         only=['host', 'internal', 'external', 'gps'],
         help='time base for sample timestamps',
     )
+    rx_channel_count = attr.value.int(
+        1, sets=False, min=1, cache=True, help='number of input ports'
+    )
 
-    transient_holdoff_time = attr.value.float(
+    array_backend = attr.value.str(
+        'numpy',
+        only=('numpy', 'cupy'),
+        help='array module to use, which sets the type of compute device (numpy = cpu, cupy = gpu)',
+    )
+
+    # constants that can be adjusted by device-specific classes to tune streaming behavior
+    _stream_all_rx_channels = attr.value.bool(
+        False,
+        sets=False,
+        help='whether to stream all channels even when only one is selected',
+    )
+
+    _transient_holdoff_time = attr.value.float(
         0.0, sets=False, label='s', help='holdoff time before valid data after enable'
+    )
+
+    _transport_dtype = attr.value.str(
+        'complex64',
+        only=('int16', 'float32', 'complex64'),
+        sets=False,
+        help='buffer transport dtype',
     )
 
     @attr.property.str(sets=False, cache=True, help='unique radio hardware identifier')
@@ -97,178 +240,194 @@ class RadioDevice(lb.Device):
 
     def open(self):
         self._armed_capture: structs.RadioCapture | None = None
+        self._carryover = _ReceiveBufferCarryover(self)
 
-    def setup(self, radio_config: structs.RadioSetup):
+    def setup(self, radio_setup: structs.RadioSetup):
         """disarm acquisition and apply the given radio setup"""
 
-        if self.channel() is not None:
-            self.channel_enabled(False)
-
-        self.calibration = radio_config.calibration
-        self.periodic_trigger = radio_config.periodic_trigger
-        self.gapless_repeats = radio_config.gapless_repeats
-        self.time_sync_every_capture = radio_config.time_sync_every_capture
-        self.time_source(radio_config.time_source)
+        self.calibration = radio_setup.calibration
+        self.periodic_trigger = radio_setup.periodic_trigger
+        self.gapless_repeats = radio_setup.gapless_repeats
+        self.array_backend = radio_setup.array_backend
+        self.time_sync_every_capture = radio_setup.time_sync_every_capture
+        self.time_source(radio_setup.time_source)
 
         if not self.time_sync_every_capture:
+            self.rx_enabled(False)
             self.sync_time_source()
 
+    @lb.stopwatch('arm', logger_level='debug')
     def arm(self, capture: structs.RadioCapture):
         """stop the stream, apply a capture configuration, and start it"""
 
-        with lb.stopwatch('arm', logger_level='debug'):
-            if self.channel() is not None:
-                self.channel_enabled(False)
-
-            if iqwaveform.power_analysis.isroundmod(
-                capture.duration * capture.sample_rate, 1
-            ):
-                self.duration = capture.duration
-            else:
-                raise ValueError(
-                    f'duration {capture.duration} is not an integer multiple of sample period'
-                )
-
-            if capture.channel != self.channel():
-                self.channel(capture.channel)
-            else:
-                self.channel_enabled(False)
-
-            if self.gain() != capture.gain:
-                self.gain(capture.gain)
-
-            fs_backend, lo_offset, analysis_filter = design_capture_filter(
-                self.base_clock_rate, capture
+        if iqwaveform.power_analysis.isroundmod(
+            capture.duration * capture.sample_rate, 1
+        ):
+            self.duration = capture.duration
+        else:
+            raise ValueError(
+                f'duration {capture.duration} is not an integer multiple of sample period'
             )
 
-            nfft_out = analysis_filter.get('nfft_out', analysis_filter['nfft'])
-            downsample = analysis_filter['nfft'] / nfft_out
+        if not self.gapless_repeats:
+            self.rx_enabled(False)
 
-            if (
-                fs_backend != self.backend_sample_rate()
-                or downsample != self._downsample
-            ):
-                self.channel_enabled(False)
-                with attr.hold_attr_notifications(self):
-                    self._downsample = 1  # temporarily avoid a potential bounding error
-                self.backend_sample_rate(fs_backend)
-                self._downsample = downsample
+        if method_attr._number_if_single(capture.channel) != self.channel():
+            # TODO: support the case of multichannel -> single channel elegantly
+            self.rx_enabled(False)
+            self.channel(capture.channel)
 
-            if capture.sample_rate != self.sample_rate():
-                # in this case, it's only a post-processing (GPU resampling) change
-                self.sample_rate(capture.sample_rate)
+        if method_attr._number_if_single(capture.gain) != self.gain():
+            self.rx_enabled(False)
+            self.gain(capture.gain)
 
-            if (
-                self.periodic_trigger is not None
-                and capture.duration < self.periodic_trigger
-            ):
-                self._logger.warning(
-                    'periodic trigger duration exceeds capture duration, '
-                    'which creates a large buffer of unused samples'
-                )
-
-            if lo_offset != self.lo_offset:
-                self.lo_offset = lo_offset  # hold update on this one?
-
-            if capture.center_frequency != self.center_frequency():
-                self.channel_enabled(False)
-                self.center_frequency(capture.center_frequency)
-
-            self.analysis_bandwidth = capture.analysis_bandwidth
-
-            if self.time_sync_every_capture:
-                self.channel_enabled(False)
-                self.sync_time_source()
-
-            if not self.channel_enabled():
-                self._holdover_samples = None
-
-            self._armed_capture = capture
-            self._next_time_ns = None
-
-    def read_iq(self, capture) -> tuple['np.ndarray[np.complex64]', float]:
-        streamed_count = 0
-        awaiting_timestamp = True
-        buf_time_ns = self._next_time_ns
-        start_ns = self._next_time_ns
-
-        buf_size, _ = get_capture_buffer_sizes(self, capture, include_holdoff=True)
-        sample_count, _ = get_capture_buffer_sizes(self, capture, include_holdoff=False)
-
-        samples = np.empty((2 * buf_size,), dtype=np.float32)
-
-        if buf_time_ns is None and self._holdover_samples is not None:
-            raise ValueError('holdover samples are missing timestamp')
-
-        if self._holdover_samples is None:
-            holdover_count = 0
-        else:
-            # note: holdover_count.dtype is np.complex64, samples.dtype is np.float32
-            holdover_count = self._holdover_samples.size
-            samples[: 2 * holdover_count] = self._holdover_samples.view(samples.dtype)
-
-        holdover_size = sample_count - round(
-            capture.duration * self.backend_sample_rate()
+        fs_backend, lo_offset, analysis_filter = design_capture_filter(
+            self.base_clock_rate, capture
         )
 
-        # default holdoffs parameters, valid when we already have a clock reading
-        stft_pad, _ = _get_stft_padding(self.base_clock_rate, capture)
-        holdoff_size = stft_pad
+        if (
+            lo_offset != self.lo_offset
+            or capture.center_frequency != self.center_frequency()
+        ):
+            self.rx_enabled(False)
+            self.center_frequency(capture.center_frequency)
+            self.lo_offset = lo_offset
+
+        nfft_out = analysis_filter.get('nfft_out', analysis_filter['nfft'])
+        downsample = analysis_filter['nfft'] / nfft_out
+
+        if fs_backend != self.backend_sample_rate() or downsample != self._downsample:
+            self.rx_enabled(False)
+            with attr.hold_attr_notifications(self):
+                self._downsample = 1  # temporarily avoid a potential bounding error
+            self.backend_sample_rate(fs_backend)
+            self._downsample = downsample
+
+        if capture.sample_rate != self.sample_rate():
+            # in this case, it's only a post-processing (GPU resampling) change
+            self.rx_enabled(False)
+            self.sample_rate(capture.sample_rate)
+
+        if (
+            self.periodic_trigger is not None
+            and capture.duration < self.periodic_trigger
+        ):
+            self._logger.warning(
+                'periodic trigger duration exceeds capture duration, '
+                'which creates a large buffer of unused samples'
+            )
+
+        self.analysis_bandwidth = capture.analysis_bandwidth
+
+        self._armed_capture = capture
+
+    @lb.stopwatch('read_iq', logger_level='debug')
+    def read_iq(
+        self,
+        capture: structs.RadioCapture,
+        buffers: tuple['np.ndarray', 'np.ndarray'] = None,
+    ) -> tuple['np.ndarray[np.complex64]', float]:
+        # the return buffer
+        if buffers is None:
+            samples, stream_bufs = alloc_empty_iq(self, capture)
+        else:
+            samples, stream_bufs = buffers
+
+        # holdoffs parameters, valid when we already have a clock reading
+        stft_pad_before, _ = _get_stft_pad_size(self.base_clock_rate, capture)
+
+        # carryover from the previous acquisition
+        awaiting_timestamp = True
+        start_ns, carryover_count = self._carryover.apply(samples)
+        buf_time_ns = start_ns
+
+        # the number of holdoff samples from the end of the holdoff period
+        # to include with the returned waveform
+        included_holdoff = stft_pad_before
 
         fs = self.backend_sample_rate()
-        chunk_size = sample_count + holdover_count
-        timeout_sec = chunk_size / fs + 50e-3
-        remaining = sample_count - holdover_count
+
+        # sample counters
+        sample_count = get_channel_read_buffer_count(
+            self, capture, include_holdoff=False
+        )
+        received_count = 0
+        chunk_count = remaining = sample_count - carryover_count
+
+        if self.time_sync_every_capture:
+            self.rx_enabled(False)
+            self.sync_time_source()
+
+        if not self.rx_enabled():
+            self.rx_enabled(True)
 
         while remaining > 0:
-            if streamed_count > 0 or self.gapless_repeats:
+            if received_count > 0 or self.gapless_repeats:
                 on_overflow = 'except'
             else:
                 on_overflow = 'ignore'
 
-            request_count = min(chunk_size, remaining)
+            request_count = min(chunk_count, remaining)
 
-            if 2*(streamed_count + request_count) > samples.size:
+            if (received_count + request_count) > samples.shape[1]:
                 # this should never happen if samples are tracked and allocated properly
-                raise MemoryError(f'about to request {request_count} samples, but buffer has capacity for only {samples.size//2 - streamed_count}')
+                raise MemoryError(
+                    f'request may exceed {received_count + request_count} samples, '
+                    f'exceeding buffer capacity for {samples.size - received_count}'
+                )
 
             # Read the samples from the data buffer
             this_count, ret_time_ns = self._read_stream(
-                [samples],
-                offset=holdover_count + streamed_count,
+                stream_bufs,
+                offset=carryover_count + received_count,
                 count=request_count,
-                timeout_sec=timeout_sec,
+                timeout_sec=request_count / fs + 10e-3,
                 on_overflow=on_overflow,
             )
 
-            if 2*(this_count + streamed_count) > samples.size:
+            if (this_count + received_count) > samples.shape[1]:
                 # this should never happen
-                print(f'requested {min(chunk_size, remaining)} samples, but got {remaining}')
-                raise MemoryError(f'overfilled receive buffer by {2*(this_count + streamed_count) - samples.size}')
+                raise MemoryError(
+                    f'overfilled receive buffer by {(this_count + received_count) - samples.size}'
+                )
 
             if buf_time_ns is None:
-                # special case for the first read in the stream, since
+                # special case for the first read in the stream, because
                 # devices may not always return timestamps
                 buf_time_ns = ret_time_ns
 
             if awaiting_timestamp:
-                holdoff_size = find_trigger_holdoff(self, buf_time_ns, stft_pad=stft_pad)
-                remaining = remaining + holdoff_size
+                included_holdoff = find_trigger_holdoff(
+                    self, buf_time_ns, stft_pad_before=stft_pad_before
+                )
+                remaining = remaining + included_holdoff - stft_pad_before
 
-                start_ns = buf_time_ns + round(holdoff_size * 1e9 / fs)
+                start_ns = buf_time_ns + round(included_holdoff * 1e9 / fs)
                 awaiting_timestamp = False
 
             remaining = remaining - this_count
-            streamed_count += this_count
+            received_count += this_count
 
-        sample_offs = holdoff_size - stft_pad
-        samples = samples.view('complex64')[sample_offs: sample_offs + sample_count]
+        samples = samples.view('complex64')
+        sample_offs = included_holdoff - stft_pad_before
+        sample_span = slice(sample_offs, sample_offs + sample_count)
 
-        self._holdover_samples = samples[-holdover_size:]
-        self._next_time_ns = start_ns + round(1e9 * capture.duration)
+        unused_count = sample_count - round(capture.duration * fs)
+        self._carryover.stash(
+            samples[:, sample_span],
+            start_ns,
+            unused_sample_count=unused_count,
+            capture=capture,
+        )
 
-        return samples, start_ns
+        # it seems to be important to convert to cupy here in order
+        # to get a full view of the underlying pinned memory. cuda
+        # memory corruption has been observed when waiting until after
+        samples = _cast_iq(self, samples)
 
+        return samples[:, sample_span], start_ns
+
+    @lb.stopwatch('acquire', logger_level='debug')
     def acquire(
         self,
         capture: structs.RadioCapture,
@@ -281,31 +440,37 @@ class RadioDevice(lb.Device):
         """
         from .. import iq_corrections
 
-        with lb.stopwatch('acquire', logger_level='debug'):
-            if capture != self._armed_capture:
-                self.arm(capture)
+        # allocate (and arm the capture if necessary)
+        prep_calls = {'buffers': lb.Call(alloc_empty_iq, self, capture)}
+        iqwaveform.power_analysis.Any  # touch to work around a lazy loading bug
+        if capture != self._armed_capture:
+            prep_calls['arm'] = lb.Call(self.arm, capture)
+        buffers = lb.concurrently(**prep_calls)['buffers']
 
-            if self.channel() is None or not self.channel_enabled():
-                self.channel_enabled(True)
+        # the low-level acquisition
+        iq, time_ns = self.read_iq(capture, buffers=buffers)
+        del buffers
 
-            iq, time_ns = self.read_iq(capture)
-            time_ns = pd.Timestamp(time_ns, unit='ns')
+        if next_capture == capture and self.gapless_repeats:
+            # the one case where we leave it running
+            pass
+        else:
+            self.rx_enabled(False)
 
-            if next_capture == capture and self.gapless_repeats:
-                # the one case where we leave it running
-                pass
-            else:
-                self.channel_enabled(False)
+        if next_capture is not None and capture != next_capture:
+            self.arm(next_capture)
 
-            if next_capture is not None and next_capture != next_capture:
-                self.arm(next_capture)
+        if correction:
+            with lb.stopwatch('resample and calibrate', logger_level='debug'):
+                iq = iq_corrections.resampling_correction(
+                    iq, capture, self, overwrite_x=True
+                )
 
-            if correction:
-                with lb.stopwatch('resampling', logger_level='debug'):
-                    iq = iq_corrections.resampling_correction(iq, capture, self)
+        acquired_capture = msgspec.structs.replace(
+            capture, start_time=pd.Timestamp(time_ns, unit='ns')
+        )
 
-            acquired_capture = structs.copy_struct(capture, start_time=time_ns)
-            return iq, acquired_capture
+        return iq, acquired_capture
 
     def _read_stream(
         self, buffers, offset, count, timeout_sec, *, on_overflow='except'
@@ -320,9 +485,6 @@ class RadioDevice(lb.Device):
         self, cls=structs.RadioCapture
     ) -> structs.RadioCapture | None:
         """generate the currently armed capture configuration for the specified channel"""
-
-        if self.channel() is None:
-            return None
 
         if self.lo_offset == 0:
             lo_shift = 'none'
@@ -344,25 +506,38 @@ class RadioDevice(lb.Device):
             lo_shift=lo_shift,
         )
 
+    def get_array_namespace(self: RadioDevice):
+        if self.array_backend == 'cupy':
+            import cupy
 
-def find_trigger_holdoff(radio: RadioDevice, start_time_ns: int, stft_pad: int = 0):
+            return cupy
+        elif self.array_backend == 'numpy':
+            import numpy
+
+            return numpy
+
+
+def find_trigger_holdoff(
+    radio: RadioDevice, start_time_ns: int, stft_pad_before: int = 0
+):
     sample_rate = radio.backend_sample_rate()
-    periodic_trigger = radio.periodic_trigger
+    min_holdoff = stft_pad_before
 
+    # transient holdoff if we've rearmed as indicated by the presence of carryover samples
+    if radio._carryover.start_time_ns is None:
+        min_holdoff = min_holdoff + round(radio._transient_holdoff_time * sample_rate)
+
+    periodic_trigger = radio.periodic_trigger
     if periodic_trigger in (0, None):
-        return 0
+        return min_holdoff
 
     periodic_trigger_ns = round(periodic_trigger * 1e9)
 
     # float rounding errors cause problems here; evaluate based on the 1-ns resolution
     excess_time_ns = start_time_ns % periodic_trigger_ns
     holdoff_ns = (periodic_trigger_ns - excess_time_ns) % periodic_trigger_ns
-
     holdoff = round(holdoff_ns / 1e9 * sample_rate)
 
-    # wait long enough to meet the fulfill the radio's transient time and any
-    # needed stft padding samples
-    min_holdoff = round(radio.transient_holdoff_time * sample_rate) + stft_pad
     if holdoff < min_holdoff:
         periodic_trigger_samples = round(periodic_trigger * sample_rate)
         holdoff += (
@@ -414,7 +589,7 @@ def _design_capture_filter(
         raise ValueError('lo_shift requires host_resample=True')
     elif base_clock_rate < capture.sample_rate:
         raise ValueError(
-            f'upsampling above {base_clock_rate/1e6:f} MHz requires host_resample=True'
+            f'upsampling above {base_clock_rate / 1e6:f} MHz requires host_resample=True'
         )
     else:
         # use the SDR firmware to implement the desired sample rate
@@ -438,36 +613,34 @@ def design_capture_filter(
 
 
 def needs_stft(analysis_filter: dict, capture: structs.RadioCapture):
+    if np.isfinite(capture.analysis_bandwidth):
+        return True
     is_resample = analysis_filter['nfft'] != analysis_filter['nfft_out']
-    return analysis_filter and (
-        np.isfinite(capture.analysis_bandwidth)
-        or (is_resample and capture.host_resample)
-    )
+    return is_resample and capture.host_resample
 
 
 @functools.lru_cache(30000)
-def _get_stft_padding(
+def _get_stft_pad_size(
     base_clock_rate: float, capture: structs.RadioCapture
 ) -> tuple[int, int]:
     """returns the padding before and after a waveform to achieve an integral number of FFT windows"""
-    samples_out = round(capture.duration * capture.sample_rate)
-
     _, _, analysis_filter = design_capture_filter(base_clock_rate, capture)
+    if not needs_stft(analysis_filter, capture):
+        return (0, 0)
+
     nfft = analysis_filter['nfft']
 
+    samples_out = round(capture.duration * capture.sample_rate)
     min_samples_in = ceil(samples_out * nfft / analysis_filter['nfft_out'])
 
     # round up to an integral number of FFT windows
     samples_in = ceil(min_samples_in / nfft) * nfft + nfft
 
-    if needs_stft(analysis_filter, capture):
-        return nfft // 2, nfft // 2 + (samples_in - min_samples_in)
-    else:
-        return 0, 0
+    return nfft // 2, nfft // 2 + (samples_in - min_samples_in)
 
 
 @functools.lru_cache(30000)
-def _get_capture_buffer_sizes_cached(
+def _get_input_buffer_count_cached(
     base_clock_rate: float,
     periodic_trigger: float | None,
     capture: structs.RadioCapture,
@@ -486,47 +659,111 @@ def _get_capture_buffer_sizes_cached(
     else:
         sample_rate = capture.sample_rate
 
-    if capture.host_resample and needs_stft(analysis_filter, capture):
+    if needs_stft(analysis_filter, capture):
         nfft = analysis_filter['nfft']
-
-        pad_before, pad_after = _get_stft_padding(base_clock_rate, capture)
-
+        pad_before, pad_after = _get_stft_pad_size(base_clock_rate, capture)
         min_samples_in = ceil(samples_out * nfft / analysis_filter['nfft_out'])
-
         samples_in = min_samples_in + (pad_before + pad_after)
-
-        samples_out = iqwaveform.fourier._istft_buffer_size(
-            samples_in,
-            window=analysis_filter['window'],
-            nfft_out=analysis_filter['nfft_out'],
-            nfft=nfft,
-            extend=True,
-        )
     else:
         samples_in = round(capture.sample_rate * capture.duration)
 
     if include_holdoff:
         # accommmodate holdoff samples as needed for the periodic trigger and transient holdoff durations
         samples_in += ceil(
-            sample_rate * (transient_holdoff + 2*(periodic_trigger or 0))
+            sample_rate * (transient_holdoff + 2 * (periodic_trigger or 0))
         )
 
-    return samples_in, samples_out
+    return samples_in
 
 
-def get_capture_buffer_sizes(
+def get_channel_resample_buffer_count(radio: RadioDevice, capture):
+    _, _, analysis_filter = design_capture_filter(radio.base_clock_rate, capture)
+
+    if capture.host_resample and needs_stft(analysis_filter, capture):
+        input_size = get_channel_read_buffer_count(radio, capture, True)
+        buf_size = iqwaveform.fourier._istft_buffer_size(
+            input_size,
+            window=analysis_filter['window'],
+            nfft_out=analysis_filter['nfft_out'],
+            nfft=analysis_filter['nfft'],
+            extend=True,
+        )
+    else:
+        buf_size = round(capture.duration * capture.sample_rate)
+
+    return buf_size
+
+
+def get_channel_read_buffer_count(
     radio: RadioDevice, capture=None, include_holdoff=False
-) -> tuple[int, int]:
+) -> int:
     if capture is None:
         capture = radio.get_capture_struct()
 
-    return _get_capture_buffer_sizes_cached(
+    return _get_input_buffer_count_cached(
         base_clock_rate=radio.base_clock_rate,
         periodic_trigger=radio.periodic_trigger,
         capture=capture,
-        transient_holdoff=radio.transient_holdoff_time,
+        transient_holdoff=radio._transient_holdoff_time,
         include_holdoff=include_holdoff,
     )
+
+
+@lb.stopwatch('allocate acquisition buffer', logger_level='debug')
+def alloc_empty_iq(
+    radio: RadioDevice, capture: structs.RadioCapture
+) -> tuple[np.ndarray, np.ndarray]:
+    """allocate a buffer of IQ return values.
+
+    Returns:
+        The buffer and the list of buffer references for streaming.
+    """
+    count = get_channel_read_buffer_count(radio, capture, include_holdoff=True)
+
+    if radio.array_backend == 'cupy':
+        try:
+            util.configure_cupy()
+            from cupyx import empty_pinned as empty
+        except ModuleNotFoundError as ex:
+            raise RuntimeError(
+                'could not import the configured array backend, "cupy"'
+            ) from ex
+    else:
+        empty = np.empty
+
+    buf_dtype = np.dtype(radio._transport_dtype)
+
+    # fast reinterpretation between dtypes requires the waveform to be in the last axis
+    channels = capture.channel
+    if isinstance(channels, numbers.Number):
+        channels = (channels,)
+    else:
+        channels = tuple(channels)
+    samples = empty((len(channels), count), dtype=np.complex64)
+
+    # build the list of channel buffers, including references to the throwaway
+    # in case of radio._stream_all_rx_channels
+    if radio._stream_all_rx_channels and len(channels) != radio.rx_channel_count:
+        if radio._transport_dtype == 'complex64':
+            # a throwaway buffer for samples that won't be returned
+            extra_count = count
+        else:
+            extra_count = 2 * count
+
+        extra = np.empty(extra_count, dtype=buf_dtype)
+    else:
+        extra = None
+
+    buffers = []
+    i = 0
+    for channel in range(radio.rx_channel_count):
+        if channel in channels:
+            buffers.append(samples[i, :].view(buf_dtype))
+            i += 1
+        elif radio._stream_all_rx_channels:
+            buffers.append(extra)
+
+    return samples, buffers
 
 
 def _list_radio_classes(subclass=RadioDevice):
@@ -542,7 +779,7 @@ def _list_radio_classes(subclass=RadioDevice):
     return clsmap
 
 
-def find_radio_cls_by_name(
+def _find_radio_cls_helper(
     name: str, parent_cls: type[RadioDevice] = RadioDevice
 ) -> RadioDevice:
     """returns a list of radio subclasses that have been imported"""
@@ -555,10 +792,3 @@ def find_radio_cls_by_name(
         raise AttributeError(
             f'invalid driver {repr(name)}. valid names: {tuple(mapping.keys())}'
         )
-
-
-def is_same_resource(r1: str | dict, r2: str | dict):
-    if hasattr(r1, 'items'):
-        return set(r1.items()) == set(r2.items())
-    else:
-        return r1 == r2

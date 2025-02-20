@@ -1,6 +1,9 @@
+import array_api_compat
+import contextlib
 import importlib
 import importlib.util
 import sys
+import threading
 
 
 def lazy_import(module_name: str, package=None):
@@ -26,3 +29,48 @@ def lazy_import(module_name: str, package=None):
     sys.modules[module_name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def pinned_array_as_cupy(x, stream=None):
+    import cupy as cp
+
+    out = cp.empty_like(x)
+    out.data.copy_from_host_async(x.ctypes.data, x.data.nbytes, stream=stream)
+    return out
+
+
+def except_on_low_memory(threshold_bytes=500_000_000):
+    try:
+        import cupy as cp
+    except ModuleNotFoundError:
+        return
+    import psutil
+
+    mempool = cp.get_default_memory_pool()
+
+    if psutil.virtual_memory().available >= threshold_bytes:
+        return
+
+    raise MemoryError('too little memory to proceed')
+
+
+def free_cupy_mempool():
+    import cupy as cp
+
+    mempool = cp.get_default_memory_pool()
+    if mempool is not None:
+        mempool.free_all_blocks()
+
+
+_compute_lock = threading.RLock()
+
+
+@contextlib.contextmanager
+def compute_lock(array=None):
+    is_cupy = array_api_compat.is_cupy_array(array)
+    get_lock = array is None or is_cupy
+    if get_lock:
+        _compute_lock.acquire()
+    yield
+    if get_lock:
+        _compute_lock.release()

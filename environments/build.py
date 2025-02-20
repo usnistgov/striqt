@@ -2,6 +2,7 @@
 
 from ruamel.yaml import YAML  # use of ruamel.yaml preserves comments
 import sys
+import re
 from pathlib import Path
 from functools import lru_cache
 
@@ -16,8 +17,23 @@ def read_layer(recipe_path, layer_relative_path):
     return yaml.load(open(recipe_path.parent / layer_relative_path, 'r'))
 
 
+def package_name(s):
+    result = re.split(r'\ *\~*[\@\=\>\<\ ]+', s, maxsplit=1)[0]
+    if result in 'python-freethreading':
+        return 'python'
+    else:
+        return result
+
+
 def ordered_merge(l1, l2):
     return list(dict.fromkeys(l1 + l2).keys())
+
+
+def ordered_dependency_merge(l1, l2):
+    # avoid duplicating a specific package name
+    d1 = {package_name(s): s for s in l1}
+    d2 = {package_name(s): s for s in l2}
+    return list({**d1, **d2}.values())
 
 
 def pop_pip(dependency_list):
@@ -50,12 +66,12 @@ for recipe_path in recipe_paths:
 
         new_pip = pop_pip(layer['dependencies'])
 
-        env['dependencies'] = ordered_merge(
+        env['dependencies'] = ordered_dependency_merge(
             env.get('dependencies', []), layer.get('dependencies', [])
         )
 
         if new_pip is not None:
-            env_pip = ordered_merge(env_pip, new_pip)
+            env_pip = ordered_dependency_merge(env_pip, new_pip)
 
     if len(env_pip) > 0:
         env['dependencies'].append({'pip': env_pip})

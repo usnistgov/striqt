@@ -5,11 +5,10 @@ import typing
 
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
-from ._channel_power_time_series import PowerDetectorCoords, PowerDetectorAxis
-from ._channel_power_ccdf import (
-    ChannelPowerCoords,
-    ChannelPowerBinAxis,
-    make_power_bins,
+from ._channel_power_time_series import (
+    PowerDetectorCoords,
+    PowerDetectorAxis,
+    channel_power_time_series,
 )
 from ..api.registry import register_xarray_measurement
 from ..api import structs, util
@@ -20,6 +19,38 @@ if typing.TYPE_CHECKING:
 else:
     iqwaveform = util.lazy_import('iqwaveform')
     np = util.lazy_import('numpy')
+
+
+@functools.lru_cache
+def make_power_bins(power_low, power_high, power_resolution, xp=np):
+    """generate the list of power bins"""
+    ret = xp.arange(power_low, power_high, power_resolution)
+    if power_high - ret[-1] > power_resolution / 2:
+        ret = xp.pad(ret, [[0, 1]], mode='constant', constant_values=power_high).copy()
+    return ret
+
+
+ChannelPowerBinAxis = typing.Literal['channel_power_bin']
+
+
+@dataclasses.dataclass
+class ChannelPowerCoords:
+    data: Data[ChannelPowerBinAxis, np.float32]
+    standard_name: Attr[str] = 'Channel power'
+    units: Attr[str] = 'dBm'
+
+    @staticmethod
+    @functools.lru_cache
+    def factory(
+        capture: structs.Capture,
+        *,
+        power_low: float,
+        power_high: float,
+        power_resolution: float,
+        **_,
+    ) -> dict[str, np.ndarray]:
+        """returns a dictionary of coordinate values, keyed by axis dimension name"""
+        return make_power_bins(power_low, power_high, power_resolution)
 
 
 @functools.lru_cache
@@ -72,7 +103,6 @@ def channel_power_histogram(
     else:
         xp = iqwaveform.util.array_namespace(iq)
 
-    dtype = xp.finfo(iq.dtype).dtype
     bin_edges = make_power_histogram_bin_edges(
         power_low=power_low,
         power_high=power_high,
@@ -80,17 +110,26 @@ def channel_power_histogram(
         xp=xp,
     )
 
-    kws = {'iq': iq, 'Ts': 1 / capture.sample_rate, 'Tbin': detector_period}
+    power_dB, _ = channel_power_time_series(
+        iq,
+        capture,
+        power_detectors=power_detectors,
+        detector_period=detector_period,
+        as_xarray=False,
+    )
+
+    count_dtype = xp.finfo(iq.dtype).dtype
 
     data = []
-    for detector in power_detectors:
-        if detector_period is None:
-            power_dB = iqwaveform.envtodB(iq)
-        else:
-            power = iqwaveform.iq_to_bin_power(kind=detector, **kws).astype('float32')
-            power_dB = iqwaveform.powtodB(power, out=power)
-        counts, _ = xp.histogram(power_dB, bin_edges)
-        data.append(counts.astype(dtype) / xp.sum(counts))
+    for i_chan in range(power_dB.shape[0]):
+        counts = []
+        for i_detector in range(power_dB.shape[1]):
+            hist = xp.histogram(power_dB[i_chan, i_detector], bin_edges)[0]
+            counts.append(hist)
+        counts = xp.asarray(counts, dtype=count_dtype)
+        data.append(counts / xp.sum(counts))
+
+    data = xp.asarray(data, dtype=count_dtype)
 
     metadata = {
         'detector_period': detector_period,

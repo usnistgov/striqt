@@ -1,13 +1,14 @@
+from __future__ import annotations
+
 import time
-from functools import wraps
+import numbers
 import typing
 
 import labbench as lb
 from labbench import paramattr as attr
-import msgspec
 
-from .base import RadioDevice, design_capture_filter
-from .. import structs
+from . import base, method_attr
+from .. import structs, captures
 
 
 if typing.TYPE_CHECKING:
@@ -25,48 +26,7 @@ else:
 channel_kwarg = attr.method_kwarg.int('channel', min=0, help='hardware port number')
 
 
-def _verify_channel_setting(func: callable) -> callable:
-    # TODO: fix typing
-    @wraps(func)
-    def wrapper(self, *args, **kws):
-        if not self.isopen:
-            name = getattr(func, '__name__', repr(func))
-            raise RuntimeError(f'open radio before calling {name}')
-        if self.channel() is None:
-            name = getattr(func, '__name__', repr(func))
-            raise RuntimeError(f'set {self}.channel before calling {name}')
-
-        return func(self, *args, **kws)
-
-    return wrapper
-
-
-def _verify_channel_for_getter(func: callable) -> callable:
-    # TODO: fix typing
-    @wraps(func)
-    def wrapper(self):
-        if self.channel() is None:
-            name = getattr(func, '__name__', repr(func))
-            raise RuntimeError(f'set {self}.channel before calling {name}')
-        else:
-            return func(self)
-
-    return wrapper
-
-
-def _verify_channel_for_setter(func: callable) -> callable:
-    # TODO: fix typing
-    @wraps(func)
-    def wrapper(self, argument):
-        if self.channel() is None:
-            raise ValueError(f'set {self}.channel first')
-        else:
-            return func(self, argument)
-
-    return wrapper
-
-
-def get_stream_result(
+def validate_stream_result(
     sr: SoapySDR.StreamResult, on_overflow='except'
 ) -> tuple[int, int]:
     """track the number of samples received and remaining in a read stream.
@@ -92,7 +52,7 @@ def get_stream_result(
         raise IOError(f'{SoapySDR.errToStr(sr.ret)} (error code {sr.ret})')
 
 
-class SoapyRadioDevice(RadioDevice):
+class SoapyRadioDevice(base.RadioDevice):
     """single-channel sensor waveform acquisition through SoapySDR and pre-processed with iqwaveform"""
 
     resource: dict = attr.value.dict(
@@ -105,81 +65,37 @@ class SoapyRadioDevice(RadioDevice):
         help='configure behavior on receive buffer overflow',
     )
 
-    @attr.method.float(
-        min=0,
-        cache=True,
-        label='Hz',
-        help='sample rate before resampling',
+    _rx_enable_delay = attr.value.float(
+        None, sets=False, label='s', help='channel activation wait time'
     )
-    @_verify_channel_for_getter
+
+    _transport_dtype = attr.value.str('int16', inherit=True)
+
+    @attr.method.float(inherit=True)
     def backend_sample_rate(self):
-        return self.backend.getSampleRate(SoapySDR.SOAPY_SDR_RX, self.channel())
+        channels = self.channel()
+        if isinstance(channels, numbers.Number):
+            channels = (channels,)
+        for channel in channels:
+            return self.backend.getSampleRate(SoapySDR.SOAPY_SDR_RX, channel)
 
     @backend_sample_rate.setter
-    @_verify_channel_for_setter
     def _(self, backend_sample_rate):
-        mcr = self.base_clock_rate
-        if np.isclose(backend_sample_rate, mcr):
+        rate = self.base_clock_rate
+        if np.isclose(backend_sample_rate, rate):
             # avoid exceptions due to rounding error
-            backend_sample_rate = mcr
+            backend_sample_rate = rate
 
-        self.backend.setSampleRate(
-            SoapySDR.SOAPY_SDR_RX, self.channel(), backend_sample_rate
-        )
-
-    @attr.method.int(
-        min=0,
-        allow_none=True,
-        cache=True,
-        help='RX input port index',
-    )
-    def channel(self):
-        # return none until this is set, then the cached value is returned
-        return None
-
-    @channel.setter
-    def _(self, channel: int):
-        if self.channel() == channel:
-            return
-
-        if channel is None and self._rx_stream is not None:
-            self.channel_enabled(False)
-        else:
-            if getattr(self, '_rx_stream', None) is not None:
-                self.backend.closeStream(self._rx_stream)
-
-            with lb.stopwatch('stream setup', logger_level='debug'):
-                self._rx_stream = self.backend.setupStream(
-                    SoapySDR.SOAPY_SDR_RX, SoapySDR.SOAPY_SDR_CF32, [channel]
-                )
-
-    @attr.method.float(
-        min=0,
-        label='Hz',
-        help='direct conversion LO frequency of the RX',
-    )
-    @_verify_channel_for_getter
-    def lo_frequency(self):
-        # there is only one RX LO, shared by both channels
-        ret = self.backend.getFrequency(SoapySDR.SOAPY_SDR_RX, self.channel())
-        return ret
-
-    @lo_frequency.setter
-    @_verify_channel_for_setter
-    def _(self, center_frequency):
-        # there is only one RX LO, shared by both channels
-        self.backend.setFrequency(
-            SoapySDR.SOAPY_SDR_RX, self.channel(), center_frequency
-        )
-
-    center_frequency = lo_frequency.corrected_from_expression(
-        lo_frequency + RadioDevice.lo_offset,
-        help='RF frequency at the center of the analysis bandwidth',
-        label='Hz',
-    )
+        channels = self.channel()
+        if isinstance(channels, numbers.Number):
+            channels = (channels,)
+        for channel in channels:
+            self.backend.setSampleRate(
+                SoapySDR.SOAPY_SDR_RX, channel, backend_sample_rate
+            )
 
     sample_rate = backend_sample_rate.corrected_from_expression(
-        backend_sample_rate / RadioDevice._downsample,
+        backend_sample_rate / base.RadioDevice._downsample,
         label='Hz',
         help='sample rate of acquired waveform',
     )
@@ -189,9 +105,71 @@ class SoapyRadioDevice(RadioDevice):
         """the self-reported "actual" sample rate of the radio"""
         return self.backend.getSampleRate(SoapySDR.SOAPY_SDR_RX, 0) / self._downsample
 
+    @lb.stopwatch('stream initialization', logger_level='debug')
+    def _setup_rx_stream(self, channels):
+        if self._transport_dtype == 'int16':
+            soapy_type = SoapySDR.SOAPY_SDR_CS16
+        elif self._transport_dtype == 'float32':
+            soapy_type = SoapySDR.SOAPY_SDR_CF32
+        else:
+            raise ValueError(f'unsupported transport type {self._transport_type}')
+        self._rx_stream = self.backend.setupStream(
+            SoapySDR.SOAPY_SDR_RX, soapy_type, list(channels)
+        )
+
+    @method_attr.ChannelMaybeTupleMethod(inherit=True)
+    def channel(self):
+        # return none until this is set, then the cached value is returned
+        return 0
+
+    @channel.setter
+    def _(self, channels: tuple[int, ...] | None):
+        if self._stream_all_rx_channels:
+            # in this case, the stream is controlled only on open
+            return
+
+        elif getattr(self, '_rx_stream', None) is not None:
+            if self.channel() == channels:
+                # already set up
+                return
+            else:
+                self.rx_enabled(False)
+                self.backend.closeStream(self._rx_stream)
+
+        # if we make it this far, we need to build and enable the RX stream
+        self._setup_rx_stream(channels)
+
+    @attr.method.float(
+        min=0,
+        label='Hz',
+        help='direct conversion LO frequency of the RX',
+    )
+    def lo_frequency(self):
+        # there is only one RX LO, shared by both channels
+        channels = self.channel()
+        if isinstance(channels, numbers.Number):
+            channels = (channels,)
+        for channel in channels:
+            ret = self.backend.getFrequency(SoapySDR.SOAPY_SDR_RX, channel)
+            return ret
+
+    @lo_frequency.setter
+    def _(self, center_frequency):
+        # there is only one RX LO, shared by both channels
+        channels = self.channel()
+        if isinstance(channels, numbers.Number):
+            channels = (channels,)
+        for channel in channels:
+            self.backend.setFrequency(SoapySDR.SOAPY_SDR_RX, channel, center_frequency)
+
+    center_frequency = lo_frequency.corrected_from_expression(
+        lo_frequency + base.RadioDevice.lo_offset,
+        help='RF frequency at the center of the analysis bandwidth',
+        label='Hz',
+    )
+
     @attr.method.str(inherit=True, sets=True, gets=True)
     def time_source(self):
-        # there is only one RX LO, shared by both channels
         backend_result = self.backend.getTimeSource()
         if backend_result == 'internal' and self.on_overflow == 'log':
             return 'host'
@@ -211,37 +189,46 @@ class SoapyRadioDevice(RadioDevice):
             self.backend.setTimeSource(time_source)
             self.on_overflow = 'except'
 
-    @attr.method.bool(cache=True)
-    def channel_enabled(self):
-        # due to cache=True, this is only called at most once, if the first access is a set.
-        # the default in this condition is then False
+    @attr.method.bool(cache=True, inherit=True)
+    def rx_enabled(self):
+        # with cache=True, this behaves as the default before the first set
         return False
 
-    @channel_enabled.setter
-    @_verify_channel_for_setter
+    @rx_enabled.setter
     def _(self, enable: bool):
-        if enable == self.channel_enabled():
+        if enable == self.rx_enabled():
             return
 
         if enable:
-            self.backend.activateStream(
-                self._rx_stream,
-                flags=SoapySDR.SOAPY_SDR_HAS_TIME,
-                # timeNs=self.backend.getHardwareTime('now'),
-            )
-        else:
-            if self._rx_stream is not None:
-                self.backend.deactivateStream(self._rx_stream)
+            delay = self._rx_enable_delay
+            kws = {'flags': SoapySDR.SOAPY_SDR_HAS_TIME}
 
-    @attr.method.float(label='dB', help='SDR hardware gain')
-    @_verify_channel_for_getter
+            if delay is not None:
+                timeNs = self.backend.getHardwareTime('now') + round(delay * 1e9)
+                kws['timeNs'] = timeNs
+
+            self.backend.activateStream(self._rx_stream, **kws)
+
+        elif self._rx_stream is not None:
+            self.backend.deactivateStream(self._rx_stream)
+
+    @method_attr.FloatMaybeTupleMethod(inherit=True)
     def gain(self):
-        return self.backend.getGain(SoapySDR.SOAPY_SDR_RX, self.channel())
+        channels = self.channel()
+        if isinstance(channels, numbers.Number):
+            channels = (channels,)
+        values = [self.backend.getGain(SoapySDR.SOAPY_SDR_RX, c) for c in channels]
+        return method_attr._number_if_single(tuple(values))
 
     @gain.setter
-    @_verify_channel_for_setter
-    def _(self, gain: float):
-        self.backend.setGain(SoapySDR.SOAPY_SDR_RX, self.channel(), gain)
+    def _(self, gains: float | tuple[float, ...]):
+        channels, gains = captures.broadcast_to_channels(
+            self.channel(), self.channel(), gains
+        )
+
+        for channel, gain in zip(channels, gains):
+            self._logger.debug(f'set channel {channel} gain: {gain} dB')
+            self.backend.setGain(SoapySDR.SOAPY_SDR_RX, channel, gain)
 
     @attr.method.float(label='dB', help='SDR TX hardware gain')
     @channel_kwarg
@@ -251,28 +238,24 @@ class SoapyRadioDevice(RadioDevice):
         else:
             self.backend.setGain(SoapySDR.SOAPY_SDR_TX, channel, gain)
 
+    @lb.stopwatch('soapy radio backend opened')
     def open(self):
-        class _SoapySDRDevice(SoapySDR.Device):
-            def close(self):
-                if SoapySDR._SoapySDR is None:
-                    return
-                else:
-                    super().close()
-
         if self.resource:
             # prevent race conditions in threaded accesses to the Soapy driver
-            self.backend = _SoapySDRDevice(self.resource)
+            self.backend = SoapySDR.Device(dict(self.resource))
         else:
-            self.backend = _SoapySDRDevice()
-
-        self._logger.info(f'opened with {self.backend.getDriverKey()}')
+            self.backend = SoapySDR.Device()
 
         self._post_connect()
 
-        for channel in 0, 1:
+        channels = list(range(self.rx_channel_count))
+        for channel in channels:
             self.backend.setGainMode(SoapySDR.SOAPY_SDR_RX, channel, False)
-        # self.channel(0)
-        # self.channel_enabled(False)
+
+        if self._stream_all_rx_channels:
+            self._setup_rx_stream(channels)
+        else:
+            self._setup_rx_stream(self.channels())
 
     def _post_connect(self):
         pass
@@ -281,18 +264,19 @@ class SoapyRadioDevice(RadioDevice):
     def base_clock_rate(self):
         return type(self).backend_sample_rate.max
 
-    @_verify_channel_setting
     def _read_stream(
         self, buffers, offset, count, timeout_sec, *, on_overflow='except'
     ) -> tuple[int, int]:
-        # Read the samples from the data buffer
+        total_timeout = self._rx_enable_delay + timeout_sec + 0.5
+
         rx_result = self.backend.readStream(
             self._rx_stream,
             [buf[offset * 2 :] for buf in buffers],
             count,
-            timeoutUs=int(timeout_sec * 1e6),
+            timeoutUs=round(total_timeout * 1e6),
         )
-        return get_stream_result(rx_result, on_overflow=on_overflow)
+
+        return validate_stream_result(rx_result, on_overflow=on_overflow)
 
     def sync_time_source(self):
         if self.time_source() in ('internal', 'host'):
@@ -308,14 +292,13 @@ class SoapyRadioDevice(RadioDevice):
     def _sync_to_external_time_source(self):
         # We first wait for a PPS transition to avoid race conditions involving
         # applying the time of the next PPS
-        with lb.stopwatch('synchronize sample time to pps'):
-            init_pps_time = self.backend.getHardwareTime('pps')
-            start_time = time.perf_counter()
-            while init_pps_time == self.backend.getHardwareTime('pps'):
-                if time.perf_counter() - start_time > 1.5:
-                    raise RuntimeError('no pps input detected for external time source')
-                else:
-                    time.sleep(10e-3)
+        init_pps_time = self.backend.getHardwareTime('pps')
+        start_time = time.perf_counter()
+        while init_pps_time == self.backend.getHardwareTime('pps'):
+            if time.perf_counter() - start_time > 1.5:
+                raise RuntimeError('no pps input detected for external time source')
+            else:
+                time.sleep(10e-3)
 
         # PPS transition occurred, should be safe to snag system time and apply it
         sys_time_now = time.time()
@@ -351,7 +334,7 @@ class SoapyRadioDevice(RadioDevice):
             if getattr(next_capture, field) != getattr(current, field):
                 return True
 
-        next_backend_sample_rate = design_capture_filter(
+        next_backend_sample_rate = base.design_capture_filter(
             self.base_clock_rate, next_capture
         )[2]['fs']
         if next_backend_sample_rate != self.backend_sample_rate():
@@ -364,15 +347,19 @@ class SoapyRadioDevice(RadioDevice):
             return
 
         if (
-            SoapySDR._SoapySDR is None
+            SoapySDR is None
+            or SoapySDR._SoapySDR is None
             or SoapySDR._SoapySDR.Device_deactivateStream is None
+            or SoapySDR.Device is None
         ):
-            # occurs sometimes when soapy's underlying libraries
-            # have been deconstructed too far to proceed
+            # soapy's underlying libraries have been deconstructed
+            # too far to proceed
             return
 
+        self.backend.__del__ = lambda: None
+
         try:
-            self.channel_enabled(False)
+            self.rx_enabled(False)
         except ValueError:
             # channel not yet set
             pass

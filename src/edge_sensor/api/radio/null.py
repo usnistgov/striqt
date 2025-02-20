@@ -3,8 +3,9 @@ import typing
 import labbench as lb
 from labbench import paramattr as attr
 
-from . import base
-from ..util import import_cupy_with_fallback, lazy_import
+from . import base, method_attr
+from .. import structs
+from ..util import lazy_import
 
 if typing.TYPE_CHECKING:
     import pandas as pd
@@ -24,20 +25,17 @@ class NullSource(base.RadioDevice):
 
     _inbuf = None
 
-    transient_holdoff_time: float = attr.value.float(0.0, sets=True, inherit=True)
+    _transient_holdoff_time: float = attr.value.float(0.0, sets=True, inherit=True)
+    _transport_dtype = attr.value.str('complex64', inherit=True)
+    rx_channel_count: int = attr.value.int(2, cache=True, help='number of input ports')
 
-    @attr.method.int(
-        min=0,
-        allow_none=True,
-        cache=True,
-        help='RX input port index',
-    )
+    @method_attr.ChannelMaybeTupleMethod(inherit=True)
     def channel(self):
         # return none until this is set, then the cached value is returned
-        return None
+        return tuple()
 
     @channel.setter
-    def _(self, channel: int):
+    def _(self, channels: int):
         pass
 
     @attr.method.float(
@@ -96,20 +94,26 @@ class NullSource(base.RadioDevice):
         pass
 
     @attr.method.bool(sets=True, gets=True)
-    def channel_enabled(self):
-        return self.backend.get('channel_enabled', False)
+    def rx_enabled(self):
+        return self.backend.get('rx_enabled', False)
 
-    @channel_enabled.setter
+    @rx_enabled.setter
     def _(self, enable: bool):
-        if enable == self.channel_enabled():
+        if enable == self.rx_enabled():
             return
         if enable:
-            self.backend['channel_enabled'] = True
+            self.backend['rx_enabled'] = True
         else:
-            self.backend['channel_enabled'] = False
+            self.backend['rx_enabled'] = False
             self.reset_sample_counter()
 
-    @attr.method.float(label='dB', help='SDR hardware gain')
+    def setup(self, setup: structs.RadioSetup):
+        super().setup(setup)
+
+        if setup._rx_channel_count is not None:
+            self.rx_channel_count = setup._rx_channel_count
+
+    @method_attr.FloatMaybeTupleMethod(inherit=True)
     def gain(self):
         return self.backend.setdefault('gain', 0)
 
@@ -149,26 +153,15 @@ class NullSource(base.RadioDevice):
             self.base_clock_rate, capture
         )
         sample_time_offset = -analysis_filter['nfft'] // 2
+        fs = float(self.backend_sample_rate())
 
         timestamp_ns = (
             1_000_000_000 * (self._samples_elapsed - sample_time_offset)
-        ) / float(self.backend_sample_rate())
-
-        for channel, buf in zip([self.channel], buffers):
-            values = self.get_waveform(
-                count,
-                self._samples_elapsed,
-                channel=channel,
-                xp=getattr(self, 'xp', np),
-            )
-            buf[2 * offset : 2 * (offset + count)] = values.view('float32')
+        ) / fs
 
         self._samples_elapsed += count
 
         return count, round(timestamp_ns)
-
-    def get_waveform(self, count, start_index: int, *, channel: int = 0, xp):
-        return xp.empty(count, dtype='complex64')
 
     def reset_sample_counter(self):
         self._samples_elapsed = 0

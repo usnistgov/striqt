@@ -95,12 +95,20 @@ defaults:
   # RF Center frequency (Hz)
   center_frequency: 3710e6
 
-  # Channel index, e.g., 0 -> RX1, 1 -> RX2
+  # A channel index, or list of channel indexes for multichannel acquisition
+  # Examples:
+  #    0 # for RX1
+  #    [0,1] # for both RX1 and RX2
   channel: 0
 
-  # hardware gain setting (dB)
+  # Hardware RX gain setting, or a list of gain settings for each channel matching the
+  # length of channel (above)
+  #
   # Range is hardware-dependent - see the gain limits specified by
   #   src/edge_sensor/radio/*.py
+  # Examples:
+  #    -10 # apply -10 dB gain to all channels
+  #    [-10, 0] # -10 dB on RX1 and 0 dB on RX2
   gain: -10 # dB
 
   # acquisition duration (s)
@@ -153,22 +161,22 @@ captures:
   - center_frequency: 3750e6 # Hz
     analysis_bandwidth: 100e6 # Hz
     sample_rate: 153.6e6 # Hz
-    gain: 0 # dB
+    gain: [0] # dB
 
   - center_frequency: 3830e6 # Hz
     analysis_bandwidth: 60e6 # Hz
     sample_rate: 92.16e6 # Hz
-    gain: 0 # dB
+    gain: [0] # dB
 
   - center_frequency: 3900e6 # Hz
     analysis_bandwidth: 80e6 # Hz
     sample_rate: 122.88e6 # Hz
-    gain: 0 # dB
+    gain: [0] # dB
 
   - center_frequency: 3960e6 # Hz
     sample_rate: 61.44e6 # Hz
     analysis_bandwidth: 40e6 # Hz
-    gain: 0 # dB
+    gain: [0] # dB
 
 
 # Specify the output analyses performed for each capture.
@@ -194,18 +202,22 @@ channel_analysis:
     cellular_cyclic_autocorrelation:
         # evaluate for the following cellular SCS
         subcarrier_spacings:
-        - 15e3
-        - 30e3
-        - 60e3
+        - 15000
+        - 30000
+        - 60000
+
+        # evaluate slot numbers specific to each link
+        downlink_slots: [0,  5,  6,  7,  8,  9, 10, 15, 16, 17, 18, 19]
+        uplink_slots: [3, 13]
 
         # the evaluation can be expensive; limit to this number of frames
-        frame_limit: 2
+        frame_range: [0,1]
 
         # if true, return a correlation; otherwise, return a covariance (power)
         normalize: true
 
-    # ccdf evaluated on channel power in the time domain
-    channel_power_ccdf:
+    # histogram evaluated on channel power in the time domain
+    channel_power_histogram:
         # binning is performed on the power axis to allow aggregation across captures
         power_low: -40 # dBm
         power_high: 15 # dBm
@@ -225,10 +237,10 @@ channel_analysis:
         - peak
 
     # a persistence spectrum evaluated along the spectrogram
-    persistence_spectrum:
+    power_spectral_density:
         # a list of statistics to apply across the frequency axis
         # 'min', 'max' (or equivalent 'peak'), 'mean' (or equivalent 'rms'), or a quantile number
-        persistence_statistics:
+        frequency_statistics:
         - mean
         - 0.5
         - 0.75

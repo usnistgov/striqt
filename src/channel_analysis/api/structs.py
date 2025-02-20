@@ -32,22 +32,14 @@ builtins_to_struct = functools.partial(msgspec.convert)
 builtins_to_struct.__name__ = 'builtins_to_struct'
 
 
-def copy_struct(struct: msgspec.Struct, **update_fields):
-    """return a copy of struct, optionally with changes to its fields"""
-
-    mapping = struct_to_builtins(struct)
-    mapping = dict(mapping, **update_fields)
-    return builtins_to_struct(mapping, type(struct))
-
-
 class Capture(msgspec.Struct, kw_only=True, frozen=True):
     """bare minimum information about an IQ acquisition"""
 
     # acquisition
     duration: Annotated[float, meta('duration of the capture', 's')] = 0.1
     sample_rate: Annotated[float, meta('IQ sample rate', 'S/s')] = 15.36e6
-    analysis_bandwidth: Optional[Annotated[float, meta('Analysis bandwidth', 'Hz')]] = (
-        None
+    analysis_bandwidth: Annotated[float, meta('Analysis bandwidth', 'Hz')] = float(
+        'inf'
     )
 
 

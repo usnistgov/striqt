@@ -9,16 +9,19 @@ import rpyc
 from . import captures, sweeps, util
 from . import structs
 from .radio import find_radio_cls_by_name, is_same_resource, RadioDevice
+from channel_analysis.api.util import compute_lock
 
 if typing.TYPE_CHECKING:
     import numpy as np
     import xarray as xr
     import labbench as lb
     import pandas as pd
+    import channel_analysis
 else:
     np = util.lazy_import('numpy')
     xr = util.lazy_import('xarray')
     lb = util.lazy_import('labbench')
+    channel_analysis = util.lazy_import('channel_analysis')
 
 
 class SweepController:
@@ -27,14 +30,14 @@ class SweepController:
     This is also used by `start_sensor_server` to serve remote operations.
     """
 
-    def __init__(self, radio_setup: structs.RadioSetup = None):
+    def __init__(self, sweep: structs.Sweep = None):
         self.radios: dict[str, RadioDevice] = {}
         self.warmed_captures: set[structs.RadioCapture] = set()
         self.handlers: dict[rpyc.Connection, typing.Any] = {}
         util.set_cuda_mem_limit()
 
-        if radio_setup is not None:
-            self.open_radio(radio_setup)
+        if sweep is not None:
+            self.prepare_sweep(sweep, calibration=None)
 
     def close(self):
         last_ex = None
@@ -52,13 +55,14 @@ class SweepController:
         driver_name = radio_setup.driver
         radio_cls = find_radio_cls_by_name(driver_name)
 
-        if radio_setup.resource is None:
-            resource = radio_cls.resource.default
+        device_args = dict(radio_setup.device_args)
+        if hasattr(radio_cls, 'resource') and radio_setup.resource is not None:
+            resource = device_args['resource'] = radio_setup.resource
         else:
-            resource = radio_setup.resource
+            resource = None
 
         if driver_name in self.radios and self.radios[driver_name].isopen:
-            if is_same_resource(self.radios[driver_name].resource, resource):
+            if is_same_resource(self.radios[driver_name], radio_setup):
                 lb.logger.debug(f'reusing open {repr(driver_name)}')
                 return self.radios[driver_name]
             else:
@@ -69,12 +73,10 @@ class SweepController:
         else:
             lb.logger.debug(f'opening driver {repr(driver_name)}')
 
-        radio = self.radios[driver_name] = radio_cls()
-        if resource is not None:
-            radio.resource = resource
+        radio = self.radios[driver_name] = radio_cls(**radio_setup.device_args)
 
-        if radio_setup.transient_holdoff_time is not None:
-            radio.transient_holdoff_time = radio_setup.transient_holdoff_time
+        if radio_setup._transient_holdoff_time is not None:
+            radio._transient_holdoff_time = radio_setup._transient_holdoff_time
 
         radio.open()
 
@@ -87,6 +89,10 @@ class SweepController:
         if radio_setup is None:
             # close all
             for name, radio in self.radios.items():
+                if lb.paramattr._bases.get_class_attrs is None:
+                    # accommodate a strange side effect of partially
+                    # torn down python. TODO: proper fix for this
+                    continue
                 try:
                     radio.close()
                 except BaseException as ex:
@@ -95,7 +101,10 @@ class SweepController:
             self.radios[radio_setup.driver].close()
 
     def _describe_preparation(self, target_sweep: structs.Sweep) -> str:
-        if sweeps.sweep_touches_gpu(target_sweep) and target_sweep.radio_setup.warmup_sweep:
+        if (
+            sweeps.sweep_touches_gpu(target_sweep)
+            and target_sweep.radio_setup.warmup_sweep
+        ):
             warmup_sweep = sweeps.design_warmup_sweep(
                 target_sweep, skip=tuple(self.warmed_captures)
             )
@@ -121,6 +130,8 @@ class SweepController:
         warmup_iter = []
         warmup_sweep = None
 
+        calls = {}
+
         if sweep_spec.radio_setup.warmup_sweep:
             # maybe lead to a sweep iterator
             warmup_sweep = sweeps.design_warmup_sweep(
@@ -129,25 +140,24 @@ class SweepController:
             self.warmed_captures = self.warmed_captures | set(warmup_sweep.captures)
 
             if len(warmup_sweep.captures) > 0:
-                warmup_iter = self.iter_sweep(
-                    warmup_sweep, calibration, quiet=True, pickled=pickled
-                )
+                prep_msg = self._describe_preparation(sweep_spec)
+                if prep_msg:
+                    lb.logger.info(prep_msg)
 
-        try:
-            lb.concurrently(
-                warmup=lb.Call(list, warmup_iter),
-                open_radio=lb.Call(self.open_radio, sweep_spec.radio_setup),
-            )
-        finally:
-            if warmup_sweep is not None:
-                self.close_radio(warmup_sweep.radio_setup)
+                warmup_iter = self.iter_sweep(
+                    warmup_sweep, calibration=None, quiet=True, pickled=pickled
+                )
+                calls['warmup'] = lb.Call(list, warmup_iter)
+
+        calls['open_radio'] = lb.Call(self.open_radio, sweep_spec.radio_setup)
+
+        lb.concurrently(**calls)
 
     def iter_sweep(
         self,
         sweep: structs.Sweep,
         calibration: 'xr.Dataset' = None,
         *,
-        close_after: bool = True,
         always_yield: bool = False,
         quiet: bool = False,
         pickled: bool = False,
@@ -159,9 +169,6 @@ class SweepController:
         del kwargs['self'], kwargs['prepare']
 
         if prepare:
-            prep_msg = self._describe_preparation(sweep)
-            if prep_msg:
-                lb.logger.info(prep_msg)
             self.prepare_sweep(sweep, calibration, pickled=True)
 
         radio = self.open_radio(sweep.radio_setup)
@@ -173,7 +180,6 @@ class SweepController:
         self,
         sweep: structs.Sweep,
         calibration: 'xr.Dataset' = None,
-        close_after: bool = True,
         always_yield: bool = False,
         quiet: bool = False,
         pickled: bool = False,
@@ -241,7 +247,8 @@ class _ServerService(rpyc.Service, SweepController):
         sweep = rpyc.utils.classic.obtain(sweep)
 
         with lb.stopwatch(
-            f'obtaining calibration data {str(sweep.radio_setup.calibration)}'
+            f'obtaining calibration data {str(sweep.radio_setup.calibration)}',
+            threshold=10e-3,
         ):
             calibration = rpyc.utils.classic.obtain(calibration)
 
@@ -263,7 +270,6 @@ class _ServerService(rpyc.Service, SweepController):
             calibration,
             always_yield=always_yield,
             pickled=True,
-            close_after=False,
             loop=loop,
             prepare=False,
         )
@@ -311,7 +317,7 @@ class _ClientService(rpyc.Service):
         """serialize an object back to the client via pickling"""
         if description is not None:
             lb.logger.info(f'{description}')
-        with lb.stopwatch('data transfer', logger_level='debug'):
+        with lb.stopwatch('data transfer', threshold=10e-3, logger_level='debug'):
             if pickled_dataset is None:
                 return None
             elif isinstance(pickled_dataset, bytes):

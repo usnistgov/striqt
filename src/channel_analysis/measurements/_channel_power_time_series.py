@@ -75,16 +75,17 @@ def channel_power_time_series(
     detector_period: float,
     power_detectors: tuple[str, ...] = ('rms', 'peak'),
 ):
-    kws = {'iq': iq, 'Ts': 1 / capture.sample_rate, 'Tbin': detector_period}
+    xp = iqwaveform.util.array_namespace(iq)
+    kws = {'iq': iq, 'Ts': 1 / capture.sample_rate, 'Tbin': detector_period, 'axis': 1}
 
-    data = []
-    for detector in power_detectors:
-        power = iqwaveform.iq_to_bin_power(kind=detector, **kws)
-        data.append(iqwaveform.powtodB(power.astype('float32')))
+    power = [iqwaveform.iq_to_bin_power(kind=d, **kws) for d in power_detectors]
+    power = xp.array(power)
+    power = xp.moveaxis(power, -2, 0)
 
     metadata = {
         'detector_period': detector_period,
-        'units': f'dBm/{(capture.analysis_bandwidth or capture.sample_rate)/1e6} MHz',
+        'units': f'dBm/{(capture.analysis_bandwidth or capture.sample_rate) / 1e6} MHz',
     }
 
-    return data, metadata
+    power = iqwaveform.powtodB(power).astype('float32')
+    return power, metadata

@@ -88,14 +88,9 @@ def zip_offsets(
 
 
 @cache
-def import_cupy_with_fallback():
-    try:
-        import cupy as xp
-    except ModuleNotFoundError:
-        # warn only once due to @cache
-        import labbench as lb
-        import numpy as xp
+def configure_cupy():
+    import cupy
 
-        lb.logger.warning('cupy is not installed; falling back to cpu with numpy')
-
-    return xp
+    # the FFT plan sets up large caches that don't help us
+    cupy.fft.config.get_plan_cache().set_size(0)
+    cupy.cuda.set_pinned_memory_allocator(None)

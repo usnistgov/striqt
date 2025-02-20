@@ -6,17 +6,28 @@ channels:
   - file://opt/deepwave/conda-channels/airstack-conda
 
 dependencies:
+  # python3.9 is the most recent supported by the Air-T Jetson stack
+  - python=3.9
   - soapysdr-module-airt
   - cython<3
   - pytools==2022.1.12
+
+  # pin to a number of versions that were known to resolved on jetpack 4.6
   - numba~=0.56.0
+  - pandas~=1.5
+  - scipy~=1.9
+  - numpy>=1.21,<2
+  - matplotlib-base>=3.7,<3.10
+  - numexpr~=2.8
+  - zarr~=2.18.2
+  - msgspec~=0.18
+
   # eventual support for real-time HUD
   - pyside6
   - pyqtgraph    
-  # nvidia profiling
-  - nsight-compute
   - pip:
     - https://archive.deepwavedigital.com/pycuda/pycuda-2020.1-cp39-cp39-linux_aarch64.whl
     - https://archive.deepwavedigital.com/pytools/pytools-2022.1.12-py2.py3-none-any.whl
     - --extra-index-url https://pip.cupy.dev/aarch64
     - cupy-cuda102
+    - -e ..[edge-airt]

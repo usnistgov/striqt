@@ -3,8 +3,9 @@
 from __future__ import annotations
 import functools
 import msgspec
+import numbers
 import typing
-from typing import Annotated, Optional, Literal, Any
+from typing import Annotated, Optional, Literal, Any, Union
 
 from . import util
 
@@ -15,7 +16,6 @@ from channel_analysis.api.structs import (
     ChannelAnalysis,  # noqa: F401
     struct_to_builtins,  # noqa: F401
     builtins_to_struct,  # noqa: F401
-    copy_struct,  # noqa: F401
 )
 
 if typing.TYPE_CHECKING:
@@ -25,6 +25,14 @@ else:
     pd = util.lazy_import('pandas')
 
 _TShift = Literal['left', 'right', 'none']
+
+
+def _dict_hash(d):
+    key_hash = frozenset(d.keys())
+    value_hash = tuple(
+        [_dict_hash(v) if isinstance(v, dict) else v for v in d.values()]
+    )
+    return hash(key_hash) ^ hash(value_hash)
 
 
 def _make_default_analysis():
@@ -50,13 +58,38 @@ class WaveformCapture(channel_analysis.Capture, forbid_unknown_fields=True):
     host_resample: bool = True
 
 
+SingleChannelType = Annotated[int, meta('Input port index', ge=0)]
+SingleGainType = Annotated[float, meta('Gain setting', 'dB')]
+
+
+@functools.lru_cache
+def _validate_multichannel(channel, gain):
+    """guarantee that self.gain is a number or matches the length of self.channel"""
+    if isinstance(channel, numbers.Number):
+        if isinstance(gain, tuple):
+            raise ValueError(
+                'gain must be a single number unless multiple channels are specified'
+            )
+    else:
+        if isinstance(gain, tuple) and len(gain) != len(channel):
+            raise ValueError(
+                'gain, when specified as a tuple, must match channel count'
+            )
+
+
 class RadioCapture(WaveformCapture, forbid_unknown_fields=True):
     """Capture specification for a single radio waveform"""
 
     # RF and leveling
     center_frequency: Annotated[float, meta('RF center frequency', 'Hz', gt=0)] = 3710e6
-    channel: Annotated[int, meta('Input port index', ge=0)] = 0
-    gain: Annotated[float, meta('Gain setting', 'dB')] = -10
+    channel: Annotated[
+        Union[SingleChannelType, tuple[SingleChannelType, ...]],
+        meta('Input port indices'),
+    ] = 0
+    gain: Annotated[
+        Union[SingleGainType, tuple[SingleGainType, ...]],
+        meta('Gain setting for each channel', 'dB'),
+    ] = -10
 
     delay: Optional[
         Annotated[float, meta('Delay in acquisition start time', 's', gt=0)]
@@ -65,11 +98,15 @@ class RadioCapture(WaveformCapture, forbid_unknown_fields=True):
         None
     )
 
+    def __post_init__(self):
+        _validate_multichannel(self.channel, self.gain)
+
 
 class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):
     """run-time characteristics of the radio that are left invariant during a sweep"""
 
     driver: str = 'AirT7x01B'
+    device_args: dict = {}
     resource: Any = None
     time_source: Literal['host', 'internal', 'external', 'gps'] = 'host'
     continuous_trigger: Annotated[
@@ -78,10 +115,34 @@ class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):
     ] = True
     periodic_trigger: Optional[float] = None
     calibration: Optional[str] = None
-    transient_holdoff_time: Optional[float] = None
-    gapless_repeats: Annotated[bool, meta('whether to raise an exception on overflows between identical captures')] = False
-    time_sync_every_capture: Annotated[bool, meta('whether to sync to PPS before each capture in a sweep')] = False
-    warmup_sweep: Annotated[bool, meta('whether to run the GPU compute on empty buffers before sweeping for more even run time')] = True
+    gapless_repeats: Annotated[
+        bool,
+        meta('whether to raise an exception on overflows between identical captures'),
+    ] = False
+    time_sync_every_capture: Annotated[
+        bool, meta('whether to sync to PPS before each capture in a sweep')
+    ] = False
+    warmup_sweep: Annotated[
+        bool,
+        meta(
+            'whether to run the GPU compute on empty buffers before sweeping for more even run time'
+        ),
+    ] = True
+    array_backend: Annotated[
+        Union[Literal['numpy'], Literal['cupy']],
+        meta(
+            'array module to use, which sets the type of compute device (numpy = cpu, cupy = gpu)'
+        ),
+    ] = 'cupy'
+
+    _transient_holdoff_time: Optional[float] = None
+    _rx_channel_count: Optional[int] = None
+
+    def __post_init__(self):
+        if self.gapless_repeats and self.time_sync_every_capture:
+            raise ValueError(
+                'time_sync_every_capture and gapless_repeats are mutually exclusive'
+            )
 
 
 class Description(msgspec.Struct, forbid_unknown_fields=True):
@@ -91,10 +152,14 @@ class Description(msgspec.Struct, forbid_unknown_fields=True):
     version: str = 'unversioned'
 
 
-class Output(msgspec.Struct, forbid_unknown_fields=True):
+class Output(msgspec.Struct, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     path: Optional[str] = '{yaml_name}-{start_time}'
     store: typing.Union[Literal['zip'], Literal['directory']] = 'zip'
     coord_aliases: dict[str, dict[str, dict[str, Any]]] = {}
+
+    def __hash__(self):
+        # hashing coordinate aliases greatly speeds up xarray coordinate generation
+        return hash(self.path) ^ hash(self.store) ^ _dict_hash(self.coord_aliases)
 
 
 class Sweep(msgspec.Struct, forbid_unknown_fields=True):
@@ -104,23 +169,3 @@ class Sweep(msgspec.Struct, forbid_unknown_fields=True):
     channel_analysis: dict = msgspec.field(default_factory=_make_default_analysis)
     description: Description = msgspec.field(default_factory=Description)
     output: Output = msgspec.field(default_factory=Output)
-
-
-@functools.lru_cache
-def get_attrs(struct: type[msgspec.Struct], field: str) -> dict[str, str]:
-    """get an attrs dict for xarray based on Annotated type hints with `meta`"""
-    hints = typing.get_type_hints(struct, include_extras=True)
-
-    try:
-        metas = hints[field].__metadata__
-    except (AttributeError, KeyError):
-        return {}
-
-    if len(metas) == 0:
-        return {}
-    elif len(metas) == 1 and isinstance(metas[0], msgspec.Meta):
-        return metas[0].extra
-    else:
-        raise TypeError(
-            'Annotated[] type hints must contain exactly one msgspec.Meta object'
-        )

@@ -1,32 +1,39 @@
 from __future__ import annotations
 import functools
+import msgspec
 import typing
 import pickle
 import gzip
-from math import ceil
+from pathlib import Path
+import array_api_compat
 
-from channel_analysis.api import filters
 from . import util
+from .captures import split_capture_channels
+from channel_analysis.api.util import except_on_low_memory
 
-from .radio import RadioDevice, get_capture_buffer_sizes, design_capture_filter
-from .radio.base import needs_stft
+from .radio import base, RadioDevice, design_capture_filter
 from . import structs
-from scipy.signal._arraytools import axis_slice
 
 if typing.TYPE_CHECKING:
     import numpy as np
     import xarray as xr
     import scipy
     import iqwaveform
+    import labbench as lb
+
 else:
     np = util.lazy_import('numpy')
     xr = util.lazy_import('xarray')
     scipy = util.lazy_import('scipy')
     iqwaveform = util.lazy_import('iqwaveform')
+    lb = util.lazy_import('labbench')
 
 
 @functools.lru_cache
 def read_calibration_corrections(path):
+    if path is None:
+        return None
+
     with gzip.GzipFile(path, 'rb') as fd:
         return pickle.load(fd)
 
@@ -117,8 +124,8 @@ def _y_factor_frequency_response_correction(
     Tamb: float,
     Tref=290,
 ):
-    spectrum = dataset.persistence_spectrum.sel(
-        persistence_statistic='mean', drop=True
+    spectrum = dataset.power_spectral_density.sel(
+        frequency_statistic='mean', drop=True
     ).pipe(lambda x: 10 ** (x / 10.0))
 
     fc_T = fc_temperatures
@@ -173,74 +180,28 @@ def _describe_missing_data(corrections: 'xr.Dataset', exact_matches: dict):
     return '; '.join(misses)
 
 
-def resampling_correction(
-    iq: 'iqwaveform.util.Array',
-    capture: structs.RadioCapture,
-    radio: RadioDevice,
-    force_calibration: typing.Optional['xr.Dataset'] = None,
-    *,
-    axis=0,
-    out=None,
+@functools.lru_cache()
+def lookup_power_correction(
+    cal_data: Path | 'xr.Dataset' | None, capture: structs.RadioCapture, xp
 ):
-    """apply a bandpass filter implemented through STFT overlap-and-add.
-
-    Args:
-        iq: the input waveform
-        capture: the capture filter specification structure
-        radio: the radio instance that performed the capture
-        force_calibration: if specified, this calibration dataset is used rather than loading from file
-        axis: the axis of `x` along which to compute the filter
-
-    Returns:
-        the filtered IQ capture
-    """
-
-    fs_backend, _, analysis_filter = design_capture_filter(
-        radio.base_clock_rate, capture
-    )
-    nfft = analysis_filter['nfft']
-    nfft_out, noverlap, overlap_scale, _ = iqwaveform.fourier._ola_filter_parameters(
-        iq.size,
-        window=analysis_filter['window'],
-        nfft_out=analysis_filter.get('nfft_out', nfft),
-        nfft=nfft,
-        extend=True,
-    )
-
-    xp = util.import_cupy_with_fallback()
-
-    # _, buf_size = get_capture_buffer_sizes(radio, capture)
-    # if out is None:
-    #     # create a buffer large enough for post-processing seeded with a copy of the IQ
-    #     if nfft_out > nfft:
-    #         buf_size = ceil(buf_size * nfft_out / nfft)
-    #     buf_size = max(buf_size, iq.shape[axis])
-    #     buf = xp.empty(buf_size, dtype=iq.dtype)
-    # else:
-    #     if out.size < buf.size:
-    #         raise ValueError('resampling output buffer is too small')
-    #     buf = out
-
-    iq = xp.asarray(iq)
-
-    if force_calibration is not None:
-        corrections = force_calibration
-    elif radio.calibration:
-        corrections = read_calibration_corrections(radio.calibration)
+    if isinstance(cal_data, xr.Dataset):
+        corrections = cal_data
+    elif cal_data:
+        corrections = read_calibration_corrections(cal_data)
     else:
-        corrections = None
+        return None
 
-    if corrections is None:
-        power_scale = None
-    else:
+    power_scale = []
+
+    for capture_chan in split_capture_channels(capture):
         # these fields must match the calibration conditions exactly
         exact_matches = dict(
-            channel=capture.channel,
-            gain=capture.gain,
-            lo_shift=capture.lo_shift,
-            sample_rate=capture.sample_rate,
-            analysis_bandwidth=capture.analysis_bandwidth or np.inf,
-            host_resample=capture.host_resample,
+            channel=capture_chan.channel,
+            gain=capture_chan.gain,
+            lo_shift=capture_chan.lo_shift,
+            sample_rate=capture_chan.sample_rate,
+            analysis_bandwidth=capture_chan.analysis_bandwidth or np.inf,
+            host_resample=capture_chan.host_resample,
         )
 
         try:
@@ -258,112 +219,178 @@ def resampling_correction(
             if name in sel.coords:
                 sel = sel.drop(name)
 
+        sel = sel.squeeze(drop=True).dropna('center_frequency')
+
+        if sel.size == 0:
+            raise ValueError(
+                'no calibration data is available for this combination of sampling parameters'
+            )
+        elif capture_chan.center_frequency > sel.center_frequency.max():
+            raise ValueError(
+                f'center_frequency {capture_chan.center_frequency / 1e6} MHz exceeds calibration max {sel.center_frequency.max() / 1e6} MHz'
+            )
+        elif capture_chan.center_frequency < sel.center_frequency.min():
+            raise ValueError(
+                f'center_frequency {capture_chan.center_frequency / 1e6} MHz is below calibration min {sel.center_frequency.min() / 1e6} MHz'
+            )
+
         # allow interpolation between sample points in these fields
-        sel = (
-            sel.squeeze(drop=True)
-            .dropna('center_frequency')
-            .interp(center_frequency=capture.center_frequency)
-        )
+        sel = sel.interp(center_frequency=capture_chan.center_frequency)
 
-        if not np.isfinite(sel):
-            raise ValueError('no calibration data available for this capture')
+        power_scale.append(float(sel))
 
-        power_scale = float(sel)
+    return xp.asarray(power_scale, dtype='float32')[:, np.newaxis]
 
-    if not needs_stft(analysis_filter, capture):
+
+def _power_scale(cal_power_scale, dtype_iq_scale):
+    if cal_power_scale is None and dtype_iq_scale is None:
+        return None
+
+    if dtype_iq_scale is None:
+        dtype_iq_scale = 1
+    if cal_power_scale is None:
+        cal_power_scale = 1
+
+    return cal_power_scale * (dtype_iq_scale**2)
+
+
+def resampling_correction(
+    iq: 'iqwaveform.util.Array',
+    capture: structs.RadioCapture,
+    radio: RadioDevice,
+    force_calibration: typing.Optional['xr.Dataset'] = None,
+    *,
+    overwrite_x=False,
+    axis=1,
+):
+    """apply a bandpass filter implemented through STFT overlap-and-add.
+
+    Args:
+        iq: the input waveform, as a pinned array
+        capture: the capture filter specification structure
+        radio: the radio instance that performed the capture
+        force_calibration: if specified, this calibration dataset is used rather than loading from file
+        axis: the axis of `x` along which to compute the filter
+
+    Returns:
+        the filtered IQ capture
+    """
+
+    xp = iqwaveform.util.array_namespace(iq)
+
+    if array_api_compat.is_cupy_array(iq):
+        util.configure_cupy()
+
+    if radio._transport_dtype == 'int16':
+        dtype_scale = 1.0 / float(np.iinfo(radio._transport_dtype).max)
+    else:
+        dtype_scale = None
+
+    with lb.stopwatch('power correction lookup', threshold=10e-3, logger_level='debug'):
+        bare_capture = msgspec.structs.replace(capture, start_time=None)
+        cal_data = radio.calibration if force_calibration is None else force_calibration
+        cal_scale = lookup_power_correction(cal_data, bare_capture, xp)
+
+    power_scale = _power_scale(cal_scale, dtype_scale)
+
+    fs, _, analysis_filter = design_capture_filter(radio.base_clock_rate, capture)
+    nfft = analysis_filter['nfft']
+    nfft_out, noverlap, overlap_scale, _ = iqwaveform.fourier._ola_filter_parameters(
+        iq.size,
+        window=analysis_filter['window'],
+        nfft_out=analysis_filter.get('nfft_out', nfft),
+        nfft=nfft,
+        extend=True,
+    )
+
+    if not base.needs_stft(analysis_filter, capture):
         # no filtering or resampling needed
-        iq = iq[: round(capture.duration * capture.sample_rate)]
+        iq = iq[:, : round(capture.duration * capture.sample_rate)]
         if power_scale is not None:
             iq *= np.sqrt(power_scale)
         return iq
 
-    w = iqwaveform.fourier._get_window(
-        analysis_filter['window'], nfft, fftbins=False, xp=xp
-    )
-
     # set the passband roughly equal to the 3 dB bandwidth based on ENBW
-    freq_res = fs_backend / nfft
-    enbw = freq_res * iqwaveform.fourier.equivalent_noise_bandwidth(
-        analysis_filter['window'], nfft, fftbins=False
-    )
+    # freq_res = fs / nfft
+    # enbw_bins = iqwaveform.fourier.equivalent_noise_bandwidth(
+    # analysis_filter['window'], nfft, fftbins=False
+    # )
+    # enbw = enbw_bins * freq_res
     passband = analysis_filter['passband']
 
-    freqs, _, xstft = iqwaveform.fourier.stft(
+    except_on_low_memory()
+
+    y = iqwaveform.fourier.stft(
         iq,
-        fs=fs_backend,
-        window=w,
+        fs=fs,
+        window=analysis_filter['window'],
         nperseg=nfft,
         noverlap=round(nfft * overlap_scale),
         axis=axis,
         truncate=False,
-        # out=buf,
+        overwrite_x=overwrite_x,
+        return_axis_arrays=False,
     )
+
+    freqs = iqwaveform.fourier.fftfreq(nfft, 1 / fs, xp=xp)
+
+    except_on_low_memory()
 
     if nfft_out < nfft:
         # downsample applies the filter as well
-        freqs, xstft = iqwaveform.fourier.downsample_stft(
-            freqs,
-            xstft,
-            nfft_out=nfft_out,
-            passband=passband,
-            axis=axis,
-            # out=buf,
+        freqs, y = iqwaveform.fourier.downsample_stft(
+            freqs, y, nfft_out=nfft_out, passband=passband, axis=axis
         )
     elif nfft_out > nfft:
         # upsample
         if np.isfinite(capture.analysis_bandwidth):
-            iqwaveform.fourier.zero_stft_by_freq(
-                freqs,
-                xstft,
-                passband=(passband[0] + enbw / 2, passband[1] - enbw / 2),
+            y = iqwaveform.fourier.stft_fir_lowpass(
+                y,
+                sample_rate=fs,
+                bandwidth=capture.analysis_bandwidth,
+                transition_bandwidth=250e3,
                 axis=axis,
+                out=y,
             )
-
-        # padded_shape = list(xstft.shape)
-        # padded_shape[axis+1] += pad_left+pad_right
-        # padded_xstft = iqwaveform.fourier._truncated_buffer(buf, padded_shape)
-
-        # start with the actual data, to make sure we don't overwrite it in the underlying buffer
-        # axis_slice(padded_xstft, pad_left, padded_xstft.shape[axis+1] - pad_right, axis=axis+1)[:] = xstft
-        # axis_slice(padded_xstft, 0, pad_left, axis=axis+1)[:] = 0
-        # axis_slice(padded_xstft, padded_xstft.shape[axis+1] - pad_right, None, axis=axis+1)[:] = 0
-
-        # xstft = padded_xstft
 
         pad_left = (nfft_out - nfft) // 2
         pad_right = pad_left + (nfft_out - nfft) % 2
 
-        xstft = iqwaveform.util.pad_along_axis(
-            xstft, [[pad_left, pad_right]], axis=axis + 1
-        )
+        y = iqwaveform.util.pad_along_axis(y, [[pad_left, pad_right]], axis=axis + 1)
 
     else:
-        # nfft_out == nfft
-        iqwaveform.fourier.zero_stft_by_freq(
-            freqs,
-            xstft,
-            passband=(passband[0] + enbw, passband[1] - enbw),
+        y = iqwaveform.fourier.stft_fir_lowpass(
+            y,
+            sample_rate=fs,
+            bandwidth=capture.analysis_bandwidth,
+            transition_bandwidth=250e3,
             axis=axis,
+            out=y,
         )
 
+    del iq
+
+    except_on_low_memory()
+
     iq = iqwaveform.fourier.istft(
-        xstft,
-        nfft=nfft_out,
-        noverlap=noverlap,
-        # out=buf,
-        axis=axis,
+        y, nfft=nfft_out, noverlap=noverlap, axis=axis, overwrite_x=True
     )
+
+    del y
+
+    except_on_low_memory()
 
     # start the capture after the transient holdoff window
     iq_size_out = round(capture.duration * capture.sample_rate)
     i0 = nfft_out // 2
     assert i0 + iq_size_out <= iq.shape[axis]
-    iq = iq[i0 : i0 + iq_size_out]
+    iq = iqwaveform.util.axis_slice(iq, i0, i0 + iq_size_out, axis=axis)
 
     if power_scale is None and nfft == nfft_out:
         pass
+    elif power_scale is None:
+        iq *= np.sqrt(nfft_out / nfft)
     else:
-        # voltage_scale = (power_scale or 1) * nfft_out / nfft
-        iq *= np.sqrt(power_scale or 1) * np.sqrt(nfft_out / nfft)
+        iq *= np.sqrt(power_scale) * np.sqrt(nfft_out / nfft)
 
     return iq

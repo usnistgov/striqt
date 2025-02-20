@@ -5,7 +5,7 @@ import itertools
 
 import msgspec
 
-from . import captures, util
+from . import captures, util, xarray_ops
 
 from .radio import RadioDevice, NullSource, find_radio_cls_by_name
 from . import structs
@@ -49,10 +49,10 @@ def design_warmup_sweep(
     sweep: structs.Sweep, skip: tuple[structs.RadioCapture, ...]
 ) -> structs.Sweep:
     """returns a Sweep object for a NullRadio consisting of capture combinations from
-    `sweep` with all unique combinations of data shapes.
+    `sweep`.
 
-    This is meant to be run with fake data to warm up JIT caches and avoid
-    analysis slowdowns during sweeps.
+    This is meant to trigger expensive python imports and warm up JIT caches
+    in order to avoid analysis slowdowns during sweeps.
     """
 
     # captures that have unique sampling parameters, which are those
@@ -63,17 +63,24 @@ def design_warmup_sweep(
     unique_wcaptures = unique_map.keys() - skip_wcaptures
     captures = [unique_map[c] for c in unique_wcaptures]
 
-    radio_cls = find_radio_cls_by_name(sweep.radio_setup.driver)
-    radio_setup = copy.copy(sweep.radio_setup)
-    radio_setup.driver = NullSource.__name__
-    radio_setup.resource = 'empty'
-    radio_setup.transient_holdoff_time = radio_cls.transient_holdoff_time.default
+    if len(captures) > 1:
+        captures = captures[:1]
 
-    return type(sweep)(
-        captures=captures,
-        radio_setup=radio_setup,
-        channel_analysis=sweep.channel_analysis,
-        output=sweep.output
+    radio_cls = find_radio_cls_by_name(sweep.radio_setup.driver)
+
+    null_radio_setup = msgspec.structs.replace(
+        sweep.radio_setup,
+        driver=NullSource.__name__,
+        device_args={},
+        resource='empty',
+        _rx_channel_count=radio_cls.rx_channel_count.default,
+        calibration=None,
+    )
+
+    return msgspec.structs.replace(
+        sweep,  #
+        captures=captures,  #
+        radio_setup=null_radio_setup,
     )
 
 
@@ -85,7 +92,6 @@ def iter_sweep(
     quiet=False,
     pickled=False,
     loop=False,
-    close_after=False,
 ) -> typing.Generator['xr.Dataset' | bytes | None]:
     """iterate through sweep captures on the specified radio, yielding a dataset for each.
 
@@ -102,7 +108,6 @@ def iter_sweep(
         always_yield: if `True`, yield `None` before the second capture
         quiet: if True, log at the debug level, and show 'info' level log messages or higher only to the screen
         pickled: if True, yield pickled `bytes` instead of xr.Datasets
-        close_after: if True, close the radio after the last capture
 
     Returns:
         An iterator of analyzed data
@@ -114,12 +119,12 @@ def iter_sweep(
         **structs.struct_to_builtins(sweep.description),
     }
 
-    analyze = captures.ChannelAnalysisWrapper(
+    analyze = xarray_ops.ChannelAnalysisWrapper(
         radio=radio,
         sweep=sweep,
         analysis_spec=sweep.channel_analysis,
         extra_attrs=attrs,
-        calibration=calibration,
+        correction=True,
     )
 
     if len(sweep.captures) == 0:
@@ -139,56 +144,50 @@ def iter_sweep(
     # iterate across (previous, current, next) captures to support concurrency
     offset_captures = util.zip_offsets(capture_iter, (-1, 0, 1), fill=None)
 
-    try:
-        for i, (_, capture_this, capture_next) in enumerate(offset_captures):
-            calls = {}
+    for i, (_, capture_this, capture_next) in enumerate(offset_captures):
+        calls = {}
 
-            if capture_this is not None:
-                # extra iteration at the end for the last analysis
-                calls['acquire'] = lb.Call(
-                    radio.acquire,
-                    capture_this,
-                    next_capture=capture_next,
-                    correction=False,
-                )
-
-            if capture_prev is not None:
-                # iq is only available after the first iteration
-                calls['analyze'] = lb.Call(
-                    analyze,
-                    iq,
-                    sweep_time=sweep_time,
-                    capture=capture_prev,
-                    pickled=pickled,
-                )
-
-            desc = captures.describe_capture(
-                capture_this, capture_prev, index=i, count=count
+        if capture_this is not None:
+            # extra iteration at the end for the last analysis
+            calls['acquire'] = lb.Call(
+                radio.acquire,
+                capture_this,
+                next_capture=capture_next,
+                correction=False,
             )
 
-            with lb.stopwatch(f'{desc} •', logger_level='debug' if quiet else 'info'):
-                ret = lb.concurrently(**calls, flatten=False)
+        if capture_prev is not None:
+            # iq is only available after the first iteration
+            calls['analyze'] = lb.Call(
+                analyze,
+                iq,
+                sweep_time=sweep_time,
+                capture=capture_prev,
+                pickled=pickled,
+            )
 
-            if 'analyze' in ret:
-                yield ret['analyze']
-            elif always_yield:
-                yield None
+        desc = channel_analysis.describe_capture(
+            capture_this, capture_prev, index=i, count=count
+        )
 
-            if 'acquire' in ret:
-                iq, capture_prev = ret['acquire']
-                if sweep_time is None:
-                    sweep_time = capture_prev.start_time
+        with lb.stopwatch(f'{desc} •', logger_level='debug' if quiet else 'info'):
+            ret = lb.concurrently(**calls, flatten=False)
 
-    finally:
-        if close_after:
-            radio.close()
+        if 'analyze' in ret:
+            yield ret['analyze']
+        elif always_yield:
+            yield None
+
+        if 'acquire' in ret:
+            iq, capture_prev = ret['acquire']
+            if sweep_time is None:
+                sweep_time = capture_prev.start_time
 
 
 def iter_raw_iq(
     radio: RadioDevice,
     sweep: structs.Sweep,
     quiet=False,
-    close_after=False,
 ) -> typing.Generator['xr.Dataset' | bytes | None]:
     """iterate through the sweep and yield the raw IQ vector for each.
 
@@ -205,7 +204,6 @@ def iter_raw_iq(
         always_yield: if `True`, yield `None` before the second capture
         quiet: if True, log at the debug level, and show 'info' level log messages or higher only to the screen
         pickled: if True, yield pickled `bytes` instead of xr.Datasets
-        close_after: if True, close the radio after the last capture
 
     Returns:
         An iterator of analyzed data
@@ -220,25 +218,20 @@ def iter_raw_iq(
     # iterate across (previous, current, next) captures to support concurrency
     offset_captures = util.zip_offsets(sweep.captures, (0, 1), fill=None)
 
-    try:
-        for i, (capture_this, capture_next) in enumerate(offset_captures):
-            desc = captures.describe_capture(
-                capture_this, capture_prev, index=i, count=len(sweep.captures)
+    for i, (capture_this, capture_next) in enumerate(offset_captures):
+        desc = captures.describe_capture(
+            capture_this, capture_prev, index=i, count=len(sweep.captures)
+        )
+
+        with lb.stopwatch(f'{desc} •', logger_level='debug' if quiet else 'info'):
+            # extra iteration at the end for the last analysis
+            iq, capture = radio.acquire(
+                capture_this,
+                next_capture=capture_next,
+                correction=False,
             )
 
-            with lb.stopwatch(f'{desc} •', logger_level='debug' if quiet else 'info'):
-                # extra iteration at the end for the last analysis
-                iq, capture = radio.acquire(
-                    capture_this,
-                    next_capture=capture_next,
-                    correction=False,
-                )
-
-            yield iq, capture
-
-    finally:
-        if close_after:
-            radio.close()
+        yield iq, capture
 
 
 def stopiter_as_return(iter):
@@ -291,7 +284,7 @@ def iter_callbacks(
 
         def intake_func(data):
             return data
-        
+
     elif not hasattr(intake_func, '__name__'):
         intake_func.__name__ = 'save'
 
@@ -310,7 +303,9 @@ def iter_callbacks(
 
         returns = lb.concurrently(
             lb.Call(stopiter_as_return, data_spec_pairs).rename('data'),
-            lb.Call(acquire_func, this_capture, sweep_spec.radio_setup).rename('acquire'),
+            lb.Call(acquire_func, this_capture, sweep_spec.radio_setup).rename(
+                'acquire'
+            ),
             lb.Call(intake_func, last_data).rename('save'),
             flatten=False,
         )
@@ -324,8 +319,8 @@ def iter_callbacks(
             ext_data = returns.get('acquire', {})
 
         if isinstance(data, xr.Dataset):
+            new_dims = {xarray_ops.CAPTURE_DIM: data.capture.size}
             ext_dataarrays = {
-                k: xr.DataArray(v).expand_dims(captures.CAPTURE_DIM)
-                for k, v in ext_data.items()
+                k: xr.DataArray(v).expand_dims(new_dims) for k, v in ext_data.items()
             }
             last_data = data.assign(ext_dataarrays)

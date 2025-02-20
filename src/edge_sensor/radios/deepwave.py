@@ -1,29 +1,55 @@
 from __future__ import annotations
-import labbench.paramattr as attr
+import labbench as lb
+from math import sqrt, ceil
+import SoapySDR
+from labbench import paramattr as attr
 
-from ..api.radio import SoapyRadioDevice
+from ..api.radio import soapy
+from ..api import structs
 import uuid
 
+
+def _reenable_loop(radio, count):
+    import numpy as np
+
+    buf = np.empty((radio.rx_channel_count, 2), dtype='float32')
+
+    for _ in range(count):
+        radio.backend.activateStream(radio._rx_stream)
+        radio._read_stream(buf, 0, 1, timeout_sec=200e-3, on_overflow='ignore')
+        radio.backend.deactivateStream(radio._rx_stream)
+
+
 # for TX only (RX channel is accessed through the AirT7201B.channel method)
-channel_kwarg = attr.method_kwarg.int(
-    'channel', min=0, max=1, help='hardware port number'
-)
+channel_kwarg = attr.method_kwarg.int('channel', min=0, help='hardware port number')
 
 
-class Air7x01B(SoapyRadioDevice):
-    resource = attr.value.dict(default={}, inherit=True)
+class Air7x01B(soapy.SoapyRadioDevice):
+    resource = attr.value.dict({}, inherit=True)
 
     # adjust bounds based on the hardware
-    duration = attr.value.float(100e-3, inherit=True)
     lo_offset = attr.value.float(0.0, min=-125e6, max=125e6, inherit=True)
-    channel = attr.method.int(min=0, max=1, inherit=True)
     lo_frequency = attr.method.float(min=300e6, max=6000e6, inherit=True)
     backend_sample_rate = attr.method.float(min=3.906250e6, max=125e6, inherit=True)
-    gain = attr.method.float(min=-30, max=0, step=0.5, inherit=True)
+    gain = type(soapy.SoapyRadioDevice.gain)(min=-30, max=0, step=0.5, inherit=True)
     tx_gain = attr.method.float(min=-41.95, max=0, step=0.1, inherit=True)
+    rx_channel_count = attr.value.int(2, inherit=True)
 
-    # this was set based on gain setting sweep tests
-    transient_holdoff_time = attr.value.float(20e-3, inherit=True)
+    # set based on gain setting sweep tests
+    _transient_holdoff_time = attr.value.float(2e-3, inherit=True)
+
+    # stream setup and teardown for channel configuration are slow;
+    # instead, stream all RX channels
+    _stream_all_rx_channels = attr.value.bool(True, inherit=True)
+
+    # without this, multichannel acquisition start time will vary
+    # across channels, resulting in streaming errors
+    _rx_enable_delay = attr.value.float(0.33, inherit=True)
+
+    # use of float32 saves the gpu a slight amount of work, but
+    # demands more memory bandwidth. went with int16 as the alternative.
+    _transport_dtype = attr.value.str('int16', inherit=True)
+    _reenable_cycles = 0
 
     def open(self):
         # in some cases specifying the driver has caused exceptions on connect
@@ -31,6 +57,24 @@ class Air7x01B(SoapyRadioDevice):
         driver = self.backend.getDriverKey()
         if driver != 'SoapyAIRT':
             raise IOError(f'connected to {driver}, but expected SoapyAirT')
+
+    def arm(self, capture: structs.RadioCapture):
+        fc_current = self.center_frequency()
+        if capture.center_frequency != fc_current:
+            # empirical thresholds for the number of reenable cycles
+            # needed to establish IQ balancing (about 60 dB, in one unit)
+            ratio = capture.center_frequency / fc_current
+
+            if max(1 / ratio, ratio) >= 4.5:
+                reenable_count = 5
+            else:
+                reenable_count = 4
+        else:
+            reenable_count = 2
+
+        super().arm(capture)
+
+        _reenable_loop(self, reenable_count)
 
     def _post_connect(self):
         self._set_jesd_sysref_delay(0)

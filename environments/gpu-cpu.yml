@@ -6,37 +6,32 @@ channels:
 - nvidia
 - conda-forge
 dependencies:
-  # python3.9 is the most recent supported by the Air-T Jetson stack
-- python=3.9
+  # development
+- python
 - pip
 - jupyter
 - ruff
-- pandas~=1.5
-- scipy~=1.9
-- numpy>=1.21,<2
-- matplotlib-base>=3.7,<3.10
-- scikit-learn~=1.5
+- toml
+- ruamel.yaml
+- pandas
+- scipy>=1.13,<2
+- numpy>=1.24,<3
+- matplotlib-base~=3.7
 - numexpr~=2.8
 - array-api-compat
 - methodtools
+- numba
 - labbench>=0.42.0,<1
 - rpyc~=5.3
-- soapysdr~=0.8.1
-- xarray~=2024.3
-- zarr~=2.18.2
+- xarray>=2024.3
+- zarr>=2.18,<4
 - dask
-- msgspec~=0.18.0
-- pigz
-- dulwich
-- ruamel.yaml
+- msgspec~=0.18
 - schemdraw
 - mscorefonts
 - cupy ~= 12.2
 - cython
-- nsight-compute
 - pip:
   - iqwaveform @ git+https://github.com/usnistgov/iqwaveform
   - xarray_dataclasses @ git+https://github.com/dgkuester/xarray-dataclasses@lazy-imports
-
-      # allows imports from the src/ directory in this repo
-  - -e ..
+  - -e ..[gpu-cpu]

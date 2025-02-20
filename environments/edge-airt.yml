@@ -7,42 +7,41 @@ channels:
 - nvidia
 - file://opt/deepwave/conda-channels/airstack-conda
 dependencies:
-  # python3.9 is the most recent supported by the Air-T Jetson stack
+  # development
 - python=3.9
 - pip
 - jupyter
 - ruff
+- toml
+- ruamel.yaml
 - pandas~=1.5
 - scipy~=1.9
 - numpy>=1.21,<2
 - matplotlib-base>=3.7,<3.10
-- scikit-learn~=1.5
 - numexpr~=2.8
 - array-api-compat
 - methodtools
+- numba~=0.56.0
 - labbench>=0.42.0,<1
 - rpyc~=5.3
-- soapysdr~=0.8.1
-- xarray~=2024.3
+- xarray>=2024.3
 - zarr~=2.18.2
 - dask
-- msgspec~=0.18.0
-- pigz
-- dulwich
-- ruamel.yaml
+- msgspec~=0.18
 - schemdraw
 - mscorefonts
 - soapysdr-module-airt
 - cython<3
 - pytools==2022.1.12
-- numba~=0.56.0
 - pyside6
 - pyqtgraph
-- nsight-compute
+- soapysdr~=0.8.1
+- pigz
+- dulwich
 - pip:
   - iqwaveform @ git+https://github.com/usnistgov/iqwaveform
   - xarray_dataclasses @ git+https://github.com/dgkuester/xarray-dataclasses@lazy-imports
-  - -e ..
+  - -e ..[edge_airt]
   - https://archive.deepwavedigital.com/pycuda/pycuda-2020.1-cp39-cp39-linux_aarch64.whl
   - https://archive.deepwavedigital.com/pytools/pytools-2022.1.12-py2.py3-none-any.whl
   - --extra-index-url https://pip.cupy.dev/aarch64

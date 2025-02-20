@@ -12,7 +12,7 @@ import typing
 
 from . import structs
 from . import util
-from .xarray import (
+from .xarray_ops import (
     ChannelAnalysisResult,
     evaluate_channel_analysis,
     package_channel_analysis,
@@ -40,16 +40,12 @@ else:
 TFunc = typing.Callable[..., typing.Any]
 
 
-def _results_as_shared_arrays(
+def _results_as_arrays(
     obj: tuple | list | dict | 'iqwaveform.util.Array', as_shmarray=False
 ):
     """convert an array, or a container of arrays, into a numpy array (or container of numpy arrays)"""
 
-    if isinstance(obj, (tuple, list)):
-        return [_results_as_shared_arrays(item) for item in obj]
-    elif isinstance(obj, dict):
-        return [_results_as_shared_arrays(item) for item in obj.values()]
-    elif array_api_compat.is_torch_array(obj):
+    if array_api_compat.is_torch_array(obj):
         array = obj.cpu()
     elif array_api_compat.is_cupy_array(obj):
         array = obj.get()
@@ -106,14 +102,26 @@ class ChannelAnalysisRegistryDecorator(collections.UserDict):
 
             @functools.wraps(func)
             def wrapped(iq, capture, **kws):
-                # a "secret" argument, delay_xarray, allows the return of a
-                # ChannelAnalysis result for fast serialization and xarray object
-                # instantiation
-                delay_xarray = kws.pop('delay_xarray', False)
+                # injects and handles an additional argument, 'as_xarray', which allows
+                # the return of a ChannelAnalysis result for fast serialization and
+                # xarray object instantiation
+                as_xarray = kws.pop('as_xarray', True)
+                if as_xarray == 'delayed':
+                    delay_xarray = True
+                elif as_xarray in (True, False):
+                    delay_xarray = False
+                else:
+                    raise ValueError(
+                        'xarray argument must be one of (True, False, "delayed")'
+                    )
 
                 bound = sig.bind(iq=iq, capture=capture, **kws)
                 call_params = bound.kwargs
+
                 ret = func(*bound.args, **bound.kwargs)
+
+                if not as_xarray:
+                    return ret
 
                 if isinstance(ret, (list, tuple)) and len(ret) == 2:
                     result, ret_metadata = ret
@@ -122,9 +130,15 @@ class ChannelAnalysisRegistryDecorator(collections.UserDict):
                     result = ret
                     ret_metadata = metadata
 
+                try:
+                    result = _results_as_arrays(result, as_shmarray=delay_xarray)
+                except TypeError as ex:
+                    msg = f'improper return type from {func.__name__}'
+                    raise TypeError(msg) from ex
+
                 result_obj = ChannelAnalysisResult(
                     xarray_datacls,
-                    _results_as_shared_arrays(result, as_shmarray=delay_xarray),
+                    result,
                     capture,
                     parameters=call_params,
                     attrs=ret_metadata,
@@ -179,10 +193,22 @@ def analyze_by_spec(
     capture: structs.Capture,
     *,
     spec: str | dict | structs.ChannelAnalysis,
+    as_xarray: typing.Literal[True]
+    | typing.Literal[False]
+    | typing.Literal['delayed'] = True,
+    expand_dims=None,
 ) -> 'xr.Dataset':
     """evaluate a set of different channel analyses on the iq waveform as specified by spec"""
 
     results = evaluate_channel_analysis(
-        iq, capture, spec=spec, registry=register_xarray_measurement
+        iq,
+        capture,
+        spec=spec,
+        registry=register_xarray_measurement,
+        as_xarray='delayed' if as_xarray else False,
     )
-    return package_channel_analysis(capture, results)
+
+    if as_xarray and as_xarray != 'delayed':
+        return package_channel_analysis(capture, results, expand_dims=expand_dims)
+    else:
+        return results

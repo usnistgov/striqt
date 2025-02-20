@@ -4,5 +4,9 @@ channels:
   - conda-forge
 
 dependencies:
+  - soapysdr~=0.8.1
+  - pigz
+  # git repository introspection support for metadata
+  - dulwich
   - pip:
     - ssmdevices
