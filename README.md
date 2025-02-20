@@ -25,9 +25,10 @@ Installation with radio hardware and GPU support is provided via conda environme
 ### Option 2: pip installation
 The dependencies, APIs, and CLIs can be installed without radio hardware or GPU support (for post-analysis, plotting, testing, etc.) via `pip install`. In order to avoid conflicts with other projects, the recommended practice for this is to install into a python virtual environment.
 
-Procedure:
 1. Clone this repository
 2. `pip install <path-to-repository>`
+
+In the future, this may be simplified if the repository is made public.
 
 ## Basic Usage
 
