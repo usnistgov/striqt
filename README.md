@@ -19,8 +19,7 @@ The source code layout is oriented toward execution of notebooks or scripts in c
     - IDE: select the `flex-spectrum-sensor` virtual environment 
     - Command line: `conda activate flex-spectrum-sensor`
 
-> **_NOTE:_**  The environment operates on an [editable install](https://setuptools.pypa.io/en/latest/userguide/development_mode.html) of the modules and command line tools. This means you should not
-move the `flex-spectrum-sensor` directory, otherwise the environment will be corrupted.  
+> **_NOTE:_**  The environment operates on an [editable install](https://setuptools.pypa.io/en/latest/userguide/development_mode.html) of the modules and command line tools. As a result, if the location of the cloned source code repository is moved, the flex-spectrum-sensor environment needs to be removed and built again according to the instructions above.
 
 ### pip installation
 The dependencies, APIs, and CLIs can be installed without radio hardware support (for post-analysis, testing, etc.) via `pip install`. In order to avoid conflicts with other projects, the recommended practice for this is to install into a python virtual environment.
@@ -43,15 +42,17 @@ Once a `flex-spectrum-sensor` environment is installed and activated, the follow
 Detailed usage instructions for each can be discovered with the `--help` flag.
 
 ### Module APIs
-This is alpha software. The API may still change without warning, and only source-code level documentation is available for these modules.
+This is alpha software. The API may still change without warning.
+
+Documentation:
+* The most up-to-date documentation is in the source-code as docstrings
+* A few examples are located in `tests` and `notebooks`. Some of these may not be up to date.
 
 The repository is organized into two python modules that are importable as :
 
 * `channel_analysis`: Methods for the analysis of an IQ recording. These use [iqwaveform](https://github.com/dgkuester/iqwaveform) and [the python array API](https://data-apis.org/array-api/latest/) for interchangeable CPU or CUDA GPU compute, depending on whether `numpy` or `cupy` objects are passed in. Results are packaged into [xarray Dataset objects](https://docs.xarray.dev/en/stable/generated/xarray.Dataset.html).
 
 * `edge_sensor`: Methods for swept acquisition and analysis of field data with software-defined radios.
-
-These may be imported from any directory provided that the `flex-spectrum-sensor` environment is activated. They are imported directly from the file tree in the source code repository, so __if your copy of the source code repository is moved, the flex-spectrum-sensor environment should be removed and built again from scratch__.
 
 ### See Also
 * [Validation and calibration with hardware](https://github.com/usnistgov/flex-spectrum-sensor-tests)
