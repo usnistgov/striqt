@@ -66,7 +66,7 @@ def fftfreq(nfft, fs, dtype='float64') -> 'np.ndarray':
 
 
 def freq_axis_values(
-    capture: structs.RadioCapture, fres: int, navg: int = None, truncate=False
+    capture: structs.RadioCapture, fres: int, navg: int = None, trim_stopband=False
 ):
     if iqwaveform.isroundmod(capture.sample_rate, fres):
         nfft = round(capture.sample_rate / fres)
@@ -80,7 +80,7 @@ def freq_axis_values(
     freqs = fftfreq(nfft, capture.sample_rate)
     # freqs = iqwaveform.fourier.fftfreq(nfft, 1.0 / fs, dtype='longdouble')
 
-    if truncate and np.isfinite(capture.analysis_bandwidth):
+    if trim_stopband and np.isfinite(capture.analysis_bandwidth):
         # stick with python arithmetic here for numpy/cupy consistency
         freqs = truncate_spectrogram_bandwidth(
             freqs, nfft, capture.sample_rate, capture.analysis_bandwidth, axis=0
@@ -163,7 +163,7 @@ def _evaluate(
     window: typing.Union[str, tuple[str, float]],
     frequency_resolution: float,
     fractional_overlap: float = 0,
-    truncate_to_bandwidth: bool = True,
+    trim_stopband: bool = True,
 ):
     # TODO: integrate this back into iqwaveform
     if iqwaveform.isroundmod(capture.sample_rate, frequency_resolution):
@@ -192,7 +192,7 @@ def _evaluate(
     )
 
     # truncate to the analysis bandwidth
-    if truncate_to_bandwidth and np.isfinite(capture.analysis_bandwidth):
+    if trim_stopband and np.isfinite(capture.analysis_bandwidth):
         # stick with python arithmetic to ensure consistency with axis bounds calculations
         spg = truncate_spectrogram_bandwidth(
             spg, nfft, capture.sample_rate, bandwidth=capture.analysis_bandwidth, axis=2
@@ -216,10 +216,10 @@ def compute_spectrogram(
     window: typing.Union[str, tuple[str, float]],
     frequency_resolution: float,
     fractional_overlap: float = 0,
-    frequency_bin_averaging: int = None,
-    time_bin_averaging: int = None,
+    frequency_bin_averaging: typing.Optional[int] = None,
+    time_bin_averaging: typing.Optional[int] = None,
     limit_digits: int = None,
-    truncate_to_bandwidth: bool = True,
+    trim_stopband: bool = True,
     dB: bool = True,
     dtype='float16',
 ):
@@ -227,7 +227,7 @@ def compute_spectrogram(
         window=window,
         frequency_resolution=frequency_resolution,
         fractional_overlap=fractional_overlap,
-        truncate_to_bandwidth=truncate_to_bandwidth,
+        trim_stopband=trim_stopband,
     )
     spg, metadata = _evaluate(iq=iq, capture=capture, **eval_kws)
 
@@ -274,7 +274,7 @@ class SpectrogramTimeCoords:
         *,
         frequency_resolution: float,
         fractional_overlap: float,
-        time_bin_averaging: int,
+        time_bin_averaging: typing.Optional[int],
         **_,
     ) -> dict[str, np.ndarray]:
         import pandas as pd
@@ -315,7 +315,7 @@ class SpectrogramBasebandFrequencyCoords:
         *,
         frequency_resolution: float,
         fractional_overlap: float = 0,
-        frequency_bin_averaging: float = None,
+        frequency_bin_averaging: typing.Optional[int] = None,
         truncate: bool = True,
         **_,
     ) -> dict[str, np.ndarray]:
@@ -323,7 +323,7 @@ class SpectrogramBasebandFrequencyCoords:
             capture,
             fres=frequency_resolution,
             navg=frequency_bin_averaging,
-            truncate=truncate,
+            trim_stopband=truncate,
         )
 
 

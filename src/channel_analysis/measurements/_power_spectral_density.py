@@ -55,10 +55,10 @@ class BasebandFrequencyCoords:
         *,
         frequency_resolution: float,
         fractional_overlap: float = 0,
-        truncate: bool = True,
+        trim_stopband: bool = True,
         **_,
     ) -> dict[str, np.ndarray]:
-        return freq_axis_values(capture, fres=frequency_resolution, truncate=truncate)
+        return freq_axis_values(capture, fres=frequency_resolution, trim_stopband=trim_stopband)
 
 
 ### Dataarray
@@ -84,7 +84,7 @@ def power_spectral_density(
     frequency_statistic: tuple[typing.Union[str, float], ...] = ('mean',),
     fractional_overlap: float = 0,
     frequency_bin_averaging: typing.Optional[float] = None,
-    truncate: bool = True,
+    trim_stopband: bool = True,
 ):
     """estimate power spectral density using the Welch method.
 
@@ -105,7 +105,7 @@ def power_spectral_density(
         window=window,
         frequency_resolution=frequency_resolution,
         frequency_bin_averaging=frequency_bin_averaging,
-        truncate_to_bandwidth=truncate,
+        trim_stopband=trim_stopband,
         fractional_overlap=fractional_overlap,
         dB=False,
         dtype=dtype,
