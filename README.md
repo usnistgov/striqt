@@ -2,7 +2,7 @@ This is a python-based platform for experimentation with high-fidelity real time
 
 ## Installation
 
-### Conda Environment
+### Option 1: Conda Environment
 The source code layout is oriented toward execution of notebooks or scripts in conda environments. Several variants of a `flex-spectrum-sensor` environment are provided here, targeted at different host computing environments.
 
 1. Ensure that `conda` is installed (or `mamba`/`micromamba`, substituted in what follows)
@@ -21,8 +21,8 @@ The source code layout is oriented toward execution of notebooks or scripts in c
 
 > **_NOTE:_**  The environment operates on an [editable install](https://setuptools.pypa.io/en/latest/userguide/development_mode.html) of the modules and command line tools. As a result, if the location of the cloned source code repository is moved, the flex-spectrum-sensor environment needs to be removed and built again according to the instructions above.
 
-### pip installation
-The dependencies, APIs, and CLIs can be installed without radio hardware support (for post-analysis, testing, etc.) via `pip install`. In order to avoid conflicts with other projects, the recommended practice for this is to install into a python virtual environment.
+### Option 2: pip installation
+The dependencies, APIs, and CLIs can be installed without radio hardware or GPU support (for post-analysis, plotting, testing, etc.) via `pip install`. In order to avoid conflicts with other projects, the recommended practice for this is to install into a python virtual environment.
 
 Procedure:
 1. Clone this repository
