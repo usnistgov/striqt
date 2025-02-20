@@ -1,6 +1,7 @@
 This is a python-based platform for experimentation with high-fidelity real time signal analysis (RTSA) with software-defined radios. Baseband signal processing may be performed interchangeably on either CPU or CUDA GPUs.
 
 ## Installation
+The following options require that the host has internet access in order to download dependencies. Installs via local package indexes may require customization that has not been tested.
 
 ### Option 1: Conda Environment
 Installation with radio hardware and GPU support is provided via conda environments. Several variants of a `flex-spectrum-sensor` environment are provided here, targeted at different host computing environments.
@@ -24,7 +25,6 @@ Installation with radio hardware and GPU support is provided via conda environme
 ### Option 2: pip installation
 The dependencies, APIs, and CLIs can be installed without radio hardware or GPU support (for post-analysis, plotting, testing, etc.) via `pip install`. In order to avoid conflicts with other projects, the recommended practice for this is to install into a python virtual environment.
 
-Procedure:
 1. Clone this repository
 2. `pip install <path-to-repository>`
 
@@ -51,6 +51,7 @@ The API is organized into two python modules that are importable as :
 * `edge_sensor`: Methods for swept acquisition and analysis of field data with software-defined radios.
 
 ## Documentation
+In keeping with the alpha development status of this codebase, documentation is limited.
 * [reference](https://github.com/usnistgov/flex-spectrum-sensor/blob/main/doc/reference-sweep.yaml) for the `yaml` configuration files that drive `edge_sensor`
 * Docstrings in the source code are the most up-to-date API documentation
 * A few examples are located in [tests](https://github.com/usnistgov/flex-spectrum-sensor/tree/main/tests) and [notebooks](https://github.com/usnistgov/flex-spectrum-sensor/tree/main/notebooks). Some of these may not be up to date.
