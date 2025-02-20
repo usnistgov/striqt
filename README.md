@@ -52,6 +52,7 @@ The API is organized into two python modules that are importable as :
 * `edge_sensor`: Methods for swept acquisition and analysis of field data with software-defined radios.
 
 ## Documentation
+In keeping with the alpha development status of this codebase, documentation is limited.
 * [reference](https://github.com/usnistgov/flex-spectrum-sensor/blob/main/doc/reference-sweep.yaml) for the `yaml` configuration files that drive `edge_sensor`
 * Docstrings in the source code are the most up-to-date API documentation
 * A few examples are located in [tests](https://github.com/usnistgov/flex-spectrum-sensor/tree/main/tests) and [notebooks](https://github.com/usnistgov/flex-spectrum-sensor/tree/main/notebooks). Some of these may not be up to date.
