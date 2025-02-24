@@ -41,13 +41,21 @@ class FixedEngFormatter(mpl.ticker.EngFormatter):
         unit='',
         unitInTick=True,
         places=None,
-        sep=' ',
+        sep=None,
         *,
         usetex=None,
         useMathText=None,
         useOffset=False,
     ):
         self.unitInTick = unitInTick
+
+        if sep is not None:
+            pass
+        if unit is None or (len(unit) == 1 and not unit.isalnum()):
+            sep = ''
+        else:
+            sep = ' '
+
         super().__init__(
             unit,
             places,

@@ -21,9 +21,9 @@ else:
 
 
 @functools.lru_cache
-def equivalent_noise_bandwidth(window: typing.Union[str, tuple[str, float]], N: int):
+def equivalent_noise_bandwidth(window: typing.Union[str, tuple[str, float]], nfft: int):
     """return the equivalent noise bandwidth (ENBW) of a window, in bins"""
-    w = iqwaveform.fourier._get_window(window, N)
+    w = iqwaveform.fourier._get_window(window, nfft)
     return len(w) * np.sum(w**2) / np.sum(w) ** 2
 
 
@@ -163,6 +163,7 @@ def _evaluate(
     window: typing.Union[str, tuple[str, float]],
     frequency_resolution: float,
     fractional_overlap: float = 0,
+    fractional_window: float = 1,
     trim_stopband: bool = True,
 ):
     # TODO: integrate this back into iqwaveform
@@ -181,12 +182,18 @@ def _evaluate(
     else:
         raise ValueError('sample_rate_Hz/resolution must be a counting number')
 
+    if iqwaveform.isroundmod((1 - fractional_window) * nfft, 1):
+        nzero = round((1 - fractional_window) * nfft)
+    else:
+        raise ValueError('(1-fractional_window) * (sample_rate/frequency_resolution) must be a counting number')
+
     spg = iqwaveform.fourier.spectrogram(
         iq,
         window=window,
         fs=capture.sample_rate,
         nperseg=nfft,
         noverlap=noverlap,
+        nzero=nzero,
         axis=1,
         return_axis_arrays=False,
     )
@@ -216,6 +223,7 @@ def compute_spectrogram(
     window: typing.Union[str, tuple[str, float]],
     frequency_resolution: float,
     fractional_overlap: float = 0,
+    fractional_window: float = 1,
     frequency_bin_averaging: typing.Optional[int] = None,
     time_bin_averaging: typing.Optional[int] = None,
     limit_digits: int = None,
@@ -228,6 +236,7 @@ def compute_spectrogram(
         frequency_resolution=frequency_resolution,
         fractional_overlap=fractional_overlap,
         trim_stopband=trim_stopband,
+        fractional_window=fractional_window,
     )
     spg, metadata = _evaluate(iq=iq, capture=capture, **eval_kws)
 
@@ -273,8 +282,8 @@ class SpectrogramTimeCoords:
         capture: structs.Capture,
         *,
         frequency_resolution: float,
-        fractional_overlap: float,
-        time_bin_averaging: typing.Optional[int],
+        fractional_overlap: float = 0,
+        time_bin_averaging: typing.Optional[int] = None,
         **_,
     ) -> dict[str, np.ndarray]:
         import pandas as pd
@@ -292,7 +301,7 @@ class SpectrogramTimeCoords:
             hop_size = hop_size * time_bin_averaging
         else:
             raise ValueError(
-                'spectrogram time bin count must be an whole multiple of time_bin_averaging'
+                'spectrogram time bin count must be a whole multiple of time_bin_averaging'
             )
 
         return pd.RangeIndex(size) * hop_size / capture.sample_rate
@@ -346,6 +355,7 @@ def spectrogram(
     window: typing.Union[str, tuple[str, float]],
     frequency_resolution: float,
     fractional_overlap: float = 0,
+    fractional_window: float = 1,
     frequency_bin_averaging: typing.Optional[int] = None,
     time_bin_averaging: typing.Optional[int] = None,
 ):
