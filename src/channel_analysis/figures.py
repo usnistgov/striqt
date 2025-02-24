@@ -25,7 +25,7 @@ else:
     iqwaveform = util.lazy_import('iqwaveform')
 
 
-_FIXED_UNIT_PREFIXES = {'center_frequency': 'M'}
+_FORCE_UNIT_PREFIXES = {'center_frequency': 'M'}
 
 
 class MissingDataError(AttributeError):
@@ -418,7 +418,7 @@ def capture_to_dicts(capture: xr.DataArray, title_case=False) -> dict[str]:
     d = {}
     for k, v in coords.items():
         if isinstance(v['data'], numbers.Number):
-            prefix = _FIXED_UNIT_PREFIXES.get(k, None)
+            prefix = _FORCE_UNIT_PREFIXES.get(k, None)
             d[k] = xarray_ops.describe_value(v['data'], v['attrs'], unit_prefix=prefix)
         elif isinstance(v['data'], str):
             d[k] = v['data'].replace('_', ' ')
