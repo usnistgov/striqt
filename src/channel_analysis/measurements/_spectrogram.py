@@ -163,7 +163,7 @@ def _evaluate(
     window: typing.Union[str, tuple[str, float]],
     frequency_resolution: float,
     fractional_overlap: float = 0,
-    fractional_window: float = 1,
+    window_scale: float = 1,
     trim_stopband: bool = True,
 ):
     # TODO: integrate this back into iqwaveform
@@ -182,10 +182,12 @@ def _evaluate(
     else:
         raise ValueError('sample_rate_Hz/resolution must be a counting number')
 
-    if iqwaveform.isroundmod((1 - fractional_window) * nfft, 1):
-        nzero = round((1 - fractional_window) * nfft)
+    if iqwaveform.isroundmod((1 - window_scale) * nfft, 1):
+        nzero = round((1 - window_scale) * nfft)
     else:
-        raise ValueError('(1-fractional_window) * (sample_rate/frequency_resolution) must be a counting number')
+        raise ValueError(
+            '(1-window_scale) * (sample_rate/frequency_resolution) must be a counting number'
+        )
 
     spg = iqwaveform.fourier.spectrogram(
         iq,
@@ -223,7 +225,7 @@ def compute_spectrogram(
     window: typing.Union[str, tuple[str, float]],
     frequency_resolution: float,
     fractional_overlap: float = 0,
-    fractional_window: float = 1,
+    window_scale: float = 1,
     frequency_bin_averaging: typing.Optional[int] = None,
     time_bin_averaging: typing.Optional[int] = None,
     limit_digits: int = None,
@@ -236,7 +238,7 @@ def compute_spectrogram(
         frequency_resolution=frequency_resolution,
         fractional_overlap=fractional_overlap,
         trim_stopband=trim_stopband,
-        fractional_window=fractional_window,
+        window_scale=window_scale,
     )
     spg, metadata = _evaluate(iq=iq, capture=capture, **eval_kws)
 
@@ -355,7 +357,7 @@ def spectrogram(
     window: typing.Union[str, tuple[str, float]],
     frequency_resolution: float,
     fractional_overlap: float = 0,
-    fractional_window: float = 1,
+    window_scale: float = 1,
     frequency_bin_averaging: typing.Optional[int] = None,
     time_bin_averaging: typing.Optional[int] = None,
 ):

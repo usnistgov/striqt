@@ -58,7 +58,9 @@ class BasebandFrequencyCoords:
         trim_stopband: bool = True,
         **_,
     ) -> dict[str, np.ndarray]:
-        return freq_axis_values(capture, fres=frequency_resolution, trim_stopband=trim_stopband)
+        return freq_axis_values(
+            capture, fres=frequency_resolution, trim_stopband=trim_stopband
+        )
 
 
 ### Dataarray
@@ -83,7 +85,7 @@ def power_spectral_density(
     frequency_resolution: float,
     frequency_statistic: tuple[typing.Union[str, float], ...] = ('mean',),
     fractional_overlap: float = 0,
-    fractional_window: float = 1,
+    window_scale: float = 1,
     frequency_bin_averaging: typing.Optional[float] = None,
     trim_stopband: bool = True,
 ):

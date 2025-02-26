@@ -10,6 +10,7 @@ import numcodecs
 
 from . import util
 import xarray as xr
+
 if typing.TYPE_CHECKING:
     import numpy as np
     import xarray as xr
@@ -162,35 +163,41 @@ def dump(
             return data.to_zarr(store, encoding=encodings, mode='w', **kws)
 
 
-def read_matlab_iq(path, fs, duration=None, xp=np, dtype='complex64'):
+def read_matlab_iq(
+    path: Path|str, fs: float, duration: float, *, xp=np, dtype='complex64', input_dtype='complex128', skip_samples=0
+):
     """read complex-valued IQ waveforms from .mat files as a numpy array.
-    
-    Requires `h5py` module installed to read the file. 
+
+    Requires `h5py` module installed to read the file.
     """
     import h5py
 
+    global mat
     mat = h5py.File(path, 'r')
+    
     dataset = mat['#refs#']
-    sizes = {k: v.shape[1] for k,v in dataset.items() if hasattr(v, 'shape') and v.ndim == 2}
-    cum_sizes = xp.cumsum(list(sizes.values()))
-    extra = 32
+    sample_tally = 0
+    array_list = []
 
     if duration is None:
-        size = cum_sizes[-1]
-        keys = list(sizes.keys())
+        target_size = None
     else:
-        size = round(duration * fs) + extra
-        start_sizes = cum_sizes - cum_sizes[0]
-        keys = [k for k, start_size in zip(sizes.keys(), start_sizes) if start_size < size + extra]
+        target_size = round(duration * fs) + skip_samples
 
-    value_list = [
-        xp.asarray(dataset[k], dataset[k].dtype).view('complex128').astype(dtype)
-        for k in keys
-    ]
+    for key, ref in dataset.items():
+        if not hasattr(ref, 'shape') or ref.ndim != 2:
+            continue
 
-    iq = xp.concat(value_list, axis=1)[:,extra:extra+size]
+        x = xp.asarray(dataset[key], dataset[key].dtype).view(input_dtype).astype(dtype)
+        array_list.append(x)
+        sample_tally += x.shape[1]
 
-    return iq
+        if target_size is not None and sample_tally >= target_size:
+            break
+
+    iq = xp.concat(array_list, axis=1)
+
+    return iq[:, skip_samples : target_size]
 
 
 def load(path: str | Path) -> 'xr.DataArray' | 'xr.Dataset':

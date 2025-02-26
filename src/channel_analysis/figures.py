@@ -549,7 +549,7 @@ def label_axis(
 
     standard_name = ax_data.attrs.get('standard_name', None) or ax_data.name
     long_name = ax_data.attrs.get('long_name', None) or standard_name
-    
+
     if short:
         desc_text = standard_name
     else:
