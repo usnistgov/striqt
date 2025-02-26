@@ -130,7 +130,7 @@ def cellular_cyclic_autocorrelation(
 
     xp = iqwaveform.util.array_namespace(iq)
     subcarrier_spacings = tuple(subcarrier_spacings)
-    phy_scs = _get_phy_mappings(
+    phy_scs = _get_phy_mapping(
         capture.analysis_bandwidth, capture.sample_rate, subcarrier_spacings, xp=xp
     )
     metadata = {}
@@ -168,7 +168,6 @@ def cellular_cyclic_autocorrelation(
     )
     for chan in range(iq.shape[0]):
         for iscs, phy in enumerate(phy_scs.values()):
-            # R = _correlate_cyclic_prefixes(iq, phy, **kws)
             cp_inds = phy.index_cyclic_prefix(**idx_kws, slots=downlink_slots)
             R = iqwaveform.ofdm.corr_at_indices(
                 cp_inds, iq[chan], phy.nfft, norm=normalize
@@ -180,6 +179,7 @@ def cellular_cyclic_autocorrelation(
                 R = iqwaveform.ofdm.corr_at_indices(
                     cp_inds, iq[chan], phy.nfft, norm=normalize
                 )
+                # R = xp.roll(R, -phy.cp_sizes[0])
                 result[chan][1][iscs][: R.size] = xp.abs(R)
 
     if normalize:
@@ -191,7 +191,7 @@ def cellular_cyclic_autocorrelation(
 
 
 @functools.lru_cache
-def _get_phy_mappings(
+def _get_phy_mapping(
     channel_bandwidth: float,
     sample_rate: float,
     subcarrier_spacings: tuple[float, ...],
@@ -209,7 +209,7 @@ def _get_phy_mappings(
 def _get_max_corr_size(
     capture: structs.Capture, *, subcarrier_spacings: tuple[float, ...]
 ):
-    phy_scs = _get_phy_mappings(
+    phy_scs = _get_phy_mapping(
         capture.analysis_bandwidth, capture.sample_rate, subcarrier_spacings
     )
     return max([np.diff(phy.cp_start_idx).min() for phy in phy_scs.values()])

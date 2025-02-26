@@ -162,6 +162,37 @@ def dump(
             return data.to_zarr(store, encoding=encodings, mode='w', **kws)
 
 
+def read_matlab_iq(path, fs, duration=None, xp=np, dtype='complex64'):
+    """read complex-valued IQ waveforms from .mat files as a numpy array.
+    
+    Requires `h5py` module installed to read the file. 
+    """
+    import h5py
+
+    mat = h5py.File(path, 'r')
+    dataset = mat['#refs#']
+    sizes = {k: v.shape[1] for k,v in dataset.items() if hasattr(v, 'shape') and v.ndim == 2}
+    cum_sizes = xp.cumsum(list(sizes.values()))
+    extra = 32
+
+    if duration is None:
+        size = cum_sizes[-1]
+        keys = list(sizes.keys())
+    else:
+        size = round(duration * fs) + extra
+        start_sizes = cum_sizes - cum_sizes[0]
+        keys = [k for k, start_size in zip(sizes.keys(), start_sizes) if start_size < size + extra]
+
+    value_list = [
+        xp.asarray(dataset[k], dataset[k].dtype).view('complex128').astype(dtype)
+        for k in keys
+    ]
+
+    iq = xp.concat(value_list, axis=1)[:,extra:extra+size]
+
+    return iq
+
+
 def load(path: str | Path) -> 'xr.DataArray' | 'xr.Dataset':
     """load a dataset or data array"""
 
