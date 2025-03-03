@@ -3,7 +3,7 @@ import dataclasses
 import functools
 import typing
 
-from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
+from xarray_dataclasses import AsDataArray, Coordof, Data, Attr, Name
 
 from ..api.registry import register_xarray_measurement
 from ._spectrogram import compute_spectrogram, equivalent_noise_bandwidth
@@ -69,6 +69,7 @@ class SpectrogramHistogram(AsDataArray):
     counts: Data[SpectrogramPowerBinAxis, np.float32]
     spectrogram_power_bin: Coordof[SpectrogramPowerBinCoords]
     standard_name: Attr[str] = 'Fraction of counts'
+    name: Name[str] = 'cellular_resource_power_histogram'
 
 
 @register_xarray_measurement(SpectrogramHistogram)

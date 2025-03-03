@@ -40,7 +40,7 @@ def truncate_spectrogram_bandwidth(x, nfft, fs, bandwidth, axis=0):
     return iqwaveform.util.axis_slice(x, *edges, axis=axis)
 
 
-def binned_mean(x, count, *, axis=0, truncate=True):
+def binned_mean(x, count, *, axis=0, truncate=True, reject_extrema=False):
     """reduce an array by averaging into bins on the specified axis"""
 
     xp = iqwaveform.util.array_namespace(x)
@@ -51,7 +51,11 @@ def binned_mean(x, count, *, axis=0, truncate=True):
         if trim > 0:
             x = iqwaveform.util.axis_slice(x, trim // 2, trim // 2 + dimsize, axis=axis)
     x = iqwaveform.fourier.to_blocks(x, count, axis=axis)
-    ret = xp.nanmean(x, axis=axis + 1 if axis >= 0 else axis)
+    stat_axis = axis + 1 if axis >= 0 else axis
+    if reject_extrema:
+        x = np.sort(x, axis=stat_axis)
+        x = iqwaveform.util.axis_slice(x, 1, -1, axis=stat_axis)
+    ret = xp.nanmean(x, axis=stat_axis)
     return ret
 
 
@@ -303,15 +307,9 @@ class SpectrogramTimeCoords:
         scale = nfft / hop_size
         size = int(scale * (capture.sample_rate * capture.duration / nfft - 1) + 1)
 
-        if not time_bin_averaging:
-            pass
-        elif size % time_bin_averaging == 0:
+        if time_bin_averaging:
             size = size // time_bin_averaging
             hop_size = hop_size * time_bin_averaging
-        else:
-            raise ValueError(
-                'spectrogram time bin count must be a whole multiple of time_bin_averaging'
-            )
 
         return pd.RangeIndex(size) * hop_size / capture.sample_rate
 
