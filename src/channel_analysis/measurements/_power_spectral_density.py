@@ -3,7 +3,7 @@ import dataclasses
 import functools
 import typing
 
-from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
+from xarray_dataclasses import AsDataArray, Coordof, Data, Attr, Name
 
 from ..api.registry import register_xarray_measurement
 from ._spectrogram import freq_axis_values, compute_spectrogram
@@ -74,6 +74,7 @@ class PowerSpectralDensity(AsDataArray):
     baseband_frequency: Coordof[BasebandFrequencyCoords]
 
     standard_name: Attr[str] = 'Power spectral density'
+    name: Name[str] = 'power_spectral_density'
 
 
 @register_xarray_measurement(PowerSpectralDensity)

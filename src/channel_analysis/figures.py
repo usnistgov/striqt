@@ -379,6 +379,17 @@ class CapturePlotter:
         )
 
     @_maybe_skip_missing
+    def cellular_resource_power_histogram(self, data: xr.Dataset, **sel):
+        key = self.cellular_resource_power_histogram.__name__
+        return self._line(
+            data[key].sel(sel),
+            name=key,
+            x='cellular_resource_power_bin',
+            xticklabelunits=False,
+            # hue=hue,
+        )
+
+    @_maybe_skip_missing
     def spectrogram_ratio_histogram(self, data: xr.Dataset, **sel):
         key = self.spectrogram_ratio_histogram.__name__
         return self._line(
@@ -468,6 +479,7 @@ def plot_cyclic_channel_power(
     dB=True,
     ax=None,
     colors=None,
+    plot_kws={},
 ):
     if ax is None:
         _, ax = plt.subplots()
@@ -487,6 +499,7 @@ def plot_cyclic_channel_power(
             time,
             (a.sel(cyclic_statistic=center_statistic)),
             color=f'C{i}' if colors is None else colors[i],
+            **plot_kws,
         )
 
     for i, detector in enumerate(cyclic_channel_power.power_detector.values):

@@ -4,6 +4,7 @@ import dataclasses
 import decimal
 import functools
 import typing
+import warnings
 
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
@@ -18,6 +19,10 @@ else:
     iqwaveform = util.lazy_import('iqwaveform')
     signal = util.lazy_import('scipy.signal')
     np = util.lazy_import('numpy')
+
+warnings.filterwarnings(
+    'ignore', '.*Mean of empty slice.*', category=RuntimeWarning, module=__name__
+)
 
 
 @functools.lru_cache
@@ -38,13 +43,15 @@ def truncate_spectrogram_bandwidth(x, nfft, fs, bandwidth, axis=0):
 def binned_mean(x, count, *, axis=0, truncate=True):
     """reduce an array by averaging into bins on the specified axis"""
 
+    xp = iqwaveform.util.array_namespace(x)
+
     if truncate:
         trim = x.shape[axis] % (count)
         dimsize = (x.shape[axis] // count) * count
         if trim > 0:
             x = iqwaveform.util.axis_slice(x, trim // 2, trim // 2 + dimsize, axis=axis)
     x = iqwaveform.fourier.to_blocks(x, count, axis=axis)
-    ret = x.mean(axis=axis + 1)
+    ret = xp.nanmean(x, axis=axis + 1 if axis >= 0 else axis)
     return ret
 
 

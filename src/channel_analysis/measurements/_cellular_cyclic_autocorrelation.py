@@ -69,13 +69,8 @@ class LinkDirectionCoords:
 
     @staticmethod
     @functools.lru_cache
-    def factory(
-        capture: structs.Capture, *, downlink_slots='all', uplink_slots=tuple(), **_
-    ):
-        return ['downlink', 'uplink'], {
-            'downlink_slots': downlink_slots,
-            'uplink_slots': uplink_slots,
-        }
+    def factory(capture: structs.Capture, **_):
+        return ['downlink', 'uplink'], {}
 
 
 ### Dataarray definition

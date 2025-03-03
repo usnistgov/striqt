@@ -289,13 +289,15 @@ class ChannelAnalysisResult(collections.UserDict):
     attrs: dict[str] = dataclasses.field(default_factory=dict)
 
     def to_xarray(self, expand_dims=None) -> 'xr.DataArray':
-        return channel_dataarray(
+        array = channel_dataarray(
             cls=self.datacls,
             data=self.data,
             capture=self.capture,
             parameters=self.parameters,
             expand_dims=expand_dims,
-        ).assign_attrs(self.attrs)
+        )
+
+        return array.assign_attrs(self.attrs)
 
 
 def select_parameter_kws(locals_: dict, omit=('capture', 'out')) -> dict:
@@ -334,6 +336,7 @@ def evaluate_channel_analysis(
                 if not func_kws:
                     continue
                 results[name] = func(iq, capture, as_xarray=as_xarray, **func_kws)
+                print(results[name])
 
     return results
 

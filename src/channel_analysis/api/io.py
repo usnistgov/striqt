@@ -164,7 +164,14 @@ def dump(
 
 
 def read_matlab_iq(
-    path: Path|str, fs: float, duration: float, *, xp=np, dtype='complex64', input_dtype='complex128', skip_samples=0
+    path: Path | str,
+    fs: float,
+    duration: float,
+    *,
+    xp=np,
+    dtype='complex64',
+    input_dtype='complex128',
+    skip_samples=0,
 ):
     """read complex-valued IQ waveforms from .mat files as a numpy array.
 
@@ -174,7 +181,7 @@ def read_matlab_iq(
 
     global mat
     mat = h5py.File(path, 'r')
-    
+
     dataset = mat['#refs#']
     sample_tally = 0
     array_list = []
@@ -197,7 +204,7 @@ def read_matlab_iq(
 
     iq = xp.concat(array_list, axis=1)
 
-    return iq[:, skip_samples : target_size]
+    return iq[:, skip_samples:target_size]
 
 
 def load(path: str | Path) -> 'xr.DataArray' | 'xr.Dataset':
