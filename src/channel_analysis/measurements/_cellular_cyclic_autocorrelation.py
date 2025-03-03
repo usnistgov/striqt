@@ -70,7 +70,8 @@ class LinkDirectionCoords:
     @staticmethod
     @functools.lru_cache
     def factory(capture: structs.Capture, **_):
-        return ['downlink', 'uplink'], {}
+        values = np.array(['downlink', 'uplink'], dtype='U8')
+        return values, {}
 
 
 ### Dataarray definition
