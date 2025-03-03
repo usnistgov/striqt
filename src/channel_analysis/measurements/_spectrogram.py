@@ -40,7 +40,7 @@ def truncate_spectrogram_bandwidth(x, nfft, fs, bandwidth, axis=0):
     return iqwaveform.util.axis_slice(x, *edges, axis=axis)
 
 
-def binned_mean(x, count, *, axis=0, truncate=True, reject_extrema=False):
+def binned_mean(x, count, *, axis=0, truncate=True, reject_extrema=False, centered=True):
     """reduce an array by averaging into bins on the specified axis"""
 
     xp = iqwaveform.util.array_namespace(x)
@@ -49,7 +49,11 @@ def binned_mean(x, count, *, axis=0, truncate=True, reject_extrema=False):
         trim = x.shape[axis] % (count)
         dimsize = (x.shape[axis] // count) * count
         if trim > 0:
-            x = iqwaveform.util.axis_slice(x, trim // 2, trim // 2 + dimsize, axis=axis)
+            if centered:
+                start = trim // 2
+            else:
+                start = 0
+            x = iqwaveform.util.axis_slice(x, start, start + dimsize, axis=axis)
     x = iqwaveform.fourier.to_blocks(x, count, axis=axis)
     stat_axis = axis + 1 if axis >= 0 else axis
     if reject_extrema:
@@ -259,7 +263,7 @@ def compute_spectrogram(
         spg = binned_mean(spg, frequency_bin_averaging, axis=2)
 
     if time_bin_averaging is not None:
-        spg = binned_mean(spg, time_bin_averaging, axis=1)
+        spg = binned_mean(spg, time_bin_averaging, axis=1, centered=False)
 
     if dB:
         spg = iqwaveform.powtodB(spg, eps=1e-25)
