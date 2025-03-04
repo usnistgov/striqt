@@ -24,7 +24,20 @@ else:
     # this is needed to resolve the 'pd.Timestamp' stub at runtime
     pd = util.lazy_import('pandas')
 
-_TShift = Literal['left', 'right', 'none']
+SingleChannelType = Annotated[int, meta('Input port index', ge=0)]
+SingleGainType = Annotated[float, meta('Gain setting', 'dB')]
+CenterFrequencyType = Annotated[float, meta('RF center frequency', 'Hz', gt=0)]
+ChannelType = Annotated[
+    Union[SingleChannelType, tuple[SingleChannelType, ...]],
+    meta('Input port indices'),
+]
+GainType = Annotated[
+    Union[SingleGainType, tuple[SingleGainType, ...]],
+    meta('Gain setting for each channel', 'dB'),
+]
+LOShiftType = Literal['left', 'right', 'none']
+DelayType = Annotated[float, meta('Delay in acquisition start time', 's', gt=0)]
+StartTimeType = Annotated['pd.Timestamp', meta('Acquisition start time')]
 
 
 def _dict_hash(d):
@@ -54,12 +67,8 @@ class WaveformCapture(channel_analysis.Capture, forbid_unknown_fields=True):
     analysis_bandwidth: Annotated[
         float, meta('Bandwidth of the analysis filter (or inf to disable)', 'Hz', gt=0)
     ] = float('inf')
-    lo_shift: Annotated[_TShift, meta('LO shift direction')] = 'none'
+    lo_shift: Annotated[LOShiftType, meta('LO shift direction')] = 'none'
     host_resample: bool = True
-
-
-SingleChannelType = Annotated[int, meta('Input port index', ge=0)]
-SingleGainType = Annotated[float, meta('Gain setting', 'dB')]
 
 
 @functools.lru_cache
@@ -81,25 +90,42 @@ class RadioCapture(WaveformCapture, forbid_unknown_fields=True):
     """Capture specification for a single radio waveform"""
 
     # RF and leveling
-    center_frequency: Annotated[float, meta('RF center frequency', 'Hz', gt=0)] = 3710e6
-    channel: Annotated[
-        Union[SingleChannelType, tuple[SingleChannelType, ...]],
-        meta('Input port indices'),
-    ] = 0
-    gain: Annotated[
-        Union[SingleGainType, tuple[SingleGainType, ...]],
-        meta('Gain setting for each channel', 'dB'),
-    ] = -10
+    center_frequency: CenterFrequencyType = 3710e6
+    channel: ChannelType = 0
+    gain: GainType = -10
 
-    delay: Optional[
-        Annotated[float, meta('Delay in acquisition start time', 's', gt=0)]
-    ] = None
-    start_time: Optional[Annotated['pd.Timestamp', meta('Acquisition start time')]] = (
-        None
-    )
+    delay: Optional[DelayType] = None
+    start_time: Optional[StartTimeType] = None
 
     def __post_init__(self):
         _validate_multichannel(self.channel, self.gain)
+
+
+TimeSourceType = Literal['host', 'internal', 'external', 'gps']
+ContinuousTriggerType = Annotated[
+    bool,
+    meta('Whether to trigger immediately after each call to acquire() when armed'),
+]
+GaplessRepeatType = Annotated[
+    bool,
+    meta('whether to raise an exception on overflows between identical captures'),
+]
+
+TimeSyncEveryCaptureType = Annotated[
+    bool, meta('whether to sync to PPS before each capture in a sweep')
+]
+WarmupSweepType = Annotated[
+    bool,
+    meta(
+        'whether to run the GPU compute on empty buffers before sweeping for more even run time'
+    ),
+]
+ArrayBackendType = Annotated[
+    Union[Literal['numpy'], Literal['cupy']],
+    meta(
+        'array module to use, which sets the type of compute device (numpy = cpu, cupy = gpu)'
+    ),
+]
 
 
 class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):
@@ -108,32 +134,14 @@ class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):
     driver: str = 'AirT7x01B'
     device_args: dict = {}
     resource: Any = None
-    time_source: Literal['host', 'internal', 'external', 'gps'] = 'host'
-    continuous_trigger: Annotated[
-        bool,
-        meta('Whether to trigger immediately after each call to acquire() when armed'),
-    ] = True
+    time_source: TimeSourceType = 'host'
+    continuous_trigger: ContinuousTriggerType = True
     periodic_trigger: Optional[float] = None
     calibration: Optional[str] = None
-    gapless_repeats: Annotated[
-        bool,
-        meta('whether to raise an exception on overflows between identical captures'),
-    ] = False
-    time_sync_every_capture: Annotated[
-        bool, meta('whether to sync to PPS before each capture in a sweep')
-    ] = False
-    warmup_sweep: Annotated[
-        bool,
-        meta(
-            'whether to run the GPU compute on empty buffers before sweeping for more even run time'
-        ),
-    ] = True
-    array_backend: Annotated[
-        Union[Literal['numpy'], Literal['cupy']],
-        meta(
-            'array module to use, which sets the type of compute device (numpy = cpu, cupy = gpu)'
-        ),
-    ] = 'cupy'
+    gapless_repeats: GaplessRepeatType = False
+    time_sync_every_capture: TimeSyncEveryCaptureType = False
+    warmup_sweep: WarmupSweepType = True
+    array_backend: ArrayBackendType = 'cupy'
 
     _transient_holdoff_time: Optional[float] = None
     _rx_channel_count: Optional[int] = None

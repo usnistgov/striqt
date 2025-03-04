@@ -16,6 +16,7 @@ if typing.TYPE_CHECKING:
     import xarray as xr
     import zarr
     import pandas as pd
+    import iqwaveform
 
     if hasattr(zarr.storage, 'Store'):
         # zarr 2.x
@@ -29,6 +30,7 @@ else:
     pd = util.lazy_import('pandas')
     xr = util.lazy_import('xarray')
     zarr = util.lazy_import('zarr')
+    iqwaveform = util.lazy_import('iqwaveform')
 
 warnings.filterwarnings(
     'ignore',
@@ -163,21 +165,34 @@ def dump(
             return data.to_zarr(store, encoding=encodings, mode='w', **kws)
 
 
+def load(path: str | Path) -> 'xr.DataArray' | 'xr.Dataset':
+    """load a dataset or data array"""
+
+    if isinstance(path, (str, Path)):
+        store = open_store(path, mode='r')
+
+    return xr.open_dataset(store, engine='zarr')
+
+
 def read_matlab_iq(
     path: Path | str,
-    fs: float,
-    duration: float,
+    sample_rate: float,
+    duration: float = None,
     *,
-    xp=np,
+    rx_channel_count=1,
     dtype='complex64',
     input_dtype='complex128',
     skip_samples=0,
-):
+    xp=np,
+    **capture_info,
+) -> 'iqwaveform.type_stubs.ArrayLike':
     """read complex-valued IQ waveforms from .mat files as a numpy array.
 
     Requires `h5py` module installed to read the file.
     """
     import h5py
+
+    # capture = _build_file_capture(sample_rate, duration, **capture_info)
 
     global mat
     mat = h5py.File(path, 'r')
@@ -189,13 +204,13 @@ def read_matlab_iq(
     if duration is None:
         target_size = None
     else:
-        target_size = round(duration * fs) + skip_samples
+        target_size = round(duration * sample_rate) + skip_samples
 
-    for key, ref in dataset.items():
+    for ref in dataset.values():
         if not hasattr(ref, 'shape') or ref.ndim != 2:
             continue
 
-        x = xp.asarray(dataset[key], dataset[key].dtype).view(input_dtype).astype(dtype)
+        x = xp.asarray(ref, ref.dtype).view(input_dtype).astype(dtype)
         array_list.append(x)
         sample_tally += x.shape[1]
 
@@ -205,12 +220,3 @@ def read_matlab_iq(
     iq = xp.concat(array_list, axis=1)
 
     return iq[:, skip_samples:target_size]
-
-
-def load(path: str | Path) -> 'xr.DataArray' | 'xr.Dataset':
-    """load a dataset or data array"""
-
-    if isinstance(path, (str, Path)):
-        store = open_store(path, mode='r')
-
-    return xr.open_dataset(store, engine='zarr')

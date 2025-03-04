@@ -40,7 +40,9 @@ def truncate_spectrogram_bandwidth(x, nfft, fs, bandwidth, axis=0):
     return iqwaveform.util.axis_slice(x, *edges, axis=axis)
 
 
-def binned_mean(x, count, *, axis=0, truncate=True, reject_extrema=False, centered=True):
+def binned_mean(
+    x, count, *, axis=0, truncate=True, reject_extrema=False, centered=True
+):
     """reduce an array by averaging into bins on the specified axis"""
 
     xp = iqwaveform.util.array_namespace(x)

@@ -2,20 +2,23 @@
 
 from __future__ import annotations
 from datetime import datetime
+import numpy as np
 from pathlib import Path
 import typing
 
 import msgspec
 
-from .structs import Sweep, RadioCapture  # noqa: F401
+from .structs import Sweep, RadioCapture, FileSourceCapture  # noqa: F401
 from . import util, captures
 import channel_analysis
 from channel_analysis import load, dump  # noqa: F401
 
 if typing.TYPE_CHECKING:
     import pandas as pd
+    import iqwaveform
 else:
     pd = util.lazy_import('pandas')
+    iqwaveform = util.lazy_import('iqwaveform')
 
 
 SweepType = typing.TypeVar('SweepType', bound=Sweep)
@@ -151,3 +154,24 @@ def read_yaml_sweep(
     sweep = msgspec.structs.replace(sweep, output=output_spec, radio_setup=setup_spec)
 
     return sweep
+
+
+def read_tdms_iq(
+    path: Path | str,
+    duration: float = None,
+    *,
+    rx_channel_count=1,
+    dtype='complex64',
+    skip_samples=0,
+    xp=np,
+) -> tuple['iqwaveform.type_stubs.ArrayLike', FileSourceCapture]:
+
+    from .radio.testing import TDMSFileSource
+
+    source = TDMSFileSource(path=path, rx_channel_count=rx_channel_count)
+    capture = source.get_capture_struct()
+
+    source.arm(capture)
+    iq, _ = source.read_iq(capture)
+
+    return iq
