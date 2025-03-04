@@ -83,7 +83,7 @@ def spectrogram_histogram(
     power_high: float,
     power_resolution: float,
     fractional_overlap: float = 0,
-    window_scale: float = 1,
+    window_fill: float = 1,
     frequency_bin_averaging: int = None,
     time_bin_averaging: int = None,
 ):
@@ -93,7 +93,7 @@ def spectrogram_histogram(
         window=window,
         frequency_resolution=frequency_resolution,
         fractional_overlap=fractional_overlap,
-        window_scale=window_scale,
+        window_fill=window_fill,
         frequency_bin_averaging=frequency_bin_averaging,
         time_bin_averaging=time_bin_averaging,
         dtype='float32',
