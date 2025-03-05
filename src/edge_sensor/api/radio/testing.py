@@ -4,12 +4,13 @@ import numbers
 from pathlib import Path
 import typing
 
-from . import base
+from . import base, method_attr
 from .null import NullSource
+from .. import structs
 
 import labbench as lb
 from labbench import paramattr as attr
-
+import msgspec
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -217,6 +218,105 @@ class TDMSFileSource(TestSource):
         float_dtype = np.finfo(np.dtype(dtype)).dtype
 
         return (iq * float_dtype(scale)).view(dtype).copy()
+
+
+class FileSource(TestSource):
+    """returns IQ waveforms from a file"""
+
+    path: str = attr.value.str(default=None, help='path to the tdms file')
+    file_format: str = attr.value.str('auto', only=['auto', 'mat', 'tdms'])
+    file_metadata: dict = attr.value.dict(
+        default={}, help='any capture fields not included in the file'
+    )
+
+    @property
+    def base_clock_rate(self):
+        return self._iq_capture.sample_rate
+
+    @attr.method.float(
+        min=0,
+        cache=True,
+        label='Hz',
+        help='sample rate before resampling',
+    )
+    def backend_sample_rate(self):
+        return self.base_clock_rate
+
+    @backend_sample_rate.setter
+    def _(self, value):
+        if value != self.base_clock_rate:
+            raise ValueError(
+                f'file sample rate must match capture ({self.base_clock_rate})'
+            )
+
+    @attr.method.float(
+        min=0,
+        cache=True,
+        label='Hz',
+        help='center frequency',
+    )
+    def center_frequency(self):
+        return self._iq_capture.center_frequency
+
+    @center_frequency.setter
+    def _(self, value):
+        actual = self.center_frequency()
+        if value != actual:
+            self._logger.warning(
+                f'center frequency ignored, using {actual / 1e6} MHz from file'
+            )
+
+    @method_attr.ChannelMaybeTupleMethod(
+        inherit=True
+    )
+    def channel(self):
+        return self._iq_capture.channel
+
+    @channel.setter
+    def _(self, value):
+        actual = self.channel()
+        if value != actual:
+            self._logger.warning(
+                f'channel ignored, using {actual / 1e6} MHz from file'
+            )
+
+    def open(self):
+        self._file_stream = None
+
+    def setup(self, radio_setup: structs.RadioSetup):
+        super().setup(radio_setup)
+
+        if self._file_stream is not None:
+            self._file_stream.close()
+
+        self._file_stream = channel_analysis.io.open_bare_iq(
+            self.path,
+            format=self.file_format,
+            rx_channel_count=1,
+            dtype='complex64',
+            xp=self.get_array_namespace(),
+            **self.file_metadata,
+        )
+
+        self._iq_capture = msgspec.convert(
+            self._file_stream.get_metadata(), structs.FileSourceCapture
+        )
+
+    def arm(self, capture=None, **capture_kws):
+        if self._file_stream is None:
+            raise RuntimeError('call setup() before arm()')
+
+        super().arm(capture, **capture_kws)
+        self._file_stream.seek(0)
+
+    def get_waveform(
+        self, count: int, offset: int, *, channel: int = 0, xp=np, dtype='complex64'
+    ):
+        if self._file_stream is None:
+            raise RuntimeError('call setup() before reading samples')
+        self._file_stream.seek(offset)
+        ret = self._file_stream.read(count)
+        return ret.copy()
 
 
 class ZarrIQSource(TestSource):

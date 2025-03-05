@@ -165,7 +165,6 @@ def read_tdms_iq(
     skip_samples=0,
     xp=np,
 ) -> tuple['iqwaveform.type_stubs.ArrayLike', FileSourceCapture]:
-
     from .radio.testing import TDMSFileSource
 
     source = TDMSFileSource(path=path, rx_channel_count=rx_channel_count)

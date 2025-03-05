@@ -317,7 +317,7 @@ class SoapyRadioDevice(base.RadioDevice):
 
     def acquire(
         self,
-        capture: structs.RadioCapture,
+        capture: structs.RadioCapture=None,
         next_capture: typing.Union[structs.RadioCapture, None] = None,
         correction: bool = True,
     ) -> tuple[np.array, 'pd.Timestamp']:

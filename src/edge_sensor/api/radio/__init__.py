@@ -11,6 +11,7 @@ from .testing import (
     SingleToneSource,
     SawtoothSource,
     NoiseSource,
+    FileSource,
     TDMSFileSource,
     ZarrIQSource,
 )

@@ -28,7 +28,7 @@ warnings.filterwarnings(
 @functools.lru_cache
 def equivalent_noise_bandwidth(window: typing.Union[str, tuple[str, float]], nfft: int):
     """return the equivalent noise bandwidth (ENBW) of a window, in bins"""
-    w = iqwaveform.fourier._get_window(window, nfft)
+    w = iqwaveform.fourier.get_window(window, nfft)
     return len(w) * np.sum(w**2) / np.sum(w) ** 2
 
 

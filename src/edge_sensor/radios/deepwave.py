@@ -58,7 +58,10 @@ class Air7x01B(soapy.SoapyRadioDevice):
         if driver != 'SoapyAIRT':
             raise IOError(f'connected to {driver}, but expected SoapyAirT')
 
-    def arm(self, capture: structs.RadioCapture):
+    def arm(self, capture: structs.RadioCapture=None, **capture_kws):
+        if capture is None:
+            capture = self.get_capture_struct()
+
         fc_current = self.center_frequency()
         if capture.center_frequency != fc_current:
             # empirical thresholds for the number of reenable cycles
@@ -72,7 +75,7 @@ class Air7x01B(soapy.SoapyRadioDevice):
         else:
             reenable_count = 2
 
-        super().arm(capture)
+        super().arm(capture, **capture_kws)
 
         _reenable_loop(self, reenable_count)
 

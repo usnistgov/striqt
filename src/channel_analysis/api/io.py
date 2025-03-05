@@ -174,8 +174,111 @@ def load(path: str | Path) -> 'xr.DataArray' | 'xr.Dataset':
     return xr.open_dataset(store, engine='zarr')
 
 
+class _FileStreamBase:
+    def __init__(
+        self,
+        path,
+        *,
+        rx_channel_count=1,
+        skip_samples=0,
+        dtype='complex64',
+        xp=np,
+        **meta,
+    ):
+        self._rx_channel_count = rx_channel_count
+        self._leftover = None
+        self._position = None
+        self._skip_samples = skip_samples
+        self.dtype = dtype
+        self._xp = xp
+        self._meta = meta
+        self.seek(0)
+
+    def seek(self, pos):
+        self._leftover = None
+        self._position = pos
+
+    def get_metadata(self) -> dict:
+        return self._meta
+
+
+class MATFileStream(_FileStreamBase):
+    def __init__(
+        self,
+        path,
+        sample_rate: float,
+        rx_channel_count=1,
+        skip_samples=0,
+        dtype='complex64',
+        input_dtype='complex128',
+        xp=np,
+        **meta,
+    ):
+        kws = dict(locals())
+        del kws['input_dtype'], kws['self'], kws['__class__'], kws['meta']
+
+        import h5py
+
+        self._fd = h5py.File(path, 'r')
+        self._input_dtype = input_dtype
+
+        super().__init__(**kws)
+
+    def close(self):
+        self._fd.close()
+
+    def read(self, count=None):
+        if count == 0:
+            return
+
+        xp = self._xp
+
+        if self._leftover is None:
+            tally = 0
+            array_list = []
+        else:
+            tally = self._leftover.shape[1]
+            array_list = [self._leftover]
+
+        while tally < count:
+            try:
+                ref = self._refs.pop(0)
+            except IndexError:
+                if count is not None:
+                    raise ValueError('too few samples in the file')
+                else:
+                    break
+
+            if not hasattr(ref, 'shape') or ref.ndim != 2:
+                continue
+
+            x = xp.asarray(ref, ref.dtype).view(self._input_dtype).astype(self.dtype)
+            array_list.append(x)
+            tally += x.shape[1]
+
+        iq = xp.concat(array_list, axis=1)
+        self._meta['channel'] = list(range(iq.shape[0]))
+
+        if count is None:
+            self._leftover = None
+            return iq
+
+        self._leftover = iq[:, count:]
+        self._position += count
+        return iq[:, :count]
+
+    def seek(self, pos):
+        if pos == self._position:
+            return
+
+        super().seek(pos)
+
+        self._refs = list(self._fd['#refs#'].values())
+        self.read(self._skip_samples + pos)
+
+
 def read_matlab_iq(
-    path: Path | str,
+    path: Path | str | MATFileStream,
     sample_rate: float,
     duration: float = None,
     *,
@@ -184,39 +287,139 @@ def read_matlab_iq(
     input_dtype='complex128',
     skip_samples=0,
     xp=np,
-    **capture_info,
 ) -> 'iqwaveform.type_stubs.ArrayLike':
-    """read complex-valued IQ waveforms from .mat files as a numpy array.
+    """read complex-valued IQ waveforms from .mat files and return an array.
 
-    Requires `h5py` module installed to read the file.
+    Requires the `h5py` module.
     """
-    import h5py
-
-    # capture = _build_file_capture(sample_rate, duration, **capture_info)
-
-    global mat
-    mat = h5py.File(path, 'r')
-
-    dataset = mat['#refs#']
-    sample_tally = 0
-    array_list = []
+    if isinstance(path, MATFileStream):
+        reader = path
+        sample_rate = reader.sample_rate
+    else:
+        kws = dict(locals())
+        del kws['duration']
+        reader = MATFileStream(**kws)
 
     if duration is None:
         target_size = None
     else:
-        target_size = round(duration * sample_rate) + skip_samples
+        target_size = round(duration * sample_rate)
 
-    for ref in dataset.values():
-        if not hasattr(ref, 'shape') or ref.ndim != 2:
-            continue
+    result = reader.read(target_size)
+    reader.close()
 
-        x = xp.asarray(ref, ref.dtype).view(input_dtype).astype(dtype)
-        array_list.append(x)
-        sample_tally += x.shape[1]
+    return result
 
-        if target_size is not None and sample_tally >= target_size:
-            break
 
-    iq = xp.concat(array_list, axis=1)
+class TDMSFileStream(_FileStreamBase):
+    def __init__(
+        self, path, rx_channel_count=1, skip_samples=0, dtype='complex64', xp=np, **meta
+    ):
+        kws = dict(locals())
+        del kws['self']
 
-    return iq[:, skip_samples:target_size]
+        from nptdms import TdmsFile
+
+        self._fd = TdmsFile.read(self.path)
+        self._header_fd, self._iq_fd = self._fd.groups()
+
+        super().__init__(**kws)
+
+    def close(self):
+        self._fd.close()
+
+    def read(self, count=None):
+        xp = self._xp
+
+        offset = self._position
+
+        size = int(self.backend['header_fd']['total_samples'][0])
+        ref_level = self.backend['header_fd']['reference_level_dBm'][0]
+
+        if size < count:
+            raise ValueError(
+                f'requested {count} samples but file capture length is {size} samples'
+            )
+
+        scale = 10 ** (float(ref_level) / 20.0) / np.iinfo(xp.int16).max
+        i, q = self.backend['iq_fd'].channels()
+        iq = xp.empty((2 * count,), dtype=xp.int16)
+        iq[offset * 2 :: 2] = xp.asarray(i[offset : count + offset])
+        iq[1 + offset * 2 :: 2] = xp.asarray(q[offset : count + offset])
+
+        float_dtype = np.finfo(np.dtype(self.dtype)).dtype
+
+        self._position += count
+
+        iq = (iq * float_dtype(scale)).view(self.dtype).copy()
+
+        return iq[np.newaxis, :]
+
+    def get_metadata(self):
+        fs = self._header_fd['IQ_samples_per_second'][0]
+        fc = self._header_fd['carrier_frequency'][0]
+        duration = self._header_fd['header_fd']['total_samples'][0] * fs
+
+        return dict(self.meta, sample_rate=fs, center_frequency=fc, duration=duration)
+
+
+_READER_SUFFIX_MAP = {'.mat': MATFileStream, '.tdms': TDMSFileStream}
+
+
+def open_bare_iq(
+    path,
+    *args,
+    format='auto',
+    skip_samples=0,
+    rx_channel_count=1,
+    dtype='complex64',
+    xp=np,
+    **kws,
+) -> _FileStreamBase:
+    kws = dict(locals(), **kws)
+    del kws['format'], kws['args']
+
+    suffix = Path(path).suffix
+
+    if format in ('auto', None):
+        try:
+            cls = _READER_SUFFIX_MAP[suffix]
+        except KeyError:
+            raise ValueError(f'unable to infer file type for file suffix "{suffix}"')
+    else:
+        cls = _READER_SUFFIX_MAP[format]
+
+    return cls(*args, **kws)
+
+
+# def read_raw_iq(
+#     path: Path | str | _FileStreamBase,
+#     format: str ='auto',
+#     duration: float = None,
+#     *,
+#     skip_samples=0,
+#     rx_channel_count=1,
+#     dtype='complex64',
+#     xp=np,
+# ) -> 'iqwaveform.type_stubs.ArrayLike':
+#     """read complex-valued IQ waveforms from .tdms files as an array of specified type.
+
+#     Requires the `pytdms` module.
+#     """
+#     if isinstance(path, _FileStreamBase):
+#         reader = path
+#         sample_rate = reader.sample_rate
+#     else:
+#         kws = dict(locals())
+#         del kws['duration'], kws['skip_samples']
+#         reader = TDMSFileStream(**kws)
+
+#     if duration is None:
+#         target_size = None
+#     else:
+#         target_size = round(duration * sample_rate)
+
+#     result = reader.read(target_size)
+#     reader.close()
+
+#     return result

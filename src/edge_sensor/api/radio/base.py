@@ -257,8 +257,13 @@ class RadioDevice(lb.Device):
             self.sync_time_source()
 
     @lb.stopwatch('arm', logger_level='debug')
-    def arm(self, capture: structs.RadioCapture):
+    def arm(self, capture: structs.RadioCapture=None, **capture_kws):
         """stop the stream, apply a capture configuration, and start it"""
+
+        if capture is None:
+            capture = self.get_capture_struct()
+
+        capture = msgspec.structs.replace(capture, **capture_kws)
 
         if iqwaveform.power_analysis.isroundmod(
             capture.duration * capture.sample_rate, 1
@@ -430,7 +435,7 @@ class RadioDevice(lb.Device):
     @lb.stopwatch('acquire', logger_level='debug')
     def acquire(
         self,
-        capture: structs.RadioCapture,
+        capture: structs.RadioCapture = None,
         next_capture: typing.Union[structs.RadioCapture, None] = None,
         correction: bool = True,
     ) -> tuple[np.array, 'pd.Timestamp']:
@@ -439,6 +444,9 @@ class RadioDevice(lb.Device):
         Optionally, calibration corrections can be applied, and the radio can be left ready for the next capture.
         """
         from .. import iq_corrections
+
+        if capture is None:
+            capture = self.get_capture_struct()
 
         # allocate (and arm the capture if necessary)
         prep_calls = {'buffers': lb.Call(alloc_empty_iq, self, capture)}

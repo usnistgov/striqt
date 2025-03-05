@@ -42,7 +42,7 @@ def filter_iq_capture(
         extend=True,
     )
 
-    w = iqwaveform.fourier._get_window(
+    w = iqwaveform.fourier.get_window(
         capture.analysis_filter.window, nfft, fftbins=False, xp=xp
     )
     freqs, _, xstft = iqwaveform.fourier.stft(

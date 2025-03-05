@@ -310,14 +310,6 @@ def resampling_correction(
             iq *= np.sqrt(power_scale)
         return iq
 
-    # set the passband roughly equal to the 3 dB bandwidth based on ENBW
-    # freq_res = fs / nfft
-    # enbw_bins = iqwaveform.fourier.equivalent_noise_bandwidth(
-    # analysis_filter['window'], nfft, fftbins=False
-    # )
-    # enbw = enbw_bins * freq_res
-    passband = analysis_filter['passband']
-
     except_on_low_memory()
 
     y = iqwaveform.fourier.stft(
@@ -336,37 +328,35 @@ def resampling_correction(
 
     except_on_low_memory()
 
+    # first, any operations that reduce the size of y
     if nfft_out < nfft:
-        # downsample applies the filter as well
         freqs, y = iqwaveform.fourier.downsample_stft(
-            freqs, y, nfft_out=nfft_out, passband=passband, axis=axis
+            freqs, y, nfft_out=nfft_out, axis=axis, out=y
         )
-    elif nfft_out > nfft:
-        # upsample
-        if np.isfinite(capture.analysis_bandwidth):
-            y = iqwaveform.fourier.stft_fir_lowpass(
-                y,
-                sample_rate=fs,
-                bandwidth=capture.analysis_bandwidth,
-                transition_bandwidth=250e3,
-                axis=axis,
-                out=y,
-            )
 
+    # apply the filter here, where the size of y is minimized
+    if np.isfinite(capture.analysis_bandwidth):
+        if nfft_out > nfft:
+            filter_fs = fs
+        else:
+            filter_fs = capture.sample_rate
+
+        y = iqwaveform.fourier.stft_fir_lowpass(
+            y,
+            sample_rate=filter_fs,
+            bandwidth=capture.analysis_bandwidth,
+            transition_bandwidth=500e3,
+            axis=axis,
+            out=y
+        )
+
+    # now upsample if needed
+    if nfft_out > nfft:
+        # upsample
         pad_left = (nfft_out - nfft) // 2
         pad_right = pad_left + (nfft_out - nfft) % 2
 
         y = iqwaveform.util.pad_along_axis(y, [[pad_left, pad_right]], axis=axis + 1)
-
-    else:
-        y = iqwaveform.fourier.stft_fir_lowpass(
-            y,
-            sample_rate=fs,
-            bandwidth=capture.analysis_bandwidth,
-            transition_bandwidth=250e3,
-            axis=axis,
-            out=y,
-        )
 
     del iq
 
@@ -382,7 +372,11 @@ def resampling_correction(
 
     # start the capture after the transient holdoff window
     iq_size_out = round(capture.duration * capture.sample_rate)
-    i0 = nfft_out // 2
+    if np.isfinite(capture.analysis_bandwidth):
+        # added filter delay
+        i0 = nfft_out
+    else:
+        i0 = nfft_out // 2
     assert i0 + iq_size_out <= iq.shape[axis]
     iq = iqwaveform.util.axis_slice(iq, i0, i0 + iq_size_out, axis=axis)
 

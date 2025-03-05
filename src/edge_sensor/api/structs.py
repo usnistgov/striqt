@@ -101,6 +101,15 @@ class RadioCapture(WaveformCapture, forbid_unknown_fields=True):
         _validate_multichannel(self.channel, self.gain)
 
 
+class FileSourceCapture(RadioCapture, forbid_unknown_fields=True):
+    """Capture specification read from a file, with support for None sentinels"""
+
+    # RF and leveling
+    center_frequency: Optional[CenterFrequencyType] = float('nan')
+    channel: Optional[ChannelType] = 0
+    gain: Optional[GainType] = float('nan')
+
+
 TimeSourceType = Literal['host', 'internal', 'external', 'gps']
 ContinuousTriggerType = Annotated[
     bool,
