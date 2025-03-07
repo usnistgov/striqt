@@ -104,7 +104,7 @@ def cellular_resource_power_histogram(
     average_rbs: bool = True,
     average_slots: bool = True,
     cp_guard_period: typing.Union[typing.Literal['normal'], typing.Literal['extended']] = 'normal',
-    window_fill: float | None = None,
+    window_fill: typing.Union[float, None] = None,
 ):
     """
 
