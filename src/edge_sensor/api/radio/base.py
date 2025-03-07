@@ -597,7 +597,6 @@ def _design_capture_filter(
         )
 
         kws['window'] = window
-        print(kws)
 
         return fs_sdr, lo_offset, kws
 
