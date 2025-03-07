@@ -26,13 +26,10 @@ else:
     iqwaveform = util.lazy_import('iqwaveform')
 
 
-T = typing.TypeVar('T')
-
-
 @dataclasses.dataclass
-class LinkPair[T]:
-    downlink: T
-    uplink: T
+class LinkPair:
+    downlink: any
+    uplink: any
 
 
 # Axis and coordinates
