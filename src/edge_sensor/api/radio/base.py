@@ -586,7 +586,6 @@ def _design_capture_filter(
 
     if capture.host_resample:
         # use GPU DSP to resample from integer divisor of the MCR
-        print(min_fft_size, window)
         fs_sdr, lo_offset, kws = iqwaveform.fourier.design_cola_resampler(
             fs_base=base_clock_rate,
             fs_target=capture.sample_rate,
