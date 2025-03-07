@@ -404,6 +404,7 @@ class ZarrIQSource(TestSource):
     def get_waveform(
         self, count: int, offset: int, *, channel: int = 0, xp=np, dtype='complex64'
     ):
+        
         iq_size = self._waveform.shape[1]
 
         if iq_size < count + offset:
@@ -416,7 +417,7 @@ class ZarrIQSource(TestSource):
                 f'requested channel exceeds data channel count of {self._waveform.shape[0]}'
             )
 
-        iq = self._waveform.values[channel, offset : count + offset]
+        iq = self._waveform.values[[channel], offset : count + offset]
 
         if dtype is None or self._waveform.dtype == dtype:
             return iq.copy()

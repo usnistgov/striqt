@@ -277,40 +277,6 @@ class MATFileStream(_FileStreamBase):
         self.read(self._skip_samples + pos)
 
 
-def read_matlab_iq(
-    path: Path | str | MATFileStream,
-    sample_rate: float,
-    duration: float = None,
-    *,
-    rx_channel_count=1,
-    dtype='complex64',
-    input_dtype='complex128',
-    skip_samples=0,
-    xp=np,
-) -> 'iqwaveform.type_stubs.ArrayLike':
-    """read complex-valued IQ waveforms from .mat files and return an array.
-
-    Requires the `h5py` module.
-    """
-    if isinstance(path, MATFileStream):
-        reader = path
-        sample_rate = reader.sample_rate
-    else:
-        kws = dict(locals())
-        del kws['duration']
-        reader = MATFileStream(**kws)
-
-    if duration is None:
-        target_size = None
-    else:
-        target_size = round(duration * sample_rate)
-
-    result = reader.read(target_size)
-    reader.close()
-
-    return result
-
-
 class TDMSFileStream(_FileStreamBase):
     def __init__(
         self, path, rx_channel_count=1, skip_samples=0, dtype='complex64', xp=np, **meta

@@ -21,6 +21,8 @@ else:
     iqwaveform = util.lazy_import('iqwaveform')
     pd = util.lazy_import('pandas')
 
+MIN_RESAMPLE_FFT_SIZE = 4 * 4096 - 1
+RESAMPLE_COLA_WINDOW = 'hamming'
 
 class _ReceiveBufferCarryover:
     """remember unused samples from the previous IQ capture"""
@@ -416,6 +418,7 @@ class RadioDevice(lb.Device):
         samples = samples.view('complex64')
         sample_offs = included_holdoff - stft_pad_before
         sample_span = slice(sample_offs, sample_offs + sample_count)
+        print('sample_offs: ', sample_offs)
 
         unused_count = sample_count - round(capture.duration * fs)
         self._carryover.stash(
@@ -451,7 +454,7 @@ class RadioDevice(lb.Device):
         # allocate (and arm the capture if necessary)
         prep_calls = {'buffers': lb.Call(alloc_empty_iq, self, capture)}
         iqwaveform.power_analysis.Any  # touch to work around a lazy loading bug
-        if capture != self._armed_capture:
+        if capture != getattr(self, '_armed_capture', None):
             prep_calls['arm'] = lb.Call(self.arm, capture)
         buffers = lb.concurrently(**prep_calls)['buffers']
 
@@ -561,6 +564,8 @@ def _design_capture_filter(
     capture: structs.WaveformCapture,
     bw_lo=0.25e6,
     min_oversampling=1.1,
+    window=RESAMPLE_COLA_WINDOW,
+    min_fft_size=MIN_RESAMPLE_FFT_SIZE
 ) -> tuple[float, float, dict]:
     """design a filter specified by the capture for a radio with the specified MCR.
 
@@ -581,15 +586,19 @@ def _design_capture_filter(
 
     if capture.host_resample:
         # use GPU DSP to resample from integer divisor of the MCR
+        print(min_fft_size, window)
         fs_sdr, lo_offset, kws = iqwaveform.fourier.design_cola_resampler(
             fs_base=base_clock_rate,
             fs_target=capture.sample_rate,
             bw=capture.analysis_bandwidth,
             bw_lo=bw_lo,
             shift=lo_shift,
-            min_fft_size=4 * 4096 - 1,
+            min_fft_size=min_fft_size,
             min_oversampling=min_oversampling,
         )
+
+        kws['window'] = window
+        print(kws)
 
         return fs_sdr, lo_offset, kws
 
@@ -617,12 +626,10 @@ def design_capture_filter(
     fixed_capture = msgspec.convert(
         capture, structs.WaveformCapture, from_attributes=True
     )
-    return _design_capture_filter(base_clock_rate, fixed_capture, *args, **kws)
+    return _design_capture_filter(base_clock_rate, fixed_capture, min_fft_size=MIN_RESAMPLE_FFT_SIZE, window=RESAMPLE_COLA_WINDOW, *args, **kws)
 
 
 def needs_stft(analysis_filter: dict, capture: structs.RadioCapture):
-    if np.isfinite(capture.analysis_bandwidth):
-        return True
     is_resample = analysis_filter['nfft'] != analysis_filter['nfft_out']
     return is_resample and capture.host_resample
 
@@ -633,6 +640,7 @@ def _get_stft_pad_size(
 ) -> tuple[int, int]:
     """returns the padding before and after a waveform to achieve an integral number of FFT windows"""
     _, _, analysis_filter = design_capture_filter(base_clock_rate, capture)
+
     if not needs_stft(analysis_filter, capture):
         return (0, 0)
 
@@ -644,7 +652,7 @@ def _get_stft_pad_size(
     # round up to an integral number of FFT windows
     samples_in = ceil(min_samples_in / nfft) * nfft + nfft
 
-    return nfft // 2, nfft // 2 + (samples_in - min_samples_in)
+    return nfft // 2 - 1, nfft // 2 + (samples_in - min_samples_in)
 
 
 @functools.lru_cache(30000)
