@@ -286,10 +286,9 @@ def resampling_correction(
     else:
         dtype_scale = None
 
-    with lb.stopwatch('power correction lookup', threshold=10e-3, logger_level='debug'):
-        bare_capture = msgspec.structs.replace(capture, start_time=None)
-        cal_data = radio.calibration if force_calibration is None else force_calibration
-        cal_scale = lookup_power_correction(cal_data, bare_capture, xp)
+    bare_capture = msgspec.structs.replace(capture, start_time=None)
+    cal_data = radio.calibration if force_calibration is None else force_calibration
+    cal_scale = lookup_power_correction(cal_data, bare_capture, xp)
 
     power_scale = _power_scale(cal_scale, dtype_scale)
 
@@ -308,16 +307,15 @@ def resampling_correction(
 
     # apply the filter here, where the size of y is minimized
     if np.isfinite(capture.analysis_bandwidth):
-        with lb.stopwatch('apply filter'):
-            h = iqwaveform.design_fir_lpf(
-                bandwidth=capture.analysis_bandwidth,
-                sample_rate=fs,
-                transition_bandwidth=250e3,
-                numtaps=4001,
-                xp=xp
-            )
-            iq = iqwaveform.oaconvolve(iq, h[xp.newaxis, :],'full', axes=1)
-            iq = iq[:, h.size//2:]
+        h = iqwaveform.design_fir_lpf(
+            bandwidth=capture.analysis_bandwidth,
+            sample_rate=fs,
+            transition_bandwidth=250e3,
+            numtaps=4001,
+            xp=xp
+        )
+        iq = iqwaveform.oaconvolve(iq, h[xp.newaxis, :],'full', axes=1)
+        iq = iq[:, h.size//2:]
 
     if not base.needs_stft(analysis_filter, capture):
         # no filtering or resampling needed
@@ -327,30 +325,26 @@ def resampling_correction(
             iq *= np.sqrt(power_scale)
         return iq
 
-    with lb.stopwatch('stft'):
-        y = iqwaveform.stft(
-            iq,
-            fs=fs,
-            window=analysis_filter['window'],
-            nperseg=nfft,
-            noverlap=round(nfft * overlap_scale),
-            axis=axis,
-            truncate=False,
-            overwrite_x=overwrite_x,
-            return_axis_arrays=False,
-        )
-
-    print(iq.dtype, y.dtype)
+    y = iqwaveform.stft(
+        iq,
+        fs=fs,
+        window=analysis_filter['window'],
+        nperseg=nfft,
+        noverlap=round(nfft * overlap_scale),
+        axis=axis,
+        truncate=False,
+        overwrite_x=overwrite_x,
+        return_axis_arrays=False,
+    )
 
     except_on_low_memory()
 
     # first, any operations that reduce the size of y
     if nfft_out < nfft:
         freqs = iqwaveform.fftfreq(nfft, 1 / fs)
-        with lb.stopwatch('downsample'):
-            freqs, y = iqwaveform.fourier.downsample_stft(
-                freqs, y, nfft_out=nfft_out, axis=axis, out=y
-            )
+        freqs, y = iqwaveform.fourier.downsample_stft(
+            freqs, y, nfft_out=nfft_out, axis=axis, out=y
+        )
 
     # now upsample if needed
     elif nfft_out > nfft:
@@ -364,10 +358,9 @@ def resampling_correction(
 
     except_on_low_memory()
 
-    with lb.stopwatch('istft'):
-        iq = iqwaveform.istft(
-            y, nfft=nfft_out, noverlap=noverlap, axis=axis, overwrite_x=True
-        )
+    iq = iqwaveform.istft(
+        y, nfft=nfft_out, noverlap=noverlap, axis=axis, overwrite_x=True
+    )
 
     except_on_low_memory()
 
