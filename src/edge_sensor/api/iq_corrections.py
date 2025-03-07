@@ -342,13 +342,11 @@ def resampling_correction(
 
     print(iq.dtype, y.dtype)
 
-    with lb.stopwatch('fftfreq'):
-        freqs = iqwaveform.fftfreq(nfft, 1 / fs, xp=xp)
-
     except_on_low_memory()
 
     # first, any operations that reduce the size of y
     if nfft_out < nfft:
+        freqs = iqwaveform.fftfreq(nfft, 1 / fs)
         with lb.stopwatch('downsample'):
             freqs, y = iqwaveform.fourier.downsample_stft(
                 freqs, y, nfft_out=nfft_out, axis=axis, out=y
