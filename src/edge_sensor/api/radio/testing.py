@@ -72,14 +72,14 @@ class SingleToneSource(TestSource):
     )
 
     def get_waveform(self, count, start_index: int, *, channel: int = 0, xp=np):
-        i = xp.arange(start_index, count + start_index, dtype='uint64')
+        i = xp.arange(start_index, count + start_index, dtype='int64')
         f_cw = self.baseband_frequency
         fs = self.backend_sample_rate()
         lo = lo_shift_tone(i, self, xp)
 
         phi = (2 * np.pi * f_cw) / fs * i + np.pi / 2
         ret = lo * xp.exp(1j * phi)
-        ret = ret.astype('complex64')
+        ret = ret.astype(self._transport_dtype)
 
         if self.snr is not None:
             capture = channel_analysis.Capture(duration=self.duration, sample_rate=fs)
@@ -305,8 +305,8 @@ class FileSource(TestSource):
     def open(self):
         self._file_stream = None
 
-    def setup(self, radio_setup: structs.RadioSetup):
-        super().setup(radio_setup)
+    def setup(self, radio_setup: structs.RadioSetup = None, **kws) -> structs.RadioSetup:
+        radio_setup = super().setup(radio_setup, **kws)
 
         if self._file_stream is not None:
             self._file_stream.close()
@@ -323,6 +323,8 @@ class FileSource(TestSource):
         self._iq_capture = msgspec.convert(
             self._file_stream.get_metadata(), structs.FileSourceCapture
         )
+
+        return radio_setup
 
     def arm(self, capture=None, **capture_kws):
         if self._file_stream is None:

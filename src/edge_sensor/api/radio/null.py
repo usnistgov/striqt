@@ -107,11 +107,13 @@ class NullSource(base.RadioDevice):
         else:
             self.backend['rx_enabled'] = False
 
-    def setup(self, setup: structs.RadioSetup):
-        super().setup(setup)
+    def setup(self, setup: structs.RadioSetup=None, **kws):
+        setup = super().setup(setup, **kws)
 
         if setup._rx_channel_count is not None:
             self.rx_channel_count = setup._rx_channel_count
+
+        return setup
 
     @method_attr.FloatMaybeTupleMethod(inherit=True)
     def gain(self):
@@ -156,8 +158,6 @@ class NullSource(base.RadioDevice):
         fs = float(self.backend_sample_rate())
 
         timestamp_ns = (1_000_000_000 * self._samples_elapsed) / fs
-
-        print(timestamp_ns)
 
         self._samples_elapsed += count
 

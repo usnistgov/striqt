@@ -23,7 +23,7 @@ else:
 
 MIN_RESAMPLE_FFT_SIZE = 4 * 4096 - 1
 RESAMPLE_COLA_WINDOW = 'hamming'
-
+FILTER_DOMAIN = 'time'
 
 class _ReceiveBufferCarryover:
     """remember unused samples from the previous IQ capture"""
@@ -245,8 +245,15 @@ class RadioDevice(lb.Device):
         self._armed_capture: structs.RadioCapture | None = None
         self._carryover = _ReceiveBufferCarryover(self)
 
-    def setup(self, radio_setup: structs.RadioSetup):
+    def setup(self, radio_setup: structs.RadioSetup = None, **setup_kws):
         """disarm acquisition and apply the given radio setup"""
+
+        if radio_setup is None:
+            radio_setup = structs.RadioSetup()
+
+        radio_setup = msgspec.structs.replace(radio_setup, **setup_kws)
+        if radio_setup.driver is None:
+            radio_setup = msgspec.structs.replace(radio_setup, driver=self.__class__.__name__)
 
         self.calibration = radio_setup.calibration
         self.periodic_trigger = radio_setup.periodic_trigger
@@ -258,6 +265,8 @@ class RadioDevice(lb.Device):
         if not self.time_sync_every_capture:
             self.rx_enabled(False)
             self.sync_time_source()
+
+        return radio_setup
 
     @lb.stopwatch('arm', logger_level='debug')
     def arm(self, capture: structs.RadioCapture = None, **capture_kws):
@@ -635,7 +644,16 @@ def design_capture_filter(
     )
 
 
-def needs_stft(analysis_filter: dict, capture: structs.RadioCapture):
+def needs_stft(analysis_filter: dict, capture: structs.RadioCapture) -> bool:
+    """determine whether an STFT will be needed to filter or resample"""
+    
+    if FILTER_DOMAIN == 'time':
+        pass
+    elif FILTER_DOMAIN not in ('frequency', 'auto'):
+        raise ValueError('FILTER_DOMAIN must be "time", "frequency", or "auto"')
+    elif FILTER_DOMAIN == 'frequency' and capture.analysis_bandwidth != float('inf'):
+        return True
+
     is_resample = analysis_filter['nfft'] != analysis_filter['nfft_out']
     return is_resample and capture.host_resample
 
