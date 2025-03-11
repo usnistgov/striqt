@@ -23,7 +23,7 @@ else:
 
 MIN_RESAMPLE_FFT_SIZE = 4 * 4096 - 1
 RESAMPLE_COLA_WINDOW = 'hamming'
-FILTER_DOMAIN = 'time'
+FILTER_DOMAIN = 'auto'
 
 class _ReceiveBufferCarryover:
     """remember unused samples from the previous IQ capture"""
