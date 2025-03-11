@@ -24,7 +24,7 @@ class NullSource(base.RadioDevice):
     """emulate a radio with fake data"""
 
     _inbuf = None
-
+    _samples_elapsed = 0
     _transient_holdoff_time: float = attr.value.float(0.0, sets=True, inherit=True)
     _transport_dtype = attr.value.str('complex64', inherit=True)
     rx_channel_count: int = attr.value.int(2, cache=True, help='number of input ports')
@@ -32,7 +32,7 @@ class NullSource(base.RadioDevice):
     @method_attr.ChannelMaybeTupleMethod(inherit=True)
     def channel(self):
         # return none until this is set, then the cached value is returned
-        return tuple()
+        return (0,)
 
     @channel.setter
     def _(self, channels: int):
@@ -103,9 +103,9 @@ class NullSource(base.RadioDevice):
             return
         if enable:
             self.backend['rx_enabled'] = True
+            self.reset_sample_counter()
         else:
             self.backend['rx_enabled'] = False
-            self.reset_sample_counter()
 
     def setup(self, setup: structs.RadioSetup):
         super().setup(setup)
@@ -131,7 +131,7 @@ class NullSource(base.RadioDevice):
 
     def open(self):
         self._logger.propagate = False
-        self.reset_sample_counter()
+        self.reset_sample_counter(0)
         self.backend = {}
 
     @attr.property.str(inherit=True)
@@ -152,21 +152,30 @@ class NullSource(base.RadioDevice):
         _, _, analysis_filter = base.design_capture_filter(
             self.base_clock_rate, capture
         )
-        
+
         fs = float(self.backend_sample_rate())
 
-        timestamp_ns = (
-            1_000_000_000 * self._samples_elapsed
-        ) / fs
+        timestamp_ns = (1_000_000_000 * self._samples_elapsed) / fs
+
+        print(timestamp_ns)
 
         self._samples_elapsed += count
 
-        print('timestamp: ', timestamp_ns)
-
         return count, round(timestamp_ns)
 
-    def reset_sample_counter(self):
-        self._samples_elapsed = 0
+    def reset_sample_counter(self, value=None):
+        if value is not None:
+            self._samples_elapsed = value
+            self._sample_start_index = value
+            return
+        capture = self.get_capture_struct()
+        pad, _ = base._get_dsp_pad_size(
+            self.base_clock_rate, capture)
+        holdoff = base.find_trigger_holdoff(
+            self, 0, dsp_pad_before=pad
+        )        
+        self._samples_elapsed = -holdoff
+        self._sample_start_index = -holdoff
 
 
 class NullRadio(NullSource):

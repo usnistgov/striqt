@@ -24,6 +24,7 @@ else:
 MIN_RESAMPLE_FFT_SIZE = 4 * 4096 - 1
 RESAMPLE_COLA_WINDOW = 'hamming'
 
+
 class _ReceiveBufferCarryover:
     """remember unused samples from the previous IQ capture"""
 
@@ -259,7 +260,7 @@ class RadioDevice(lb.Device):
             self.sync_time_source()
 
     @lb.stopwatch('arm', logger_level='debug')
-    def arm(self, capture: structs.RadioCapture=None, **capture_kws):
+    def arm(self, capture: structs.RadioCapture = None, **capture_kws):
         """stop the stream, apply a capture configuration, and start it"""
 
         if capture is None:
@@ -341,7 +342,7 @@ class RadioDevice(lb.Device):
             samples, stream_bufs = buffers
 
         # holdoffs parameters, valid when we already have a clock reading
-        stft_pad_before, _ = _get_stft_pad_size(self.base_clock_rate, capture)
+        dsp_pad_before, _ = _get_dsp_pad_size(self.base_clock_rate, capture)
 
         # carryover from the previous acquisition
         awaiting_timestamp = True
@@ -350,7 +351,7 @@ class RadioDevice(lb.Device):
 
         # the number of holdoff samples from the end of the holdoff period
         # to include with the returned waveform
-        included_holdoff = stft_pad_before
+        included_holdoff = dsp_pad_before
 
         fs = self.backend_sample_rate()
 
@@ -405,9 +406,9 @@ class RadioDevice(lb.Device):
 
             if awaiting_timestamp:
                 included_holdoff = find_trigger_holdoff(
-                    self, buf_time_ns, stft_pad_before=stft_pad_before
+                    self, buf_time_ns, dsp_pad_before=dsp_pad_before
                 )
-                remaining = remaining + included_holdoff - stft_pad_before
+                remaining = remaining + included_holdoff - dsp_pad_before
 
                 start_ns = buf_time_ns + round(included_holdoff * 1e9 / fs)
                 awaiting_timestamp = False
@@ -416,9 +417,8 @@ class RadioDevice(lb.Device):
             received_count += this_count
 
         samples = samples.view('complex64')
-        sample_offs = included_holdoff - stft_pad_before
+        sample_offs = included_holdoff - dsp_pad_before
         sample_span = slice(sample_offs, sample_offs + sample_count)
-        print('sample_offs: ', sample_offs)
 
         unused_count = sample_count - round(capture.duration * fs)
         self._carryover.stash(
@@ -529,10 +529,10 @@ class RadioDevice(lb.Device):
 
 
 def find_trigger_holdoff(
-    radio: RadioDevice, start_time_ns: int, stft_pad_before: int = 0
+    radio: RadioDevice, start_time_ns: int, dsp_pad_before: int = 0
 ):
     sample_rate = radio.backend_sample_rate()
-    min_holdoff = stft_pad_before
+    min_holdoff = dsp_pad_before
 
     # transient holdoff if we've rearmed as indicated by the presence of carryover samples
     if radio._carryover.start_time_ns is None:
@@ -565,7 +565,7 @@ def _design_capture_filter(
     bw_lo=0.25e6,
     min_oversampling=1.1,
     window=RESAMPLE_COLA_WINDOW,
-    min_fft_size=MIN_RESAMPLE_FFT_SIZE
+    min_fft_size=MIN_RESAMPLE_FFT_SIZE,
 ) -> tuple[float, float, dict]:
     """design a filter specified by the capture for a radio with the specified MCR.
 
@@ -594,6 +594,7 @@ def _design_capture_filter(
             shift=lo_shift,
             min_fft_size=min_fft_size,
             min_oversampling=min_oversampling,
+            window=window
         )
 
         kws['window'] = window
@@ -624,7 +625,14 @@ def design_capture_filter(
     fixed_capture = msgspec.convert(
         capture, structs.WaveformCapture, from_attributes=True
     )
-    return _design_capture_filter(base_clock_rate, fixed_capture, min_fft_size=MIN_RESAMPLE_FFT_SIZE, window=RESAMPLE_COLA_WINDOW, *args, **kws)
+    return _design_capture_filter(
+        base_clock_rate,
+        fixed_capture,
+        min_fft_size=MIN_RESAMPLE_FFT_SIZE,
+        window=RESAMPLE_COLA_WINDOW,
+        *args,
+        **kws,
+    )
 
 
 def needs_stft(analysis_filter: dict, capture: structs.RadioCapture):
@@ -633,7 +641,7 @@ def needs_stft(analysis_filter: dict, capture: structs.RadioCapture):
 
 
 @functools.lru_cache(30000)
-def _get_stft_pad_size(
+def _get_dsp_pad_size(
     base_clock_rate: float, capture: structs.RadioCapture
 ) -> tuple[int, int]:
     """returns the padding before and after a waveform to achieve an integral number of FFT windows"""
@@ -643,6 +651,7 @@ def _get_stft_pad_size(
         return (0, 0)
 
     nfft = analysis_filter['nfft']
+    nfft_out = analysis_filter.get('nfft_out', nfft)
 
     samples_out = round(capture.duration * capture.sample_rate)
     min_samples_in = ceil(samples_out * nfft / analysis_filter['nfft_out'])
@@ -650,7 +659,17 @@ def _get_stft_pad_size(
     # round up to an integral number of FFT windows
     samples_in = ceil(min_samples_in / nfft) * nfft + nfft
 
-    return nfft // 2 - 1, nfft // 2 + (samples_in - min_samples_in)
+    noverlap_out = iqwaveform.fourier._ola_filter_parameters(
+        samples_in,
+        window=analysis_filter['window'],
+        nfft_out=nfft_out,
+        nfft=nfft,
+        extend=True,
+    )[1]
+
+    noverlap = ceil(noverlap_out * nfft / nfft_out)
+
+    return noverlap, noverlap + (samples_in - min_samples_in)
 
 
 @functools.lru_cache(30000)
@@ -675,7 +694,7 @@ def _get_input_buffer_count_cached(
 
     if needs_stft(analysis_filter, capture):
         nfft = analysis_filter['nfft']
-        pad_before, pad_after = _get_stft_pad_size(base_clock_rate, capture)
+        pad_before, pad_after = _get_dsp_pad_size(base_clock_rate, capture)
         min_samples_in = ceil(samples_out * nfft / analysis_filter['nfft_out'])
         samples_in = min_samples_in + (pad_before + pad_after)
     else:

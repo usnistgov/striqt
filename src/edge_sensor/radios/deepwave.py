@@ -58,7 +58,7 @@ class Air7x01B(soapy.SoapyRadioDevice):
         if driver != 'SoapyAIRT':
             raise IOError(f'connected to {driver}, but expected SoapyAirT')
 
-    def arm(self, capture: structs.RadioCapture=None, **capture_kws):
+    def arm(self, capture: structs.RadioCapture = None, **capture_kws):
         if capture is None:
             capture = self.get_capture_struct()
 

@@ -312,10 +312,10 @@ def resampling_correction(
             sample_rate=fs,
             transition_bandwidth=250e3,
             numtaps=4001,
-            xp=xp
+            xp=xp,
         )
-        iq = iqwaveform.oaconvolve(iq, h[xp.newaxis, :],'full', axes=1)
-        iq = iq[:, h.size//2:]
+        iq = iqwaveform.oaconvolve(iq, h[xp.newaxis, :], 'full', axes=1)
+        iq = iq[:, h.size // 2 :]
 
     if not base.needs_stft(analysis_filter, capture):
         # no filtering or resampling needed
@@ -366,7 +366,7 @@ def resampling_correction(
 
     # start the capture after the transient holdoff window
     iq_size_out = round(capture.duration * capture.sample_rate)
-    i0 = nfft_out // 2
+    i0 = noverlap
     assert i0 + iq_size_out <= iq.shape[axis]
     iq = iqwaveform.util.axis_slice(iq, i0, i0 + iq_size_out, axis=axis)
 

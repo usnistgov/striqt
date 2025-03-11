@@ -93,6 +93,32 @@ class SingleToneSource(TestSource):
         return ret
 
 
+class DiracDeltaSource(TestSource):
+    time: float = attr.value.float(
+        default=0, help='pulse start time relative to the start of the waveform', label='s'
+    )
+
+    power: float = attr.value.float(
+        0, label='dB', help='instantaneous power level of the discretized delta'
+    )
+
+    base_clock_rate: float = attr.value.float(
+        default=125e6, min=0, help='base clock rate'
+    )
+
+    def get_waveform(self, count, start_index: int, *, channel: int = 0, xp=np):
+        abs_pulse_index = round(self.time * self.backend_sample_rate())
+        rel_pulse_index = abs_pulse_index - start_index
+        
+
+        ret = xp.zeros(count, dtype=self._transport_dtype)
+
+        if rel_pulse_index >= 0 and rel_pulse_index < count:
+            ret[rel_pulse_index] = 10 ** (self.power / 20)
+
+        return ret[np.newaxis,]
+
+
 class SawtoothSource(TestSource):
     period: float = attr.value.float(
         default=0.01,
@@ -266,9 +292,7 @@ class FileSource(TestSource):
                 f'center frequency ignored, using {actual / 1e6} MHz from file'
             )
 
-    @method_attr.ChannelMaybeTupleMethod(
-        inherit=True
-    )
+    @method_attr.ChannelMaybeTupleMethod(inherit=True)
     def channel(self):
         return self._iq_capture.channel
 
@@ -276,9 +300,7 @@ class FileSource(TestSource):
     def _(self, value):
         actual = self.channel()
         if value != actual:
-            self._logger.warning(
-                f'channel ignored, using {actual / 1e6} MHz from file'
-            )
+            self._logger.warning(f'channel ignored, using {actual / 1e6} MHz from file')
 
     def open(self):
         self._file_stream = None
@@ -314,9 +336,16 @@ class FileSource(TestSource):
     ):
         if self._file_stream is None:
             raise RuntimeError('call setup() before reading samples')
-        self._file_stream.seek(offset)
+        self._file_stream.seek(offset - self._sample_start_index)
         ret = self._file_stream.read(count)
         return ret.copy()
+
+    def reset_sample_counter(self, value=None):
+        if self.periodic_trigger is None:
+            super().reset_sample_counter(0)
+        else:
+            samples = self.periodic_trigger * self.backend_sample_rate()
+            super().reset_sample_counter(-samples)
 
 
 class ZarrIQSource(TestSource):
@@ -404,7 +433,6 @@ class ZarrIQSource(TestSource):
     def get_waveform(
         self, count: int, offset: int, *, channel: int = 0, xp=np, dtype='complex64'
     ):
-        
         iq_size = self._waveform.shape[1]
 
         if iq_size < count + offset:
@@ -417,7 +445,9 @@ class ZarrIQSource(TestSource):
                 f'requested channel exceeds data channel count of {self._waveform.shape[0]}'
             )
 
-        iq = self._waveform.values[[channel], offset : count + offset]
+        start = offset - self._sample_start_index
+        
+        iq = self._waveform.values[[channel], start : count + start]
 
         if dtype is None or self._waveform.dtype == dtype:
             return iq.copy()
