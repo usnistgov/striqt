@@ -309,15 +309,16 @@ def resampling_correction(
 
     # apply the filter here, where the size of y is minimized
     if np.isfinite(capture.analysis_bandwidth):
+        taps = base.FILTER_SIZE
         h = iqwaveform.design_fir_lpf(
             bandwidth=capture.analysis_bandwidth,
             sample_rate=fs,
             transition_bandwidth=250e3,
-            numtaps=4001,
+            numtaps=base.FILTER_SIZE,
             xp=xp,
         )
         iq = iqwaveform.oaconvolve(iq, h[xp.newaxis, :], 'full', axes=axis)
-        iq = iqwaveform.util.axis_slice(iq, h.size // 2, None, axis=axis)
+        iq = iqwaveform.util.axis_slice(iq, h.size-1, None, axis=axis)
 
     if not needs_stft:
         # bail here if filtering or resampling needed
