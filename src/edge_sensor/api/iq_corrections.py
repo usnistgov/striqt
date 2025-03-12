@@ -317,8 +317,11 @@ def resampling_correction(
             numtaps=base.FILTER_SIZE,
             xp=xp,
         )
+        start_shape = iq.shape
+        pad = base._get_filter_pad(capture)
         iq = iqwaveform.oaconvolve(iq, h[xp.newaxis, :], 'full', axes=axis)
-        iq = iqwaveform.util.axis_slice(iq, h.size-1, None, axis=axis)
+        iq = iqwaveform.util.axis_slice(iq, pad + h.size - 1, iq.shape[axis], axis=axis)
+        print(iq.shape)
 
     if not needs_stft:
         # bail here if filtering or resampling needed
@@ -382,10 +385,10 @@ def resampling_correction(
     # scale = iq.size/size_in
 
     # start the capture after the padding for transients
-    pad, _ = base._get_dsp_pad_size(radio.base_clock_rate, capture)
     size_out = round(capture.duration * capture.sample_rate)
-    assert pad + size_out <= iq.shape[axis]
-    iq = iqwaveform.util.axis_slice(iq, pad, pad + size_out, axis=axis)
+    assert size_out <= iq.shape[axis]
+    iq = iqwaveform.util.axis_slice(iq, -size_out, iq.shape[axis], axis=axis)
+    assert iq.shape[axis] == size_out
 
     # # apply final scaling
     # if power_scale is not None:
