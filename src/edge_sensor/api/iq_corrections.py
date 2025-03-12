@@ -316,8 +316,8 @@ def resampling_correction(
             numtaps=4001,
             xp=xp,
         )
-        iq = iqwaveform.oaconvolve(iq, h[xp.newaxis, :], 'full', axes=1)
-        iq = iq[:, h.size // 2 :]
+        iq = iqwaveform.oaconvolve(iq, h[xp.newaxis, :], 'full', axes=axis)
+        iq = iqwaveform.util.axis_slice(iq, h.size // 2, None, axis=axis)
 
     if not needs_stft:
         # bail here if filtering or resampling needed
@@ -327,8 +327,13 @@ def resampling_correction(
             iq *= np.sqrt(power_scale)
         return iq
 
-    with lb.stopwatch('resample'):
-        iq = iqwaveform.fourier.resample(iq, round(iq.shape[axis] * nfft_out/nfft), overwrite_x=True, axis=1, scale = 1 if power_scale is None else power_scale)
+    iq = iqwaveform.fourier.resample(
+        iq,
+        round(iq.shape[axis] * nfft_out / nfft),
+        overwrite_x=True,
+        axis=axis,
+        scale=1 if power_scale is None else power_scale,
+    )
 
     # y = iqwaveform.stft(
     #     iq,

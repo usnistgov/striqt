@@ -95,7 +95,9 @@ class SingleToneSource(TestSource):
 
 class DiracDeltaSource(TestSource):
     time: float = attr.value.float(
-        default=0, help='pulse start time relative to the start of the waveform', label='s'
+        default=0,
+        help='pulse start time relative to the start of the waveform',
+        label='s',
     )
 
     power: float = attr.value.float(
@@ -109,7 +111,6 @@ class DiracDeltaSource(TestSource):
     def get_waveform(self, count, start_index: int, *, channel: int = 0, xp=np):
         abs_pulse_index = round(self.time * self.backend_sample_rate())
         rel_pulse_index = abs_pulse_index - start_index
-        
 
         ret = xp.zeros(count, dtype=self._transport_dtype)
 
@@ -305,7 +306,9 @@ class FileSource(TestSource):
     def open(self):
         self._file_stream = None
 
-    def setup(self, radio_setup: structs.RadioSetup = None, **kws) -> structs.RadioSetup:
+    def setup(
+        self, radio_setup: structs.RadioSetup = None, **kws
+    ) -> structs.RadioSetup:
         radio_setup = super().setup(radio_setup, **kws)
 
         if self._file_stream is not None:
@@ -448,7 +451,7 @@ class ZarrIQSource(TestSource):
             )
 
         start = offset - self._sample_start_index
-        
+
         iq = self._waveform.values[[channel], start : count + start]
 
         if dtype is None or self._waveform.dtype == dtype:

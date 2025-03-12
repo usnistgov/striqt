@@ -107,7 +107,7 @@ class NullSource(base.RadioDevice):
         else:
             self.backend['rx_enabled'] = False
 
-    def setup(self, setup: structs.RadioSetup=None, **kws):
+    def setup(self, setup: structs.RadioSetup = None, **kws):
         setup = super().setup(setup, **kws)
 
         if setup._rx_channel_count is not None:
@@ -169,11 +169,8 @@ class NullSource(base.RadioDevice):
             self._sample_start_index = value
             return
         capture = self.get_capture_struct()
-        pad, _ = base._get_dsp_pad_size(
-            self.base_clock_rate, capture)
-        holdoff = base.find_trigger_holdoff(
-            self, 0, dsp_pad_before=pad
-        )        
+        pad, _ = base._get_dsp_pad_size(self.base_clock_rate, capture)
+        holdoff = base.find_trigger_holdoff(self, 0, dsp_pad_before=pad)
         self._samples_elapsed = -holdoff
         self._sample_start_index = -holdoff
 

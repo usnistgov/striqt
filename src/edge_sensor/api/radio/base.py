@@ -25,6 +25,7 @@ MIN_RESAMPLE_FFT_SIZE = 4 * 4096 - 1
 RESAMPLE_COLA_WINDOW = 'hamming'
 FILTER_DOMAIN = 'time'
 
+
 class _ReceiveBufferCarryover:
     """remember unused samples from the previous IQ capture"""
 
@@ -253,7 +254,9 @@ class RadioDevice(lb.Device):
 
         radio_setup = msgspec.structs.replace(radio_setup, **setup_kws)
         if radio_setup.driver is None:
-            radio_setup = msgspec.structs.replace(radio_setup, driver=self.__class__.__name__)
+            radio_setup = msgspec.structs.replace(
+                radio_setup, driver=self.__class__.__name__
+            )
 
         self.calibration = radio_setup.calibration
         self.periodic_trigger = radio_setup.periodic_trigger
@@ -603,7 +606,7 @@ def _design_capture_filter(
             shift=lo_shift,
             min_fft_size=min_fft_size,
             min_oversampling=min_oversampling,
-            window=window
+            window=window,
         )
 
         kws['window'] = window
