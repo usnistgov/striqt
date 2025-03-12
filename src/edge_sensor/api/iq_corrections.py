@@ -294,7 +294,6 @@ def resampling_correction(
 
     fs, _, analysis_filter = design_capture_filter(radio.base_clock_rate, capture)
     nfft = analysis_filter['nfft']
-    size_in = iq.size
 
     nfft_out, noverlap, overlap_scale, _ = iqwaveform.fourier._ola_filter_parameters(
         iq.size,
@@ -308,16 +307,8 @@ def resampling_correction(
 
     needs_stft = base.needs_stft(analysis_filter, capture)
 
-    if not np.isfinite(capture.analysis_bandwidth):
-        filter_domain = None
-    elif base.FILTER_DOMAIN == 'auto':
-        filter_domain = 'frequency' if needs_stft else 'time'
-    else:
-        filter_domain = base.FILTER_DOMAIN
-
     # apply the filter here, where the size of y is minimized
-    if filter_domain == 'time':
-        lb.util.logger.debug('applying filter in time domain')
+    if np.isfinite(capture.analysis_bandwidth):
         h = iqwaveform.design_fir_lpf(
             bandwidth=capture.analysis_bandwidth,
             sample_rate=fs,
@@ -336,7 +327,8 @@ def resampling_correction(
             iq *= np.sqrt(power_scale)
         return iq
 
-    iq = iqwaveform.fourier.resample(iq, round(iq.shape[axis] * nfft_out/nfft), overwrite_x=True, axis=1, scale = 1 if power_scale is None else power_scale)
+    with lb.stopwatch('resample'):
+        iq = iqwaveform.fourier.resample(iq, round(iq.shape[axis] * nfft_out/nfft), overwrite_x=True, axis=1, scale = 1 if power_scale is None else power_scale)
 
     # y = iqwaveform.stft(
     #     iq,
@@ -384,10 +376,10 @@ def resampling_correction(
     # scale = iq.size/size_in
 
     # start the capture after the padding for transients
+    pad, _ = base._get_dsp_pad_size(radio.base_clock_rate, capture)
     size_out = round(capture.duration * capture.sample_rate)
-    i0 = noverlap
-    assert i0 + size_out <= iq.shape[axis]
-    iq = iqwaveform.util.axis_slice(iq, i0, i0 + size_out, axis=axis)
+    assert pad + size_out <= iq.shape[axis]
+    iq = iqwaveform.util.axis_slice(iq, pad, pad + size_out, axis=axis)
 
     # # apply final scaling
     # if power_scale is not None:

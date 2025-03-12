@@ -646,13 +646,6 @@ def design_capture_filter(
 
 def needs_stft(analysis_filter: dict, capture: structs.RadioCapture) -> bool:
     """determine whether an STFT will be needed to filter or resample"""
-    
-    if FILTER_DOMAIN == 'time':
-        pass
-    elif FILTER_DOMAIN not in ('frequency', 'auto'):
-        raise ValueError('FILTER_DOMAIN must be "time", "frequency", or "auto"')
-    elif FILTER_DOMAIN == 'frequency' and capture.analysis_bandwidth != float('inf'):
-        return True
 
     is_resample = analysis_filter['nfft'] != analysis_filter['nfft_out']
     return is_resample and capture.host_resample
