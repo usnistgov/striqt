@@ -320,8 +320,7 @@ def resampling_correction(
         start_shape = iq.shape
         pad = base._get_filter_pad(capture)
         iq = iqwaveform.oaconvolve(iq, h[xp.newaxis, :], 'full', axes=axis)
-        iq = iqwaveform.util.axis_slice(iq, pad + h.size - 1, iq.shape[axis], axis=axis)
-        print(iq.shape)
+        iq = iqwaveform.util.axis_slice(iq, pad + h.size // 2, iq.shape[axis] - h.size // 2, axis=axis)
 
     if not needs_stft:
         # bail here if filtering or resampling needed
