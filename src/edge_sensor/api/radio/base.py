@@ -21,6 +21,8 @@ else:
     iqwaveform = util.lazy_import('iqwaveform')
     pd = util.lazy_import('pandas')
 
+
+FILTER_SIZE = 4001
 MIN_RESAMPLE_FFT_SIZE = 4 * 4096 - 1
 RESAMPLE_COLA_WINDOW = 'hamming'
 FILTER_DOMAIN = 'time'
@@ -651,6 +653,13 @@ def needs_stft(analysis_filter: dict, capture: structs.RadioCapture) -> bool:
     return is_resample and capture.host_resample
 
 
+def _get_filter_delay(capture: structs.RadioCapture):
+    if np.isfinite(capture.analysis_bandwidth):
+        return FILTER_SIZE // 2
+    else:
+        return 0
+
+
 @functools.lru_cache(30000)
 def _get_dsp_pad_size(
     base_clock_rate: float, capture: structs.RadioCapture
@@ -658,8 +667,10 @@ def _get_dsp_pad_size(
     """returns the padding before and after a waveform to achieve an integral number of FFT windows"""
     _, _, analysis_filter = design_capture_filter(base_clock_rate, capture)
 
+    filter_delay = _get_filter_delay(capture)
+
     if not needs_stft(analysis_filter, capture):
-        return (0, 0)
+        return (filter_delay, 0)
 
     nfft = analysis_filter['nfft']
     nfft_out = analysis_filter.get('nfft_out', nfft)
@@ -680,7 +691,7 @@ def _get_dsp_pad_size(
 
     noverlap = ceil(noverlap_out * nfft / nfft_out)
 
-    return noverlap, noverlap + (samples_in - min_samples_in)
+    return noverlap + filter_delay, noverlap + (samples_in - min_samples_in)
 
 
 @functools.lru_cache(30000)
