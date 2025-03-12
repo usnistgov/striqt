@@ -336,50 +336,52 @@ def resampling_correction(
             iq *= np.sqrt(power_scale)
         return iq
 
-    y = iqwaveform.stft(
-        iq,
-        fs=fs,
-        window=analysis_filter['window'],
-        nperseg=nfft,
-        noverlap=round(nfft * overlap_scale),
-        axis=axis,
-        truncate=False,
-        overwrite_x=overwrite_x,
-        return_axis_arrays=False,
-    )
+    iq = iqwaveform.fourier.resample(iq, round(iq.shape[axis] * nfft_out/nfft), overwrite_x=True, axis=1, scale = 1 if power_scale is None else power_scale)
 
-    # resample
-    except_on_low_memory()
-    if nfft_out < nfft:
-        # downsample by trimming frequency
-        freqs = iqwaveform.fftfreq(nfft, 1 / fs)
-        freqs, y = iqwaveform.fourier.downsample_stft(
-            freqs, y, nfft_out=nfft_out, axis=axis, out=y
-        )
-    elif nfft_out > nfft:
-        # upsample by zero-padding frequency
-        pad_left = (nfft_out - nfft) // 2
-        pad_right = pad_left + (nfft_out - nfft) % 2
-        y = iqwaveform.util.pad_along_axis(y, [[pad_left, pad_right]], axis=axis + 1)
+    # y = iqwaveform.stft(
+    #     iq,
+    #     fs=fs,
+    #     window=analysis_filter['window'],
+    #     nperseg=nfft,
+    #     noverlap=round(nfft * overlap_scale),
+    #     axis=axis,
+    #     truncate=False,
+    #     overwrite_x=overwrite_x,
+    #     return_axis_arrays=False,
+    # )
 
-    if filter_domain == 'frequency':
-        lb.util.logger.debug('applying filter in frequency domain')
-        y = iqwaveform.fourier.stft_fir_lowpass(
-            y,
-            sample_rate=capture.sample_rate,
-            bandwidth=capture.analysis_bandwidth,
-            transition_bandwidth=500e3,
-            axis=axis,
-            out=y
-        )
-    del iq
+    # # resample
+    # except_on_low_memory()
+    # if nfft_out < nfft:
+    #     # downsample by trimming frequency
+    #     freqs = iqwaveform.fftfreq(nfft, 1 / fs)
+    #     freqs, y = iqwaveform.fourier.downsample_stft(
+    #         freqs, y, nfft_out=nfft_out, axis=axis, out=y
+    #     )
+    # elif nfft_out > nfft:
+    #     # upsample by zero-padding frequency
+    #     pad_left = (nfft_out - nfft) // 2
+    #     pad_right = pad_left + (nfft_out - nfft) % 2
+    #     y = iqwaveform.util.pad_along_axis(y, [[pad_left, pad_right]], axis=axis + 1)
 
-    # reconstruct into a resampled waveform
-    except_on_low_memory()
-    iq = iqwaveform.istft(
-        y, nfft=nfft_out, noverlap=noverlap, axis=axis, overwrite_x=True
-    )
-    scale = iq.size/size_in
+    # if filter_domain == 'frequency':
+    #     lb.util.logger.debug('applying filter in frequency domain')
+    #     y = iqwaveform.fourier.stft_fir_lowpass(
+    #         y,
+    #         sample_rate=capture.sample_rate,
+    #         bandwidth=capture.analysis_bandwidth,
+    #         transition_bandwidth=500e3,
+    #         axis=axis,
+    #         out=y
+    #     )
+    # del iq
+
+    # # reconstruct into a resampled waveform
+    # except_on_low_memory()
+    # iq = iqwaveform.istft(
+    #     y, nfft=nfft_out, noverlap=noverlap, axis=axis, overwrite_x=True
+    # )
+    # scale = iq.size/size_in
 
     # start the capture after the padding for transients
     size_out = round(capture.duration * capture.sample_rate)
@@ -387,9 +389,9 @@ def resampling_correction(
     assert i0 + size_out <= iq.shape[axis]
     iq = iqwaveform.util.axis_slice(iq, i0, i0 + size_out, axis=axis)
 
-    # apply final scaling
-    if power_scale is not None:
-        scale *= np.sqrt(power_scale)
-    iq *= scale
+    # # apply final scaling
+    # if power_scale is not None:
+    #     scale *= np.sqrt(power_scale)
+    # iq *= scale
 
     return iq

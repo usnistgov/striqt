@@ -23,7 +23,7 @@ else:
 
 MIN_RESAMPLE_FFT_SIZE = 4 * 4096 - 1
 RESAMPLE_COLA_WINDOW = 'hamming'
-FILTER_DOMAIN = 'auto'
+FILTER_DOMAIN = 'time'
 
 class _ReceiveBufferCarryover:
     """remember unused samples from the previous IQ capture"""
@@ -634,11 +634,11 @@ def design_capture_filter(
     fixed_capture = msgspec.convert(
         capture, structs.WaveformCapture, from_attributes=True
     )
+    kws.setdefault('window', RESAMPLE_COLA_WINDOW)
     return _design_capture_filter(
         base_clock_rate,
         fixed_capture,
         min_fft_size=MIN_RESAMPLE_FFT_SIZE,
-        window=RESAMPLE_COLA_WINDOW,
         *args,
         **kws,
     )
