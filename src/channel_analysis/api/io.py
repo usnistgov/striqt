@@ -356,36 +356,3 @@ def open_bare_iq(
         cls = _READER_SUFFIX_MAP[format]
 
     return cls(*args, **kws)
-
-
-# def read_raw_iq(
-#     path: Path | str | _FileStreamBase,
-#     format: str ='auto',
-#     duration: float = None,
-#     *,
-#     skip_samples=0,
-#     rx_channel_count=1,
-#     dtype='complex64',
-#     xp=np,
-# ) -> 'iqwaveform.type_stubs.ArrayLike':
-#     """read complex-valued IQ waveforms from .tdms files as an array of specified type.
-
-#     Requires the `pytdms` module.
-#     """
-#     if isinstance(path, _FileStreamBase):
-#         reader = path
-#         sample_rate = reader.sample_rate
-#     else:
-#         kws = dict(locals())
-#         del kws['duration'], kws['skip_samples']
-#         reader = TDMSFileStream(**kws)
-
-#     if duration is None:
-#         target_size = None
-#     else:
-#         target_size = round(duration * sample_rate)
-
-#     result = reader.read(target_size)
-#     reader.close()
-
-#     return result

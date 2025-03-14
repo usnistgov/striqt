@@ -50,6 +50,7 @@ class TestSource(NullSource):
             )
             buf[offset : (offset + count)] = values
 
+
         return super()._read_stream(
             buffers, offset, count, timeout_sec=timeout_sec, on_overflow=on_overflow
         )
@@ -256,6 +257,8 @@ class FileSource(TestSource):
         default={}, help='any capture fields not included in the file'
     )
 
+    _iq_capture = structs.FileSourceCapture()
+
     @property
     def base_clock_rate(self):
         return self._iq_capture.sample_rate
@@ -288,10 +291,38 @@ class FileSource(TestSource):
     @center_frequency.setter
     def _(self, value):
         actual = self.center_frequency()
-        if value != actual:
+        if value != actual and np.isfinite(actual):
             self._logger.warning(
                 f'center frequency ignored, using {actual / 1e6} MHz from file'
+            )            
+
+    @attr.method.float(
+        cache=True,
+        label='dB',
+        help='gain',
+    )
+    def gain(self):
+        return self._iq_capture.gain
+
+    @gain.setter
+    def _(self, value):
+        actual = self.gain()
+        if value != actual and np.isfinite(actual):
+            self._logger.warning(
+                f'gain ignored, using {actual / 1e6} MHz from metadata'
             )
+
+    @attr.method.float(
+        cache=True,
+        label='Hz',
+        help='sample rate',
+    )
+    def sample_rate(self):
+        return self.backend_sample_rate()
+
+    @sample_rate.setter
+    def _(self, value):
+        pass
 
     @method_attr.ChannelMaybeTupleMethod(inherit=True)
     def channel(self):
@@ -317,7 +348,7 @@ class FileSource(TestSource):
         self._file_stream = channel_analysis.io.open_bare_iq(
             self.path,
             format=self.file_format,
-            rx_channel_count=1,
+            rx_channel_count=self.rx_channel_count,
             dtype='complex64',
             xp=self.get_array_namespace(),
             **self.file_metadata,
@@ -343,10 +374,16 @@ class FileSource(TestSource):
             raise RuntimeError('call setup() before reading samples')
         self._file_stream.seek(offset - self._sample_start_index)
         ret = self._file_stream.read(count)
+        assert ret.shape[1] == count
         return ret.copy()
 
     def reset_sample_counter(self, value=None):
-        if self.periodic_trigger is None:
+        # pad_size = sum(base._get_dsp_pad_size(self.base_clock_rate))
+        capture = self.get_capture_struct()
+        pad_start = base._get_dsp_pad_size(self.base_clock_rate, capture)[0]
+        holdoff = base.find_trigger_holdoff(self, 0, dsp_pad_before=pad_start)
+
+        if self.periodic_trigger is None or holdoff == 0:
             super().reset_sample_counter(0)
         else:
             samples = self.periodic_trigger * self.backend_sample_rate()
@@ -416,7 +453,7 @@ class ZarrIQSource(TestSource):
     @center_frequency.setter
     def _(self, value):
         actual = self.center_frequency()
-        if value != actual:
+        if value != actual and np.isfinite(actual):
             self._logger.warning(
                 f'center frequency ignored, using {actual / 1e6} MHz from file'
             )

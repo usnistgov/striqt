@@ -165,9 +165,14 @@ def cellular_cyclic_autocorrelation(
     for chan in range(iq.shape[0]):
         for iscs, phy in enumerate(phy_scs.values()):
             cp_inds = phy.index_cyclic_prefix(**idx_kws, slots=downlink_slots)
+
+            # shift index to the symbol boundary rather than the CP
+            cyclic_shift = -phy.cp_sizes[0] * 2 // cp_inds.shape[1]
+
             R = iqwaveform.ofdm.corr_at_indices(
                 cp_inds, iq[chan], phy.nfft, norm=normalize
             )
+            R = xp.roll(R, cyclic_shift)
             result[chan][0][iscs][: R.size] = xp.abs(R)
 
             if len(uplink_slots) > 0:
@@ -175,7 +180,7 @@ def cellular_cyclic_autocorrelation(
                 R = iqwaveform.ofdm.corr_at_indices(
                     cp_inds, iq[chan], phy.nfft, norm=normalize
                 )
-                # R = xp.roll(R, -phy.cp_sizes[0])
+                R = xp.roll(R, cyclic_shift)
                 result[chan][1][iscs][: R.size] = xp.abs(R)
 
     if normalize:

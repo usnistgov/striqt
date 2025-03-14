@@ -649,7 +649,7 @@ def design_capture_filter(
     )
 
 
-def needs_stft(analysis_filter: dict, capture: structs.RadioCapture) -> bool:
+def needs_resample(analysis_filter: dict, capture: structs.RadioCapture) -> bool:
     """determine whether an STFT will be needed to filter or resample"""
 
     is_resample = analysis_filter['nfft'] != analysis_filter['nfft_out']
@@ -658,7 +658,7 @@ def needs_stft(analysis_filter: dict, capture: structs.RadioCapture) -> bool:
 
 def _get_filter_pad(capture: structs.RadioCapture):
     if np.isfinite(capture.analysis_bandwidth):
-        return FILTER_SIZE
+        return FILTER_SIZE//2+1
     else:
         return 0
 
@@ -715,19 +715,18 @@ def _get_input_buffer_count_cached(
     else:
         sample_rate = capture.sample_rate
 
-    if needs_stft(analysis_filter, capture):
+    pad_size = sum(_get_dsp_pad_size(base_clock_rate, capture))
+    if needs_resample(analysis_filter, capture):
         nfft = analysis_filter['nfft']
-        pad_before, pad_after = _get_dsp_pad_size(base_clock_rate, capture)
         min_samples_in = ceil(samples_out * nfft / analysis_filter['nfft_out'])
-        samples_in = min_samples_in + (pad_before + pad_after)
+        samples_in = min_samples_in + pad_size
     else:
-        samples_in = round(capture.sample_rate * capture.duration)
+        samples_in = round(capture.sample_rate * capture.duration) + pad_size
 
     if include_holdoff:
-        # accommmodate holdoff samples as needed for the periodic trigger and transient holdoff durations
-        samples_in += ceil(
-            sample_rate * (transient_holdoff + 2 * (periodic_trigger or 0))
-        )
+        # pad the buffer for triggering and transient holdoff
+        extra_time = transient_holdoff + 2 * (periodic_trigger or 0)
+        samples_in += ceil(sample_rate * extra_time)
 
     return samples_in
 
@@ -735,7 +734,7 @@ def _get_input_buffer_count_cached(
 def get_channel_resample_buffer_count(radio: RadioDevice, capture):
     _, _, analysis_filter = design_capture_filter(radio.base_clock_rate, capture)
 
-    if capture.host_resample and needs_stft(analysis_filter, capture):
+    if capture.host_resample and needs_resample(analysis_filter, capture):
         input_size = get_channel_read_buffer_count(radio, capture, True)
         buf_size = iqwaveform.fourier._istft_buffer_size(
             input_size,

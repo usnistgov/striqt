@@ -293,23 +293,13 @@ def resampling_correction(
     power_scale = _power_scale(cal_scale, dtype_scale)
 
     fs, _, analysis_filter = design_capture_filter(radio.base_clock_rate, capture)
-    nfft = analysis_filter['nfft']
-
-    nfft_out, noverlap, overlap_scale, _ = iqwaveform.fourier._ola_filter_parameters(
-        iq.size,
-        window=analysis_filter['window'],
-        nfft_out=analysis_filter.get('nfft_out', nfft),
-        nfft=nfft,
-        extend=True,
-    )
 
     except_on_low_memory()
 
-    needs_stft = base.needs_stft(analysis_filter, capture)
+    needs_resample = base.needs_resample(analysis_filter, capture)
 
     # apply the filter here, where the size of y is minimized
     if np.isfinite(capture.analysis_bandwidth):
-        taps = base.FILTER_SIZE
         h = iqwaveform.design_fir_lpf(
             bandwidth=capture.analysis_bandwidth,
             sample_rate=fs,
@@ -317,12 +307,11 @@ def resampling_correction(
             numtaps=base.FILTER_SIZE,
             xp=xp,
         )
-        start_shape = iq.shape
         pad = base._get_filter_pad(capture)
-        iq = iqwaveform.oaconvolve(iq, h[xp.newaxis, :], 'full', axes=axis)
-        iq = iqwaveform.util.axis_slice(iq, pad + h.size // 2, iq.shape[axis] - h.size // 2, axis=axis)
+        iq = iqwaveform.oaconvolve(iq, h[xp.newaxis, :], 'same', axes=axis)
+        iq = iqwaveform.util.axis_slice(iq, pad, iq.shape[axis], axis=axis)
 
-    if not needs_stft:
+    if not needs_resample:
         # bail here if filtering or resampling needed
         size = round(capture.duration * capture.sample_rate)
         iq = iq[:, :size]
@@ -330,13 +319,27 @@ def resampling_correction(
             iq *= np.sqrt(power_scale)
         return iq
 
+    except_on_low_memory()
+
+    size_out = round(capture.duration * capture.sample_rate)
     iq = iqwaveform.fourier.resample(
         iq,
-        round(iq.shape[axis] * nfft_out / nfft),
-        overwrite_x=True,
+        size_out,
+        overwrite_x=overwrite_x,
         axis=axis,
         scale=1 if power_scale is None else power_scale,
     )
+
+    assert iq.shape[axis] == size_out
+
+    # nfft = analysis_filter['nfft']
+    # nfft_out, noverlap, overlap_scale, _ = iqwaveform.fourier._ola_filter_parameters(
+    #     iq.size,
+    #     window=analysis_filter['window'],
+    #     nfft_out=analysis_filter.get('nfft_out', nfft),
+    #     nfft=nfft,
+    #     extend=True,
+    # )
 
     # y = iqwaveform.stft(
     #     iq,
@@ -384,10 +387,10 @@ def resampling_correction(
     # scale = iq.size/size_in
 
     # start the capture after the padding for transients
-    size_out = round(capture.duration * capture.sample_rate)
-    assert size_out <= iq.shape[axis]
-    iq = iqwaveform.util.axis_slice(iq, -size_out, iq.shape[axis], axis=axis)
-    assert iq.shape[axis] == size_out
+    # size_out = round(capture.duration * capture.sample_rate)
+    # assert size_out <= iq.shape[axis]
+    # iq = iqwaveform.util.axis_slice(iq, -size_out, iq.shape[axis], axis=axis)
+    # assert iq.shape[axis] == size_out
 
     # # apply final scaling
     # if power_scale is not None:

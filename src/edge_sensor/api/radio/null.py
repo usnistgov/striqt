@@ -27,7 +27,7 @@ class NullSource(base.RadioDevice):
     _samples_elapsed = 0
     _transient_holdoff_time: float = attr.value.float(0.0, sets=True, inherit=True)
     _transport_dtype = attr.value.str('complex64', inherit=True)
-    rx_channel_count: int = attr.value.int(2, cache=True, help='number of input ports')
+    rx_channel_count: int = attr.value.int(1, cache=True, help='number of input ports')
 
     @method_attr.ChannelMaybeTupleMethod(inherit=True)
     def channel(self):
@@ -150,14 +150,10 @@ class NullSource(base.RadioDevice):
     def _read_stream(
         self, buffers, offset, count, timeout_sec=None, *, on_overflow='except'
     ) -> tuple[int, int]:
-        capture = self.get_capture_struct()
-        _, _, analysis_filter = base.design_capture_filter(
-            self.base_clock_rate, capture
-        )
 
         fs = float(self.backend_sample_rate())
-
-        timestamp_ns = (1_000_000_000 * self._samples_elapsed) / fs
+        sample_period_ns = 1_000_000_000 / fs
+        timestamp_ns = self._samples_elapsed * sample_period_ns
 
         self._samples_elapsed += count
 

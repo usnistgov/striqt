@@ -108,6 +108,7 @@ class FileSourceCapture(RadioCapture, forbid_unknown_fields=True):
     center_frequency: Optional[CenterFrequencyType] = float('nan')
     channel: Optional[ChannelType] = 0
     gain: Optional[GainType] = float('nan')
+    backend_sample_rate: Optional[float] = float('nan')
 
 
 TimeSourceType = Literal['host', 'internal', 'external', 'gps']
