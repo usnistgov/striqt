@@ -294,7 +294,7 @@ class FileSource(TestSource):
         if value != actual and np.isfinite(actual):
             self._logger.warning(
                 f'center frequency ignored, using {actual / 1e6} MHz from file'
-            )            
+            )
 
     @attr.method.float(
         cache=True,

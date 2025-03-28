@@ -202,7 +202,7 @@ class _FileStreamBase:
         return self._meta
 
 
-class MATFileStream(_FileStreamBase):
+class MATNewFileStream(_FileStreamBase):
     def __init__(
         self,
         path,
@@ -216,6 +216,8 @@ class MATFileStream(_FileStreamBase):
     ):
         kws = dict(locals())
         del kws['input_dtype'], kws['self'], kws['__class__'], kws['meta']
+
+
 
         import h5py
 
@@ -277,6 +279,94 @@ class MATFileStream(_FileStreamBase):
         self.read(self._skip_samples + pos)
 
 
+class MATLegacyFileStream(_FileStreamBase):
+    def __init__(
+        self,
+        path,
+        sample_rate: float,
+        key: str,
+        rx_channel_count=1,
+        skip_samples=0,
+        dtype='complex64',
+        xp=np,
+        **meta,
+    ):
+        kws = dict(locals())
+        del kws['self'], kws['__class__'], kws['meta'], kws['key']
+
+        from scipy import io as sio
+
+        available = self.list_variables(path)
+
+        if key not in available:
+            raise KeyError(f'key {key!r} does not point to array data. valid array keys: {available!r}')
+
+        self._fd = sio.loadmat(path, variable_names=[key], squeeze_me=True)
+        self._key = key
+
+        super().__init__(**kws)
+
+    @staticmethod
+    def list_variables(path: str) -> list[str]:
+        from scipy import io as sio
+        return [name for (name, shape, _) in sio.whosmat(path) if len(shape) > 0]
+
+    def close(self):
+        pass
+
+    def read(self, count=None):
+        if count == 0:
+            return
+
+        xp = self._xp
+
+        if self._leftover is None:
+            tally = 0
+            array_list = []
+        else:
+            tally = self._leftover.shape[1]
+            array_list = [self._leftover]
+
+        all_refs = list(self._refs)
+
+        while tally < count:
+            try:
+                ref = all_refs.pop(0)
+            except IndexError:
+                if count is not None:
+                    raise ValueError('too few samples in the file')
+                else:
+                    break
+
+            if not hasattr(ref, 'shape') or ref.ndim != 2:
+                continue
+
+            x = xp.asarray(ref, ref.dtype).astype(self.dtype)
+            array_list.append(x)
+            tally += x.shape[1]
+
+        iq = xp.concat(array_list, axis=1)
+        self._meta['channel'] = list(range(iq.shape[0]))
+
+        if count is None:
+            self._leftover = None
+            return iq
+
+        self._leftover = iq[:, count:]
+        self._position += count
+        return iq[:, :count]
+
+    def seek(self, pos):
+        if pos == self._position:
+            return
+
+        super().seek(pos)
+
+        iq = np.atleast_2d(self._fd[self._key])
+        self._refs = [iq]
+        self.read(self._skip_samples + pos)
+
+
 class TDMSFileStream(_FileStreamBase):
     def __init__(
         self, path, rx_channel_count=1, skip_samples=0, dtype='complex64', xp=np, **meta
@@ -329,9 +419,6 @@ class TDMSFileStream(_FileStreamBase):
         return dict(self.meta, sample_rate=fs, center_frequency=fc, duration=duration)
 
 
-_READER_SUFFIX_MAP = {'.mat': MATFileStream, '.tdms': TDMSFileStream}
-
-
 def open_bare_iq(
     path,
     *args,
@@ -345,14 +432,19 @@ def open_bare_iq(
     kws = dict(locals(), **kws)
     del kws['format'], kws['args']
 
-    suffix = Path(path).suffix
-
     if format in ('auto', None):
+        format = Path(path).suffix 
+
+    if format == '.tdms':
+        cls = TDMSFileStream
+    elif format == '.mat':
         try:
-            cls = _READER_SUFFIX_MAP[suffix]
-        except KeyError:
-            raise ValueError(f'unable to infer file type for file suffix "{suffix}"')
+            MATLegacyFileStream.list_variables(path)
+        except NotImplementedError:
+            cls = MATNewFileStream
+        else:
+            cls = MATLegacyFileStream
     else:
-        cls = _READER_SUFFIX_MAP[format]
+        raise ValueError(f'unsupported file format "{format}"')
 
     return cls(*args, **kws)

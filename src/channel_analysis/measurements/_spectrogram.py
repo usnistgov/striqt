@@ -373,5 +373,6 @@ def spectrogram(
     window_fill: float = 1,
     frequency_bin_averaging: typing.Optional[int] = None,
     time_bin_averaging: typing.Optional[int] = None,
+    dtype:str='float16'
 ):
-    return compute_spectrogram(**locals(), limit_digits=3, dtype='float16')
+    return compute_spectrogram(**locals(), limit_digits=3)
