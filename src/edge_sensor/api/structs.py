@@ -136,7 +136,12 @@ ArrayBackendType = Annotated[
         'array module to use, which sets the type of compute device (numpy = cpu, cupy = gpu)'
     ),
 ]
-
+FastLOType = Annotated[
+    bool,
+    meta(
+        'if False, permit the radio to use slower frequency changes/channel enables to improve LO spurs'
+    ),
+]
 
 class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):
     """run-time characteristics of the radio that are left invariant during a sweep"""
@@ -152,6 +157,7 @@ class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):
     time_sync_every_capture: TimeSyncEveryCaptureType = False
     warmup_sweep: WarmupSweepType = True
     array_backend: ArrayBackendType = 'cupy'
+    fast_lo: FastLOType = False
 
     _transient_holdoff_time: Optional[float] = None
     _rx_channel_count: Optional[int] = None
