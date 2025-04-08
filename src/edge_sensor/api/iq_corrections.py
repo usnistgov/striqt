@@ -16,6 +16,7 @@ from . import structs
 
 if typing.TYPE_CHECKING:
     import numpy as np
+    import pandas as pd
     import xarray as xr
     import scipy
     import iqwaveform
@@ -151,6 +152,13 @@ def compute_y_factor_corrections(
     #     **kwargs, fc_temperatures=ret.temperature
     # )
     return ret
+
+
+def summarize_noise_figure(corrections: 'xr.Dataset', **sel) -> 'pd.DataFrame':
+    max_gain = float(corrections.gain.max())
+    max_nf = corrections.noise_figure.sel(gain=max_gain, **sel, drop=True).squeeze()
+    stacked = max_nf.stack(condition=max_nf.dims).dropna("condition")
+    return stacked.to_dataframe()[["noise_figure"]]
 
 
 def _describe_missing_data(corrections: 'xr.Dataset', exact_matches: dict):
