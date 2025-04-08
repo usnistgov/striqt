@@ -336,7 +336,6 @@ def evaluate_channel_analysis(
                 if not func_kws:
                     continue
                 results[name] = func(iq, capture, as_xarray=as_xarray, **func_kws)
-                print(results[name])
 
     return results
 
