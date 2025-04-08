@@ -50,6 +50,7 @@ class Air7x01B(soapy.SoapyRadioDevice):
     # demands more memory bandwidth. went with int16 as the alternative.
     _transport_dtype = attr.value.str('int16', inherit=True)
     _reenable_cycles = 0
+    _fast_lo = attr.value.bool(False, help='if False, channel enables are looped for cleaner LO spectrum')
 
     def open(self):
         # in some cases specifying the driver has caused exceptions on connect
@@ -77,7 +78,8 @@ class Air7x01B(soapy.SoapyRadioDevice):
 
         super().arm(capture, **capture_kws)
 
-        _reenable_loop(self, reenable_count)
+        if not self._fast_lo:
+            _reenable_loop(self, reenable_count)
 
     def _post_connect(self):
         self._set_jesd_sysref_delay(0)
