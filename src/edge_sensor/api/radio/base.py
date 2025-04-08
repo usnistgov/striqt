@@ -183,7 +183,7 @@ class RadioDevice(lb.Device):
 
     fast_lo = attr.value.bool(
         False,
-        help='if False, permit the radio to use slower frequency changes/channel enables to improve LO spurs'
+        help='if False, permit the radio to use slower frequency changes/channel enables to improve LO spurs',
     )
 
     _downsample = attr.value.float(1.0, min=0, help='backend_sample_rate/sample_rate')
@@ -664,7 +664,7 @@ def needs_resample(analysis_filter: dict, capture: structs.RadioCapture) -> bool
 
 def _get_filter_pad(capture: structs.RadioCapture):
     if np.isfinite(capture.analysis_bandwidth):
-        return FILTER_SIZE//2+1
+        return FILTER_SIZE // 2 + 1
     else:
         return 0
 

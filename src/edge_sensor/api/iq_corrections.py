@@ -129,18 +129,17 @@ def _y_factor_frequency_response_correction(
         frequency_statistic='mean', drop=True
     ).pipe(lambda x: 10 ** (x / 10.0))
 
-    fc_T = fc_temperatures
     all_T = _y_factor_temperature(spectrum, enr_dB=20.87, Tamb=294.5389)
 
     # normalize the power correction at each center frequency, and then average the result across center frequency
-    baseband_frequency_response = (fc_T.broadcast_like(all_T) / all_T).median(
-        dim='center_frequency'
-    )
 
-    baseband_frequency_response.name = 'Baseband power scaling correction'
-    baseband_frequency_response.attrs = {'units': 'unitless'}
+    temp_norm = fc_temperatures.broadcast_like(all_T) / all_T
+    frequency_response = temp_norm.median(dim='center_frequency')
 
-    return baseband_frequency_response
+    frequency_response.name = 'Baseband power scaling correction'
+    frequency_response.attrs = {'units': 'unitless'}
+
+    return frequency_response
 
 
 def compute_y_factor_corrections(
@@ -157,8 +156,8 @@ def compute_y_factor_corrections(
 def summarize_noise_figure(corrections: 'xr.Dataset', **sel) -> 'pd.DataFrame':
     max_gain = float(corrections.gain.max())
     max_nf = corrections.noise_figure.sel(gain=max_gain, **sel, drop=True).squeeze()
-    stacked = max_nf.stack(condition=max_nf.dims).dropna("condition")
-    return stacked.to_dataframe()[["noise_figure"]]
+    stacked = max_nf.stack(condition=max_nf.dims).dropna('condition')
+    return stacked.to_dataframe()[['noise_figure']]
 
 
 def _describe_missing_data(corrections: 'xr.Dataset', exact_matches: dict):

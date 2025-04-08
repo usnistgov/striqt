@@ -150,7 +150,6 @@ class NullSource(base.RadioDevice):
     def _read_stream(
         self, buffers, offset, count, timeout_sec=None, *, on_overflow='except'
     ) -> tuple[int, int]:
-
         fs = float(self.backend_sample_rate())
         sample_period_ns = 1_000_000_000 / fs
         timestamp_ns = self._samples_elapsed * sample_period_ns

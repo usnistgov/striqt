@@ -217,8 +217,6 @@ class MATNewFileStream(_FileStreamBase):
         kws = dict(locals())
         del kws['input_dtype'], kws['self'], kws['__class__'], kws['meta']
 
-
-
         import h5py
 
         self._fd = h5py.File(path, 'r')
@@ -299,7 +297,9 @@ class MATLegacyFileStream(_FileStreamBase):
         available = self.list_variables(path)
 
         if key not in available:
-            raise KeyError(f'key {key!r} does not point to array data. valid array keys: {available!r}')
+            raise KeyError(
+                f'key {key!r} does not point to array data. valid array keys: {available!r}'
+            )
 
         self._fd = sio.loadmat(path, variable_names=[key], squeeze_me=True)
         self._key = key
@@ -309,6 +309,7 @@ class MATLegacyFileStream(_FileStreamBase):
     @staticmethod
     def list_variables(path: str) -> list[str]:
         from scipy import io as sio
+
         return [name for (name, shape, _) in sio.whosmat(path) if len(shape) > 0]
 
     def close(self):
@@ -433,7 +434,7 @@ def open_bare_iq(
     del kws['format'], kws['args']
 
     if format in ('auto', None):
-        format = Path(path).suffix 
+        format = Path(path).suffix
 
     if format == '.tdms':
         cls = TDMSFileStream

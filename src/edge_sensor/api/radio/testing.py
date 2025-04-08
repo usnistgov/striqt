@@ -50,7 +50,6 @@ class TestSource(NullSource):
             )
             buf[offset : (offset + count)] = values
 
-
         return super()._read_stream(
             buffers, offset, count, timeout_sec=timeout_sec, on_overflow=on_overflow
         )

@@ -41,7 +41,14 @@ def truncate_spectrogram_bandwidth(x, nfft, fs, bandwidth, axis=0):
 
 
 def binned_mean(
-    x, count, *, axis=0, truncate=True, reject_extrema=False, centered=True, center_offset=0
+    x,
+    count,
+    *,
+    axis=0,
+    truncate=True,
+    reject_extrema=False,
+    centered=True,
+    center_offset=0,
 ):
     """reduce an array by averaging into bins on the specified axis"""
 
@@ -373,6 +380,6 @@ def spectrogram(
     window_fill: float = 1,
     frequency_bin_averaging: typing.Optional[int] = None,
     time_bin_averaging: typing.Optional[int] = None,
-    dtype:str='float16'
+    dtype: str = 'float16',
 ):
     return compute_spectrogram(**locals(), limit_digits=3)

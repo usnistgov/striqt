@@ -143,6 +143,7 @@ FastLOType = Annotated[
     ),
 ]
 
+
 class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):
     """run-time characteristics of the radio that are left invariant during a sweep"""
 
