@@ -368,6 +368,81 @@ class MATLegacyFileStream(_FileStreamBase):
         self.read(self._skip_samples + pos)
 
 
+class NPYFileStream(_FileStreamBase):
+    def __init__(
+        self,
+        path,
+        sample_rate: float,
+        rx_channel_count=1,
+        skip_samples=0,
+        dtype='complex64',
+        xp=np,
+        **meta,
+    ):
+        kws = dict(locals())
+        del kws['self'], kws['__class__'], kws['meta']
+
+        self._data = xp.asarray(np.atleast_2d(np.load(path))).astype(dtype)
+
+        if rx_channel_count <= self._data.shape[-2]:
+            self._data = self._data[...,:rx_channel_count,:]
+        else:
+            raise ValueError(f'rx_channel_count exceeds input data channel dimension size ({self._data.shape[-2]})')
+
+        super().__init__(**kws)
+
+    def close(self):
+        pass
+
+    def read(self, count=None):
+        if count == 0:
+            return
+
+        xp = self._xp
+
+        if self._leftover is None:
+            tally = 0
+            array_list = []
+        else:
+            tally = self._leftover.shape[1]
+            array_list = [self._leftover]
+
+        while tally < count:
+            try:
+                ref = self._refs.pop(0)
+            except IndexError:
+                if count is not None:
+                    raise ValueError('too few samples in the file')
+                else:
+                    break
+
+            if not hasattr(ref, 'shape') or ref.ndim < 2:
+                continue
+
+            array_list.append(ref)
+            tally += ref.shape[1]
+
+        iq = xp.concat(array_list, axis=1)
+        self._meta['channel'] = list(range(iq.shape[0]))
+
+        if count is None:
+            self._leftover = None
+            return iq
+
+        self._leftover = iq[:, count:]
+        self._position += count
+        return iq[:, :count]
+
+    def seek(self, pos):
+        if pos == self._position:
+            return
+
+        super().seek(pos)
+
+        self._refs = [self._data]
+        self.read(self._skip_samples + pos)
+
+
 class TDMSFileStream(_FileStreamBase):
     def __init__(
         self, path, rx_channel_count=1, skip_samples=0, dtype='complex64', xp=np, **meta
@@ -445,6 +520,8 @@ def open_bare_iq(
             cls = MATNewFileStream
         else:
             cls = MATLegacyFileStream
+    elif format == '.npy':
+        cls = NPYFileStream
     else:
         raise ValueError(f'unsupported file format "{format}"')
 
