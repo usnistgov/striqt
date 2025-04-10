@@ -27,6 +27,11 @@ def make_power_bins(power_low, power_high, power_resolution, xp=np):
     ret = xp.arange(power_low, power_high, power_resolution)
     if power_high - ret[-1] > power_resolution / 2:
         ret = xp.pad(ret, [[0, 1]], mode='constant', constant_values=power_high).copy()
+
+    # catch-all bins for counts outside of the specified range
+    bottom_inf = xp.array([float('-inf')])
+    top_inf = xp.array([float('inf')])
+    ret = xp.concatenate((bottom_inf, ret, top_inf))
     return ret
 
 
@@ -67,8 +72,8 @@ def make_power_histogram_bin_edges(power_low, power_high, power_resolution, xp=n
         + power_resolution / 2
     )
 
-    top_edge = xp.array([power_high + power_resolution / 2])
-    return xp.concatenate((bin_centers - power_resolution, top_edge))
+    top_edge = xp.array([power_high + power_resolution / 2, bin_centers[-1]])
+    return xp.concatenate((bin_centers[:-1] - power_resolution, top_edge))
 
 
 @dataclasses.dataclass

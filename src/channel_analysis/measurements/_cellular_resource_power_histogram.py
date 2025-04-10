@@ -74,7 +74,7 @@ class CellularResourcePowerBinCoords:
             # lists break lru_cache
             window = tuple(window)
 
-        enbw = frequency_resolution * equivalent_noise_bandwidth(window, nfft)
+        enbw = frequency_resolution * 2*equivalent_noise_bandwidth(window, nfft)
 
         return bins, {'units': f'dBm/{enbw / 1e3:0.0f} kHz'}
 
@@ -184,6 +184,13 @@ def cellular_resource_power_histogram(
         dtype='float32',
         dB=False,
     )
+
+    # we really wanted to sum bins pairwise, instead of averaging them, but
+    # it was simpler to average across all 24 bins rather than sum 2 and average 12.
+    # this compensates for the difference.
+    spg *= 2
+    # enbw = 2*metadata['noise_bandwidth']
+    # metadata = metadata | {'noise_bandwidth': enbw, 'units': f'dBm/{enbw / 1e3:0.0f} kHz'}
 
     freqs = SpectrogramBasebandFrequencyCoords.factory(
         capture,
@@ -327,7 +334,9 @@ def build_tdd_link_symbol_masks(
     if flex_as is not None:
         flex_as = flex_as.lower()
     frame_slots = frame_slots.lower()
-    special_symbols = special_symbols.lower()
+
+    if special_symbols is not None:
+        special_symbols = special_symbols.lower()
 
     if len(frame_slots.strip('dus')) > 0:
         allowed = set('dus')

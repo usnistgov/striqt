@@ -9,7 +9,6 @@ import rpyc
 from . import captures, sweeps, util
 from . import structs
 from .radio import find_radio_cls_by_name, is_same_resource, RadioDevice
-from channel_analysis.api.util import compute_lock
 
 if typing.TYPE_CHECKING:
     import numpy as np
