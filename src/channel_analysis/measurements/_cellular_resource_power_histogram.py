@@ -74,7 +74,7 @@ class CellularResourcePowerBinCoords:
             # lists break lru_cache
             window = tuple(window)
 
-        enbw = frequency_resolution * 2*equivalent_noise_bandwidth(window, nfft)
+        enbw = frequency_resolution * 2 * equivalent_noise_bandwidth(window, nfft)
 
         return bins, {'units': f'dBm/{enbw / 1e3:0.0f} kHz'}
 
