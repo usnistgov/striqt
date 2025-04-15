@@ -9,6 +9,9 @@ else:
     iqwaveform = util.lazy_import('iqwaveform')
     np = util.lazy_import('numpy')
 
+from ..api.registry import register_xarray_measurement
+from ..api import structs, util
+
 
 @functools.lru_cache()
 def _m_sequence(N_id2: int) -> list[int]:
@@ -81,22 +84,20 @@ def pss_5g_nr(
         )
 
     if size_out == SC_COUNT and frequency_offset == 0:
-        pad_left = 0
-        pad_right = 0
+        pad_lo = 0
+        pad_hi = 0
     else:
-        pad_left = size_out // 2 - 120 + 56 + frequency_offset
-        pad_right = size_out - SC_COUNT - pad_left
+        pad_lo = size_out // 2 - 120 + 56 + frequency_offset
+        pad_hi = size_out - SC_COUNT - pad_lo
 
-    if pad_left < 0 or pad_right < 0:
+    if pad_lo < 0 or pad_hi < 0:
         raise ValueError(
             'center_frequency shift pushes M-sequence outside of Nyquist sample rate'
         )
 
-    m_sequences = np.array([_m_sequence(i) for i in range(3)], dtype=dtype)
     norm = np.float32(np.sqrt(SC_COUNT))
-    pss_freq = iqwaveform.util.pad_along_axis(
-        m_sequences / norm, [(pad_left, pad_right)], axis=1
-    )
+    m_seqs = np.array([_m_sequence(i) for i in range(3)], dtype=dtype)
+    pss_freq = iqwaveform.util.pad_along_axis(m_seqs / norm, [(pad_lo, pad_hi)], axis=1)
     pss_time = np.fft.ifft(np.fft.fftshift(pss_freq, axes=1), axis=1)
 
     # prepend the cyclic prefix
@@ -106,9 +107,81 @@ def pss_5g_nr(
     return xp.array(pss_time)
 
 
-def pss_offset(symbol_offset, sample_rate, subcarrier_spacing):
+def pss_offset(sample_rate, subcarrier_spacing, *, symbol_offset):
     sc_count = sample_rate / subcarrier_spacing
     spacing = round(
         (1 + symbol_offset) * sc_count + (10 + (symbol_offset + 1) * 9) / 128 * sc_count
     )
     return spacing + round(sc_count / 128)
+
+
+def pss_correlate(
+    iq,
+    capture: structs.Capture,
+    *,
+    subcarrier_spacing: float,
+    sync_period: float = 10e-3,
+    block_frequency_offset: float = 0,
+    duration: typing.Optional[float] = None,
+    trim_cp: bool = True,
+):
+    if not iqwaveform.util.isroundmod(subcarrier_spacing, 15e3):
+        raise ValueError('subcarrier_spacing must be multiple of 15000')
+
+    if iqwaveform.util.isroundmod(capture.sample_rate, 128 * subcarrier_spacing):
+        frame_size = round(10e-3 * capture.sample_rate)
+    else:
+        raise ValueError(
+            f'capture.sample_rate must be a multiple of {128 * subcarrier_spacing}'
+        )
+
+    slot_duration = 10e-3 / (10 * subcarrier_spacing / 15e3)
+
+    if duration is None:
+        duration = 2 * slot_duration
+    elif not iqwaveform.util.isroundmod(duration, slot_duration / 2):
+        raise ValueError(
+            f'duration must be a multiple of 1/2 slot duration, {slot_duration / 2}'
+        )
+    slot_count = round(duration / slot_duration)
+    corr_size = round(duration * capture.sample_rate)
+
+    if iqwaveform.util.isroundmod(sync_period, 10e-3):
+        frames_per_sync = round(sync_period / 10e-3)
+    else:
+        raise ValueError('sync_period must be a multiple of 10e-3')
+
+    pss = pss_5g_nr(
+        capture.sample_rate, subcarrier_spacing, center_frequency=block_frequency_offset
+    )
+
+    # set up broadcasting to new dimensions:
+    # (port index, cell Nid2, sync block index, IQ sample index)
+    iq_bcast = iq.reshape((1, -1, frame_size))
+    iq_bcast = iq_bcast[:, np.newaxis, ::frames_per_sync, :corr_size]
+    pss_bcast = pss[np.newaxis, :, np.newaxis, :]
+
+    R, *_ = iqwaveform.oaconvolve(iq_bcast, pss_bcast, axes=3, mode='full')
+
+    # shift correlation peaks to the symbol start
+    cp_samples = round(9 / 128 * capture.sample_rate / subcarrier_spacing)
+    offs = round(capture.sample_rate / subcarrier_spacing + 2 * cp_samples)
+    R = np.roll(R, -offs, axis=-1)[..., :corr_size]
+
+    # -> (port index, cell Nid2, sync block index, slot index, IQ sample index)
+    excess_cp = round(capture.sample_rate / subcarrier_spacing * 1 / 128)
+    R = R.reshape(R.shape[:-1] + (slot_count, -1))[..., 2 * excess_cp :]
+
+    # -> (port index, cell Nid2, sync block index, symbol pair index, IQ sample index)
+    R = R.reshape(
+        R.shape[:-2]
+        + (
+            7 * slot_count,
+            -1,
+        )
+    )
+
+    if trim_cp:
+        R = R[..., : -cp_samples // 2]
+
+    return R
