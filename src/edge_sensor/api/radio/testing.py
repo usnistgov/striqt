@@ -363,6 +363,14 @@ class FileSource(TestSource):
         if self._file_stream is None:
             raise RuntimeError('call setup() before arm()')
 
+        if capture_kws.get('backend_sample_rate', self.base_clock_rate) not in (
+            None,
+            self.base_clock_rate,
+        ):
+            raise ValueError(f'backend_sample_rate can only be {self.base_clock_rate}')
+        else:
+            capture_kws = dict(capture_kws, backend_sample_rate=self.base_clock_rate)
+
         super().arm(capture, **capture_kws)
         self._file_stream.seek(0)
 

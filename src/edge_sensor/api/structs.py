@@ -38,6 +38,9 @@ GainType = Annotated[
 LOShiftType = Literal['left', 'right', 'none']
 DelayType = Annotated[float, meta('Delay in acquisition start time', 's', gt=0)]
 StartTimeType = Annotated['pd.Timestamp', meta('Acquisition start time')]
+BackendSampleRateType = Annotated[
+    float, meta('Force the specified sample rate in the source', 'Hz', gt=0)
+]
 
 
 def _dict_hash(d):
@@ -69,6 +72,7 @@ class WaveformCapture(channel_analysis.Capture, forbid_unknown_fields=True):
     ] = float('inf')
     lo_shift: Annotated[LOShiftType, meta('LO shift direction')] = 'none'
     host_resample: bool = True
+    backend_sample_rate: Optional[BackendSampleRateType] = None
 
 
 @functools.lru_cache

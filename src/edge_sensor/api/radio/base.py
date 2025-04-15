@@ -241,6 +241,10 @@ class RadioDevice(lb.Device):
         help='buffer transport dtype',
     )
 
+    _forced_backend_sample_rate = attr.value.float(
+        None, help='if specified, only the specified backend sample rate will be used'
+    )
+
     @attr.property.str(sets=False, cache=True, help='unique radio hardware identifier')
     def id(self):
         raise NotImplementedError
@@ -287,6 +291,8 @@ class RadioDevice(lb.Device):
             capture = self.get_capture_struct()
 
         capture = msgspec.structs.replace(capture, **capture_kws)
+
+        self._forced_backend_sample_rate = capture.backend_sample_rate
 
         if iqwaveform.power_analysis.isroundmod(
             capture.duration * capture.sample_rate, 1
@@ -535,6 +541,7 @@ class RadioDevice(lb.Device):
             # filtering and resampling
             analysis_bandwidth=self.analysis_bandwidth,
             lo_shift=lo_shift,
+            backend_sample_rate=self._forced_backend_sample_rate,
         )
 
     def get_array_namespace(self: RadioDevice):
@@ -615,6 +622,7 @@ def _design_capture_filter(
             min_fft_size=min_fft_size,
             min_oversampling=min_oversampling,
             window=window,
+            fs_sdr=capture.backend_sample_rate,
         )
 
         kws['window'] = window

@@ -385,9 +385,11 @@ class NPYFileStream(_FileStreamBase):
         self._data = xp.asarray(np.atleast_2d(np.load(path))).astype(dtype)
 
         if rx_channel_count <= self._data.shape[-2]:
-            self._data = self._data[...,:rx_channel_count,:]
+            self._data = self._data[..., :rx_channel_count, :]
         else:
-            raise ValueError(f'rx_channel_count exceeds input data channel dimension size ({self._data.shape[-2]})')
+            raise ValueError(
+                f'rx_channel_count exceeds input data channel dimension size ({self._data.shape[-2]})'
+            )
 
         super().__init__(**kws)
 
