@@ -1,4 +1,5 @@
 from ._cellular_cyclic_autocorrelation import cellular_cyclic_autocorrelation
+from ._cellular_5g_pss_correlation import cellular_5g_pss_correlation
 from ._cellular_resource_power_histogram import cellular_resource_power_histogram
 from ._channel_power_histogram import channel_power_histogram
 from ._channel_power_time_series import channel_power_time_series
