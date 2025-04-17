@@ -1,3 +1,4 @@
+from __future__ import annotations
 import functools
 import typing
 import dataclasses
@@ -318,32 +319,43 @@ def cellular_5g_pss_correlation(
     subcarrier_spacing: float,
     sample_rate: float = 15.36e6,    
     discovery_periodicity: float = 20e-3,
-    frequency_offset: float = 0,
+    frequency_offset: float|dict[float, float] = 0,
     shared_spectrum: bool = False
 ):
-    """
+    """correlate each channel of the IQ against the cellular primary synchronization signal (PSS) waveform.
+
+    Returns a DataArray containing the time-lag for each combination of NID2, symbol, and SSB start time.
+
+    Args:
+        iq: the vector of size (N, M) for N channels and M IQ waveform samples
+        capture: capture structure that describes the iq acquisition parameters
+        sample_rate (samples/s): resample to this rate before analysis (or None to follow capture.sample_rate)
+        subcarrier_spacing (Hz): OFDM subcarrier spacing
+        discovery_periodicity (s): interval between synchronization blocks
+        frequency_offset (Hz): baseband center frequency of the synchronization block,
+            (or a mapping to look up frequency_offset[capture.center_frequency])
+        shared_spectrum: whether to assume "shared_spectrum" symbol layout in the SSB
+            according to 3GPP TS 138 213: Section 4.1)
+        as_xarray: if True (default), return an xarray.DataArray, otherwise a ChannelAnalysisResult object
 
     References:
         3GPP TS 138 211: Table 7.4.3.1-1, Section 7.4.2.2
         3GPP TS 138 213: Section 4.1
-
-    Args:
-        iq (_type_): _description_
-        capture (structs.Capture): _description_
-        sample_rate: resample to this rate before analysis (or None to follow capture.sample_rate)
-        subcarrier_spacing (float): _description_
-        discovery_periodicity (float, optional): _description_. Defaults to 10e-3.
-        frequency_offset (float, optional): _description_. Defaults to 0.
-        trim_cp (bool, optional): _description_. Defaults to True.
-        shared_spectrum: bool = False
-
-    Returns:
-        _type_: _description_
     """
-    xp = iqwaveform.util.array_namespace(iq)
+
+    # TODO: make this part more explicit
     trim_cp = True
     metadata = dict(locals())
+
+    if isinstance(frequency_offset, dict):
+        if not hasattr(capture, 'center_frequency'):
+            raise ValueError('frequency_offset must be a float unless capture has a "center_frequency" attribute')
+        frequency_offset = frequency_offset[capture.center_frequency] # noqa
+
     del metadata['iq'], metadata['capture'], metadata['sample_rate']
+    params = _pss_params(capture, **metadata)
+
+    xp = iqwaveform.util.array_namespace(iq)
 
     # * 3 makes it compatible with the blackman window overlap of 2/3
     down = round(capture.sample_rate / subcarrier_spacing / 8 * 3)
@@ -351,7 +363,11 @@ def cellular_5g_pss_correlation(
     iq = iqwaveform.fourier.oaresample(iq, fs=capture.sample_rate, up=up, down=down, axis=1, window='blackman', frequency_shift=frequency_offset)
     capture = msgspec.structs.replace(capture, sample_rate=sample_rate)
 
-    params = _pss_params(capture, **metadata)
+    if isinstance(frequency_offset, dict):
+        if not hasattr(capture, 'center_frequency'):
+            raise ValueError('frequency_offset must be a float unless capture has a "center_frequency" attribute')
+        frequency_offset = frequency_offset[capture.center_frequency] # noqa
+
     frame_size = params['frame_size']
     slot_count = params['slot_count']
     corr_size = params['corr_size']
