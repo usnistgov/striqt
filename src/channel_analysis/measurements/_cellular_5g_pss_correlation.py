@@ -29,7 +29,7 @@ CellularCellID2Axis = typing.Literal['cellular_cell_id2']
 
 @dataclasses.dataclass
 class CellularCellID2Coords:
-    data: Data[CellularCellID2Axis, str]
+    data: Data[CellularCellID2Axis, np.uint8]
     standard_name: Attr[str] = r'Cell Identity 2 ($N_{ID}^{(2)}$)'
 
     @staticmethod
