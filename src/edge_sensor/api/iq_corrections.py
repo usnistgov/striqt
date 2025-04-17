@@ -246,7 +246,7 @@ def lookup_power_correction(
 
         power_scale.append(float(sel))
 
-    return xp.asarray(power_scale, dtype='float32')[:, np.newaxis]
+    return xp.asarray(power_scale, dtype='float32')
 
 
 def _power_scale(cal_power_scale, dtype_iq_scale):
