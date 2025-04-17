@@ -45,7 +45,7 @@ class FixedEngFormatter(mpl.ticker.EngFormatter):
         *,
         usetex=None,
         useMathText=None,
-        useOffset=False,
+        **kws,
     ):
         self.unitInTick = unitInTick
 
@@ -62,7 +62,7 @@ class FixedEngFormatter(mpl.ticker.EngFormatter):
             sep,
             usetex=usetex,
             useMathText=useMathText,
-            useOffset=useOffset,
+            **kws,
         )
 
     def format_data(self, value):
