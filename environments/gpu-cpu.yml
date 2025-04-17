@@ -27,6 +27,7 @@ dependencies:
 - zarr>=2.18,<4
 - dask
 - msgspec~=0.18
+- frozendict
 - schemdraw
 - mscorefonts
 - cupy ~= 12.2
