@@ -160,6 +160,13 @@ def summarize_noise_figure(corrections: 'xr.Dataset', **sel) -> 'pd.DataFrame':
     return stacked.to_dataframe()[['noise_figure']]
 
 
+def summarize_power_corrections(corrections: 'xr.Dataset', **sel) -> 'pd.DataFrame':
+    max_gain = float(corrections.gain.max())
+    corr = corrections.power_correction.sel(gain=max_gain, **sel, drop=True).squeeze()
+    stacked = corr.stack(condition=corr.dims).dropna('condition')
+    return stacked.to_dataframe()[['power_correction']]
+
+
 def _describe_missing_data(corrections: 'xr.Dataset', exact_matches: dict):
     misses = []
     cal = corrections.power_correction.copy()
