@@ -319,7 +319,7 @@ def cellular_5g_pss_correlation(
     subcarrier_spacing: float,
     sample_rate: float = 15.36e6,    
     discovery_periodicity: float = 20e-3,
-    frequency_offset: float|dict[float, float] = 0,
+    frequency_offset: typing.Union[float,dict[float, float]] = 0,
     shared_spectrum: bool = False
 ):
     """correlate each channel of the IQ against the cellular primary synchronization signal (PSS) waveform.
