@@ -350,6 +350,7 @@ def cellular_5g_pss_correlation(
         if not hasattr(capture, 'center_frequency'):
             raise ValueError('frequency_offset must be a float unless capture has a "center_frequency" attribute')
         frequency_offset = frequency_offset[capture.center_frequency] # noqa
+        
 
     metadata = dict(locals())
     del metadata['iq'], metadata['capture'], metadata['sample_rate']
@@ -374,7 +375,7 @@ def cellular_5g_pss_correlation(
     frames_per_sync = params['frames_per_sync']
 
     pss = _pss_5g_nr(
-        capture.sample_rate, subcarrier_spacing
+        capture.sample_rate, subcarrier_spacing, xp=xp
     )
 
     # set up broadcasting to new dimensions:
