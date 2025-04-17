@@ -72,7 +72,9 @@ def make_power_histogram_bin_edges(power_low, power_high, power_resolution, xp=n
         + power_resolution / 2
     )
 
-    top_edge = xp.array([float(power_high + power_resolution / 2), float(bin_centers[-1])])
+    top_edge = xp.array(
+        [float(power_high + power_resolution / 2), float(bin_centers[-1])]
+    )
     return xp.concatenate((bin_centers[:-1] - power_resolution, top_edge))
 
 

@@ -209,10 +209,11 @@ def _pss_5g_nr(
         )
 
     from scipy import signal
+
     norm = np.float32(np.sqrt(SC_COUNT))
     m_seqs = np.array([_m_sequence(i) for i in range(3)], dtype=dtype)
     m_seqs *= signal.get_window(('dpss', 0.9), m_seqs.shape[1])[np.newaxis]
-    norm *= np.sqrt(np.mean(np.abs(m_seqs)**2))
+    norm *= np.sqrt(np.mean(np.abs(m_seqs) ** 2))
 
     pss_freq = iqwaveform.util.pad_along_axis(m_seqs / norm, [(pad_lo, pad_hi)], axis=1)
     pss_time = np.fft.ifft(np.fft.fftshift(pss_freq, axes=1), axis=1)
@@ -222,7 +223,9 @@ def _pss_5g_nr(
         cp_size = round(9 * sample_rate / subcarrier_spacing / 128)
         # pss_time = np.concatenate([pss_time[:, -cp_size:], pss_time], axis=1)
         # pss_time = iqwaveform.util.pad_along_axis(pss_time, [[cp_size, 0]], axis=1)
-        pss_time = np.concatenate([np.zeros_like(pss_time[:, -cp_size:]), pss_time], axis=1)
+        pss_time = np.concatenate(
+            [np.zeros_like(pss_time[:, -cp_size:]), pss_time], axis=1
+        )
 
     return xp.array(pss_time)
 
@@ -231,14 +234,13 @@ def _pss_5g_nr(
 def _pss_params(
     capture: structs.Capture,
     *,
-    sample_rate: float = 2*7.68e6,
+    sample_rate: float = 2 * 7.68e6,
     subcarrier_spacing: float,
     discovery_periodicity: float = 20e-3,
     frequency_offset: float = 0,
     trim_cp: bool = True,
     shared_spectrum: bool = False,
 ) -> dict:
-
     capture = msgspec.structs.replace(capture, sample_rate=sample_rate)
 
     if not iqwaveform.util.isroundmod(subcarrier_spacing, 15e3):
@@ -261,7 +263,7 @@ def _pss_params(
     # The following cases are defined in 3GPP TS 138 213: Section 4.1
     if np.isclose(subcarrier_spacing, 15e3):
         # Case A
-        offsets = [2,8]
+        offsets = [2, 8]
         mult = 14
         if shared_spectrum:
             nrange = range(5)
@@ -276,11 +278,11 @@ def _pss_params(
     #     if shared_spectrum:
     #         n = np.arange(10)
     #     else:
-    #         # for center frequencies < 3 GHz, the upper 2 can be ignored 
+    #         # for center frequencies < 3 GHz, the upper 2 can be ignored
     #         n = np.arange(4)
     elif np.isclose(subcarrier_spacing, 30e3):
         # For now, all 30 kHz SCS is assumed to be "Case C"
-        offsets = [2,8]
+        offsets = [2, 8]
         mult = 14
         if shared_spectrum:
             nrange = range(10)
@@ -289,12 +291,14 @@ def _pss_params(
             # operation) the upper 2 can be ignored
             nrange = range(4)
     else:
-        raise ValueError('only 15 kHz and 30 kHz SCS (Case A, C) are currently supported (Case A,B,C)')
+        raise ValueError(
+            'only 15 kHz and 30 kHz SCS (Case A, C) are currently supported (Case A,B,C)'
+        )
 
     symbol_indexes = []
     for n in nrange:
         for offset in offsets:
-            symbol_indexes.append(offset + mult*n)
+            symbol_indexes.append(offset + mult * n)
 
     slot_count = ceil(symbol_indexes[-1] / 14)
     slot_duration = 10e-3 / (10 * subcarrier_spacing / 15e3)
@@ -317,10 +321,10 @@ def cellular_5g_pss_correlation(
     capture: structs.Capture,
     *,
     subcarrier_spacing: float,
-    sample_rate: float = 15.36e6,    
+    sample_rate: float = 15.36e6,
     discovery_periodicity: float = 20e-3,
-    frequency_offset: typing.Union[float,dict[float, float]] = 0,
-    shared_spectrum: bool = False
+    frequency_offset: typing.Union[float, dict[float, float]] = 0,
+    shared_spectrum: bool = False,
 ):
     """correlate each channel of the IQ against the cellular primary synchronization signal (PSS) waveform.
 
@@ -348,9 +352,10 @@ def cellular_5g_pss_correlation(
 
     if isinstance(frequency_offset, dict):
         if not hasattr(capture, 'center_frequency'):
-            raise ValueError('frequency_offset must be a float unless capture has a "center_frequency" attribute')
-        frequency_offset = frequency_offset[capture.center_frequency] # noqa
-        
+            raise ValueError(
+                'frequency_offset must be a float unless capture has a "center_frequency" attribute'
+            )
+        frequency_offset = frequency_offset[capture.center_frequency]  # noqa
 
     metadata = dict(locals())
     del metadata['iq'], metadata['capture'], metadata['sample_rate']
@@ -360,27 +365,35 @@ def cellular_5g_pss_correlation(
 
     # * 3 makes it compatible with the blackman window overlap of 2/3
     down = round(capture.sample_rate / subcarrier_spacing / 8 * 3)
-    up = round(down * (sample_rate/capture.sample_rate))
-    iq = iqwaveform.fourier.oaresample(iq, fs=capture.sample_rate, up=up, down=down, axis=1, window='blackman', frequency_shift=frequency_offset)
+    up = round(down * (sample_rate / capture.sample_rate))
+    iq = iqwaveform.fourier.oaresample(
+        iq,
+        fs=capture.sample_rate,
+        up=up,
+        down=down,
+        axis=1,
+        window='blackman',
+        frequency_shift=frequency_offset,
+    )
     capture = msgspec.structs.replace(capture, sample_rate=sample_rate)
 
     if isinstance(frequency_offset, dict):
         if not hasattr(capture, 'center_frequency'):
-            raise ValueError('frequency_offset must be a float unless capture has a "center_frequency" attribute')
-        frequency_offset = frequency_offset[capture.center_frequency] # noqa
+            raise ValueError(
+                'frequency_offset must be a float unless capture has a "center_frequency" attribute'
+            )
+        frequency_offset = frequency_offset[capture.center_frequency]  # noqa
 
     frame_size = params['frame_size']
     slot_count = params['slot_count']
     corr_size = params['corr_size']
     frames_per_sync = params['frames_per_sync']
 
-    pss = _pss_5g_nr(
-        capture.sample_rate, subcarrier_spacing, xp=xp
-    )
+    pss = _pss_5g_nr(capture.sample_rate, subcarrier_spacing, xp=xp)
 
     # set up broadcasting to new dimensions:
     # (port index, cell Nid2, sync block index, IQ sample index)
-    iq_bcast = iq.reshape((1, -1, frame_size))
+    iq_bcast = iq.reshape((iq.shape[0], -1, frame_size))
     iq_bcast = iq_bcast[:, xp.newaxis, ::frames_per_sync, :corr_size]
     pss_bcast = pss[xp.newaxis, :, xp.newaxis, :]
 
@@ -397,8 +410,8 @@ def cellular_5g_pss_correlation(
 
     # -> (port index, cell Nid2, sync block index, symbol pair index, IQ sample index)
     paired_symbol_shape = R.shape[:-2] + (7 * slot_count, -1)
-    paired_symbol_indexes = xp.array(params['symbol_indexes'], dtype='uint32')//2
-    R = R.reshape(paired_symbol_shape)[...,paired_symbol_indexes,:]
+    paired_symbol_indexes = xp.array(params['symbol_indexes'], dtype='uint32') // 2
+    R = R.reshape(paired_symbol_shape)[..., paired_symbol_indexes, :]
 
     if trim_cp:
         R = R[..., : -cp_samples // 2]

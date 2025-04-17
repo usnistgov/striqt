@@ -19,6 +19,7 @@ if typing.TYPE_CHECKING:
     import iqwaveform
     from xarray_dataclasses import datamodel, dataarray
     import labbench as lb
+    import frozendict
 else:
     np = util.lazy_import('numpy')
     xr = util.lazy_import('xarray')
@@ -26,6 +27,7 @@ else:
     datamodel = util.lazy_import('xarray_dataclasses.datamodel')
     dataarray = util.lazy_import('xarray_dataclasses.dataarray')
     lb = util.lazy_import('labbench')
+    frozendict = util.lazy_import('frozendict')
 
 
 TFunc = typing.Callable[..., typing.Any]
@@ -69,10 +71,17 @@ def get_data_model(dataclass: typing.Any):
 
 
 def freezevalues(parameters: dict) -> dict:
-    return {
-        k: (tuple(v) if isinstance(v, (list, np.ndarray)) else v)
-        for k, v in parameters.items()
-    }
+    ret = dict()
+
+    for k, v in parameters.items():
+        if isinstance(v, (list, np.ndarray)):
+            ret[k] = tuple(v)
+        elif isinstance(v, dict):
+            ret[k] = frozendict.frozendict(v)
+        else:
+            ret[k] = v
+
+    return ret
 
 
 _ENG_PREFIXES = {

@@ -156,11 +156,19 @@ class ChannelAnalysisRegistryDecorator(collections.UserDict):
             ]
 
             struct_type = msgspec.defstruct(
-                name, sig_kws, bases=(KeywordArguments,), forbid_unknown_fields=True
+                name,
+                sig_kws,
+                bases=(KeywordArguments,),
+                forbid_unknown_fields=True,
+                frozen=True,
             )
 
+            def hook(type_):
+                print(type_)
+                return type_
+
             # validate the struct
-            msgspec.json.schema(struct_type)
+            msgspec.json.schema(struct_type, schema_hook=hook)
 
             self[struct_type] = wrapped
 
