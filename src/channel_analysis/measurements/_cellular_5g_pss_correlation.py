@@ -345,13 +345,13 @@ def cellular_5g_pss_correlation(
 
     # TODO: make this part more explicit
     trim_cp = True
-    metadata = dict(locals())
 
     if isinstance(frequency_offset, dict):
         if not hasattr(capture, 'center_frequency'):
             raise ValueError('frequency_offset must be a float unless capture has a "center_frequency" attribute')
         frequency_offset = frequency_offset[capture.center_frequency] # noqa
 
+    metadata = dict(locals())
     del metadata['iq'], metadata['capture'], metadata['sample_rate']
     params = _pss_params(capture, **metadata)
 
