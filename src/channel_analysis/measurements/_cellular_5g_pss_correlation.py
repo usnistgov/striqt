@@ -93,7 +93,7 @@ class CellularPSSLagCoords:
         params = _pss_params(capture, **kws)
 
         max_len = 2 * round(
-            kws['sample_rate'] / params['subcarrier_spacing'] + params['cp_samples']
+            params['sample_rate'] / params['subcarrier_spacing'] + params['cp_samples']
         )
 
         if params['trim_cp']:
@@ -246,8 +246,8 @@ def _pss_params(
     if not iqwaveform.util.isroundmod(subcarrier_spacing, 15e3):
         raise ValueError('subcarrier_spacing must be multiple of 15000')
 
-    if iqwaveform.util.isroundmod(capture.sample_rate, 128 * subcarrier_spacing):
-        frame_size = round(10e-3 * capture.sample_rate)
+    if iqwaveform.util.isroundmod(sample_rate, 128 * subcarrier_spacing):
+        frame_size = round(10e-3 * sample_rate)
     else:
         raise ValueError(
             f'capture.sample_rate must be a multiple of {128 * subcarrier_spacing}'
@@ -303,14 +303,14 @@ def _pss_params(
     slot_count = ceil(symbol_indexes[-1] / 14)
     slot_duration = 10e-3 / (10 * subcarrier_spacing / 15e3)
     duration = slot_count * slot_duration
-    corr_size = round(duration * capture.sample_rate)
+    corr_size = round(duration * sample_rate)
 
     if iqwaveform.util.isroundmod(discovery_periodicity, 10e-3):
         frames_per_sync = round(discovery_periodicity / 10e-3)
     else:
         raise ValueError('discovery_periodicity must be a multiple of 10e-3')
 
-    cp_samples = round(9 / 128 * capture.sample_rate / subcarrier_spacing)
+    cp_samples = round(9 / 128 * sample_rate / subcarrier_spacing)
 
     return locals()
 
