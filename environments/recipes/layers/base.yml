@@ -17,7 +17,7 @@ dependencies:
   # hard-coded on behalf of pip for iqwaveform
   - pandas
   - scipy>=1.13,<2
-  - numpy>=1.24,<3
+  - numpy>=1.21,<3
   - matplotlib-base~=3.7
   - numexpr~=2.8
   - array-api-compat
