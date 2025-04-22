@@ -71,7 +71,7 @@ def binned_mean(
         if trim:
             dimsize = (x.shape[axis] // count) * count
             x = iqwaveform.util.axis_slice(x, 0, dimsize, axis=axis)
-            
+
     x = iqwaveform.fourier.to_blocks(x, count, axis=axis)
     stat_axis = axis + 1 if axis >= 0 else axis
     if reject_extrema:

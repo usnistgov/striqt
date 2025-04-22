@@ -214,7 +214,7 @@ def cellular_resource_power_histogram(
 
     # apply the binning only now
     if frequency_bin_averaging is not None:
-        masked_spgs = binned_mean(masked_spgs, 2*frequency_bin_averaging, axis=3)
+        masked_spgs = binned_mean(masked_spgs, 2 * frequency_bin_averaging, axis=3)
 
     if time_bin_averaging is not None:
         masked_spgs = binned_mean(
