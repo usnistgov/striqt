@@ -101,7 +101,7 @@ def cellular_resource_power_histogram(
     guard_bandwidths: tuple[float, float] = (0, 0),
     frame_slots: typing.Optional[str] = None,
     special_symbols: typing.Optional[str] = None,
-    average_rbs: bool = True,
+    average_rbs: typing.Union[bool, typing.Literal['half']] = True,
     average_slots: bool = True,
     cp_guard_period: typing.Union[
         typing.Literal['normal'], typing.Literal['extended']
@@ -139,7 +139,9 @@ def cellular_resource_power_histogram(
 
     link_direction = 'downlink', 'uplink'
 
-    if average_rbs:
+    if average_rbs == 'half':
+        frequency_bin_averaging = 6
+    elif average_rbs:
         frequency_bin_averaging = 12
     else:
         frequency_bin_averaging = None
@@ -212,7 +214,7 @@ def cellular_resource_power_histogram(
 
     # apply the binning only now
     if frequency_bin_averaging is not None:
-        masked_spgs = binned_mean(masked_spgs, frequency_bin_averaging, axis=3)
+        masked_spgs = binned_mean(masked_spgs, 2*frequency_bin_averaging, axis=3)
 
     if time_bin_averaging is not None:
         masked_spgs = binned_mean(

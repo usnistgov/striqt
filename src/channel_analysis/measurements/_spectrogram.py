@@ -48,23 +48,30 @@ def binned_mean(
     truncate=True,
     reject_extrema=False,
     centered=True,
-    center_offset=0,
 ):
     """reduce an array by averaging into bins on the specified axis"""
 
     xp = iqwaveform.util.array_namespace(x)
 
-    if truncate:
+    if not truncate:
+        pass
+    elif centered:
+        # enforce that index 0 is a center bin
+        center_bin = x.shape[axis] // 2
+        size_left = center_bin - count // 2
+        blocks_left = size_left // count
+        block_count = 2 * blocks_left + 1
+        start = center_bin - (count * block_count) // 2
+        stop = start + count * block_count
+
+        if start > 0 or stop < x.shape[axis]:
+            x = iqwaveform.util.axis_slice(x, start, stop, axis=axis)
+    else:
         trim = x.shape[axis] % (count)
-        dimsize = (x.shape[axis] // count) * count
-        if trim > 0:
-            if centered:
-                start = trim // 2
-            else:
-                start = 0
-            x = iqwaveform.util.axis_slice(x, start, start + dimsize, axis=axis)
-    if centered and center_offset != 0:
-        x = xp.roll(x, center_offset, axis=axis)
+        if trim:
+            dimsize = (x.shape[axis] // count) * count
+            x = iqwaveform.util.axis_slice(x, 0, dimsize, axis=axis)
+            
     x = iqwaveform.fourier.to_blocks(x, count, axis=axis)
     stat_axis = axis + 1 if axis >= 0 else axis
     if reject_extrema:
