@@ -506,7 +506,7 @@ class RadioDevice(lb.Device):
         acquired_capture = msgspec.structs.replace(
             capture,
             start_time=pd.Timestamp(time_ns, unit='ns'),
-            backend_sample_rate=self.backend_sample_rate()
+            backend_sample_rate=self.backend_sample_rate(),
         )
 
         return iq, acquired_capture
@@ -521,10 +521,10 @@ class RadioDevice(lb.Device):
         raise NotImplementedError
 
     def get_capture_struct(
-        self, cls=structs.RadioCapture, *, realized: bool=False
+        self, cls=structs.RadioCapture, *, realized: bool = False
     ) -> structs.RadioCapture:
         """generate the currently armed capture configuration for the specified channel.
-        
+
         If the truth of actual evaluates as False, only the requested value
         of backend_sample_rate is returned in the given radio capture.
         """
