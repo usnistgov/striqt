@@ -519,9 +519,13 @@ class RadioDevice(lb.Device):
         raise NotImplementedError
 
     def get_capture_struct(
-        self, cls=structs.RadioCapture
-    ) -> structs.RadioCapture | None:
-        """generate the currently armed capture configuration for the specified channel"""
+        self, cls=structs.RadioCapture, *, realized: bool=False
+    ) -> structs.RadioCapture:
+        """generate the currently armed capture configuration for the specified channel.
+        
+        If the truth of actual evaluates as False, only the requested value
+        of backend_sample_rate is returned in the given radio capture.
+        """
 
         if self.lo_offset == 0:
             lo_shift = 'none'
@@ -529,6 +533,11 @@ class RadioDevice(lb.Device):
             lo_shift = 'left'
         elif self.lo_offset > 0:
             lo_shift = 'right'
+
+        if realized:
+            backend_sample_rate = self.backend_sample_rate()
+        else:
+            backend_sample_rate = self._forced_backend_sample_rate or float('nan')
 
         return cls(
             # RF and leveling
@@ -541,7 +550,7 @@ class RadioDevice(lb.Device):
             # filtering and resampling
             analysis_bandwidth=self.analysis_bandwidth,
             lo_shift=lo_shift,
-            backend_sample_rate=self._forced_backend_sample_rate,
+            backend_sample_rate=backend_sample_rate,
         )
 
     def get_array_namespace(self: RadioDevice):
