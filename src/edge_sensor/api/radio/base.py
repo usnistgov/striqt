@@ -504,7 +504,9 @@ class RadioDevice(lb.Device):
                 )
 
         acquired_capture = msgspec.structs.replace(
-            capture, start_time=pd.Timestamp(time_ns, unit='ns')
+            capture,
+            start_time=pd.Timestamp(time_ns, unit='ns'),
+            backend_sample_rate=self.backend_sample_rate
         )
 
         return iq, acquired_capture
@@ -537,7 +539,7 @@ class RadioDevice(lb.Device):
         if realized:
             backend_sample_rate = self.backend_sample_rate()
         else:
-            backend_sample_rate = self._forced_backend_sample_rate or float('nan')
+            backend_sample_rate = self._forced_backend_sample_rate
 
         return cls(
             # RF and leveling
