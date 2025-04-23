@@ -153,14 +153,21 @@ def compute_y_factor_corrections(
     return ret
 
 
-def summarize_noise_figure(corrections: 'xr.Dataset', **sel) -> 'pd.DataFrame':
+def summarize_calibration(corrections: 'xr.Dataset', **sel):
+    nf_summary = _summarize_noise_figure(corrections, **sel)
+    corr_summary = _summarize_power_corrections(corrections, **sel)
+
+    return pd.concat([nf_summary, corr_summary], axis=1)
+
+
+def _summarize_noise_figure(corrections: 'xr.Dataset', **sel) -> 'pd.DataFrame':
     max_gain = float(corrections.gain.max())
     max_nf = corrections.noise_figure.sel(gain=max_gain, **sel, drop=True).squeeze()
     stacked = max_nf.stack(condition=max_nf.dims).dropna('condition')
     return stacked.to_dataframe()[['noise_figure']]
 
 
-def summarize_power_corrections(corrections: 'xr.Dataset', **sel) -> 'pd.DataFrame':
+def _summarize_power_corrections(corrections: 'xr.Dataset', **sel) -> 'pd.DataFrame':
     max_gain = float(corrections.gain.max())
     corr = corrections.power_correction.sel(gain=max_gain, **sel, drop=True).squeeze()
     stacked = corr.stack(condition=corr.dims).dropna('condition')
