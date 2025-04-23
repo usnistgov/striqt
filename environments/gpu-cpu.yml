@@ -5,6 +5,7 @@ name: flex-spectrum-sensor
 channels:
 - nvidia
 - conda-forge
+- nodefaults
 dependencies:
   # development
 - python

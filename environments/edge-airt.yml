@@ -6,6 +6,7 @@ channels:
 - conda-forge
 - nvidia
 - file://opt/deepwave/conda-channels/airstack-conda
+- nodefaults
 dependencies:
   # development
 - python=3.9
