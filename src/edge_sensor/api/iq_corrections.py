@@ -264,7 +264,7 @@ def lookup_power_correction(
     return xp.asarray(power_scale, dtype='float32')
 
 
-def _power_scale(cal_power_scale, dtype_iq_scale):
+def _get_voltage_scale(cal_power_scale, dtype_iq_scale):
     if cal_power_scale is None and dtype_iq_scale is None:
         return None
 
@@ -273,7 +273,7 @@ def _power_scale(cal_power_scale, dtype_iq_scale):
     if cal_power_scale is None:
         cal_power_scale = 1
 
-    return cal_power_scale * (dtype_iq_scale**2)
+    return np.sqrt(cal_power_scale) * dtype_iq_scale
 
 
 def resampling_correction(
@@ -310,14 +310,9 @@ def resampling_correction(
 
     bare_capture = msgspec.structs.replace(capture, start_time=None)
     cal_data = radio.calibration if force_calibration is None else force_calibration
-    print('cal_data: ', cal_data)
     cal_scale = lookup_power_correction(cal_data, bare_capture, xp)
-    print('cal_scale: ', cal_scale)
+    scale = _get_voltage_scale(cal_scale, dtype_scale)
 
-    power_scale = _power_scale(cal_scale, dtype_scale)
-
-    if cal_scale is not None:
-        1 // 0
 
     fs, _, analysis_filter = design_capture_filter(radio.base_clock_rate, capture)
 
@@ -325,7 +320,7 @@ def resampling_correction(
 
     needs_resample = base.needs_resample(analysis_filter, capture)
 
-    print('scale: ', power_scale)
+    print('scale: ', scale)
 
     # apply the filter here, where the size of y is minimized
     if np.isfinite(capture.analysis_bandwidth):
@@ -349,8 +344,8 @@ def resampling_correction(
         # bail here if filtering or resampling needed
         size = round(capture.duration * capture.sample_rate)
         iq = iq[:, :size]
-        if power_scale is not None:
-            iq *= np.sqrt(power_scale)
+        if scale is not None:
+            iq *= scale
         return iq
 
     except_on_low_memory()
@@ -361,7 +356,7 @@ def resampling_correction(
         size_out,
         overwrite_x=overwrite_x,
         axis=axis,
-        scale=1 if power_scale is None else power_scale,
+        scale=1 if scale is None else scale,
     )
 
     assert iq.shape[axis] == size_out
