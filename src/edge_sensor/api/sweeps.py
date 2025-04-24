@@ -181,6 +181,7 @@ def iter_sweep(
 
         if 'acquire' in ret:
             iq, capture_prev = ret['acquire']
+            print('acquired capture: ', capture_prev)
             if sweep_time is None:
                 sweep_time = capture_prev.start_time
 
