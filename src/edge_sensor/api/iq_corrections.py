@@ -316,7 +316,8 @@ def resampling_correction(
 
     power_scale = _power_scale(cal_scale, dtype_scale)
 
-    1 // 0
+    if cal_scale is not None:
+        1 // 0
 
     fs, _, analysis_filter = design_capture_filter(radio.base_clock_rate, capture)
 
