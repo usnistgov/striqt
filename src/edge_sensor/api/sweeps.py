@@ -158,6 +158,7 @@ def iter_sweep(
 
         if capture_prev is not None:
             # iq is only available after the first iteration
+            print('analyzing ', capture_prev)
             calls['analyze'] = lb.Call(
                 analyze,
                 iq,
