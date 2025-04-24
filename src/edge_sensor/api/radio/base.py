@@ -491,8 +491,6 @@ class RadioDevice(lb.Device):
         """
         from .. import iq_corrections
 
-        fs = self.backend_sample_rate()
-
         if capture is None:
             print('get capture struct!')
             capture = self.get_capture_struct()
@@ -504,6 +502,9 @@ class RadioDevice(lb.Device):
         iqwaveform.power_analysis.Any  # touch to work around a lazy loading bug
         if capture != getattr(self, '_armed_capture', None):
             prep_calls['arm'] = lb.Call(self.arm, capture)
+
+        # this needs to be here, after maybe arming this capture
+        fs = self.backend_sample_rate()
         buffers = lb.concurrently(**prep_calls)['buffers']
 
         # the low-level acquisition
