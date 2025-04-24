@@ -310,6 +310,7 @@ def resampling_correction(
 
     bare_capture = msgspec.structs.replace(capture, start_time=None)
     cal_data = radio.calibration if force_calibration is None else force_calibration
+    print('cal_data: ', cal_data)
     cal_scale = lookup_power_correction(cal_data, bare_capture, xp)
 
     power_scale = _power_scale(cal_scale, dtype_scale)
