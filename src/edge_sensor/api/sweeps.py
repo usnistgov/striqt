@@ -163,8 +163,9 @@ def iter_sweep(
         analysis_spec=sweep.channel_analysis,
         extra_attrs=attrs,
         correction=True,
-        overwrite_x=not reuse_compatible_iq,
     )
+
+    overwrite_x = not reuse_compatible_iq
 
     if len(sweep.captures) == 0:
         return
@@ -211,6 +212,7 @@ def iter_sweep(
                 sweep_time=sweep_time,
                 capture=capture_prev,
                 pickled=pickled,
+                overwrite_x=overwrite_x
             )
 
         desc = channel_analysis.describe_capture(
