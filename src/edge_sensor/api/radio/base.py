@@ -345,7 +345,11 @@ class RadioDevice(lb.Device):
         if capture.sample_rate != self.sample_rate():
             # in this case, it's only a post-processing (GPU resampling) change
             self.rx_enabled(False)
+            print('set sample rate to ', capture.sample_rate)
+            print(self.sample_rate(), self.backend_sample_rate())
             self.sample_rate(capture.sample_rate)
+            print(self.sample_rate(), self.backend_sample_rate())
+            
 
         if (
             self.periodic_trigger is not None
@@ -360,7 +364,7 @@ class RadioDevice(lb.Device):
 
         self._armed_capture = capture
 
-        print('armed: ', capture, 'backend rate ', self.backend_sample_rate())
+        print('armed: ', capture, 'backend rate ', self.backend_sample_rate(), ' target rate ', self.sample_rate())
 
         return capture
 
