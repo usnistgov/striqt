@@ -199,8 +199,8 @@ class SweepController:
 
         return sweeps.iter_raw_iq(radio, sweep)
 
-    def __del__(self):
-        self.close()
+    # def __del__(self):
+    #     self.close()
 
 
 class _ServerService(rpyc.Service, SweepController):

@@ -505,13 +505,13 @@ class RadioDevice(lb.Device):
                     iq, capture, self, overwrite_x=True
                 )
 
-        print('acquired: ', self.sample_rate(), self.backend_sample_rate())
-
         acquired_capture = msgspec.structs.replace(
             capture,
             start_time=pd.Timestamp(time_ns, unit='ns'),
             backend_sample_rate=self.backend_sample_rate(),
         )
+
+        print('acquired: ', self.sample_rate(), self.backend_sample_rate(), acquired_capture)
 
         return iq, acquired_capture
 
