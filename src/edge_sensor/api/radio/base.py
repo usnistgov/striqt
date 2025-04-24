@@ -355,7 +355,7 @@ class RadioDevice(lb.Device):
 
         self._armed_capture = capture
 
-        print('armed: ', capture)
+        print('armed: ', capture, 'backend rate ', self.backend_sample_rate())
 
         return capture
 
