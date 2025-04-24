@@ -491,6 +491,8 @@ class RadioDevice(lb.Device):
         """
         from .. import iq_corrections
 
+        fs = self.backend_sample_rate()
+
         if capture is None:
             print('get capture struct!')
             capture = self.get_capture_struct()
@@ -526,10 +528,11 @@ class RadioDevice(lb.Device):
         acquired_capture = msgspec.structs.replace(
             capture,
             start_time=pd.Timestamp(time_ns, unit='ns'),
-            backend_sample_rate=self.backend_sample_rate(),
+            backend_sample_rate=fs,
         )
 
         print('acquired: ', self._forced_backend_sample_rate, self.sample_rate(), self.backend_sample_rate(), acquired_capture)
+
 
         return iq, acquired_capture
 
