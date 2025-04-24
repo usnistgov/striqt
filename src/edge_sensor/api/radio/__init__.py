@@ -42,15 +42,19 @@ def find_radio_cls_by_name(
 def is_same_resource(radio: RadioDevice, radio_setup: 'base.RadioSetup') -> bool:
     expect_cls = find_radio_cls_by_name(radio_setup.driver)
     if not isinstance(radio, expect_cls):
+        print('wrong type')
         return False
     if (
         getattr(radio, 'resource', None) is not None
         and radio.resource != radio_setup.resource
     ):
+        print('wrong resource')
         return False
     for name, value in radio_setup.device_args.items():
         if not hasattr(radio, name):
+            print('radio is missing argument')
             return False
         if getattr(radio, name) != value:
+            print('expected radio value ', value, ' but got ', getattr(radio, name))
             return False
     return True
