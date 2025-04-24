@@ -330,16 +330,12 @@ class RadioDevice(lb.Device):
         nfft_out = analysis_filter.get('nfft_out', analysis_filter['nfft'])
         downsample = analysis_filter['nfft'] / nfft_out
 
-        print('arming: ', fs_backend, self.backend_sample_rate(), ' for sample rate ', capture.sample_rate)
-
         if fs_backend != self.backend_sample_rate() or downsample != self._downsample:
             self.rx_enabled(False)
             with attr.hold_attr_notifications(self):
                 self._downsample = 1  # temporarily avoid a potential bounding error
             self.backend_sample_rate(fs_backend)
             self._downsample = downsample
-
-        print('now ', self.backend_sample_rate())
 
         if capture.sample_rate != self.sample_rate():
             # in this case, it's only a post-processing (GPU resampling) change
@@ -358,6 +354,8 @@ class RadioDevice(lb.Device):
         self.analysis_bandwidth = capture.analysis_bandwidth
 
         self._armed_capture = capture
+
+        print('armed: ', capture)
 
         return capture
 
