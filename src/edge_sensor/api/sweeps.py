@@ -5,9 +5,14 @@ import itertools
 
 import msgspec
 
-from . import captures, util, xarray_ops
+from . import captures, util, xarray_ops, iq_corrections
 
-from .radio import RadioDevice, NullSource, find_radio_cls_by_name
+from .radio import (
+    RadioDevice,
+    NullSource,
+    find_radio_cls_by_name,
+    design_capture_filter,
+)
 from . import structs
 
 
@@ -86,6 +91,36 @@ def design_warmup_sweep(
     )
 
 
+def iq_is_reusable(
+    base_clock_rate, c1: structs.RadioCapture | None, c2: structs.RadioCapture
+):
+    """return True if c2 is compatible with the raw and uncalibrated IQ acquired for c1"""
+
+    if c1 is None:
+        return False
+
+    fsb1 = design_capture_filter(base_clock_rate, c1)[0]
+    fsb2 = design_capture_filter(base_clock_rate, c2)[0]
+
+    if fsb1 != fsb2:
+        # the backend sample rates need to be the same
+        return False
+
+    c1_compare = msgspec.structs.replace(c1, backend_sample_rate=None)
+
+    c2_compare = msgspec.structs.replace(
+        c2,
+        # ignore parameters that only affect downstream processing
+        # that are validated to have flat response and unity gain
+        analysis_bandwidth=c1.analysis_bandwidth,
+        sample_rate=c1.sample_rate,
+        backend_sample_rate=None,
+        host_resample=c1.host_resample,
+    )
+
+    return c1_compare == c2_compare
+
+
 def iter_sweep(
     radio: RadioDevice,
     sweep: structs.Sweep,
@@ -94,6 +129,7 @@ def iter_sweep(
     quiet=False,
     pickled=False,
     loop=False,
+    reuse_compatible_iq=False,
 ) -> typing.Generator['xr.Dataset' | bytes | None]:
     """iterate through sweep captures on the specified radio, yielding a dataset for each.
 
@@ -127,6 +163,7 @@ def iter_sweep(
         analysis_spec=sweep.channel_analysis,
         extra_attrs=attrs,
         correction=True,
+        overwrite_x=not reuse_compatible_iq,
     )
 
     if len(sweep.captures) == 0:
@@ -135,6 +172,8 @@ def iter_sweep(
     iq = None
     sweep_time = None
     capture_prev = None
+
+    base_clock_rate = radio.base_clock_rate
 
     if loop:
         capture_iter = itertools.cycle(sweep.captures)
@@ -149,7 +188,13 @@ def iter_sweep(
     for i, (_, capture_this, capture_next) in enumerate(offset_captures):
         calls = {}
 
-        if capture_this is not None:
+        if capture_this is None:
+            pass
+        elif not reuse_compatible_iq and iq_is_reusable(
+            base_clock_rate, capture_prev, capture_this
+        ):
+            lb.util.logger.info('reusing IQ from previous capture')
+        else:
             # extra iteration at the end for the last analysis
             calls['acquire'] = lb.Call(
                 radio.acquire,

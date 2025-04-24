@@ -161,7 +161,9 @@ def summarize_calibration(corrections: 'xr.Dataset', **sel):
     return pd.concat([nf_summary, corr_summary], axis=1)
 
 
-def _summarize_calibration_field(corrections: 'xr.Dataset', field_name, **sel) -> 'pd.DataFrame':
+def _summarize_calibration_field(
+    corrections: 'xr.Dataset', field_name, **sel
+) -> 'pd.DataFrame':
     max_gain = float(corrections.gain.max())
     corr = corrections[field_name].sel(gain=max_gain, **sel, drop=True).squeeze()
     stacked = corr.stack(condition=corr.dims).dropna('condition')
@@ -305,7 +307,6 @@ def resampling_correction(
     cal_data = radio.calibration if force_calibration is None else force_calibration
     cal_scale = lookup_power_correction(cal_data, bare_capture, xp)
     scale = _get_voltage_scale(cal_scale, dtype_scale)
-
 
     fs, _, analysis_filter = design_capture_filter(radio.base_clock_rate, capture)
 

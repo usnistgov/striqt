@@ -156,6 +156,7 @@ class SweepController:
         pickled: bool = False,
         loop: bool = False,
         prepare: bool = True,
+        reuse_compatible_iq: bool = False,
     ) -> typing.Generator['xr.Dataset']:
         # take args {3,4...N}
         kwargs = dict(locals())
@@ -224,6 +225,7 @@ class _ServerService(rpyc.Service, SweepController):
         *,
         loop: bool = False,
         always_yield: bool = False,
+        reuse_compatible_iq: bool = False,
     ) -> typing.Generator['xr.Dataset']:
         """wraps actions.sweep_iter to run on the remote server.
 
@@ -262,6 +264,7 @@ class _ServerService(rpyc.Service, SweepController):
             pickled=True,
             loop=loop,
             prepare=False,
+            reuse_compatible_iq=reuse_compatible_iq,
         )
 
         desc_pairs = zip_longest(sweep_iter, descs, fillvalue=None)

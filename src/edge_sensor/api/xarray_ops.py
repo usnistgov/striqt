@@ -229,6 +229,7 @@ class ChannelAnalysisWrapper:
         sweep_time,
         capture: structs.RadioCapture,
         pickled=False,
+        overwrite_x=True,
     ) -> 'xr.Dataset':
         """Inject radio device and capture info into a channel analysis result."""
 
@@ -239,7 +240,7 @@ class ChannelAnalysisWrapper:
             if self.correction:
                 with lb.stopwatch('analysis: resample/calibrate', logger_level='debug'):
                     iq = iq_corrections.resampling_correction(
-                        iq, capture, self.radio, overwrite_x=True
+                        iq, capture, self.radio, overwrite_x=overwrite_x
                     )
 
             with lb.stopwatch('build coords', threshold=10e-3, logger_level='debug'):
