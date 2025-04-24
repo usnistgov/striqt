@@ -481,13 +481,13 @@ class RadioDevice(lb.Device):
         from .. import iq_corrections
 
         if capture is None:
+            print('get capture struct!')
             capture = self.get_capture_struct()
 
         # allocate (and arm the capture if necessary)
         prep_calls = {'buffers': lb.Call(alloc_empty_iq, self, capture)}
         iqwaveform.power_analysis.Any  # touch to work around a lazy loading bug
         if capture != getattr(self, '_armed_capture', None):
-            print('rearming!')
             prep_calls['arm'] = lb.Call(self.arm, capture)
         buffers = lb.concurrently(**prep_calls)['buffers']
 
