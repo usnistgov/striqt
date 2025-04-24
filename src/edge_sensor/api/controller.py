@@ -66,7 +66,7 @@ class SweepController:
         else:
             lb.logger.debug(f'opening driver {repr(driver_name)}')
 
-        radio = self.radios[driver_name] = radio_cls(radio_setup.resource)
+        radio = self.radios[driver_name] = radio_cls(resource=radio_setup.resource)
 
         if radio_setup._transient_holdoff_time is not None:
             radio._transient_holdoff_time = radio_setup._transient_holdoff_time
