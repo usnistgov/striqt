@@ -494,6 +494,8 @@ class RadioDevice(lb.Device):
         if capture is None:
             print('get capture struct!')
             capture = self.get_capture_struct()
+        else:
+            print('about to acquire ', capture)
 
         # allocate (and arm the capture if necessary)
         prep_calls = {'buffers': lb.Call(alloc_empty_iq, self, capture)}
