@@ -28,6 +28,7 @@ else:
     scipy = util.lazy_import('scipy')
     iqwaveform = util.lazy_import('iqwaveform')
     lb = util.lazy_import('labbench')
+    pd = util.lazy_import('pandas')
 
 
 @functools.lru_cache

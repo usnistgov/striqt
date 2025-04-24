@@ -288,7 +288,9 @@ class RadioDevice(lb.Device):
         return radio_setup
 
     @lb.stopwatch('arm', logger_level='debug')
-    def arm(self, capture: structs.RadioCapture = None, **capture_kws) -> structs.RadioCapture:
+    def arm(
+        self, capture: structs.RadioCapture = None, **capture_kws
+    ) -> structs.RadioCapture:
         """stop the stream, apply a capture configuration, and start it"""
 
         if capture is None:
@@ -344,7 +346,7 @@ class RadioDevice(lb.Device):
         if capture.sample_rate != self.sample_rate():
             # in this case, it's only a post-processing (GPU resampling) change
             self.rx_enabled(False)
-            self.sample_rate(capture.sample_rate)          
+            self.sample_rate(capture.sample_rate)
 
         if (
             self.periodic_trigger is not None
@@ -483,8 +485,6 @@ class RadioDevice(lb.Device):
         if capture is None:
             capture = self.get_capture_struct()
 
-        self._logger.warning(f'acquire: {capture}')
-
         # allocate (and arm the capture if necessary)
         prep_calls = {'buffers': lb.Call(alloc_empty_iq, self, capture)}
         iqwaveform.power_analysis.Any  # touch to work around a lazy loading bug
@@ -493,9 +493,9 @@ class RadioDevice(lb.Device):
 
         buffers = lb.concurrently(**prep_calls)['buffers']
 
-        # this needs to be here, _after_ the possible arm call
+        # this must be here, _after_ the possible arm call, and before possibly
+        # arming the next
         fs = self.backend_sample_rate()
-        self._logger.warning(f'acquire: backend rate: {fs}')
 
         # the low-level acquisition
         iq, time_ns = self.read_iq(capture, buffers=buffers)
