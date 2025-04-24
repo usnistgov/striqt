@@ -299,6 +299,8 @@ def iter_callbacks(
     last_data = None
 
     while True:
+        lb.logger.warning('iter loop start')
+
         if this_capture is not None:
             arm_func(this_capture, sweep_spec.radio_setup)
 
