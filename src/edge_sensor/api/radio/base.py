@@ -336,7 +336,7 @@ class RadioDevice(lb.Device):
         downsample = analysis_filter['nfft'] / nfft_out
 
         print('target: ', capture.sample_rate, capture.backend_sample_rate)
-        print('start: ', self.sample_rate(), self.backend_sample_rate())
+        print('start: ', self.sample_rate(), fs_backend)
 
         if fs_backend != self.backend_sample_rate() or downsample != self._downsample:
             self.rx_enabled(False)
