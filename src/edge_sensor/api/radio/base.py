@@ -292,6 +292,7 @@ class RadioDevice(lb.Device):
 
         capture = msgspec.structs.replace(capture, **capture_kws)
 
+        print('about to set forced rate: ', capture.backend_sample_rate)
         self._forced_backend_sample_rate = capture.backend_sample_rate
 
         if iqwaveform.power_analysis.isroundmod(

@@ -66,7 +66,8 @@ def _apply_exception_hooks(controller, sweep, debug: bool, remote: bool | None):
             )
             debugger(*args)
 
-        if not remote:
+        if remote:
+            print('closing in exception hook')
             controller.close_radio(sweep.radio_setup)
 
     sys.excepthook = hook
@@ -367,6 +368,8 @@ def init_sensor_sweep(
 
     opened.setdefault('store', None)
     opened.setdefault('calibration', None)
+
+    lb.logger.info('init complete')
 
     return opened['store'], controller, sweep, opened['calibration']
 
