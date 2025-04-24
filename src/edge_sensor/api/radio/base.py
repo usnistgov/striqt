@@ -339,7 +339,7 @@ class RadioDevice(lb.Device):
             self.backend_sample_rate(fs_backend)
             self._downsample = downsample
 
-        print('now ', self.backend_sample_rate(fs_backend))
+        print('now ', self.backend_sample_rate())
 
         if capture.sample_rate != self.sample_rate():
             # in this case, it's only a post-processing (GPU resampling) change

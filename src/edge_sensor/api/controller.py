@@ -199,9 +199,6 @@ class SweepController:
 
         return sweeps.iter_raw_iq(radio, sweep)
 
-    # def __del__(self):
-    #     self.close()
-
 
 class _ServerService(rpyc.Service, SweepController):
     """API exposed by a server to remote clients"""
