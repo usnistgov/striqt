@@ -245,6 +245,10 @@ class RadioDevice(lb.Device):
         None, help='if specified, only the specified backend sample rate will be used'
     )
 
+    resource: dict = attr.value.dict(
+        default={}, help='resource dictionary to specify the device connection'
+    )
+
     @attr.property.str(sets=False, cache=True, help='unique radio hardware identifier')
     def id(self):
         raise NotImplementedError

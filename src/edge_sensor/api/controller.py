@@ -54,25 +54,19 @@ class SweepController:
         driver_name = radio_setup.driver
         radio_cls = find_radio_cls_by_name(driver_name)
 
-        device_args = dict(radio_setup.device_args)
-        if hasattr(radio_cls, 'resource') and radio_setup.resource is not None:
-            resource = device_args['resource'] = radio_setup.resource
-        else:
-            resource = None
-
         if driver_name in self.radios and self.radios[driver_name].isopen:
             if is_same_resource(self.radios[driver_name], radio_setup):
                 lb.logger.debug(f'reusing open {repr(driver_name)}')
                 return self.radios[driver_name]
             else:
                 lb.logger.debug(
-                    f're-opening {repr(driver_name)} to set resource={repr(resource)}'
+                    f're-opening {repr(driver_name)} to set resource={repr(radio_setup.resource)}'
                 )
                 self.radios[driver_name].close()
         else:
             lb.logger.debug(f'opening driver {repr(driver_name)}')
 
-        radio = self.radios[driver_name] = radio_cls(**radio_setup.device_args)
+        radio = self.radios[driver_name] = radio_cls(radio_setup.resource)
 
         if radio_setup._transient_holdoff_time is not None:
             radio._transient_holdoff_time = radio_setup._transient_holdoff_time

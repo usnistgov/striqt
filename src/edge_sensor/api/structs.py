@@ -152,8 +152,7 @@ class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):
     """run-time characteristics of the radio that are left invariant during a sweep"""
 
     driver: Optional[str] = None
-    device_args: dict = {}
-    resource: Any = None
+    resource: dict = {}
     time_source: TimeSourceType = 'host'
     continuous_trigger: ContinuousTriggerType = True
     periodic_trigger: Optional[float] = None

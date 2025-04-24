@@ -71,8 +71,7 @@ def design_warmup_sweep(
     null_radio_setup = msgspec.structs.replace(
         sweep.radio_setup,
         driver=NullSource.__name__,
-        device_args={},
-        resource='empty',
+        resource={},
         _rx_channel_count=radio_cls.rx_channel_count.default,
         calibration=None,
     )
