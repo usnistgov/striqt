@@ -284,7 +284,7 @@ class RadioDevice(lb.Device):
         return radio_setup
 
     @lb.stopwatch('arm', logger_level='debug')
-    def arm(self, capture: structs.RadioCapture = None, **capture_kws):
+    def arm(self, capture: structs.RadioCapture = None, **capture_kws) -> structs.RadioCapture:
         """stop the stream, apply a capture configuration, and start it"""
 
         if capture is None:
@@ -354,6 +354,8 @@ class RadioDevice(lb.Device):
         self.analysis_bandwidth = capture.analysis_bandwidth
 
         self._armed_capture = capture
+
+        return capture
 
     @lb.stopwatch('read_iq', logger_level='debug')
     def read_iq(
@@ -502,6 +504,8 @@ class RadioDevice(lb.Device):
                 iq = iq_corrections.resampling_correction(
                     iq, capture, self, overwrite_x=True
                 )
+
+        print('acquired: ', self.sample_rate(), self.backend_sample_rate())
 
         acquired_capture = msgspec.structs.replace(
             capture,
