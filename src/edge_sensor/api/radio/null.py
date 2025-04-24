@@ -142,7 +142,7 @@ class NullSource(base.RadioDevice):
 
     @property
     def base_clock_rate(self):
-        return 125e6
+        return self.resource.get('base_clock_rate', 125e6)
 
     def set_array_module(self, xp):
         self.xp = xp

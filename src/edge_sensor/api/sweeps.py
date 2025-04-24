@@ -68,10 +68,12 @@ def design_warmup_sweep(
 
     radio_cls = find_radio_cls_by_name(sweep.radio_setup.driver)
 
+    radio = radio_cls(resource=radio_cls(sweep.radio_setup.resource))
+
     null_radio_setup = msgspec.structs.replace(
         sweep.radio_setup,
         driver=NullSource.__name__,
-        resource={},
+        resource={'base_clock_rate': radio.base_clock_rate},
         _rx_channel_count=radio_cls.rx_channel_count.default,
         calibration=None,
     )
