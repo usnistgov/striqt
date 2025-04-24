@@ -330,6 +330,8 @@ class RadioDevice(lb.Device):
         nfft_out = analysis_filter.get('nfft_out', analysis_filter['nfft'])
         downsample = analysis_filter['nfft'] / nfft_out
 
+        print('arm: ', fs_backend, self.backend_sample_rate())
+
         if fs_backend != self.backend_sample_rate() or downsample != self._downsample:
             self.rx_enabled(False)
             with attr.hold_attr_notifications(self):
