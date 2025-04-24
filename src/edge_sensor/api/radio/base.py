@@ -533,7 +533,6 @@ class RadioDevice(lb.Device):
 
         print('acquired: ', self._forced_backend_sample_rate, self.sample_rate(), self.backend_sample_rate(), acquired_capture)
 
-
         return iq, acquired_capture
 
     def _read_stream(
