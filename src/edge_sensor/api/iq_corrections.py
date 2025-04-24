@@ -320,6 +320,8 @@ def resampling_correction(
 
     needs_resample = base.needs_resample(analysis_filter, capture)
 
+    print('scale: ', power_scale)
+
     # apply the filter here, where the size of y is minimized
     if np.isfinite(capture.analysis_bandwidth):
         h = iqwaveform.design_fir_lpf(

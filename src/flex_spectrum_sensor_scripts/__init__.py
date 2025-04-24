@@ -369,8 +369,6 @@ def init_sensor_sweep(
     opened.setdefault('store', None)
     opened.setdefault('calibration', None)
 
-    lb.logger.info('init complete')
-
     return opened['store'], controller, sweep, opened['calibration']
 
 
