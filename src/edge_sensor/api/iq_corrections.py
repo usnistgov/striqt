@@ -155,24 +155,17 @@ def compute_y_factor_corrections(
 
 
 def summarize_calibration(corrections: 'xr.Dataset', **sel):
-    nf_summary = _summarize_noise_figure(corrections, **sel)
-    corr_summary = _summarize_power_corrections(corrections, **sel)
+    nf_summary = _summarize_calibration_field(corrections, 'noise_figure', **sel)
+    corr_summary = _summarize_calibration_field(corrections, 'power_correction', **sel)
 
     return pd.concat([nf_summary, corr_summary], axis=1)
 
 
-def _summarize_noise_figure(corrections: 'xr.Dataset', **sel) -> 'pd.DataFrame':
+def _summarize_calibration_field(corrections: 'xr.Dataset', field_name, **sel) -> 'pd.DataFrame':
     max_gain = float(corrections.gain.max())
-    max_nf = corrections.noise_figure.sel(gain=max_gain, **sel, drop=True).squeeze()
-    stacked = max_nf.stack(condition=max_nf.dims).dropna('condition')
-    return stacked.to_dataframe()[['noise_figure']]
-
-
-def _summarize_power_corrections(corrections: 'xr.Dataset', **sel) -> 'pd.DataFrame':
-    max_gain = float(corrections.gain.max())
-    corr = corrections.power_correction.sel(gain=max_gain, **sel, drop=True).squeeze()
+    corr = corrections[field_name].sel(gain=max_gain, **sel, drop=True).squeeze()
     stacked = corr.stack(condition=corr.dims).dropna('condition')
-    return stacked.to_dataframe()[['power_correction']]
+    return stacked.to_dataframe()[[field_name]]
 
 
 def _describe_missing_data(corrections: 'xr.Dataset', exact_matches: dict):
@@ -320,8 +313,6 @@ def resampling_correction(
 
     needs_resample = base.needs_resample(analysis_filter, capture)
 
-    print('scale: ', scale)
-
     # apply the filter here, where the size of y is minimized
     if np.isfinite(capture.analysis_bandwidth):
         h = iqwaveform.design_fir_lpf(
@@ -331,14 +322,9 @@ def resampling_correction(
             numtaps=base.FILTER_SIZE,
             xp=xp,
         )
-        print(base.FILTER_SIZE)
         pad = base._get_filter_pad(capture)
-
-        print('before filter: ', iq.var(axis=1))
         iq = iqwaveform.oaconvolve(iq, h[xp.newaxis, :], 'same', axes=axis)
-        print('after filter: ', iq.var(axis=1))
         iq = iqwaveform.util.axis_slice(iq, pad, iq.shape[axis], axis=axis)
-        print('after slice: ', iq.var(axis=1))
 
     if not needs_resample:
         # bail here if filtering or resampling needed
