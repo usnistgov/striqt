@@ -148,6 +148,7 @@ def iter_sweep(
 
         if capture_this is not None:
             # extra iteration at the end for the last analysis
+            print('next acquisition capture: ', capture_this)
             calls['acquire'] = lb.Call(
                 radio.acquire,
                 capture_this,
