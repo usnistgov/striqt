@@ -42,11 +42,8 @@ def find_radio_cls_by_name(
 def is_same_resource(radio: RadioDevice, radio_setup: base.structs.RadioSetup) -> bool:
     expect_cls = find_radio_cls_by_name(radio_setup.driver)
     if not isinstance(radio, expect_cls):
-        print('wrong type')
         return False
-    
-    if radio_setup.resource != radio.resource:
-        print(f'expected radio resource {radio_setup.resource}, but found {radio.resource}')
+    elif radio_setup.resource != radio.resource:
         return False
-
-    return True
+    else:
+        return True

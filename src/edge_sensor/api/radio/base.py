@@ -296,7 +296,6 @@ class RadioDevice(lb.Device):
 
         capture = msgspec.structs.replace(capture, **capture_kws)
 
-        print('about to set forced rate: ', capture.backend_sample_rate)
         self._forced_backend_sample_rate = capture.backend_sample_rate
 
         if iqwaveform.power_analysis.isroundmod(
@@ -335,9 +334,6 @@ class RadioDevice(lb.Device):
         nfft_out = analysis_filter.get('nfft_out', analysis_filter['nfft'])
         downsample = analysis_filter['nfft'] / nfft_out
 
-        print('target: ', capture.sample_rate, capture.backend_sample_rate)
-        print('start: ', self.sample_rate(), fs_backend)
-
         if fs_backend != self.backend_sample_rate() or downsample != self._downsample:
             self.rx_enabled(False)
             with attr.hold_attr_notifications(self):
@@ -348,11 +344,7 @@ class RadioDevice(lb.Device):
         if capture.sample_rate != self.sample_rate():
             # in this case, it's only a post-processing (GPU resampling) change
             self.rx_enabled(False)
-            print('set sample rate to ', capture.sample_rate)
-            print(self.sample_rate(), self.backend_sample_rate())
-            self.sample_rate(capture.sample_rate)
-            print(self.sample_rate(), self.backend_sample_rate())
-            
+            self.sample_rate(capture.sample_rate)          
 
         if (
             self.periodic_trigger is not None
@@ -366,9 +358,6 @@ class RadioDevice(lb.Device):
         self.analysis_bandwidth = capture.analysis_bandwidth
 
         self._armed_capture = capture
-
-        print('finish: ', self.sample_rate(), self.backend_sample_rate())
-        print('armed: ', capture, 'backend rate ', self.backend_sample_rate(), ' target rate ', self.sample_rate())
 
         return capture
 
@@ -492,10 +481,9 @@ class RadioDevice(lb.Device):
         from .. import iq_corrections
 
         if capture is None:
-            print('get capture struct!')
             capture = self.get_capture_struct()
-        else:
-            print('about to acquire ', capture)
+
+        self._logger.warning(f'acquire: {capture}')
 
         # allocate (and arm the capture if necessary)
         prep_calls = {'buffers': lb.Call(alloc_empty_iq, self, capture)}
@@ -503,9 +491,11 @@ class RadioDevice(lb.Device):
         if capture != getattr(self, '_armed_capture', None):
             prep_calls['arm'] = lb.Call(self.arm, capture)
 
-        # this needs to be here, after maybe arming this capture
-        fs = self.backend_sample_rate()
         buffers = lb.concurrently(**prep_calls)['buffers']
+
+        # this needs to be here, _after_ the possible arm call
+        fs = self.backend_sample_rate()
+        self._logger.warning(f'acquire: backend rate: {fs}')
 
         # the low-level acquisition
         iq, time_ns = self.read_iq(capture, buffers=buffers)
@@ -531,8 +521,6 @@ class RadioDevice(lb.Device):
             start_time=pd.Timestamp(time_ns, unit='ns'),
             backend_sample_rate=fs,
         )
-
-        print('acquired: ', self._forced_backend_sample_rate, 'target rate:', self.sample_rate(), 'backend rate:', fs, acquired_capture)
 
         return iq, acquired_capture
 

@@ -151,7 +151,6 @@ def iter_sweep(
 
         if capture_this is not None:
             # extra iteration at the end for the last analysis
-            print('next acquisition capture: ', capture_this)
             calls['acquire'] = lb.Call(
                 radio.acquire,
                 capture_this,
@@ -161,7 +160,6 @@ def iter_sweep(
 
         if capture_prev is not None:
             # iq is only available after the first iteration
-            print('analyzing ', capture_prev)
             calls['analyze'] = lb.Call(
                 analyze,
                 iq,
