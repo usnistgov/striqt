@@ -44,12 +44,9 @@ def is_same_resource(radio: RadioDevice, radio_setup: base.structs.RadioSetup) -
     if not isinstance(radio, expect_cls):
         print('wrong type')
         return False
+    
+    if radio_setup.resource != radio.resource:
+        print(f'expected radio resource {radio_setup.resource}, but found {radio.resource}')
+        return False
 
-    for name, value in radio_setup.resource.items():
-        if not hasattr(radio, name):
-            print('radio is missing argument')
-            return False
-        if getattr(radio, name) != value:
-            print('expected radio value ', value, ' but got ', getattr(radio, name))
-            return False
     return True
