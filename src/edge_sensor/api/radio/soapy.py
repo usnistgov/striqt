@@ -55,7 +55,7 @@ def validate_stream_result(
 class SoapyRadioDevice(base.RadioDevice):
     """single-channel sensor waveform acquisition through SoapySDR and pre-processed with iqwaveform"""
 
-    resource: dict = attr.value.dict(inherit=True, 
+    resource: dict = attr.value.dict(inherit=True, default={},
         help='SoapySDR resource dictionary to specify the device connection'
     )
 
