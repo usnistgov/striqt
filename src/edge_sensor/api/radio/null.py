@@ -65,7 +65,7 @@ class NullSource(base.RadioDevice):
         help='sample rate before resampling',
     )
     def backend_sample_rate(self):
-        return self.backend.setdefault('backend_sample_rate', 25e6)
+        return self.backend.setdefault('backend_sample_rate', 125e6)
 
     @backend_sample_rate.setter
     def _(self, value):
