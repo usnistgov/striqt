@@ -511,7 +511,7 @@ class RadioDevice(lb.Device):
             backend_sample_rate=self.backend_sample_rate(),
         )
 
-        print('acquired: ', self.sample_rate(), self.backend_sample_rate(), acquired_capture)
+        print('acquired: ', self._forced_backend_sample_rate, self.sample_rate(), self.backend_sample_rate(), acquired_capture)
 
         return iq, acquired_capture
 
