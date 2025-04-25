@@ -293,8 +293,6 @@ class RadioDevice(lb.Device):
     ) -> structs.RadioCapture:
         """stop the stream, apply a capture configuration, and start it"""
 
-        self._logger.warning(f'arm {capture}')
-
         if capture is None:
             capture = self.get_capture_struct()
 

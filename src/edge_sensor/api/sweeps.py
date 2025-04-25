@@ -1,7 +1,7 @@
 from __future__ import annotations
 import typing
 import itertools
-
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import msgspec
 
 from . import captures, util, xarray_ops
@@ -103,7 +103,6 @@ def _iq_is_reusable(
 
     if fsb1 != fsb2:
         # the realized backend sample rates need to be the same
-        print('**********')
         return False
 
     downstream_kws = {'host_resample': False, 'start_time': None, 'backend_sample_rate': None}
@@ -136,11 +135,11 @@ class SweepIterator:
     ):
         self.radio = radio
 
-        self._calibration=calibration,
-        self._always_yield=always_yield,
-        self._quiet=quiet,
-        self._pickled=pickled,
-        self._loop=loop,
+        self._calibration=calibration
+        self._always_yield=always_yield
+        self._quiet=quiet
+        self._pickled=pickled
+        self._loop=loop
         self._reuse_iq=reuse_compatible_iq
 
         self._ext_arm = None
@@ -170,6 +169,8 @@ class SweepIterator:
             extra_attrs=attrs,
             correction=True,
         )
+        self._analyze.__name__ = 'analyze'
+        self._analyze.__qualname__ = 'analyze'
 
     def __iter__(self) -> typing.Generator['xr.Dataset' | bytes | None]:
         iq = None
@@ -217,9 +218,8 @@ class SweepIterator:
                     sweep_time=sweep_time,
                     capture=capture_prev,
                     pickled=self._pickled,
-                    overwrite_x=True
-                )
-                calls['prior_ext_data'] = lb.Call(lambda: this_ext_data).rename('prior_ext_data')
+                    overwrite_x=not self._reuse_iq
+                ).rename('analyze')
 
             if capture_intake is None:
                 # for the first two iterations, there is no data to save
@@ -230,7 +230,7 @@ class SweepIterator:
             desc = channel_analysis.describe_capture(
                 capture_this, capture_prev, index=i, count=count
             )
-
+            
             with lb.stopwatch(f'{desc} •', logger_level='debug' if self._quiet else 'info'):
                 ret = lb.concurrently(**calls, flatten=False)
 
@@ -239,6 +239,7 @@ class SweepIterator:
 
             if 'acquire' in ret:
                 iq, capture_prev = ret['acquire']['radio']
+                prior_ext_data = this_ext_data
                 this_ext_data = ret['acquire'].get('extension', {}) or {}
 
                 if not capture_prev.host_resample:
@@ -270,7 +271,7 @@ class SweepIterator:
                 backend_sample_rate=self.radio.backend_sample_rate(),
                 start_time=None,
             )
-            acquire_calls['radio'] = lb.Call(tuple, iq_prev, capture_ret)
+            acquire_calls['radio'] = lb.Call(tuple, (iq_prev, capture_ret))
         else:
             acquire_calls['radio'] = lb.Call(
                 self.radio.acquire,
@@ -281,7 +282,8 @@ class SweepIterator:
         if self._ext_acquire is not None:
             acquire_calls['extension'] = lb.Call(self._ext_acquire, capture_next, self.sweep.radio_setup)
 
-        result = lb.concurrently(**acquire_calls, flatten=False)
+        with lb.stopwatch('acquisition', threshold=capture_this.duration):
+            result = lb.concurrently(**acquire_calls, flatten=False)
 
         if capture_next is not None and not reuse_next:
             self._arm(capture_next)
@@ -295,7 +297,8 @@ class SweepIterator:
         if self._ext_arm is not None:
             arm_calls['extension'] = lb.Call(self._ext_arm, capture, self.sweep.radio_setup)
 
-        return lb.concurrently(**arm_calls)
+        with lb.stopwatch('arm'):
+            return lb.concurrently(**arm_calls)
 
     def _intake(self, radio_data: 'xr.Dataset', ext_data={}):
         if not isinstance(radio_data, xr.Dataset):

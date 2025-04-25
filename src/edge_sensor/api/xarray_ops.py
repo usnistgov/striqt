@@ -215,8 +215,6 @@ def _assign_alias_coords(capture_data: 'xr.Dataset', aliases):
 class ChannelAnalysisWrapper:
     """Inject radio device and capture metadata and coordinates into a channel analysis result"""
 
-    __name__ = 'analyze'
-
     radio: RadioDevice
     sweep: structs.Sweep
     analysis_spec: list[structs.ChannelAnalysis]
@@ -233,12 +231,12 @@ class ChannelAnalysisWrapper:
     ) -> 'xr.Dataset':
         """Inject radio device and capture info into a channel analysis result."""
 
-        with lb.stopwatch('analysis', logger_level='debug'):
+        with lb.stopwatch('analysis', logger_level='info'):
             if array_api_compat.is_cupy_array(iq):
                 util.configure_cupy()
 
             if self.correction:
-                with lb.stopwatch('analysis: resample/calibrate', logger_level='debug'):
+                with lb.stopwatch('resample, filter, calibrate', logger_level='debug'):
                     iq = iq_corrections.resampling_correction(
                         iq, capture, self.radio, overwrite_x=overwrite_x
                     )
