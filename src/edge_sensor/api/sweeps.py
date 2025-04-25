@@ -299,7 +299,7 @@ class SweepIterator:
 
     def _intake(self, radio_data: 'xr.Dataset', ext_data={}):
         if not isinstance(radio_data, xr.Dataset):
-            raise ValueError('expected xr.Dataset type for data')
+            raise ValueError(f'expected xr.Dataset type for data, not {type(radio_data)}')
 
         if len(ext_data) > 0:
             update_ext_dims = {xarray_ops.CAPTURE_DIM: radio_data.capture.size}
