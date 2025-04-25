@@ -111,7 +111,7 @@ class SweepController:
         ):
             msgs += ['opening radio']
         if warmup_sweep is not None and len(warmup_sweep.captures) > 0:
-            msgs += [f'warming GPU ({len(warmup_sweep.captures)} empty captures)']
+            msgs += ['priming GPU']
         return ' and '.join(msgs)
 
     def prepare_sweep(self, sweep_spec: structs.Sweep, calibration, pickled=False):
