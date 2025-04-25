@@ -193,14 +193,18 @@ class SweepIterator:
         # iterate across (previous-1, previous, current, next) captures to support concurrency
         offset_captures = util.zip_offsets(capture_iter, (-2, -1, 0, 1), fill=None)
 
+        executor = ThreadPoolExecutor(max_workers=3)
+
         for i, (capture_intake, _, capture_this, capture_next) in enumerate(offset_captures):
-            calls = {}
+            executor.__enter__()
+            futures = {}
+            ret = {}
 
             if capture_this is None:
                 # Nones at the end indicate post-analysis and saves
                 pass
             else:
-                calls['acquire'] = lb.Call(
+                futures['acquire'] = executor.submit(
                     self._acquire,
                     iq,
                     capture_prev,
@@ -208,31 +212,31 @@ class SweepIterator:
                     capture_next
                 )
 
-            if capture_prev is None:
-                # no pending data in the first iteration
-                pass
-            else:
-                calls['analyze'] = lb.Call(
-                    self._analyze,
-                    iq,
-                    sweep_time=sweep_time,
-                    capture=capture_prev,
-                    pickled=self._pickled,
-                    overwrite_x=not self._reuse_iq
-                ).rename('analyze')
-
             if capture_intake is None:
                 # for the first two iterations, there is no data to save
                 pass
             else:
-                calls['intake'] = lb.Call(self._intake, radio_data=analysis, ext_data=prior_ext_data)
+                futures['intake'] = lb.Call(self._intake, radio_data=analysis, ext_data=prior_ext_data)
 
             desc = channel_analysis.describe_capture(
                 capture_this, capture_prev, index=i, count=count
             )
             
             with lb.stopwatch(f'{desc} •', logger_level='debug' if self._quiet else 'info'):
-                ret = lb.concurrently(**calls, flatten=False)
+                if capture_prev is None:
+                    # no pending data in the first iteration
+                    pass
+                else:
+                    ret['analyze'] = self._analyze(
+                        iq,
+                        sweep_time=sweep_time,
+                        capture=capture_prev,
+                        pickled=self._pickled,
+                        overwrite_x=not self._reuse_iq
+                    )
+
+                future_names = dict(zip(futures.values(), futures.keys()))
+                ret.update({future_names[fut] for fut in as_completed(future_names)})
 
             if 'analyze' in ret:
                 analysis = ret['analyze']
