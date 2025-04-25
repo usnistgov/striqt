@@ -1,11 +1,10 @@
 from __future__ import annotations
-import copy
 import typing
 import itertools
 
 import msgspec
 
-from . import captures, util, xarray_ops, iq_corrections
+from . import captures, util, xarray_ops
 
 from .radio import (
     RadioDevice,
@@ -190,10 +189,10 @@ class SweepIterator:
         if count == 0:
             return
 
-        # iterate across (previous, current, next) captures to support concurrency
+        # iterate across (previous-1, previous, current, next) captures to support concurrency
         offset_captures = util.zip_offsets(capture_iter, (-2, -1, 0, 1), fill=None)
 
-        for i, (_, _, capture_this, capture_next) in enumerate(offset_captures):
+        for i, (capture_intake, _, capture_this, capture_next) in enumerate(offset_captures):
             calls = {}
 
             if capture_this is None:
@@ -222,7 +221,7 @@ class SweepIterator:
                 )
                 calls['prior_ext_data'] = lb.Call(lambda: this_ext_data).rename('prior_ext_data')
 
-            if analysis is None:
+            if capture_intake is None:
                 # for the first two iterations, there is no data to save
                 pass
             else:
