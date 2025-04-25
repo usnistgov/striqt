@@ -231,7 +231,7 @@ class ChannelAnalysisWrapper:
     ) -> 'xr.Dataset':
         """Inject radio device and capture info into a channel analysis result."""
 
-        with lb.stopwatch('analysis', logger_level='info'):
+        with lb.stopwatch('analysis', logger_level='debug'):
             if array_api_compat.is_cupy_array(iq):
                 util.configure_cupy()
 

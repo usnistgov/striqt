@@ -193,9 +193,9 @@ class SweepIterator:
         # iterate across (previous-1, previous, current, next) captures to support concurrency
         offset_captures = util.zip_offsets(capture_iter, (-2, -1, 0, 1), fill=None)
 
-        executor = ThreadPoolExecutor(max_workers=3)
 
         for i, (capture_intake, _, capture_this, capture_next) in enumerate(offset_captures):
+            executor = ThreadPoolExecutor(max_workers=3)
             executor.__enter__()
             futures = {}
             ret = {}
@@ -216,7 +216,7 @@ class SweepIterator:
                 # for the first two iterations, there is no data to save
                 pass
             else:
-                futures['intake'] = lb.Call(self._intake, radio_data=analysis, ext_data=prior_ext_data)
+                futures['intake'] = executor.submit(self._intake, radio_data=analysis, ext_data=prior_ext_data)
 
             desc = channel_analysis.describe_capture(
                 capture_this, capture_prev, index=i, count=count
@@ -227,6 +227,8 @@ class SweepIterator:
                     # no pending data in the first iteration
                     pass
                 else:
+                    # it is important that CUDA operations happen in the main thread
+                    # for performance reasons (cause unknown)
                     ret['analyze'] = self._analyze(
                         iq,
                         sweep_time=sweep_time,
@@ -236,7 +238,7 @@ class SweepIterator:
                     )
 
                 future_names = dict(zip(futures.values(), futures.keys()))
-                ret.update({future_names[fut] for fut in as_completed(future_names)})
+                ret.update({future_names[fut]: fut.result() for fut in as_completed(future_names)})
 
             if 'analyze' in ret:
                 analysis = ret['analyze']
@@ -286,8 +288,7 @@ class SweepIterator:
         if self._ext_acquire is not None:
             acquire_calls['extension'] = lb.Call(self._ext_acquire, capture_next, self.sweep.radio_setup)
 
-        with lb.stopwatch('acquisition', threshold=capture_this.duration):
-            result = lb.concurrently(**acquire_calls, flatten=False)
+        result = lb.concurrently(**acquire_calls, flatten=False)
 
         if capture_next is not None and not reuse_next:
             self._arm(capture_next)
@@ -301,8 +302,7 @@ class SweepIterator:
         if self._ext_arm is not None:
             arm_calls['extension'] = lb.Call(self._ext_arm, capture, self.sweep.radio_setup)
 
-        with lb.stopwatch('arm'):
-            return lb.concurrently(**arm_calls)
+        return lb.concurrently(**arm_calls)
 
     def _intake(self, radio_data: 'xr.Dataset', ext_data={}):
         if not isinstance(radio_data, xr.Dataset):
