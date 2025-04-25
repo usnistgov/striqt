@@ -130,7 +130,9 @@ def describe_capture(
         if name == 'start_time':
             continue
         value = getattr(this, name)
-        if prev is None or value != getattr(prev, name):
+        if prev is not None and name == 'backend_sample_rate' and value is None:
+            continue
+        elif prev is None or value != getattr(prev, name):
             diffs.append(describe_field(this, name))
 
     capture_diff = ', '.join(diffs)

@@ -363,7 +363,7 @@ def init_sensor_sweep(
             force=force,
         )
 
-    with lb.stopwatch('load store and prepare calibrations'):
+    with lb.stopwatch('load store and prepare calibrations', logger_level='debug'):
         opened = lb.concurrently(**calls)
 
     opened.setdefault('store', None)

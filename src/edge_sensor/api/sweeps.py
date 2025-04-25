@@ -92,21 +92,24 @@ def design_warmup_sweep(
 
 
 def iq_is_reusable(
-    base_clock_rate, c1: structs.RadioCapture | None, c2: structs.RadioCapture
+    c1: structs.RadioCapture | None, c2: structs.RadioCapture, base_clock_rate
 ):
     """return True if c2 is compatible with the raw and uncalibrated IQ acquired for c1"""
 
-    if c1 is None:
+    if c1 is None or c2 is None:
         return False
 
     fsb1 = design_capture_filter(base_clock_rate, c1)[0]
     fsb2 = design_capture_filter(base_clock_rate, c2)[0]
 
     if fsb1 != fsb2:
-        # the backend sample rates need to be the same
+        # the realized backend sample rates need to be the same
+        print('**********')
         return False
 
-    c1_compare = msgspec.structs.replace(c1, backend_sample_rate=None)
+    downstream_kws = {'host_resample': False, 'start_time': None, 'backend_sample_rate': None}
+
+    c1_compare = msgspec.structs.replace(c1, **downstream_kws)
 
     c2_compare = msgspec.structs.replace(
         c2,
@@ -114,11 +117,23 @@ def iq_is_reusable(
         # that are validated to have flat response and unity gain
         analysis_bandwidth=c1.analysis_bandwidth,
         sample_rate=c1.sample_rate,
-        backend_sample_rate=None,
-        host_resample=c1.host_resample,
+        **downstream_kws
     )
 
     return c1_compare == c2_compare
+
+
+def _acquire_recycled(radio, iq, capture_this, capture_next=None):
+    capture_ret = msgspec.structs.replace(
+        capture_this,
+        backend_sample_rate=radio.backend_sample_rate(),
+        start_time=None,
+    )
+
+    if capture_next is not None:
+        radio.arm(capture_next)
+
+    return iq, capture_ret
 
 
 def iter_sweep(
@@ -165,14 +180,14 @@ def iter_sweep(
         correction=True,
     )
 
-    overwrite_x = not reuse_compatible_iq
-
     if len(sweep.captures) == 0:
         return
 
     iq = None
     sweep_time = None
     capture_prev = None
+    reuse_this = False
+    reuse_next = False
 
     base_clock_rate = radio.base_clock_rate
 
@@ -186,33 +201,46 @@ def iter_sweep(
     # iterate across (previous, current, next) captures to support concurrency
     offset_captures = util.zip_offsets(capture_iter, (-1, 0, 1), fill=None)
 
+    if reuse_compatible_iq:
+        radio.arm(sweep.captures[0])
+
     for i, (_, capture_this, capture_next) in enumerate(offset_captures):
         calls = {}
 
+        if reuse_compatible_iq:
+            reuse_this = iq_is_reusable(capture_prev, capture_this, base_clock_rate)
+            reuse_next = iq_is_reusable(capture_this, capture_next, base_clock_rate)
+
         if capture_this is None:
+            # skip one at the end to leave a loop iteration for the last analysis
             pass
-        elif not reuse_compatible_iq and iq_is_reusable(
-            base_clock_rate, capture_prev, capture_this
-        ):
-            lb.util.logger.info('reusing IQ from previous capture')
+        elif reuse_this:
+            calls['acquire'] = lb.Call(_acquire_recycled,
+                radio,
+                iq.copy(),
+                capture_this,
+                capture_next=None if reuse_next else capture_next
+            )
         else:
-            # extra iteration at the end for the last analysis
             calls['acquire'] = lb.Call(
                 radio.acquire,
                 capture_this,
-                next_capture=capture_next,
+                next_capture=None if reuse_next else capture_next,
                 correction=False,
             )
+        lb.util.logger.warning(f'radio arm and acquire for {capture_this}')
 
-        if capture_prev is not None:
-            # iq is only available after the first iteration
+        if capture_prev is None:
+            # no data yet in the first iteration
+            pass
+        else:
             calls['analyze'] = lb.Call(
                 analyze,
                 iq,
                 sweep_time=sweep_time,
                 capture=capture_prev,
                 pickled=pickled,
-                overwrite_x=overwrite_x
+                overwrite_x=True
             )
 
         desc = channel_analysis.describe_capture(
@@ -229,8 +257,12 @@ def iter_sweep(
 
         if 'acquire' in ret:
             iq, capture_prev = ret['acquire']
-            if sweep_time is None:
-                sweep_time = capture_prev.start_time
+
+            if not capture_prev.host_resample:
+                assert capture_prev.sample_rate == capture_prev.backend_sample_rate
+
+        if sweep_time is None:
+            sweep_time = capture_prev.start_time
 
 
 def iter_raw_iq(
@@ -347,6 +379,7 @@ def iter_callbacks(
     last_data = None
 
     while True:
+        lb.util.logger.warning(f'peripherals arm and acquire for {this_capture}')
         if this_capture is not None:
             arm_func(this_capture, sweep_spec.radio_setup)
 
