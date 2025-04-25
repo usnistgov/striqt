@@ -225,7 +225,7 @@ class SweepIterator:
                 # for the first two iterations, there is no data to save
                 pass
             else:
-                calls['intake'] = lb.Call(self._intake, data=analysis, ext_data=prior_ext_data)
+                calls['intake'] = lb.Call(self._intake, radio_data=analysis, ext_data=prior_ext_data)
 
             desc = channel_analysis.describe_capture(
                 capture_this, capture_prev, index=i, count=count
