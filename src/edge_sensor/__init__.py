@@ -6,7 +6,7 @@ from .api import iq_corrections, structs, util
 
 from .api.controller import connect, start_server, SweepController
 from .api.io import load, dump, open_store, read_yaml_sweep
-from .api.iq_corrections import read_calibration_corrections
+from .api.calibration import read_calibration_corrections
 from .api.radio import (
     RadioDevice,
     NullSource,

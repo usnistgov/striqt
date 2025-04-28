@@ -2,26 +2,31 @@
 
 from __future__ import annotations
 from datetime import datetime
-import numpy as np
 from pathlib import Path
 import typing
 
 import msgspec
 
-from .structs import Sweep, RadioCapture, FileSourceCapture  # noqa: F401
-from . import util, captures
 import channel_analysis
 from channel_analysis import load, dump  # noqa: F401
 
+from . import util, captures, structs, xarray_ops
+
 if typing.TYPE_CHECKING:
-    import pandas as pd
     import iqwaveform
+    import labbench as lb
+    import numpy as np
+    import pandas as pd
+    import xarray as xr
 else:
-    pd = util.lazy_import('pandas')
     iqwaveform = util.lazy_import('iqwaveform')
+    xr = util.lazy_import('xarray')
+    lb = util.lazy_import('labbench')
+    np = util.lazy_import('numpy')
+    pd = util.lazy_import('pandas')
 
 
-SweepType = typing.TypeVar('SweepType', bound=Sweep)
+SweepType = typing.TypeVar('SweepType', bound=structs.Sweep)
 
 
 def _dec_hook(type_, obj):
@@ -32,7 +37,7 @@ def _dec_hook(type_, obj):
 
 
 def _get_default_format_fields(
-    sweep: Sweep, *, radio_id: str | None = None, yaml_path
+    sweep: structs.Sweep, *, radio_id: str | None = None, yaml_path
 ) -> dict[str, str]:
     """return a mapping for string `'{field_name}'.format()` style mapping values"""
     fields = captures.capture_fields_with_aliases(
@@ -48,22 +53,24 @@ def _get_default_format_fields(
 
 def expand_path(
     path: str | Path,
-    sweep: Sweep,
+    sweep: structs.Sweep,
     *,
     radio_id: str | None = None,
-    yaml_path=None,
+    relative_to_file=None,
     yaml_relative=False,
 ) -> str:
     """return an absolute path, allowing for user tokens (~) and {field} in the input."""
     if path is None:
         return None
 
-    fields = _get_default_format_fields(sweep, radio_id=radio_id, yaml_path=yaml_path)
+    fields = _get_default_format_fields(
+        sweep, radio_id=radio_id, yaml_path=relative_to_file
+    )
     path = Path(path).expanduser()
     path = Path(str(path).format(**fields))
 
-    if yaml_relative and not path.is_absolute():
-        path = Path(yaml_path).parent.absolute() / path
+    if relative_to_file is not None and not path.is_absolute():
+        path = Path(relative_to_file).parent.absolute() / path
     return str(path.absolute())
 
 
@@ -71,7 +78,7 @@ def open_store(
     sweep,
     *,
     radio_id: str,
-    yaml_path: str,
+    yaml_path: str = None,
     output_path=None,
     store_backend=None,
     force=False,
@@ -85,7 +92,7 @@ def open_store(
         spec_path = sweep.output.path
     else:
         spec_path = expand_path(
-            output_path, sweep, radio_id=radio_id, yaml_path=yaml_path
+            output_path, sweep, radio_id=radio_id, relative_to_file=yaml_path
         )
 
     if store_backend == 'directory':
@@ -102,7 +109,7 @@ def read_yaml_sweep(
     path: str | Path,
     *,
     adjust_captures={},
-    sweep_cls: type[SweepType] = Sweep,
+    sweep_cls: type[SweepType] = structs.Sweep,
     radio_id=None,
 ) -> tuple[SweepType, tuple[str, ...]]:
     """build a Sweep struct from the contents of specified yaml file.
@@ -138,17 +145,17 @@ def read_yaml_sweep(
         dict(defaults, **c, **adjust_captures) for c in tree['captures']
     ]
 
-    sweep: Sweep = channel_analysis.builtins_to_struct(
+    sweep: structs.Sweep = channel_analysis.builtins_to_struct(
         tree, type=sweep_cls, strict=False, dec_hook=_dec_hook
     )
 
     # fill formatting fields in paths
-    kws = dict(sweep=sweep, radio_id=radio_id, yaml_path=path)
+    kws = dict(sweep=sweep, radio_id=radio_id)
 
     output_path = expand_path(sweep.output.path, **kws)
     output_spec = msgspec.structs.replace(sweep.output, path=output_path)
 
-    cal_path = expand_path(sweep.radio_setup.calibration, yaml_relative=True, **kws)
+    cal_path = expand_path(sweep.radio_setup.calibration, relative_to_file=path, **kws)
     setup_spec = msgspec.structs.replace(sweep.radio_setup, calibration=cal_path)
 
     sweep = msgspec.structs.replace(sweep, output=output_spec, radio_setup=setup_spec)
@@ -164,7 +171,7 @@ def read_tdms_iq(
     dtype='complex64',
     skip_samples=0,
     xp=np,
-) -> tuple['iqwaveform.type_stubs.ArrayLike', FileSourceCapture]:
+) -> tuple['iqwaveform.type_stubs.ArrayLike', structs.FileSourceCapture]:
     from .radio.testing import TDMSFileSource
 
     source = TDMSFileSource(path=path, rx_channel_count=rx_channel_count)
@@ -174,3 +181,102 @@ def read_tdms_iq(
     iq, _ = source.read_iq(capture)
 
     return iq
+
+
+class SweepDataManager:
+    def __init__(
+        self,
+        sweep_spec: structs.Sweep | str | Path,
+        *,
+        radio_id: str,
+        output_path: str | None = None,
+        store_kind: str | None = None,
+        force: bool = False,
+    ):
+        if isinstance(sweep_spec, structs.Sweep):
+            self.sweep_spec = sweep_spec
+            yaml_path = None
+        elif isinstance(sweep_spec, (str, Path)):
+            self.sweep_spec = read_yaml_sweep(sweep_spec)
+            yaml_path = sweep_spec
+
+        if output_path is None:
+            output_path = self.sweep_spec.output.path
+
+        self.output_path = expand_path(
+            self.output_path,
+            self.sweep_spec,
+            radio_id=self.radio_id,
+            relative_to_file=yaml_path,
+        )
+
+        if store_kind is None:
+            self.store_kind = self.sweep_spec.output.store.lower()
+        else:
+            self.store_kind = store_kind.lower()
+
+        self.store = None
+        self.radio_id = radio_id
+        self.force = force
+
+        self.clear()
+
+    def clear(self):
+        self.pending_data: list[xr.Dataset] = []
+
+    def __enter__(self):
+        self.open()
+        return self
+
+    def __exit__(self, *args):
+        self.close()
+
+    def open(self):
+        raise NotImplementedError
+
+    def close(self):
+        self.flush()
+
+    def append(self, capture_data: xr.Dataset):
+        raise NotImplementedError
+
+    def flush(self):
+        raise NotImplementedError
+
+
+class SweepStoreManager(SweepDataManager):
+    """concatenates the data from each capture and dumps to a zarr data store"""
+
+    def append(self, capture_data: xr.Dataset | None):
+        if capture_data is None:
+            return
+        else:
+            self.pending_data.append(capture_data)
+
+    def open(self):
+        if self.store_kind == 'directory':
+            fixed_path = Path(self.output_path).with_suffix('.zarr')
+        elif self.store_kind == 'zip':
+            fixed_path = Path(self.output_path).with_suffix('.zarr.zip')
+        else:
+            raise ValueError(f'unsupported store type {self.store_kind!r}')
+
+        fixed_path.parent.mkdir(parents=True, exist_ok=True)
+
+        self.store = open_store(fixed_path, mode='w' if self.force else 'a')
+
+    def close(self):
+        super().close()
+        self.store.close()
+
+    def flush(self):
+        if len(self.pending_data) == 0:
+            return
+
+        with lb.stopwatch('build dataset'):
+            data_captures = xr.concat(self.pending_data, xarray_ops.CAPTURE_DIM)
+
+        with lb.stopwatch('dump data'):
+            channel_analysis.dump(self.store, data_captures)
+
+        self.clear()
