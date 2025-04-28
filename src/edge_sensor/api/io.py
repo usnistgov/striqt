@@ -20,10 +20,10 @@ if typing.TYPE_CHECKING:
     import xarray as xr
 else:
     iqwaveform = util.lazy_import('iqwaveform')
-    xr = util.lazy_import('xarray')
     lb = util.lazy_import('labbench')
     np = util.lazy_import('numpy')
     pd = util.lazy_import('pandas')
+    xr = util.lazy_import('xarray')
 
 
 SweepType = typing.TypeVar('SweepType', bound=structs.Sweep)
@@ -57,7 +57,6 @@ def expand_path(
     *,
     radio_id: str | None = None,
     relative_to_file=None,
-    yaml_relative=False,
 ) -> str:
     """return an absolute path, allowing for user tokens (~) and {field} in the input."""
     if path is None:
