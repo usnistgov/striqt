@@ -330,7 +330,7 @@ def resampling_correction(
         iq = iqwaveform.oaconvolve(iq, h[xp.newaxis, :], 'same', axes=axis)
         iq = iqwaveform.util.axis_slice(iq, pad, iq.shape[axis], axis=axis)
 
-        # iq is now a copy, so it can be safely overridden 
+        # iq is now a copy, so it can be safely overridden
         overwrite_x = True
 
     if not needs_resample:
@@ -338,9 +338,7 @@ def resampling_correction(
         size = round(capture.duration * capture.sample_rate)
         iq = iq[:, :size]
         if scale is not None:
-            iq = xp.multiply(
-                iq, scale, out=iq if overwrite_x else None
-            )
+            iq = xp.multiply(iq, scale, out=iq if overwrite_x else None)
         elif not overwrite_x:
             iq = iq.copy()
         return iq

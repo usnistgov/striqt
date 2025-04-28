@@ -105,7 +105,11 @@ def _iq_is_reusable(
         # the realized backend sample rates need to be the same
         return False
 
-    downstream_kws = {'host_resample': False, 'start_time': None, 'backend_sample_rate': None}
+    downstream_kws = {
+        'host_resample': False,
+        'start_time': None,
+        'backend_sample_rate': None,
+    }
 
     c1_compare = msgspec.structs.replace(c1, **downstream_kws)
 
@@ -115,14 +119,15 @@ def _iq_is_reusable(
         # that are validated to have flat response and unity gain
         analysis_bandwidth=c1.analysis_bandwidth,
         sample_rate=c1.sample_rate,
-        **downstream_kws
+        **downstream_kws,
     )
 
     return c1_compare == c2_compare
 
 
 class SweepIterator:
-    def __init__(self,
+    def __init__(
+        self,
         radio: RadioDevice,
         sweep: structs.Sweep,
         *,
@@ -135,12 +140,12 @@ class SweepIterator:
     ):
         self.radio = radio
 
-        self._calibration=calibration
-        self._always_yield=always_yield
-        self._quiet=quiet
-        self._pickled=pickled
-        self._loop=loop
-        self._reuse_iq=reuse_compatible_iq
+        self._calibration = calibration
+        self._always_yield = always_yield
+        self._quiet = quiet
+        self._pickled = pickled
+        self._loop = loop
+        self._reuse_iq = reuse_compatible_iq
 
         self._ext_arm = None
         self._ext_acquire = None
@@ -193,8 +198,9 @@ class SweepIterator:
         # iterate across (previous-1, previous, current, next) captures to support concurrency
         offset_captures = util.zip_offsets(capture_iter, (-2, -1, 0, 1), fill=None)
 
-
-        for i, (capture_intake, _, capture_this, capture_next) in enumerate(offset_captures):
+        for i, (capture_intake, _, capture_this, capture_next) in enumerate(
+            offset_captures
+        ):
             executor = ThreadPoolExecutor(max_workers=3)
             executor.__enter__()
             futures = {}
@@ -205,24 +211,24 @@ class SweepIterator:
                 pass
             else:
                 futures['acquire'] = executor.submit(
-                    self._acquire,
-                    iq,
-                    capture_prev,
-                    capture_this,
-                    capture_next
+                    self._acquire, iq, capture_prev, capture_this, capture_next
                 )
 
             if capture_intake is None:
                 # for the first two iterations, there is no data to save
                 pass
             else:
-                futures['intake'] = executor.submit(self._intake, radio_data=analysis, ext_data=prior_ext_data)
+                futures['intake'] = executor.submit(
+                    self._intake, radio_data=analysis, ext_data=prior_ext_data
+                )
 
             desc = channel_analysis.describe_capture(
                 capture_this, capture_prev, index=i, count=count
             )
-            
-            with lb.stopwatch(f'{desc} •', logger_level='debug' if self._quiet else 'info'):
+
+            with lb.stopwatch(
+                f'{desc} •', logger_level='debug' if self._quiet else 'info'
+            ):
                 if capture_prev is None:
                     # no pending data in the first iteration
                     pass
@@ -234,11 +240,16 @@ class SweepIterator:
                         sweep_time=sweep_time,
                         capture=capture_prev,
                         pickled=self._pickled,
-                        overwrite_x=not self._reuse_iq
+                        overwrite_x=not self._reuse_iq,
                     )
 
                 future_names = dict(zip(futures.values(), futures.keys()))
-                ret.update({future_names[fut]: fut.result() for fut in as_completed(future_names)})
+                ret.update(
+                    {
+                        future_names[fut]: fut.result()
+                        for fut in as_completed(future_names)
+                    }
+                )
 
             if 'analyze' in ret:
                 analysis = ret['analyze']
@@ -261,8 +272,12 @@ class SweepIterator:
 
     def _acquire(self, iq_prev, capture_prev, capture_this, capture_next):
         if self._reuse_iq:
-            reuse_this = _iq_is_reusable(capture_prev, capture_this, self.radio.base_clock_rate)
-            reuse_next = _iq_is_reusable(capture_this, capture_next, self.radio.base_clock_rate)
+            reuse_this = _iq_is_reusable(
+                capture_prev, capture_this, self.radio.base_clock_rate
+            )
+            reuse_next = _iq_is_reusable(
+                capture_this, capture_next, self.radio.base_clock_rate
+            )
         else:
             reuse_this = reuse_next = False
 
@@ -286,7 +301,9 @@ class SweepIterator:
             )
 
         if self._ext_acquire is not None:
-            acquire_calls['extension'] = lb.Call(self._ext_acquire, capture_next, self.sweep.radio_setup)
+            acquire_calls['extension'] = lb.Call(
+                self._ext_acquire, capture_next, self.sweep.radio_setup
+            )
 
         result = lb.concurrently(**acquire_calls, flatten=False)
 
@@ -300,18 +317,23 @@ class SweepIterator:
 
         arm_calls['radio'] = lb.Call(self.radio.arm, capture)
         if self._ext_arm is not None:
-            arm_calls['extension'] = lb.Call(self._ext_arm, capture, self.sweep.radio_setup)
+            arm_calls['extension'] = lb.Call(
+                self._ext_arm, capture, self.sweep.radio_setup
+            )
 
         return lb.concurrently(**arm_calls)
 
     def _intake(self, radio_data: 'xr.Dataset', ext_data={}):
         if not isinstance(radio_data, xr.Dataset):
-            raise ValueError(f'expected xr.Dataset type for data, not {type(radio_data)}')
+            raise ValueError(
+                f'expected xr.Dataset type for data, not {type(radio_data)}'
+            )
 
         if len(ext_data) > 0:
             update_ext_dims = {xarray_ops.CAPTURE_DIM: radio_data.capture.size}
             new_arrays = {
-                k: xr.DataArray(v).expand_dims(update_ext_dims) for k, v in ext_data.items()
+                k: xr.DataArray(v).expand_dims(update_ext_dims)
+                for k, v in ext_data.items()
             }
             radio_data = radio_data.assign(new_arrays)
 
@@ -330,7 +352,7 @@ def iter_sweep(
     quiet=False,
     pickled=False,
     loop=False,
-    reuse_compatible_iq=False,        
+    reuse_compatible_iq=False,
 ) -> SweepIterator:
     """iterate through sweep captures on the radio, yielding a dataset for each.
 
@@ -379,7 +401,9 @@ def iter_callbacks(
         Generator
     """
 
-    sweep_iter.set_callbacks(arm_func=arm_func, acquire_func=acquire_func, intake_func=intake_func)
+    sweep_iter.set_callbacks(
+        arm_func=arm_func, acquire_func=acquire_func, intake_func=intake_func
+    )
 
     return sweep_iter
 
