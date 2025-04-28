@@ -259,16 +259,23 @@ def lookup_power_correction(
     return xp.asarray(power_scale, dtype='float32')
 
 
-def _get_voltage_scale(cal_power_scale, dtype_iq_scale):
-    if cal_power_scale is None and dtype_iq_scale is None:
+def _get_voltage_scale(cal_power_scale, transport_dtype: str):
+    if transport_dtype == 'int16':
+        dtype_scale = 1.0 / float(np.iinfo(transport_dtype).max)
+    elif not isinstance(transport_dtype, str):
+        raise TypeError('transport_dtype must be str')
+    else:
+        dtype_scale = None
+
+    if cal_power_scale is None and dtype_scale is None:
         return None
 
-    if dtype_iq_scale is None:
-        dtype_iq_scale = 1
+    if dtype_scale is None:
+        dtype_scale = 1
     if cal_power_scale is None:
         cal_power_scale = 1
 
-    return np.sqrt(cal_power_scale) * dtype_iq_scale
+    return np.sqrt(cal_power_scale) * dtype_scale
 
 
 def resampling_correction(
@@ -288,6 +295,7 @@ def resampling_correction(
         radio: the radio instance that performed the capture
         force_calibration: if specified, this calibration dataset is used rather than loading from file
         axis: the axis of `x` along which to compute the filter
+        overwrite_x: if True, modify the contents of IQ in-place; otherwise, a copy will be returned
 
     Returns:
         the filtered IQ capture
@@ -298,15 +306,10 @@ def resampling_correction(
     if array_api_compat.is_cupy_array(iq):
         util.configure_cupy()
 
-    if radio._transport_dtype == 'int16':
-        dtype_scale = 1.0 / float(np.iinfo(radio._transport_dtype).max)
-    else:
-        dtype_scale = None
-
     bare_capture = msgspec.structs.replace(capture, start_time=None)
     cal_data = radio.calibration if force_calibration is None else force_calibration
     cal_scale = lookup_power_correction(cal_data, bare_capture, xp)
-    scale = _get_voltage_scale(cal_scale, dtype_scale)
+    scale = _get_voltage_scale(cal_scale, radio._transport_dtype)
 
     fs, _, analysis_filter = design_capture_filter(radio.base_clock_rate, capture)
 
@@ -314,7 +317,7 @@ def resampling_correction(
 
     needs_resample = base.needs_resample(analysis_filter, capture)
 
-    # apply the filter here, where the size of y is minimized
+    # apply the filter here and ensure we're working with a copy if needed
     if np.isfinite(capture.analysis_bandwidth):
         h = iqwaveform.design_fir_lpf(
             bandwidth=capture.analysis_bandwidth,
@@ -327,12 +330,19 @@ def resampling_correction(
         iq = iqwaveform.oaconvolve(iq, h[xp.newaxis, :], 'same', axes=axis)
         iq = iqwaveform.util.axis_slice(iq, pad, iq.shape[axis], axis=axis)
 
+        # iq is now a copy, so it can be safely overridden 
+        overwrite_x = True
+
     if not needs_resample:
-        # bail here if filtering or resampling needed
+        # bail here if host resampling is not needed
         size = round(capture.duration * capture.sample_rate)
         iq = iq[:, :size]
         if scale is not None:
-            iq *= scale
+            iq = xp.multiply(
+                iq, scale, out=iq if overwrite_x else None
+            )
+        elif not overwrite_x:
+            iq = iq.copy()
         return iq
 
     except_on_low_memory()
