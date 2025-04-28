@@ -4,8 +4,9 @@ import functools
 from pathlib import Path
 import pickle
 import typing
+import warnings
 
-from . import store, structs, util, xarray_ops
+from . import io, structs, util, xarray_ops
 from .captures import split_capture_channels
 
 if typing.TYPE_CHECKING:
@@ -250,7 +251,7 @@ def lookup_power_correction(
     return xp.asarray(power_scale, dtype='float32')
 
 
-class CalibrationDataManager(store.SweepDataManager):
+class CalibrationDataManager(io.SweepDataManager):
     _DROP_FIELDS = (
         'sweep_start_time',
         'start_time',
@@ -259,6 +260,13 @@ class CalibrationDataManager(store.SweepDataManager):
         'duration',
         'sample_rate',
     )
+
+    def open(self):
+        if not self.force and Path(self.output_path).exists():
+            print('merging results from previous file')
+            self.prev_corrections = read_calibration_corrections(self.output_path)
+        else:
+            self.prev_corrections = None
 
     def append(self, capture_data: xr.Dataset):
         if capture_data is None:
@@ -272,42 +280,32 @@ class CalibrationDataManager(store.SweepDataManager):
         sweep_start_time = self.data_captures[0].sweep_start_time[0]
         channel = int(self.data_captures[0].channel)
 
-        data_captures = (
-            xr.concat(self.data_captures, xarray_ops.CAPTURE_DIM)
+        capture_data = (
+            xr.concat(self.pending_data, xarray_ops.CAPTURE_DIM)
             .assign_attrs({'sweep_start_time': float(sweep_start_time)})
             .drop_vars(self._DROP_FIELDS)
         )
 
-        dataset = data_captures.set_xindex(list(data_captures.capture.coords)).unstack(
-            'capture'
-        )
-        dataset['noise_diode_enabled'] = dataset.noise_diode_enabled.astype('bool')
-
-        if self.output_path is None:
-            radio_id = data_captures.radio_id.values[0]
-            driver = data_captures.attrs['driver']
-            output_path = f'cals/{driver}-{radio_id}.p'
-        else:
-            output_path = self.output_path
+        # break out each remaining capture coordinate into its own dimension
+        fields = list(capture_data.capture.coords)
+        by_field = capture_data.set_xindex(fields).unstack('capture')
+        by_field['noise_diode_enabled'] = by_field.noise_diode_enabled.astype('bool')
 
         # compute and merge corrections
-        from edge_sensor import iq_corrections as cal
-
-        corrections = cal.compute_y_factor_corrections(
-            dataset,
+        corrections = compute_y_factor_corrections(
+            by_field,
             enr_dB=self.sweep_spec.radio_setup.enr,
             Tamb=self.sweep_spec.radio_setup.ambient_temperature,
         )
 
-        if not self.force and Path(output_path).exists():
+        if not self.force and Path(self.output_path).exists():
             print('merging results from previous file')
-            prev_corrections = read_calibration_corrections(output_path)
-            if channel in prev_corrections.channel:
-                prev_corrections = prev_corrections.drop_sel(channel=channel)
-            corrections = xr.concat([corrections, prev_corrections], dim='channel')
+            if channel in self.prev_corrections.channel:
+                self.prev_corrections = self.prev_corrections.drop_sel(channel=channel)
+            corrections = xr.concat([corrections, self.prev_corrections], dim='channel')
 
         print(f'Channel {channel} calibration results:')
-        summary = cal.summarize_calibration(corrections, channel=channel)
+        summary = summarize_calibration(corrections, channel=channel)
         print(summary.sort_index(axis=1).sort_index(axis=0))
 
-        cal.save_calibration_corrections(output_path, corrections)
+        save_calibration_corrections(self.output_path, corrections)
