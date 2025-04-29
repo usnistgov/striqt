@@ -324,7 +324,9 @@ class CapturePlotter:
         )
 
     @_maybe_skip_missing
-    def channel_power_time_series(self, data: 'xr.Dataset', hue='power_detector', **sel):
+    def channel_power_time_series(
+        self, data: 'xr.Dataset', hue='power_detector', **sel
+    ):
         key = self.channel_power_time_series.__name__
         return self._line(
             data[key].sel(sel),

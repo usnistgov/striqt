@@ -57,5 +57,6 @@ def run(**kws):
         if not kws['remote']:
             controller.close_radio(sweep_spec.radio_setup)
 
+
 if __name__ == '__main__':
     run()

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import click
 from pathlib import Path
 import typing
@@ -34,17 +32,13 @@ def lazy_import(module_name: str):
 
 
 if typing.TYPE_CHECKING:
-    from IPython.core import ultratb
+    import edge_sensor
     import labbench as lb
     import xarray as xr
-    import edge_sensor
-    import zarr
 else:
     edge_sensor = lazy_import('edge_sensor')
     lb = lazy_import('labbench')
     xr = lazy_import('xarray')
-    ultratb = lazy_import('IPython.core.ultratb')
-    zarr = lazy_import('zarr')
 
 
 HOSTNAME = gethostname()
@@ -56,8 +50,9 @@ def _chain_decorators(decorators: list[callable], func: callable) -> callable:
     return func
 
 
-def _apply_exception_hooks(controller, sweep, debug: bool, remote: bool | None):
+def _apply_exception_hooks(controller, sweep, debug: bool, remote: typing.Optional[bool]):
     def hook(*args):
+        from IPython.core import ultratb
         if debug:
             print('entering debugger')
             lb.util.force_full_traceback(True)
@@ -71,13 +66,6 @@ def _apply_exception_hooks(controller, sweep, debug: bool, remote: bool | None):
             controller.close_radio(sweep.radio_setup)
 
     sys.excepthook = hook
-
-
-def _do_expensive_imports():
-    import iqwaveform
-    import xarray
-    import pandas
-    import numpy
 
 
 # %% Sweep script
@@ -289,14 +277,14 @@ Dataset = typing.TypeVar('Dataset', bound='xr.Dataset')
 def init_sweep_cli(
     *,
     yaml_path: Path,
-    output_path: str | None = None,
-    store_backend: str | None,
-    remote: str | None,
+    output_path: typing.Optional[str] = None,
+    store_backend: typing.Optional[str],
+    remote: typing.Optional[str],
     force: bool = False,
     verbose: bool = False,
     debug: bool = False,
-    sweep_cls: type[Sweep] | None = None,
-    store_manager_cls: type[DataStoreManager] | None = None,
+    sweep_cls: typing.Optional[type[Sweep]] = None,
+    store_manager_cls: typing.Optional[type[DataStoreManager]] = None,
 ) -> tuple[DataStoreManager, Controller, Sweep, Dataset]:
     if sweep_cls is None:
         sweep_cls = edge_sensor.Sweep
@@ -355,10 +343,49 @@ def init_sweep_cli(
 
     except BaseException:
         import traceback
+
         traceback.print_exc()
         raise
 
     return store, controller, sweep, opened.get('calibration', None)
+
+
+def run_sweep(
+    sweep_spec: 'edge_sensor.Sweep',
+    controller: 'edge_sensor.SweepController',
+    calibration: 'xr.Dataset',
+    store: 'edge_sensor.DataStoreManager',
+    arm_func: typing.Optional[callable] = None,
+    acquire_func: typing.Optional[callable] = None,
+    reuse_compatible_iq: bool=False,
+):
+    try:
+        # iterate through the sweep specification, yielding a dataset for each capture
+        sweep_iter = controller.iter_sweep(
+            sweep_spec,
+            calibration=calibration,
+            prepare=False,
+            always_yield=True,
+            reuse_compatible_iq=reuse_compatible_iq,  # calibration-specific optimization
+        )
+
+        sweep_iter.set_callbacks(
+            arm_func=arm_func, acquire_func=acquire_func, intake_func=store.append
+        )
+
+        # step through captures
+        for _ in sweep_iter:
+            pass
+
+        store.flush()
+
+    except BaseException:
+        import traceback
+
+        traceback.print_exc()
+        # this is handled by hooks in sys.excepthook, which may
+        # trigger the IPython debugger (if configured) and then close the radio
+        raise
 
 
 # %% Server scripts
