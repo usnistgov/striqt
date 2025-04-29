@@ -32,7 +32,9 @@ def _get_voltage_scale(
     bare_capture = msgspec.structs.replace(capture, start_time=None)
 
     cal_data = radio.calibration if force_calibration is None else force_calibration
-    power_scale = calibration.lookup_power_correction(cal_data, bare_capture, xp)
+    power_scale = calibration.lookup_power_correction(
+        cal_data, bare_capture, radio.base_clock_rate, xp=xp
+    )
 
     transport_dtype = radio._transport_dtype
     if transport_dtype == 'int16':

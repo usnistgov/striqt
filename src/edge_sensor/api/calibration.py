@@ -11,6 +11,7 @@ import msgspec
 from . import io, structs, sweeps, util, xarray_ops
 from .captures import split_capture_channels
 from .structs import Annotated, meta
+from .radio.base import design_capture_filter
 
 if typing.TYPE_CHECKING:
     import gzip
@@ -21,7 +22,7 @@ if typing.TYPE_CHECKING:
 else:
     gzip = util.lazy_import('gzip')
     np = util.lazy_import('numpy')
-    pd = util.lazy_import('pandas')    
+    pd = util.lazy_import('pandas')
     scipy = util.lazy_import('scipy')
     xr = util.lazy_import('xarray')
 
@@ -70,7 +71,7 @@ def _cached_calibration_captures(
         'channel': variables['channel'],
         'noise_diode_enabled': variables['noise_diode_enabled'],
         **variables,
-        'analysis_bandwidth': analysis_bandwidths
+        'analysis_bandwidth': analysis_bandwidths,
     }
 
     # every combination of each variable
@@ -111,7 +112,10 @@ class CalibrationSweep(
 
     def __post_init__(self):
         if self.radio_setup.calibration is not None:
-            raise ValueError('radio_setup.calibration must be None for a calibration sweep')
+            raise ValueError(
+                'radio_setup.calibration must be None for a calibration sweep'
+            )
+
 
 @functools.lru_cache
 def read_calibration_corrections(path):
@@ -281,7 +285,11 @@ def _describe_missing_data(corrections: xr.Dataset, exact_matches: dict):
 
 @functools.lru_cache()
 def lookup_power_correction(
-    cal_data: Path | xr.Dataset | None, capture: structs.RadioCapture, xp
+    cal_data: Path | xr.Dataset | None,
+    capture: structs.RadioCapture,
+    base_clock_rate: float,
+    *,
+    xp,
 ):
     if isinstance(cal_data, xr.Dataset):
         corrections = cal_data
@@ -293,14 +301,15 @@ def lookup_power_correction(
     power_scale = []
 
     for capture_chan in split_capture_channels(capture):
-        # these fields must match the calibration conditions exactly
+        fs, *_ = design_capture_filter(capture_chan, base_clock_rate)
+
+        # these capture fields must match the calibration conditions exactly
         exact_matches = dict(
             channel=capture_chan.channel,
             gain=capture_chan.gain,
             lo_shift=capture_chan.lo_shift,
-            sample_rate=capture_chan.sample_rate,
+            backend_sample_rate=fs,
             analysis_bandwidth=capture_chan.analysis_bandwidth or np.inf,
-            host_resample=capture_chan.host_resample,
         )
 
         try:
@@ -378,7 +387,7 @@ class CalibrationDataManager(io.DataStoreManager):
 
         if self.sweep_start_time is None:
             self.sweep_start_time = float(capture_data.sweep_start_time[0])
-        
+
         self.pending_data.append(capture_data)
 
     def flush(self):
