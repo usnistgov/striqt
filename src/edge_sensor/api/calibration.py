@@ -8,10 +8,9 @@ import typing
 
 import msgspec
 
-from . import io, structs, sweeps, util, xarray_ops
+from . import io, sources, structs, sweeps, util, xarray_ops
 from .captures import split_capture_channels
 from .structs import Annotated, meta
-from .radio.base import design_capture_filter
 
 if typing.TYPE_CHECKING:
     import gzip
@@ -126,14 +125,14 @@ def read_calibration_corrections(path):
         return pickle.load(fd)
 
 
-def save_calibration_corrections(path, corrections: xr.Dataset):
+def save_calibration_corrections(path, corrections: 'xr.Dataset'):
     with gzip.GzipFile(path, 'wb') as fd:
         pickle.dump(corrections, fd)
 
 
 def _y_factor_temperature(
-    power: xr.DataArray, enr_dB: float, Tamb: float, Tref=290.0
-) -> xr.Dataset:
+    power: 'xr.DataArray', enr_dB: float, Tamb: float, Tref=290.0
+) -> 'xr.Dataset':
     Toff = Tamb
     Ton = Tref * 10 ** (enr_dB / 10.0)
 
@@ -150,7 +149,7 @@ def _y_factor_temperature(
     return T
 
 
-def _limit_nyquist_bandwidth(data: xr.DataArray) -> xr.DataArray:
+def _limit_nyquist_bandwidth(data: 'xr.DataArray') -> 'xr.DataArray':
     """replace float('inf') analysis bandwidth with the Nyquist bandwidth"""
 
     # return bandwidth with same shape as dataset.channel_power_time_series
@@ -162,8 +161,8 @@ def _limit_nyquist_bandwidth(data: xr.DataArray) -> xr.DataArray:
 
 
 def _y_factor_power_corrections(
-    dataset: xr.Dataset, enr_dB: float, Tamb: float, Tref=290.0
-) -> xr.Dataset:
+    dataset: 'xr.Dataset', enr_dB: float, Tamb: float, Tref=290.0
+) -> 'xr.Dataset':
     # TODO: check that this works for xr.DataArray inputs in (enr_dB, Tamb)
 
     kwargs = dict(list(locals().items())[1:])
@@ -230,8 +229,8 @@ def _y_factor_frequency_response_correction(
 
 
 def compute_y_factor_corrections(
-    dataset: xr.Dataset, enr_dB: float, Tamb: float, Tref=290.0
-) -> xr.Dataset:
+    dataset: 'xr.Dataset', enr_dB: float, Tamb: float, Tref=290.0
+) -> 'xr.Dataset':
     kwargs = locals()
     ret = _y_factor_power_corrections(**kwargs)
     # ret['baseband_frequency_response'] = _y_factor_frequency_response_correction(
@@ -241,7 +240,7 @@ def compute_y_factor_corrections(
 
 
 def _summarize_calibration_field(
-    corrections: xr.Dataset, field_name, **sel
+    corrections: 'xr.Dataset', field_name, **sel
 ) -> 'pd.DataFrame':
     max_gain = float(corrections.gain.max())
     corr = corrections[field_name].sel(gain=max_gain, **sel, drop=True).squeeze()
@@ -249,14 +248,14 @@ def _summarize_calibration_field(
     return stacked.to_dataframe()[[field_name]]
 
 
-def summarize_calibration(corrections: xr.Dataset, **sel):
+def summarize_calibration(corrections: 'xr.Dataset', **sel) -> 'pd.DataFrame':
     nf_summary = _summarize_calibration_field(corrections, 'noise_figure', **sel)
     corr_summary = _summarize_calibration_field(corrections, 'power_correction', **sel)
 
     return pd.concat([nf_summary, corr_summary], axis=1)
 
 
-def _describe_missing_data(corrections: xr.Dataset, exact_matches: dict):
+def _describe_missing_data(corrections: 'xr.Dataset', exact_matches: dict):
     misses = []
     cal = corrections.power_correction.copy()
 
@@ -285,7 +284,7 @@ def _describe_missing_data(corrections: xr.Dataset, exact_matches: dict):
 
 @functools.lru_cache()
 def lookup_power_correction(
-    cal_data: Path | xr.Dataset | None,
+    cal_data: Path | 'xr.Dataset' | None,
     capture: structs.RadioCapture,
     base_clock_rate: float,
     *,
@@ -301,7 +300,7 @@ def lookup_power_correction(
     power_scale = []
 
     for capture_chan in split_capture_channels(capture):
-        fs, *_ = design_capture_filter(capture_chan, base_clock_rate)
+        fs, *_ = sources.design_capture_filter(capture_chan, base_clock_rate)
 
         # these capture fields must match the calibration conditions exactly
         exact_matches = dict(
@@ -381,7 +380,7 @@ class CalibrationDataManager(io.DataStoreManager):
 
         self.sweep_start_time = None
 
-    def append(self, capture_data: xr.Dataset):
+    def append(self, capture_data: 'xr.Dataset'):
         if capture_data is None:
             return
 

@@ -10,7 +10,7 @@ import pickle
 import typing
 
 from . import captures, structs, util
-from .radio import RadioDevice
+from .sources import RadioDevice
 
 import array_api_compat
 

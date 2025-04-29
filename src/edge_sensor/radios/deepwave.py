@@ -4,7 +4,7 @@ from math import sqrt, ceil
 import SoapySDR
 from labbench import paramattr as attr
 
-from ..api.radio import soapy
+from ..api.sources import soapy
 from ..api import structs
 import uuid
 

@@ -301,9 +301,6 @@ def init_sweep_cli(
     if sweep_cls is None:
         sweep_cls = edge_sensor.Sweep
 
-    if store_manager_cls is None:
-        store_manager_cls = edge_sensor.io.AppendingDataManager
-
     # first read, without knowing radio_id
     sweep = edge_sensor.read_yaml_sweep(yaml_path, sweep_cls=sweep_cls)
 
@@ -329,27 +326,37 @@ def init_sweep_cli(
     # as a file naming field
     controller = _connect_controller(remote, sweep)
     _apply_exception_hooks(controller, sweep, debug=debug, remote=remote)
-    radio_id = controller.radio_id(sweep.radio_setup.driver)
-    sweep = edge_sensor.read_yaml_sweep(
-        yaml_path,
-        sweep_cls=sweep_cls,
-        radio_id=radio_id,
-    )
 
-    # now, open the store
-    store = store_manager_cls(
-        sweep, output_path=output_path, store_backend=store_backend, force=force
-    )
+    if store_manager_cls is None:
+        store_manager_cls = edge_sensor.io.AppendingDataManager
 
-    calls = {}
-    calls['calibration'] = lb.Call(
-        edge_sensor.read_calibration_corrections,
-        sweep.radio_setup.calibration,
-    )
-    calls['store'] = lb.Call(store.open)
+    try:
+        radio_id = controller.radio_id(sweep.radio_setup.driver)
+        sweep = edge_sensor.read_yaml_sweep(
+            yaml_path,
+            sweep_cls=sweep_cls,
+            radio_id=radio_id,
+        )
 
-    with lb.stopwatch('load store and prepare calibrations', logger_level='debug'):
-        opened = lb.concurrently(**calls)
+        # now, open the store
+        store = store_manager_cls(
+            sweep, output_path=output_path, store_backend=store_backend, force=force
+        )
+
+        calls = {}
+        calls['calibration'] = lb.Call(
+            edge_sensor.read_calibration_corrections,
+            sweep.radio_setup.calibration,
+        )
+        calls['store'] = lb.Call(store.open)
+
+        with lb.stopwatch('load store and prepare calibrations', logger_level='debug'):
+            opened = lb.concurrently(**calls)
+
+    except BaseException:
+        import traceback
+        traceback.print_exc()
+        raise
 
     return store, controller, sweep, opened.get('calibration', None)
 

@@ -4,14 +4,7 @@ import itertools
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import msgspec
 
-from . import captures, structs, util, xarray_ops
-
-from .radio import (
-    RadioDevice,
-    NullSource,
-    find_radio_cls_by_name,
-    design_capture_filter,
-)
+from . import captures, structs, sources, util, xarray_ops
 
 
 if typing.TYPE_CHECKING:
@@ -69,14 +62,14 @@ def design_warmup_sweep(
     if len(captures) > 1:
         captures = captures[:1]
 
-    radio_cls = find_radio_cls_by_name(sweep.radio_setup.driver)
+    radio_cls = sources.find_radio_cls_by_name(sweep.radio_setup.driver)
 
     # TODO: currently, the base_clock_rate is left as the null radio default.
     # this may cause problems in the future if its default disagrees with another
     # radio
     null_radio_setup = msgspec.structs.replace(
         sweep.radio_setup,
-        driver=NullSource.__name__,
+        driver=sources.NullSource.__name__,
         resource={},
         _rx_channel_count=radio_cls.rx_channel_count.default,
         calibration=None,
@@ -97,8 +90,8 @@ def _iq_is_reusable(
     if c1 is None or c2 is None:
         return False
 
-    fsb1 = design_capture_filter(base_clock_rate, c1)[0]
-    fsb2 = design_capture_filter(base_clock_rate, c2)[0]
+    fsb1 = sources.design_capture_filter(base_clock_rate, c1)[0]
+    fsb2 = sources.design_capture_filter(base_clock_rate, c2)[0]
 
     if fsb1 != fsb2:
         # the realized backend sample rates need to be the same
@@ -140,7 +133,7 @@ class LinearCaptureSequencer(CaptureTransformer):
 class SweepIterator:
     def __init__(
         self,
-        radio: RadioDevice,
+        radio: 'sources.RadioDevice',
         sweep: structs.Sweep,
         *,
         calibration: 'xr.Dataset' = None,
@@ -356,7 +349,7 @@ class SweepIterator:
 
 
 def iter_sweep(
-    radio: RadioDevice,
+    radio: 'sources.RadioDevice',
     sweep: structs.Sweep,
     *,
     calibration: 'xr.Dataset' = None,
@@ -421,7 +414,7 @@ def iter_callbacks(
 
 
 def iter_raw_iq(
-    radio: RadioDevice,
+    radio: 'sources.RadioDevice',
     sweep: structs.Sweep,
     quiet=False,
 ) -> typing.Generator['xr.Dataset' | bytes | None]:

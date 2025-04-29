@@ -9,7 +9,6 @@ from collections import defaultdict
 import numcodecs
 
 from . import util
-import xarray as xr
 
 if typing.TYPE_CHECKING:
     import numpy as np

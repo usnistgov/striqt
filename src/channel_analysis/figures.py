@@ -249,7 +249,7 @@ class CapturePlotter:
 
     def _line(
         self,
-        data: xr.DataArray,
+        data: 'xr.DataArray',
         name: str,
         sel: dict = {},
         *,
@@ -275,7 +275,7 @@ class CapturePlotter:
 
     def _heatmap(
         self,
-        data: xr.DataArray,
+        data: 'xr.DataArray',
         name: str,
         sel: dict = {},
         *,
@@ -303,7 +303,7 @@ class CapturePlotter:
                 spg.plot.pcolormesh(**kws)
 
     def cellular_cyclic_autocorrelation(
-        self, data: xr.Dataset, hue='link_direction', **sel
+        self, data: 'xr.Dataset', hue='link_direction', **sel
     ):
         key = self.cellular_cyclic_autocorrelation.__name__
         return self._line(
@@ -313,7 +313,7 @@ class CapturePlotter:
             hue=hue,
         )
 
-    def channel_power_histogram(self, data: xr.Dataset, hue='power_detector', **sel):
+    def channel_power_histogram(self, data: 'xr.Dataset', hue='power_detector', **sel):
         key = self.channel_power_histogram.__name__
         return self._line(
             data[key].sel(sel),
@@ -324,7 +324,7 @@ class CapturePlotter:
         )
 
     @_maybe_skip_missing
-    def channel_power_time_series(self, data: xr.Dataset, hue='power_detector', **sel):
+    def channel_power_time_series(self, data: 'xr.Dataset', hue='power_detector', **sel):
         key = self.channel_power_time_series.__name__
         return self._line(
             data[key].sel(sel),
@@ -335,7 +335,7 @@ class CapturePlotter:
 
     @_maybe_skip_missing
     def power_spectral_density(
-        self, data: xr.Dataset, hue='frequency_statistic', **sel
+        self, data: 'xr.Dataset', hue='frequency_statistic', **sel
     ):
         key = self.power_spectral_density.__name__
 
@@ -358,7 +358,7 @@ class CapturePlotter:
         )
 
     @_maybe_skip_missing
-    def spectrogram(self, data: xr.Dataset, **sel):
+    def spectrogram(self, data: 'xr.Dataset', **sel):
         key = self.spectrogram.__name__
         self._heatmap(
             data[key].sel(sel).dropna('spectrogram_baseband_frequency'),
@@ -368,7 +368,7 @@ class CapturePlotter:
         )
 
     @_maybe_skip_missing
-    def spectrogram_histogram(self, data: xr.Dataset, **sel):
+    def spectrogram_histogram(self, data: 'xr.Dataset', **sel):
         key = self.spectrogram_histogram.__name__
         return self._line(
             data[key].sel(sel),
@@ -379,7 +379,7 @@ class CapturePlotter:
         )
 
     @_maybe_skip_missing
-    def cellular_resource_power_histogram(self, data: xr.Dataset, **sel):
+    def cellular_resource_power_histogram(self, data: 'xr.Dataset', **sel):
         key = self.cellular_resource_power_histogram.__name__
         return self._line(
             data[key].sel(sel),
@@ -390,7 +390,7 @@ class CapturePlotter:
         )
 
     @_maybe_skip_missing
-    def spectrogram_ratio_histogram(self, data: xr.Dataset, **sel):
+    def spectrogram_ratio_histogram(self, data: 'xr.Dataset', **sel):
         key = self.spectrogram_ratio_histogram.__name__
         return self._line(
             data[key].sel(sel),
@@ -401,7 +401,7 @@ class CapturePlotter:
         )
 
     @_maybe_skip_missing
-    def cyclic_channel_power(self, data: xr.Dataset, **sel):
+    def cyclic_channel_power(self, data: 'xr.Dataset', **sel):
         data_across_facets = data.cyclic_channel_power.sel(**sel)
         with self._plot_context(data, name='cyclic_channel_power', x='cyclic_lag'):
             if self.facet_col is not None:
@@ -421,7 +421,7 @@ class CapturePlotter:
                 plot_cyclic_channel_power(cyclic_power, ax=ax)
 
 
-def capture_to_dicts(capture: xr.DataArray, title_case=False) -> dict[str]:
+def capture_to_dicts(capture: 'xr.DataArray', title_case=False) -> dict[str]:
     if capture.ndim > 0:
         return [capture_to_dicts(c, title_case)[0] for c in capture]
 
@@ -441,7 +441,7 @@ def capture_to_dicts(capture: xr.DataArray, title_case=False) -> dict[str]:
     return [d]
 
 
-def label_by_coord(data: xr.DataArray, fmt: str, *, title_case=True, **extra_fields):
+def label_by_coord(data: 'xr.DataArray', fmt: str, *, title_case=True, **extra_fields):
     coords = capture_to_dicts(data.capture, title_case=title_case)
     return [fmt.format(**c, **extra_fields) for c in coords]
 

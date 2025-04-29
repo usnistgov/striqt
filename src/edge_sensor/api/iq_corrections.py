@@ -1,14 +1,14 @@
 from __future__ import annotations
-import iqwaveform.type_stubs
 import msgspec
 import typing
 
-from .radio import base, RadioDevice, design_capture_filter
+from .sources import base, RadioDevice, design_capture_filter
 from . import calibration, structs, util
 
 if typing.TYPE_CHECKING:
     import array_api_compat
     import iqwaveform
+    import iqwaveform.type_stubs
     import numpy as np
     import xarray as xr
 
@@ -21,7 +21,7 @@ else:
 
 def _get_voltage_scale(
     capture: structs.RadioCapture, radio: RadioDevice, *, force_calibration=False, xp=np
-) -> iqwaveform.type_stubs.ArrayLike:
+) -> 'iqwaveform.type_stubs.ArrayLike':
     """compute the scaling factor needed to scale each of N channels of an IQ waveform
 
     Returns:

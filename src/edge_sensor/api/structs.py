@@ -10,7 +10,6 @@ from typing import Annotated, Optional, Literal, Any, Union
 from . import util
 
 import channel_analysis
-import channel_analysis.api.filters
 from channel_analysis.api.structs import (
     meta,
     ChannelAnalysis,  # noqa: F401

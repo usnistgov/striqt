@@ -6,17 +6,7 @@ from flex_spectrum_sensor_scripts import (
     click_sensor_sweep,
     init_sweep_cli,
     edge_sensor,
-    lb,
-    xr,
 )
-
-
-def get_file_format_fields(dataset: 'xr.Dataset'):
-    return {
-        name: coord.values[0]
-        for name, coord in dataset.coords.items()
-        if edge_sensor.CAPTURE_DIM in coord.dims
-    }
 
 
 @click_sensor_sweep(
@@ -24,32 +14,48 @@ def get_file_format_fields(dataset: 'xr.Dataset'):
 )
 def run(**kws):
     # instantiate sweep objects
-    store, controller, sweep_spec, calibration = init_sweep_cli(**kws)
+    store: 'edge_sensor.io.AppendingDataManager'
+    sweep_spec: 'edge_sensor.Sweep'
+
+    store, controller, sweep_spec, calibration = init_sweep_cli(
+        **kws,
+        sweep_cls=edge_sensor.Sweep,
+        store_manager_cls=edge_sensor.io.AppendingDataManager,
+    )
 
     try:
-        prepare = kws.get('remote', None)
+        # may need to revisit this to restore remote operation
+        # prepare = kws.get('remote', None)
+        # results = [
+        #     result
+        #     for result in sweep_iter
+        #     if result is not None
+        # ]
 
-        # acquire and analyze each capture in the sweep
-        results = [
-            result
-            for result in controller.iter_sweep(
-                sweep_spec, calibration, prepare=prepare
-            )
-            if result is not None
-        ]
+        sweep_iter = controller.iter_sweep(
+            sweep_spec,
+            calibration=calibration,
+            prepare=False,
+            always_yield=True,
+        )
 
-        with lb.stopwatch('merging results', logger_level='debug'):
-            dataset = xr.concat(results, edge_sensor.CAPTURE_DIM)
+        sweep_iter.set_callbacks(intake_func=store.append)
 
-        with lb.stopwatch(f'write to {sweep_spec.output.path}'):
-            edge_sensor.dump(store, dataset)
-    except:
+        for _ in sweep_iter:
+            pass
+
+        store.flush()
+
+    except BaseException:
+        import traceback
+
+        traceback.print_exc()
+        # this is handled by hooks in sys.excepthook, which may
         # trigger the IPython debugger (if configured) and then close the radio
         raise
     else:
         if not kws['remote']:
             controller.close_radio(sweep_spec.radio_setup)
-
 
 if __name__ == '__main__':
     run()

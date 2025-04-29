@@ -8,7 +8,7 @@ import rpyc
 
 from . import captures, sweeps, util
 from . import structs
-from .radio import find_radio_cls_by_name, is_same_resource, RadioDevice
+from .sources import find_radio_cls_by_name, is_same_resource, RadioDevice
 
 if typing.TYPE_CHECKING:
     import numpy as np
