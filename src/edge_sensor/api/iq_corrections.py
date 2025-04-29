@@ -2,7 +2,7 @@ from __future__ import annotations
 import msgspec
 import typing
 
-from .sources import base, RadioDevice, design_capture_filter
+from .sources import base, RadioSource, design_capture_filter
 from . import calibration, structs, util
 
 if typing.TYPE_CHECKING:
@@ -20,7 +20,7 @@ else:
 
 
 def _get_voltage_scale(
-    capture: structs.RadioCapture, radio: RadioDevice, *, force_calibration=False, xp=np
+    capture: structs.RadioCapture, radio: RadioSource, *, force_calibration=False, xp=np
 ) -> 'iqwaveform.type_stubs.ArrayLike':
     """compute the scaling factor needed to scale each of N channels of an IQ waveform
 
@@ -56,7 +56,7 @@ def _get_voltage_scale(
 def resampling_correction(
     iq: 'iqwaveform.util.Array',
     capture: structs.RadioCapture,
-    radio: RadioDevice,
+    radio: RadioSource,
     force_calibration: typing.Optional['xr.Dataset'] = None,
     *,
     overwrite_x=False,

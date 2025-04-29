@@ -133,7 +133,7 @@ class LinearCaptureSequencer(CaptureTransformer):
 class SweepIterator:
     def __init__(
         self,
-        radio: 'sources.RadioDevice',
+        radio: 'sources.RadioSource',
         sweep: structs.Sweep,
         *,
         calibration: 'xr.Dataset' = None,
@@ -349,7 +349,7 @@ class SweepIterator:
 
 
 def iter_sweep(
-    radio: 'sources.RadioDevice',
+    radio: 'sources.RadioSource',
     sweep: structs.Sweep,
     *,
     calibration: 'xr.Dataset' = None,
@@ -414,7 +414,7 @@ def iter_callbacks(
 
 
 def iter_raw_iq(
-    radio: 'sources.RadioDevice',
+    radio: 'sources.RadioSource',
     sweep: structs.Sweep,
     quiet=False,
 ) -> typing.Generator['xr.Dataset' | bytes | None]:

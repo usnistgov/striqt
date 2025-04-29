@@ -8,7 +8,7 @@ from .api.controller import connect, start_server, SweepController
 from .api.io import load, dump, open_store, read_yaml_sweep
 from .api.calibration import read_calibration_corrections
 from .api.sources import (
-    RadioDevice,
+    RadioSource,
     NullSource,
     design_capture_filter,
 )
@@ -18,5 +18,3 @@ from .api.xarray_ops import CAPTURE_DIM, concat_time_dim, analyze_capture
 
 # support legacy namespacing until the _api -> api change propagates through dependent libraries
 from . import api
-
-_api = api

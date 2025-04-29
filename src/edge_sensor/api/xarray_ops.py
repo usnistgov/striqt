@@ -10,7 +10,7 @@ import pickle
 import typing
 
 from . import captures, structs, util
-from .sources import RadioDevice
+from .sources import RadioSource
 
 import array_api_compat
 
@@ -215,7 +215,7 @@ def _assign_alias_coords(capture_data: 'xr.Dataset', aliases):
 class ChannelAnalysisWrapper:
     """Inject radio device and capture metadata and coordinates into a channel analysis result"""
 
-    radio: RadioDevice
+    radio: RadioSource
     sweep: structs.Sweep
     analysis_spec: list[structs.ChannelAnalysis]
     extra_attrs: dict[str, typing.Any] | None = None
@@ -274,7 +274,7 @@ class ChannelAnalysisWrapper:
 
 
 def analyze_capture(
-    radio: RadioDevice,
+    radio: RadioSource,
     iq: util.ArrayType,
     capture: structs.Capture,
     sweep: structs.Sweep,

@@ -52,7 +52,7 @@ def validate_stream_result(
         raise IOError(f'{SoapySDR.errToStr(sr.ret)} (error code {sr.ret})')
 
 
-class SoapyRadioDevice(base.RadioDevice):
+class SoapyRadioDevice(base.RadioSource):
     """single-channel sensor waveform acquisition through SoapySDR and pre-processed with iqwaveform"""
 
     resource: dict = attr.value.dict(
@@ -97,7 +97,7 @@ class SoapyRadioDevice(base.RadioDevice):
             )
 
     sample_rate = backend_sample_rate.corrected_from_expression(
-        backend_sample_rate / base.RadioDevice._downsample,
+        backend_sample_rate / base.RadioSource._downsample,
         label='Hz',
         help='sample rate of acquired waveform',
     )
@@ -165,7 +165,7 @@ class SoapyRadioDevice(base.RadioDevice):
             self.backend.setFrequency(SoapySDR.SOAPY_SDR_RX, channel, center_frequency)
 
     center_frequency = lo_frequency.corrected_from_expression(
-        lo_frequency + base.RadioDevice.lo_offset,
+        lo_frequency + base.RadioSource.lo_offset,
         help='RF frequency at the center of the analysis bandwidth',
         label='Hz',
     )

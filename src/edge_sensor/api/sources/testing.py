@@ -24,7 +24,7 @@ else:
     xr = lb.util.lazy_import('xarray')
 
 
-def lo_shift_tone(inds, radio: base.RadioDevice, xp):
+def lo_shift_tone(inds, radio: base.RadioSource, xp):
     _, lo_offset, _ = base.design_capture_filter(
         radio.base_clock_rate, radio.get_capture_struct()
     )

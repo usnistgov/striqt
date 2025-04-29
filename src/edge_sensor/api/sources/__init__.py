@@ -1,7 +1,7 @@
 from . import base, null, testing
 
 from .base import (
-    RadioDevice,
+    RadioSource,
     get_channel_read_buffer_count,
     design_capture_filter,
 )
@@ -22,8 +22,8 @@ from .testing import (
 
 
 def find_radio_cls_by_name(
-    name: str, parent_cls: type[RadioDevice] = RadioDevice
-) -> RadioDevice:
+    name: str, parent_cls: type[RadioSource] = RadioSource
+) -> RadioSource:
     """returns a list of radio subclasses that have been imported"""
 
     try:
@@ -39,7 +39,7 @@ def find_radio_cls_by_name(
     return radio_cls
 
 
-def is_same_resource(radio: RadioDevice, radio_setup: base.structs.RadioSetup) -> bool:
+def is_same_resource(radio: RadioSource, radio_setup: base.structs.RadioSetup) -> bool:
     expect_cls = find_radio_cls_by_name(radio_setup.driver)
     if not isinstance(radio, expect_cls):
         return False

@@ -101,7 +101,7 @@ class _ReceiveBufferCarryover:
 
 
 def _cast_iq(
-    radio: RadioDevice, buffer: 'iqwaveform.util.ArrayType'
+    radio: RadioSource, buffer: 'iqwaveform.util.ArrayType'
 ) -> 'iqwaveform.util.ArrayType':
     """cast the buffer to floating point, if necessary"""
     # array_namespace will categorize cupy pinned memory as numpy
@@ -135,7 +135,7 @@ def _cast_iq(
     return buffer_out
 
 
-class RadioDevice(lb.Device):
+class RadioSource(lb.Device):
     _carryover = _ReceiveBufferCarryover()
 
     analysis_bandwidth = attr.value.float(
@@ -573,7 +573,7 @@ class RadioDevice(lb.Device):
             backend_sample_rate=backend_sample_rate,
         )
 
-    def get_array_namespace(self: RadioDevice):
+    def get_array_namespace(self: RadioSource):
         if self.array_backend == 'cupy':
             import cupy
 
@@ -585,7 +585,7 @@ class RadioDevice(lb.Device):
 
 
 def find_trigger_holdoff(
-    radio: RadioDevice, start_time_ns: int, dsp_pad_before: int = 0
+    radio: RadioSource, start_time_ns: int, dsp_pad_before: int = 0
 ):
     sample_rate = radio.backend_sample_rate()
     min_holdoff = dsp_pad_before
@@ -774,7 +774,7 @@ def _get_input_buffer_count_cached(
     return samples_in
 
 
-def get_channel_resample_buffer_count(radio: RadioDevice, capture):
+def get_channel_resample_buffer_count(radio: RadioSource, capture):
     _, _, analysis_filter = design_capture_filter(radio.base_clock_rate, capture)
 
     if capture.host_resample and needs_resample(analysis_filter, capture):
@@ -793,7 +793,7 @@ def get_channel_resample_buffer_count(radio: RadioDevice, capture):
 
 
 def get_channel_read_buffer_count(
-    radio: RadioDevice, capture=None, include_holdoff=False
+    radio: RadioSource, capture=None, include_holdoff=False
 ) -> int:
     if capture is None:
         capture = radio.get_capture_struct()
@@ -809,7 +809,7 @@ def get_channel_read_buffer_count(
 
 @lb.stopwatch('allocate acquisition buffer', logger_level='debug')
 def alloc_empty_iq(
-    radio: RadioDevice, capture: structs.RadioCapture
+    radio: RadioSource, capture: structs.RadioCapture
 ) -> tuple[np.ndarray, np.ndarray]:
     """allocate a buffer of IQ return values.
 
@@ -864,7 +864,7 @@ def alloc_empty_iq(
     return samples, buffers
 
 
-def _list_radio_classes(subclass=RadioDevice):
+def _list_radio_classes(subclass=RadioSource):
     """returns a list of radio subclasses that have been imported"""
 
     clsmap = {c.__name__: c for c in subclass.__subclasses__()}
@@ -878,8 +878,8 @@ def _list_radio_classes(subclass=RadioDevice):
 
 
 def _find_radio_cls_helper(
-    name: str, parent_cls: type[RadioDevice] = RadioDevice
-) -> RadioDevice:
+    name: str, parent_cls: type[RadioSource] = RadioSource
+) -> RadioSource:
     """returns a list of radio subclasses that have been imported"""
 
     mapping = _list_radio_classes(parent_cls)

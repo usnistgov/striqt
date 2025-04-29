@@ -8,7 +8,7 @@ import rpyc
 
 from . import captures, sweeps, util
 from . import structs
-from .sources import find_radio_cls_by_name, is_same_resource, RadioDevice
+from .sources import find_radio_cls_by_name, is_same_resource, RadioSource
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -30,7 +30,7 @@ class SweepController:
     """
 
     def __init__(self, sweep: structs.Sweep = None):
-        self.radios: dict[str, RadioDevice] = {}
+        self.radios: dict[str, RadioSource] = {}
         self.warmed_captures: set[structs.RadioCapture] = set()
         self.handlers: dict[rpyc.Connection, typing.Any] = {}
         util.set_cuda_mem_limit()

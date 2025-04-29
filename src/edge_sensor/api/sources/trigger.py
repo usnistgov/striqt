@@ -35,7 +35,7 @@ def find_trigger_holdoff(start_time, sample_rate, periodic_trigger: float | None
 
 
 class ThreadedStream:
-    def __init__(self, radio: base.RadioDevice, capture: structs.RadioCapture, xp=np):
+    def __init__(self, radio: base.RadioSource, capture: structs.RadioCapture, xp=np):
         self._thread = None
         self.radio = radio
         self._xp = xp
