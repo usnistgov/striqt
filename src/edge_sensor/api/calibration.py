@@ -426,4 +426,4 @@ class CalibrationDataManager(io.DataStoreManager):
             print(summary.sort_index(axis=1).sort_index(axis=0))
 
         save_calibration_corrections(self.output_path, corrections)
-        print('saved to {str(self.output_path)!r}')
+        print(f'saved to {str(self.output_path)!r}')
