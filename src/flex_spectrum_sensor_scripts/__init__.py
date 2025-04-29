@@ -1,10 +1,9 @@
 import click
-from pathlib import Path
-import typing
-import sys
 import importlib.util
+from pathlib import Path
 from socket import gethostname
-
+import sys
+import typing
 
 def lazy_import(module_name: str):
     """postponed imports of the module with the specified name.
