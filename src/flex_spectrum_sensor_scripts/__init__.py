@@ -1,8 +1,6 @@
 import click
-import collections
 import importlib.util
 from pathlib import Path
-from socket import gethostname
 import sys
 import typing
 
@@ -39,9 +37,6 @@ else:
     edge_sensor = lazy_import('edge_sensor')
     lb = lazy_import('labbench')
     xr = lazy_import('xarray')
-
-
-HOSTNAME = gethostname()
 
 
 def _chain_decorators(decorators: list[callable], func: callable) -> callable:
@@ -399,37 +394,41 @@ def execute_cli(
 
 
 # %% Server scripts
-_CLICK_SERVER = (
-    click.command('Host a server for remote control over the spectrum sensor'),
-    click.argument('host', type=str, default=HOSTNAME),
-    click.option(
-        '--port/',
-        '-p',
-        show_default=True,
-        default=4567,
-        type=int,
-        help='TCP port to serve',
-    ),
-    click.option(
-        '--driver/',
-        '-d',
-        show_default=True,
-        default='NullRadio',
-        type=str,
-        help='name of the default driver to load',
-    ),
-    click.option(
-        '--verbose/',
-        '-v',
-        is_flag=True,
-        show_default=True,
-        default=False,
-        help='print debug',
-    ),
-)
 
 
 def click_server(func):
+    import socket
+    HOSTNAME = socket.gethostname()
+
+    _CLICK_SERVER = (
+        click.command('Host a server for remote control over the spectrum sensor'),
+        click.argument('host', type=str, default=HOSTNAME),
+        click.option(
+            '--port/',
+            '-p',
+            show_default=True,
+            default=4567,
+            type=int,
+            help='TCP port to serve',
+        ),
+        click.option(
+            '--driver/',
+            '-d',
+            show_default=True,
+            default='NullRadio',
+            type=str,
+            help='name of the default driver to load',
+        ),
+        click.option(
+            '--verbose/',
+            '-v',
+            is_flag=True,
+            show_default=True,
+            default=False,
+            help='print debug',
+        ),
+    )
+
     return _chain_decorators(_CLICK_SERVER, func)
 
 
