@@ -73,13 +73,17 @@ def _cached_calibration_captures(
         'analysis_bandwidth': analysis_bandwidths
     }
 
+    print(variables)
+
     # every combination of each variable
     combos = itertools.product(*variables.values())
 
     captures = []
     for values in combos:
         mapping = dict(zip(variables, values))
-        if mapping['analysis_bandwidth'] < mapping['sample_rate']:
+        if mapping['analysis_bandwidth'] == float('inf'):
+            pass
+        elif mapping['analysis_bandwidth'] > mapping['sample_rate']:
             # skip cases outside of 1st Nyquist zone
             continue
         capture = msgspec.structs.replace(defaults, **mapping)
