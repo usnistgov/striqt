@@ -4,7 +4,6 @@ import functools
 from math import ceil
 import typing
 
-import iqwaveform.type_stubs
 import numpy as np
 from xarray_dataclasses import AsDataArray, Coordof, Data, Name, Attr
 
@@ -22,6 +21,7 @@ from ..api import structs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
+    import iqwaveform.type_stubs
 else:
     iqwaveform = util.lazy_import('iqwaveform')
 
@@ -320,7 +320,7 @@ def build_tdd_link_symbol_masks(
     normal_cp=True,
     flex_as=None,
     xp=np,
-) -> iqwaveform.type_stubs.ArrayLike:
+) -> 'iqwaveform.type_stubs.ArrayLike':
     """generate a symbol-by-symbol sequence of masking arrays for uplink and downlink.
 
     The number of slots given in the frame match the appropriate number for a given
