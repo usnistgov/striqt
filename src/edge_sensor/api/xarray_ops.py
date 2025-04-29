@@ -9,7 +9,7 @@ import numbers
 import pickle
 import typing
 
-from . import iq_corrections, captures, structs, util
+from . import captures, structs, util
 from .radio import RadioDevice
 
 import array_api_compat
@@ -230,6 +230,9 @@ class ChannelAnalysisWrapper:
         overwrite_x=True,
     ) -> 'xr.Dataset':
         """Inject radio device and capture info into a channel analysis result."""
+
+        # wait to import until here to avoid a circular import
+        from . import iq_corrections
 
         with lb.stopwatch('analysis', logger_level='debug'):
             if array_api_compat.is_cupy_array(iq):

@@ -73,6 +73,13 @@ def _apply_exception_hooks(controller, sweep, debug: bool, remote: bool | None):
     sys.excepthook = hook
 
 
+def _do_expensive_imports():
+    import iqwaveform
+    import xarray
+    import pandas
+    import numpy
+
+
 # %% Sweep script
 def click_sensor_sweep(description: typing.Optional[str] = None):
     """decorates a function to serve as the main function in a sweep CLI with click"""
@@ -264,12 +271,6 @@ def click_capture_plotter(description: typing.Optional[str] = None):
     return decorate
 
 
-Store = typing.TypeVar('Store', bound='zarr.storage.Store')
-Controller = typing.TypeVar('Controller', bound='edge_sensor.SweepController')
-Sweep = typing.TypeVar('Sweep', bound='edge_sensor.Sweep')
-Dataset = typing.TypeVar('Dataset', bound='xr.Dataset')
-
-
 def _connect_controller(remote, sweep):
     if remote is None:
         return edge_sensor.SweepController(sweep)
@@ -277,39 +278,34 @@ def _connect_controller(remote, sweep):
         return edge_sensor.connect(remote).root
 
 
-def _preload_calibrations(yaml_path, sweep_cls, radio_id, adjust_captures):
-    # re-read the sweep with the radio id, which allows us to resolve
-    # calibration path names that are formatted based on the radio ID
-    sweep = edge_sensor.read_yaml_sweep(
-        yaml_path,
-        sweep_cls=sweep_cls,
-        adjust_captures=adjust_captures,
-        radio_id=radio_id,
-    )
-
-    data = edge_sensor.read_calibration_corrections(sweep.radio_setup.calibration)
-
-    return data
+DataStoreManager = typing.TypeVar(
+    'DataStoreManager', bound='edge_sensor.io.DataStoreManager'
+)
+Controller = typing.TypeVar('Controller', bound='edge_sensor.SweepController')
+Sweep = typing.TypeVar('Sweep', bound='edge_sensor.Sweep')
+Dataset = typing.TypeVar('Dataset', bound='xr.Dataset')
 
 
-def init_sensor_sweep(
+def init_sweep_cli(
     *,
     yaml_path: Path,
-    output_path: str | None,
+    output_path: str | None = None,
     store_backend: str | None,
     remote: str | None,
-    force: bool,
-    verbose: bool,
-    debug: bool,
-    sweep_cls: type = None,
-    adjust_captures: dict = {},
-    open_store: bool = True,
-) -> tuple[Store, Controller, Sweep, Dataset]:
+    force: bool = False,
+    verbose: bool = False,
+    debug: bool = False,
+    sweep_cls: type[Sweep] | None = None,
+    store_manager_cls: type[DataStoreManager] | None = None,
+) -> tuple[DataStoreManager, Controller, Sweep, Dataset]:
     if sweep_cls is None:
         sweep_cls = edge_sensor.Sweep
 
+    if store_manager_cls is None:
+        store_manager_cls = edge_sensor.io.AppendingDataManager
+
     sweep = edge_sensor.read_yaml_sweep(
-        yaml_path, sweep_cls=sweep_cls, adjust_captures=adjust_captures
+        yaml_path, sweep_cls=sweep_cls
     )
 
     if store_backend is None and sweep.output.store is None:
@@ -330,46 +326,33 @@ def init_sensor_sweep(
     else:
         lb.show_messages('info')
 
+    # start by connecting to the controller, so that the radio id can be used
+    # as a file naming field
     controller = _connect_controller(remote, sweep)
     _apply_exception_hooks(controller, sweep, debug=debug, remote=remote)
-
-    # reload the yaml now that radio_id can be known to fully format any filenames
     radio_id = controller.radio_id(sweep.radio_setup.driver)
     sweep = edge_sensor.read_yaml_sweep(
         yaml_path,
         sweep_cls=sweep_cls,
-        adjust_captures=adjust_captures,
         radio_id=radio_id,
+    )
+
+    # now, open the store
+    store = store_manager_cls(
+        sweep, output_path=output_path, store_backend=store_backend, force=force
     )
 
     calls = {}
-
     calls['calibration'] = lb.Call(
-        _preload_calibrations,
-        yaml_path,
-        sweep_cls=sweep_cls,
-        radio_id=radio_id,
-        adjust_captures=adjust_captures,
+        edge_sensor.read_calibration_corrections,
+        sweep.radio_setup.calibration,
     )
-
-    if open_store:
-        calls['store'] = lb.Call(
-            edge_sensor.open_store,
-            sweep,
-            radio_id=radio_id,
-            yaml_path=yaml_path,
-            output_path=output_path,
-            store_backend=store_backend,
-            force=force,
-        )
+    calls['store'] = lb.Call(store.open)
 
     with lb.stopwatch('load store and prepare calibrations', logger_level='debug'):
         opened = lb.concurrently(**calls)
 
-    opened.setdefault('store', None)
-    opened.setdefault('calibration', None)
-
-    return opened['store'], controller, sweep, opened['calibration']
+    return store, controller, sweep, opened.get('calibration', None)
 
 
 # %% Server scripts

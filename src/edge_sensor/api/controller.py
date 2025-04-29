@@ -157,7 +157,7 @@ class SweepController:
         loop: bool = False,
         prepare: bool = True,
         reuse_compatible_iq: bool = False,
-    ) -> typing.Generator['xr.Dataset']:
+    ) -> sweeps.SweepIterator:
         # take args {3,4...N}
         kwargs = dict(locals())
         del kwargs['self'], kwargs['prepare']

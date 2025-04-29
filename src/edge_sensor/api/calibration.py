@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import functools
+import itertools
 from pathlib import Path
 import pickle
 import typing
-import warnings
 
-from . import io, structs, util, xarray_ops
+import msgspec
+
+from . import io, structs, sweeps, util, xarray_ops
 from .captures import split_capture_channels
+from .structs import Annotated, meta
 
 if typing.TYPE_CHECKING:
     import gzip
@@ -22,6 +25,91 @@ else:
     scipy = util.lazy_import('scipy')
     iqwaveform = util.lazy_import('iqwaveform')
 
+NoiseDiodeEnabledType = Annotated[bool, meta(standard_name='Noise diode enabled')]
+
+
+class CalibrationCapture(structs.RadioCapture, forbid_unknown_fields=True, frozen=True):
+    """Specialize fields to add to the RadioCapture type"""
+
+    # RadioCapture with added fields
+    noise_diode_enabled: NoiseDiodeEnabledType = False
+
+
+class CalibrationSetup(msgspec.Struct, forbid_unknown_fields=True):
+    enr: Annotated[float, meta(standard_name='Excess noise ratio', unit='dB')] = 20.87
+    ambient_temperature: Annotated[
+        float, meta(standard_name='Ambient temperature', unit='K')
+    ] = 294.5389
+
+
+class CalibrationVariables(
+    msgspec.Struct, forbid_unknown_fields=True, kw_only=True, frozen=True
+):
+    noise_diode_enabled: tuple[NoiseDiodeEnabledType, ...] = (False, True)
+    sample_rate: tuple[structs.BackendSampleRateType, ...]
+    center_frequency: tuple[structs.CenterFrequencyType, ...] = (3700e6,)
+    channel: tuple[structs.ChannelType, ...] = (0,)
+    gain: tuple[structs.GainType, ...] = (0,)
+
+    # filtering and resampling
+    analysis_bandwidth: tuple[structs.AnalysisBandwidthType, ...] = (float('inf'),)
+    lo_shift: tuple[structs.LOShiftType, ...] = ('none',)
+
+
+@functools.lru_cache
+def _cached_calibration_captures(
+    variables: CalibrationVariables, defaults: CalibrationCapture
+):
+    variables = msgspec.to_builtins(variables)
+
+    # enforce ordering to place difficult-to-change variables in
+    # the outermost loops, in case the ordering is changed by
+    # subclasses
+    analysis_bandwidths = variables.pop('analysis_bandwidth')
+    variables = {
+        'channel': variables['channel'],
+        'noise_diode_enabled': variables['noise_diode_enabled'],
+        **variables,
+        'analysis_bandwidth': analysis_bandwidths
+    }
+
+    # every combination of each variable
+    combos = itertools.product(*variables.values())
+
+    captures = []
+    for values in combos:
+        mapping = dict(zip(variables, values))
+        if mapping['analysis_bandwidth'] < mapping['sample_rate']:
+            # skip cases outside of 1st Nyquist zone
+            continue
+        capture = msgspec.structs.replace(defaults, **mapping)
+        captures.append(capture)
+
+    return tuple(captures)
+
+
+class CalibrationSweep(
+    structs.Sweep, forbid_unknown_fields=True, kw_only=True, frozen=True
+):
+    """This specialized sweep is fed to the YAML file loader
+    to specify the change in expected capture structure."""
+
+    @property
+    def captures(self) -> tuple[CalibrationCapture]:
+        """returns a tuple of captures generated from combinations of self.variables"""
+        variables = structs.validated(self.calibration_variables)
+        defaults = structs.validated(self.defaults)
+        return _cached_calibration_captures(variables, defaults)
+
+    calibration_variables: CalibrationVariables
+    defaults: CalibrationCapture = msgspec.field(default_factory=CalibrationCapture)
+    calibration_setup: CalibrationSetup = msgspec.field(
+        default_factory=CalibrationSetup
+    )
+
+    def __post_init__(self):
+        if self.radio_setup.calibration is not None:
+            raise ValueError('radio_setup.calibration must be None for a calibration sweep')
 
 @functools.lru_cache
 def read_calibration_corrections(path):
@@ -251,7 +339,19 @@ def lookup_power_correction(
     return xp.asarray(power_scale, dtype='float32')
 
 
-class CalibrationDataManager(io.SweepDataManager):
+class CalibrationCaptureTransformer(sweeps.CaptureTransformer):
+    def __init__(self, sweep: structs.Sweep, channel: int):
+        self.channel = channel
+        super().__init__(sweep)
+
+    def __iter__(self) -> typing.Generator[structs.RadioCapture]:
+        for capture in self.sweep.captures:
+            yield msgspec.replace(capture, channel=self.channel)
+
+
+class CalibrationDataManager(io.DataStoreManager):
+    sweep_spec: CalibrationSweep
+
     _DROP_FIELDS = (
         'sweep_start_time',
         'start_time',
@@ -294,8 +394,8 @@ class CalibrationDataManager(io.SweepDataManager):
         # compute and merge corrections
         corrections = compute_y_factor_corrections(
             by_field,
-            enr_dB=self.sweep_spec.radio_setup.enr,
-            Tamb=self.sweep_spec.radio_setup.ambient_temperature,
+            enr_dB=self.sweep_spec.calibration_setup.enr,
+            Tamb=self.sweep_spec.calibration_setup.ambient_temperature,
         )
 
         if not self.force and Path(self.output_path).exists():

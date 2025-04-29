@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from flex_spectrum_sensor_scripts import (
     click_sensor_sweep,
-    init_sensor_sweep,
+    init_sweep_cli,
     edge_sensor,
     lb,
     xr,
@@ -24,7 +24,7 @@ def get_file_format_fields(dataset: 'xr.Dataset'):
 )
 def run(**kws):
     # instantiate sweep objects
-    store, controller, sweep_spec, calibration = init_sensor_sweep(**kws)
+    store, controller, sweep_spec, calibration = init_sweep_cli(**kws)
 
     try:
         prepare = kws.get('remote', None)

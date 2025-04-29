@@ -2,7 +2,7 @@
 
 # start with this to work around a dynamic library loading
 # packaging quirk on jetson aarch64
-from .api import iq_corrections, structs, util
+from .api import calibration, io, iq_corrections, structs, util
 
 from .api.controller import connect, start_server, SweepController
 from .api.io import load, dump, open_store, read_yaml_sweep

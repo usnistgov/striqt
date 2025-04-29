@@ -37,7 +37,7 @@ def _dec_hook(type_, obj):
 
 
 def _get_default_format_fields(
-    sweep: structs.Sweep, *, radio_id: str | None = None, yaml_path
+    sweep: structs.Sweep, *, radio_id: str | None = None, yaml_path: Path | str | None
 ) -> dict[str, str]:
     """return a mapping for string `'{field_name}'.format()` style mapping values"""
     fields = captures.capture_fields_with_aliases(
@@ -45,7 +45,9 @@ def _get_default_format_fields(
     )
 
     fields['start_time'] = datetime.now().strftime('%Y%m%d-%Hh%Mm%S')
-    fields['yaml_name'] = Path(yaml_path).stem
+    fields['driver'] = sweep.radio_setup.driver
+    if yaml_path is not None:
+        fields['yaml_name'] = Path(yaml_path).stem
     fields['radio_id'] = radio_id
 
     return fields
@@ -107,7 +109,6 @@ def open_store(
 def read_yaml_sweep(
     path: str | Path,
     *,
-    adjust_captures={},
     sweep_cls: type[SweepType] = structs.Sweep,
     radio_id=None,
 ) -> tuple[SweepType, tuple[str, ...]]:
@@ -115,8 +116,8 @@ def read_yaml_sweep(
 
     Args:
         path: path to the yaml file
-        adjust_captures: update (and override) all fields with the given values
-
+        sweep_cls: instantiate and return this subclass of structs.Sweep
+        radio_id: unique hardware identifier of the radio for filename substitutions
     """
 
     with open(path, 'rb') as fd:
@@ -140,9 +141,7 @@ def read_yaml_sweep(
         cal_path = str(cal_path)
         tree['radio_setup']['calibration'] = cal_path
 
-    tree['captures'] = [
-        dict(defaults, **c, **adjust_captures) for c in tree['captures']
-    ]
+    tree['captures'] = [defaults | c for c in tree.get('captures', ())]
 
     sweep: structs.Sweep = channel_analysis.builtins_to_struct(
         tree, type=sweep_cls, strict=False, dec_hook=_dec_hook
@@ -182,46 +181,34 @@ def read_tdms_iq(
     return iq
 
 
-class SweepDataManager:
+class DataStoreManager:
     def __init__(
         self,
         sweep_spec: structs.Sweep | str | Path,
         *,
-        radio_id: str,
         output_path: str | None = None,
-        store_kind: str | None = None,
+        store_backend: str | None = None,
         force: bool = False,
     ):
-        if isinstance(sweep_spec, structs.Sweep):
-            self.sweep_spec = sweep_spec
-            yaml_path = None
-        elif isinstance(sweep_spec, (str, Path)):
-            self.sweep_spec = read_yaml_sweep(sweep_spec)
-            yaml_path = sweep_spec
+        self.sweep_spec = sweep_spec
 
         if output_path is None:
-            output_path = self.sweep_spec.output.path
-
-        self.output_path = expand_path(
-            self.output_path,
-            self.sweep_spec,
-            radio_id=self.radio_id,
-            relative_to_file=yaml_path,
-        )
-
-        if store_kind is None:
-            self.store_kind = self.sweep_spec.output.store.lower()
+            self.output_path = self.sweep_spec.output.path
         else:
-            self.store_kind = store_kind.lower()
+            self.output_path = output_path
+
+        if store_backend is None:
+            self.store_backend = self.sweep_spec.output.store.lower()
+        else:
+            self.store_backend = store_backend.lower()
 
         self.store = None
-        self.radio_id = radio_id
         self.force = force
 
         self.clear()
 
     def clear(self):
-        self.pending_data: list[xr.Dataset] = []
+        self.pending_data: list['xr.Dataset'] = []
 
     def __enter__(self):
         self.open()
@@ -236,29 +223,29 @@ class SweepDataManager:
     def close(self):
         self.flush()
 
-    def append(self, capture_data: xr.Dataset):
+    def append(self, capture_data: 'xr.Dataset'):
         raise NotImplementedError
 
     def flush(self):
         raise NotImplementedError
 
 
-class SweepStoreManager(SweepDataManager):
+class AppendingDataManager(DataStoreManager):
     """concatenates the data from each capture and dumps to a zarr data store"""
 
-    def append(self, capture_data: xr.Dataset | None):
+    def append(self, capture_data: 'xr.Dataset' | None):
         if capture_data is None:
             return
         else:
             self.pending_data.append(capture_data)
 
     def open(self):
-        if self.store_kind == 'directory':
+        if self.store_backend == 'directory':
             fixed_path = Path(self.output_path).with_suffix('.zarr')
-        elif self.store_kind == 'zip':
+        elif self.store_backend == 'zip':
             fixed_path = Path(self.output_path).with_suffix('.zarr.zip')
         else:
-            raise ValueError(f'unsupported store type {self.store_kind!r}')
+            raise ValueError(f'unsupported store type {self.store_backend!r}')
 
         fixed_path.parent.mkdir(parents=True, exist_ok=True)
 

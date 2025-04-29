@@ -35,7 +35,7 @@ GainType = Annotated[
     Union[SingleGainType, tuple[SingleGainType, ...]],
     meta('Gain setting for each channel', 'dB'),
 ]
-LOShiftType = Literal['left', 'right', 'none']
+LOShiftType = Annotated[Literal['left', 'right', 'none'], meta('LO shift direction')]
 DelayType = Annotated[float, meta('Delay in acquisition start time', 's', gt=0)]
 StartTimeType = Annotated['pd.Timestamp', meta('Acquisition start time')]
 BackendSampleRateType = Annotated[
@@ -52,7 +52,12 @@ def _dict_hash(d):
 
 
 def _make_default_analysis():
-    return channel_analysis.as_registered_channel_analysis.spec_type()()
+    return channel_analysis.api.registry.register_xarray_measurement.spec_type()()
+
+
+AnalysisBandwidthType = Annotated[
+    float, meta('Bandwidth of the analysis filter (or inf to disable)', 'Hz', gt=0)
+]
 
 
 class WaveformCapture(channel_analysis.Capture, forbid_unknown_fields=True):
@@ -67,10 +72,8 @@ class WaveformCapture(channel_analysis.Capture, forbid_unknown_fields=True):
     sample_rate: Annotated[float, meta('Sample rate', 'S/s', gt=0)] = 15.36e6
 
     # filtering and resampling
-    analysis_bandwidth: Annotated[
-        float, meta('Bandwidth of the analysis filter (or inf to disable)', 'Hz', gt=0)
-    ] = float('inf')
-    lo_shift: Annotated[LOShiftType, meta('LO shift direction')] = 'none'
+    analysis_bandwidth: AnalysisBandwidthType = float('inf')
+    lo_shift: LOShiftType = 'none'
     host_resample: bool = True
     backend_sample_rate: Optional[BackendSampleRateType] = None
 
@@ -191,9 +194,13 @@ class Output(msgspec.Struct, forbid_unknown_fields=True, frozen=True, cache_hash
 
 
 class Sweep(msgspec.Struct, forbid_unknown_fields=True):
-    captures: tuple[RadioCapture, ...]
+    captures: tuple[RadioCapture, ...] = tuple()
     radio_setup: RadioSetup = msgspec.field(default_factory=RadioSetup)
     defaults: RadioCapture = msgspec.field(default_factory=RadioCapture)
     channel_analysis: dict = msgspec.field(default_factory=_make_default_analysis)
     description: Description = msgspec.field(default_factory=Description)
     output: Output = msgspec.field(default_factory=Output)
+
+
+def validated(struct):
+    return msgspec.convert(msgspec.to_builtins(struct), type(struct))

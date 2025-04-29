@@ -4,7 +4,7 @@ import itertools
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import msgspec
 
-from . import captures, util, xarray_ops
+from . import captures, structs, util, xarray_ops
 
 from .radio import (
     RadioDevice,
@@ -12,7 +12,6 @@ from .radio import (
     find_radio_cls_by_name,
     design_capture_filter,
 )
-from . import structs
 
 
 if typing.TYPE_CHECKING:
@@ -123,6 +122,19 @@ def _iq_is_reusable(
     )
 
     return c1_compare == c2_compare
+
+
+class CaptureTransformer:
+    def __init__(self, sweep: structs.Sweep):
+        self.sweep = sweep
+
+    def __iter__(self) -> typing.Generator[structs.RadioCapture]:
+        raise NotImplementedError
+
+
+class LinearCaptureSequencer(CaptureTransformer):
+    def __iter__(self) -> typing.Generator[structs.RadioCapture]:
+        yield from self.sweep.captures
 
 
 class SweepIterator:
