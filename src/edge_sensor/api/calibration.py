@@ -151,7 +151,7 @@ def _limit_nyquist_bandwidth(data: xr.DataArray) -> xr.DataArray:
 
     # return bandwidth with same shape as dataset.channel_power_time_series
     bw = data.analysis_bandwidth.broadcast_like(data).copy().squeeze()
-    sample_rate = data.sample_rate.broadcast_like(data).squeeze()
+    sample_rate = data.backend_sample_rate.broadcast_like(data).squeeze()
     where = bw.values == float('inf')
     bw.values[where] = sample_rate.values[where]
     return bw
