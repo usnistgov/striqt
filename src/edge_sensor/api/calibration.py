@@ -370,21 +370,27 @@ class CalibrationDataManager(io.DataStoreManager):
         else:
             self.prev_corrections = None
 
+        self.sweep_start_time = None
+
     def append(self, capture_data: xr.Dataset):
         if capture_data is None:
             return
-        else:
-            self.pending_data.append(capture_data)
-        return
+
+        if self.sweep_start_time is None:
+            self.sweep_start_time = float(capture_data.sweep_start_time[0])
+        
+        self.pending_data.append(capture_data)
 
     def flush(self):
+        if len(self.pending_data) == 0:
+            return
+
         # re-index by radio setting rather than capture
-        sweep_start_time = self.data_captures[0].sweep_start_time[0]
         channel = int(self.data_captures[0].channel)
 
         capture_data = (
             xr.concat(self.pending_data, xarray_ops.CAPTURE_DIM)
-            .assign_attrs({'sweep_start_time': float(sweep_start_time)})
+            .assign_attrs({'sweep_start_time': self.sweep_start_time})
             .drop_vars(self._DROP_FIELDS)
         )
 
