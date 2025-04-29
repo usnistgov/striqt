@@ -23,6 +23,8 @@ def lazy_import(module_name: str):
     except KeyError:
         pass
 
+    import importlib.util
+
     spec = importlib.util.find_spec(module_name)
     if spec is None:
         raise ImportError(f'no module found named "{module_name}"')

@@ -343,7 +343,7 @@ def init_sweep_cli(
 
         calls = {}
         calls['calibration'] = lb.Call(
-            edge_sensor.read_calibration_corrections,
+            edge_sensor.calibration.read_calibration_corrections,
             sweep_spec.radio_setup.calibration,
         )
         calls['store'] = lb.Call(store.open)
