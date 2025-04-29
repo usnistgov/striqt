@@ -16,14 +16,14 @@ if typing.TYPE_CHECKING:
     import gzip
     import numpy as np
     import pandas as pd
-    import xarray as xr
     import scipy
+    import xarray as xr
 else:
     gzip = util.lazy_import('gzip')
     np = util.lazy_import('numpy')
-    xr = util.lazy_import('xarray')
+    pd = util.lazy_import('pandas')    
     scipy = util.lazy_import('scipy')
-    iqwaveform = util.lazy_import('iqwaveform')
+    xr = util.lazy_import('xarray')
 
 NoiseDiodeEnabledType = Annotated[bool, meta(standard_name='Noise diode enabled')]
 
