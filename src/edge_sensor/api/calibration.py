@@ -73,8 +73,6 @@ def _cached_calibration_captures(
         'analysis_bandwidth': analysis_bandwidths
     }
 
-    print(variables)
-
     # every combination of each variable
     combos = itertools.product(*variables.values())
 

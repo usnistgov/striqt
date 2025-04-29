@@ -155,7 +155,7 @@ class SweepController:
         quiet: bool = False,
         pickled: bool = False,
         loop: bool = False,
-        prepare: bool = True,
+        prepare: bool = False,
         reuse_compatible_iq: bool = False,
     ) -> sweeps.SweepIterator:
         # take args {3,4...N}
@@ -163,7 +163,7 @@ class SweepController:
         del kwargs['self'], kwargs['prepare']
 
         if prepare:
-            self.prepare_sweep(sweep, calibration, pickled=True)
+            self.prepare_sweep(sweep, calibration, pickled=False)
 
         radio = self.open_radio(sweep.radio_setup)
         radio.setup(sweep.radio_setup)
