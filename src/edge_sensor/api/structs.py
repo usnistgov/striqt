@@ -120,18 +120,19 @@ class FileSourceCapture(RadioCapture, forbid_unknown_fields=True):
 
 TimeSourceType = Annotated[
     Literal['host', 'internal', 'external', 'gps'],
-    meta('Hardware source for timestamps')
+    meta('Hardware source for timestamps'),
 ]
 
 ClockSourceType = Annotated[
     Literal['internal', 'external', 'gps'],
-    meta('Hardware source for the frequency reference')
+    meta('Hardware source for the frequency reference'),
 ]
 
 ContinuousTriggerType = Annotated[
     bool,
     meta('Whether to trigger immediately after each call to acquire() when armed'),
 ]
+
 GaplessRepeatType = Annotated[
     bool,
     meta('whether to raise an exception on overflows between identical captures'),
@@ -140,18 +141,21 @@ GaplessRepeatType = Annotated[
 TimeSyncEveryCaptureType = Annotated[
     bool, meta('whether to sync to PPS before each capture in a sweep')
 ]
+
 WarmupSweepType = Annotated[
     bool,
     meta(
         'whether to run the GPU compute on empty buffers before sweeping for more even run time'
     ),
 ]
+
 ArrayBackendType = Annotated[
     Union[Literal['numpy'], Literal['cupy']],
     meta(
         'array module to use, which sets the type of compute device (numpy = cpu, cupy = gpu)'
     ),
 ]
+
 FastLOType = Annotated[
     bool,
     meta(
