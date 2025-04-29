@@ -412,8 +412,10 @@ class CalibrationDataManager(io.DataStoreManager):
                 self.prev_corrections = self.prev_corrections.drop_sel(channel=channel)
             corrections = xr.concat([corrections, self.prev_corrections], dim='channel')
 
-        print(f'Channel {channel} calibration results:')
+        print(f'calibration results on channel {channel} (shown for max gain)')
         summary = summarize_calibration(corrections, channel=channel)
-        print(summary.sort_index(axis=1).sort_index(axis=0))
+        with pd.option_context('display.max_rows', None):
+            print(summary.sort_index(axis=1).sort_index(axis=0))
 
         save_calibration_corrections(self.output_path, corrections)
+        print('saved to {str(self.output_path)!r}')
