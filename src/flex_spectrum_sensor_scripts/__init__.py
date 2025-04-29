@@ -1,4 +1,5 @@
 import click
+import collections
 import importlib.util
 from pathlib import Path
 from socket import gethostname
@@ -272,6 +273,16 @@ Controller = typing.TypeVar('Controller', bound='edge_sensor.SweepController')
 Sweep = typing.TypeVar('Sweep', bound='edge_sensor.Sweep')
 Dataset = typing.TypeVar('Dataset', bound='xr.Dataset')
 
+TData = typing.TypeVar('TData')
+TSweep = typing.TypeVar('TSweep')
+
+
+class CLIObjects[TData,TSweep](typing.NamedTuple):
+    store: TData
+    controller: Controller
+    sweep_spec: TSweep
+    calibration: Dataset
+
 
 def init_sweep_cli(
     *,
@@ -284,20 +295,20 @@ def init_sweep_cli(
     debug: bool = False,
     sweep_cls: typing.Optional[type[Sweep]] = None,
     store_manager_cls: typing.Optional[type[DataStoreManager]] = None,
-) -> tuple[DataStoreManager, Controller, Sweep, Dataset]:
+) -> CLIObjects[DataStoreManager, Sweep]:
     if sweep_cls is None:
         sweep_cls = edge_sensor.Sweep
 
     # first read, without knowing radio_id
-    sweep = edge_sensor.read_yaml_sweep(yaml_path, sweep_cls=sweep_cls)
+    sweep_spec = edge_sensor.read_yaml_sweep(yaml_path, sweep_cls=sweep_cls)
 
-    if store_backend is None and sweep.output.store is None:
+    if store_backend is None and sweep_spec.output.store is None:
         click.echo(
             'specify output.store in the yaml file or use -s <NAME> on the command line'
         )
         sys.exit(1)
 
-    if output_path is None and sweep.output.path is None:
+    if output_path is None and sweep_spec.output.path is None:
         click.echo(
             'specify output.path in the yaml file or use -o PATH on the command line'
         )
@@ -311,15 +322,15 @@ def init_sweep_cli(
 
     # start by connecting to the controller, so that the radio id can be used
     # as a file naming field
-    controller = _connect_controller(remote, sweep)
-    _apply_exception_hooks(controller, sweep, debug=debug, remote=remote)
+    controller = _connect_controller(remote, sweep_spec)
+    _apply_exception_hooks(controller, sweep_spec, debug=debug, remote=remote)
 
     if store_manager_cls is None:
         store_manager_cls = edge_sensor.io.AppendingDataManager
 
     try:
-        radio_id = controller.radio_id(sweep.radio_setup.driver)
-        sweep = edge_sensor.read_yaml_sweep(
+        radio_id = controller.radio_id(sweep_spec.radio_setup.driver)
+        sweep_spec = edge_sensor.read_yaml_sweep(
             yaml_path,
             sweep_cls=sweep_cls,
             radio_id=radio_id,
@@ -327,13 +338,13 @@ def init_sweep_cli(
 
         # now, open the store
         store = store_manager_cls(
-            sweep, output_path=output_path, store_backend=store_backend, force=force
+            sweep_spec, output_path=output_path, store_backend=store_backend, force=force
         )
 
         calls = {}
         calls['calibration'] = lb.Call(
             edge_sensor.read_calibration_corrections,
-            sweep.radio_setup.calibration,
+            sweep_spec.radio_setup.calibration,
         )
         calls['store'] = lb.Call(store.open)
 
@@ -346,37 +357,36 @@ def init_sweep_cli(
         traceback.print_exc()
         raise
 
-    return store, controller, sweep, opened.get('calibration', None)
+    return CLIObjects(store=store, controller=controller, sweep_spec=sweep_spec, calibration=opened.get('calibration', None))
 
 
-def run_sweep(
-    sweep_spec: 'edge_sensor.Sweep',
-    controller: 'edge_sensor.SweepController',
-    calibration: 'xr.Dataset',
-    store: 'edge_sensor.DataStoreManager',
+def execute_cli(
+    cli: CLIObjects,
+    *,
     arm_func: typing.Optional[callable] = None,
     acquire_func: typing.Optional[callable] = None,
     reuse_compatible_iq: bool=False,
+    remote = None
 ):
     try:
         # iterate through the sweep specification, yielding a dataset for each capture
-        sweep_iter = controller.iter_sweep(
-            sweep_spec,
-            calibration=calibration,
+        sweep_iter = cli.controller.iter_sweep(
+            cli.sweep_spec,
+            calibration=cli.calibration,
             prepare=False,
             always_yield=True,
             reuse_compatible_iq=reuse_compatible_iq,  # calibration-specific optimization
         )
 
         sweep_iter.set_callbacks(
-            arm_func=arm_func, acquire_func=acquire_func, intake_func=store.append
+            arm_func=arm_func, acquire_func=acquire_func, intake_func=cli.store.append
         )
 
         # step through captures
         for _ in sweep_iter:
             pass
 
-        store.flush()
+        cli.store.flush()
 
     except BaseException:
         import traceback
@@ -385,6 +395,10 @@ def run_sweep(
         # this is handled by hooks in sys.excepthook, which may
         # trigger the IPython debugger (if configured) and then close the radio
         raise
+
+    else:
+        if remote is not None:
+            cli.controller.close_radio(cli.sweep_spec.radio_setup)
 
 
 # %% Server scripts
@@ -422,7 +436,7 @@ def click_server(func):
     return _chain_decorators(_CLICK_SERVER, func)
 
 
-def run_server(host: str, port: int, driver: str, verbose: bool):
+def server_cli(host: str, port: int, driver: str, verbose: bool):
     # defer imports to here to make the command line --help snappier
     from edge_sensor.api.controller import start_server
     import labbench as lb
