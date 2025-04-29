@@ -386,7 +386,7 @@ class CalibrationDataManager(io.DataStoreManager):
             return
 
         # re-index by radio setting rather than capture
-        channel = int(self.data_captures[0].channel)
+        channel = int(self.pending_data[0].channel)
 
         capture_data = (
             xr.concat(self.pending_data, xarray_ops.CAPTURE_DIM)
