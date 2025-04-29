@@ -213,6 +213,10 @@ class RadioDevice(lb.Device):
         only=['host', 'internal', 'external', 'gps'],
         help='time base for sample timestamps',
     )
+    clock_source = attr.method.str(
+        only=['internal', 'external', 'gps'],
+        help='frequency reference source',
+    )
     rx_channel_count = attr.value.int(
         1, sets=False, min=1, cache=True, help='number of input ports'
     )
@@ -279,6 +283,7 @@ class RadioDevice(lb.Device):
         self.array_backend = radio_setup.array_backend
         self.time_sync_every_capture = radio_setup.time_sync_every_capture
         self.time_source(radio_setup.time_source)
+        self.clock_source(radio_setup.clock_source)
         self.fast_lo = radio_setup.fast_lo
 
         if not self.time_sync_every_capture:

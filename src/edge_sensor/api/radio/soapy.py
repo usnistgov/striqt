@@ -191,6 +191,15 @@ class SoapyRadioDevice(base.RadioDevice):
             self.backend.setTimeSource(time_source)
             self.on_overflow = 'except'
 
+    @attr.method.str(inherit=True, sets=True, gets=True)
+    def clock_source(self):
+        backend_result = self.backend.getClockSource()
+        return backend_result.lower()
+
+    @clock_source.setter
+    def _(self, clock_source: str):
+        self.backend.setTimeSource(clock_source)
+
     @attr.method.bool(cache=True, inherit=True)
     def rx_enabled(self):
         # with cache=True, this behaves as the default before the first set

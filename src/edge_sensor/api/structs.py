@@ -118,7 +118,16 @@ class FileSourceCapture(RadioCapture, forbid_unknown_fields=True):
     backend_sample_rate: Optional[float] = float('nan')
 
 
-TimeSourceType = Literal['host', 'internal', 'external', 'gps']
+TimeSourceType = Annotated[
+    Literal['host', 'internal', 'external', 'gps'],
+    meta('Hardware source for timestamps')
+]
+
+ClockSourceType = Annotated[
+    Literal['internal', 'external', 'gps'],
+    meta('Hardware source for the frequency reference')
+]
+
 ContinuousTriggerType = Annotated[
     bool,
     meta('Whether to trigger immediately after each call to acquire() when armed'),
@@ -157,6 +166,7 @@ class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):
     driver: Optional[str] = None
     resource: dict = {}
     time_source: TimeSourceType = 'host'
+    clock_source: ClockSourceType = 'internal'
     continuous_trigger: ContinuousTriggerType = True
     periodic_trigger: Optional[float] = None
     calibration: Optional[str] = None
