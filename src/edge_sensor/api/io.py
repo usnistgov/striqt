@@ -150,7 +150,7 @@ def read_yaml_sweep(
     # fill formatting fields in paths
     kws = dict(sweep=sweep, radio_id=radio_id)
 
-    output_path = expand_path(sweep.output.path, **kws)
+    output_path = expand_path(sweep.output.path, relative_to_file=path, **kws)
     output_spec = msgspec.structs.replace(sweep.output, path=output_path)
 
     cal_path = expand_path(sweep.radio_setup.calibration, relative_to_file=path, **kws)

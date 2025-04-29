@@ -236,13 +236,6 @@ def compute_y_factor_corrections(
     return ret
 
 
-def summarize_calibration(corrections: xr.Dataset, **sel):
-    nf_summary = _summarize_calibration_field(corrections, 'noise_figure', **sel)
-    corr_summary = _summarize_calibration_field(corrections, 'power_correction', **sel)
-
-    return pd.concat([nf_summary, corr_summary], axis=1)
-
-
 def _summarize_calibration_field(
     corrections: xr.Dataset, field_name, **sel
 ) -> 'pd.DataFrame':
@@ -250,6 +243,13 @@ def _summarize_calibration_field(
     corr = corrections[field_name].sel(gain=max_gain, **sel, drop=True).squeeze()
     stacked = corr.stack(condition=corr.dims).dropna('condition')
     return stacked.to_dataframe()[[field_name]]
+
+
+def summarize_calibration(corrections: xr.Dataset, **sel):
+    nf_summary = _summarize_calibration_field(corrections, 'noise_figure', **sel)
+    corr_summary = _summarize_calibration_field(corrections, 'power_correction', **sel)
+
+    return pd.concat([nf_summary, corr_summary], axis=1)
 
 
 def _describe_missing_data(corrections: xr.Dataset, exact_matches: dict):

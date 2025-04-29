@@ -304,6 +304,7 @@ def init_sweep_cli(
     if store_manager_cls is None:
         store_manager_cls = edge_sensor.io.AppendingDataManager
 
+    # first read, without knowing radio_id
     sweep = edge_sensor.read_yaml_sweep(
         yaml_path, sweep_cls=sweep_cls
     )
