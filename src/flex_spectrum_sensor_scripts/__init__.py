@@ -273,14 +273,11 @@ Controller = typing.TypeVar('Controller', bound='edge_sensor.SweepController')
 Sweep = typing.TypeVar('Sweep', bound='edge_sensor.Sweep')
 Dataset = typing.TypeVar('Dataset', bound='xr.Dataset')
 
-TData = typing.TypeVar('TData')
-TSweep = typing.TypeVar('TSweep')
 
-
-class CLIObjects[TData,TSweep](typing.NamedTuple):
-    store: TData
+class CLIObjects(typing.NamedTuple):
+    store: DataStoreManager
     controller: Controller
-    sweep_spec: TSweep
+    sweep_spec: Sweep
     calibration: Dataset
 
 
