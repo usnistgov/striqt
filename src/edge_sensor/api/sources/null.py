@@ -90,6 +90,14 @@ class NullSource(base.RadioSource):
     def _(self, time_source: str):
         self.backend['time_source'] = time_source.lower()
 
+    @attr.method.str(inherit=True, sets=True, gets=True)
+    def clock_source(self):
+        return self.backend.setdefault('clock_source', 'internal')
+
+    @clock_source.setter
+    def _(self, clock_source: str):
+        self.backend['clock_source'] = clock_source.lower()
+
     def sync_time_source(self):
         pass
 
