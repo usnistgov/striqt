@@ -11,7 +11,7 @@ if typing.TYPE_CHECKING:
     import labbench as lb
 else:
     xr = util.lazy_import('xarray')
-    xr = util.lazy_import('labbench')
+    lb = util.lazy_import('labbench')
 
 def _connect_controller(remote, sweep):
     if remote is None:
