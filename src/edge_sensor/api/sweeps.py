@@ -1,8 +1,9 @@
+"""implementation of performant acquisition and analysis sequencing for a series of captures"""
+
 from __future__ import annotations
 import functools
 import itertools
 import typing
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import msgspec
 
 from . import captures, structs, sources, util, xarray_ops
