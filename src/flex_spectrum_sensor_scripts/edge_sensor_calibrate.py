@@ -29,7 +29,7 @@ def run(*, channel, **kws):
         sweep_spec = msgspec.structs.replace(
             cli_objs.sweep_spec, calibration_variables=variables
         )
-        cli_objs = cli.CLIObjects(sweep_spec=sweep_spec, *cli_objs[1:])
+        cli_objs = cli.CLIObjects(sweep_spec, *cli_objs[1:])
         cli_objs.peripherals.set_sweep(sweep_spec)
 
     cli.execute_sweep(
