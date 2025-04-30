@@ -49,7 +49,9 @@ def set_cuda_mem_limit(fraction=0.75):
     cupy.get_default_memory_pool().set_limit(fraction=fraction)
 
 
-def concurrently_with_fg(calls: dict[str,callable] = {}, flatten=True) -> tuple[typing.Any, typing.Any]:
+def concurrently_with_fg(
+    calls: dict[str, callable] = {}, flatten=True
+) -> tuple[typing.Any, typing.Any]:
     """runs foreground() in the current thread, and lb.concurrently(**background) in another thread"""
     from concurrent.futures import ThreadPoolExecutor
     import labbench as lb
@@ -93,7 +95,6 @@ def concurrently_with_fg(calls: dict[str,callable] = {}, flatten=True) -> tuple[
         raise ex
 
     return result
-
 
 
 def zip_offsets(

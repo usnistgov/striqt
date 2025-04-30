@@ -13,6 +13,7 @@ else:
     xr = util.lazy_import('xarray')
     lb = util.lazy_import('labbench')
 
+
 def _connect_controller(remote, sweep):
     if remote is None:
         return controller.SweepController(sweep)
@@ -34,17 +35,20 @@ class SweepSpecClasses(typing.NamedTuple):
 
 
 def _get_extension_classes(sweep_spec: structs.Sweep) -> SweepSpecClasses:
-    extensions = sweep_spec.extensions
-
+    exts = sweep_spec.extensions
     import_cls = io._import_extension
     return SweepSpecClasses(
-        peripherals_cls=import_cls(extensions['peripherals']),
-        writer_cls=import_cls(extensions['writer']),
+        peripherals_cls=import_cls(exts.peripherals),
+        writer_cls=import_cls(exts.writer),
     )
 
 
 def _apply_exception_hooks(
-    controller=None, *, sweep=None, debug: bool=False, remote: typing.Optional[bool]=False
+    controller=None,
+    *,
+    sweep=None,
+    debug: bool = False,
+    remote: typing.Optional[bool] = False,
 ):
     def hook(*args):
         from IPython.core import ultratb
@@ -74,7 +78,6 @@ def init_sweep_cli(
     verbose: bool = False,
     debug: bool = False,
 ) -> CLIObjects:
-
     # now re-read the yaml, using sweep_cls as the schema, but without knowledge of
     sweep_spec = io.read_yaml_sweep(yaml_path)
 

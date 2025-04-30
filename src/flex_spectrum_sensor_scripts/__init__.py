@@ -198,6 +198,7 @@ def click_capture_plotter(description: typing.Optional[str] = None):
 
     return decorate
 
+
 # %% Server scripts
 
 

@@ -9,6 +9,7 @@ from flex_spectrum_sensor_scripts import click_sensor_sweep
 def run(**kws):
     # instantiate sweep objects
     from edge_sensor.api import cli
+
     cli_objs = cli.init_sweep_cli(**kws)
 
     cli.execute_sweep(

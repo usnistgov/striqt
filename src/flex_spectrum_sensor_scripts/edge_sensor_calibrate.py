@@ -16,6 +16,7 @@ from flex_spectrum_sensor_scripts import click_sensor_sweep
 )
 def run(*, channel, **kws):
     from edge_sensor.api import cli
+
     cli_objs = cli.init_sweep_cli(**kws)
 
     # apply the channel setting

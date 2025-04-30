@@ -6,6 +6,7 @@ from flex_spectrum_sensor_scripts import click_server
 @click_server
 def run(**kws):
     from edge_sensor.api import cli
+
     cli.server_cli(**kws)
 
 

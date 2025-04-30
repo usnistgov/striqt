@@ -52,7 +52,7 @@ def _get_default_format_fields(
 
 def expand_path(
     path: str | Path,
-    sweep: structs.Sweep|None=None,
+    sweep: structs.Sweep | None = None,
     *,
     radio_id: str | None = None,
     relative_to_file=None,
@@ -144,7 +144,6 @@ def read_yaml_sweep(
     pass
 
 
-
 def read_yaml_sweep(
     path: str | Path,
     *,
@@ -179,7 +178,9 @@ def read_yaml_sweep(
     tree['captures'] = [defaults | c for c in tree.get('captures', ())]
 
     extensions = tree['extensions']
-    extensions['import_path'] = expand_path(extensions.get('import_path', None), relative_to_file=path)
+    extensions['import_path'] = expand_path(
+        extensions.get('import_path', None), relative_to_file=path
+    )
     sweep_cls = _import_extension(extensions, 'sweep_struct')
 
     sweep: structs.Sweep = channel_analysis.builtins_to_struct(
