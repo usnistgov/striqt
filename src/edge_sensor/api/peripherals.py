@@ -12,10 +12,10 @@ class PeripheralsBase:
     def __init__(self, sweep: structs.Sweep):
         self.set_sweep(sweep)
 
-    def open():
+    def open(self):
         pass
 
-    def close():
+    def close(self):
         pass
 
     def arm(
