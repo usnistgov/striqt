@@ -169,7 +169,7 @@ class SweepIterator:
         self._ext_intake = intake_func
 
     def setup(self, sweep: structs.Sweep):
-        self.sweep: structs.Sweep = sweep
+        self.sweep: structs.Sweep = structs.validated(sweep)
 
         self._analyze = xarray_ops.ChannelAnalysisWrapper(
             radio=self.radio,
