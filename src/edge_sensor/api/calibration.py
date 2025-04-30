@@ -96,6 +96,8 @@ class CalibrationSweep(
     """This specialized sweep is fed to the YAML file loader
     to specify the change in expected capture structure."""
 
+    captures: tuple[CalibrationCapture] = tuple()
+
     @property
     def captures(self) -> tuple[CalibrationCapture]:
         """returns a tuple of captures generated from combinations of self.variables"""
@@ -164,8 +166,6 @@ def _y_factor_power_corrections(
     dataset: 'xr.Dataset', enr_dB: float, Tamb: float, Tref=290.0
 ) -> 'xr.Dataset':
     # TODO: check that this works for xr.DataArray inputs in (enr_dB, Tamb)
-
-    kwargs = dict(list(locals().items())[1:])
 
     k = scipy.constants.Boltzmann * 1000  # scaled from W/K to mW/K
     enr = 10 ** (enr_dB / 10.0)
