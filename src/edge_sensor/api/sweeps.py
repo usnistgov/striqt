@@ -298,7 +298,7 @@ class SweepIterator:
 
         if self._ext_acquire is not None:
             calls['peripherals'] = lb.Call(
-                self._ext_acquire, capture_next, self.sweep.radio_setup
+                self._ext_acquire, capture_next
             )
 
         result = lb.concurrently(**calls, flatten=False)
