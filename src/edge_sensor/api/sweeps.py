@@ -1,7 +1,6 @@
 """implementation of performant acquisition and analysis sequencing for a series of captures"""
 
 from __future__ import annotations
-import functools
 import itertools
 import typing
 import msgspec
@@ -140,6 +139,7 @@ class SweepIterator:
         radio: 'sources.SourceBase',
         sweep: structs.Sweep,
         *,
+        extensions = peripherals.No
         calibration: 'xr.Dataset' = None,
         always_yield=False,
         quiet=False,
@@ -452,95 +452,3 @@ def iter_raw_iq(
             )
 
         yield iq, capture
-
-
-# def stopiter_as_return(iter):
-#     try:
-#         return next(iter)
-#     except StopIteration:
-#         return StopIteration
-
-# def iter_callbacks(
-#     sweep_iter: 'xr.Dataset' | bytes | None,
-#     sweep_spec: structs.Sweep,
-#     *,
-#     arm_func: callable[[structs.Capture, structs.RadioSetup], None] | None = None,
-#     acquire_func: callable[[structs.Capture, structs.RadioSetup], None] | None = None,
-#     intake_func: callable[['xr.Dataset', structs.Capture], typing.Any] | None = None,
-# ):
-#     """trigger callbacks on each sweep iteration.
-
-#     This can add support for external device setup and acquisition. Each callback should be able
-#     to accommodate `None` values as sentinels to indicate that no data is available yet (for `save`)
-#     or no data being acquired (for `setup` and `acquire`).
-
-#     Args:
-#         sweep_iter: a generator returned by `iter_sweep`
-#         sweep_spec: the sweep specification for `sweep_iter`
-#         setup: function to be called during before the start of each capture
-#         acquire: function to be called during the acquisition of each capture
-#         save: function to be called after the acquisition and analysis of each capture
-
-#     Returns:
-#         Generator
-#     """
-
-#     if arm_func is None:
-
-#         def arm_func(capture):
-#             pass
-#     elif not hasattr(arm_func, '__name__'):
-#         arm_func.__name__ = 'arm'
-
-#     if acquire_func is None:
-
-#         def acquire_func(capture):
-#             pass
-#     elif not hasattr(acquire_func, '__name__'):
-#         acquire_func.__name__ = 'acquire'
-
-#     if intake_func is None:
-
-#         def intake_func(data):
-#             return data
-
-#     elif not hasattr(intake_func, '__name__'):
-#         intake_func.__name__ = 'save'
-
-#     # pairs of (data, capture) from the controller
-#     data_spec_pairs = itertools.zip_longest(
-#         sweep_iter, sweep_spec.captures, fillvalue=None
-#     )
-
-#     data = None
-#     this_capture = sweep_spec.captures[0]
-#     last_data = None
-
-#     while True:
-#         lb.util.logger.warning(f'peripherals arm and acquire for {this_capture}')
-#         if this_capture is not None:
-#             arm_func(this_capture, sweep_spec.radio_setup)
-
-#         returns = lb.concurrently(
-#             lb.Call(stopiter_as_return, data_spec_pairs).rename('data'),
-#             lb.Call(acquire_func, this_capture, sweep_spec.radio_setup).rename(
-#                 'acquire'
-#             ),
-#             lb.Call(intake_func, last_data).rename('save'),
-#             flatten=False,
-#         )
-
-#         yield returns.get('save', None)
-
-#         if returns['data'] is StopIteration:
-#             break
-#         else:
-#             (data, this_capture) = returns['data']
-#             ext_data = returns.get('acquire', {})
-
-#         if isinstance(data, xr.Dataset):
-#             new_dims = {xarray_ops.CAPTURE_DIM: data.capture.size}
-#             ext_dataarrays = {
-#                 k: xr.DataArray(v).expand_dims(new_dims) for k, v in ext_data.items()
-#             }
-#             last_data = data.assign(ext_dataarrays)

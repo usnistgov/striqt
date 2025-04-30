@@ -50,4 +50,5 @@ class PeripheralsBase:
 
 
 class NoPeripherals(PeripheralsBase):
-    pass
+    def __init__(self, sweep=None):
+        pass
