@@ -139,7 +139,6 @@ class SweepIterator:
         radio: 'sources.SourceBase',
         sweep: structs.Sweep,
         *,
-        extensions = peripherals.No
         calibration: 'xr.Dataset' = None,
         always_yield=False,
         quiet=False,
