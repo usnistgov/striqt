@@ -8,7 +8,7 @@ import typing
 
 import msgspec
 
-from . import io, sources, structs, sweeps, util, writers, xarray_ops
+from . import peripherals, sources, structs, util, writers, xarray_ops
 from .captures import split_capture_channels
 from .structs import Annotated, meta
 
@@ -417,3 +417,38 @@ class CalibrationWriter(writers.WriterBase):
 
         save_calibration_corrections(self.output_path, corrections)
         print(f'saved to {str(self.output_path)!r}')
+
+
+class ConnectionInputPeripheral(peripherals.PeripheralsBase):
+    """Human input "peripheral" to prompt noise diode connection changes"""
+
+    sweep: CalibrationSweep
+
+    _last_state = (None, None)
+
+    def arm(self, capture: CalibrationCapture):
+        """This is run before each capture"""
+        state = (capture.channel, capture.noise_diode_enabled)
+
+        if state != self._last_state:
+            if capture.noise_diode_enabled:
+                input(
+                    f'enable noise diode at channel {capture.channel} and press enter'
+                )
+            else:
+                input(
+                    f'disable noise diode at channel {capture.channel} and press enter'
+                )
+
+        self._last_state = state
+
+        return capture
+
+    def acquire(self, capture: CalibrationCapture):
+        """This runs during each capture.
+
+        It should return a dictionary of results keyed by name
+        with (float, int, str, xr.DataArray, etc)
+        """
+
+        return {}

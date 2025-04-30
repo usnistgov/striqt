@@ -3,6 +3,7 @@
 from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
+import sys
 import typing
 
 import msgspec
@@ -14,16 +15,12 @@ from . import util, captures, structs
 
 if typing.TYPE_CHECKING:
     import iqwaveform
-    import labbench as lb
     import numpy as np
     import pandas as pd
-    import xarray as xr
 else:
     iqwaveform = util.lazy_import('iqwaveform')
-    lb = util.lazy_import('labbench')
     np = util.lazy_import('numpy')
     pd = util.lazy_import('pandas')
-    xr = util.lazy_import('xarray')
 
 
 SweepType = typing.TypeVar('SweepType', bound=structs.Sweep)
@@ -55,7 +52,7 @@ def _get_default_format_fields(
 
 def expand_path(
     path: str | Path,
-    sweep: structs.Sweep,
+    sweep: structs.Sweep|None=None,
     *,
     radio_id: str | None = None,
     relative_to_file=None,
@@ -64,11 +61,12 @@ def expand_path(
     if path is None:
         return None
 
-    fields = _get_default_format_fields(
-        sweep, radio_id=radio_id, yaml_path=relative_to_file
-    )
     path = Path(path).expanduser()
-    path = Path(str(path).format(**fields))
+    if sweep is not None:
+        fields = _get_default_format_fields(
+            sweep, radio_id=radio_id, yaml_path=relative_to_file
+        )
+        path = Path(str(path).format(**fields))
 
     if relative_to_file is not None and not path.is_absolute():
         path = Path(relative_to_file).parent.absolute() / path
@@ -106,12 +104,52 @@ def open_store(
     return store_backend
 
 
+def _import_extension(extensions: dict[str, str], name: str) -> type:
+    """import an extension class from a dict representation of structs.Extensions
+
+    Arguments:
+        extensions: builtin representation of structs.Extensions
+        name: extensions key containing the name to import
+
+    Returns:
+
+    """
+    import importlib
+
+    if extensions['import_path'] is None:
+        pass
+    elif extensions['import_path'] not in sys.path:
+        sys.path.insert(0, extensions['import_path'])
+
+    spec = extensions[name]
+
+    mod_name, *sub_names, obj_name = spec.rsplit('.')
+    mod = importlib.import_module(mod_name)
+    for name in sub_names:
+        mod = getattr(mod, name)
+    return getattr(mod, obj_name)
+
+
+@typing.overload
+def read_yaml_sweep(
+    path: str | Path, *, sweep_cls: type[SweepType], radio_id: str | None = None
+) -> SweepType:
+    pass
+
+
+@typing.overload
+def read_yaml_sweep(
+    path: str | Path, *, sweep_cls=None, radio_id: str | None = None
+) -> dict:
+    pass
+
+
+
 def read_yaml_sweep(
     path: str | Path,
     *,
-    sweep_cls: type[SweepType] = structs.Sweep,
-    radio_id=None,
-) -> tuple[SweepType, tuple[str, ...]]:
+    radio_id: str | None = None,
+) -> SweepType | dict:
     """build a Sweep struct from the contents of specified yaml file.
 
     Args:
@@ -122,9 +160,6 @@ def read_yaml_sweep(
 
     with open(path, 'rb') as fd:
         text = fd.read()
-
-    # validate first
-    msgspec.yaml.decode(text, type=sweep_cls, strict=False, dec_hook=_dec_hook)
 
     # build a dict to extract the list of sweep fields and apply defaults
     tree = msgspec.yaml.decode(text, type=dict, strict=False)
@@ -143,20 +178,29 @@ def read_yaml_sweep(
 
     tree['captures'] = [defaults | c for c in tree.get('captures', ())]
 
+    extensions = tree['extensions']
+    extensions['import_path'] = expand_path(extensions.get('import_path', None), relative_to_file=path)
+    sweep_cls = _import_extension(extensions, 'sweep_struct')
+
     sweep: structs.Sweep = channel_analysis.builtins_to_struct(
         tree, type=sweep_cls, strict=False, dec_hook=_dec_hook
     )
 
     # fill formatting fields in paths
-    kws = dict(sweep=sweep, radio_id=radio_id)
+    kws = dict(relative_to_file=path, sweep=sweep, radio_id=radio_id)
 
-    output_path = expand_path(sweep.output.path, relative_to_file=path, **kws)
+    output_path = expand_path(sweep.output.path, **kws)
     output_spec = msgspec.structs.replace(sweep.output, path=output_path)
 
-    cal_path = expand_path(sweep.radio_setup.calibration, relative_to_file=path, **kws)
+    cal_path = expand_path(sweep.radio_setup.calibration, **kws)
     setup_spec = msgspec.structs.replace(sweep.radio_setup, calibration=cal_path)
 
-    sweep = msgspec.structs.replace(sweep, output=output_spec, radio_setup=setup_spec)
+    import_path = expand_path(sweep.extensions.import_path, **kws)
+    extensions_spec = msgspec.structs.replace(sweep.extensions, import_path=import_path)
+
+    sweep = msgspec.structs.replace(
+        sweep, output=output_spec, radio_setup=setup_spec, extensions=extensions_spec
+    )
 
     return sweep
 

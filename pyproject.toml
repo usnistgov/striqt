@@ -51,9 +51,10 @@ edge-airt = [ "cupy-cuda102",
 ]
 
 [project.scripts]
+edge-sensor-calibrate = "flex_spectrum_sensor_scripts.edge_sensor_calibrate:run"
 edge-sensor-sweep = "flex_spectrum_sensor_scripts.edge_sensor_sweep:run"
 edge-sensor-server = "flex_spectrum_sensor_scripts.edge_sensor_server:run"
-edge-capture-plotter = "flex_spectrum_sensor_scripts.edge_capture_plotter:run"
+plot-edge-data = "flex_spectrum_sensor_scripts.plot_edge_data:run"
 
 [tool.ruff]
 target-version = "py39"

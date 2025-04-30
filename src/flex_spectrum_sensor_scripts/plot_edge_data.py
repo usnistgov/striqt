@@ -9,7 +9,7 @@ def run(dataset, output_path: str, interactive: bool):
     from channel_analysis import figures
     from concurrent import futures
     import multiprocessing
-    import iqwaveform
+    import iqwaveform  # needed for plt.style.use()
     from matplotlib import pyplot as plt
 
     plt.style.use('iqwaveform.ieee_double_column')

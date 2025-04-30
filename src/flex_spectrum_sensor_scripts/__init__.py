@@ -1,66 +1,11 @@
 import click
-import importlib.util
-from pathlib import Path
-import sys
 import typing
-
-def lazy_import(module_name: str):
-    """postponed imports of the module with the specified name.
-
-    The import is not performed until the module is accessed in the code. This
-    reduces the total time to import labbench by waiting to import the module
-    until it is used.
-    """
-
-    # see https://docs.python.org/3/library/importlib.html#implementing-lazy-imports
-    try:
-        ret = sys.modules[module_name]
-        return ret
-    except KeyError:
-        pass
-
-    spec = importlib.util.find_spec(module_name)
-    if spec is None:
-        raise ImportError(f'no module found named "{module_name}"')
-    spec.loader = importlib.util.LazyLoader(spec.loader)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-if typing.TYPE_CHECKING:
-    import edge_sensor
-    import labbench as lb
-    import xarray as xr
-else:
-    edge_sensor = lazy_import('edge_sensor')
-    lb = lazy_import('labbench')
-    xr = lazy_import('xarray')
 
 
 def _chain_decorators(decorators: list[callable], func: callable) -> callable:
     for option in decorators:
         func = option(func)
     return func
-
-
-def _apply_exception_hooks(controller, sweep, debug: bool, remote: typing.Optional[bool]):
-    def hook(*args):
-        from IPython.core import ultratb
-        if debug:
-            print('entering debugger')
-            lb.util.force_full_traceback(True)
-            debugger = ultratb.FormattedTB(
-                mode='Verbose', color_scheme='Linux', call_pdb=1
-            )
-            debugger(*args)
-
-        if remote:
-            print('closing in exception hook')
-            controller.close_radio(sweep.radio_setup)
-
-    sys.excepthook = hook
 
 
 # %% Sweep script
@@ -253,151 +198,12 @@ def click_capture_plotter(description: typing.Optional[str] = None):
 
     return decorate
 
-
-def _connect_controller(remote, sweep):
-    if remote is None:
-        return edge_sensor.SweepController(sweep)
-    else:
-        return edge_sensor.connect(remote).root
-
-
-DataStoreManager = typing.TypeVar(
-    'DataStoreManager', bound='edge_sensor.io.DataStoreManager'
-)
-Controller = typing.TypeVar('Controller', bound='edge_sensor.SweepController')
-Sweep = typing.TypeVar('Sweep', bound='edge_sensor.Sweep')
-Dataset = typing.TypeVar('Dataset', bound='xr.Dataset')
-
-
-class CLIObjects(typing.NamedTuple):
-    store: DataStoreManager
-    controller: Controller
-    sweep_spec: Sweep
-    calibration: Dataset
-
-
-def init_sweep_cli(
-    *,
-    yaml_path: Path,
-    output_path: typing.Optional[str] = None,
-    store_backend: typing.Optional[str],
-    remote: typing.Optional[str],
-    force: bool = False,
-    verbose: bool = False,
-    debug: bool = False,
-    sweep_cls: typing.Optional[type[Sweep]] = None,
-    store_manager_cls: typing.Optional[type[DataStoreManager]] = None,
-) -> CLIObjects[DataStoreManager, Sweep]:
-    if sweep_cls is None:
-        sweep_cls = edge_sensor.Sweep
-
-    # first read, without knowing radio_id
-    sweep_spec = edge_sensor.read_yaml_sweep(yaml_path, sweep_cls=sweep_cls)
-
-    if store_backend is None and sweep_spec.output.store is None:
-        click.echo(
-            'specify output.store in the yaml file or use -s <NAME> on the command line'
-        )
-        sys.exit(1)
-
-    if output_path is None and sweep_spec.output.path is None:
-        click.echo(
-            'specify output.path in the yaml file or use -o PATH on the command line'
-        )
-        sys.exit(1)
-
-    if verbose:
-        lb.util.force_full_traceback(True)
-        lb.show_messages('debug')
-    else:
-        lb.show_messages('info')
-
-    # start by connecting to the controller, so that the radio id can be used
-    # as a file naming field
-    controller = _connect_controller(remote, sweep_spec)
-    _apply_exception_hooks(controller, sweep_spec, debug=debug, remote=remote)
-
-    if store_manager_cls is None:
-        store_manager_cls = edge_sensor.io.CaptureAppender
-
-    try:
-        radio_id = controller.radio_id(sweep_spec.radio_setup.driver)
-        sweep_spec = edge_sensor.read_yaml_sweep(
-            yaml_path,
-            sweep_cls=sweep_cls,
-            radio_id=radio_id,
-        )
-
-        # now, open the store
-        store = store_manager_cls(
-            sweep_spec, output_path=output_path, store_backend=store_backend, force=force
-        )
-
-        calls = {}
-        calls['calibration'] = lb.Call(
-            edge_sensor.calibration.read_calibration_corrections,
-            sweep_spec.radio_setup.calibration,
-        )
-        calls['store'] = lb.Call(store.open)
-
-        with lb.stopwatch('load store and prepare calibrations', logger_level='debug'):
-            opened = lb.concurrently(**calls)
-
-    except BaseException:
-        import traceback
-
-        traceback.print_exc()
-        raise
-
-    return CLIObjects(store=store, controller=controller, sweep_spec=sweep_spec, calibration=opened.get('calibration', None))
-
-
-def execute_cli(
-    cli: CLIObjects,
-    *,
-    arm_func: typing.Optional[callable] = None,
-    acquire_func: typing.Optional[callable] = None,
-    reuse_compatible_iq: bool=False,
-    remote = None
-):
-    try:
-        # iterate through the sweep specification, yielding a dataset for each capture
-        sweep_iter = cli.controller.iter_sweep(
-            cli.sweep_spec,
-            calibration=cli.calibration,
-            prepare=False,
-            always_yield=True,
-            reuse_compatible_iq=reuse_compatible_iq,  # calibration-specific optimization
-        )
-
-        sweep_iter.set_callbacks(
-            arm_func=arm_func, acquire_func=acquire_func, intake_func=cli.store.append
-        )
-
-        # step through captures
-        for _ in sweep_iter:
-            pass
-
-        cli.store.flush()
-
-    except BaseException:
-        import traceback
-
-        traceback.print_exc()
-        # this is handled by hooks in sys.excepthook, which may
-        # trigger the IPython debugger (if configured) and then close the radio
-        raise
-
-    else:
-        if remote is not None:
-            cli.controller.close_radio(cli.sweep_spec.radio_setup)
-
-
 # %% Server scripts
 
 
 def click_server(func):
     import socket
+
     HOSTNAME = socket.gethostname()
 
     _CLICK_SERVER = (
@@ -430,17 +236,3 @@ def click_server(func):
     )
 
     return _chain_decorators(_CLICK_SERVER, func)
-
-
-def server_cli(host: str, port: int, driver: str, verbose: bool):
-    # defer imports to here to make the command line --help snappier
-    from edge_sensor.api.controller import start_server
-    import labbench as lb
-
-    if verbose:
-        lb.util.force_full_traceback(True)
-        lb.show_messages('debug')
-    else:
-        lb.show_messages('info')
-
-    edge_sensor.start_server(host=host, port=port, default_driver=driver)

@@ -216,7 +216,7 @@ class MATNewFileStream(_FileStreamBase):
         kws = dict(locals())
         del kws['input_dtype'], kws['self'], kws['__class__'], kws['meta']
 
-        import h5py # noqa
+        import h5py  # noqa
 
         self._fd = h5py.File(path, 'r')
         self._input_dtype = input_dtype
@@ -451,7 +451,7 @@ class TDMSFileStream(_FileStreamBase):
         kws = dict(locals())
         del kws['self']
 
-        from nptdms import TdmsFile # noqa
+        from nptdms import TdmsFile  # noqa
 
         self._fd = TdmsFile.read(self.path)
         self._header_fd, self._iq_fd = self._fd.groups()

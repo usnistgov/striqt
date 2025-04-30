@@ -206,14 +206,35 @@ class Output(msgspec.Struct, forbid_unknown_fields=True, frozen=True, cache_hash
         return hash(self.path) ^ hash(self.store) ^ _dict_hash(self.coord_aliases)
 
 
-WriterClassType = Annotated[typing.Union[str, Literal['edge_sensor.writers.CaptureAppender']], meta('data store manager to import and use')]
-PeripheralClassType = Annotated[typing.Union[str, Literal['edge_sensor.peripherals.NoPeripherals']], meta('peripheral manager class for import')]
-ExtensionPathType = Annotated[Optional[str], meta('optional import path to add (if relative, specified with regard to this yaml)')]
+SweepStructType = Annotated[
+    typing.Union[str, Literal['edge_sensor.Sweep']],
+    meta(
+        'edge_sensor.Sweep subclass to import to decode the sweep specification structure'
+    ),
+]
+WriterClassType = Annotated[
+    typing.Union[str, Literal['edge_sensor.writers.CaptureAppender']],
+    meta('data store manager to import and use'),
+]
+PeripheralClassType = Annotated[
+    typing.Union[str, Literal['edge_sensor.peripherals.NoPeripherals']],
+    meta('peripheral manager class for import'),
+]
+ExtensionPathType = Annotated[
+    Optional[str],
+    meta(
+        'optional import path to add (if relative, specified with regard to this yaml)'
+    ),
+]
 
-class Extensions(msgspec.Struct, forbid_unknown_fields=True, frozen=True, cache_hash=True):
+
+class Extensions(
+    msgspec.Struct, forbid_unknown_fields=True, frozen=True, cache_hash=True
+):
     peripherals: PeripheralClassType = 'edge_sensor.peripherals.NoPeripherals'
     writer: WriterClassType = 'edge_sensor.writers.CaptureAppender'
-    path: ExtensionPathType = None
+    sweep_struct: SweepStructType = 'edge_sensor.Sweep'
+    import_path: ExtensionPathType = None
 
 
 class Sweep(msgspec.Struct, forbid_unknown_fields=True):

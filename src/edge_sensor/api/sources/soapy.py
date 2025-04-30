@@ -12,7 +12,7 @@ from .. import structs, captures
 
 
 if typing.TYPE_CHECKING:
-    import iqwaveform    
+    import iqwaveform
     import numpy as np
     import pandas as pd
     import SoapySDR
