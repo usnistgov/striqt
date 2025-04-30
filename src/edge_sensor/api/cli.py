@@ -39,8 +39,8 @@ def _get_extension_classes(sweep_spec: structs.Sweep) -> SweepSpecClasses:
 
     import_cls = io._import_extension
     return SweepSpecClasses(
-        peripherals_cls=import_cls(ext['peripherals']),
-        writer_cls=import_cls(ext['writer']),
+        peripherals_cls=import_cls(ext, 'peripherals'),
+        writer_cls=import_cls(ext, 'writer'),
     )
 
 
