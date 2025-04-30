@@ -119,7 +119,6 @@ def _iq_is_reusable(
     return c1_compare == c2_compare
 
 
-@functools.lru_cache()
 def _build_attrs(sweep: structs.Sweep):
     fields = set(type(sweep).__struct_fields__)
     base_fields = set(structs.Sweep.__struct_fields__)
