@@ -4,7 +4,7 @@ import click
 from flex_spectrum_sensor_scripts import click_sensor_sweep
 
 
-@click_sensor_sweep('Run a Y-factor calibration sweep')
+@click_sensor_sweep('Run a Y-factor calibration sweep with speed optimizations')
 @click.option(
     '--channel/',
     default=None,
