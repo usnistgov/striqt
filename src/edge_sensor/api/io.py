@@ -38,7 +38,7 @@ def _get_default_format_fields(
 ) -> dict[str, str]:
     """return a mapping for string `'{field_name}'.format()` style mapping values"""
     fields = captures.capture_fields_with_aliases(
-        sweep.captures[0], radio_id=radio_id, output=sweep.output
+        sweep.defaults, radio_id=radio_id, output=sweep.output
     )
 
     fields['start_time'] = datetime.now().strftime('%Y%m%d-%Hh%Mm%S')
