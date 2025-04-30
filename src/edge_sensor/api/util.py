@@ -73,8 +73,7 @@ def concurrently_with_fg(
         bg_future = executor.submit(lb.concurrently, **bg, flatten=flatten)
 
         try:
-            if fg is not None:
-                result.update(lb.sequentially(**fg))
+            result = lb.sequentially(**fg, flatten=flatten)
         except BaseException as ex:
             if isinstance(ex, lb.util.ConcurrentException):
                 exc_list.extend(ex.thread_exceptions)
