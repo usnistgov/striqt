@@ -98,8 +98,7 @@ class CalibrationSweep(
 
     captures: tuple[CalibrationCapture] = tuple()
 
-    @property
-    def captures(self) -> tuple[CalibrationCapture]: # noqa: F811
+    def _get_captures(self) -> tuple[CalibrationCapture]: # noqa: F811
         """returns a tuple of captures generated from combinations of self.variables"""
         variables = structs.validated(self.calibration_variables)
         defaults = structs.validated(self.defaults)
@@ -116,6 +115,12 @@ class CalibrationSweep(
             raise ValueError(
                 'radio_setup.calibration must be None for a calibration sweep'
             )
+
+    def __getattribute__(self, name):
+        if name == 'captures':
+            return self._get_captures()
+        else:
+            return super().__getattribute__(name)
 
 
 @functools.lru_cache
