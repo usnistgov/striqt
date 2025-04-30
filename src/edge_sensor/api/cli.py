@@ -44,7 +44,7 @@ def _get_extension_classes(sweep_spec: structs.Sweep) -> SweepSpecClasses:
 
 
 def _apply_exception_hooks(
-    controller, sweep, debug: bool, remote: typing.Optional[bool]
+    controller=None, *, sweep=None, debug: bool=False, remote: typing.Optional[bool]=False
 ):
     def hook(*args):
         from IPython.core import ultratb
@@ -98,8 +98,12 @@ def init_sweep_cli(
 
     # start by connecting to the controller, so that the radio id can be used
     # as a file naming field
+    if not remote:
+        _apply_exception_hooks(debug=debug)
     controller = _connect_controller(remote, sweep_spec)
-    _apply_exception_hooks(controller, sweep_spec, debug=debug, remote=remote)
+    if remote:
+        _apply_exception_hooks(controller, sweep_spec, debug=debug, remote=remote)
+    
     yaml_classes = _get_extension_classes(sweep_spec)
 
     try:
