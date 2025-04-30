@@ -51,7 +51,7 @@ def set_cuda_mem_limit(fraction=0.75):
 
 def concurrently_with_fg(calls: dict[str,callable] = {}, flatten=True) -> tuple[typing.Any, typing.Any]:
     """runs foreground() in the current thread, and lb.concurrently(**background) in another thread"""
-    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from concurrent.futures import ThreadPoolExecutor
     import labbench as lb
 
     # split to foreground and backround
@@ -76,7 +76,7 @@ def concurrently_with_fg(calls: dict[str,callable] = {}, flatten=True) -> tuple[
                 exc_list.append(ex)
 
         try:
-            result.update(as_completed(bg_future))
+            result.update(bg_future.result())
         except BaseException as ex:
             if isinstance(ex, lb.util.ConcurrentException):
                 exc_list.extend(ex.thread_exceptions)
