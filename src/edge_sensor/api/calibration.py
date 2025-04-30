@@ -420,7 +420,7 @@ class CalibrationWriter(writers.WriterBase):
         print(f'saved to {str(self.output_path)!r}')
 
 
-class NoiseDiodePeripheral(peripherals.PeripheralsBase):
+class ManualNoiseDiodePeripheral(peripherals.PeripheralsBase):
     """Human input "peripheral" to prompt noise diode connection changes"""
 
     sweep: CalibrationSweep
