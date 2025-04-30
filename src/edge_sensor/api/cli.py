@@ -100,13 +100,12 @@ def init_sweep_cli(
     # as a file naming field
     if not remote:
         _apply_exception_hooks(debug=debug)
-    controller = _connect_controller(remote, sweep_spec)
-    if remote:
-        _apply_exception_hooks(controller, sweep_spec, debug=debug, remote=remote)
-    
-    yaml_classes = _get_extension_classes(sweep_spec)
-
     try:
+        controller = _connect_controller(remote, sweep_spec)
+        if remote:
+            _apply_exception_hooks(controller, sweep_spec, debug=debug, remote=remote)
+
+        yaml_classes = _get_extension_classes(sweep_spec)
         radio_id = controller.radio_id(sweep_spec.radio_setup.driver)
         sweep_spec = io.read_yaml_sweep(
             yaml_path,
