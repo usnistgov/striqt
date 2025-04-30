@@ -23,9 +23,6 @@ else:
     pd = util.lazy_import('pandas')
 
 
-SweepType = typing.TypeVar('SweepType', bound=structs.Sweep)
-
-
 def _dec_hook(type_, obj):
     if typing.get_origin(type_) is pd.Timestamp:
         return pd.to_datetime(obj)
@@ -130,31 +127,20 @@ def _import_extension(extensions: dict[str, str], name: str) -> type:
     return getattr(mod, obj_name)
 
 
-@typing.overload
-def read_yaml_sweep(
-    path: str | Path, *, sweep_cls: type[SweepType], radio_id: str | None = None
-) -> SweepType:
-    pass
-
-
-@typing.overload
-def read_yaml_sweep(
-    path: str | Path, *, sweep_cls=None, radio_id: str | None = None
-) -> dict:
-    pass
-
-
 def read_yaml_sweep(
     path: str | Path,
     *,
     radio_id: str | None = None,
-) -> SweepType | dict:
+) -> structs.Sweep:
     """build a Sweep struct from the contents of specified yaml file.
 
     Args:
         path: path to the yaml file
-        sweep_cls: instantiate and return this subclass of structs.Sweep
         radio_id: unique hardware identifier of the radio for filename substitutions
+
+    Returns:
+        an instance of structs.Sweep, or one of its subclasses if
+        specified by `extensions.sweep_struct`)
     """
 
     with open(path, 'rb') as fd:

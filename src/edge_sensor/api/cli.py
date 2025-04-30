@@ -110,7 +110,6 @@ def init_sweep_cli(
         radio_id = controller.radio_id(sweep_spec.radio_setup.driver)
         sweep_spec = io.read_yaml_sweep(
             yaml_path,
-            sweep_cls=yaml_classes.sweep_cls,
             radio_id=radio_id,
         )
 
