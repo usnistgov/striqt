@@ -263,7 +263,7 @@ class SweepIterator:
             elif self._always_yield:
                 yield None
 
-            if sweep_time is None:
+            if sweep_time is None and capture_prev is not None:
                 sweep_time = capture_prev.start_time
 
     def _acquire(self, iq_prev, capture_prev, capture_this, capture_next):
