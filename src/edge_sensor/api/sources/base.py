@@ -496,7 +496,7 @@ class SourceBase(lb.Device):
         if capture != getattr(self, '_armed_capture', None):
             prep_calls['arm'] = lb.Call(self.arm, capture)
 
-        buffers = lb.concurrently(**prep_calls)['buffers']
+        buffers = util.concurrently_with_fg(prep_calls)['buffers']
 
         # this must be here, _after_ the possible arm call, and before possibly
         # arming the next

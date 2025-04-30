@@ -144,7 +144,7 @@ class SweepController:
 
         calls['open_radio'] = lb.Call(self.open_radio, sweep_spec.radio_setup)
 
-        lb.concurrently(**calls)
+        util.concurrently_with_fg(calls)
 
     def iter_sweep(
         self,

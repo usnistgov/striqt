@@ -49,6 +49,53 @@ def set_cuda_mem_limit(fraction=0.75):
     cupy.get_default_memory_pool().set_limit(fraction=fraction)
 
 
+def concurrently_with_fg(calls: dict[str,callable] = {}, flatten=True) -> tuple[typing.Any, typing.Any]:
+    """runs foreground() in the current thread, and lb.concurrently(**background) in another thread"""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    import labbench as lb
+
+    # split to foreground and backround
+    pairs = iter(calls.items())
+    fg_name, foreground = next(pairs)
+    background = dict(pairs)
+
+    executor = ThreadPoolExecutor()
+    exc_list = []
+    result = {}
+
+    with executor:
+        bg_future = executor.submit(lb.concurrently, **background, flatten=flatten)
+
+        try:
+            if foreground is not None:
+                result[fg_name] = foreground()
+        except BaseException as ex:
+            if isinstance(ex, lb.util.ConcurrentException):
+                exc_list.extend(ex.thread_exceptions)
+            else:
+                exc_list.append(ex)
+
+        try:
+            result.update(as_completed(bg_future))
+        except BaseException as ex:
+            if isinstance(ex, lb.util.ConcurrentException):
+                exc_list.extend(ex.thread_exceptions)
+            else:
+                exc_list.append(ex)
+
+    if len(exc_list) == 0:
+        pass
+    elif len(exc_list) == 1:
+        raise exc_list[0]
+    else:
+        ex = lb.util.ConcurrentException('multiple exceptions raised')
+        ex.thread_exceptions = exc_list
+        raise ex
+
+    return result
+
+
+
 def zip_offsets(
     seq: typing.Iterable[TGen],
     shifts: tuple[int, ...] | list[int],

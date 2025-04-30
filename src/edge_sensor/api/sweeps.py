@@ -204,16 +204,29 @@ class SweepIterator:
         for i, (capture_intake, _, capture_this, capture_next) in enumerate(
             offset_captures
         ):
-            executor = ThreadPoolExecutor(max_workers=3)
-            executor.__enter__()
-            futures = {}
-            ret = {}
+            calls = {}
+
+            if capture_prev is None:
+                # no pending data in the first iteration
+                pass
+            else:
+                # it is important that CUDA operations happen in the main thread
+                # for performance reasons (cause unknown). this needs to be the
+                # first entry in calls to guarantee this runs in the foreground.
+                calls['analyze'] = lb.Call(
+                    self._analyze,
+                    iq,
+                    sweep_time=sweep_time,
+                    capture=capture_prev,
+                    pickled=self._pickled,
+                    overwrite_x=not self._reuse_iq,
+                )
 
             if capture_this is None:
                 # Nones at the end indicate post-analysis and saves
                 pass
             else:
-                futures['acquire'] = executor.submit(
+                calls['acquire'] = lb.Call(
                     self._acquire, iq, capture_prev, capture_this, capture_next
                 )
 
@@ -221,7 +234,7 @@ class SweepIterator:
                 # for the first two iterations, there is no data to save
                 pass
             else:
-                futures['intake'] = executor.submit(
+                calls['intake'] = lb.Call(
                     self._intake, radio_data=analysis, ext_data=prior_ext_data
                 )
 
@@ -232,27 +245,7 @@ class SweepIterator:
             with lb.stopwatch(
                 f'{desc} •', logger_level='debug' if self._quiet else 'info'
             ):
-                if capture_prev is None:
-                    # no pending data in the first iteration
-                    pass
-                else:
-                    # it is important that CUDA operations happen in the main thread
-                    # for performance reasons (cause unknown)
-                    ret['analyze'] = self._analyze(
-                        iq,
-                        sweep_time=sweep_time,
-                        capture=capture_prev,
-                        pickled=self._pickled,
-                        overwrite_x=not self._reuse_iq,
-                    )
-
-                future_names = dict(zip(futures.values(), futures.keys()))
-                ret.update(
-                    {
-                        future_names[fut]: fut.result()
-                        for fut in as_completed(future_names)
-                    }
-                )
+                ret = util.concurrently_with_fg(calls, flatten=False)
 
             if 'analyze' in ret:
                 analysis = ret['analyze']
@@ -260,7 +253,7 @@ class SweepIterator:
             if 'acquire' in ret:
                 iq, capture_prev = ret['acquire']['radio']
                 prior_ext_data = this_ext_data
-                this_ext_data = ret['acquire'].get('extension', {}) or {}
+                this_ext_data = ret['acquire'].get('peripherals', {}) or {}
 
                 if not capture_prev.host_resample:
                     assert capture_prev.sample_rate == capture_prev.backend_sample_rate
@@ -288,27 +281,27 @@ class SweepIterator:
             self._arm(capture_this)
 
         # acquire from the radio and any peripherals
-        acquire_calls = {}
+        calls = {}
         if reuse_this:
             capture_ret = msgspec.structs.replace(
                 capture_this,
                 backend_sample_rate=self.radio.backend_sample_rate(),
                 start_time=None,
             )
-            acquire_calls['radio'] = lb.Call(tuple, (iq_prev, capture_ret))
+            calls['radio'] = lb.Call(tuple, (iq_prev, capture_ret))
         else:
-            acquire_calls['radio'] = lb.Call(
+            calls['radio'] = lb.Call(
                 self.radio.acquire,
                 capture_this,
                 correction=False,
             )
 
         if self._ext_acquire is not None:
-            acquire_calls['extension'] = lb.Call(
+            calls['peripherals'] = lb.Call(
                 self._ext_acquire, capture_next, self.sweep.radio_setup
             )
 
-        result = lb.concurrently(**acquire_calls, flatten=False)
+        result = lb.concurrently(**calls, flatten=False)
 
         if capture_next is not None and not reuse_next:
             self._arm(capture_next)
@@ -320,7 +313,7 @@ class SweepIterator:
 
         arm_calls['radio'] = lb.Call(self.radio.arm, capture)
         if self._ext_arm is not None:
-            arm_calls['extension'] = lb.Call(
+            arm_calls['peripherals'] = lb.Call(
                 self._ext_arm, capture, self.sweep.radio_setup
             )
 
