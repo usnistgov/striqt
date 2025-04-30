@@ -99,7 +99,7 @@ class CalibrationSweep(
     captures: tuple[CalibrationCapture] = tuple()
 
     @property
-    def captures(self) -> tuple[CalibrationCapture]:
+    def captures(self) -> tuple[CalibrationCapture]: # noqa: F811
         """returns a tuple of captures generated from combinations of self.variables"""
         variables = structs.validated(self.calibration_variables)
         defaults = structs.validated(self.defaults)
