@@ -58,8 +58,12 @@ def concurrently_with_fg(
 
     # split to foreground and backround
     pairs = iter(calls.items())
-    fg_name, foreground = next(pairs)
-    background = dict(pairs)
+    if len(calls) > 0:
+        fg_name, foreground = next(pairs)
+        background = dict(pairs)
+    else:
+        fg_name, foreground = None, None
+        background = {}
 
     executor = ThreadPoolExecutor()
     exc_list = []
