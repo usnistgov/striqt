@@ -96,7 +96,6 @@ class CalibrationSweep(
     """This specialized sweep is fed to the YAML file loader
     to specify the change in expected capture structure."""
 
-    captures: tuple[CalibrationCapture, ...] = tuple()
     calibration_variables: CalibrationVariables
     defaults: CalibrationCapture = msgspec.field(default_factory=CalibrationCapture)
     calibration_setup: CalibrationSetup = msgspec.field(
@@ -109,18 +108,15 @@ class CalibrationSweep(
                 'radio_setup.calibration must be None for a calibration sweep'
             )
 
+    # the top here is just to set the annotation for msgspec
+    captures: tuple[CalibrationCapture, ...] = tuple()
+
     @property
     def captures(self) -> tuple[CalibrationCapture]:  # noqa: F811
         """returns a tuple of captures generated from combinations of self.variables"""
         variables = structs.validated(self.calibration_variables)
         defaults = structs.validated(self.defaults)
         return _cached_calibration_captures(variables, defaults)
-
-    # def __getattribute__(self, name):
-    #     if name == 'captures':
-    #         return self._get_captures()
-    #     else:
-    #         return super().__getattribute__(name)
 
 
 @functools.lru_cache
@@ -424,7 +420,7 @@ class CalibrationWriter(writers.WriterBase):
         print(f'saved to {str(self.output_path)!r}')
 
 
-class ConnectionInputPeripheral(peripherals.PeripheralsBase):
+class NoiseDiodePeripheral(peripherals.PeripheralsBase):
     """Human input "peripheral" to prompt noise diode connection changes"""
 
     sweep: CalibrationSweep
