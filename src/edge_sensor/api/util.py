@@ -58,19 +58,23 @@ def concurrently_with_fg(
 
     # split to foreground and backround
     pairs = iter(calls.items())
-    fg_name, fg_func = next(pairs)
-    bg_map = dict(pairs)
+    if len(calls) > 0:
+        fg_name, foreground = next(pairs)
+        background = dict(pairs)
+    else:
+        fg_name, foreground = None, None
+        background = {}
 
     executor = ThreadPoolExecutor()
     exc_list = []
     result = {}
 
     with executor:
-        bg_future = executor.submit(lb.concurrently, **bg_map, flatten=flatten)
+        bg_future = executor.submit(lb.concurrently, **background, flatten=flatten)
 
         try:
-            if fg_func is not None:
-                result[fg_name] = fg_func()
+            if foreground is not None:
+                result[fg_name] = foreground()
         except BaseException as ex:
             if isinstance(ex, lb.util.ConcurrentException):
                 exc_list.extend(ex.thread_exceptions)
