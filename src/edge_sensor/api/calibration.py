@@ -111,12 +111,17 @@ class CalibrationSweep(
     # the top here is just to set the annotation for msgspec
     captures: tuple[CalibrationCapture, ...] = tuple()
 
-    @property
-    def captures(self) -> tuple[CalibrationCapture]:  # noqa: F811
-        """returns a tuple of captures generated from combinations of self.variables"""
-        variables = structs.validated(self.calibration_variables)
-        defaults = structs.validated(self.defaults)
-        return _cached_calibration_captures(variables, defaults)
+    def __getattribute__(self, name):
+        if name == 'captures':
+            variables = structs.validated(self.calibration_variables)
+            defaults = structs.validated(self.defaults)
+            return _cached_calibration_captures(variables, defaults)
+        else:
+            return super().__getattribute__(name)
+
+    # @property
+    # def captures(self) -> tuple[CalibrationCapture]:  # noqa: F811
+    #     """returns a tuple of captures generated from combinations of self.variables"""
 
 
 @functools.lru_cache
