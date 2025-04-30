@@ -318,7 +318,7 @@ def init_sweep_cli(
     _apply_exception_hooks(controller, sweep_spec, debug=debug, remote=remote)
 
     if store_manager_cls is None:
-        store_manager_cls = edge_sensor.io.AppendingDataManager
+        store_manager_cls = edge_sensor.io.CaptureAppender
 
     try:
         radio_id = controller.radio_id(sweep_spec.radio_setup.driver)

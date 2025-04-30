@@ -24,14 +24,14 @@ def _reenable_loop(radio, count):
 channel_kwarg = attr.method_kwarg.int('channel', min=0, help='hardware port number')
 
 
-class Air7x01B(soapy.SoapyRadioDevice):
+class Air7x01B(soapy.SoapyRadioSource):
     resource = attr.value.dict({}, inherit=True)
 
     # adjust bounds based on the hardware
     lo_offset = attr.value.float(0.0, min=-125e6, max=125e6, inherit=True)
     lo_frequency = attr.method.float(min=300e6, max=6000e6, inherit=True)
     backend_sample_rate = attr.method.float(min=3.906250e6, max=125e6, inherit=True)
-    gain = type(soapy.SoapyRadioDevice.gain)(min=-30, max=0, step=0.5, inherit=True)
+    gain = type(soapy.SoapyRadioSource.gain)(min=-30, max=0, step=0.5, inherit=True)
     tx_gain = attr.method.float(min=-41.95, max=0, step=0.1, inherit=True)
     rx_channel_count = attr.value.int(2, inherit=True)
 

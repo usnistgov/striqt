@@ -8,7 +8,7 @@ import typing
 
 import msgspec
 
-from . import io, sources, structs, sweeps, util, xarray_ops
+from . import io, sources, structs, sweeps, util, writers, xarray_ops
 from .captures import split_capture_channels
 from .structs import Annotated, meta
 
@@ -349,17 +349,7 @@ def lookup_power_correction(
     return xp.asarray(power_scale, dtype='float32')
 
 
-class CalibrationCaptureTransformer(sweeps.CaptureTransformer):
-    def __init__(self, sweep: structs.Sweep, channel: int):
-        self.channel = channel
-        super().__init__(sweep)
-
-    def __iter__(self) -> typing.Generator[structs.RadioCapture]:
-        for capture in self.sweep.captures:
-            yield msgspec.replace(capture, channel=self.channel)
-
-
-class CalibrationDataManager(io.DataStoreManager):
+class CalibrationWriter(writers.WriterBase):
     sweep_spec: CalibrationSweep
 
     _DROP_FIELDS = (

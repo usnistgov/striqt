@@ -14,13 +14,13 @@ from flex_spectrum_sensor_scripts import (
 )
 def run(**kws):
     # instantiate sweep objects
-    store: 'edge_sensor.io.AppendingDataManager'
+    store: 'edge_sensor.io.CaptureAppender'
     sweep_spec: 'edge_sensor.Sweep'
 
     store, controller, sweep_spec, calibration = init_sweep_cli(
         **kws,
         sweep_cls=edge_sensor.Sweep,
-        store_manager_cls=edge_sensor.io.AppendingDataManager,
+        store_manager_cls=edge_sensor.io.CaptureAppender,
     )
 
     try:

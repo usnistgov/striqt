@@ -206,12 +206,23 @@ class Output(msgspec.Struct, forbid_unknown_fields=True, frozen=True, cache_hash
         return hash(self.path) ^ hash(self.store) ^ _dict_hash(self.coord_aliases)
 
 
+WriterClassType = Annotated[typing.Union[str, Literal['edge_sensor.writers.CaptureAppender']], meta('data store manager to import and use')]
+PeripheralClassType = Annotated[typing.Union[str, Literal['edge_sensor.peripherals.NoPeripherals']], meta('peripheral manager class for import')]
+ExtensionPathType = Annotated[Optional[str], meta('optional import path to add (if relative, specified with regard to this yaml)')]
+
+class Extensions(msgspec.Struct, forbid_unknown_fields=True, frozen=True, cache_hash=True):
+    peripherals: PeripheralClassType = 'edge_sensor.peripherals.NoPeripherals'
+    writer: WriterClassType = 'edge_sensor.writers.CaptureAppender'
+    path: ExtensionPathType = None
+
+
 class Sweep(msgspec.Struct, forbid_unknown_fields=True):
     captures: tuple[RadioCapture, ...] = tuple()
     radio_setup: RadioSetup = msgspec.field(default_factory=RadioSetup)
     defaults: RadioCapture = msgspec.field(default_factory=RadioCapture)
     channel_analysis: dict = msgspec.field(default_factory=_make_default_analysis)
     description: Description = msgspec.field(default_factory=Description)
+    extensions: Extensions = msgspec.field(default_factory=Extensions)
     output: Output = msgspec.field(default_factory=Output)
 
 

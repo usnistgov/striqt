@@ -1,6 +1,7 @@
 from __future__ import annotations
-import typing
+import functools
 import itertools
+import typing
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import msgspec
 
@@ -117,23 +118,26 @@ def _iq_is_reusable(
     return c1_compare == c2_compare
 
 
-class CaptureTransformer:
-    def __init__(self, sweep: structs.Sweep):
-        self.sweep = sweep
+@functools.lru_cache()
+def _build_attrs(sweep: structs.Sweep):
+    fields = set(type(sweep).__struct_fields__)
+    base_fields = set(structs.Sweep.__struct_fields__)
+    new_fields = list(fields - base_fields)
+    attr_fields = ['description', 'radio_setup'] + new_fields
 
-    def __iter__(self) -> typing.Generator[structs.RadioCapture]:
-        raise NotImplementedError
+    attrs = {}
+    for field in attr_fields[::-1]:
+        obj = getattr(sweep, field)
+        new_attrs = structs.struct_to_builtins(obj)
+        attrs.update(new_attrs)
 
-
-class LinearCaptureSequencer(CaptureTransformer):
-    def __iter__(self) -> typing.Generator[structs.RadioCapture]:
-        yield from self.sweep.captures
+    return attrs
 
 
 class SweepIterator:
     def __init__(
         self,
-        radio: 'sources.RadioSource',
+        radio: 'sources.SourceBase',
         sweep: structs.Sweep,
         *,
         calibration: 'xr.Dataset' = None,
@@ -166,17 +170,11 @@ class SweepIterator:
     def setup(self, sweep: structs.Sweep):
         self.sweep: structs.Sweep = sweep
 
-        attrs = {
-            # metadata fields
-            **structs.struct_to_builtins(sweep.radio_setup),
-            **structs.struct_to_builtins(sweep.description),
-        }
-
         self._analyze = xarray_ops.ChannelAnalysisWrapper(
             radio=self.radio,
             sweep=sweep,
             analysis_spec=sweep.channel_analysis,
-            extra_attrs=attrs,
+            extra_attrs=_build_attrs(sweep),
             correction=True,
         )
         self._analyze.__name__ = 'analyze'
@@ -349,7 +347,7 @@ class SweepIterator:
 
 
 def iter_sweep(
-    radio: 'sources.RadioSource',
+    radio: 'sources.SourceBase',
     sweep: structs.Sweep,
     *,
     calibration: 'xr.Dataset' = None,
@@ -414,7 +412,7 @@ def iter_callbacks(
 
 
 def iter_raw_iq(
-    radio: 'sources.RadioSource',
+    radio: 'sources.SourceBase',
     sweep: structs.Sweep,
     quiet=False,
 ) -> typing.Generator['xr.Dataset' | bytes | None]:

@@ -20,7 +20,7 @@ else:
 channel_kwarg = attr.method_kwarg.int('channel', min=0, help='hardware port number')
 
 
-class NullSource(base.RadioSource):
+class NullSource(base.SourceBase):
     """emulate a radio with fake data"""
 
     _inbuf = None
@@ -53,7 +53,7 @@ class NullSource(base.RadioSource):
         self.backend['lo_frequency'] = value
 
     center_frequency = lo_frequency.corrected_from_expression(
-        lo_frequency + base.RadioSource.lo_offset,
+        lo_frequency + base.SourceBase.lo_offset,
         help='RF frequency at the center of the RX baseband',
         label='Hz',
     )
@@ -72,7 +72,7 @@ class NullSource(base.RadioSource):
         self.backend['backend_sample_rate'] = value
 
     sample_rate = backend_sample_rate.corrected_from_expression(
-        backend_sample_rate / base.RadioSource._downsample,
+        backend_sample_rate / base.SourceBase._downsample,
         label='Hz',
         help='sample rate of acquired waveform',
     )

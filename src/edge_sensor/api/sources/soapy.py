@@ -12,15 +12,15 @@ from .. import structs, captures
 
 
 if typing.TYPE_CHECKING:
+    import iqwaveform    
     import numpy as np
     import pandas as pd
     import SoapySDR
-    import iqwaveform
 else:
+    iqwaveform = lb.util.lazy_import('iqwaveform')
     np = lb.util.lazy_import('numpy')
     pd = lb.util.lazy_import('pandas')
     SoapySDR = lb.util.lazy_import('SoapySDR')
-    iqwaveform = lb.util.lazy_import('iqwaveform')
 
 
 channel_kwarg = attr.method_kwarg.int('channel', min=0, help='hardware port number')
@@ -52,7 +52,7 @@ def validate_stream_result(
         raise IOError(f'{SoapySDR.errToStr(sr.ret)} (error code {sr.ret})')
 
 
-class SoapyRadioDevice(base.RadioSource):
+class SoapyRadioSource(base.SourceBase):
     """single-channel sensor waveform acquisition through SoapySDR and pre-processed with iqwaveform"""
 
     resource: dict = attr.value.dict(
@@ -97,7 +97,7 @@ class SoapyRadioDevice(base.RadioSource):
             )
 
     sample_rate = backend_sample_rate.corrected_from_expression(
-        backend_sample_rate / base.RadioSource._downsample,
+        backend_sample_rate / base.SourceBase._downsample,
         label='Hz',
         help='sample rate of acquired waveform',
     )
@@ -165,7 +165,7 @@ class SoapyRadioDevice(base.RadioSource):
             self.backend.setFrequency(SoapySDR.SOAPY_SDR_RX, channel, center_frequency)
 
     center_frequency = lo_frequency.corrected_from_expression(
-        lo_frequency + base.RadioSource.lo_offset,
+        lo_frequency + base.SourceBase.lo_offset,
         help='RF frequency at the center of the analysis bandwidth',
         label='Hz',
     )
