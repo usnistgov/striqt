@@ -14,6 +14,7 @@ else:
     xr = util.lazy_import('xarray')
     lb = util.lazy_import('labbench')
 
+
 def _connect_controller(remote, sweep):
     if remote is None:
         return controller.SweepController(sweep)
@@ -45,7 +46,11 @@ def _get_extension_classes(sweep_spec: structs.Sweep) -> SweepSpecClasses:
 
 
 def _apply_exception_hooks(
-    controller=None, *, sweep=None, debug: bool=False, remote: typing.Optional[bool]=False
+    controller=None,
+    *,
+    sweep=None,
+    debug: bool = False,
+    remote: typing.Optional[bool] = False,
 ):
     def hook(*args):
         from IPython.core import ultratb
@@ -75,7 +80,6 @@ def init_sweep_cli(
     verbose: bool = False,
     debug: bool = False,
 ) -> CLIObjects:
-
     # now re-read the yaml, using sweep_cls as the schema, but without knowledge of
     sweep_spec = io.read_yaml_sweep(yaml_path)
 
@@ -151,7 +155,7 @@ def init_sweep_cli(
     )
 
 
-def execute_sweep(
+def execute_sweep_cli(
     cli: CLIObjects,
     *,
     reuse_compatible_iq: bool = False,
@@ -190,16 +194,3 @@ def execute_sweep(
     else:
         if remote is not None:
             cli.controller.close_radio(cli.sweep_spec.radio_setup)
-
-
-def server_cli(host: str, port: int, driver: str, verbose: bool):
-    # defer imports to here to make the command line --help snappier
-    import labbench as lb
-
-    if verbose:
-        lb.util.force_full_traceback(True)
-        lb.show_messages('debug')
-    else:
-        lb.show_messages('info')
-
-    controller.start_server(host=host, port=port, default_driver=driver)

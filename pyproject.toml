@@ -51,10 +51,10 @@ edge-airt = [ "cupy-cuda102",
 ]
 
 [project.scripts]
-edge-sensor-calibrate = "_edge_sensor_scripts.edge_sensor_calibrate:run"
-edge-sensor-sweep = "_edge_sensor_scripts.edge_sensor_sweep:run"
-edge-sensor-server = "_edge_sensor_scripts.edge_sensor_server:run"
-plot-edge-data = "_edge_sensor_scripts.plot_edge_data:run"
+edge-sensor-calibrate = "_edge_sensor_cli.calibrate:run"
+edge-sensor-sweep = "_edge_sensor_cli.sweep:run"
+edge-sensor-server = "_edge_sensor_cli.server:run"
+plot-edge-data = "_edge_sensor_cli.plot:run"
 
 [tool.ruff]
 target-version = "py39"

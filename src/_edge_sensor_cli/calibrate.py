@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import click
-from flex_spectrum_sensor_scripts import click_sensor_sweep
+from . import click_sensor_sweep
 
 
 @click_sensor_sweep('Run a Y-factor calibration sweep with speed optimizations')
@@ -15,9 +15,9 @@ from flex_spectrum_sensor_scripts import click_sensor_sweep
     help='limit the calibration to the hardware input port at the specified index',
 )
 def run(*, channel, **kws):
-    from edge_sensor.api import cli
+    from edge_sensor.api import frontend
 
-    cli_objs = cli.init_sweep_cli(**kws)
+    cli_objs = frontend.init_sweep_cli(**kws)
 
     # apply the channel setting
     if channel is not None:
@@ -29,10 +29,10 @@ def run(*, channel, **kws):
         sweep_spec = msgspec.structs.replace(
             cli_objs.sweep_spec, calibration_variables=variables
         )
-        cli_objs = cli.CLIObjects(sweep_spec, *cli_objs[1:])
+        cli_objs = frontend.CLIObjects(sweep_spec, *cli_objs[1:])
         cli_objs.peripherals.set_sweep(sweep_spec)
 
-    cli.execute_sweep(
+    frontend.execute_sweep_cli(
         cli_objs,
         reuse_compatible_iq=True,
         remote=kws.get('remote', None),

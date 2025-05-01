@@ -58,7 +58,10 @@ class WriterBase:
         self.flush()
 
     def append(self, capture_data: 'xr.Dataset'):
-        raise NotImplementedError
+        if capture_data is None:
+            return
+        else:
+            self.pending_data.append(capture_data)
 
     def flush(self):
         raise NotImplementedError
@@ -66,12 +69,6 @@ class WriterBase:
 
 class CaptureAppender(WriterBase):
     """concatenates the data from each capture and dumps to a zarr data store"""
-
-    def append(self, capture_data: 'xr.Dataset' | None):
-        if capture_data is None:
-            return
-        else:
-            self.pending_data.append(capture_data)
 
     def open(self):
         if self.store_backend == 'directory':

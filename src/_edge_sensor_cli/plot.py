@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from flex_spectrum_sensor_scripts import click_capture_plotter
+from . import click_capture_plotter
 
 
 @click_capture_plotter()
@@ -8,7 +8,6 @@ def run(dataset, output_path: str, interactive: bool):
     """generic plots"""
     from channel_analysis import figures
     from concurrent import futures
-    import multiprocessing
     import iqwaveform  # needed for plt.style.use()
     from matplotlib import pyplot as plt
 

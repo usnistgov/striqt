@@ -1,6 +1,6 @@
 """this is installed into the shell PATH environment as configured by pyproject.toml"""
 
-from flex_spectrum_sensor_scripts import click_sensor_sweep
+from . import click_sensor_sweep
 
 
 @click_sensor_sweep(
@@ -8,11 +8,11 @@ from flex_spectrum_sensor_scripts import click_sensor_sweep
 )
 def run(**kws):
     # instantiate sweep objects
-    from edge_sensor.api import cli
+    from edge_sensor.api import frontend
 
-    cli_objs = cli.init_sweep_cli(**kws)
+    cli_objs = frontend.init_sweep_cli(**kws)
 
-    cli.execute_sweep(
+    frontend.execute_sweep_cli(
         cli_objs,
         remote=kws.get('remote', None),
     )
