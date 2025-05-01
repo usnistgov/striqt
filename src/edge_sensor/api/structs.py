@@ -268,4 +268,4 @@ def _dec_hook(type_, obj):
 
 
 def validated(struct):
-    return msgspec.convert(msgspec.to_builtins(struct), type(struct), dec_hook=_dec_hook)
+    return msgspec.convert(msgspec.to_builtins(struct, builtin_types=[pd.Timestamp], enc_hook=_dec_hook), type(struct), dec_hook=_dec_hook)
