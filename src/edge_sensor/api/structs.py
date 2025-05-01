@@ -268,17 +268,8 @@ def _dec_hook(type_, obj):
         return obj
 
 
-def _enc_hook(obj):
-    import numpy as np
-
-    if isinstance(obj, (np.float16, np.float32, np.float64)):
-        return float(obj)
-    else:
-        return obj
-
-
 def validated(struct):
-    obj = msgspec.to_builtins(struct, builtin_types=[pd.Timestamp], enc_hook=_enc_hook)
+    obj = struct_to_builtins(struct)
     return msgspec.convert(
         obj,
         type(struct),

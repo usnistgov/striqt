@@ -9,8 +9,19 @@ import msgspec
 
 if typing.TYPE_CHECKING:
     import pandas as pd
+    import numpy as np
 else:
     pd = util.lazy_import('pandas')
+    np = util.lazy_import('numpy')
+
+
+def _enc_hook(obj):
+    import numpy as np
+
+    if isinstance(obj, (np.float16, np.float32, np.float64)):
+        return float(obj)
+    else:
+        return obj
 
 
 def meta(standard_name: str, unit: str | None = None, **kws) -> msgspec.Meta:
@@ -24,7 +35,7 @@ def meta(standard_name: str, unit: str | None = None, **kws) -> msgspec.Meta:
 
 @functools.wraps(functools.partial(msgspec.to_builtins, builtin_types=[]))
 def struct_to_builtins(*args, **kws):
-    kws = dict(kws, builtin_types=(pd.Timestamp,))
+    kws = dict(kws, builtin_types=(pd.Timestamp,), enc_hook=_enc_hook)
     return msgspec.to_builtins(*args, **kws)
 
 
