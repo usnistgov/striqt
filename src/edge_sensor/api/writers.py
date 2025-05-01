@@ -72,9 +72,7 @@ class WriterBase:
         raise NotImplementedError
 
 
-class CaptureAppender(WriterBase):
-    """concatenates the data from each capture and dumps to a zarr data store"""
-
+class ZarrWriterBase(WriterBase):
     def open(self):
         if self.store_backend == 'directory':
             fixed_path = Path(self.output_path).with_suffix('.zarr')
@@ -91,14 +89,38 @@ class CaptureAppender(WriterBase):
         super().close()
         self.store.close()
 
-    def flush(self):
-        data = self.pop()
 
-        if len(data) == 0:
+class CaptureAppender(ZarrWriterBase):
+    """concatenates the data from each capture and dumps to a zarr data store"""
+
+    def flush(self):
+        data_list = self.pop()
+
+        if len(data_list) == 0:
             return
 
         with lb.stopwatch('build dataset'):
-            data_captures = xr.concat(data, xarray_ops.CAPTURE_DIM)
+            data_captures = xr.concat(data_list, xarray_ops.CAPTURE_DIM)
 
         with lb.stopwatch('dump data'):
             channel_analysis.dump(self.store, data_captures)
+
+
+class SpectrogramTimeAppender(ZarrWriterBase):
+    def open(self):
+        if 'spectrogram' not in self.sweep_spec.channel_analysis:
+            raise ValueError('channel_analysis must include "spectrogram" to append on spectrogram time axis')
+        
+        super().open()
+
+    def flush(self):
+        data_list = self.pop()
+
+        if len(data_list) == 0:
+            return
+
+        with lb.stopwatch("build dataset"):
+            by_spectrogram = xarray_ops.concat_time_dim(data_list, "spectrogram_time")
+
+        with lb.stopwatch("dump data"):
+            channel_analysis.dump(by_spectrogram, data_list, compression=False)
