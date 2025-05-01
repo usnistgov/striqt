@@ -162,10 +162,10 @@ class SweepIterator:
 
         self.setup(sweep)
 
-    def set_peripherals(self, *, peripherals: PeripheralsBase | None = None):
+    def set_peripherals(self, peripherals: PeripheralsBase | None):
         self._peripherals = peripherals
 
-    def set_writer(self, *, writer: WriterBase | None = None):
+    def set_writer(self, writer: WriterBase | None):
         self._writer = writer
 
     def setup(self, sweep: structs.Sweep):

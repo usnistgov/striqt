@@ -265,7 +265,7 @@ class SourceBase(lb.Device):
         self._armed_capture: structs.RadioCapture | None = None
         self._carryover = _ReceiveBufferCarryover(self)
 
-    def setup(self, radio_setup: structs.RadioSetup = None, **setup_kws):
+    def setup(self, radio_setup: structs.RadioSetup, **setup_kws):
         """disarm acquisition and apply the given radio setup"""
 
         if radio_setup is None:

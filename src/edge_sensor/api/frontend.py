@@ -103,6 +103,7 @@ def init_sweep_cli(
 
     # start by connecting to the controller, so that the radio id can be used
     # as a file naming field
+    peripherals = None
     if not remote:
         _apply_exception_hooks(debug=debug)
     try:
@@ -144,6 +145,8 @@ def init_sweep_cli(
         import traceback
 
         traceback.print_exc()
+        if cli.peripherals:
+            cli.peripherals.close()
         raise
 
     return CLIObjects(
@@ -184,6 +187,8 @@ def execute_sweep_cli(
         import traceback
 
         traceback.print_exc()
+        if cli.peripherals:
+            cli.peripherals.close()
         # this is handled by hooks in sys.excepthook, which may
         # trigger the IPython debugger (if configured) and then close the radio
         raise
@@ -191,3 +196,5 @@ def execute_sweep_cli(
     else:
         if remote is not None:
             cli.controller.close_radio(cli.sweep_spec.radio_setup)
+    
+

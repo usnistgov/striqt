@@ -73,6 +73,8 @@ class SoapyRadioSource(base.SourceBase):
 
     _transport_dtype = attr.value.str('int16', inherit=True)
 
+    _rx_stream = None
+
     @attr.method.float(inherit=True)
     def backend_sample_rate(self):
         channels = self.channel()
@@ -108,7 +110,17 @@ class SoapyRadioSource(base.SourceBase):
         return self.backend.getSampleRate(SoapySDR.SOAPY_SDR_RX, 0) / self._downsample
 
     @lb.stopwatch('stream initialization', logger_level='debug')
-    def _setup_rx_stream(self, channels):
+    def _setup_rx_stream(self, channels=None):
+        if self._rx_stream is not None:
+            return
+        
+        if channels is not None:
+            pass
+        elif self._stream_all_rx_channels:
+            channels = list(range(self.rx_channel_count))
+        else:
+            channels = self.channels()
+
         if self._transport_dtype == 'int16':
             soapy_type = SoapySDR.SOAPY_SDR_CS16
         elif self._transport_dtype == 'float32':
@@ -118,6 +130,11 @@ class SoapyRadioSource(base.SourceBase):
         self._rx_stream = self.backend.setupStream(
             SoapySDR.SOAPY_SDR_RX, soapy_type, list(channels)
         )
+
+    def _disable_rx_stream(self):
+        if self._rx_stream:
+            self.backend.closeStream(self._rx_stream)
+            self._rx_stream = False
 
     @method_attr.ChannelMaybeTupleMethod(inherit=True)
     def channel(self):
@@ -140,6 +157,15 @@ class SoapyRadioSource(base.SourceBase):
 
         # if we make it this far, we need to build and enable the RX stream
         self._setup_rx_stream(channels)
+
+    def setup(self, radio_setup: structs.RadioSetup):
+        if radio_setup.clock_source != self.clock_source():
+            self.rx_enabled(False)
+            self._disable_rx_stream()
+
+        super().setup(radio_setup)
+        
+        self._setup_rx_stream()
 
     @attr.method.float(
         min=0,
@@ -198,7 +224,8 @@ class SoapyRadioSource(base.SourceBase):
 
     @clock_source.setter
     def _(self, clock_source: str):
-        self.backend.setTimeSource(clock_source)
+        print('*** ', clock_source)
+        self.backend.setClockSource(clock_source)
 
     @attr.method.bool(cache=True, inherit=True)
     def rx_enabled(self):
@@ -218,6 +245,7 @@ class SoapyRadioSource(base.SourceBase):
                 timeNs = self.backend.getHardwareTime('now') + round(delay * 1e9)
                 kws['timeNs'] = timeNs
 
+            print('***', kws)
             self.backend.activateStream(self._rx_stream, **kws)
 
         elif self._rx_stream is not None:
@@ -263,10 +291,10 @@ class SoapyRadioSource(base.SourceBase):
         for channel in channels:
             self.backend.setGainMode(SoapySDR.SOAPY_SDR_RX, channel, False)
 
-        if self._stream_all_rx_channels:
-            self._setup_rx_stream(channels)
-        else:
-            self._setup_rx_stream(self.channels())
+        # may have to re-enable this to change the clock source, but
+        # this doesn't cost much due to GPU prep and warming up times
+        self._setup_rx_stream()
+
 
     def _post_connect(self):
         pass
