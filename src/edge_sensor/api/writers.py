@@ -14,7 +14,7 @@ else:
 
 
 class WriterBase:
-    """manage writes to a data store as captures are acquired one at a time"""
+    """intake acquisitions one at a time, and parcel data store"""
 
     def __init__(
         self,
@@ -51,9 +51,6 @@ class WriterBase:
     def __exit__(self, *args):
         self.close()
 
-    def open(self):
-        raise NotImplementedError
-
     def close(self):
         self.flush()
 
@@ -62,6 +59,9 @@ class WriterBase:
             return
         else:
             self.pending_data.append(capture_data)
+
+    def open(self):
+        raise NotImplementedError
 
     def flush(self):
         raise NotImplementedError
