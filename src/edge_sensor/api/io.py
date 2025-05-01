@@ -23,13 +23,6 @@ else:
     pd = util.lazy_import('pandas')
 
 
-def _dec_hook(type_, obj):
-    if typing.get_origin(type_) is pd.Timestamp:
-        return pd.to_datetime(obj)
-    else:
-        return obj
-
-
 def _get_default_format_fields(
     sweep: structs.Sweep, *, radio_id: str | None = None, yaml_path: Path | str | None
 ) -> dict[str, str]:
@@ -170,7 +163,7 @@ def read_yaml_sweep(
     sweep_cls = _import_extension(extensions, 'sweep_struct')
 
     sweep: structs.Sweep = channel_analysis.builtins_to_struct(
-        tree, type=sweep_cls, strict=False, dec_hook=_dec_hook
+        tree, type=sweep_cls, strict=False, dec_hook=structs._dec_hook
     )
 
     # fill formatting fields in paths

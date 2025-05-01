@@ -257,5 +257,15 @@ class Sweep(msgspec.Struct, forbid_unknown_fields=True):
             return super().__getattribute__(name)
 
 
+def _dec_hook(type_, obj):
+    import numpy as np
+    if typing.get_origin(type_) is pd.Timestamp:
+        return pd.to_datetime(obj)
+    elif isinstance(obj, (np.float16, np.float32, np.float64)):
+        return float(obj)
+    else:
+        return obj
+
+
 def validated(struct):
-    return msgspec.convert(msgspec.to_builtins(struct), type(struct))
+    return msgspec.convert(msgspec.to_builtins(struct), type(struct), dec_hook=_dec_hook)
