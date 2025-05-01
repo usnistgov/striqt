@@ -109,8 +109,10 @@ class CaptureAppender(ZarrWriterBase):
 class SpectrogramTimeAppender(ZarrWriterBase):
     def open(self):
         if 'spectrogram' not in self.sweep_spec.channel_analysis:
-            raise ValueError('channel_analysis must include "spectrogram" to append on spectrogram time axis')
-        
+            raise ValueError(
+                'channel_analysis must include "spectrogram" to append on spectrogram time axis'
+            )
+
         super().open()
 
     def flush(self):
@@ -119,8 +121,8 @@ class SpectrogramTimeAppender(ZarrWriterBase):
         if len(data_list) == 0:
             return
 
-        with lb.stopwatch("build dataset"):
-            by_spectrogram = xarray_ops.concat_time_dim(data_list, "spectrogram_time")
+        with lb.stopwatch('build dataset'):
+            by_spectrogram = xarray_ops.concat_time_dim(data_list, 'spectrogram_time')
 
-        with lb.stopwatch("dump data"):
+        with lb.stopwatch('dump data'):
             channel_analysis.dump(by_spectrogram, data_list, compression=False)
