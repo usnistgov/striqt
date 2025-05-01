@@ -171,11 +171,8 @@ def execute_sweep_cli(
             reuse_compatible_iq=reuse_compatible_iq,  # calibration-specific optimization
         )
 
-        sweep_iter.set_callbacks(
-            arm_func=cli.peripherals.arm,
-            acquire_func=cli.peripherals.acquire,
-            intake_func=cli.writer.append,
-        )
+        sweep_iter.set_peripherals(cli.peripherals)
+        sweep_iter.set_writer(cli.writer)
 
         # step through captures
         for _ in sweep_iter:

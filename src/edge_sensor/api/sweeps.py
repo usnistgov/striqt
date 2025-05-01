@@ -6,6 +6,8 @@ import typing
 import msgspec
 
 from . import captures, structs, sources, util, xarray_ops
+from .peripherals import PeripheralsBase
+from .writers import WriterBase
 
 
 if typing.TYPE_CHECKING:
@@ -155,16 +157,16 @@ class SweepIterator:
         self._loop = loop
         self._reuse_iq = reuse_compatible_iq
 
-        self._ext_arm = None
-        self._ext_acquire = None
-        self._ext_intake = None
+        self._peripherals = None
+        self._writer = None
 
         self.setup(sweep)
 
-    def set_callbacks(self, *, arm_func, acquire_func, intake_func):
-        self._ext_arm = arm_func
-        self._ext_acquire = acquire_func
-        self._ext_intake = intake_func
+    def set_peripherals(self, *, peripherals: PeripheralsBase|None=None):
+        self._peripherals = peripherals
+
+    def set_writer(self, *, writer: WriterBase|None=None):
+        self._writer = writer
 
     def setup(self, sweep: structs.Sweep):
         self.sweep: structs.Sweep = structs.validated(sweep)
@@ -295,8 +297,8 @@ class SweepIterator:
                 correction=False,
             )
 
-        if self._ext_acquire is not None:
-            calls['peripherals'] = lb.Call(self._ext_acquire, capture_next)
+        if self._peripherals is not None:
+            calls['peripherals'] = lb.Call(self._peripherals.acquire, capture_next)
 
         result = lb.concurrently(**calls, flatten=False)
 
@@ -306,13 +308,13 @@ class SweepIterator:
         return result
 
     def _arm(self, capture):
-        arm_calls = {}
+        calls = {}
 
-        arm_calls['radio'] = lb.Call(self.radio.arm, capture)
-        if self._ext_arm is not None:
-            arm_calls['peripherals'] = lb.Call(self._ext_arm, capture)
+        calls['radio'] = lb.Call(self.radio.arm, capture)
+        if self._peripherals is not None:
+            calls['peripherals'] = lb.Call(self._peripherals.arm, capture)
 
-        return lb.concurrently(**arm_calls)
+        return lb.concurrently(**calls)
 
     def _intake(self, radio_data: 'xr.Dataset', ext_data={}):
         if not isinstance(radio_data, xr.Dataset):
@@ -328,8 +330,8 @@ class SweepIterator:
             }
             radio_data = radio_data.assign(new_arrays)
 
-        if self._ext_intake is not None:
-            self._ext_intake(radio_data)
+        if self._writer is not None:
+            self._writer.append(radio_data)
 
         return radio_data
 
@@ -366,37 +368,6 @@ def iter_sweep(
     """
 
     return SweepIterator(**locals())
-
-
-def iter_callbacks(
-    sweep_iter: SweepIterator,
-    sweep_spec: structs.Sweep = None,
-    *,
-    arm_func: callable[[structs.Capture, structs.RadioSetup], None] | None = None,
-    acquire_func: callable[[structs.Capture, structs.RadioSetup], None] | None = None,
-    intake_func: callable[['xr.Dataset', structs.Capture], typing.Any] | None = None,
-):
-    """trigger callbacks on each sweep iteration.
-    This can add support for external device setup and acquisition. Each callback should be able
-    to accommodate `None` values as sentinels to indicate that no data is available yet (for `save`)
-    or no data being acquired (for `setup` and `acquire`).
-
-    Args:
-        sweep_iter: a generator returned by `iter_sweep`
-        sweep_spec: the sweep specification for `sweep_iter`
-        setup: function to be called during before the start of each capture
-        acquire: function to be called during the acquisition of each capture
-        save: function to be called after the acquisition and analysis of each capture
-
-    Returns:
-        Generator
-    """
-
-    sweep_iter.set_callbacks(
-        arm_func=arm_func, acquire_func=acquire_func, intake_func=intake_func
-    )
-
-    return sweep_iter
 
 
 def iter_raw_iq(

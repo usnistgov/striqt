@@ -380,20 +380,22 @@ class CalibrationWriter(writers.WriterBase):
         if capture_data is None:
             return
 
+        super().append(capture_data)
+
         if self.sweep_start_time is None:
             self.sweep_start_time = float(capture_data.sweep_start_time[0])
 
-        self.pending_data.append(capture_data)
-
     def flush(self):
-        if len(self.pending_data) == 0:
+        data = self.pop()
+
+        if len(data) == 0:
             return
 
         # re-index by radio setting rather than capture
-        channel = int(self.pending_data[0].channel)
+        channel = int(data[0].channel)
 
         capture_data = (
-            xr.concat(self.pending_data, xarray_ops.CAPTURE_DIM)
+            xr.concat(data, xarray_ops.CAPTURE_DIM)
             .assign_attrs({'sweep_start_time': self.sweep_start_time})
             .drop_vars(self._DROP_FIELDS)
         )

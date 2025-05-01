@@ -1,5 +1,6 @@
 from __future__ import annotations
 from pathlib import Path
+from threading import RLock
 import typing
 from . import io, structs, util, xarray_ops
 
@@ -38,11 +39,14 @@ class WriterBase:
 
         self.store = None
         self.force = force
+        self._lock = RLock()
+        self._pending_data: list['xr.Dataset'] = []
 
-        self.clear()
-
-    def clear(self):
-        self.pending_data: list['xr.Dataset'] = []
+    def pop(self) -> list['xr.Dataset']:
+        with self._lock:
+            result = self._pending_data
+            self._pending_data: list['xr.Dataset'] = []
+        return result
 
     def __enter__(self):
         self.open()
@@ -58,7 +62,8 @@ class WriterBase:
         if capture_data is None:
             return
         else:
-            self.pending_data.append(capture_data)
+            with self._lock:
+                self._pending_data.append(capture_data)
 
     def open(self):
         raise NotImplementedError
@@ -87,13 +92,13 @@ class CaptureAppender(WriterBase):
         self.store.close()
 
     def flush(self):
-        if len(self.pending_data) == 0:
+        data = self.pop()
+
+        if len(data) == 0:
             return
 
         with lb.stopwatch('build dataset'):
-            data_captures = xr.concat(self.pending_data, xarray_ops.CAPTURE_DIM)
+            data_captures = xr.concat(data, xarray_ops.CAPTURE_DIM)
 
         with lb.stopwatch('dump data'):
             channel_analysis.dump(self.store, data_captures)
-
-        self.clear()
