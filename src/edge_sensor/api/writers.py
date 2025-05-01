@@ -83,7 +83,7 @@ class ZarrWriterBase(WriterBase):
 
         fixed_path.parent.mkdir(parents=True, exist_ok=True)
 
-        self.store = io.open_store(fixed_path, mode='w' if self.force else 'a')
+        self.store = channel_analysis.open_store(fixed_path, mode='w' if self.force else 'a')
 
     def close(self):
         super().close()
