@@ -386,10 +386,7 @@ def iter_raw_iq(
     Args:
         radio: the device that runs the sweep
         sweep: the specification that configures the sweep
-        calibration: if specified, the calibration data used to scale the output from full-scale to physical power
-        always_yield: if `True`, yield `None` before the second capture
         quiet: if True, log at the debug level, and show 'info' level log messages or higher only to the screen
-        pickled: if True, yield pickled `bytes` instead of xr.Datasets
 
     Returns:
         An iterator of analyzed data
