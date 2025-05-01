@@ -246,6 +246,16 @@ class Sweep(msgspec.Struct, forbid_unknown_fields=True):
     extensions: Extensions = msgspec.field(default_factory=Extensions)
     output: Output = msgspec.field(default_factory=Output)
 
+    def get_captures(self):
+        """allow autogeneration of capture sequences"""
+        return object.__getattribute__(self, 'captures')
+
+    def __getattribute__(self, name):
+        if name == 'captures':
+            return self.get_captures()
+        else:
+            return super().__getattribute__(name)
+
 
 def validated(struct):
     return msgspec.convert(msgspec.to_builtins(struct), type(struct))
