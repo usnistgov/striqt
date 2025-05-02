@@ -417,11 +417,9 @@ class SourceBase(lb.Device):
             request_count = min(chunk_count, remaining)
 
             if (received_count + request_count) > samples.shape[1]:
-                # this should never happen if samples are tracked and allocated properly
-                raise MemoryError(
-                    f'request may exceed {received_count + request_count} samples, '
-                    f'exceeding buffer capacity for {samples.size - received_count}'
-                )
+                # this could happen if there is a slight mismatch between
+                # the requested and realized sample rate
+                break
 
             # Read the samples from the data buffer
             this_count, ret_time_ns = self._read_stream(

@@ -132,9 +132,9 @@ class SoapyRadioSource(base.SourceBase):
         )
 
     def _disable_rx_stream(self):
-        if self._rx_stream:
+        if self._rx_stream is not None:
             self.backend.closeStream(self._rx_stream)
-            self._rx_stream = False
+            self._rx_stream = None
 
     @method_attr.ChannelMaybeTupleMethod(inherit=True)
     def channel(self):
@@ -224,7 +224,6 @@ class SoapyRadioSource(base.SourceBase):
 
     @clock_source.setter
     def _(self, clock_source: str):
-        print('*** ', clock_source)
         self.backend.setClockSource(clock_source)
 
     @attr.method.bool(cache=True, inherit=True)
@@ -245,7 +244,6 @@ class SoapyRadioSource(base.SourceBase):
                 timeNs = self.backend.getHardwareTime('now') + round(delay * 1e9)
                 kws['timeNs'] = timeNs
 
-            print('***', kws)
             self.backend.activateStream(self._rx_stream, **kws)
 
         elif self._rx_stream is not None:

@@ -83,6 +83,12 @@ def init_sweep_cli(
     # now re-read the yaml, using sweep_cls as the schema, but without knowledge of
     sweep_spec = io.read_yaml_sweep(yaml_path)
 
+    if 'None' in sweep_spec.output.path:
+        # in this case, we're still waiting to fill in radio_id
+        open_writer_early = False
+    else:
+        open_writer_early = True
+
     if store_backend is None and sweep_spec.output.store is None:
         click.echo(
             'specify output.store in the yaml file or use -s <NAME> on the command line'
@@ -107,7 +113,22 @@ def init_sweep_cli(
     if not remote:
         _apply_exception_hooks(debug=debug)
     try:
-        controller = _connect_controller(remote, sweep_spec)
+        calls = {}
+        calls['controller'] = lb.Call(_connect_controller, remote, sweep_spec)
+        if open_writer_early:
+            yaml_classes = _get_extension_classes(sweep_spec)
+            # now, open the store
+            writer = yaml_classes.writer_cls(
+                sweep_spec,
+                output_path=output_path,
+                store_backend=store_backend
+            )
+            calls['file store'] = lb.Call(writer.open)
+        with lb.stopwatch(
+            f'open {", ".join(calls)}', logger_level='info', threshold=1
+        ):
+            controller = util.concurrently_with_fg(calls, False)['controller']
+
         if remote:
             _apply_exception_hooks(controller, sweep_spec, debug=debug, remote=remote)
 
@@ -120,24 +141,24 @@ def init_sweep_cli(
 
         peripherals = yaml_classes.peripherals_cls(sweep_spec)
 
-        # now, open the store
-        writer = yaml_classes.writer_cls(
-            sweep_spec,
-            output_path=output_path,
-            store_backend=store_backend,
-            force=force,
-        )
-
+        # open the rest
         calls = {}
         calls['calibration'] = lb.Call(
             calibration.read_calibration_corrections,
             sweep_spec.radio_setup.calibration,
         )
-        calls['writer'] = lb.Call(writer.open)
         calls['peripherals'] = lb.Call(peripherals.open)
+        if not open_writer_early:
+            # now, open the store
+            writer = yaml_classes.writer_cls(
+                sweep_spec,
+                output_path=output_path,
+                store_backend=store_backend
+            )
+            calls['writer'] = lb.Call(writer.open)
 
         with lb.stopwatch(
-            'load data writer, peripherals, and calibrations', logger_level='debug'
+            f'load {", ".join(calls)}', logger_level='info', threshold=0.25
         ):
             opened = lb.concurrently(**calls)
 

@@ -56,7 +56,11 @@ def expand_path(
         fields = _get_default_format_fields(
             sweep, radio_id=radio_id, yaml_path=relative_to_file
         )
-        path = Path(str(path).format(**fields))
+        try:
+            path = Path(str(path).format(**fields))
+        except KeyError as ex:
+            valid_fields = ', '.join(fields.keys())
+            raise ValueError(f'valid formatting fields are {valid_fields!r}') from ex
 
     if relative_to_file is not None and not path.is_absolute():
         path = Path(relative_to_file).parent.absolute() / path

@@ -78,8 +78,15 @@ def design_warmup_sweep(
         calibration=None,
     )
 
+    class WarmupSweep(type(sweep)):
+        def get_captures(self):
+            # override any capture auto-generating logic
+            return structs.Sweep.get_captures(self)
+
+    warmup = structs.builtins_to_struct(structs.struct_to_builtins(sweep), WarmupSweep)
+
     return msgspec.structs.replace(
-        sweep,  #
+        warmup,  #
         captures=captures,  #
         radio_setup=null_radio_setup,
     )

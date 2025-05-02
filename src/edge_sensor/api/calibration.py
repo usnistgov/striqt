@@ -299,7 +299,7 @@ def lookup_power_correction(
     power_scale = []
 
     for capture_chan in split_capture_channels(capture):
-        fs, *_ = sources.design_capture_filter(capture_chan, base_clock_rate)
+        fs, *_ = sources.design_capture_filter(base_clock_rate, capture_chan)
 
         # these capture fields must match the calibration conditions exactly
         exact_matches = dict(
