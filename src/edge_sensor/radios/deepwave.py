@@ -12,7 +12,7 @@ import uuid
 def _reenable_loop(radio, count):
     import numpy as np
 
-    buf = np.empty((radio.rx_channel_count, 2), dtype='float32')
+    buf = np.empty((radio.rx_channel_count, 2), dtype=radio._transport_dtype)
 
     for _ in range(count):
         radio.backend.activateStream(radio._rx_stream)
@@ -44,7 +44,7 @@ class Air7x01B(soapy.SoapyRadioSource):
 
     # without this, multichannel acquisition start time will vary
     # across channels, resulting in streaming errors
-    _rx_enable_delay = attr.value.float(0.33, inherit=True)
+    _rx_enable_delay = attr.value.float(0.28, inherit=True)
 
     # use of float32 saves the gpu a slight amount of work, but
     # demands more memory bandwidth. went with int16 as the alternative.

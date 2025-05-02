@@ -113,7 +113,7 @@ class SoapyRadioSource(base.SourceBase):
     def _setup_rx_stream(self, channels=None):
         if self._rx_stream is not None:
             return
-        
+
         if channels is not None:
             pass
         elif self._stream_all_rx_channels:
@@ -164,7 +164,7 @@ class SoapyRadioSource(base.SourceBase):
             self._disable_rx_stream()
 
         super().setup(radio_setup)
-        
+
         self._setup_rx_stream()
 
     @attr.method.float(
@@ -292,7 +292,6 @@ class SoapyRadioSource(base.SourceBase):
         # may have to re-enable this to change the clock source, but
         # this doesn't cost much due to GPU prep and warming up times
         self._setup_rx_stream()
-
 
     def _post_connect(self):
         pass

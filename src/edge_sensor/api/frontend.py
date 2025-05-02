@@ -119,14 +119,10 @@ def init_sweep_cli(
             yaml_classes = _get_extension_classes(sweep_spec)
             # now, open the store
             writer = yaml_classes.writer_cls(
-                sweep_spec,
-                output_path=output_path,
-                store_backend=store_backend
+                sweep_spec, output_path=output_path, store_backend=store_backend
             )
             calls['file store'] = lb.Call(writer.open)
-        with lb.stopwatch(
-            f'open {", ".join(calls)}', logger_level='info', threshold=1
-        ):
+        with lb.stopwatch(f'open {", ".join(calls)}', logger_level='info', threshold=1):
             controller = util.concurrently_with_fg(calls, False)['controller']
 
         if remote:
@@ -151,9 +147,7 @@ def init_sweep_cli(
         if not open_writer_early:
             # now, open the store
             writer = yaml_classes.writer_cls(
-                sweep_spec,
-                output_path=output_path,
-                store_backend=store_backend
+                sweep_spec, output_path=output_path, store_backend=store_backend
             )
             calls['writer'] = lb.Call(writer.open)
 
@@ -217,5 +211,3 @@ def execute_sweep_cli(
     else:
         if remote is not None:
             cli.controller.close_radio(cli.sweep_spec.radio_setup)
-    
-

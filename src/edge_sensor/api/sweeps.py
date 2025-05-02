@@ -218,9 +218,6 @@ class SweepIterator:
                 # no pending data in the first iteration
                 pass
             else:
-                # it is important that CUDA operations happen in the main thread
-                # for performance reasons (cause unknown). this needs to be the
-                # first entry in calls to guarantee this runs in the foreground.
                 calls['analyze'] = lb.Call(
                     self._analyze,
                     iq,
@@ -228,6 +225,7 @@ class SweepIterator:
                     capture=capture_prev,
                     pickled=self._pickled,
                     overwrite_x=not self._reuse_iq,
+                    delayed=True,
                 )
 
             if capture_this is None:
@@ -256,7 +254,9 @@ class SweepIterator:
                 ret = util.concurrently_with_fg(calls, flatten=False)
 
             if 'analyze' in ret:
-                analysis = ret['analyze']
+                # wait until now to do CPU-intensive xarray Dataset packaging
+                # in order to leave cycles free to complete the acquisition
+                analysis = ret['analyze'].get()
 
             if 'acquire' in ret:
                 iq, capture_prev = ret['acquire']['radio']

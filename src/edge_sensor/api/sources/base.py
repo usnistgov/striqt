@@ -489,12 +489,12 @@ class SourceBase(lb.Device):
             capture = self.get_capture_struct()
 
         # allocate (and arm the capture if necessary)
-        prep_calls = {'buffers': lb.Call(alloc_empty_iq, self, capture)}
+        calls = {'buffers': lb.Call(alloc_empty_iq, self, capture)}
         iqwaveform.power_analysis.Any  # touch to work around a lazy loading bug
         if capture != getattr(self, '_armed_capture', None):
-            prep_calls['arm'] = lb.Call(self.arm, capture)
+            calls['arm'] = lb.Call(self.arm, capture)
 
-        buffers = util.concurrently_with_fg(prep_calls)['buffers']
+        buffers = util.concurrently_with_fg(calls)['buffers']
 
         # this must be here, _after_ the possible arm call, and before possibly
         # arming the next

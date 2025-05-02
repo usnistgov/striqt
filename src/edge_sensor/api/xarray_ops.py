@@ -228,7 +228,8 @@ class ChannelAnalysisWrapper:
         capture: structs.RadioCapture,
         pickled=False,
         overwrite_x=True,
-    ) -> 'xr.Dataset':
+        delayed=True,
+    ) -> 'xr.Dataset' | dict[str] | str:
         """Inject radio device and capture info into a channel analysis result."""
 
         # wait to import until here to avoid a circular import
@@ -244,33 +245,63 @@ class ChannelAnalysisWrapper:
                         iq, capture, self.radio, overwrite_x=overwrite_x
                     )
 
-            with lb.stopwatch('build coords', threshold=10e-3, logger_level='debug'):
-                coords = build_coords(
-                    capture,
-                    output=self.sweep.output,
-                    radio_id=self.radio.id,
-                    sweep_time=sweep_time,
-                )
-
-            analysis = channel_analysis.analyze_by_spec(
-                iq, capture, spec=self.analysis_spec, expand_dims=(CAPTURE_DIM,)
+            result = channel_analysis.analyze_by_spec(
+                iq,
+                capture,
+                spec=self.analysis_spec,
+                as_xarray='delayed' if delayed else True,
             )
 
+            if delayed:
+                result = DelayedAnalysisResult(
+                    delayed=result,
+                    capture=capture,
+                    sweep=self.sweep,
+                    radio_id=self.radio.id,
+                    sweep_time=sweep_time,
+                    extra_attrs=self.extra_attrs,
+                )
+
+        if pickled:
+            return pickle.dumps(result)
+        else:
+            return result
+
+
+@dataclasses.dataclass()
+class DelayedAnalysisResult:
+    delayed: dict
+    capture: structs.Capture
+    sweep: structs.Sweep
+    radio_id: str
+    sweep_time: typing.Any
+    extra_attrs: dict = None
+
+    def get(self) -> 'xr.Dataset':
+        """complete any remaining calculations, transfer from the device, and build an output dataset """
+
+        with lb.stopwatch('residual calculations', threshold=10e-3, logger_level='info'):
+            analysis = channel_analysis.api.xarray_ops.package_channel_analysis(
+                self.capture, self.delayed, expand_dims=(CAPTURE_DIM,)
+            )
+            coords = build_coords(
+                self.capture,
+                output=self.sweep.output,
+                radio_id=self.radio_id,
+                sweep_time=self.sweep_time,
+            )
             analysis = analysis.assign_coords(coords)
 
             # these are coordinates - drop from attrs
             for name in coords.keys():
                 analysis.attrs.pop(name, None)
 
-        if self.extra_attrs is not None:
-            analysis.attrs.update(self.extra_attrs)
+            if self.extra_attrs is not None:
+                analysis.attrs.update(self.extra_attrs)
 
-        analysis[SWEEP_TIMESTAMP_NAME].attrs.update(label='Sweep start time')
+            analysis[SWEEP_TIMESTAMP_NAME].attrs.update(label='Sweep start time')
 
-        if pickled:
-            return pickle.dumps(analysis)
-        else:
-            return analysis
+        return analysis
 
 
 def analyze_capture(
