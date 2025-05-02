@@ -224,7 +224,10 @@ class SoapyRadioSource(base.SourceBase):
 
     @clock_source.setter
     def _(self, clock_source: str):
-        self.backend.setClockSource(clock_source)
+        if clock_source != self.clock_source():
+            # avoid potential grouchiness if the clock source
+            # is changed after the stream setup
+            self.backend.setClockSource(clock_source)
 
     @attr.method.bool(cache=True, inherit=True)
     def rx_enabled(self):

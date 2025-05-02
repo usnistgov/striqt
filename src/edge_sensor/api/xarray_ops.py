@@ -280,7 +280,7 @@ class DelayedAnalysisResult:
     def get(self) -> 'xr.Dataset':
         """complete any remaining calculations, transfer from the device, and build an output dataset """
 
-        with lb.stopwatch('residual calculations', threshold=10e-3, logger_level='info'):
+        with lb.stopwatch('residual calculations', threshold=10e-3, logger_level='debug'):
             analysis = channel_analysis.api.xarray_ops.package_channel_analysis(
                 self.capture, self.delayed, expand_dims=(CAPTURE_DIM,)
             )
