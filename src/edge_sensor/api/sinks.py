@@ -101,6 +101,7 @@ class SinkBase:
 def _zarr_imports():
     """open the store in the a background process"""
     t0 = time.perf_counter()
+    global imports
     def imports():
         import xarray
         import pandas
