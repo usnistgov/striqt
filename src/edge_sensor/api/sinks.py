@@ -29,7 +29,6 @@ def _dump_captures(data: list['xarray_ops.DelayedAnalysisResult'], store, execut
 
         y = xr.concat(ds_seq, xarray_ops.CAPTURE_DIM)
         channel_analysis.dump(store, y)
-        y.to_zarr(store, mode='w')
         return time.perf_counter() - t0
 
     return executor.submit(_func)
