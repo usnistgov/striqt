@@ -43,15 +43,13 @@ class SinkBase:
         self.store = None
         self.force = force
         self._future = None
-        self._lock = threading.RLock()
         self._pending_data: list['xr.Dataset'] = []
         context = multiprocessing.get_context('fork')
         self._executor = ProcessPoolExecutor(1, mp_context=context)
 
     def pop(self) -> list['xr.Dataset']:
-        with self._lock:
-            result = self._pending_data
-            self._pending_data: list['xr.Dataset'] = []
+        result = self._pending_data
+        self._pending_data: list['xr.Dataset'] = []
         return result
 
     def submit(self, func, *args, **kws):
