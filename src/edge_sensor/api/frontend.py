@@ -42,6 +42,8 @@ class DebugOnException:
             lb.util.force_full_traceback(True)
             if not hasattr(sys, 'last_value'):
                 sys.last_value = exc
+            if not hasattr(sys, 'last_traceback'):
+                sys.last_traceback = tb
             debugger = ultratb.FormattedTB(
                 mode='Verbose', call_pdb=1
             )
