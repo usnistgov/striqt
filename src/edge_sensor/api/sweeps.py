@@ -313,24 +313,23 @@ class SweepIterator:
 
         return lb.concurrently(**calls)
 
-    def _intake(self, radio_data: 'xr.Dataset', ext_data={}):
-        if not isinstance(radio_data, xr.Dataset):
+    def _intake(self, results: xarray_ops.DelayedAnalysisResult, ext_data={}):
+        if not isinstance(results, list):
             raise ValueError(
-                f'expected xr.Dataset type for data, not {type(radio_data)}'
+                f'expected DelayedAnalysisResult type for results, not {type(results[0])}'
             )
 
-        if len(ext_data) > 0:
-            update_ext_dims = {xarray_ops.CAPTURE_DIM: radio_data.capture.size}
-            new_arrays = {
-                k: xr.DataArray(v).expand_dims(update_ext_dims)
-                for k, v in ext_data.items()
-            }
-            radio_data = radio_data.assign(new_arrays)
+        if len(results) == 0:
+            return
 
+        if not isinstance(results[0], xarray_ops.DelayedAnalysisResult):
+            raise ValueError(
+                f'expected DelayedAnalysisResult type for data, not {type(results[0])}'
+            )
+        
+        results.set_external_data(ext_data)
         if self._writer is not None:
-            self._writer.append(radio_data)
-
-        return radio_data
+            self._writer.append(results)
 
 
 def iter_sweep(

@@ -276,6 +276,10 @@ class DelayedAnalysisResult:
     radio_id: str
     sweep_time: typing.Any
     extra_attrs: dict = None
+    ext_data: dict = {}
+
+    def set_external_data(self, ext_data: dict[str]) -> None:
+        self.ext_data=ext_data
 
     def to_xarray(self) -> 'xr.Dataset':
         """complete any remaining calculations, transfer from the device, and build an output dataset"""
@@ -302,6 +306,14 @@ class DelayedAnalysisResult:
                 analysis.attrs.update(self.extra_attrs)
 
             analysis[SWEEP_TIMESTAMP_NAME].attrs.update(label='Sweep start time')
+
+        if len(self.ext_data) > 0:
+            update_ext_dims = {CAPTURE_DIM: analysis.capture.size}
+            new_arrays = {
+                k: xr.DataArray(v).expand_dims(update_ext_dims)
+                for k, v in self.ext_data.items()
+            }
+            analysis = analysis.assign(new_arrays)
 
         return analysis
 

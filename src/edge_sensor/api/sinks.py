@@ -17,14 +17,15 @@ else:
     lb = util.lazy_import('labbench')
 
 
-def _dump_captures(data: list['xarray_ops.DelayedAnalysisResult'], store):
+def _dump_captures(data: list['xarray_ops.DelayedAnalysisResult'], store, ext_data={}):
     """write the data to disk in a background process"""
     t0 = time.perf_counter()
     global _func # to prevent gc on _func
     def _func():
         # wait until now to do CPU-intensive xarray Dataset packaging
         # in order to leave cycles free for acquisition and analysis
-        ds_seq = (r.to_xarray() for r in data)
+        ds_seq = (r.to_xarray(ext_data) for r in data)
+
         y = xr.concat(ds_seq, xarray_ops.CAPTURE_DIM)
         channel_analysis.dump(store, y)
         y.to_zarr(store, mode='w')
