@@ -140,6 +140,7 @@ class ZarrSinkBase(SinkBase):
 def _flush_captures_future(data: list['xarray_ops.DelayedAnalysisResult'], store):
     """write the data to disk in a background process"""
     t0 = time.perf_counter()
+    global dump
     def dump():
         # wait until now to do CPU-intensive xarray Dataset packaging
         # in order to leave cycles free for acquisition and analysis
