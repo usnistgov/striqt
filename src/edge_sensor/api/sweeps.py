@@ -247,9 +247,7 @@ class SweepIterator:
                 ret = util.concurrently_with_fg(calls, flatten=False)
 
             if 'analyze' in ret:
-                # wait until now to do CPU-intensive xarray Dataset packaging
-                # in order to leave cycles free to complete the acquisition
-                analysis = ret['analyze'].get()
+                analysis = ret['analyze']
 
             if 'acquire' in ret:
                 iq, capture_prev = ret['acquire']['radio']

@@ -348,7 +348,7 @@ def lookup_power_correction(
     return xp.asarray(power_scale, dtype='float32')
 
 
-class CalibrationWriter(sinks.SinkBase):
+class CalibrationSink(sinks.SinkBase):
     sweep_spec: CalibrationSweep
 
     _DROP_FIELDS = (
@@ -383,6 +383,8 @@ class CalibrationWriter(sinks.SinkBase):
 
         if len(data) == 0:
             return
+
+        super().flush()
 
         # re-index by radio setting rather than capture
         channel = int(data[0].channel)

@@ -22,6 +22,8 @@ def _dump_captures(data: list['xarray_ops.DelayedAnalysisResult'], store):
     t0 = time.perf_counter()
     global _func # to prevent gc on _func
     def _func():
+        # wait until now to do CPU-intensive xarray Dataset packaging
+        # in order to leave cycles free for acquisition and analysis
         ds_seq = (r.to_xarray() for r in data)
         y = xr.concat(ds_seq, xarray_ops.CAPTURE_DIM)
         channel_analysis.dump(store, y)
@@ -82,12 +84,6 @@ class SinkBase:
         finally:
             self.close()
 
-    def _finish_flush(self):
-        if self._future is not None:
-            time_elapsed = self._future.result(timeout=30)
-            lb.logger.info(f'flush time elapsed: {time_elapsed:0.2f} s')
-        self._future = None
-
     def close(self):
         self.flush()
 
@@ -102,7 +98,10 @@ class SinkBase:
         raise NotImplementedError
 
     def flush(self):
-        raise NotImplementedError
+        if self._future is not None:
+            time_elapsed = self._future.result(timeout=30)
+            lb.logger.info(f'flush time elapsed: {time_elapsed:0.2f} s')
+        self._future = None
 
 
 class ZarrSinkBase(SinkBase):
@@ -134,7 +133,8 @@ class CaptureAppender(ZarrSinkBase):
         if len(data_list) == 0:
             return
 
-        self._finish_flush()
+        super().flush()
+
         self._future = _dump_captures(data_list, self.store, self._executor)
         # with lb.stopwatch('build dataset'):
         #     data_captures = xr.concat(data_list, xarray_ops.CAPTURE_DIM)
@@ -157,6 +157,8 @@ class SpectrogramTimeAppender(ZarrSinkBase):
 
         if len(data_list) == 0:
             return
+        
+        super().flush()
 
         with lb.stopwatch('build dataset'):
             by_spectrogram = xarray_ops.concat_time_dim(data_list, 'spectrogram_time')
