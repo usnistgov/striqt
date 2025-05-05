@@ -68,7 +68,7 @@ class StructBase(msgspec.Struct, kw_only=True, frozen=True):
 
     @classmethod
     def fromdict(cls: type[_T], d: dict) -> _T:
-        return msgspec.convert(d, type=cls, dec_hook=_dec_hook)
+        return msgspec.convert(d, type=cls, strict=False, dec_hook=_dec_hook)
 
     @classmethod
     def fromjson(cls: type[_T], d: str|bytes) -> _T:
