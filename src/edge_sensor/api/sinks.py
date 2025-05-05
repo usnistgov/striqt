@@ -93,8 +93,11 @@ class SinkBase:
         self._future = None
 
 
-@functools.lru_cache(1)
 def _open_zarr(path, force):
+    _get_zarr(path, mode='w' if force else 'a')
+
+@functools.lru_cache(1)
+def _get_zarr(path, force):
     return channel_analysis.open_store(
         path, mode='w' if force else 'a'
     )
