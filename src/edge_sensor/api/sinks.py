@@ -86,10 +86,10 @@ class SinkBase:
     def wait(self):
         if self._future is None:
             return
-
-        name, duration = self._future.result(timeout=30)
-        if name is not None:
-            lb.logger.info(f'{name} time elapsed: {duration:0.2f}')
+        self._future.result(timeout=30)
+        # name, duration = self._future.result(timeout=30)
+        # if name is not None:
+        #     lb.logger.info(f'{name} time elapsed: {duration:0.2f}')
         self._future = None
 
 
