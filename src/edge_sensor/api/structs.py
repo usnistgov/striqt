@@ -211,9 +211,9 @@ SweepStructType = Annotated[
         'edge_sensor.Sweep subclass to import to decode the sweep specification structure'
     ),
 ]
-WriterClassType = Annotated[
+SinkClassType = Annotated[
     typing.Union[str, Literal['edge_sensor.writers.CaptureAppender']],
-    meta('data store manager to import and use'),
+    meta('data sink class to import and use'),
 ]
 PeripheralClassType = Annotated[
     typing.Union[str, Literal['edge_sensor.peripherals.NoPeripherals']],
@@ -229,7 +229,7 @@ ExtensionPathType = Annotated[
 
 class Extensions(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     peripherals: PeripheralClassType = 'edge_sensor.peripherals.NoPeripherals'
-    writer: WriterClassType = 'edge_sensor.writers.CaptureAppender'
+    sink: SinkClassType = 'edge_sensor.sink.CaptureAppender'
     sweep_struct: SweepStructType = 'edge_sensor.Sweep'
     import_path: ExtensionPathType = None
 

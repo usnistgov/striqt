@@ -58,7 +58,7 @@ class CLIObjects(typing.NamedTuple):
 
 
 class SweepSpecClasses(typing.NamedTuple):
-    writer_cls: typing.Type[sinks.SinkBase]
+    sink_cls: typing.Type[sinks.SinkBase]
     peripherals_cls: typing.Type[peripherals.PeripheralsBase]
 
 
@@ -68,7 +68,7 @@ def _get_extension_classes(sweep_spec: structs.Sweep) -> SweepSpecClasses:
     import_cls = io._import_extension
     return SweepSpecClasses(
         peripherals_cls=import_cls(ext, 'peripherals'),
-        writer_cls=import_cls(ext, 'writer'),
+        sink_cls=import_cls(ext, 'sink'),
     )
 
 
@@ -120,7 +120,7 @@ def init_sweep_cli(
         if open_writer_early:
             yaml_classes = _get_extension_classes(sweep_spec)
             # now, open the store
-            sink = yaml_classes.writer_cls(
+            sink = yaml_classes.sink_cls(
                 sweep_spec, output_path=output_path, store_backend=store_backend
             )
             calls['file store'] = lb.Call(sink.open)
@@ -145,7 +145,7 @@ def init_sweep_cli(
         calls['peripherals'] = lb.Call(peripherals.open)
         if not open_writer_early:
             # now, open the store
-            sink = yaml_classes.writer_cls(
+            sink = yaml_classes.sink_cls(
                 sweep_spec, output_path=output_path, store_backend=store_backend
             )
             calls['writer'] = lb.Call(sink.open)
