@@ -49,11 +49,11 @@ class DebugOnException:
 
 
 class CLIObjects(typing.NamedTuple):
-    sweep_spec: structs.Sweep
     sink: sinks.SinkBase
     controller: controller.SweepController
     peripherals: peripherals.PeripheralsBase
     debugger: DebugOnException
+    sweep_spec: structs.Sweep
     calibration: 'xr.Dataset'
 
 
@@ -176,15 +176,15 @@ def execute_sweep_cli(
     reuse_compatible_iq: bool = False,
     remote=None,
 ):
-    # the cal is not a context
-    *cli_context, cal = cli
+    # pull out the cli elements that have context
+    *cli_context, sweep, cal = cli
 
     print('entering context...')
     with lb.sequentially(*cli_context):
         # iterate through the sweep specification, yielding a dataset for each capture
         sweep_iter = cli.controller.iter_sweep(
-            cli.sweep_spec,
-            calibration=cli.calibration,
+            sweep,
+            calibration=cal,
             prepare=False,
             always_yield=True,
             reuse_compatible_iq=reuse_compatible_iq,  # calibration-specific optimization
