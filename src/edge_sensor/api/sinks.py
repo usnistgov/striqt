@@ -4,7 +4,6 @@ import sys
 import typing
 from . import structs, util, xarray_ops
 from concurrent.futures import ThreadPoolExecutor
-import multiprocessing
 
 import channel_analysis
 
@@ -42,8 +41,7 @@ class SinkBase:
         self.force = force
         self._future = None
         self._pending_data: list['xr.Dataset'] = []
-        context = multiprocessing.get_context('fork')
-        self._executor = ThreadPoolExecutor(1, mp_context=context)
+        self._executor = ThreadPoolExecutor(1)
 
     def pop(self) -> list['xr.Dataset']:
         result = self._pending_data
