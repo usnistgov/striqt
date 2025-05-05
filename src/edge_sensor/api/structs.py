@@ -229,7 +229,7 @@ ExtensionPathType = Annotated[
 
 class Extensions(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     peripherals: PeripheralClassType = 'edge_sensor.peripherals.NoPeripherals'
-    sink: SinkClassType = 'edge_sensor.sink.CaptureAppender'
+    sink: SinkClassType = 'edge_sensor.sinks.CaptureAppender'
     sweep_struct: SweepStructType = 'edge_sensor.Sweep'
     import_path: ExtensionPathType = None
 
