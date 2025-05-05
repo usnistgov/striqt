@@ -319,11 +319,10 @@ class SweepIterator:
                 f'expected DelayedAnalysisResult type for data, not {type(results)}'
             )
 
-        if len(results) == 0:
-            return
-
         results.set_extra_data(ext_data)
-        if self._writer is not None:
+        if self._writer is None:
+            return results
+        else:
             self._writer.append(results)
 
 
