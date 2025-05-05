@@ -234,7 +234,7 @@ class SweepIterator:
                 pass
             else:
                 calls['intake'] = lb.Call(
-                    self._intake, analysis_data=analysis, ext_data=prior_ext_data
+                    self._intake, results=analysis, ext_data=prior_ext_data
                 )
 
             desc = channel_analysis.describe_capture(
