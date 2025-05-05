@@ -18,20 +18,20 @@ else:
     lb = util.lazy_import('labbench')
 
 
-def _dump_captures(data: list['xarray_ops.DelayedAnalysisResult'], store, executor):
+def _open_store_future(data: list['xarray_ops.DelayedAnalysisResult'], store):
     """write the data to disk in a background process"""
     t0 = time.perf_counter()
-    global _func # to prevent gc on _func
-    def _func():
+    global _open # to prevent gc on _func
+    def _open():
         # wait until now to do CPU-intensive xarray Dataset packaging
         # in order to leave cycles free for acquisition and analysis
         ds_seq = (r.to_xarray() for r in data)
 
         y = xr.concat(ds_seq, xarray_ops.CAPTURE_DIM)
         channel_analysis.dump(store, y)
-        return time.perf_counter() - t0
+        return ('open', time.perf_counter() - t0)
 
-    return executor.submit(_func)
+    return _open
 
 
 class SinkBase:
@@ -71,6 +71,9 @@ class SinkBase:
             self._pending_data: list['xr.Dataset'] = []
         return result
 
+    def submit(self, func):
+        self._future = self._executor.submit(func)      
+
     def __enter__(self):
         self.open()
         self._executor.__enter__()
@@ -82,6 +85,7 @@ class SinkBase:
     def close(self):
         try:
             self.flush()
+            self.wait()
         finally:
             self._executor.__exit__(*sys.exc_info())
 
@@ -99,12 +103,18 @@ class SinkBase:
         raise NotImplementedError
 
     def flush(self):
-        print('no _future')
-        if self._future is not None:
-            time_elapsed = self._future.result(timeout=30)
-            lb.logger.info(f'flush time elapsed: {time_elapsed:0.2f} s')
-        self._future = None
+        raise NotImplementedError
 
+    def wait(self):
+        if self._future is None:
+            return
+
+        log_name, time_elapsed = self._future.result(timeout=30)
+
+        if log_name is not None:
+            lb.logger.info(f'{log_name} time elapsed: {time_elapsed:0.2f} s')
+
+        self._future = None
 
 class ZarrSinkBase(SinkBase):
     def open(self):
@@ -130,18 +140,34 @@ class ZarrSinkBase(SinkBase):
         self.store = None
 
 
+def _flush_captures_future(data: list['xarray_ops.DelayedAnalysisResult'], store):
+    """write the data to disk in a background process"""
+    t0 = time.perf_counter()
+    global _dump # to prevent gc on _func
+    def _dump():
+        # wait until now to do CPU-intensive xarray Dataset packaging
+        # in order to leave cycles free for acquisition and analysis
+        ds_seq = (r.to_xarray() for r in data)
+
+        y = xr.concat(ds_seq, xarray_ops.CAPTURE_DIM)
+        channel_analysis.dump(store, y)
+        return ('flush', time.perf_counter() - t0)
+
+    return _dump
+
+
 class CaptureAppender(ZarrSinkBase):
     """concatenates the data from each capture and dumps to a zarr data store"""
 
     def flush(self):
-        super().flush()
+        self.wait()
 
         data_list = self.pop()
 
         if len(data_list) == 0:
             return
 
-        self._future = _dump_captures(data_list, self.store, self._executor)
+        self.submit(_flush_captures_future(data_list, self.store))
         # with lb.stopwatch('build dataset'):
         #     data_captures = xr.concat(data_list, xarray_ops.CAPTURE_DIM)
 
@@ -159,8 +185,6 @@ class SpectrogramTimeAppender(ZarrSinkBase):
         super().open()
 
     def flush(self):
-        super().flush()
-
         data_list = self.pop()
 
         if len(data_list) == 0:
