@@ -17,22 +17,19 @@ else:
     lb = util.lazy_import('labbench')
 
 
-def _dump_captures(data: list['xarray_ops.DelayedAnalysisResult'], store, ext_data={}):
+def _dump_captures(data: list['xarray_ops.DelayedAnalysisResult'], store, executor):
     """write the data to disk in a background process"""
     t0 = time.perf_counter()
     global _func # to prevent gc on _func
     def _func():
         # wait until now to do CPU-intensive xarray Dataset packaging
         # in order to leave cycles free for acquisition and analysis
-        ds_seq = (r.to_xarray(ext_data) for r in data)
+        ds_seq = (r.to_xarray() for r in data)
 
         y = xr.concat(ds_seq, xarray_ops.CAPTURE_DIM)
         channel_analysis.dump(store, y)
         y.to_zarr(store, mode='w')
         return time.perf_counter() - t0
-
-    context = multiprocessing.get_context('fork')
-    executor = ProcessPoolExecutor(mp_context=context)
 
     return executor.submit(_func)
 
@@ -86,6 +83,7 @@ class SinkBase:
             self.close()
 
     def close(self):
+        print('close!')
         self.flush()
 
     def append(self, capture_data: 'xr.Dataset'):
@@ -99,6 +97,7 @@ class SinkBase:
         raise NotImplementedError
 
     def flush(self):
+        print('no _future')
         if self._future is not None:
             time_elapsed = self._future.result(timeout=30)
             lb.logger.info(f'flush time elapsed: {time_elapsed:0.2f} s')
