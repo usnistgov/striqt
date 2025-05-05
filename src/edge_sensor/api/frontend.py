@@ -45,7 +45,7 @@ class DebugOnException:
             if not hasattr(sys, 'last_traceback'):
                 sys.last_traceback = tb
             debugger = ultratb.FormattedTB(
-                mode='Verbose', call_pdb=1
+                mode='Plain', call_pdb=1
             )
             debugger(etype, exc, tb)
 
