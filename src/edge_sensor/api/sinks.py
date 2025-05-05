@@ -82,7 +82,6 @@ class SinkBase:
     def close(self):
         try:
             self.flush()
-            self.close()
         finally:
             self._executor.__exit__(*sys.exc_info())
 
