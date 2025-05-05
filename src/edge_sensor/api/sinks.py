@@ -109,7 +109,7 @@ class ZarrSinkBase(SinkBase):
 
         self.submit(self._open, fixed_path, self.force, time.perf_counter())
 
-    def _open(self, fixed_path, force, t0)
+    def _open(self, fixed_path, force, t0):
         self.store = channel_analysis.open_store(
             fixed_path, mode='w' if force else 'a'
         )
