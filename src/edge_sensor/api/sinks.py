@@ -121,8 +121,9 @@ class CaptureAppender(ZarrSinkBase):
         if len(data_list) == 0:
             return
 
-        channel_analysis.dump(self.store, y)
+        self.submit(self._flush_thread, data_list)
 
+    def _flush_thread(self, data_list):
         with lb.stopwatch('build dataset'):
             ds_seq = (r.to_xarray() for r in data_list)
             dataset = xr.concat(ds_seq, xarray_ops.CAPTURE_DIM)
