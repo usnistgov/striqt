@@ -89,14 +89,10 @@ class SinkBase:
         if self._future is None:
             return
 
-        self._future.result(timeout=30)
+        name, duration = self._future.result(timeout=30)
+        if name is not None:
+            lb.logger.info(f'{name} time elapsed: {duration:0.2f}')
         self._future = None
-
-
-def zarr_imports(t0):
-    import xarray
-    import zarr
-    print('imports time: ', time.perf_counter()-t0)
 
 
 class ZarrSinkBase(SinkBase):
@@ -113,27 +109,18 @@ class ZarrSinkBase(SinkBase):
 
         fixed_path.parent.mkdir(parents=True, exist_ok=True)
 
-        self.store = channel_analysis.open_store(
-            fixed_path, mode='w' if self.force else 'a'
-        )
+        self.submit(self._open, fixed_path, self.force, time.perf_counter())
 
-        self.submit(zarr_imports, time.perf_counter())
+    def _open(self, fixed_path, force, t0)
+        self.store = channel_analysis.open_store(
+            fixed_path, mode='w' if force else 'a'
+        )
+        return 'open', time.perf_counter()-t0
 
     def close(self):
         super().close()
         self.store.close()
         self.store = None
-
-
-def _flush_captures_future(data: list['xarray_ops.DelayedAnalysisResult'], store, t0):
-    """write the data to disk in a background process"""
-    # wait until now to do CPU-intensive xarray Dataset packaging
-    # in order to leave cycles free for acquisition and analysis
-    ds_seq = (r.to_xarray() for r in data)
-
-    y = xr.concat(ds_seq, xarray_ops.CAPTURE_DIM)
-    channel_analysis.dump(store, y)
-    print('flush time: ', time.perf_counter()-t0)
 
 
 class CaptureAppender(ZarrSinkBase):
@@ -147,12 +134,22 @@ class CaptureAppender(ZarrSinkBase):
         if len(data_list) == 0:
             return
 
-        self.submit(_flush_captures_future, data_list, self.store, time.perf_counter())
+        self.submit(self._flush, data_list, time.perf_counter())
         # with lb.stopwatch('build dataset'):
         #     data_captures = xr.concat(data_list, xarray_ops.CAPTURE_DIM)
 
         # with lb.stopwatch('dump data'):
         #     channel_analysis.dump(self.store, data_captures)
+
+    def _flush(self, data: list['xarray_ops.DelayedAnalysisResult'], t0):
+        """write the data to disk in a background process"""
+        # wait until now to do CPU-intensive xarray Dataset packaging
+        # in order to leave cycles free for acquisition and analysis
+        ds_seq = (r.to_xarray() for r in data)
+
+        y = xr.concat(ds_seq, xarray_ops.CAPTURE_DIM)
+        channel_analysis.dump(self.store, y)
+        return ('flush: ', time.perf_counter()-t0)
 
 
 class SpectrogramTimeAppender(ZarrSinkBase):
