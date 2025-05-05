@@ -17,6 +17,8 @@ else:
     xr = util.lazy_import('xarray')
     lb = util.lazy_import('labbench')
 
+dump = None
+imports = None
 
 class SinkBase:
     """intake acquisitions one at a time, and parcel data store"""
