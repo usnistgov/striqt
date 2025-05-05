@@ -11,6 +11,7 @@ class PeripheralsBase:
 
     def __init__(self, sweep: structs.Sweep|None):
         self.set_sweep(sweep)
+        super().__init__()
 
     def open(self):
         pass

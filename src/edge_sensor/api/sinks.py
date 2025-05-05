@@ -133,12 +133,12 @@ class CaptureAppender(ZarrSinkBase):
     """concatenates the data from each capture and dumps to a zarr data store"""
 
     def flush(self):
+        super().flush()
+
         data_list = self.pop()
 
         if len(data_list) == 0:
             return
-
-        super().flush()
 
         self._future = _dump_captures(data_list, self.store, self._executor)
         # with lb.stopwatch('build dataset'):
@@ -158,13 +158,13 @@ class SpectrogramTimeAppender(ZarrSinkBase):
         super().open()
 
     def flush(self):
+        super().flush()
+
         data_list = self.pop()
 
         if len(data_list) == 0:
             return
         
-        super().flush()
-
         with lb.stopwatch('build dataset'):
             by_spectrogram = xarray_ops.concat_time_dim(data_list, 'spectrogram_time')
 
