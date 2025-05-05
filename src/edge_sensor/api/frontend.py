@@ -156,7 +156,7 @@ def init_sweep_cli(
             opened = lb.concurrently(**calls)
 
     except BaseException:
-        debug_handler.run()
+        debug_handler.run(*sys.exc_info)
         if not debug_handler.enable:
             raise
 
