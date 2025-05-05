@@ -17,9 +17,6 @@ else:
     xr = util.lazy_import('xarray')
     lb = util.lazy_import('labbench')
 
-dump = None
-imports = None
-
 class SinkBase:
     """intake acquisitions one at a time, and parcel data store"""
 
@@ -57,8 +54,8 @@ class SinkBase:
             self._pending_data: list['xr.Dataset'] = []
         return result
 
-    def submit(self, func):
-        self._future = self._executor.submit(func)      
+    def submit(self, func, *args, **kws):
+        self._future = self._executor.submit(func, *args, **kws)
 
     def __enter__(self):
         self.open()
@@ -92,25 +89,14 @@ class SinkBase:
         if self._future is None:
             return
 
-        name, time_elapsed = self._future.result(timeout=30)
-
-        if name is not None:
-            lb.logger.info(f'{name} time elapsed: {time_elapsed:0.2f} s')
-
+        self._future.result(timeout=30)
         self._future = None
 
 
-def _zarr_imports():
-    """open the store in the a background process"""
-    t0 = time.perf_counter()
-    global imports
-    def imports():
-        import xarray
-        import pandas
-        import iqwaveform
-        return ('imports', time.perf_counter() - t0)
-
-    return imports
+def zarr_imports(t0):
+    import xarray
+    import zarr
+    print('imports time: ', time.perf_counter()-t0)
 
 
 class ZarrSinkBase(SinkBase):
@@ -131,7 +117,7 @@ class ZarrSinkBase(SinkBase):
             fixed_path, mode='w' if self.force else 'a'
         )
 
-        self.submit(_zarr_imports())
+        self.submit(zarr_imports, time.perf_counter())
 
     def close(self):
         super().close()
@@ -139,20 +125,15 @@ class ZarrSinkBase(SinkBase):
         self.store = None
 
 
-def _flush_captures_future(data: list['xarray_ops.DelayedAnalysisResult'], store):
+def _flush_captures_future(data: list['xarray_ops.DelayedAnalysisResult'], store, t0):
     """write the data to disk in a background process"""
-    t0 = time.perf_counter()
-    global dump
-    def dump():
-        # wait until now to do CPU-intensive xarray Dataset packaging
-        # in order to leave cycles free for acquisition and analysis
-        ds_seq = (r.to_xarray() for r in data)
+    # wait until now to do CPU-intensive xarray Dataset packaging
+    # in order to leave cycles free for acquisition and analysis
+    ds_seq = (r.to_xarray() for r in data)
 
-        y = xr.concat(ds_seq, xarray_ops.CAPTURE_DIM)
-        channel_analysis.dump(store, y)
-        return ('dump', time.perf_counter() - t0)
-
-    return dump
+    y = xr.concat(ds_seq, xarray_ops.CAPTURE_DIM)
+    channel_analysis.dump(store, y)
+    print('flush time: ', time.perf_counter()-t0)
 
 
 class CaptureAppender(ZarrSinkBase):
@@ -166,7 +147,7 @@ class CaptureAppender(ZarrSinkBase):
         if len(data_list) == 0:
             return
 
-        self.submit(_flush_captures_future(data_list, self.store))
+        self.submit(_flush_captures_future, data_list, self.store, time.perf_counter())
         # with lb.stopwatch('build dataset'):
         #     data_captures = xr.concat(data_list, xarray_ops.CAPTURE_DIM)
 
