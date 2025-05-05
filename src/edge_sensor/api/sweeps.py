@@ -313,7 +313,7 @@ class SweepIterator:
 
         return lb.concurrently(**calls)
 
-    def _intake(self, results: xarray_ops.DelayedAnalysisResult, ext_data={}):
+    def _intake(self, results: xarray_ops.DelayedAnalysisResult, ext_data={}) -> xarray_ops.DelayedAnalysisResult|None:
         if not isinstance(results, xarray_ops.DelayedAnalysisResult):
             raise ValueError(
                 f'expected DelayedAnalysisResult type for data, not {type(results)}'
