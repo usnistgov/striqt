@@ -327,7 +327,7 @@ class SweepIterator:
                 f'expected DelayedAnalysisResult type for data, not {type(results[0])}'
             )
         
-        results.set_external_data(ext_data)
+        results.set_extra_data(ext_data)
         if self._writer is not None:
             self._writer.append(results)
 

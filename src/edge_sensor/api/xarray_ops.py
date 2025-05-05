@@ -275,11 +275,11 @@ class DelayedAnalysisResult:
     sweep: structs.Sweep
     radio_id: str
     sweep_time: typing.Any
-    extra_attrs: dict = None
-    ext_data: dict = {}
+    extra_attrs: dict|None = None
+    extra_data: dict|None = None
 
-    def set_external_data(self, ext_data: dict[str]) -> None:
-        self.ext_data=ext_data
+    def set_extra_data(self, extra_data: dict[str]) -> None:
+        self.extra_data=extra_data
 
     def to_xarray(self) -> 'xr.Dataset':
         """complete any remaining calculations, transfer from the device, and build an output dataset"""
@@ -307,11 +307,11 @@ class DelayedAnalysisResult:
 
             analysis[SWEEP_TIMESTAMP_NAME].attrs.update(label='Sweep start time')
 
-        if len(self.ext_data) > 0:
+        if self.extra_data is not None:
             update_ext_dims = {CAPTURE_DIM: analysis.capture.size}
             new_arrays = {
                 k: xr.DataArray(v).expand_dims(update_ext_dims)
-                for k, v in self.ext_data.items()
+                for k, v in self.extra_data.items()
             }
             analysis = analysis.assign(new_arrays)
 
