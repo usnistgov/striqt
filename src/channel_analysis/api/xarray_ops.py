@@ -14,6 +14,7 @@ from . import structs, util
 
 
 if typing.TYPE_CHECKING:
+    from .registry import ChannelAnalysisRegistry
     import numpy as np
     import xarray as xr
     import iqwaveform
@@ -326,13 +327,18 @@ def evaluate_channel_analysis(
     as_xarray: typing.Literal[True]
     | typing.Literal[False]
     | typing.Literal['delayed'] = 'delayed',
-    registry,
+    registry: 'ChannelAnalysisRegistry',
 ):
     """evaluate the specified channel analysis for the given IQ waveform and
     its capture information"""
     # round-trip for type conversion and validation
-    spec = structs.builtins_to_struct(spec, registry.spec_type())
-    spec_dict = structs.struct_to_builtins(spec)
+
+    if isinstance(spec, structs.ChannelAnalysis):
+        spec = spec.validate()
+    else:
+        spec = registry.spec_type().fromdict(spec)
+
+    spec_dict = spec.todict()
 
     results = {}
 
@@ -362,9 +368,7 @@ def package_channel_analysis(
         for name, res in results.items():
             xarrays[name] = res.to_xarray(expand_dims)
 
-        # capture.analysis_filter = dict(capture.analysis_filter)
-        # capture = structs.builtins_to_struct(capture, type=type(capture))
-        attrs = structs.struct_to_builtins(capture)
+        attrs = capture.todict()
         if isinstance(capture, structs.FilteredCapture):
             attrs['analysis_filter'] = msgspec.to_builtins(capture.analysis_filter)
         ret = xr.Dataset(xarrays, attrs=attrs)

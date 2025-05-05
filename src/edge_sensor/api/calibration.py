@@ -35,7 +35,7 @@ class CalibrationCapture(structs.RadioCapture, forbid_unknown_fields=True, froze
     noise_diode_enabled: NoiseDiodeEnabledType = False
 
 
-class CalibrationSetup(msgspec.Struct, forbid_unknown_fields=True):
+class CalibrationSetup(structs.StructBase, forbid_unknown_fields=True):
     enr: Annotated[float, meta(standard_name='Excess noise ratio', unit='dB')] = 20.87
     ambient_temperature: Annotated[
         float, meta(standard_name='Ambient temperature', unit='K')
@@ -43,7 +43,7 @@ class CalibrationSetup(msgspec.Struct, forbid_unknown_fields=True):
 
 
 class CalibrationVariables(
-    msgspec.Struct, forbid_unknown_fields=True, kw_only=True, frozen=True
+    structs.StructBase, forbid_unknown_fields=True, kw_only=True, frozen=True
 ):
     noise_diode_enabled: tuple[NoiseDiodeEnabledType, ...] = (False, True)
     sample_rate: tuple[structs.BackendSampleRateType, ...]
@@ -84,7 +84,7 @@ def _cached_calibration_captures(
         elif mapping['analysis_bandwidth'] > mapping['sample_rate']:
             # skip cases outside of 1st Nyquist zone
             continue
-        capture = msgspec.structs.replace(defaults, **mapping)
+        capture = defaults.replace(**mapping)
         captures.append(capture)
 
     return tuple(captures)
@@ -112,8 +112,8 @@ class CalibrationSweep(
     captures: tuple[CalibrationCapture, ...] = tuple()
 
     def get_captures(self):
-        variables = structs.validated(self.calibration_variables)
-        defaults = structs.validated(self.defaults)
+        variables = self.calibration_variables.validate()
+        defaults = self.defaults.validate()
         return _cached_calibration_captures(variables, defaults)
 
 

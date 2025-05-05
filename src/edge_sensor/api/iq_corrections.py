@@ -1,5 +1,4 @@
 from __future__ import annotations
-import msgspec
 import typing
 
 from .sources import base, SourceBase, design_capture_filter
@@ -29,7 +28,7 @@ def _get_voltage_scale(
     """
     # to make the best use of the calibration lookup cache, remove extraneous
     # fields in case this is a specialized capture subclass
-    bare_capture = msgspec.structs.replace(capture, start_time=None)
+    bare_capture = capture.replace(start_time=None)
 
     cal_data = radio.calibration if force_calibration is None else force_calibration
     power_scale = calibration.lookup_power_correction(

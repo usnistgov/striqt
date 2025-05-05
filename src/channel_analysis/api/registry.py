@@ -20,14 +20,12 @@ from .xarray_ops import (
 
 
 if typing.TYPE_CHECKING:
-    import numpy as np
     from xarray_dataclasses import dataarray
     import array_api_compat
     import iqwaveform
     from . import shmarray
     import xarray as xr
 else:
-    np = util.lazy_import('numpy')
     dataarray = util.lazy_import('xarray_dataclasses.dataarray')
     array_api_compat = util.lazy_import('array_api_compat')
     iqwaveform = util.lazy_import('iqwaveform')
@@ -64,11 +62,11 @@ def _results_as_arrays(
     #     return array
 
 
-class KeywordArguments(msgspec.Struct):
+class KeywordArguments(structs.StructBase):
     """base class for the keyword argument parameters of an analysis function"""
 
 
-class ChannelAnalysisRegistryDecorator(collections.UserDict):
+class ChannelAnalysisRegistry(collections.UserDict):
     """a registry of keyword-only arguments for decorated functions"""
 
     def __init__(self, base_struct=None):
@@ -176,7 +174,7 @@ class ChannelAnalysisRegistryDecorator(collections.UserDict):
 
         return wrapper
 
-    def spec_type(self) -> structs.ChannelAnalysis:
+    def spec_type(self) -> type[structs.ChannelAnalysis]:
         """return a Struct subclass type representing a specification for calls to all registered functions"""
         fields = [
             (func.__name__, typing.Union[struct_type, None], None)
@@ -193,7 +191,7 @@ class ChannelAnalysisRegistryDecorator(collections.UserDict):
         )
 
 
-register_xarray_measurement = ChannelAnalysisRegistryDecorator(structs.ChannelAnalysis)
+register_xarray_measurement = ChannelAnalysisRegistry(structs.ChannelAnalysis)
 
 
 def analyze_by_spec(

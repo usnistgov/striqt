@@ -129,7 +129,7 @@ def _get_alias_dtypes(output: structs.Output):
 
 
 @functools.lru_cache
-def get_attrs(struct: type[msgspec.Struct], field: str) -> dict[str, str]:
+def get_attrs(struct: type[structs.StructBase], field: str) -> dict[str, str]:
     """introspect an attrs dict for xarray from the specified field in `struct`"""
     hints = typing.get_type_hints(struct, include_extras=True)
 
@@ -278,9 +278,11 @@ class DelayedAnalysisResult:
     extra_attrs: dict = None
 
     def get(self) -> 'xr.Dataset':
-        """complete any remaining calculations, transfer from the device, and build an output dataset """
+        """complete any remaining calculations, transfer from the device, and build an output dataset"""
 
-        with lb.stopwatch('residual calculations', threshold=10e-3, logger_level='debug'):
+        with lb.stopwatch(
+            'residual calculations', threshold=10e-3, logger_level='debug'
+        ):
             analysis = channel_analysis.api.xarray_ops.package_channel_analysis(
                 self.capture, self.delayed, expand_dims=(CAPTURE_DIM,)
             )
@@ -325,8 +327,8 @@ def analyze_capture(
     """
     attrs = {
         # metadata fields
-        **structs.struct_to_builtins(sweep.radio_setup),
-        **structs.struct_to_builtins(sweep.description),
+        **sweep.radio_setup.todict(),
+        **sweep.description.todict(),
     }
 
     func = ChannelAnalysisWrapper(

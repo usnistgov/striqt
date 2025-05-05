@@ -271,11 +271,10 @@ class SourceBase(lb.Device):
         if radio_setup is None:
             radio_setup = structs.RadioSetup()
 
-        radio_setup = msgspec.structs.replace(radio_setup, **setup_kws)
+        radio_setup = radio_setup.replace(**setup_kws)
         if radio_setup.driver is None:
-            radio_setup = msgspec.structs.replace(
-                radio_setup, driver=self.__class__.__name__
-            )
+            driver = self.__class__.__name__
+            radio_setup = radio_setup.replace(driver=driver)
 
         self.calibration = radio_setup.calibration
         self.periodic_trigger = radio_setup.periodic_trigger
@@ -301,7 +300,7 @@ class SourceBase(lb.Device):
         if capture is None:
             capture = self.get_capture_struct()
 
-        capture = msgspec.structs.replace(capture, **capture_kws)
+        capture = capture.replace(**capture_kws)
 
         self._forced_backend_sample_rate = capture.backend_sample_rate
 
@@ -519,8 +518,7 @@ class SourceBase(lb.Device):
                     iq, capture, self, overwrite_x=True
                 )
 
-        acquired_capture = msgspec.structs.replace(
-            capture,
+        acquired_capture = capture.replace(
             start_time=pd.Timestamp(time_ns, unit='ns'),
             backend_sample_rate=fs,
         )

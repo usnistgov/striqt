@@ -21,14 +21,10 @@ def run(*, channel, **kws):
 
     # apply the channel setting
     if channel is not None:
-        import msgspec
-
-        variables = msgspec.structs.replace(
-            cli_objs.sweep_spec.calibration_variables, channel=(channel,)
+        variables = cli_objs.sweep_spec.calibration_variables.replace(
+            channel=(channel,)
         )
-        sweep_spec = msgspec.structs.replace(
-            cli_objs.sweep_spec, calibration_variables=variables
-        )
+        sweep_spec = cli_objs.sweep_spec.replace(calibration_variables=variables)
         cli_objs = frontend.CLIObjects(sweep_spec, *cli_objs[1:])
         cli_objs.peripherals.set_sweep(sweep_spec)
 

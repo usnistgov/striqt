@@ -13,8 +13,7 @@ import channel_analysis
 from channel_analysis.api.structs import (
     meta,
     ChannelAnalysis,  # noqa: F401
-    struct_to_builtins,  # noqa: F401
-    builtins_to_struct,  # noqa: F401
+    StructBase,
 )
 
 if typing.TYPE_CHECKING:
@@ -163,7 +162,7 @@ FastLOType = Annotated[
 ]
 
 
-class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):
+class RadioSetup(StructBase, forbid_unknown_fields=True):
     """run-time characteristics of the radio that are left invariant during a sweep"""
 
     driver: Optional[str] = None
@@ -189,14 +188,14 @@ class RadioSetup(msgspec.Struct, forbid_unknown_fields=True):
             )
 
 
-class Description(msgspec.Struct, forbid_unknown_fields=True):
+class Description(StructBase, forbid_unknown_fields=True):
     summary: Optional[str] = None
     location: Optional[tuple[float, float, float]] = None
     signal_chain: Optional[tuple[str, ...]] = tuple()
     version: str = 'unversioned'
 
 
-class Output(msgspec.Struct, forbid_unknown_fields=True, frozen=True, cache_hash=True):
+class Output(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     path: Optional[str] = '{yaml_name}-{start_time}'
     store: typing.Union[Literal['zip'], Literal['directory']] = 'zip'
     coord_aliases: dict[str, dict[str, dict[str, Any]]] = {}
@@ -228,16 +227,14 @@ ExtensionPathType = Annotated[
 ]
 
 
-class Extensions(
-    msgspec.Struct, forbid_unknown_fields=True, frozen=True, cache_hash=True
-):
+class Extensions(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     peripherals: PeripheralClassType = 'edge_sensor.peripherals.NoPeripherals'
     writer: WriterClassType = 'edge_sensor.writers.CaptureAppender'
     sweep_struct: SweepStructType = 'edge_sensor.Sweep'
     import_path: ExtensionPathType = None
 
 
-class Sweep(msgspec.Struct, forbid_unknown_fields=True):
+class Sweep(StructBase, forbid_unknown_fields=True):
     captures: tuple[RadioCapture, ...] = tuple()
     radio_setup: RadioSetup = msgspec.field(default_factory=RadioSetup)
     defaults: RadioCapture = msgspec.field(default_factory=RadioCapture)
@@ -255,23 +252,3 @@ class Sweep(msgspec.Struct, forbid_unknown_fields=True):
             return self.get_captures()
         else:
             return super().__getattribute__(name)
-
-
-def _dec_hook(type_, obj):
-    import numpy as np
-
-    if typing.get_origin(type_) is pd.Timestamp:
-        return pd.to_datetime(obj)
-    elif isinstance(obj, (np.float16, np.float32, np.float64)):
-        return float(obj)
-    else:
-        return obj
-
-
-def validated(struct):
-    obj = struct_to_builtins(struct)
-    return msgspec.convert(
-        obj,
-        type(struct),
-        dec_hook=_dec_hook,
-    )

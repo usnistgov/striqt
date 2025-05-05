@@ -166,24 +166,28 @@ def read_yaml_sweep(
     )
     sweep_cls = _import_extension(extensions, 'sweep_struct')
 
-    sweep: structs.Sweep = channel_analysis.builtins_to_struct(
-        tree, type=sweep_cls, strict=False, dec_hook=structs._dec_hook
-    )
+    if not issubclass(sweep_cls, structs.Sweep):
+        name = extensions['sweep_struct']
+        raise TypeError(
+            f'extension.sweep_struct is {name!r}, which exists but is not subclass of edge_sensor.Sweep'
+        )
+
+    sweep: structs.Sweep = sweep_cls.fromdict(tree)
 
     # fill formatting fields in paths
     kws = dict(relative_to_file=path, sweep=sweep, radio_id=radio_id)
 
     output_path = expand_path(sweep.output.path, **kws)
-    output_spec = msgspec.structs.replace(sweep.output, path=output_path)
+    output_spec = sweep.output.replace(path=output_path)
 
     cal_path = expand_path(sweep.radio_setup.calibration, **kws)
-    setup_spec = msgspec.structs.replace(sweep.radio_setup, calibration=cal_path)
+    setup_spec = sweep.radio_setup.replace(calibration=cal_path)
 
     import_path = expand_path(sweep.extensions.import_path, **kws)
-    extensions_spec = msgspec.structs.replace(sweep.extensions, import_path=import_path)
+    extensions_spec = sweep.extensions.replace(import_path=import_path)
 
-    sweep = msgspec.structs.replace(
-        sweep, output=output_spec, radio_setup=setup_spec, extensions=extensions_spec
+    sweep = sweep.replace(
+        output=output_spec, radio_setup=setup_spec, extensions=extensions_spec
     )
 
     return sweep

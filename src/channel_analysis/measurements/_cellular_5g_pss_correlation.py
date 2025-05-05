@@ -241,7 +241,7 @@ def _pss_params(
     trim_cp: bool = True,
     shared_spectrum: bool = False,
 ) -> dict:
-    capture = msgspec.structs.replace(capture, sample_rate=sample_rate)
+    capture = capture.replace(sample_rate=sample_rate)
 
     if not iqwaveform.util.isroundmod(subcarrier_spacing, 15e3):
         raise ValueError('subcarrier_spacing must be multiple of 15000')
@@ -375,7 +375,7 @@ def cellular_5g_pss_correlation(
         window='blackman',
         frequency_shift=frequency_offset,
     )
-    capture = msgspec.structs.replace(capture, sample_rate=sample_rate)
+    capture = capture.replace(sample_rate=sample_rate)
 
     if isinstance(frequency_offset, dict):
         if not hasattr(capture, 'center_frequency'):

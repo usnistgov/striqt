@@ -2,22 +2,15 @@
 
 from __future__ import annotations
 import functools
-import msgspec
 import numbers
-import typing
 
-from . import structs, util
-
-if typing.TYPE_CHECKING:
-    import numpy as np
-else:
-    np = util.lazy_import('numpy')
+from . import structs
 
 
 @functools.lru_cache(10000)
 def broadcast_to_channels(
     channels: int | tuple[int, ...], *params, allow_mismatch=False
-) -> list[list]:
+) -> list[tuple[int, ...]]:
     """broadcast sequences in each element in `params` up to the
     length of capture.channel.
     """
@@ -45,7 +38,7 @@ def broadcast_to_channels(
 
 def _match_capture_fields(
     capture: structs.RadioCapture, fields: dict[str], radio_id: str | None = None
-):
+) -> bool:
     if isinstance(capture.channel, tuple):
         raise ValueError('split the capture to evaluate alias matches')
 
@@ -69,8 +62,11 @@ def _match_capture_fields(
 
 @functools.lru_cache()
 def evaluate_aliases(
-    capture: structs.RadioCapture, *, radio_id: str = None, output: structs.Output
-):
+    capture: structs.RadioCapture,
+    *,
+    radio_id: str | None = None,
+    output: structs.Output,
+) -> dict[str]:
     """evaluate the field values"""
 
     ret = {}
@@ -104,13 +100,13 @@ def split_capture_channels(capture: structs.RadioCapture) -> list[structs.RadioC
         for remap, value in zip(remaps, values):
             remap[field] = value
 
-    return [msgspec.structs.replace(capture, **remap) for remap in remaps]
+    return [capture.replace(**remap) for remap in remaps]
 
 
 def capture_fields_with_aliases(
     capture: structs.RadioCapture, *, radio_id: str = None, output: structs.Output
 ) -> dict:
-    attrs = structs.struct_to_builtins(capture)
+    attrs = capture.todict()
     c = split_capture_channels(capture)[0]
     aliases = evaluate_aliases(c, radio_id=radio_id, output=output)
 
@@ -118,7 +114,7 @@ def capture_fields_with_aliases(
 
 
 def get_field_value(
-    name,
+    name: str,
     capture: structs.RadioCapture,
     radio_id: str,
     alias_hits: dict,
@@ -128,16 +124,11 @@ def get_field_value(
     if isinstance(capture.channel, tuple):
         raise ValueError('split the capture before the call to get_capture_field')
 
-    # aliases = output.coord_aliases
-    # if len(aliases) > 0:
-    #     alias_hits = _evaluate_aliases(capture, radio_id, output)
-
     if hasattr(capture, name):
         value = getattr(capture, name)
         if isinstance(value, tuple):
             value = value[0]
     elif name in alias_hits:
-        # default_type = type(next(iter(aliases[name].values())))
         value = alias_hits[name]
     elif name == 'radio_id':
         value = radio_id

@@ -70,8 +70,7 @@ def design_warmup_sweep(
     # TODO: currently, the base_clock_rate is left as the null radio default.
     # this may cause problems in the future if its default disagrees with another
     # radio
-    null_radio_setup = msgspec.structs.replace(
-        sweep.radio_setup,
+    null_radio_setup = sweep.radio_setup.replace(
         driver=sources.NullSource.__name__,
         resource={},
         _rx_channel_count=radio_cls.rx_channel_count.default,
@@ -83,13 +82,9 @@ def design_warmup_sweep(
             # override any capture auto-generating logic
             return structs.Sweep.get_captures(self)
 
-    warmup = structs.builtins_to_struct(structs.struct_to_builtins(sweep), WarmupSweep)
+    warmup = WarmupSweep.fromdict(sweep.todict())
 
-    return msgspec.structs.replace(
-        warmup,  #
-        captures=captures,  #
-        radio_setup=null_radio_setup,
-    )
+    return warmup.replace(captures=captures, radio_setup=null_radio_setup)
 
 
 def _iq_is_reusable(
@@ -113,10 +108,8 @@ def _iq_is_reusable(
         'backend_sample_rate': None,
     }
 
-    c1_compare = msgspec.structs.replace(c1, **downstream_kws)
-
-    c2_compare = msgspec.structs.replace(
-        c2,
+    c1_compare = c1.replace(**downstream_kws)
+    c2_compare = c2.replace(
         # ignore parameters that only affect downstream processing
         # that are validated to have flat response and unity gain
         analysis_bandwidth=c1.analysis_bandwidth,
@@ -136,7 +129,7 @@ def _build_attrs(sweep: structs.Sweep):
     attrs = {}
     for field in attr_fields[::-1]:
         obj = getattr(sweep, field)
-        new_attrs = structs.struct_to_builtins(obj)
+        new_attrs = obj.todict()
         attrs.update(new_attrs)
 
     return attrs
@@ -176,7 +169,7 @@ class SweepIterator:
         self._writer = writer
 
     def setup(self, sweep: structs.Sweep):
-        self.sweep: structs.Sweep = structs.validated(sweep)
+        self.sweep: structs.Sweep = sweep.validate()
 
         self._analyze = xarray_ops.ChannelAnalysisWrapper(
             radio=self.radio,
@@ -291,8 +284,7 @@ class SweepIterator:
         # acquire from the radio and any peripherals
         calls = {}
         if reuse_this:
-            capture_ret = msgspec.structs.replace(
-                capture_this,
+            capture_ret = capture_this.replace(
                 backend_sample_rate=self.radio.backend_sample_rate(),
                 start_time=None,
             )
