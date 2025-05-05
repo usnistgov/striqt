@@ -74,8 +74,7 @@ class SinkBase:
         if capture_data is None:
             return
         else:
-            with self._lock:
-                self._pending_data.append(capture_data)
+            self._pending_data.append(capture_data)
 
     def open(self):
         raise NotImplementedError
