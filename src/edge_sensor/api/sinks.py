@@ -90,10 +90,10 @@ class SinkBase:
         if self._future is None:
             return
 
-        log_name, time_elapsed = self._future.result(timeout=30)
+        func, time_elapsed = self._future.result(timeout=30)
 
-        if log_name is not None:
-            lb.logger.info(f'{log_name} time elapsed: {time_elapsed:0.2f} s')
+        if func is not None:
+            lb.logger.info(f'{func.__name__} time elapsed: {time_elapsed:0.2f} s')
 
         self._future = None
 
@@ -101,14 +101,13 @@ class SinkBase:
 def _zarr_imports():
     """open the store in the a background process"""
     t0 = time.perf_counter()
-    global _imports
-    def _imports():
+    def imports():
         import xarray
         import pandas
         import iqwaveform
-        return ('imports', time.perf_counter() - t0)
+        return (imports, time.perf_counter() - t0)
 
-    return _imports
+    return imports
 
 
 class ZarrSinkBase(SinkBase):
@@ -140,17 +139,16 @@ class ZarrSinkBase(SinkBase):
 def _flush_captures_future(data: list['xarray_ops.DelayedAnalysisResult'], store):
     """write the data to disk in a background process"""
     t0 = time.perf_counter()
-    global _dump # to prevent gc on _func
-    def _dump():
+    def dump():
         # wait until now to do CPU-intensive xarray Dataset packaging
         # in order to leave cycles free for acquisition and analysis
         ds_seq = (r.to_xarray() for r in data)
 
         y = xr.concat(ds_seq, xarray_ops.CAPTURE_DIM)
         channel_analysis.dump(store, y)
-        return ('flush', time.perf_counter() - t0)
+        return (dump, time.perf_counter() - t0)
 
-    return _dump
+    return dump
 
 
 class CaptureAppender(ZarrSinkBase):
