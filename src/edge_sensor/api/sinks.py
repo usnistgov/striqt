@@ -104,7 +104,7 @@ def _get_zarr(path, force):
 
 
 def _close_zarr(path, force):
-    store = _open_zarr(path, force)
+    store = _get_zarr(path, force)
     store.close()
 
 
