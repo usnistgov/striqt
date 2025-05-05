@@ -90,10 +90,10 @@ class SinkBase:
         if self._future is None:
             return
 
-        func, time_elapsed = self._future.result(timeout=30)
+        name, time_elapsed = self._future.result(timeout=30)
 
-        if func is not None:
-            lb.logger.info(f'{func.__name__} time elapsed: {time_elapsed:0.2f} s')
+        if name is not None:
+            lb.logger.info(f'{name} time elapsed: {time_elapsed:0.2f} s')
 
         self._future = None
 
@@ -105,7 +105,7 @@ def _zarr_imports():
         import xarray
         import pandas
         import iqwaveform
-        return (imports, time.perf_counter() - t0)
+        return ('imports', time.perf_counter() - t0)
 
     return imports
 
@@ -146,7 +146,7 @@ def _flush_captures_future(data: list['xarray_ops.DelayedAnalysisResult'], store
 
         y = xr.concat(ds_seq, xarray_ops.CAPTURE_DIM)
         channel_analysis.dump(store, y)
-        return (dump, time.perf_counter() - t0)
+        return ('dump', time.perf_counter() - t0)
 
     return dump
 
