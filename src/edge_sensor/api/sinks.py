@@ -94,7 +94,7 @@ class SinkBase:
 
 
 def _open_zarr(path, force):
-    _get_zarr(path, mode='w' if force else 'a')
+    _get_zarr(path, force)
 
 @functools.lru_cache(1)
 def _get_zarr(path, force):
