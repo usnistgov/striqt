@@ -9,7 +9,7 @@ class PeripheralsBase:
     methods for arming and acquisition.
     """
 
-    def __init__(self, sweep: structs.Sweep):
+    def __init__(self, sweep: structs.Sweep|None):
         self.set_sweep(sweep)
 
     def open(self):

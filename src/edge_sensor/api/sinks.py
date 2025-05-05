@@ -106,6 +106,9 @@ class SinkBase:
 
 class ZarrSinkBase(SinkBase):
     def open(self):
+        if self.store is not None:
+            return
+        
         if self.store_backend == 'directory':
             fixed_path = Path(self.output_path).with_suffix('.zarr')
         elif self.store_backend == 'zip':
@@ -122,6 +125,7 @@ class ZarrSinkBase(SinkBase):
     def close(self):
         super().close()
         self.store.close()
+        self.store = None
 
 
 class CaptureAppender(ZarrSinkBase):

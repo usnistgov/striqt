@@ -22,12 +22,39 @@ def _connect_controller(remote, sweep):
         return controller.connect(remote).root
 
 
+class DebugOnException:
+    def __init__(
+        self,
+        enable: bool = False,
+    ):
+        self.enable = enable
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.run(*args)
+
+    def run(self, etype, exc, tb):
+        if self.enable:
+            print('entering debugger')
+            from IPython.core import ultratb
+            lb.util.force_full_traceback(True)
+            if not hasattr(sys, 'last_value'):
+                sys.last_value = exc
+            debugger = ultratb.FormattedTB(
+                mode='Verbose', call_pdb=1
+            )
+            debugger(etype, exc, tb)
+
+
 class CLIObjects(typing.NamedTuple):
     sweep_spec: structs.Sweep
-    writer: sinks.SinkBase
+    sink: sinks.SinkBase
     controller: controller.SweepController
-    calibration: 'xr.Dataset'
     peripherals: peripherals.PeripheralsBase
+    debugger: DebugOnException
+    calibration: 'xr.Dataset'
 
 
 class SweepSpecClasses(typing.NamedTuple):
@@ -45,31 +72,6 @@ def _get_extension_classes(sweep_spec: structs.Sweep) -> SweepSpecClasses:
     )
 
 
-def _apply_exception_hooks(
-    controller=None,
-    *,
-    sweep=None,
-    debug: bool = False,
-    remote: typing.Optional[bool] = False,
-):
-    def hook(*args):
-        from IPython.core import ultratb
-
-        if debug:
-            print('entering debugger')
-            lb.util.force_full_traceback(True)
-            debugger = ultratb.FormattedTB(
-                mode='Verbose', color_scheme='Linux', call_pdb=1
-            )
-            debugger(*args)
-
-        if remote:
-            print('closing in exception hook')
-            controller.close_radio(sweep.radio_setup)
-
-    sys.excepthook = hook
-
-
 def init_sweep_cli(
     *,
     yaml_path: Path,
@@ -82,6 +84,8 @@ def init_sweep_cli(
 ) -> CLIObjects:
     # now re-read the yaml, using sweep_cls as the schema, but without knowledge of
     sweep_spec = io.read_yaml_sweep(yaml_path)
+
+    debug_handler = DebugOnException(debug)
 
     if 'None' in sweep_spec.output.path:
         # in this case, we're still waiting to fill in radio_id
@@ -110,23 +114,18 @@ def init_sweep_cli(
     # start by connecting to the controller, so that the radio id can be used
     # as a file naming field
     peripherals = None
-    if not remote:
-        _apply_exception_hooks(debug=debug)
     try:
         calls = {}
         calls['controller'] = lb.Call(_connect_controller, remote, sweep_spec)
         if open_writer_early:
             yaml_classes = _get_extension_classes(sweep_spec)
             # now, open the store
-            writer = yaml_classes.writer_cls(
+            sink = yaml_classes.writer_cls(
                 sweep_spec, output_path=output_path, store_backend=store_backend
             )
-            calls['file store'] = lb.Call(writer.open)
+            calls['file store'] = lb.Call(sink.open)
         with lb.stopwatch(f'open {", ".join(calls)}', logger_level='info', threshold=1):
             controller = util.concurrently_with_fg(calls, False)['controller']
-
-        if remote:
-            _apply_exception_hooks(controller, sweep_spec, debug=debug, remote=remote)
 
         yaml_classes = _get_extension_classes(sweep_spec)
         radio_id = controller.radio_id(sweep_spec.radio_setup.driver)
@@ -146,10 +145,10 @@ def init_sweep_cli(
         calls['peripherals'] = lb.Call(peripherals.open)
         if not open_writer_early:
             # now, open the store
-            writer = yaml_classes.writer_cls(
+            sink = yaml_classes.writer_cls(
                 sweep_spec, output_path=output_path, store_backend=store_backend
             )
-            calls['writer'] = lb.Call(writer.open)
+            calls['writer'] = lb.Call(sink.open)
 
         with lb.stopwatch(
             f'load {", ".join(calls)}', logger_level='info', threshold=0.25
@@ -157,19 +156,16 @@ def init_sweep_cli(
             opened = lb.concurrently(**calls)
 
     except BaseException:
-        import traceback
-
-        traceback.print_exc()
-        if cli.peripherals:
-            cli.peripherals.close()
+        debug_handler()
         raise
 
     return CLIObjects(
-        writer=writer,
+        sink=sink,
         controller=controller,
         sweep_spec=sweep_spec,
-        calibration=opened.get('calibration', None),
         peripherals=peripherals,
+        debugger=debug_handler,
+        calibration=opened.get('calibration', None)
     )
 
 
@@ -179,7 +175,11 @@ def execute_sweep_cli(
     reuse_compatible_iq: bool = False,
     remote=None,
 ):
-    try:
+    # the cal is not a context
+    *cli_context, cal = cli
+
+    print('entering context...')
+    with lb.sequentially(*cli_context):
         # iterate through the sweep specification, yielding a dataset for each capture
         sweep_iter = cli.controller.iter_sweep(
             cli.sweep_spec,
@@ -190,24 +190,8 @@ def execute_sweep_cli(
         )
 
         sweep_iter.set_peripherals(cli.peripherals)
-        sweep_iter.set_writer(cli.writer)
+        sweep_iter.set_writer(cli.sink)
 
         # step through captures
         for _ in sweep_iter:
             pass
-
-        cli.writer.flush()
-
-    except BaseException:
-        import traceback
-
-        traceback.print_exc()
-        if cli.peripherals:
-            cli.peripherals.close()
-        # this is handled by hooks in sys.excepthook, which may
-        # trigger the IPython debugger (if configured) and then close the radio
-        raise
-
-    else:
-        if remote is not None:
-            cli.controller.close_radio(cli.sweep_spec.radio_setup)

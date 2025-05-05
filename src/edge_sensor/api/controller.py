@@ -38,6 +38,12 @@ class SweepController:
         if sweep is not None:
             self.prepare_sweep(sweep, calibration=None)
 
+    def __enter__(self):
+        return self
+    
+    def __exit__(self, *args):
+        self.close()
+
     def close(self):
         last_ex = None
 
