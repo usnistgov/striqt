@@ -77,14 +77,17 @@ class SinkBase:
         return self
 
     def __exit__(self, *args):
-        try:
-            self._executor.__exit__(*args)
-        finally:
-            self.close()
+        self.close()
 
     def close(self):
+        try:
+            self.flush()
+            self.close()
+        finally:
+            self._executor.__exit__()
+
         print('close!')
-        self.flush()
+        
 
     def append(self, capture_data: 'xr.Dataset'):
         if capture_data is None:
