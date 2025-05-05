@@ -1,8 +1,4 @@
-"""integrate channel_analysis into captures on sensor hardware"""
-
-# start with this to work around a dynamic library loading
-# packaging quirk on jetson aarch64
-from .api import calibration, io, peripherals, structs, util, writers
+from .api import calibration, io, peripherals, sinks, structs, util
 from . import api
 
 from .api.controller import connect, start_server, SweepController

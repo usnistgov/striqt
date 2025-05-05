@@ -7,7 +7,7 @@ import msgspec
 
 from . import captures, structs, sources, util, xarray_ops
 from .peripherals import PeripheralsBase
-from .writers import WriterBase
+from .sinks import SinkBase
 
 
 if typing.TYPE_CHECKING:
@@ -165,7 +165,7 @@ class SweepIterator:
     def set_peripherals(self, peripherals: PeripheralsBase | None):
         self._peripherals = peripherals
 
-    def set_writer(self, writer: WriterBase | None):
+    def set_writer(self, writer: SinkBase | None):
         self._writer = writer
 
     def setup(self, sweep: structs.Sweep):

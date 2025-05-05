@@ -8,7 +8,7 @@ import typing
 
 import msgspec
 
-from . import peripherals, sources, structs, util, writers, xarray_ops
+from . import peripherals, sinks, sources, structs, util, xarray_ops
 from .captures import split_capture_channels
 from .structs import Annotated, meta
 
@@ -348,7 +348,7 @@ def lookup_power_correction(
     return xp.asarray(power_scale, dtype='float32')
 
 
-class CalibrationWriter(writers.WriterBase):
+class CalibrationWriter(sinks.SinkBase):
     sweep_spec: CalibrationSweep
 
     _DROP_FIELDS = (

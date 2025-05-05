@@ -277,7 +277,7 @@ class DelayedAnalysisResult:
     sweep_time: typing.Any
     extra_attrs: dict = None
 
-    def get(self) -> 'xr.Dataset':
+    def to_xarray(self) -> 'xr.Dataset':
         """complete any remaining calculations, transfer from the device, and build an output dataset"""
 
         with lb.stopwatch(

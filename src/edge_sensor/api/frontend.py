@@ -5,7 +5,7 @@ import typing
 import msgspec
 import click
 
-from . import calibration, controller, io, peripherals, structs, util, writers
+from . import calibration, controller, io, peripherals, sinks, structs, util
 
 if typing.TYPE_CHECKING:
     import xarray as xr
@@ -24,14 +24,14 @@ def _connect_controller(remote, sweep):
 
 class CLIObjects(typing.NamedTuple):
     sweep_spec: structs.Sweep
-    writer: writers.WriterBase
+    writer: sinks.SinkBase
     controller: controller.SweepController
     calibration: 'xr.Dataset'
     peripherals: peripherals.PeripheralsBase
 
 
 class SweepSpecClasses(typing.NamedTuple):
-    writer_cls: typing.Type[writers.WriterBase]
+    writer_cls: typing.Type[sinks.SinkBase]
     peripherals_cls: typing.Type[peripherals.PeripheralsBase]
 
 
