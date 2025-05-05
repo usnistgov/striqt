@@ -1,5 +1,6 @@
 from __future__ import annotations
 from pathlib import Path
+import sys
 import time
 import threading
 import typing
@@ -84,7 +85,7 @@ class SinkBase:
             self.flush()
             self.close()
         finally:
-            self._executor.__exit__()
+            self._executor.__exit__(*sys.exc_info)
 
         print('close!')
         
