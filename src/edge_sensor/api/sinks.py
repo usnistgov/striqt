@@ -18,22 +18,6 @@ else:
     lb = util.lazy_import('labbench')
 
 
-def _open_store_future(data: list['xarray_ops.DelayedAnalysisResult'], store):
-    """write the data to disk in a background process"""
-    t0 = time.perf_counter()
-    global _open # to prevent gc on _func
-    def _open():
-        # wait until now to do CPU-intensive xarray Dataset packaging
-        # in order to leave cycles free for acquisition and analysis
-        ds_seq = (r.to_xarray() for r in data)
-
-        y = xr.concat(ds_seq, xarray_ops.CAPTURE_DIM)
-        channel_analysis.dump(store, y)
-        return ('open', time.perf_counter() - t0)
-
-    return _open
-
-
 class SinkBase:
     """intake acquisitions one at a time, and parcel data store"""
 
@@ -89,9 +73,6 @@ class SinkBase:
         finally:
             self._executor.__exit__(*sys.exc_info())
 
-        print('close!')
-        
-
     def append(self, capture_data: 'xr.Dataset'):
         if capture_data is None:
             return
@@ -116,11 +97,25 @@ class SinkBase:
 
         self._future = None
 
+
+def _zarr_imports():
+    """open the store in the a background process"""
+    t0 = time.perf_counter()
+    global _imports
+    def _imports():
+        import xarray
+        import pandas
+        import iqwaveform
+        return ('imports', time.perf_counter() - t0)
+
+    return _imports
+
+
 class ZarrSinkBase(SinkBase):
     def open(self):
         if self.store is not None:
             return
-        
+
         if self.store_backend == 'directory':
             fixed_path = Path(self.output_path).with_suffix('.zarr')
         elif self.store_backend == 'zip':
@@ -133,6 +128,8 @@ class ZarrSinkBase(SinkBase):
         self.store = channel_analysis.open_store(
             fixed_path, mode='w' if self.force else 'a'
         )
+
+        self.submit(_zarr_imports())
 
     def close(self):
         super().close()
