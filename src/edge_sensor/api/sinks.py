@@ -1,12 +1,10 @@
 from __future__ import annotations
 from pathlib import Path
 import sys
-import time
 import typing
 from . import structs, util, xarray_ops
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 import multiprocessing
-import functools
 
 import channel_analysis
 
@@ -45,7 +43,7 @@ class SinkBase:
         self._future = None
         self._pending_data: list['xr.Dataset'] = []
         context = multiprocessing.get_context('fork')
-        self._executor = ProcessPoolExecutor(1, mp_context=context)
+        self._executor = ThreadPoolExecutor(1, mp_context=context)
 
     def pop(self) -> list['xr.Dataset']:
         result = self._pending_data
@@ -81,42 +79,13 @@ class SinkBase:
         raise NotImplementedError
 
     def flush(self):
-        raise NotImplementedError
+        pass
 
     def wait(self):
         if self._future is None:
             return
         self._future.result(timeout=30)
-        # name, duration = self._future.result(timeout=30)
-        # if name is not None:
-        #     lb.logger.info(f'{name} time elapsed: {duration:0.2f}')
         self._future = None
-
-
-def _open_zarr(path, force):
-    _get_zarr(path, force)
-
-@functools.lru_cache(1)
-def _get_zarr(path, force):
-    return channel_analysis.open_store(
-        path, mode='w' if force else 'a'
-    )
-
-
-def _close_zarr(path, force):
-    store = _get_zarr(path, force)
-    store.close()
-
-
-def _dump_zarr(path, force, data):
-    """write the data to disk in a background process"""
-    # wait until now to do CPU-intensive xarray Dataset packaging
-    # in order to leave cycles free for acquisition and analysis
-    store = _open_zarr(path, force)
-    ds_seq = (r.to_xarray() for r in data)
-
-    y = xr.concat(ds_seq, xarray_ops.CAPTURE_DIM)
-    channel_analysis.dump(store, y)
 
 
 class ZarrSinkBase(SinkBase):
@@ -133,20 +102,13 @@ class ZarrSinkBase(SinkBase):
 
         fixed_path.parent.mkdir(parents=True, exist_ok=True)
 
-        self.path = fixed_path
-
-        self.submit(_open_zarr, fixed_path, self.force)
-        self.wait()
-
-    def _open(self, fixed_path, force, t0):
         self.store = channel_analysis.open_store(
-            fixed_path, mode='w' if force else 'a'
+            fixed_path, mode='w' if self.force else 'a'
         )
-        return 'open', time.perf_counter()-t0
 
     def close(self):
         super().close()
-        self.submit(_close_zarr, self.path, self.force)
+        self.store.close()
         self.wait()
 
 
@@ -161,12 +123,14 @@ class CaptureAppender(ZarrSinkBase):
         if len(data_list) == 0:
             return
 
-        self.submit(_dump_zarr, self.path, self.force, data_list)
-        # with lb.stopwatch('build dataset'):
-        #     data_captures = xr.concat(data_list, xarray_ops.CAPTURE_DIM)
+        channel_analysis.dump(self.store, y)
 
-        # with lb.stopwatch('dump data'):
-        #     channel_analysis.dump(self.store, data_captures)
+        with lb.stopwatch('build dataset'):
+            ds_seq = (r.to_xarray() for r in data_list)
+            dataset = xr.concat(ds_seq, xarray_ops.CAPTURE_DIM)
+
+        with lb.stopwatch('dump data'):
+            channel_analysis.dump(self.store, dataset)
 
 
 class SpectrogramTimeAppender(ZarrSinkBase):
@@ -179,11 +143,15 @@ class SpectrogramTimeAppender(ZarrSinkBase):
         super().open()
 
     def flush(self):
+        self.wait()
         data_list = self.pop()
 
         if len(data_list) == 0:
             return
-        
+
+        self.submit(self._flush_thread, data_list)
+
+    def _flush_thread(self, data_list):
         with lb.stopwatch('build dataset'):
             by_spectrogram = xarray_ops.concat_time_dim(data_list, 'spectrogram_time')
 
