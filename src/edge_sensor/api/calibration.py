@@ -315,14 +315,15 @@ def lookup_power_correction(
                 corrections.power_correction.sel(
                     **exact_matches, drop=True
                 )  # there is still one more dim to drop
-                .dropna('channel')
-                .squeeze()
             )
         except KeyError:
             misses = _describe_missing_data(corrections, exact_matches)
             exc = KeyError(f'calibration is not available for this capture: {misses}')
         else:
             exc = None
+
+        if 'channel' in sel.coords:
+            sel = sel.dropna('channel').squeeze()
 
         if exc is not None:
             raise exc
