@@ -144,7 +144,9 @@ class _MinSweep(structs.Sweep):
     captures: list[structs.channel_analysis.Capture]
 
 
-def concat_group_sizes(captures: tuple[structs.RadioCapture, ...], *, min_size: int=1) -> list[int]:
+def concat_group_sizes(
+    captures: tuple[structs.RadioCapture, ...], *, min_size: int = 1
+) -> list[int]:
     """return the minimum sizes of groups of captures that can be concatenated.
 
     This is important, because some channel analysis results produce a different

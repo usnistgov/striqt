@@ -69,7 +69,7 @@ class SinkBase:
         finally:
             self._executor.__exit__(*sys.exc_info())
 
-    def append(self, capture_data: 'xr.Dataset'|None, capture: structs.RadioCapture):
+    def append(self, capture_data: 'xr.Dataset' | None, capture: structs.RadioCapture):
         if capture_data is None:
             return
 
