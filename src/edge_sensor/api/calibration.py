@@ -311,7 +311,11 @@ def lookup_power_correction(
         )
 
         try:
-            sel = corrections.power_correction.sel(**exact_matches, drop=True)
+            sel = (
+                corrections.power_correction
+                .sel(**exact_matches, drop=True) # there is still one more dim to drop
+                .dropna('channel').squeeze()
+            )
         except KeyError:
             misses = _describe_missing_data(corrections, exact_matches)
             exc = KeyError(f'calibration is not available for this capture: {misses}')
