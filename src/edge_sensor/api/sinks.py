@@ -73,7 +73,8 @@ class SinkBase:
         if capture_data is None:
             return
 
-        self._pending_data.append(capture_data)
+        self._pending_data.append(capture_data.to_xarray())
+
         if len(self._pending_data) == self._group_sizes[0]:
             self.flush()
             self._group_sizes.pop(0)
@@ -129,8 +130,8 @@ class CaptureAppender(ZarrSinkBase):
 
     def _flush_thread(self, data_list):
         with lb.stopwatch('build dataset'):
-            ds_seq = (r.to_xarray() for r in data_list)
-            dataset = xr.concat(ds_seq, xarray_ops.CAPTURE_DIM)
+            # ds_seq = (r.to_xarray() for r in data_list)
+            dataset = xr.concat(data_list, xarray_ops.CAPTURE_DIM)
 
         with lb.stopwatch('dump data'):
             channel_analysis.dump(self.store, dataset)
