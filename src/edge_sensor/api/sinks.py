@@ -47,7 +47,6 @@ class SinkBase:
 
     def pop(self) -> list['xr.Dataset']:
         result = self._pending_data
-        self._remaining = self._remaining[len(result) :]
         self._pending_data = []
         return result
 
