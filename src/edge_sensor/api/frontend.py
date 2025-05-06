@@ -39,14 +39,13 @@ class DebugOnException:
         if self.enable:
             print('entering debugger')
             from IPython.core import ultratb
+
             lb.util.force_full_traceback(True)
             if not hasattr(sys, 'last_value'):
                 sys.last_value = exc
             if not hasattr(sys, 'last_traceback'):
                 sys.last_traceback = tb
-            debugger = ultratb.FormattedTB(
-                mode='Plain', call_pdb=1
-            )
+            debugger = ultratb.FormattedTB(mode='Plain', call_pdb=1)
             debugger(etype, exc, tb)
 
 
@@ -168,7 +167,7 @@ def init_sweep_cli(
         sweep_spec=sweep_spec,
         peripherals=peripherals,
         debugger=debug_handler,
-        calibration=opened.get('calibration', None)
+        calibration=opened.get('calibration', None),
     )
 
 

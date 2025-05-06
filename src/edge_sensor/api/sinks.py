@@ -2,7 +2,7 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 import typing
-from . import structs, util, xarray_ops
+from . import captures, structs, util, xarray_ops
 from concurrent.futures import ThreadPoolExecutor
 
 import channel_analysis
@@ -13,6 +13,7 @@ if typing.TYPE_CHECKING:
 else:
     xr = util.lazy_import('xarray')
     lb = util.lazy_import('labbench')
+
 
 class SinkBase:
     """intake acquisitions one at a time, and parcel data store"""
@@ -42,10 +43,12 @@ class SinkBase:
         self._future = None
         self._pending_data: list['xr.Dataset'] = []
         self._executor = ThreadPoolExecutor(1)
+        self._group_sizes = captures.concat_group_sizes(sweep_spec.captures)
 
     def pop(self) -> list['xr.Dataset']:
         result = self._pending_data
-        self._pending_data: list['xr.Dataset'] = []
+        self._remaining = self._remaining[len(result) :]
+        self._pending_data = []
         return result
 
     def submit(self, func, *args, **kws):
@@ -67,11 +70,15 @@ class SinkBase:
         finally:
             self._executor.__exit__(*sys.exc_info())
 
-    def append(self, capture_data: 'xr.Dataset'):
+    def append(self, capture_data: 'xr.Dataset'|None, capture: structs.RadioCapture):
         if capture_data is None:
             return
-        else:
-            self._pending_data.append(capture_data)
+
+        print('append: ', sys.getsizeof(capture_data), sys.getsizeof(self._pending_data))
+        self._pending_data.append(capture_data)
+        if len(self._pending_data) == self._group_sizes[0]:
+            # self.flush()
+            self._group_sizes.pop(0)
 
     def open(self):
         raise NotImplementedError
@@ -115,7 +122,6 @@ class CaptureAppender(ZarrSinkBase):
 
     def flush(self):
         self.wait()
-
         data_list = self.pop()
 
         if len(data_list) == 0:

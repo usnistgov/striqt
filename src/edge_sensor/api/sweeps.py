@@ -158,7 +158,7 @@ class SweepIterator:
         self._reuse_iq = reuse_compatible_iq
 
         self._peripherals = None
-        self._writer = None
+        self._sink = None
 
         self.setup(sweep)
 
@@ -166,7 +166,7 @@ class SweepIterator:
         self._peripherals = peripherals
 
     def set_writer(self, writer: SinkBase | None):
-        self._writer = writer
+        self._sink = writer
 
     def setup(self, sweep: structs.Sweep):
         self.sweep: structs.Sweep = sweep.validate()
@@ -234,7 +234,10 @@ class SweepIterator:
                 pass
             else:
                 calls['intake'] = lb.Call(
-                    self._intake, results=analysis, ext_data=prior_ext_data
+                    self._intake,
+                    results=analysis,
+                    capture=capture_intake,
+                    ext_data=prior_ext_data,
                 )
 
             desc = channel_analysis.describe_capture(
@@ -313,17 +316,22 @@ class SweepIterator:
 
         return lb.concurrently(**calls)
 
-    def _intake(self, results: xarray_ops.DelayedAnalysisResult, ext_data={}) -> xarray_ops.DelayedAnalysisResult|None:
+    def _intake(
+        self,
+        results: xarray_ops.DelayedAnalysisResult,
+        capture: structs.RadioCapture,
+        ext_data={},
+    ) -> xarray_ops.DelayedAnalysisResult | None:
         if not isinstance(results, xarray_ops.DelayedAnalysisResult):
             raise ValueError(
                 f'expected DelayedAnalysisResult type for data, not {type(results)}'
             )
 
         results.set_extra_data(ext_data)
-        if self._writer is None:
+        if self._sink is None:
             return results
         else:
-            self._writer.append(results)
+            self._sink.append(results, capture)
 
 
 def iter_sweep(

@@ -137,3 +137,43 @@ def get_field_value(
     else:
         raise KeyError
     return value
+
+
+class _MinSweep(structs.Sweep):
+    # a sweep with captures that express only the parameters that impact data shape
+    captures: list[structs.channel_analysis.Capture]
+
+
+def concat_group_sizes(captures: tuple[structs.RadioCapture, ...]) -> list[int]:
+    """return the minimum sizes of groups of captures that can be concatenated.
+
+    This is important, because some channel analysis results produce a different
+    shape depending on (sample_rate, analysis_bandwidth, duration).
+
+    Returns:
+        The list l of sizes of each group such that sum(l) == len(captures)
+    """
+
+    remaining = _MinSweep(captures=captures).validate().captures
+    whole_set = set(remaining)
+
+    pending = []
+    sizes = []
+    count = 0
+
+    while len(remaining) > 0:
+        count += 1
+
+        if set(pending) == set(remaining) == whole_set:
+            # make sure that the pending and remaining captures
+            # will result in equivalent shapes when concatenated
+            sizes.append(count)
+            count = 0
+            pending = []
+
+        pending.append(remaining.pop(0))
+
+    if count > 0:
+        sizes.append(count)
+
+    return sizes

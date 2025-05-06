@@ -49,9 +49,10 @@ class StructBase(msgspec.Struct, kw_only=True, frozen=True):
     It is a `msgspec.Struct` class with some often-used utility
     methods that fix encoding and decoding hooks for extra types.
     """
+
     def replace(self, **attrs) -> type[typing.Self]:
         """returns a copy of self with changed attributes.
-        
+
         See also:
             Python standard library `copy.replace`
         """
@@ -62,7 +63,7 @@ class StructBase(msgspec.Struct, kw_only=True, frozen=True):
         return msgspec.to_builtins(
             self, builtin_types=(pd.Timestamp,), enc_hook=_enc_hook
         )
-    
+
     def tojson(self) -> bytes:
         return msgspec.json.encode(self, enc_hook=_enc_hook)
 
@@ -71,7 +72,13 @@ class StructBase(msgspec.Struct, kw_only=True, frozen=True):
         return msgspec.convert(d, type=cls, strict=False, dec_hook=_dec_hook)
 
     @classmethod
-    def fromjson(cls: type[_T], d: str|bytes) -> _T:
+    def fromstruct(cls: type[_T], other: StructBase) -> _T:
+        return msgspec.convert(
+            other, type=cls, strict=False, from_attributes=True, dec_hook=_dec_hook
+        )
+
+    @classmethod
+    def fromjson(cls: type[_T], d: str | bytes) -> _T:
         return msgspec.json.decode(d, type=cls, strict=False, dec_hook=_dec_hook)
 
     def validate(self) -> type[typing.Self]:

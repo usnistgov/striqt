@@ -275,11 +275,11 @@ class DelayedAnalysisResult:
     sweep: structs.Sweep
     radio_id: str
     sweep_time: typing.Any
-    extra_attrs: dict|None = None
-    extra_data: dict|None = None
+    extra_attrs: dict | None = None
+    extra_data: dict | None = None
 
     def set_extra_data(self, extra_data: dict[str]) -> None:
-        self.extra_data=extra_data
+        self.extra_data = extra_data
 
     def to_xarray(self) -> 'xr.Dataset':
         """complete any remaining calculations, transfer from the device, and build an output dataset"""
