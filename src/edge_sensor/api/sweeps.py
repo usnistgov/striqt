@@ -235,7 +235,7 @@ class SweepIterator:
             else:
                 calls['intake'] = lb.Call(
                     self._intake,
-                    results=analysis,
+                    results=analysis.to_xarray(),
                     capture=capture_intake,
                     ext_data=prior_ext_data,
                 )

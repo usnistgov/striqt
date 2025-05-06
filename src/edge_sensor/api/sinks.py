@@ -73,7 +73,7 @@ class SinkBase:
         if capture_data is None:
             return
 
-        self._pending_data.append(capture_data.to_xarray())
+        self._pending_data.append(capture_data)
 
         if len(self._pending_data) == self._group_sizes[0]:
             self.flush()
@@ -130,7 +130,6 @@ class CaptureAppender(ZarrSinkBase):
 
     def _flush_thread(self, data_list):
         with lb.stopwatch('build dataset'):
-            # ds_seq = (r.to_xarray() for r in data_list)
             dataset = xr.concat(data_list, xarray_ops.CAPTURE_DIM)
 
         with lb.stopwatch('dump data'):
