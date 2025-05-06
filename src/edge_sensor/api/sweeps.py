@@ -233,11 +233,11 @@ class SweepIterator:
                 # for the first two iterations, there is no data to save
                 pass
             else:
+                analysis.set_extra_data(prior_ext_data)
                 calls['intake'] = lb.Call(
                     self._intake,
                     results=analysis.to_xarray(),
                     capture=capture_intake,
-                    ext_data=prior_ext_data,
                 )
 
             desc = channel_analysis.describe_capture(
@@ -318,16 +318,14 @@ class SweepIterator:
 
     def _intake(
         self,
-        results: xarray_ops.DelayedAnalysisResult,
+        results: 'xr.Dataset',
         capture: structs.RadioCapture,
-        ext_data={},
-    ) -> xarray_ops.DelayedAnalysisResult | None:
-        if not isinstance(results, xarray_ops.DelayedAnalysisResult):
+    ) -> 'xr.Dataset' | None:
+        if not isinstance(results, xr.Dataset):
             raise ValueError(
                 f'expected DelayedAnalysisResult type for data, not {type(results)}'
             )
 
-        results.set_extra_data(ext_data)
         if self._sink is None:
             return results
         else:
