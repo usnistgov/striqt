@@ -43,7 +43,7 @@ class SinkBase:
         self._future = None
         self._pending_data: list['xr.Dataset'] = []
         self._executor = ThreadPoolExecutor(1)
-        self._group_sizes = captures.concat_group_sizes(sweep_spec.captures)
+        self._group_sizes = captures.concat_group_sizes(sweep_spec.captures, min_size=4)
 
     def pop(self) -> list['xr.Dataset']:
         result = self._pending_data
@@ -73,10 +73,9 @@ class SinkBase:
         if capture_data is None:
             return
 
-        print('append: ', sys.getsizeof(capture_data), sys.getsizeof(self._pending_data))
         self._pending_data.append(capture_data)
         if len(self._pending_data) == self._group_sizes[0]:
-            # self.flush()
+            self.flush()
             self._group_sizes.pop(0)
 
     def open(self):
