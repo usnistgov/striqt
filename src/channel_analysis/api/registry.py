@@ -23,7 +23,6 @@ if typing.TYPE_CHECKING:
     from xarray_dataclasses import dataarray
     import array_api_compat
     import iqwaveform
-    from . import shmarray
     import xarray as xr
 else:
     dataarray = util.lazy_import('xarray_dataclasses.dataarray')
@@ -31,15 +30,12 @@ else:
     iqwaveform = util.lazy_import('iqwaveform')
     xr = util.lazy_import('xarray')
 
-    # TODO: figure out a proper relative import here to work properly
-    shmarray = util.lazy_import('channel_analysis.api.shmarray')
-
 
 TFunc = typing.Callable[..., typing.Any]
 
 
 def _results_as_arrays(
-    obj: tuple | list | dict | 'iqwaveform.util.Array', as_shmarray=False
+    obj: tuple | list | dict | 'iqwaveform.util.Array'
 ):
     """convert an array, or a container of arrays, into a numpy array (or container of numpy arrays)"""
 
@@ -47,19 +43,10 @@ def _results_as_arrays(
         array = obj.cpu()
     elif array_api_compat.is_cupy_array(obj):
         array = obj.get()
-    elif array_api_compat.is_numpy_array(obj) or isinstance(
-        obj, shmarray.NDSharedArray
-    ):
-        array = obj
     else:
         raise TypeError(f'obj type {type(obj)} is unrecognized')
 
     return array
-    # TODO: something like the following to implement IPC for file storage
-    # if as_shmarray:
-    #     return shmarray.NDSharedArray(array)
-    # else:
-    #     return array
 
 
 class KeywordArguments(structs.StructBase):
@@ -129,7 +116,7 @@ class ChannelAnalysisRegistry(collections.UserDict):
                     ret_metadata = metadata
 
                 try:
-                    result = _results_as_arrays(result, as_shmarray=delay_xarray)
+                    result = _results_as_arrays(result)
                 except TypeError as ex:
                     msg = f'improper return type from {func.__name__}'
                     raise TypeError(msg) from ex
@@ -162,7 +149,6 @@ class ChannelAnalysisRegistry(collections.UserDict):
             )
 
             def hook(type_):
-                print(type_)
                 return type_
 
             # validate the struct
