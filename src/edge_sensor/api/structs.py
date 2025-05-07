@@ -58,7 +58,7 @@ AnalysisBandwidthType = Annotated[
 ]
 
 
-class WaveformCapture(channel_analysis.Capture, forbid_unknown_fields=True):
+class WaveformCapture(channel_analysis.Capture, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     """Capture specification structure for a generic waveform.
 
     This subset of RadioCapture is broken out here to simplify the evaluation of
@@ -91,7 +91,7 @@ def _validate_multichannel(channel, gain):
             )
 
 
-class RadioCapture(WaveformCapture, forbid_unknown_fields=True):
+class RadioCapture(WaveformCapture, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     """Capture specification for a single radio waveform"""
 
     # RF and leveling
@@ -106,7 +106,7 @@ class RadioCapture(WaveformCapture, forbid_unknown_fields=True):
         _validate_multichannel(self.channel, self.gain)
 
 
-class FileSourceCapture(RadioCapture, forbid_unknown_fields=True):
+class FileSourceCapture(RadioCapture, forbid_unknown_fields=True, cache_hash=True):
     """Capture specification read from a file, with support for None sentinels"""
 
     # RF and leveling
@@ -162,7 +162,7 @@ FastLOType = Annotated[
 ]
 
 
-class RadioSetup(StructBase, forbid_unknown_fields=True):
+class RadioSetup(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     """run-time characteristics of the radio that are left invariant during a sweep"""
 
     driver: Optional[str] = None
@@ -188,7 +188,7 @@ class RadioSetup(StructBase, forbid_unknown_fields=True):
             )
 
 
-class Description(StructBase, forbid_unknown_fields=True):
+class Description(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     summary: Optional[str] = None
     location: Optional[tuple[float, float, float]] = None
     signal_chain: Optional[tuple[str, ...]] = tuple()
@@ -234,7 +234,7 @@ class Extensions(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash
     import_path: ExtensionPathType = None
 
 
-class Sweep(StructBase, forbid_unknown_fields=True):
+class Sweep(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     captures: tuple[RadioCapture, ...] = tuple()
     radio_setup: RadioSetup = msgspec.field(default_factory=RadioSetup)
     defaults: RadioCapture = msgspec.field(default_factory=RadioCapture)

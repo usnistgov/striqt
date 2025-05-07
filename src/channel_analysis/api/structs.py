@@ -42,7 +42,7 @@ def meta(standard_name: str, unit: str | None = None, **kws) -> msgspec.Meta:
     )
 
 
-class StructBase(msgspec.Struct, kw_only=True, frozen=True):
+class StructBase(msgspec.Struct, kw_only=True, frozen=True, cache_hash=True):
     """Base type for structures that support validated
     (de)serialization.
 
@@ -96,13 +96,13 @@ class Capture(StructBase, kw_only=True, frozen=True):
     )
 
 
-class AnalysisFilter(StructBase, kw_only=True, frozen=True):
+class AnalysisFilter(StructBase, kw_only=True, frozen=True, cache_hash=True):
     nfft: int = 8192
     window: typing.Union[tuple[str, ...], str] = 'hamming'
     nfft_out: int = None
 
 
-class FilteredCapture(Capture, kw_only=True, frozen=True):
+class FilteredCapture(Capture, kw_only=True, frozen=True, cache_hash=True):
     # filtering and resampling
     analysis_filter: AnalysisFilter = msgspec.field(default_factory=AnalysisFilter)
     # analysis_filter: dict = msgspec.field(
@@ -110,7 +110,7 @@ class FilteredCapture(Capture, kw_only=True, frozen=True):
     # )
 
 
-class ChannelAnalysis(StructBase):
+class ChannelAnalysis(StructBase, cache_hash=True):
     """base class for groups of keyword arguments that define calls to multiple analysis functions"""
 
 
