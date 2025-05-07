@@ -164,7 +164,6 @@ def concat_group_sizes(
     count = 0
 
     while len(remaining) > 0:
-        count += 1
 
         if count >= min_size and set(pending) == set(remaining) == whole_set:
             # make sure that the pending and remaining captures
@@ -173,6 +172,7 @@ def concat_group_sizes(
             count = 0
             pending = []
 
+        count += 1
         pending.append(remaining.pop(0))
 
     if count > 0:
