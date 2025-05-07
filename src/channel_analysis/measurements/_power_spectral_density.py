@@ -89,7 +89,7 @@ def power_spectral_density(
     window_fill: float = 1,
     frequency_bin_averaging: typing.Optional[float] = None,
     trim_stopband: bool = True,
-    dtype='float16'
+    dtype='float16',
 ):
     """estimate power spectral density using the Welch method.
 
