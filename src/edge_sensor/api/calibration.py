@@ -28,14 +28,14 @@ else:
 NoiseDiodeEnabledType = Annotated[bool, meta(standard_name='Noise diode enabled')]
 
 
-class CalibrationCapture(structs.RadioCapture, forbid_unknown_fields=True, frozen=True):
+class ManualYFactorCapture(structs.RadioCapture, forbid_unknown_fields=True, frozen=True):
     """Specialize fields to add to the RadioCapture type"""
 
     # RadioCapture with added fields
     noise_diode_enabled: NoiseDiodeEnabledType = False
 
 
-class CalibrationSetup(structs.StructBase, forbid_unknown_fields=True):
+class ManualYFactorSetup(structs.StructBase, forbid_unknown_fields=True):
     enr: Annotated[float, meta(standard_name='Excess noise ratio', unit='dB')] = 20.87
     ambient_temperature: Annotated[
         float, meta(standard_name='Ambient temperature', unit='K')
@@ -58,7 +58,7 @@ class CalibrationVariables(
 
 @functools.lru_cache
 def _cached_calibration_captures(
-    variables: CalibrationVariables, defaults: CalibrationCapture
+    variables: CalibrationVariables, defaults: ManualYFactorCapture
 ):
     variables = msgspec.to_builtins(variables)
 
@@ -90,16 +90,16 @@ def _cached_calibration_captures(
     return tuple(captures)
 
 
-class CalibrationSweep(
+class ManualYFactorSweep(
     structs.Sweep, forbid_unknown_fields=True, kw_only=True, frozen=True
 ):
     """This specialized sweep is fed to the YAML file loader
     to specify the change in expected capture structure."""
 
     calibration_variables: CalibrationVariables
-    defaults: CalibrationCapture = msgspec.field(default_factory=CalibrationCapture)
-    calibration_setup: CalibrationSetup = msgspec.field(
-        default_factory=CalibrationSetup
+    defaults: ManualYFactorCapture = msgspec.field(default_factory=ManualYFactorCapture)
+    calibration_setup: ManualYFactorSetup = msgspec.field(
+        default_factory=ManualYFactorSetup
     )
 
     def __post_init__(self):
@@ -109,7 +109,7 @@ class CalibrationSweep(
             )
 
     # the top here is just to set the annotation for msgspec
-    captures: tuple[CalibrationCapture, ...] = tuple()
+    captures: tuple[ManualYFactorCapture, ...] = tuple()
 
     def get_captures(self):
         variables = self.calibration_variables.validate()
@@ -356,7 +356,7 @@ def lookup_power_correction(
 
 
 class CalibrationSink(sinks.SinkBase):
-    sweep_spec: CalibrationSweep
+    sweep_spec: ManualYFactorSweep
 
     _DROP_FIELDS = (
         'sweep_start_time',
@@ -429,14 +429,14 @@ class CalibrationSink(sinks.SinkBase):
         print(f'saved to {str(self.output_path)!r}')
 
 
-class ManualNoiseDiodePeripheral(peripherals.PeripheralsBase):
+class ManualYFactorPeripheral(peripherals.PeripheralsBase):
     """Human input "peripheral" to prompt noise diode connection changes"""
 
-    sweep: CalibrationSweep
+    sweep: ManualYFactorSweep
 
     _last_state = (None, None)
 
-    def arm(self, capture: CalibrationCapture):
+    def arm(self, capture: ManualYFactorCapture):
         """This is run before each capture"""
         state = (capture.channel, capture.noise_diode_enabled)
 
@@ -454,7 +454,7 @@ class ManualNoiseDiodePeripheral(peripherals.PeripheralsBase):
 
         return capture
 
-    def acquire(self, capture: CalibrationCapture):
+    def acquire(self, capture: ManualYFactorCapture):
         """This runs during each capture.
 
         It should return a dictionary of results keyed by name
