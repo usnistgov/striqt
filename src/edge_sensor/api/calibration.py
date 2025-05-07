@@ -375,7 +375,7 @@ class YFactorSink(sinks.SinkBase):
         if capture_data is None:
             return
 
-        super().append(capture_data)
+        super().append(capture_data, capture)
 
         if self.sweep_start_time is None:
             self.sweep_start_time = float(capture_data.sweep_start_time[0])
