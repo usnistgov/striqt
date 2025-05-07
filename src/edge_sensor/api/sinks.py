@@ -75,10 +75,6 @@ class SinkBase:
 
         self._pending_data.append(capture_data)
 
-        if len(self._pending_data) == self._group_sizes[0]:
-            self.flush()
-            self._group_sizes.pop(0)
-
     def open(self):
         raise NotImplementedError
 
@@ -119,6 +115,13 @@ class ZarrSinkBase(SinkBase):
 class CaptureAppender(ZarrSinkBase):
     """concatenates the data from each capture and dumps to a zarr data store"""
 
+    def append(self, capture_data: 'xr.Dataset' | None, capture: structs.RadioCapture):
+        super().append(capture_data, capture)
+
+        if len(self._pending_data) == self._group_sizes[0]:
+            self.flush()
+            self._group_sizes.pop(0)
+
     def flush(self):
         self.wait()
         data_list = self.pop()
@@ -144,6 +147,13 @@ class SpectrogramTimeAppender(ZarrSinkBase):
             )
 
         super().open()
+
+    def append(self, capture_data: 'xr.Dataset' | None, capture: structs.RadioCapture):
+        super().append(capture_data, capture)
+
+        if len(self._pending_data) == self._group_sizes[0]:
+            self.flush()
+            self._group_sizes.pop(0)
 
     def flush(self):
         self.wait()
