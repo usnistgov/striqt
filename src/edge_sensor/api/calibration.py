@@ -402,7 +402,7 @@ class YFactorSink(sinks.SinkBase):
         # re-index by radio setting rather than capture
         channel = int(data[0].channel)
 
-        fields = [ManualYFactorCapture.noise_diode_enabled.__qualname__] + list(self.sweep_spec.calibration_variables.__struct_fields__)
+        fields = list(self.sweep_spec.calibration_variables.__struct_fields__)
         if 'sample_rate' in fields:
             fields.remove('sample_rate')
 
