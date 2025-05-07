@@ -180,7 +180,10 @@ def execute_sweep_cli(
     # pull out the cli elements that have context
     *cli_context, sweep, cal = cli
 
-    with lb.concurrently(*cli_context):
+    import time
+    t0 = time.perf_counter()
+    with lb.sequentially(*cli_context):
+        print(time.perf_counter() - t0)
         # iterate through the sweep specification, yielding a dataset for each capture
         sweep_iter = cli.controller.iter_sweep(
             sweep,
