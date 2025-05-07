@@ -371,7 +371,7 @@ class YFactorSink(sinks.SinkBase):
 
         self.sweep_start_time = None
 
-    def append(self, capture_data: 'xr.Dataset'):
+    def append(self, capture_data: 'xr.Dataset', capture: ManualYFactorCapture):
         if capture_data is None:
             return
 
