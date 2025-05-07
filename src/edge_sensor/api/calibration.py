@@ -6,8 +6,6 @@ from pathlib import Path
 import pickle
 import typing
 
-import msgspec
-
 from . import peripherals, sinks, sources, structs, util, xarray_ops
 from .captures import split_capture_channels
 from .structs import Annotated, meta
@@ -56,40 +54,6 @@ class CalibrationVariables(
     lo_shift: tuple[structs.LOShiftType, ...] = ('none',)
 
 
-@functools.lru_cache
-def _cached_calibration_captures(
-    variables: CalibrationVariables, defaults: ManualYFactorCapture
-):
-    variables = msgspec.to_builtins(variables)
-
-    # enforce ordering to place difficult-to-change variables in
-    # the outermost loops, in case the ordering is changed by
-    # subclasses
-    analysis_bandwidths = variables.pop('analysis_bandwidth')
-    variables = {
-        'channel': variables['channel'],
-        'noise_diode_enabled': variables['noise_diode_enabled'],
-        **variables,
-        'analysis_bandwidth': analysis_bandwidths,
-    }
-
-    # every combination of each variable
-    combos = itertools.product(*variables.values())
-
-    captures = []
-    for values in combos:
-        mapping = dict(zip(variables, values))
-        if mapping['analysis_bandwidth'] == float('inf'):
-            pass
-        elif mapping['analysis_bandwidth'] > mapping['sample_rate']:
-            # skip cases outside of 1st Nyquist zone
-            continue
-        capture = defaults.replace(**mapping)
-        captures.append(capture)
-
-    return tuple(captures)
-
-
 class ManualYFactorSweep(
     structs.Sweep, forbid_unknown_fields=True, kw_only=True, frozen=True
 ):
@@ -97,10 +61,8 @@ class ManualYFactorSweep(
     to specify the change in expected capture structure."""
 
     calibration_variables: CalibrationVariables
-    defaults: ManualYFactorCapture = msgspec.field(default_factory=ManualYFactorCapture)
-    calibration_setup: ManualYFactorSetup = msgspec.field(
-        default_factory=ManualYFactorSetup
-    )
+    defaults: ManualYFactorCapture = ManualYFactorCapture()
+    calibration_setup: ManualYFactorSetup = ManualYFactorSetup()
 
     def __post_init__(self):
         if self.radio_setup.calibration is not None:
@@ -129,6 +91,39 @@ def read_calibration_corrections(path):
 def save_calibration_corrections(path, corrections: 'xr.Dataset'):
     with gzip.GzipFile(path, 'wb') as fd:
         pickle.dump(corrections, fd)
+
+@functools.lru_cache
+def _cached_calibration_captures(
+    variables: CalibrationVariables, defaults: ManualYFactorCapture
+):
+    variables = variables.todict()
+
+    # enforce ordering to place difficult-to-change variables in
+    # the outermost loops, in case the ordering is changed by
+    # subclasses
+    analysis_bandwidths = variables.pop('analysis_bandwidth')
+    variables = {
+        'channel': variables['channel'],
+        'noise_diode_enabled': variables['noise_diode_enabled'],
+        **variables,
+        'analysis_bandwidth': analysis_bandwidths,
+    }
+
+    # every combination of each variable
+    combos = itertools.product(*variables.values())
+
+    captures = []
+    for values in combos:
+        mapping = dict(zip(variables, values))
+        if mapping['analysis_bandwidth'] == float('inf'):
+            pass
+        elif mapping['analysis_bandwidth'] > mapping['sample_rate']:
+            # skip cases outside of 1st Nyquist zone
+            continue
+        capture = defaults.replace(**mapping)
+        captures.append(capture)
+
+    return tuple(captures)
 
 
 def _y_factor_temperature(
@@ -162,11 +157,12 @@ def _limit_nyquist_bandwidth(data: 'xr.DataArray') -> 'xr.DataArray':
 
 
 def _y_factor_power_corrections(
-    dataset: 'xr.Dataset', enr_dB: float, Tamb: float, Tref=290.0
+    dataset: 'xr.Dataset', Tref=290.0
 ) -> 'xr.Dataset':
     # TODO: check that this works for xr.DataArray inputs in (enr_dB, Tamb)
 
     k = scipy.constants.Boltzmann * 1000  # scaled from W/K to mW/K
+    enr_dB = dataset.enr_dB.sel(noise_diode_enabled=True, drop=True)
     enr = 10 ** (enr_dB / 10.0)
 
     power = (
@@ -184,7 +180,7 @@ def _y_factor_power_corrections(
     noise_figure.name = 'Noise figure'
     noise_figure.attrs = {'units': 'dB'}
 
-    T = Tref * (10 ** (noise_figure / 10) - 1)  # _y_factor_temperature(power, **kwargs)
+    T = Tref * (10 ** (noise_figure / 10) - 1)
     T.name = 'Noise temperature'
     T.attrs = {'units': 'K'}
 
@@ -228,10 +224,9 @@ def _y_factor_frequency_response_correction(
 
 
 def compute_y_factor_corrections(
-    dataset: 'xr.Dataset', enr_dB: float, Tamb: float, Tref=290.0
+    dataset: 'xr.Dataset', Tref=290.0
 ) -> 'xr.Dataset':
-    kwargs = locals()
-    ret = _y_factor_power_corrections(**kwargs)
+    ret = _y_factor_power_corrections(dataset, Tref=Tref)
     # ret['baseband_frequency_response'] = _y_factor_frequency_response_correction(
     #     **kwargs, fc_temperatures=ret.temperature
     # )
@@ -355,7 +350,7 @@ def lookup_power_correction(
     return xp.asarray(power_scale, dtype='float32')
 
 
-class CalibrationSink(sinks.SinkBase):
+class YFactorSink(sinks.SinkBase):
     sweep_spec: ManualYFactorSweep
 
     _DROP_FIELDS = (
@@ -461,4 +456,4 @@ class ManualYFactorPeripheral(peripherals.PeripheralsBase):
         with (float, int, str, xr.DataArray, etc)
         """
 
-        return {}
+        return {'enr_dB': self.sweep.calibration_setup.enr, 'Tamb_K': self.sweep.calibration_setup.ambient_temperature}
