@@ -89,6 +89,7 @@ def power_spectral_density(
     window_fill: float = 1,
     frequency_bin_averaging: typing.Optional[float] = None,
     trim_stopband: bool = True,
+    dtype='float16'
 ):
     """estimate power spectral density using the Welch method.
 
@@ -135,6 +136,6 @@ def power_spectral_density(
         ufunc = stat_ufunc_from_shorthand(frequency_statistic[i], xp=xp)
         axis_index(psd, i, axis=axis)[:] = ufunc(spg, axis=axis)
 
-    psd = iqwaveform.powtodB(psd)
+    psd = iqwaveform.powtodB(psd).astype(dtype)
 
     return psd, metadata
