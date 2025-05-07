@@ -30,7 +30,6 @@ def run(*, channel, **kws):
 
     frontend.execute_sweep_cli(
         cli_objs,
-        reuse_compatible_iq=True,
         remote=kws.get('remote', None),
     )
 

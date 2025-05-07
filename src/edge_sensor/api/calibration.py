@@ -26,18 +26,26 @@ else:
 NoiseDiodeEnabledType = Annotated[bool, meta(standard_name='Noise diode enabled')]
 
 
-class ManualYFactorCapture(structs.RadioCapture, forbid_unknown_fields=True, frozen=True):
+class ManualYFactorCapture(
+    structs.RadioCapture, forbid_unknown_fields=True, frozen=True
+):
     """Specialize fields to add to the RadioCapture type"""
 
     # RadioCapture with added fields
     noise_diode_enabled: NoiseDiodeEnabledType = False
 
 
-class ManualYFactorSetup(structs.StructBase, forbid_unknown_fields=True):
+class ManualYFactorSetup(structs.StructBase, forbid_unknown_fields=True, frozen=True):
     enr: Annotated[float, meta(standard_name='Excess noise ratio', unit='dB')] = 20.87
     ambient_temperature: Annotated[
         float, meta(standard_name='Ambient temperature', unit='K')
     ] = 294.5389
+
+
+class CalibrationRadioSetup(
+    structs.RadioSetup, forbid_unknown_fields=True, frozen=True
+):
+    reuse_iq = True
 
 
 class CalibrationVariables(
@@ -63,6 +71,7 @@ class ManualYFactorSweep(
     calibration_variables: CalibrationVariables
     defaults: ManualYFactorCapture = ManualYFactorCapture()
     calibration_setup: ManualYFactorSetup = ManualYFactorSetup()
+    radio_setup: CalibrationRadioSetup = CalibrationRadioSetup()
 
     def __post_init__(self):
         if self.radio_setup.calibration is not None:
@@ -91,6 +100,7 @@ def read_calibration_corrections(path):
 def save_calibration_corrections(path, corrections: 'xr.Dataset'):
     with gzip.GzipFile(path, 'wb') as fd:
         pickle.dump(corrections, fd)
+
 
 @functools.lru_cache
 def _cached_calibration_captures(
@@ -156,9 +166,7 @@ def _limit_nyquist_bandwidth(data: 'xr.DataArray') -> 'xr.DataArray':
     return bw
 
 
-def _y_factor_power_corrections(
-    dataset: 'xr.Dataset', Tref=290.0
-) -> 'xr.Dataset':
+def _y_factor_power_corrections(dataset: 'xr.Dataset', Tref=290.0) -> 'xr.Dataset':
     # TODO: check that this works for xr.DataArray inputs in (enr_dB, Tamb)
 
     k = scipy.constants.Boltzmann * 1000  # scaled from W/K to mW/K
@@ -223,9 +231,7 @@ def _y_factor_frequency_response_correction(
     return frequency_response
 
 
-def compute_y_factor_corrections(
-    dataset: 'xr.Dataset', Tref=290.0
-) -> 'xr.Dataset':
+def compute_y_factor_corrections(dataset: 'xr.Dataset', Tref=290.0) -> 'xr.Dataset':
     ret = _y_factor_power_corrections(dataset, Tref=Tref)
     # ret['baseband_frequency_response'] = _y_factor_frequency_response_correction(
     #     **kwargs, fc_temperatures=ret.temperature
@@ -456,4 +462,7 @@ class ManualYFactorPeripheral(peripherals.PeripheralsBase):
         with (float, int, str, xr.DataArray, etc)
         """
 
-        return {'enr_dB': self.sweep.calibration_setup.enr, 'Tamb_K': self.sweep.calibration_setup.ambient_temperature}
+        return {
+            'enr_dB': self.sweep.calibration_setup.enr,
+            'Tamb_K': self.sweep.calibration_setup.ambient_temperature,
+        }

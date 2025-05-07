@@ -58,7 +58,9 @@ AnalysisBandwidthType = Annotated[
 ]
 
 
-class WaveformCapture(channel_analysis.Capture, forbid_unknown_fields=True, frozen=True, cache_hash=True):
+class WaveformCapture(
+    channel_analysis.Capture, forbid_unknown_fields=True, frozen=True, cache_hash=True
+):
     """Capture specification structure for a generic waveform.
 
     This subset of RadioCapture is broken out here to simplify the evaluation of
@@ -91,7 +93,9 @@ def _validate_multichannel(channel, gain):
             )
 
 
-class RadioCapture(WaveformCapture, forbid_unknown_fields=True, frozen=True, cache_hash=True):
+class RadioCapture(
+    WaveformCapture, forbid_unknown_fields=True, frozen=True, cache_hash=True
+):
     """Capture specification for a single radio waveform"""
 
     # RF and leveling
@@ -176,7 +180,11 @@ class RadioSetup(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash
     time_sync_every_capture: TimeSyncEveryCaptureType = False
     warmup_sweep: WarmupSweepType = True
     array_backend: ArrayBackendType = 'cupy'
-    fast_lo: FastLOType = False
+    fast_lo: FastLOType = True
+
+    # this is enabled by a calibration subclass to skip unecessary
+    # re-acquisitions
+    reuse_iq = False
 
     _transient_holdoff_time: Optional[float] = None
     _rx_channel_count: Optional[int] = None

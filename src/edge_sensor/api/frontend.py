@@ -174,20 +174,20 @@ def init_sweep_cli(
 def execute_sweep_cli(
     cli: CLIObjects,
     *,
-    reuse_compatible_iq: bool = False,
     remote=None,
 ):
     # pull out the cli elements that have context
     *cli_context, sweep, cal = cli
 
     with lb.sequentially(*cli_context):
+        reuse_iq = cli.sweep_spec.radio_setup.reuse_iq
         # iterate through the sweep specification, yielding a dataset for each capture
         sweep_iter = cli.controller.iter_sweep(
             sweep,
             calibration=cal,
             prepare=False,
             always_yield=True,
-            reuse_compatible_iq=reuse_compatible_iq,  # calibration-specific optimization
+            reuse_compatible_iq=reuse_iq,  # calibration-specific optimization
         )
 
         sweep_iter.set_peripherals(cli.peripherals)

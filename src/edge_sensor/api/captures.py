@@ -164,7 +164,6 @@ def concat_group_sizes(
     count = 0
 
     while len(remaining) > 0:
-
         if count >= min_size and set(pending) == set(remaining) == whole_set:
             # make sure that the pending and remaining captures
             # will result in equivalent shapes when concatenated
