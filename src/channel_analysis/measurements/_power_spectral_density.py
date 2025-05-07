@@ -112,6 +112,7 @@ def power_spectral_density(
         frequency_bin_averaging=frequency_bin_averaging,
         trim_stopband=trim_stopband,
         fractional_overlap=fractional_overlap,
+        window_fill=window_fill,
         dB=False,
         dtype=dtype,
     )

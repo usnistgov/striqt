@@ -49,7 +49,6 @@ def _results_as_arrays(
     return array
 
 
-@functools.lru_cache()
 def _param_to_field(name, p: inspect.Parameter):
     """convert an inspect.Parameter to a msgspec.Struct field"""
     if p.annotation is inspect._empty:

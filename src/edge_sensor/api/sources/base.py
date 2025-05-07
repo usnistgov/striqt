@@ -834,7 +834,7 @@ def alloc_empty_iq(
     else:
         channels = tuple(channels)
 
-    with lb.stopwatch('allocate buffer'):
+    with lb.stopwatch('allocate buffer', logger_level='debug'):
         samples = empty((len(channels), count), dtype=np.complex64)
 
     # build the list of channel buffers, including references to the throwaway
