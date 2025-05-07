@@ -404,7 +404,7 @@ class YFactorSink(sinks.SinkBase):
         )
 
         # break out each remaining capture coordinate into its own dimension
-        fields = list(capture_data.capture.coords)
+        fields = self.sweep_spec.calibration_variables.__struct_fields__
         by_field = capture_data.set_xindex(fields).unstack('capture')
         by_field['noise_diode_enabled'] = by_field.noise_diode_enabled.astype('bool')
 
