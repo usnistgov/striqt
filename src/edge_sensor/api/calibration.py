@@ -419,7 +419,6 @@ class YFactorSink(sinks.SinkBase):
         # break out each remaining capture coordinate into its own dimension
         by_field = (
             capture_data.set_xindex(fields)
-            .drop_duplicates('capture')
             .unstack('capture')
         )
         by_field['noise_diode_enabled'] = by_field.noise_diode_enabled.astype('bool')

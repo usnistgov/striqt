@@ -196,3 +196,5 @@ def execute_sweep_cli(
         # step through captures
         for _ in sweep_iter:
             pass
+
+        cli.sink.flush()
