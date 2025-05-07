@@ -100,6 +100,8 @@ def power_spectral_density(
     from iqwaveform.util import axis_index, array_namespace
     from iqwaveform.fourier import stat_ufunc_from_shorthand
 
+    working_dtype = 'float32'
+
     xp = array_namespace(iq)
     axis = 1
 
@@ -113,21 +115,21 @@ def power_spectral_density(
         fractional_overlap=fractional_overlap,
         window_fill=window_fill,
         dB=False,
-        dtype=dtype,
+        dtype=working_dtype,
     )
 
     findquantile = iqwaveform.util.find_float_inds(tuple(frequency_statistic))
 
     newshape = list(spg.shape)
     newshape[axis] = len(frequency_statistic)
-    psd = xp.empty(newshape, dtype=dtype)
+    psd = xp.empty(newshape, dtype=working_dtype)
 
     # all of the quantiles, evaluated together
-    q = np.array(frequency_statistic)[findquantile].astype(dtype)
+    q = np.array(frequency_statistic)[findquantile].astype(working_dtype)
     psd[:, findquantile] = (
         xp.quantile(spg, list(q), axis=axis)
         .swapaxes(0, axis)  # quantile bumps the output result to axis 0
-        .astype(dtype)  #
+        .astype(working_dtype)  #
     )
 
     # everything else
