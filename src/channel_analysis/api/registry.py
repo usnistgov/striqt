@@ -34,9 +34,7 @@ else:
 TFunc = typing.Callable[..., typing.Any]
 
 
-def _results_as_arrays(
-    obj: tuple | list | dict | 'iqwaveform.util.Array'
-):
+def _results_as_arrays(obj: tuple | list | dict | 'iqwaveform.util.Array'):
     """convert an array, or a container of arrays, into a numpy array (or container of numpy arrays)"""
 
     if array_api_compat.is_torch_array(obj):

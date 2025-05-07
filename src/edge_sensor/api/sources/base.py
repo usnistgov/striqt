@@ -467,7 +467,7 @@ class SourceBase(lb.Device):
         samples = _cast_iq(self, samples)
 
         return samples[:, sample_span], start_ns
-    
+
     def _get_next_buffers(self, capture) -> tuple[np.ndarray, np.ndarray]:
         """swap the buffers, and reallocate if needed"""
         self._buffers = [self._buffers[1], self._buffers[0]]
@@ -803,7 +803,9 @@ def get_channel_read_buffer_count(
 
 @lb.stopwatch('allocate acquisition buffer', logger_level='debug')
 def alloc_empty_iq(
-    radio: SourceBase, capture: structs.RadioCapture, prior: typing.Optional[np.ndarray]=None
+    radio: SourceBase,
+    capture: structs.RadioCapture,
+    prior: typing.Optional[np.ndarray] = None,
 ) -> tuple[np.ndarray, tuple[np.ndarray, np.ndarray]]:
     """allocate a buffer of IQ return values.
 
@@ -838,7 +840,7 @@ def alloc_empty_iq(
         all_samples = prior
 
     # the subset that we'll return for use by the next acquisition
-    samples = all_samples[:len(channels),:count]
+    samples = all_samples[: len(channels), :count]
 
     # build the list of channel buffers, including references to the throwaway
     # in case of radio._stream_all_rx_channels
