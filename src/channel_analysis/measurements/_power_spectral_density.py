@@ -102,7 +102,6 @@ def power_spectral_density(
 
     xp = array_namespace(iq)
     axis = 1
-    dtype = 'float32'
 
     spg, metadata = compute_spectrogram(
         iq,
