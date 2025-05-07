@@ -242,7 +242,7 @@ class SourceBase(lb.Device):
         'complex64',
         only=('int16', 'float32', 'complex64'),
         sets=False,
-        help='buffer transport dtype',
+        help='buffer and transport dtype',
     )
 
     _forced_backend_sample_rate = attr.value.float(
@@ -833,7 +833,9 @@ def alloc_empty_iq(
         channels = (channels,)
     else:
         channels = tuple(channels)
-    samples = empty((len(channels), count), dtype=np.complex64)
+
+    with lb.stopwatch('allocate buffer'):
+        samples = empty((len(channels), count), dtype=np.complex64)
 
     # build the list of channel buffers, including references to the throwaway
     # in case of radio._stream_all_rx_channels
