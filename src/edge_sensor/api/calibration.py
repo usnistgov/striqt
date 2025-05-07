@@ -397,17 +397,21 @@ class YFactorSink(sinks.SinkBase):
         # re-index by radio setting rather than capture
         channel = int(data[0].channel)
 
-        capture_data = (
-            xr.concat(data, xarray_ops.CAPTURE_DIM)
-            .assign_attrs({'sweep_start_time': self.sweep_start_time})
-            .drop_vars(self._DROP_FIELDS)
-        )
-
-        # break out each remaining capture coordinate into its own dimension
         fields = list(self.sweep_spec.calibration_variables.__struct_fields__)
         if 'sample_rate' in fields:
             fields.remove('sample_rate')
 
+        attrs = {
+            'sweep_start_time': self.sweep_start_time,
+            'calibration_fields': fields
+        }
+        capture_data = (
+            xr.concat(data, xarray_ops.CAPTURE_DIM)
+            .assign_attrs(attrs)
+            .drop_vars(self._DROP_FIELDS)
+        )
+
+        # break out each remaining capture coordinate into its own dimension
         by_field = (
             capture_data.set_xindex(fields)
             .drop_duplicates('capture')
