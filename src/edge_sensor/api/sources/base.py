@@ -470,7 +470,7 @@ class SourceBase(lb.Device):
     
     def _get_next_buffers(self, capture) -> tuple[np.ndarray, np.ndarray]:
         """swap the buffers, and reallocate if needed"""
-        self._buffers = self._buffers[1], self._buffers[0]
+        self._buffers = [self._buffers[1], self._buffers[0]]
         self._buffers[0], ret = alloc_empty_iq(self, capture, self._buffers[0])
         return ret
 
