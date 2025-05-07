@@ -132,7 +132,7 @@ class CaptureAppender(ZarrSinkBase):
         with lb.stopwatch('build dataset', threshold=0.5):
             dataset = xr.concat(data_list, xarray_ops.CAPTURE_DIM)
 
-        with lb.stopwatch(f'write to {self.path}'):
+        with lb.stopwatch(f'write to {self.output_path}'):
             channel_analysis.dump(self.store, dataset)
 
 
