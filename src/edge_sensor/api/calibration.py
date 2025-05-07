@@ -377,6 +377,11 @@ class YFactorSink(sinks.SinkBase):
 
         self.sweep_start_time = None
 
+    def close(self):
+        # pointedly, do not flush on close - only after a complete
+        # dataset
+        pass
+
     def append(self, capture_data: 'xr.Dataset', capture: ManualYFactorCapture):
         if capture_data is None:
             return
@@ -397,7 +402,7 @@ class YFactorSink(sinks.SinkBase):
         # re-index by radio setting rather than capture
         channel = int(data[0].channel)
 
-        fields = list(self.sweep_spec.calibration_variables.__struct_fields__)
+        fields = [ManualYFactorCapture.noise_diode_enabled.__qualname__] + list(self.sweep_spec.calibration_variables.__struct_fields__)
         if 'sample_rate' in fields:
             fields.remove('sample_rate')
 
