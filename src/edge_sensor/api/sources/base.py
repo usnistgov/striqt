@@ -264,6 +264,7 @@ class SourceBase(lb.Device):
     def open(self):
         self._armed_capture: structs.RadioCapture | None = None
         self._carryover = _ReceiveBufferCarryover(self)
+        self._buffers = [None, None]
 
     def setup(self, radio_setup: structs.RadioSetup, **setup_kws):
         """disarm acquisition and apply the given radio setup"""
@@ -371,15 +372,11 @@ class SourceBase(lb.Device):
     def read_iq(
         self,
         capture: structs.RadioCapture,
-        buffers: tuple['np.ndarray', 'np.ndarray'] = None,
     ) -> tuple['np.ndarray[np.complex64]', float]:
         # the return buffer
-        if buffers is None:
-            samples, stream_bufs = alloc_empty_iq(self, capture)
-        else:
-            samples, stream_bufs = buffers
+        samples, stream_bufs = self._get_next_buffers(capture)
 
-        # holdoffs parameters, valid when we already have a clock reading
+        # holdoff parameters, valid when we already have a clock reading
         dsp_pad_before, _ = _get_dsp_pad_size(self.base_clock_rate, capture)
 
         # carryover from the previous acquisition
@@ -470,6 +467,12 @@ class SourceBase(lb.Device):
         samples = _cast_iq(self, samples)
 
         return samples[:, sample_span], start_ns
+    
+    def _get_next_buffers(self, capture) -> tuple[np.ndarray, np.ndarray]:
+        """swap the buffers, and reallocate if needed"""
+        self._buffers = self._buffers[1], self._buffers[0]
+        self._buffers[0], ret = alloc_empty_iq(self, capture, self._buffers[0])
+        return ret
 
     @lb.stopwatch('acquire', logger_level='debug')
     def acquire(
@@ -488,20 +491,15 @@ class SourceBase(lb.Device):
             capture = self.get_capture_struct()
 
         # allocate (and arm the capture if necessary)
-        calls = {'buffers': lb.Call(alloc_empty_iq, self, capture)}
-        iqwaveform.power_analysis.Any  # touch to work around a lazy loading bug
         if capture != getattr(self, '_armed_capture', None):
-            calls['arm'] = lb.Call(self.arm, capture)
-
-        buffers = util.concurrently_with_fg(calls)['buffers']
+            self.arm(capture)
 
         # this must be here, _after_ the possible arm call, and before possibly
         # arming the next
         fs = self.backend_sample_rate()
 
         # the low-level acquisition
-        iq, time_ns = self.read_iq(capture, buffers=buffers)
-        del buffers
+        iq, time_ns = self.read_iq(capture)
 
         if next_capture == capture and self.gapless_repeats:
             # the one case where we leave it running
@@ -805,8 +803,8 @@ def get_channel_read_buffer_count(
 
 @lb.stopwatch('allocate acquisition buffer', logger_level='debug')
 def alloc_empty_iq(
-    radio: SourceBase, capture: structs.RadioCapture
-) -> tuple[np.ndarray, np.ndarray]:
+    radio: SourceBase, capture: structs.RadioCapture, prior: typing.Optional[np.ndarray]=None
+) -> tuple[np.ndarray, tuple[np.ndarray, np.ndarray]]:
     """allocate a buffer of IQ return values.
 
     Returns:
@@ -834,8 +832,13 @@ def alloc_empty_iq(
     else:
         channels = tuple(channels)
 
-    with lb.stopwatch('allocate buffer', logger_level='debug'):
-        samples = empty((len(channels), count), dtype=np.complex64)
+    if prior is None or (prior.shape[0] < len(channels) or prior.shape[1] < count):
+        all_samples = empty((len(channels), count), dtype=np.complex64)
+    else:
+        all_samples = prior
+
+    # the subset that we'll return for use by the next acquisition
+    samples = all_samples[:len(channels),:count]
 
     # build the list of channel buffers, including references to the throwaway
     # in case of radio._stream_all_rx_channels
@@ -854,12 +857,12 @@ def alloc_empty_iq(
     i = 0
     for channel in range(radio.rx_channel_count):
         if channel in channels:
-            buffers.append(samples[i, :].view(buf_dtype))
+            buffers.append(samples[i].view(buf_dtype))
             i += 1
         elif radio._stream_all_rx_channels:
             buffers.append(extra)
 
-    return samples, buffers
+    return all_samples, (samples, buffers)
 
 
 def _list_radio_classes(subclass=SourceBase):
