@@ -416,11 +416,7 @@ class YFactorSink(sinks.SinkBase):
         by_field['noise_diode_enabled'] = by_field.noise_diode_enabled.astype('bool')
 
         # compute and merge corrections
-        corrections = compute_y_factor_corrections(
-            by_field,
-            enr_dB=self.sweep_spec.calibration_setup.enr,
-            Tamb=self.sweep_spec.calibration_setup.ambient_temperature,
-        )
+        corrections = compute_y_factor_corrections(by_field)
 
         if not self.force and Path(self.output_path).exists():
             print('merging results from previous file')
