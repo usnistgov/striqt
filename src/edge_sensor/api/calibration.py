@@ -170,7 +170,9 @@ def _y_factor_power_corrections(dataset: 'xr.Dataset', Tref=290.0) -> 'xr.Datase
     # TODO: check that this works for xr.DataArray inputs in (enr_dB, Tamb)
 
     k = scipy.constants.Boltzmann * 1000  # scaled from W/K to mW/K
-    enr_dB = dataset.enr_dB.sel(noise_diode_enabled=True, drop=True)
+    enr_dB = dataset.enr_dB.set_xindex(['noise_diode_enabled']).sel(
+        noise_diode_enabled=True, drop=True
+    )
     enr = 10 ** (enr_dB / 10.0)
 
     power = (
@@ -403,7 +405,7 @@ class YFactorSink(sinks.SinkBase):
 
         attrs = {
             'sweep_start_time': self.sweep_start_time,
-            'calibration_fields': fields
+            'calibration_fields': fields,
         }
         capture_data = (
             xr.concat(data, xarray_ops.CAPTURE_DIM)
