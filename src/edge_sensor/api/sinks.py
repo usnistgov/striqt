@@ -88,7 +88,7 @@ class SinkBase:
     def wait(self):
         if self._future is None:
             return
-        self._future.result(timeout=30)
+        self._future.result()
         self._future = None
 
 
