@@ -8,11 +8,12 @@ import click
 def run(yaml_path):
     print('Initializing...')
     # instantiate sweep objects
-    from edge_sensor.api import frontend
+    from edge_sensor.api import frontend, calibration
     import edge_sensor
     from pprint import pprint
     from edge_sensor.api.io import _get_default_format_fields
     import labbench as lb
+    from pathlib import Path
 
     lb.show_messages('warning')
 
@@ -23,14 +24,23 @@ def run(yaml_path):
     sweep = edge_sensor.read_yaml_sweep(yaml_path, radio_id=radio_id)
     print('Success!')
 
-    print('\n\nExpanded paths')
+    print('\nCalibration info')
+    print(60 * '=')
+    cal = calibration.read_calibration(sweep.radio_setup.calibration)
+    print(calibration.summarize_calibration(cal))
+
+    print('\nExpanded paths')
     print(60 * '=')
     expanded_paths = {
         'output.path': sweep.output.path,
         'extensions.import_path': sweep.extensions.import_path,
         'radio_setup.calibration': sweep.radio_setup.calibration,
     }
-    pprint(expanded_paths, width=60)
+
+    for name, p in expanded_paths.items():
+        print(f'{name}:')
+        print(f'\tPath: {p}')
+        print('\tExists: ', 'yes' if Path(p).exists() else 'no')
 
     print('\n\nAlias {field} names and expanded values:')
     print(60 * '=')
