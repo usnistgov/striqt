@@ -93,13 +93,11 @@ def read_calibration_corrections(path):
     if path is None:
         return None
 
-    with gzip.GzipFile(path, 'rb') as fd:
-        return pickle.load(fd)
+    return xr.open_dataset(path)
 
 
 def save_calibration_corrections(path, corrections: 'xr.Dataset'):
-    with gzip.GzipFile(path, 'wb') as fd:
-        pickle.dump(corrections, fd)
+    corrections.to_netcdf(path)
 
 
 @functools.lru_cache
