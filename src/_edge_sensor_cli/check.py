@@ -14,6 +14,7 @@ def run(yaml_path):
     from edge_sensor.api.io import _get_default_format_fields
     import labbench as lb
     from pathlib import Path
+    import pandas as pd
 
     lb.show_messages('warning')
 
@@ -32,7 +33,9 @@ def run(yaml_path):
         print('No file at configured path!')
     else:
         cal = calibration.read_calibration(sweep.radio_setup.calibration)
-        print(calibration.summarize_calibration(cal))
+        summary = calibration.summarize_calibration(cal)
+        with pd.option_context('display.max_rows', None):
+            print(summary.sort_index(axis=1).sort_index(axis=0))
 
     print('\nExpanded paths')
     print(60 * '=')
