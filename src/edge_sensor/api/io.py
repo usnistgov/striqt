@@ -175,20 +175,21 @@ def read_yaml_sweep(
     sweep: structs.Sweep = sweep_cls.fromdict(tree)
 
     # fill formatting fields in paths
-    kws = dict(relative_to_file=path, sweep=sweep, radio_id=radio_id)
+    if radio_id is not None:
+        kws = dict(relative_to_file=path, sweep=sweep, radio_id=radio_id)
 
-    output_path = expand_path(sweep.output.path, **kws)
-    output_spec = sweep.output.replace(path=output_path)
+        output_path = expand_path(sweep.output.path, **kws)
+        output_spec = sweep.output.replace(path=output_path)
 
-    cal_path = expand_path(sweep.radio_setup.calibration, **kws)
-    setup_spec = sweep.radio_setup.replace(calibration=cal_path)
+        cal_path = expand_path(sweep.radio_setup.calibration, **kws)
+        setup_spec = sweep.radio_setup.replace(calibration=cal_path)
 
-    import_path = expand_path(sweep.extensions.import_path, **kws)
-    extensions_spec = sweep.extensions.replace(import_path=import_path)
+        import_path = expand_path(sweep.extensions.import_path, **kws)
+        extensions_spec = sweep.extensions.replace(import_path=import_path)
 
-    sweep = sweep.replace(
-        output=output_spec, radio_setup=setup_spec, extensions=extensions_spec
-    )
+        sweep = sweep.replace(
+            output=output_spec, radio_setup=setup_spec, extensions=extensions_spec
+        )
 
     return sweep
 
