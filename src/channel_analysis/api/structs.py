@@ -37,8 +37,9 @@ def meta(standard_name: str, units: str | None = None, **kws) -> msgspec.Meta:
     """annotation that is used to generate 'standard_name' and 'units' fields of xarray attrs objects"""
     extra = {'standard_name': standard_name}
     if units is not None:
+        # xarray objects with units == None cannot be saved to netcdf
         extra['units'] = units
-    return msgspec.Meta(description=standard_name, extra={extra}, **kws)
+    return msgspec.Meta(description=standard_name, extra=extra, **kws)
 
 
 class StructBase(msgspec.Struct, kw_only=True, frozen=True, cache_hash=True):
