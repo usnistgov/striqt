@@ -89,14 +89,14 @@ class ManualYFactorSweep(
 
 
 @functools.lru_cache
-def read_calibration_corrections(path):
+def read_calibration(path):
     if path is None:
         return None
 
     return xr.open_dataset(path)
 
 
-def save_calibration_corrections(path, corrections: 'xr.Dataset'):
+def save_calibration(path, corrections: 'xr.Dataset'):
     corrections.to_netcdf(path)
 
 
@@ -202,7 +202,7 @@ def _y_factor_power_corrections(dataset: 'xr.Dataset', Tref=290.0) -> 'xr.Datase
             'noise_figure': noise_figure,
             'power_correction': power_correction,
         },
-        attrs=dataset.attrs
+        attrs={'calibration_variables': dataset.attrs['calibration_variables']}
     )
 
 
@@ -292,7 +292,7 @@ def lookup_power_correction(
     if isinstance(cal_data, xr.Dataset):
         corrections = cal_data
     elif cal_data:
-        corrections = read_calibration_corrections(cal_data)
+        corrections = read_calibration(cal_data)
     else:
         return None
 
@@ -370,7 +370,7 @@ class YFactorSink(sinks.SinkBase):
     def open(self):
         if not self.force and Path(self.output_path).exists():
             print('merging results from previous file')
-            self.prev_corrections = read_calibration_corrections(self.output_path)
+            self.prev_corrections = read_calibration(self.output_path)
         else:
             self.prev_corrections = None
 
@@ -435,7 +435,7 @@ class YFactorSink(sinks.SinkBase):
         with pd.option_context('display.max_rows', None):
             print(summary.sort_index(axis=1).sort_index(axis=0))
 
-        save_calibration_corrections(self.output_path, corrections)
+        save_calibration(self.output_path, corrections)
         print(f'saved to {str(self.output_path)!r}')
 
 

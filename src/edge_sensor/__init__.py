@@ -3,7 +3,7 @@ from . import api
 
 from .api.controller import connect, start_server, SweepController
 from .api.io import dump, load, open_store, read_yaml_sweep
-from .api.calibration import read_calibration_corrections
+from .api.calibration import read_calibration
 from .api.iq_corrections import resampling_correction
 from .api.sources import (
     SourceBase,

@@ -140,7 +140,7 @@ def init_sweep_cli(
         # open the rest
         calls = {}
         calls['calibration'] = lb.Call(
-            calibration.read_calibration_corrections,
+            calibration.read_calibration,
             sweep_spec.radio_setup.calibration,
         )
         calls['peripherals'] = lb.Call(peripherals.open)
