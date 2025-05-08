@@ -30,6 +30,7 @@ dependencies:
 - dask
 - msgspec~=0.18
 - frozendict
+- netCDF4
 - schemdraw
 - mscorefonts
 - soapysdr-module-airt
