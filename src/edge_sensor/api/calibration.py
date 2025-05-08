@@ -414,13 +414,11 @@ class YFactorSink(sinks.SinkBase):
             xr.concat(data, xarray_ops.CAPTURE_DIM)
             .assign_attrs(attrs)
             .drop_vars(self._DROP_FIELDS)
+            .set_xindex(fields)
         )
 
         # break out each remaining capture coordinate into its own dimension
-        by_field = (
-            capture_data.set_xindex(fields)
-            .unstack('capture')
-        )
+        by_field = capture_data.unstack('capture')
         by_field['noise_diode_enabled'] = by_field.noise_diode_enabled.astype('bool')
 
         # compute and merge corrections
