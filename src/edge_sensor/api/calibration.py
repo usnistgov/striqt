@@ -409,7 +409,7 @@ class YFactorSink(sinks.SinkBase):
 
         attrs = {
             'sweep_start_time': self.sweep_start_time,
-            'calibration_fields': fields
+            'calibration_fields': fields,
         }
         capture_data = (
             xr.concat(data, xarray_ops.CAPTURE_DIM)
