@@ -36,9 +36,9 @@ class ManualYFactorCapture(
 
 
 class ManualYFactorSetup(structs.StructBase, forbid_unknown_fields=True, frozen=True):
-    enr: Annotated[float, meta(standard_name='Excess noise ratio', unit='dB')] = 20.87
+    enr: Annotated[float, meta(standard_name='Excess noise ratio', units='dB')] = 20.87
     ambient_temperature: Annotated[
-        float, meta(standard_name='Ambient temperature', unit='K')
+        float, meta(standard_name='Ambient temperature', units='K')
     ] = 294.5389
 
 
@@ -405,6 +405,7 @@ class YFactorSink(sinks.SinkBase):
         fields = list(self.sweep_spec.calibration_variables.__struct_fields__)
         if 'sample_rate' in fields:
             fields.remove('sample_rate')
+            fields.append('backend_sample_rate')
 
         attrs = {
             'sweep_start_time': self.sweep_start_time,

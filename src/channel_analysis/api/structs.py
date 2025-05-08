@@ -33,13 +33,12 @@ def _dec_hook(type_, obj):
         return obj
 
 
-def meta(standard_name: str, unit: str | None = None, **kws) -> msgspec.Meta:
+def meta(standard_name: str, units: str | None = None, **kws) -> msgspec.Meta:
     """annotation that is used to generate 'standard_name' and 'units' fields of xarray attrs objects"""
-    return msgspec.Meta(
-        description=standard_name,
-        extra={'standard_name': standard_name, 'units': unit},
-        **kws,
-    )
+    extra = {'standard_name': standard_name}
+    if units is not None:
+        extra['units'] = units
+    return msgspec.Meta(description=standard_name, extra={extra}, **kws)
 
 
 class StructBase(msgspec.Struct, kw_only=True, frozen=True, cache_hash=True):
