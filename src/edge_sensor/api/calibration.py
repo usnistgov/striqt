@@ -202,7 +202,6 @@ def _y_factor_power_corrections(dataset: 'xr.Dataset', Tref=290.0) -> 'xr.Datase
             'noise_figure': noise_figure,
             'power_correction': power_correction,
         },
-        attrs={'calibration_variables': dataset.attrs['calibration_variables']}
     )
 
 
