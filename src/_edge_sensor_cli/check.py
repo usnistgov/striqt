@@ -18,13 +18,12 @@ def run(yaml_path):
 
     lb.show_messages('warning')
 
-    sweep = edge_sensor.read_yaml_sweep(yaml_path)
-    print(f'Testing connect with driver {sweep.radio_setup.driver!r}...')
-    controller = frontend.get_controller(None, sweep)
-    radio_id = controller.radio_id(sweep.radio_setup.driver)
+    init_sweep = edge_sensor.read_yaml_sweep(yaml_path)
+    print(f'Testing connect with driver {init_sweep.radio_setup.driver!r}...')
+    controller = frontend.get_controller(None, init_sweep)
+    radio_id = controller.radio_id(init_sweep.radio_setup.driver)
     print(f'Connected, radio_id is {radio_id!r}')
     sweep = edge_sensor.read_yaml_sweep(yaml_path, radio_id=radio_id)
-    
 
     print('\nCalibration info')
     print(60 * '=')
@@ -38,18 +37,19 @@ def run(yaml_path):
         with pd.option_context('display.max_rows', None):
             print(summary.sort_index(axis=1).sort_index(axis=0))
 
-    print('\nExpanded paths')
+    print('\nPaths')
     print(60 * '=')
     expanded_paths = {
-        'output.path': sweep.output.path,
-        'extensions.import_path': sweep.extensions.import_path,
-        'radio_setup.calibration': sweep.radio_setup.calibration,
+        'output.path': (sweep.output.path, init_sweep.output.path),
+        'extensions.import_path': (sweep.extensions.import_path, init_sweep.extensions.import_path),
+        'radio_setup.calibration': (sweep.radio_setup.calibration, init_sweep.radio_setup.calibration),
     }
 
-    for name, p in expanded_paths.items():
+    for name, (pe, pu) in expanded_paths.items():
         print(f'{name}:')
-        print(f'\tPath: {p}')
-        print('\tExists: ', 'yes' if Path(p).exists() else 'no')
+        print(f'\tRaw input: {pu!r}')
+        print(f'\tEvaluated: {pe!r}')
+        print('\tExists: ', 'yes' if Path(pe).exists() else 'no')
 
     print('\n\nAlias {field} names and expanded values:')
     print(60 * '=')
