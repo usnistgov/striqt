@@ -22,7 +22,7 @@ def run(yaml_path):
     print(f'Testing connect with driver {sweep.radio_setup.driver!r}...')
     controller = frontend.get_controller(None, sweep)
     radio_id = controller.radio_id(sweep.radio_setup.driver)
-    print('Connected, radio_id is {radio_id!r}')
+    print(f'Connected, radio_id is {radio_id!r}')
     sweep = edge_sensor.read_yaml_sweep(yaml_path, radio_id=radio_id)
     
 
