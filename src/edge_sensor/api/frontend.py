@@ -15,7 +15,7 @@ else:
     lb = util.lazy_import('labbench')
 
 
-def _connect_controller(remote, sweep):
+def get_controller(remote, sweep):
     if remote is None:
         return controller.SweepController(sweep)
     else:
@@ -117,7 +117,7 @@ def init_sweep_cli(
     peripherals = None
     try:
         calls = {}
-        calls['controller'] = lb.Call(_connect_controller, remote, sweep_spec)
+        calls['controller'] = lb.Call(get_controller, remote, sweep_spec)
         if open_writer_early:
             yaml_classes = _get_extension_classes(sweep_spec)
             # now, open the store
