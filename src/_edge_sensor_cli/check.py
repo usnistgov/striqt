@@ -26,8 +26,13 @@ def run(yaml_path):
 
     print('\nCalibration info')
     print(60 * '=')
-    cal = calibration.read_calibration(sweep.radio_setup.calibration)
-    print(calibration.summarize_calibration(cal))
+    if sweep.radio_setup.calibration is None:
+        print('Configured for uncalibrated operation')
+    elif not Path(sweep.radio_setup.calibration).exists():
+        print('No file at configured path!')
+    else:
+        cal = calibration.read_calibration(sweep.radio_setup.calibration)
+        print(calibration.summarize_calibration(cal))
 
     print('\nExpanded paths')
     print(60 * '=')
