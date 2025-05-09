@@ -56,10 +56,11 @@ class BasebandFrequencyCoords:
         frequency_resolution: float,
         fractional_overlap: float = 0,
         trim_stopband: bool = True,
+        frequency_bin_averaging: typing.Optional[float] = None,
         **_,
     ) -> dict[str, np.ndarray]:
         return freq_axis_values(
-            capture, fres=frequency_resolution, trim_stopband=trim_stopband
+            capture, fres=frequency_resolution, trim_stopband=trim_stopband, navg=frequency_bin_averaging
         )
 
 
