@@ -41,6 +41,8 @@ def _results_as_arrays(obj: tuple | list | dict | 'iqwaveform.util.Array'):
         array = obj.cpu()
     elif array_api_compat.is_cupy_array(obj):
         array = obj.get()
+    elif array_api_compat.is_numpy_array(obj):
+        return obj
     else:
         raise TypeError(f'obj type {type(obj)} is unrecognized')
 

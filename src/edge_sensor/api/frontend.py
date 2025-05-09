@@ -88,12 +88,13 @@ def init_sweep_cli(
 
     debug_handler = DebugOnException(debug)
 
-    if 'None' in sweep_spec.output.path:
+    if '{' in sweep_spec.output.path.replace('{{',''):
         # in this case, we're still waiting to fill in radio_id
-        open_writer_early = False
+        open_sink_early = False
     else:
         open_writer_early = True
     open_writer_early = False
+
     if store_backend is None and sweep_spec.output.store is None:
         click.echo(
             'specify output.store in the yaml file or use -s <NAME> on the command line'
@@ -105,6 +106,8 @@ def init_sweep_cli(
             'specify output.path in the yaml file or use -o PATH on the command line'
         )
         sys.exit(1)
+    elif output_path is None:
+        output_path = sweep_spec.output.path
 
     if verbose:
         lb.util.force_full_traceback(True)
@@ -118,7 +121,7 @@ def init_sweep_cli(
     try:
         calls = {}
         calls['controller'] = lb.Call(get_controller, remote, sweep_spec)
-        if open_writer_early:
+        if open_sink_early:
             yaml_classes = _get_extension_classes(sweep_spec)
             # now, open the store
             sink = yaml_classes.sink_cls(
@@ -144,7 +147,7 @@ def init_sweep_cli(
             sweep_spec.radio_setup.calibration,
         )
         calls['peripherals'] = lb.Call(peripherals.open)
-        if not open_writer_early:
+        if not open_sink_early:
             # now, open the store
             sink = yaml_classes.sink_cls(
                 sweep_spec, output_path=output_path, store_backend=store_backend

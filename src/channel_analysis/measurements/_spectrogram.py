@@ -106,12 +106,17 @@ def freq_axis_values(
     else:
         raise ValueError('sample_rate/resolution must be a counting number')
 
-    # otherwise negligible rounding errors lead to headaches when merging
-    # spectra with different sampling parameters. start here with long floats
-    # to minimize this problem
-    # fs = np.longdouble(capture.sample_rate)
+    if navg is None:
+        pass
+    elif iqwaveform.util.isroundmod(navg, 1):
+        navg = round(navg)
+    else:
+        raise ValueError('frequency_bin_averaging must be an integer bin count')
+
+    # use the iqwaveform.fourier fftfreq for higher precision, which avoids
+    # headaches when merging spectra with different sampling parameters due
+    # to rounding errors.
     freqs = fftfreq(nfft, capture.sample_rate)
-    # freqs = iqwaveform.fourier.fftfreq(nfft, 1.0 / fs, dtype='longdouble')
 
     if trim_stopband and np.isfinite(capture.analysis_bandwidth):
         # stick with python arithmetic here for numpy/cupy consistency
@@ -199,6 +204,7 @@ def _evaluate(
     window_fill: float = 1,
     trim_stopband: bool = True,
 ):
+    print('_evaluate', capture.center_frequency)
     # TODO: integrate this back into iqwaveform
     if iqwaveform.isroundmod(capture.sample_rate, frequency_resolution):
         nfft = round(capture.sample_rate / frequency_resolution)
@@ -266,6 +272,20 @@ def compute_spectrogram(
     dB: bool = True,
     dtype='float16',
 ):
+    if frequency_bin_averaging is None:
+        pass
+    elif iqwaveform.util.isroundmod(frequency_bin_averaging, 1):
+        frequency_bin_averaging = round(frequency_bin_averaging)
+    else:
+        raise ValueError('frequency_bin_averaging must be an integer bin count')
+
+    if time_bin_averaging is None:
+        pass
+    elif iqwaveform.util.isroundmod(time_bin_averaging, 1):
+        time_bin_averaging = round(time_bin_averaging)
+    else:
+        raise ValueError('time_bin_averaging must be an integer bin count')
+    
     eval_kws = dict(
         window=window,
         frequency_resolution=frequency_resolution,
