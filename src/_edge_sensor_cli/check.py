@@ -41,8 +41,14 @@ def run(yaml_path):
     print(60 * '=')
     expanded_paths = {
         'output.path': (sweep.output.path, init_sweep.output.path),
-        'extensions.import_path': (sweep.extensions.import_path, init_sweep.extensions.import_path),
-        'radio_setup.calibration': (sweep.radio_setup.calibration, init_sweep.radio_setup.calibration),
+        'extensions.import_path': (
+            sweep.extensions.import_path,
+            init_sweep.extensions.import_path,
+        ),
+        'radio_setup.calibration': (
+            sweep.radio_setup.calibration,
+            init_sweep.radio_setup.calibration,
+        ),
     }
 
     for name, (pe, pu) in expanded_paths.items():

@@ -19,7 +19,7 @@ import iqwaveform
 
 # avoid lazy loading, since this module isn't imported with channel_analysis
 # and lazy loading seems to lead to problems with matplotlib in some cases
-import iqwaveform.figures # noqa: F401 
+import iqwaveform.figures  # noqa: F401
 
 
 _FORCE_UNIT_PREFIXES = {'center_frequency': 'M'}
@@ -321,9 +321,7 @@ class CapturePlotter:
         )
 
     @_maybe_skip_missing
-    def channel_power_time_series(
-        self, data: xr.Dataset, hue='power_detector', **sel
-    ):
+    def channel_power_time_series(self, data: xr.Dataset, hue='power_detector', **sel):
         key = self.channel_power_time_series.__name__
         return self._line(
             data[key].sel(sel),

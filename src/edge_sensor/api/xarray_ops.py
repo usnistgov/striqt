@@ -337,11 +337,9 @@ def analyze_capture(
     Returns:
         an xarray dataset containing the analysis specified by sweep.channel_analysis
     """
-    attrs = {
-        # metadata fields
-        **sweep.radio_setup.todict(),
-        **sweep.description.todict(),
-    }
+
+    # metadata fields
+    attrs = sweep.radio_setup.todict() | sweep.description.todict()
 
     func = ChannelAnalysisWrapper(
         radio=radio,
