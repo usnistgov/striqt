@@ -285,14 +285,14 @@ def compute_spectrogram(
 
     if frequency_bin_averaging is None:
         pass
-    elif iqwaveform.util.isroundmod(frequency_bin_averaging):
+    elif iqwaveform.util.isroundmod(frequency_bin_averaging, 1):
         frequency_bin_averaging = round(frequency_bin_averaging)
     else:
         raise ValueError('frequency_bin_averaging must be an integer bin count')
 
     if time_bin_averaging is None:
         pass
-    elif iqwaveform.util.isroundmod(time_bin_averaging):
+    elif iqwaveform.util.isroundmod(time_bin_averaging, 1):
         time_bin_averaging = round(time_bin_averaging)
     else:
         raise ValueError('time_bin_averaging must be an integer bin count')
