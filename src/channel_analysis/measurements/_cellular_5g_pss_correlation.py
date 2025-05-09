@@ -29,13 +29,13 @@ CellularCellID2Axis = typing.Literal['cellular_cell_id2']
 
 @dataclasses.dataclass
 class CellularCellID2Coords:
-    data: Data[CellularCellID2Axis, np.uint8]
+    data: Data[CellularCellID2Axis, np.uint16]
     standard_name: Attr[str] = r'Cell Identity 2 ($N_{ID}^{(2)}$)'
 
     @staticmethod
     @functools.lru_cache
     def factory(capture: structs.Capture, **_):
-        values = np.array([0, 1, 2], dtype='uint8')
+        values = np.array([0, 1, 2], dtype='uint16')
         return values, {}
 
 
