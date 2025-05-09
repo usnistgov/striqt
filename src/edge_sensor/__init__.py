@@ -9,6 +9,7 @@ from .api.sources import (
     SourceBase,
     NullSource,
     FileSource,
+    ZarrIQSource,
     design_capture_filter,
 )
 from .api.structs import RadioCapture, RadioSetup, Sweep, Description
