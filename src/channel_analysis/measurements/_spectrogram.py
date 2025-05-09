@@ -113,12 +113,10 @@ def freq_axis_values(
     else:
         raise ValueError('frequency_bin_averaging must be an integer bin count')
 
-    # otherwise negligible rounding errors lead to headaches when merging
-    # spectra with different sampling parameters. start here with long floats
-    # to minimize this problem
-    # fs = np.longdouble(capture.sample_rate)
+    # use the iqwaveform.fourier fftfreq for higher precision, which avoids
+    # headaches when merging spectra with different sampling parameters due
+    # to rounding errors.
     freqs = fftfreq(nfft, capture.sample_rate)
-    # freqs = iqwaveform.fourier.fftfreq(nfft, 1.0 / fs, dtype='longdouble')
 
     if trim_stopband and np.isfinite(capture.analysis_bandwidth):
         # stick with python arithmetic here for numpy/cupy consistency
@@ -206,6 +204,7 @@ def _evaluate(
     window_fill: float = 1,
     trim_stopband: bool = True,
 ):
+    print('_evaluate', capture.center_frequency)
     # TODO: integrate this back into iqwaveform
     if iqwaveform.isroundmod(capture.sample_rate, frequency_resolution):
         nfft = round(capture.sample_rate / frequency_resolution)
