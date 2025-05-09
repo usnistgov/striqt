@@ -88,7 +88,7 @@ def init_sweep_cli(
 
     debug_handler = DebugOnException(debug)
 
-    if '{' in sweep_spec.output.path:
+    if '{' in sweep_spec.output.path.replace('{{',''):
         # in this case, we're still waiting to fill in radio_id
         open_sink_early = True
     else:
