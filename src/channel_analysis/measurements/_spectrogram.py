@@ -106,6 +106,13 @@ def freq_axis_values(
     else:
         raise ValueError('sample_rate/resolution must be a counting number')
 
+    if navg is None:
+        pass
+    elif iqwaveform.util.isroundmod(navg, 1):
+        navg = round(navg)
+    else:
+        raise ValueError('frequency_bin_averaging must be an integer bin count')
+
     # otherwise negligible rounding errors lead to headaches when merging
     # spectra with different sampling parameters. start here with long floats
     # to minimize this problem
