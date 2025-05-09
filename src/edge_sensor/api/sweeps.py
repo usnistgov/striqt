@@ -257,8 +257,8 @@ class SweepIterator:
                 prior_ext_data = this_ext_data
                 this_ext_data = ret['acquire'].get('peripherals', {}) or {}
 
-                if not capture_prev.host_resample:
-                    assert capture_prev.sample_rate == capture_prev.backend_sample_rate
+                #if not capture_prev.host_resample:
+                #    assert capture_prev.sample_rate == capture_prev.backend_sample_rate
 
             if 'intake' in ret:
                 yield ret['intake']

@@ -93,7 +93,7 @@ def init_sweep_cli(
         open_writer_early = False
     else:
         open_writer_early = True
-
+    open_writer_early = False
     if store_backend is None and sweep_spec.output.store is None:
         click.echo(
             'specify output.store in the yaml file or use -s <NAME> on the command line'
