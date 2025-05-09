@@ -90,9 +90,9 @@ def init_sweep_cli(
 
     if '{' in sweep_spec.output.path.replace('{{',''):
         # in this case, we're still waiting to fill in radio_id
-        open_sink_early = True
-    else:
         open_sink_early = False
+    else:
+        open_sink_early = True
 
     if store_backend is None and sweep_spec.output.store is None:
         click.echo(
