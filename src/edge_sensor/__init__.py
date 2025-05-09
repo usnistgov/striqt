@@ -8,6 +8,7 @@ from .api.iq_corrections import resampling_correction
 from .api.sources import (
     SourceBase,
     NullSource,
+    FileSource,
     design_capture_filter,
 )
 from .api.structs import RadioCapture, RadioSetup, Sweep, Description
