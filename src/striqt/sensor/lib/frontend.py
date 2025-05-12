@@ -105,8 +105,6 @@ def init_sweep_cli(
             'specify output.path in the yaml file or use -o PATH on the command line'
         )
         sys.exit(1)
-    elif output_path is None:
-        output_path = sweep_spec.output.path
 
     if verbose:
         lb.util.force_full_traceback(True)
@@ -121,7 +119,9 @@ def init_sweep_cli(
         calls = {}
         calls['controller'] = lb.Call(get_controller, remote, sweep_spec)
         if open_sink_early:
-            print('open early')
+            if output_path is None:
+                output_path = sweep_spec.output.path
+
             yaml_classes = _get_extension_classes(sweep_spec)
             # now, open the store
             sink = yaml_classes.sink_cls(
@@ -148,8 +148,9 @@ def init_sweep_cli(
         )
         calls['peripherals'] = lb.Call(peripherals.open)
         if not open_sink_early:
-            print('open late')
-            # now, open the store
+            if output_path is None:
+                output_path = sweep_spec.output.path
+
             sink = yaml_classes.sink_cls(
                 sweep_spec, output_path=output_path, store_backend=store_backend
             )
