@@ -75,7 +75,7 @@ def resampling_correction(
         the filtered IQ capture
     """
 
-    from analysis.lib.util import except_on_low_memory
+    from striqt.analysis.lib.util import except_on_low_memory
 
     xp = iqwaveform.util.array_namespace(iq)
 
