@@ -10,7 +10,7 @@ import inspect
 import msgspec
 import typing
 
-from . import structs
+from . import specs
 from . import util
 from .xarray_ops import (
     ChannelAnalysisResult,
@@ -62,7 +62,7 @@ def _param_to_field(name, p: inspect.Parameter):
         return (name, p.annotation, p.default)
 
 
-class KeywordArguments(structs.StructBase):
+class KeywordArguments(specs.StructBase):
     """base class for the keyword argument parameters of an analysis function"""
 
 
@@ -160,7 +160,7 @@ class ChannelAnalysisRegistry(collections.UserDict):
 
         return wrapper
 
-    def spec_type(self) -> type[structs.ChannelAnalysis]:
+    def spec_type(self) -> type[specs.ChannelAnalysis]:
         """return a Struct subclass type representing a specification for calls to all registered functions"""
         fields = [
             (func.__name__, typing.Union[struct_type, None], None)
@@ -177,14 +177,14 @@ class ChannelAnalysisRegistry(collections.UserDict):
         )
 
 
-register_xarray_measurement = ChannelAnalysisRegistry(structs.ChannelAnalysis)
+register_xarray_measurement = ChannelAnalysisRegistry(specs.ChannelAnalysis)
 
 
 def analyze_by_spec(
     iq: 'iqwaveform.util.Array',
-    capture: structs.Capture,
+    capture: specs.Capture,
     *,
-    spec: str | dict | structs.ChannelAnalysis,
+    spec: str | dict | specs.ChannelAnalysis,
     as_xarray: typing.Literal[True]
     | typing.Literal[False]
     | typing.Literal['delayed'] = True,

@@ -5,11 +5,11 @@ import typing
 
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr, Name
 
-from ..api.registry import register_xarray_measurement
+from ..lib.registry import register_xarray_measurement
 from ._spectrogram import compute_spectrogram, equivalent_noise_bandwidth
 from ._channel_power_histogram import ChannelPowerCoords, make_power_histogram_bin_edges
 
-from ..api import structs, util
+from ..lib import specs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -32,7 +32,7 @@ class SpectrogramPowerBinCoords:
     @staticmethod
     @functools.lru_cache
     def factory(
-        capture: structs.Capture,
+        capture: specs.Capture,
         *,
         window: typing.Union[str, tuple[str, float]],
         frequency_resolution: float,
@@ -75,7 +75,7 @@ class SpectrogramHistogram(AsDataArray):
 @register_xarray_measurement(SpectrogramHistogram)
 def spectrogram_histogram(
     iq: 'iqwaveform.util.Array',
-    capture: structs.Capture,
+    capture: specs.Capture,
     *,
     window: typing.Union[str, tuple[str, float]],
     frequency_resolution: float,

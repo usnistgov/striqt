@@ -5,8 +5,8 @@ import typing
 
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
-from ..api.registry import register_xarray_measurement
-from ..api import structs, util
+from ..lib.registry import register_xarray_measurement
+from ..lib import specs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -20,7 +20,7 @@ else:
 
 
 def _get_start_stop_index(
-    capture: structs.Capture,
+    capture: specs.Capture,
     start_time_sec: typing.Optional[float] = None,
     stop_time_sec: typing.Optional[float] = None,
     allow_none=True,
@@ -56,7 +56,7 @@ class IQSampleIndexCoords:
     @staticmethod
     @functools.lru_cache
     def factory(
-        capture: structs.Capture,
+        capture: specs.Capture,
         *,
         start_time_sec: typing.Optional[float] = None,
         stop_time_sec: typing.Optional[float] = None,
@@ -87,7 +87,7 @@ class IQWaveform(AsDataArray):
 @register_xarray_measurement(IQWaveform)
 def iq_waveform(
     iq: 'iqwaveform.util.Array',
-    capture: structs.Capture,
+    capture: specs.Capture,
     *,
     start_time_sec: typing.Optional[float] = None,
     stop_time_sec: typing.Optional[float] = None,

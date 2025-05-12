@@ -1,7 +1,7 @@
 from __future__ import annotations
 import typing
 
-from . import structs, util
+from . import specs, util
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -13,7 +13,7 @@ else:
 
 def filter_iq_capture(
     iq: 'iqwaveform.util.Array',
-    capture: structs.FilteredCapture,
+    capture: specs.FilteredCapture,
     *,
     axis=0,
     out=None,
@@ -89,7 +89,7 @@ def filter_iq_capture(
 
 
 def simulated_awgn(
-    capture: structs.Capture,
+    capture: specs.Capture,
     *,
     power_spectral_density: float = 1,
     xp=np,
@@ -107,7 +107,7 @@ def simulated_awgn(
     generator = xp.random.Generator(bitgen)
     size = round(capture.duration * capture.sample_rate)
 
-    if isinstance(capture, structs.FilteredCapture):
+    if isinstance(capture, specs.FilteredCapture):
         size = size + 2 * capture.analysis_filter.nfft
 
     if pinned_cuda:
@@ -136,7 +136,7 @@ def simulated_awgn(
 
     samples *= xp.sqrt(power / 2)
 
-    if isinstance(capture, structs.FilteredCapture):
+    if isinstance(capture, specs.FilteredCapture):
         return filter_iq_capture(samples, capture)[
             capture.analysis_filter.nfft : -capture.analysis_filter.nfft
         ]
@@ -168,7 +168,7 @@ def read_tdms(path, analysis_bandwidth: float = None):
         iq = iq[: (iq.shape[0] // frame_size) * frame_size]
 
     iq = (iq * np.float32(scale)).view('complex64')
-    capture = structs.FilteredCapture(
+    capture = specs.FilteredCapture(
         duration=iq.size / fs, sample_rate=fs, analysis_bandwidth=analysis_bandwidth
     )
 

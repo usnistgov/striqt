@@ -4,8 +4,8 @@ from math import sqrt, ceil
 import SoapySDR
 from labbench import paramattr as attr
 
-from ..api.sources import soapy
-from ..api import structs
+from ..lib.sources import soapy
+from ..lib import specs
 import uuid
 
 
@@ -58,7 +58,7 @@ class Air7x01B(soapy.SoapyRadioSource):
         if driver != 'SoapyAIRT':
             raise IOError(f'connected to {driver}, but expected SoapyAirT')
 
-    def arm(self, capture: structs.RadioCapture = None, **capture_kws):
+    def arm(self, capture: specs.RadioCapture = None, **capture_kws):
         if capture is None:
             capture = self.get_capture_struct()
 

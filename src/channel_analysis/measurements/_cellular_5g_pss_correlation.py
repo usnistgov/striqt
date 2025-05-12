@@ -4,7 +4,7 @@ import typing
 import dataclasses
 from math import ceil
 
-from ..api import util
+from ..lib import specs, util
 
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr, Name
 
@@ -19,8 +19,8 @@ else:
     pd = util.lazy_import('pandas')
     msgspec = util.lazy_import('msgspec')
 
-from ..api.registry import register_xarray_measurement
-from ..api import structs, util
+from ..lib.registry import register_xarray_measurement
+from ..lib import util
 
 
 ###
@@ -34,7 +34,7 @@ class CellularCellID2Coords:
 
     @staticmethod
     @functools.lru_cache
-    def factory(capture: structs.Capture, **_):
+    def factory(capture: specs.Capture, **_):
         values = np.array([0, 1, 2], dtype='uint16')
         return values, {}
 
@@ -52,7 +52,7 @@ class CellularSSBStartTimeElapsedCoords:
     @staticmethod
     @functools.lru_cache
     def factory(
-        capture: structs.Capture,
+        capture: specs.Capture,
         **kws,
     ):
         params = _pss_params(capture, **kws)
@@ -71,7 +71,7 @@ class CellularSSBSymbolIndexCoords:
 
     @staticmethod
     @functools.lru_cache
-    def factory(capture: structs.Capture, **kws):
+    def factory(capture: specs.Capture, **kws):
         params = _pss_params(capture, **kws)
 
         return list(params['symbol_indexes'])
@@ -89,7 +89,7 @@ class CellularPSSLagCoords:
 
     @staticmethod
     @functools.lru_cache
-    def factory(capture: structs.Capture, **kws) -> dict[str, np.ndarray]:
+    def factory(capture: specs.Capture, **kws) -> dict[str, np.ndarray]:
         params = _pss_params(capture, **kws)
 
         max_len = 2 * round(
@@ -232,7 +232,7 @@ def _pss_5g_nr(
 
 @functools.lru_cache()
 def _pss_params(
-    capture: structs.Capture,
+    capture: specs.Capture,
     *,
     sample_rate: float = 2 * 7.68e6,
     subcarrier_spacing: float,
@@ -318,7 +318,7 @@ def _pss_params(
 @register_xarray_measurement(Cellular5GNRPSSCorrelation)
 def cellular_5g_pss_correlation(
     iq,
-    capture: structs.Capture,
+    capture: specs.Capture,
     *,
     subcarrier_spacing: float,
     sample_rate: float = 15.36e6,

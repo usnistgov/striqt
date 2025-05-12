@@ -5,9 +5,9 @@ import typing
 
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
-from ..api.registry import register_xarray_measurement
+from ..lib.registry import register_xarray_measurement
 
-from ..api import structs, util
+from ..lib import specs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -29,7 +29,7 @@ class TimeElapsedCoords:
     @staticmethod
     @functools.lru_cache
     def factory(
-        capture: structs.Capture, *, detector_period: float, **_
+        capture: specs.Capture, *, detector_period: float, **_
     ) -> dict[str, np.ndarray]:
         import pandas as pd
 
@@ -49,7 +49,7 @@ class PowerDetectorCoords:
     @staticmethod
     @functools.lru_cache
     def factory(
-        capture: structs.Capture, *, power_detectors: tuple[str], **kws
+        capture: specs.Capture, *, power_detectors: tuple[str], **kws
     ) -> dict[str, list]:
         return np.array(list(power_detectors))
 
@@ -70,7 +70,7 @@ class ChannelPowerTimeSeries(AsDataArray):
 @register_xarray_measurement(ChannelPowerTimeSeries)
 def channel_power_time_series(
     iq,
-    capture: structs.Capture,
+    capture: specs.Capture,
     *,
     detector_period: float,
     power_detectors: tuple[str, ...] = ('rms', 'peak'),

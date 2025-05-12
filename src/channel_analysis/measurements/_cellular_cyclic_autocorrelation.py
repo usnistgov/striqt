@@ -6,8 +6,8 @@ import typing
 
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
-from ..api.registry import register_xarray_measurement
-from ..api import structs, util
+from ..lib.registry import register_xarray_measurement
+from ..lib import specs, util
 
 
 if typing.TYPE_CHECKING:
@@ -33,7 +33,7 @@ class CyclicSampleLagCoords:
     @staticmethod
     @functools.lru_cache
     def factory(
-        capture: structs.Capture, *, subcarrier_spacings: tuple[float, ...], **_
+        capture: specs.Capture, *, subcarrier_spacings: tuple[float, ...], **_
     ) -> dict[str, np.ndarray]:
         max_len = _get_max_corr_size(capture, subcarrier_spacings=subcarrier_spacings)
         axis_name = typing.get_args(CyclicSampleLagAxis)[0]
@@ -52,9 +52,7 @@ class SubcarrierSpacingCoords:
 
     @staticmethod
     @functools.lru_cache
-    def factory(
-        capture: structs.Capture, *, subcarrier_spacings: tuple[float, ...], **_
-    ):
+    def factory(capture: specs.Capture, *, subcarrier_spacings: tuple[float, ...], **_):
         return list(subcarrier_spacings)
 
 
@@ -69,7 +67,7 @@ class LinkDirectionCoords:
 
     @staticmethod
     @functools.lru_cache
-    def factory(capture: structs.Capture, **_):
+    def factory(capture: specs.Capture, **_):
         values = np.array(['downlink', 'uplink'], dtype='U8')
         return values, {}
 
@@ -90,7 +88,7 @@ class CellularCyclicAutocorrelation(AsDataArray):
 @register_xarray_measurement(CellularCyclicAutocorrelation)
 def cellular_cyclic_autocorrelation(
     iq: 'iqwaveform.util.Array',
-    capture: structs.Capture,
+    capture: specs.Capture,
     *,
     subcarrier_spacings: typing.Union[float, tuple[float, ...]] = (15e3, 30e3, 60e3),
     frame_range: typing.Union[int, tuple[int, typing.Optional[int]]] = (0, 1),
@@ -208,7 +206,7 @@ def _get_phy_mapping(
 
 @functools.lru_cache
 def _get_max_corr_size(
-    capture: structs.Capture, *, subcarrier_spacings: tuple[float, ...]
+    capture: specs.Capture, *, subcarrier_spacings: tuple[float, ...]
 ):
     phy_scs = _get_phy_mapping(
         capture.analysis_bandwidth, capture.sample_rate, subcarrier_spacings

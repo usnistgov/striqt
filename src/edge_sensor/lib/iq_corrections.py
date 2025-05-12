@@ -2,7 +2,7 @@ from __future__ import annotations
 import typing
 
 from .sources import base, SourceBase, design_capture_filter
-from . import calibration, structs, util
+from . import calibration, specs, util
 
 if typing.TYPE_CHECKING:
     import array_api_compat
@@ -19,7 +19,7 @@ else:
 
 
 def _get_voltage_scale(
-    capture: structs.RadioCapture, radio: SourceBase, *, force_calibration=False, xp=np
+    capture: specs.RadioCapture, radio: SourceBase, *, force_calibration=False, xp=np
 ) -> 'iqwaveform.type_stubs.ArrayLike':
     """compute the scaling factor needed to scale each of N channels of an IQ waveform
 
@@ -54,7 +54,7 @@ def _get_voltage_scale(
 
 def resampling_correction(
     iq: 'iqwaveform.util.Array',
-    capture: structs.RadioCapture,
+    capture: specs.RadioCapture,
     radio: SourceBase,
     force_calibration: typing.Optional['xr.Dataset'] = None,
     *,
@@ -75,7 +75,7 @@ def resampling_correction(
         the filtered IQ capture
     """
 
-    from channel_analysis.api.util import except_on_low_memory
+    from channel_analysis.lib.util import except_on_low_memory
 
     xp = iqwaveform.util.array_namespace(iq)
 

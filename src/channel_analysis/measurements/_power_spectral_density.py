@@ -5,9 +5,9 @@ import typing
 
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr, Name
 
-from ..api.registry import register_xarray_measurement
+from ..lib.registry import register_xarray_measurement
 from ._spectrogram import freq_axis_values, compute_spectrogram
-from ..api import structs, util
+from ..lib import specs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -29,7 +29,7 @@ class FrequencyStatisticCoords:
     @staticmethod
     @functools.lru_cache
     def factory(
-        capture: structs.Capture,
+        capture: specs.Capture,
         *,
         frequency_statistic: tuple[typing.Union[str, float], ...],
         **_,
@@ -51,7 +51,7 @@ class BasebandFrequencyCoords:
     @staticmethod
     @functools.lru_cache
     def factory(
-        capture: structs.Capture,
+        capture: specs.Capture,
         *,
         frequency_resolution: float,
         fractional_overlap: float = 0,
@@ -60,7 +60,10 @@ class BasebandFrequencyCoords:
         **_,
     ) -> dict[str, np.ndarray]:
         return freq_axis_values(
-            capture, fres=frequency_resolution, trim_stopband=trim_stopband, navg=frequency_bin_averaging
+            capture,
+            fres=frequency_resolution,
+            trim_stopband=trim_stopband,
+            navg=frequency_bin_averaging,
         )
 
 
@@ -81,7 +84,7 @@ class PowerSpectralDensity(AsDataArray):
 @register_xarray_measurement(PowerSpectralDensity)
 def power_spectral_density(
     iq: 'iqwaveform.util.Array',
-    capture: structs.Capture,
+    capture: specs.Capture,
     *,
     window: typing.Union[str, tuple[str, float]],
     frequency_resolution: float,

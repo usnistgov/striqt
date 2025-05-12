@@ -1,17 +1,17 @@
-from .api import calibration, io, peripherals, sinks, structs, util
-from . import api
+from .lib import calibration, io, peripherals, sinks, specs, util
+from . import lib
 
-from .api.controller import connect, start_server, SweepController
-from .api.io import dump, load, open_store, read_yaml_sweep
-from .api.calibration import read_calibration
-from .api.iq_corrections import resampling_correction
-from .api.sources import (
+from .lib.controller import connect, start_server, SweepController
+from .lib.io import dump, load, open_store, read_yaml_sweep
+from .lib.calibration import read_calibration
+from .lib.iq_corrections import resampling_correction
+from .lib.sources import (
     SourceBase,
     NullSource,
     FileSource,
     ZarrIQSource,
     design_capture_filter,
 )
-from .api.structs import RadioCapture, RadioSetup, Sweep, Description
-from .api.sweeps import iter_sweep
-from .api.xarray_ops import CAPTURE_DIM, concat_time_dim, analyze_capture
+from .lib.specs import RadioCapture, RadioSetup, Sweep, Description
+from .lib.sweeps import iter_sweep
+from .lib.xarray_ops import CAPTURE_DIM, concat_time_dim, analyze_capture

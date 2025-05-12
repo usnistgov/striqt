@@ -7,7 +7,7 @@ import typing
 import numpy as np
 from xarray_dataclasses import AsDataArray, Coordof, Data, Name, Attr
 
-from ..api.registry import register_xarray_measurement
+from ..lib.registry import register_xarray_measurement
 from ._spectrogram import (
     binned_mean,
     compute_spectrogram,
@@ -17,7 +17,7 @@ from ._spectrogram import (
 from ._channel_power_histogram import ChannelPowerCoords, make_power_histogram_bin_edges
 from ._cellular_cyclic_autocorrelation import LinkDirectionAxis, LinkDirectionCoords
 
-from ..api import structs, util
+from ..lib import specs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -45,7 +45,7 @@ class CellularResourcePowerBinCoords:
     @staticmethod
     @functools.lru_cache
     def factory(
-        capture: structs.Capture,
+        capture: specs.Capture,
         *,
         window: typing.Union[str, tuple[str, float]],
         subcarrier_spacing: float,
@@ -91,7 +91,7 @@ class CellularResourcePowerHistogram(AsDataArray):
 @register_xarray_measurement(CellularResourcePowerHistogram)
 def cellular_resource_power_histogram(
     iq: 'iqwaveform.type_stubs.ArrayLike',
-    capture: structs.Capture,
+    capture: specs.Capture,
     *,
     window: typing.Union[str, tuple[str, float]],
     subcarrier_spacing: float,

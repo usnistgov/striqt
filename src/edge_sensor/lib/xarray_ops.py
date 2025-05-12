@@ -9,7 +9,7 @@ import numbers
 import pickle
 import typing
 
-from . import captures, structs, util
+from . import captures, specs, util
 from .sources import SourceBase
 
 import array_api_compat
@@ -68,7 +68,7 @@ def concat_time_dim(datasets: list['xr.Dataset'], time_dim: str) -> 'xr.Dataset'
 
 @functools.lru_cache
 def coord_template(
-    capture_cls: type[structs.RadioCapture],
+    capture_cls: type[specs.RadioCapture],
     channels: tuple[int, ...],
     **alias_dtypes: dict[str, type],
 ):
@@ -119,7 +119,7 @@ def coord_template(
 
 
 @functools.lru_cache
-def _get_alias_dtypes(output: structs.Output):
+def _get_alias_dtypes(output: specs.Output):
     aliases = output.coord_aliases
 
     alias_dtypes = {}
@@ -129,7 +129,7 @@ def _get_alias_dtypes(output: structs.Output):
 
 
 @functools.lru_cache
-def get_attrs(struct: type[structs.StructBase], field: str) -> dict[str, str]:
+def get_attrs(struct: type[specs.StructBase], field: str) -> dict[str, str]:
     """introspect an attrs dict for xarray from the specified field in `struct`"""
     hints = typing.get_type_hints(struct, include_extras=True)
 
@@ -149,7 +149,7 @@ def get_attrs(struct: type[structs.StructBase], field: str) -> dict[str, str]:
 
 
 def build_coords(
-    capture: structs.RadioCapture, output: structs.Output, radio_id: str, sweep_time
+    capture: specs.RadioCapture, output: specs.Output, radio_id: str, sweep_time
 ):
     alias_dtypes = _get_alias_dtypes(output)
 
@@ -216,8 +216,8 @@ class ChannelAnalysisWrapper:
     """Inject radio device and capture metadata and coordinates into a channel analysis result"""
 
     radio: SourceBase
-    sweep: structs.Sweep
-    analysis_spec: list[structs.ChannelAnalysis]
+    sweep: specs.Sweep
+    analysis_spec: list[specs.ChannelAnalysis]
     extra_attrs: dict[str, typing.Any] | None = None
     correction: bool = False
 
@@ -225,7 +225,7 @@ class ChannelAnalysisWrapper:
         self,
         iq: 'channel_analysis.ArrayType',
         sweep_time,
-        capture: structs.RadioCapture,
+        capture: specs.RadioCapture,
         pickled=False,
         overwrite_x=True,
         delayed=True,
@@ -271,8 +271,8 @@ class ChannelAnalysisWrapper:
 @dataclasses.dataclass()
 class DelayedAnalysisResult:
     delayed: dict
-    capture: structs.Capture
-    sweep: structs.Sweep
+    capture: specs.Capture
+    sweep: specs.Sweep
     radio_id: str
     sweep_time: typing.Any
     extra_attrs: dict | None = None
@@ -287,7 +287,7 @@ class DelayedAnalysisResult:
         with lb.stopwatch(
             'residual calculations', threshold=10e-3, logger_level='debug'
         ):
-            analysis = channel_analysis.api.xarray_ops.package_channel_analysis(
+            analysis = channel_analysis.lib.xarray_ops.package_channel_analysis(
                 self.capture, self.delayed, expand_dims=(CAPTURE_DIM,)
             )
             coords = build_coords(
@@ -321,8 +321,8 @@ class DelayedAnalysisResult:
 def analyze_capture(
     radio: SourceBase,
     iq: util.ArrayType,
-    capture: structs.Capture,
-    sweep: structs.Sweep,
+    capture: specs.Capture,
+    sweep: specs.Sweep,
     *,
     sweep_start_time=None,
     correction: bool = False,

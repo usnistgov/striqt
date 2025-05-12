@@ -1,3 +1,5 @@
+"""data structures that specify waveform characteristics"""
+
 from __future__ import annotations
 import functools
 import typing

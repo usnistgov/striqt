@@ -10,7 +10,7 @@ import math
 import msgspec
 import typing
 
-from . import structs, util
+from . import specs, util
 
 
 if typing.TYPE_CHECKING:
@@ -112,8 +112,8 @@ _ENG_PREFIXES = {
 
 @functools.lru_cache
 def describe_capture(
-    this: structs.Capture | None,
-    prev: structs.Capture | None = None,
+    this: specs.Capture | None,
+    prev: specs.Capture | None = None,
     *,
     index: int,
     count: int,
@@ -199,8 +199,8 @@ def format_units(value, unit='', places=None, force_prefix=None, sep=' ') -> str
     return f'{mant:{fmt}}{suffix}'
 
 
-def describe_field(capture: structs.Capture, name: str):
-    meta = structs.get_capture_type_attrs(type(capture))
+def describe_field(capture: specs.Capture, name: str):
+    meta = specs.get_capture_type_attrs(type(capture))
     attrs = meta[name]
     value = getattr(capture, name)
     value_str = describe_value(value, attrs)
@@ -296,7 +296,7 @@ class ChannelAnalysisResult(collections.UserDict):
 
     datacls: type
     data: typing.Union['np.ndarray', dict]
-    capture: structs.RadioCapture
+    capture: specs.RadioCapture
     parameters: dict[str, typing.Any]
     attrs: dict[str] = dataclasses.field(default_factory=dict)
 
@@ -321,9 +321,9 @@ def select_parameter_kws(locals_: dict, omit=('capture', 'out')) -> dict:
 
 def evaluate_channel_analysis(
     iq: 'iqwaveform.util.Array',
-    capture: structs.Capture,
+    capture: specs.Capture,
     *,
-    spec: str | dict | structs.ChannelAnalysis,
+    spec: str | dict | specs.ChannelAnalysis,
     as_xarray: typing.Literal[True]
     | typing.Literal[False]
     | typing.Literal['delayed'] = 'delayed',
@@ -333,7 +333,7 @@ def evaluate_channel_analysis(
     its capture information"""
     # round-trip for type conversion and validation
 
-    if isinstance(spec, structs.ChannelAnalysis):
+    if isinstance(spec, specs.ChannelAnalysis):
         spec = spec.validate()
     else:
         spec = registry.spec_type().fromdict(spec)
@@ -358,8 +358,8 @@ def evaluate_channel_analysis(
 
 
 def package_channel_analysis(
-    capture: structs.Capture,
-    results: dict[str, structs.ChannelAnalysis],
+    capture: specs.Capture,
+    results: dict[str, specs.ChannelAnalysis],
     expand_dims=None,
 ) -> 'xr.Dataset':
     # materialize as xarrays
@@ -369,7 +369,7 @@ def package_channel_analysis(
             xarrays[name] = res.to_xarray(expand_dims)
 
         attrs = capture.todict()
-        if isinstance(capture, structs.FilteredCapture):
+        if isinstance(capture, specs.FilteredCapture):
             attrs['analysis_filter'] = msgspec.to_builtins(capture.analysis_filter)
         ret = xr.Dataset(xarrays, attrs=attrs)
 

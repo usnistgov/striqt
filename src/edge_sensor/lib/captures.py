@@ -4,7 +4,7 @@ from __future__ import annotations
 import functools
 import numbers
 
-from . import structs
+from . import specs
 
 
 @functools.lru_cache(10000)
@@ -37,7 +37,7 @@ def broadcast_to_channels(
 
 
 def _match_capture_fields(
-    capture: structs.RadioCapture, fields: dict[str], radio_id: str | None = None
+    capture: specs.RadioCapture, fields: dict[str], radio_id: str | None = None
 ) -> bool:
     if isinstance(capture.channel, tuple):
         raise ValueError('split the capture to evaluate alias matches')
@@ -62,10 +62,10 @@ def _match_capture_fields(
 
 @functools.lru_cache()
 def evaluate_aliases(
-    capture: structs.RadioCapture,
+    capture: specs.RadioCapture,
     *,
     radio_id: str | None = None,
-    output: structs.Output,
+    output: specs.Output,
 ) -> dict[str]:
     """evaluate the field values"""
 
@@ -80,7 +80,7 @@ def evaluate_aliases(
 
 
 @functools.lru_cache()
-def split_capture_channels(capture: structs.RadioCapture) -> list[structs.RadioCapture]:
+def split_capture_channels(capture: specs.RadioCapture) -> list[specs.RadioCapture]:
     """split a multi-channel capture into a list of single-channel captures.
 
     If capture is not a multi-channel capture (its channel field is just a number),
@@ -104,7 +104,7 @@ def split_capture_channels(capture: structs.RadioCapture) -> list[structs.RadioC
 
 
 def capture_fields_with_aliases(
-    capture: structs.RadioCapture, *, radio_id: str = None, output: structs.Output
+    capture: specs.RadioCapture, *, radio_id: str = None, output: specs.Output
 ) -> dict:
     attrs = capture.todict()
     c = split_capture_channels(capture)[0]
@@ -115,7 +115,7 @@ def capture_fields_with_aliases(
 
 def get_field_value(
     name: str,
-    capture: structs.RadioCapture,
+    capture: specs.RadioCapture,
     radio_id: str,
     alias_hits: dict,
     extra_field_values: dict = {},
@@ -139,13 +139,13 @@ def get_field_value(
     return value
 
 
-class _MinSweep(structs.Sweep):
+class _MinSweep(specs.Sweep):
     # a sweep with captures that express only the parameters that impact data shape
-    captures: list[structs.channel_analysis.Capture]
+    captures: list[specs.channel_analysis.Capture]
 
 
 def concat_group_sizes(
-    captures: tuple[structs.RadioCapture, ...], *, min_size: int = 1
+    captures: tuple[specs.RadioCapture, ...], *, min_size: int = 1
 ) -> list[int]:
     """return the minimum sizes of groups of captures that can be concatenated.
 

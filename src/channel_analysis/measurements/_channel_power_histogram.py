@@ -10,8 +10,8 @@ from ._channel_power_time_series import (
     PowerDetectorAxis,
     channel_power_time_series,
 )
-from ..api.registry import register_xarray_measurement
-from ..api import structs, util
+from ..lib.registry import register_xarray_measurement
+from ..lib import specs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -47,7 +47,7 @@ class ChannelPowerCoords:
     @staticmethod
     @functools.lru_cache
     def factory(
-        capture: structs.Capture,
+        capture: specs.Capture,
         *,
         power_low: float,
         power_high: float,
@@ -92,7 +92,7 @@ class ChannelPowerHistogram(AsDataArray):
 @register_xarray_measurement(ChannelPowerHistogram)
 def channel_power_histogram(
     iq,
-    capture: structs.Capture,
+    capture: specs.Capture,
     *,
     power_low: float,
     power_high: float,

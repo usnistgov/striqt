@@ -5,7 +5,7 @@ import typing
 import msgspec
 import click
 
-from . import calibration, controller, io, peripherals, sinks, structs, util
+from . import calibration, controller, io, peripherals, sinks, specs, util
 
 if typing.TYPE_CHECKING:
     import xarray as xr
@@ -54,7 +54,7 @@ class CLIObjects(typing.NamedTuple):
     controller: controller.SweepController
     peripherals: peripherals.PeripheralsBase
     debugger: DebugOnException
-    sweep_spec: structs.Sweep
+    sweep_spec: specs.Sweep
     calibration: 'xr.Dataset'
 
 
@@ -63,7 +63,7 @@ class SweepSpecClasses(typing.NamedTuple):
     peripherals_cls: typing.Type[peripherals.PeripheralsBase]
 
 
-def _get_extension_classes(sweep_spec: structs.Sweep) -> SweepSpecClasses:
+def _get_extension_classes(sweep_spec: specs.Sweep) -> SweepSpecClasses:
     ext = msgspec.to_builtins(sweep_spec.extensions)
 
     import_cls = io._import_extension
@@ -88,7 +88,7 @@ def init_sweep_cli(
 
     debug_handler = DebugOnException(debug)
 
-    if '{' in sweep_spec.output.path.replace('{{',''):
+    if '{' in sweep_spec.output.path.replace('{{', ''):
         # in this case, we're still waiting to fill in radio_id
         open_sink_early = False
     else:

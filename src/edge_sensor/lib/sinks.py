@@ -2,7 +2,7 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 import typing
-from . import captures, structs, util, xarray_ops
+from . import captures, specs, util, xarray_ops
 from concurrent.futures import ThreadPoolExecutor
 
 import channel_analysis
@@ -20,7 +20,7 @@ class SinkBase:
 
     def __init__(
         self,
-        sweep_spec: structs.Sweep | str | Path,
+        sweep_spec: specs.Sweep | str | Path,
         *,
         output_path: str | None = None,
         store_backend: str | None = None,
@@ -69,7 +69,7 @@ class SinkBase:
         finally:
             self._executor.__exit__(*sys.exc_info())
 
-    def append(self, capture_data: 'xr.Dataset' | None, capture: structs.RadioCapture):
+    def append(self, capture_data: 'xr.Dataset' | None, capture: specs.RadioCapture):
         if capture_data is None:
             return
 
@@ -115,7 +115,7 @@ class ZarrSinkBase(SinkBase):
 class CaptureAppender(ZarrSinkBase):
     """concatenates the data from each capture and dumps to a zarr data store"""
 
-    def append(self, capture_data: 'xr.Dataset' | None, capture: structs.RadioCapture):
+    def append(self, capture_data: 'xr.Dataset' | None, capture: specs.RadioCapture):
         super().append(capture_data, capture)
 
         if len(self._pending_data) == self._group_sizes[0]:
@@ -148,7 +148,7 @@ class SpectrogramTimeAppender(ZarrSinkBase):
 
         super().open()
 
-    def append(self, capture_data: 'xr.Dataset' | None, capture: structs.RadioCapture):
+    def append(self, capture_data: 'xr.Dataset' | None, capture: specs.RadioCapture):
         super().append(capture_data, capture)
 
         if len(self._pending_data) == self._group_sizes[0]:

@@ -5,12 +5,12 @@ import typing
 
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
-from ..api.registry import register_xarray_measurement
+from ..lib.registry import register_xarray_measurement
 from ._spectrogram import compute_spectrogram
 from ._spectrogram_histogram import SpectrogramPowerBinCoords
 from ._channel_power_histogram import make_power_histogram_bin_edges
 
-from ..api import structs, util
+from ..lib import specs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -31,7 +31,7 @@ class SpectrogramPowerRatioBinCoords:
 
     @staticmethod
     @functools.lru_cache
-    def factory(capture: structs.Capture, **kws):
+    def factory(capture: specs.Capture, **kws):
         bins, attrs = SpectrogramPowerBinCoords.factory(capture, **kws)
         attrs['units'] = attrs['units'].replace('dBm', 'dB')
         return bins, attrs
@@ -47,7 +47,7 @@ class SpectrogramRatioHistogram(AsDataArray):
 @register_xarray_measurement(SpectrogramRatioHistogram)
 def spectrogram_ratio_histogram(
     iq: 'iqwaveform.util.Array',
-    capture: structs.Capture,
+    capture: specs.Capture,
     *,
     window: typing.Union[str, tuple[str, float]],
     frequency_resolution: float,

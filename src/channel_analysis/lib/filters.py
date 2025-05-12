@@ -5,7 +5,7 @@ from __future__ import annotations
 import functools
 import typing
 
-from . import structs, util
+from . import specs, util
 
 
 if typing.TYPE_CHECKING:
@@ -32,7 +32,7 @@ def select_parameter_kws(locals_: dict, omit=('capture', 'out')) -> dict:
 
 @functools.lru_cache(8)
 def _generate_iir_lpf(
-    capture: structs.Capture,
+    capture: specs.Capture,
     *,
     passband_ripple: float | int,
     stopband_attenuation: float | int,
@@ -78,7 +78,7 @@ def _generate_iir_lpf(
 
 def iir_filter(
     iq: 'iqwaveform.util.Array',
-    capture: structs.Capture,
+    capture: specs.Capture,
     *,
     passband_ripple: float | int,
     stopband_attenuation: float | int,
@@ -103,7 +103,7 @@ def iir_filter(
 
 def ola_filter(
     iq: 'iqwaveform.util.Array',
-    capture: structs.Capture,
+    capture: specs.Capture,
     *,
     nfft: int,
     window: typing.Any = 'hamming',

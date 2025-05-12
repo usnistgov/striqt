@@ -11,7 +11,7 @@ import msgspec
 import channel_analysis
 from channel_analysis import load, dump  # noqa: F401
 
-from . import util, captures, structs
+from . import specs, util, captures
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -24,7 +24,7 @@ else:
 
 
 def _get_default_format_fields(
-    sweep: structs.Sweep, *, radio_id: str | None = None, yaml_path: Path | str | None
+    sweep: specs.Sweep, *, radio_id: str | None = None, yaml_path: Path | str | None
 ) -> dict[str, str]:
     """return a mapping for string `'{field_name}'.format()` style mapping values"""
     fields = captures.capture_fields_with_aliases(
@@ -42,7 +42,7 @@ def _get_default_format_fields(
 
 def expand_path(
     path: str | Path,
-    sweep: structs.Sweep | None = None,
+    sweep: specs.Sweep | None = None,
     *,
     radio_id: str | None = None,
     relative_to_file=None,
@@ -128,7 +128,7 @@ def read_yaml_sweep(
     path: str | Path,
     *,
     radio_id: str | None = None,
-) -> structs.Sweep:
+) -> specs.Sweep:
     """build a Sweep struct from the contents of specified yaml file.
 
     Args:
@@ -166,13 +166,13 @@ def read_yaml_sweep(
     )
     sweep_cls = _import_extension(extensions, 'sweep_struct')
 
-    if not issubclass(sweep_cls, structs.Sweep):
+    if not issubclass(sweep_cls, specs.Sweep):
         name = extensions['sweep_struct']
         raise TypeError(
             f'extension.sweep_struct is {name!r}, which exists but is not subclass of edge_sensor.Sweep'
         )
 
-    sweep: structs.Sweep = sweep_cls.fromdict(tree)
+    sweep: specs.Sweep = sweep_cls.fromdict(tree)
 
     # fill formatting fields in paths
     if radio_id is not None:
@@ -202,7 +202,7 @@ def read_tdms_iq(
     dtype='complex64',
     skip_samples=0,
     xp=np,
-) -> tuple['iqwaveform.type_stubs.ArrayLike', structs.FileSourceCapture]:
+) -> tuple['iqwaveform.type_stubs.ArrayLike', specs.FileSourceCapture]:
     from .sources.testing import TDMSFileSource
 
     source = TDMSFileSource(path=path, rx_channel_count=rx_channel_count)

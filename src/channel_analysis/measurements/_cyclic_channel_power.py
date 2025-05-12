@@ -5,10 +5,10 @@ import typing
 
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
-from ..api.registry import register_xarray_measurement
+from ..lib.registry import register_xarray_measurement
 from ._channel_power_time_series import PowerDetectorAxis, PowerDetectorCoords
 
-from ..api import structs, util
+from ..lib import specs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -30,7 +30,7 @@ class CyclicStatisticCoords:
     @staticmethod
     @functools.lru_cache
     def factory(
-        capture: structs.Capture,
+        capture: specs.Capture,
         *,
         cyclic_statistics: tuple[typing.Union[str, float], ...] = (
             'min',
@@ -55,7 +55,7 @@ class CyclicLagCoords:
     @staticmethod
     @functools.lru_cache
     def factory(
-        capture: structs.Capture,
+        capture: specs.Capture,
         *,
         cyclic_period: float,
         detector_period: float,
@@ -84,7 +84,7 @@ class CyclicChannelPower(AsDataArray):
 @register_xarray_measurement(CyclicChannelPower)
 def cyclic_channel_power(
     iq,
-    capture: structs.Capture,
+    capture: specs.Capture,
     *,
     cyclic_period: float,
     detector_period: float,

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from . import structs
+from . import specs
 
 
 class PeripheralsBase:
@@ -9,7 +9,7 @@ class PeripheralsBase:
     methods for arming and acquisition.
     """
 
-    def __init__(self, sweep: structs.Sweep | None):
+    def __init__(self, sweep: specs.Sweep | None):
         self.set_sweep(sweep)
         super().__init__()
 
@@ -20,7 +20,7 @@ class PeripheralsBase:
         pass
 
     def arm(
-        self, capture: structs.RadioCapture, radio_setup: structs.RadioSetup
+        self, capture: specs.RadioCapture, radio_setup: specs.RadioSetup
     ) -> dict[str]:
         """called while the capture is being armed in the radio.
 
@@ -29,7 +29,7 @@ class PeripheralsBase:
         return {}
 
     def acquire(
-        self, capture: structs.RadioCapture, radio_setup: structs.RadioSetup
+        self, capture: specs.RadioCapture, radio_setup: specs.RadioSetup
     ) -> dict[str]:
         """called while the capture is being acquired in the radio.
 
@@ -39,7 +39,7 @@ class PeripheralsBase:
         """
         return {}
 
-    def set_sweep(self, sweep: structs.Sweep):
+    def set_sweep(self, sweep: specs.Sweep):
         self.sweep = sweep
 
     def __enter__(self):

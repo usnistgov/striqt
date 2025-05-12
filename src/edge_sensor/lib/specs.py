@@ -1,4 +1,4 @@
-"""data structures for configuration of radio hardware, captures, and sweeps"""
+"""data structures that specify operation of radio hardware, captures, and sweeps"""
 
 from __future__ import annotations
 import functools
@@ -10,7 +10,7 @@ from typing import Annotated, Optional, Literal, Any, Union
 from . import util
 
 import channel_analysis
-from channel_analysis.api.structs import (
+from channel_analysis.lib.specs import (
     meta,
     ChannelAnalysis,  # noqa: F401
     StructBase,
@@ -50,7 +50,7 @@ def _dict_hash(d):
 
 
 def _make_default_analysis():
-    return channel_analysis.api.registry.register_xarray_measurement.spec_type()()
+    return channel_analysis.lib.registry.register_xarray_measurement.spec_type()()
 
 
 AnalysisBandwidthType = Annotated[

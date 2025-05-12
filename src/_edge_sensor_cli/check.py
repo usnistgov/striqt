@@ -8,10 +8,10 @@ import click
 def run(yaml_path):
     print('Initializing...')
     # instantiate sweep objects
-    from edge_sensor.api import frontend, calibration
+    from edge_sensor.lib import frontend, calibration
     import edge_sensor
     from pprint import pprint
-    from edge_sensor.api.io import _get_default_format_fields
+    from edge_sensor.lib.io import _get_default_format_fields
     import labbench as lb
     from pathlib import Path
     import pandas as pd

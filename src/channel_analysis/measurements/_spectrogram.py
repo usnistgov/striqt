@@ -8,8 +8,8 @@ import warnings
 
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
-from ..api.registry import register_xarray_measurement
-from ..api import structs, util
+from ..lib.registry import register_xarray_measurement
+from ..lib import specs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -99,7 +99,7 @@ def fftfreq(nfft, fs, dtype='float64') -> 'np.ndarray':
 
 
 def freq_axis_values(
-    capture: structs.RadioCapture, fres: int, navg: int = None, trim_stopband=False
+    capture: specs.RadioCapture, fres: int, navg: int = None, trim_stopband=False
 ):
     if iqwaveform.isroundmod(capture.sample_rate, fres):
         nfft = round(capture.sample_rate / fres)
@@ -196,7 +196,7 @@ def cached_spectrograms():
 @_spectrogram_cache.cached_calls
 def _evaluate(
     iq: 'iqwaveform.util.Array',
-    capture: structs.Capture,
+    capture: specs.Capture,
     *,
     window: typing.Union[str, tuple[str, float]],
     frequency_resolution: float,
@@ -259,7 +259,7 @@ def _evaluate(
 
 def compute_spectrogram(
     iq: 'iqwaveform.util.Array',
-    capture: structs.Capture,
+    capture: specs.Capture,
     *,
     window: typing.Union[str, tuple[str, float]],
     frequency_resolution: float,
@@ -285,7 +285,7 @@ def compute_spectrogram(
         time_bin_averaging = round(time_bin_averaging)
     else:
         raise ValueError('time_bin_averaging must be an integer bin count')
-    
+
     eval_kws = dict(
         window=window,
         frequency_resolution=frequency_resolution,
@@ -334,7 +334,7 @@ class SpectrogramTimeCoords:
     @staticmethod
     @functools.lru_cache
     def factory(
-        capture: structs.Capture,
+        capture: specs.Capture,
         *,
         frequency_resolution: float,
         fractional_overlap: float = 0,
@@ -369,7 +369,7 @@ class SpectrogramBasebandFrequencyCoords:
     @staticmethod
     @functools.lru_cache
     def factory(
-        capture: structs.Capture,
+        capture: specs.Capture,
         *,
         frequency_resolution: float,
         fractional_overlap: float = 0,
@@ -399,7 +399,7 @@ class Spectrogram(AsDataArray):
 @register_xarray_measurement(Spectrogram)
 def spectrogram(
     iq: 'iqwaveform.util.Array',
-    capture: structs.Capture,
+    capture: specs.Capture,
     *,
     window: typing.Union[str, tuple[str, float]],
     frequency_resolution: float,

@@ -6,9 +6,9 @@ from pathlib import Path
 import pickle
 import typing
 
-from . import peripherals, sinks, sources, structs, util, xarray_ops
+from . import peripherals, sinks, sources, specs, util, xarray_ops
 from .captures import split_capture_channels
-from .structs import Annotated, meta
+from .specs import Annotated, meta
 
 if typing.TYPE_CHECKING:
     import gzip
@@ -26,44 +26,40 @@ else:
 NoiseDiodeEnabledType = Annotated[bool, meta(standard_name='Noise diode enabled')]
 
 
-class ManualYFactorCapture(
-    structs.RadioCapture, forbid_unknown_fields=True, frozen=True
-):
+class ManualYFactorCapture(specs.RadioCapture, forbid_unknown_fields=True, frozen=True):
     """Specialize fields to add to the RadioCapture type"""
 
     # RadioCapture with added fields
     noise_diode_enabled: NoiseDiodeEnabledType = False
 
 
-class ManualYFactorSetup(structs.StructBase, forbid_unknown_fields=True, frozen=True):
+class ManualYFactorSetup(specs.StructBase, forbid_unknown_fields=True, frozen=True):
     enr: Annotated[float, meta(standard_name='Excess noise ratio', units='dB')] = 20.87
     ambient_temperature: Annotated[
         float, meta(standard_name='Ambient temperature', units='K')
     ] = 294.5389
 
 
-class CalibrationRadioSetup(
-    structs.RadioSetup, forbid_unknown_fields=True, frozen=True
-):
+class CalibrationRadioSetup(specs.RadioSetup, forbid_unknown_fields=True, frozen=True):
     reuse_iq = True
 
 
 class CalibrationVariables(
-    structs.StructBase, forbid_unknown_fields=True, kw_only=True, frozen=True
+    specs.StructBase, forbid_unknown_fields=True, kw_only=True, frozen=True
 ):
     noise_diode_enabled: tuple[NoiseDiodeEnabledType, ...] = (False, True)
-    sample_rate: tuple[structs.BackendSampleRateType, ...]
-    center_frequency: tuple[structs.CenterFrequencyType, ...] = (3700e6,)
-    channel: tuple[structs.ChannelType, ...] = (0,)
-    gain: tuple[structs.GainType, ...] = (0,)
+    sample_rate: tuple[specs.BackendSampleRateType, ...]
+    center_frequency: tuple[specs.CenterFrequencyType, ...] = (3700e6,)
+    channel: tuple[specs.ChannelType, ...] = (0,)
+    gain: tuple[specs.GainType, ...] = (0,)
 
     # filtering and resampling
-    analysis_bandwidth: tuple[structs.AnalysisBandwidthType, ...] = (float('inf'),)
-    lo_shift: tuple[structs.LOShiftType, ...] = ('none',)
+    analysis_bandwidth: tuple[specs.AnalysisBandwidthType, ...] = (float('inf'),)
+    lo_shift: tuple[specs.LOShiftType, ...] = ('none',)
 
 
 class ManualYFactorSweep(
-    structs.Sweep, forbid_unknown_fields=True, kw_only=True, frozen=True
+    specs.Sweep, forbid_unknown_fields=True, kw_only=True, frozen=True
 ):
     """This specialized sweep is fed to the YAML file loader
     to specify the change in expected capture structure."""
@@ -283,7 +279,7 @@ def _describe_missing_data(corrections: 'xr.Dataset', exact_matches: dict):
 @functools.lru_cache()
 def lookup_power_correction(
     cal_data: Path | 'xr.Dataset' | None,
-    capture: structs.RadioCapture,
+    capture: specs.RadioCapture,
     base_clock_rate: float,
     *,
     xp,

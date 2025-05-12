@@ -8,8 +8,8 @@ from pathlib import Path
 import typing
 import warnings
 
-from .api.structs import Capture
-from .api import xarray_ops
+from .lib.specs import Capture
+from .lib import xarray_ops
 
 import matplotlib as mpl
 from matplotlib import pyplot as plt

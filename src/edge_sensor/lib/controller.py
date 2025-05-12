@@ -7,7 +7,7 @@ import typing
 import rpyc
 
 from . import captures, sweeps, util
-from . import structs
+from . import specs
 from .sources import find_radio_cls_by_name, is_same_resource, SourceBase
 
 if typing.TYPE_CHECKING:
@@ -29,9 +29,9 @@ class SweepController:
     This is also used by `start_sensor_server` to serve remote operations.
     """
 
-    def __init__(self, sweep: structs.Sweep = None):
+    def __init__(self, sweep: specs.Sweep = None):
         self.radios: dict[str, SourceBase] = {}
-        self.warmed_captures: set[structs.RadioCapture] = set()
+        self.warmed_captures: set[specs.RadioCapture] = set()
         self.handlers: dict[rpyc.Connection, typing.Any] = {}
         util.set_cuda_mem_limit()
 
@@ -56,7 +56,7 @@ class SweepController:
         if last_ex is not None:
             raise last_ex
 
-    def open_radio(self, radio_setup: structs.RadioSetup):
+    def open_radio(self, radio_setup: specs.RadioSetup):
         driver_name = radio_setup.driver
         radio_cls = find_radio_cls_by_name(driver_name)
 
@@ -84,7 +84,7 @@ class SweepController:
     def radio_id(self, driver_name: str) -> str:
         return self.radios[driver_name].id
 
-    def close_radio(self, radio_setup: structs.RadioSetup = None):
+    def close_radio(self, radio_setup: specs.RadioSetup = None):
         if radio_setup is None:
             # close all
             for name, radio in self.radios.items():
@@ -99,7 +99,7 @@ class SweepController:
         else:
             self.radios[radio_setup.driver].close()
 
-    def _describe_preparation(self, target_sweep: structs.Sweep) -> str:
+    def _describe_preparation(self, target_sweep: specs.Sweep) -> str:
         if (
             sweeps.sweep_touches_gpu(target_sweep)
             and target_sweep.radio_setup.warmup_sweep
@@ -120,7 +120,7 @@ class SweepController:
             msgs += ['preparing GPU']
         return ' and '.join(msgs)
 
-    def prepare_sweep(self, sweep_spec: structs.Sweep, calibration, pickled=False):
+    def prepare_sweep(self, sweep_spec: specs.Sweep, calibration, pickled=False):
         """open the radio while warming up the GPU"""
 
         if not sweeps.sweep_touches_gpu(sweep_spec):
@@ -154,7 +154,7 @@ class SweepController:
 
     def iter_sweep(
         self,
-        sweep: structs.Sweep,
+        sweep: specs.Sweep,
         calibration: 'xr.Dataset' = None,
         *,
         always_yield: bool = False,
@@ -178,7 +178,7 @@ class SweepController:
 
     def iter_raw_iq(
         self,
-        sweep: structs.Sweep,
+        sweep: specs.Sweep,
         calibration: 'xr.Dataset' = None,
         always_yield: bool = False,
         quiet: bool = False,
@@ -226,7 +226,7 @@ class _ServerService(rpyc.Service, SweepController):
 
     def exposed_iter_sweep(
         self,
-        sweep: structs.Sweep,
+        sweep: specs.Sweep,
         calibration: 'xr.Dataset' = None,
         *,
         loop: bool = False,
@@ -282,8 +282,8 @@ class _ServerService(rpyc.Service, SweepController):
 
     def exposed_acquire(
         self,
-        capture: structs.RadioCapture,
-        next_capture: typing.Union[structs.RadioCapture, None] = None,
+        capture: specs.RadioCapture,
+        next_capture: typing.Union[specs.RadioCapture, None] = None,
         correction: bool = True,
     ) -> tuple['np.array', 'pd.Timestamp']:
         iq = self.radio.acquire(capture, next_capture, correction)
@@ -296,7 +296,7 @@ class _ServerService(rpyc.Service, SweepController):
     def exposed_read_stream(self, samples: int):
         return self.radio._read_stream(samples)
 
-    def exposed_close_radio(self, radio_setup: structs.RadioSetup = None):
+    def exposed_close_radio(self, radio_setup: specs.RadioSetup = None):
         radio_setup = rpyc.utils.classic.obtain(radio_setup)
         self.close_radio(radio_setup)
 
@@ -336,7 +336,7 @@ def start_server(host=None, port=4567, default_driver: str | None = None):
     if default_driver is None:
         default_setup = None
     else:
-        default_setup = structs.RadioSetup(driver=default_driver)
+        default_setup = specs.RadioSetup(driver=default_driver)
 
     t = rpyc.ThreadedServer(
         _ServerService(default_setup),

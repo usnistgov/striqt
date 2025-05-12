@@ -5,7 +5,7 @@ import itertools
 import typing
 import msgspec
 
-from . import captures, structs, sources, util, xarray_ops
+from . import captures, sources, specs, util, xarray_ops
 from .peripherals import PeripheralsBase
 from .sinks import SinkBase
 
@@ -20,7 +20,7 @@ else:
     channel_analysis = util.lazy_import('channel_analysis')
 
 
-def sweep_touches_gpu(sweep: structs.Sweep):
+def sweep_touches_gpu(sweep: specs.Sweep):
     """returns True if the sweep would benefit from the GPU"""
     IQ_MEAS_NAME = channel_analysis.measurements.iq_waveform.__name__
 
@@ -45,8 +45,8 @@ def _convert_captures(
 
 
 def design_warmup_sweep(
-    sweep: structs.Sweep, skip: tuple[structs.RadioCapture, ...]
-) -> structs.Sweep:
+    sweep: specs.Sweep, skip: tuple[specs.RadioCapture, ...]
+) -> specs.Sweep:
     """returns a Sweep object for a NullRadio consisting of capture combinations from
     `sweep`.
 
@@ -56,9 +56,9 @@ def design_warmup_sweep(
 
     # captures that have unique sampling parameters, which are those
     # specified in structs.WaveformCapture
-    wcaptures = _convert_captures(sweep.captures, structs.WaveformCapture)
+    wcaptures = _convert_captures(sweep.captures, specs.WaveformCapture)
     unique_map = dict(zip(wcaptures, sweep.captures))
-    skip_wcaptures = set(_convert_captures(skip, structs.WaveformCapture))
+    skip_wcaptures = set(_convert_captures(skip, specs.WaveformCapture))
     unique_wcaptures = unique_map.keys() - skip_wcaptures
     captures = [unique_map[c] for c in unique_wcaptures]
 
@@ -80,7 +80,7 @@ def design_warmup_sweep(
     class WarmupSweep(type(sweep)):
         def get_captures(self):
             # override any capture auto-generating logic
-            return structs.Sweep.get_captures(self)
+            return specs.Sweep.get_captures(self)
 
     warmup = WarmupSweep.fromdict(sweep.todict())
 
@@ -88,7 +88,7 @@ def design_warmup_sweep(
 
 
 def _iq_is_reusable(
-    c1: structs.RadioCapture | None, c2: structs.RadioCapture, base_clock_rate
+    c1: specs.RadioCapture | None, c2: specs.RadioCapture, base_clock_rate
 ):
     """return True if c2 is compatible with the raw and uncalibrated IQ acquired for c1"""
 
@@ -120,9 +120,9 @@ def _iq_is_reusable(
     return c1_compare == c2_compare
 
 
-def _build_attrs(sweep: structs.Sweep):
+def _build_attrs(sweep: specs.Sweep):
     fields = set(type(sweep).__struct_fields__)
-    base_fields = set(structs.Sweep.__struct_fields__)
+    base_fields = set(specs.Sweep.__struct_fields__)
     new_fields = list(fields - base_fields)
     attr_fields = ['description', 'radio_setup'] + new_fields
 
@@ -139,7 +139,7 @@ class SweepIterator:
     def __init__(
         self,
         radio: 'sources.SourceBase',
-        sweep: structs.Sweep,
+        sweep: specs.Sweep,
         *,
         calibration: 'xr.Dataset' = None,
         always_yield=False,
@@ -168,8 +168,8 @@ class SweepIterator:
     def set_writer(self, writer: SinkBase | None):
         self._sink = writer
 
-    def setup(self, sweep: structs.Sweep):
-        self.sweep: structs.Sweep = sweep.validate()
+    def setup(self, sweep: specs.Sweep):
+        self.sweep: specs.Sweep = sweep.validate()
 
         self._analyze = xarray_ops.ChannelAnalysisWrapper(
             radio=self.radio,
@@ -319,7 +319,7 @@ class SweepIterator:
     def _intake(
         self,
         results: 'xr.Dataset',
-        capture: structs.RadioCapture,
+        capture: specs.RadioCapture,
     ) -> 'xr.Dataset' | None:
         if not isinstance(results, xr.Dataset):
             raise ValueError(
@@ -334,7 +334,7 @@ class SweepIterator:
 
 def iter_sweep(
     radio: 'sources.SourceBase',
-    sweep: structs.Sweep,
+    sweep: specs.Sweep,
     *,
     calibration: 'xr.Dataset' = None,
     always_yield=False,
@@ -368,7 +368,7 @@ def iter_sweep(
 
 def iter_raw_iq(
     radio: 'sources.SourceBase',
-    sweep: structs.Sweep,
+    sweep: specs.Sweep,
     quiet=False,
 ) -> typing.Generator['xr.Dataset' | bytes | None]:
     """iterate through the sweep and yield the raw IQ vector for each.
