@@ -113,6 +113,8 @@ def resampling_correction(
         size = round(capture.duration * capture.sample_rate)
         iq = iq[:, :size]
         if scale is not None:
+            if scale.ndim == 1:
+                scale = scale[:,None]
             iq = xp.multiply(iq, scale, out=iq if overwrite_x else None)
         elif not overwrite_x:
             iq = iq.copy()

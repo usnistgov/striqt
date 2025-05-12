@@ -314,6 +314,7 @@ def lookup_power_correction(
         except KeyError:
             misses = _describe_missing_data(corrections, exact_matches)
             exc = KeyError(f'calibration is not available for this capture: {misses}')
+            raise exc
         else:
             exc = None
 
@@ -343,7 +344,10 @@ def lookup_power_correction(
             )
 
         # allow interpolation between sample points in these fields
-        sel = sel.interp(center_frequency=capture_chan.center_frequency)
+        try:
+            sel = sel.sel(center_frequency=capture_chan.center_frequency)
+        except BaseException:
+            sel = sel.interp(center_frequency=capture_chan.center_frequency)
 
         power_scale.append(float(sel))
 

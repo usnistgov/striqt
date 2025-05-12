@@ -92,7 +92,8 @@ def init_sweep_cli(
         # in this case, we're still waiting to fill in radio_id
         open_sink_early = False
     else:
-        open_sink_early = True
+        open_writer_early = True
+    open_writer_early = False
 
     if store_backend is None and sweep_spec.output.store is None:
         click.echo(
