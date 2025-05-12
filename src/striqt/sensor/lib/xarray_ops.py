@@ -20,14 +20,14 @@ if typing.TYPE_CHECKING:
     import numpy as np
     import pandas as pd
     import xarray as xr
-    from striqt.analysis.lib.xarray_ops import package_analysis
+    import striqt.analysis as striqt_analysis
 else:
     iqwaveform = util.lazy_import('iqwaveform')
     lb = util.lazy_import('labbench')
     np = util.lazy_import('numpy')
     pd = util.lazy_import('pandas')
     xr = util.lazy_import('xarray')
-    package_analysis = util.lazy_import('striqt.analysis.lib.xarray_ops')
+    striqt_analysis = util.lazy_import('striqt.analysis')
 
 CAPTURE_DIM = 'capture'
 SWEEP_TIMESTAMP_NAME = 'sweep_start_time'
@@ -247,7 +247,7 @@ class ChannelAnalysisWrapper:
                         iq, capture, self.radio, overwrite_x=overwrite_x
                     )
 
-            result = analysis.analyze_by_spec(
+            result = striqt_analysis.lib.registry.analyze_by_spec(
                 iq,
                 capture,
                 spec=self.analysis_spec,
