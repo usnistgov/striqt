@@ -143,14 +143,17 @@ class SweepController:
                 if prep_msg:
                     lb.logger.info(prep_msg)
 
+                print('make warmup')
                 warmup_iter = self.iter_sweep(
                     warmup_sweep, calibration=None, quiet=True, pickled=pickled
                 )
+                print('made')
                 calls['warmup'] = lb.Call(list, warmup_iter)
 
         calls['open_radio'] = lb.Call(self.open_radio, sweep_spec.radio_setup)
 
         util.concurrently_with_fg(calls)
+        print('call done')
 
     def iter_sweep(
         self,
