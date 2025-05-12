@@ -50,7 +50,7 @@ def _dict_hash(d):
 
 
 def _make_default_analysis():
-    return analysis.lib.registry.register_xarray_measurement.spec_type()()
+    return analysis.lib.registry.measurement.spec_type()()
 
 
 AnalysisBandwidthType = Annotated[
