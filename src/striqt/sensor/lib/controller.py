@@ -131,23 +131,20 @@ class SweepController:
 
         calls = {}
 
-        if sweep_spec.radio_setup.warmup_sweep:
+        if sweep_spec.radio_setup.warmup_sweep and len(self.warmed_captures) == 0:
             # maybe lead to a sweep iterator
             warmup_sweep = sweeps.design_warmup_sweep(
                 sweep_spec, skip=tuple(self.warmed_captures)
             )
-            self.warmed_captures = self.warmed_captures | set(warmup_sweep.captures)
 
             if len(warmup_sweep.captures) > 0:
                 prep_msg = self._describe_preparation(sweep_spec)
                 if prep_msg:
                     lb.logger.info(prep_msg)
 
-                print('make warmup')
                 warmup_iter = self.iter_sweep(
                     warmup_sweep, calibration=None, quiet=True, pickled=pickled
                 )
-                print('made')
                 calls['warmup'] = lb.Call(list, warmup_iter)
 
         calls['open_radio'] = lb.Call(self.open_radio, sweep_spec.radio_setup)
