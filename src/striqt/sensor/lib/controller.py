@@ -123,15 +123,16 @@ class SweepController:
     def prepare_sweep(self, sweep_spec: specs.Sweep, calibration, pickled=False):
         """open the radio while warming up the GPU"""
 
-        if not sweeps.sweep_touches_gpu(sweep_spec):
-            return
-
         warmup_iter = []
         warmup_sweep = None
 
         calls = {}
 
-        if sweep_spec.radio_setup.warmup_sweep and len(self.warmed_captures) == 0:
+        if not sweeps.sweep_touches_gpu(sweep_spec):
+            pass
+        elif not sweep_spec.radio_setup.warmup_sweep
+            pass
+        elif len(self.warmed_captures) == 0:
             # maybe lead to a sweep iterator
             warmup_sweep = sweeps.design_warmup_sweep(
                 sweep_spec, skip=tuple(self.warmed_captures)
