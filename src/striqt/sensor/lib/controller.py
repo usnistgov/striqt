@@ -352,7 +352,7 @@ def connect(host='localhost', port=4567) -> rpyc.Connection:
     """connect to a remote sensor sensor.
 
     The returned connection object contains a `root` attribute that
-    exposes remote wrappers for `edge_sensor.actions`.
+    exposes remote wrappers for `striqt.sensor.SweepIterator`.
 
     Example::
 

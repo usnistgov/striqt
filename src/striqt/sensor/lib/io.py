@@ -169,7 +169,7 @@ def read_yaml_sweep(
     if not issubclass(sweep_cls, specs.Sweep):
         name = extensions['sweep_struct']
         raise TypeError(
-            f'extension.sweep_struct is {name!r}, which exists but is not subclass of edge_sensor.Sweep'
+            f'extension.sweep_struct is {name!r}, which exists but is not subclass of striqt.sinks.Sweep'
         )
 
     sweep: specs.Sweep = sweep_cls.fromdict(tree)

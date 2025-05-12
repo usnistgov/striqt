@@ -214,17 +214,17 @@ class Output(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash=Tru
 
 
 SweepStructType = Annotated[
-    typing.Union[str, Literal['edge_sensor.Sweep']],
+    typing.Union[str, Literal['striqt.sensor.Sweep']],
     meta(
-        'edge_sensor.Sweep subclass to import to decode the sweep specification structure'
+        'striqt.sensor.Sweep subclass to import to decode the sweep specification structure'
     ),
 ]
 SinkClassType = Annotated[
-    typing.Union[str, Literal['edge_sensor.writers.CaptureAppender']],
+    typing.Union[str, Literal['striqt.sensor.writers.CaptureAppender']],
     meta('data sink class to import and use'),
 ]
 PeripheralClassType = Annotated[
-    typing.Union[str, Literal['edge_sensor.peripherals.NoPeripherals']],
+    typing.Union[str, Literal['striqt.sensor.peripherals.NoPeripherals']],
     meta('peripheral manager class for import'),
 ]
 ExtensionPathType = Annotated[
@@ -236,9 +236,9 @@ ExtensionPathType = Annotated[
 
 
 class Extensions(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
-    peripherals: PeripheralClassType = 'edge_sensor.peripherals.NoPeripherals'
-    sink: SinkClassType = 'edge_sensor.sinks.CaptureAppender'
-    sweep_struct: SweepStructType = 'edge_sensor.Sweep'
+    peripherals: PeripheralClassType = 'striqt.sensor.peripherals.NoPeripherals'
+    sink: SinkClassType = 'striqt.sensor.sinks.CaptureAppender'
+    sweep_struct: SweepStructType = 'striqt.sensor.Sweep'
     import_path: ExtensionPathType = None
 
 

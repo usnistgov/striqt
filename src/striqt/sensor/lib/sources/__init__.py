@@ -17,7 +17,7 @@ from .testing import (
     ZarrIQSource,
 )
 
-# soapy device is not imported here to allow edge_sensor imports
+# soapy device is not imported here to allow striqt.sensor imports
 # for testing when SoapySDR is not installed
 
 
