@@ -289,7 +289,7 @@ class DelayedAnalysisResult:
         with lb.stopwatch(
             'residual calculations', threshold=10e-3, logger_level='debug'
         ):
-            analysis = package_analysis(
+            analysis = striqt_analysis.lib.registry.package_analysis(
                 self.capture, self.delayed, expand_dims=(CAPTURE_DIM,)
             )
             coords = build_coords(
