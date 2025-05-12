@@ -38,9 +38,7 @@ def sweep_touches_gpu(sweep: specs.Sweep):
     return False
 
 
-def _convert_captures(
-    captures: list[analysis.Capture], type_: type[analysis.Capture]
-):
+def _convert_captures(captures: list[analysis.Capture], type_: type[analysis.Capture]):
     return [msgspec.convert(c, type_, from_attributes=True) for c in captures]
 
 
@@ -257,7 +255,7 @@ class SweepIterator:
                 prior_ext_data = this_ext_data
                 this_ext_data = ret['acquire'].get('peripherals', {}) or {}
 
-                #if not capture_prev.host_resample:
+                # if not capture_prev.host_resample:
                 #    assert capture_prev.sample_rate == capture_prev.backend_sample_rate
 
             if 'intake' in ret:

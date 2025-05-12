@@ -173,7 +173,7 @@ class _AnalysisRegistry(collections.UserDict):
             forbid_unknown_fields=True,
             omit_defaults=True,
         )
-    
+
 
 measurement = _AnalysisRegistry(specs.Analysis)
 
@@ -204,7 +204,7 @@ measurement = _AnalysisRegistry(specs.Analysis)
 #                 try:
 #                     name = (func.__name__,)
 #                 except AttributeError as ex:
-#                     raise TypeError('specify the coordinate name with register_coordinate(name, ...)')from ex                
+#                     raise TypeError('specify the coordinate name with register_coordinate(name, ...)')from ex
 
 #             if name in self:
 #                 raise KeyError(f'a coordinate has already been registered for dimension {dims!r}')

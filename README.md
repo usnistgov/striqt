@@ -29,7 +29,7 @@ The API is organized into two python modules that are importable as :
 * Optimized CPU or CUDA GPU compute using full-precision float
 
 `striqt.sensor`
-* Acquire data from sensor hardware as specified by a configuration file
+* Acquire data from sensor hardware according to a configuration file
 * Concurrent acquisition, analysis, and archival
 * Automated sensor calibration based on the Y-factor technique
 

@@ -102,9 +102,7 @@ class ZarrSinkBase(SinkBase):
 
         fixed_path.parent.mkdir(parents=True, exist_ok=True)
 
-        self.store = analysis.open_store(
-            fixed_path, mode='w' if self.force else 'a'
-        )
+        self.store = analysis.open_store(fixed_path, mode='w' if self.force else 'a')
 
     def close(self):
         super().close()
