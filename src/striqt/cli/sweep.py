@@ -8,7 +8,7 @@ from . import click_sensor_sweep
 )
 def run(**kws):
     # instantiate sweep objects
-    from striqt.radio.lib import frontend
+    from striqt.sensor.lib import frontend
 
     cli_objs = frontend.init_sweep_cli(**kws)
 

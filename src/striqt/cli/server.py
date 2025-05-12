@@ -6,7 +6,7 @@ from . import click_server
 @click_server
 def run(*, host, port, driver, verbose, **kws):
     import labbench as lb
-    from striqt.radio.lib import controller
+    from striqt.sensor.lib import controller
 
     if verbose:
         lb.util.force_full_traceback(True)

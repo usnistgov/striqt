@@ -8,22 +8,22 @@ import click
 def run(yaml_path):
     print('Initializing...')
     # instantiate sweep objects
-    from striqt.radio.lib import frontend, calibration
-    from striqt import radio
+    from striqt.sensor.lib import frontend, calibration
+    from striqt import sensor
     from pprint import pprint
-    from striqt.radio.lib.io import _get_default_format_fields
+    from striqt.sensor.lib.io import _get_default_format_fields
     import labbench as lb
     from pathlib import Path
     import pandas as pd
 
     lb.show_messages('warning')
 
-    init_sweep = radio.read_yaml_sweep(yaml_path)
+    init_sweep = sensor.read_yaml_sweep(yaml_path)
     print(f'Testing connect with driver {init_sweep.radio_setup.driver!r}...')
     controller = frontend.get_controller(None, init_sweep)
     radio_id = controller.radio_id(init_sweep.radio_setup.driver)
     print(f'Connected, radio_id is {radio_id!r}')
-    sweep = radio.read_yaml_sweep(yaml_path, radio_id=radio_id)
+    sweep = sensor.read_yaml_sweep(yaml_path, radio_id=radio_id)
 
     print('\nCalibration info')
     print(60 * '=')

@@ -15,7 +15,7 @@ from . import click_sensor_sweep
     help='limit the calibration to the hardware input port at the specified index',
 )
 def run(*, channel, **kws):
-    from striqt.radio.lib import frontend
+    from striqt.sensor.lib import frontend
 
     cli_objs = frontend.init_sweep_cli(**kws)
 
