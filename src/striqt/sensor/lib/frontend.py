@@ -121,12 +121,13 @@ def init_sweep_cli(
         calls = {}
         calls['controller'] = lb.Call(get_controller, remote, sweep_spec)
         if open_sink_early:
+            print('open early')
             yaml_classes = _get_extension_classes(sweep_spec)
             # now, open the store
             sink = yaml_classes.sink_cls(
                 sweep_spec, output_path=output_path, store_backend=store_backend
             )
-            calls['file store'] = lb.Call(sink.open)
+            calls['open sink'] = lb.Call(sink.open)
         with lb.stopwatch(f'open {", ".join(calls)}', logger_level='info', threshold=1):
             controller = util.concurrently_with_fg(calls, False)['controller']
 
@@ -147,11 +148,12 @@ def init_sweep_cli(
         )
         calls['peripherals'] = lb.Call(peripherals.open)
         if not open_sink_early:
+            print('open late')
             # now, open the store
             sink = yaml_classes.sink_cls(
                 sweep_spec, output_path=output_path, store_backend=store_backend
             )
-            calls['writer'] = lb.Call(sink.open)
+            calls['open sink'] = lb.Call(sink.open)
 
         with lb.stopwatch(
             f'load {", ".join(calls)}', logger_level='info', threshold=0.25
