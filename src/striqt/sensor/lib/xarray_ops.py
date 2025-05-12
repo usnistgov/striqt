@@ -27,7 +27,7 @@ else:
     np = util.lazy_import('numpy')
     pd = util.lazy_import('pandas')
     xr = util.lazy_import('xarray')
-    analysis = util.lazy_import('striqt.analysis')
+    package_analysis = util.lazy_import('striqt.analysis.lib.xarray_ops')
 
 CAPTURE_DIM = 'capture'
 SWEEP_TIMESTAMP_NAME = 'sweep_start_time'
