@@ -52,11 +52,11 @@ edge-airt = [ "cupy-cuda102",
 ]
 
 [project.scripts]
-calibrate-edge-sensor = "striqt.cli.calibrate:run"
+calibrate-sensor = "striqt.cli.calibrate:run"
 check-sweep = "striqt.cli.check:run"
-edge-sensor-sweep = "striqt.cli.sweep:run"
-plot-edge-data = "striqt.cli.plot:run"
-serve-edge-sensor = "striqt.cli.server:run"
+sensor-sweep = "striqt.cli.sweep:run"
+plot-striqt-analysis = "striqt.cli.plot:run"
+serve-sensor = "striqt.cli.server:run"
 
 [tool.ruff]
 target-version = "py39"

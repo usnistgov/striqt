@@ -1,6 +1,6 @@
 # the base environment that supports CPU computations (no GPU or SDRs)
 
-name: flex-spectrum-sensor
+name: striqt
 
 channels:
 - nvidia
