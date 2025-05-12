@@ -185,7 +185,7 @@ class SweepIterator:
         prior_ext_data = {}
         sweep_time = None
         capture_prev = None
-        analysis = None
+        result = None
 
         if self._loop:
             capture_iter = itertools.cycle(self.sweep.captures)
@@ -231,10 +231,10 @@ class SweepIterator:
                 # for the first two iterations, there is no data to save
                 pass
             else:
-                analysis.set_extra_data(prior_ext_data)
+                result.set_extra_data(prior_ext_data)
                 calls['intake'] = lb.Call(
                     self._intake,
-                    results=analysis.to_xarray(),
+                    results=result.to_xarray(),
                     capture=capture_intake,
                 )
 
@@ -248,7 +248,7 @@ class SweepIterator:
                 ret = util.concurrently_with_fg(calls, flatten=False)
 
             if 'analyze' in ret:
-                analysis = ret['analyze']
+                result = ret['analyze']
 
             if 'acquire' in ret:
                 iq, capture_prev = ret['acquire']['radio']
