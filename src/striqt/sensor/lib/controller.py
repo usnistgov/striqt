@@ -130,7 +130,7 @@ class SweepController:
 
         if not sweeps.sweep_touches_gpu(sweep_spec):
             pass
-        elif not sweep_spec.radio_setup.warmup_sweep
+        elif not sweep_spec.radio_setup.warmup_sweep:
             pass
         elif len(self.warmed_captures) == 0:
             # maybe lead to a sweep iterator
