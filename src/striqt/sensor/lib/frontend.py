@@ -88,12 +88,11 @@ def init_sweep_cli(
 
     debug_handler = DebugOnException(debug)
 
-    if '{' in sweep_spec.output.path.replace('{{', ''):
+    if '{' in sweep_spec.output.path:
         # in this case, we're still waiting to fill in radio_id
         open_sink_early = False
     else:
-        open_writer_early = True
-    open_writer_early = False
+        open_sink_early = True
 
     if store_backend is None and sweep_spec.output.store is None:
         click.echo(
@@ -123,6 +122,8 @@ def init_sweep_cli(
         calls['controller'] = lb.Call(get_controller, remote, sweep_spec)
         if open_sink_early:
             yaml_classes = _get_extension_classes(sweep_spec)
+            print('open early: ', sweep_spec.output.path)
+            1//0
             # now, open the store
             sink = yaml_classes.sink_cls(
                 sweep_spec, output_path=output_path, store_backend=store_backend
@@ -148,6 +149,8 @@ def init_sweep_cli(
         )
         calls['peripherals'] = lb.Call(peripherals.open)
         if not open_sink_early:
+            print('open late: ', sweep_spec.output.path)
+            1//0
             # now, open the store
             sink = yaml_classes.sink_cls(
                 sweep_spec, output_path=output_path, store_backend=store_backend
