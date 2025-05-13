@@ -68,7 +68,6 @@ class SweepController:
             raise last_ex
 
     def open_radio(self, radio_setup: specs.RadioSetup):
-        print('open radio', radio_setup.driver)
         driver_name = radio_setup.driver
         radio_cls = find_radio_cls_by_name(driver_name)
 
@@ -135,8 +134,6 @@ class SweepController:
     def warmup_sweep(self, sweep_spec: specs.Sweep, calibration, pickled=False):
         """open the radio while warming up the GPU"""
 
-        print('warmup sweep')
-
         warmup_iter = []
         warmup_sweep = None
 
@@ -152,8 +149,6 @@ class SweepController:
                 sweep_spec, skip=tuple(self.warmed_captures)
             )
 
-            print('warmup sweep: ', warmup_sweep.captures)
-
             if len(warmup_sweep.captures) > 0:
                 prep_msg = self._describe_preparation(sweep_spec)
                 if prep_msg:
@@ -163,12 +158,10 @@ class SweepController:
                     warmup_sweep, always_yield=True, calibration=None, quiet=True, prepare=False, pickled=pickled
                 )
                 calls['warmup'] = lb.Call(_consume_warmup, warmup_iter)
-                print('finished setting up')
 
         calls['open_radio'] = lb.Call(self.open_radio, sweep_spec.radio_setup)
 
         util.concurrently_with_fg(calls)
-        print('call done')
 
     def iter_sweep(
         self,

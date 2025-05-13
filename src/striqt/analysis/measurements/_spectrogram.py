@@ -188,7 +188,6 @@ class _spectrogram_cache:
 def cached_spectrograms():
     global _spectrogram_cache
     _spectrogram_cache.enabled = True
-    print('enable')
     yield
     print()
     _spectrogram_cache.clear()

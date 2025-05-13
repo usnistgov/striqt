@@ -368,7 +368,7 @@ class YFactorSink(sinks.SinkBase):
 
     def open(self):
         if not self.force and Path(self.output_path).exists():
-            print('merging results from previous file')
+            print('reading results from previous file')
             self.prev_corrections = read_calibration(self.output_path)
         else:
             self.prev_corrections = None

@@ -203,7 +203,6 @@ class SweepIterator:
                 # no pending data in the first iteration
                 pass
             else:
-                lb.logger.info(f'add an analyze {capture_prev} on {self.sweep.radio_setup.driver}')
                 calls['analyze'] = lb.Call(
                     self._analyze,
                     iq,
@@ -218,7 +217,6 @@ class SweepIterator:
                 # this happens at the end during the last post-analysis and intakes
                 pass
             else:
-                lb.logger.info(f'add an acquire {capture_this}  on {self.sweep.radio_setup.driver}')
                 calls['acquire'] = lb.Call(
                     self._acquire, iq, capture_prev, capture_this, capture_next
                 )
@@ -227,6 +225,7 @@ class SweepIterator:
                 # for the first two iterations, there is no data to save
                 pass
             else:
+                assert capture_intake is not None
                 result.set_extra_data(prior_ext_data)
                 calls['intake'] = lb.Call(
                     self._intake,
@@ -252,8 +251,6 @@ class SweepIterator:
             else:
                 iq = None
                 capture_prev = None
-                # if not capture_prev.host_resample:
-                #    assert capture_prev.sample_rate == capture_prev.backend_sample_rate
 
             if 'intake' in ret:
                 yield ret['intake']
