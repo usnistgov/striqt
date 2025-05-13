@@ -112,13 +112,18 @@ class _AnalysisRegistry(collections.UserDict):
                     result = ret
                     ret_metadata = metadata
 
-                return _AnalysisResult(
+                result = _AnalysisResult(
                     xarray_datacls,
                     result,
                     capture,
                     parameters=call_params,
                     attrs=ret_metadata,
                 )
+
+                if as_xarray == 'delayed':
+                    return result
+                else:
+                    return result.to_xarray()
 
             sig_kws = [
                 _param_to_field(k, p)

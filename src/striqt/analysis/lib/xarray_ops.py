@@ -11,6 +11,7 @@ import typing
 
 from . import specs, util
 
+import array_api_compat
 
 if typing.TYPE_CHECKING:
     from .registry import _AnalysisRegistry
@@ -31,6 +32,21 @@ else:
 
 
 TFunc = typing.Callable[..., typing.Any]
+
+
+def _results_as_arrays(obj: tuple | list | dict | 'iqwaveform.util.Array'):
+    """convert an array, or a container of arrays, into a numpy array (or container of numpy arrays)"""
+
+    if array_api_compat.is_torch_array(obj):
+        array = obj.cpu()
+    elif array_api_compat.is_cupy_array(obj):
+        array = obj.get()
+    elif array_api_compat.is_numpy_array(obj):
+        return obj
+    else:
+        raise TypeError(f'obj type {type(obj)} is unrecognized')
+
+    return array
 
 
 def _entry_stub(entry: 'datamodel.AnyEntry'):
@@ -280,7 +296,7 @@ class _AnalysisResult(collections.UserDict):
     """
 
     datacls: type
-    data: typing.Union['np.ndarray', dict]
+    data: typing.Union['iqwaveform.type_stubs.ArrayLike', dict]
     capture: specs.RadioCapture
     parameters: dict[str, typing.Any]
     attrs: dict[str] = dataclasses.field(default_factory=dict)
@@ -288,11 +304,11 @@ class _AnalysisResult(collections.UserDict):
     def to_xarray(self, expand_dims=None) -> 'xr.DataArray':
         array = channel_dataarray(
             cls=self.datacls,
-            data=self.data,
+            data=_results_as_arrays(self.data),
             capture=self.capture,
             parameters=self.parameters,
             expand_dims=expand_dims,
-        )
+        )           
 
         return array.assign_attrs(self.attrs)
 
@@ -328,7 +344,6 @@ def evaluate_analysis(
     results: dict[str, _AnalysisResult] = {}
 
     from ..measurements._spectrogram import cached_spectrograms
-    from .registry import _results_as_arrays
 
     with cached_spectrograms():
         # first, queue 
