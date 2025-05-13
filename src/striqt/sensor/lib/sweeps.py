@@ -203,7 +203,7 @@ class SweepIterator:
                 # no pending data in the first iteration
                 pass
             else:
-                lb.logger.info(f'add an analyze {capture_prev}')
+                lb.logger.info(f'add an analyze {capture_prev} on {self.sweep.radio_setup.driver}')
                 calls['analyze'] = lb.Call(
                     self._analyze,
                     iq,
@@ -218,7 +218,7 @@ class SweepIterator:
                 # Nones at the end indicate post-analysis and saves
                 pass
             else:
-                lb.logger.info(f'add an acquire {capture_this}')
+                lb.logger.info(f'add an acquire {capture_this}  on {self.sweep.radio_setup.driver}')
                 calls['acquire'] = lb.Call(
                     self._acquire, iq, capture_prev, capture_this, capture_next
                 )
