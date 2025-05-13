@@ -329,6 +329,7 @@ def cellular_5g_pss_correlation(
     sample_rate: float = 15.36e6,
     discovery_periodicity: float = 20e-3,
     frequency_offset: typing.Union[float, dict[float, float]] = 0,
+    max_block_count = 1,
     shared_spectrum: bool = False,
 ):
     """correlate each channel of the IQ against the cellular primary synchronization signal (PSS) waveform.
@@ -371,6 +372,11 @@ def cellular_5g_pss_correlation(
     # * 3 makes it compatible with the blackman window overlap of 2/3
     down = round(capture.sample_rate / subcarrier_spacing / 8 * 3)
     up = round(down * (sample_rate / capture.sample_rate))
+
+    if max_block_count is not None:
+        duration = round(max_block_count * discovery_periodicity * capture.sample_rate)
+        iq = iq[..., :duration]
+
     iq = iqwaveform.fourier.oaresample(
         iq,
         fs=capture.sample_rate,
