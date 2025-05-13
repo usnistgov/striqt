@@ -23,9 +23,10 @@ else:
     analysis = util.lazy_import('striqt.analysis')
 
 
-def _consume(gen: typing.Generator[typing.Any]):
+def _consume_warmup(gen: typing.Generator[typing.Any]):
     for _ in gen:
-        print('*')
+        # avoid retaining warmup results in memory
+        pass
 
 
 class SweepController:
@@ -159,9 +160,9 @@ class SweepController:
                     lb.logger.info(prep_msg)
 
                 warmup_iter = self.iter_sweep(
-                    warmup_sweep, calibration=None, quiet=True, prepare=False, pickled=pickled
+                    warmup_sweep, always_yield=True, calibration=None, quiet=True, prepare=False, pickled=pickled
                 )
-                calls['warmup'] = lb.Call(_consume, warmup_iter)
+                calls['warmup'] = lb.Call(_consume_warmup, warmup_iter)
                 print('finished setting up')
 
         calls['open_radio'] = lb.Call(self.open_radio, sweep_spec.radio_setup)
