@@ -241,18 +241,18 @@ def _evaluate(
         return_axis_arrays=False,
     )
 
-    if frequency_bin_averaging is not None:
-        spg = binned_mean(spg, frequency_bin_averaging, axis=2)
-
-    if time_bin_averaging is not None:
-        spg = binned_mean(spg, time_bin_averaging, axis=1, centered=False)
-
     # truncate to the analysis bandwidth
     if trim_stopband and np.isfinite(capture.analysis_bandwidth):
         # stick with python arithmetic to ensure consistency with axis bounds calculations
         spg = truncate_spectrogram_bandwidth(
             spg, nfft, capture.sample_rate, bandwidth=capture.analysis_bandwidth, axis=2
         )
+
+    if frequency_bin_averaging is not None:
+        spg = binned_mean(spg, frequency_bin_averaging, axis=2)
+
+    if time_bin_averaging is not None:
+        spg = binned_mean(spg, time_bin_averaging, axis=1, centered=False)
 
     metadata = {
         'window': window,
