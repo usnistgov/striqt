@@ -341,7 +341,6 @@ def evaluate_analysis(
     """evaluate the specified channel analysis for the given IQ waveform and
     its capture information"""
     # round-trip for type conversion and validation
-
     if isinstance(spec, specs.Analysis):
         spec = spec.validate()
     else:
@@ -382,19 +381,15 @@ def evaluate_analysis(
         if cache is not None:
             cache.__exit__(None, None, None)
 
-        for name in func_map.keys():
-            results[name] = results[name].compute()
+    import gc
+    gc.collect(0)
+        # for name in func_map.keys():
+        #     results[name] = results[name].compute()
 
     if not as_xarray:
         return results
 
     for name in list(results.keys()):
-        try:
-            results[name].data = _results_as_arrays(results[name].data)
-        except TypeError as ex:
-            msg = f'improper return type from {func.__name__}'
-            raise TypeError(msg) from ex
-
         if as_xarray == 'delayed':
             pass
         else:
