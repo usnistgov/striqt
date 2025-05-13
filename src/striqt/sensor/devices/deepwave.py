@@ -47,8 +47,8 @@ class Air7x01B(soapy.SoapyRadioSource):
     _rx_enable_delay = attr.value.float(0.31, inherit=True)
 
     # use of float32 saves the gpu a slight amount of work, but
-    # demands more memory bandwidth. went with int16 as the alternative.
-    _transport_dtype = attr.value.str('int16', inherit=True)
+    # demands more memory bandwidth
+    _transport_dtype = attr.value.str('float32', inherit=True)
     _reenable_cycles = 0
 
     def open(self):
