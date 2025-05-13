@@ -217,6 +217,7 @@ class SweepIterator:
                 # Nones at the end indicate post-analysis and saves
                 pass
             else:
+                print('add an acquire')
                 calls['acquire'] = lb.Call(
                     self._acquire, iq, capture_prev, capture_this, capture_next
                 )
