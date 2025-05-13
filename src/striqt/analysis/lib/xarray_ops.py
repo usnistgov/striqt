@@ -271,7 +271,7 @@ def channel_dataarray(
 
 
 @dataclasses.dataclass
-class ChannelAnalysisResult(collections.UserDict):
+class _AnalysisResult(collections.UserDict):
     """represents the return result from a channel analysis function.
 
     This includes a method to convert to `xarray.DataArray`, which is
@@ -325,7 +325,7 @@ def evaluate_analysis(
 
     spec_dict = spec.todict()
 
-    results = {}
+    results: dict[str, _AnalysisResult] = {}
 
     from ..measurements._spectrogram import cached_spectrograms
     from .registry import _results_as_arrays
@@ -342,7 +342,7 @@ def evaluate_analysis(
 
         for name in list(results.keys()):
                 try:
-                    results[name] = _results_as_arrays(results[name])
+                    results[name].data = _results_as_arrays(results[name].data)
                 except TypeError as ex:
                     msg = f'improper return type from {func.__name__}'
                     raise TypeError(msg) from ex

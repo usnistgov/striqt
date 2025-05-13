@@ -13,7 +13,7 @@ import typing
 from . import specs
 from . import util
 from .xarray_ops import (
-    ChannelAnalysisResult,
+    _AnalysisResult,
     evaluate_analysis,
     package_analysis,
 )
@@ -120,7 +120,7 @@ class _AnalysisRegistry(collections.UserDict):
                 #     msg = f'improper return type from {func.__name__}'
                 #     raise TypeError(msg) from ex
 
-                result_obj = ChannelAnalysisResult(
+                result_obj = _AnalysisResult(
                     xarray_datacls,
                     result,
                     capture,
