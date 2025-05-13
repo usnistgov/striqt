@@ -360,6 +360,7 @@ def evaluate_analysis(
             for name in (func_set & func_names)
         }
 
+    import gc
     for basis_kind, func_map in funcs_by_kind.items():
         if basis_kind == 'spectrogram':
             cache = cached_spectrograms()
@@ -376,15 +377,11 @@ def evaluate_analysis(
                     continue
                 results[name] = func(
                     iq, capture, as_xarray='delayed' if as_xarray else False, **func_kws
-                )
+                ).compute()
+                gc.collect()
 
         if cache is not None:
             cache.__exit__(None, None, None)
-
-    import gc
-    gc.collect(2)
-        # for name in func_map.keys():
-        #     results[name] = results[name].compute()
 
     if not as_xarray:
         return results
