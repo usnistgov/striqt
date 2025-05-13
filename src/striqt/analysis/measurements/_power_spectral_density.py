@@ -144,4 +144,4 @@ def power_spectral_density(
 
     psd = iqwaveform.powtodB(psd).astype(dtype)
 
-    return psd, metadata
+    return psd.copy(), metadata

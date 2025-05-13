@@ -118,4 +118,4 @@ def spectrogram_histogram(
 
     data = counts / xp.sum(counts[0])
 
-    return data, metadata
+    return data.copy(), metadata
