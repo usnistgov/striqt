@@ -33,6 +33,14 @@ class SweepController:
         self.radios: dict[str, SourceBase] = {}
         self.warmed_captures: set[specs.RadioCapture] = set()
         self.handlers: dict[rpyc.Connection, typing.Any] = {}
+
+        if sweep is None:
+            # wait until later
+            return
+        else:
+            # for performance, do any warmup runs and open a device connection
+            self.warmup_sweep(self._spec, calibration=None)
+
         util.set_cuda_mem_limit()
 
     def __enter__(self):
@@ -141,7 +149,7 @@ class SweepController:
                     lb.logger.info(prep_msg)
 
                 warmup_iter = self.iter_sweep(
-                    warmup_sweep, calibration=None, quiet=True, pickled=pickled
+                    warmup_sweep, calibration=None, quiet=True, prepare=False, pickled=pickled
                 )
                 calls['warmup'] = lb.Call(list, warmup_iter)
 
