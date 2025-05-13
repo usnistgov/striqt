@@ -88,6 +88,23 @@ class SinkBase:
         self._future = None
 
 
+class NullSink(SinkBase):
+    def open(self):
+        pass
+
+    def close(self):
+        pass
+
+    def flush(self):
+        pass
+
+    def append(self, capture_data: 'xr.Dataset' | None, capture: specs.RadioCapture):
+        pass
+
+    def wait(self):
+        pass
+
+
 class ZarrSinkBase(SinkBase):
     def open(self):
         if self.store is not None:
