@@ -206,7 +206,6 @@ def _evaluate(
     window_fill: float = 1,
     trim_stopband: bool = True,
 ):
-    print('_evaluate', capture)
     # TODO: integrate this back into iqwaveform
     if iqwaveform.isroundmod(capture.sample_rate, frequency_resolution):
         nfft = round(capture.sample_rate / frequency_resolution)
