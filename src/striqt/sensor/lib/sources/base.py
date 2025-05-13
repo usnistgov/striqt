@@ -265,6 +265,11 @@ class SourceBase(lb.Device):
         self._carryover = _ReceiveBufferCarryover(self)
         self._buffers = [None, None]
 
+    def close(self):
+        print('close ', self)
+        self._carryover = None
+        self._buffers = None
+
     def setup(self, radio_setup: specs.RadioSetup, **setup_kws):
         """disarm acquisition and apply the given radio setup"""
 
