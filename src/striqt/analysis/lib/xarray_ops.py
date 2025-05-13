@@ -300,6 +300,15 @@ class _DelayedDataArray(collections.UserDict):
     parameters: dict[str, typing.Any]
     attrs: dict[str] = dataclasses.field(default_factory=dict)
 
+    def compute(self) -> _DelayedDataArray:
+        return _DelayedDataArray(
+            datacls=self.datacls,
+            data=_results_as_arrays(self.data),
+            capture=self.capture,
+            parameters=self.parameters,
+            attrs=self.attrs
+        )
+
     def to_xarray(self, expand_dims=None) -> 'xr.DataArray':
         array = channel_dataarray(
             cls=self.datacls,
@@ -354,7 +363,7 @@ def evaluate_analysis(
                     continue
                 results[name] = func(
                     iq, capture, as_xarray='delayed' if as_xarray else False, **func_kws
-                )
+                ).compute()
 
     if not as_xarray:
         return results
