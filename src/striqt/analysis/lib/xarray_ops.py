@@ -382,7 +382,7 @@ def evaluate_analysis(
             cache.__exit__(None, None, None)
 
     import gc
-    gc.collect(0)
+    gc.collect(2)
         # for name in func_map.keys():
         #     results[name] = results[name].compute()
 
