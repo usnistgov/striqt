@@ -203,6 +203,7 @@ class SweepIterator:
                 # no pending data in the first iteration
                 pass
             else:
+                print('add an analyze', capture_prev)
                 calls['analyze'] = lb.Call(
                     self._analyze,
                     iq,
@@ -213,16 +214,16 @@ class SweepIterator:
                     delayed=True,
                 )
 
-            if capture_this is None or capture_prev is None:
+            if capture_this is None:
                 # Nones at the end indicate post-analysis and saves
                 pass
             else:
-                print('add an acquire')
+                print('add an acquire', capture_this)
                 calls['acquire'] = lb.Call(
                     self._acquire, iq, capture_prev, capture_this, capture_next
                 )
 
-            if capture_intake is None or result is None:
+            if capture_intake is None:
                 # for the first two iterations, there is no data to save
                 pass
             else:
