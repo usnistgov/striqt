@@ -82,7 +82,9 @@ class CellularSSBSymbolIndexCoords:
 
     @staticmethod
     @functools.lru_cache
-    def factory(capture: specs.Capture, **kws):
+    def factory(
+        capture: specs.Capture, max_block_count: typing.Optional[int] = 1, **kws
+    ):
         params = _pss_params(capture, **kws)
 
         return list(params['symbol_indexes'])
