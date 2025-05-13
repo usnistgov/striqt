@@ -21,7 +21,6 @@ from .xarray_ops import (
 
 if typing.TYPE_CHECKING:
     import xarray_dataclasses
-    import array_api_compat
     import iqwaveform
     import xarray as xr
 else:
@@ -219,7 +218,7 @@ def analyze_by_spec(
         as_xarray='delayed' if as_xarray else False,
     )
 
-    if as_xarray and as_xarray != 'delayed':
-        return package_analysis(capture, results, expand_dims=expand_dims)
-    else:
+    if not as_xarray or as_xarray == 'delayed':
         return results
+    else:
+        return package_analysis(capture, results, expand_dims=expand_dims)

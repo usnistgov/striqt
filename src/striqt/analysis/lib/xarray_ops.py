@@ -368,9 +368,9 @@ def evaluate_analysis(
             raise TypeError(msg) from ex
 
         if as_xarray == 'delayed':
-            return results[name]
+            pass
         else:
-            return results[name].to_xarray()
+            results[name] = results[name].to_xarray()
 
     return results
 
