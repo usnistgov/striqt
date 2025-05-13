@@ -214,8 +214,8 @@ class SweepIterator:
                     delayed=True,
                 )
 
-            if capture_this is None:
-                # Nones at the end indicate post-analysis and saves
+            if iq is not None:
+                # this happens at the end during the last post-analysis and intakes
                 pass
             else:
                 lb.logger.info(f'add an acquire {capture_this}  on {self.sweep.radio_setup.driver}')
@@ -223,7 +223,7 @@ class SweepIterator:
                     self._acquire, iq, capture_prev, capture_this, capture_next
                 )
 
-            if capture_intake is None:
+            if result is not None:
                 # for the first two iterations, there is no data to save
                 pass
             else:
@@ -243,14 +243,15 @@ class SweepIterator:
             ):
                 ret = util.concurrently_with_fg(calls, flatten=False)
 
-            if 'analyze' in ret:
-                result = ret['analyze']
+            result = ret.get('analyze', None)
 
             if 'acquire' in ret:
                 iq, capture_prev = ret['acquire']['radio']
                 prior_ext_data = this_ext_data
                 this_ext_data = ret['acquire'].get('peripherals', {}) or {}
-
+            else:
+                iq = None
+                capture_prev = None
                 # if not capture_prev.host_resample:
                 #    assert capture_prev.sample_rate == capture_prev.backend_sample_rate
 
