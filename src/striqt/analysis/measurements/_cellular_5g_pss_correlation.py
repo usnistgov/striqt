@@ -58,10 +58,16 @@ class CellularSSBStartTimeElapsedCoords:
     @functools.lru_cache
     def factory(
         capture: specs.Capture,
+        max_block_count: typing.Optional[int] = 1,
         **kws,
     ):
         params = _pss_params(capture, **kws)
-        count = round(params['duration'] / params['discovery_periodicity'])
+        total_blocks = round(params['duration'] / params['discovery_periodicity'])
+        if max_block_count is None:
+            count = total_blocks
+        else:
+            count = min(max_block_count, total_blocks)
+
         return np.arange(max(count, 1)) * params['discovery_periodicity']
 
 
