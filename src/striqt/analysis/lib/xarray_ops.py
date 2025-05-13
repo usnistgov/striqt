@@ -353,10 +353,6 @@ def evaluate_analysis(
     funcs_by_kind = {}
     func_names = set(spec_dict.keys())
 
-    if iqwaveform.util.is_cupy_array(iq):
-        import cupy
-        cupy.cuda.get_current_stream().synchronize()
-
     for basis_name, func_list in registry.by_basis.items():
         func_set = set(func_list)
         funcs_by_kind[basis_name] = {
@@ -365,11 +361,11 @@ def evaluate_analysis(
         }
 
     for basis_kind, func_map in funcs_by_kind.items():
-        if basis_kind == 'spectrogram':
-            cache = cached_spectrograms()
-            cache.__enter__()
-        else:
-            cache = None
+        # if basis_kind == 'spectrogram':
+        #     cache = cached_spectrograms()
+        #     cache.__enter__()
+        # else:
+        #     cache = None
 
         for name, func in func_map.items():
             util.except_on_low_memory()
@@ -382,8 +378,8 @@ def evaluate_analysis(
                     iq, capture, as_xarray='delayed' if as_xarray else False, **func_kws
                 ).compute()
 
-        if cache is not None:
-            cache.__exit__(None, None, None)
+        # if cache is not None:
+        #     cache.__exit__(None, None, None)
 
     if not as_xarray:
         return results
