@@ -128,6 +128,8 @@ class SweepController:
     def warmup_sweep(self, sweep_spec: specs.Sweep, calibration, pickled=False):
         """open the radio while warming up the GPU"""
 
+        print('warmup sweep')
+
         warmup_iter = []
         warmup_sweep = None
 
