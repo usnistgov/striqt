@@ -345,7 +345,7 @@ def evaluate_analysis(
     from ..measurements._spectrogram import cached_spectrograms
 
     with cached_spectrograms():
-        # first, queue 
+        # first, queue
         for name, func_kws in spec_dict.items():
             util.except_on_low_memory()
             with lb.stopwatch(f'analysis: {name}', logger_level='debug'):
