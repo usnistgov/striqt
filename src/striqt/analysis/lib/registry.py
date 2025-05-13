@@ -233,7 +233,7 @@ def analyze_by_spec(
 ) -> 'xr.Dataset':
     """evaluate a set of different channel analyses on the iq waveform as specified by spec"""
 
-    print('analyze by spec')
+    print('analyze by spec', capture)
 
     results = evaluate_analysis(
         iq,
