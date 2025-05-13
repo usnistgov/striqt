@@ -155,7 +155,12 @@ class SweepController:
                     lb.logger.info(prep_msg)
 
                 warmup_iter = self.iter_sweep(
-                    warmup_sweep, always_yield=True, calibration=None, quiet=True, prepare=False, pickled=pickled
+                    warmup_sweep,
+                    always_yield=True,
+                    calibration=None,
+                    quiet=True,
+                    prepare=False,
+                    pickled=pickled,
                 )
                 calls['warmup'] = lb.Call(_consume_warmup, warmup_iter)
 

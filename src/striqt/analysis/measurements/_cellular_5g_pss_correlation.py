@@ -368,12 +368,12 @@ def cellular_5g_pss_correlation(
     del metadata['iq'], metadata['capture']
 
     params = _pss_params(
-        capture, 
+        capture,
         subcarrier_spacing=subcarrier_spacing,
-        sample_rate = sample_rate,
-        discovery_periodicity = discovery_periodicity,
-        frequency_offset = frequency_offset,
-        shared_spectrum = shared_spectrum
+        sample_rate=sample_rate,
+        discovery_periodicity=discovery_periodicity,
+        frequency_offset=frequency_offset,
+        shared_spectrum=shared_spectrum,
     )
 
     xp = iqwaveform.util.array_namespace(iq)
