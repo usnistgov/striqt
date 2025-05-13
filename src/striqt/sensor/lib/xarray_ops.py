@@ -247,7 +247,7 @@ class AnalysisCaller:
                         iq, capture, self.radio, overwrite_x=overwrite_x
                     )
 
-            result = striqt_analysis.lib.registry.analyze_by_spec(
+            result = striqt_analysis.lib.xarray_ops.analyze_by_spec(
                 iq,
                 capture,
                 spec=self.analysis_spec,
