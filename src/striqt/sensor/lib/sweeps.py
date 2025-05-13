@@ -222,7 +222,7 @@ class SweepIterator:
                     self._acquire, iq, capture_prev, capture_this, capture_next
                 )
 
-            if capture_intake is None:
+            if capture_intake is None or result is None:
                 # for the first two iterations, there is no data to save
                 pass
             else:
