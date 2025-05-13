@@ -361,11 +361,11 @@ def evaluate_analysis(
         }
 
     for basis_kind, func_map in funcs_by_kind.items():
-        # if basis_kind == 'spectrogram':
-        #     cache = cached_spectrograms()
-        #     cache.__enter__()
-        # else:
-        #     cache = None
+        if basis_kind == 'spectrogram':
+            cache = cached_spectrograms()
+            cache.__enter__()
+        else:
+            cache = None
 
         for name, func in func_map.items():
             util.except_on_low_memory()
@@ -378,8 +378,8 @@ def evaluate_analysis(
                     iq, capture, as_xarray='delayed' if as_xarray else False, **func_kws
                 ).compute()
 
-        # if cache is not None:
-        #     cache.__exit__(None, None, None)
+        if cache is not None:
+            cache.__exit__(None, None, None)
 
     if not as_xarray:
         return results

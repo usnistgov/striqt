@@ -56,7 +56,7 @@ class _ReceiveBufferCarryover:
         else:
             # note: carryover.samples.dtype is np.complex64, samples.dtype is np.float32
             carryover_count = self.samples.shape[1]
-            samples[:, : 2 * carryover_count] = self.samples.view(samples.dtype).copy()
+            samples[:, : 2 * carryover_count] = self.samples.view(samples.dtype)
 
         return self.start_time_ns, carryover_count
 
