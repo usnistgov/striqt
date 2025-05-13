@@ -214,7 +214,7 @@ def _assign_alias_coords(capture_data: 'xr.Dataset', aliases):
 
 
 @dataclasses.dataclass
-class ChannelAnalysisWrapper:
+class AnalysisCaller:
     """Inject radio device and capture metadata and coordinates into a channel analysis result"""
 
     radio: SourceBase
@@ -343,7 +343,7 @@ def analyze_capture(
     # metadata fields
     attrs = sweep.radio_setup.todict() | sweep.description.todict()
 
-    func = ChannelAnalysisWrapper(
+    func = AnalysisCaller(
         radio=radio,
         sweep=sweep,
         analysis_spec=sweep.analysis,

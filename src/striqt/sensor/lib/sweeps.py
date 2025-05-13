@@ -163,7 +163,9 @@ class SweepIterator:
     def setup(self, sweep: specs.Sweep):
         self.sweep: specs.Sweep = sweep.validate()
 
-        self._analyze = xarray_ops.ChannelAnalysisWrapper(
+        print('setup: ', self.sweep.captures)
+
+        self._analyze = xarray_ops.AnalysisCaller(
             radio=self.radio,
             sweep=sweep,
             analysis_spec=sweep.analysis,
