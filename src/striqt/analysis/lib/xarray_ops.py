@@ -357,7 +357,7 @@ def evaluate_analysis(
     for basis_name, func_list in registry.by_basis.items():
         func_set = set(func_list)
         funcs_by_kind[basis_name] = {
-            name: registry[type(spec_dict[name])]
+            name: registry[type(getattr(spec, name))]
             for name in (func_set & func_names)
         }
 
