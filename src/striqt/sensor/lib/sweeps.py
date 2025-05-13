@@ -163,8 +163,6 @@ class SweepIterator:
     def setup(self, sweep: specs.Sweep):
         self.sweep: specs.Sweep = sweep.validate()
 
-        print('setup: ', self.sweep.captures)
-
         self._analyze = xarray_ops.AnalysisCaller(
             radio=self.radio,
             sweep=sweep,
@@ -176,6 +174,7 @@ class SweepIterator:
         self._analyze.__qualname__ = 'analyze'
 
     def __iter__(self) -> typing.Generator['xr.Dataset' | bytes | None]:
+        print('iterate')
         iq = None
         this_ext_data = {}
         prior_ext_data = {}
