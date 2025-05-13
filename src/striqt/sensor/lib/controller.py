@@ -62,6 +62,7 @@ class SweepController:
             raise last_ex
 
     def open_radio(self, radio_setup: specs.RadioSetup):
+        print('open radio')
         driver_name = radio_setup.driver
         radio_cls = find_radio_cls_by_name(driver_name)
 
