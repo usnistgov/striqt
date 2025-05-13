@@ -45,7 +45,7 @@ class Air7x01B(soapy.SoapyRadioSource):
 
     # use of float32 saves the gpu a slight amount of work, but
     # demands more memory bandwidth
-    _transport_dtype = attr.value.str('float32', inherit=True)
+    _transport_dtype = attr.value.str('int16', inherit=True)
     _reenable_cycles = 0
 
     def open(self):

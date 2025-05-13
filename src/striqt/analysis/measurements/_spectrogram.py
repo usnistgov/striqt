@@ -214,8 +214,6 @@ def _evaluate(
         raise ValueError('sample_rate/resolution must be a counting number')
     enbw = frequency_resolution * equivalent_noise_bandwidth(window, nfft)
 
-    print('evaluate!', capture)
-
     if isinstance(window, list):
         # lists break lru_cache
         window = tuple(window)
