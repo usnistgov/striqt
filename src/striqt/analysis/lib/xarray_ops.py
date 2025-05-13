@@ -361,20 +361,26 @@ def evaluate_analysis(
             for name in (func_set & func_names)
         }
 
-    print(funcs_by_kind)
-    1//0
+    for basis_kind, func_map in funcs_by_kind.items():
+        if basis_kind == 'spectrogram':
+            cache = cached_spectrograms()
+            cache.__enter__()
+        else:
+            cache = None
 
-    with cached_spectrograms():
-        # first, queue
-        for name, func_kws in spec_dict.items():
+        for name, func in func_map.items():
             util.except_on_low_memory()
             with lb.stopwatch(f'analysis: {name}', logger_level='debug'):
-                func = registry[type(getattr(spec, name))]
+                # func = registry[type(getattr(spec, name))]
+                func_kws = spec_dict[name]
                 if not func_kws:
                     continue
                 results[name] = func(
                     iq, capture, as_xarray='delayed' if as_xarray else False, **func_kws
                 ).compute()
+
+        if cache is not None:
+            cache.__exit__()
 
     if not as_xarray:
         return results
