@@ -237,8 +237,10 @@ class SweepIterator:
                 capture_this, capture_prev, index=i, count=count
             )
 
+            hide_message = self._quiet or capture_this is None and capture_prev is None
+
             with lb.stopwatch(
-                f'{desc} •', logger_level='debug' if self._quiet else 'info'
+                f'{desc} •', logger_level='debug' if hide_message else 'info'
             ):
                 ret = util.concurrently_with_fg(calls, flatten=False)
 

@@ -302,15 +302,15 @@ def compute_spectrogram(
         fractional_overlap=fractional_overlap,
         trim_stopband=trim_stopband,
         window_fill=window_fill,
-        frequency_bin_averaging = frequency_bin_averaging,
-        time_bin_averaging = time_bin_averaging,
+        frequency_bin_averaging=frequency_bin_averaging,
+        time_bin_averaging=time_bin_averaging,
     )
     spg, metadata = _evaluate(iq=iq, capture=capture, **eval_kws)
 
     xp = iqwaveform.util.array_namespace(iq)
 
     copied = False
-    if dB:        
+    if dB:
         spg = iqwaveform.powtodB(spg, eps=1e-25)
         copied = True
 
