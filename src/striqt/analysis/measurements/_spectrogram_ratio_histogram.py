@@ -98,4 +98,4 @@ def spectrogram_ratio_histogram(
 
     data = counts / xp.sum(counts[0])
 
-    return data.copy(), metadata
+    return data, metadata

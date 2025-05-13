@@ -204,6 +204,8 @@ def _evaluate(
     fractional_overlap: float = 0,
     window_fill: float = 1,
     trim_stopband: bool = True,
+    frequency_bin_averaging: typing.Optional[int] = None,
+    time_bin_averaging: typing.Optional[int] = None,
 ):
     # TODO: integrate this back into iqwaveform
     if iqwaveform.isroundmod(capture.sample_rate, frequency_resolution):
@@ -238,6 +240,12 @@ def _evaluate(
         axis=1,
         return_axis_arrays=False,
     )
+
+    if frequency_bin_averaging is not None:
+        spg = binned_mean(spg, frequency_bin_averaging, axis=2)
+
+    if time_bin_averaging is not None:
+        spg = binned_mean(spg, time_bin_averaging, axis=1, centered=False)
 
     # truncate to the analysis bandwidth
     if trim_stopband and np.isfinite(capture.analysis_bandwidth):
@@ -292,24 +300,23 @@ def compute_spectrogram(
         fractional_overlap=fractional_overlap,
         trim_stopband=trim_stopband,
         window_fill=window_fill,
+        frequency_bin_averaging = time_bin_averaging,
+        time_bin_averaging = time_bin_averaging,
     )
     spg, metadata = _evaluate(iq=iq, capture=capture, **eval_kws)
 
     xp = iqwaveform.util.array_namespace(iq)
 
-    if frequency_bin_averaging is not None:
-        spg = binned_mean(spg, frequency_bin_averaging, axis=2)
-
-    if time_bin_averaging is not None:
-        spg = binned_mean(spg, time_bin_averaging, axis=1, centered=False)
-
-    if dB:
+    copied = False
+    if dB:        
         spg = iqwaveform.powtodB(spg, eps=1e-25)
+        copied = True
 
     if limit_digits is not None:
-        xp.round(spg, limit_digits, spg)
+        xp.round(spg, limit_digits, out=spg if copied else None)
+        copied = True
 
-    spg = spg.astype(dtype)
+    spg = spg.astype(dtype, copy=not copied)
 
     metadata = dict(
         metadata,

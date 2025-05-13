@@ -452,4 +452,4 @@ def cellular_5g_pss_correlation(
 
     metadata = metadata | {'units': 'mW', 'standard_name': 'PSS Covariance'}
 
-    return R.copy(), metadata
+    return R, metadata

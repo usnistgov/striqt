@@ -186,7 +186,7 @@ def cellular_cyclic_autocorrelation(
     else:
         metadata.update(standard_name='Cyclic Autocovariance', units='mW')
 
-    return result.copy(), metadata
+    return result, metadata
 
 
 @functools.lru_cache

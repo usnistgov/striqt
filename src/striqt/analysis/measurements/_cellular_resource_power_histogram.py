@@ -248,7 +248,7 @@ def cellular_resource_power_histogram(
     )
     del metadata['units']
 
-    return data.copy(), metadata
+    return data, metadata
 
 
 def apply_mask(
