@@ -20,6 +20,7 @@ from .xarray_ops import (
 
 
 if typing.TYPE_CHECKING:
+    import xarray_dataclasses
     import array_api_compat
     import iqwaveform
     import xarray as xr
@@ -71,7 +72,7 @@ class _AnalysisRegistry(collections.UserDict):
         super().__init__()
         self.base_struct = base_struct
 
-    def __call__(self, xarray_datacls: 'measurement.DataClass', metadata={}) -> TFunc:
+    def __call__(self, xarray_datacls: 'xarray_dataclasses.datamodel.DataClass', metadata={}) -> TFunc:
         """add decorated `func` and its keyword arguments in the self.tostruct() schema"""
 
         def wrapper(func: TFunc):
@@ -113,11 +114,11 @@ class _AnalysisRegistry(collections.UserDict):
                     result = ret
                     ret_metadata = metadata
 
-                try:
-                    result = _results_as_arrays(result)
-                except TypeError as ex:
-                    msg = f'improper return type from {func.__name__}'
-                    raise TypeError(msg) from ex
+                # try:
+                #     result = _results_as_arrays(result)
+                # except TypeError as ex:
+                #     msg = f'improper return type from {func.__name__}'
+                #     raise TypeError(msg) from ex
 
                 result_obj = ChannelAnalysisResult(
                     xarray_datacls,

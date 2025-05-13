@@ -328,6 +328,7 @@ def evaluate_analysis(
     results = {}
 
     from ..measurements._spectrogram import cached_spectrograms
+    from .registry import _results_as_arrays
 
     with cached_spectrograms():
         # evaluate each possible analysis function if specified
@@ -338,6 +339,14 @@ def evaluate_analysis(
                 if not func_kws:
                     continue
                 results[name] = func(iq, capture, as_xarray=as_xarray, **func_kws)
+
+        for name in list(results.keys()):
+                try:
+                    results[name] = _results_as_arrays(results[name])
+                except TypeError as ex:
+                    msg = f'improper return type from {func.__name__}'
+                    raise TypeError(msg) from ex
+
 
     return results
 
