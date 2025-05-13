@@ -106,7 +106,7 @@ class _AnalysisRegistry(collections.UserDict):
                 if p.kind is inspect.Parameter.KEYWORD_ONLY and not k.startswith('_')
             ]
 
-            self.by_basis.setdefault(basis, []).append(func)
+            self.by_basis.setdefault(basis, []).append(name)
 
             struct_type = msgspec.defstruct(
                 name,
