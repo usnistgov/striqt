@@ -13,7 +13,7 @@ import typing
 from . import specs
 from . import util
 from .xarray_ops import (
-    _AnalysisResult,
+    _DelayedDataArray,
     evaluate_analysis,
     package_analysis,
 )
@@ -31,21 +31,6 @@ else:
 
 
 TFunc = typing.Callable[..., typing.Any]
-
-
-def _results_as_arrays(obj: tuple | list | dict | 'iqwaveform.util.Array'):
-    """convert an array, or a container of arrays, into a numpy array (or container of numpy arrays)"""
-
-    if array_api_compat.is_torch_array(obj):
-        array = obj.cpu()
-    elif array_api_compat.is_cupy_array(obj):
-        array = obj.get()
-    elif array_api_compat.is_numpy_array(obj):
-        return obj
-    else:
-        raise TypeError(f'obj type {type(obj)} is unrecognized')
-
-    return array
 
 
 def _param_to_field(name, p: inspect.Parameter):
@@ -112,7 +97,7 @@ class _AnalysisRegistry(collections.UserDict):
                     result = ret
                     ret_metadata = metadata
 
-                result = _AnalysisResult(
+                result = _DelayedDataArray(
                     xarray_datacls,
                     result,
                     capture,

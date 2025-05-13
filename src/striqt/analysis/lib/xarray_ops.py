@@ -287,7 +287,7 @@ def channel_dataarray(
 
 
 @dataclasses.dataclass
-class _AnalysisResult(collections.UserDict):
+class _DelayedDataArray(collections.UserDict):
     """represents the return result from a channel analysis function.
 
     This includes a method to convert to `xarray.DataArray`, which is
@@ -308,7 +308,7 @@ class _AnalysisResult(collections.UserDict):
             capture=self.capture,
             parameters=self.parameters,
             expand_dims=expand_dims,
-        )           
+        )
 
         return array.assign_attrs(self.attrs)
 
@@ -341,7 +341,7 @@ def evaluate_analysis(
 
     spec_dict = spec.todict()
 
-    results: dict[str, _AnalysisResult] = {}
+    results: dict[str, _DelayedDataArray] = {}
 
     from ..measurements._spectrogram import cached_spectrograms
 
@@ -377,7 +377,7 @@ def evaluate_analysis(
 
 def package_analysis(
     capture: specs.Capture,
-    results: dict[str, specs.Analysis],
+    results: dict[str, _DelayedDataArray],
     expand_dims=None,
 ) -> 'xr.Dataset':
     # materialize as xarrays

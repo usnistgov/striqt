@@ -255,7 +255,7 @@ class AnalysisCaller:
             )
 
             if delayed:
-                result = DelayedAnalysisResult(
+                result = _DelayedDataset(
                     delayed=result,
                     capture=capture,
                     sweep=self.sweep,
@@ -271,8 +271,8 @@ class AnalysisCaller:
 
 
 @dataclasses.dataclass()
-class DelayedAnalysisResult:
-    delayed: dict
+class _DelayedDataset:
+    delayed: dict[str, striqt_analysis.lib.xarray_ops._DelayedDataArray]
     capture: specs.Capture
     sweep: specs.Sweep
     radio_id: str
