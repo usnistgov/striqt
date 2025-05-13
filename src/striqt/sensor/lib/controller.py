@@ -39,7 +39,7 @@ class SweepController:
             return
         else:
             # for performance, do any warmup runs and open a device connection
-            self.warmup_sweep(self._spec, calibration=None)
+            self.warmup_sweep(sweep, calibration=None)
 
         util.set_cuda_mem_limit()
 
