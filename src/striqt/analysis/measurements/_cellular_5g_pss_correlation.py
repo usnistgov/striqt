@@ -102,7 +102,9 @@ class CellularPSSLagCoords:
 
     @staticmethod
     @functools.lru_cache
-    def factory(capture: specs.Capture, **kws) -> dict[str, np.ndarray]:
+    def factory(
+        capture: specs.Capture, max_block_count: typing.Optional[int] = 1, **kws
+    ) -> dict[str, np.ndarray]:
         params = _pss_params(capture, **kws)
 
         max_len = 2 * round(
