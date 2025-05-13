@@ -35,9 +35,6 @@ class SweepController:
         self.handlers: dict[rpyc.Connection, typing.Any] = {}
         util.set_cuda_mem_limit()
 
-        if sweep is not None:
-            self.warmup_sweep(sweep, calibration=None)
-
     def __enter__(self):
         return self
 
