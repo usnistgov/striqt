@@ -369,7 +369,6 @@ def evaluate_analysis(
             cache = None
 
         for name, func in func_map.items():
-            print(basis_name, name, func)
             util.except_on_low_memory()
             with lb.stopwatch(f'analysis: {name}', logger_level='debug'):
                 # func = registry[type(getattr(spec, name))]

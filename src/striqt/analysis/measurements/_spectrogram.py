@@ -264,6 +264,12 @@ def _evaluate(
         'frequency_bin_averaging': frequency_bin_averaging,
     }
 
+    if iqwaveform.util.is_cupy_array(iq):
+        import cupy
+
+        stream = cupy.cuda.get_current_stream()
+        stream.synchronize()
+
     return spg, metadata
 
 
