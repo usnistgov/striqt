@@ -9,12 +9,11 @@ import inspect
 import math
 import typing
 
-from . import specs, util
+from . import registry, specs, util
 
 import array_api_compat
 
 if typing.TYPE_CHECKING:
-    from .registry import _AnalysisRegistry
     import numpy as np
     import xarray as xr
     import iqwaveform
@@ -328,7 +327,7 @@ def evaluate_analysis(
     as_xarray: typing.Literal[True]
     | typing.Literal[False]
     | typing.Literal['delayed'] = 'delayed',
-    registry: '_AnalysisRegistry',
+    registry: 'registry._AnalysisRegistry',
 ):
     """evaluate the specified channel analysis for the given IQ waveform and
     its capture information"""
@@ -392,3 +391,29 @@ def package_analysis(
         ret = xr.Dataset(xarrays, attrs=attrs)
 
     return ret
+
+
+def analyze_by_spec(
+    iq: 'iqwaveform.util.Array',
+    capture: specs.Capture,
+    *,
+    spec: str | dict | specs.Analysis,
+    as_xarray: typing.Literal[True]
+    | typing.Literal[False]
+    | typing.Literal['delayed'] = True,
+    expand_dims=None,
+) -> 'xr.Dataset':
+    """evaluate a set of different channel analyses on the iq waveform as specified by spec"""
+
+    results = evaluate_analysis(
+        iq,
+        capture,
+        spec=spec,
+        registry=registry.measurement,
+        as_xarray='delayed' if as_xarray else False,
+    )
+
+    if not as_xarray or as_xarray == 'delayed':
+        return results
+    else:
+        return package_analysis(capture, results, expand_dims=expand_dims)

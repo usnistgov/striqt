@@ -11,22 +11,10 @@ import msgspec
 import typing
 
 from . import specs
-from . import util
-from .xarray_ops import (
-    _DelayedDataArray,
-    evaluate_analysis,
-    package_analysis,
-)
 
 
 if typing.TYPE_CHECKING:
     import xarray_dataclasses
-    import iqwaveform
-    import xarray as xr
-else:
-    array_api_compat = util.lazy_import('array_api_compat')
-    iqwaveform = util.lazy_import('iqwaveform')
-    xr = util.lazy_import('xarray')
 
 
 TFunc = typing.Callable[..., typing.Any]
@@ -72,6 +60,8 @@ class _AnalysisRegistry(collections.UserDict):
 
             @functools.wraps(func)
             def wrapped(iq, capture, **kws):
+                from .xarray_ops import _DelayedDataArray
+
                 # injects and handles an additional argument, 'as_xarray', which allows
                 # the return of a ChannelAnalysis result for fast serialization and
                 # xarray object instantiation
@@ -196,29 +186,3 @@ measurement = _AnalysisRegistry(specs.Analysis)
 #         return wrapper
 
 # coordinate = _CoordinateRegistry()
-
-
-def analyze_by_spec(
-    iq: 'iqwaveform.util.Array',
-    capture: specs.Capture,
-    *,
-    spec: str | dict | specs.Analysis,
-    as_xarray: typing.Literal[True]
-    | typing.Literal[False]
-    | typing.Literal['delayed'] = True,
-    expand_dims=None,
-) -> 'xr.Dataset':
-    """evaluate a set of different channel analyses on the iq waveform as specified by spec"""
-
-    results = evaluate_analysis(
-        iq,
-        capture,
-        spec=spec,
-        registry=measurement,
-        as_xarray='delayed' if as_xarray else False,
-    )
-
-    if not as_xarray or as_xarray == 'delayed':
-        return results
-    else:
-        return package_analysis(capture, results, expand_dims=expand_dims)
