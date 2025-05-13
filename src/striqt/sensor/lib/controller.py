@@ -146,7 +146,7 @@ class SweepController:
                 sweep_spec, skip=tuple(self.warmed_captures)
             )
 
-            print('warmup sweep: ', warmup_sweep)
+            print('warmup sweep: ', warmup_sweep.captures)
 
             if len(warmup_sweep.captures) > 0:
                 prep_msg = self._describe_preparation(sweep_spec)
