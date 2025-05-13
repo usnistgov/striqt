@@ -214,7 +214,7 @@ class SweepIterator:
                     delayed=True,
                 )
 
-            if iq is not None:
+            if iq is None:
                 # this happens at the end during the last post-analysis and intakes
                 pass
             else:
@@ -223,7 +223,7 @@ class SweepIterator:
                     self._acquire, iq, capture_prev, capture_this, capture_next
                 )
 
-            if result is not None:
+            if result is None:
                 # for the first two iterations, there is no data to save
                 pass
             else:
