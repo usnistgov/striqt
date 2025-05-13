@@ -28,6 +28,8 @@ def _consume_warmup(controller, radio_setup, gen: typing.Generator[typing.Any]):
         # avoid retaining warmup results in memory
         pass
 
+    print('close null')
+
     controller.close_radio(radio_setup)
 
 
