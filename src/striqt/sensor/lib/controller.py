@@ -36,7 +36,7 @@ class SweepController:
         util.set_cuda_mem_limit()
 
         if sweep is not None:
-            self.prepare_sweep(sweep, calibration=None)
+            self.warmup_sweep(sweep, calibration=None)
 
     def __enter__(self):
         return self
@@ -120,7 +120,7 @@ class SweepController:
             msgs += ['preparing GPU']
         return ' and '.join(msgs)
 
-    def prepare_sweep(self, sweep_spec: specs.Sweep, calibration, pickled=False):
+    def warmup_sweep(self, sweep_spec: specs.Sweep, calibration, pickled=False):
         """open the radio while warming up the GPU"""
 
         warmup_iter = []
@@ -170,7 +170,7 @@ class SweepController:
         del kwargs['self'], kwargs['prepare']
 
         if prepare:
-            self.prepare_sweep(sweep, calibration, pickled=False)
+            self.warmup_sweep(sweep, calibration, pickled=False)
 
         radio = self.open_radio(sweep.radio_setup)
         radio.setup(sweep.radio_setup)
@@ -194,7 +194,7 @@ class SweepController:
             prep_msg = self._describe_preparation(sweep)
             if prep_msg:
                 lb.logger.info(prep_msg)
-            self.prepare_sweep(sweep, calibration, pickled=True)
+            self.warmup_sweep(sweep, calibration, pickled=True)
 
         radio = self.open_radio(sweep.radio_setup)
         radio.setup(sweep.radio_setup)
@@ -255,7 +255,7 @@ class _ServerService(rpyc.Service, SweepController):
         if prep_msg:
             conn.root.deliver(None, prep_msg)
             lb.logger.info(prep_msg)
-        self.prepare_sweep(sweep, calibration, pickled=True)
+        self.warmup_sweep(sweep, calibration, pickled=True)
 
         capture_pairs = util.zip_offsets(sweep.captures, (0, -1), fill=None)
 

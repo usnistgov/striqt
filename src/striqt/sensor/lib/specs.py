@@ -244,12 +244,12 @@ class Extensions(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash
 
 class Sweep(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     captures: tuple[RadioCapture, ...] = tuple()
-    radio_setup: RadioSetup = msgspec.field(default_factory=RadioSetup)
-    defaults: RadioCapture = msgspec.field(default_factory=RadioCapture)
+    radio_setup: RadioSetup = RadioSetup()
+    defaults: RadioCapture = RadioCapture()
     analysis: dict = msgspec.field(default_factory=_make_default_analysis)
-    description: Description = msgspec.field(default_factory=Description)
-    extensions: Extensions = msgspec.field(default_factory=Extensions)
-    output: Output = msgspec.field(default_factory=Output)
+    description: Description = Description()
+    extensions: Extensions = Extensions()
+    output: Output = Output()
 
     def get_captures(self):
         """allow autogeneration of capture sequences"""

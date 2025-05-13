@@ -3,7 +3,6 @@
 from __future__ import annotations
 import itertools
 import typing
-import msgspec
 
 from . import captures, sources, specs, util, xarray_ops
 from .peripherals import PeripheralsBase
@@ -38,10 +37,6 @@ def sweep_touches_gpu(sweep: specs.Sweep):
     return False
 
 
-def _convert_captures(captures: list[analysis.Capture], type_: type[analysis.Capture]):
-    return [msgspec.convert(c, type_, from_attributes=True) for c in captures]
-
-
 def design_warmup_sweep(
     sweep: specs.Sweep, skip: tuple[specs.RadioCapture, ...]
 ) -> specs.Sweep:
@@ -54,9 +49,9 @@ def design_warmup_sweep(
 
     # captures that have unique sampling parameters, which are those
     # specified in structs.WaveformCapture
-    wcaptures = _convert_captures(sweep.captures, specs.WaveformCapture)
+    wcaptures = [specs.WaveformCapture.fromspec(c) for c in sweep.captures]
     unique_map = dict(zip(wcaptures, sweep.captures))
-    skip_wcaptures = set(_convert_captures(skip, specs.WaveformCapture))
+    skip_wcaptures = {specs.WaveformCapture.fromspec(c) for c in skip}
     unique_wcaptures = unique_map.keys() - skip_wcaptures
     captures = [unique_map[c] for c in unique_wcaptures]
 
@@ -109,7 +104,6 @@ def _iq_is_reusable(
     c1_compare = c1.replace(**downstream_kws)
     c2_compare = c2.replace(
         # ignore parameters that only affect downstream processing
-        # that are validated to have flat response and unity gain
         analysis_bandwidth=c1.analysis_bandwidth,
         sample_rate=c1.sample_rate,
         **downstream_kws,

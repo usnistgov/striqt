@@ -10,7 +10,6 @@ from .. import specs
 
 import labbench as lb
 from labbench import paramattr as attr
-import msgspec
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -351,9 +350,8 @@ class FileSource(TestSource):
             **self.file_metadata,
         )
 
-        self._iq_capture = msgspec.convert(
-            self._file_stream.get_metadata(), specs.FileSourceCapture
-        )
+        metadata = self._file_stream.get_metadata()
+        self._iq_capture = specs.FileSourceCapture.fromdict(metadata)
 
         return radio_setup
 

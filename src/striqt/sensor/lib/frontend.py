@@ -2,7 +2,6 @@ from pathlib import Path
 import sys
 import typing
 
-import msgspec
 import click
 
 from . import calibration, controller, io, peripherals, sinks, specs, util
@@ -64,7 +63,7 @@ class SweepSpecClasses(typing.NamedTuple):
 
 
 def _get_extension_classes(sweep_spec: specs.Sweep) -> SweepSpecClasses:
-    ext = msgspec.to_builtins(sweep_spec.extensions)
+    ext = sweep_spec.extensions.todict()
 
     import_cls = io._import_extension
     return SweepSpecClasses(

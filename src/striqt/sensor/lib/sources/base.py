@@ -6,7 +6,6 @@ import typing
 
 import labbench as lb
 from labbench import paramattr as attr
-import msgspec
 import numpy as np
 
 from .. import specs, util
@@ -673,9 +672,7 @@ def design_capture_filter(
     base_clock_rate, capture: specs.WaveformCapture, *args, **kws
 ):
     # cast the struct in case it's a subclass
-    fixed_capture = msgspec.convert(
-        capture, specs.WaveformCapture, from_attributes=True
-    )
+    fixed_capture = specs.WaveformCapture.fromspec(capture)
     kws.setdefault('window', RESAMPLE_COLA_WINDOW)
     return _design_capture_filter(
         base_clock_rate,

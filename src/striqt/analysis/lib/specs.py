@@ -75,7 +75,7 @@ class StructBase(msgspec.Struct, kw_only=True, frozen=True, cache_hash=True):
         return msgspec.convert(d, type=cls, strict=False, dec_hook=_dec_hook)
 
     @classmethod
-    def fromstruct(cls: type[_T], other: StructBase) -> _T:
+    def fromspec(cls: type[_T], other: StructBase) -> _T:
         return msgspec.convert(
             other, type=cls, strict=False, from_attributes=True, dec_hook=_dec_hook
         )

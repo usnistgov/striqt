@@ -172,6 +172,7 @@ class _AnalysisRegistry(collections.UserDict):
             kw_only=True,
             forbid_unknown_fields=True,
             omit_defaults=True,
+            frozen=True
         )
 
 

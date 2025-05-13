@@ -190,7 +190,7 @@ def cached_spectrograms():
     _spectrogram_cache.enabled = True
     print('enable')
     yield
-    print('done')
+    print()
     _spectrogram_cache.clear()
     _spectrogram_cache.enabled = False
 

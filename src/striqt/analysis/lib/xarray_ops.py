@@ -7,7 +7,6 @@ import functools
 import dataclasses
 import inspect
 import math
-import msgspec
 import typing
 
 from . import specs, util
@@ -356,7 +355,7 @@ def package_analysis(
 
         attrs = capture.todict()
         if isinstance(capture, specs.FilteredCapture):
-            attrs['analysis_filter'] = msgspec.to_builtins(capture.analysis_filter)
+            attrs['analysis_filter'] = capture.analysis_filter.todict()
         ret = xr.Dataset(xarrays, attrs=attrs)
 
     return ret
