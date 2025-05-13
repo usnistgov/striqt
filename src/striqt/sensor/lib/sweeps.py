@@ -213,7 +213,7 @@ class SweepIterator:
                     delayed=True,
                 )
 
-            if capture_this is None:
+            if capture_this is None or capture_prev is None:
                 # Nones at the end indicate post-analysis and saves
                 pass
             else:
