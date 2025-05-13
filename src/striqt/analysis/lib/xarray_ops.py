@@ -380,7 +380,7 @@ def evaluate_analysis(
                     continue
                 results[name] = func(
                     iq, capture, as_xarray='delayed' if as_xarray else False, **func_kws
-                )
+                ).compute()
 
         if cache is not None:
             cache.__exit__(None, None, None)
@@ -392,7 +392,7 @@ def evaluate_analysis(
         if as_xarray == 'delayed':
             pass
         else:
-            results[name] = results[name].compute().to_xarray()
+            results[name] = results[name].to_xarray()
 
     return results
 

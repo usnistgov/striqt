@@ -198,4 +198,4 @@ def resampling_correction(
     #     scale *= np.sqrt(power_scale)
     # iq *= scale
 
-    return iq.copy()
+    return iq
