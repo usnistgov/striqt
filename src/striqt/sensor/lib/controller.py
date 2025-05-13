@@ -23,10 +23,12 @@ else:
     analysis = util.lazy_import('striqt.analysis')
 
 
-def _consume_warmup(gen: typing.Generator[typing.Any]):
+def _consume_warmup(controller, gen: typing.Generator[typing.Any]):
     for _ in gen:
         # avoid retaining warmup results in memory
         pass
+
+    controller.close_radio('NullSource')
 
 
 class SweepController:

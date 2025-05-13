@@ -266,7 +266,6 @@ class SourceBase(lb.Device):
         self._buffers = [None, None]
 
     def close(self):
-        print('close ', self)
         self._carryover = None
         self._buffers = None
 
