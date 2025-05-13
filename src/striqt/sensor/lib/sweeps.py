@@ -1,7 +1,6 @@
 """implementation of performant acquisition and analysis sequencing for a series of captures"""
 
 from __future__ import annotations
-import functools
 import itertools
 import typing
 
@@ -20,7 +19,6 @@ else:
     analysis = util.lazy_import('striqt.analysis')
 
 
-@functools.lru_cache()
 def sweep_touches_gpu(sweep: specs.Sweep):
     """returns True if the sweep would benefit from the GPU"""
     IQ_MEAS_NAME = analysis.measurements.iq_waveform.__name__
@@ -39,7 +37,6 @@ def sweep_touches_gpu(sweep: specs.Sweep):
     return False
 
 
-@functools.lru_cache()
 def design_warmup_sweep(
     sweep: specs.Sweep, skip: tuple[specs.RadioCapture, ...]
 ) -> specs.Sweep:
@@ -83,7 +80,6 @@ def design_warmup_sweep(
     return warmup.replace(captures=captures, radio_setup=null_radio_setup)
 
 
-@functools.lru_cache()
 def _iq_is_reusable(
     c1: specs.RadioCapture | None, c2: specs.RadioCapture, base_clock_rate
 ):
@@ -116,7 +112,6 @@ def _iq_is_reusable(
     return c1_compare == c2_compare
 
 
-@functools.lru_cache()
 def _build_attrs(sweep: specs.Sweep):
     fields = set(type(sweep).__struct_fields__)
     base_fields = set(specs.Sweep.__struct_fields__)
