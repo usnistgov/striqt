@@ -260,6 +260,8 @@ def _evaluate(
         'fractional_overlap': fractional_overlap,
         'noise_bandwidth': enbw,
         'units': f'dBm/{enbw / 1e3:0.0f} kHz',
+        'time_bin_averaging': time_bin_averaging,
+        'frequency_bin_averaging': frequency_bin_averaging,
     }
 
     return spg, metadata
@@ -312,18 +314,12 @@ def compute_spectrogram(
         spg = iqwaveform.powtodB(spg, eps=1e-25)
         copied = True
 
-    if limit_digits is not None:
-        xp.round(spg, limit_digits, out=spg if copied else None)
-        copied = True
-
     spg = spg.astype(dtype, copy=not copied)
 
-    metadata = dict(
-        metadata,
-        time_bin_averaging=time_bin_averaging,
-        limit_digits=limit_digits,
-        frequency_bin_averaging=frequency_bin_averaging,
-    )
+    if limit_digits is not None:
+        xp.round(spg, limit_digits, out=spg)
+
+    metadata = metadata | {'limit_digits': limit_digits}
 
     return spg, metadata
 
