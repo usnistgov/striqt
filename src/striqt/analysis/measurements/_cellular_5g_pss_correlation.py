@@ -329,8 +329,8 @@ def cellular_5g_pss_correlation(
     sample_rate: float = 15.36e6,
     discovery_periodicity: float = 20e-3,
     frequency_offset: typing.Union[float, dict[float, float]] = 0,
-    max_block_count: typing.Optional[int] = 1,
     shared_spectrum: bool = False,
+    max_block_count: typing.Optional[int] = 1,
 ):
     """correlate each channel of the IQ against the cellular primary synchronization signal (PSS) waveform.
 
@@ -339,14 +339,14 @@ def cellular_5g_pss_correlation(
     Args:
         iq: the vector of size (N, M) for N channels and M IQ waveform samples
         capture: capture structure that describes the iq acquisition parameters
-        sample_rate (samples/s): resample to this rate before analysis (or None to follow capture.sample_rate)
+        sample_rate (samples/s): downsample to this rate before analysis (or None to follow capture.sample_rate)
         subcarrier_spacing (Hz): OFDM subcarrier spacing
         discovery_periodicity (s): interval between synchronization blocks
         frequency_offset (Hz): baseband center frequency of the synchronization block,
             (or a mapping to look up frequency_offset[capture.center_frequency])
-        max_block_count: if not None, the number of synchronization blocks to analyze
         shared_spectrum: whether to assume "shared_spectrum" symbol layout in the SSB
             according to 3GPP TS 138 213: Section 4.1)
+        max_block_count: if not None, the number of synchronization blocks to analyze
         as_xarray: if True (default), return an xarray.DataArray, otherwise a ChannelAnalysisResult object
 
     References:
@@ -365,8 +365,16 @@ def cellular_5g_pss_correlation(
         frequency_offset = frequency_offset[capture.center_frequency]  # noqa
 
     metadata = dict(locals())
-    del metadata['iq'], metadata['capture'], metadata['sample_rate']
-    params = _pss_params(capture, **metadata)
+    del metadata['iq'], metadata['capture']
+
+    params = _pss_params(
+        capture, 
+        subcarrier_spacing=subcarrier_spacing,
+        sample_rate = sample_rate,
+        discovery_periodicity = discovery_periodicity,
+        frequency_offset = frequency_offset,
+        shared_spectrum = shared_spectrum
+    )
 
     xp = iqwaveform.util.array_namespace(iq)
 
