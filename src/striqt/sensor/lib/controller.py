@@ -153,10 +153,12 @@ class SweepController:
                 if prep_msg:
                     lb.logger.info(prep_msg)
 
+                print('setup')
                 warmup_iter = self.iter_sweep(
                     warmup_sweep, calibration=None, quiet=True, prepare=False, pickled=pickled
                 )
                 calls['warmup'] = lb.Call(list, warmup_iter)
+                print('finished setting up')
 
         calls['open_radio'] = lb.Call(self.open_radio, sweep_spec.radio_setup)
 

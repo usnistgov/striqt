@@ -174,7 +174,6 @@ class SweepIterator:
         self._analyze.__qualname__ = 'analyze'
 
     def __iter__(self) -> typing.Generator['xr.Dataset' | bytes | None]:
-        print('iterate')
         iq = None
         this_ext_data = {}
         prior_ext_data = {}
