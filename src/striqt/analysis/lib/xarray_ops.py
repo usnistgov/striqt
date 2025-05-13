@@ -331,22 +331,31 @@ def evaluate_analysis(
     from .registry import _results_as_arrays
 
     with cached_spectrograms():
-        # evaluate each possible analysis function if specified
+        # first, queue 
         for name, func_kws in spec_dict.items():
             util.except_on_low_memory()
             with lb.stopwatch(f'analysis: {name}', logger_level='debug'):
                 func = registry[type(getattr(spec, name))]
                 if not func_kws:
                     continue
-                results[name] = func(iq, capture, as_xarray=as_xarray, **func_kws)
+                results[name] = func(
+                    iq, capture, as_xarray='delayed' if as_xarray else False, **func_kws
+                )
 
-        for name in list(results.keys()):
-                try:
-                    results[name].data = _results_as_arrays(results[name].data)
-                except TypeError as ex:
-                    msg = f'improper return type from {func.__name__}'
-                    raise TypeError(msg) from ex
+    if not as_xarray:
+        return results
 
+    for name in list(results.keys()):
+        try:
+            results[name].data = _results_as_arrays(results[name].data)
+        except TypeError as ex:
+            msg = f'improper return type from {func.__name__}'
+            raise TypeError(msg) from ex
+
+        if as_xarray == 'delayed':
+            return results[name]
+        else:
+            return results[name].to_xarray()
 
     return results
 

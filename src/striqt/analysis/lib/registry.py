@@ -72,7 +72,9 @@ class _AnalysisRegistry(collections.UserDict):
         super().__init__()
         self.base_struct = base_struct
 
-    def __call__(self, xarray_datacls: 'xarray_dataclasses.datamodel.DataClass', metadata={}) -> TFunc:
+    def __call__(
+        self, xarray_datacls: 'xarray_dataclasses.datamodel.DataClass', metadata={}
+    ) -> TFunc:
         """add decorated `func` and its keyword arguments in the self.tostruct() schema"""
 
         def wrapper(func: TFunc):
@@ -90,11 +92,7 @@ class _AnalysisRegistry(collections.UserDict):
                 # the return of a ChannelAnalysis result for fast serialization and
                 # xarray object instantiation
                 as_xarray = kws.pop('as_xarray', True)
-                if as_xarray == 'delayed':
-                    delay_xarray = True
-                elif as_xarray in (True, False):
-                    delay_xarray = False
-                else:
+                if as_xarray not in ('delayed', True, False):
                     raise ValueError(
                         'xarray argument must be one of (True, False, "delayed")'
                     )
@@ -114,24 +112,13 @@ class _AnalysisRegistry(collections.UserDict):
                     result = ret
                     ret_metadata = metadata
 
-                # try:
-                #     result = _results_as_arrays(result)
-                # except TypeError as ex:
-                #     msg = f'improper return type from {func.__name__}'
-                #     raise TypeError(msg) from ex
-
-                result_obj = _AnalysisResult(
+                return _AnalysisResult(
                     xarray_datacls,
                     result,
                     capture,
                     parameters=call_params,
                     attrs=ret_metadata,
                 )
-
-                if delay_xarray:
-                    return result_obj
-                else:
-                    return result_obj.to_xarray()
 
             sig_kws = [
                 _param_to_field(k, p)
