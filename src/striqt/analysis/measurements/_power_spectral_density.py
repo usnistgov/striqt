@@ -81,7 +81,7 @@ class PowerSpectralDensity(AsDataArray):
     name: Name[str] = 'power_spectral_density'
 
 
-@measurement(PowerSpectralDensity)
+@measurement(PowerSpectralDensity, basis='spectrogram')
 def power_spectral_density(
     iq: 'iqwaveform.util.Array',
     capture: specs.Capture,

@@ -72,7 +72,7 @@ class SpectrogramHistogram(AsDataArray):
     name: Name[str] = 'cellular_resource_power_histogram'
 
 
-@measurement(SpectrogramHistogram)
+@measurement(SpectrogramHistogram, basis='spectrogram')
 def spectrogram_histogram(
     iq: 'iqwaveform.util.Array',
     capture: specs.Capture,

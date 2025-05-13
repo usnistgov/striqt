@@ -43,9 +43,10 @@ class _AnalysisRegistry(collections.UserDict):
     def __init__(self, base_struct=None):
         super().__init__()
         self.base_struct = base_struct
+        self.by_basis: dict[str, set[callable]] = {}
 
     def __call__(
-        self, xarray_datacls: 'xarray_dataclasses.datamodel.DataClass', metadata={}
+        self, xarray_datacls: 'xarray_dataclasses.datamodel.DataClass', basis: str, metadata={}
     ) -> TFunc:
         """add decorated `func` and its keyword arguments in the self.tostruct() schema"""
 
@@ -104,6 +105,8 @@ class _AnalysisRegistry(collections.UserDict):
                 for k, p in params.items()
                 if p.kind is inspect.Parameter.KEYWORD_ONLY and not k.startswith('_')
             ]
+
+            self.by_basis.setdefault(basis, []).append(func)
 
             struct_type = msgspec.defstruct(
                 name,

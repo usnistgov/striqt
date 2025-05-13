@@ -67,7 +67,7 @@ class ChannelPowerTimeSeries(AsDataArray):
 
 
 ### iqwaveform implementation
-@measurement(ChannelPowerTimeSeries)
+@measurement(ChannelPowerTimeSeries, basis='channel_power')
 def channel_power_time_series(
     iq,
     capture: specs.Capture,

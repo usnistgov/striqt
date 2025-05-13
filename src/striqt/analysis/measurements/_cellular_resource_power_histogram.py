@@ -88,7 +88,7 @@ class CellularResourcePowerHistogram(AsDataArray):
     name: Name[str] = 'cellular_resource_power_histogram'
 
 
-@measurement(CellularResourcePowerHistogram)
+@measurement(CellularResourcePowerHistogram, basis='spectrogram')
 def cellular_resource_power_histogram(
     iq: 'iqwaveform.type_stubs.ArrayLike',
     capture: specs.Capture,

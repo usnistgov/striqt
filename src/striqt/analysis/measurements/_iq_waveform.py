@@ -84,7 +84,7 @@ class IQWaveform(AsDataArray):
     units: Attr[str] = 'V/√Ω'
 
 
-@measurement(IQWaveform)
+@measurement(IQWaveform, basis='iq')
 def iq_waveform(
     iq: 'iqwaveform.util.Array',
     capture: specs.Capture,

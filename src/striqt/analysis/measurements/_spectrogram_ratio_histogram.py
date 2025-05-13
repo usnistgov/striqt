@@ -44,7 +44,7 @@ class SpectrogramRatioHistogram(AsDataArray):
     standard_name: Attr[str] = 'Fraction of counts'
 
 
-@measurement(SpectrogramRatioHistogram)
+@measurement(SpectrogramRatioHistogram, basis='spectrogram')
 def spectrogram_ratio_histogram(
     iq: 'iqwaveform.util.Array',
     capture: specs.Capture,

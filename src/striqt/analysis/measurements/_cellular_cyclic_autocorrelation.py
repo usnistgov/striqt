@@ -85,7 +85,7 @@ class CellularCyclicAutocorrelation(AsDataArray):
 
 
 ### iqwaveform wrapper
-@measurement(CellularCyclicAutocorrelation)
+@measurement(CellularCyclicAutocorrelation, basis='correlator')
 def cellular_cyclic_autocorrelation(
     iq: 'iqwaveform.util.Array',
     capture: specs.Capture,

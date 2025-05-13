@@ -81,7 +81,7 @@ class CyclicChannelPower(AsDataArray):
     units: Attr[str] = 'dBm'
 
 
-@measurement(CyclicChannelPower)
+@measurement(CyclicChannelPower, basis='channel_power')
 def cyclic_channel_power(
     iq,
     capture: specs.Capture,

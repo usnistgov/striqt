@@ -350,8 +350,16 @@ def evaluate_analysis(
     spec_dict = spec.todict()
 
     results: dict[str, _DelayedDataArray] = {}
-
     from ..measurements._spectrogram import cached_spectrograms
+
+    funcs_by_kind = {}
+    func_names = set(spec_dict.keys())
+
+    for basis_name, func_set in registry.by_basis.items():
+        funcs_by_kind[basis_name] = {name: registry[type(spec_dict[name])] for name in (func_set & func_names)}
+
+    print(funcs_by_kind)
+    1//0
 
     with cached_spectrograms():
         # first, queue

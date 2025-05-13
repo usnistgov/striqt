@@ -399,7 +399,7 @@ class Spectrogram(AsDataArray):
     long_name: Attr[str] = 'Power spectral density'
 
 
-@measurement(Spectrogram)
+@measurement(Spectrogram, basis='spectrogram')
 def spectrogram(
     iq: 'iqwaveform.util.Array',
     capture: specs.Capture,

@@ -89,7 +89,7 @@ class ChannelPowerHistogram(AsDataArray):
     standard_name: Attr[str] = 'Fraction of counts'
 
 
-@measurement(ChannelPowerHistogram)
+@measurement(ChannelPowerHistogram, basis='channel_power')
 def channel_power_histogram(
     iq,
     capture: specs.Capture,

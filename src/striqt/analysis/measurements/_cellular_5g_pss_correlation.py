@@ -330,7 +330,7 @@ def _pss_params(
     return locals()
 
 
-@registry.measurement(Cellular5GNRPSSCorrelation)
+@registry.measurement(Cellular5GNRPSSCorrelation, basis='correlator')
 def cellular_5g_pss_correlation(
     iq,
     capture: specs.Capture,
