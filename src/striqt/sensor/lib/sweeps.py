@@ -199,7 +199,7 @@ class SweepIterator:
         ):
             calls = {}
 
-            if capture_prev is None:
+            if iq is None:
                 # no pending data in the first iteration
                 pass
             else:
@@ -214,7 +214,7 @@ class SweepIterator:
                     delayed=True,
                 )
 
-            if iq is None:
+            if capture_this is None:
                 # this happens at the end during the last post-analysis and intakes
                 pass
             else:
