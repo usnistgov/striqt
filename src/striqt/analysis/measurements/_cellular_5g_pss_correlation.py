@@ -446,6 +446,10 @@ def cellular_5g_pss_correlation(
     if trim_cp:
         R = R[..., : -cp_samples // 2]
 
-    R = iqwaveform.envtopow(R) * xp.exp(1j * xp.angle(R))
+    R = iqwaveform.envtopow(R)
+    exp = xp.multiply(1j, xp.angle(R), dtype='complex64')
+    R *= xp.exp(exp, out=exp)
 
-    return R, metadata | {'units': 'mW', 'standard_name': 'PSS Covariance'}
+    metadata = metadata | {'units': 'mW', 'standard_name': 'PSS Covariance'}
+
+    return R.copy(), metadata

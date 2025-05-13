@@ -38,7 +38,7 @@ def _results_as_arrays(obj: tuple | list | dict | 'iqwaveform.util.Array'):
     if array_api_compat.is_torch_array(obj):
         array = obj.cpu()
     elif array_api_compat.is_cupy_array(obj):
-        array = obj.get().copy()
+        array = obj.get()
     elif array_api_compat.is_numpy_array(obj):
         return obj
     else:
