@@ -1,7 +1,4 @@
 from __future__ import annotations
-import labbench as lb
-from math import sqrt, ceil
-import SoapySDR
 from labbench import paramattr as attr
 
 from ..lib.sources import soapy
