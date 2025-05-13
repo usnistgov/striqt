@@ -289,7 +289,7 @@ class _DelayedDataset:
         with lb.stopwatch(
             'residual calculations', threshold=10e-3, logger_level='debug'
         ):
-            analysis = striqt_analysis.lib.registry.package_analysis(
+            analysis = striqt_analysis.lib.xarray_ops.package_analysis(
                 self.capture, self.delayed, expand_dims=(CAPTURE_DIM,)
             )
             coords = build_coords(
