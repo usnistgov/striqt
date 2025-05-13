@@ -380,7 +380,7 @@ def evaluate_analysis(
                 ).compute()
 
         if cache is not None:
-            cache.__exit__()
+            cache.__exit__(None, None, None)
 
     if not as_xarray:
         return results
