@@ -35,7 +35,7 @@ class DebugOnException:
         self.run(*args)
 
     def run(self, etype, exc, tb):
-        if self.enable:
+        if self.enable and (etype, exc, tb) != (None, None, None):
             print('entering debugger')
             from IPython.core import ultratb
 
@@ -161,7 +161,8 @@ def init_sweep_cli(
         ):
             opened = lb.concurrently(**calls)
 
-    except BaseException:
+    except BaseException as ex:
+        print(ex)
         debug_handler.run(*sys.exc_info())
         if not debug_handler.enable:
             raise
