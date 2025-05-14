@@ -114,6 +114,7 @@ def init_sweep_cli(
     # start by connecting to the controller, so that the radio id can be used
     # as a file naming field
     peripherals = None
+    sink = None
     try:
         calls = {}
         calls['controller'] = lb.Call(get_controller, remote, sweep_spec)
