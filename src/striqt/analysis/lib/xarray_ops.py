@@ -7,6 +7,7 @@ import functools
 import dataclasses
 import inspect
 import math
+import sys
 import typing
 
 from . import registry, specs, util
@@ -379,7 +380,7 @@ def evaluate_analysis(
                 ).compute()
 
         if cache is not None:
-            cache.__exit__(None, None, None)
+            cache.__exit__(*sys.exc_info())
 
     if not as_xarray:
         return results
