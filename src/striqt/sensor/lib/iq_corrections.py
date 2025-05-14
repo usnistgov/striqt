@@ -129,6 +129,7 @@ def resampling_correction(
         overwrite_x=overwrite_x,
         axis=axis,
         scale=1 if scale is None else scale,
+        loop_axes=(0,)
     )
 
     assert iq.shape[axis] == size_out
