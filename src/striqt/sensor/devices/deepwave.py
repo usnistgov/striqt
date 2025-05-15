@@ -77,6 +77,11 @@ class Air7x01B(soapy.SoapyRadioSource):
         if not self.fast_lo:
             _reenable_loop(self, reenable_count)
 
+        # re-sync the clock source if it is external
+        clock_source = self.clock_source()
+        if clock_source != 'internal':
+            self.clock_source(clock_source)        
+
     def _post_connect(self):
         self._set_jesd_sysref_delay(0)
 
