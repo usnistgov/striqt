@@ -1,13 +1,11 @@
 from __future__ import annotations
 import dataclasses
-import functools
 import typing
 
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
 
 from ..lib.registry import measurement
-from ._spectrogram import compute_spectrogram
-from ._spectrogram_histogram import SpectrogramPowerBinCoords
+from . import _spectrogram, _spectrogram_histogram
 from ._channel_power_histogram import make_power_histogram_bin_edges
 
 from ..lib import specs, util
@@ -30,9 +28,16 @@ class SpectrogramPowerRatioBinCoords:
     units: Attr[str] = 'dB'
 
     @staticmethod
-    @functools.lru_cache
-    def factory(capture: specs.Capture, **kws):
-        bins, attrs = SpectrogramPowerBinCoords.factory(capture, **kws)
+    @util.lru_cache()
+    def factory(
+        capture: specs.Capture, spec: SpectrogramHistogramRatioAnalysis
+    ) -> dict[str, np.ndarray]:
+        """returns a dictionary of coordinate values, keyed by axis dimension name"""
+
+        abs_spec = _spectrogram_histogram.SpectrogramHistogramAnalysis.fromspec(spec)
+        bins, attrs = _spectrogram_histogram.SpectrogramPowerBinCoords.factory(
+            capture, abs_spec
+        )
         attrs['units'] = attrs['units'].replace('dBm', 'dB')
         return bins, attrs
 
@@ -44,30 +49,29 @@ class SpectrogramRatioHistogram(AsDataArray):
     standard_name: Attr[str] = 'Fraction of counts'
 
 
-@measurement(SpectrogramRatioHistogram, basis='spectrogram')
+class SpectrogramHistogramRatioAnalysis(
+    _spectrogram_histogram.SpectrogramHistogramAnalysis, kw_only=True, frozen=True
+):
+    pass
+
+
+@measurement(
+    SpectrogramRatioHistogram,
+    basis='spectrogram',
+    spec_type=SpectrogramHistogramRatioAnalysis,
+)
 def spectrogram_ratio_histogram(
     iq: 'iqwaveform.util.Array',
     capture: specs.Capture,
-    *,
-    window: typing.Union[str, tuple[str, float]],
-    frequency_resolution: float,
-    power_low: float,
-    power_high: float,
-    power_resolution: float,
-    fractional_overlap: float = 0,
-    window_fill: float = 1,
-    frequency_bin_averaging: int = None,
-    time_bin_averaging: int = None,
+    **kwargs: typing.Unpack[SpectrogramHistogramRatioAnalysis],
 ):
-    spg, metadata = compute_spectrogram(
+    spec = SpectrogramHistogramRatioAnalysis.fromdict(kwargs)
+    spg_spec = _spectrogram.SpectrogramAnalysis.fromspec(spec)
+
+    spg, metadata = _spectrogram.evaluate_spectrogram(
         iq,
         capture,
-        window=window,
-        frequency_resolution=frequency_resolution,
-        fractional_overlap=fractional_overlap,
-        window_fill=window_fill,
-        frequency_bin_averaging=frequency_bin_averaging,
-        time_bin_averaging=time_bin_averaging,
+        spg_spec,
         dtype='float32',
     )
 
@@ -84,9 +88,9 @@ def spectrogram_ratio_histogram(
 
     xp = iqwaveform.util.array_namespace(iq)
     bin_edges = make_power_histogram_bin_edges(
-        power_low=power_low,
-        power_high=power_high,
-        power_resolution=power_resolution,
+        power_low=spec.power_low,
+        power_high=spec.power_high,
+        power_resolution=spec.power_resolution,
         xp=xp,
     )
 

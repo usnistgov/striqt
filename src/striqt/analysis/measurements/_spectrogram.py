@@ -13,11 +13,9 @@ from ..lib import specs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
-    from scipy import signal
     import numpy as np
 else:
     iqwaveform = util.lazy_import('iqwaveform')
-    signal = util.lazy_import('scipy.signal')
     np = util.lazy_import('numpy')
 
 warnings.filterwarnings(
@@ -25,7 +23,19 @@ warnings.filterwarnings(
 )
 
 
-@functools.lru_cache
+class FrequencyAnalysisBase(specs.Analysis, kw_only=True, frozen=True):
+    window: typing.Union[str, tuple[str, float]]
+    frequency_resolution: float
+    fractional_overlap: float = 0
+    window_fill: float = 1
+    frequency_bin_averaging: typing.Optional[int] = None
+
+
+class SpectrogramAnalysis(FrequencyAnalysisBase, kw_only=True, frozen=True):
+    time_bin_averaging: typing.Optional[int] = None
+
+
+@util.lru_cache()
 def equivalent_noise_bandwidth(window: typing.Union[str, tuple[str, float]], nfft: int):
     """return the equivalent noise bandwidth (ENBW) of a window, in bins"""
     w = iqwaveform.fourier.get_window(window, nfft)
@@ -38,47 +48,6 @@ def truncate_spectrogram_bandwidth(x, nfft, fs, bandwidth, axis=0):
         nfft, 1.0 / fs, cutoff_low=-bandwidth / 2, cutoff_hi=bandwidth / 2
     )
     return iqwaveform.util.axis_slice(x, *edges, axis=axis)
-
-
-def binned_mean(
-    x,
-    count,
-    *,
-    axis=0,
-    truncate=True,
-    reject_extrema=False,
-    centered=True,
-):
-    """reduce an array by averaging into bins on the specified axis"""
-
-    xp = iqwaveform.util.array_namespace(x)
-
-    if not truncate:
-        pass
-    elif centered:
-        # enforce that index 0 is a center bin
-        center_bin = x.shape[axis] // 2
-        size_left = center_bin - count // 2
-        blocks_left = size_left // count
-        block_count = 2 * blocks_left + 1
-        start = center_bin - (count * block_count) // 2
-        stop = start + count * block_count
-
-        if start > 0 or stop < x.shape[axis]:
-            x = iqwaveform.util.axis_slice(x, start, stop, axis=axis)
-    else:
-        trim = x.shape[axis] % (count)
-        if trim:
-            dimsize = (x.shape[axis] // count) * count
-            x = iqwaveform.util.axis_slice(x, 0, dimsize, axis=axis)
-
-    x = iqwaveform.fourier.to_blocks(x, count, axis=axis)
-    stat_axis = axis + 1 if axis >= 0 else axis
-    if reject_extrema:
-        x = np.sort(x, axis=stat_axis)
-        x = iqwaveform.util.axis_slice(x, 1, -1, axis=stat_axis)
-    ret = xp.nanmean(x, axis=stat_axis)
-    return ret
 
 
 def fftfreq(nfft, fs, dtype='float64') -> 'np.ndarray':
@@ -125,7 +94,7 @@ def freq_axis_values(
         )
 
     if navg is not None:
-        freqs = binned_mean(freqs, navg)
+        freqs = iqwaveform.util.binned_mean(freqs, navg)
         freqs -= freqs[freqs.size // 2]
 
     # only now downconvert. round to a still-large number of digits
@@ -195,36 +164,28 @@ def cached_spectrograms():
 
 
 @_spectrogram_cache.cached_calls
-def _evaluate(
+def _cached_spectrogram(
     iq: 'iqwaveform.util.Array',
     capture: specs.Capture,
+    spec: SpectrogramAnalysis,
     *,
-    window: typing.Union[str, tuple[str, float]],
-    frequency_resolution: float,
-    fractional_overlap: float = 0,
-    window_fill: float = 1,
     trim_stopband: bool = True,
-    frequency_bin_averaging: typing.Optional[int] = None,
-    time_bin_averaging: typing.Optional[int] = None,
 ):
     # TODO: integrate this back into iqwaveform
-    if iqwaveform.isroundmod(capture.sample_rate, frequency_resolution):
-        nfft = round(capture.sample_rate / frequency_resolution)
+    spec = spec.validate()
+
+    if iqwaveform.isroundmod(capture.sample_rate, spec.frequency_resolution):
+        nfft = round(capture.sample_rate / spec.frequency_resolution)
     else:
         raise ValueError('sample_rate/resolution must be a counting number')
-    enbw = frequency_resolution * equivalent_noise_bandwidth(window, nfft)
 
-    if isinstance(window, list):
-        # lists break lru_cache
-        window = tuple(window)
-
-    if iqwaveform.isroundmod(capture.sample_rate, frequency_resolution):
-        noverlap = round(fractional_overlap * nfft)
+    if iqwaveform.isroundmod(capture.sample_rate, spec.frequency_resolution):
+        noverlap = round(spec.fractional_overlap * nfft)
     else:
         raise ValueError('sample_rate_Hz/resolution must be a counting number')
 
-    if iqwaveform.isroundmod((1 - window_fill) * nfft, 1):
-        nzero = round((1 - window_fill) * nfft)
+    if iqwaveform.isroundmod((1 - spec.window_fill) * nfft, 1):
+        nzero = round((1 - spec.window_fill) * nfft)
     else:
         raise ValueError(
             '(1-window_fill) * (sample_rate/frequency_resolution) must be a counting number'
@@ -232,14 +193,14 @@ def _evaluate(
 
     spg = iqwaveform.fourier.spectrogram(
         iq,
-        window=window,
+        window=spec.window,
         fs=capture.sample_rate,
         nperseg=nfft,
         noverlap=noverlap,
         nzero=nzero,
         axis=1,
         return_axis_arrays=False,
-        iter_axes=0
+        iter_axes=0,
     )
 
     # truncate to the analysis bandwidth
@@ -249,21 +210,13 @@ def _evaluate(
             spg, nfft, capture.sample_rate, bandwidth=capture.analysis_bandwidth, axis=2
         )
 
-    if frequency_bin_averaging is not None:
-        spg = binned_mean(spg, frequency_bin_averaging, axis=2)
+    if spec.frequency_bin_averaging is not None:
+        spg = iqwaveform.util.binned_mean(spg, spec.frequency_bin_averaging, axis=2)
 
-    if time_bin_averaging is not None:
-        spg = binned_mean(spg, time_bin_averaging, axis=1, centered=False)
-
-    metadata = {
-        'window': window,
-        'frequency_resolution': frequency_resolution,
-        'fractional_overlap': fractional_overlap,
-        'noise_bandwidth': enbw,
-        'units': f'dBm/{enbw / 1e3:0.0f} kHz',
-        'time_bin_averaging': time_bin_averaging,
-        'frequency_bin_averaging': frequency_bin_averaging,
-    }
+    if spec.time_bin_averaging is not None:
+        spg = iqwaveform.util.binned_mean(
+            spg, spec.time_bin_averaging, axis=1, fft=False
+        )
 
     if iqwaveform.util.is_cupy_array(iq):
         import cupy
@@ -271,64 +224,21 @@ def _evaluate(
         stream = cupy.cuda.get_current_stream()
         stream.synchronize()
 
-    return spg, metadata
+    return spg, get_metadata(spec, nfft)
 
 
-def compute_spectrogram(
-    iq: 'iqwaveform.util.Array',
-    capture: specs.Capture,
-    *,
-    window: typing.Union[str, tuple[str, float]],
-    frequency_resolution: float,
-    fractional_overlap: float = 0,
-    window_fill: float = 1,
-    frequency_bin_averaging: typing.Optional[int] = None,
-    time_bin_averaging: typing.Optional[int] = None,
-    limit_digits: int = None,
-    trim_stopband: bool = True,
-    dB: bool = True,
-    dtype='float16',
-):
-    if frequency_bin_averaging is None:
-        pass
-    elif iqwaveform.util.isroundmod(frequency_bin_averaging, 1):
-        frequency_bin_averaging = round(frequency_bin_averaging)
-    else:
-        raise ValueError('frequency_bin_averaging must be an integer bin count')
+def get_metadata(spec: SpectrogramAnalysis, nfft):
+    enbw = spec.frequency_resolution * equivalent_noise_bandwidth(spec.window, nfft)
 
-    if time_bin_averaging is None:
-        pass
-    elif iqwaveform.util.isroundmod(time_bin_averaging, 1):
-        time_bin_averaging = round(time_bin_averaging)
-    else:
-        raise ValueError('time_bin_averaging must be an integer bin count')
-
-    eval_kws = dict(
-        window=window,
-        frequency_resolution=frequency_resolution,
-        fractional_overlap=fractional_overlap,
-        trim_stopband=trim_stopband,
-        window_fill=window_fill,
-        frequency_bin_averaging=frequency_bin_averaging,
-        time_bin_averaging=time_bin_averaging,
-    )
-    spg, metadata = _evaluate(iq=iq, capture=capture, **eval_kws)
-
-    xp = iqwaveform.util.array_namespace(iq)
-
-    copied = False
-    if dB:
-        spg = iqwaveform.powtodB(spg, eps=1e-25)
-        copied = True
-
-    spg = spg.astype(dtype, copy=not copied)
-
-    if limit_digits is not None:
-        xp.round(spg, limit_digits, out=spg)
-
-    metadata = metadata | {'limit_digits': limit_digits}
-
-    return spg, metadata
+    return {
+        'window': spec.window,
+        'frequency_resolution': spec.frequency_resolution,
+        'fractional_overlap': spec.fractional_overlap,
+        'noise_bandwidth': enbw,
+        'units': f'dBm/{enbw / 1e3:0.0f} kHz',
+        'time_bin_averaging': spec.time_bin_averaging,
+        'frequency_bin_averaging': spec.frequency_bin_averaging,
+    }
 
 
 # Axis and coordinates
@@ -342,26 +252,21 @@ class SpectrogramTimeCoords:
     units: Attr[str] = 's'
 
     @staticmethod
-    @functools.lru_cache
+    @util.lru_cache()
     def factory(
-        capture: specs.Capture,
-        *,
-        frequency_resolution: float,
-        fractional_overlap: float = 0,
-        time_bin_averaging: typing.Optional[int] = None,
-        **_,
+        capture: specs.Capture, spec: SpectrogramAnalysis
     ) -> dict[str, np.ndarray]:
         import pandas as pd
 
         # validation of these is handled inside iqwaveform
-        nfft = round(capture.sample_rate / frequency_resolution)
-        hop_size = nfft - round(fractional_overlap * nfft)
+        nfft = round(capture.sample_rate / spec.frequency_resolution)
+        hop_size = nfft - round(spec.fractional_overlap * nfft)
         scale = nfft / hop_size
         size = int(scale * (capture.sample_rate * capture.duration / nfft - 1) + 1)
 
-        if time_bin_averaging:
-            size = size // time_bin_averaging
-            hop_size = hop_size * time_bin_averaging
+        if spec.time_bin_averaging:
+            size = size // spec.time_bin_averaging
+            hop_size = hop_size * spec.time_bin_averaging
 
         return pd.RangeIndex(size) * hop_size / capture.sample_rate
 
@@ -377,21 +282,15 @@ class SpectrogramBasebandFrequencyCoords:
     units: Attr[str] = 'Hz'
 
     @staticmethod
-    @functools.lru_cache
+    @util.lru_cache()
     def factory(
-        capture: specs.Capture,
-        *,
-        frequency_resolution: float,
-        fractional_overlap: float = 0,
-        frequency_bin_averaging: typing.Optional[int] = None,
-        truncate: bool = True,
-        **_,
+        capture: specs.Capture, spec: SpectrogramAnalysis
     ) -> dict[str, np.ndarray]:
         return freq_axis_values(
             capture,
-            fres=frequency_resolution,
-            navg=frequency_bin_averaging,
-            trim_stopband=truncate,
+            fres=spec.frequency_resolution,
+            navg=spec.frequency_bin_averaging,
+            trim_stopband=spec.truncate,
         )
 
 
@@ -406,17 +305,41 @@ class Spectrogram(AsDataArray):
     long_name: Attr[str] = 'Power spectral density'
 
 
-@measurement(Spectrogram, basis='spectrogram')
+def evaluate_spectrogram(
+    iq: 'iqwaveform.util.Array',
+    capture: specs.Capture,
+    spec: SpectrogramAnalysis,
+    *,
+    dtype: typing.Union[
+        typing.Literal['float16'], typing.Literal['float32']
+    ] = 'float16',
+    limit_digits: typing.Optional[int] = None,
+    trim_stopband: bool = True,
+):
+    spg, metadata = _cached_spectrogram(iq, capture, spec, trim_stopband=trim_stopband)
+
+    xp = iqwaveform.util.array_namespace(iq)
+
+    copied = False
+    if spec.dB:
+        spg = iqwaveform.powtodB(spg, eps=1e-25)
+        copied = True
+
+    spg = spg.astype(dtype, copy=not copied)
+
+    if limit_digits is not None:
+        xp.round(spg, spec.limit_digits, out=spg)
+
+    metadata = metadata | {'limit_digits': spec.limit_digits}
+
+    return spg, metadata
+
+
+@measurement(Spectrogram, basis='spectrogram', spec_type=SpectrogramAnalysis)
 def spectrogram(
     iq: 'iqwaveform.util.Array',
     capture: specs.Capture,
-    *,
-    window: typing.Union[str, tuple[str, float]],
-    frequency_resolution: float,
-    fractional_overlap: float = 0,
-    window_fill: float = 1,
-    frequency_bin_averaging: typing.Optional[int] = None,
-    time_bin_averaging: typing.Optional[int] = None,
-    dtype: str = 'float16',
+    **kwargs: typing.Unpack[SpectrogramAnalysis],
 ):
-    return compute_spectrogram(**locals(), limit_digits=3)
+    spec = SpectrogramAnalysis.fromdict(kwargs).validate()
+    return evaluate_spectrogram(iq, capture, spec, limit_digits=3, dtype='float16')

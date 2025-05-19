@@ -1,6 +1,5 @@
 from __future__ import annotations
 import dataclasses
-import functools
 import typing
 
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
@@ -28,18 +27,9 @@ class CyclicStatisticCoords:
     standard_name: Attr[str] = 'Cyclic statistic'
 
     @staticmethod
-    @functools.lru_cache
-    def factory(
-        capture: specs.Capture,
-        *,
-        cyclic_statistics: tuple[typing.Union[str, float], ...] = (
-            'min',
-            'mean',
-            'max',
-        ),
-        **_,
-    ):
-        return list(cyclic_statistics)
+    @util.lru_cache()
+    def factory(capture: specs.Capture, spec: CyclicChannelPowerAnalysis):
+        return list(spec.cyclic_statistics)
 
 
 ### Cyclic lag axis and coordinate labels
@@ -53,17 +43,11 @@ class CyclicLagCoords:
     units: Attr[str] = 's'
 
     @staticmethod
-    @functools.lru_cache
-    def factory(
-        capture: specs.Capture,
-        *,
-        cyclic_period: float,
-        detector_period: float,
-        **_,
-    ):
-        lag_count = int(np.rint(cyclic_period / detector_period))
+    @util.lru_cache()
+    def factory(capture: specs.Capture, spec: CyclicChannelPowerAnalysis):
+        lag_count = int(np.rint(spec.cyclic_period / spec.detector_period))
 
-        return np.arange(lag_count) * detector_period
+        return np.arange(lag_count) * spec.detector_period
 
 
 ### Define the data structure of the returned DataArray
@@ -81,28 +65,30 @@ class CyclicChannelPower(AsDataArray):
     units: Attr[str] = 'dBm'
 
 
-@measurement(CyclicChannelPower, basis='channel_power')
-def cyclic_channel_power(
-    iq,
-    capture: specs.Capture,
-    *,
-    cyclic_period: float,
-    detector_period: float,
-    power_detectors: tuple[str, ...] = ('rms', 'peak'),
-    cyclic_statistics: tuple[typing.Union[str, float], ...] = ('min', 'mean', 'max'),
-):
-    xp = iqwaveform.util.array_namespace(iq)
+class CyclicChannelPowerAnalysis(specs.Analysis, kw_only=True, frozen=True):
+    cyclic_period: float
+    detector_period: float
+    power_detectors: tuple[str, ...] = ('rms', 'peak')
+    cyclic_statistics: tuple[typing.Union[str, float], ...] = ('min', 'mean', 'max')
 
-    power_detectors = tuple(power_detectors)
-    cyclic_statistics = tuple(cyclic_statistics)
+
+@measurement(
+    CyclicChannelPower, basis='channel_power', spec_type=CyclicChannelPowerAnalysis
+)
+def cyclic_channel_power(
+    iq, capture: specs.Capture, **kwargs: typing.Unpack[CyclicChannelPowerAnalysis]
+):
+    spec = CyclicChannelPowerAnalysis.fromdict(kwargs)
+
+    xp = iqwaveform.util.array_namespace(iq)
 
     nested_ret = iqwaveform.iq_to_cyclic_power(
         iq,
         1 / capture.sample_rate,
-        cyclic_period=cyclic_period,
-        detector_period=detector_period,
-        detectors=power_detectors,
-        cycle_stats=cyclic_statistics,
+        cyclic_period=spec.cyclic_period,
+        detector_period=spec.detector_period,
+        detectors=spec.power_detectors,
+        cycle_stats=spec.cyclic_statistics,
         axis=1,
     )
 

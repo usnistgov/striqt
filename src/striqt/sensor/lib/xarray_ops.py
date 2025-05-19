@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import dataclasses
-import functools
 import msgspec
 import numbers
 import pickle
@@ -68,7 +67,7 @@ def concat_time_dim(datasets: list['xr.Dataset'], time_dim: str) -> 'xr.Dataset'
     return ds
 
 
-@functools.lru_cache
+@util.lru_cache()
 def coord_template(
     capture_cls: type[specs.RadioCapture],
     channels: tuple[int, ...],
@@ -120,7 +119,7 @@ def coord_template(
     return xr.Coordinates(vars)
 
 
-@functools.lru_cache
+@util.lru_cache()
 def _get_alias_dtypes(output: specs.Output):
     aliases = output.coord_aliases
 
@@ -130,7 +129,7 @@ def _get_alias_dtypes(output: specs.Output):
     return alias_dtypes
 
 
-@functools.lru_cache
+@util.lru_cache()
 def get_attrs(struct: type[specs.StructBase], field: str) -> dict[str, str]:
     """introspect an attrs dict for xarray from the specified field in `struct`"""
     hints = typing.get_type_hints(struct, include_extras=True)

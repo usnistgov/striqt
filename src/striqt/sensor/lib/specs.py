@@ -1,7 +1,6 @@
 """data structures that specify operation of radio hardware, captures, and sweeps"""
 
 from __future__ import annotations
-import functools
 import msgspec
 import numbers
 import typing
@@ -50,7 +49,7 @@ def _dict_hash(d):
 
 
 def _make_default_analysis():
-    return analysis.lib.registry.measurement.spec_type()()
+    return analysis.lib.registry.measurement.spec_types()()
 
 
 AnalysisBandwidthType = Annotated[
@@ -78,7 +77,7 @@ class WaveformCapture(
     backend_sample_rate: Optional[BackendSampleRateType] = None
 
 
-@functools.lru_cache
+@util.lru_cache()
 def _validate_multichannel(channel, gain):
     """guarantee that self.gain is a number or matches the length of self.channel"""
     if isinstance(channel, numbers.Number):

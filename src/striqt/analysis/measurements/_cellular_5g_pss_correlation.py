@@ -20,6 +20,15 @@ else:
 from ..lib import registry, util
 
 
+class Cellular5GNRPSSCorrelationSpec(specs.Analysis, kw_only=True, frozen=True):
+    subcarrier_spacing: float
+    sample_rate: float = 15.36e6
+    discovery_periodicity: float = 20e-3
+    frequency_offset: typing.Union[float, dict[float, float]] = 0
+    shared_spectrum: bool = False
+    max_block_count: typing.Optional[int] = 1
+
+
 ###
 CellularCellID2Axis = typing.Literal['cellular_cell_id2']
 
@@ -30,15 +39,15 @@ class CellularCellID2Coords:
     standard_name: Attr[str] = r'Cell Identity 2 ($N_{ID}^{(2)}$)'
 
     @staticmethod
-    @functools.lru_cache
-    def factory(capture: specs.Capture, **_):
+    @util.lru_cache()
+    def factory(capture: specs.Capture, spec: typing.Any):
         values = np.array([0, 1, 2], dtype='uint16')
         return values, {}
 
 
 # TODO: one day move to this approach
 # @registry.coordinate(dtype='uint16', standard_name=r'Cell Identity 2 ($N_{ID}^{(2)}$)')
-# @functools.lru_cache
+# @util.lru_cache()
 # def cellular_id2(capture: specs.Capture, **_):
 #     values = np.array([0, 1, 2], dtype='uint16')
 #     return values, {}
@@ -55,18 +64,14 @@ class CellularSSBStartTimeElapsedCoords:
     units: Attr[str] = 's'
 
     @staticmethod
-    @functools.lru_cache
-    def factory(
-        capture: specs.Capture,
-        max_block_count: typing.Optional[int] = 1,
-        **kws,
-    ):
-        params = _pss_params(capture, **kws)
+    @util.lru_cache()
+    def factory(capture: specs.Capture, spec: Cellular5GNRPSSCorrelationSpec):
+        params = _pss_params(capture, spec)
         total_blocks = round(params['duration'] / params['discovery_periodicity'])
-        if max_block_count is None:
+        if spec.max_block_count is None:
             count = total_blocks
         else:
-            count = min(max_block_count, total_blocks)
+            count = min(spec.max_block_count, total_blocks)
 
         return np.arange(max(count, 1)) * params['discovery_periodicity']
 
@@ -81,11 +86,9 @@ class CellularSSBSymbolIndexCoords:
     standard_name: Attr[str] = 'SSB symbol index'
 
     @staticmethod
-    @functools.lru_cache
-    def factory(
-        capture: specs.Capture, max_block_count: typing.Optional[int] = 1, **kws
-    ):
-        params = _pss_params(capture, **kws)
+    @util.lru_cache()
+    def factory(capture: specs.Capture, spec: Cellular5GNRPSSCorrelationSpec):
+        params = _pss_params(capture, spec)
 
         return list(params['symbol_indexes'])
 
@@ -101,11 +104,9 @@ class CellularPSSLagCoords:
     units: Attr[str] = 's'
 
     @staticmethod
-    @functools.lru_cache
-    def factory(
-        capture: specs.Capture, max_block_count: typing.Optional[int] = 1, **kws
-    ) -> dict[str, np.ndarray]:
-        params = _pss_params(capture, **kws)
+    @util.lru_cache()
+    def factory(capture: specs.Capture, spec: Cellular5GNRPSSCorrelationSpec):
+        params = _pss_params(capture, spec)
 
         max_len = 2 * round(
             params['sample_rate'] / params['subcarrier_spacing'] + params['cp_samples']
@@ -246,26 +247,17 @@ def _pss_5g_nr(
 
 
 @functools.lru_cache()
-def _pss_params(
-    capture: specs.Capture,
-    *,
-    sample_rate: float = 2 * 7.68e6,
-    subcarrier_spacing: float,
-    discovery_periodicity: float = 20e-3,
-    frequency_offset: float = 0,
-    trim_cp: bool = True,
-    shared_spectrum: bool = False,
-) -> dict:
-    capture = capture.replace(sample_rate=sample_rate)
+def _pss_params(capture: specs.Capture, spec: Cellular5GNRPSSCorrelationSpec) -> dict:
+    capture = capture.replace(sample_rate=spec.sample_rate)
 
-    if not iqwaveform.util.isroundmod(subcarrier_spacing, 15e3):
+    if not iqwaveform.util.isroundmod(spec.subcarrier_spacing, 15e3):
         raise ValueError('subcarrier_spacing must be multiple of 15000')
 
-    if iqwaveform.util.isroundmod(sample_rate, 128 * subcarrier_spacing):
-        frame_size = round(10e-3 * sample_rate)
+    if iqwaveform.util.isroundmod(spec.sample_rate, 128 * spec.subcarrier_spacing):
+        frame_size = round(10e-3 * spec.sample_rate)
     else:
         raise ValueError(
-            f'capture.sample_rate must be a multiple of {128 * subcarrier_spacing}'
+            f'capture.sample_rate must be a multiple of {128 * spec.subcarrier_spacing}'
         )
 
     # if duration is None:
@@ -276,11 +268,11 @@ def _pss_params(
     #     )
 
     # The following cases are defined in 3GPP TS 138 213: Section 4.1
-    if np.isclose(subcarrier_spacing, 15e3):
+    if np.isclose(spec.subcarrier_spacing, 15e3):
         # Case A
         offsets = [2, 8]
         mult = 14
-        if shared_spectrum:
+        if spec.shared_spectrum:
             nrange = range(5)
         else:
             # for center frequencies < 3 GHz (or 1.88 GHz in unpaired operation)
@@ -295,11 +287,11 @@ def _pss_params(
     #     else:
     #         # for center frequencies < 3 GHz, the upper 2 can be ignored
     #         n = np.arange(4)
-    elif np.isclose(subcarrier_spacing, 30e3):
+    elif np.isclose(spec.subcarrier_spacing, 30e3):
         # For now, all 30 kHz SCS is assumed to be "Case C"
         offsets = [2, 8]
         mult = 14
-        if shared_spectrum:
+        if spec.shared_spectrum:
             nrange = range(10)
         else:
             # for center frequencies < 3 GHz (or 1.88 GHz in unpaired
@@ -316,31 +308,27 @@ def _pss_params(
             symbol_indexes.append(offset + mult * n)
 
     slot_count = ceil(symbol_indexes[-1] / 14)
-    slot_duration = 10e-3 / (10 * subcarrier_spacing / 15e3)
+    slot_duration = 10e-3 / (10 * spec.subcarrier_spacing / 15e3)
     duration = slot_count * slot_duration
-    corr_size = round(duration * sample_rate)
+    corr_size = round(duration * spec.sample_rate)
 
-    if iqwaveform.util.isroundmod(discovery_periodicity, 10e-3):
-        frames_per_sync = round(discovery_periodicity / 10e-3)
+    if iqwaveform.util.isroundmod(spec.discovery_periodicity, 10e-3):
+        frames_per_sync = round(spec.discovery_periodicity / 10e-3)
     else:
         raise ValueError('discovery_periodicity must be a multiple of 10e-3')
 
-    cp_samples = round(9 / 128 * sample_rate / subcarrier_spacing)
+    cp_samples = round(9 / 128 * spec.sample_rate / spec.subcarrier_spacing)
 
     return locals()
 
 
-@registry.measurement(Cellular5GNRPSSCorrelation, basis='correlator')
+@registry.measurement(
+    Cellular5GNRPSSCorrelation,
+    basis='correlator',
+    spec_type=Cellular5GNRPSSCorrelationSpec,
+)
 def cellular_5g_pss_correlation(
-    iq,
-    capture: specs.Capture,
-    *,
-    subcarrier_spacing: float,
-    sample_rate: float = 15.36e6,
-    discovery_periodicity: float = 20e-3,
-    frequency_offset: typing.Union[float, dict[float, float]] = 0,
-    shared_spectrum: bool = False,
-    max_block_count: typing.Optional[int] = 1,
+    iq, capture: specs.Capture, **kwargs: typing.Unpack[Cellular5GNRPSSCorrelationSpec]
 ):
     """correlate each channel of the IQ against the cellular primary synchronization signal (PSS) waveform.
 
@@ -364,10 +352,12 @@ def cellular_5g_pss_correlation(
         3GPP TS 138 213: Section 4.1
     """
 
+    spec = Cellular5GNRPSSCorrelationSpec.fromdict(kwargs)
+
     # TODO: make this part more explicit
     trim_cp = True
 
-    if isinstance(frequency_offset, dict):
+    if isinstance(spec.frequency_offset, dict):
         if not hasattr(capture, 'center_frequency'):
             raise ValueError(
                 'frequency_offset must be a float unless capture has a "center_frequency" attribute'
@@ -379,21 +369,23 @@ def cellular_5g_pss_correlation(
 
     params = _pss_params(
         capture,
-        subcarrier_spacing=subcarrier_spacing,
-        sample_rate=sample_rate,
-        discovery_periodicity=discovery_periodicity,
+        subcarrier_spacing=spec.subcarrier_spacing,
+        sample_rate=spec.sample_rate,
+        discovery_periodicity=spec.discovery_periodicity,
         frequency_offset=frequency_offset,
-        shared_spectrum=shared_spectrum,
+        shared_spectrum=spec.shared_spectrum,
     )
 
     xp = iqwaveform.util.array_namespace(iq)
 
     # * 3 makes it compatible with the blackman window overlap of 2/3
-    down = round(capture.sample_rate / subcarrier_spacing / 8 * 3)
-    up = round(down * (sample_rate / capture.sample_rate))
+    down = round(capture.sample_rate / spec.subcarrier_spacing / 8 * 3)
+    up = round(down * (spec.sample_rate / capture.sample_rate))
 
-    if max_block_count is not None:
-        duration = round(max_block_count * discovery_periodicity * capture.sample_rate)
+    if spec.max_block_count is not None:
+        duration = round(
+            spec.max_block_count * spec.discovery_periodicity * capture.sample_rate
+        )
         iq = iq[..., :duration]
 
     iq = iqwaveform.fourier.oaresample(
@@ -405,7 +397,7 @@ def cellular_5g_pss_correlation(
         window='blackman',
         frequency_shift=frequency_offset,
     )
-    capture = capture.replace(sample_rate=sample_rate)
+    capture = capture.replace(sample_rate=spec.sample_rate)
 
     if isinstance(frequency_offset, dict):
         if not hasattr(capture, 'center_frequency'):
@@ -419,7 +411,7 @@ def cellular_5g_pss_correlation(
     corr_size = params['corr_size']
     frames_per_sync = params['frames_per_sync']
 
-    pss = _pss_5g_nr(capture.sample_rate, subcarrier_spacing, xp=xp)
+    pss = _pss_5g_nr(capture.sample_rate, spec.subcarrier_spacing, xp=xp)
 
     # set up broadcasting to new dimensions:
     # (port index, cell Nid2, sync block index, IQ sample index)
@@ -430,12 +422,12 @@ def cellular_5g_pss_correlation(
     R = iqwaveform.oaconvolve(iq_bcast, pss_bcast, axes=3, mode='full')
 
     # shift correlation peaks to the symbol start
-    cp_samples = round(9 / 128 * capture.sample_rate / subcarrier_spacing)
-    offs = round(capture.sample_rate / subcarrier_spacing + 2 * cp_samples)
+    cp_samples = round(9 / 128 * capture.sample_rate / spec.subcarrier_spacing)
+    offs = round(capture.sample_rate / spec.subcarrier_spacing + 2 * cp_samples)
     R = xp.roll(R, -offs, axis=-1)[..., :corr_size]
 
     # -> (port index, cell Nid2, sync block index, slot index, IQ sample index)
-    excess_cp = round(capture.sample_rate / subcarrier_spacing * 1 / 128)
+    excess_cp = round(capture.sample_rate / spec.subcarrier_spacing * 1 / 128)
     R = R.reshape(R.shape[:-1] + (slot_count, -1))[..., 2 * excess_cp :]
 
     # -> (port index, cell Nid2, sync block index, symbol pair index, IQ sample index)
@@ -450,6 +442,10 @@ def cellular_5g_pss_correlation(
     phase = xp.multiply(1j, xp.angle(R), dtype='complex64')
     R = R * xp.exp(phase)
 
-    metadata = metadata | {'units': 'mW', 'standard_name': 'PSS Covariance'}
+    enbw = spec.subcarrier_spacing * 127
+    metadata = metadata | {
+        'units': 'mW/{enbw/1e6:0.2f} MHz',
+        'standard_name': 'PSS Covariance',
+    }
 
     return R, metadata

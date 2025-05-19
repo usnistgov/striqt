@@ -59,7 +59,7 @@ def shaped(
 ) -> 'dataarray.TDataArray': ...
 
 
-@functools.lru_cache
+@util.lru_cache()
 def dataarray_stub(cls: typing.Any, expand_dims=None) -> typing.Any:
     """return an empty array of type `cls`"""
 
@@ -81,7 +81,7 @@ def dataarray_stub(cls: typing.Any, expand_dims=None) -> typing.Any:
     return stub
 
 
-@functools.lru_cache
+@util.lru_cache()
 def get_data_model(dataclass: typing.Any):
     return datamodel.DataModel.from_dataclass(dataclass)
 
@@ -111,7 +111,7 @@ _ENG_PREFIXES = {
 }
 
 
-@functools.lru_cache
+@util.lru_cache()
 def describe_capture(
     this: specs.Capture | None,
     prev: specs.Capture | None = None,
@@ -225,17 +225,17 @@ def describe_value(value, attrs: dict, unit_prefix=None):
     return value_str
 
 
-def channel_dataarray(
+def measurement_as_xarray(
     cls,
     data: 'np.ndarray',
     capture,
-    parameters: dict[str, typing.Any],
+    spec: specs.Analysis,
     expand_dims=None,
 ) -> 'xr.DataArray':
     """build an `xarray.DataArray` from an ndarray, capture information, and channel analysis keyword arguments"""
     template = dataarray_stub(cls, expand_dims)
     data = np.asarray(data)
-    parameters = frozendict.deepfreeze(parameters)
+    spec.validate()
 
     # allow unused dimensions before those of the template
     # (for e.g. multichannel acquisition)
@@ -254,7 +254,7 @@ def channel_dataarray(
         ) from ex
 
     for entry in get_data_model(cls).coords:
-        ret = entry.base.factory(capture, **parameters)
+        ret = entry.base.factory(capture, spec)
 
         try:
             if isinstance(ret, tuple):
@@ -298,7 +298,7 @@ class _DelayedDataArray(collections.UserDict):
     datacls: type
     data: typing.Union['iqwaveform.type_stubs.ArrayLike', dict]
     capture: specs.RadioCapture
-    parameters: dict[str, typing.Any]
+    spec: specs.Analysis
     attrs: dict[str] = dataclasses.field(default_factory=dict)
 
     def compute(self) -> _DelayedDataArray:
@@ -307,15 +307,16 @@ class _DelayedDataArray(collections.UserDict):
             data=_results_as_arrays(self.data),
             capture=self.capture,
             parameters=self.parameters,
-            attrs=self.attrs
+            spec=self.spec,
+            attrs=self.attrs,
         )
 
     def to_xarray(self, expand_dims=None) -> 'xr.DataArray':
-        array = channel_dataarray(
+        array = measurement_as_xarray(
             cls=self.datacls,
             data=_results_as_arrays(self.data),
             capture=self.capture,
-            parameters=self.parameters,
+            spec=self.spec,
             expand_dims=expand_dims,
         )
 
@@ -345,7 +346,7 @@ def evaluate_analysis(
     if isinstance(spec, specs.Analysis):
         spec = spec.validate()
     else:
-        spec = registry.spec_type().fromdict(spec)
+        spec = registry.spec_types().fromdict(spec)
 
     spec_dict = spec.todict()
     results: dict[str, _DelayedDataArray] = {}
@@ -354,7 +355,7 @@ def evaluate_analysis(
     funcs_by_kind = {}
     func_names = set(spec_dict.keys())
 
-    for basis_name, func_list in registry.by_basis.items():
+    for basis_name, func_list in registry.bases.items():
         func_set = set(func_list)
         funcs_by_kind[basis_name] = {
             name: registry[type(getattr(spec, name))]

@@ -164,7 +164,9 @@ class SweepController:
                     prepare=False,
                     pickled=pickled,
                 )
-                calls['warmup'] = lb.Call(_consume_warmup, self, warmup_sweep.radio_setup, warmup_iter)
+                calls['warmup'] = lb.Call(
+                    _consume_warmup, self, warmup_sweep.radio_setup, warmup_iter
+                )
 
         calls['open_radio'] = lb.Call(self.open_radio, sweep_spec.radio_setup)
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 import dataclasses
-import functools
 import numbers
 import typing
 
@@ -20,6 +19,15 @@ else:
     pd = util.lazy_import('pandas')
 
 
+class CellularCyclicAutocorrelationSpec(specs.Analysis, kw_only=True, frozen=True):
+    subcarrier_spacings: typing.Union[float, tuple[float, ...]] = (15e3, 30e3, 60e3)
+    frame_range: typing.Union[int, tuple[int, typing.Optional[int]]] = (0, 1)
+    downlink_slots: typing.Union[None, tuple[int, ...]] = None
+    uplink_slots: typing.Union[tuple[int, ...]] = tuple()
+    symbol_range: typing.Union[int, tuple[int, typing.Optional[int]]] = (0, None)
+    normalize: bool = True
+
+
 ### Time elapsed dimension and coordinates
 CyclicSampleLagAxis = typing.Literal['cyclic_sample_lag']
 
@@ -31,11 +39,13 @@ class CyclicSampleLagCoords:
     units: Attr[str] = 's'
 
     @staticmethod
-    @functools.lru_cache
+    @util.lru_cache()
     def factory(
-        capture: specs.Capture, *, subcarrier_spacings: tuple[float, ...], **_
+        capture: specs.Capture, spec: CellularCyclicAutocorrelationSpec
     ) -> dict[str, np.ndarray]:
-        max_len = _get_max_corr_size(capture, subcarrier_spacings=subcarrier_spacings)
+        max_len = _get_max_corr_size(
+            capture, subcarrier_spacings=spec.subcarrier_spacings
+        )
         axis_name = typing.get_args(CyclicSampleLagAxis)[0]
         return pd.RangeIndex(0, max_len, name=axis_name) / capture.sample_rate
 
@@ -51,9 +61,9 @@ class SubcarrierSpacingCoords:
     units: Attr[str] = 'Hz'
 
     @staticmethod
-    @functools.lru_cache
-    def factory(capture: specs.Capture, *, subcarrier_spacings: tuple[float, ...], **_):
-        return list(subcarrier_spacings)
+    @util.lru_cache()
+    def factory(capture: specs.Capture, spec: CellularCyclicAutocorrelationSpec):
+        return list(spec.subcarrier_spacings)
 
 
 ### Up/down link category
@@ -66,8 +76,8 @@ class LinkDirectionCoords:
     standard_name: Attr[str] = 'Link direction'
 
     @staticmethod
-    @functools.lru_cache
-    def factory(capture: specs.Capture, **_):
+    @util.lru_cache()
+    def factory(capture: specs.Capture, spec: CellularCyclicAutocorrelationSpec):
         values = np.array(['downlink', 'uplink'], dtype='U8')
         return values, {}
 
@@ -84,18 +94,40 @@ class CellularCyclicAutocorrelation(AsDataArray):
     cyclic_sample_lag: Coordof[CyclicSampleLagCoords]
 
 
-### iqwaveform wrapper
-@measurement(CellularCyclicAutocorrelation, basis='correlator')
+@util.lru_cache()
+def _get_phy_mapping(
+    channel_bandwidth: float,
+    sample_rate: float,
+    subcarrier_spacings: tuple[float, ...],
+    xp=np,
+) -> dict[str]:
+    return {
+        scs: iqwaveform.ofdm.Phy3GPP(
+            channel_bandwidth, scs, sample_rate=sample_rate, xp=xp
+        )
+        for scs in subcarrier_spacings
+    }
+
+
+@util.lru_cache()
+def _get_max_corr_size(
+    capture: specs.Capture, *, subcarrier_spacings: tuple[float, ...]
+):
+    phy_scs = _get_phy_mapping(
+        capture.analysis_bandwidth, capture.sample_rate, subcarrier_spacings
+    )
+    return max([np.diff(phy.cp_start_idx).min() for phy in phy_scs.values()])
+
+
+@measurement(
+    CellularCyclicAutocorrelation,
+    basis='correlator',
+    spec_type=CellularCyclicAutocorrelationSpec,
+)
 def cellular_cyclic_autocorrelation(
     iq: 'iqwaveform.util.Array',
     capture: specs.Capture,
-    *,
-    subcarrier_spacings: typing.Union[float, tuple[float, ...]] = (15e3, 30e3, 60e3),
-    frame_range: typing.Union[int, tuple[int, typing.Optional[int]]] = (0, 1),
-    downlink_slots: typing.Union[None, tuple[int, ...]] = None,
-    uplink_slots: typing.Union[tuple[int, ...]] = tuple(),
-    symbol_range: typing.Union[int, tuple[int, typing.Optional[int]]] = (0, None),
-    normalize: bool = True,
+    **kwargs: typing.Unpack[CellularCyclicAutocorrelationSpec],
 ) -> 'iqwaveform.util.Array':
     """evaluate the cyclic autocorrelation of the IQ sequence based on 4G or 5G cellular
     cyclic prefix sample lag offsets.
@@ -120,10 +152,12 @@ def cellular_cyclic_autocorrelation(
         an float32-valued array with matching the array type of `iq`
     """
 
-    RANGE_MAP = {'frames': frame_range, 'symbols': symbol_range}
+    spec = CellularCyclicAutocorrelationSpec.fromdict(kwargs)
+
+    RANGE_MAP = {'frames': spec.frame_range, 'symbols': spec.symbol_range}
 
     xp = iqwaveform.util.array_namespace(iq)
-    subcarrier_spacings = tuple(subcarrier_spacings)
+    subcarrier_spacings = tuple(spec.subcarrier_spacings)
     phy_scs = _get_phy_mapping(
         capture.analysis_bandwidth, capture.sample_rate, subcarrier_spacings, xp=xp
     )
@@ -134,12 +168,12 @@ def cellular_cyclic_autocorrelation(
             subcarrier_spacings,
         )
 
-    if downlink_slots is None:
+    if spec.downlink_slots is None:
         downlink_slots = 'all'
     else:
         downlink_slots = tuple(downlink_slots)
 
-    uplink_slots = tuple(uplink_slots)
+    uplink_slots = tuple(spec.uplink_slots)
 
     # transform the indexing arguments into the form expected by phy.index_cyclic_prefix
     idx_kws = {}
@@ -168,7 +202,7 @@ def cellular_cyclic_autocorrelation(
             cyclic_shift = -phy.cp_sizes[0] * 2 // cp_inds.shape[1]
 
             R = iqwaveform.ofdm.corr_at_indices(
-                cp_inds, iq[chan], phy.nfft, norm=normalize
+                cp_inds, iq[chan], phy.nfft, norm=spec.normalize
             )
             R = xp.roll(R, cyclic_shift)
             result[chan][0][iscs][: R.size] = xp.abs(R)
@@ -176,39 +210,14 @@ def cellular_cyclic_autocorrelation(
             if len(uplink_slots) > 0:
                 cp_inds = phy.index_cyclic_prefix(**idx_kws, slots=uplink_slots)
                 R = iqwaveform.ofdm.corr_at_indices(
-                    cp_inds, iq[chan], phy.nfft, norm=normalize
+                    cp_inds, iq[chan], phy.nfft, norm=spec.normalize
                 )
                 R = xp.roll(R, cyclic_shift)
                 result[chan][1][iscs][: R.size] = xp.abs(R)
 
-    if normalize:
+    if spec.normalize:
         metadata.update(standard_name='Cyclic Autocorrelation')
     else:
         metadata.update(standard_name='Cyclic Autocovariance', units='mW')
 
     return result, metadata
-
-
-@functools.lru_cache
-def _get_phy_mapping(
-    channel_bandwidth: float,
-    sample_rate: float,
-    subcarrier_spacings: tuple[float, ...],
-    xp=np,
-) -> dict[str]:
-    return {
-        scs: iqwaveform.ofdm.Phy3GPP(
-            channel_bandwidth, scs, sample_rate=sample_rate, xp=xp
-        )
-        for scs in subcarrier_spacings
-    }
-
-
-@functools.lru_cache
-def _get_max_corr_size(
-    capture: specs.Capture, *, subcarrier_spacings: tuple[float, ...]
-):
-    phy_scs = _get_phy_mapping(
-        capture.analysis_bandwidth, capture.sample_rate, subcarrier_spacings
-    )
-    return max([np.diff(phy.cp_start_idx).min() for phy in phy_scs.values()])

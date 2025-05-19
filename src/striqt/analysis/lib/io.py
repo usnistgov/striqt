@@ -42,7 +42,9 @@ warnings.filterwarnings(
 )
 
 
-def open_store(path: str | Path, *, mode: str) -> 'zarr.storage.Store|zarr.abc.store.Store':
+def open_store(
+    path: str | Path, *, mode: str
+) -> 'zarr.storage.Store|zarr.abc.store.Store':
     if hasattr(zarr.storage, 'Store'):
         # zarr 2.x
         StoreBase = zarr.storage.Store

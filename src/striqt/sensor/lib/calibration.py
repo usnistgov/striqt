@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import functools
 import itertools
 from pathlib import Path
-import pickle
 import typing
 
 from . import peripherals, sinks, sources, specs, util, xarray_ops
@@ -84,7 +82,7 @@ class ManualYFactorSweep(
         return _cached_calibration_captures(variables, defaults)
 
 
-@functools.lru_cache
+@util.lru_cache()
 def read_calibration(path):
     if path is None:
         return None
@@ -96,7 +94,7 @@ def save_calibration(path, corrections: 'xr.Dataset'):
     corrections.to_netcdf(path)
 
 
-@functools.lru_cache
+@util.lru_cache()
 def _cached_calibration_captures(
     variables: CalibrationVariables, defaults: ManualYFactorCapture
 ):
@@ -276,7 +274,7 @@ def _describe_missing_data(corrections: 'xr.Dataset', exact_matches: dict):
     return '; '.join(misses)
 
 
-@functools.lru_cache()
+@util.lru_cache()
 def lookup_power_correction(
     cal_data: Path | 'xr.Dataset' | None,
     capture: specs.RadioCapture,

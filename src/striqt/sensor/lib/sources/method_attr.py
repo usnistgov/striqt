@@ -2,11 +2,12 @@
 as defined in structs.RadioCapture"""
 
 from __future__ import annotations
-import functools
 import numbers
 import typing
 
 import labbench as lb
+
+from .. import util
 
 
 ElementType = typing.TypeVar('ElementType')
@@ -27,7 +28,7 @@ def _number_if_single(seq: tuple[ElementType, ...]) -> tuple[ElementType]:
     pass
 
 
-@functools.lru_cache()
+@util.lru_cache()
 def _number_if_single(seq: ElementType | tuple[ElementType, ...]):
     if isinstance(seq, numbers.Number):
         return seq
@@ -37,7 +38,7 @@ def _number_if_single(seq: ElementType | tuple[ElementType, ...]):
         return seq
 
 
-@functools.lru_cache()
+@util.lru_cache()
 def _validate_tuple_numbers(
     type_, values: numbers.Number | tuple, min, max, step, allow_duplicates=True
 ):

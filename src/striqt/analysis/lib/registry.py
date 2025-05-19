@@ -40,24 +40,30 @@ class KeywordArguments(specs.StructBase):
 class _AnalysisRegistry(collections.UserDict):
     """a registry of keyword-only arguments for decorated functions"""
 
-    def __init__(self, base_struct=None):
-        super().__init__()
-        self.base_struct = base_struct
-        self.by_basis: dict[str, set[callable]] = {}
+    spec_base_type = specs.Analysis
 
-    def __call__(
-        self, xarray_datacls: 'xarray_dataclasses.datamodel.DataClass', basis: str, metadata={}
-    ) -> TFunc:
+    def __init__(self):
+        super().__init__()
+        self.bases: dict[str, set[callable]] = {}
+        self.names = set()
+
+    def __call__[**P, R](
+        self,
+        xarray_datacls: 'xarray_dataclasses.datamodel.DataClass',
+        basis: str,
+        spec_type: type[specs.Analysis],
+        metadata={},
+    ) -> typing.Callable[P, R]:
         """add decorated `func` and its keyword arguments in the self.tostruct() schema"""
 
         def wrapper(func: TFunc):
             name = func.__name__
-            if name in self:
-                raise TypeError(
-                    f'another function named {repr(name)} has already been registered'
-                )
-            sig = inspect.signature(func)
-            params = sig.parameters
+            if name in self.names:
+                raise TypeError(f'a function named {repr(name)} was already registered')
+            else:
+                self.names.add(name)
+
+            # sig = inspect.signature(func)
 
             @functools.wraps(func)
             def wrapped(iq, capture, **kws):
@@ -72,10 +78,8 @@ class _AnalysisRegistry(collections.UserDict):
                         'xarray argument must be one of (True, False, "delayed")'
                     )
 
-                bound = sig.bind(iq=iq, capture=capture, **kws)
-                call_params = bound.kwargs
-
-                ret = func(*bound.args, **bound.kwargs)
+                spec = spec_type.fromdict(kws)
+                ret = func(iq, capture, **spec.todict())
 
                 if not as_xarray:
                     return ret
@@ -91,7 +95,7 @@ class _AnalysisRegistry(collections.UserDict):
                     xarray_datacls,
                     result,
                     capture,
-                    parameters=call_params,
+                    spec=spec,
                     attrs=ret_metadata,
                 )
 
@@ -100,35 +104,36 @@ class _AnalysisRegistry(collections.UserDict):
                 else:
                     return result.to_xarray()
 
-            sig_kws = [
-                _param_to_field(k, p)
-                for k, p in params.items()
-                if p.kind is inspect.Parameter.KEYWORD_ONLY and not k.startswith('_')
-            ]
+            name = wrapped.__name__
+            if name in self:
+                raise TypeError(
+                    f'another function named {repr(name)} has already been registered'
+                )
+            # sig = inspect.signature(wrapped)
+            # params = sig.parameters
 
-            self.by_basis.setdefault(basis, []).append(name)
+            # sig_kws = [
+            #     _param_to_field(k, p)
+            #     for k, p in params.items()
+            #     if p.kind is inspect.Parameter.KEYWORD_ONLY and not k.startswith('_')
+            # ]
 
-            struct_type = msgspec.defstruct(
-                name,
-                sig_kws,
-                bases=(KeywordArguments,),
-                forbid_unknown_fields=True,
-                frozen=True,
-            )
+            # self.bases.setdefault(basis, []).append(name)
+            # self.spec_types[name] = spec_type
 
-            def hook(type_):
-                return type_
+            # def hook(type_):
+            #     return type_
 
-            # validate the struct
-            msgspec.json.schema(struct_type, schema_hook=hook)
+            # # validate the struct
+            # msgspec.json.schema(struct_type, schema_hook=hook)
 
-            self[struct_type] = wrapped
+            self[spec_type] = wrapped
 
             return wrapped
 
         return wrapper
 
-    def spec_type(self) -> type[specs.Analysis]:
+    def spec_types(self) -> type[specs.Analysis]:
         """return a Struct subclass type representing a specification for calls to all registered functions"""
         fields = [
             (func.__name__, typing.Union[struct_type, None], None)
@@ -138,7 +143,7 @@ class _AnalysisRegistry(collections.UserDict):
         return msgspec.defstruct(
             'Analysis',
             fields,
-            bases=(self.base_struct,) if self.base_struct else None,
+            bases=(self.spec_base_type,),
             kw_only=True,
             forbid_unknown_fields=True,
             omit_defaults=True,
@@ -146,10 +151,10 @@ class _AnalysisRegistry(collections.UserDict):
         )
 
 
-measurement = _AnalysisRegistry(specs.Analysis)
+measurement = _AnalysisRegistry()
 
 
-# TODO: future approach to registering coordinates, rather than dataclasses
+# TODO: future approach to registering coordinates, rather than dataclasses?
 # class _RegisteredCoordinate(typing.NamedTuple):
 #     dims: tuple[str, ...]
 #     dtype: str

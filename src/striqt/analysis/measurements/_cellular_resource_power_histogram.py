@@ -8,13 +8,9 @@ import numpy as np
 from xarray_dataclasses import AsDataArray, Coordof, Data, Name, Attr
 
 from ..lib.registry import measurement
-from ._spectrogram import (
-    binned_mean,
-    compute_spectrogram,
-    equivalent_noise_bandwidth,
-    SpectrogramBasebandFrequencyCoords,
-)
-from ._channel_power_histogram import ChannelPowerCoords, make_power_histogram_bin_edges
+from . import _spectrogram, _channel_power_histogram
+
+# from ._channel_power_histogram import ChannelPowerCoords, make_power_histogram_bin_edges
 from ._cellular_cyclic_autocorrelation import LinkDirectionAxis, LinkDirectionCoords
 
 from ..lib import specs, util
@@ -43,38 +39,27 @@ class CellularResourcePowerBinCoords:
     units: Attr[str] = 'dBm'
 
     @staticmethod
-    @functools.lru_cache
+    @util.lru_cache()
     def factory(
-        capture: specs.Capture,
-        *,
-        window: typing.Union[str, tuple[str, float]],
-        subcarrier_spacing: float,
-        power_low: float,
-        power_high: float,
-        power_resolution: float,
-        **_,
+        capture: specs.Capture, spec: CellularResourcePowerHistogramSpec
     ) -> dict[str, np.ndarray]:
         """returns a dictionary of coordinate values, keyed by axis dimension name"""
-        bins = ChannelPowerCoords.factory(
-            capture,
-            power_low=power_low,
-            power_high=power_high,
-            power_resolution=power_resolution,
+
+        bins = _channel_power_histogram.make_power_bins(
+            power_low=spec.power_low,
+            power_high=spec.power_high,
+            power_resolution=spec.power_resolution,
         )
 
-        frequency_resolution = subcarrier_spacing / 2
+        fres = spec.subcarrier_spacing / 2
 
-        if iqwaveform.isroundmod(capture.sample_rate, frequency_resolution):
+        if iqwaveform.isroundmod(capture.sample_rate, fres):
             # need capture.sample_rate/resolution to give us a counting number
-            nfft = round(capture.sample_rate / frequency_resolution)
+            nfft = round(capture.sample_rate / fres)
         else:
             raise ValueError('sample_rate/resolution must be a counting number')
 
-        if isinstance(window, list):
-            # lists break lru_cache
-            window = tuple(window)
-
-        enbw = frequency_resolution * 2 * equivalent_noise_bandwidth(window, nfft)
+        enbw = fres * 2 * _spectrogram.equivalent_noise_bandwidth(spec.window, nfft)
 
         return bins, {'units': f'dBm/{enbw / 1e3:0.0f} kHz'}
 
@@ -88,25 +73,32 @@ class CellularResourcePowerHistogram(AsDataArray):
     name: Name[str] = 'cellular_resource_power_histogram'
 
 
-@measurement(CellularResourcePowerHistogram, basis='spectrogram')
+class CellularResourcePowerHistogramSpec(specs.Analysis, kw_only=True, frozen=True):
+    window: typing.Union[str, tuple[str, float]]
+    window_fill: typing.Union[float, None] = None
+    subcarrier_spacing: float
+    power_low: float
+    power_high: float
+    power_resolution: float
+    guard_bandwidths: tuple[float, float] = (0, 0)
+    frame_slots: typing.Optional[str] = None
+    special_symbols: typing.Optional[str] = None
+    average_rbs: typing.Union[bool, typing.Literal['half']] = True
+    average_slots: bool = True
+    cp_guard_period: typing.Union[
+        typing.Literal['normal'], typing.Literal['extended']
+    ] = 'normal'
+
+
+@measurement(
+    CellularResourcePowerHistogram,
+    basis='spectrogram',
+    spec_type=CellularResourcePowerHistogramSpec,
+)
 def cellular_resource_power_histogram(
     iq: 'iqwaveform.type_stubs.ArrayLike',
     capture: specs.Capture,
-    *,
-    window: typing.Union[str, tuple[str, float]],
-    subcarrier_spacing: float,
-    power_low: float,
-    power_high: float,
-    power_resolution: float,
-    guard_bandwidths: tuple[float, float] = (0, 0),
-    frame_slots: typing.Optional[str] = None,
-    special_symbols: typing.Optional[str] = None,
-    average_rbs: typing.Union[bool, typing.Literal['half']] = True,
-    average_slots: bool = True,
-    cp_guard_period: typing.Union[
-        typing.Literal['normal'], typing.Literal['extended']
-    ] = 'normal',
-    window_fill: typing.Union[float, None] = None,
+    **kwargs: typing.Unpack[CellularResourcePowerHistogramSpec],
 ):
     """
 
@@ -135,57 +127,60 @@ def cellular_resource_power_histogram(
     Returns:
         `xarray.DataArray` or `(array, dict)` based on `as_xarray`
     """
+    spec = CellularResourcePowerHistogramSpec.fromdict(kwargs)
+
     xp = iqwaveform.util.array_namespace(iq)
 
     link_direction = 'downlink', 'uplink'
 
-    if average_rbs == 'half':
+    if spec.average_rbs == 'half':
         frequency_bin_averaging = 6
-    elif average_rbs:
+    elif spec.average_rbs:
         frequency_bin_averaging = 12
     else:
         frequency_bin_averaging = None
 
-    if average_slots:
+    if spec.average_slots:
         time_bin_averaging = 14
     else:
         time_bin_averaging = None
 
-    slot_count = round(10 * subcarrier_spacing / 15e3)
-    if frame_slots is None:
+    slot_count = round(10 * spec.subcarrier_spacing / 15e3)
+    if spec.frame_slots is None:
         frame_slots = slot_count * 'd'
     elif len(frame_slots) != slot_count:
         raise ValueError(
             f'expected a string with {slot_count} characters, but received {len(frame_slots)}'
         )
+    else:
+        frame_slots = spec.frame_slots
 
-    if 's' in frame_slots and special_symbols is None:
+    if 's' in frame_slots and spec.special_symbols is None:
         raise ValueError(
             'specify special_symbols that implement the requested "s" special slot'
         )
 
     # set STFT overlap and the fractional fill in the window
-    if cp_guard_period == 'normal':
+    if spec.cp_guard_period == 'normal':
         fractional_overlap = 13 / 28
-        if window_fill is None:
+        if spec.window_fill is None:
             window_fill = 15 / 28
-    elif cp_guard_period == 'extended':
+    elif spec.cp_guard_period == 'extended':
         fractional_overlap = 11 / 24
         if window_fill is None:
             window_fill = 13 / 24
     else:
         raise ValueError('cp_guard_period must be "normal" or "extended"')
 
-    spg, metadata = compute_spectrogram(
-        iq,
-        capture,
-        window=window,
-        frequency_resolution=subcarrier_spacing / 2,
+    spg_spec = _spectrogram.SpectrogramAnalysis(
+        window=spec.window,
+        frequency_resolution=spec.subcarrier_spacing / 2,
         fractional_overlap=fractional_overlap,
         window_fill=window_fill,
         dtype='float32',
         dB=False,
     )
+    spg, metadata = _spectrogram.evaluate_spectrogram(iq, capture, spg_spec)
 
     # we really wanted to sum bins pairwise, instead of averaging them, but
     # it was simpler to average across all 24 bins rather than sum 2 and average 12.
@@ -194,9 +189,9 @@ def cellular_resource_power_histogram(
     # enbw = 2*metadata['noise_bandwidth']
     # metadata = metadata | {'noise_bandwidth': enbw, 'units': f'dBm/{enbw / 1e3:0.0f} kHz'}
 
-    freqs = SpectrogramBasebandFrequencyCoords.factory(
+    freqs = _spectrogram.SpectrogramBasebandFrequencyCoords.factory(
         capture,
-        frequency_resolution=subcarrier_spacing / 2,
+        frequency_resolution=spec.subcarrier_spacing / 2,
         fractional_overlap=fractional_overlap,
     )
 
@@ -206,26 +201,28 @@ def cellular_resource_power_histogram(
         link_direction=link_direction,
         channel_bandwidth=capture.analysis_bandwidth,
         frame_slots=frame_slots,
-        special_symbols=special_symbols,
-        guard_left=guard_bandwidths[0],
-        guard_right=guard_bandwidths[1],
+        special_symbols=spec.special_symbols,
+        guard_left=spec.guard_bandwidths[0],
+        guard_right=spec.guard_bandwidths[1],
         xp=xp,
     )
 
     # apply the binning only now
     if frequency_bin_averaging is not None:
-        masked_spgs = binned_mean(masked_spgs, 2 * frequency_bin_averaging, axis=3)
+        masked_spgs = iqwaveform.util.binned_mean(
+            masked_spgs, 2 * frequency_bin_averaging, axis=3
+        )
 
     if time_bin_averaging is not None:
-        masked_spgs = binned_mean(
-            masked_spgs, time_bin_averaging, axis=2, centered=False
+        masked_spgs = iqwaveform.util.binned_mean(
+            masked_spgs, time_bin_averaging, axis=2, fft=False
         )
 
     masked_spgs = iqwaveform.powtodB(masked_spgs, out=masked_spgs)
-    bin_edges = make_power_histogram_bin_edges(
-        power_low=power_low,
-        power_high=power_high,
-        power_resolution=power_resolution,
+    bin_edges = _channel_power_histogram.make_power_histogram_bin_edges(
+        power_low=spec.power_low,
+        power_high=spec.power_high,
+        power_resolution=spec.power_resolution,
         xp=xp,
     )
 
@@ -243,8 +240,8 @@ def cellular_resource_power_histogram(
         frequency_bin_averaging=frequency_bin_averaging,
         time_bin_averaging=time_bin_averaging,
         frame_slot=frame_slots,
-        special_symbols=special_symbols,
-        guard_bandwidths=guard_bandwidths,
+        special_symbols=spec.special_symbols,
+        guard_bandwidths=spec.guard_bandwidths,
     )
     del metadata['units']
 

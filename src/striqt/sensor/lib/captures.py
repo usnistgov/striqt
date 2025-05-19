@@ -1,13 +1,12 @@
 """utility functions for structs.RadioCapture data structures"""
 
 from __future__ import annotations
-import functools
 import numbers
 
-from . import specs
+from . import specs, util
 
 
-@functools.lru_cache(10000)
+@util.lru_cache(10000)
 def broadcast_to_channels(
     channels: int | tuple[int, ...], *params, allow_mismatch=False
 ) -> list[tuple[int, ...]]:
@@ -60,7 +59,7 @@ def _match_capture_fields(
     return True
 
 
-@functools.lru_cache()
+@util.lru_cache()
 def evaluate_aliases(
     capture: specs.RadioCapture,
     *,
@@ -79,7 +78,7 @@ def evaluate_aliases(
     return ret
 
 
-@functools.lru_cache()
+@util.lru_cache()
 def split_capture_channels(capture: specs.RadioCapture) -> list[specs.RadioCapture]:
     """split a multi-channel capture into a list of single-channel captures.
 

@@ -1,9 +1,11 @@
 import array_api_compat
 import contextlib
+import functools
 import importlib
 import importlib.util
 import sys
 import threading
+import typing
 
 
 def lazy_import(module_name: str, package=None):
@@ -29,6 +31,15 @@ def lazy_import(module_name: str, package=None):
     sys.modules[module_name] = module
     spec.loader.exec_module(module)
     return module
+
+
+@functools.wraps(functools.lru_cache)
+def lru_cache[**P, T](
+    maxsize: int | None = 128, typed: bool = False
+) -> typing.Callable[[typing.Callable[P, T]], typing.Callable[P, T]]:
+    # presuming that the API is designed to accept only hashable types, set
+    # the type hint to match the wrapped function
+    return functools.lru_cache(maxsize, typed)
 
 
 def pinned_array_as_cupy(x, stream=None):

@@ -1,7 +1,6 @@
 """data structures that specify waveform characteristics"""
 
 from __future__ import annotations
-import functools
 import typing
 from typing import Annotated
 from . import util
@@ -113,11 +112,37 @@ class FilteredCapture(Capture, kw_only=True, frozen=True, cache_hash=True):
     # )
 
 
-class Analysis(StructBase, cache_hash=True):
+if typing.TYPE_CHECKING:
+    # allow Argument subclasses to be used as function
+    # argument hints, for example:
+    #
+    #   def func(**kwargs: typing.Unpack[ArgumentSubclass]):
+    #       ...
+    #
+    # This violates the intended use of typing in python, in
+    # part because default values are not supported by TypedDict.
+    #
+    # Workaround is the following EOL comment after any default argument:
+    #     # type: ignore[misc]
+    class AnalysisKeywords(StructBase, typing.TypedDict):
+        """base class for groups of keyword arguments that define calls to a set of analysis functions"""
+
+        pass
+else:
+
+    class AnalysisKeywords(StructBase, cache_hash=True, kw_only=True, frozen=True):
+        """base class for groups of keyword arguments that define calls to a set of analysis functions"""
+
+        pass
+
+
+class Analysis(StructBase, cache_hash=True, kw_only=True, frozen=True):
     """base class for groups of keyword arguments that define calls to a set of analysis functions"""
 
+    pass
 
-@functools.lru_cache
+
+@util.lru_cache()
 def get_capture_type_attrs(capture_cls: type[Capture]) -> dict[str]:
     """return attrs metadata for each field in `capture`"""
     info = msgspec.inspect.type_info(capture_cls)

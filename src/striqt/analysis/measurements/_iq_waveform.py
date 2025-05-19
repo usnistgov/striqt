@@ -1,6 +1,5 @@
 from __future__ import annotations
 import dataclasses
-import functools
 import typing
 
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
@@ -54,17 +53,14 @@ class IQSampleIndexCoords:
     standard_name: Attr[str] = 'Sample Index'
 
     @staticmethod
-    @functools.lru_cache
+    @util.lru_cache()
     def factory(
-        capture: specs.Capture,
-        *,
-        start_time_sec: typing.Optional[float] = None,
-        stop_time_sec: typing.Optional[float] = None,
+        capture: specs.Capture, spec: IQWaveformAnalysis
     ) -> typing.Iterable[int]:
         start, stop = _get_start_stop_index(
             capture,
-            start_time_sec=start_time_sec,
-            stop_time_sec=stop_time_sec,
+            start_time_sec=spec.start_time_sec,
+            stop_time_sec=spec.stop_time_sec,
             allow_none=False,
         )
         name = typing.get_args(IQSampleIndexAxis)[0]
@@ -74,7 +70,7 @@ class IQSampleIndexCoords:
 ### DataArray definition
 @dataclasses.dataclass
 class IQWaveform(AsDataArray):
-    power_time_series: Data[IQSampleIndexAxis, np.complex64]
+    iq_waveform: Data[IQSampleIndexAxis, np.complex64]
 
     # Including this leads to serialized data with an
     # index vector of the same size as the IQ waveform.
@@ -84,33 +80,35 @@ class IQWaveform(AsDataArray):
     units: Attr[str] = 'V/√Ω'
 
 
-@measurement(IQWaveform, basis='iq')
+class IQWaveformAnalysis(specs.Analysis, kw_only=True, frozen=True):
+    start_time_sec: typing.Optional[float] = (None,)
+    stop_time_sec: typing.Optional[float] = (None,)
+
+
+@measurement(IQWaveform, basis='iq', spec_type=IQWaveformAnalysis)
 def iq_waveform(
     iq: 'iqwaveform.util.Array',
     capture: specs.Capture,
-    *,
-    start_time_sec: typing.Optional[float] = None,
-    stop_time_sec: typing.Optional[float] = None,
+    **kwargs: typing.Unpack[IQWaveformAnalysis],
 ) -> 'iqwaveform.util.Array':
     """package a clipping of the IQ waveform"""
 
-    metadata = {
-        'start_time_sec': start_time_sec,
-        'stop_time_sec': stop_time_sec,
-    }
+    spec = IQWaveformAnalysis.fromdict(kwargs)
 
-    if start_time_sec is None:
+    metadata = spec.todict()
+
+    if spec.start_time_sec is None:
         start = None
     else:
-        start = int(start_time_sec * capture.sample_rate)
+        start = int(spec.start_time_sec * capture.sample_rate)
 
-    if stop_time_sec is None:
+    if spec.stop_time_sec is None:
         stop = None
     else:
-        stop = int(stop_time_sec * capture.sample_rate)
+        stop = int(spec.stop_time_sec * capture.sample_rate)
 
     start, stop = _get_start_stop_index(
-        capture, start_time_sec=start_time_sec, stop_time_sec=stop_time_sec
+        capture, start_time_sec=spec.start_time_sec, stop_time_sec=spec.stop_time_sec
     )
 
     return iq[:, start:stop], metadata

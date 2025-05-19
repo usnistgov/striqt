@@ -1,12 +1,11 @@
 from __future__ import annotations
 import dataclasses
-import functools
 import typing
 
 from xarray_dataclasses import AsDataArray, Coordof, Data, Attr, Name
 
 from ..lib.registry import measurement
-from ._spectrogram import freq_axis_values, compute_spectrogram
+from . import _spectrogram
 from ..lib import specs, util
 
 if typing.TYPE_CHECKING:
@@ -18,24 +17,21 @@ else:
 
 
 ### Persistence statistics dimension and coordinates
-PersistenceStatisticAxis = typing.Literal['frequency_statistic']
+TimeStatisticAxis = typing.Literal['time_statistic']
 
 
 @dataclasses.dataclass
-class FrequencyStatisticCoords:
-    data: Data[PersistenceStatisticAxis, str]
+class TimeStatisticCoords:
+    data: Data[TimeStatisticAxis, str]
     standard_name: Attr[str] = 'Frequency statistic'
 
     @staticmethod
-    @functools.lru_cache
+    @util.lru_cache()
     def factory(
-        capture: specs.Capture,
-        *,
-        frequency_statistic: tuple[typing.Union[str, float], ...],
-        **_,
+        capture: specs.Capture, spec: PowerSpectralDensityAnalysis
     ) -> np.ndarray:
-        frequency_statistic = [str(s) for s in frequency_statistic]
-        return np.asarray(frequency_statistic, dtype=object)
+        time_statistic = [str(s) for s in spec.time_statistic]
+        return np.asarray(time_statistic, dtype=object)
 
 
 ### Baseband frequency axis and coordinates
@@ -49,57 +45,52 @@ class BasebandFrequencyCoords:
     units: Attr[str] = 'Hz'
 
     @staticmethod
-    @functools.lru_cache
+    @util.lru_cache()
     def factory(
-        capture: specs.Capture,
-        *,
-        frequency_resolution: float,
-        fractional_overlap: float = 0,
-        trim_stopband: bool = True,
-        frequency_bin_averaging: typing.Optional[float] = None,
-        **_,
+        capture: specs.Capture, spec: PowerSpectralDensityAnalysis
     ) -> dict[str, np.ndarray]:
-        return freq_axis_values(
+        return _spectrogram.freq_axis_values(
             capture,
-            fres=frequency_resolution,
-            trim_stopband=trim_stopband,
-            navg=frequency_bin_averaging,
+            fres=spec.frequency_resolution,
+            trim_stopband=spec.trim_stopband,
+            navg=spec.frequency_bin_averaging,
         )
 
 
 ### Dataarray
 @dataclasses.dataclass
 class PowerSpectralDensity(AsDataArray):
-    power_time_series: Data[
-        tuple[PersistenceStatisticAxis, BasebandFrequencyAxis], np.float32
-    ]
+    power_time_series: Data[tuple[TimeStatisticAxis, BasebandFrequencyAxis], np.float32]
 
-    frequency_statistic: Coordof[FrequencyStatisticCoords]
+    time_statistic: Coordof[TimeStatisticCoords]
     baseband_frequency: Coordof[BasebandFrequencyCoords]
 
     standard_name: Attr[str] = 'Power spectral density'
     name: Name[str] = 'power_spectral_density'
 
 
-@measurement(PowerSpectralDensity, basis='spectrogram')
+class PowerSpectralDensityAnalysis(
+    _spectrogram.FrequencyAnalysisBase, kw_only=True, frozen=True
+):
+    time_statistic: tuple[typing.Union[str, float], ...] = (('mean',),)
+
+
+@measurement(
+    PowerSpectralDensity, basis='spectrogram', spec_type=PowerSpectralDensityAnalysis
+)
 def power_spectral_density(
     iq: 'iqwaveform.util.Array',
     capture: specs.Capture,
-    *,
-    window: typing.Union[str, tuple[str, float]],
-    frequency_resolution: float,
-    frequency_statistic: tuple[typing.Union[str, float], ...] = ('mean',),
-    fractional_overlap: float = 0,
-    window_fill: float = 1,
-    frequency_bin_averaging: typing.Optional[float] = None,
-    trim_stopband: bool = True,
-    dtype: str = 'float16',
+    **kwargs: typing.Unpack[PowerSpectralDensityAnalysis],
 ):
     """estimate power spectral density using the Welch method.
 
     A list of statistics can be supplied to evaluate across the frequency axis,
     including 'mean' as applied in the original method.
     """
+
+    spec = PowerSpectralDensityAnalysis.fromdict(kwargs)
+    spg_spec = _spectrogram.SpectrogramAnalysis.fromspec(spec)
 
     from iqwaveform.util import axis_index, array_namespace
     from iqwaveform.fourier import stat_ufunc_from_shorthand
@@ -109,27 +100,22 @@ def power_spectral_density(
     xp = array_namespace(iq)
     axis = 1
 
-    spg, metadata = compute_spectrogram(
+    spg, metadata = _spectrogram.evaluate_spectrogram(
         iq,
         capture,
-        window=window,
-        frequency_resolution=frequency_resolution,
-        frequency_bin_averaging=frequency_bin_averaging,
-        trim_stopband=trim_stopband,
-        fractional_overlap=fractional_overlap,
-        window_fill=window_fill,
+        spg_spec,
         dB=False,
         dtype=working_dtype,
     )
 
-    findquantile = iqwaveform.util.find_float_inds(tuple(frequency_statistic))
+    findquantile = iqwaveform.util.find_float_inds(tuple(spec.time_statistic))
 
     newshape = list(spg.shape)
-    newshape[axis] = len(frequency_statistic)
+    newshape[axis] = len(spec.time_statistic)
     psd = xp.empty(newshape, dtype=working_dtype)
 
     # all of the quantiles, evaluated together
-    q = [frequency_statistic[i] for i, flag in enumerate(findquantile) if flag]
+    q = [spec.time_statistic[i] for i, flag in enumerate(findquantile) if flag]
     psd[:, findquantile] = (
         xp.quantile(spg, q, axis=axis)
         .swapaxes(0, axis)  # quantile bumps the output result to axis 0
@@ -139,9 +125,9 @@ def power_spectral_density(
     # everything else
     i_isnt_quantile = np.where(~np.array(findquantile))[0]
     for i in i_isnt_quantile:
-        ufunc = stat_ufunc_from_shorthand(frequency_statistic[i], xp=xp)
+        ufunc = stat_ufunc_from_shorthand(spec.time_statistic[i], xp=xp)
         axis_index(psd, i, axis=axis)[:] = ufunc(spg, axis=axis)
 
-    psd = iqwaveform.powtodB(psd).astype(dtype)
+    psd = iqwaveform.powtodB(psd).astype('float16')
 
     return psd, metadata

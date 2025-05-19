@@ -611,7 +611,7 @@ def find_trigger_holdoff(
     return holdoff
 
 
-@functools.lru_cache(30000)
+@util.lru_cache(30000)
 def _design_capture_filter(
     base_clock_rate: float,
     capture: specs.WaveformCapture,
@@ -701,7 +701,7 @@ def _get_filter_pad(capture: specs.RadioCapture):
         return 0
 
 
-@functools.lru_cache(30000)
+@util.lru_cache(30000)
 def _get_dsp_pad_size(
     base_clock_rate: float, capture: specs.RadioCapture
 ) -> tuple[int, int]:
@@ -733,7 +733,7 @@ def _get_dsp_pad_size(
     return noverlap + filter_pad, noverlap + (samples_in - min_samples_in)
 
 
-@functools.lru_cache(30000)
+@util.lru_cache(30000)
 def _get_input_buffer_count_cached(
     base_clock_rate: float,
     periodic_trigger: float | None,
