@@ -97,7 +97,7 @@ def _get_max_corr_size(
     coord_funcs=[link_direction, subcarrier_spacing, cyclic_sample_lag],
     dtype='float32',
     spec_type=CellularCyclicAutocorrelationSpec,
-    attrs={'units': 'dBm', 'standard_name': 'Cyclic Autocovariance'},
+    attrs={'units': 'mW', 'standard_name': 'Cyclic Autocovariance'},
 )
 def cellular_cyclic_autocorrelation(
     iq: 'iqwaveform.util.Array',
