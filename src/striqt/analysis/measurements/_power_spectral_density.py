@@ -42,19 +42,15 @@ def time_statistic(
 def baseband_frequency(
     capture: specs.Capture, spec: PowerSpectralDensitySpec
 ) -> dict[str, np.ndarray]:
-    return _spectrogram.freq_axis_values(
-        capture,
-        fres=spec.frequency_resolution,
-        trim_stopband=spec.trim_stopband,
-        navg=spec.frequency_bin_averaging,
-    )
+    spg_spec = _spectrogram.SpectrogramSpec.fromspec(spec)
+    return _spectrogram.spectrogram_baseband_frequency(capture, spg_spec)
 
 
 @registry.measurement(
     depends=_spectrogram.spectrogram,
     coord_funcs=[time_statistic, baseband_frequency],
     spec_type=PowerSpectralDensitySpec,
-    dtype='float16',
+    dtype='float32',
     attrs={'standard_name': 'Power spectral density'},
 )
 def power_spectral_density(

@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import collections
 import functools
-import inspect
 import msgspec
 import typing
 
@@ -16,17 +15,68 @@ from . import specs
 TFunc = typing.Callable[..., typing.Any]
 
 
-def _param_to_field(name, p: inspect.Parameter):
-    """convert an inspect.Parameter to a msgspec.Struct field"""
-    if p.annotation is inspect._empty:
-        raise TypeError(
-            f'to register this function, keyword-only argument "{name}" needs a type annotation'
-        )
+class Cache:
+    """A single-element cache of measurement results.
 
-    if p.default is inspect._empty:
-        return (name, p.annotation)
-    else:
-        return (name, p.annotation, p.default)
+    It is keyed on captures and keyword arguments.
+
+    """
+
+    _key: frozenset = None
+    _value = None
+    enabled = False
+
+    @staticmethod
+    def kw_key(kws):
+        if kws is None:
+            return None
+
+        kws = dict(kws)
+        del kws['iq'], kws['as_xarray']
+        return frozenset(kws.items())
+
+    @classmethod
+    def clear(cls):
+        cls.update(None, None)
+
+    @classmethod
+    def lookup(cls, kws: dict):
+        if cls._key is None or not cls.enabled:
+            return None
+
+        if cls.kw_key(kws) == cls._key:
+            return cls._value
+        else:
+            return None
+
+    @classmethod
+    def update(cls, kws: dict, value):
+        if not cls.enabled:
+            return
+        cls._key = cls.kw_key(kws)
+        cls._value = value
+
+    @classmethod
+    def cached_calls(cls, func):
+        @functools.wraps(func)
+        def wrapped(**kws):
+            match = cls.lookup(kws)
+            if match is not None:
+                return match
+
+            ret = func(**kws)
+            cls.update(kws, ret)
+            return ret
+
+        return wrapped
+
+    def __enter__(self):
+        self.enabled = True
+        return self
+
+    def __exit__(self, *args):
+        self.enabled = False
+        self.clear()
 
 
 # TODO: future approach to registering coordinates, rather than dataclasses?
@@ -47,6 +97,11 @@ class _CoordinateRegistry(collections.UserDict[str, DelayedCoordinate]):
         dims: tuple[str, ...] | None = None,
         attrs={},
     ) -> typing.Callable[P, R]:
+        """register a coordinate factory function.
+
+        The factory function should return an iterable containing coordinate
+        values, or None to indicate a named placeholder for a dimension.
+        """
         kws = locals()
 
         def wrapper(func):
@@ -83,7 +138,6 @@ class _CoordinateRegistry(collections.UserDict[str, DelayedCoordinate]):
 
     def get(self, key):
         if not callable(key):
-            print(repr(key))
             raise TypeError('coordinate key must be a registered callable')
         try:
             return super().get(key)
@@ -91,16 +145,6 @@ class _CoordinateRegistry(collections.UserDict[str, DelayedCoordinate]):
             raise TypeError(
                 f'callable {repr(key)} has not been registerd as a coordinate'
             )
-
-    def guess_dims(self, funcs: typing.Iterable[callable]) -> list[str]:
-        """guess dimensions of a dataarray based on its coordinates"""
-        dims = {}
-        for func in funcs:
-            coord = self.get(func)
-            if coord is None:
-                continue
-            dims.update(dict.fromkeys(coord.dims, None))
-        return list(dims.keys())
 
 
 coordinate_factory = _CoordinateRegistry()
@@ -113,6 +157,7 @@ class _MeasurementRegistry(collections.UserDict):
         super().__init__()
         self.depends_on: dict[callable, set[callable]] = {}
         self.names: set[str] = set()
+        self.caches: dict[callable, callable] = {}
 
     def __call__[**P, R](
         self,
@@ -125,6 +170,7 @@ class _MeasurementRegistry(collections.UserDict):
         depends: typing.Iterable[callable] = [],
         spec_type: type[specs.Measurement],
         dtype: str,
+        cache: Cache | None = None,
         attrs={},
     ) -> typing.Callable[P, R]:
         """add decorated `func` and its keyword arguments in the self.tostruct() schema"""
@@ -139,6 +185,7 @@ class _MeasurementRegistry(collections.UserDict):
             for entry in coord_funcs:
                 if not callable(entry):
                     raise TypeError('each coord_funcs item must be callable')
+            coord_funcs = tuple(coord_funcs)
 
         if callable(depends):
             depends = (depends,)
@@ -157,13 +204,6 @@ class _MeasurementRegistry(collections.UserDict):
                 )
             else:
                 self.names.add(name)
-
-            if kws['dims'] is None:
-                dims = coordinate_factory.guess_dims(coord_funcs)
-            else:
-                dims = kws['dims']
-
-            # sig = inspect.signature(func)
 
             @functools.wraps(func)
             def wrapped(iq, capture, **kws):
@@ -185,53 +225,44 @@ class _MeasurementRegistry(collections.UserDict):
                     return ret
 
                 if isinstance(ret, (list, tuple)) and len(ret) == 2:
-                    result, ret_metadata = ret
-                    ret_metadata = dict(attrs, **ret_metadata)
+                    data, metadata = ret
+                    metadata = attrs | metadata
                 else:
-                    result = ret
-                    ret_metadata = attrs
+                    data = ret
+                    metadata = attrs
 
-                result = _DelayedDataArray(
-                    result,
-                    capture,
+                data = _DelayedDataArray(
+                    data=data,
+                    capture=capture,
                     name=name,
                     dims=dims,
                     coord_factories=coord_funcs,
                     spec=spec,
                     dtype=dtype,
-                    attrs=ret_metadata,
+                    attrs=metadata,
                 )
 
                 if as_xarray == 'delayed':
-                    return result
+                    return data
                 else:
-                    return result.to_xarray()
+                    return data.to_xarray()
 
             name = wrapped.__name__
             if name in self:
                 raise TypeError(
                     f'another function named {repr(name)} has already been registered'
                 )
-            # sig = inspect.signature(wrapped)
-            # params = sig.parameters
-
-            # sig_kws = [
-            #     _param_to_field(k, p)
-            #     for k, p in params.items()
-            #     if p.kind is inspect.Parameter.KEYWORD_ONLY and not k.startswith('_')
-            # ]
 
             self.depends_on[wrapped] = []
             for dep in depends:
                 self.depends_on[dep].append(wrapped)
 
-            # self.spec_types[name] = spec_type
-
-            # def hook(type_):
-            #     return type_
-
-            # # validate the struct
-            # msgspec.json.schema(struct_type, schema_hook=hook)
+            if cache is None:
+                pass
+            elif not isinstance(cache, Cache):
+                raise TypeError('cache argument must be an instance of Cache')
+            else:
+                self.caches[wrapped] = cache
 
             self[spec_type] = wrapped
 
@@ -239,7 +270,7 @@ class _MeasurementRegistry(collections.UserDict):
 
         return wrapper
 
-    def spec_types(self) -> type[specs.Measurement]:
+    def container_spec(self) -> type[specs.MeasurementSet]:
         """return a Struct subclass type representing a specification for calls to all registered functions"""
         fields = [
             (func.__name__, typing.Union[struct_type, None], None)
@@ -249,7 +280,7 @@ class _MeasurementRegistry(collections.UserDict):
         return msgspec.defstruct(
             'Analysis',
             fields,
-            bases=(specs.Measurement,),
+            bases=(specs.MeasurementSet,),
             kw_only=True,
             forbid_unknown_fields=True,
             omit_defaults=True,

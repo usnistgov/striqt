@@ -42,9 +42,9 @@ def time_elapsed(capture: specs.Capture, spec: ChannelPowerTimeSeriesSpec):
 @registry.coordinate_factory(dtype='float32', attrs={'standard_name': 'Power detector'})
 @util.lru_cache()
 def power_detector(
-    capture: specs.Capture, *, spec: ChannelPowerTimeSeriesSpec
-) -> dict[str, list]:
-    return np.array(list(spec.power_detectors))
+    capture: specs.Capture, spec: ChannelPowerTimeSeriesSpec
+) -> 'np.ndarray':
+    return np.array(spec.power_detectors)
 
 
 @registry.measurement(
@@ -67,7 +67,7 @@ def channel_power_time_series(
 
     xp = iqwaveform.util.array_namespace(iq)
     results = xp.array(results)
-    results = xp.moveaxis(results, -2, 0)
-    results = iqwaveform.powtodB(power).astype('float32')
+    results = xp.moveaxis(results, 0, 1)
+    results = iqwaveform.powtodB(results).astype('float32')
 
     return results, spec.todict()

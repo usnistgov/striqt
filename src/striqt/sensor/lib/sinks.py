@@ -123,7 +123,8 @@ class ZarrSinkBase(SinkBase):
 
     def close(self):
         super().close()
-        self.store.close()
+        if getattr(self.store, '_is_open', True):
+            self.store.close()
         self.wait()
 
 

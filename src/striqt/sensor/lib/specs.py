@@ -49,7 +49,7 @@ def _dict_hash(d):
 
 
 def _make_default_analysis():
-    return analysis.lib.registry.measurement.spec_types()()
+    return analysis.lib.registry.measurement.container_spec()()
 
 
 AnalysisBandwidthType = Annotated[
@@ -204,7 +204,7 @@ class Description(StructBase, forbid_unknown_fields=True, frozen=True, cache_has
 
 class Output(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     path: Optional[str] = '{yaml_name}-{start_time}'
-    store: typing.Union[Literal['zip'], Literal['directory']] = 'zip'
+    store: typing.Union[Literal['zip'], Literal['directory']] = 'directory'
     coord_aliases: dict[str, dict[str, dict[str, Any]]] = {}
 
     def __hash__(self):

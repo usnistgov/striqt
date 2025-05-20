@@ -126,6 +126,14 @@ class Measurement(
     pass
 
 
+class MeasurementSet(
+    StructBase, forbid_unknown_fields=True, cache_hash=True, kw_only=True, frozen=True
+):
+    """base class for groups of keyword arguments that define calls to a set of analysis functions"""
+
+    pass
+
+
 @util.lru_cache()
 def get_capture_type_attrs(capture_cls: type[Capture]) -> dict[str]:
     """return attrs metadata for each field in `capture`"""

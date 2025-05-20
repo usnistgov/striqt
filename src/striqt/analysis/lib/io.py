@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import functools
 import typing
 import warnings
 
 from pathlib import Path
 from collections import defaultdict
+
 import numcodecs
 
 from . import util
@@ -66,13 +66,6 @@ def open_store(
     return store
 
 
-@functools.cache
-def _get_iq_index_name():
-    from .. import measurements
-
-    return typing.get_args(measurements.IQSampleIndexAxis)[0]
-
-
 def _build_encodings(data, compression=None, filter: bool = True):
     # todo: this will need to be updated to work with zarr 3
 
@@ -119,7 +112,9 @@ def dump(
 ) -> 'StoreType':
     """serialize a dataset into a zarr directory structure"""
 
-    if hasattr(data, _get_iq_index_name()):
+    from ..measurements._iq_waveform import iq_index
+
+    if hasattr(data, iq_index.__name__):
         if 'sample_rate' in data.attrs:
             # sample rate is metadata
             sample_rate = data.attrs['sample_rate']
@@ -127,7 +122,7 @@ def dump(
             # sample rate is a variate
             sample_rate = data.sample_rate.values.flatten()[0]
 
-        chunks = {_get_iq_index_name(): round(sample_rate * 100e-3)}
+        chunks = {iq_index.__name__: round(sample_rate * 100e-3)}
     else:
         chunks = {}
 

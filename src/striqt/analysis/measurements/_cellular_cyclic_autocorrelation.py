@@ -144,7 +144,7 @@ def cellular_cyclic_autocorrelation(
     if spec.downlink_slots is None:
         downlink_slots = 'all'
     else:
-        downlink_slots = tuple(downlink_slots)
+        downlink_slots = tuple(spec.downlink_slots)
 
     uplink_slots = tuple(spec.uplink_slots)
 
