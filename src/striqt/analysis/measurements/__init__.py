@@ -4,7 +4,7 @@ from ._cellular_resource_power_histogram import cellular_resource_power_histogra
 from ._channel_power_histogram import channel_power_histogram
 from ._channel_power_time_series import channel_power_time_series
 from ._cyclic_channel_power import cyclic_channel_power
-from ._iq_waveform import iq_waveform, IQSampleIndexAxis
+from ._iq_waveform import iq_waveform
 from ._power_spectral_density import power_spectral_density
 from ._spectrogram import spectrogram
 from ._spectrogram_histogram import spectrogram_histogram

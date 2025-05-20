@@ -168,7 +168,7 @@ class NoiseSource(TestSource):
             capture, xp=xp, seed=0, power_spectral_density=self.power_spectral_density
         )
         x /= np.sqrt(self.backend_sample_rate() / self.sample_rate())
-        ii = xp.arange(start_index, count + start_index, dtype='uint64')
+        ii = xp.arange(start_index, count + start_index, dtype='int64')
 
         ret = x[ii]
         ret *= lo_shift_tone(ii, self, xp)

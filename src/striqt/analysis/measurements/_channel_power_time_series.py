@@ -1,12 +1,7 @@
 from __future__ import annotations
-import dataclasses
 import typing
 
-from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
-
-from ..lib.registry import measurement
-
-from ..lib import specs, util
+from ..lib import registry, specs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -17,64 +12,49 @@ else:
     np = util.lazy_import('numpy')
     pd = util.lazy_import('pandas')
 
-### Time elapsed dimension and coordinates
-TimeElapsedAxis = typing.Literal['time_elapsed']
 
-
-@dataclasses.dataclass
-class TimeElapsedCoords:
-    data: Data[TimeElapsedAxis, np.float32]
-    standard_name: Attr[str] = 'Time elapsed'
-    units: Attr[str] = 's'
-
-    @staticmethod
-    @util.lru_cache()
-    def factory(capture: specs.Capture, spec: ChannelPowerTimeSeriesSpec):
-        length = round(capture.duration / spec.detector_period)
-        return pd.RangeIndex(length) * spec.detector_period
-
-
-### Power detector dimension and coordinates
-PowerDetectorAxis = typing.Literal['power_detector']
-
-
-@dataclasses.dataclass
-class PowerDetectorCoords:
-    data: Data[PowerDetectorAxis, object]
-    standard_name: Attr[str] = 'Power detector'
-
-    @staticmethod
-    @util.lru_cache()
-    def factory(
-        capture: specs.Capture, *, power_detectors: tuple[str], **kws
-    ) -> dict[str, list]:
-        return np.array(list(power_detectors))
-
-
-### Dataarray definition
-@dataclasses.dataclass
-class ChannelPowerTimeSeries(AsDataArray):
-    power_time_series: Data[tuple[PowerDetectorAxis, TimeElapsedAxis], np.float32]
-
-    power_detector: Coordof[PowerDetectorCoords]
-    time_elapsed: Coordof[TimeElapsedCoords]
-
-    standard_name: Attr[str] = 'Channel power'
-    units: Attr[str] = 'dBm'
-
-
-class ChannelPowerTimeSeriesSpec(specs.Analysis, kw_only=True, frozen=True):
+class ChannelPowerTimeSeriesSpec(
+    specs.Measurement,
+    forbid_unknown_fields=True,
+    cache_hash=True,
+    kw_only=True,
+    frozen=True,
+):
     detector_period: float
     power_detectors: tuple[str, ...] = ('rms', 'peak')
 
 
-@measurement(
-    ChannelPowerTimeSeries,
-    basis='channel_power',
+class ChannelPowerTimeSeriesKeywords(specs.AnalysisKeywords):
+    # for setting the type hints in **kwargs below
+    detector_period: float
+    power_detectors: typing.NotRequired[tuple[str, ...]]
+
+
+@registry.coordinate_factory(
+    dtype='float32', attrs={'standard_name': 'Time elapsed', 'units': 's'}
+)
+@util.lru_cache()
+def time_elapsed(capture: specs.Capture, spec: ChannelPowerTimeSeriesSpec):
+    length = round(capture.duration / spec.detector_period)
+    return pd.RangeIndex(length) * spec.detector_period
+
+
+@registry.coordinate_factory(dtype='float32', attrs={'standard_name': 'Power detector'})
+@util.lru_cache()
+def power_detector(
+    capture: specs.Capture, *, spec: ChannelPowerTimeSeriesSpec
+) -> dict[str, list]:
+    return np.array(list(spec.power_detectors))
+
+
+@registry.measurement(
+    coord_funcs=[power_detector, time_elapsed],
+    dtype='float32',
     spec_type=ChannelPowerTimeSeriesSpec,
+    attrs={'standard_name': 'Fraction of detector periods', 'units': 'dBm'},
 )
 def channel_power_time_series(
-    iq, capture: specs.Capture, **kwargs: typing.Unpack[ChannelPowerTimeSeriesSpec]
+    iq, capture: specs.Capture, **kwargs: typing.Unpack[ChannelPowerTimeSeriesKeywords]
 ):
     spec = ChannelPowerTimeSeriesSpec.fromdict(kwargs)
 
@@ -90,10 +70,4 @@ def channel_power_time_series(
     results = xp.moveaxis(results, -2, 0)
     results = iqwaveform.powtodB(power).astype('float32')
 
-    enbw = capture.analysis_bandwidth or capture.sample_rate
-    metadata = {
-        'detector_period': spec.detector_period,
-        'units': f'dBm/{enbw / 1e6} MHz',
-    }
-
-    return results, metadata
+    return results, spec.todict()

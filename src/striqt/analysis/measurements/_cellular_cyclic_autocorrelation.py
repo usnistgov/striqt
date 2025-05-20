@@ -1,12 +1,8 @@
 from __future__ import annotations
-import dataclasses
 import numbers
 import typing
 
-from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
-
-from ..lib.registry import measurement
-from ..lib import specs, util
+from ..lib import registry, specs, util
 
 
 if typing.TYPE_CHECKING:
@@ -19,79 +15,57 @@ else:
     pd = util.lazy_import('pandas')
 
 
-class CellularCyclicAutocorrelationSpec(specs.Analysis, kw_only=True, frozen=True):
+class CellularCyclicAutocorrelationSpec(
+    specs.Measurement,
+    forbid_unknown_fields=True,
+    cache_hash=True,
+    kw_only=True,
+    frozen=True,
+):
     subcarrier_spacings: typing.Union[float, tuple[float, ...]] = (15e3, 30e3, 60e3)
     frame_range: typing.Union[int, tuple[int, typing.Optional[int]]] = (0, 1)
     downlink_slots: typing.Union[None, tuple[int, ...]] = None
     uplink_slots: typing.Union[tuple[int, ...]] = tuple()
     symbol_range: typing.Union[int, tuple[int, typing.Optional[int]]] = (0, None)
-    normalize: bool = True
 
 
-### Time elapsed dimension and coordinates
-CyclicSampleLagAxis = typing.Literal['cyclic_sample_lag']
+class CellularCyclicAutocorrelationKeywords(specs.AnalysisKeywords, total=False):
+    subcarrier_spacings: typing.Union[float, tuple[float, ...]]
+    frame_range: typing.Union[int, tuple[int, typing.Optional[int]]]
+    downlink_slots: typing.Union[None, tuple[int, ...]]
+    uplink_slots: typing.Union[tuple[int, ...]]
+    symbol_range: typing.Union[int, tuple[int, typing.Optional[int]]]
 
 
-@dataclasses.dataclass
-class CyclicSampleLagCoords:
-    data: Data[CyclicSampleLagAxis, np.float32]
-    standard_name: Attr[str] = 'Cyclic sample lag'
-    units: Attr[str] = 's'
-
-    @staticmethod
-    @util.lru_cache()
-    def factory(
-        capture: specs.Capture, spec: CellularCyclicAutocorrelationSpec
-    ) -> dict[str, np.ndarray]:
-        max_len = _get_max_corr_size(
-            capture, subcarrier_spacings=spec.subcarrier_spacings
-        )
-        axis_name = typing.get_args(CyclicSampleLagAxis)[0]
-        return pd.RangeIndex(0, max_len, name=axis_name) / capture.sample_rate
+@registry.coordinate_factory(
+    dtype='float32', attrs={'standard_name': 'Cyclic sample lag', 'units': 's'}
+)
+@util.lru_cache()
+def cyclic_sample_lag(
+    capture: specs.Capture, spec: CellularCyclicAutocorrelationSpec
+) -> dict[str, np.ndarray]:
+    max_len = _get_max_corr_size(capture, subcarrier_spacings=spec.subcarrier_spacings)
+    name = cyclic_sample_lag.__name__
+    return pd.RangeIndex(0, max_len, name=name) / capture.sample_rate
 
 
 ### Subcarrier spacing label axis
 SubcarrierSpacingAxis = typing.Literal['subcarrier_spacing']
 
 
-@dataclasses.dataclass
-class SubcarrierSpacingCoords:
-    data: Data[SubcarrierSpacingAxis, np.float32]
-    standard_name: Attr[str] = 'Subcarrier spacing'
-    units: Attr[str] = 'Hz'
-
-    @staticmethod
-    @util.lru_cache()
-    def factory(capture: specs.Capture, spec: CellularCyclicAutocorrelationSpec):
-        return list(spec.subcarrier_spacings)
+@registry.coordinate_factory(
+    dtype='float32', attrs={'standard_name': 'Subcarrier spacing', 'units': 'Hz'}
+)
+@util.lru_cache()
+def subcarrier_spacing(capture: specs.Capture, spec: CellularCyclicAutocorrelationSpec):
+    return list(spec.subcarrier_spacings)
 
 
-### Up/down link category
-LinkDirectionAxis = typing.Literal['link_direction']
-
-
-@dataclasses.dataclass
-class LinkDirectionCoords:
-    data: Data[LinkDirectionAxis, str]
-    standard_name: Attr[str] = 'Link direction'
-
-    @staticmethod
-    @util.lru_cache()
-    def factory(capture: specs.Capture, spec: CellularCyclicAutocorrelationSpec):
-        values = np.array(['downlink', 'uplink'], dtype='U8')
-        return values, {}
-
-
-### Dataarray definition
-@dataclasses.dataclass
-class CellularCyclicAutocorrelation(AsDataArray):
-    power_time_series: Data[
-        tuple[LinkDirectionAxis, SubcarrierSpacingAxis, CyclicSampleLagAxis], np.float32
-    ]
-
-    link_direction: Coordof[LinkDirectionCoords]
-    subcarrier_spacing: Coordof[SubcarrierSpacingCoords]
-    cyclic_sample_lag: Coordof[CyclicSampleLagCoords]
+@registry.coordinate_factory(dtype='str', attrs={'standard_name': 'Link direction'})
+@util.lru_cache()
+def link_direction(capture: specs.Capture, spec: CellularCyclicAutocorrelationSpec):
+    values = np.array(['downlink', 'uplink'], dtype='U8')
+    return values, {}
 
 
 @util.lru_cache()
@@ -119,15 +93,16 @@ def _get_max_corr_size(
     return max([np.diff(phy.cp_start_idx).min() for phy in phy_scs.values()])
 
 
-@measurement(
-    CellularCyclicAutocorrelation,
-    basis='correlator',
+@registry.measurement(
+    coord_funcs=[link_direction, subcarrier_spacing, cyclic_sample_lag],
+    dtype='float32',
     spec_type=CellularCyclicAutocorrelationSpec,
+    attrs={'units': 'dBm', 'standard_name': 'Cyclic Autocovariance'},
 )
 def cellular_cyclic_autocorrelation(
     iq: 'iqwaveform.util.Array',
     capture: specs.Capture,
-    **kwargs: typing.Unpack[CellularCyclicAutocorrelationSpec],
+    **kwargs: typing.Unpack[CellularCyclicAutocorrelationKeywords],
 ) -> 'iqwaveform.util.Array':
     """evaluate the cyclic autocorrelation of the IQ sequence based on 4G or 5G cellular
     cyclic prefix sample lag offsets.
@@ -145,8 +120,6 @@ def cellular_cyclic_autocorrelation(
         downlink_slots: slot indexes to attribute to the downlink (or all, if None)
         uplink_slots: slot indexes to attribute to the uplink
         symbol_range: the symbols to evaluate within all indexed slots
-        normalize: if True, results are normalized as autocorrelation (0 to 1);
-            otherwise, autocovariance (power)
 
     Returns:
         an float32-valued array with matching the array type of `iq`
@@ -201,23 +174,16 @@ def cellular_cyclic_autocorrelation(
             # shift index to the symbol boundary rather than the CP
             cyclic_shift = -phy.cp_sizes[0] * 2 // cp_inds.shape[1]
 
-            R = iqwaveform.ofdm.corr_at_indices(
-                cp_inds, iq[chan], phy.nfft, norm=spec.normalize
-            )
+            R = iqwaveform.ofdm.corr_at_indices(cp_inds, iq[chan], phy.nfft, norm=False)
             R = xp.roll(R, cyclic_shift)
             result[chan][0][iscs][: R.size] = xp.abs(R)
 
             if len(uplink_slots) > 0:
                 cp_inds = phy.index_cyclic_prefix(**idx_kws, slots=uplink_slots)
                 R = iqwaveform.ofdm.corr_at_indices(
-                    cp_inds, iq[chan], phy.nfft, norm=spec.normalize
+                    cp_inds, iq[chan], phy.nfft, norm=False
                 )
                 R = xp.roll(R, cyclic_shift)
                 result[chan][1][iscs][: R.size] = xp.abs(R)
-
-    if spec.normalize:
-        metadata.update(standard_name='Cyclic Autocorrelation')
-    else:
-        metadata.update(standard_name='Cyclic Autocovariance', units='mW')
 
     return result, metadata

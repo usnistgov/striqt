@@ -1,15 +1,11 @@
 from __future__ import annotations
 import contextlib
-import dataclasses
 import decimal
 import functools
 import typing
 import warnings
 
-from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
-
-from ..lib.registry import measurement
-from ..lib import specs, util
+from ..lib import registry, specs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -23,7 +19,13 @@ warnings.filterwarnings(
 )
 
 
-class FrequencyAnalysisBase(specs.Analysis, kw_only=True, frozen=True):
+class FrequencyAnalysisBase(
+    specs.Measurement,
+    forbid_unknown_fields=True,
+    cache_hash=True,
+    kw_only=True,
+    frozen=True,
+):
     window: typing.Union[str, tuple[str, float]]
     frequency_resolution: float
     fractional_overlap: float = 0
@@ -31,8 +33,26 @@ class FrequencyAnalysisBase(specs.Analysis, kw_only=True, frozen=True):
     frequency_bin_averaging: typing.Optional[int] = None
 
 
-class SpectrogramAnalysis(FrequencyAnalysisBase, kw_only=True, frozen=True):
+class FrequencyAnalysisKeywords(specs.AnalysisKeywords):
+    window: typing.Union[str, tuple[str, float]]
+    frequency_resolution: float
+    fractional_overlap: typing.NotRequired[float]
+    window_fill: typing.NotRequired[float]
+    frequency_bin_averaging: typing.NotRequired[typing.Optional[int]]
+
+
+class SpectrogramSpec(
+    FrequencyAnalysisBase,
+    forbid_unknown_fields=True,
+    cache_hash=True,
+    kw_only=True,
+    frozen=True,
+):
     time_bin_averaging: typing.Optional[int] = None
+
+
+class SpectrogramKeywords(FrequencyAnalysisKeywords):
+    time_bin_averaging: typing.NotRequired[typing.Optional[int]]
 
 
 @util.lru_cache()
@@ -153,6 +173,36 @@ class _spectrogram_cache:
         return wrapped
 
 
+def evaluate_spectrogram(
+    iq: 'iqwaveform.util.Array',
+    capture: specs.Capture,
+    spec: SpectrogramSpec,
+    *,
+    dtype: typing.Union[
+        typing.Literal['float16'], typing.Literal['float32']
+    ] = 'float16',
+    limit_digits: typing.Optional[int] = None,
+    trim_stopband: bool = True,
+):
+    spg, metadata = _cached_spectrogram(iq, capture, spec, trim_stopband=trim_stopband)
+
+    xp = iqwaveform.util.array_namespace(iq)
+
+    copied = False
+    if spec.dB:
+        spg = iqwaveform.powtodB(spg, eps=1e-25)
+        copied = True
+
+    spg = spg.astype(dtype, copy=not copied)
+
+    if limit_digits is not None:
+        xp.round(spg, spec.limit_digits, out=spg)
+
+    metadata = metadata | {'limit_digits': spec.limit_digits}
+
+    return spg, metadata
+
+
 @contextlib.contextmanager
 def cached_spectrograms():
     global _spectrogram_cache
@@ -167,7 +217,7 @@ def cached_spectrograms():
 def _cached_spectrogram(
     iq: 'iqwaveform.util.Array',
     capture: specs.Capture,
-    spec: SpectrogramAnalysis,
+    spec: SpectrogramSpec,
     *,
     trim_stopband: bool = True,
 ):
@@ -227,7 +277,7 @@ def _cached_spectrogram(
     return spg, get_metadata(spec, nfft)
 
 
-def get_metadata(spec: SpectrogramAnalysis, nfft):
+def get_metadata(spec: SpectrogramSpec, nfft):
     enbw = spec.frequency_resolution * equivalent_noise_bandwidth(spec.window, nfft)
 
     return {
@@ -241,105 +291,51 @@ def get_metadata(spec: SpectrogramAnalysis, nfft):
     }
 
 
-# Axis and coordinates
-SpectrogramTimeAxis = typing.Literal['spectrogram_time']
+@registry.coordinate_factory(
+    dtype='float32', attrs={'standard_name': 'Time elapsed', 'units': 's'}
+)
+@util.lru_cache()
+def spectrogram_time(
+    capture: specs.Capture, spec: SpectrogramSpec
+) -> dict[str, np.ndarray]:
+    import pandas as pd
+
+    # validation of these is handled inside iqwaveform
+    nfft = round(capture.sample_rate / spec.frequency_resolution)
+    hop_size = nfft - round(spec.fractional_overlap * nfft)
+    scale = nfft / hop_size
+    size = int(scale * (capture.sample_rate * capture.duration / nfft - 1) + 1)
+
+    if spec.time_bin_averaging:
+        size = size // spec.time_bin_averaging
+        hop_size = hop_size * spec.time_bin_averaging
+
+    return pd.RangeIndex(size) * hop_size / capture.sample_rate
 
 
-@dataclasses.dataclass
-class SpectrogramTimeCoords:
-    data: Data[SpectrogramTimeAxis, np.float32]
-    standard_name: Attr[str] = 'Time elapsed'
-    units: Attr[str] = 's'
-
-    @staticmethod
-    @util.lru_cache()
-    def factory(
-        capture: specs.Capture, spec: SpectrogramAnalysis
-    ) -> dict[str, np.ndarray]:
-        import pandas as pd
-
-        # validation of these is handled inside iqwaveform
-        nfft = round(capture.sample_rate / spec.frequency_resolution)
-        hop_size = nfft - round(spec.fractional_overlap * nfft)
-        scale = nfft / hop_size
-        size = int(scale * (capture.sample_rate * capture.duration / nfft - 1) + 1)
-
-        if spec.time_bin_averaging:
-            size = size // spec.time_bin_averaging
-            hop_size = hop_size * spec.time_bin_averaging
-
-        return pd.RangeIndex(size) * hop_size / capture.sample_rate
+@registry.coordinate_factory(dtype='float64', attrs={'units': 'Hz'})
+@util.lru_cache()
+def spectrogram_baseband_frequency(
+    capture: specs.Capture, spec: SpectrogramSpec
+) -> dict[str, np.ndarray]:
+    return freq_axis_values(
+        capture,
+        fres=spec.frequency_resolution,
+        navg=spec.frequency_bin_averaging,
+        trim_stopband=spec.truncate,
+    )
 
 
-### Baseband frequency axis and coordinates
-SpectrogramBasebandFrequencyAxis = typing.Literal['spectrogram_baseband_frequency']
-
-
-@dataclasses.dataclass
-class SpectrogramBasebandFrequencyCoords:
-    data: Data[SpectrogramBasebandFrequencyAxis, np.float64]
-    standard_name: Attr[str] = 'Baseband frequency'
-    units: Attr[str] = 'Hz'
-
-    @staticmethod
-    @util.lru_cache()
-    def factory(
-        capture: specs.Capture, spec: SpectrogramAnalysis
-    ) -> dict[str, np.ndarray]:
-        return freq_axis_values(
-            capture,
-            fres=spec.frequency_resolution,
-            navg=spec.frequency_bin_averaging,
-            trim_stopband=spec.truncate,
-        )
-
-
-@dataclasses.dataclass
-class Spectrogram(AsDataArray):
-    spectrogram: Data[
-        tuple[SpectrogramTimeAxis, SpectrogramBasebandFrequencyAxis], np.float16
-    ]
-    spectrogram_time: Coordof[SpectrogramTimeCoords]
-    spectrogram_baseband_frequency: Coordof[SpectrogramBasebandFrequencyCoords]
-    standard_name: Attr[str] = 'PSD'
-    long_name: Attr[str] = 'Power spectral density'
-
-
-def evaluate_spectrogram(
-    iq: 'iqwaveform.util.Array',
-    capture: specs.Capture,
-    spec: SpectrogramAnalysis,
-    *,
-    dtype: typing.Union[
-        typing.Literal['float16'], typing.Literal['float32']
-    ] = 'float16',
-    limit_digits: typing.Optional[int] = None,
-    trim_stopband: bool = True,
-):
-    spg, metadata = _cached_spectrogram(iq, capture, spec, trim_stopband=trim_stopband)
-
-    xp = iqwaveform.util.array_namespace(iq)
-
-    copied = False
-    if spec.dB:
-        spg = iqwaveform.powtodB(spg, eps=1e-25)
-        copied = True
-
-    spg = spg.astype(dtype, copy=not copied)
-
-    if limit_digits is not None:
-        xp.round(spg, spec.limit_digits, out=spg)
-
-    metadata = metadata | {'limit_digits': spec.limit_digits}
-
-    return spg, metadata
-
-
-@measurement(Spectrogram, basis='spectrogram', spec_type=SpectrogramAnalysis)
+@registry.measurement(
+    coord_funcs=[spectrogram_time, spectrogram_baseband_frequency],
+    spec_type=SpectrogramSpec,
+    dtype='float16',
+    attrs={'standard_name': 'PSD', 'long_name': 'Power Spectral Density'},
+)
 def spectrogram(
     iq: 'iqwaveform.util.Array',
     capture: specs.Capture,
-    **kwargs: typing.Unpack[SpectrogramAnalysis],
+    **kwargs: typing.Unpack[SpectrogramKeywords],
 ):
-    spec = SpectrogramAnalysis.fromdict(kwargs).validate()
+    spec = SpectrogramSpec.fromdict(kwargs).validate()
     return evaluate_spectrogram(iq, capture, spec, limit_digits=3, dtype='float16')

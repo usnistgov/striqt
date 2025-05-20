@@ -19,18 +19,14 @@ class PeripheralsBase:
     def close(self):
         pass
 
-    def arm(
-        self, capture: specs.RadioCapture, radio_setup: specs.RadioSetup
-    ) -> dict[str]:
+    def arm(self, capture: specs.RadioCapture) -> dict[str]:
         """called while the capture is being armed in the radio.
 
         This then returns a dictionary of {field_name: value} pairs to update in `capture`.
         """
         return {}
 
-    def acquire(
-        self, capture: specs.RadioCapture, radio_setup: specs.RadioSetup
-    ) -> dict[str]:
+    def acquire(self, capture: specs.RadioCapture) -> dict[str]:
         """called while the capture is being acquired in the radio.
 
         This returns a dictionary of new {data_variable: value} pairs that specify that

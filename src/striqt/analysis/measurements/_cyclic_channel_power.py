@@ -1,13 +1,9 @@
 from __future__ import annotations
-import dataclasses
 import typing
 
-from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
+from ._channel_power_time_series import power_detector
 
-from ..lib.registry import measurement
-from ._channel_power_time_series import PowerDetectorAxis, PowerDetectorCoords
-
-from ..lib import specs, util
+from ..lib import registry, specs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -17,68 +13,52 @@ else:
     np = util.lazy_import('numpy')
 
 
-### Cyclic statistic axis and coordinate labels
-CyclicStatisticAxis = typing.Literal['cyclic_statistic']
-
-
-@dataclasses.dataclass
-class CyclicStatisticCoords:
-    data: Data[CyclicStatisticAxis, object]
-    standard_name: Attr[str] = 'Cyclic statistic'
-
-    @staticmethod
-    @util.lru_cache()
-    def factory(capture: specs.Capture, spec: CyclicChannelPowerAnalysis):
-        return list(spec.cyclic_statistics)
-
-
-### Cyclic lag axis and coordinate labels
-CyclicLagAxis = typing.Literal['cyclic_lag']
-
-
-@dataclasses.dataclass
-class CyclicLagCoords:
-    data: Data[CyclicLagAxis, np.float32]
-    standard_name: Attr[str] = 'Cyclic lag'
-    units: Attr[str] = 's'
-
-    @staticmethod
-    @util.lru_cache()
-    def factory(capture: specs.Capture, spec: CyclicChannelPowerAnalysis):
-        lag_count = int(np.rint(spec.cyclic_period / spec.detector_period))
-
-        return np.arange(lag_count) * spec.detector_period
-
-
-### Define the data structure of the returned DataArray
-@dataclasses.dataclass
-class CyclicChannelPower(AsDataArray):
-    power_time_series: Data[
-        tuple[PowerDetectorAxis, CyclicStatisticAxis, CyclicLagAxis], np.float32
-    ]
-
-    power_detector: Coordof[PowerDetectorCoords]
-    cyclic_statistic: Coordof[CyclicStatisticCoords]
-    cyclic_lag: Coordof[CyclicLagCoords]
-
-    standard_name: Attr[str] = 'Channel power'
-    units: Attr[str] = 'dBm'
-
-
-class CyclicChannelPowerAnalysis(specs.Analysis, kw_only=True, frozen=True):
+class CyclicChannelPowerSpec(
+    specs.Measurement,
+    forbid_unknown_fields=True,
+    cache_hash=True,
+    kw_only=True,
+    frozen=True,
+):
     cyclic_period: float
     detector_period: float
     power_detectors: tuple[str, ...] = ('rms', 'peak')
     cyclic_statistics: tuple[typing.Union[str, float], ...] = ('min', 'mean', 'max')
 
 
-@measurement(
-    CyclicChannelPower, basis='channel_power', spec_type=CyclicChannelPowerAnalysis
+class CyclicChannelPowerKeywords(specs.AnalysisKeywords):
+    cyclic_period: float
+    detector_period: float
+    power_detectors: typing.Optional[tuple[str, ...]]
+    cyclic_statistics: typing.Optional[tuple[typing.Union[str, float], ...]]
+
+
+@registry.coordinate_factory(dtype=object, attrs={'standard_name': 'Cyclic statistic'})
+@util.lru_cache()
+def cyclic_statistic(capture: specs.Capture, spec: CyclicChannelPowerSpec):
+    return list(spec.cyclic_statistics)
+
+
+@registry.coordinate_factory(
+    dtype='float32', attrs={'standard_name': 'Cyclic lag', 'units': 's'}
+)
+@util.lru_cache()
+def cyclic_lag(capture: specs.Capture, spec: CyclicChannelPowerSpec):
+    lag_count = int(np.rint(spec.cyclic_period / spec.detector_period))
+
+    return np.arange(lag_count) * spec.detector_period
+
+
+@registry.measurement(
+    coord_funcs=[power_detector, cyclic_statistic, cyclic_lag],
+    spec_type=CyclicChannelPowerSpec,
+    dtype='float32',
+    attrs={'standard_name': 'Cyclic channel power', 'units': 'dBm'},
 )
 def cyclic_channel_power(
-    iq, capture: specs.Capture, **kwargs: typing.Unpack[CyclicChannelPowerAnalysis]
+    iq, capture: specs.Capture, **kwargs: typing.Unpack[CyclicChannelPowerSpec]
 ):
-    spec = CyclicChannelPowerAnalysis.fromdict(kwargs)
+    spec = CyclicChannelPowerSpec.fromdict(kwargs)
 
     xp = iqwaveform.util.array_namespace(iq)
 

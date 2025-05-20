@@ -1,12 +1,8 @@
 from __future__ import annotations
-import functools
-import typing
-import dataclasses
 from math import ceil
+import typing
 
-from ..lib import specs, util
-
-from xarray_dataclasses import AsDataArray, Coordof, Data, Attr, Name
+from ..lib import registry, specs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -17,10 +13,14 @@ else:
     np = util.lazy_import('numpy')
     pd = util.lazy_import('pandas')
 
-from ..lib import registry, util
 
-
-class Cellular5GNRPSSCorrelationSpec(specs.Analysis, kw_only=True, frozen=True):
+class Cellular5GNRPSSCorrelationSpec(
+    specs.Measurement,
+    forbid_unknown_fields=True,
+    cache_hash=True,
+    kw_only=True,
+    frozen=True,
+):
     subcarrier_spacing: float
     sample_rate: float = 15.36e6
     discovery_periodicity: float = 20e-3
@@ -29,119 +29,74 @@ class Cellular5GNRPSSCorrelationSpec(specs.Analysis, kw_only=True, frozen=True):
     max_block_count: typing.Optional[int] = 1
 
 
-###
-CellularCellID2Axis = typing.Literal['cellular_cell_id2']
+class Cellular5GNRPSSCorrelationKeywords(specs.AnalysisKeywords, total=False):
+    subcarrier_spacing: typing.Required[float]
+    sample_rate: float
+    discovery_periodicity: float
+    frequency_offset: typing.Union[float, dict[float, float]]
+    shared_spectrum: bool
+    max_block_count: typing.Optional[int]
 
 
-@dataclasses.dataclass
-class CellularCellID2Coords:
-    data: Data[CellularCellID2Axis, np.uint16]
-    standard_name: Attr[str] = r'Cell Identity 2 ($N_{ID}^{(2)}$)'
-
-    @staticmethod
-    @util.lru_cache()
-    def factory(capture: specs.Capture, spec: typing.Any):
-        values = np.array([0, 1, 2], dtype='uint16')
-        return values, {}
-
-
-# TODO: one day move to this approach
-# @registry.coordinate(dtype='uint16', standard_name=r'Cell Identity 2 ($N_{ID}^{(2)}$)')
-# @util.lru_cache()
-# def cellular_id2(capture: specs.Capture, **_):
-#     values = np.array([0, 1, 2], dtype='uint16')
-#     return values, {}
+@registry.coordinate_factory(
+    dtype='uint16', attrs={'standard_name': r'Cell Identity 2 ($N_{ID}^{(2)}$)'}
+)
+@util.lru_cache()
+def cellular_cell_id2(capture: specs.Capture, spec: typing.Any):
+    values = np.array([0, 1, 2], dtype='uint16')
+    return values, {}
 
 
 ### Subcarrier spacing label axis
 CellularSSBStartTimeElapsedAxis = typing.Literal['cellular_ssb_start_time']
 
 
-@dataclasses.dataclass
-class CellularSSBStartTimeElapsedCoords:
-    data: Data[CellularSSBStartTimeElapsedAxis, np.float32]
-    standard_name: Attr[str] = 'Time elapsed at synchronization block start'
-    units: Attr[str] = 's'
+@registry.coordinate_factory(
+    dtype='float32', attrs={'standard_name': 'Time Elapsed', 'units': 's'}
+)
+@util.lru_cache()
+def cellular_ssb_start_time(
+    capture: specs.Capture, spec: Cellular5GNRPSSCorrelationSpec
+):
+    params = _pss_params(capture, spec)
+    total_blocks = round(params['duration'] / params['discovery_periodicity'])
+    if spec.max_block_count is None:
+        count = total_blocks
+    else:
+        count = min(spec.max_block_count, total_blocks)
 
-    @staticmethod
-    @util.lru_cache()
-    def factory(capture: specs.Capture, spec: Cellular5GNRPSSCorrelationSpec):
-        params = _pss_params(capture, spec)
-        total_blocks = round(params['duration'] / params['discovery_periodicity'])
-        if spec.max_block_count is None:
-            count = total_blocks
-        else:
-            count = min(spec.max_block_count, total_blocks)
-
-        return np.arange(max(count, 1)) * params['discovery_periodicity']
+    return np.arange(max(count, 1)) * params['discovery_periodicity']
 
 
-### Subcarrier spacing label axis
-CellularSSBSymbolIndexAxis = typing.Literal['cellular_ssb_symbol_index']
+@registry.coordinate_factory(dtype='uint8', attrs={'standard_name': 'SSB symbol index'})
+@util.lru_cache()
+def cellular_ssb_symbol_index(
+    capture: specs.Capture, spec: Cellular5GNRPSSCorrelationSpec
+):
+    params = _pss_params(capture, spec)
+
+    return list(params['symbol_indexes'])
 
 
-@dataclasses.dataclass
-class CellularSSBSymbolIndexCoords:
-    data: Data[CellularSSBSymbolIndexAxis, np.uint8]
-    standard_name: Attr[str] = 'SSB symbol index'
+@registry.coordinate_factory(
+    dtype='float32', attrs={'standard_name': 'Symbol lag', 'units': 's'}
+)
+@util.lru_cache()
+def cellular_pss_lag(capture: specs.Capture, spec: Cellular5GNRPSSCorrelationSpec):
+    params = _pss_params(capture, spec)
 
-    @staticmethod
-    @util.lru_cache()
-    def factory(capture: specs.Capture, spec: Cellular5GNRPSSCorrelationSpec):
-        params = _pss_params(capture, spec)
+    max_len = 2 * round(
+        params['sample_rate'] / params['subcarrier_spacing'] + params['cp_samples']
+    )
 
-        return list(params['symbol_indexes'])
+    if params['trim_cp']:
+        max_len = max_len - round(0.5 * params['cp_samples'])
 
-
-### Time elapsed dimension and coordinates
-CellularPSSLagAxis = typing.Literal['cellular_pss_lag']
-
-
-@dataclasses.dataclass
-class CellularPSSLagCoords:
-    data: Data[CellularPSSLagAxis, np.float32]
-    standard_name: Attr[str] = 'PSS synchronization lag'
-    units: Attr[str] = 's'
-
-    @staticmethod
-    @util.lru_cache()
-    def factory(capture: specs.Capture, spec: Cellular5GNRPSSCorrelationSpec):
-        params = _pss_params(capture, spec)
-
-        max_len = 2 * round(
-            params['sample_rate'] / params['subcarrier_spacing'] + params['cp_samples']
-        )
-
-        if params['trim_cp']:
-            max_len = max_len - round(0.5 * params['cp_samples'])
-
-        axis_name = typing.get_args(CellularPSSLagAxis)[0]
-        return pd.RangeIndex(0, max_len, name=axis_name) / params['sample_rate']
+    name = cellular_pss_lag.__name__
+    return pd.RangeIndex(0, max_len, name=name) / params['sample_rate']
 
 
-### Dataarray definition
-@dataclasses.dataclass
-class Cellular5GNRPSSCorrelation(AsDataArray):
-    power_time_series: Data[
-        tuple[
-            CellularCellID2Axis,
-            CellularSSBStartTimeElapsedAxis,
-            CellularSSBSymbolIndexAxis,
-            CellularPSSLagAxis,
-        ],
-        np.complex64,
-    ]
-
-    cellular_cell_id2: Coordof[CellularCellID2Coords]
-    cellular_ssb_start_time: Coordof[CellularSSBStartTimeElapsedCoords]
-    cellular_ssb_symbol_index: Coordof[CellularSSBSymbolIndexCoords]
-    cellular_pss_lag: Coordof[CellularPSSLagCoords]
-
-    standard_name: Attr[str] = 'PSS Correlation'
-    name: Name[str] = 'cellular_5g_pss_correlation'
-
-
-@functools.lru_cache()
+@util.lru_cache()
 def _m_sequence(N_id2: int) -> list[int]:
     """compute the M-sequence used as the 5G-NR primary synchronization sequence.
 
@@ -163,7 +118,7 @@ def _m_sequence(N_id2: int) -> list[int]:
     return pss
 
 
-@functools.lru_cache()
+@util.lru_cache()
 def _pss_5g_nr(
     sample_rate: float,
     subcarrier_spacing: float,
@@ -246,7 +201,7 @@ def _pss_5g_nr(
     return xp.array(pss_time)
 
 
-@functools.lru_cache()
+@util.lru_cache()
 def _pss_params(capture: specs.Capture, spec: Cellular5GNRPSSCorrelationSpec) -> dict:
     capture = capture.replace(sample_rate=spec.sample_rate)
 
@@ -323,12 +278,20 @@ def _pss_params(capture: specs.Capture, spec: Cellular5GNRPSSCorrelationSpec) ->
 
 
 @registry.measurement(
-    Cellular5GNRPSSCorrelation,
-    basis='correlator',
+    coord_funcs=[
+        cellular_cell_id2,
+        cellular_ssb_start_time,
+        cellular_ssb_symbol_index,
+        cellular_pss_lag,
+    ],
+    dtype='complex64',
     spec_type=Cellular5GNRPSSCorrelationSpec,
+    attrs={'standard_name': 'PSS Correlation'},
 )
 def cellular_5g_pss_correlation(
-    iq, capture: specs.Capture, **kwargs: typing.Unpack[Cellular5GNRPSSCorrelationSpec]
+    iq,
+    capture: specs.Capture,
+    **kwargs: typing.Unpack[Cellular5GNRPSSCorrelationKeywords],
 ):
     """correlate each channel of the IQ against the cellular primary synchronization signal (PSS) waveform.
 
@@ -444,7 +407,7 @@ def cellular_5g_pss_correlation(
 
     enbw = spec.subcarrier_spacing * 127
     metadata = metadata | {
-        'units': 'mW/{enbw/1e6:0.2f} MHz',
+        'units': f'mW/{enbw / 1e6:0.2f} MHz',
         'standard_name': 'PSS Covariance',
     }
 

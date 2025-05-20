@@ -98,7 +98,7 @@ def open_store(
     return store_backend
 
 
-def _import_extension(extensions: dict[str, str], name: str) -> type:
+def _import_extension(extensions: dict[str, str], name: str, default=None) -> type:
     """import an extension class from a dict representation of structs.Extensions
 
     Arguments:
@@ -110,12 +110,14 @@ def _import_extension(extensions: dict[str, str], name: str) -> type:
     """
     import importlib
 
-    if extensions['import_path'] is None:
+    if extensions.get('import_path', None) is None:
         pass
     elif extensions['import_path'] not in sys.path:
         sys.path.insert(0, extensions['import_path'])
 
-    spec = extensions[name]
+    spec = extensions.get(name, None)
+    if spec is None:
+        return default
 
     mod_name, *sub_names, obj_name = spec.rsplit('.')
     mod = importlib.import_module(mod_name)
@@ -160,12 +162,13 @@ def read_yaml_sweep(
 
     tree['captures'] = [defaults | c for c in tree.get('captures', ())]
 
-    extensions = tree['extensions']
-    extensions['import_path'] = expand_path(
-        extensions.get('import_path', None), relative_to_file=path
-    )
-    sweep_cls = _import_extension(extensions, 'sweep_struct')
+    extensions = tree.get('extensions', {})
+    if 'import_path' in extensions:
+        extensions['import_path'] = expand_path(
+            extensions.get('import_path', None), relative_to_file=path
+        )
 
+    sweep_cls = _import_extension(extensions, 'sweep_struct', default=specs.Sweep)
     if not issubclass(sweep_cls, specs.Sweep):
         name = extensions['sweep_struct']
         raise TypeError(

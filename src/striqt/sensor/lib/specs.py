@@ -11,7 +11,7 @@ from . import util
 from striqt import analysis
 from striqt.analysis.lib.specs import (
     meta,
-    Analysis,  # noqa: F401
+    Measurement,  # noqa: F401
     StructBase,
 )
 

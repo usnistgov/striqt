@@ -1,12 +1,8 @@
 from __future__ import annotations
-import dataclasses
 import typing
 
-from xarray_dataclasses import AsDataArray, Coordof, Data, Attr, Name
-
-from ..lib.registry import measurement
 from . import _spectrogram
-from ..lib import specs, util
+from ..lib import registry, specs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -16,72 +12,55 @@ else:
     np = util.lazy_import('numpy')
 
 
-### Persistence statistics dimension and coordinates
-TimeStatisticAxis = typing.Literal['time_statistic']
-
-
-@dataclasses.dataclass
-class TimeStatisticCoords:
-    data: Data[TimeStatisticAxis, str]
-    standard_name: Attr[str] = 'Frequency statistic'
-
-    @staticmethod
-    @util.lru_cache()
-    def factory(
-        capture: specs.Capture, spec: PowerSpectralDensityAnalysis
-    ) -> np.ndarray:
-        time_statistic = [str(s) for s in spec.time_statistic]
-        return np.asarray(time_statistic, dtype=object)
-
-
-### Baseband frequency axis and coordinates
-BasebandFrequencyAxis = typing.Literal['baseband_frequency']
-
-
-@dataclasses.dataclass
-class BasebandFrequencyCoords:
-    data: Data[BasebandFrequencyAxis, np.float64]
-    standard_name: Attr[str] = 'Baseband frequency'
-    units: Attr[str] = 'Hz'
-
-    @staticmethod
-    @util.lru_cache()
-    def factory(
-        capture: specs.Capture, spec: PowerSpectralDensityAnalysis
-    ) -> dict[str, np.ndarray]:
-        return _spectrogram.freq_axis_values(
-            capture,
-            fres=spec.frequency_resolution,
-            trim_stopband=spec.trim_stopband,
-            navg=spec.frequency_bin_averaging,
-        )
-
-
-### Dataarray
-@dataclasses.dataclass
-class PowerSpectralDensity(AsDataArray):
-    power_time_series: Data[tuple[TimeStatisticAxis, BasebandFrequencyAxis], np.float32]
-
-    time_statistic: Coordof[TimeStatisticCoords]
-    baseband_frequency: Coordof[BasebandFrequencyCoords]
-
-    standard_name: Attr[str] = 'Power spectral density'
-    name: Name[str] = 'power_spectral_density'
-
-
-class PowerSpectralDensityAnalysis(
-    _spectrogram.FrequencyAnalysisBase, kw_only=True, frozen=True
+class PowerSpectralDensitySpec(
+    _spectrogram.FrequencyAnalysisBase,
+    forbid_unknown_fields=True,
+    cache_hash=True,
+    kw_only=True,
+    frozen=True,
 ):
     time_statistic: tuple[typing.Union[str, float], ...] = (('mean',),)
 
 
-@measurement(
-    PowerSpectralDensity, basis='spectrogram', spec_type=PowerSpectralDensityAnalysis
+class PowerSpectralDensityKeywords(_spectrogram.FrequencyAnalysisKeywords):
+    time_statistic: typing.NotRequired[tuple[typing.Union[str, float], ...]]
+
+
+@registry.coordinate_factory(dtype='str', attrs={'standard_name': 'Time statistic'})
+@util.lru_cache()
+def time_statistic(
+    capture: specs.Capture, spec: PowerSpectralDensitySpec
+) -> np.ndarray:
+    time_statistic = [str(s) for s in spec.time_statistic]
+    return np.asarray(time_statistic, dtype=object)
+
+
+@registry.coordinate_factory(
+    dtype='float64', attrs={'standard_name': 'Baseband frequency', 'units': 'Hz'}
+)
+@util.lru_cache()
+def baseband_frequency(
+    capture: specs.Capture, spec: PowerSpectralDensitySpec
+) -> dict[str, np.ndarray]:
+    return _spectrogram.freq_axis_values(
+        capture,
+        fres=spec.frequency_resolution,
+        trim_stopband=spec.trim_stopband,
+        navg=spec.frequency_bin_averaging,
+    )
+
+
+@registry.measurement(
+    depends=_spectrogram.spectrogram,
+    coord_funcs=[time_statistic, baseband_frequency],
+    spec_type=PowerSpectralDensitySpec,
+    dtype='float16',
+    attrs={'standard_name': 'Power spectral density'},
 )
 def power_spectral_density(
     iq: 'iqwaveform.util.Array',
     capture: specs.Capture,
-    **kwargs: typing.Unpack[PowerSpectralDensityAnalysis],
+    **kwargs: typing.Unpack[PowerSpectralDensityKeywords],
 ):
     """estimate power spectral density using the Welch method.
 
@@ -89,8 +68,8 @@ def power_spectral_density(
     including 'mean' as applied in the original method.
     """
 
-    spec = PowerSpectralDensityAnalysis.fromdict(kwargs)
-    spg_spec = _spectrogram.SpectrogramAnalysis.fromspec(spec)
+    spec = PowerSpectralDensitySpec.fromdict(kwargs)
+    spg_spec = _spectrogram.SpectrogramSpec.fromspec(spec)
 
     from iqwaveform.util import axis_index, array_namespace
     from iqwaveform.fourier import stat_ufunc_from_shorthand

@@ -112,31 +112,15 @@ class FilteredCapture(Capture, kw_only=True, frozen=True, cache_hash=True):
     # )
 
 
-if typing.TYPE_CHECKING:
-    # allow Argument subclasses to be used as function
-    # argument hints, for example:
-    #
-    #   def func(**kwargs: typing.Unpack[ArgumentSubclass]):
-    #       ...
-    #
-    # This violates the intended use of typing in python, in
-    # part because default values are not supported by TypedDict.
-    #
-    # Workaround is the following EOL comment after any default argument:
-    #     # type: ignore[misc]
-    class AnalysisKeywords(StructBase, typing.TypedDict):
-        """base class for groups of keyword arguments that define calls to a set of analysis functions"""
+class AnalysisKeywords(typing.TypedDict):
+    """base class for groups of keyword arguments that define calls to a set of analysis functions"""
 
-        pass
-else:
-
-    class AnalysisKeywords(StructBase, cache_hash=True, kw_only=True, frozen=True):
-        """base class for groups of keyword arguments that define calls to a set of analysis functions"""
-
-        pass
+    as_xarray: typing.NotRequired[bool | typing.Literal['delayed']]
 
 
-class Analysis(StructBase, cache_hash=True, kw_only=True, frozen=True):
+class Measurement(
+    StructBase, forbid_unknown_fields=True, cache_hash=True, kw_only=True, frozen=True
+):
     """base class for groups of keyword arguments that define calls to a set of analysis functions"""
 
     pass

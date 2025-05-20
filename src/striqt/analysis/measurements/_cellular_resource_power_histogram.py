@@ -1,79 +1,30 @@
 from __future__ import annotations
 import dataclasses
-import functools
 from math import ceil
 import typing
 
-import numpy as np
-from xarray_dataclasses import AsDataArray, Coordof, Data, Name, Attr
+from ..lib import registry, specs, util
 
-from ..lib.registry import measurement
 from . import _spectrogram, _channel_power_histogram
+from ._cellular_cyclic_autocorrelation import link_direction
 
-# from ._channel_power_histogram import ChannelPowerCoords, make_power_histogram_bin_edges
-from ._cellular_cyclic_autocorrelation import LinkDirectionAxis, LinkDirectionCoords
-
-from ..lib import specs, util
 
 if typing.TYPE_CHECKING:
+    import numpy as np
     import iqwaveform
     import iqwaveform.type_stubs
 else:
     iqwaveform = util.lazy_import('iqwaveform')
+    np = util.lazy_import('numpy')
 
 
-@dataclasses.dataclass
-class LinkPair:
-    downlink: any
-    uplink: any
-
-
-# Axis and coordinates
-CellularResourcePowerBinAxis = typing.Literal['cellular_resource_power_bin']
-
-
-@dataclasses.dataclass
-class CellularResourcePowerBinCoords:
-    data: Data[CellularResourcePowerBinAxis, np.float32]
-    standard_name: Attr[str] = 'Cellular resource grid bin power'
-    units: Attr[str] = 'dBm'
-
-    @staticmethod
-    @util.lru_cache()
-    def factory(
-        capture: specs.Capture, spec: CellularResourcePowerHistogramSpec
-    ) -> dict[str, np.ndarray]:
-        """returns a dictionary of coordinate values, keyed by axis dimension name"""
-
-        bins = _channel_power_histogram.make_power_bins(
-            power_low=spec.power_low,
-            power_high=spec.power_high,
-            power_resolution=spec.power_resolution,
-        )
-
-        fres = spec.subcarrier_spacing / 2
-
-        if iqwaveform.isroundmod(capture.sample_rate, fres):
-            # need capture.sample_rate/resolution to give us a counting number
-            nfft = round(capture.sample_rate / fres)
-        else:
-            raise ValueError('sample_rate/resolution must be a counting number')
-
-        enbw = fres * 2 * _spectrogram.equivalent_noise_bandwidth(spec.window, nfft)
-
-        return bins, {'units': f'dBm/{enbw / 1e3:0.0f} kHz'}
-
-
-@dataclasses.dataclass
-class CellularResourcePowerHistogram(AsDataArray):
-    counts: Data[tuple[LinkDirectionAxis, CellularResourcePowerBinAxis], np.float32]
-    link_direction: Coordof[LinkDirectionCoords]
-    cellular_resource_power_bin: Coordof[CellularResourcePowerBinCoords]
-    standard_name: Attr[str] = 'Fraction of resource grid'
-    name: Name[str] = 'cellular_resource_power_histogram'
-
-
-class CellularResourcePowerHistogramSpec(specs.Analysis, kw_only=True, frozen=True):
+class CellularResourcePowerHistogramSpec(
+    specs.Measurement,
+    forbid_unknown_fields=True,
+    cache_hash=True,
+    kw_only=True,
+    frozen=True,
+):
     window: typing.Union[str, tuple[str, float]]
     window_fill: typing.Union[float, None] = None
     subcarrier_spacing: float
@@ -90,10 +41,56 @@ class CellularResourcePowerHistogramSpec(specs.Analysis, kw_only=True, frozen=Tr
     ] = 'normal'
 
 
-@measurement(
-    CellularResourcePowerHistogram,
-    basis='spectrogram',
+@dataclasses.dataclass
+class LinkPair:
+    downlink: any
+    uplink: any
+
+
+@registry.coordinate_factory(
+    dtype='float32',
+    attrs={'standard_name': 'Cellular resource grid bin power', 'units': 'dBm'},
+)
+@util.lru_cache()
+def cellular_resource_power_bin(
+    capture: specs.Capture, spec: CellularResourcePowerHistogramSpec
+) -> dict[str, np.ndarray]:
+    """returns a dictionary of coordinate values, keyed by axis dimension name"""
+
+    bins = _channel_power_histogram.make_power_bins(
+        power_low=spec.power_low,
+        power_high=spec.power_high,
+        power_resolution=spec.power_resolution,
+    )
+
+    fres = spec.subcarrier_spacing / 2
+
+    if iqwaveform.isroundmod(capture.sample_rate, fres):
+        # need capture.sample_rate/resolution to give us a counting number
+        nfft = round(capture.sample_rate / fres)
+    else:
+        raise ValueError('sample_rate/resolution must be a counting number')
+
+    enbw = fres * 2 * _spectrogram.equivalent_noise_bandwidth(spec.window, nfft)
+
+    return bins, {'units': f'dBm/{enbw / 1e3:0.0f} kHz'}
+
+
+# @dataclasses.dataclass
+# class CellularResourcePowerHistogram(AsDataArray):
+#     counts: Data[tuple[LinkDirectionAxis, CellularResourcePowerBinAxis], np.float32]
+#     link_direction: Coordof[LinkDirectionCoords]
+#     cellular_resource_power_bin: Coordof[CellularResourcePowerBinCoords]
+#     standard_name: Attr[str] = 'Fraction of resource grid'
+#     name: Name[str] = 'cellular_resource_power_histogram'
+
+
+@registry.measurement(
+    coord_funcs=[link_direction, cellular_resource_power_bin],
+    dtype='float32',
+    depends=_spectrogram.spectrogram,
     spec_type=CellularResourcePowerHistogramSpec,
+    attrs={'standard_name': 'Fraction of resource grid'},
 )
 def cellular_resource_power_histogram(
     iq: 'iqwaveform.type_stubs.ArrayLike',
@@ -172,7 +169,7 @@ def cellular_resource_power_histogram(
     else:
         raise ValueError('cp_guard_period must be "normal" or "extended"')
 
-    spg_spec = _spectrogram.SpectrogramAnalysis(
+    spg_spec = _spectrogram.SpectrogramSpec(
         window=spec.window,
         frequency_resolution=spec.subcarrier_spacing / 2,
         fractional_overlap=fractional_overlap,
@@ -307,7 +304,7 @@ def apply_mask(
     return masks[np.newaxis, :, :, np.newaxis] * spectrogram[:, np.newaxis, :, :]
 
 
-@functools.lru_cache()
+@util.lru_cache()
 def build_tdd_link_symbol_masks(
     frame_slots: str,
     special_symbols: typing.Optional[str] = None,

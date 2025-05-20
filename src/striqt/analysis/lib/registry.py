@@ -13,10 +13,6 @@ import typing
 from . import specs
 
 
-if typing.TYPE_CHECKING:
-    import xarray_dataclasses
-
-
 TFunc = typing.Callable[..., typing.Any]
 
 
@@ -33,35 +29,139 @@ def _param_to_field(name, p: inspect.Parameter):
         return (name, p.annotation, p.default)
 
 
-class KeywordArguments(specs.StructBase):
-    """base class for the keyword argument parameters of an analysis function"""
+# TODO: future approach to registering coordinates, rather than dataclasses?
+class DelayedCoordinate(typing.NamedTuple):
+    name: str
+    func: callable
+    dtype: str
+    dims: tuple[str, ...] = None
+    attrs: dict = {}
 
 
-class _AnalysisRegistry(collections.UserDict):
+class _CoordinateRegistry(collections.UserDict[str, DelayedCoordinate]):
+    def __call__[**P, R](
+        self,
+        dtype,
+        *,
+        name: str | None = None,
+        dims: tuple[str, ...] | None = None,
+        attrs={},
+    ) -> typing.Callable[P, R]:
+        kws = locals()
+
+        def wrapper(func):
+            if isinstance(kws['dims'], str):
+                dims = tuple((kws['dims'],))
+            else:
+                dims = kws['dims']
+
+            if kws['name'] is not None:
+                name = str(kws['name'])
+            else:
+                try:
+                    name = func.__name__
+                except AttributeError as ex:
+                    raise TypeError(
+                        'specify the coordinate name with coordinates(name, ...)'
+                    ) from ex
+
+            if name in self:
+                raise KeyError(
+                    f'a coordinate has already been registered for coordinate {name!r}'
+                )
+
+            if dims is None:
+                dims = (name,)
+
+            self[name] = DelayedCoordinate(
+                name=name, func=func, dims=dims, dtype=dtype, attrs=attrs
+            )
+
+            return func
+
+        return wrapper
+
+    def get(self, key):
+        if not callable(key):
+            print(repr(key))
+            raise TypeError('coordinate key must be a registered callable')
+        try:
+            return super().get(key)
+        except KeyError:
+            raise TypeError(
+                f'callable {repr(key)} has not been registerd as a coordinate'
+            )
+
+    def guess_dims(self, funcs: typing.Iterable[callable]) -> list[str]:
+        """guess dimensions of a dataarray based on its coordinates"""
+        dims = {}
+        for func in funcs:
+            coord = self.get(func)
+            if coord is None:
+                continue
+            dims.update(dict.fromkeys(coord.dims, None))
+        return list(dims.keys())
+
+
+coordinate_factory = _CoordinateRegistry()
+
+
+class _MeasurementRegistry(collections.UserDict):
     """a registry of keyword-only arguments for decorated functions"""
-
-    spec_base_type = specs.Analysis
 
     def __init__(self):
         super().__init__()
-        self.bases: dict[str, set[callable]] = {}
-        self.names = set()
+        self.depends_on: dict[callable, set[callable]] = {}
+        self.names: set[str] = set()
 
     def __call__[**P, R](
         self,
-        xarray_datacls: 'xarray_dataclasses.datamodel.DataClass',
-        basis: str,
-        spec_type: type[specs.Analysis],
-        metadata={},
+        # xarray_datacls: 'xarray_dataclasses.datamodel.DataClass',
+        name: str | None = None,
+        *,
+        # coords: typing.Iterable[],
+        dims: typing.Iterable[str] | str | None = None,
+        coord_funcs: typing.Iterable[callable] | callable | None = None,
+        depends: typing.Iterable[callable] = [],
+        spec_type: type[specs.Measurement],
+        dtype: str,
+        attrs={},
     ) -> typing.Callable[P, R]:
         """add decorated `func` and its keyword arguments in the self.tostruct() schema"""
+        if isinstance(dims, str):
+            dims = (dims,)
+
+        if coord_funcs is None:
+            coord_funcs = ()
+        elif callable(coord_funcs):
+            coord_funcs = (coord_funcs,)
+        else:
+            for entry in coord_funcs:
+                if not callable(entry):
+                    raise TypeError('each coord_funcs item must be callable')
+
+        if callable(depends):
+            depends = (depends,)
+
+        kws = locals()
 
         def wrapper(func: TFunc):
-            name = func.__name__
+            if kws['name'] is None:
+                name = func.__name__
+            else:
+                name = kws['name ']
+
             if name in self.names:
-                raise TypeError(f'a function named {repr(name)} was already registered')
+                raise TypeError(
+                    f'a measurement named {repr(name)} was already registered'
+                )
             else:
                 self.names.add(name)
+
+            if kws['dims'] is None:
+                dims = coordinate_factory.guess_dims(coord_funcs)
+            else:
+                dims = kws['dims']
 
             # sig = inspect.signature(func)
 
@@ -86,16 +186,19 @@ class _AnalysisRegistry(collections.UserDict):
 
                 if isinstance(ret, (list, tuple)) and len(ret) == 2:
                     result, ret_metadata = ret
-                    ret_metadata = dict(metadata, **ret_metadata)
+                    ret_metadata = dict(attrs, **ret_metadata)
                 else:
                     result = ret
-                    ret_metadata = metadata
+                    ret_metadata = attrs
 
                 result = _DelayedDataArray(
-                    xarray_datacls,
                     result,
                     capture,
+                    name=name,
+                    dims=dims,
+                    coord_factories=coord_funcs,
                     spec=spec,
+                    dtype=dtype,
                     attrs=ret_metadata,
                 )
 
@@ -118,7 +221,10 @@ class _AnalysisRegistry(collections.UserDict):
             #     if p.kind is inspect.Parameter.KEYWORD_ONLY and not k.startswith('_')
             # ]
 
-            # self.bases.setdefault(basis, []).append(name)
+            self.depends_on[wrapped] = []
+            for dep in depends:
+                self.depends_on[dep].append(wrapped)
+
             # self.spec_types[name] = spec_type
 
             # def hook(type_):
@@ -133,7 +239,7 @@ class _AnalysisRegistry(collections.UserDict):
 
         return wrapper
 
-    def spec_types(self) -> type[specs.Analysis]:
+    def spec_types(self) -> type[specs.Measurement]:
         """return a Struct subclass type representing a specification for calls to all registered functions"""
         fields = [
             (func.__name__, typing.Union[struct_type, None], None)
@@ -143,7 +249,7 @@ class _AnalysisRegistry(collections.UserDict):
         return msgspec.defstruct(
             'Analysis',
             fields,
-            bases=(self.spec_base_type,),
+            bases=(specs.Measurement,),
             kw_only=True,
             forbid_unknown_fields=True,
             omit_defaults=True,
@@ -151,46 +257,4 @@ class _AnalysisRegistry(collections.UserDict):
         )
 
 
-measurement = _AnalysisRegistry()
-
-
-# TODO: future approach to registering coordinates, rather than dataclasses?
-# class _RegisteredCoordinate(typing.NamedTuple):
-#     dims: tuple[str, ...]
-#     dtype: str
-#     standard_name: str
-#     units: typing.Optional[str]
-#     func: callable
-
-
-# class _CoordinateRegistry(collections.UserDict[str, _RegisteredCoordinate]):
-#     def __call__(self, name: str|None = None, *, dims: tuple[str, ...], dtype, standard_name, units=None):
-#         if isinstance(dims, str):
-#             dims = tuple((dims,))
-#         else:
-#             dims = tuple(dims)
-#             if len(dims) == 0:
-#                 raise ValueError('dims must be a string or an iterable of strings')
-
-#         if name is not None:
-#             name = str(name)
-
-#         def wrapper(func):
-#             if name is None: # noqa: F823
-#                 try:
-#                     name = (func.__name__,)
-#                 except AttributeError as ex:
-#                     raise TypeError('specify the coordinate name with register_coordinate(name, ...)')from ex
-
-#             if name in self:
-#                 raise KeyError(f'a coordinate has already been registered for dimension {dims!r}')
-
-#             self[name] = _RegisteredCoordinate(
-#                 dims=dims, dtype=dtype, standard_name=standard_name, units=units
-#             )
-
-#             return func
-
-#         return wrapper
-
-# coordinate = _CoordinateRegistry()
+measurement = _MeasurementRegistry()

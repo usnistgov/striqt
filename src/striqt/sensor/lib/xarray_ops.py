@@ -218,7 +218,7 @@ class AnalysisCaller:
 
     radio: SourceBase
     sweep: specs.Sweep
-    analysis_spec: list[specs.Analysis]
+    analysis_spec: list[specs.Measurement]
     extra_attrs: dict[str, typing.Any] | None = None
     correction: bool = False
 

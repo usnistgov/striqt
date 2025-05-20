@@ -1,11 +1,7 @@
 from __future__ import annotations
-import dataclasses
 import typing
 
-from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
-
-from ..lib.registry import measurement
-from ..lib import specs, util
+from ..lib import registry, specs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -18,82 +14,67 @@ else:
     np = util.lazy_import('numpy')
 
 
+class IQWaveformSpec(
+    specs.Measurement,
+    forbid_unknown_fields=True,
+    cache_hash=True,
+    kw_only=True,
+    frozen=True,
+):
+    start_time_sec: typing.Optional[float] = (None,)
+    stop_time_sec: typing.Optional[float] = (None,)
+
+
+class IQWaveformKeywords(specs.AnalysisKeywords):
+    start_time_sec: typing.NotRequired[typing.Optional[float]]
+    stop_time_sec: typing.NotRequired[typing.Optional[float]]
+
+
 def _get_start_stop_index(
     capture: specs.Capture,
-    start_time_sec: typing.Optional[float] = None,
-    stop_time_sec: typing.Optional[float] = None,
+    spec: IQWaveformSpec,
     allow_none=True,
 ):
-    if start_time_sec is None:
+    if spec.start_time_sec is None:
         if allow_none:
             start = None
         else:
             start = 0
     else:
-        start = int(start_time_sec * capture.sample_rate)
+        start = int(spec.start_time_sec * capture.sample_rate)
 
-    if stop_time_sec is None:
+    if spec.stop_time_sec is None:
         if allow_none:
             stop = None
         else:
             stop = int(capture.sample_rate * capture.duration)
     else:
-        stop = int(stop_time_sec * capture.sample_rate)
+        stop = int(spec.stop_time_sec * capture.sample_rate)
 
     return start, stop
 
 
-### IQ sample index dimension and coordinates
-IQSampleIndexAxis = typing.Literal['iq_index']
+@registry.coordinate_factory(dtype='uint64', attrs={'standard_name': 'Sample Index'})
+@util.lru_cache()
+def iq_index(capture: specs.Capture, spec: IQWaveformSpec) -> typing.Iterable[int]:
+    start, stop = _get_start_stop_index(capture, spec, allow_none=False)
+    return pd.RangeIndex(start, stop, name=iq_index.__name__)
 
 
-@dataclasses.dataclass
-class IQSampleIndexCoords:
-    data: Data[IQSampleIndexAxis, int]
-    standard_name: Attr[str] = 'Sample Index'
-
-    @staticmethod
-    @util.lru_cache()
-    def factory(
-        capture: specs.Capture, spec: IQWaveformAnalysis
-    ) -> typing.Iterable[int]:
-        start, stop = _get_start_stop_index(
-            capture,
-            start_time_sec=spec.start_time_sec,
-            stop_time_sec=spec.stop_time_sec,
-            allow_none=False,
-        )
-        name = typing.get_args(IQSampleIndexAxis)[0]
-        return pd.RangeIndex(start, stop, name=name)
-
-
-### DataArray definition
-@dataclasses.dataclass
-class IQWaveform(AsDataArray):
-    iq_waveform: Data[IQSampleIndexAxis, np.complex64]
-
-    # Including this leads to serialized data with an
-    # index vector of the same size as the IQ waveform.
-    # iq_index: Coordof[IQSampleIndexCoords]
-
-    standard_name: Attr[str] = 'IQ waveform'
-    units: Attr[str] = 'V/√Ω'
-
-
-class IQWaveformAnalysis(specs.Analysis, kw_only=True, frozen=True):
-    start_time_sec: typing.Optional[float] = (None,)
-    stop_time_sec: typing.Optional[float] = (None,)
-
-
-@measurement(IQWaveform, basis='iq', spec_type=IQWaveformAnalysis)
+@registry.measurement(
+    coord_funcs=[iq_index],
+    spec_type=IQWaveformSpec,
+    dtype='complex64',
+    attrs={'standard_name': 'IQ waveform', 'units': 'V/√Ω'},
+)
 def iq_waveform(
     iq: 'iqwaveform.util.Array',
     capture: specs.Capture,
-    **kwargs: typing.Unpack[IQWaveformAnalysis],
+    **kwargs: typing.Unpack[IQWaveformKeywords],
 ) -> 'iqwaveform.util.Array':
     """package a clipping of the IQ waveform"""
 
-    spec = IQWaveformAnalysis.fromdict(kwargs)
+    spec = IQWaveformSpec.fromdict(kwargs)
 
     metadata = spec.todict()
 
@@ -107,8 +88,6 @@ def iq_waveform(
     else:
         stop = int(spec.stop_time_sec * capture.sample_rate)
 
-    start, stop = _get_start_stop_index(
-        capture, start_time_sec=spec.start_time_sec, stop_time_sec=spec.stop_time_sec
-    )
+    start, stop = _get_start_stop_index(capture, spec)
 
     return iq[:, start:stop], metadata

@@ -1,12 +1,8 @@
 from __future__ import annotations
-import dataclasses
 import typing
 
-from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
-
+from ..lib import registry, specs, util
 from . import _channel_power_time_series
-from ..lib.registry import measurement
-from ..lib import specs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -17,7 +13,19 @@ else:
 
 
 class ChannelPowerHistogramSpec(
-    _channel_power_time_series.ChannelPowerTimeSeriesSpec, kw_only=True, frozen=True
+    _channel_power_time_series.ChannelPowerTimeSeriesSpec,
+    forbid_unknown_fields=True,
+    cache_hash=True,
+    kw_only=True,
+    frozen=True,
+):
+    power_low: float
+    power_high: float
+    power_resolution: float
+
+
+class ChannelPowerHistogramKeywords(
+    _channel_power_time_series.ChannelPowerTimeSeriesKeywords
 ):
     power_low: float
     power_high: float
@@ -36,24 +44,6 @@ def make_power_bins(power_low, power_high, power_resolution, xp=np):
     top_inf = xp.array([float('inf')])
     ret = xp.concatenate((bottom_inf, ret, top_inf))
     return ret
-
-
-ChannelPowerBinAxis = typing.Literal['channel_power_bin']
-
-
-@dataclasses.dataclass
-class ChannelPowerCoords:
-    data: Data[ChannelPowerBinAxis, np.float32]
-    standard_name: Attr[str] = 'Channel power'
-    units: Attr[str] = 'dBm'
-
-    @staticmethod
-    @util.lru_cache()
-    def factory(
-        capture: specs.Capture, spec: ChannelPowerHistogramSpec
-    ) -> dict[str, np.ndarray]:
-        """returns a dictionary of coordinate values, keyed by axis dimension name"""
-        return make_power_bins(spec.power_low, spec.power_high, spec.power_resolution)
 
 
 @util.lru_cache()
@@ -76,27 +66,26 @@ def make_power_histogram_bin_edges(power_low, power_high, power_resolution, xp=n
     return xp.concatenate((bin_centers[:-1] - power_resolution, top_edge))
 
 
-@dataclasses.dataclass
-class ChannelPowerHistogram(AsDataArray):
-    histogram: Data[
-        tuple[_channel_power_time_series.PowerDetectorAxis, ChannelPowerBinAxis],
-        np.float32,
-    ]
-
-    # Coordinates: matching the number and order of axes in the data
-    power_detector: Coordof[_channel_power_time_series.PowerDetectorCoords]
-    channel_power_bin: Coordof[ChannelPowerCoords]
-
-    standard_name: Attr[str] = 'Fraction of counts'
+@registry.coordinate_factory(
+    dtype='float32', attrs={'standard_name': 'Channel power', 'units': 'dBm'}
+)
+@util.lru_cache()
+def channel_power_bin(
+    capture: specs.Capture, spec: ChannelPowerHistogramSpec
+) -> dict[str, np.ndarray]:
+    """returns a dictionary of coordinate values, keyed by axis dimension name"""
+    return make_power_bins(spec.power_low, spec.power_high, spec.power_resolution)
 
 
-@measurement(
-    ChannelPowerHistogram,
-    basis='channel_power',
+@registry.measurement(
+    coord_funcs=[_channel_power_time_series.power_detector, channel_power_bin],
+    depends=[_channel_power_time_series.channel_power_time_series],
     spec_type=ChannelPowerHistogramSpec,
+    dtype='float32',
+    attrs={'standard_name': 'Channel power', 'units': 'dBm'},
 )
 def channel_power_histogram(
-    iq, capture: specs.Capture, **kwargs: typing.Unpack[ChannelPowerHistogramSpec]
+    iq, capture: specs.Capture, **kwargs: typing.Unpack[ChannelPowerHistogramKeywords]
 ):
     """evaluate the fraction of channel power readings binned on a uniform grid spacing.
 

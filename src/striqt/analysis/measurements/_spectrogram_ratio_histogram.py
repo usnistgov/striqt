@@ -1,14 +1,9 @@
 from __future__ import annotations
-import dataclasses
 import typing
 
-from xarray_dataclasses import AsDataArray, Coordof, Data, Attr
+from . import _channel_power_histogram, _spectrogram, _spectrogram_histogram
 
-from ..lib.registry import measurement
-from . import _spectrogram, _spectrogram_histogram
-from ._channel_power_histogram import make_power_histogram_bin_edges
-
-from ..lib import specs, util
+from ..lib import registry, specs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -18,55 +13,52 @@ else:
     np = util.lazy_import('numpy')
 
 
-SpectrogramPowerRatioBinAxis = typing.Literal['spectrogram_power_ratio_bin']
-
-
-@dataclasses.dataclass
-class SpectrogramPowerRatioBinCoords:
-    data: Data[SpectrogramPowerRatioBinAxis, np.float32]
-    standard_name: Attr[str] = 'Spectrogram power ratio'
-    units: Attr[str] = 'dB'
-
-    @staticmethod
-    @util.lru_cache()
-    def factory(
-        capture: specs.Capture, spec: SpectrogramHistogramRatioAnalysis
-    ) -> dict[str, np.ndarray]:
-        """returns a dictionary of coordinate values, keyed by axis dimension name"""
-
-        abs_spec = _spectrogram_histogram.SpectrogramHistogramAnalysis.fromspec(spec)
-        bins, attrs = _spectrogram_histogram.SpectrogramPowerBinCoords.factory(
-            capture, abs_spec
-        )
-        attrs['units'] = attrs['units'].replace('dBm', 'dB')
-        return bins, attrs
-
-
-@dataclasses.dataclass
-class SpectrogramRatioHistogram(AsDataArray):
-    counts: Data[SpectrogramPowerRatioBinAxis, np.float32]
-    spectrogram_power_ratio_bin: Coordof[SpectrogramPowerRatioBinCoords]
-    standard_name: Attr[str] = 'Fraction of counts'
-
-
-class SpectrogramHistogramRatioAnalysis(
-    _spectrogram_histogram.SpectrogramHistogramAnalysis, kw_only=True, frozen=True
+class SpectrogramHistogramRatioSpec(
+    _spectrogram_histogram.SpectrogramHistogramSpec,
+    forbid_unknown_fields=True,
+    cache_hash=True,
+    kw_only=True,
+    frozen=True,
 ):
     pass
 
 
-@measurement(
-    SpectrogramRatioHistogram,
-    basis='spectrogram',
-    spec_type=SpectrogramHistogramRatioAnalysis,
+class SpectrogramHistogramRatioKeywords(
+    _spectrogram_histogram.SpectrogramHistogramKeywords
+):
+    pass
+
+
+@registry.coordinate_factory(
+    dtype='float32',
+    attrs={'standard_name': 'Spectrogram cross-channel power ratio', 'units': 'dB'},
+)
+@util.lru_cache()
+def spectrogram_ratio_power_bin(
+    capture: specs.Capture, spec: SpectrogramHistogramRatioSpec
+) -> dict[str, np.ndarray]:
+    """returns a dictionary of coordinate values, keyed by axis dimension name"""
+
+    abs_spec = _spectrogram_histogram.SpectrogramHistogramSpec.fromspec(spec)
+    bins, attrs = _spectrogram_histogram.spectrogram_power_bin(capture, abs_spec)
+    attrs['units'] = attrs['units'].replace('dBm', 'dB')
+    return bins, attrs
+
+
+@registry.measurement(
+    depends=_spectrogram.spectrogram,
+    coord_funcs=[spectrogram_ratio_power_bin],
+    spec_type=SpectrogramHistogramRatioSpec,
+    dtype='float32',
+    attrs={'standard_name': 'Fraction of counts'},
 )
 def spectrogram_ratio_histogram(
     iq: 'iqwaveform.util.Array',
     capture: specs.Capture,
-    **kwargs: typing.Unpack[SpectrogramHistogramRatioAnalysis],
+    **kwargs: typing.Unpack[SpectrogramHistogramRatioKeywords],
 ):
-    spec = SpectrogramHistogramRatioAnalysis.fromdict(kwargs)
-    spg_spec = _spectrogram.SpectrogramAnalysis.fromspec(spec)
+    spec = SpectrogramHistogramRatioSpec.fromdict(kwargs)
+    spg_spec = _spectrogram.SpectrogramSpec.fromspec(spec)
 
     spg, metadata = _spectrogram.evaluate_spectrogram(
         iq,
@@ -87,7 +79,7 @@ def spectrogram_ratio_histogram(
     metadata.pop('units')
 
     xp = iqwaveform.util.array_namespace(iq)
-    bin_edges = make_power_histogram_bin_edges(
+    bin_edges = _channel_power_histogram.make_power_histogram_bin_edges(
         power_low=spec.power_low,
         power_high=spec.power_high,
         power_resolution=spec.power_resolution,
