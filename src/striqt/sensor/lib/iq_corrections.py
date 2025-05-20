@@ -1,7 +1,7 @@
 from __future__ import annotations
 import typing
 
-from .sources import base, SourceBase, design_capture_filter
+from .sources import base, SourceBase, design_capture_resampler
 from . import calibration, specs, util
 
 if typing.TYPE_CHECKING:
@@ -86,11 +86,12 @@ def resampling_correction(
         capture, radio, force_calibration=force_calibration, xp=xp
     )
 
-    fs, _, analysis_filter = design_capture_filter(radio.base_clock_rate, capture)
+    design = design_capture_resampler(radio.base_clock_rate, capture)
+    fs = design['fs_sdr']
 
     except_on_low_memory()
 
-    needs_resample = base.needs_resample(analysis_filter, capture)
+    needs_resample = base.needs_resample(design, capture)
 
     # apply the filter here and ensure we're working with a copy if needed
     if np.isfinite(capture.analysis_bandwidth):

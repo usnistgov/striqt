@@ -2,6 +2,7 @@ import typing
 
 import labbench as lb
 from labbench import paramattr as attr
+import time
 
 from . import base, method_attr
 from .. import specs
@@ -99,7 +100,7 @@ class NullSource(base.SourceBase):
         self.backend['clock_source'] = clock_source.lower()
 
     def sync_time_source(self):
-        pass
+        self._sync_time_ns = time.time_ns()
 
     @attr.method.bool(sets=True, gets=True)
     def rx_enabled(self):
@@ -111,7 +112,6 @@ class NullSource(base.SourceBase):
             return
         if enable:
             self.backend['rx_enabled'] = True
-            self.reset_sample_counter()
         else:
             self.backend['rx_enabled'] = False
 
@@ -160,13 +160,15 @@ class NullSource(base.SourceBase):
     ) -> tuple[int, int]:
         fs = float(self.backend_sample_rate())
         sample_period_ns = 1_000_000_000 / fs
-        timestamp_ns = self._samples_elapsed * sample_period_ns
+        timestamp_ns = self._sync_time_ns + self._samples_elapsed * sample_period_ns
 
         self._samples_elapsed += count
 
         return count, round(timestamp_ns)
 
     def reset_sample_counter(self, value=None):
+        self.sync_time_source()
+
         if value is not None:
             self._samples_elapsed = value
             self._sample_start_index = value

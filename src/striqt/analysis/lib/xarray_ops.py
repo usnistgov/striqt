@@ -291,7 +291,7 @@ def build_dataarray(
                 name = f'{delayed.name}.{info.name}'
                 raise ValueError(f'unexpected {name} coordinate shape: {problem}')
 
-        da[info.name].attrs.update(metadata)
+        da[info.name].attrs.update(info.attrs|metadata)
 
     return da.assign_attrs(delayed.attrs)
 

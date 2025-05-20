@@ -88,8 +88,8 @@ def _iq_is_reusable(
     if c1 is None or c2 is None:
         return False
 
-    fsb1 = sources.design_capture_filter(base_clock_rate, c1)[0]
-    fsb2 = sources.design_capture_filter(base_clock_rate, c2)[0]
+    fsb1 = sources.design_capture_resampler(base_clock_rate, c1)['fs_sdr']
+    fsb2 = sources.design_capture_resampler(base_clock_rate, c2)['fs_sdr']
 
     if fsb1 != fsb2:
         # the realized backend sample rates need to be the same

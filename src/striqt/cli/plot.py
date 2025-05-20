@@ -25,6 +25,7 @@ def run(dataset, output_path: str, interactive: bool):
     )
 
     executor = futures.ProcessPoolExecutor(max_workers=6)
+    ex = None
 
     with executor:
         pending = []
@@ -60,7 +61,7 @@ def run(dataset, output_path: str, interactive: bool):
                 executor.submit(
                     plotter.power_spectral_density,
                     data,
-                    frequency_statistic=['mean', 0.9, 'max'],
+                    time_statistic=['mean', 0.9, 'max'],
                 )
             ]
 
@@ -69,6 +70,11 @@ def run(dataset, output_path: str, interactive: bool):
                 future.result()
             except Exception as exc:
                 print(f'generated an exception: {exc}')
+                if ex is None:
+                    ex = exc
+    
+    if ex is not None:
+        raise ex
 
 
 if __name__ == '__main__':

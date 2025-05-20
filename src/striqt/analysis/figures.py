@@ -70,6 +70,12 @@ class FixedEngFormatter(mpl.ticker.EngFormatter):
             sign = -1
             value = -value
 
+        elif value == float('inf'):
+            return '∞'
+
+        elif value == float('-inf'):
+            return '-∞'
+
         if value != 0:
             pow10 = int(math.floor(math.log10(value) / 3) * 3)
         else:
@@ -121,9 +127,14 @@ def _maybe_skip_missing(func):
     @functools.wraps(func)
     def wrapped(obj: CapturePlotter, data, *args, **kws):
         if obj._ignore_missing and func.__name__ not in data.data_vars:
-            pass
-        else:
+            return
+
+        try:            
             func(obj, data, *args, **kws)
+        except BaseException as ex:
+            new_text = f'while plotting {func.__name__}, {ex.args[0]}'
+            ex.args = (new_text,) + ex.args[1:]
+            raise ex
 
     return wrapped
 
@@ -332,7 +343,7 @@ class CapturePlotter:
 
     @_maybe_skip_missing
     def power_spectral_density(
-        self, data: xr.Dataset, hue='frequency_statistic', **sel
+        self, data: xr.Dataset, hue='time_statistic', **sel
     ):
         key = self.power_spectral_density.__name__
 
@@ -340,7 +351,7 @@ class CapturePlotter:
             key not in data.data_vars
             and 'persistence_spectrum' in data.data_vars
             and 'persistence_statistics' in data
-            and hue == 'frequency_statistic'
+            and hue == 'time_statistic'
         ):
             # legacy
 
@@ -625,7 +636,7 @@ def label_selection(
         label = coord.attrs.get('standard_name', coord.attrs.get('name', name))
         values = np.atleast_1d(coord.values)
         if units is not None:
-            formatter = mpl.ticker.EngFormatter(unit=units)
+            formatter = FixedEngFormatter(unit=units)
             coord_names[label] = ', '.join([formatter(v) for v in values])
         else:
             coord_names[label] = ', '.join([str(v) for v in values])

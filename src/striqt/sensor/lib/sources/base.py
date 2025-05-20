@@ -117,12 +117,11 @@ def _cast_iq(
 
     # what follows is some acrobatics to minimize new memory allocation and copy
     if dtype_in.kind == 'i':
-        # 1. the same memory buffer, interpreted as int16 without casting
+        # the same memory buffer, interpreted as int16 without casting
         buffer_int16 = buffer.view('int16')[:, : 2 * buffer.shape[1]]
         buffer_float32 = buffer.view('float32')
 
-        # TODO: evaluate whether this is necessary, or if a copy is really so painful
-        # 2. in-place casting from the int16 samples, filling in the extra allocation in self.buffer
+        # in-place cast from the int16 samples, filling the extra allocation in self.buffer
         xp.copyto(buffer_float32, buffer_int16, casting='unsafe')
 
         # re-interpret the interleaved (float32 I, float32 Q) values as a complex value
@@ -329,9 +328,11 @@ class SourceBase(lb.Device):
             self.rx_enabled(False)
             self.gain(capture.gain)
 
-        fs_backend, lo_offset, analysis_filter = design_capture_filter(
+        resampler_design = design_capture_resampler(
             self.base_clock_rate, capture
         )
+        fs_backend = resampler_design['fs_sdr']
+        lo_offset = resampler_design['lo_offset']
 
         if (
             lo_offset != self.lo_offset
@@ -341,8 +342,8 @@ class SourceBase(lb.Device):
             self.center_frequency(capture.center_frequency)
             self.lo_offset = lo_offset
 
-        nfft_out = analysis_filter.get('nfft_out', analysis_filter['nfft'])
-        downsample = analysis_filter['nfft'] / nfft_out
+        nfft_out = resampler_design.get('nfft_out', resampler_design['nfft'])
+        downsample = resampler_design['nfft'] / nfft_out
 
         if fs_backend != self.backend_sample_rate() or downsample != self._downsample:
             self.rx_enabled(False)
@@ -612,14 +613,14 @@ def find_trigger_holdoff(
 
 
 @util.lru_cache(30000)
-def _design_capture_filter(
+def _design_capture_resampler(
     base_clock_rate: float,
     capture: specs.WaveformCapture,
     bw_lo=0.25e6,
     min_oversampling=1.1,
     window=RESAMPLE_COLA_WINDOW,
     min_fft_size=MIN_RESAMPLE_FFT_SIZE,
-) -> tuple[float, float, dict]:
+) -> 'iqwaveform.fourier.ResamplerDesign':
     """design a filter specified by the capture for a radio with the specified MCR.
 
     For the return value, see `iqwaveform.fourier.design_cola_resampler`
@@ -639,7 +640,8 @@ def _design_capture_filter(
 
     if capture.host_resample:
         # use GPU DSP to resample from integer divisor of the MCR
-        fs_sdr, lo_offset, kws = iqwaveform.fourier.design_cola_resampler(
+        # fs_sdr, lo_offset, kws = iqwaveform.fourier.design_cola_resampler(
+        design = iqwaveform.fourier.design_cola_resampler(
             fs_base=base_clock_rate,
             fs_target=capture.sample_rate,
             bw=capture.analysis_bandwidth,
@@ -651,9 +653,9 @@ def _design_capture_filter(
             fs_sdr=capture.backend_sample_rate,
         )
 
-        kws['window'] = window
+        design['window'] = window
 
-        return fs_sdr, lo_offset, kws
+        return design
 
     elif lo_shift:
         raise ValueError('lo_shift requires host_resample=True')
@@ -671,14 +673,14 @@ def _design_capture_filter(
         )
 
 
-@functools.wraps(_design_capture_filter)
-def design_capture_filter(
+@functools.wraps(_design_capture_resampler)
+def design_capture_resampler(
     base_clock_rate, capture: specs.WaveformCapture, *args, **kws
-):
+) -> 'iqwaveform.fourier.ResamplerDesign':
     # cast the struct in case it's a subclass
     fixed_capture = specs.WaveformCapture.fromspec(capture)
     kws.setdefault('window', RESAMPLE_COLA_WINDOW)
-    return _design_capture_filter(
+    return _design_capture_resampler(
         base_clock_rate,
         fixed_capture,
         min_fft_size=MIN_RESAMPLE_FFT_SIZE,
@@ -706,23 +708,23 @@ def _get_dsp_pad_size(
     base_clock_rate: float, capture: specs.RadioCapture
 ) -> tuple[int, int]:
     """returns the padding before and after a waveform to achieve an integral number of FFT windows"""
-    _, _, analysis_filter = design_capture_filter(base_clock_rate, capture)
+    resampler_design = design_capture_resampler(base_clock_rate, capture)
 
     filter_pad = _get_filter_pad(capture)
     return (filter_pad, 0)
 
-    nfft = analysis_filter['nfft']
-    nfft_out = analysis_filter.get('nfft_out', nfft)
+    nfft = resampler_design['nfft']
+    nfft_out = resampler_design.get('nfft_out', nfft)
 
     samples_out = round(capture.duration * capture.sample_rate)
-    min_samples_in = ceil(samples_out * nfft / analysis_filter['nfft_out'])
+    min_samples_in = ceil(samples_out * nfft / resampler_design['nfft_out'])
 
     # round up to an integral number of FFT windows
     samples_in = ceil(min_samples_in / nfft) * nfft + nfft
 
     noverlap_out = iqwaveform.fourier._ola_filter_parameters(
         samples_in,
-        window=analysis_filter['window'],
+        window=resampler_design['window'],
         nfft_out=nfft_out,
         nfft=nfft,
         extend=True,
@@ -747,16 +749,16 @@ def _get_input_buffer_count_cached(
         msg = f'duration must be an integer multiple of the sample period (1/{capture.sample_rate} s)'
         raise ValueError(msg)
 
-    _, _, analysis_filter = design_capture_filter(base_clock_rate, capture)
+    resampler_design = design_capture_resampler(base_clock_rate, capture)
     if capture.host_resample:
-        sample_rate = analysis_filter['fs']
+        sample_rate = resampler_design['fs']
     else:
         sample_rate = capture.sample_rate
 
     pad_size = sum(_get_dsp_pad_size(base_clock_rate, capture))
-    if needs_resample(analysis_filter, capture):
-        nfft = analysis_filter['nfft']
-        min_samples_in = ceil(samples_out * nfft / analysis_filter['nfft_out'])
+    if needs_resample(resampler_design, capture):
+        nfft = resampler_design['nfft']
+        min_samples_in = ceil(samples_out * nfft / resampler_design['nfft_out'])
         samples_in = min_samples_in + pad_size
     else:
         samples_in = round(capture.sample_rate * capture.duration) + pad_size
@@ -770,15 +772,15 @@ def _get_input_buffer_count_cached(
 
 
 def get_channel_resample_buffer_count(radio: SourceBase, capture):
-    _, _, analysis_filter = design_capture_filter(radio.base_clock_rate, capture)
+    resampler_design = design_capture_resampler(radio.base_clock_rate, capture)
 
-    if capture.host_resample and needs_resample(analysis_filter, capture):
+    if capture.host_resample and needs_resample(resampler_design, capture):
         input_size = get_channel_read_buffer_count(radio, capture, True)
         buf_size = iqwaveform.fourier._istft_buffer_size(
             input_size,
-            window=analysis_filter['window'],
-            nfft_out=analysis_filter['nfft_out'],
-            nfft=analysis_filter['nfft'],
+            window=resampler_design['window'],
+            nfft_out=resampler_design['nfft_out'],
+            nfft=resampler_design['nfft'],
             extend=True,
         )
     else:

@@ -97,20 +97,14 @@ def simulated_awgn(
     seed=None,
     out=None,
 ) -> 'iqwaveform.util.Array':
-    try:
-        # e.g., numpy
-        bitgen = xp.random.PCG64(seed=seed)
-    except AttributeError:
-        # e.g., cupy
-        bitgen = xp.random.MRG32k3a(seed=seed)
-
-    generator = xp.random.Generator(bitgen)
+    # use the slower RandomState for maximum compatibility
+    # across array module namespaces
+    gen = xp.random.RandomState(seed=seed)
     size = round(capture.duration * capture.sample_rate)
 
-    if isinstance(capture, specs.FilteredCapture):
-        size = size + 2 * capture.analysis_filter.nfft
-
-    if pinned_cuda:
+    if out is not None:
+        samples = out
+    elif pinned_cuda:
         import numba
         import numba.cuda
 
@@ -126,22 +120,20 @@ def simulated_awgn(
 
         samples = xp.array(samples, copy=False)
     else:
-        samples = xp.empty((size,), dtype=xp.complex64)
+        samples = None
 
-    generator.standard_normal(
-        size=2 * size, dtype=xp.float32, out=samples.view(xp.float32)
-    )
+    x = gen.standard_normal(size=2 * size).astype('float32').view('complex64')
+
+    if samples is None:
+        samples = x
+    else:
+        samples[:] = x
 
     power = power_spectral_density * capture.sample_rate
 
     samples *= xp.sqrt(power / 2)
 
-    if isinstance(capture, specs.FilteredCapture):
-        return filter_iq_capture(samples, capture)[
-            capture.analysis_filter.nfft : -capture.analysis_filter.nfft
-        ]
-    else:
-        return samples
+    return samples
 
 
 def read_tdms(path, analysis_bandwidth: float = None):

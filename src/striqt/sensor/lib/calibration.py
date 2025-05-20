@@ -207,7 +207,7 @@ def _y_factor_frequency_response_correction(
     Tref=290,
 ):
     spectrum = dataset.power_spectral_density.sel(
-        frequency_statistic='mean', drop=True
+        time_statistic='mean', drop=True
     ).pipe(lambda x: 10 ** (x / 10.0))
 
     all_T = _y_factor_temperature(spectrum, enr_dB=20.87, Tamb=294.5389)
@@ -292,7 +292,7 @@ def lookup_power_correction(
     power_scale = []
 
     for capture_chan in split_capture_channels(capture):
-        fs, *_ = sources.design_capture_filter(base_clock_rate, capture_chan)
+        fs = sources.design_capture_resampler(base_clock_rate, capture_chan)['fs_sdr']
 
         # these capture fields must match the calibration conditions exactly
         exact_matches = dict(

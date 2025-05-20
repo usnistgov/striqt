@@ -10,7 +10,7 @@ from .lib.sources import (
     NullSource,
     FileSource,
     ZarrIQSource,
-    design_capture_filter,
+    design_capture_resampler,
 )
 from .lib.specs import RadioCapture, RadioSetup, Sweep, Description
 from .lib.sweeps import iter_sweep

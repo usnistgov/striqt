@@ -75,7 +75,7 @@ def truncate_spectrogram_bandwidth(x, nfft, fs, bandwidth, axis=0):
 def fftfreq(nfft, fs, dtype='float64') -> 'np.ndarray':
     """compute fftfreq for a specified sample rate.
 
-    This is meant to produce higher-precision results for 
+    This is meant to produce higher-precision results for
     rational sample rates in order to avoid rounding errors
     when merging captures with different sample rates.
     """

@@ -24,9 +24,8 @@ else:
 
 
 def lo_shift_tone(inds, radio: base.SourceBase, xp):
-    _, lo_offset, _ = base.design_capture_filter(
-        radio.base_clock_rate, radio.get_capture_struct()
-    )
+    resampler_design = base.design_capture_resampler(radio.base_clock_rate, radio.get_capture_struct())
+    lo_offset = resampler_design['lo_offset']
     return xp.exp((2j * np.pi * lo_offset) / radio.backend_sample_rate() * inds).astype(
         'complex64'
     )
@@ -167,12 +166,22 @@ class NoiseSource(TestSource):
         x = analysis.simulated_awgn(
             capture, xp=xp, seed=0, power_spectral_density=self.power_spectral_density
         )
-        x /= np.sqrt(self.backend_sample_rate() / self.sample_rate())
-        ii = xp.arange(start_index, count + start_index, dtype='int64')
+        # x /= np.sqrt(self.backend_sample_rate() / self.sample_rate())
 
-        ret = x[ii]
-        ret *= lo_shift_tone(ii, self, xp)
-        return ret
+        
+        if start_index < 0:
+            pad = -start_index
+            start_index = 0
+            count = count - pad
+        else:
+            pad = 0
+
+        ret = x[start_index: count + start_index]
+
+        if pad:
+            return xp.pad(ret, [[pad, 0]], mode='constant')
+        else:
+            return ret
 
 
 class TDMSFileSource(TestSource):

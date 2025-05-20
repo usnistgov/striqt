@@ -373,9 +373,9 @@ class SoapyRadioSource(base.SourceBase):
             if getattr(next_capture, field) != getattr(current, field):
                 return True
 
-        next_backend_sample_rate = base.design_capture_filter(
+        next_backend_sample_rate = base.design_capture_resampler(
             self.base_clock_rate, next_capture
-        )[2]['fs']
+        )['fs']
         if next_backend_sample_rate != self.backend_sample_rate():
             return True
 
