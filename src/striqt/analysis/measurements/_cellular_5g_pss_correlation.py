@@ -203,6 +203,9 @@ def _pss_5g_nr(
 
 @util.lru_cache()
 def _pss_params(capture: specs.Capture, spec: Cellular5GNRPSSCorrelationSpec) -> dict:
+    # TODO: make this part more explicit
+    trim_cp = True
+
     capture = capture.replace(sample_rate=spec.sample_rate)
 
     if not iqwaveform.util.isroundmod(spec.subcarrier_spacing, 15e3):
@@ -317,9 +320,6 @@ def cellular_5g_pss_correlation(
 
     spec = Cellular5GNRPSSCorrelationSpec.fromdict(kwargs).validate()
 
-    # TODO: make this part more explicit
-    trim_cp = True
-
     if isinstance(spec.frequency_offset, frozenset):
         if not hasattr(capture, 'center_frequency'):
             raise ValueError(
@@ -392,7 +392,7 @@ def cellular_5g_pss_correlation(
     paired_symbol_indexes = xp.array(params['symbol_indexes'], dtype='uint32') // 2
     R = R.reshape(paired_symbol_shape)[..., paired_symbol_indexes, :]
 
-    if trim_cp:
+    if params['trim_cp']:
         R = R[..., : -cp_samples // 2]
 
     R = iqwaveform.envtopow(R)
