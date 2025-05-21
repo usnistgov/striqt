@@ -7,10 +7,10 @@ import importlib.util
 import sys
 import threading
 import typing
+import typing_extensions
 
-
-_P = typing.ParamSpec('_P')
-_R = typing.TypeVar('_R')
+_P = typing_extensions.ParamSpec('_P')
+_R = typing_extensions.TypeVar('_R')
 
 
 def lazy_import(module_name: str, package=None):

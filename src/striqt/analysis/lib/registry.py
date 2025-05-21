@@ -8,12 +8,12 @@ import collections
 import functools
 import msgspec
 import typing
-
+import typing_extensions
 from . import specs
 
 
-_P = typing.ParamSpec('_P')
-_R = typing.TypeVar('_R')
+_P = typing_extensions.ParamSpec('_P')
+_R = typing_extensions.TypeVar('_R')
 
 
 class Cache:

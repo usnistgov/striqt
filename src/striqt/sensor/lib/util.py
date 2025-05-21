@@ -2,13 +2,14 @@ from __future__ import annotations
 import functools
 import itertools
 import typing
+import typing_extensions
 import sys
 
 TGen = type[typing.Any]
 
 
-_P = typing.ParamSpec('_P')
-_R = typing.TypeVar('_R')
+_P = typing_extensions.ParamSpec('_P')
+_R = typing_extensions.TypeVar('_R')
 
 
 def lazy_import(module_name: str):
