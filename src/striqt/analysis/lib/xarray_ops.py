@@ -364,9 +364,8 @@ def evaluate_by_spec(
     | typing.Literal[False]
     | typing.Literal['delayed'] = 'delayed',
 ):
-    """evaluate the specified channel analysis for the given IQ waveform and
-    its capture information"""
-    # round-trip for type conversion and validation
+    """evaluate each analysis for the given IQ waveform"""
+
     if isinstance(spec, specs.MeasurementSet):
         spec = spec.validate()
     else:
