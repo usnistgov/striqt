@@ -268,7 +268,7 @@ class SourceBase(lb.Device):
         self._carryover = None
         self._buffers = None
 
-    def setup(self, radio_setup: specs.RadioSetup, **setup_kws):
+    def setup(self, radio_setup: specs.RadioSetup, **setup_kws: typing.Unpack[specs._RadioSetupKeywords]):
         """disarm acquisition and apply the given radio setup"""
 
         if radio_setup is None:
@@ -296,7 +296,7 @@ class SourceBase(lb.Device):
 
     @lb.stopwatch('arm', logger_level='debug')
     def arm(
-        self, capture: specs.RadioCapture = None, **capture_kws
+        self, capture: specs.RadioCapture = None, **capture_kws: typing.Unpack[specs._RadioCaptureKeywords]
     ) -> specs.RadioCapture:
         """stop the stream, apply a capture configuration, and start it"""
 

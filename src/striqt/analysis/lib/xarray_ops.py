@@ -6,7 +6,6 @@ import collections
 import functools
 import dataclasses
 import math
-import sys
 import typing
 
 from . import registry, specs, util
@@ -17,14 +16,11 @@ if typing.TYPE_CHECKING:
     import numpy as np
     import xarray as xr
     import iqwaveform
-    from xarray_dataclasses import datamodel, dataarray
     import labbench as lb
 else:
     np = util.lazy_import('numpy')
     xr = util.lazy_import('xarray')
     iqwaveform = util.lazy_import('iqwaveform')
-    datamodel = util.lazy_import('xarray_dataclasses.datamodel')
-    dataarray = util.lazy_import('xarray_dataclasses.dataarray')
     lb = util.lazy_import('labbench')
 
 
@@ -48,12 +44,6 @@ def _results_as_arrays(obj: tuple | list | dict | 'iqwaveform.util.Array'):
 
 def _empty_stub(dims, dtype):
     return xr.DataArray(np.empty(len(dims) * (1,), dtype=dtype))
-
-
-@typing.overload
-def shaped(
-    cls: type['dataarray.OptionedClass[dataarray.PInit, dataarray.TDataArray]'],
-) -> 'dataarray.TDataArray': ...
 
 
 @util.lru_cache()
@@ -87,11 +77,6 @@ def dataarray_stub(
         stub = stub.expand_dims({n: 0 for n in expand_dims}, axis=0)
 
     return stub
-
-
-@util.lru_cache()
-def get_data_model(dataclass: typing.Any):
-    return datamodel.DataModel.from_dataclass(dataclass)
 
 
 _ENG_PREFIXES = {

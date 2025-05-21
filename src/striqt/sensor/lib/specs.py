@@ -57,6 +57,21 @@ AnalysisBandwidthType = Annotated[
 ]
 
 
+@util.lru_cache()
+def _validate_multichannel(channel, gain):
+    """guarantee that self.gain is a number or matches the length of self.channel"""
+    if isinstance(channel, numbers.Number):
+        if isinstance(gain, tuple):
+            raise ValueError(
+                'gain must be a single number unless multiple channels are specified'
+            )
+    else:
+        if isinstance(gain, tuple) and len(gain) != len(channel):
+            raise ValueError(
+                'gain, when specified as a tuple, must match channel count'
+            )
+
+
 class WaveformCapture(
     analysis.Capture, forbid_unknown_fields=True, frozen=True, cache_hash=True
 ):
@@ -77,19 +92,19 @@ class WaveformCapture(
     backend_sample_rate: Optional[BackendSampleRateType] = None
 
 
-@util.lru_cache()
-def _validate_multichannel(channel, gain):
-    """guarantee that self.gain is a number or matches the length of self.channel"""
-    if isinstance(channel, numbers.Number):
-        if isinstance(gain, tuple):
-            raise ValueError(
-                'gain must be a single number unless multiple channels are specified'
-            )
-    else:
-        if isinstance(gain, tuple) and len(gain) != len(channel):
-            raise ValueError(
-                'gain, when specified as a tuple, must match channel count'
-            )
+class _WaveformCaptureKeywords(typing.TypedDict, total=False):
+    # this needs to be kept in sync with WaveformCapture in order to 
+    # properly provide type hints for IDEs in the arm and acquire
+    # call signatures of source.Base objects
+    duration: Annotated[float, meta('Acquisition duration', 's', gt=0)]
+    sample_rate: Annotated[float, meta('Sample rate', 'S/s', gt=0)]
+
+    # filtering and resampling
+    analysis_bandwidth: AnalysisBandwidthType
+    lo_shift: LOShiftType
+    host_resample: bool
+    backend_sample_rate: Optional[BackendSampleRateType]
+
 
 
 class RadioCapture(
@@ -107,6 +122,17 @@ class RadioCapture(
 
     def __post_init__(self):
         _validate_multichannel(self.channel, self.gain)
+
+
+class _RadioCaptureKeywords(_WaveformCaptureKeywords, total=False):
+    # this needs to be kept in sync with WaveformCapture in order to 
+    # properly provide type hints for IDEs in the arm and acquire
+    # call signatures of source.Base objects
+    center_frequency: CenterFrequencyType
+    channel: ChannelType
+    gain: GainType
+    delay: Optional[DelayType]
+    start_time: Optional[StartTimeType]
 
 
 class FileSourceCapture(RadioCapture, forbid_unknown_fields=True, cache_hash=True):
@@ -193,6 +219,25 @@ class RadioSetup(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash
             raise ValueError(
                 'time_sync_every_capture and gapless_repeats are mutually exclusive'
             )
+
+
+class _RadioSetupKeywords(typing.TypedDict, total=False):
+    # this needs to be kept in sync with WaveformCapture in order to 
+    # properly provide type hints for IDEs in the setup
+    # call signature of source.Base objects
+
+    driver: Optional[str]
+    resource: dict = {}
+    time_source: TimeSourceType
+    clock_source: ClockSourceType
+    continuous_trigger: ContinuousTriggerType
+    periodic_trigger: Optional[float]
+    calibration: Optional[str]
+    gapless_repeats: GaplessRepeatType
+    time_sync_every_capture: TimeSyncEveryCaptureType
+    warmup_sweep: WarmupSweepType
+    array_backend: ArrayBackendType
+    fast_lo: FastLOType
 
 
 class Description(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):

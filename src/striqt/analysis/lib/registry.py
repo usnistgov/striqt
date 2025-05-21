@@ -161,10 +161,8 @@ class _MeasurementRegistry(collections.UserDict):
 
     def __call__[**P, R](
         self,
-        # xarray_datacls: 'xarray_dataclasses.datamodel.DataClass',
         name: str | None = None,
         *,
-        # coords: typing.Iterable[],
         dims: typing.Iterable[str] | str | None = None,
         coord_funcs: typing.Iterable[callable] | callable | None = None,
         depends: typing.Iterable[callable] = [],
