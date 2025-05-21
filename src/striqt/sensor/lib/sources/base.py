@@ -894,7 +894,7 @@ def _list_radio_classes(subclass=SourceBase):
     return clsmap
 
 
-def _find_radio_cls_helper(
+def find_radio_cls_helper(
     name: str, parent_cls: type[SourceBase] = SourceBase
 ) -> SourceBase:
     """returns a list of radio subclasses that have been imported"""

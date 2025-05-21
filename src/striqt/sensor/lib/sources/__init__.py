@@ -28,13 +28,13 @@ def find_radio_cls_by_name(
 
     try:
         # first: without optional imports
-        radio_cls = base._find_radio_cls_helper(name)
+        radio_cls = base.find_radio_cls_helper(name)
     except AttributeError:
         # then: with optional imports
         from . import soapy
         from ... import devices
 
-        radio_cls = base._find_radio_cls_helper(name)
+        radio_cls = base.find_radio_cls_helper(name)
 
     return radio_cls
 
