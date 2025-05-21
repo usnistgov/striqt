@@ -86,14 +86,14 @@ def cellular_pss_lag(capture: specs.Capture, spec: Cellular5GNRPSSCorrelationSpe
     params = _pss_params(capture, spec)
 
     max_len = 2 * round(
-        params['sample_rate'] / params['subcarrier_spacing'] + params['cp_samples']
+        spec.sample_rate / spec.subcarrier_spacing + params['cp_samples']
     )
 
     if params['trim_cp']:
         max_len = max_len - round(0.5 * params['cp_samples'])
 
     name = cellular_pss_lag.__name__
-    return pd.RangeIndex(0, max_len, name=name) / params['sample_rate']
+    return pd.RangeIndex(0, max_len, name=name) / spec.sample_rate
 
 
 @util.lru_cache()
