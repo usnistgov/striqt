@@ -39,7 +39,7 @@ def lazy_import(module_name: str):
 
 
 @functools.wraps(functools.lru_cache)
-def lru_cache[**_P, _R](
+def lru_cache(
     maxsize: int | None = 128, typed: bool = False
 ) -> typing.Callable[[typing.Callable[_P, _R]], typing.Callable[_P, _R]]:
     # presuming that the API is designed to accept only hashable types, set
@@ -47,6 +47,7 @@ def lru_cache[**_P, _R](
     return functools.lru_cache(maxsize, typed)
 
 
+@lru_cache()
 def set_cuda_mem_limit(fraction=0.75):
     try:
         import cupy

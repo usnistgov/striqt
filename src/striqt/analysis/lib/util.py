@@ -39,7 +39,7 @@ def lazy_import(module_name: str, package=None):
 
 
 @functools.wraps(functools.lru_cache)
-def lru_cache[**_P, _R](
+def lru_cache(
     maxsize: int | None = 128, typed: bool = False
 ) -> typing.Callable[[typing.Callable[_P, _R]], typing.Callable[_P, _R]]:
     # presuming that the API is designed to accept only hashable types, set

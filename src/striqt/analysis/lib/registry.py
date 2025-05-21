@@ -89,7 +89,7 @@ class DelayedCoordinate(typing.NamedTuple):
     attrs: dict = {}
 
 class _CoordinateRegistry(collections.UserDict[str, DelayedCoordinate]):
-    def __call__[**_P, _R](
+    def __call__(
         self,
         dtype,
         *,
@@ -159,7 +159,7 @@ class _MeasurementRegistry(collections.UserDict):
         self.names: set[str] = set()
         self.caches: dict[callable, callable] = {}
 
-    def __call__[**_P, _R](
+    def __call__(
         self,
         name: str | None = None,
         *,
