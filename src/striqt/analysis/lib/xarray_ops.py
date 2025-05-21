@@ -205,8 +205,8 @@ def dataarray_stub(
     data_stub = _empty_stub(dims, dtype)
     stub = xr.DataArray(data=data_stub, dims=dims, coords=coord_stubs)
 
-    slices = dict.fromkeys(stub.dims, slice(None, 0))
-    stub = stub.isel(slices)
+    # slices = dict.fromkeys(stub.dims, slice(None, 0))
+    # stub = stub.isel(slices)
 
     if expand_dims is not None:
         stub = stub.expand_dims({n: 0 for n in expand_dims}, axis=0)
@@ -236,9 +236,8 @@ def build_dataarray(
     target_shape = data.shape[-len(template.dims) :]
 
     # to bypass initialization overhead, grow from the empty template
-    da = template.pad(
-        {dim: [0, target_shape[i]] for i, dim in enumerate(template.dims)}
-    )
+    pad = {dim: [0, target_shape[i]-1] for i, dim in enumerate(template.dims)}
+    da = template.pad(pad, mode='edge')
 
     try:
         da.values[:] = data
