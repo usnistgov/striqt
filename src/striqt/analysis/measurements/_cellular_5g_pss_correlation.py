@@ -24,7 +24,7 @@ class Cellular5GNRPSSCorrelationSpec(
     subcarrier_spacing: float
     sample_rate: float = 15.36e6
     discovery_periodicity: float = 20e-3
-    frequency_offset: typing.Union[float, dict[float, float]] = 0
+    frequency_offset: typing.Union[float, frozenset[tuple[float, float]]] = 0
     shared_spectrum: bool = False
     max_block_count: typing.Optional[int] = 1
 
@@ -33,7 +33,7 @@ class Cellular5GNRPSSCorrelationKeywords(specs.AnalysisKeywords, total=False):
     subcarrier_spacing: typing.Required[float]
     sample_rate: float
     discovery_periodicity: float
-    frequency_offset: typing.Union[float, dict[float, float]]
+    frequency_offset: typing.Union[float, frozenset[tuple[float, float]]]
     shared_spectrum: bool
     max_block_count: typing.Optional[int]
 
@@ -320,12 +320,13 @@ def cellular_5g_pss_correlation(
     # TODO: make this part more explicit
     trim_cp = True
 
-    if isinstance(spec.frequency_offset, dict):
+    if isinstance(spec.frequency_offset, frozenset):
         if not hasattr(capture, 'center_frequency'):
             raise ValueError(
                 'frequency_offset must be a float unless capture has a "center_frequency" attribute'
             )
-        frequency_offset = spec.frequency_offset[capture.center_frequency]  # noqa
+        lookup = dict(spec.frequency_offset)
+        frequency_offset = lookup[capture.center_frequency]  # noqa
 
     metadata = dict(locals())
     del metadata['iq'], metadata['capture']
