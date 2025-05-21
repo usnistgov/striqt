@@ -12,6 +12,10 @@ import typing
 from . import specs
 
 
+_P = typing.ParamSpec('_P')
+_R = typing.TypeVar('_R')
+
+
 class Cache:
     """A single-element cache of measurement results.
 
@@ -84,16 +88,15 @@ class DelayedCoordinate(typing.NamedTuple):
     dims: tuple[str, ...] = None
     attrs: dict = {}
 
-
 class _CoordinateRegistry(collections.UserDict[str, DelayedCoordinate]):
-    def __call__[**P, R](
+    def __call__[**_P, _R](
         self,
         dtype,
         *,
         name: str | None = None,
         dims: tuple[str, ...] | None = None,
         attrs={},
-    ) -> typing.Callable[P, R]:
+    ) -> typing.Callable[_P, _R]:
         """register a coordinate factory function.
 
         The factory function should return an iterable containing coordinate
@@ -156,7 +159,7 @@ class _MeasurementRegistry(collections.UserDict):
         self.names: set[str] = set()
         self.caches: dict[callable, callable] = {}
 
-    def __call__[**P, R](
+    def __call__[**_P, _R](
         self,
         name: str | None = None,
         *,
@@ -167,7 +170,7 @@ class _MeasurementRegistry(collections.UserDict):
         dtype: str,
         cache: Cache | None = None,
         attrs={},
-    ) -> typing.Callable[P, R]:
+    ) -> typing.Callable[_P, _R]:
         """add decorated `func` and its keyword arguments in the self.tostruct() schema"""
         if isinstance(dims, str):
             dims = (dims,)

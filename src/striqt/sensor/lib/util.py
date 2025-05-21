@@ -7,6 +7,10 @@ import sys
 TGen = type[typing.Any]
 
 
+_P = typing.ParamSpec('_P')
+_R = typing.TypeVar('_R')
+
+
 def lazy_import(module_name: str):
     """postponed import of the module with the specified name.
 
@@ -35,9 +39,9 @@ def lazy_import(module_name: str):
 
 
 @functools.wraps(functools.lru_cache)
-def lru_cache[**P, T](
+def lru_cache[**_P, _R](
     maxsize: int | None = 128, typed: bool = False
-) -> typing.Callable[[typing.Callable[P, T]], typing.Callable[P, T]]:
+) -> typing.Callable[[typing.Callable[_P, _R]], typing.Callable[_P, _R]]:
     # presuming that the API is designed to accept only hashable types, set
     # the type hint to match the wrapped function
     return functools.lru_cache(maxsize, typed)
