@@ -178,9 +178,9 @@ def _results_as_arrays(obj: tuple | list | dict | 'iqwaveform.util.Array'):
     return array
 
 
-def _empty_stub(dims, dtype):
+def _empty_stub(dims, dtype, attrs={}):
     x = np.empty(len(dims) * (1,), dtype=dtype)
-    return xr.DataArray(x)
+    return xr.DataArray(x, dims=dims, attrs=attrs)
 
 
 @util.lru_cache()
@@ -195,9 +195,7 @@ def dataarray_stub(
     coord_stubs = {}
     for func in coord_factories:
         info = registry.coordinate_factory[func.__name__]
-
-        coord =  {dim: _empty_stub((1,), info.dtype) for dim in info.dims}
-        coord_stubs[info.name] = xr.Coordinates(coord, indexes={})
+        coord_stubs[info.name] = _empty_stub(info.dims, info.dtype, attrs=info.attrs)
 
     if not dims:
         dims = _infer_coord_dims(coord_factories)
@@ -205,15 +203,11 @@ def dataarray_stub(
     data_stub = _empty_stub(dims, dtype)
     stub = xr.DataArray(data=data_stub, dims=dims, coords=coord_stubs)
 
-    # slices = dict.fromkeys(stub.dims, slice(None, 0))
-    # stub = stub.isel(slices)
+    slices = dict.fromkeys(stub.dims, slice(None, 0))
+    stub = stub.isel(slices)
 
     if expand_dims is not None:
         stub = stub.expand_dims({n: 0 for n in expand_dims}, axis=0)
-
-    for func in coord_factories:
-        info = registry.coordinate_factory[func.__name__]
-        stub[info.name] = stub[info.name].assign_attrs(info.attrs)
 
     return stub
 
@@ -224,7 +218,7 @@ def build_dataarray(
 ) -> 'xr.DataArray':
     """build an `xarray.DataArray` from an ndarray, capture information, and channel analysis keyword arguments"""
     template = dataarray_stub(
-        delayed.dims, delayed.coord_factories, delayed.dtype, expand_dims
+        delayed.dims, delayed.coord_factories, delayed.dtype, expand_dims=expand_dims
     )
     data = np.asarray(delayed.data)
     delayed.spec.validate()
@@ -236,8 +230,8 @@ def build_dataarray(
     target_shape = data.shape[-len(template.dims) :]
 
     # to bypass initialization overhead, grow from the empty template
-    pad = {dim: [0, target_shape[i]-1] for i, dim in enumerate(template.dims)}
-    da = template.pad(pad, mode='edge')
+    pad = {dim: [0, target_shape[i]] for i, dim in enumerate(template.dims)}
+    da = template.pad(pad)
 
     try:
         da.values[:] = data
@@ -265,15 +259,20 @@ def build_dataarray(
             exc = None
 
         if exc is not None:
-            template_shape = da[info.name].indexes[info.dims[0]].shape
+            template_shape = tuple([da[info.name].indexes[d].shape for d in info.dims])
             data_shape = np.array(arr).shape
+            name = f'{delayed.name}.{info.name}'
 
             if template_shape == data_shape:
+                exc.args = (f'in coordinate {name!r}, {exc.args[0]}',) + exc.args[1:]
                 raise exc
             else:
-                problem = f'expected {template_shape} from template, but factory gave {data_shape}'
-                name = f'{delayed.name}.{info.name}'
-                raise ValueError(f'unexpected {name} coordinate shape: {problem}')
+                problem = (
+                    f'unexpected shape in coordinate {name!r}: '
+                    f'data dimensions {info.dims!r} have shape {template_shape}, '
+                    f'but coordinate factory gave {data_shape}'
+                )
+                raise ValueError(problem) from exc
 
         da[info.name] = da[info.name].assign_attrs(metadata)
 

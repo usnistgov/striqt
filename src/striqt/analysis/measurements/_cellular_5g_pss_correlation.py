@@ -68,7 +68,9 @@ def cellular_ssb_start_time(
     return np.arange(max(count, 1)) * spec.discovery_periodicity
 
 
-@registry.coordinate_factory(dtype='uint16', attrs={'standard_name': 'SSB symbol index'})
+@registry.coordinate_factory(
+    dtype='uint16', attrs={'standard_name': 'SSB symbol index'}
+)
 @util.lru_cache()
 def cellular_ssb_symbol_index(
     capture: specs.Capture, spec: Cellular5GNRPSSCorrelationSpec
@@ -327,7 +329,6 @@ def cellular_5g_pss_correlation(
             )
         lookup = dict(spec.frequency_offset)
         frequency_offset = lookup[capture.center_frequency]  # noqa
-
 
     params = _pss_params(capture, spec)
 

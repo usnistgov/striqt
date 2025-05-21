@@ -88,6 +88,7 @@ class DelayedCoordinate(typing.NamedTuple):
     dims: tuple[str, ...] = None
     attrs: dict = {}
 
+
 class _CoordinateRegistry(collections.UserDict[str, DelayedCoordinate]):
     def __call__(
         self,
