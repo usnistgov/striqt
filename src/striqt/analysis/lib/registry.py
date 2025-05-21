@@ -33,40 +33,37 @@ class Cache:
             return None
 
         kws = dict(kws)
-        del kws['iq'], kws['as_xarray']
+        kws.pop('iq', None)
+        kws.pop('as_xarray', None)
         return frozenset(kws.items())
 
-    @classmethod
-    def clear(cls):
-        cls.update(None, None)
+    def clear(self):
+        self.update(None, None)
 
-    @classmethod
-    def lookup(cls, kws: dict):
-        if cls._key is None or not cls.enabled:
+    def lookup(self, kws: dict):
+        if self._key is None or not self.enabled:
             return None
 
-        if cls.kw_key(kws) == cls._key:
-            return cls._value
+        if self.kw_key(kws) == self._key:
+            return self._value
         else:
             return None
 
-    @classmethod
-    def update(cls, kws: dict, value):
-        if not cls.enabled:
+    def update(self, kws: dict, value):
+        if not self.enabled:
             return
-        cls._key = cls.kw_key(kws)
-        cls._value = value
+        self._key = self.kw_key(kws)
+        self._value = value
 
-    @classmethod
-    def cached_calls(cls, func):
+    def decorate(self, func):
         @functools.wraps(func)
         def wrapped(**kws):
-            match = cls.lookup(kws)
+            match = self.lookup(kws)
             if match is not None:
                 return match
 
             ret = func(**kws)
-            cls.update(kws, ret)
+            self.update(kws, ret)
             return ret
 
         return wrapped

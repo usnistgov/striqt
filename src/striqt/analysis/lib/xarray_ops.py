@@ -431,7 +431,6 @@ def analyze_by_spec(
     expand_dims=None,
 ) -> 'xr.Dataset':
     """evaluate a set of different channel analyses on the iq waveform as specified by spec"""
-
     results = evaluate_by_spec(
         iq,
         capture,

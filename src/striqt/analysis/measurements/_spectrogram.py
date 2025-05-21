@@ -122,13 +122,12 @@ def evaluate_spectrogram(
 _cache = registry.Cache()
 
 
-@_cache.cached_calls
+@_cache.decorate
 def _cached_spectrogram(
     iq: 'iqwaveform.util.Array',
     capture: specs.Capture,
     spec: SpectrogramSpec,
 ):
-    # TODO: integrate this back into iqwaveform
     spec = spec.validate()
 
     if iqwaveform.isroundmod(capture.sample_rate, spec.frequency_resolution):
