@@ -190,7 +190,7 @@ class _MeasurementRegistry(collections.UserDict):
 
         kws = locals()
 
-        def wrapper(func: typing.Callable[P, R]) -> typing.Callable[P, R]:
+        def wrapper(func: typing.Callable[_P, _R]) -> typing.Callable[_P, _R]:
             if kws['name'] is None:
                 name = func.__name__
             else:
