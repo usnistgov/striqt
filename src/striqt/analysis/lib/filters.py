@@ -20,9 +20,6 @@ else:
     iqwaveform = util.lazy_import('iqwaveform')
 
 
-TFunc = typing.Callable[..., typing.Any]
-
-
 def select_parameter_kws(locals_: dict, omit=('capture', 'out')) -> dict:
     """return the analysis parameters from the locals() evaluated at the beginning of analysis function"""
 

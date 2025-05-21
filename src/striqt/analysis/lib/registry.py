@@ -12,9 +12,6 @@ import typing
 from . import specs
 
 
-TFunc = typing.Callable[..., typing.Any]
-
-
 class Cache:
     """A single-element cache of measurement results.
 
@@ -190,7 +187,7 @@ class _MeasurementRegistry(collections.UserDict):
 
         kws = locals()
 
-        def wrapper(func: TFunc):
+        def wrapper(func: typing.Callable[P,R]) -> typing.Callable[P,R]:
             if kws['name'] is None:
                 name = func.__name__
             else:

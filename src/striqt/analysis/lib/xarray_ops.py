@@ -13,18 +13,15 @@ from . import registry, specs, util
 import array_api_compat
 
 if typing.TYPE_CHECKING:
-    import numpy as np
-    import xarray as xr
     import iqwaveform
     import labbench as lb
+    import numpy as np
+    import xarray as xr
 else:
-    np = util.lazy_import('numpy')
-    xr = util.lazy_import('xarray')
     iqwaveform = util.lazy_import('iqwaveform')
     lb = util.lazy_import('labbench')
-
-
-TFunc = typing.Callable[..., typing.Any]
+    np = util.lazy_import('numpy')
+    xr = util.lazy_import('xarray')
 
 
 def _results_as_arrays(obj: tuple | list | dict | 'iqwaveform.util.Array'):
