@@ -328,8 +328,6 @@ def cellular_5g_pss_correlation(
         lookup = dict(spec.frequency_offset)
         frequency_offset = lookup[capture.center_frequency]  # noqa
 
-    metadata = dict(locals())
-    del metadata['iq'], metadata['capture']
 
     params = _pss_params(capture, spec)
 
@@ -400,7 +398,7 @@ def cellular_5g_pss_correlation(
     R = R * xp.exp(phase)
 
     enbw = spec.subcarrier_spacing * 127
-    metadata = metadata | {
+    metadata = {
         'units': f'mW/{enbw / 1e6:0.2f} MHz',
         'standard_name': 'PSS Covariance',
     }
