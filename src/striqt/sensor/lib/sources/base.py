@@ -193,28 +193,35 @@ class SourceBase(lb.Device):
         min=0,
         help='list of RX channel port indexes to acquire',
     )
+
     gain = method_attr.FloatMaybeTupleMethod(
         label='dB', help='receive gain for each channel in hardware'
     )
+
     center_frequency = attr.method.float(
         min=0,
         label='Hz',
         help='RF frequency at the center of the RX baseband for all channels',
     )
+
     backend_sample_rate = attr.method.float(
         min=0,
         label='Hz',
         help='sample rate before resampling',
     )
+
     rx_enabled = attr.method.bool()
+
     time_source = attr.method.str(
         only=['host', 'internal', 'external', 'gps'],
         help='time base for sample timestamps',
     )
+
     clock_source = attr.method.str(
         only=['internal', 'external', 'gps'],
         help='frequency reference source',
     )
+
     rx_channel_count = attr.value.int(
         1, sets=False, min=1, cache=True, help='number of input ports'
     )
@@ -222,7 +229,7 @@ class SourceBase(lb.Device):
     array_backend = attr.value.str(
         'numpy',
         only=('numpy', 'cupy'),
-        help='array module to use, which sets the type of compute device (numpy = cpu, cupy = gpu)',
+        help='array module to use, which sets the type of compute device: numpy = cpu, cupy = gpu',
     )
 
     # constants that can be adjusted by device-specific classes to tune streaming behavior
