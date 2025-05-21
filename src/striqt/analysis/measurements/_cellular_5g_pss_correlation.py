@@ -59,13 +59,13 @@ def cellular_ssb_start_time(
     capture: specs.Capture, spec: Cellular5GNRPSSCorrelationSpec
 ):
     params = _pss_params(capture, spec)
-    total_blocks = round(params['duration'] / params['discovery_periodicity'])
+    total_blocks = round(params['duration'] / spec.discovery_periodicity)
     if spec.max_block_count is None:
         count = total_blocks
     else:
         count = min(spec.max_block_count, total_blocks)
 
-    return np.arange(max(count, 1)) * params['discovery_periodicity']
+    return np.arange(max(count, 1)) * spec.discovery_periodicity
 
 
 @registry.coordinate_factory(dtype='uint8', attrs={'standard_name': 'SSB symbol index'})
