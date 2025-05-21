@@ -315,7 +315,7 @@ def cellular_5g_pss_correlation(
         3GPP TS 138 213: Section 4.1
     """
 
-    spec = Cellular5GNRPSSCorrelationSpec.fromdict(kwargs)
+    spec = Cellular5GNRPSSCorrelationSpec.fromdict(kwargs).validate()
 
     # TODO: make this part more explicit
     trim_cp = True
