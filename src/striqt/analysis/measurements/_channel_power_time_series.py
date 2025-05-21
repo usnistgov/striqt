@@ -39,7 +39,7 @@ def time_elapsed(capture: specs.Capture, spec: ChannelPowerTimeSeriesSpec):
     return pd.RangeIndex(length) * spec.detector_period
 
 
-@registry.coordinate_factory(dtype='float32', attrs={'standard_name': 'Power detector'})
+@registry.coordinate_factory(dtype=object, attrs={'standard_name': 'Power detector'})
 @util.lru_cache()
 def power_detector(
     capture: specs.Capture, spec: ChannelPowerTimeSeriesSpec
