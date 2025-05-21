@@ -24,58 +24,6 @@ else:
     xr = util.lazy_import('xarray')
 
 
-def _results_as_arrays(obj: tuple | list | dict | 'iqwaveform.util.Array'):
-    """convert an array, or a container of arrays, into a numpy array (or container of numpy arrays)"""
-
-    if array_api_compat.is_torch_array(obj):
-        array = obj.cpu()
-    elif array_api_compat.is_cupy_array(obj):
-        array = obj.get()
-    elif array_api_compat.is_numpy_array(obj):
-        return obj
-    else:
-        raise TypeError(f'obj type {type(obj)} is unrecognized')
-
-    return array
-
-
-def _empty_stub(dims, dtype):
-    return xr.DataArray(np.empty(len(dims) * (1,), dtype=dtype))
-
-
-@util.lru_cache()
-def dataarray_stub(
-    dims: tuple[str, ...],
-    coord_factories: tuple[callable, ...],
-    dtype: str,
-    expand_dims: tuple[str, ...] | None = None,
-) -> typing.Any:
-    """return an empty array of type `cls`"""
-
-    coord_stubs = {}
-    for func in coord_factories:
-        info = registry.coordinate_factory[func.__name__]
-
-        coord = xr.Coordinates(
-            {dim: _empty_stub((1,), info.dtype) for dim in info.dims}, indexes={}
-        )
-        coord_stubs[info.name] = coord
-
-    if not dims:
-        dims = _infer_coord_dims(coord_factories)
-
-    data_stub = _empty_stub(dims, dtype)
-    stub = xr.DataArray(data=data_stub, dims=dims, coords=coord_stubs)
-
-    slices = dict.fromkeys(stub.dims, slice(None, 0))
-    stub = stub.isel(slices)
-
-    if expand_dims is not None:
-        stub = stub.expand_dims({n: 0 for n in expand_dims}, axis=0)
-
-    return stub
-
-
 _ENG_PREFIXES = {
     -30: 'q',
     -27: 'r',
@@ -215,6 +163,61 @@ def describe_value(value, attrs: dict, unit_prefix=None):
     return value_str
 
 
+def _results_as_arrays(obj: tuple | list | dict | 'iqwaveform.util.Array'):
+    """convert an array, or a container of arrays, into a numpy array (or container of numpy arrays)"""
+
+    if array_api_compat.is_torch_array(obj):
+        array = obj.cpu()
+    elif array_api_compat.is_cupy_array(obj):
+        array = obj.get()
+    elif array_api_compat.is_numpy_array(obj):
+        return obj
+    else:
+        raise TypeError(f'obj type {type(obj)} is unrecognized')
+
+    return array
+
+
+def _empty_stub(dims, dtype):
+    x = np.empty(len(dims) * (1,), dtype=dtype)
+    return xr.DataArray(x)
+
+
+@util.lru_cache()
+def dataarray_stub(
+    dims: tuple[str, ...],
+    coord_factories: tuple[callable, ...],
+    dtype: str,
+    expand_dims: tuple[str, ...] | None = None,
+) -> typing.Any:
+    """return an empty array of type `cls`"""
+
+    coord_stubs = {}
+    for func in coord_factories:
+        info = registry.coordinate_factory[func.__name__]
+
+        coord =  {dim: _empty_stub((1,), info.dtype) for dim in info.dims}
+        coord_stubs[info.name] = xr.Coordinates(coord, indexes={})
+
+    if not dims:
+        dims = _infer_coord_dims(coord_factories)
+
+    data_stub = _empty_stub(dims, dtype)
+    stub = xr.DataArray(data=data_stub, dims=dims, coords=coord_stubs)
+
+    slices = dict.fromkeys(stub.dims, slice(None, 0))
+    stub = stub.isel(slices)
+
+    if expand_dims is not None:
+        stub = stub.expand_dims({n: 0 for n in expand_dims}, axis=0)
+
+    for func in coord_factories:
+        info = registry.coordinate_factory[func.__name__]
+        stub[info.name] = stub[info.name].assign_attrs(info.attrs)
+
+    return stub
+
+
 def build_dataarray(
     delayed: _DelayedDataArray,
     expand_dims=None,
@@ -273,7 +276,7 @@ def build_dataarray(
                 name = f'{delayed.name}.{info.name}'
                 raise ValueError(f'unexpected {name} coordinate shape: {problem}')
 
-        da[info.name].attrs.update(info.attrs | metadata)
+        da[info.name] = da[info.name].assign_attrs(metadata)
 
     return da.assign_attrs(delayed.attrs)
 

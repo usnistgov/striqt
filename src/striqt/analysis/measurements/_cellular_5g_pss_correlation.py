@@ -68,7 +68,7 @@ def cellular_ssb_start_time(
     return np.arange(max(count, 1)) * spec.discovery_periodicity
 
 
-@registry.coordinate_factory(dtype='uint8', attrs={'standard_name': 'SSB symbol index'})
+@registry.coordinate_factory(dtype='uint16', attrs={'standard_name': 'SSB symbol index'})
 @util.lru_cache()
 def cellular_ssb_symbol_index(
     capture: specs.Capture, spec: Cellular5GNRPSSCorrelationSpec
