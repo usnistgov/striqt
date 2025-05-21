@@ -183,24 +183,31 @@ def execute_sweep_cli(
     remote=None,
 ):
     # pull out the cli elements that have context
-    *cli_context, sweep, cal = cli
+    cli_objects = cli
+    *cli_context, sweep, cal = cli_objects
 
     with lb.sequentially(*cli_context):
-        reuse_iq = cli.sweep_spec.radio_setup.reuse_iq
-        # iterate through the sweep specification, yielding a dataset for each capture
-        sweep_iter = cli.controller.iter_sweep(
-            sweep,
-            calibration=cal,
-            prepare=False,
-            always_yield=True,
-            reuse_compatible_iq=reuse_iq,  # calibration-specific optimization
-        )
+        try:
+            reuse_iq = cli.sweep_spec.radio_setup.reuse_iq
+            # iterate through the sweep specification, yielding a dataset for each capture
+            sweep_iter = cli.controller.iter_sweep(
+                sweep,
+                calibration=cal,
+                prepare=False,
+                always_yield=True,
+                reuse_compatible_iq=reuse_iq,  # calibration-specific optimization
+            )
 
-        sweep_iter.set_peripherals(cli.peripherals)
-        sweep_iter.set_writer(cli.sink)
+            sweep_iter.set_peripherals(cli.peripherals)
+            sweep_iter.set_writer(cli.sink)
 
-        # step through captures
-        for _ in sweep_iter:
-            pass
+            # step through captures
+            for _ in sweep_iter:
+                pass
 
-        cli.sink.flush()
+            cli.sink.flush()
+        except BaseException as ex:
+            print(ex)
+            cli_objects.debugger.run(*sys.exc_info())
+            if not cli_objects.debugger.enable:
+                raise
