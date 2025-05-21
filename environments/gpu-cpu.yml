@@ -28,7 +28,6 @@ dependencies:
 - zarr>=2.18,<4
 - dask
 - msgspec~=0.18
-- frozendict
 - netCDF4
 - schemdraw
 - mscorefonts
@@ -36,5 +35,4 @@ dependencies:
 - cython
 - pip:
   - iqwaveform @ git+https://github.com/usnistgov/iqwaveform
-  - xarray_dataclasses @ git+https://github.com/dgkuester/xarray-dataclasses@lazy-imports
   - -e ..[gpu-cpu]

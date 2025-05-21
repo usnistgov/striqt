@@ -5,7 +5,6 @@ description = "tooling to support precision gpu-accelerated radio signal analysi
 requires-python = ">=3.9"
 dependencies = [ "array-api-compat",
  "dask",
- "frozendict",
  "iqwaveform @ git+https://github.com/usnistgov/iqwaveform",
  "labbench>=0.42.0,<1",
  "matplotlib~=3.7",
@@ -20,7 +19,6 @@ dependencies = [ "array-api-compat",
  "schemdraw",
  "scipy>=1.13,<2",
  "xarray>=2024.3",
- "xarray_dataclasses @ git+https://github.com/dgkuester/xarray-dataclasses@lazy-imports",
  "zarr>=2.18,<4",
 ]
 [[project.authors]]
