@@ -412,7 +412,7 @@ def package_analysis(
     with lb.stopwatch('package analyses into xarray', logger_level='debug'):
         xarrays = {}
         for name, res in results.items():
-            xarrays[name] = res.to_xarray(expand_dims)
+            xarrays[name] = res.compute().to_xarray(expand_dims)
 
         attrs = capture.todict()
         if isinstance(capture, specs.FilteredCapture):
