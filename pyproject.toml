@@ -55,7 +55,7 @@ edge-airt = [ "cupy-cuda102",
 calibrate-sensor = "striqt.cli.calibrate:run"
 check-sweep = "striqt.cli.check:run"
 sensor-sweep = "striqt.cli.sweep:run"
-plot-striqt-analysis = "striqt.cli.plot:run"
+plot-sensor-captures = "striqt.cli.plot:run"
 serve-sensor = "striqt.cli.server:run"
 
 [tool.ruff]
