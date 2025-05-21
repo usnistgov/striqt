@@ -136,9 +136,7 @@ def _run_click_plotter(
         output_path = Path(zarr_path).parent / Path(zarr_path).name.split('.', 1)[0]
         output_path.mkdir(exist_ok=True)
 
-
     plot_func(dataset, output_path, interactive, **plot_func_kws)
-
 
     if interactive:
         input('press enter to quit')

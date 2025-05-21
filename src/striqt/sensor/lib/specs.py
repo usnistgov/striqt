@@ -93,7 +93,7 @@ class WaveformCapture(
 
 
 class _WaveformCaptureKeywords(typing.TypedDict, total=False):
-    # this needs to be kept in sync with WaveformCapture in order to 
+    # this needs to be kept in sync with WaveformCapture in order to
     # properly provide type hints for IDEs in the arm and acquire
     # call signatures of source.Base objects
     duration: Annotated[float, meta('Acquisition duration', 's', gt=0)]
@@ -104,7 +104,6 @@ class _WaveformCaptureKeywords(typing.TypedDict, total=False):
     lo_shift: LOShiftType
     host_resample: bool
     backend_sample_rate: Optional[BackendSampleRateType]
-
 
 
 class RadioCapture(
@@ -125,7 +124,7 @@ class RadioCapture(
 
 
 class _RadioCaptureKeywords(_WaveformCaptureKeywords, total=False):
-    # this needs to be kept in sync with WaveformCapture in order to 
+    # this needs to be kept in sync with WaveformCapture in order to
     # properly provide type hints for IDEs in the arm and acquire
     # call signatures of source.Base objects
     center_frequency: CenterFrequencyType
@@ -222,7 +221,7 @@ class RadioSetup(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash
 
 
 class _RadioSetupKeywords(typing.TypedDict, total=False):
-    # this needs to be kept in sync with WaveformCapture in order to 
+    # this needs to be kept in sync with WaveformCapture in order to
     # properly provide type hints for IDEs in the setup
     # call signature of source.Base objects
 

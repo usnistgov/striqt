@@ -129,7 +129,7 @@ def _maybe_skip_missing(func):
         if obj._ignore_missing and func.__name__ not in data.data_vars:
             return
 
-        try:            
+        try:
             func(obj, data, *args, **kws)
         except BaseException as ex:
             new_text = f'while plotting {func.__name__}, {ex.args[0]}'
@@ -342,9 +342,7 @@ class CapturePlotter:
         )
 
     @_maybe_skip_missing
-    def power_spectral_density(
-        self, data: xr.Dataset, hue='time_statistic', **sel
-    ):
+    def power_spectral_density(self, data: xr.Dataset, hue='time_statistic', **sel):
         key = self.power_spectral_density.__name__
 
         if (

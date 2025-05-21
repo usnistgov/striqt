@@ -72,7 +72,7 @@ def run(dataset, output_path: str, interactive: bool):
                 print(f'generated an exception: {exc}')
                 if ex is None:
                     ex = exc
-    
+
     if ex is not None:
         raise ex
 
