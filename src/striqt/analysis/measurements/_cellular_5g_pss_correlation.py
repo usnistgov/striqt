@@ -1,5 +1,4 @@
 from __future__ import annotations
-from frozendict import frozendict
 import typing
 
 from ..lib import registry, specs, util
@@ -127,7 +126,6 @@ def _empty_measurement(iq, capture: specs.Capture, spec: Cellular5GNRPSSCorrelat
     xp = iqwaveform.util.array_namespace(iq)
     meas_ax_shape = [len(f(capture, spec)) for f in _coord_funcs]
     new_shape = iq.shape[:-1] + tuple(meas_ax_shape)
-    print(new_shape)
     return xp.full(new_shape, float('nan'), dtype=dtype)
 
 @registry.measurement(
@@ -227,11 +225,11 @@ def cellular_5g_pss_correlation(
     offs = round(capture.sample_rate / spec.subcarrier_spacing + 2 * cp_samples)
     R = xp.roll(R, -offs, axis=-1)[..., :corr_size]
 
-    # -> (port index, cell Nid2, sync block index, slot index, IQ sample index)
+    # dims -> (port index, cell Nid2, sync block index, slot index, IQ sample index)
     excess_cp = round(capture.sample_rate / spec.subcarrier_spacing * 1 / 128)
     R = R.reshape(R.shape[:-1] + (slot_count, -1))[..., 2 * excess_cp :]
 
-    # -> (port index, cell Nid2, sync block index, symbol pair index, IQ sample index)
+    # dims -> (port index, cell Nid2, sync block index, symbol pair index, IQ sample index)
     paired_symbol_shape = R.shape[:-2] + (7 * slot_count, -1)
     paired_symbol_indexes = xp.array(params.symbol_indexes, dtype='uint32') // 2
     R = R.reshape(paired_symbol_shape)[..., paired_symbol_indexes, :]
@@ -248,7 +246,5 @@ def cellular_5g_pss_correlation(
         'units': f'mW/{enbw / 1e6:0.2f} MHz',
         'standard_name': 'PSS Covariance',
     }
-
-    print(R.shape)
 
     return R, metadata
