@@ -345,7 +345,7 @@ def analyze_capture(
     func = AnalysisCaller(
         radio=radio,
         sweep=sweep,
-        analysis_spec=sweep.analysis,
+        analysis_spec=sweep.potato,
         extra_attrs=attrs,
         correction=correction,
     )

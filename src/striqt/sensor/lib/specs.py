@@ -5,6 +5,8 @@ import numbers
 import typing
 from typing import Annotated, Optional, Literal, Any, Union
 
+import msgspec
+
 from . import util
 
 from striqt import analysis
@@ -294,3 +296,15 @@ class Sweep(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash=True
             return self.get_captures()
         else:
             return super().__getattribute__(name)
+
+    @classmethod
+    def _to_current_registry(cls: type[Sweep]) -> type[Sweep]:
+        UpdatedAnalysis = analysis.lib.registry.measurement.container_spec()
+        return msgspec.defstruct(
+            cls.__name__,
+            ((cls.analysis.__name__, UpdatedAnalysis),),
+            bases=(cls,),
+            frozen=True,
+            forbid_unknown_fields=True,
+            cache_hash=True
+        )

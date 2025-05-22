@@ -174,8 +174,9 @@ def read_yaml_sweep(
         raise TypeError(
             f'extension.sweep_struct is {name!r}, which exists but is not subclass of striqt.sinks.Sweep'
         )
-
-    sweep: specs.Sweep = sweep_cls.fromdict(tree)
+    
+    # update any new registered analysis
+    sweep: specs.Sweep = sweep_cls._to_current_registry().fromdict(tree)
 
     # fill formatting fields in paths
     if radio_id is not None:
