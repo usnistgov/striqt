@@ -28,9 +28,6 @@ class ResourceGridConfigSpec(
     guard_bandwidths: tuple[float, float] = (0, 0)
     frame_slots: typing.Optional[str] = None
     special_symbols: typing.Optional[str] = None
-    cyclic_prefix_type: typing.Union[
-        typing.Literal['normal'], typing.Literal['extended']
-    ] = 'normal'
 
 
 class _ResourceGridConfigKeywords(typing.TypedDict, total=False):
@@ -38,9 +35,6 @@ class _ResourceGridConfigKeywords(typing.TypedDict, total=False):
     guard_bandwidths: tuple[float, float]
     frame_slots: typing.Optional[str]
     special_symbols: typing.Optional[str]
-    cyclic_prefix_type: typing.Union[
-        typing.Literal['normal'], typing.Literal['extended']
-    ] = 'normal'
 
 
 class CellularResourcePowerHistogramSpec(
@@ -64,6 +58,9 @@ class _CellularResourcePowerHistogramKeywords(typing.TypedDict, total=False):
     # for IDE type hinting of the measurement function
     window: typing.Union[str, tuple[str, float]]
     subcarrier_spacing: float
+    cyclic_prefix_type: typing.Union[
+        typing.Literal['normal'], typing.Literal['extended']
+    ] = 'normal'
     power_low: float
     power_high: float
     power_resolution: float
@@ -136,7 +133,7 @@ def cellular_resource_power_histogram(
             if False, resolution is 1 subcarrier.
         average_slot: when True, counts will report power averaged to 1 slot in time;
             if False, resolution is 1 symbol.
-        cp_guard_period: the 3GPP cyclic prefix guard interval type, one of
+        cyclic_prefix: the 3GPP cyclic prefix size, one of
             `('extended','normal')`
         as_xarray: if True (the default), returns an xarray with labeled axes and metadata;
             otherwise, returns an (array, dict) tuple containing the result and metadata
@@ -186,10 +183,10 @@ def cellular_resource_power_histogram(
         )
 
     # set STFT overlap and the fractional fill in the window
-    if grid_spec.cyclic_prefix_type == 'normal':
+    if spec.cp_guard_period == 'normal':
         fractional_overlap = 13 / 28
         window_fill = 15 / 28
-    elif grid_spec.cyclic_prefix_type == 'extended':
+    elif spec.cp_guard_period == 'extended':
         fractional_overlap = 11 / 24
         window_fill = 13 / 24
     else:
@@ -200,10 +197,8 @@ def cellular_resource_power_histogram(
         frequency_resolution=spec.subcarrier_spacing / 2,
         fractional_overlap=fractional_overlap,
         window_fill=window_fill,
-        dtype='float32',
-        dB=False,
     )
-    spg, metadata = _spectrogram.evaluate_spectrogram(iq, capture, spg_spec)
+    spg, metadata = _spectrogram.evaluate_spectrogram(iq, capture, spg_spec, dtype='float32', dB=False)
 
     # we really wanted to sum bins pairwise, instead of averaging them, but
     # it was simpler to average across all 24 bins rather than sum 2 and average 12.
