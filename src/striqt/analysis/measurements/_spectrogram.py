@@ -215,8 +215,11 @@ def spectrogram_time(
 @registry.coordinate_factory(dtype='float64', attrs={'units': 'Hz'})
 @util.lru_cache()
 def spectrogram_baseband_frequency(
-    capture: specs.Capture, spec: SpectrogramSpec
+    capture: specs.Capture, spec: SpectrogramSpec, xp=np
 ) -> dict[str, np.ndarray]:
+    if xp is not np:
+        return xp.array(spectrogram_baseband_frequency(capture, spec))
+
     if iqwaveform.isroundmod(capture.sample_rate, spec.frequency_resolution):
         nfft = round(capture.sample_rate / spec.frequency_resolution)
     else:

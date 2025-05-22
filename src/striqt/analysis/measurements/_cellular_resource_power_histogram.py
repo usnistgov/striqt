@@ -211,7 +211,7 @@ def cellular_resource_power_histogram(
     # enbw = 2*metadata['noise_bandwidth']
     # metadata = metadata | {'noise_bandwidth': enbw, 'units': f'dBm/{enbw / 1e3:0.0f} kHz'}
 
-    freqs = _spectrogram.spectrogram_baseband_frequency(capture, spg_spec)
+    freqs = _spectrogram.spectrogram_baseband_frequency(capture, spg_spec, xp=xp)
 
     masked_spgs = apply_mask(
         spg,
