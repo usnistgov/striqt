@@ -184,8 +184,14 @@ def cellular_5g_pss_correlation(
         iq = iq[..., :duration]
 
     if frequency_offset is None:
-        new_shape = (iq.shape[0], round(iq.shape[1] * up / down))
-        iq = xp.full(new_shape, float('nan'), dtype=iq.dtype)
+        new_shape = iq.shape[:-1] + (
+            len(cellular_cell_id2(capture, spec)),
+            len(cellular_ssb_start_time(capture, spec)),
+            len(cellular_ssb_symbol_index(capture, spec)),
+            len(cellular_pss_lag(capture, spec))
+        )
+
+        return xp.full(new_shape, float('nan'), dtype=iq.dtype)        
     else:
         iq = iqwaveform.fourier.oaresample(
             iq,
