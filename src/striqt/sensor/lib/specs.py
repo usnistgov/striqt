@@ -5,9 +5,6 @@ import numbers
 import typing
 from typing import Annotated, Optional, Literal, Any, Union
 
-import msgspec
-from frozendict import frozendict
-
 from . import util
 
 from striqt import analysis
@@ -188,7 +185,7 @@ class RadioSetup(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash
     """run-time characteristics of the radio that are left invariant during a sweep"""
 
     driver: Optional[str] = None
-    resource: frozendict = frozendict()
+    resource: dict = {}
     time_source: TimeSourceType = 'host'
     clock_source: ClockSourceType = 'internal'
     continuous_trigger: ContinuousTriggerType = True
@@ -243,7 +240,7 @@ class Description(StructBase, forbid_unknown_fields=True, frozen=True, cache_has
 class Output(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     path: Optional[str] = '{yaml_name}-{start_time}'
     store: typing.Union[Literal['zip'], Literal['directory']] = 'directory'
-    coord_aliases: frozendict[str, frozendict[str, frozendict[str, Any]]] = frozendict()
+    coord_aliases: dict[str, dict[str, dict[str, Any]]] = {}
 
     def __hash__(self):
         # hashing coordinate aliases greatly speeds up xarray coordinate generation

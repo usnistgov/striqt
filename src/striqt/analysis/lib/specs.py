@@ -4,7 +4,6 @@ from __future__ import annotations
 import typing
 from typing import Annotated
 
-import frozendict
 import msgspec
 
 from . import util
@@ -18,7 +17,7 @@ else:
 
 
 _T = typing.TypeVar('_T')
-_BUILTIN_TYPES = (pd.Timestamp, frozendict.frozendict)
+_BUILTIN_TYPES = (pd.Timestamp,)
 
 
 def _enc_hook(obj):
