@@ -1,6 +1,4 @@
 from __future__ import annotations
-from math import ceil
-import types
 import typing
 
 from ..lib import registry, specs, util
@@ -152,12 +150,15 @@ def cellular_5g_pss_correlation(
 
     spec = Cellular5GNRPSSCorrelationSpec.fromdict(kwargs).validate()
 
-    frequency_offset = specs.maybe_capture_lookup(
-        capture,
-        spec.frequency_offset,
-        capture_attr='center_frequency',
-        error_label='frequency_offset',
-    )
+    try:
+        frequency_offset = specs.maybe_capture_lookup(
+            capture,
+            spec.frequency_offset,
+            capture_attr='center_frequency',
+            error_label='frequency_offset',
+        )
+    except KeyError:
+        frequency_offset = None
 
     params = iqwaveform.ofdm.pss_params(
         sample_rate=spec.sample_rate,
@@ -178,23 +179,20 @@ def cellular_5g_pss_correlation(
         )
         iq = iq[..., :duration]
 
-    iq = iqwaveform.fourier.oaresample(
-        iq,
-        fs=capture.sample_rate,
-        up=up,
-        down=down,
-        axis=1,
-        window='blackman',
-        frequency_shift=frequency_offset,
-    )
+    if frequency_offset is None:
+        new_shape = iq.shape[:-1] + (round(iq.shape[-1] * up / down),)
+        iq = xp.full(new_shape, float('nan'), dtype=iq.dtype)
+    else:
+        iq = iqwaveform.fourier.oaresample(
+            iq,
+            fs=capture.sample_rate,
+            up=up,
+            down=down,
+            axis=1,
+            window='blackman',
+            frequency_shift=frequency_offset,
+        )
     capture = capture.replace(sample_rate=spec.sample_rate)
-
-    if isinstance(frequency_offset, dict):
-        if not hasattr(capture, 'center_frequency'):
-            raise ValueError(
-                'frequency_offset must be a float unless capture has a "center_frequency" attribute'
-            )
-        frequency_offset = frequency_offset[capture.center_frequency]  # noqa
 
     slot_count = params.slot_count
     corr_size = params.corr_size
