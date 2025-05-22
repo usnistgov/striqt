@@ -302,7 +302,7 @@ class Sweep(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash=True
         UpdatedAnalysis = analysis.lib.registry.measurement.container_spec()
         return msgspec.defstruct(
             cls.__name__,
-            ((cls.analysis.__name__, UpdatedAnalysis),),
+            ((cls.analysis.__name__, UpdatedAnalysis, UpdatedAnalysis()),),
             bases=(cls,),
             frozen=True,
             forbid_unknown_fields=True,
