@@ -6,6 +6,7 @@ from pathlib import Path
 import sys
 import typing
 
+from frozendict import deepfreeze
 import msgspec
 
 from striqt import analysis
@@ -175,7 +176,7 @@ def read_yaml_sweep(
             f'extension.sweep_struct is {name!r}, which exists but is not subclass of striqt.sinks.Sweep'
         )
 
-    sweep: specs.Sweep = sweep_cls.fromdict(tree)
+    sweep: specs.Sweep = sweep_cls.fromdict(deepfreeze(tree))
 
     # fill formatting fields in paths
     if radio_id is not None:

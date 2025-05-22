@@ -366,7 +366,7 @@ def evaluate_by_spec(
 ):
     """evaluate each analysis for the given IQ waveform"""
 
-    if isinstance(spec, specs.MeasurementSet):
+    if isinstance(spec, specs.Analysis):
         spec = spec.validate()
     else:
         spec = registry.measurement.container_spec().fromdict(spec)

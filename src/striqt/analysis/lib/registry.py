@@ -266,7 +266,7 @@ class _MeasurementRegistry(collections.UserDict):
 
         return wrapper
 
-    def container_spec(self) -> type[specs.MeasurementSet]:
+    def container_spec(self) -> type[specs.Analysis]:
         """return a Struct subclass type representing a specification for calls to all registered functions"""
         fields = [
             (func.__name__, typing.Union[struct_type, None], None)
@@ -276,7 +276,7 @@ class _MeasurementRegistry(collections.UserDict):
         return msgspec.defstruct(
             'Analysis',
             fields,
-            bases=(specs.MeasurementSet,),
+            bases=(specs.Analysis,),
             kw_only=True,
             forbid_unknown_fields=True,
             omit_defaults=True,

@@ -3,9 +3,11 @@
 from __future__ import annotations
 import typing
 from typing import Annotated
-from . import util
+
+import frozendict
 import msgspec
 
+from . import util
 
 if typing.TYPE_CHECKING:
     import pandas as pd
@@ -16,6 +18,7 @@ else:
 
 
 _T = typing.TypeVar('_T')
+_BUILTIN_TYPES = (pd.Timestamp, frozendict.frozendict)
 
 
 def _enc_hook(obj):
@@ -26,7 +29,8 @@ def _enc_hook(obj):
 
 
 def _dec_hook(type_, obj):
-    if typing.get_origin(type_) is pd.Timestamp:
+    origin_type = typing.get_origin(type_)
+    if issubclass(origin_type, pd.Timestamp):
         return pd.to_datetime(obj)
     elif isinstance(obj, (np.float16, np.float32, np.float64)):
         return float(obj)
@@ -63,7 +67,7 @@ class StructBase(msgspec.Struct, kw_only=True, frozen=True, cache_hash=True):
     def todict(self) -> dict:
         """return a dictinary representation of `self`"""
         return msgspec.to_builtins(
-            self, builtin_types=(pd.Timestamp,), enc_hook=_enc_hook
+            self, builtin_types=_BUILTIN_TYPES, enc_hook=_enc_hook
         )
 
     def tojson(self) -> bytes:
@@ -71,12 +75,12 @@ class StructBase(msgspec.Struct, kw_only=True, frozen=True, cache_hash=True):
 
     @classmethod
     def fromdict(cls: type[_T], d: dict) -> _T:
-        return msgspec.convert(d, type=cls, strict=False, dec_hook=_dec_hook)
+        return msgspec.convert(d, type=cls, strict=False, dec_hook=_dec_hook, builtin_types=_BUILTIN_TYPES)
 
     @classmethod
     def fromspec(cls: type[_T], other: StructBase) -> _T:
         return msgspec.convert(
-            other, type=cls, strict=False, from_attributes=True, dec_hook=_dec_hook
+            other, type=cls, strict=False, from_attributes=True, dec_hook=_dec_hook, builtin_types=_BUILTIN_TYPES
         )
 
     @classmethod
@@ -126,10 +130,10 @@ class Measurement(
     pass
 
 
-class MeasurementSet(
+class Analysis(
     StructBase, forbid_unknown_fields=True, cache_hash=True, kw_only=True, frozen=True
 ):
-    """base class for groups of keyword arguments that define calls to a set of analysis functions"""
+    """base class for a set of Measurement specifications"""
 
     pass
 

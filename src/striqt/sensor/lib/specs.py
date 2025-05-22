@@ -1,24 +1,22 @@
 """data structures that specify operation of radio hardware, captures, and sweeps"""
 
 from __future__ import annotations
-import msgspec
 import numbers
 import typing
 from typing import Annotated, Optional, Literal, Any, Union
 
+import msgspec
+from frozendict import frozendict
+
 from . import util
 
 from striqt import analysis
-from striqt.analysis.lib.specs import (
-    meta,
-    Measurement,  # noqa: F401
-    StructBase,
-)
+from striqt.analysis.lib.specs import (meta, Measurement, StructBase)
 
 if typing.TYPE_CHECKING:
     import pandas as pd
 else:
-    # this is needed to resolve the 'pd.Timestamp' stub at runtime
+    # to resolve the 'pd.Timestamp' stub at runtime
     pd = util.lazy_import('pandas')
 
 SingleChannelType = Annotated[int, meta('Input port index', ge=0)]
@@ -46,10 +44,6 @@ def _dict_hash(d):
         [_dict_hash(v) if isinstance(v, dict) else v for v in d.values()]
     )
     return hash(key_hash) ^ hash(value_hash)
-
-
-def _make_default_analysis():
-    return analysis.lib.registry.measurement.container_spec()()
 
 
 AnalysisBandwidthType = Annotated[
@@ -194,7 +188,7 @@ class RadioSetup(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash
     """run-time characteristics of the radio that are left invariant during a sweep"""
 
     driver: Optional[str] = None
-    resource: dict = {}
+    resource: frozendict = frozendict()
     time_source: TimeSourceType = 'host'
     clock_source: ClockSourceType = 'internal'
     continuous_trigger: ContinuousTriggerType = True
@@ -226,7 +220,7 @@ class _RadioSetupKeywords(typing.TypedDict, total=False):
     # call signature of source.Base objects
 
     driver: Optional[str]
-    resource: dict = {}
+    resource: dict
     time_source: TimeSourceType
     clock_source: ClockSourceType
     continuous_trigger: ContinuousTriggerType
@@ -249,7 +243,7 @@ class Description(StructBase, forbid_unknown_fields=True, frozen=True, cache_has
 class Output(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     path: Optional[str] = '{yaml_name}-{start_time}'
     store: typing.Union[Literal['zip'], Literal['directory']] = 'directory'
-    coord_aliases: dict[str, dict[str, dict[str, Any]]] = {}
+    coord_aliases: frozendict[str, frozendict[str, frozendict[str, Any]]] = frozendict()
 
     def __hash__(self):
         # hashing coordinate aliases greatly speeds up xarray coordinate generation
@@ -285,11 +279,15 @@ class Extensions(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash
     import_path: ExtensionPathType = None
 
 
+# dynamically generate the Analysis type from what's bundled in to striqt.analysis
+BundledAnalysis = analysis.lib.registry.measurement.container_spec()
+
+
 class Sweep(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     captures: tuple[RadioCapture, ...] = tuple()
     radio_setup: RadioSetup = RadioSetup()
     defaults: RadioCapture = RadioCapture()
-    analysis: dict = msgspec.field(default_factory=_make_default_analysis)
+    analysis: BundledAnalysis = BundledAnalysis() # type: ignore
     description: Description = Description()
     extensions: Extensions = Extensions()
     output: Output = Output()

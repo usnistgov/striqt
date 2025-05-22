@@ -59,12 +59,16 @@ class SinkBase:
         self._executor.__enter__()
         return self
 
-    def __exit__(self, *args):
-        self.close()
+    def __exit__(self, *exc_info):
+        try:
+            if exc_info == (None, None, None):
+                self.wait()
+                self.flush()
+        finally:
+            self.close()
 
     def close(self):
         try:
-            self.flush()
             self.wait()
         finally:
             self._executor.__exit__(*sys.exc_info())
