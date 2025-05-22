@@ -1,6 +1,8 @@
 """data structures that specify waveform characteristics"""
 
 from __future__ import annotations
+import functools
+import operator
 import typing
 from typing import Annotated
 
@@ -127,12 +129,24 @@ class AnalysisKeywords(typing.TypedDict):
     as_xarray: typing.NotRequired[bool | typing.Literal['delayed']]
 
 
+def _dict_hash(d):
+    key_hash = frozenset(d.keys())
+    value_hash = tuple(
+        [_dict_hash(v) if isinstance(v, dict) else v for v in d.values()]
+    )
+    return hash(key_hash) ^ hash(value_hash)
+
+
 class Measurement(
-    StructBase, forbid_unknown_fields=True, cache_hash=True, kw_only=True, frozen=True
+    StructBase, forbid_unknown_fields=True, cache_hash=True, kw_only=True, frozen=True, dict=True
 ):
     """base class for groups of keyword arguments that define calls to a set of analysis functions"""
 
-    pass
+    # def __hash__(self):
+    #     keys = hash(frozenset())
+    #     values = [hash((k,v)) if ]
+    #     functools.reduce(operator.xor, )
+
 
 
 class Analysis(
