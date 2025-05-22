@@ -28,8 +28,7 @@ def _enc_hook(obj):
 
 
 def _dec_hook(type_, obj):
-    origin_type = typing.get_origin(type_)
-    if issubclass(origin_type, pd.Timestamp):
+    if typing.get_origin(type_) is pd.Timestamp:
         return pd.to_datetime(obj)
     elif isinstance(obj, (np.float16, np.float32, np.float64)):
         return float(obj)
