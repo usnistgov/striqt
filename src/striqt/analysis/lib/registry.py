@@ -282,6 +282,7 @@ class _MeasurementRegistry(collections.UserDict):
             forbid_unknown_fields=True,
             omit_defaults=True,
             frozen=True,
+            cache_hash=True
         )
 
 
