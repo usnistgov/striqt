@@ -18,6 +18,31 @@ else:
     np = util.lazy_import('numpy')
 
 
+class ResourceGridConfigSpec(
+    specs.StructBase,
+    forbid_unknown_fields=True,
+    cache_hash=True,
+    kw_only=True,
+    frozen=True
+):
+    guard_bandwidths: tuple[float, float] = (0, 0)
+    frame_slots: typing.Optional[str|dict[float,str]] = None
+    special_symbols: typing.Optional[str] = None
+    cyclic_prefix_type: typing.Union[
+        typing.Literal['normal'], typing.Literal['extended']
+    ] = 'normal'
+
+
+class _ResourceGridConfigKeywords(typing.TypedDict, total=False):
+    # for IDE type hinting of the measurement function
+    guard_bandwidths: tuple[float, float]
+    frame_slots: typing.Optional[str|dict[float,str]]
+    special_symbols: typing.Optional[str]
+    cyclic_prefix_type: typing.Union[
+        typing.Literal['normal'], typing.Literal['extended']
+    ] = 'normal'
+
+
 class CellularResourcePowerHistogramSpec(
     specs.Measurement,
     forbid_unknown_fields=True,
@@ -26,19 +51,25 @@ class CellularResourcePowerHistogramSpec(
     frozen=True,
 ):
     window: typing.Union[str, tuple[str, float]]
-    window_fill: typing.Union[float, None] = None
     subcarrier_spacing: float
     power_low: float
     power_high: float
     power_resolution: float
-    guard_bandwidths: tuple[float, float] = (0, 0)
-    frame_slots: typing.Optional[str] = None
-    special_symbols: typing.Optional[str] = None
-    average_rbs: typing.Union[bool, typing.Literal['half']] = True
-    average_slots: bool = True
-    cp_guard_period: typing.Union[
-        typing.Literal['normal'], typing.Literal['extended']
-    ] = 'normal'
+    average_rbs: typing.Union[bool, typing.Literal['half']] = False
+    average_slots: bool = False
+    resource_grid: dict[float, ResourceGridConfigSpec] = ResourceGridConfigSpec()
+
+
+class _CellularResourcePowerHistogramKeywords(typing.TypedDict, total=False):
+    # for IDE type hinting of the measurement function
+    window: typing.Union[str, tuple[str, float]]
+    subcarrier_spacing: float
+    power_low: float
+    power_high: float
+    power_resolution: float
+    average_rbs: typing.Union[bool, typing.Literal['half']]
+    average_slots: bool
+    resource_grid: _ResourceGridConfigKeywords|dict[float, _ResourceGridConfigKeywords]
 
 
 @dataclasses.dataclass
@@ -76,15 +107,6 @@ def cellular_resource_power_bin(
     return bins, {'units': f'dBm/{enbw / 1e3:0.0f} kHz'}
 
 
-# @dataclasses.dataclass
-# class CellularResourcePowerHistogram(AsDataArray):
-#     counts: Data[tuple[LinkDirectionAxis, CellularResourcePowerBinAxis], np.float32]
-#     link_direction: Coordof[LinkDirectionCoords]
-#     cellular_resource_power_bin: Coordof[CellularResourcePowerBinCoords]
-#     standard_name: Attr[str] = 'Fraction of resource grid'
-#     name: Name[str] = 'cellular_resource_power_histogram'
-
-
 @registry.measurement(
     coord_funcs=[link_direction, cellular_resource_power_bin],
     dtype='float32',
@@ -95,7 +117,7 @@ def cellular_resource_power_bin(
 def cellular_resource_power_histogram(
     iq: 'iqwaveform.type_stubs.ArrayLike',
     capture: specs.Capture,
-    **kwargs: typing.Unpack[CellularResourcePowerHistogramSpec],
+    **kwargs: typing.Unpack[_CellularResourcePowerHistogramKeywords],
 ):
     """
 
@@ -116,8 +138,6 @@ def cellular_resource_power_histogram(
             if False, resolution is 1 symbol.
         cp_guard_period: the 3GPP cyclic prefix guard interval type, one of
             `('extended','normal')`
-        window_fill: the fraction of the FFT to fill with non-zero window values
-            (or `None` for the symbol duration)
         as_xarray: if True (the default), returns an xarray with labeled axes and metadata;
             otherwise, returns an (array, dict) tuple containing the result and metadata
 
@@ -142,15 +162,23 @@ def cellular_resource_power_histogram(
     else:
         time_bin_averaging = None
 
+    try:
+        grid_spec = specs.maybe_capture_lookup(
+            capture, spec.resource_grid, 'center_frequency', 'resource_grid'
+        )
+    except KeyError:
+        # default
+        grid_spec = ResourceGridConfigSpec()
+
     slot_count = round(10 * spec.subcarrier_spacing / 15e3)
-    if spec.frame_slots is None:
+    if grid_spec.frame_slots is None:
         frame_slots = slot_count * 'd'
     elif len(frame_slots) != slot_count:
         raise ValueError(
             f'expected a string with {slot_count} characters, but received {len(frame_slots)}'
         )
     else:
-        frame_slots = spec.frame_slots
+        frame_slots = grid_spec.frame_slots
 
     if 's' in frame_slots and spec.special_symbols is None:
         raise ValueError(
@@ -158,14 +186,12 @@ def cellular_resource_power_histogram(
         )
 
     # set STFT overlap and the fractional fill in the window
-    if spec.cp_guard_period == 'normal':
+    if grid_spec.cyclic_prefix_type == 'normal':
         fractional_overlap = 13 / 28
-        if spec.window_fill is None:
-            window_fill = 15 / 28
-    elif spec.cp_guard_period == 'extended':
+        window_fill = 15 / 28
+    elif grid_spec.cyclic_prefix_type == 'extended':
         fractional_overlap = 11 / 24
-        if window_fill is None:
-            window_fill = 13 / 24
+        window_fill = 13 / 24
     else:
         raise ValueError('cp_guard_period must be "normal" or "extended"')
 
@@ -199,8 +225,8 @@ def cellular_resource_power_histogram(
         channel_bandwidth=capture.analysis_bandwidth,
         frame_slots=frame_slots,
         special_symbols=spec.special_symbols,
-        guard_left=spec.guard_bandwidths[0],
-        guard_right=spec.guard_bandwidths[1],
+        guard_left=grid_spec.guard_bandwidths[0],
+        guard_right=grid_spec.guard_bandwidths[1],
         xp=xp,
     )
 
@@ -238,7 +264,7 @@ def cellular_resource_power_histogram(
         time_bin_averaging=time_bin_averaging,
         frame_slot=frame_slots,
         special_symbols=spec.special_symbols,
-        guard_bandwidths=spec.guard_bandwidths,
+        guard_bandwidths=grid_spec.guard_bandwidths,
     )
     del metadata['units']
 
