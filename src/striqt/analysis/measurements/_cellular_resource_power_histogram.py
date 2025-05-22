@@ -52,7 +52,7 @@ class CellularResourcePowerHistogramSpec(
     average_rbs: typing.Union[bool, typing.Literal['half']] = False
     average_slots: bool = False
     resource_grid: dict[float, ResourceGridConfigSpec] = ResourceGridConfigSpec()
-    cyclic_prefix_type: typing.Union[
+    cyclic_prefix: typing.Union[
         typing.Literal['normal'], typing.Literal['extended']
     ] = 'normal'
 
