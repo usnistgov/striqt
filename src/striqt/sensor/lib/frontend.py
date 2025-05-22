@@ -164,6 +164,7 @@ def init_sweep_cli(
     except BaseException as ex:
         print(ex)
         debug_handler.run(*sys.exc_info())
+        sys.exit(1)
         if not debug_handler.enable:
             raise
 
