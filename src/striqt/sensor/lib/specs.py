@@ -242,10 +242,6 @@ class Output(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash=Tru
     store: typing.Union[Literal['zip'], Literal['directory']] = 'directory'
     coord_aliases: dict[str, dict[str, dict[str, Any]]] = {}
 
-    def __hash__(self):
-        # hashing coordinate aliases greatly speeds up xarray coordinate generation
-        return hash(self.path) ^ hash(self.store) ^ _dict_hash(self.coord_aliases)
-
 
 SweepStructType = Annotated[
     typing.Union[str, Literal['striqt.sensor.Sweep']],

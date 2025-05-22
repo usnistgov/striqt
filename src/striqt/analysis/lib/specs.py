@@ -38,6 +38,18 @@ def _dec_hook(type_, obj):
         return obj
 
 
+def _dict_hash(d: typing.Mapping):
+    """compute the hash of a dict or other mapping based on its key, value pairs.
+    
+    The hash is evaluated recursively for nested dictionaries.
+    """
+    key_hash = frozenset(d.keys())
+    value_hash = tuple(
+        [_dict_hash(v) if isinstance(v, dict) else v for v in d.values()]
+    )
+    return hash(key_hash) ^ hash(value_hash)
+
+
 def meta(standard_name: str, units: str | None = None, **kws) -> msgspec.Meta:
     """annotation that is used to generate 'standard_name' and 'units' fields of xarray attrs objects"""
     extra = {'standard_name': standard_name}
@@ -97,6 +109,26 @@ class StructBase(msgspec.Struct, kw_only=True, frozen=True, cache_hash=True):
     def validate(self) -> type[typing.Self]:
         return self.fromdict(self.todict())
 
+    def __hash__(self):
+        try:
+            return msgspec.Struct.__hash__(self)
+        except TypeError:
+            # presume a dict from here on
+            pass
+
+        # attr names come with the type, so get them for free here
+        h = hash(type(self))
+
+        # work through the values
+        for name in self.__struct_fields__:
+            value = getattr(self, name) 
+            if isinstance(value, dict):
+                h ^= _dict_hash(value)
+            else:
+                h ^= hash(value)
+
+        return h
+
 
 class Capture(StructBase, kw_only=True, frozen=True):
     """bare minimum information about an IQ acquisition"""
@@ -129,38 +161,10 @@ class AnalysisKeywords(typing.TypedDict):
     as_xarray: typing.NotRequired[bool | typing.Literal['delayed']]
 
 
-def _dict_hash(d):
-    key_hash = frozenset(d.keys())
-    value_hash = tuple(
-        [_dict_hash(v) if isinstance(v, dict) else v for v in d.values()]
-    )
-    return hash(key_hash) ^ hash(value_hash)
-
-
 class Measurement(
     StructBase, forbid_unknown_fields=True, cache_hash=True, kw_only=True, frozen=True
 ):
     """base class for groups of keyword arguments that define calls to a set of analysis functions"""
-
-    def __hash__(self):
-        try:
-            return msgspec.Struct.__hash__(self)
-        except TypeError:
-            # presume a dict from here on
-            pass
-
-        # attr names come with the type, so get them for free here
-        h = hash(type(self))
-
-        # work through the values
-        for name in self.__struct_fields__:
-            value = getattr(self, name) 
-            if isinstance(value, dict):
-                h ^= _dict_hash(value)
-            else:
-                h ^= hash(value)
-
-        return h
 
 
 class Analysis(
