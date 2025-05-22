@@ -303,8 +303,8 @@ def apply_mask(
 
     # null frequencies in the guard interval
     eps = 1e-6
-    ilo = xp.searchsorted(freqs, -channel_bandwidth / 2 + guard_left + eps)
-    ihi = xp.searchsorted(freqs, channel_bandwidth / 2 - guard_right - eps)
+    ilo = xp.searchsorted(freqs, xp.asarray(-channel_bandwidth / 2 + guard_left + eps))
+    ihi = xp.searchsorted(freqs, xp.asarray(channel_bandwidth / 2 - guard_right - eps))
     spg_left = iqwaveform.util.axis_slice(spectrogram, 0, ilo, axis=-1)
     spg_right = iqwaveform.util.axis_slice(spectrogram, ihi, None, axis=-1)
     xp.copyto(spg_left, float('nan'))
