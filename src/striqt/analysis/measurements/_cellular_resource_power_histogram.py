@@ -186,10 +186,10 @@ def cellular_resource_power_histogram(
         )
 
     # set STFT overlap and the fractional fill in the window
-    if spec.cp_guard_period == 'normal':
+    if spec.cyclic_prefix == 'normal':
         fractional_overlap = 13 / 28
         window_fill = 15 / 28
-    elif spec.cp_guard_period == 'extended':
+    elif spec.cyclic_prefix == 'extended':
         fractional_overlap = 11 / 24
         window_fill = 13 / 24
     else:
