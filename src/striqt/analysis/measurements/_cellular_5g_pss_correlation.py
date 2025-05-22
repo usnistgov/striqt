@@ -98,116 +98,18 @@ def cellular_pss_lag(capture: specs.Capture, spec: Cellular5GNRPSSCorrelationSpe
     return pd.RangeIndex(0, max_len, name=name) / spec.sample_rate
 
 
-@util.lru_cache()
-def _m_sequence(N_id2: int) -> list[int]:
-    """compute the M-sequence used as the 5G-NR primary synchronization sequence.
-
-    These express frequency-domain values of the active subcarriers, spaced at the
-    subcarrier spacing.
-
-    Args:
-        N_id2: one of (0,1,2), expressing the sector portion of the cell ID
-    """
-    x = [0, 1, 1, 0, 1, 1, 1]
-
-    for i in range(7, 127):
-        x.append((x[i - 3] + x[i - 7]) % 2)
-
-    m = [(n + 43 * N_id2) % 127 for n in range(127)]
-
-    pss = [(1 - 2 * x[_m]) for _m in m]
-
-    return pss
+class SyncParams(typing.NamedTuple):
+    cp_samples: int
+    frame_size: int
+    slot_count: int
+    corr_size: int
+    frames_per_sync: int
+    trim_cp: bool
+    symbol_indexes: list[int]
 
 
 @util.lru_cache()
-def _pss_5g_nr(
-    sample_rate: float,
-    subcarrier_spacing: float,
-    center_frequency=0,
-    pad_cp=True,
-    *,
-    xp=np,
-    dtype='complex64',
-):
-    """compute the PSS correlation sequences at the given sample rate for each N_id2.
-
-    The sequence can be convolved with an IQ waveform of the same sample rate
-    along the last axis to compute a synchronization correlation sequence. The
-    result would be normalized to the IQ input power.
-
-    Args:
-        sample_rate: the desired output sample rate (in S/s), a multiple of subcarrier_spacing and at least (127*subcarrier_spacing)
-        subcarrier_spacing: the subcarrier spacing (in Hz), a multiple of 15e3
-
-    Returns:
-        xp.ndarray with dimensions (N_id2 index, PSS sample index)
-    """
-
-    # number of occupied subcarriers in the PSS
-    SC_COUNT = 127
-
-    if not iqwaveform.util.isroundmod(subcarrier_spacing, 15e3):
-        raise ValueError('subcarrier_spacing must be a multiple of 15000')
-
-    min_sample_rate = SC_COUNT * subcarrier_spacing
-    if sample_rate < min_sample_rate:
-        raise ValueError(f'sample_rate must be at least {min_sample_rate} S/s')
-
-    if iqwaveform.util.isroundmod(sample_rate, subcarrier_spacing):
-        size_out = round(sample_rate / subcarrier_spacing)
-    else:
-        raise ValueError('sample_rate must be a multiple of subcarrier spacing')
-
-    if center_frequency == 0:
-        frequency_offset = 0
-    elif iqwaveform.util.isroundmod(center_frequency, subcarrier_spacing):
-        # check frequency bounds later via pad_*
-        frequency_offset = round(center_frequency / subcarrier_spacing)
-    else:
-        raise ValueError(
-            'center_frequency must be a whole multiple of subcarrier_spacing'
-        )
-
-    if size_out == SC_COUNT and frequency_offset == 0:
-        pad_lo = 0
-        pad_hi = 0
-    else:
-        pad_lo = size_out // 2 - 120 + 56 + frequency_offset
-        pad_hi = size_out - SC_COUNT - pad_lo
-
-    if pad_lo < 0 or pad_hi < 0:
-        raise ValueError(
-            'center_frequency shift pushes M-sequence outside of Nyquist sample rate'
-        )
-
-    from scipy import signal
-
-    norm = np.float32(np.sqrt(SC_COUNT))
-    m_seqs = np.array([_m_sequence(i) for i in range(3)], dtype=dtype)
-    m_seqs *= signal.get_window(('dpss', 0.9), m_seqs.shape[1])[np.newaxis]
-    norm *= np.sqrt(np.mean(np.abs(m_seqs) ** 2))
-
-    pss_freq = iqwaveform.util.pad_along_axis(m_seqs / norm, [(pad_lo, pad_hi)], axis=1)
-    pss_time = np.fft.ifft(np.fft.fftshift(pss_freq, axes=1), axis=1)
-
-    # prepend the cyclic prefix
-    if pad_cp:
-        cp_size = round(9 * sample_rate / subcarrier_spacing / 128)
-        # pss_time = np.concatenate([pss_time[:, -cp_size:], pss_time], axis=1)
-        # pss_time = iqwaveform.util.pad_along_axis(pss_time, [[cp_size, 0]], axis=1)
-        pss_time = np.concatenate(
-            [np.zeros_like(pss_time[:, -cp_size:]), pss_time], axis=1
-        )
-
-    return xp.array(pss_time)
-
-
-@util.lru_cache()
-def _pss_params(capture: specs.Capture, spec: Cellular5GNRPSSCorrelationSpec) -> dict:
-    # TODO: make this part more explicit
-    trim_cp = True
-
+def _pss_params(capture: specs.Capture, spec: Cellular5GNRPSSCorrelationSpec, trim_cp=True) -> SyncParams:
     capture = capture.replace(sample_rate=spec.sample_rate)
 
     if not iqwaveform.util.isroundmod(spec.subcarrier_spacing, 15e3):
@@ -279,7 +181,15 @@ def _pss_params(capture: specs.Capture, spec: Cellular5GNRPSSCorrelationSpec) ->
 
     cp_samples = round(9 / 128 * spec.sample_rate / spec.subcarrier_spacing)
 
-    return locals()
+    return SyncParams(
+        cp_samples=cp_samples,
+        frame_size=frame_size,
+        slot_count=slot_count,
+        corr_size=corr_size,
+        frames_per_sync=frames_per_sync,
+        trim_cp=trim_cp,
+        symbol_indexes=symbol_indexes
+    )
 
 
 @registry.measurement(
@@ -362,16 +272,15 @@ def cellular_5g_pss_correlation(
             )
         frequency_offset = frequency_offset[capture.center_frequency]  # noqa
 
-    frame_size = params['frame_size']
-    slot_count = params['slot_count']
-    corr_size = params['corr_size']
-    frames_per_sync = params['frames_per_sync']
+    slot_count = params.slot_count
+    corr_size = params.corr_size
+    frames_per_sync = params.frames_per_sync
 
-    pss = _pss_5g_nr(capture.sample_rate, spec.subcarrier_spacing, xp=xp)
+    pss = iqwaveform.ofdm.pss_5g_nr(capture.sample_rate, spec.subcarrier_spacing, xp=xp)
 
     # set up broadcasting to new dimensions:
     # (port index, cell Nid2, sync block index, IQ sample index)
-    iq_bcast = iq.reshape((iq.shape[0], -1, frame_size))
+    iq_bcast = iq.reshape((iq.shape[0], -1, params.frame_size))
     iq_bcast = iq_bcast[:, xp.newaxis, ::frames_per_sync, :corr_size]
     pss_bcast = pss[xp.newaxis, :, xp.newaxis, :]
 
@@ -388,10 +297,10 @@ def cellular_5g_pss_correlation(
 
     # -> (port index, cell Nid2, sync block index, symbol pair index, IQ sample index)
     paired_symbol_shape = R.shape[:-2] + (7 * slot_count, -1)
-    paired_symbol_indexes = xp.array(params['symbol_indexes'], dtype='uint32') // 2
+    paired_symbol_indexes = xp.array(params.symbol_indexes, dtype='uint32') // 2
     R = R.reshape(paired_symbol_shape)[..., paired_symbol_indexes, :]
 
-    if params['trim_cp']:
+    if params.trim_cp:
         R = R[..., : -cp_samples // 2]
 
     R = iqwaveform.envtopow(R)
