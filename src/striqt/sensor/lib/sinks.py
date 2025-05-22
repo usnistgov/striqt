@@ -161,7 +161,7 @@ class CaptureAppender(ZarrSinkBase):
 
 class SpectrogramTimeAppender(ZarrSinkBase):
     def open(self):
-        if 'spectrogram' not in self.sweep_spec.potato:
+        if 'spectrogram' not in self.sweep_spec.analysis:
             raise ValueError(
                 '"analysis" spec must include "spectrogram" to append on spectrogram time axis'
             )

@@ -26,7 +26,7 @@ def sweep_touches_gpu(sweep: specs.Sweep):
     if sweep.radio_setup.calibration is not None:
         return True
 
-    if tuple(sweep.potato.keys()) != (IQ_MEAS_NAME,):
+    if tuple(sweep.analysis.keys()) != (IQ_MEAS_NAME,):
         # everything except iq_clipping requires a warmup
         return True
 
@@ -166,7 +166,7 @@ class SweepIterator:
         self._analyze = xarray_ops.AnalysisCaller(
             radio=self.radio,
             sweep=sweep,
-            analysis_spec=sweep.potato,
+            analysis_spec=sweep.analysis,
             extra_attrs=_build_attrs(sweep),
             correction=True,
         )
