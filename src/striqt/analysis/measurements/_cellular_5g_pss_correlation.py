@@ -249,4 +249,6 @@ def cellular_5g_pss_correlation(
         'standard_name': 'PSS Covariance',
     }
 
+    print(R.shape)
+
     return R, metadata
