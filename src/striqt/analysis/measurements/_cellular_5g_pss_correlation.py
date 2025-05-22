@@ -20,6 +20,7 @@ class Cellular5GNRPSSCorrelationSpec(
     cache_hash=True,
     kw_only=True,
     frozen=True,
+    dict=True
 ):
     subcarrier_spacing: float
     sample_rate: float = 15.36e6
