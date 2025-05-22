@@ -9,8 +9,10 @@ import threading
 import typing
 import typing_extensions
 
-_P = typing_extensions.ParamSpec('_P')
-_R = typing_extensions.TypeVar('_R')
+
+if typing.TYPE_CHECKING:
+    _P = typing_extensions.ParamSpec('_P')
+    _R = typing_extensions.TypeVar('_R')
 
 
 def lazy_import(module_name: str, package=None):

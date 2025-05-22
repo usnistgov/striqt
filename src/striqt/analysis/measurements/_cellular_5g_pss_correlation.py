@@ -24,7 +24,7 @@ class Cellular5GNRPSSCorrelationSpec(
     subcarrier_spacing: float
     sample_rate: float = 15.36e6
     discovery_periodicity: float = 20e-3
-    frequency_offset: typing.Union[float, frozendict[float, float]] = 0
+    frequency_offset: typing.Union[float, dict[float, float]] = 0
     shared_spectrum: bool = False
     max_block_count: typing.Optional[int] = 1
     trim_cp: bool = True
@@ -106,9 +106,6 @@ def cellular_pss_lag(capture: specs.Capture, spec: Cellular5GNRPSSCorrelationSpe
 
     name = cellular_pss_lag.__name__
     return pd.RangeIndex(0, max_len, name=name) / spec.sample_rate
-
-
-_T = typing.TypeVar('_T')
 
 
 @registry.measurement(

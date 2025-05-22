@@ -11,12 +11,12 @@ from . import util
 if typing.TYPE_CHECKING:
     import pandas as pd
     import numpy as np
+    _T = typing.TypeVar('_T')
 else:
     pd = util.lazy_import('pandas')
     np = util.lazy_import('numpy')
 
 
-_T = typing.TypeVar('_T')
 _BUILTIN_TYPES = (pd.Timestamp,)
 
 

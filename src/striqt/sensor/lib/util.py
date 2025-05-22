@@ -7,9 +7,9 @@ import sys
 
 TGen = type[typing.Any]
 
-
-_P = typing_extensions.ParamSpec('_P')
-_R = typing_extensions.TypeVar('_R')
+if typing.TYPE_CHECKING:
+    _P = typing_extensions.ParamSpec('_P')
+    _R = typing_extensions.TypeVar('_R')
 
 
 def lazy_import(module_name: str):

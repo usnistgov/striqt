@@ -12,8 +12,9 @@ import typing_extensions
 from . import specs
 
 
-_P = typing_extensions.ParamSpec('_P')
-_R = typing_extensions.TypeVar('_R')
+if typing.TYPE_CHECKING:
+    _P = typing_extensions.ParamSpec('_P')
+    _R = typing_extensions.TypeVar('_R')
 
 
 class Cache:
