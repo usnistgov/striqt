@@ -52,21 +52,24 @@ class CellularResourcePowerHistogramSpec(
     average_rbs: typing.Union[bool, typing.Literal['half']] = False
     average_slots: bool = False
     resource_grid: dict[float, ResourceGridConfigSpec] = ResourceGridConfigSpec()
+    cyclic_prefix_type: typing.Union[
+        typing.Literal['normal'], typing.Literal['extended']
+    ] = 'normal'
 
 
 class _CellularResourcePowerHistogramKeywords(typing.TypedDict, total=False):
     # for IDE type hinting of the measurement function
     window: typing.Union[str, tuple[str, float]]
     subcarrier_spacing: float
-    cyclic_prefix_type: typing.Union[
-        typing.Literal['normal'], typing.Literal['extended']
-    ] = 'normal'
     power_low: float
-    power_high: float
+    power_hixgh: float
     power_resolution: float
     average_rbs: typing.Union[bool, typing.Literal['half']]
     average_slots: bool
     resource_grid: dict[float, _ResourceGridConfigKeywords]
+    cyclic_prefix: typing.Union[
+        typing.Literal['normal'], typing.Literal['extended']
+    ]
 
 
 @dataclasses.dataclass
