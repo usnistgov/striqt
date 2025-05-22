@@ -13,6 +13,8 @@ from .. import util
 
 if typing.TYPE_CHECKING:
     ElementType = typing.TypeVar('ElementType')
+else:
+    ElementType = typing.Any
 
 
 @typing.overload
