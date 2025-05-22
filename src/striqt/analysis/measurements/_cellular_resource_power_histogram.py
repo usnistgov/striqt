@@ -26,7 +26,7 @@ class ResourceGridConfigSpec(
     frozen=True
 ):
     guard_bandwidths: tuple[float, float] = (0, 0)
-    frame_slots: typing.Optional[str|dict[float,str]] = None
+    frame_slots: typing.Optional[str] = None
     special_symbols: typing.Optional[str] = None
     cyclic_prefix_type: typing.Union[
         typing.Literal['normal'], typing.Literal['extended']
@@ -36,7 +36,7 @@ class ResourceGridConfigSpec(
 class _ResourceGridConfigKeywords(typing.TypedDict, total=False):
     # for IDE type hinting of the measurement function
     guard_bandwidths: tuple[float, float]
-    frame_slots: typing.Optional[str|dict[float,str]]
+    frame_slots: typing.Optional[str]
     special_symbols: typing.Optional[str]
     cyclic_prefix_type: typing.Union[
         typing.Literal['normal'], typing.Literal['extended']
@@ -69,7 +69,7 @@ class _CellularResourcePowerHistogramKeywords(typing.TypedDict, total=False):
     power_resolution: float
     average_rbs: typing.Union[bool, typing.Literal['half']]
     average_slots: bool
-    resource_grid: _ResourceGridConfigKeywords|dict[float, _ResourceGridConfigKeywords]
+    resource_grid: dict[float, _ResourceGridConfigKeywords]
 
 
 @dataclasses.dataclass
