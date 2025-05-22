@@ -47,7 +47,7 @@ class Cellular5GNRPSSCorrelationKeywords(specs.AnalysisKeywords, total=False):
 @util.lru_cache()
 def cellular_cell_id2(capture: specs.Capture, spec: typing.Any):
     values = np.array([0, 1, 2], dtype='uint16')
-    return values, {}
+    return values
 
 
 ### Subcarrier spacing label axis
