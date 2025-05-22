@@ -6,7 +6,7 @@ import typing
 from ..lib import registry, specs, util
 
 from . import _spectrogram, _channel_power_histogram
-from ._cellular_cyclic_autocorrelation import link_direction
+from ._cellular_cyclic_autocorrelation import link_direction, tdd_config_from_str
 
 
 if typing.TYPE_CHECKING:
@@ -162,13 +162,9 @@ def cellular_resource_power_histogram(
     else:
         time_bin_averaging = None
 
-    try:
-        grid_spec = specs.maybe_capture_lookup(
-            capture, spec.resource_grid, 'center_frequency', 'resource_grid'
-        )
-    except KeyError:
-        # default
-        grid_spec = ResourceGridConfigSpec()
+    grid_spec = specs.maybe_lookup_with_capture_key(
+        capture, spec.resource_grid, 'center_frequency', 'resource_grid', default=ResourceGridConfigSpec()
+    )
 
     slot_count = round(10 * spec.subcarrier_spacing / 15e3)
     if grid_spec.frame_slots is None:
@@ -208,8 +204,8 @@ def cellular_resource_power_histogram(
     # it was simpler to average across all 24 bins rather than sum 2 and average 12.
     # this compensates for the difference.
     spg *= 2
-    # enbw = 2*metadata['noise_bandwidth']
-    # metadata = metadata | {'noise_bandwidth': enbw, 'units': f'dBm/{enbw / 1e3:0.0f} kHz'}
+    enbw = 2*metadata['noise_bandwidth']
+    metadata = metadata | {'noise_bandwidth': enbw, 'units': f'dBm/{enbw / 1e3:0.0f} kHz'}
 
     freqs = _spectrogram.spectrogram_baseband_frequency(capture, spg_spec, xp=xp)
 
@@ -252,16 +248,6 @@ def cellular_resource_power_histogram(
     norm = xp.sum(counts, axis=(1, 2), keepdims=True)
     norm[norm == 0] = 1
     data = counts / norm
-
-    metadata = dict(
-        metadata,
-        frequency_bin_averaging=frequency_bin_averaging,
-        time_bin_averaging=time_bin_averaging,
-        frame_slot=frame_slots,
-        special_symbols=grid_spec.special_symbols,
-        guard_bandwidths=grid_spec.guard_bandwidths,
-    )
-    del metadata['units']
 
     return data, metadata
 
@@ -348,53 +334,12 @@ def build_tdd_link_symbol_masks(
             indicate the sequence of symbol types in the special slot.
     """
 
-    if flex_as is not None:
-        flex_as = flex_as.lower()
-    frame_slots = frame_slots.lower()
-
-    if special_symbols is not None:
-        special_symbols = special_symbols.lower()
-
-    if len(frame_slots.strip('dus')) > 0:
-        allowed = set('dus')
-        raise ValueError(f'frame_slots string may only contain {allowed}')
-
-    if special_symbols is None:
-        pass
-    elif len(special_symbols.strip('duf')) > 0:
-        allowed = set('duf')
-        raise ValueError(f'special_symbols string may only contain {allowed}')
-
-    if normal_cp:
-        symbols_per_slot = 14
-    else:
-        symbols_per_slot = 12
-
-    downlink_code_to_value = {
-        'd': 1,
-        'u': float('nan'),
-        'f': 1 if flex_as == 'd' else float('nan'),
-    }
-    uplink_code_to_value = {
-        'd': float('nan'),
-        'u': 1,
-        'f': 1 if flex_as == 'u' else float('nan'),
-    }
-
-    code_maps = {'downlink': downlink_code_to_value, 'uplink': uplink_code_to_value}
-
-    slot_by_symbol = {
-        'd': symbols_per_slot * 'd',
-        'u': symbols_per_slot * 'u',
-        's': special_symbols,
-    }
-
-    frame_by_symbol = ''.join([slot_by_symbol[k] for k in frame_slots])
+    tdd_config = tdd_config_from_str(frame_slots, special_symbols, normal_cp=normal_cp, flex_as=flex_as)
 
     out_shape = (len(link_direction), count)
     out = xp.empty(out_shape, dtype='float32')
     for i, direction in enumerate(link_direction):
-        single_mask = [code_maps[direction][k] for k in frame_by_symbol]
+        single_mask = [tdd_config.code_maps[direction][k] for k in tdd_config.frame_by_symbol]
 
         if count is None:
             frame_count = 1

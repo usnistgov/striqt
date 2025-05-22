@@ -163,15 +163,13 @@ def cellular_5g_pss_correlation(
 
     spec = Cellular5GNRPSSCorrelationSpec.fromdict(kwargs).validate()
 
-    try:
-        frequency_offset = specs.maybe_capture_lookup(
-            capture,
-            spec.frequency_offset,
-            capture_attr='center_frequency',
-            error_label='frequency_offset',
-        )
-    except KeyError:
-        frequency_offset = None
+    frequency_offset = specs.maybe_lookup_with_capture_key(
+        capture,
+        spec.frequency_offset,
+        capture_attr='center_frequency',
+        error_label='frequency_offset',
+        default=None
+    )
 
     params = iqwaveform.ofdm.pss_params(
         sample_rate=spec.sample_rate,

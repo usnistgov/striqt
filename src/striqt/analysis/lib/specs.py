@@ -5,6 +5,7 @@ import functools
 import operator
 import typing
 from typing import Annotated
+import warnings
 
 import msgspec
 
@@ -199,11 +200,20 @@ def get_capture_type_attrs(capture_cls: type[Capture]) -> dict[str]:
     return attrs
 
 
-def maybe_capture_lookup(
+@functools.cache
+def _warn_on_capture_lookup_miss(capture_value, capture_attr, error_label, default):
+    warnings.warn(
+        f'{error_label} is missing key {capture_attr}=={capture_value!r}; '
+        f'using default {default}'
+    )
+
+
+def maybe_lookup_with_capture_key(
     capture: Capture,
     value: _T | typing.Mapping[str, _T],
     capture_attr: str,
     error_label: str,
+    default=None
 ) -> _T:
     """evaluate a lookup table based on an attribute in a capture object.
     
@@ -219,6 +229,11 @@ def maybe_capture_lookup(
                 f'can only look up {error_label} when an attribute {capture_attr!r} '
                 f'exists in the capture type'
             )
-        return value[capture_value]
+        try:
+            return value[capture_value]
+        except KeyError:
+            _warn_on_capture_lookup_miss(capture_value=capture_value, capture_attr=capture_attr, error_label=error_label, default=default)
+            return default
+
     else:
         return value

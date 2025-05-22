@@ -485,12 +485,18 @@ def plot_cyclic_channel_power(
     dB=True,
     ax=None,
     colors=None,
+    steps=True,
     plot_kws={},
 ):
     if ax is None:
         _, ax = plt.subplots()
 
     time = cyclic_channel_power.cyclic_lag
+
+    fill_kws = {}
+    if steps:
+        plot_kws = plot_kws | {'drawstyle': 'steps'}
+        fill_kws['step'] = 'pre'
 
     if 'capture' in cyclic_channel_power.dims:
         cyclic_channel_power = cyclic_channel_power.squeeze('capture')
@@ -522,6 +528,7 @@ def plot_cyclic_channel_power(
             alpha=0.25,
             lw=0,
             rasterized=True,
+            **fill_kws
         )
 
     label_axis('x', cyclic_channel_power.cyclic_lag, ax=ax)
