@@ -126,6 +126,7 @@ def _empty_measurement(iq, capture: specs.Capture, spec: Cellular5GNRPSSCorrelat
     xp = iqwaveform.util.array_namespace(iq)
     meas_ax_shape = [len(f(capture, spec)) for f in _coord_funcs]
     new_shape = iq.shape[:-1] + tuple(meas_ax_shape)
+    1//0
     return xp.full(new_shape, float('nan'), dtype=dtype)
 
 @registry.measurement(
