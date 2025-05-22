@@ -1,4 +1,5 @@
 from __future__ import annotations
+from frozendict import frozendict
 import typing
 
 from ..lib import registry, specs, util
@@ -23,7 +24,7 @@ class Cellular5GNRPSSCorrelationSpec(
     subcarrier_spacing: float
     sample_rate: float = 15.36e6
     discovery_periodicity: float = 20e-3
-    frequency_offset: typing.Union[float, dict[float, float]] = 0
+    frequency_offset: typing.Union[float, frozendict[float, float]] = 0
     shared_spectrum: bool = False
     max_block_count: typing.Optional[int] = 1
     trim_cp: bool = True
