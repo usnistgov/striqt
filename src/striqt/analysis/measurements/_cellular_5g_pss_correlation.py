@@ -124,7 +124,8 @@ dtype = 'complex64'
 
 def _empty_measurement(iq, capture: specs.Capture, spec: Cellular5GNRPSSCorrelationSpec):
     xp = iqwaveform.util.array_namespace(iq)
-    new_shape = iq.shape[:-1] + tuple([f(capture, spec) for f in _coord_funcs])
+    meas_ax_shape = [len(f(capture, spec)) for f in _coord_funcs]
+    new_shape = iq.shape[:-1] + tuple(meas_ax_shape)
     return xp.full(new_shape, float('nan'), dtype=dtype)
 
 @registry.measurement(
