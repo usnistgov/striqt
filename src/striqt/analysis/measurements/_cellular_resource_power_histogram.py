@@ -180,7 +180,7 @@ def cellular_resource_power_histogram(
     else:
         frame_slots = grid_spec.frame_slots
 
-    if 's' in frame_slots and spec.special_symbols is None:
+    if 's' in frame_slots and grid_spec.special_symbols is None:
         raise ValueError(
             'specify special_symbols that implement the requested "s" special slot'
         )
@@ -222,7 +222,7 @@ def cellular_resource_power_histogram(
         link_direction=link_direction,
         channel_bandwidth=capture.analysis_bandwidth,
         frame_slots=frame_slots,
-        special_symbols=spec.special_symbols,
+        special_symbols=grid_spec.special_symbols,
         guard_left=grid_spec.guard_bandwidths[0],
         guard_right=grid_spec.guard_bandwidths[1],
         xp=xp,
@@ -261,7 +261,7 @@ def cellular_resource_power_histogram(
         frequency_bin_averaging=frequency_bin_averaging,
         time_bin_averaging=time_bin_averaging,
         frame_slot=frame_slots,
-        special_symbols=spec.special_symbols,
+        special_symbols=grid_spec.special_symbols,
         guard_bandwidths=grid_spec.guard_bandwidths,
     )
     del metadata['units']
