@@ -28,14 +28,15 @@ class Cache:
     _value = None
     enabled = False
 
-    @staticmethod
-    def kw_key(kws):
+    def __init__(self, fields: list[str]):
+        self._fields = fields
+
+    def kw_key(self, kws: dict[str, typing.Any]):
         if kws is None:
             return None
 
-        kws = dict(kws)
-        kws.pop('iq', None)
-        kws.pop('as_xarray', None)
+        kws = {k: kws[k] for k in self._fields}
+
         return frozenset(kws.items())
 
     def clear(self):
@@ -56,7 +57,7 @@ class Cache:
         self._key = self.kw_key(kws)
         self._value = value
 
-    def decorate(self, func):
+    def apply(self, func: typing.Callable[_P, _R]) -> typing.Callable[_P, _R]:
         @functools.wraps(func)
         def wrapped(**kws):
             match = self.lookup(kws)
@@ -157,6 +158,7 @@ class _MeasurementRegistry(collections.UserDict):
         self.depends_on: dict[callable, set[callable]] = {}
         self.names: set[str] = set()
         self.caches: dict[callable, callable] = {}
+        self.use_unaligned_input: set[callable] = set()
 
     def __call__(
         self,
@@ -168,6 +170,7 @@ class _MeasurementRegistry(collections.UserDict):
         spec_type: type[specs.Measurement],
         dtype: str,
         cache: Cache | None = None,
+        use_unaligned_input=False,
         attrs={},
     ) -> typing.Callable[_P, _R]:
         """add decorated `func` and its keyword arguments in the self.tostruct() schema"""
@@ -263,11 +266,14 @@ class _MeasurementRegistry(collections.UserDict):
 
             self[spec_type] = wrapped
 
+            if use_unaligned_input:
+                self.use_unaligned_input.add(wrapped)
+
             return wrapped
 
         return wrapper
 
-    def container_spec(self) -> type[specs.Analysis]:
+    def tospec(self) -> type[specs.Analysis]:
         """return a Struct subclass type representing a specification for calls to all registered functions"""
         fields = [
             (func.__name__, typing.Union[struct_type, None], None)

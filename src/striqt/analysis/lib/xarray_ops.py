@@ -369,7 +369,7 @@ def evaluate_by_spec(
     if isinstance(spec, specs.Analysis):
         spec = spec.validate()
     else:
-        spec = registry.measurement.container_spec().fromdict(spec)
+        spec = registry.measurement.tospec().fromdict(spec)
 
     spec_dict = spec.todict()
     results: dict[str, _DelayedDataArray] = {}

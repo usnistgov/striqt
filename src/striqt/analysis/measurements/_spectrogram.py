@@ -119,10 +119,10 @@ def evaluate_spectrogram(
     return spg, metadata
 
 
-_cache = registry.Cache()
+_cache = registry.Cache(['capture', 'spec'])
 
 
-@_cache.decorate
+@_cache.apply
 def _cached_spectrogram(
     iq: 'iqwaveform.util.Array',
     capture: specs.Capture,

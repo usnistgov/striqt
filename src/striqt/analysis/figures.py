@@ -495,8 +495,8 @@ def plot_cyclic_channel_power(
 
     fill_kws = {}
     if steps:
-        plot_kws = plot_kws | {'drawstyle': 'steps'}
-        fill_kws['step'] = 'pre'
+        plot_kws = plot_kws | {'drawstyle': 'steps-post'}
+        fill_kws['step'] = 'post'
 
     if 'capture' in cyclic_channel_power.dims:
         cyclic_channel_power = cyclic_channel_power.squeeze('capture')

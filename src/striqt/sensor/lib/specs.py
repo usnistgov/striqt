@@ -275,7 +275,7 @@ class Extensions(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash
 
 
 # dynamically generate the Analysis type from what's bundled in to striqt.analysis
-BundledAnalysis = analysis.lib.registry.measurement.container_spec()
+BundledAnalysis = analysis.lib.registry.measurement.tospec()
 
 
 class Sweep(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
@@ -299,7 +299,7 @@ class Sweep(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash=True
 
     @classmethod
     def _to_current_registry(cls: type[Sweep]) -> type[Sweep]:
-        UpdatedAnalysis = analysis.lib.registry.measurement.container_spec()
+        UpdatedAnalysis = analysis.lib.registry.measurement.tospec()
         return msgspec.defstruct(
             cls.__name__,
             ((cls.analysis.__name__, UpdatedAnalysis, UpdatedAnalysis()),),

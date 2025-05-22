@@ -1,6 +1,8 @@
 from __future__ import annotations
 import typing
 
+import iqwaveform.type_stubs
+
 from ..lib import registry, specs, util
 
 if typing.TYPE_CHECKING:
@@ -128,41 +130,12 @@ def _empty_measurement(iq, capture: specs.Capture, spec: Cellular5GNRPSSCorrelat
     new_shape = iq.shape[:-1] + tuple(meas_ax_shape)
     return xp.full(new_shape, float('nan'), dtype=dtype)
 
-@registry.measurement(
-    coord_funcs=_coord_funcs,
-    dtype=dtype,
-    spec_type=Cellular5GNRPSSCorrelationSpec,
-    attrs={'standard_name': 'PSS Correlation'},
-)
-def cellular_5g_pss_correlation(
-    iq,
-    capture: specs.Capture,
-    **kwargs: typing.Unpack[Cellular5GNRPSSCorrelationKeywords],
-):
-    """correlate each channel of the IQ against the cellular primary synchronization signal (PSS) waveform.
 
-    Returns a DataArray containing the time-lag for each combination of NID2, symbol, and SSB start time.
+alignment_cache = registry.Cache(['capture', 'spec'])
 
-    Args:
-        iq: the vector of size (N, M) for N channels and M IQ waveform samples
-        capture: capture structure that describes the iq acquisition parameters
-        sample_rate (samples/s): downsample to this rate before analysis (or None to follow capture.sample_rate)
-        subcarrier_spacing (Hz): OFDM subcarrier spacing
-        discovery_periodicity (s): interval between synchronization blocks
-        frequency_offset (Hz): baseband center frequency of the synchronization block,
-            (or a mapping to look up frequency_offset[capture.center_frequency])
-        shared_spectrum: whether to assume "shared_spectrum" symbol layout in the SSB
-            according to 3GPP TS 138 213: Section 4.1)
-        max_block_count: if not None, the number of synchronization blocks to analyze
-        as_xarray: if True (default), return an xarray.DataArray, otherwise a ChannelAnalysisResult object
 
-    References:
-        3GPP TS 138 211: Table 7.4.3.1-1, Section 7.4.2.2
-        3GPP TS 138 213: Section 4.1
-    """
-
-    spec = Cellular5GNRPSSCorrelationSpec.fromdict(kwargs).validate()
-
+@alignment_cache.apply
+def evaluate_5g_pss(iq, capture: specs.Capture, spec: Cellular5GNRPSSCorrelationSpec) -> 'iqwaveform.type_stubs.ArrayType':
     frequency_offset = specs.maybe_lookup_with_capture_key(
         capture,
         spec.frequency_offset,
@@ -235,14 +208,49 @@ def cellular_5g_pss_correlation(
     if spec.trim_cp:
         R = R[..., : -cp_samples // 2]
 
-    R = iqwaveform.envtopow(R)
-    phase = xp.multiply(1j, xp.angle(R), dtype='complex64')
-    R = R * xp.exp(phase)
+    return R
+
+
+@registry.measurement(
+    coord_funcs=_coord_funcs,
+    dtype=dtype,
+    spec_type=Cellular5GNRPSSCorrelationSpec,
+    cache=alignment_cache,
+    use_unaligned_input=True,
+    attrs={'standard_name': 'PSS Cross-Covariance'},
+)
+def cellular_5g_pss_correlation(
+    iq,
+    capture: specs.Capture,
+    **kwargs: typing.Unpack[Cellular5GNRPSSCorrelationKeywords],
+):
+    """correlate each channel of the IQ against the cellular primary synchronization signal (PSS) waveform.
+
+    Returns a DataArray containing the time-lag for each combination of NID2, symbol, and SSB start time.
+
+    Args:
+        iq: the vector of size (N, M) for N channels and M IQ waveform samples
+        capture: capture structure that describes the iq acquisition parameters
+        sample_rate (samples/s): downsample to this rate before analysis (or None to follow capture.sample_rate)
+        subcarrier_spacing (Hz): OFDM subcarrier spacing
+        discovery_periodicity (s): interval between synchronization blocks
+        frequency_offset (Hz): baseband center frequency of the synchronization block,
+            (or a mapping to look up frequency_offset[capture.center_frequency])
+        shared_spectrum: whether to assume "shared_spectrum" symbol layout in the SSB
+            according to 3GPP TS 138 213: Section 4.1)
+        max_block_count: if not None, the number of synchronization blocks to analyze
+        as_xarray: if True (default), return an xarray.DataArray, otherwise a ChannelAnalysisResult object
+
+    References:
+        3GPP TS 138 211: Table 7.4.3.1-1, Section 7.4.2.2
+        3GPP TS 138 213: Section 4.1
+    """
+
+    spec = Cellular5GNRPSSCorrelationSpec.fromdict(kwargs).validate()
+
+    R = evaluate_5g_pss(iq, capture, spec)
 
     enbw = spec.subcarrier_spacing * 127
-    metadata = {
-        'units': f'mW/{enbw / 1e6:0.2f} MHz',
-        'standard_name': 'PSS Covariance',
-    }
+    metadata = {'units': f'mW/{enbw / 1e6:0.2f} MHz'}
 
     return R, metadata
