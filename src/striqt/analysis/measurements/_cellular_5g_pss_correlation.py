@@ -112,26 +112,6 @@ def cellular_pss_lag(capture: specs.Capture, spec: Cellular5GNRPSSCorrelationSpe
 _T = typing.TypeVar('_T')
 
 
-def maybe_capture_lookup(
-    capture: specs.Capture,
-    value: _T | typing.Mapping[str, _T],
-    capture_attr: str,
-    spec_attr: str,
-) -> _T:
-    """if value is dict-like,"""
-    if hasattr(value, 'keys') and hasattr(value, '__getitem__'):
-        try:
-            capture_value = getattr(capture, capture_attr)
-        except AttributeError:
-            raise ValueError(
-                f'can only look up {spec_attr} when an attribute {capture_attr!r} '
-                f'exists in the capture type'
-            )
-        return value[capture_value]
-    else:
-        return value
-
-
 @registry.measurement(
     coord_funcs=[
         cellular_cell_id2,
@@ -172,19 +152,12 @@ def cellular_5g_pss_correlation(
 
     spec = Cellular5GNRPSSCorrelationSpec.fromdict(kwargs).validate()
 
-    frequency_offset = maybe_capture_lookup(
+    frequency_offset = specs.maybe_capture_lookup(
         capture,
         spec.frequency_offset,
         capture_attr='center_frequency',
-        spec_attr='frequency_offset',
+        error_label='frequency_offset',
     )
-    # if isinstance(spec.frequency_offset, dict):
-    #     if not hasattr(capture, 'center_frequency'):
-    #         raise ValueError(
-    #             'frequency_offset must be a float unless capture has a "center_frequency" attribute'
-    #         )
-    #     lookup = dict(spec.frequency_offset)
-    #     frequency_offset = lookup[capture.center_frequency]  # noqa
 
     params = iqwaveform.ofdm.pss_params(
         sample_rate=spec.sample_rate,

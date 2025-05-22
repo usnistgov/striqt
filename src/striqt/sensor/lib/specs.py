@@ -8,7 +8,7 @@ from typing import Annotated, Optional, Literal, Any, Union
 from . import util
 
 from striqt import analysis
-from striqt.analysis.lib.specs import meta, Measurement, StructBase
+from striqt.analysis.lib.specs import meta, StructBase
 
 if typing.TYPE_CHECKING:
     import pandas as pd

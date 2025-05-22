@@ -165,3 +165,28 @@ def get_capture_type_attrs(capture_cls: type[Capture]) -> dict[str]:
             attrs[field.name] = {}
 
     return attrs
+
+
+def maybe_capture_lookup(
+    capture: Capture,
+    value: _T | typing.Mapping[str, _T],
+    capture_attr: str,
+    error_label: str,
+) -> _T:
+    """evaluate a lookup table based on an attribute in a capture object.
+    
+    Returns:
+    - If value is dict-like, returns value[getattr(capture, capture_attr)]
+    - Otherwise, returns value
+    """
+    if hasattr(value, 'keys') and hasattr(value, '__getitem__'):
+        try:
+            capture_value = getattr(capture, capture_attr)
+        except AttributeError:
+            raise AttributeError(
+                f'can only look up {error_label} when an attribute {capture_attr!r} '
+                f'exists in the capture type'
+            )
+        return value[capture_value]
+    else:
+        return value
