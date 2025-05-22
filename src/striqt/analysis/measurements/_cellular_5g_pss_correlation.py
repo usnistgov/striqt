@@ -114,14 +114,22 @@ def cellular_pss_lag(capture: specs.Capture, spec: Cellular5GNRPSSCorrelationSpe
     return pd.RangeIndex(0, max_len, name=name) / spec.sample_rate
 
 
+_coord_funcs = [
+    cellular_cell_id2,
+    cellular_ssb_start_time,
+    cellular_ssb_symbol_index,
+    cellular_pss_lag
+]
+dtype = 'complex64'
+
+def _empty_measurement(iq, capture: specs.Capture, spec: Cellular5GNRPSSCorrelationSpec):
+    xp = iqwaveform.util.array_namespace(iq)
+    new_shape = iq.shape[:-1] + tuple([f(capture, spec) for f in _coord_funcs])
+    return xp.full(new_shape, float('nan'), dtype=dtype)
+
 @registry.measurement(
-    coord_funcs=[
-        cellular_cell_id2,
-        cellular_ssb_start_time,
-        cellular_ssb_symbol_index,
-        cellular_pss_lag,
-    ],
-    dtype='complex64',
+    coord_funcs=_coord_funcs,
+    dtype=dtype,
     spec_type=Cellular5GNRPSSCorrelationSpec,
     attrs={'standard_name': 'PSS Correlation'},
 )
@@ -184,14 +192,7 @@ def cellular_5g_pss_correlation(
         iq = iq[..., :duration]
 
     if frequency_offset is None:
-        new_shape = iq.shape[:-1] + (
-            len(cellular_cell_id2(capture, spec)),
-            len(cellular_ssb_start_time(capture, spec)),
-            len(cellular_ssb_symbol_index(capture, spec)),
-            len(cellular_pss_lag(capture, spec))
-        )
-
-        return xp.full(new_shape, float('nan'), dtype=iq.dtype)        
+        return _empty_measurement(iq, capture, spec)
     else:
         iq = iqwaveform.fourier.oaresample(
             iq,
