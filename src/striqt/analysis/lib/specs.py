@@ -138,15 +138,30 @@ def _dict_hash(d):
 
 
 class Measurement(
-    StructBase, forbid_unknown_fields=True, cache_hash=True, kw_only=True, frozen=True, dict=True
+    StructBase, forbid_unknown_fields=True, cache_hash=True, kw_only=True, frozen=True
 ):
     """base class for groups of keyword arguments that define calls to a set of analysis functions"""
 
-    # def __hash__(self):
-    #     keys = hash(frozenset())
-    #     values = [hash((k,v)) if ]
-    #     functools.reduce(operator.xor, )
+    def __hash__(self):
+        try:
+            return msgspec.Struct.__hash__(self)
+        except TypeError:
+            # presume a dict from here on
+            pass
 
+        # attr names come with the type, so get them for free here
+        typehash = hash(type(self))
+
+        # work through the values
+        attrs = []
+        for name in self.__struct_fields__:
+            value = getattr(self, name) 
+            if isinstance(value, dict):
+                attrs.append(_dict_hash(value))
+            else:
+                attrs.append(value)
+
+        return typehash ^ functools.reduce(operator.xor, attrs)
 
 
 class Analysis(
