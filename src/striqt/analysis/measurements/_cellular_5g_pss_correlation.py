@@ -98,7 +98,12 @@ def cellular_ssb_symbol_index(
 )
 @util.lru_cache()
 def cellular_pss_lag(capture: specs.Capture, spec: Cellular5GNRPSSCorrelationSpec):
-    params = iqwaveform.ofdm.pss_params(capture, spec)
+    params = iqwaveform.ofdm.pss_params(
+        sample_rate=spec.sample_rate,
+        subcarrier_spacing=spec.subcarrier_spacing,
+        discovery_periodicity=spec.discovery_periodicity,
+        shared_spectrum=spec.shared_spectrum,
+    )
 
     max_len = 2 * round(spec.sample_rate / spec.subcarrier_spacing + params.cp_samples)
 
