@@ -150,18 +150,17 @@ class Measurement(
             pass
 
         # attr names come with the type, so get them for free here
-        typehash = hash(type(self))
+        h = hash(type(self))
 
         # work through the values
-        attrs = []
         for name in self.__struct_fields__:
             value = getattr(self, name) 
             if isinstance(value, dict):
-                attrs.append(_dict_hash(value))
+                h ^= _dict_hash(value)
             else:
-                attrs.append(value)
+                h ^= hash(value)
 
-        return typehash ^ functools.reduce(operator.xor, attrs)
+        return h
 
 
 class Analysis(
