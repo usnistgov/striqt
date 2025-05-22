@@ -64,8 +64,6 @@ def except_on_low_memory(threshold_bytes=500_000_000):
         return
     import psutil
 
-    mempool = cp.get_default_memory_pool()
-
     if psutil.virtual_memory().available >= threshold_bytes:
         return
 
