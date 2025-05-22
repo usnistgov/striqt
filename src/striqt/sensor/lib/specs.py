@@ -8,7 +8,7 @@ from typing import Annotated, Optional, Literal, Any, Union
 from . import util
 
 from striqt import analysis
-from striqt.analysis.lib.specs import (meta, Measurement, StructBase)
+from striqt.analysis.lib.specs import meta, Measurement, StructBase
 
 if typing.TYPE_CHECKING:
     import pandas as pd
@@ -284,7 +284,7 @@ class Sweep(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash=True
     captures: tuple[RadioCapture, ...] = tuple()
     radio_setup: RadioSetup = RadioSetup()
     defaults: RadioCapture = RadioCapture()
-    analysis: BundledAnalysis = BundledAnalysis() # type: ignore
+    analysis: BundledAnalysis = BundledAnalysis()  # type: ignore
     description: Description = Description()
     extensions: Extensions = Extensions()
     output: Output = Output()

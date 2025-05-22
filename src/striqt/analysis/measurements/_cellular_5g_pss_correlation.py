@@ -1,5 +1,6 @@
 from __future__ import annotations
 from math import ceil
+import types
 import typing
 
 from ..lib import registry, specs, util
@@ -27,6 +28,7 @@ class Cellular5GNRPSSCorrelationSpec(
     frequency_offset: typing.Union[float, dict[float, float]] = 0
     shared_spectrum: bool = False
     max_block_count: typing.Optional[int] = 1
+    trim_cp: bool = True
 
 
 class Cellular5GNRPSSCorrelationKeywords(specs.AnalysisKeywords, total=False):
@@ -36,6 +38,7 @@ class Cellular5GNRPSSCorrelationKeywords(specs.AnalysisKeywords, total=False):
     frequency_offset: typing.Union[float, dict[float, float]]
     shared_spectrum: bool
     max_block_count: typing.Optional[int]
+    trim_cp: bool
 
 
 @registry.coordinate_factory(
@@ -58,8 +61,13 @@ CellularSSBStartTimeElapsedAxis = typing.Literal['cellular_ssb_start_time']
 def cellular_ssb_start_time(
     capture: specs.Capture, spec: Cellular5GNRPSSCorrelationSpec
 ):
-    params = _pss_params(capture, spec)
-    total_blocks = round(params['duration'] / spec.discovery_periodicity)
+    params = iqwaveform.ofdm.pss_params(
+        sample_rate=spec.sample_rate,
+        subcarrier_spacing=spec.subcarrier_spacing,
+        discovery_periodicity=spec.discovery_periodicity,
+        shared_spectrum=spec.shared_spectrum,
+    )
+    total_blocks = round(params.duration / spec.discovery_periodicity)
     if spec.max_block_count is None:
         count = total_blocks
     else:
@@ -75,9 +83,14 @@ def cellular_ssb_start_time(
 def cellular_ssb_symbol_index(
     capture: specs.Capture, spec: Cellular5GNRPSSCorrelationSpec
 ):
-    params = _pss_params(capture, spec)
+    params = iqwaveform.ofdm.pss_params(
+        sample_rate=spec.sample_rate,
+        subcarrier_spacing=spec.subcarrier_spacing,
+        discovery_periodicity=spec.discovery_periodicity,
+        shared_spectrum=spec.shared_spectrum,
+    )
 
-    return list(params['symbol_indexes'])
+    return list(params.symbol_indexes)
 
 
 @registry.coordinate_factory(
@@ -85,111 +98,38 @@ def cellular_ssb_symbol_index(
 )
 @util.lru_cache()
 def cellular_pss_lag(capture: specs.Capture, spec: Cellular5GNRPSSCorrelationSpec):
-    params = _pss_params(capture, spec)
+    params = iqwaveform.ofdm.pss_params(capture, spec)
 
-    max_len = 2 * round(
-        spec.sample_rate / spec.subcarrier_spacing + params['cp_samples']
-    )
+    max_len = 2 * round(spec.sample_rate / spec.subcarrier_spacing + params.cp_samples)
 
-    if params['trim_cp']:
-        max_len = max_len - round(0.5 * params['cp_samples'])
+    if spec.trim_cp:
+        max_len = max_len - round(0.5 * params.cp_samples)
 
     name = cellular_pss_lag.__name__
     return pd.RangeIndex(0, max_len, name=name) / spec.sample_rate
 
 
-class SyncParams(typing.NamedTuple):
-    cp_samples: int
-    frame_size: int
-    slot_count: int
-    corr_size: int
-    frames_per_sync: int
-    trim_cp: bool
-    symbol_indexes: list[int]
+_T = typing.TypeVar('_T')
 
 
-@util.lru_cache()
-def _pss_params(capture: specs.Capture, spec: Cellular5GNRPSSCorrelationSpec, trim_cp=True) -> SyncParams:
-    capture = capture.replace(sample_rate=spec.sample_rate)
-
-    if not iqwaveform.util.isroundmod(spec.subcarrier_spacing, 15e3):
-        raise ValueError('subcarrier_spacing must be multiple of 15000')
-
-    if iqwaveform.util.isroundmod(spec.sample_rate, 128 * spec.subcarrier_spacing):
-        frame_size = round(10e-3 * spec.sample_rate)
+def maybe_capture_lookup(
+    capture: specs.Capture,
+    value: _T | typing.Mapping[str, _T],
+    capture_attr: str,
+    spec_attr: str,
+) -> _T:
+    """if value is dict-like,"""
+    if hasattr(value, 'keys') and hasattr(value, '__getitem__'):
+        try:
+            capture_value = getattr(capture, capture_attr)
+        except AttributeError:
+            raise ValueError(
+                f'can only look up {spec_attr} when an attribute {capture_attr!r} '
+                f'exists in the capture type'
+            )
+        return value[capture_value]
     else:
-        raise ValueError(
-            f'capture.sample_rate must be a multiple of {128 * spec.subcarrier_spacing}'
-        )
-
-    # if duration is None:
-    #     duration = 2 * slot_duration
-    # elif not iqwaveform.util.isroundmod(duration, slot_duration / 2):
-    #     raise ValueError(
-    #         f'duration must be a multiple of 1/2 slot duration, {slot_duration / 2}'
-    #     )
-
-    # The following cases are defined in 3GPP TS 138 213: Section 4.1
-    if np.isclose(spec.subcarrier_spacing, 15e3):
-        # Case A
-        offsets = [2, 8]
-        mult = 14
-        if spec.shared_spectrum:
-            nrange = range(5)
-        else:
-            # for center frequencies < 3 GHz (or 1.88 GHz in unpaired operation)
-            # the upper 2 can be ignored
-            nrange = range(4)
-    # TODO: Implement Case B
-    # elif np.isclose(subcarrier_spacing, 30e3):
-    #     # Case B
-    #     offsets = [2,8]
-    #     if shared_spectrum:
-    #         n = np.arange(10)
-    #     else:
-    #         # for center frequencies < 3 GHz, the upper 2 can be ignored
-    #         n = np.arange(4)
-    elif np.isclose(spec.subcarrier_spacing, 30e3):
-        # For now, all 30 kHz SCS is assumed to be "Case C"
-        offsets = [2, 8]
-        mult = 14
-        if spec.shared_spectrum:
-            nrange = range(10)
-        else:
-            # for center frequencies < 3 GHz (or 1.88 GHz in unpaired
-            # operation) the upper 2 can be ignored
-            nrange = range(4)
-    else:
-        raise ValueError(
-            'only 15 kHz and 30 kHz SCS (Case A, C) are currently supported (Case A,B,C)'
-        )
-
-    symbol_indexes = []
-    for n in nrange:
-        for offset in offsets:
-            symbol_indexes.append(offset + mult * n)
-
-    slot_count = ceil(symbol_indexes[-1] / 14)
-    slot_duration = 10e-3 / (10 * spec.subcarrier_spacing / 15e3)
-    duration = slot_count * slot_duration
-    corr_size = round(duration * spec.sample_rate)
-
-    if iqwaveform.util.isroundmod(spec.discovery_periodicity, 10e-3):
-        frames_per_sync = round(spec.discovery_periodicity / 10e-3)
-    else:
-        raise ValueError('discovery_periodicity must be a multiple of 10e-3')
-
-    cp_samples = round(9 / 128 * spec.sample_rate / spec.subcarrier_spacing)
-
-    return SyncParams(
-        cp_samples=cp_samples,
-        frame_size=frame_size,
-        slot_count=slot_count,
-        corr_size=corr_size,
-        frames_per_sync=frames_per_sync,
-        trim_cp=trim_cp,
-        symbol_indexes=symbol_indexes
-    )
+        return value
 
 
 @registry.measurement(
@@ -232,15 +172,26 @@ def cellular_5g_pss_correlation(
 
     spec = Cellular5GNRPSSCorrelationSpec.fromdict(kwargs).validate()
 
-    if isinstance(spec.frequency_offset, dict):
-        if not hasattr(capture, 'center_frequency'):
-            raise ValueError(
-                'frequency_offset must be a float unless capture has a "center_frequency" attribute'
-            )
-        lookup = dict(spec.frequency_offset)
-        frequency_offset = lookup[capture.center_frequency]  # noqa
+    frequency_offset = maybe_capture_lookup(
+        capture,
+        spec.frequency_offset,
+        capture_attr='center_frequency',
+        spec_attr='frequency_offset',
+    )
+    # if isinstance(spec.frequency_offset, dict):
+    #     if not hasattr(capture, 'center_frequency'):
+    #         raise ValueError(
+    #             'frequency_offset must be a float unless capture has a "center_frequency" attribute'
+    #         )
+    #     lookup = dict(spec.frequency_offset)
+    #     frequency_offset = lookup[capture.center_frequency]  # noqa
 
-    params = _pss_params(capture, spec)
+    params = iqwaveform.ofdm.pss_params(
+        sample_rate=spec.sample_rate,
+        subcarrier_spacing=spec.subcarrier_spacing,
+        discovery_periodicity=spec.discovery_periodicity,
+        shared_spectrum=spec.shared_spectrum,
+    )
 
     xp = iqwaveform.util.array_namespace(iq)
 
@@ -300,7 +251,7 @@ def cellular_5g_pss_correlation(
     paired_symbol_indexes = xp.array(params.symbol_indexes, dtype='uint32') // 2
     R = R.reshape(paired_symbol_shape)[..., paired_symbol_indexes, :]
 
-    if params.trim_cp:
+    if spec.trim_cp:
         R = R[..., : -cp_samples // 2]
 
     R = iqwaveform.envtopow(R)
