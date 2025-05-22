@@ -29,6 +29,7 @@ dependencies:
 - dask
 - msgspec~=0.18
 - netCDF4
+- frozendict
 - schemdraw
 - mscorefonts
 - cupy ~= 12.2

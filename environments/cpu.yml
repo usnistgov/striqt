@@ -35,6 +35,7 @@ dependencies:
 - dask
 - msgspec~=0.18
 - netCDF4
+- frozendict
 
   # for documentation and plotting
 - schemdraw
