@@ -121,15 +121,13 @@ _coord_funcs = [
     cellular_pss_lag
 ]
 dtype = 'complex64'
-n = 0
+
 def _empty_measurement(iq, capture: specs.Capture, spec: Cellular5GNRPSSCorrelationSpec):
     global n
     xp = iqwaveform.util.array_namespace(iq)
     meas_ax_shape = [len(f(capture, spec)) for f in _coord_funcs]
     new_shape = iq.shape[:-1] + tuple(meas_ax_shape)
-    if n == 1:
-        1//0
-    n = n + 1
+    print(new_shape)
     return xp.full(new_shape, float('nan'), dtype=dtype)
 
 @registry.measurement(
