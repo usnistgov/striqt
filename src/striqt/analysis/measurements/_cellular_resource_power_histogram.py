@@ -173,7 +173,7 @@ def cellular_resource_power_histogram(
     slot_count = round(10 * spec.subcarrier_spacing / 15e3)
     if grid_spec.frame_slots is None:
         frame_slots = slot_count * 'd'
-    elif len(frame_slots) != slot_count:
+    elif len(grid_spec.frame_slots) != slot_count:
         raise ValueError(
             f'expected a string with {slot_count} characters, but received {len(frame_slots)}'
         )
