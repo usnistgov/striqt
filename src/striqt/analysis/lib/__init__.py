@@ -1,1 +1,1 @@
-from . import io, registry, specs, util, xarray_ops
+from . import io, register, specs, util, xarray_ops

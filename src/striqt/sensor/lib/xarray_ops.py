@@ -11,7 +11,7 @@ import typing
 from . import captures, specs, util
 from .sources import SourceBase
 
-from striqt.analysis import registry
+from striqt.analysis import register
 
 import array_api_compat
 
@@ -238,13 +238,15 @@ class AnalysisCaller:
         # wait to import until here to avoid a circular import
         from . import iq_corrections
 
-        with registry.measurement.cache_context():        
+        with register.measurement.cache_context():
             with lb.stopwatch('analysis', logger_level='debug'):
                 if array_api_compat.is_cupy_array(iq):
                     util.configure_cupy()
 
                 if self.correction:
-                    with lb.stopwatch('resample, filter, calibrate', logger_level='debug'):
+                    with lb.stopwatch(
+                        'resample, filter, calibrate', logger_level='debug'
+                    ):
                         iq = iq_corrections.resampling_correction(
                             iq, capture, self.radio, overwrite_x=overwrite_x
                         )
@@ -257,7 +259,7 @@ class AnalysisCaller:
                 )
 
                 if delayed:
-                    result = _DelayedDataset(
+                    result = DelayedDataset(
                         delayed=result,
                         capture=capture,
                         sweep=self.sweep,
@@ -273,8 +275,8 @@ class AnalysisCaller:
 
 
 @dataclasses.dataclass()
-class _DelayedDataset:
-    delayed: dict[str, striqt_analysis.lib.xarray_ops._DelayedDataArray]
+class DelayedDataset:
+    delayed: dict[str, striqt_analysis.lib.xarray_ops.DelayedDataArray]
     capture: specs.Capture
     sweep: specs.Sweep
     radio_id: str

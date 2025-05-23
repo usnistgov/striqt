@@ -162,10 +162,11 @@ def init_sweep_cli(
             opened = lb.concurrently(**calls)
 
     except BaseException as ex:
-        print(ex)
-        debug_handler.run(*sys.exc_info())
-        sys.exit(1)
-        if not debug_handler.enable:
+        if debug_handler.enable:
+            print(ex)
+            debug_handler.run(*sys.exc_info())
+            sys.exit(1)
+        else:
             raise
 
     return CLIObjects(
@@ -208,7 +209,9 @@ def execute_sweep_cli(
 
             cli.sink.flush()
         except BaseException as ex:
-            print(ex)
-            cli_objects.debugger.run(*sys.exc_info())
-            if not cli_objects.debugger.enable:
+            if cli_objects.debugger.enable:
+                print(ex)
+                cli_objects.debugger.run(*sys.exc_info())
+                sys.exit(1)
+            else:
                 raise

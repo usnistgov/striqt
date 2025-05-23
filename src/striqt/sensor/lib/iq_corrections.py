@@ -123,15 +123,26 @@ def resampling_correction(
 
     except_on_low_memory()
 
-    size_out = round(capture.duration * capture.sample_rate)
+    if radio._aligner is None:
+        resample_duration = capture.duration
+    else:
+        resample_duration = capture.duration + radio._aligner.max_lag(capture)
+
+    resample_size_out = round(resample_duration * capture.sample_rate)
     iq = iqwaveform.fourier.resample(
         iq,
-        size_out,
+        resample_size_out,
         overwrite_x=overwrite_x,
         axis=axis,
         scale=1 if scale is None else scale,
         iter_axes=(0,),
     )
+
+    size_out = round(capture.duration * capture.sample_rate)
+    if radio._aligner is not None:
+        align_start = radio._aligner(iq, capture)
+        offset = round(align_start * capture.sample_rate)
+        iq = iq[:, offset : offset + size_out]
 
     assert iq.shape[axis] == size_out
 

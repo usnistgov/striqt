@@ -345,8 +345,10 @@ class FileSource(TestSource):
     def open(self):
         self._file_stream = None
 
-    def setup(self, radio_setup: specs.RadioSetup = None, **kws) -> specs.RadioSetup:
-        radio_setup = super().setup(radio_setup, **kws)
+    def setup(
+        self, radio_setup: specs.RadioSetup = None, analysis=None, **kws
+    ) -> specs.RadioSetup:
+        radio_setup = super().setup(radio_setup, analysis, **kws)
 
         if self._file_stream is not None:
             self._file_stream.close()

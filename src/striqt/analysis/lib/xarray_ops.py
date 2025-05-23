@@ -8,7 +8,7 @@ import dataclasses
 import math
 import typing
 
-from . import registry, specs, util
+from . import register, specs, util
 
 import array_api_compat
 
@@ -194,7 +194,7 @@ def dataarray_stub(
 
     coord_stubs = {}
     for func in coord_factories:
-        info = registry.coordinate_factory[func.__name__]
+        info = register.coordinate_factory[func]
         coord_stubs[info.name] = _empty_stub(info.dims, info.dtype, attrs=info.attrs)
 
     if not dims:
@@ -213,12 +213,15 @@ def dataarray_stub(
 
 
 def build_dataarray(
-    delayed: _DelayedDataArray,
+    delayed: DelayedDataArray,
     expand_dims=None,
 ) -> 'xr.DataArray':
     """build an `xarray.DataArray` from an ndarray, capture information, and channel analysis keyword arguments"""
     template = dataarray_stub(
-        delayed.dims, delayed.coord_factories, delayed.dtype, expand_dims=expand_dims
+        delayed.info.dims,
+        delayed.info.coord_factories,
+        delayed.info.dtype,
+        expand_dims=expand_dims,
     )
     data = np.asarray(delayed.data)
     delayed.spec.validate()
@@ -237,12 +240,12 @@ def build_dataarray(
         da.values[:] = data
     except ValueError as ex:
         raise ValueError(
-            f'{delayed.name} measurement data has unexpected shape {data.shape}'
+            f'{delayed.info.name} measurement data has unexpected shape {data.shape}'
         ) from ex
 
-    for coord_func in delayed.coord_factories:
-        info = registry.coordinate_factory[coord_func.__name__]
-        ret = coord_func(delayed.capture, delayed.spec)
+    for coord_factory in delayed.info.coord_factories:
+        coord_info = register.coordinate_factory[coord_factory]
+        ret = coord_factory(delayed.capture, delayed.spec)
 
         try:
             if isinstance(ret, tuple):
@@ -251,7 +254,7 @@ def build_dataarray(
                 arr = ret
                 metadata = {}
 
-            da[info.name].indexes[info.dims[0]].values[:] = arr
+            da[coord_info.name].indexes[coord_info.dims[0]].values[:] = arr
 
         except ValueError as ex:
             exc = ex
@@ -259,9 +262,11 @@ def build_dataarray(
             exc = None
 
         if exc is not None:
-            template_shape = tuple([da[info.name].indexes[d].shape for d in info.dims])
+            template_shape = tuple(
+                [da[coord_info.name].indexes[d].shape for d in coord_info.dims]
+            )
             data_shape = np.array(arr).shape
-            name = f'{delayed.name}.{info.name}'
+            name = f'{delayed.info.name}.{coord_info.name}'
 
             if template_shape == data_shape:
                 exc.args = (f'in coordinate {name!r}, {exc.args[0]}',) + exc.args[1:]
@@ -269,18 +274,18 @@ def build_dataarray(
             else:
                 problem = (
                     f'unexpected shape in coordinate {name!r}: '
-                    f'data dimensions {info.dims!r} have shape {template_shape}, '
+                    f'data dimensions {coord_info.dims!r} have shape {template_shape}, '
                     f'but coordinate factory gave {data_shape}'
                 )
                 raise ValueError(problem) from exc
 
-        da[info.name] = da[info.name].assign_attrs(metadata)
+        da[coord_info.name] = da[coord_info.name].assign_attrs(metadata)
 
-    return da.assign_attrs(delayed.attrs)
+    return da.assign_attrs(delayed.info.attrs)
 
 
 @util.lru_cache()
-def _infer_coord_dims(coord_funcs: typing.Iterable[callable]) -> list[str]:
+def _infer_coord_dims(coord_factories: typing.Iterable[callable]) -> list[str]:
     """guess dimensions of a dataarray based on its coordinates.
 
     This orders the dimensions according to (1) first appearance in each
@@ -290,30 +295,31 @@ def _infer_coord_dims(coord_funcs: typing.Iterable[callable]) -> list[str]:
 
     # build an ordered list of unique coordinates
     coord_dims = {}
-    for func in coord_funcs:
-        coord = registry.coordinate_factory[func.__name__]
+    for func in coord_factories:
+        coord = register.coordinate_factory[func]
         if coord is None:
             continue
         coord_dims.update(dict.fromkeys(coord.dims, None))
     return list(coord_dims.keys())
 
 
-def _validate_delayed_ndim(delayed: _DelayedDataArray) -> None:
-    if delayed.dims is None:
-        expect_dims = _infer_coord_dims(delayed.coord_factories)
+def _validate_delayed_ndim(delayed: DelayedDataArray) -> None:
+    if delayed.info.dims is None:
+        expect_dims = _infer_coord_dims(delayed.info.coord_factories)
     else:
-        expect_dims = delayed.dims
+        expect_dims = delayed.info.dims
 
     ndim = delayed.data.ndim
 
     if len(expect_dims) + 1 != ndim:
         raise ValueError(
-            f'coordinates of {delayed.name!r} indicate {len(expect_dims) + 1} dimensions, but the data has {ndim}'
+            f'coordinates of {delayed.info.name!r} indicate {len(expect_dims) + 1} '
+            f'dimensions, but the data has {ndim}'
         )
 
 
 @dataclasses.dataclass
-class _DelayedDataArray(collections.UserDict):
+class DelayedDataArray(collections.UserDict):
     """represents the return result from a channel analysis function.
 
     This includes a method to convert to `xarray.DataArray`, which is
@@ -325,23 +331,15 @@ class _DelayedDataArray(collections.UserDict):
     capture: specs.RadioCapture
     spec: specs.Measurement
     data: typing.Union['iqwaveform.type_stubs.ArrayLike', dict]
-    name: str
-    dtype: str
-    dims: tuple[str, ...] = ()
-    coord_factories: tuple[registry.DelayedCoordinate, ...] = ()
-    attrs: dict[str] = dataclasses.field(default_factory=dict)
+    info: register.MeasurementInfo
 
-    def compute(self) -> _DelayedDataArray:
-        return _DelayedDataArray(
+    def compute(self) -> DelayedDataArray:
+        return DelayedDataArray(
             # datacls=self.datacls,
-            data=_results_as_arrays(self.data),
-            coord_factories=self.coord_factories,
-            dims=self.dims,
             capture=self.capture,
-            dtype=self.dtype,
             spec=self.spec,
-            attrs=self.attrs,
-            name=self.name,
+            data=_results_as_arrays(self.data),
+            info=self.info,
         )
 
     def to_xarray(self, expand_dims=None) -> 'xr.DataArray':
@@ -369,26 +367,25 @@ def evaluate_by_spec(
     if isinstance(spec, specs.Analysis):
         spec = spec.validate()
     else:
-        spec = registry.measurement.to_analysis_spec().fromdict(spec)
+        spec = register.to_analysis_spec(register.measurement).fromdict(spec)
 
     spec_dict = spec.todict()
-    results: dict[str, _DelayedDataArray] = {}
+    results: dict[str, DelayedDataArray] = {}
 
     shared_kws = {
         'iq': iq,
         'capture': capture,
         'as_xarray': 'delayed' if as_xarray else False,
     }
-    
+
     for name in spec_dict.keys():
-        func = registry.measurement[type(getattr(spec, name))]
+        meas = register.measurement[type(getattr(spec, name))]
         util.except_on_low_memory()
         with lb.stopwatch(f'analysis: {name}', logger_level='debug'):
-            # func = registry[type(getattr(spec, name))]
             func_kws = spec_dict[name]
             if not func_kws:
                 continue
-            results[name] = func(**shared_kws, **func_kws)
+            results[name] = meas.func(**shared_kws, **func_kws)
 
     if not as_xarray:
         return results
@@ -404,7 +401,7 @@ def evaluate_by_spec(
 
 def package_analysis(
     capture: specs.Capture,
-    results: dict[str, _DelayedDataArray],
+    results: dict[str, DelayedDataArray],
     expand_dims=None,
 ) -> 'xr.Dataset':
     # materialize as xarrays

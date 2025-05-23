@@ -3,7 +3,7 @@ import typing
 
 from . import _channel_power_histogram, _spectrogram, _spectrogram_histogram
 
-from ..lib import registry, specs, util
+from ..lib import register, specs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -29,7 +29,7 @@ class SpectrogramHistogramRatioKeywords(
     pass
 
 
-@registry.coordinate_factory(
+@register.coordinate_factory(
     dtype='float32',
     attrs={'standard_name': 'Spectrogram cross-channel power ratio', 'units': 'dB'},
 )
@@ -45,9 +45,9 @@ def spectrogram_ratio_power_bin(
     return bins, attrs
 
 
-@registry.measurement(
+@register.measurement(
     depends=_spectrogram.spectrogram,
-    coord_funcs=[spectrogram_ratio_power_bin],
+    coord_factories=[spectrogram_ratio_power_bin],
     spec_type=SpectrogramHistogramRatioSpec,
     dtype='float32',
     attrs={'standard_name': 'Fraction of counts'},

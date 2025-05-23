@@ -3,7 +3,7 @@ import dataclasses
 from math import ceil
 import typing
 
-from ..lib import registry, specs, util
+from ..lib import register, specs, util
 
 from . import _spectrogram, _channel_power_histogram
 from ._cellular_cyclic_autocorrelation import link_direction, tdd_config_from_str
@@ -76,7 +76,7 @@ class LinkPair:
     uplink: any
 
 
-@registry.coordinate_factory(
+@register.coordinate_factory(
     dtype='float32',
     attrs={'standard_name': 'Cellular resource grid bin power', 'units': 'dBm'},
 )
@@ -105,8 +105,8 @@ def cellular_resource_power_bin(
     return bins, {'units': f'dBm/{enbw / 1e3:0.0f} kHz'}
 
 
-@registry.measurement(
-    coord_funcs=[link_direction, cellular_resource_power_bin],
+@register.measurement(
+    coord_factories=[link_direction, cellular_resource_power_bin],
     dtype='float32',
     depends=_spectrogram.spectrogram,
     spec_type=CellularResourcePowerHistogramSpec,

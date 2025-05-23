@@ -53,9 +53,9 @@ class RadioProcessService(rpyc.Service):
         iq = self.radio._read_stream(samples)
         return self.conn.root.remote_shared_array(iq)
 
-    def exposed_setup(self, radio_config: specs.RadioSetup):
-        radio_config = rpyc.utils.classic.obtain(radio_config)
-        return self.radio.setup(radio_config)
+    def exposed_setup(self, radio_setup: specs.RadioSetup, analysis=None):
+        radio_setup = rpyc.utils.classic.obtain(radio_setup)
+        return self.radio.setup(radio_setup, analysis)
 
     def exposed_arm(self, capture: specs.RadioCapture):
         capture = rpyc.utils.classic.obtain(capture)

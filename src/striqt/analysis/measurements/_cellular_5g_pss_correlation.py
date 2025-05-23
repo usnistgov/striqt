@@ -1,18 +1,21 @@
 from __future__ import annotations
 import typing
 
-import iqwaveform.type_stubs
+from ..lib import register, specs, util
 
-from ..lib import registry, specs, util
+import array_api_compat
 
 if typing.TYPE_CHECKING:
     import iqwaveform
     import numpy as np
     import pandas as pd
+    from scipy import ndimage
+    import iqwaveform.type_stubs
 else:
     iqwaveform = util.lazy_import('iqwaveform')
     np = util.lazy_import('numpy')
     pd = util.lazy_import('pandas')
+    ndimage = util.lazy_import('scipy.ndimage')
 
 
 class Cellular5GNRPSSCorrelationSpec(
@@ -42,7 +45,7 @@ class Cellular5GNRPSSCorrelationKeywords(specs.AnalysisKeywords, total=False):
     trim_cp: bool
 
 
-@registry.coordinate_factory(
+@register.coordinate_factory(
     dtype='uint16', attrs={'standard_name': r'Cell Identity 2 ($N_{ID}^{(2)}$)'}
 )
 @util.lru_cache()
@@ -55,7 +58,7 @@ def cellular_cell_id2(capture: specs.Capture, spec: typing.Any):
 CellularSSBStartTimeElapsedAxis = typing.Literal['cellular_ssb_start_time']
 
 
-@registry.coordinate_factory(
+@register.coordinate_factory(
     dtype='float32', attrs={'standard_name': 'Time Elapsed', 'units': 's'}
 )
 @util.lru_cache()
@@ -77,7 +80,7 @@ def cellular_ssb_start_time(
     return np.arange(max(count, 1)) * spec.discovery_periodicity
 
 
-@registry.coordinate_factory(
+@register.coordinate_factory(
     dtype='uint16', attrs={'standard_name': 'SSB symbol index'}
 )
 @util.lru_cache()
@@ -94,7 +97,7 @@ def cellular_ssb_symbol_index(
     return list(params.symbol_indexes)
 
 
-@registry.coordinate_factory(
+@register.coordinate_factory(
     dtype='float32', attrs={'standard_name': 'Symbol lag', 'units': 's'}
 )
 @util.lru_cache()
@@ -115,7 +118,7 @@ def cellular_pss_lag(capture: specs.Capture, spec: Cellular5GNRPSSCorrelationSpe
     return pd.RangeIndex(0, max_len, name=name) / spec.sample_rate
 
 
-_coord_funcs = [
+_coord_factories = [
     cellular_cell_id2,
     cellular_ssb_start_time,
     cellular_ssb_symbol_index,
@@ -129,12 +132,12 @@ def _empty_measurement(
 ):
     global n
     xp = iqwaveform.util.array_namespace(iq)
-    meas_ax_shape = [len(f(capture, spec)) for f in _coord_funcs]
+    meas_ax_shape = [len(f(capture, spec)) for f in _coord_factories]
     new_shape = iq.shape[:-1] + tuple(meas_ax_shape)
     return xp.full(new_shape, float('nan'), dtype=dtype)
 
 
-alignment_cache = registry.KeywordArgumentCache(['capture', 'spec'])
+alignment_cache = register.KeywordArgumentCache(['capture', 'spec'])
 
 
 @alignment_cache.apply
@@ -219,13 +222,64 @@ def evaluate_5g_pss(
     return R
 
 
-@registry.measurement(
-    coord_funcs=_coord_funcs,
+@register.alignment_source(
+    Cellular5GNRPSSCorrelationSpec, lag_coord_func=cellular_pss_lag
+)
+def sync_aggregate_5g_pss(
+    iq,
+    capture: specs.Capture,
+    window_fill=0.5,
+    **kwargs: typing.Unpack[Cellular5GNRPSSCorrelationKeywords],
+):
+    """compute alignment index offsets based on cellular_5g_pss_correlation.
+
+    This approach is meant to account for a weighted average of nearby peaks
+    to reduce mis-alignment errors in measurements of aggregate interference.
+
+    The underlying heuristic is a triangular weighting function to include energy
+    within +/- 1/4 symbol of each peak. Outside of this range, spectrogram errors
+    due to "ISI" begin to increase quickly.
+    """
+
+    spec = Cellular5GNRPSSCorrelationSpec.fromdict(kwargs).validate()
+
+    xp = iqwaveform.util.array_namespace(iq)
+
+    kwargs['as_xarray'] = False
+
+    R, _ = cellular_5g_pss_correlation(iq, capture, **kwargs)
+
+    # start dimensions: (..., port index, cell Nid2, sync block index, symbol pair index, IQ sample index)
+    Ragg = iqwaveform.envtopow(R.sum(axis=(-4, -2)))
+
+    # reduce port index, etc in power space
+    Ragg = Ragg.mean(axis=tuple(range(Ragg.ndim - 1)))
+    Ragg = Ragg - xp.median(Ragg)
+    assert Ragg.ndim == 1
+
+    weights = iqwaveform.get_window(
+        'triang',
+        nwindow=round(window_fill * Ragg.size),
+        nzero=round((1 - window_fill) * Ragg.size),
+        norm=False,
+    )
+    weights = np.roll(weights, round((1 - window_fill) * Ragg.size / 2))
+
+    if not array_api_compat.is_numpy_array(Ragg):
+        Ragg = Ragg.get()
+
+    est = ndimage.correlate1d(Ragg, weights, mode='wrap')
+    i = est.argmax()
+
+    return cellular_pss_lag(capture, spec)[i]
+
+
+@register.measurement(
+    Cellular5GNRPSSCorrelationSpec,
+    coord_factories=_coord_factories,
     dtype=dtype,
-    spec_type=Cellular5GNRPSSCorrelationSpec,
     cache=alignment_cache,
-    prefers_unaligned_input=True,
-    align_with_axis=cellular_pss_lag,
+    prefer_unaligned_input=True,
     attrs={'standard_name': 'PSS Cross-Covariance'},
 )
 def cellular_5g_pss_correlation(

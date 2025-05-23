@@ -182,22 +182,32 @@ FastLOType = Annotated[
     ),
 ]
 
+AlignmentSourceType = Annotated[
+    str,
+    meta(
+        'name of a registered waveform alignment function for analysis-based IQ synchronization'
+    ),
+]
+
 
 class RadioSetup(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     """run-time characteristics of the radio that are left invariant during a sweep"""
 
     driver: Optional[str] = None
     resource: dict = {}
-    time_source: TimeSourceType = 'host'
-    clock_source: ClockSourceType = 'internal'
+
     continuous_trigger: ContinuousTriggerType = True
-    periodic_trigger: Optional[float] = None
     calibration: Optional[str] = None
     gapless_repeats: GaplessRepeatType = False
     time_sync_every_capture: TimeSyncEveryCaptureType = False
     warmup_sweep: WarmupSweepType = True
     array_backend: ArrayBackendType = 'cupy'
     fast_lo: FastLOType = True
+
+    time_source: TimeSourceType = 'host'
+    clock_source: ClockSourceType = 'internal'
+    periodic_trigger: Optional[float] = None
+    alignment_source: Optional[str] = None
 
     # this is enabled by a calibration subclass to skip unecessary
     # re-acquisitions
@@ -210,6 +220,14 @@ class RadioSetup(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash
         if self.gapless_repeats and self.time_sync_every_capture:
             raise ValueError(
                 'time_sync_every_capture and gapless_repeats are mutually exclusive'
+            )
+
+        if self.alignment_source is None:
+            pass
+        elif self.alignment_source not in analysis.register.alignment_source:
+            registered = set(analysis.register.alignment_source)
+            raise ValueError(
+                f'alignment_source "{self.alignment_source!r}" is not one of the registered functions {registered!r}'
             )
 
 
@@ -275,32 +293,19 @@ class Extensions(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash
 
 
 # dynamically generate Analysis type for "built-in" measurements in to striqt.analysis
-BundledAnalysis = analysis.lib.registry.measurement.to_analysis_spec()
-BundledAlignmentAnalysis = analysis.lib.registry.measurement.to_analysis_spec(for_alignment=True)
-WindowFillType = Annotated[float, meta('size of the averaging window as a fraction of the analysis interval', ge=0, le=1)]
+BundledAnalysis = analysis.register.to_analysis_spec(analysis.register.measurement)
+BundledAlignmentAnalysis = analysis.register.to_analysis_spec(
+    analysis.register.alignment_source
+)
 
-
-class Alignment(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
-    analysis: BundledAlignmentAnalysis = BundledAlignmentAnalysis() # type: ignore
-    window: str = 'triang'
-    window_fill: float = 0.5
-
-    @classmethod
-    def _to_current_registry(cls: type[Alignment]) -> type[Alignment]:
-        Analysis = analysis.lib.registry.measurement.to_analysis_spec(for_alignment=True)
-
-        fields = (
-            (cls.analysis.__name__, Analysis, Analysis()),
-        )
-
-        return msgspec.defstruct(
-            cls.__name__,
-            fields,
-            bases=(cls,),
-            frozen=True,
-            forbid_unknown_fields=True,
-            cache_hash=True,
-        )
+WindowFillType = Annotated[
+    float,
+    meta(
+        'size of the averaging window as a fraction of the analysis interval',
+        ge=0,
+        le=1,
+    ),
+]
 
 
 class Sweep(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
@@ -308,7 +313,6 @@ class Sweep(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash=True
     radio_setup: RadioSetup = RadioSetup()
     defaults: RadioCapture = RadioCapture()
 
-    alignment: Alignment = Alignment()
     analysis: BundledAnalysis = BundledAnalysis()  # type: ignore
     description: Description = Description()
     extensions: Extensions = Extensions()
@@ -325,15 +329,13 @@ class Sweep(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash=True
             return super().__getattribute__(name)
 
     @classmethod
-    def _to_current_registry(cls: type[Sweep]) -> type[Sweep]:
-        Analysis = analysis.lib.registry.measurement.to_analysis_spec()
-        alignment_cls: type[Alignment] = typing.get_type_hints(cls)['alignment']
-        Alignment = alignment_cls._to_current_registry()
-
-        fields = (
-            (cls.analysis.__name__, Analysis, Analysis()),
-            (cls.alignment.__name__, Alignment, Alignment()),
+    def _from_registry(cls: type[Sweep]) -> type[Sweep]:
+        Analysis = analysis.register.to_analysis_spec(
+            analysis.register.measurement,
+            base=typing.get_type_hints(cls)[cls.analysis.__name__],
         )
+
+        fields = ((cls.analysis.__name__, Analysis, Analysis()),)
 
         return msgspec.defstruct(
             cls.__name__,

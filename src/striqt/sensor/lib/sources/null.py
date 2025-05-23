@@ -115,8 +115,8 @@ class NullSource(base.SourceBase):
         else:
             self.backend['rx_enabled'] = False
 
-    def setup(self, setup: specs.RadioSetup = None, **kws):
-        setup = super().setup(setup, **kws)
+    def setup(self, setup: specs.RadioSetup = None, analysis=None, **kws):
+        setup = super().setup(setup, analysis, **kws)
 
         if setup._rx_channel_count is not None:
             self.rx_channel_count = setup._rx_channel_count

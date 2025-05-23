@@ -158,12 +158,12 @@ class SoapyRadioSource(base.SourceBase):
         # if we make it this far, we need to build and enable the RX stream
         self._setup_rx_stream(channels)
 
-    def setup(self, radio_setup: specs.RadioSetup):
+    def setup(self, radio_setup: specs.RadioSetup, analysis=None):
         if radio_setup.clock_source != self.clock_source():
             self.rx_enabled(False)
             self._disable_rx_stream()
 
-        super().setup(radio_setup)
+        super().setup(radio_setup, analysis)
 
         self._setup_rx_stream()
 

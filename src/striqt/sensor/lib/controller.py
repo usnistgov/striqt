@@ -192,7 +192,7 @@ class SweepController:
             self.warmup_sweep(sweep, calibration, pickled=False)
 
         radio = self.open_radio(sweep.radio_setup)
-        radio.setup(sweep.radio_setup)
+        radio.setup(sweep.radio_setup, sweep.analysis)
 
         return sweeps.iter_sweep(radio, **kwargs)
 
@@ -216,7 +216,7 @@ class SweepController:
             self.warmup_sweep(sweep, calibration, pickled=True)
 
         radio = self.open_radio(sweep.radio_setup)
-        radio.setup(sweep.radio_setup)
+        radio.setup(sweep.radio_setup, sweep.analysis)
 
         return sweeps.iter_raw_iq(radio, sweep)
 

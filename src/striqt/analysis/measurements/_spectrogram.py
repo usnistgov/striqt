@@ -5,7 +5,7 @@ import functools
 import typing
 import warnings
 
-from ..lib import registry, specs, util
+from ..lib import register, specs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -119,7 +119,7 @@ def evaluate_spectrogram(
     return spg, metadata
 
 
-_cache = registry.KeywordArgumentCache(['capture', 'spec'])
+_cache = register.KeywordArgumentCache(['capture', 'spec'])
 
 
 @_cache.apply
@@ -190,7 +190,7 @@ def _cached_spectrogram(
     return spg, metadata
 
 
-@registry.coordinate_factory(
+@register.coordinate_factory(
     dtype='float32', attrs={'standard_name': 'Time elapsed', 'units': 's'}
 )
 @util.lru_cache()
@@ -212,7 +212,7 @@ def spectrogram_time(
     return pd.RangeIndex(size) * hop_size / capture.sample_rate
 
 
-@registry.coordinate_factory(dtype='float64', attrs={'units': 'Hz'})
+@register.coordinate_factory(dtype='float64', attrs={'units': 'Hz'})
 @util.lru_cache()
 def spectrogram_baseband_frequency(
     capture: specs.Capture, spec: SpectrogramSpec, xp=np
@@ -244,8 +244,8 @@ def spectrogram_baseband_frequency(
     return freqs.astype('float64').round(16)
 
 
-@registry.measurement(
-    coord_funcs=[spectrogram_time, spectrogram_baseband_frequency],
+@register.measurement(
+    coord_factories=[spectrogram_time, spectrogram_baseband_frequency],
     spec_type=SpectrogramSpec,
     dtype='float16',
     cache=_cache,

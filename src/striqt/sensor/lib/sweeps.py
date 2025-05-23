@@ -26,7 +26,8 @@ def sweep_touches_gpu(sweep: specs.Sweep):
     if sweep.radio_setup.calibration is not None:
         return True
 
-    if tuple(sweep.analysis.keys()) != (IQ_MEAS_NAME,):
+    analysis_dict = sweep.analysis.todict()
+    if tuple(analysis_dict.keys()) != (IQ_MEAS_NAME,):
         # everything except iq_clipping requires a warmup
         return True
 

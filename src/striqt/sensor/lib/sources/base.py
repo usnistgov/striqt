@@ -12,6 +12,9 @@ from .. import specs, util
 from . import method_attr
 
 from striqt.analysis.lib.util import pinned_array_as_cupy
+from striqt.analysis.lib.specs import Analysis
+from striqt.analysis.lib import register
+
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -270,6 +273,7 @@ class SourceBase(lb.Device):
         self._armed_capture: specs.RadioCapture | None = None
         self._carryover = _ReceiveBufferCarryover(self)
         self._buffers = [None, None]
+        self._aligner: register.AlignmentCaller | None = None
 
     def close(self):
         self._carryover = None
@@ -278,6 +282,7 @@ class SourceBase(lb.Device):
     def setup(
         self,
         radio_setup: specs.RadioSetup,
+        analysis: Analysis = None,
         **setup_kws: typing.Unpack[specs._RadioSetupKeywords],
     ):
         """disarm acquisition and apply the given radio setup"""
@@ -286,6 +291,7 @@ class SourceBase(lb.Device):
             radio_setup = specs.RadioSetup()
 
         radio_setup = radio_setup.replace(**setup_kws)
+
         if radio_setup.driver is None:
             driver = self.__class__.__name__
             radio_setup = radio_setup.replace(driver=driver)
@@ -302,6 +308,19 @@ class SourceBase(lb.Device):
         if not self.time_sync_every_capture:
             self.rx_enabled(False)
             self.sync_time_source()
+
+        if radio_setup.alignment_source is None:
+            self._aligner = None
+        elif analysis is None:
+            name = register.get_alignment_measurement_name(radio_setup.alignment_source)
+            raise ValueError(
+                f'alignment source {name!r} requires an analysis '
+                f'specification for {radio_setup.alignment_source!r}'
+            )
+        else:
+            self._aligner = register.get_aligner(
+                radio_setup.alignment_source, analysis=analysis
+            )
 
         return radio_setup
 
@@ -387,12 +406,14 @@ class SourceBase(lb.Device):
     def read_iq(
         self,
         capture: specs.RadioCapture,
-    ) -> tuple['np.ndarray[np.complex64]', float]:
+    ) -> tuple['np.ndarray[np.complex64]', int]:
         # the return buffer
         samples, stream_bufs = self._get_next_buffers(capture)
 
         # holdoff parameters, valid when we already have a clock reading
-        dsp_pad_before, _ = _get_dsp_pad_size(self.base_clock_rate, capture)
+        dsp_pad_before, _ = _get_dsp_pad_size(
+            self.base_clock_rate, capture, self._aligner
+        )
 
         # carryover from the previous acquisition
         awaiting_timestamp = True
@@ -716,13 +737,23 @@ def _get_filter_pad(capture: specs.RadioCapture):
 
 @util.lru_cache(30000)
 def _get_dsp_pad_size(
-    base_clock_rate: float, capture: specs.RadioCapture
+    base_clock_rate: float,
+    capture: specs.RadioCapture,
+    aligner: register.AlignmentCaller | None = None,
 ) -> tuple[int, int]:
     """returns the padding before and after a waveform to achieve an integral number of FFT windows"""
     resampler_design = design_capture_resampler(base_clock_rate, capture)
 
     filter_pad = _get_filter_pad(capture)
-    return (filter_pad, 0)
+
+    if aligner is None:
+        lag_pad = 0
+    else:
+        max_lag = aligner.max_lag(capture)
+        lag_pad = ceil(base_clock_rate * max_lag)
+        lag_pad = lag_pad + (lag_pad % 2)
+
+    return (filter_pad, lag_pad)
 
     nfft = resampler_design['nfft']
     nfft_out = resampler_design.get('nfft_out', nfft)
@@ -753,6 +784,7 @@ def _get_input_buffer_count_cached(
     capture: specs.RadioCapture,
     transient_holdoff: float = 0,
     include_holdoff: bool = False,
+    aligner: register.AlignmentCaller | None = None,
 ):
     if iqwaveform.power_analysis.isroundmod(capture.duration * capture.sample_rate, 1):
         samples_out = round(capture.duration * capture.sample_rate)
@@ -766,7 +798,7 @@ def _get_input_buffer_count_cached(
     else:
         sample_rate = capture.sample_rate
 
-    pad_size = sum(_get_dsp_pad_size(base_clock_rate, capture))
+    pad_size = sum(_get_dsp_pad_size(base_clock_rate, capture, aligner))
     if needs_resample(resampler_design, capture):
         nfft = resampler_design['nfft']
         min_samples_in = ceil(samples_out * nfft / resampler_design['nfft_out'])
@@ -801,7 +833,7 @@ def get_channel_resample_buffer_count(radio: SourceBase, capture):
 
 
 def get_channel_read_buffer_count(
-    radio: SourceBase, capture=None, include_holdoff=False
+    radio: SourceBase, capture: specs.RadioCapture | None = None, include_holdoff=False
 ) -> int:
     if capture is None:
         capture = radio.get_capture_struct()
@@ -812,6 +844,7 @@ def get_channel_read_buffer_count(
         capture=capture,
         transient_holdoff=radio._transient_holdoff_time,
         include_holdoff=include_holdoff,
+        aligner=radio._aligner,
     )
 
 

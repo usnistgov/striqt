@@ -1,7 +1,7 @@
 from __future__ import annotations
 import typing
 
-from ..lib import registry, specs, util
+from ..lib import register, specs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -30,7 +30,7 @@ class ChannelPowerTimeSeriesKeywords(specs.AnalysisKeywords):
     power_detectors: typing.NotRequired[tuple[str, ...]]
 
 
-@registry.coordinate_factory(
+@register.coordinate_factory(
     dtype='float32', attrs={'standard_name': 'Time elapsed', 'units': 's'}
 )
 @util.lru_cache()
@@ -39,7 +39,7 @@ def time_elapsed(capture: specs.Capture, spec: ChannelPowerTimeSeriesSpec):
     return pd.RangeIndex(length) * spec.detector_period
 
 
-@registry.coordinate_factory(dtype=object, attrs={'standard_name': 'Power detector'})
+@register.coordinate_factory(dtype=object, attrs={'standard_name': 'Power detector'})
 @util.lru_cache()
 def power_detector(
     capture: specs.Capture, spec: ChannelPowerTimeSeriesSpec
@@ -47,8 +47,8 @@ def power_detector(
     return np.array(spec.power_detectors)
 
 
-@registry.measurement(
-    coord_funcs=[power_detector, time_elapsed],
+@register.measurement(
+    coord_factories=[power_detector, time_elapsed],
     dtype='float32',
     spec_type=ChannelPowerTimeSeriesSpec,
     attrs={'standard_name': 'Fraction of detector periods', 'units': 'dBm'},

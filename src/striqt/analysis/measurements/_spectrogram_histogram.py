@@ -2,7 +2,7 @@ from __future__ import annotations
 import typing
 
 from . import _spectrogram, _channel_power_histogram
-from ..lib import registry, specs, util
+from ..lib import register, specs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -30,7 +30,7 @@ class SpectrogramHistogramKeywords(_spectrogram.SpectrogramKeywords):
     power_resolution: float
 
 
-@registry.coordinate_factory(
+@register.coordinate_factory(
     dtype='float32', attrs={'standard_name': 'Spectrogram bin power', 'units': 'dBm'}
 )
 @util.lru_cache()
@@ -57,9 +57,9 @@ def spectrogram_power_bin(
     return bins, {'units': f'dBm/{enbw / 1e3:0.0f} kHz'}
 
 
-@registry.measurement(
+@register.measurement(
     depends=_spectrogram.spectrogram,
-    coord_funcs=[spectrogram_power_bin],
+    coord_factories=[spectrogram_power_bin],
     spec_type=SpectrogramHistogramSpec,
     dtype='float32',
     attrs={'standard_name': 'Fraction of counts'},

@@ -176,7 +176,7 @@ def read_yaml_sweep(
         )
 
     # update any new registered analysis
-    sweep: specs.Sweep = sweep_cls._to_current_registry().fromdict(tree)
+    sweep: specs.Sweep = sweep_cls._from_registry().fromdict(tree)
 
     # fill formatting fields in paths
     if radio_id is not None:
