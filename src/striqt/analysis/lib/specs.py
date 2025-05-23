@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 import functools
-import operator
 import typing
 from typing import Annotated
 import warnings
@@ -14,6 +13,7 @@ from . import util
 if typing.TYPE_CHECKING:
     import pandas as pd
     import numpy as np
+
     _T = typing.TypeVar('_T')
 else:
     pd = util.lazy_import('pandas')
@@ -41,7 +41,7 @@ def _dec_hook(type_, obj):
 
 def _dict_hash(d: typing.Mapping):
     """compute the hash of a dict or other mapping based on its key, value pairs.
-    
+
     The hash is evaluated recursively for nested dictionaries.
     """
     key_hash = frozenset(d.keys())
@@ -122,7 +122,7 @@ class StructBase(msgspec.Struct, kw_only=True, frozen=True, cache_hash=True):
 
         # work through the values
         for name in self.__struct_fields__:
-            value = getattr(self, name) 
+            value = getattr(self, name)
             if isinstance(value, dict):
                 h ^= _dict_hash(value)
             else:
@@ -213,10 +213,10 @@ def maybe_lookup_with_capture_key(
     value: _T | typing.Mapping[str, _T],
     capture_attr: str,
     error_label: str,
-    default=None
+    default=None,
 ) -> _T:
     """evaluate a lookup table based on an attribute in a capture object.
-    
+
     Returns:
     - If value is dict-like, returns value[getattr(capture, capture_attr)]
     - Otherwise, returns value
@@ -232,7 +232,12 @@ def maybe_lookup_with_capture_key(
         try:
             return value[capture_value]
         except KeyError:
-            _warn_on_capture_lookup_miss(capture_value=capture_value, capture_attr=capture_attr, error_label=error_label, default=default)
+            _warn_on_capture_lookup_miss(
+                capture_value=capture_value,
+                capture_attr=capture_attr,
+                error_label=error_label,
+                default=default,
+            )
             return default
 
     else:

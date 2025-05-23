@@ -174,7 +174,7 @@ def read_yaml_sweep(
         raise TypeError(
             f'extension.sweep_struct is {name!r}, which exists but is not subclass of striqt.sinks.Sweep'
         )
-    
+
     # update any new registered analysis
     sweep: specs.Sweep = sweep_cls._to_current_registry().fromdict(tree)
 

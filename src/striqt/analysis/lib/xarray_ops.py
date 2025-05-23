@@ -369,7 +369,7 @@ def evaluate_by_spec(
     if isinstance(spec, specs.Analysis):
         spec = spec.validate()
     else:
-        spec = registry.measurement.tospec().fromdict(spec)
+        spec = registry.measurement.to_analysis_spec().fromdict(spec)
 
     spec_dict = spec.todict()
     results: dict[str, _DelayedDataArray] = {}
@@ -379,17 +379,16 @@ def evaluate_by_spec(
         'capture': capture,
         'as_xarray': 'delayed' if as_xarray else False,
     }
-
-    with lb.sequentially(*registry.measurement.caches.values()):
-        for name in spec_dict.keys():
-            func = registry.measurement[type(getattr(spec, name))]
-            util.except_on_low_memory()
-            with lb.stopwatch(f'analysis: {name}', logger_level='debug'):
-                # func = registry[type(getattr(spec, name))]
-                func_kws = spec_dict[name]
-                if not func_kws:
-                    continue
-                results[name] = func(**shared_kws, **func_kws)
+    
+    for name in spec_dict.keys():
+        func = registry.measurement[type(getattr(spec, name))]
+        util.except_on_low_memory()
+        with lb.stopwatch(f'analysis: {name}', logger_level='debug'):
+            # func = registry[type(getattr(spec, name))]
+            func_kws = spec_dict[name]
+            if not func_kws:
+                continue
+            results[name] = func(**shared_kws, **func_kws)
 
     if not as_xarray:
         return results

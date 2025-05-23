@@ -10,7 +10,6 @@ import labbench as lb
 from .. import util
 
 
-
 if typing.TYPE_CHECKING:
     ElementType = typing.TypeVar('ElementType')
 else:

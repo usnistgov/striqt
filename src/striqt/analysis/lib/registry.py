@@ -9,15 +9,18 @@ import functools
 import msgspec
 import typing
 import typing_extensions
-from . import specs
+from . import specs, util
 
 
 if typing.TYPE_CHECKING:
     _P = typing_extensions.ParamSpec('_P')
     _R = typing_extensions.TypeVar('_R')
+    import labbench as lb
+else:
+    lb = util.lazy_import('labbench')
 
 
-class Cache:
+class KeywordArgumentCache:
     """A single-element cache of measurement results.
 
     It is keyed on captures and keyword arguments.
@@ -59,12 +62,12 @@ class Cache:
 
     def apply(self, func: typing.Callable[_P, _R]) -> typing.Callable[_P, _R]:
         @functools.wraps(func)
-        def wrapped(**kws):
+        def wrapped(*args, **kws):
             match = self.lookup(kws)
             if match is not None:
                 return match
 
-            ret = func(**kws)
+            ret = func(*args, **kws)
             self.update(kws, ret)
             return ret
 
@@ -150,7 +153,7 @@ class _CoordinateRegistry(collections.UserDict[str, DelayedCoordinate]):
 coordinate_factory = _CoordinateRegistry()
 
 
-class _MeasurementRegistry(collections.UserDict):
+class _MeasurementRegistry(collections.UserDict[type[specs.Measurement], callable]):
     """a registry of keyword-only arguments for decorated functions"""
 
     def __init__(self):
@@ -159,6 +162,7 @@ class _MeasurementRegistry(collections.UserDict):
         self.names: set[str] = set()
         self.caches: dict[callable, callable] = {}
         self.use_unaligned_input: set[callable] = set()
+        self.alignment_sources: dict[type[specs.Measurement], tuple[callable, callable]] = {}
 
     def __call__(
         self,
@@ -169,11 +173,13 @@ class _MeasurementRegistry(collections.UserDict):
         depends: typing.Iterable[callable] = [],
         spec_type: type[specs.Measurement],
         dtype: str,
-        cache: Cache | None = None,
-        use_unaligned_input=False,
+        cache: KeywordArgumentCache | None = None,
+        prefers_unaligned_input=False,
+        align_with_axis=None,
         attrs={},
     ) -> typing.Callable[_P, _R]:
         """add decorated `func` and its keyword arguments in the self.tostruct() schema"""
+
         if isinstance(dims, str):
             dims = (dims,)
 
@@ -259,25 +265,34 @@ class _MeasurementRegistry(collections.UserDict):
 
             if cache is None:
                 pass
-            elif not isinstance(cache, Cache):
+            elif not isinstance(cache, KeywordArgumentCache):
                 raise TypeError('cache argument must be an instance of Cache')
             else:
                 self.caches[wrapped] = cache
 
             self[spec_type] = wrapped
 
-            if use_unaligned_input:
+            if align_with_axis is not None:
+                self.alignment_sources[spec_type] = (wrapped, align_with_axis)
+
+            if prefers_unaligned_input:
                 self.use_unaligned_input.add(wrapped)
 
             return wrapped
 
         return wrapper
 
-    def tospec(self) -> type[specs.Analysis]:
+    def to_analysis_spec(self, for_alignment: bool = False) -> type[specs.Analysis]:
         """return a Struct subclass type representing a specification for calls to all registered functions"""
+
+        if for_alignment:
+            type_map = ((k, v[0]) for k,v in self.alignment_sources.items())
+        else:
+            type_map = self.items()
+
         fields = [
             (func.__name__, typing.Union[struct_type, None], None)
-            for struct_type, func in self.items()
+            for struct_type, func in type_map.items()
         ]
 
         return msgspec.defstruct(
@@ -288,8 +303,11 @@ class _MeasurementRegistry(collections.UserDict):
             forbid_unknown_fields=True,
             omit_defaults=True,
             frozen=True,
-            cache_hash=True
+            cache_hash=True,
         )
+
+    def cache_context(self) -> typing.ContextManager:
+        return lb.sequentially(*self.caches.values())
 
 
 measurement = _MeasurementRegistry()

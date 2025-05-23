@@ -21,7 +21,7 @@ class Cellular5GNRPSSCorrelationSpec(
     cache_hash=True,
     kw_only=True,
     frozen=True,
-    dict=True
+    dict=True,
 ):
     subcarrier_spacing: float
     sample_rate: float = 15.36e6
@@ -119,11 +119,14 @@ _coord_funcs = [
     cellular_cell_id2,
     cellular_ssb_start_time,
     cellular_ssb_symbol_index,
-    cellular_pss_lag
+    cellular_pss_lag,
 ]
 dtype = 'complex64'
 
-def _empty_measurement(iq, capture: specs.Capture, spec: Cellular5GNRPSSCorrelationSpec):
+
+def _empty_measurement(
+    iq, capture: specs.Capture, spec: Cellular5GNRPSSCorrelationSpec
+):
     global n
     xp = iqwaveform.util.array_namespace(iq)
     meas_ax_shape = [len(f(capture, spec)) for f in _coord_funcs]
@@ -131,17 +134,22 @@ def _empty_measurement(iq, capture: specs.Capture, spec: Cellular5GNRPSSCorrelat
     return xp.full(new_shape, float('nan'), dtype=dtype)
 
 
-alignment_cache = registry.Cache(['capture', 'spec'])
+alignment_cache = registry.KeywordArgumentCache(['capture', 'spec'])
 
 
 @alignment_cache.apply
-def evaluate_5g_pss(iq, capture: specs.Capture, spec: Cellular5GNRPSSCorrelationSpec) -> 'iqwaveform.type_stubs.ArrayType':
+def evaluate_5g_pss(
+    iq: 'iqwaveform.type_stubs.ArrayType',
+    *,
+    capture: specs.Capture,
+    spec: Cellular5GNRPSSCorrelationSpec,
+) -> 'iqwaveform.type_stubs.ArrayType':
     frequency_offset = specs.maybe_lookup_with_capture_key(
         capture,
         spec.frequency_offset,
         capture_attr='center_frequency',
         error_label='frequency_offset',
-        default=None
+        default=None,
     )
 
     params = iqwaveform.ofdm.pss_params(
@@ -216,7 +224,8 @@ def evaluate_5g_pss(iq, capture: specs.Capture, spec: Cellular5GNRPSSCorrelation
     dtype=dtype,
     spec_type=Cellular5GNRPSSCorrelationSpec,
     cache=alignment_cache,
-    use_unaligned_input=True,
+    prefers_unaligned_input=True,
+    align_with_axis=cellular_pss_lag,
     attrs={'standard_name': 'PSS Cross-Covariance'},
 )
 def cellular_5g_pss_correlation(
@@ -248,7 +257,7 @@ def cellular_5g_pss_correlation(
 
     spec = Cellular5GNRPSSCorrelationSpec.fromdict(kwargs).validate()
 
-    R = evaluate_5g_pss(iq, capture, spec)
+    R = evaluate_5g_pss(iq, capture=capture, spec=spec)
 
     enbw = spec.subcarrier_spacing * 127
     metadata = {'units': f'mW/{enbw / 1e6:0.2f} MHz'}

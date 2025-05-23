@@ -119,7 +119,7 @@ def evaluate_spectrogram(
     return spg, metadata
 
 
-_cache = registry.Cache(['capture', 'spec'])
+_cache = registry.KeywordArgumentCache(['capture', 'spec'])
 
 
 @_cache.apply

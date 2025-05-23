@@ -23,7 +23,7 @@ class ResourceGridConfigSpec(
     forbid_unknown_fields=True,
     cache_hash=True,
     kw_only=True,
-    frozen=True
+    frozen=True,
 ):
     guard_bandwidths: tuple[float, float] = (0, 0)
     frame_slots: typing.Optional[str] = None
@@ -67,9 +67,7 @@ class _CellularResourcePowerHistogramKeywords(typing.TypedDict, total=False):
     average_rbs: typing.Union[bool, typing.Literal['half']]
     average_slots: bool
     resource_grid: dict[float, _ResourceGridConfigKeywords]
-    cyclic_prefix: typing.Union[
-        typing.Literal['normal'], typing.Literal['extended']
-    ]
+    cyclic_prefix: typing.Union[typing.Literal['normal'], typing.Literal['extended']]
 
 
 @dataclasses.dataclass
@@ -163,7 +161,11 @@ def cellular_resource_power_histogram(
         time_bin_averaging = None
 
     grid_spec = specs.maybe_lookup_with_capture_key(
-        capture, spec.resource_grid, 'center_frequency', 'resource_grid', default=ResourceGridConfigSpec()
+        capture,
+        spec.resource_grid,
+        'center_frequency',
+        'resource_grid',
+        default=ResourceGridConfigSpec(),
     )
 
     slot_count = round(10 * spec.subcarrier_spacing / 15e3)
@@ -198,14 +200,19 @@ def cellular_resource_power_histogram(
         window_fill=window_fill,
     )
 
-    spg, metadata = _spectrogram.evaluate_spectrogram(iq, capture, spg_spec, dtype='float32', dB=False)
+    spg, metadata = _spectrogram.evaluate_spectrogram(
+        iq, capture, spg_spec, dtype='float32', dB=False
+    )
 
     # we really wanted to sum bins pairwise, instead of averaging them, but
     # it was simpler to average across all 24 bins rather than sum 2 and average 12.
     # this compensates for the difference.
     spg *= 2
-    enbw = 2*metadata['noise_bandwidth']
-    metadata = metadata | {'noise_bandwidth': enbw, 'units': f'dBm/{enbw / 1e3:0.0f} kHz'}
+    enbw = 2 * metadata['noise_bandwidth']
+    metadata = metadata | {
+        'noise_bandwidth': enbw,
+        'units': f'dBm/{enbw / 1e3:0.0f} kHz',
+    }
 
     freqs = _spectrogram.spectrogram_baseband_frequency(capture, spg_spec, xp=xp)
 
@@ -334,12 +341,16 @@ def build_tdd_link_symbol_masks(
             indicate the sequence of symbol types in the special slot.
     """
 
-    tdd_config = tdd_config_from_str(frame_slots, special_symbols, normal_cp=normal_cp, flex_as=flex_as)
+    tdd_config = tdd_config_from_str(
+        frame_slots, special_symbols, normal_cp=normal_cp, flex_as=flex_as
+    )
 
     out_shape = (len(link_direction), count)
     out = xp.empty(out_shape, dtype='float32')
     for i, direction in enumerate(link_direction):
-        single_mask = [tdd_config.code_maps[direction][k] for k in tdd_config.frame_by_symbol]
+        single_mask = [
+            tdd_config.code_maps[direction][k] for k in tdd_config.frame_by_symbol
+        ]
 
         if count is None:
             frame_count = 1

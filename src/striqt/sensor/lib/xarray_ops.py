@@ -11,6 +11,8 @@ import typing
 from . import captures, specs, util
 from .sources import SourceBase
 
+from striqt.analysis import registry
+
 import array_api_compat
 
 if typing.TYPE_CHECKING:
@@ -236,32 +238,33 @@ class AnalysisCaller:
         # wait to import until here to avoid a circular import
         from . import iq_corrections
 
-        with lb.stopwatch('analysis', logger_level='debug'):
-            if array_api_compat.is_cupy_array(iq):
-                util.configure_cupy()
+        with registry.measurement.cache_context():        
+            with lb.stopwatch('analysis', logger_level='debug'):
+                if array_api_compat.is_cupy_array(iq):
+                    util.configure_cupy()
 
-            if self.correction:
-                with lb.stopwatch('resample, filter, calibrate', logger_level='debug'):
-                    iq = iq_corrections.resampling_correction(
-                        iq, capture, self.radio, overwrite_x=overwrite_x
-                    )
+                if self.correction:
+                    with lb.stopwatch('resample, filter, calibrate', logger_level='debug'):
+                        iq = iq_corrections.resampling_correction(
+                            iq, capture, self.radio, overwrite_x=overwrite_x
+                        )
 
-            result = striqt_analysis.lib.xarray_ops.analyze_by_spec(
-                iq,
-                capture,
-                spec=self.analysis_spec,
-                as_xarray='delayed' if delayed else True,
-            )
-
-            if delayed:
-                result = _DelayedDataset(
-                    delayed=result,
-                    capture=capture,
-                    sweep=self.sweep,
-                    radio_id=self.radio.id,
-                    sweep_time=sweep_time,
-                    extra_attrs=self.extra_attrs,
+                result = striqt_analysis.lib.xarray_ops.analyze_by_spec(
+                    iq,
+                    capture,
+                    spec=self.analysis_spec,
+                    as_xarray='delayed' if delayed else True,
                 )
+
+                if delayed:
+                    result = _DelayedDataset(
+                        delayed=result,
+                        capture=capture,
+                        sweep=self.sweep,
+                        radio_id=self.radio.id,
+                        sweep_time=sweep_time,
+                        extra_attrs=self.extra_attrs,
+                    )
 
         if pickled:
             return pickle.dumps(result)

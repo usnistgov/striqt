@@ -528,7 +528,7 @@ def plot_cyclic_channel_power(
             alpha=0.25,
             lw=0,
             rasterized=True,
-            **fill_kws
+            **fill_kws,
         )
 
     label_axis('x', cyclic_channel_power.cyclic_lag, ax=ax)

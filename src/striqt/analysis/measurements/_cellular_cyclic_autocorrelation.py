@@ -24,7 +24,7 @@ class CellularCyclicAutocorrelationSpec(
 ):
     subcarrier_spacings: typing.Union[float, tuple[float, ...]] = (15e3, 30e3, 60e3)
     frame_range: typing.Union[int, tuple[int, typing.Optional[int]]] = (0, 1)
-    frame_slots: typing.Optional[str|dict[float,str]] = None
+    frame_slots: typing.Optional[str | dict[float, str]] = None
     symbol_range: typing.Union[int, tuple[int, typing.Optional[int]]] = (0, None)
 
 
@@ -42,14 +42,14 @@ class NormalizedTDDSlotConfig(typing.NamedTuple):
     slot_by_symbol: dict[str, float]
     downlink_slot_indexes: tuple[int, ...]
     uplink_slot_indexes: tuple[int, ...]
-    frame_by_symbol: str|None
+    frame_by_symbol: str | None
 
 
 @util.lru_cache()
 def tdd_config_from_str(
     subcarrier_spacing: float,
-    frame_slots: str|None,
-    special_symbols: str|None = None,
+    frame_slots: str | None,
+    special_symbols: str | None = None,
     *,
     normal_cp=True,
     flex_as=None,
@@ -69,7 +69,7 @@ def tdd_config_from_str(
         a NormalizedTDDSlotConfig object containing more detailed parameters
     """
 
-    expect_slot_count = round(10 * subcarrier_spacing/15e3)
+    expect_slot_count = round(10 * subcarrier_spacing / 15e3)
 
     if flex_as is not None:
         flex_as = flex_as.lower()
@@ -81,7 +81,7 @@ def tdd_config_from_str(
     elif len(frame_slots) != expect_slot_count:
         raise ValueError(
             f'frame_slots must have length {expect_slot_count} to match '
-            f'the slot count at {round(subcarrier_spacing/1e3)} kHz'
+            f'the slot count at {round(subcarrier_spacing / 1e3)} kHz'
         )
     else:
         frame_slots = frame_slots.lower()
@@ -138,7 +138,7 @@ def tdd_config_from_str(
         slot_by_symbol=slot_by_symbol,
         uplink_slot_indexes=tuple(uplink_slots),
         downlink_slot_indexes=tuple(downlink_slots),
-        frame_by_symbol=frame_by_symbol
+        frame_by_symbol=frame_by_symbol,
     )
 
 
@@ -244,7 +244,7 @@ def cellular_cyclic_autocorrelation(
     frame_slots = specs.maybe_lookup_with_capture_key(
         capture, spec.frame_slots, 'center_frequency', 'frame_slots', default='d'
     )
-        
+
     if isinstance(subcarrier_spacings, numbers.Number):
         subcarrier_spacings = tuple(
             subcarrier_spacings,
@@ -275,7 +275,9 @@ def cellular_cyclic_autocorrelation(
                 subcarrier_spacing=phy.subcarrier_spacing, frame_slots=frame_slots
             )
 
-            cp_inds = phy.index_cyclic_prefix(**idx_kws, slots=tdd_config.downlink_slot_indexes)
+            cp_inds = phy.index_cyclic_prefix(
+                **idx_kws, slots=tdd_config.downlink_slot_indexes
+            )
 
             # shift index to the symbol boundary rather than the CP
             cyclic_shift = -phy.cp_sizes[0] * 2 // cp_inds.shape[1]
@@ -285,7 +287,9 @@ def cellular_cyclic_autocorrelation(
             result[chan][0][iscs][: R.size] = xp.abs(R)
 
             if len(tdd_config.uplink_slot_indexes) > 0:
-                cp_inds = phy.index_cyclic_prefix(**idx_kws, slots=tdd_config.uplink_slot_indexes)
+                cp_inds = phy.index_cyclic_prefix(
+                    **idx_kws, slots=tdd_config.uplink_slot_indexes
+                )
                 R = iqwaveform.ofdm.corr_at_indices(
                     cp_inds, iq[chan], phy.nfft, norm=False
                 )

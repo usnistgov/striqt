@@ -274,21 +274,48 @@ class Extensions(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash
     import_path: ExtensionPathType = None
 
 
-# dynamically generate the Analysis type from what's bundled in to striqt.analysis
-BundledAnalysis = analysis.lib.registry.measurement.tospec()
+# dynamically generate Analysis type for "built-in" measurements in to striqt.analysis
+BundledAnalysis = analysis.lib.registry.measurement.to_analysis_spec()
+BundledAlignmentAnalysis = analysis.lib.registry.measurement.to_analysis_spec(for_alignment=True)
+WindowFillType = Annotated[float, meta('size of the averaging window as a fraction of the analysis interval', ge=0, le=1)]
+
+
+class Alignment(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
+    analysis: BundledAlignmentAnalysis = BundledAlignmentAnalysis() # type: ignore
+    window: str = 'triang'
+    window_fill: float = 0.5
+
+    @classmethod
+    def _to_current_registry(cls: type[Alignment]) -> type[Alignment]:
+        Analysis = analysis.lib.registry.measurement.to_analysis_spec(for_alignment=True)
+
+        fields = (
+            (cls.analysis.__name__, Analysis, Analysis()),
+        )
+
+        return msgspec.defstruct(
+            cls.__name__,
+            fields,
+            bases=(cls,),
+            frozen=True,
+            forbid_unknown_fields=True,
+            cache_hash=True,
+        )
 
 
 class Sweep(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     captures: tuple[RadioCapture, ...] = tuple()
     radio_setup: RadioSetup = RadioSetup()
     defaults: RadioCapture = RadioCapture()
+
+    alignment: Alignment = Alignment()
     analysis: BundledAnalysis = BundledAnalysis()  # type: ignore
     description: Description = Description()
     extensions: Extensions = Extensions()
     output: Output = Output()
 
     def get_captures(self):
-        """allow autogeneration of capture sequences"""
+        """subclasses may use this to autogenerate capture sequences"""
         return object.__getattribute__(self, 'captures')
 
     def __getattribute__(self, name):
@@ -299,12 +326,20 @@ class Sweep(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash=True
 
     @classmethod
     def _to_current_registry(cls: type[Sweep]) -> type[Sweep]:
-        UpdatedAnalysis = analysis.lib.registry.measurement.tospec()
+        Analysis = analysis.lib.registry.measurement.to_analysis_spec()
+        alignment_cls: type[Alignment] = typing.get_type_hints(cls)['alignment']
+        Alignment = alignment_cls._to_current_registry()
+
+        fields = (
+            (cls.analysis.__name__, Analysis, Analysis()),
+            (cls.alignment.__name__, Alignment, Alignment()),
+        )
+
         return msgspec.defstruct(
             cls.__name__,
-            ((cls.analysis.__name__, UpdatedAnalysis, UpdatedAnalysis()),),
+            fields,
             bases=(cls,),
             frozen=True,
             forbid_unknown_fields=True,
-            cache_hash=True
+            cache_hash=True,
         )
