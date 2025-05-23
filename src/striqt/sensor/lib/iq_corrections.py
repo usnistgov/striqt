@@ -3,6 +3,7 @@ import typing
 
 from .sources import base, SourceBase, design_capture_resampler
 from . import calibration, specs, util
+from striqt.analysis.lib.xarray_ops import IQPair
 
 if typing.TYPE_CHECKING:
     import array_api_compat
@@ -53,14 +54,14 @@ def _get_voltage_scale(
 
 
 def resampling_correction(
-    iq: 'iqwaveform.util.Array',
+    iq: 'iqwaveform.type_stubs.ArrayType',
     capture: specs.RadioCapture,
     radio: SourceBase,
     force_calibration: typing.Optional['xr.Dataset'] = None,
     *,
     overwrite_x=False,
     axis=1,
-):
+) -> IQPair:
     """apply a bandpass filter implemented through STFT overlap-and-add.
 
     Args:
@@ -139,12 +140,20 @@ def resampling_correction(
     )
 
     size_out = round(capture.duration * capture.sample_rate)
+
     if radio._aligner is not None:
         align_start = radio._aligner(iq, capture)
         offset = round(align_start * capture.sample_rate)
-        iq = iq[:, offset : offset + size_out]
+        iq_aligned = iq[:, offset : offset + size_out]
+        iq_unaligned = iq[:, :size_out]
+    else:
+        iq_aligned = None
+        iq_unaligned = iq[:, :size_out]
 
-    assert iq.shape[axis] == size_out
+    assert iq_unaligned.shape[axis] == size_out
+    assert iq_aligned is None or iq_aligned.shape[axis] == size_out
+
+    return IQPair(aligned=iq_aligned, unaligned=iq_unaligned)
 
     # nfft = analysis_filter['nfft']
     # nfft_out, noverlap, overlap_scale, _ = iqwaveform.fourier._ola_filter_parameters(
@@ -210,5 +219,3 @@ def resampling_correction(
     # if power_scale is not None:
     #     scale *= np.sqrt(power_scale)
     # iq *= scale
-
-    return iq

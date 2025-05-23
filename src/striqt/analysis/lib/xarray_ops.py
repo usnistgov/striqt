@@ -14,6 +14,7 @@ import array_api_compat
 
 if typing.TYPE_CHECKING:
     import iqwaveform
+    import iqwaveform.type_stubs
     import labbench as lb
     import numpy as np
     import xarray as xr
@@ -22,6 +23,11 @@ else:
     lb = util.lazy_import('labbench')
     np = util.lazy_import('numpy')
     xr = util.lazy_import('xarray')
+
+
+class IQPair(typing.NamedTuple):
+    unaligned: 'iqwaveform.type_stubs.ArrayType'
+    aligned: 'iqwaveform.type_stubs.ArrayType' | None
 
 
 _ENG_PREFIXES = {
@@ -354,7 +360,7 @@ def select_parameter_kws(locals_: dict, omit=('capture', 'out')) -> dict:
 
 
 def evaluate_by_spec(
-    iq: 'iqwaveform.util.Array',
+    iq: 'iqwaveform.type_stubs.ArrayType' | IQPair,
     capture: specs.Capture,
     *,
     spec: str | dict | specs.Measurement,
@@ -371,12 +377,7 @@ def evaluate_by_spec(
 
     spec_dict = spec.todict()
     results: dict[str, DelayedDataArray] = {}
-
-    shared_kws = {
-        'iq': iq,
-        'capture': capture,
-        'as_xarray': 'delayed' if as_xarray else False,
-    }
+    as_xarray = 'delayed' if as_xarray else False
 
     for name in spec_dict.keys():
         meas = register.measurement[type(getattr(spec, name))]
@@ -385,7 +386,14 @@ def evaluate_by_spec(
             func_kws = spec_dict[name]
             if not func_kws:
                 continue
-            results[name] = meas.func(**shared_kws, **func_kws)
+            if iq.aligned is None or meas.prefer_unaligned_input:
+                iq_sel = iq.unaligned
+            else:
+                iq_sel = iq.aligned
+
+            results[name] = meas.func(
+                iq=iq_sel, capture=capture, as_xarray=as_xarray, **func_kws
+            )
 
     if not as_xarray:
         return results
@@ -419,7 +427,7 @@ def package_analysis(
 
 
 def analyze_by_spec(
-    iq: 'iqwaveform.util.Array',
+    iq: 'iqwaveform.type_stubs.ArrayType' | IQPair,
     capture: specs.Capture,
     *,
     spec: str | dict | specs.Measurement,

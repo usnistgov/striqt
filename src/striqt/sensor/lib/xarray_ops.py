@@ -253,7 +253,7 @@ class AnalysisCaller:
 
                 result = striqt_analysis.lib.xarray_ops.analyze_by_spec(
                     iq,
-                    capture,
+                    capture=capture,
                     spec=self.analysis_spec,
                     as_xarray='delayed' if delayed else True,
                 )
