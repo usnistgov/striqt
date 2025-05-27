@@ -203,10 +203,12 @@ def get_5g_ssb_iq(
         return None
 
     down = round(capture.sample_rate / spec.subcarrier_spacing / 8)
-    if down % 3 > 0:
+    up = round(down * (spec.sample_rate / capture.sample_rate))
+    
+    if up % 3 > 0:
         # ensure compatibility with the blackman window overlap of 2/3
         down = down * 3
-    up = round(down * (spec.sample_rate / capture.sample_rate))
+        up = up * 3
 
     if spec.max_block_count is not None:
         duration = round(
