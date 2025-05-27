@@ -171,7 +171,6 @@ class SweepIterator:
             analysis_spec=sweep.analysis,
             extra_attrs=_build_attrs(sweep),
             correction=True,
-            block_each=True
         )
         self._analyze.__name__ = 'analyze'
         self._analyze.__qualname__ = 'analyze'
@@ -214,6 +213,7 @@ class SweepIterator:
                     pickled=self._pickled,
                     overwrite_x=not self._reuse_iq,
                     delayed=True,
+                    block_each=True
                 )
 
             if capture_this is None:
