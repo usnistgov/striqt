@@ -1,7 +1,7 @@
 from __future__ import annotations
 import typing
 
-from . import _channel_power_histogram, _spectrogram, _spectrogram_histogram
+from . import shared, _channel_power_histogram, _spectrogram, _spectrogram_histogram
 
 from ..lib import register, specs, util
 
@@ -58,9 +58,9 @@ def spectrogram_ratio_histogram(
     **kwargs: typing.Unpack[SpectrogramHistogramRatioKeywords],
 ):
     spec = SpectrogramHistogramRatioSpec.fromdict(kwargs)
-    spg_spec = _spectrogram.SpectrogramSpec.fromspec(spec)
+    spg_spec = shared.SpectrogramSpec.fromspec(spec)
 
-    spg, metadata = _spectrogram.evaluate_spectrogram(
+    spg, metadata = shared.evaluate_spectrogram(
         iq,
         capture,
         spg_spec,

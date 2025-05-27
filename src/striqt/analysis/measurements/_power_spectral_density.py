@@ -1,7 +1,7 @@
 from __future__ import annotations
 import typing
 
-from . import _spectrogram
+from . import _spectrogram, shared
 from ..lib import register, specs, util
 
 if typing.TYPE_CHECKING:
@@ -13,7 +13,7 @@ else:
 
 
 class PowerSpectralDensitySpec(
-    _spectrogram.FrequencyAnalysisBase,
+    shared.FrequencyAnalysisBase,
     forbid_unknown_fields=True,
     cache_hash=True,
     kw_only=True,
@@ -22,8 +22,8 @@ class PowerSpectralDensitySpec(
     time_statistic: tuple[typing.Union[str, float], ...] = (('mean',),)
 
 
-class PowerSpectralDensityKeywords(_spectrogram.FrequencyAnalysisKeywords):
-    time_statistic: typing.NotRequired[tuple[typing.Union[str, float], ...]]
+class PowerSpectralDensityKeywords(shared.FrequencyAnalysisKeywords, total=False):
+    time_statistic: tuple[typing.Union[str, float], ...]
 
 
 @register.coordinate_factory(dtype='str', attrs={'standard_name': 'Time statistic'})
@@ -42,8 +42,8 @@ def time_statistic(
 def baseband_frequency(
     capture: specs.Capture, spec: PowerSpectralDensitySpec
 ) -> dict[str, np.ndarray]:
-    spg_spec = _spectrogram.SpectrogramSpec.fromspec(spec)
-    return _spectrogram.spectrogram_baseband_frequency(capture, spg_spec)
+    spg_spec = shared.SpectrogramSpec.fromspec(spec)
+    return shared.spectrogram_baseband_frequency(capture, spg_spec)
 
 
 @register.measurement(
@@ -65,7 +65,7 @@ def power_spectral_density(
     """
 
     spec = PowerSpectralDensitySpec.fromdict(kwargs)
-    spg_spec = _spectrogram.SpectrogramSpec.fromspec(spec)
+    spg_spec = shared.SpectrogramSpec.fromspec(spec)
 
     from iqwaveform.util import axis_index, array_namespace
     from iqwaveform.fourier import stat_ufunc_from_shorthand
@@ -75,7 +75,7 @@ def power_spectral_density(
     xp = array_namespace(iq)
     axis = 1
 
-    spg, metadata = _spectrogram.evaluate_spectrogram(
+    spg, metadata = shared.evaluate_spectrogram(
         iq,
         capture,
         spg_spec,

@@ -250,7 +250,7 @@ class _MeasurementRegistry(
         dims: typing.Iterable[str] | str | None = None,
         coord_factories: typing.Iterable[callable] | callable | None = None,
         depends: typing.Iterable[callable] = [],
-        cache: KeywordArgumentCache | None = None,
+        caches: typing.Iterable[KeywordArgumentCache] | None = None,
         prefer_unaligned_input=False,
         attrs={},
     ) -> typing.Callable[[_TMeasCallable], _TMeasCallable]:
@@ -276,7 +276,7 @@ class _MeasurementRegistry(
             name=name,
             coord_factories=coord_factories,
             prefer_unaligned_input=prefer_unaligned_input,
-            cache=cache,
+            cache=caches,
             dtype=dtype,
             attrs=attrs,
             depends=depends,
@@ -335,12 +335,18 @@ class _MeasurementRegistry(
             for dep in depends:
                 self.depends_on[dep].append(wrapped)
 
-            if cache is None:
+            if caches is None:
                 pass
-            elif not isinstance(cache, KeywordArgumentCache):
-                raise TypeError('cache argument must be an instance of Cache')
+            elif isinstance(caches, KeywordArgumentCache):
+                self.caches[wrapped] = [caches]
+            elif isinstance(caches, (tuple, list)) and isinstance(
+                caches[0], KeywordArgumentCache
+            ):
+                self.caches[wrapped] = list(caches)
             else:
-                self.caches[wrapped] = cache
+                raise TypeError(
+                    'cache argument must be an tuple or list of KeywordArgumentCache'
+                )
 
             self[spec_type] = MeasurementInfo(func=wrapped, **info_kws)
 
@@ -349,7 +355,10 @@ class _MeasurementRegistry(
         return wrapper
 
     def cache_context(self) -> typing.ContextManager:
-        return lb.sequentially(*self.caches.values())
+        all_caches = []
+        for caches in self.caches.values():
+            all_caches.extend(caches)
+        return lb.sequentially(all_caches)
 
 
 measurement = _MeasurementRegistry()

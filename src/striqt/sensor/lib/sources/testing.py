@@ -14,12 +14,12 @@ from labbench import paramattr as attr
 if typing.TYPE_CHECKING:
     import numpy as np
     import pandas as pd
-    from striqt import analysis
+    import striqt.analysis as striqt_analysis
     import xarray as xr
 else:
     np = lb.util.lazy_import('numpy')
     pd = lb.util.lazy_import('pandas')
-    analysis = lb.util.lazy_import('striqt.analysis')
+    striqt_analysis = lb.util.lazy_import('striqt.analysis')
     xr = lb.util.lazy_import('xarray')
 
 
@@ -82,9 +82,9 @@ class SingleToneSource(TestSource):
         ret = ret.astype(self._transport_dtype)
 
         if self.snr is not None:
-            capture = analysis.Capture(duration=self.duration, sample_rate=fs)
+            capture = striqt_analysis.Capture(duration=self.duration, sample_rate=fs)
             power = 10 ** (-self.snr / 10)
-            noise = analysis.simulated_awgn(
+            noise = striqt_analysis.simulated_awgn(
                 capture, xp=xp, seed=0, power_spectral_density=power
             )
             noise = noise[i % noise.size]
@@ -161,11 +161,11 @@ class NoiseSource(TestSource):
 
     def get_waveform(self, count, start_index: int, *, channel: int = 0, xp=np):
         duration = (count + start_index) / self.backend_sample_rate()
-        capture = analysis.Capture(
+        capture = striqt_analysis.Capture(
             duration=duration, sample_rate=self.backend_sample_rate()
         )
 
-        x = analysis.simulated_awgn(
+        x = striqt_analysis.simulated_awgn(
             capture, xp=xp, seed=0, power_spectral_density=self.power_spectral_density
         )
         # x /= np.sqrt(self.backend_sample_rate() / self.sample_rate())
@@ -353,7 +353,7 @@ class FileSource(TestSource):
         if self._file_stream is not None:
             self._file_stream.close()
 
-        self._file_stream = analysis.io.open_bare_iq(
+        self._file_stream = striqt_analysis.io.open_bare_iq(
             self.path,
             format=self.file_format,
             rx_channel_count=self.rx_channel_count,
@@ -407,7 +407,7 @@ class FileSource(TestSource):
 
 class ZarrIQSource(TestSource):
     """Emulate an SDR by drawing IQ samples from an xarray returned by
-    a channel_analysis.iq_waveform measurement.
+    a striqt.analysis.iq_waveform measurement.
     """
 
     path: Path = attr.value.Path(help='path to zarr file')
@@ -423,7 +423,7 @@ class ZarrIQSource(TestSource):
     def open(self):
         """set the waveform from an xarray.DataArray containing a single capture of IQ samples"""
 
-        waveform = analysis.load(self.path).iq_waveform
+        waveform = striqt_analysis.load(self.path).iq_waveform
 
         if len(self.select) > 0:
             waveform = waveform.set_xindex(list(self.select.keys()))

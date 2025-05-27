@@ -517,7 +517,7 @@ class SourceBase(lb.Device):
         capture: specs.RadioCapture = None,
         next_capture: typing.Union[specs.RadioCapture, None] = None,
         correction: bool = True,
-    ) -> tuple[np.array|IQPair, 'pd.Timestamp']:
+    ) -> tuple[np.array | IQPair, 'pd.Timestamp']:
         """arm a capture and enable the channel (if necessary), read the resulting IQ waveform.
 
         Optionally, calibration corrections can be applied, and the radio can be left ready for the next capture.
@@ -552,6 +552,9 @@ class SourceBase(lb.Device):
                 iq = iq_corrections.resampling_correction(
                     iq, capture, self, overwrite_x=True
                 )
+
+                if self._aligner is None:
+                    iq = iq.unaligned
 
         acquired_capture = capture.replace(
             start_time=pd.Timestamp(time_ns, unit='ns'),

@@ -23,6 +23,9 @@ else:
 _BUILTIN_TYPES = (pd.Timestamp,)
 
 
+WindowType = typing.Union[str, tuple[str, float]]
+
+
 def _enc_hook(obj):
     if isinstance(obj, (np.float16, np.float32, np.float64)):
         return float(obj)

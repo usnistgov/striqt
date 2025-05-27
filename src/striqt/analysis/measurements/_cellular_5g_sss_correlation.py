@@ -19,7 +19,7 @@ else:
     ndimage = util.lazy_import('scipy.ndimage')
 
 
-class Cellular5GNRPSSCorrelationSpec(
+class Cellular5GNRSSSCorrelationSpec(
     shared.Cellular5GNRSyncCorrelationSpec,
     forbid_unknown_fields=True,
     cache_hash=True,
@@ -30,7 +30,21 @@ class Cellular5GNRPSSCorrelationSpec(
     pass
 
 
+@register.coordinate_factory(
+    dtype='uint16', attrs={'standard_name': r'Cell gNode-B Identity ($N_\text{ID}^{(1)}$)'}
+)
+@util.lru_cache()
+def cellular_cell_id1(capture: specs.Capture, spec: typing.Any):
+    values = np.arange(336, dtype='uint16')
+    return values
+
+
+### Subcarrier spacing label axis
+CellularSSBStartTimeElapsedAxis = typing.Literal['cellular_ssb_start_time']
+
+
 _coord_factories = [
+    cellular_cell_id1,
     shared.cellular_cell_id2,
     shared.cellular_ssb_start_time,
     shared.cellular_ssb_beam_index,
@@ -39,15 +53,15 @@ _coord_factories = [
 dtype = 'complex64'
 
 
-pss_alignment_cache = register.KeywordArgumentCache(['capture', 'spec'])
+sss_alignment_cache = register.KeywordArgumentCache(['capture', 'spec'])
 
 
-@pss_alignment_cache.apply
-def correlate_5g_pss(
+@sss_alignment_cache.apply
+def correlate_5g_sss(
     iq: 'iqwaveform.type_stubs.ArrayType',
     *,
     capture: specs.Capture,
-    spec: Cellular5GNRPSSCorrelationSpec,
+    spec: Cellular5GNRSSSCorrelationSpec,
 ) -> 'iqwaveform.type_stubs.ArrayType':
     xp = iqwaveform.util.array_namespace(iq)
 
@@ -57,30 +71,33 @@ def correlate_5g_pss(
             iq, capture=capture, spec=spec, coord_factories=_coord_factories
         )
 
-    params = iqwaveform.ofdm.pss_params(
+    params = iqwaveform.ofdm.sss_params(
         sample_rate=spec.sample_rate,
         subcarrier_spacing=spec.subcarrier_spacing,
         discovery_periodicity=spec.discovery_periodicity,
         shared_spectrum=spec.shared_spectrum,
     )
 
-    pss_seq = iqwaveform.ofdm.pss_5g_nr(
+    sss_seq = iqwaveform.ofdm.sss_5g_nr(
         spec.sample_rate, spec.subcarrier_spacing, xp=xp
     )
 
-    return shared.correlate_sync_sequence(ssb_iq, pss_seq, spec=spec, params=params)
+    meas = shared.correlate_sync_sequence(ssb_iq, sss_seq, spec=spec, params=params)
+
+    # split Nid into (Nid1, Nid2)
+    return iqwaveform.util.to_blocks(meas, 3, axis=-4)
 
 
 @register.alignment_source(
-    Cellular5GNRPSSCorrelationSpec, lag_coord_func=shared.cellular_ssb_lag
+    Cellular5GNRSSSCorrelationSpec, lag_coord_func=shared.cellular_ssb_lag
 )
-def sync_aggregate_5g_pss(
+def sync_aggregate_5g_sss(
     iq,
     capture: specs.Capture,
     window_fill=0.5,
     **kwargs: typing.Unpack[shared.Cellular5GNRSyncCorrelationKeywords],
 ):
-    """compute alignment index offsets based on correlate_5g_pss.
+    """compute alignment index offsets based on correlate_5g_sss.
 
     This approach is meant to account for a weighted average of nearby peaks
     to reduce mis-alignment errors in measurements of aggregate interference.
@@ -90,13 +107,13 @@ def sync_aggregate_5g_pss(
     due to "ISI" begin to increase quickly.
     """
 
-    spec = Cellular5GNRPSSCorrelationSpec.fromdict(kwargs).validate()
+    spec = Cellular5GNRSSSCorrelationSpec.fromdict(kwargs).validate()
 
     xp = iqwaveform.util.array_namespace(iq)
 
     kwargs['as_xarray'] = False
 
-    R, _ = cellular_5g_pss_correlation(iq, capture, **kwargs)
+    R, _ = cellular_5g_sss_correlation(iq, capture, **kwargs)
 
     # start dimensions: (..., port index, cell Nid2, sync block index, symbol pair index, IQ sample index)
     Ragg = iqwaveform.envtopow(R.sum(axis=(-4, -2)))
@@ -124,14 +141,14 @@ def sync_aggregate_5g_pss(
 
 
 @register.measurement(
-    Cellular5GNRPSSCorrelationSpec,
+    Cellular5GNRSSSCorrelationSpec,
     coord_factories=_coord_factories,
     dtype=dtype,
-    caches=(pss_alignment_cache, shared.ssb_iq_cache),
+    caches=(sss_alignment_cache, shared.ssb_iq_cache),
     prefer_unaligned_input=True,
-    attrs={'standard_name': 'PSS Cross-Covariance'},
+    attrs={'standard_name': 'SSS Cross-Covariance'},
 )
-def cellular_5g_pss_correlation(
+def cellular_5g_sss_correlation(
     iq,
     capture: specs.Capture,
     **kwargs: typing.Unpack[shared.Cellular5GNRSyncCorrelationKeywords],
@@ -158,9 +175,9 @@ def cellular_5g_pss_correlation(
         3GPP TS 138 213: Section 4.1
     """
 
-    spec = Cellular5GNRPSSCorrelationSpec.fromdict(kwargs).validate()
+    spec = Cellular5GNRSSSCorrelationSpec.fromdict(kwargs).validate()
 
-    R = correlate_5g_pss(iq, capture=capture, spec=spec)
+    R = correlate_5g_sss(iq, capture=capture, spec=spec)
 
     enbw = spec.subcarrier_spacing * 127
     metadata = {'units': f'mW/{enbw / 1e6:0.2f} MHz'}

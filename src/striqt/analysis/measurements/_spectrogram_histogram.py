@@ -1,7 +1,7 @@
 from __future__ import annotations
 import typing
 
-from . import _spectrogram, _channel_power_histogram
+from . import shared, _spectrogram, _channel_power_histogram
 from ..lib import register, specs, util
 
 if typing.TYPE_CHECKING:
@@ -13,7 +13,7 @@ else:
 
 
 class SpectrogramHistogramSpec(
-    _spectrogram.SpectrogramSpec,
+    shared.SpectrogramSpec,
     forbid_unknown_fields=True,
     cache_hash=True,
     kw_only=True,
@@ -24,7 +24,7 @@ class SpectrogramHistogramSpec(
     power_resolution: float
 
 
-class SpectrogramHistogramKeywords(_spectrogram.SpectrogramKeywords):
+class SpectrogramHistogramKeywords(shared.SpectrogramKeywords):
     power_low: float
     power_high: float
     power_resolution: float
@@ -50,7 +50,7 @@ def spectrogram_power_bin(
     else:
         raise ValueError('sample_rate/resolution must be a counting number')
 
-    enbw = spec.frequency_resolution * _spectrogram.equivalent_noise_bandwidth(
+    enbw = spec.frequency_resolution * shared.equivalent_noise_bandwidth(
         spec.window, nfft
     )
 
@@ -70,9 +70,9 @@ def spectrogram_histogram(
     **kwargs: typing.Unpack[SpectrogramHistogramKeywords],
 ):
     spec = SpectrogramHistogramSpec.fromdict(kwargs)
-    spg_spec = _spectrogram.SpectrogramSpec.fromspec(spec)
+    spg_spec = shared.SpectrogramSpec.fromspec(spec)
 
-    spg, metadata = _spectrogram.evaluate_spectrogram(
+    spg, metadata = shared.evaluate_spectrogram(
         iq,
         capture,
         spec=spg_spec,
