@@ -303,16 +303,16 @@ class _MeasurementRegistry(
                     return ret
 
                 if isinstance(ret, (list, tuple)) and len(ret) == 2:
-                    data, metadata = ret
-                    metadata = attrs | metadata
+                    data, more_attrs = ret
                 else:
                     data = ret
-                    metadata = attrs
+                    more_attrs = {}
 
                 data = DelayedDataArray(
                     data=data,
                     capture=capture,
                     spec=spec,
+                    attrs=more_attrs,
                     info=self[spec_type],
                 )
 

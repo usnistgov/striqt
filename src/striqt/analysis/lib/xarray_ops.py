@@ -287,7 +287,7 @@ def build_dataarray(
 
         da[coord_info.name] = da[coord_info.name].assign_attrs(metadata)
 
-    return da.assign_attrs(delayed.info.attrs)
+    return da.assign_attrs(delayed.info.attrs | delayed.attrs)
 
 
 @util.lru_cache()
@@ -338,6 +338,7 @@ class DelayedDataArray(collections.UserDict):
     spec: specs.Measurement
     data: typing.Union['iqwaveform.type_stubs.ArrayLike', dict]
     info: register.MeasurementInfo
+    attrs: dict
 
     def compute(self) -> DelayedDataArray:
         return DelayedDataArray(
@@ -346,6 +347,7 @@ class DelayedDataArray(collections.UserDict):
             spec=self.spec,
             data=_results_as_arrays(self.data),
             info=self.info,
+            attrs=self.attrs
         )
 
     def to_xarray(self, expand_dims=None) -> 'xr.DataArray':

@@ -283,7 +283,7 @@ def evaluate_spectrogram(
     limit_digits: typing.Optional[int] = None,
     dB=True,
 ):
-    spg, metadata = _cached_spectrogram(iq=iq, capture=capture, spec=spec)
+    spg, attrs = _cached_spectrogram(iq=iq, capture=capture, spec=spec)
     xp = iqwaveform.util.array_namespace(iq)
 
     copied = False
@@ -298,9 +298,9 @@ def evaluate_spectrogram(
     if dtype == 'float16':
         spg = spg.astype(dtype, copy=not copied)
 
-    metadata = metadata | {'limit_digits': limit_digits}
+    attrs = attrs | {'limit_digits': limit_digits}
 
-    return spg, metadata
+    return spg, attrs
 
 
 spectrogram_cache = register.KeywordArgumentCache(['capture', 'spec'])
@@ -376,12 +376,12 @@ def _cached_spectrogram(
 
     enbw = spec.frequency_resolution * equivalent_noise_bandwidth(spec.window, nfft)
 
-    metadata = {
-        'noise_bandwidth': enbw,
+    attrs = {
+        'noise_bandwidth': float(enbw),
         'units': f'dBm/{enbw / 1e3:0.0f} kHz',
     }
 
-    return spg, metadata
+    return spg, attrs
 
 
 def fftfreq(nfft, fs, dtype='float64') -> 'np.ndarray':
@@ -431,5 +431,3 @@ def spectrogram_baseband_frequency(
 
     # only now downconvert. round to a still-large number of digits
     return freqs.astype('float64').round(16)
-
-
