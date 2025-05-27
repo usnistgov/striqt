@@ -31,7 +31,7 @@ class Cellular5GNRSSSCorrelationSpec(
 
 
 @register.coordinate_factory(
-    dtype='uint16', attrs={'standard_name': r'Cell gNode-B Identity ($N_\text{ID}^{(1)}$)'}
+    dtype='uint16', attrs={'standard_name': r'Cell gNodeB Identity ($N_\text{ID}^{(1)}$)'}
 )
 @util.lru_cache()
 def cellular_cell_id1(capture: specs.Capture, spec: typing.Any):
