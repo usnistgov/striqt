@@ -247,9 +247,9 @@ def summarize_calibration(corrections: 'xr.Dataset', **sel) -> 'pd.DataFrame':
     return pd.concat([nf_summary, corr_summary], axis=1)
 
 
-def _describe_missing_data(corrections: 'xr.Dataset', exact_matches: dict):
+def _describe_missing_data(cal_data: 'xr.DataArray', exact_matches: dict):
     misses = []
-    cal = corrections.power_correction.copy()
+    cal = cal_data.copy()
 
     invalid_matches = dict(exact_matches)
     # remove the valid matches
@@ -274,22 +274,14 @@ def _describe_missing_data(corrections: 'xr.Dataset', exact_matches: dict):
     return '; '.join(misses)
 
 
-@util.lru_cache()
-def lookup_power_correction(
-    cal_data: Path | 'xr.Dataset' | None,
+def _lookup_calibration_var(
+    cal_var: 'xr.DataArray',
     capture: specs.RadioCapture,
     base_clock_rate: float,
     *,
     xp,
 ):
-    if isinstance(cal_data, xr.Dataset):
-        corrections = cal_data
-    elif cal_data:
-        corrections = read_calibration(cal_data)
-    else:
-        return None
-
-    power_scale = []
+    results = []
 
     for capture_chan in split_capture_channels(capture):
         fs = sources.design_capture_resampler(base_clock_rate, capture_chan)['fs_sdr']
@@ -305,12 +297,12 @@ def lookup_power_correction(
 
         try:
             sel = (
-                corrections.power_correction.sel(
+                cal_var.sel(
                     **exact_matches, drop=True
                 )  # there is still one more dim to drop
             )
         except KeyError:
-            misses = _describe_missing_data(corrections, exact_matches)
+            misses = _describe_missing_data(cal_var, exact_matches)
             exc = KeyError(f'calibration is not available for this capture: {misses}')
             raise exc
         else:
@@ -347,9 +339,55 @@ def lookup_power_correction(
         except BaseException:
             sel = sel.interp(center_frequency=capture_chan.center_frequency)
 
-        power_scale.append(float(sel))
+        results.append(float(sel))
 
-    return xp.asarray(power_scale, dtype='float32')
+    return xp.asarray(results, dtype='float32')
+
+
+@util.lru_cache()
+def lookup_power_correction(
+    cal_data: Path | 'xr.Dataset' | None,
+    capture: specs.RadioCapture,
+    base_clock_rate: float,
+    *,
+    xp=np,
+):
+    if isinstance(cal_data, xr.Dataset):
+        corrections = cal_data
+    elif cal_data:
+        corrections = read_calibration(cal_data)
+    else:
+        return None
+
+    return _lookup_calibration_var(
+        corrections.power_correction, capture=capture, base_clock_rate=base_clock_rate, xp=xp
+    )
+
+
+@util.lru_cache()
+def lookup_system_noise_power(
+    cal_data: Path | 'xr.Dataset' | None,
+    capture: specs.RadioCapture,
+    base_clock_rate: float,
+    *,
+    T = 290,
+    xp=np,
+):
+    if isinstance(cal_data, xr.Dataset):
+        corrections = cal_data
+    elif cal_data:
+        corrections = read_calibration(cal_data)
+    else:
+        return None
+
+    noise_figure = _lookup_calibration_var(
+        corrections.noise_figure, capture=capture, base_clock_rate=base_clock_rate, xp=xp
+    )
+
+    k = scipy.constants.Boltzmann * 1000  # scaled from W/K to mW/K
+    noise_psd = (10**(noise_figure/10) - 1) * k * T
+
+    return 10*np.log10(noise_psd)
 
 
 class YFactorSink(sinks.SinkBase):

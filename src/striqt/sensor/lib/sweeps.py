@@ -5,6 +5,7 @@ import itertools
 import typing
 
 from . import captures, sources, specs, util, xarray_ops
+from .calibration import lookup_system_noise_power
 from .peripherals import PeripheralsBase
 from .sinks import SinkBase
 
@@ -293,7 +294,7 @@ class SweepIterator:
             )
 
         if self._peripherals is not None:
-            calls['peripherals'] = lb.Call(self._peripherals.acquire, capture_next)
+            calls['peripherals'] = lb.Call(self._peripherals_acquire, capture_next)
 
         result = lb.concurrently(**calls, flatten=False)
 
@@ -310,6 +311,19 @@ class SweepIterator:
             calls['peripherals'] = lb.Call(self._peripherals.arm, capture)
 
         return lb.concurrently(**calls)
+
+    def _peripherals_acquire(self, capture):
+        data = self._peripherals.acquire(capture)
+        system_noise = lookup_system_noise_power(self.sweep.radio_setup.calibration, capture, self.radio.base_clock_rate)
+
+        system_noise = xr.DataArray(
+            data=system_noise,
+            # coords={"temperature_source": list(temps.keys())},
+            dims="capture",
+            attrs={"name": "Sensor system noise PSD", "units": "dBm/Hz"},
+        )
+
+        return dict(data, system_noise)
 
     def _intake(
         self,
