@@ -318,7 +318,7 @@ class DelayedDataset:
         if self.extra_data is not None:
             update_ext_dims = {CAPTURE_DIM: analysis.capture.size}
             new_arrays = {
-                k: xr.DataArray(v).expand_dims(update_ext_dims)
+                k: xr.DataArray(v).expand_dims({} if CAPTURE_DIM in v else update_ext_dims)
                 for k, v in self.extra_data.items()
             }
             analysis = analysis.assign(new_arrays)
