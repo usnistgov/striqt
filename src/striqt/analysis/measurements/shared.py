@@ -16,7 +16,7 @@ else:
     pd = util.lazy_import('pandas')
 
 
-#%% Cellular 5G NR synchronizatino
+# %% Cellular 5G NR synchronizatino
 class Cellular5GNRSyncCorrelationSpec(
     specs.Measurement,
     forbid_unknown_fields=True,
@@ -225,7 +225,8 @@ def get_5g_ssb_iq(
     )
 
 
-#%% Spectral analysis
+# %% Spectral analysis
+
 
 class FrequencyAnalysisBase(
     specs.Measurement,
@@ -401,7 +402,9 @@ def fftfreq(nfft, fs, dtype='float64') -> 'np.ndarray':
     return np.array(values, dtype=dtype)
 
 
-@register.coordinate_factory(dtype='float64', attrs={'standard_name': 'Baseband Frequency', 'units': 'Hz'})
+@register.coordinate_factory(
+    dtype='float64', attrs={'standard_name': 'Baseband Frequency', 'units': 'Hz'}
+)
 @util.lru_cache()
 def spectrogram_baseband_frequency(
     capture: specs.Capture, spec: SpectrogramSpec, xp=np

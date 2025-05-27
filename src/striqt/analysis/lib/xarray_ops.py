@@ -347,7 +347,7 @@ class DelayedDataArray(collections.UserDict):
             spec=self.spec,
             data=_results_as_arrays(self.data),
             info=self.info,
-            attrs=self.attrs
+            attrs=self.attrs,
         )
 
     def to_xarray(self, expand_dims=None) -> 'xr.DataArray':

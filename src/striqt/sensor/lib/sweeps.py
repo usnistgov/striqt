@@ -317,17 +317,18 @@ class SweepIterator:
 
         if self.sweep.radio_setup.calibration is None:
             return data
-        
-        system_noise = lookup_system_noise_power(self.sweep.radio_setup.calibration, capture, self.radio.base_clock_rate)
+
+        system_noise = lookup_system_noise_power(
+            self.sweep.radio_setup.calibration, capture, self.radio.base_clock_rate
+        )
         system_noise = xr.DataArray(
             data=system_noise,
             # coords={"temperature_source": list(temps.keys())},
-            dims="capture",
-            attrs={"name": "Sensor system noise PSD", "units": "dBm/Hz"},
+            dims='capture',
+            attrs={'name': 'Sensor system noise PSD', 'units': 'dBm/Hz'},
         )
 
         return dict(data, system_noise)
-         
 
     def _intake(
         self,

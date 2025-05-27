@@ -360,7 +360,10 @@ def lookup_power_correction(
         return None
 
     return _lookup_calibration_var(
-        corrections.power_correction, capture=capture, base_clock_rate=base_clock_rate, xp=xp
+        corrections.power_correction,
+        capture=capture,
+        base_clock_rate=base_clock_rate,
+        xp=xp,
     )
 
 
@@ -370,7 +373,7 @@ def lookup_system_noise_power(
     capture: specs.RadioCapture,
     base_clock_rate: float,
     *,
-    T = 290,
+    T=290,
     xp=np,
 ):
     if isinstance(cal_data, xr.Dataset):
@@ -381,13 +384,16 @@ def lookup_system_noise_power(
         return None
 
     noise_figure = _lookup_calibration_var(
-        corrections.noise_figure, capture=capture, base_clock_rate=base_clock_rate, xp=xp
+        corrections.noise_figure,
+        capture=capture,
+        base_clock_rate=base_clock_rate,
+        xp=xp,
     )
 
     k = scipy.constants.Boltzmann * 1000  # scaled from W/K to mW/K
-    noise_psd = (10**(noise_figure/10) - 1) * k * T
+    noise_psd = (10 ** (noise_figure / 10) - 1) * k * T
 
-    return 10*np.log10(noise_psd)
+    return 10 * np.log10(noise_psd)
 
 
 class YFactorSink(sinks.SinkBase):
