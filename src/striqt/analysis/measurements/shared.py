@@ -45,7 +45,7 @@ class Cellular5GNRSyncCorrelationKeywords(specs.AnalysisKeywords, total=False):
 
 
 @register.coordinate_factory(
-    dtype='uint16', attrs={'standard_name': r'Cell Identity 2 ($N_{ID}^\text{(2)}$)'}
+    dtype='uint16', attrs={'standard_name': r'Cell Sector ID ($N_{ID}^\text{(2)}$)'}
 )
 @util.lru_cache()
 def cellular_cell_id2(capture: specs.Capture, spec: typing.Any):

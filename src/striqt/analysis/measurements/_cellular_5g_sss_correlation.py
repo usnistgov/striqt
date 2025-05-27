@@ -31,7 +31,7 @@ class Cellular5GNRSSSCorrelationSpec(
 
 
 @register.coordinate_factory(
-    dtype='uint16', attrs={'standard_name': r'Cell gNodeB Identity ($N_\text{ID}^{(1)}$)'}
+    dtype='uint16', attrs={'standard_name': r'Cell gNodeB ID ($N_\text{ID}^{(1)}$)'}
 )
 @util.lru_cache()
 def cellular_cell_id1(capture: specs.Capture, spec: typing.Any):
@@ -146,7 +146,7 @@ def sync_aggregate_5g_sss(
     dtype=dtype,
     caches=(sss_alignment_cache, shared.ssb_iq_cache),
     prefer_unaligned_input=True,
-    attrs={'standard_name': 'SSS Cross-Covariance'},
+    attrs={'standard_name': 'SSS Cross-Covariance', 'units': '√mW'},
 )
 def cellular_5g_sss_correlation(
     iq,
