@@ -314,6 +314,9 @@ class SweepIterator:
         return lb.concurrently(**calls)
 
     def _peripherals_acquire(self, capture):
+        if capture is None:
+            return {}
+        
         data = self._peripherals.acquire(capture)
 
         if self.sweep.radio_setup.calibration is None:
