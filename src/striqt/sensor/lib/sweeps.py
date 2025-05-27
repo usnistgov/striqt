@@ -329,7 +329,7 @@ class SweepIterator:
             attrs={'name': 'Sensor system noise PSD', 'units': 'dBm/Hz'},
         )
 
-        return dict(data, system_noise)
+        return dict(data, sensor_system_noise=system_noise)
 
     def _intake(
         self,

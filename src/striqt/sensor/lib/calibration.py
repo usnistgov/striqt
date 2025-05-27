@@ -393,7 +393,13 @@ def lookup_system_noise_power(
     k = scipy.constants.Boltzmann * 1000  # scaled from W/K to mW/K
     noise_psd = (10 ** (noise_figure / 10) - 1) * k * T
 
-    return 10 * np.log10(noise_psd)
+    return xr.DataArray(
+        data=10 * np.log10(noise_psd),
+        # coords={"temperature_source": list(temps.keys())},
+        dims='capture',
+        attrs={'name': 'Sensor system noise PSD', 'units': 'dBm/Hz'},
+    )
+
 
 
 class YFactorSink(sinks.SinkBase):
