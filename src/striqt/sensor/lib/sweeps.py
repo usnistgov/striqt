@@ -314,8 +314,11 @@ class SweepIterator:
 
     def _peripherals_acquire(self, capture):
         data = self._peripherals.acquire(capture)
-        system_noise = lookup_system_noise_power(self.sweep.radio_setup.calibration, capture, self.radio.base_clock_rate)
 
+        if self.sweep.radio_setup.calibration is None:
+            return data
+        
+        system_noise = lookup_system_noise_power(self.sweep.radio_setup.calibration, capture, self.radio.base_clock_rate)
         system_noise = xr.DataArray(
             data=system_noise,
             # coords={"temperature_source": list(temps.keys())},
@@ -324,6 +327,7 @@ class SweepIterator:
         )
 
         return dict(data, system_noise)
+         
 
     def _intake(
         self,
