@@ -358,7 +358,7 @@ class _MeasurementRegistry(
         all_caches = []
         for caches in self.caches.values():
             all_caches.extend(caches)
-        return lb.sequentially(*all_caches)
+        return lb.sequentially(*set(all_caches))
 
 
 measurement = _MeasurementRegistry()
