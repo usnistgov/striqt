@@ -201,6 +201,7 @@ def _get_max_corr_size(
 @register.measurement(
     coord_factories=[link_direction, subcarrier_spacing, cyclic_sample_lag],
     dtype='float32',
+    prefer_unaligned_input=True,
     spec_type=CellularCyclicAutocorrelationSpec,
     attrs={'units': 'mW', 'standard_name': 'Cyclic Autocovariance'},
 )
