@@ -394,7 +394,7 @@ def lookup_system_noise_power(
     noise_psd = (10 ** (noise_figure / 10) - 1) * k * T
 
     return xr.DataArray(
-        data=10 * np.log10(noise_psd[:,np.newaxis]),
+        data=10 * np.log10(noise_psd),
         # coords={"temperature_source": list(temps.keys())},
         attrs={'name': 'Sensor system noise PSD', 'units': 'dBm/Hz'},
     )
