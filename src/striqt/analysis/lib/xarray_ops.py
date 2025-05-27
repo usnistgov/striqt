@@ -369,6 +369,7 @@ def evaluate_by_spec(
     as_xarray: typing.Literal[True]
     | typing.Literal[False]
     | typing.Literal['delayed'] = 'delayed',
+    block_each=True
 ):
     """evaluate each analysis for the given IQ waveform"""
 
@@ -393,11 +394,18 @@ def evaluate_by_spec(
             else:
                 iq_sel = iq.aligned
 
-            results[name] = meas.func(
+            ret = meas.func(
                 iq=iq_sel, capture=capture, as_xarray=as_xarray, **func_kws
             )
 
-    if not as_xarray:
+            if block_each:
+                results[name] = ret.compute()
+            else:
+                results[name] = ret
+
+    if as_xarray:
+        pass
+    elif block_each:
         return results
 
     for name in list(results.keys()):
@@ -434,6 +442,7 @@ def analyze_by_spec(
     *,
     spec: str | dict | specs.Measurement,
     as_xarray: bool | typing.Literal['delayed'] = True,
+    block_each: bool = True,
     expand_dims=None,
 ) -> 'xr.Dataset':
     """evaluate a set of different channel analyses on the iq waveform as specified by spec"""
@@ -441,6 +450,7 @@ def analyze_by_spec(
         iq,
         capture,
         spec=spec,
+        block_each=block_each,
         as_xarray='delayed' if as_xarray else False,
     )
 

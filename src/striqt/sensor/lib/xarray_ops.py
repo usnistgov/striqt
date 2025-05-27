@@ -231,6 +231,7 @@ class AnalysisCaller:
         capture: specs.RadioCapture,
         pickled=False,
         overwrite_x=True,
+        block_each=False,
         delayed=True,
     ) -> 'xr.Dataset' | dict[str] | str:
         """Inject radio device and capture info into a channel analysis result."""
@@ -255,6 +256,7 @@ class AnalysisCaller:
                     iq,
                     capture=capture,
                     spec=self.analysis_spec,
+                    block_each=block_each,
                     as_xarray='delayed' if delayed else True,
                 )
 

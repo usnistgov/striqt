@@ -171,6 +171,7 @@ class SweepIterator:
             analysis_spec=sweep.analysis,
             extra_attrs=_build_attrs(sweep),
             correction=True,
+            block_each=True
         )
         self._analyze.__name__ = 'analyze'
         self._analyze.__qualname__ = 'analyze'
