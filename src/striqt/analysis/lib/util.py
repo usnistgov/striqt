@@ -39,8 +39,10 @@ if typing.TYPE_CHECKING:
     _P = typing_extensions.ParamSpec('_P')
     _R = typing_extensions.TypeVar('_R')
     import iqwaveform
+    import labbench as lb
 else:
     iqwaveform = lazy_import('iqwaveform')
+    lb = lazy_import('labbench')
 
 
 @functools.wraps(functools.lru_cache)
@@ -99,4 +101,5 @@ def sync_if_cupy(x: 'iqwaveform.type_stubs.ArrayType'):
     if iqwaveform.util.is_cupy_array(x):
         import cupy
         stream = cupy.cuda.get_current_stream()
-        stream.synchronize()
+        with lb.stopwatch('cuda synchronize', threshold=10e-3):
+            stream.synchronize()
