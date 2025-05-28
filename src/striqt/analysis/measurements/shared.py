@@ -176,6 +176,7 @@ def correlate_sync_sequence(
         R = []
 
         for group in groups:
+            print('groups: ', len(groups))
             Rpart = iqwaveform.oaconvolve(iq_bcast, group, axes=3, mode='full')
             Rpart = xp.roll(Rpart, -offs, axis=-1)[..., :corr_size]
             R.append(Rpart)
