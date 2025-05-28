@@ -149,14 +149,15 @@ def resampling_correction(
             transition_bandwidth=250e3,
             scale=1 if scale is None else scale,
         )
-        # total_pad = base._get_dsp_pad_size(
-        #     radio.base_clock_rate, capture, radio._aligner
-        # )
-        # oapad = base._get_oaresample_pad(radio.base_clock_rate, capture)
+        scale = design['nfft_out']/design['nfft']
+        oapad = base._get_oaresample_pad(radio.base_clock_rate, capture)
         lag_pad = base._get_aligner_pad_size(
             radio.base_clock_rate, capture, radio._aligner
         )
-        size_out = round(capture.duration * capture.sample_rate) + lag_pad
+        # print(oapad, lag_pad, scale)
+        size_out = (
+            round(capture.duration * capture.sample_rate) + round((oapad[1] + lag_pad) * scale)
+        )
         assert size_out <= iq.shape[axis]
         iq = iqwaveform.util.axis_slice(iq, -size_out, iq.shape[axis], axis=axis)
         assert iq.shape[axis] == size_out
