@@ -7,12 +7,8 @@ import importlib.util
 import sys
 import threading
 import typing
+import iqwaveform.type_stubs
 import typing_extensions
-
-
-if typing.TYPE_CHECKING:
-    _P = typing_extensions.ParamSpec('_P')
-    _R = typing_extensions.TypeVar('_R')
 
 
 def lazy_import(module_name: str, package=None):
@@ -38,6 +34,13 @@ def lazy_import(module_name: str, package=None):
     sys.modules[module_name] = module
     spec.loader.exec_module(module)
     return module
+
+if typing.TYPE_CHECKING:
+    _P = typing_extensions.ParamSpec('_P')
+    _R = typing_extensions.TypeVar('_R')
+    import iqwaveform
+else:
+    iqwaveform = lazy_import('iqwaveform')
 
 
 @functools.wraps(functools.lru_cache)
@@ -90,3 +93,10 @@ def compute_lock(array=None):
     yield
     if get_lock:
         _compute_lock.release()
+
+
+def sync_if_cupy(x: 'iqwaveform.type_stubs.ArrayType'):
+    if iqwaveform.util.is_cupy_array(x):
+        import cupy
+        stream = cupy.cuda.get_current_stream()
+        stream.synchronize()

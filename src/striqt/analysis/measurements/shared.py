@@ -172,10 +172,7 @@ def correlate_sync_sequence(
         for group in groups:
             Rgroup = iqwaveform.oaconvolve(iq_bcast, group, axes=3, mode='full')
             R.append(Rgroup)
-            if iqwaveform.util.is_cupy_array(iq_bcast):
-                import cupy
-                stream = cupy.cuda.get_current_stream()
-                stream.synchronize()
+            util.sync_if_cupy(iq_bcast)
 
         R = xp.concatenate(R, axis=split_axis)
 
@@ -394,12 +391,8 @@ def _cached_spectrogram(
             spg, spec.time_bin_averaging, axis=1, fft=False
         )
 
-    if iqwaveform.util.is_cupy_array(iq):
-        import cupy
-
-        stream = cupy.cuda.get_current_stream()
-        stream.synchronize()
-
+    util.sync_if_cupy(iq)
+    
     enbw = spec.frequency_resolution * equivalent_noise_bandwidth(spec.window, nfft)
 
     attrs = {
