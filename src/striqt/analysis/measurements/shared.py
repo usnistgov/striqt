@@ -162,11 +162,13 @@ def correlate_sync_sequence(
 
     if cell_id_split is None:
         R = iqwaveform.oaconvolve(iq_bcast, template_bcast, axes=3, mode='full')
+        print(template_bcast.shape)
     else:
         # step through the correlation in groups of cell IDs, if specified
         split_axis = 1
         group_count = max(template_bcast.shape[split_axis] // cell_id_split, 1)
         groups = xp.array_split(template_bcast, group_count, axis=split_axis)
+        print(groups[0].shape)
         R = []
 
         for group in groups:
