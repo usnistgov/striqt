@@ -35,6 +35,7 @@ def lazy_import(module_name: str, package=None):
     spec.loader.exec_module(module)
     return module
 
+
 if typing.TYPE_CHECKING:
     _P = typing_extensions.ParamSpec('_P')
     _R = typing_extensions.TypeVar('_R')
@@ -100,6 +101,7 @@ def compute_lock(array=None):
 def sync_if_cupy(x: 'iqwaveform.type_stubs.ArrayType'):
     if iqwaveform.util.is_cupy_array(x):
         import cupy
+
         stream = cupy.cuda.get_current_stream()
         with lb.stopwatch('cuda synchronize', threshold=10e-3):
             stream.synchronize()

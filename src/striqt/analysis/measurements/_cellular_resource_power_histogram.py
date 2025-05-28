@@ -309,7 +309,7 @@ def cellular_resource_power_histogram(
         frequency_resolution=spec.subcarrier_spacing / 2,
         fractional_overlap=fractional_overlap,
         window_fill=window_fill,
-        frequency_bin_averaging=frequency_bin_averaging
+        frequency_bin_averaging=frequency_bin_averaging,
     )
 
     spg, metadata = shared.evaluate_spectrogram(

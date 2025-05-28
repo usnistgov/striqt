@@ -213,7 +213,7 @@ class SweepIterator:
                     pickled=self._pickled,
                     overwrite_x=not self._reuse_iq,
                     delayed=True,
-                    block_each=False
+                    block_each=False,
                 )
 
             if capture_this is None:
@@ -316,7 +316,7 @@ class SweepIterator:
     def _peripherals_acquire(self, capture):
         if capture is None:
             return {}
-        
+
         data = self._peripherals.acquire(capture)
 
         if self.sweep.radio_setup.calibration is None:

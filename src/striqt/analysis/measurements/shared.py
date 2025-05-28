@@ -137,7 +137,7 @@ def correlate_sync_sequence(
     *,
     spec: Cellular5GNRSyncCorrelationSpec,
     params: 'iqwaveform.ofdm.SyncParams',
-    cell_id_split: int|None = None
+    cell_id_split: int | None = None,
 ):
     """correlate the IQ of a synchronization block against a synchronization sequence.
 

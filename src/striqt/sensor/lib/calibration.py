@@ -400,7 +400,6 @@ def lookup_system_noise_power(
     )
 
 
-
 class YFactorSink(sinks.SinkBase):
     sweep_spec: ManualYFactorSweep
 

@@ -764,15 +764,15 @@ def _get_aligner_pad_size(
     capture: specs.RadioCapture,
     aligner: register.AlignmentCaller | None = None,
 ) -> tuple[int, int]:
-    
     if aligner is None:
         lag_pad = 0
     else:
         max_lag = aligner.max_lag(capture)
         lag_pad = ceil(base_clock_rate * max_lag)
         lag_pad = lag_pad + (lag_pad % 2)
-    
+
     return lag_pad
+
 
 def _get_oaresample_pad(base_clock_rate: float, capture: specs.RadioCapture):
     resampler_design = design_capture_resampler(base_clock_rate, capture)

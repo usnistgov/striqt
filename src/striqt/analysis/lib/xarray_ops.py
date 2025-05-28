@@ -369,7 +369,7 @@ def evaluate_by_spec(
     as_xarray: typing.Literal[True]
     | typing.Literal[False]
     | typing.Literal['delayed'] = 'delayed',
-    block_each=True
+    block_each=True,
 ):
     """evaluate each analysis for the given IQ waveform"""
 
@@ -394,9 +394,7 @@ def evaluate_by_spec(
             else:
                 iq_sel = iq.aligned
 
-            ret = meas.func(
-                iq=iq_sel, capture=capture, as_xarray=as_xarray, **func_kws
-            )
+            ret = meas.func(iq=iq_sel, capture=capture, as_xarray=as_xarray, **func_kws)
 
             if block_each:
                 results[name] = ret.compute()
