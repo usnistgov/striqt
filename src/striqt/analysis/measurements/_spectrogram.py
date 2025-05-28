@@ -51,6 +51,7 @@ def spectrogram(
     capture: specs.Capture,
     **kwargs: typing.Unpack[shared.SpectrogramKeywords],
 ):
+
     spec = shared.SpectrogramSpec.fromdict(kwargs).validate()
     spg, attrs = shared.evaluate_spectrogram(
         iq, capture, spec, dB=True, limit_digits=2, dtype='float16'

@@ -260,9 +260,9 @@ def cellular_resource_power_histogram(
     link_direction = 'downlink', 'uplink'
 
     if spec.average_rbs == 'half':
-        frequency_bin_averaging = 6
-    elif spec.average_rbs:
         frequency_bin_averaging = 12
+    elif spec.average_rbs:
+        frequency_bin_averaging = 24
     else:
         frequency_bin_averaging = None
 
@@ -309,6 +309,7 @@ def cellular_resource_power_histogram(
         frequency_resolution=spec.subcarrier_spacing / 2,
         fractional_overlap=fractional_overlap,
         window_fill=window_fill,
+        frequency_bin_averaging=frequency_bin_averaging
     )
 
     spg, metadata = shared.evaluate_spectrogram(
@@ -340,12 +341,8 @@ def cellular_resource_power_histogram(
         xp=xp,
     )
 
-    # apply the binning only now
-    if frequency_bin_averaging is not None:
-        masked_spgs = iqwaveform.util.binned_mean(
-            masked_spgs, 2 * frequency_bin_averaging, axis=3
-        )
-
+    # apply the time binning only now, to allow for averaging
+    # across mask boundaries
     if time_bin_averaging is not None:
         masked_spgs = iqwaveform.util.binned_mean(
             masked_spgs, time_bin_averaging, axis=2, fft=False
