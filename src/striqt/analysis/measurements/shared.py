@@ -136,6 +136,7 @@ def correlate_sync_sequence(
     *,
     spec: Cellular5GNRSyncCorrelationSpec,
     params: 'iqwaveform.ofdm.SyncParams',
+    cell_id_split: int|None = None
 ):
     """correlate the IQ of a synchronization block against a synchronization sequence.
 
@@ -144,6 +145,7 @@ def correlate_sync_sequence(
         sync_seq: The reference sequence (e.g. from `iqwaveform.ofdm.pss_5g_nr` or `iqwaveform.ofdm.sss_5g_nr`)
         spec: The measurement specification
         params: The cell synchronization parameters (e.g. from `iqwaveform.ofdm.pss_params` or `iqwaveform.ofdm.sss_params`)
+        cell_id_split: if not None, operate on groups of this size along the cell id axis (to reduce memory usage)
     """
     xp = iqwaveform.util.array_namespace(ssb_iq)
 
@@ -152,20 +154,28 @@ def correlate_sync_sequence(
     frames_per_sync = params.frames_per_sync
 
     # set up broadcasting to new dimensions:
-    # (port index, cell Nid2, sync block index, IQ sample index)
+    # (port index, cell Nid, sync block index, IQ sample index)
     iq_bcast = ssb_iq.reshape((ssb_iq.shape[0], -1, params.frame_size))
     iq_bcast = iq_bcast[:, xp.newaxis, ::frames_per_sync, :corr_size]
-    pss_bcast = sync_seq[xp.newaxis, :, xp.newaxis, :]
+    template_bcast = sync_seq[xp.newaxis, :, xp.newaxis, :]
 
-    R = iqwaveform.oaconvolve(iq_bcast, pss_bcast, axes=3, mode='full')
+    if cell_id_split is None:
+        R = iqwaveform.oaconvolve(iq_bcast, template_bcast, axes=3, mode='full')
+    else:
+        # step through the correlation in groups of cell IDs, if specified
+        split_axis = 1
+        group_count = template_bcast.shape[split_axis] // 3
+        groups = xp.array_split(template_bcast, group_count, axis=split_axis)
+        R = [iqwaveform.oaconvolve(iq_bcast, group, axes=3, mode='full') for group in groups]
+        R = xp.concatenate(R, axis=split_axis)
 
     # shift correlation peaks to the symbol start
     cp_samples = round(9 / 128 * spec.sample_rate / spec.subcarrier_spacing)
     offs = round(spec.sample_rate / spec.subcarrier_spacing + 2 * cp_samples)
     R = xp.roll(R, -offs, axis=-1)[..., :corr_size]
 
-    # dims -> (port index, cell Nid, sync block index, slot index, IQ sample index)
-    excess_cp = round(spec.sample_rate / spec.subcarrier_spacing * 1 / 128)
+    # add slot index dimension: -> (port index, cell Nid, sync block index, slot index, IQ sample index)
+    excess_cp = round(1 / 128 * spec.sample_rate / spec.subcarrier_spacing)
     R = R.reshape(R.shape[:-1] + (slot_count, -1))[..., 2 * excess_cp :]
 
     # dims -> (port index, cell Nid, sync block index, symbol pair index, IQ sample index)
@@ -204,7 +214,7 @@ def get_5g_ssb_iq(
 
     down = round(capture.sample_rate / spec.subcarrier_spacing / 8)
     up = round(down * (spec.sample_rate / capture.sample_rate))
-    
+
     if up % 3 > 0:
         # ensure compatibility with the blackman window overlap of 2/3
         down = down * 3
@@ -230,7 +240,7 @@ def get_5g_ssb_iq(
 # %% Spectral analysis
 
 
-class FrequencyAnalysisBase(
+class FrequencyAnalysisSpecBase(
     specs.Measurement,
     forbid_unknown_fields=True,
     cache_hash=True,
@@ -254,7 +264,7 @@ class FrequencyAnalysisKeywords(specs.AnalysisKeywords):
 
 
 class SpectrogramSpec(
-    FrequencyAnalysisBase,
+    FrequencyAnalysisSpecBase,
     forbid_unknown_fields=True,
     cache_hash=True,
     kw_only=True,

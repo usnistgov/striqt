@@ -13,7 +13,7 @@ else:
 
 
 class PowerSpectralDensitySpec(
-    shared.FrequencyAnalysisBase,
+    shared.FrequencyAnalysisSpecBase,
     forbid_unknown_fields=True,
     cache_hash=True,
     kw_only=True,

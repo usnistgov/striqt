@@ -82,7 +82,9 @@ def correlate_5g_sss(
         spec.sample_rate, spec.subcarrier_spacing, xp=xp
     )
 
-    meas = shared.correlate_sync_sequence(ssb_iq, sss_seq, spec=spec, params=params)
+    meas = shared.correlate_sync_sequence(
+        ssb_iq, sss_seq, spec=spec, params=params, cell_id_split=6
+    )
 
     # split Nid into (Nid1, Nid2)
     return iqwaveform.util.to_blocks(meas, 3, axis=-4)
