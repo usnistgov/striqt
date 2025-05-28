@@ -369,7 +369,6 @@ def _cached_spectrogram(
         nzero=nzero,
         axis=1,
         return_axis_arrays=False,
-        iter_axes=0,
     )
 
     # truncate to the analysis bandwidth

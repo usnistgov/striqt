@@ -53,6 +53,9 @@ def _get_voltage_scale(
     return np.sqrt(power_scale) * dtype_scale
 
 
+USE_OARESAMPLE = False
+
+
 def resampling_correction(
     iq: 'iqwaveform.type_stubs.ArrayType',
     capture: specs.RadioCapture,
@@ -95,7 +98,7 @@ def resampling_correction(
     needs_resample = base.needs_resample(design, capture)
 
     # apply the filter here and ensure we're working with a copy if needed
-    if np.isfinite(capture.analysis_bandwidth):
+    if not USE_OARESAMPLE and np.isfinite(capture.analysis_bandwidth):
         h = iqwaveform.design_fir_lpf(
             bandwidth=capture.analysis_bandwidth,
             sample_rate=fs,
@@ -128,16 +131,42 @@ def resampling_correction(
         resample_duration = capture.duration
     else:
         resample_duration = capture.duration + radio._aligner.max_lag(capture)
-
+    
     resample_size_out = round(resample_duration * capture.sample_rate)
-    iq = iqwaveform.fourier.resample(
-        iq,
-        resample_size_out,
-        overwrite_x=overwrite_x,
-        axis=axis,
-        scale=1 if scale is None else scale,
-        iter_axes=(0,),
-    )
+
+    if USE_OARESAMPLE:
+        # this is broken. don't use it yet.
+        iq = iqwaveform.fourier.oaresample(
+            iq,
+            up=design['nfft_out'],
+            down=design['nfft'],
+            fs=fs,
+            window=design['window'],
+            overwrite_x=overwrite_x,
+            axis=axis,
+            frequency_shift=design['lo_offset'],
+            filter_bandwidth=capture.analysis_bandwidth,
+            transition_bandwidth=250e3,
+            scale=1 if scale is None else scale
+        )
+        # total_pad = base._get_dsp_pad_size(
+        #     radio.base_clock_rate, capture, radio._aligner
+        # )
+        # oapad = base._get_oaresample_pad(radio.base_clock_rate, capture)
+        lag_pad = base._get_aligner_pad_size(radio.base_clock_rate, capture, radio._aligner)
+        size_out = round(capture.duration * capture.sample_rate) + lag_pad
+        assert size_out <= iq.shape[axis]
+        iq = iqwaveform.util.axis_slice(iq, -size_out, iq.shape[axis], axis=axis)
+        assert iq.shape[axis] == size_out
+
+    else:
+        iq = iqwaveform.fourier.resample(
+            iq,
+            resample_size_out,
+            overwrite_x=overwrite_x,
+            axis=axis,
+            scale=1 if scale is None else scale,
+        )
 
     size_out = round(capture.duration * capture.sample_rate)
 

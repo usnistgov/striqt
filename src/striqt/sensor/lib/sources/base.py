@@ -746,18 +746,36 @@ def _get_dsp_pad_size(
     aligner: register.AlignmentCaller | None = None,
 ) -> tuple[int, int]:
     """returns the padding before and after a waveform to achieve an integral number of FFT windows"""
-    resampler_design = design_capture_resampler(base_clock_rate, capture)
 
-    filter_pad = _get_filter_pad(capture)
+    from .. import iq_corrections
 
+    lag_pad = _get_aligner_pad_size(base_clock_rate, capture, aligner)
+
+    if iq_corrections.USE_OARESAMPLE:
+        oa_pad_low, oa_pad_high = _get_oaresample_pad(base_clock_rate, capture)
+        return (oa_pad_low, oa_pad_high + lag_pad)
+    else:
+        filter_pad = _get_filter_pad(capture)
+        return (filter_pad, lag_pad)
+
+
+def _get_aligner_pad_size(
+    base_clock_rate: float,
+    capture: specs.RadioCapture,
+    aligner: register.AlignmentCaller | None = None,
+) -> tuple[int, int]:
+    
     if aligner is None:
         lag_pad = 0
     else:
         max_lag = aligner.max_lag(capture)
         lag_pad = ceil(base_clock_rate * max_lag)
         lag_pad = lag_pad + (lag_pad % 2)
+    
+    return lag_pad
 
-    return (filter_pad, lag_pad)
+def _get_oaresample_pad(base_clock_rate: float, capture: specs.RadioCapture):
+    resampler_design = design_capture_resampler(base_clock_rate, capture)
 
     nfft = resampler_design['nfft']
     nfft_out = resampler_design.get('nfft_out', nfft)
@@ -775,10 +793,11 @@ def _get_dsp_pad_size(
         nfft=nfft,
         extend=True,
     )[1]
+    print(locals())
 
     noverlap = ceil(noverlap_out * nfft / nfft_out)
 
-    return noverlap + filter_pad, noverlap + (samples_in - min_samples_in)
+    return noverlap, noverlap + (samples_in - min_samples_in)
 
 
 @util.lru_cache(30000)
