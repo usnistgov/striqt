@@ -82,8 +82,14 @@ def correlate_5g_sss(
         spec.sample_rate, spec.subcarrier_spacing, xp=xp
     )
 
+
+    if array_api_compat.is_cupy_array(ssb_iq):
+        cell_id_split=3
+    else:
+        cell_id_split=None
+
     meas = shared.correlate_sync_sequence(
-        ssb_iq, sss_seq, spec=spec, params=params, cell_id_split=6
+        ssb_iq, sss_seq, spec=spec, params=params, cell_id_split=cell_id_split
     )
 
     # split Nid into (Nid1, Nid2)
