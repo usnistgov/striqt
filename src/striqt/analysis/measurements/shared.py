@@ -172,7 +172,7 @@ def correlate_sync_sequence(
         for group in groups:
             Rgroup = iqwaveform.oaconvolve(iq_bcast, group, axes=3, mode='full')
             R.append(Rgroup)
-            # util.sync_if_cupy(iq_bcast)
+            util.sync_if_cupy(iq_bcast)
 
         R = xp.concatenate(R, axis=split_axis)
 
@@ -391,7 +391,7 @@ def _cached_spectrogram(
             spg, spec.time_bin_averaging, axis=1, fft=False
         )
 
-    # util.sync_if_cupy(iq)
+    util.sync_if_cupy(iq)
 
     enbw = spec.frequency_resolution * equivalent_noise_bandwidth(spec.window, nfft)
 
