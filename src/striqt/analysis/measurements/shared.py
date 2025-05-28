@@ -4,6 +4,7 @@ import typing
 
 from ..lib import register, specs, util
 
+import array_api_compat
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -164,10 +165,22 @@ def correlate_sync_sequence(
     else:
         # step through the correlation in groups of cell IDs, if specified
         split_axis = 1
-        group_count = template_bcast.shape[split_axis] // 3
+        group_count = max(template_bcast.shape[split_axis] // cell_id_split, 1)
         groups = xp.array_split(template_bcast, group_count, axis=split_axis)
-        R = [iqwaveform.oaconvolve(iq_bcast, group, axes=3, mode='full') for group in groups]
+        R = []
+
+        for group in groups:
+            Rgroup = iqwaveform.oaconvolve(iq_bcast, group, axes=3, mode='full')
+            R.append(Rgroup)
+            if iqwaveform.util.is_cupy_array(iq_bcast):
+                import cupy
+                stream = cupy.cuda.get_current_stream()
+                stream.synchronize()
+
         R = xp.concatenate(R, axis=split_axis)
+
+        
+
 
     # shift correlation peaks to the symbol start
     cp_samples = round(9 / 128 * spec.sample_rate / spec.subcarrier_spacing)
