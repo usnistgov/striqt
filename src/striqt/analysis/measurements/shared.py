@@ -168,18 +168,14 @@ def correlate_sync_sequence(
         split_axis = 1
         group_count = max(template_bcast.shape[split_axis] // cell_id_split, 1)
         groups = xp.array_split(template_bcast, group_count, axis=split_axis)
-        print(groups[0].shape)
         R = []
 
         for group in groups:
             Rgroup = iqwaveform.oaconvolve(iq_bcast, group, axes=3, mode='full')
             R.append(Rgroup)
-            util.sync_if_cupy(iq_bcast)
+            # util.sync_if_cupy(iq_bcast)
 
         R = xp.concatenate(R, axis=split_axis)
-
-        
-
 
     # shift correlation peaks to the symbol start
     cp_samples = round(9 / 128 * spec.sample_rate / spec.subcarrier_spacing)
@@ -393,7 +389,7 @@ def _cached_spectrogram(
             spg, spec.time_bin_averaging, axis=1, fft=False
         )
 
-    util.sync_if_cupy(iq)
+    # util.sync_if_cupy(iq)
 
     enbw = spec.frequency_resolution * equivalent_noise_bandwidth(spec.window, nfft)
 
