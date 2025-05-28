@@ -82,7 +82,6 @@ def correlate_5g_sss(
         spec.sample_rate, spec.subcarrier_spacing, xp=xp
     )
 
-
     if array_api_compat.is_cupy_array(ssb_iq):
         cell_id_split=3
     else:
