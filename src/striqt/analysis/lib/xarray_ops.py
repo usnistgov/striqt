@@ -389,7 +389,7 @@ def evaluate_by_spec(
             func_kws = spec_dict[name]
             if not func_kws:
                 continue
-            if iq.sync_span is None or meas.prefer_unaligned_input:
+            if iq.aligned is None or meas.prefer_unaligned_input:
                 iq_sel = iq.raw
             else:
                 iq_sel = iq.aligned
