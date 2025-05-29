@@ -3,7 +3,7 @@ import typing
 
 from .sources import base, SourceBase, design_capture_resampler
 from . import calibration, specs, util
-from striqt.analysis.lib.xarray_ops import IQPair
+from striqt.analysis.lib.xarray_ops import IQWithAlignment
 
 if typing.TYPE_CHECKING:
     import array_api_compat
@@ -64,7 +64,7 @@ def resampling_correction(
     *,
     overwrite_x=False,
     axis=1,
-) -> IQPair:
+) -> IQWithAlignment:
     """apply a bandpass filter implemented through STFT overlap-and-add.
 
     Args:
@@ -176,17 +176,19 @@ def resampling_correction(
         align_start = radio._aligner(iq[:, :size_out], capture)
         offset = round(align_start * capture.sample_rate)
         assert iq.shape[1] >= offset + size_out
-        iq_aligned = iq[:, offset : offset + size_out].copy()
-        iq_unaligned = iq[:, :size_out].copy()
-        del iq
+
+        aligned = slice(offset, offset+size_out)
+        unaligned = slice(0, size_out)
+        iq = iq[:, :offset + size_out]
     else:
-        iq_aligned = None
-        iq_unaligned = iq[:, :size_out]
+        aligned = None
+        unaligned = slice(None, None)
+        iq = iq[:, :size_out]
 
-    assert iq_unaligned.shape[axis] == size_out
-    assert iq_aligned is None or iq_aligned.shape[axis] == size_out
+    assert iq[:,unaligned].shape[axis] == size_out
+    assert aligned is None or iq[:,aligned].shape[axis] == size_out
 
-    return IQPair(aligned=iq_aligned, unaligned=iq_unaligned)
+    return IQWithAlignment(iq, sync_span=aligned, unsync_span=unaligned)
 
     # nfft = analysis_filter['nfft']
     # nfft_out, noverlap, overlap_scale, _ = iqwaveform.fourier._ola_filter_parameters(
