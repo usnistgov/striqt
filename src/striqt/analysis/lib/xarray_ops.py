@@ -386,8 +386,6 @@ def evaluate_by_spec(
 
     for name in spec_dict.keys():
         print(name)
-        if array_api_compat.is_cupy_array(iq):
-            util.free_cupy_mempool()        
         meas = register.measurement[type(getattr(spec, name))]
         util.except_on_low_memory()
         with lb.stopwatch(f'analysis: {name}', logger_level='debug'):

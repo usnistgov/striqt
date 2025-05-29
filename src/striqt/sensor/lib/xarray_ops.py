@@ -12,6 +12,7 @@ from . import captures, specs, util
 from .sources import SourceBase
 
 from striqt.analysis import register
+from striqt.analysis.lib.util import free_cupy_mempool
 
 import array_api_compat
 
@@ -242,6 +243,9 @@ class AnalysisCaller:
         with lb.stopwatch('analysis', logger_level='debug'), register.measurement.cache_context():
             if array_api_compat.is_cupy_array(iq):
                 util.configure_cupy()
+
+            if array_api_compat.is_cupy_array(iq):
+                free_cupy_mempool()        
 
             if self.correction:
                 with lb.stopwatch(

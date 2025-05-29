@@ -4,7 +4,6 @@ import typing
 from .sources import base, SourceBase, design_capture_resampler
 from . import calibration, specs, util
 from striqt.analysis.lib.xarray_ops import IQWithAlignment
-from striqt.analysis.lib.util import free_cupy_mempool
 
 if typing.TYPE_CHECKING:
     import array_api_compat
