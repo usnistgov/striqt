@@ -4,6 +4,7 @@ import typing
 from .sources import base, SourceBase, design_capture_resampler
 from . import calibration, specs, util
 from striqt.analysis.lib.xarray_ops import IQPair
+from striqt.analysis.lib.util import free_cupy_mempool
 
 if typing.TYPE_CHECKING:
     import array_api_compat
@@ -181,6 +182,9 @@ def resampling_correction(
 
     assert iq_unaligned.shape[axis] == size_out
     assert iq_aligned is None or iq_aligned.shape[axis] == size_out
+
+    if array_api_compat.is_cupy_array(iq):
+        free_cupy_mempool()
 
     return IQPair(aligned=iq_aligned, raw=iq_unaligned)
 
