@@ -214,7 +214,7 @@ class SweepIterator:
                     pickled=self._pickled,
                     overwrite_x=not self._reuse_iq,
                     delayed=True,
-                    block_each=True,
+                    block_each=False,
                 )
 
             if capture_this is None:
