@@ -170,6 +170,10 @@ def resampling_correction(
             scale=1 if scale is None else scale,
         )
 
+        if array_api_compat.is_cupy_array(iq):
+            free_cupy_mempool()
+
+
     size_out = round(capture.duration * capture.sample_rate)
 
     if radio._aligner is not None:
@@ -188,6 +192,7 @@ def resampling_correction(
 
     assert iq_unaligned.shape[axis] == size_out
     assert iq_aligned is None or iq_aligned.shape[axis] == size_out
+
 
     return IQPair(aligned=iq_aligned, raw=iq_unaligned)
 
