@@ -160,4 +160,4 @@ def configure_cupy():
 
     # the FFT plan sets up large caches that don't help us
     cupy.fft.config.get_plan_cache().set_size(0)
-    # cupy.cuda.set_pinned_memory_allocator(None)
+    cupy.cuda.set_pinned_memory_allocator(None)
