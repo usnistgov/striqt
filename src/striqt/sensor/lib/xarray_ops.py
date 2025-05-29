@@ -241,9 +241,6 @@ class AnalysisCaller:
         from . import iq_corrections
 
         with lb.stopwatch('analysis', logger_level='debug'), register.measurement.cache_context():
-            if array_api_compat.is_cupy_array(iq):
-                util.configure_cupy()
-
             if self.correction:
                 with lb.stopwatch(
                     'resample, filter, calibrate', logger_level='debug'
