@@ -154,7 +154,6 @@ def resampling_correction(
         lag_pad = base._get_aligner_pad_size(
             radio.base_clock_rate, capture, radio._aligner
         )
-        # print(oapad, lag_pad, scale)
         size_out = (
             round(capture.duration * capture.sample_rate) + round((oapad[1] + lag_pad) * scale)
         )
@@ -177,8 +176,9 @@ def resampling_correction(
         align_start = radio._aligner(iq[:, :size_out], capture)
         offset = round(align_start * capture.sample_rate)
         assert iq.shape[1] >= offset + size_out
-        iq_aligned = iq[:, offset : offset + size_out]
-        iq_unaligned = iq[:, :size_out]
+        iq_aligned = iq[:, offset : offset + size_out].copy()
+        iq_unaligned = iq[:, :size_out].copy()
+        del iq
     else:
         iq_aligned = None
         iq_unaligned = iq[:, :size_out]

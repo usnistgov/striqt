@@ -259,9 +259,6 @@ class AnalysisCaller:
                 as_xarray='delayed' if delayed else True,
             )
 
-        with lb.stopwatch('garbage collect', logger_level='info'):
-            import gc
-            gc.collect()
 
         if delayed:
             result = DelayedDataset(
