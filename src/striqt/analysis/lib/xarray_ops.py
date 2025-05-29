@@ -383,6 +383,7 @@ def evaluate_by_spec(
     as_xarray = 'delayed' if as_xarray else False
 
     for name in spec_dict.keys():
+        print(name)
         meas = register.measurement[type(getattr(spec, name))]
         util.except_on_low_memory()
         with lb.stopwatch(f'analysis: {name}', logger_level='debug'):
@@ -400,6 +401,7 @@ def evaluate_by_spec(
                 results[name] = ret.compute()
             else:
                 results[name] = ret
+        print('...done')
 
     if as_xarray:
         pass
