@@ -11,6 +11,7 @@ import typing
 import typing_extensions
 from . import specs, util
 
+import array_api_compat
 
 if typing.TYPE_CHECKING:
     _P = typing_extensions.ParamSpec('_P')
@@ -405,7 +406,12 @@ class AlignmentCaller:
         self, iq: 'iqwaveform.type_stubs.ArrayType', capture: specs.Capture
     ) -> float:
         print(capture, self.meas_kws)
-        return self.info.func(iq, capture, **self.meas_kws)
+        ret = self.info.func(iq, capture, **self.meas_kws)
+
+        if array_api_compat.is_cupy_array(iq):
+            util.free_cupy_mempool()        
+
+        return ret
 
     def max_lag(self, capture):
         lags = self.info.lag_coord_func(capture, self.meas_spec)
