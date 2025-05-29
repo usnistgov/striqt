@@ -4,6 +4,7 @@ import typing
 from .sources import base, SourceBase, design_capture_resampler
 from . import calibration, specs, util
 from striqt.analysis.lib.xarray_ops import IQWithAlignment
+from striqt.analysis.lib.util import sync_if_cupy
 
 if typing.TYPE_CHECKING:
     import array_api_compat
@@ -173,9 +174,11 @@ def resampling_correction(
     size_out = round(capture.duration * capture.sample_rate)
 
     if radio._aligner is not None:
-        align_start = radio._aligner(iq[:, :size_out].copy(), capture)
-        offset = round(align_start * capture.sample_rate)
-        assert iq.shape[1] >= offset + size_out
+        sync_if_cupy(iq)
+        size_out = round(capture.duration * capture.sample_rate)
+        # align_start = radio._aligner(iq[:, :size_out], capture)
+        # offset = round(align_start * capture.sample_rate)
+        # assert iq.shape[1] >= offset + size_out
 
         # aligned = slice(offset, offset+size_out)
         # unaligned = slice(0, size_out)
@@ -188,7 +191,6 @@ def resampling_correction(
         aligned = None
         unaligned = slice(None, None)
         iq = iq[:, :size_out]
-
 
     assert iq[:,unaligned].shape[axis] == size_out
     assert aligned is None or iq[:,aligned].shape[axis] == size_out
