@@ -51,8 +51,6 @@ def correlate_5g_pss(
 ) -> 'iqwaveform.type_stubs.ArrayType':
     xp = iqwaveform.util.array_namespace(iq)
 
-    print('eval pss')
-
     ssb_iq = shared.get_5g_ssb_iq(iq, capture=capture, spec=spec)
     if ssb_iq is None:
         return shared.empty_5g_sync_measurement(

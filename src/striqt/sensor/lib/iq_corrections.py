@@ -3,7 +3,7 @@ import typing
 
 from .sources import base, SourceBase, design_capture_resampler
 from . import calibration, specs, util
-from striqt.analysis.lib.xarray_ops import IQWithAlignment
+from striqt.analysis.lib.xarray_ops import IQPair
 
 if typing.TYPE_CHECKING:
     import array_api_compat
@@ -64,7 +64,7 @@ def resampling_correction(
     *,
     overwrite_x=False,
     axis=1,
-) -> IQWithAlignment:
+) -> IQPair:
     """apply a bandpass filter implemented through STFT overlap-and-add.
 
     Args:
@@ -79,8 +79,6 @@ def resampling_correction(
         the filtered IQ capture
     """
 
-    from striqt.analysis.lib.util import except_on_low_memory
-
     xp = iqwaveform.util.array_namespace(iq)
 
     if array_api_compat.is_cupy_array(iq):
@@ -92,8 +90,6 @@ def resampling_correction(
 
     design = design_capture_resampler(radio.base_clock_rate, capture)
     fs = design['fs_sdr']
-
-    except_on_low_memory()
 
     needs_resample = base.needs_resample(design, capture)
 
@@ -124,8 +120,6 @@ def resampling_correction(
         elif not overwrite_x:
             iq = iq.copy()
         return iq
-
-    except_on_low_memory()
 
     if radio._aligner is None:
         resample_duration = capture.duration
@@ -177,23 +171,18 @@ def resampling_correction(
         offset = round(align_start * capture.sample_rate)
         assert iq.shape[1] >= offset + size_out
 
-        aligned = slice(offset, offset+size_out)
-        unaligned = slice(0, size_out)
-        iq = iq[:, :offset + size_out]
-
-        # aligned = None
-        # unaligned = slice(None, None)
-        # iq = iq[:, :size_out]
+        iq_aligned = iq[:, offset:offset + size_out]
+        iq_unaligned = iq[:, : size_out]
+        del iq
 
     else:
-        aligned = None
-        unaligned = slice(None, None)
-        iq = iq[:, :size_out]
+        iq_aligned = None
+        iq_unaligned = iq[:, :size_out]
 
-    assert iq[:,unaligned].shape[axis] == size_out
-    assert aligned is None or iq[:,aligned].shape[axis] == size_out
+    assert iq_unaligned.shape[axis] == size_out
+    assert iq_aligned is None or iq_aligned.shape[axis] == size_out
 
-    return IQWithAlignment(iq, sync_span=aligned, unsync_span=unaligned)
+    return IQPair(aligned=iq_aligned, raw=iq_unaligned)
 
     # nfft = analysis_filter['nfft']
     # nfft_out, noverlap, overlap_scale, _ = iqwaveform.fourier._ola_filter_parameters(

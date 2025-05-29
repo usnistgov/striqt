@@ -25,11 +25,9 @@ else:
     xr = util.lazy_import('xarray')
 
 
-class IQWithAlignment(typing.NamedTuple):
-    waveform: 'iqwaveform.type_stubs.ArrayType'
-
-    unsync_span: slice = slice(None, NotImplementedError)
-    sync_span: slice|None = None
+class IQPair(typing.NamedTuple):
+    aligned: 'iqwaveform.type_stubs.ArrayType'
+    raw: 'iqwaveform.type_stubs.ArrayType'
 
 
 _ENG_PREFIXES = {
@@ -364,7 +362,7 @@ def select_parameter_kws(locals_: dict, omit=('capture', 'out')) -> dict:
 
 
 def evaluate_by_spec(
-    iq: 'iqwaveform.type_stubs.ArrayType' | IQWithAlignment,
+    iq: 'iqwaveform.type_stubs.ArrayType' | IQPair,
     capture: specs.Capture,
     *,
     spec: str | dict | specs.Measurement,
@@ -385,25 +383,23 @@ def evaluate_by_spec(
     as_xarray = 'delayed' if as_xarray else False
 
     for name in spec_dict.keys():
-        print(name)
         meas = register.measurement[type(getattr(spec, name))]
-        util.except_on_low_memory()
+
         with lb.stopwatch(f'analysis: {name}', logger_level='debug'):
             func_kws = spec_dict[name]
             if not func_kws:
                 continue
             if iq.sync_span is None or meas.prefer_unaligned_input:
-                slice_ = iq.unsync_span
+                iq_sel = iq.raw
             else:
-                slice_ = iq.sync_span
+                iq_sel = iq.aligned
 
-            ret = meas.func(iq=iq.waveform[:, slice_], capture=capture, as_xarray=as_xarray, **func_kws)
+            ret = meas.func(iq=iq_sel, capture=capture, as_xarray=as_xarray, **func_kws)
 
             if block_each:
                 results[name] = ret.compute()
             else:
                 results[name] = ret
-        print('...done')
 
     if as_xarray:
         pass
@@ -439,7 +435,7 @@ def package_analysis(
 
 
 def analyze_by_spec(
-    iq: 'iqwaveform.type_stubs.ArrayType' | IQWithAlignment,
+    iq: 'iqwaveform.type_stubs.ArrayType' | IQPair,
     capture: specs.Capture,
     *,
     spec: str | dict | specs.Measurement,
