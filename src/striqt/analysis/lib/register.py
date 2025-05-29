@@ -364,7 +364,7 @@ class _MeasurementRegistry(
 measurement = _MeasurementRegistry()
 
 
-def to_analysis_spec(
+def to_analysis_spec_type(
     registry: _AlignmentSourceRegistry | _MeasurementRegistry,
     base: type[specs.Analysis] = specs.Analysis,
 ) -> type[specs.Analysis]:

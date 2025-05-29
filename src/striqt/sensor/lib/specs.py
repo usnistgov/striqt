@@ -293,8 +293,8 @@ class Extensions(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=T
 
 
 # dynamically generate Analysis type for "built-in" measurements in to striqt.analysis
-BundledAnalysis = analysis.register.to_analysis_spec(analysis.register.measurement)
-BundledAlignmentAnalysis = analysis.register.to_analysis_spec(
+BundledAnalysis = analysis.register.to_analysis_spec_type(analysis.register.measurement)
+BundledAlignmentAnalysis = analysis.register.to_analysis_spec_type(
     analysis.register.alignment_source
 )
 
@@ -330,7 +330,7 @@ class Sweep(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
 
     @classmethod
     def _from_registry(cls: type[Sweep]) -> type[Sweep]:
-        Analysis = analysis.register.to_analysis_spec(
+        Analysis = analysis.register.to_analysis_spec_type(
             analysis.register.measurement,
             base=typing.get_type_hints(cls)[cls.analysis.__name__],
         )

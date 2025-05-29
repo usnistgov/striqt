@@ -376,7 +376,7 @@ def evaluate_by_spec(
     if isinstance(spec, specs.Analysis):
         spec = spec.validate()
     else:
-        spec = register.to_analysis_spec(register.measurement).fromdict(spec)
+        spec = register.to_analysis_spec_type(register.measurement).fromdict(spec)
 
     spec_dict = spec.todict()
     results: dict[str, DelayedDataArray] = {}
