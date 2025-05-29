@@ -79,6 +79,9 @@ def except_on_low_memory(threshold_bytes=500_000_000):
 def free_cupy_mempool():
     import cupy as cp
 
+    import gc
+    gc.collect(1)
+
     pools = cp.get_default_memory_pool(), cp.get_default_pinned_memory_pool()
     for mempool in pools:
         if mempool is not None:
