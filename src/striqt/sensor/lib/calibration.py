@@ -31,7 +31,7 @@ class ManualYFactorCapture(specs.RadioCapture, forbid_unknown_fields=True, froze
     noise_diode_enabled: NoiseDiodeEnabledType = False
 
 
-class ManualYFactorSetup(specs.StructBase, forbid_unknown_fields=True, frozen=True):
+class ManualYFactorSetup(specs.SpecBase, forbid_unknown_fields=True, frozen=True):
     enr: Annotated[float, meta(standard_name='Excess noise ratio', units='dB')] = 20.87
     ambient_temperature: Annotated[
         float, meta(standard_name='Ambient temperature', units='K')
@@ -43,7 +43,7 @@ class CalibrationRadioSetup(specs.RadioSetup, forbid_unknown_fields=True, frozen
 
 
 class CalibrationVariables(
-    specs.StructBase, forbid_unknown_fields=True, kw_only=True, frozen=True
+    specs.SpecBase, forbid_unknown_fields=True, kw_only=True, frozen=True
 ):
     noise_diode_enabled: tuple[NoiseDiodeEnabledType, ...] = (False, True)
     sample_rate: tuple[specs.BackendSampleRateType, ...]

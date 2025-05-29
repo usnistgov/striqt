@@ -19,6 +19,9 @@ else:
     xr = util.lazy_import('xarray')
 
 
+USE_OARESAMPLE = False
+
+
 def _get_voltage_scale(
     capture: specs.RadioCapture, radio: SourceBase, *, force_calibration=False, xp=np
 ) -> 'iqwaveform.type_stubs.ArrayLike':
@@ -51,9 +54,6 @@ def _get_voltage_scale(
         power_scale = 1
 
     return np.sqrt(power_scale) * dtype_scale
-
-
-USE_OARESAMPLE = False
 
 
 def resampling_correction(

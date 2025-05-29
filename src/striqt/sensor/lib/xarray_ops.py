@@ -132,7 +132,7 @@ def _get_alias_dtypes(output: specs.Output):
 
 
 @util.lru_cache()
-def get_attrs(struct: type[specs.StructBase], field: str) -> dict[str, str]:
+def get_attrs(struct: type[specs.SpecBase], field: str) -> dict[str, str]:
     """introspect an attrs dict for xarray from the specified field in `struct`"""
     hints = typing.get_type_hints(struct, include_extras=True)
 

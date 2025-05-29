@@ -10,7 +10,7 @@ import msgspec
 from . import util
 
 from striqt import analysis
-from striqt.analysis.lib.specs import meta, StructBase
+from striqt.analysis.lib.specs import meta, SpecBase
 
 if typing.TYPE_CHECKING:
     import pandas as pd
@@ -190,7 +190,7 @@ AlignmentSourceType = Annotated[
 ]
 
 
-class RadioSetup(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
+class RadioSetup(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     """run-time characteristics of the radio that are left invariant during a sweep"""
 
     driver: Optional[str] = None
@@ -250,14 +250,14 @@ class _RadioSetupKeywords(typing.TypedDict, total=False):
     fast_lo: FastLOType
 
 
-class Description(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
+class Description(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     summary: Optional[str] = None
     location: Optional[tuple[float, float, float]] = None
     signal_chain: Optional[tuple[str, ...]] = tuple()
     version: str = 'unversioned'
 
 
-class Output(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
+class Output(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     path: Optional[str] = '{yaml_name}-{start_time}'
     store: typing.Union[Literal['zip'], Literal['directory']] = 'directory'
     coord_aliases: dict[str, dict[str, dict[str, Any]]] = {}
@@ -285,7 +285,7 @@ ExtensionPathType = Annotated[
 ]
 
 
-class Extensions(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
+class Extensions(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     peripherals: PeripheralClassType = 'striqt.sensor.peripherals.NoPeripherals'
     sink: SinkClassType = 'striqt.sensor.sinks.CaptureAppender'
     sweep_struct: SweepStructType = 'striqt.sensor.Sweep'
@@ -308,7 +308,7 @@ WindowFillType = Annotated[
 ]
 
 
-class Sweep(StructBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
+class Sweep(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     captures: tuple[RadioCapture, ...] = tuple()
     radio_setup: RadioSetup = RadioSetup()
     defaults: RadioCapture = RadioCapture()

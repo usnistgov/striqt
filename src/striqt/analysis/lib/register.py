@@ -387,7 +387,7 @@ def to_analysis_spec(
     )
 
 
-class AlignmentCaller(typing.Protocol):
+class AlignmentCaller:
     def __init__(self, name: str, analysis: specs.Analysis):
         self.info: AlignmentInfo = alignment_source[name]
         self.meas_info = measurement[self.info.meas_spec_type]

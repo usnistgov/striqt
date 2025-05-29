@@ -64,7 +64,7 @@ def meta(standard_name: str, units: str | None = None, **kws) -> msgspec.Meta:
     return msgspec.Meta(description=standard_name, extra=extra, **kws)
 
 
-class StructBase(msgspec.Struct, kw_only=True, frozen=True, cache_hash=True):
+class SpecBase(msgspec.Struct, kw_only=True, frozen=True, cache_hash=True):
     """Base type for structures that support validated
     (de)serialization.
 
@@ -96,7 +96,7 @@ class StructBase(msgspec.Struct, kw_only=True, frozen=True, cache_hash=True):
         )
 
     @classmethod
-    def fromspec(cls: type[_T], other: StructBase) -> _T:
+    def fromspec(cls: type[_T], other: SpecBase) -> _T:
         return msgspec.convert(
             other,
             type=cls,
@@ -134,7 +134,7 @@ class StructBase(msgspec.Struct, kw_only=True, frozen=True, cache_hash=True):
         return h
 
 
-class Capture(StructBase, kw_only=True, frozen=True):
+class Capture(SpecBase, kw_only=True, frozen=True):
     """bare minimum information about an IQ acquisition"""
 
     # acquisition
@@ -145,7 +145,7 @@ class Capture(StructBase, kw_only=True, frozen=True):
     )
 
 
-class AnalysisFilter(StructBase, kw_only=True, frozen=True, cache_hash=True):
+class AnalysisFilter(SpecBase, kw_only=True, frozen=True, cache_hash=True):
     nfft: int = 8192
     window: typing.Union[tuple[str, ...], str] = 'hamming'
     nfft_out: int = None
@@ -166,13 +166,13 @@ class AnalysisKeywords(typing.TypedDict):
 
 
 class Measurement(
-    StructBase, forbid_unknown_fields=True, cache_hash=True, kw_only=True, frozen=True
+    SpecBase, forbid_unknown_fields=True, cache_hash=True, kw_only=True, frozen=True
 ):
     """base class for groups of keyword arguments that define calls to a set of analysis functions"""
 
 
 class Analysis(
-    StructBase, forbid_unknown_fields=True, cache_hash=True, kw_only=True, frozen=True
+    SpecBase, forbid_unknown_fields=True, cache_hash=True, kw_only=True, frozen=True
 ):
     """base class for a set of Measurement specifications"""
 
