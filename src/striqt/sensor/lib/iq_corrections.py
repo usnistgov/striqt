@@ -189,11 +189,6 @@ def resampling_correction(
     assert iq_unaligned.shape[axis] == size_out
     assert iq_aligned is None or iq_aligned.shape[axis] == size_out
 
-    if array_api_compat.is_cupy_array(iq_unaligned):
-        import gc
-        free_cupy_mempool()
-        gc.collect(1)
-
     return IQPair(aligned=iq_aligned, raw=iq_unaligned)
 
     # nfft = analysis_filter['nfft']
