@@ -239,36 +239,38 @@ class AnalysisCaller:
         # wait to import until here to avoid a circular import
         from . import iq_corrections
 
-        with register.measurement.cache_context():
-            with lb.stopwatch('analysis', logger_level='debug'):
-                if array_api_compat.is_cupy_array(iq):
-                    util.configure_cupy()
+        with lb.stopwatch('analysis', logger_level='debug'), register.measurement.cache_context():
+            if array_api_compat.is_cupy_array(iq):
+                util.configure_cupy()
 
-                if self.correction:
-                    with lb.stopwatch(
-                        'resample, filter, calibrate', logger_level='debug'
-                    ):
-                        iq = iq_corrections.resampling_correction(
-                            iq, capture, self.radio, overwrite_x=overwrite_x
-                        )
-
-                result = striqt_analysis.lib.xarray_ops.analyze_by_spec(
-                    iq,
-                    capture=capture,
-                    spec=self.analysis_spec,
-                    block_each=block_each,
-                    as_xarray='delayed' if delayed else True,
-                )
-
-                if delayed:
-                    result = DelayedDataset(
-                        delayed=result,
-                        capture=capture,
-                        sweep=self.sweep,
-                        radio_id=self.radio.id,
-                        sweep_time=sweep_time,
-                        extra_attrs=self.extra_attrs,
+            if self.correction:
+                with lb.stopwatch(
+                    'resample, filter, calibrate', logger_level='debug'
+                ):
+                    iq = iq_corrections.resampling_correction(
+                        iq, capture, self.radio, overwrite_x=overwrite_x
                     )
+
+            result = striqt_analysis.lib.xarray_ops.analyze_by_spec(
+                iq,
+                capture=capture,
+                spec=self.analysis_spec,
+                block_each=block_each,
+                as_xarray='delayed' if delayed else True,
+            )
+
+        import gc
+        gc.collect()
+
+        if delayed:
+            result = DelayedDataset(
+                delayed=result,
+                capture=capture,
+                sweep=self.sweep,
+                radio_id=self.radio.id,
+                sweep_time=sweep_time,
+                extra_attrs=self.extra_attrs,
+            )
 
         if pickled:
             return pickle.dumps(result)
