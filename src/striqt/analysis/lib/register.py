@@ -407,9 +407,6 @@ class AlignmentCaller:
     ) -> float:
         ret = self.info.func(iq, capture, **self.meas_kws)
 
-        if array_api_compat.is_cupy_array(iq):
-            util.free_cupy_mempool()        
-
         return ret
 
     def max_lag(self, capture):

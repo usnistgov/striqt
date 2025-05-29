@@ -9,6 +9,7 @@ from .calibration import lookup_system_noise_power
 from .peripherals import PeripheralsBase
 from .sinks import SinkBase
 
+import array_api_compat
 
 if typing.TYPE_CHECKING:
     import xarray as xr
@@ -205,6 +206,10 @@ class SweepIterator:
                 # no pending data in the first iteration
                 pass
             else:
+                if array_api_compat.is_cupy_array(iq):
+                    with lb.stopwatch('memory free'):
+                        analysis.util.free_cupy_mempool()
+
                 calls['analyze'] = lb.Call(
                     self._analyze,
                     iq,

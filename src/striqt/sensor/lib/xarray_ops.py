@@ -244,9 +244,6 @@ class AnalysisCaller:
             if array_api_compat.is_cupy_array(iq):
                 util.configure_cupy()
 
-            if array_api_compat.is_cupy_array(iq):
-                free_cupy_mempool()        
-
             if self.correction:
                 with lb.stopwatch(
                     'resample, filter, calibrate', logger_level='debug'
