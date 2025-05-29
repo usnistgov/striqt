@@ -173,16 +173,17 @@ def resampling_correction(
     size_out = round(capture.duration * capture.sample_rate)
 
     if radio._aligner is not None:
-        # align_start = radio._aligner(iq[:, :size_out], capture)
-        # offset = round(align_start * capture.sample_rate)
-        # assert iq.shape[1] >= offset + size_out
+        align_start = radio._aligner(iq[:, :size_out], capture)
+        offset = round(align_start * capture.sample_rate)
+        assert iq.shape[1] >= offset + size_out
 
-        # aligned = slice(offset, offset+size_out)
-        # unaligned = slice(0, size_out)
-        # iq = iq[:, :offset + size_out]
-        aligned = None
-        unaligned = slice(None, None)
-        iq = iq[:, :size_out]
+        aligned = slice(offset, offset+size_out)
+        unaligned = slice(0, size_out)
+        iq = iq[:, :offset + size_out]
+
+        # aligned = None
+        # unaligned = slice(None, None)
+        # iq = iq[:, :size_out]
 
     else:
         aligned = None
