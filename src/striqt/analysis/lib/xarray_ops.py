@@ -385,6 +385,9 @@ def evaluate_by_spec(
         meas = register.measurement[type(getattr(spec, name))]
 
         with lb.stopwatch(f'analysis: {name}', logger_level='debug'):
+            if array_api_compat.is_cupy_array(iq):
+                util.free_cupy_mempool()        
+
             func_kws = spec_dict[name]
             if not func_kws:
                 continue

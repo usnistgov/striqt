@@ -405,7 +405,6 @@ class AlignmentCaller:
     def __call__(
         self, iq: 'iqwaveform.type_stubs.ArrayType', capture: specs.Capture
     ) -> float:
-        print(capture, self.meas_kws)
         ret = self.info.func(iq, capture, **self.meas_kws)
 
         if array_api_compat.is_cupy_array(iq):

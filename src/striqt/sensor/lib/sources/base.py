@@ -793,7 +793,6 @@ def _get_oaresample_pad(base_clock_rate: float, capture: specs.RadioCapture):
         nfft=nfft,
         extend=True,
     )[1]
-    print(locals())
 
     noverlap = ceil(noverlap_out * nfft / nfft_out)
 

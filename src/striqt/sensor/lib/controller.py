@@ -342,7 +342,6 @@ class _ClientService(rpyc.Service):
             elif isinstance(pickled_dataset, bytes):
                 return pickle.loads(pickled_dataset)
             elif isinstance(pickled_dataset, str):
-                print(pickled_dataset, description)
                 raise TypeError('expected pickle bytes but got str')
 
     def exposed_remote_shared_array(self, info):
