@@ -177,13 +177,18 @@ def resampling_correction(
         offset = round(align_start * capture.sample_rate)
         assert iq.shape[1] >= offset + size_out
 
-        aligned = slice(offset, offset+size_out)
-        unaligned = slice(0, size_out)
-        iq = iq[:, :offset + size_out]
+        # aligned = slice(offset, offset+size_out)
+        # unaligned = slice(0, size_out)
+        # iq = iq[:, :offset + size_out]
+        aligned = None
+        unaligned = slice(None, None)
+        iq = iq[:, :size_out]
+
     else:
         aligned = None
         unaligned = slice(None, None)
         iq = iq[:, :size_out]
+
 
     assert iq[:,unaligned].shape[axis] == size_out
     assert aligned is None or iq[:,aligned].shape[axis] == size_out
