@@ -152,8 +152,13 @@ def resampling_correction(
         size_out = (
             round(capture.duration * capture.sample_rate) + round((oapad[1] + lag_pad) * scale)
         )
-        assert size_out <= iq.shape[axis]
-        iq = iqwaveform.util.axis_slice(iq, -size_out, iq.shape[axis], axis=axis)
+        # print(size_out + oapad[0]//2, iq.shape[axis])
+        offset = 0*design['nfft_out']//2
+        print(design['nfft_out'])
+        print(oapad[0], oapad[0]*scale)
+        print(iq.shape[axis] - size_out)
+        assert size_out + offset <= iq.shape[axis]
+        iq = iqwaveform.util.axis_slice(iq, offset, offset+size_out, axis=axis)
         assert iq.shape[axis] == size_out
 
     else:
