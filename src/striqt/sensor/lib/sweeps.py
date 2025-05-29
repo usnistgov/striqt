@@ -200,10 +200,6 @@ class SweepIterator:
         for i, (capture_intake, _, capture_this, capture_next) in enumerate(
             offset_captures
         ):
-            if array_api_compat.is_cupy_array(iq):
-                with lb.stopwatch('memory free'):
-                    analysis.util.free_cupy_mempool()
-
             calls = {}
 
             if iq is None:
