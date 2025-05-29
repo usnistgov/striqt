@@ -175,8 +175,8 @@ def resampling_correction(
 
     if radio._aligner is not None:
         align_start = radio._aligner(iq[:, :size_out], capture)
-        print('start: ', repr(align_start))
         offset = round(align_start * capture.sample_rate)
+        print('start: ', offset, 'end: ', offset + size_out, 'size: ', iq.shape[1])
         iq_aligned = iq[:, offset : offset + size_out]
         iq_unaligned = iq[:, :size_out]
     else:
