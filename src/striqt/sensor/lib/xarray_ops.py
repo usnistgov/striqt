@@ -244,6 +244,9 @@ class AnalysisCaller:
             lb.stopwatch('analysis', logger_level='debug'),
             register.measurement.cache_context(),
         ):
+            if array_api_compat.is_cupy_array(iq):
+                util.free_cupy_mempool()
+            
             if self.correction:
                 with lb.stopwatch('resample, filter, calibrate', logger_level='debug'):
                     iq = iq_corrections.resampling_correction(
