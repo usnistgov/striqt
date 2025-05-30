@@ -382,12 +382,15 @@ def evaluate_by_spec(
     results: dict[str, DelayedDataArray] = {}
     as_xarray = 'delayed' if as_xarray else False
 
+    if array_api_compat.is_cupy_array(iq):
+        util.configure_cupy()
+
     for name in spec_dict.keys():
         meas = register.measurement[type(getattr(spec, name))]
 
         with lb.stopwatch(f'analysis: {name}', logger_level='debug'):
             if array_api_compat.is_cupy_array(iq):
-                util.configure_cupy()
+                util.free_cupy_mempool()
 
             func_kws = spec_dict[name]
             if not func_kws:
