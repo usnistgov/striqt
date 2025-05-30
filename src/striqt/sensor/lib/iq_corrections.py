@@ -103,6 +103,7 @@ def resampling_correction(
             numtaps=base.FILTER_SIZE,
             xp=xp,
         )
+        print('before filter: ', iq.shape[1])
         pad = base._get_filter_pad(capture)
         iq = iqwaveform.oaconvolve(iq, h[xp.newaxis, :], 'same', axes=axis)
         iq = iqwaveform.util.axis_slice(iq, pad, iq.shape[axis], axis=axis)
