@@ -262,11 +262,10 @@ def get_5g_ssb_iq(
     else:
         size_in = iq.shape[-1]
 
-    
-
     size_out = round(size_in * spec.sample_rate / capture.sample_rate)
-    return iq[..., :size_out]
+
     out = xp.empty((iq.shape[0], size_out), dtype=iq.dtype)
+    return out
     n = xp.arange(size_in, dtype=iq.dtype)
     phase = xp.multiply(n, -2j * np.pi * frequency_offset / capture.sample_rate, out=n)
     shifter = xp.exp(phase, out=phase)
