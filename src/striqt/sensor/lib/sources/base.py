@@ -759,11 +759,12 @@ def _get_dsp_pad_size(
     else:
         filter_pad = _get_filter_pad(capture)
 
-        # accommodate the large fft by padding out further
+        # accommodate the large fft by padding to a fast size that includes at least lag_pad
         fs = design_capture_resampler(base_clock_rate, capture)['fs_sdr']
         filtered_size = lag_pad + round(capture.duration * fs)
         new_size = _get_next_fast_len(filtered_size)
-        return (filter_pad, lag_pad + (new_size - filtered_size))
+        print(new_size)
+        return (filter_pad, new_size - filtered_size)
 
 
 def _get_aligner_pad_size(
