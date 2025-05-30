@@ -172,6 +172,10 @@ def resampling_correction(
 
     size_out = round(capture.duration * capture.sample_rate)
 
+    print(base._get_aligner_pad_size(
+            radio.base_clock_rate, capture, radio._aligner
+        ))
+
     if radio._aligner is not None:
         free_cupy_mempool()
 
