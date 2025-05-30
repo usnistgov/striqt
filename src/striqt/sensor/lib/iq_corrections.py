@@ -126,9 +126,6 @@ def resampling_correction(
         resample_duration = capture.duration + radio._aligner.max_lag(capture)
 
     resample_size_out = round(resample_duration * capture.sample_rate)
-    size_in = round(resample_duration * fs)
-
-    print(iq.shape[1])
 
     if USE_OARESAMPLE:
         # this is broken. don't use it yet.
@@ -178,8 +175,7 @@ def resampling_correction(
         offset = round(align_start * capture.sample_rate)
         assert iq.shape[1] >= offset + size_out
 
-        # iq_aligned = iq[:, offset : offset + size_out]
-        iq_aligned = None
+        iq_aligned = iq[:, offset : offset + size_out]
         iq_unaligned = iq[:, :size_out]
 
     else:
