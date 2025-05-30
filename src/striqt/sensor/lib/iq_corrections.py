@@ -170,16 +170,15 @@ def resampling_correction(
             scale=1 if scale is None else scale,
         )
 
-        if array_api_compat.is_cupy_array(iq):
-            free_cupy_mempool()
-
 
     size_out = round(capture.duration * capture.sample_rate)
 
     if radio._aligner is not None:
         sync_if_cupy(iq)
-        align_size = round(20e-3 * capture.sample_rate)
-        align_start = radio._aligner(iq[:, :align_size], capture)
+        if array_api_compat.is_cupy_array(iq):
+            free_cupy_mempool()
+
+        align_start = radio._aligner(iq[:, :size_out], capture)
         offset = round(align_start * capture.sample_rate)
         assert iq.shape[1] >= offset + size_out
 
