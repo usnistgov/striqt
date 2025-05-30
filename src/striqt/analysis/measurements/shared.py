@@ -200,6 +200,8 @@ def get_5g_ssb_iq(
     """return a sync block waveform, which returns IQ that is recentered
     at baseband frequency spec.frequency_offset and downsampled to spec.sample_rate."""
 
+    xp = iqwaveform.util.array_namespace(iq)
+
     frequency_offset = specs.maybe_lookup_with_capture_key(
         capture,
         spec.frequency_offset,
@@ -220,20 +222,27 @@ def get_5g_ssb_iq(
         up = up * 3
 
     if spec.max_block_count is not None:
-        duration = round(
+        size_in = round(
             spec.max_block_count * spec.discovery_periodicity * capture.sample_rate
         )
-        iq = iq[..., :duration]
+        iq = iq[..., :size_in]
 
-    return iqwaveform.fourier.oaresample(
-        iq,
-        fs=capture.sample_rate,
-        up=up,
-        down=down,
-        axis=1,
-        window='blackman',
-        frequency_shift=frequency_offset,
-    )
+    size_out = round(up/down * size_in)
+
+    out = xp.empty((iq.shape[0], size_out), dtype=iq.dtype)
+
+    for i in range(out.shape[0]):
+        out[i] = iqwaveform.fourier.oaresample(
+            iq[i],
+            fs=capture.sample_rate,
+            up=up,
+            down=down,
+            axis=1,
+            window='blackman',
+            frequency_shift=frequency_offset,
+        )
+
+    return out
 
     # down = round(capture.sample_rate / spec.subcarrier_spacing / 8)
     # up = round(down * (spec.sample_rate / capture.sample_rate))
