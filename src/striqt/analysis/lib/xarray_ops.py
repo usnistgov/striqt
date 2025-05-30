@@ -410,16 +410,19 @@ def evaluate_by_spec(
     if array_api_compat.is_cupy_array(iq):
         util.free_cupy_mempool()
 
-    if as_xarray:
-        pass
-    elif block_each:
+    if as_xarray == 'delayed' and block_each:
         return results
 
     for name in list(results.keys()):
-        if as_xarray == 'delayed':
-            results[name] = results[name].compute()
+        if block_each:
+            res = results[name]
         else:
-            results[name] = results[name].compute().to_xarray()
+            res = results[name].compute()
+
+        if as_xarray == 'delayed':
+            results[name] = res
+        else:
+            results[name] = res.to_xarray()
 
     return results
 
