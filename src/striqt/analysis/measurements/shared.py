@@ -235,6 +235,43 @@ def get_5g_ssb_iq(
         frequency_shift=frequency_offset,
     )
 
+    # down = round(capture.sample_rate / spec.subcarrier_spacing / 8)
+    # up = round(down * (spec.sample_rate / capture.sample_rate))
+
+    # if up % 3 > 0:
+    #     # ensure compatibility with the blackman window overlap of 2/3
+    #     down = down * 3
+    #     up = up * 3
+
+    # if spec.max_block_count is not None:
+    #     size_in = round(
+    #         spec.max_block_count * spec.discovery_periodicity * capture.sample_rate
+    #     )
+    #     iq = iq[..., :size_in]
+    # else:
+    #     size_in = iq.shape[-1]
+
+    # fres = capture.sample_rate / iq.shape[-1]
+    # size_out = round(size_in * spec.sample_rate / capture.sample_rate)
+
+    # if iqwaveform.util.isroundmod(frequency_offset, fres):
+    #     shift = round(frequency_offset/fres)
+    # else:
+    #     raise ValueError(f'frequency_offset must be a multiple of {fres} Hz')
+
+    # global debug
+
+    # debug = iqwaveform.fourier.resample(
+    #     iq,
+    #     num=size_out,
+    #     axis=1,
+    #     shift=shift
+    # )
+
+    # print(debug.shape, shift)
+
+    # return debug
+
 
 # %% Spectral analysis
 
