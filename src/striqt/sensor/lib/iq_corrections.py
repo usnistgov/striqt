@@ -173,7 +173,7 @@ def resampling_correction(
     size_out = round(capture.duration * capture.sample_rate)
 
     if radio._aligner is not None:
-        # free_cupy_mempool()
+        free_cupy_mempool()
 
         align_start = radio._aligner(iq[:, :size_out], capture)
         offset = round(align_start * capture.sample_rate)
