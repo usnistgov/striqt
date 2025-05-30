@@ -407,6 +407,9 @@ def evaluate_by_spec(
             else:
                 results[name] = ret
 
+    if array_api_compat.is_cupy_array(iq):
+        util.free_cupy_mempool()
+
     if as_xarray:
         pass
     elif block_each:
@@ -414,7 +417,7 @@ def evaluate_by_spec(
 
     for name in list(results.keys()):
         if as_xarray == 'delayed':
-            pass
+            results[name] = results[name].compute()
         else:
             results[name] = results[name].compute().to_xarray()
 
