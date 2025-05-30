@@ -20,9 +20,11 @@ from striqt.analysis.lib.xarray_ops import IQPair
 if typing.TYPE_CHECKING:
     import iqwaveform
     import pandas as pd
+    import scipy
 else:
     iqwaveform = util.lazy_import('iqwaveform')
     pd = util.lazy_import('pandas')
+    scipy = util.lazy_import('scipy')
 
 
 FILTER_SIZE = 4001
@@ -756,7 +758,12 @@ def _get_dsp_pad_size(
         return (oa_pad_low, oa_pad_high + lag_pad)
     else:
         filter_pad = _get_filter_pad(capture)
-        return (filter_pad, lag_pad)
+
+        # accommodate the large fft by padding out further
+        fs = design_capture_resampler(base_clock_rate, capture)['fs_sdr']
+        filtered_size = lag_pad + round(capture.duration * fs)
+        new_size = _get_next_fast_len(filtered_size)
+        return (filter_pad, lag_pad + (new_size - filtered_size))
 
 
 def _get_aligner_pad_size(
@@ -767,12 +774,19 @@ def _get_aligner_pad_size(
     if aligner is None:
         return 0
 
-    nfft = design_capture_resampler(base_clock_rate, capture)['nfft']
     max_lag = aligner.max_lag(capture)
     lag_pad = ceil(base_clock_rate * max_lag)
 
-    return iqwaveform.util.ceildiv(lag_pad, nfft) * nfft
+    return lag_pad
 
+
+def _get_next_fast_len(n):
+    try:
+        from cupyx import scipy
+    except ModuleNotFoundError:
+        import scipy
+
+    return scipy.fft.next_fast_len(n)
 
 
 def _get_oaresample_pad(base_clock_rate: float, capture: specs.RadioCapture):
