@@ -129,6 +129,8 @@ def resampling_correction(
 
     resample_size_out = round(resample_duration * capture.sample_rate)
 
+    print(iq.shape[1])
+
     if USE_OARESAMPLE:
         # this is broken. don't use it yet.
         iq = iqwaveform.fourier.oaresample(
@@ -171,8 +173,6 @@ def resampling_correction(
         )
 
     size_out = round(capture.duration * capture.sample_rate)
-
-    print(iq.shape[1])
 
     if radio._aligner is not None:
         align_start = radio._aligner(iq[:, :size_out], capture)
