@@ -55,8 +55,7 @@ def design_warmup_sweep(
     wcaptures = [specs.WaveformCapture.fromspec(c) for c in sweep.captures]
     unique_map = dict(zip(wcaptures, sweep.captures))
     skip_wcaptures = {specs.WaveformCapture.fromspec(c) for c in skip}
-    unique_wcaptures = unique_map.keys() - skip_wcaptures
-    captures = [unique_map[c] for c in unique_wcaptures]
+    captures = [unique_map[c] for c in unique_map.keys() if c not in skip_wcaptures]
 
     if len(captures) > 1:
         captures = captures[:1]

@@ -175,8 +175,6 @@ def resampling_correction(
     print(iq.size)
 
     if radio._aligner is not None:
-        free_cupy_mempool()
-
         align_start = radio._aligner(iq[:, :size_out], capture)
         offset = round(align_start * capture.sample_rate)
         assert iq.shape[1] >= offset + size_out
