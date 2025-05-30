@@ -83,7 +83,7 @@ def resampling_correction(
     xp = iqwaveform.util.array_namespace(iq)
 
     if array_api_compat.is_cupy_array(iq):
-        util.configure_cupy()
+        util.free_cupy_mempool()
 
     scale = _get_voltage_scale(
         capture, radio, force_calibration=force_calibration, xp=xp
