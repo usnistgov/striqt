@@ -765,13 +765,14 @@ def _get_aligner_pad_size(
     aligner: register.AlignmentCaller | None = None,
 ) -> tuple[int, int]:
     if aligner is None:
-        lag_pad = 0
-    else:
-        max_lag = aligner.max_lag(capture)
-        lag_pad = ceil(base_clock_rate * max_lag)
-        lag_pad = lag_pad + (lag_pad % 2)
+        return 0
 
-    return lag_pad
+    nfft = design_capture_resampler(base_clock_rate, capture)['nfft']
+    max_lag = aligner.max_lag(capture)
+    lag_pad = ceil(base_clock_rate * max_lag)
+
+    return iqwaveform.util.ceildiv(lag_pad, nfft) * nfft
+
 
 
 def _get_oaresample_pad(base_clock_rate: float, capture: specs.RadioCapture):
