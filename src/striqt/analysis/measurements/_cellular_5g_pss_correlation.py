@@ -90,6 +90,8 @@ def sync_aggregate_5g_pss(
     due to "ISI" begin to increase quickly.
     """
 
+    return 0
+
     spec = Cellular5GNRPSSCorrelationSpec.fromdict(kwargs).validate()
 
     xp = iqwaveform.util.array_namespace(iq)
