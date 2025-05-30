@@ -10,13 +10,11 @@ if typing.TYPE_CHECKING:
     import iqwaveform
     import numpy as np
     import pandas as pd
-    from scipy import ndimage
     import iqwaveform.type_stubs
 else:
     iqwaveform = util.lazy_import('iqwaveform')
     np = util.lazy_import('numpy')
     pd = util.lazy_import('pandas')
-    ndimage = util.lazy_import('scipy.ndimage')
 
 
 class Cellular5GNRPSSCorrelationSpec(
@@ -117,11 +115,13 @@ def sync_aggregate_5g_pss(
     )
     weights = xp.roll(weights, round((1 - window_fill) * Ragg.size / 2))
 
-    if not array_api_compat.is_numpy_array(Ragg):
-        Ragg = Ragg.get()
+    if array_api_compat.is_cupy_array(Ragg):
+        from cupyx.scipy import ndimage
+    else:
+        from scipy import ndimage
 
     est = ndimage.correlate1d(Ragg, weights, mode='wrap')
-    i = est.argmax()
+    i = int(est.argmax())
 
     return shared.cellular_ssb_lag(capture, spec)[i]
 
