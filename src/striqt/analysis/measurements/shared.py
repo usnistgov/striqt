@@ -226,6 +226,8 @@ def get_5g_ssb_iq(
             spec.max_block_count * spec.discovery_periodicity * capture.sample_rate
         )
         iq = iq[..., :size_in]
+    else:
+        size_in = iq.shape[-1]
 
     size_out = round(up/down * size_in)
 
