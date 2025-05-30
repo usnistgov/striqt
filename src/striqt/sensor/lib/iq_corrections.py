@@ -119,13 +119,6 @@ def resampling_correction(
             iq = iq.copy()
         return iq
 
-    if radio._aligner is None:
-        resample_duration = capture.duration
-    else:
-        resample_duration = capture.duration + radio._aligner.max_lag(capture)
-
-    resample_size_out = round(resample_duration * capture.sample_rate)
-
     if USE_OARESAMPLE:
         # this is broken. don't use it yet.
         iq = iqwaveform.fourier.oaresample(
@@ -159,6 +152,8 @@ def resampling_correction(
         assert iq.shape[axis] == size_out
 
     else:
+        # TODO: check the non-integral rounding error here
+        resample_size_out = round(iq.shape[1] * capture.sample_rate / fs)
         iq = iqwaveform.fourier.resample(
             iq,
             resample_size_out,

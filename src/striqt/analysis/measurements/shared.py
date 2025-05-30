@@ -213,36 +213,38 @@ def get_5g_ssb_iq(
     if frequency_offset is None:
         return None
 
-    # down = round(capture.sample_rate / spec.subcarrier_spacing / 8)
-    # up = round(down * (spec.sample_rate / capture.sample_rate))
+    down = round(capture.sample_rate / spec.subcarrier_spacing / 8)
+    up = round(down * (spec.sample_rate / capture.sample_rate))
 
-    # if up % 3 > 0:
-    #     # ensure compatibility with the blackman window overlap of 2/3
-    #     down = down * 3
-    #     up = up * 3
+    if up % 3 > 0:
+        # ensure compatibility with the blackman window overlap of 2/3
+        down = down * 3
+        up = up * 3
 
-    # if spec.max_block_count is not None:
-    #     size_in = round(
-    #         spec.max_block_count * spec.discovery_periodicity * capture.sample_rate
-    #     )
-    #     iq = iq[..., :size_in]
-    # else:
-    #     size_in = iq.shape[-1]
+    if spec.max_block_count is not None:
+        size_in = round(
+            spec.max_block_count * spec.discovery_periodicity * capture.sample_rate
+        )
+        iq = iq[..., :size_in]
+    else:
+        size_in = iq.shape[-1]
 
-    # size_out = round(up/down * size_in)
+    size_out = round(up/down * size_in)
 
-    # out = xp.empty((iq.shape[0], size_out), dtype=iq.dtype)
+    out = xp.empty((iq.shape[0], size_out), dtype=iq.dtype)
 
-    # for i in range(out.shape[0]):
-    #     out[i] = iqwaveform.fourier.oaresample(
-    #         iq[i],
-    #         fs=capture.sample_rate,
-    #         up=up,
-    #         down=down,
-    #         axis=0,
-    #         window='blackman',
-    #         frequency_shift=frequency_offset,
-    #     )
+    for i in range(out.shape[0]):
+        out[i] = iqwaveform.fourier.oaresample(
+            iq[i],
+            fs=capture.sample_rate,
+            up=up,
+            down=down,
+            axis=0,
+            window='blackman',
+            frequency_shift=frequency_offset,
+        )
+
+    return out
 
     # return out
 
