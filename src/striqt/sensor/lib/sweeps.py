@@ -205,6 +205,9 @@ class SweepIterator:
                 # no pending data in the first iteration
                 pass
             else:
+                if array_api_compat.is_cupy_array(iq):
+                    util.free_cupy_mempool()
+
                 calls['analyze'] = lb.Call(
                     self._analyze,
                     iq,
