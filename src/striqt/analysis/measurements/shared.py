@@ -269,9 +269,9 @@ def get_5g_ssb_iq(
     phase = xp.multiply(n, -2j * np.pi * frequency_offset / capture.sample_rate, out=n)
     shifter = xp.exp(phase, out=phase)
     for i in range(out.shape[0]):
-        iq_shift = iq[i] * shifter
+        iq_shifted = iq[i] * shifter
         out[i] = iqwaveform.fourier.resample(
-            iq_shift,
+            iq_shifted,
             num=size_out,
             axis=0,
             overwrite_x=True
