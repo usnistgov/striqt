@@ -8,6 +8,7 @@ from . import captures, sources, specs, util, xarray_ops
 from .calibration import lookup_system_noise_power
 from .peripherals import PeripheralsBase
 from .sinks import SinkBase
+from striqt.analysis.lib.util import free_cupy_mempool
 
 import array_api_compat
 
@@ -206,7 +207,7 @@ class SweepIterator:
                 pass
             else:
                 if array_api_compat.is_cupy_array(iq):
-                    util.free_cupy_mempool()
+                    free_cupy_mempool()
 
                 calls['analyze'] = lb.Call(
                     self._analyze,
