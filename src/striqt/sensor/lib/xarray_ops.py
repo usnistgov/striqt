@@ -240,11 +240,12 @@ class AnalysisCaller:
         # wait to import until here to avoid a circular import
         from . import iq_corrections
 
-        with lb.stopwatch('analysis', logger_level='debug'), register.measurement.cache_context():
+        with (
+            lb.stopwatch('analysis', logger_level='debug'),
+            register.measurement.cache_context(),
+        ):
             if self.correction:
-                with lb.stopwatch(
-                    'resample, filter, calibrate', logger_level='debug'
-                ):
+                with lb.stopwatch('resample, filter, calibrate', logger_level='debug'):
                     iq = iq_corrections.resampling_correction(
                         iq, capture, self.radio, overwrite_x=overwrite_x
                     )
@@ -256,7 +257,6 @@ class AnalysisCaller:
                 block_each=block_each,
                 as_xarray='delayed' if delayed else True,
             )
-
 
         if delayed:
             result = DelayedDataset(

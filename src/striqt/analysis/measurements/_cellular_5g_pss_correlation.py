@@ -68,7 +68,9 @@ def correlate_5g_pss(
         spec.sample_rate, spec.subcarrier_spacing, xp=xp
     )
 
-    return shared.correlate_sync_sequence(ssb_iq, pss_seq, spec=spec, params=params)
+    return shared.correlate_sync_sequence(
+        ssb_iq, pss_seq, spec=spec, params=params, cell_id_split=1
+    )
 
 
 @register.alignment_source(

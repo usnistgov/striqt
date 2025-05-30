@@ -290,7 +290,7 @@ class SpectrogramKeywords(FrequencyAnalysisKeywords):
 def equivalent_noise_bandwidth(window: specs.WindowType, nfft: int):
     """return the equivalent noise bandwidth (ENBW) of a window, in bins"""
     w = iqwaveform.fourier.get_window(window, nfft)
-    return len(w) * np.sum(w**2) / np.sum(w) ** 2
+    return float(len(w) * np.sum(w**2) / np.sum(w) ** 2)
 
 
 def evaluate_spectrogram(

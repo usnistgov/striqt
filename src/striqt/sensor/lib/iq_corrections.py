@@ -144,21 +144,21 @@ def resampling_correction(
             transition_bandwidth=250e3,
             scale=1 if scale is None else scale,
         )
-        scale = design['nfft_out']/design['nfft']
+        scale = design['nfft_out'] / design['nfft']
         oapad = base._get_oaresample_pad(radio.base_clock_rate, capture)
         lag_pad = base._get_aligner_pad_size(
             radio.base_clock_rate, capture, radio._aligner
         )
-        size_out = (
-            round(capture.duration * capture.sample_rate) + round((oapad[1] + lag_pad) * scale)
+        size_out = round(capture.duration * capture.sample_rate) + round(
+            (oapad[1] + lag_pad) * scale
         )
         # print(size_out + oapad[0]//2, iq.shape[axis])
-        offset = 0*design['nfft_out']//2
+        offset = 0 * design['nfft_out'] // 2
         print(design['nfft_out'])
-        print(oapad[0], oapad[0]*scale)
+        print(oapad[0], oapad[0] * scale)
         print(iq.shape[axis] - size_out)
         assert size_out + offset <= iq.shape[axis]
-        iq = iqwaveform.util.axis_slice(iq, offset, offset+size_out, axis=axis)
+        iq = iqwaveform.util.axis_slice(iq, offset, offset + size_out, axis=axis)
         assert iq.shape[axis] == size_out
 
     else:
@@ -170,30 +170,26 @@ def resampling_correction(
             scale=1 if scale is None else scale,
         )
 
-
     size_out = round(capture.duration * capture.sample_rate)
 
     if radio._aligner is not None:
-        sync_if_cupy(iq)
-        if array_api_compat.is_cupy_array(iq):
-            free_cupy_mempool()
+        free_cupy_mempool()
 
         align_start = radio._aligner(iq[:, :size_out], capture)
         offset = round(align_start * capture.sample_rate)
         assert iq.shape[1] >= offset + size_out
 
-        iq_aligned = iq[:, offset:offset + size_out]
-        iq_unaligned = iq[:, : size_out]
+        iq_aligned = iq[:, offset : offset + size_out]
+        iq_unaligned = iq[:, :size_out]
 
     else:
         iq_aligned = None
         iq_unaligned = iq[:, :size_out]
-    
+
     del iq
 
     assert iq_unaligned.shape[axis] == size_out
     assert iq_aligned is None or iq_aligned.shape[axis] == size_out
-
 
     return IQPair(aligned=iq_aligned, raw=iq_unaligned)
 

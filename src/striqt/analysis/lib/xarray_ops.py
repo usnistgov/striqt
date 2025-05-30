@@ -27,7 +27,8 @@ else:
 
 class IQPair(typing.NamedTuple):
     raw: 'iqwaveform.type_stubs.ArrayType'
-    aligned: 'iqwaveform.type_stubs.ArrayType'|None = None
+    aligned: 'iqwaveform.type_stubs.ArrayType' | None = None
+
 
 _ENG_PREFIXES = {
     -30: 'q',
