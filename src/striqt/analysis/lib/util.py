@@ -77,11 +77,14 @@ def except_on_low_memory(threshold_bytes=500_000_000):
 
 
 def free_cupy_mempool():
-    import cupy as cp
-
-    mempool = cp.get_default_memory_pool()
-    if mempool is not None:
-        mempool.free_all_blocks()
+    try:
+        import cupy as cp
+    except ModuleNotFoundError:
+        pass
+    else:
+        mempool = cp.get_default_memory_pool()
+        if mempool is not None:
+            mempool.free_all_blocks()
 
 
 _compute_lock = threading.RLock()

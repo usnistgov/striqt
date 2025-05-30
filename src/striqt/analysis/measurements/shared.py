@@ -163,24 +163,15 @@ def correlate_sync_sequence(
     cp_samples = round(9 / 128 * spec.sample_rate / spec.subcarrier_spacing)
     offs = round(spec.sample_rate / spec.subcarrier_spacing + 2 * cp_samples)
 
-    if cell_id_split is None:
-        R = iqwaveform.oaconvolve(iq_bcast, template_bcast, axes=3, mode='full')
+    R_shape = list(max(a,b) for a, b in zip(iq_bcast.shape, template_bcast.shape))
+    R_shape[-1] = iq_bcast.shape[-1] + template_bcast.shape[-1] - 1
+    R = xp.empty(tuple(R_shape), dtype='complex64')
 
-        # shift correlation peaks to the symbol start
-        R = xp.roll(R, -offs, axis=-1)[..., :corr_size]
-    else:
-        # step through the correlation in groups of cell IDs, if specified
-        split_axis = 1
-        group_count = max(template_bcast.shape[split_axis] // cell_id_split, 1)
-        groups = xp.array_split(template_bcast, group_count, axis=split_axis)
-        R = []
-
-        for group in groups:
-            Rpart = iqwaveform.oaconvolve(iq_bcast, group, axes=3, mode='full')
-            Rpart = xp.roll(Rpart, -offs, axis=-1)[..., :corr_size]
-            R.append(Rpart)
-
-        R = xp.concatenate(R, axis=split_axis)
+    for cell_id in range(template_bcast.shape[1]):
+        R[:,cell_id] = iqwaveform.oaconvolve(
+            iq_bcast[:,0], template_bcast[:,cell_id], axes=2, mode='full'
+        )
+    R = xp.roll(R, -offs, axis=-1)[..., :corr_size]
 
     # add slot index dimension: -> (port index, cell Nid, sync block index, slot index, IQ sample index)
     excess_cp = round(1 / 128 * spec.sample_rate / spec.subcarrier_spacing)

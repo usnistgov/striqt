@@ -153,7 +153,7 @@ def resampling_correction(
             (oapad[1] + lag_pad) * scale
         )
         # print(size_out + oapad[0]//2, iq.shape[axis])
-        offset = 0 * design['nfft_out'] // 2
+        offset = design['nfft_out']
         print(design['nfft_out'])
         print(oapad[0], oapad[0] * scale)
         print(iq.shape[axis] - size_out)
