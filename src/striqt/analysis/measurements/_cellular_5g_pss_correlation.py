@@ -113,8 +113,9 @@ def sync_aggregate_5g_pss(
         nwindow=round(window_fill * Ragg.size),
         nzero=round((1 - window_fill) * Ragg.size),
         norm=False,
+        xp=xp
     )
-    weights = np.roll(weights, round((1 - window_fill) * Ragg.size / 2))
+    weights = xp.roll(weights, round((1 - window_fill) * Ragg.size / 2))
 
     if not array_api_compat.is_numpy_array(Ragg):
         Ragg = Ragg.get()

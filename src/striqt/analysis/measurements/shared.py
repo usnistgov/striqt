@@ -128,7 +128,7 @@ def empty_5g_sync_measurement(
     xp = iqwaveform.util.array_namespace(iq)
     meas_ax_shape = [len(f(capture, spec)) for f in coord_factories]
     new_shape = iq.shape[:-1] + tuple(meas_ax_shape)
-    return xp.full(new_shape, float('nan'), dtype=dtype)
+    return xp.full(new_shape, 0, dtype=dtype)
 
 
 def correlate_sync_sequence(
