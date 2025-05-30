@@ -4,7 +4,7 @@ import typing
 from .sources import base, SourceBase, design_capture_resampler
 from . import calibration, specs, util
 from striqt.analysis.lib.xarray_ops import IQPair
-from striqt.analysis.lib.util import free_cupy_mempool
+from striqt.analysis.lib.util import free_cupy_mempool, sync_if_cupy
 
 if typing.TYPE_CHECKING:
     import array_api_compat
@@ -177,6 +177,7 @@ def resampling_correction(
     size_out = round(capture.duration * capture.sample_rate)
 
     if radio._aligner is not None:
+        sync_if_cupy()
         align_size = round(20e-3 * capture.sample_rate)
         align_start = radio._aligner(iq[:, :align_size], capture)
         offset = round(align_start * capture.sample_rate)
