@@ -213,39 +213,6 @@ def get_5g_ssb_iq(
     if frequency_offset is None:
         return None
 
-    down = round(capture.sample_rate / spec.subcarrier_spacing / 8)
-    up = round(down * (spec.sample_rate / capture.sample_rate))
-
-    if up % 3 > 0:
-        # ensure compatibility with the blackman window overlap of 2/3
-        down = down * 3
-        up = up * 3
-
-    if spec.max_block_count is not None:
-        size_in = round(
-            spec.max_block_count * spec.discovery_periodicity * capture.sample_rate
-        )
-        iq = iq[..., :size_in]
-    else:
-        size_in = iq.shape[-1]
-
-    size_out = round(up/down * size_in)
-
-    out = xp.empty((iq.shape[0], size_out), dtype=iq.dtype)
-
-    for i in range(out.shape[0]):
-        out[i] = iqwaveform.fourier.oaresample(
-            iq[i],
-            fs=capture.sample_rate,
-            up=up,
-            down=down,
-            axis=0,
-            window='blackman',
-            frequency_shift=frequency_offset,
-        )
-
-    return out
-
     # down = round(capture.sample_rate / spec.subcarrier_spacing / 8)
     # up = round(down * (spec.sample_rate / capture.sample_rate))
 
@@ -262,26 +229,55 @@ def get_5g_ssb_iq(
     # else:
     #     size_in = iq.shape[-1]
 
-    # fres = capture.sample_rate / iq.shape[-1]
-    # size_out = round(size_in * spec.sample_rate / capture.sample_rate)
+    # size_out = round(up/down * size_in)
 
-    # if iqwaveform.util.isroundmod(frequency_offset, fres):
-    #     shift = round(frequency_offset/fres)
-    # else:
-    #     raise ValueError(f'frequency_offset must be a multiple of {fres} Hz')
+    # out = xp.empty((iq.shape[0], size_out), dtype=iq.dtype)
 
-    # global debug
+    # for i in range(out.shape[0]):
+    #     out[i] = iqwaveform.fourier.oaresample(
+    #         iq[i],
+    #         fs=capture.sample_rate,
+    #         up=up,
+    #         down=down,
+    #         axis=0,
+    #         window='blackman',
+    #         frequency_shift=frequency_offset,
+    #     )
 
-    # debug = iqwaveform.fourier.resample(
-    #     iq,
-    #     num=size_out,
-    #     axis=1,
-    #     shift=shift
-    # )
+    # return out
 
-    # print(debug.shape, shift)
+    # down = round(capture.sample_rate / spec.subcarrier_spacing / 8)
+    # up = round(down * (spec.sample_rate / capture.sample_rate))
 
-    # return debug
+    # if up % 3 > 0:
+    #     # ensure compatibility with the blackman window overlap of 2/3
+    #     down = down * 3
+    #     up = up * 3
+
+    if spec.max_block_count is not None:
+        size_in = round(
+            spec.max_block_count * spec.discovery_periodicity * capture.sample_rate
+        )
+        iq = iq[..., :size_in]
+    else:
+        size_in = iq.shape[-1]
+
+    size_out = round(size_in * spec.sample_rate / capture.sample_rate)
+
+    out = xp.empty((iq.shape[0], size_out), dtype=iq.dtype)
+    n = xp.arange(size_in, dtype='complex64')
+    phase = xp.multiply(n, -2j * np.pi * frequency_offset / capture.sample_rate, out=n)
+    shifter = xp.exp(phase, out=phase)
+    for i in range(out.shape[0]):
+        iq_shift = iq[i] * shifter
+        out[i] = iqwaveform.fourier.resample(
+            iq_shift,
+            num=size_out,
+            axis=0,
+            overwrite_x=True
+        )
+
+    return out
 
 
 # %% Spectral analysis
