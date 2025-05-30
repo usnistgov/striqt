@@ -237,7 +237,7 @@ def get_5g_ssb_iq(
             fs=capture.sample_rate,
             up=up,
             down=down,
-            axis=1,
+            axis=0,
             window='blackman',
             frequency_shift=frequency_offset,
         )
