@@ -172,9 +172,7 @@ def resampling_correction(
 
     size_out = round(capture.duration * capture.sample_rate)
 
-    print(base._get_aligner_pad_size(
-            radio.base_clock_rate, capture, radio._aligner
-        ))
+    print(iq.size)
 
     if radio._aligner is not None:
         free_cupy_mempool()
@@ -183,7 +181,7 @@ def resampling_correction(
         offset = round(align_start * capture.sample_rate)
         assert iq.shape[1] >= offset + size_out
 
-        iq_aligned = None # iq[:, offset : offset + size_out]
+        iq_aligned = iq[:, offset : offset + size_out]
         iq_unaligned = iq[:, :size_out]
 
     else:
