@@ -178,7 +178,8 @@ def resampling_correction(
         offset = round(align_start * capture.sample_rate)
         assert iq.shape[1] >= offset + size_out
 
-        iq_aligned = iq[:, offset : offset + size_out]
+        # iq_aligned = iq[:, offset : offset + size_out]
+        iq_aligned = None
         iq_unaligned = iq[:, :size_out]
 
     else:
