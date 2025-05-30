@@ -794,7 +794,7 @@ def _get_oaresample_pad(base_clock_rate: float, capture: specs.RadioCapture):
         extend=True,
     )[1]
 
-    noverlap = ceil(noverlap_out * nfft / nfft_out)*0
+    noverlap = ceil(noverlap_out * nfft / nfft_out)
 
     return (samples_in - min_samples_in) + noverlap, noverlap
 

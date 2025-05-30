@@ -401,7 +401,7 @@ class CapturePlotter:
         return self._line(
             data[key].sel(sel),
             name=key,
-            x='spectrogram_power_ratio_bin',
+            x='spectrogram_ratio_power_bin',
             xticklabelunits=False,
             # hue=hue,
         )
