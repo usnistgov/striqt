@@ -764,7 +764,7 @@ def _get_dsp_pad_size(
         filtered_size = lag_pad + round(capture.duration * fs)
         new_size = _get_next_fast_len(filtered_size)
         print('target new size: ', new_size)
-        return (filter_pad, new_size - filtered_size)
+        return (filter_pad, lag_pad + new_size - filtered_size)
 
 
 def _get_aligner_pad_size(
