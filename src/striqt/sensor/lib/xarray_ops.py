@@ -245,7 +245,7 @@ class AnalysisCaller:
             register.measurement.cache_context(),
         ):
             if array_api_compat.is_cupy_array(iq):
-                util.free_cupy_mempool()
+                free_cupy_mempool()
             
             if self.correction:
                 with lb.stopwatch('resample, filter, calibrate', logger_level='debug'):
