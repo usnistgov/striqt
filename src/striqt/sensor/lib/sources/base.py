@@ -763,7 +763,7 @@ def _get_dsp_pad_size(
         fs = design_capture_resampler(base_clock_rate, capture)['fs_sdr']
         filtered_size = lag_pad + round(capture.duration * fs)
         new_size = _get_next_fast_len(filtered_size)
-        print('target new size: ', new_size)
+        print('target new size: ', new_size, ' from ', filtered_size)
         return (filter_pad, new_size - round(capture.duration * fs))
 
 
