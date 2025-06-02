@@ -121,8 +121,6 @@ def _cast_iq(
 
         buffer = xp.array(buffer)
 
-    print('buffer out: ', buffer[-1, buffer.shape[1]//2:][:10])
-
     # what follows is some acrobatics to minimize new memory allocation and copy
     if dtype_in.kind == 'i':
         # the same memory buffer, interpreted as int16 without casting
@@ -924,6 +922,8 @@ def alloc_empty_iq(
         The buffer and the list of buffer references for streaming.
     """
     count = get_channel_read_buffer_count(radio, capture, include_holdoff=True)
+
+    print('***alloc ', capture.center_frequency, capture.channel)
 
     if radio.array_backend == 'cupy':
         try:
