@@ -194,7 +194,7 @@ class SweepIterator:
         # iterate across (previous-1, previous, current, next) captures to support concurrency
         offset_captures = util.zip_offsets(capture_iter, (-2, -1, 0, 1), fill=None)
 
-        for i, (capture_intake, _, capture_this, capture_next) in enumerate(
+        for i, (_, capture_intake, capture_this, capture_next) in enumerate(
             offset_captures
         ):
             labels = []
