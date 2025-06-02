@@ -170,6 +170,9 @@ def resampling_correction(
         iq_aligned = iq[:, offset : offset + size_out]
         iq_unaligned = iq[:, :size_out]
 
+        print('aligned: ', iq_aligned[-1, :10])
+        print('unaligned: ', iq_unaligned[-1, :10])
+
     else:
         iq_aligned = None
         iq_unaligned = iq[:, :size_out]
