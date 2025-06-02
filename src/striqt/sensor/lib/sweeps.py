@@ -203,7 +203,6 @@ class SweepIterator:
                     labels.append('None')
                 else:
                     labels.append(f'{c.center_frequency/1e6} MHz switch {getattr(c, "switch_input", None)}')
-            print(f'captures: {", ".join(labels)}')
             calls = {}
 
             if iq is None:
@@ -343,9 +342,6 @@ class SweepIterator:
             raise ValueError(
                 f'expected DelayedAnalysisResult type for data, not {type(results)}'
             )
-
-        desc = f'{capture.center_frequency/1e6} MHz switch {getattr(capture, "switch_input", None)}'
-        print('intake: ', desc, results.channel_power_time_series.values[-1])
 
         if self._sink is None:
             return results
