@@ -972,7 +972,7 @@ def alloc_empty_iq(
     i = 0
     for channel in range(radio.rx_channel_count):
         if channel in channels:
-            buffers.append(samples[i].view(buf_dtype))
+            buffers.append(all_samples.view(buf_dtype)[i, :count])
             i += 1
         elif radio._stream_all_rx_channels:
             buffers.append(extra)

@@ -306,7 +306,6 @@ class SoapyRadioSource(base.SourceBase):
     def _read_stream(
         self, buffers, offset, count, timeout_sec, *, on_overflow='except'
     ) -> tuple[int, int]:
-        print('### read: ', offset//2, buffers[0].size)
         total_timeout = self._rx_enable_delay + timeout_sec + 0.5
 
         rx_result = self.backend.readStream(
@@ -316,7 +315,9 @@ class SoapyRadioSource(base.SourceBase):
             timeoutUs=round(total_timeout * 1e6),
         )
 
-        return validate_stream_result(rx_result, on_overflow=on_overflow)
+        res = validate_stream_result(rx_result, on_overflow=on_overflow)
+        print('### read: ', offset, count, buffers[0].size, res[0])
+        return res
 
     def sync_time_source(self):
         if self.time_source() in ('internal', 'host'):
