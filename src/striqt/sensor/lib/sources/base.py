@@ -784,7 +784,6 @@ def _get_dsp_pad_size(
         # then the product (pad_blocks * block_size) will also be a product of small
         # primes
         pad_blocks = _get_next_fast_len(min_blocks)
-        print(f'realizing block size {pad_blocks} padded from the minimum {min_blocks}')
         pad_end = pad_blocks * block_size - analysis_size
         return (filter_pad, pad_end)
 

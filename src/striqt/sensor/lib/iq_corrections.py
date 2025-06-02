@@ -151,7 +151,7 @@ def resampling_correction(
         assert iq.shape[axis] == size_out
 
     else:
-        # TODO: check the non-integral rounding error here
+        assert iqwaveform.util.isroundmod(iq.shape[1] * capture.sample_rate, fs)
         resample_size_out = round(iq.shape[1] * capture.sample_rate / fs)
         iq = iqwaveform.fourier.resample(
             iq,
