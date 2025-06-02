@@ -28,7 +28,7 @@ else:
 
 
 FILTER_SIZE = 4001
-MIN_RESAMPLE_FFT_SIZE = 4 * 4096 - 1
+MIN_OARESAMPLE_FFT_SIZE = 4 * 4096 - 1
 RESAMPLE_COLA_WINDOW = 'hamming'
 FILTER_DOMAIN = 'time'
 
@@ -657,7 +657,7 @@ def _design_capture_resampler(
     bw_lo=0.25e6,
     min_oversampling=1.1,
     window=RESAMPLE_COLA_WINDOW,
-    min_fft_size=MIN_RESAMPLE_FFT_SIZE,
+    min_fft_size=MIN_OARESAMPLE_FFT_SIZE,
 ) -> 'iqwaveform.fourier.ResamplerDesign':
     """design a filter specified by the capture for a radio with the specified MCR.
 
@@ -718,10 +718,19 @@ def design_capture_resampler(
     # cast the struct in case it's a subclass
     fixed_capture = specs.WaveformCapture.fromspec(capture)
     kws.setdefault('window', RESAMPLE_COLA_WINDOW)
+
+    from .. import iq_corrections
+
+    if iq_corrections.USE_OARESAMPLE:
+        min_fft_size = MIN_OARESAMPLE_FFT_SIZE
+    else:
+        # this could probably be set to 1?
+        min_fft_size = 256
+
     return _design_capture_resampler(
         base_clock_rate,
         fixed_capture,
-        min_fft_size=MIN_RESAMPLE_FFT_SIZE,
+        min_fft_size=min_fft_size,
         *args,
         **kws,
     )
@@ -751,20 +760,33 @@ def _get_dsp_pad_size(
 
     from .. import iq_corrections
 
-    lag_pad = _get_aligner_pad_size(base_clock_rate, capture, aligner)
+    min_lag_pad = _get_aligner_pad_size(base_clock_rate, capture, aligner)
 
     if iq_corrections.USE_OARESAMPLE:
         oa_pad_low, oa_pad_high = _get_oaresample_pad(base_clock_rate, capture)
-        return (oa_pad_low, oa_pad_high + lag_pad)
+        return (oa_pad_low, oa_pad_high + min_lag_pad)
     else:
+        # this is removed before the FFT, so no need to micromanage its size
         filter_pad = _get_filter_pad(capture)
 
         # accommodate the large fft by padding to a fast size that includes at least lag_pad
-        fs = design_capture_resampler(base_clock_rate, capture)['fs_sdr']
-        filtered_size = lag_pad + round(capture.duration * fs)
-        new_size = _get_next_fast_len(filtered_size)
-        return (filter_pad, new_size - round(capture.duration * fs))
+        design = design_capture_resampler(base_clock_rate, capture)
+        analysis_size = round(capture.duration * design['fs_sdr'])
 
+        # treat the block size as the minimum number of samples needed for the resampler
+        # output to have an integral number of samples
+        block_size = design['nfft']
+        block_count = analysis_size // block_size
+        min_blocks = block_count + iqwaveform.util.ceildiv(min_lag_pad, block_size)
+
+        # since design_capture_resampler gives us a nice fft size
+        # for block_size, then if we make sure pad_blocks is also a nice fft size,
+        # then the product (pad_blocks * block_size) will also be a product of small
+        # primes
+        pad_blocks = _get_next_fast_len(min_blocks)
+        print(f'realizing block size {pad_blocks} padded from the minimum {min_blocks}')
+        pad_end = pad_blocks * block_size - analysis_size
+        return (filter_pad, pad_end)
 
 def _get_aligner_pad_size(
     base_clock_rate: float,

@@ -12,9 +12,6 @@ from . import captures, specs, util
 from .sources import SourceBase
 
 from striqt.analysis import register
-from striqt.analysis.lib.util import free_cupy_mempool
-
-import array_api_compat
 
 if typing.TYPE_CHECKING:
     import iqwaveform

@@ -8,9 +8,6 @@ from . import captures, sources, specs, util, xarray_ops
 from .calibration import lookup_system_noise_power
 from .peripherals import PeripheralsBase
 from .sinks import SinkBase
-from striqt.analysis.lib.util import free_cupy_mempool
-
-import array_api_compat
 
 if typing.TYPE_CHECKING:
     import xarray as xr
