@@ -80,6 +80,7 @@ def channel_power_bin(
 @register.measurement(
     coord_factories=[_channel_power_time_series.power_detector, channel_power_bin],
     depends=[_channel_power_time_series.channel_power_time_series],
+    caches=_channel_power_time_series._channel_power_cache,
     spec_type=ChannelPowerHistogramSpec,
     dtype='float32',
     attrs={'standard_name': 'Channel power', 'units': 'dBm'},
