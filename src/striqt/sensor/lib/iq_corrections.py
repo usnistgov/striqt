@@ -116,9 +116,8 @@ def resampling_correction(
             iq = xp.multiply(iq, scale, out=iq if overwrite_x else None)
         elif not overwrite_x:
             iq = iq.copy()
-        return IQPair(aligned=None, raw=iq)
 
-    if USE_OARESAMPLE:
+    elif USE_OARESAMPLE:
         # this is broken. don't use it yet.
         iq = iqwaveform.fourier.oaresample(
             iq,
