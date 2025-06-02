@@ -83,7 +83,7 @@ def correlate_5g_sss(
     )
 
     if array_api_compat.is_cupy_array(ssb_iq):
-        cell_id_split = 1
+        cell_id_split = 3
     else:
         cell_id_split = None
 
