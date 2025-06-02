@@ -585,10 +585,12 @@ def label_axis(
         formatter = FixedEngFormatter(unit=units, unitInTick=tick_units)
         target_ax.set_major_formatter(formatter)
         ax_finite_data = ax_data.values[np.isfinite(ax_data.values)]
-        unit_suffix = formatter.get_axis_unit_suffix(
-            ax_finite_data.min(), ax_finite_data.max()
-        )
-        target_ax.set_label_text(f'{desc_text}{unit_suffix}')
+
+        if len(ax_finite_data) > 0:
+            unit_suffix = formatter.get_axis_unit_suffix(
+                ax_finite_data.min(), ax_finite_data.max()
+            )
+            target_ax.set_label_text(f'{desc_text}{unit_suffix}')
     else:
         target_ax.set_label_text(desc_text)
 

@@ -263,6 +263,9 @@ class SweepIterator:
             if sweep_time is None and capture_prev is not None:
                 sweep_time = capture_prev.start_time
 
+        if result is not None:
+            self._intake(results=result.to_xarray(), capture=captures[-1])
+
     def _acquire(self, iq_prev, capture_prev, capture_this, capture_next):
         if self._reuse_iq:
             reuse_this = _iq_is_reusable(
