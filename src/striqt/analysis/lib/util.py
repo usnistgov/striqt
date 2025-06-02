@@ -108,3 +108,12 @@ def sync_if_cupy(x: 'iqwaveform.type_stubs.ArrayType'):
         stream = cupy.cuda.get_current_stream()
         with lb.stopwatch('cuda synchronize', threshold=10e-3):
             stream.synchronize()
+
+
+@functools.cache
+def configure_cupy():
+    import cupy
+
+    # the FFT plan sets up large caches that don't help us
+    cupy.fft.config.get_plan_cache().set_size(0)
+    cupy.cuda.set_pinned_memory_allocator(None)
