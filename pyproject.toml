@@ -1,7 +1,7 @@
 [project]
-name = "flex-spectrum-sensor"
-version = "0.0"
-description = "exploring the analysis of IQ in aggregate waveforms"
+name = "striqt"
+version = "0.0.1"
+description = "tooling to support precision gpu-accelerated radio signal analysis and software radio automation"
 requires-python = ">=3.9"
 dependencies = [ "array-api-compat",
  "dask",
@@ -11,6 +11,7 @@ dependencies = [ "array-api-compat",
  "matplotlib~=3.7",
  "methodtools",
  "msgspec~=0.18",
+ "netCDF4",
  "numba",
  "numexpr~=2.8",
  "numpy>=1.21,<3",
@@ -19,7 +20,6 @@ dependencies = [ "array-api-compat",
  "schemdraw",
  "scipy>=1.13,<2",
  "xarray>=2024.3",
- "xarray_dataclasses @ git+https://github.com/dgkuester/xarray-dataclasses@lazy-imports",
  "zarr>=2.18,<4",
 ]
 [[project.authors]]
@@ -51,9 +51,11 @@ edge-airt = [ "cupy-cuda102",
 ]
 
 [project.scripts]
-edge-sensor-sweep = "flex_spectrum_sensor_scripts.edge_sensor_sweep:run"
-edge-sensor-server = "flex_spectrum_sensor_scripts.edge_sensor_server:run"
-edge-capture-plotter = "flex_spectrum_sensor_scripts.edge_capture_plotter:run"
+calibrate-sensor = "striqt.cli.calibrate:run"
+check-sweep = "striqt.cli.check:run"
+sensor-sweep = "striqt.cli.sweep:run"
+plot-sensor-captures = "striqt.cli.plot:run"
+serve-sensor = "striqt.cli.server:run"
 
 [tool.ruff]
 target-version = "py39"

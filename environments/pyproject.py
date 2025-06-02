@@ -8,7 +8,14 @@ import toml
 from pathlib import Path
 from functools import lru_cache
 
-CONDA_SKIP = {'python', 'pip', 'mscorefonts', 'soapysdr', 'soapysdr-module-airt', 'pigz'}
+CONDA_SKIP = {
+    'python',
+    'pip',
+    'mscorefonts',
+    'soapysdr',
+    'soapysdr-module-airt',
+    'pigz',
+}
 DEV_DEPENDENCIES = {'jupyter', 'ruff', 'toml', 'ruamel.yaml'}
 PYPI_RENAME = {'ruamel.yaml': 'ruamel_yaml', 'matplotlib-base': 'matplotlib'}
 
@@ -66,7 +73,7 @@ for recipe_file in ('cpu.yml', 'gpu-cpu.yml', 'edge-airt.yml'):
 
     # list of pip dependencies, without any editable install lines
     pip_deps = pop_pip(env['dependencies']) or []
-    pip_deps = [s for s in pip_deps if not s.startswith(('-','http'))]
+    pip_deps = [s for s in pip_deps if not s.startswith(('-', 'http'))]
 
     yml_deps = {package_name(p): p for p in env['dependencies']}
     yml_deps = {k: yml_deps[k] for k in yml_deps.keys() - CONDA_SKIP}

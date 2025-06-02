@@ -1,6 +1,6 @@
 # the base environment that supports CPU computations (no GPU or SDRs)
 
-name: flex-spectrum-sensor
+name: striqt
 
 channels:
 - nvidia
@@ -28,6 +28,7 @@ dependencies:
 - zarr>=2.18,<4
 - dask
 - msgspec~=0.18
+- netCDF4
 - frozendict
 - schemdraw
 - mscorefonts
@@ -35,5 +36,4 @@ dependencies:
 - cython
 - pip:
   - iqwaveform @ git+https://github.com/usnistgov/iqwaveform
-  - xarray_dataclasses @ git+https://github.com/dgkuester/xarray-dataclasses@lazy-imports
   - -e ..[gpu-cpu]

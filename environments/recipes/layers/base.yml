@@ -1,6 +1,6 @@
 # the base environment that supports CPU computations (no GPU or SDRs)
 
-name: flex-spectrum-sensor
+name: striqt
 
 channels:
   - conda-forge
@@ -34,6 +34,7 @@ dependencies:
   - zarr>=2.18,<4
   - dask
   - msgspec~=0.18
+  - netCDF4
   - frozendict
 
   # for documentation and plotting
@@ -42,7 +43,6 @@ dependencies:
 
   - pip:
       - iqwaveform @ git+https://github.com/usnistgov/iqwaveform
-      - xarray_dataclasses @ git+https://github.com/dgkuester/xarray-dataclasses@lazy-imports
 
       # allows imports from the src/ directory in this repo
       - -e ..

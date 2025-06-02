@@ -1,0 +1,52 @@
+captures: []
+radio_setup:
+  driver: Air7101B
+  resource: {}
+  time_source: host
+  periodic_trigger: null
+  calibration: 
+  gapless_repeats: false
+  time_sync_every_capture: false
+  array_backend: cupy
+  fast_lo: false
+channel_analysis: {}
+description:
+  summary: null
+  location: null
+  signal_chain: []
+  version: unversioned
+output:
+  path: "../../cals/{driver}-{radio_id}.p"
+defaults:
+  duration: 0.05
+  sample_rate: 15360000.0
+  analysis_bandwidth: .inf
+  lo_shift: none
+  host_resample: false
+  center_frequency: 3710000000.0
+  channel: 0
+  gain: -10.0
+  noise_diode_enabled: false
+calibration_variables:
+  noise_diode_enabled:
+  - false
+  - true
+  sample_rate:
+  - 62500000.0
+  - 125000000.0
+  center_frequency:
+  - 3700000000.0
+  - 3800000000.0
+  channel:
+  - 0
+  gain:
+  - 0.0
+  analysis_bandwidth:
+  - 60000000.0
+  - 100000000.0
+  - .inf
+  lo_shift:
+  - none
+calibration_setup:
+  enr: 20.87
+  ambient_temperature: 294.5389
