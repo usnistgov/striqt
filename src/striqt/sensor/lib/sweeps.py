@@ -229,11 +229,10 @@ class SweepIterator:
                     self._acquire, iq, capture_prev, capture_this, capture_next
                 )
 
-            if result is None:
+            if result is None or capture_intake is None:
                 # for the first two iterations, there is no data to save
                 pass
             else:
-                assert capture_intake is not None
                 result.set_extra_data(prior_ext_data)
                 calls['intake'] = lb.Call(
                     self._intake,
