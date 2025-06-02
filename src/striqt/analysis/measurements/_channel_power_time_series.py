@@ -71,7 +71,6 @@ def channel_power_time_series(
     results = iqwaveform.powtodB(results).astype('float32')
 
     desc = f'{capture.center_frequency/1e6} MHz switch {getattr(capture, "switch_input", None)}'
-    print('measurement: ', desc)
-    print(results)
+    print('measurement: ', desc, results)
 
     return results, spec.todict()
