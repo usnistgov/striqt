@@ -290,7 +290,6 @@ class DelayedDataset:
         with lb.stopwatch(
             'residual calculations', threshold=10e-3, logger_level='debug'
         ):
-            print('dataset to_xarray')
             analysis = striqt_analysis.lib.dataarrays.package_analysis(
                 self.capture, self.delayed, expand_dims=(CAPTURE_DIM,)
             )
