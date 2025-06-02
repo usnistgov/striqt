@@ -47,17 +47,13 @@ def power_detector(
     return np.array(spec.power_detectors)
 
 
-@register.measurement(
-    coord_factories=[power_detector, time_elapsed],
-    dtype='float32',
-    spec_type=ChannelPowerTimeSeriesSpec,
-    attrs={'standard_name': 'Channel Power', 'units': 'dBm'},
-)
-def channel_power_time_series(
-    iq, capture: specs.Capture, **kwargs: typing.Unpack[ChannelPowerTimeSeriesKeywords]
-):
-    spec = ChannelPowerTimeSeriesSpec.fromdict(kwargs)
+_channel_power_cache = register.KeywordArgumentCache(['capture', 'spec'])
 
+
+@_channel_power_cache.apply
+def evaluate_channel_power_time_series(
+    iq, capture: specs.Capture, spec: ChannelPowerTimeSeriesSpec
+):
     results = []
     for d in spec.power_detectors:
         power = iqwaveform.iq_to_bin_power(
@@ -70,7 +66,21 @@ def channel_power_time_series(
     results = xp.moveaxis(results, 0, 1)
     results = iqwaveform.powtodB(results).astype('float32')
 
-    desc = f'{capture.center_frequency/1e6} MHz switch {getattr(capture, "switch_input", None)}'
-    print('measurement: ', desc, iq[-1][:10])
+    return results
+
+
+@register.measurement(
+    coord_factories=[power_detector, time_elapsed],
+    dtype='float32',
+    spec_type=ChannelPowerTimeSeriesSpec,
+    caches=_channel_power_cache,
+    attrs={'standard_name': 'Channel Power', 'units': 'dBm'},
+)
+def channel_power_time_series(
+    iq, capture: specs.Capture, **kwargs: typing.Unpack[ChannelPowerTimeSeriesKeywords]
+):
+    spec = ChannelPowerTimeSeriesSpec.fromdict(kwargs)
+
+    results = evaluate_channel_power_time_series(iq, capture=capture, spec=spec)
 
     return results, spec.todict()

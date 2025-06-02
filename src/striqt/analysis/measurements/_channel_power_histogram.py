@@ -106,11 +106,11 @@ def channel_power_histogram(
         xp=xp,
     )
 
-    power_dB, _ = _channel_power_time_series.channel_power_time_series(
+    pvt_spec = _channel_power_time_series.ChannelPowerTimeSeriesSpec.fromspec(spec)
+    power_dB = _channel_power_time_series.evaluate_channel_power_time_series(
         iq,
-        capture,
-        power_detectors=spec.power_detectors,
-        detector_period=spec.detector_period,
+        capture=capture,
+        spec=pvt_spec,
         as_xarray=False,
     )
 
