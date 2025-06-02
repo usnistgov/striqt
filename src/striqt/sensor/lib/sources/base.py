@@ -787,6 +787,7 @@ def _get_dsp_pad_size(
         pad_end = pad_blocks * block_size - analysis_size
         return (filter_pad, pad_end)
 
+
 def _get_aligner_pad_size(
     base_clock_rate: float,
     capture: specs.RadioCapture,

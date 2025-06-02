@@ -163,13 +163,13 @@ def correlate_sync_sequence(
     cp_samples = round(9 / 128 * spec.sample_rate / spec.subcarrier_spacing)
     offs = round(spec.sample_rate / spec.subcarrier_spacing + 2 * cp_samples)
 
-    R_shape = list(max(a,b) for a, b in zip(iq_bcast.shape, template_bcast.shape))
+    R_shape = list(max(a, b) for a, b in zip(iq_bcast.shape, template_bcast.shape))
     R_shape[-1] = iq_bcast.shape[-1] + template_bcast.shape[-1] - 1
     R = xp.empty(tuple(R_shape), dtype='complex64')
 
     for cell_id in range(template_bcast.shape[1]):
-        R[:,cell_id] = iqwaveform.oaconvolve(
-            iq_bcast[:,0], template_bcast[:,cell_id], axes=2, mode='full'
+        R[:, cell_id] = iqwaveform.oaconvolve(
+            iq_bcast[:, 0], template_bcast[:, cell_id], axes=2, mode='full'
         )
     R = xp.roll(R, -offs, axis=-1)[..., :corr_size]
 
@@ -196,7 +196,7 @@ def get_5g_ssb_iq(
     iq: 'iqwaveform.type_stubs.ArrayType',
     capture: specs.Capture,
     spec: Cellular5GNRSyncCorrelationSpec,
-    oaresample=False
+    oaresample=False,
 ) -> 'iqwaveform.type_stubs.ArrayType':
     """return a sync block waveform, which returns IQ that is recentered
     at baseband frequency spec.frequency_offset and downsampled to spec.sample_rate."""
@@ -231,7 +231,7 @@ def get_5g_ssb_iq(
         else:
             size_in = iq.shape[-1]
 
-        size_out = round(up/down * size_in)
+        size_out = round(up / down * size_in)
 
         out = xp.empty((iq.shape[0], size_out), dtype=iq.dtype)
 
@@ -261,11 +261,7 @@ def get_5g_ssb_iq(
 
         for i in range(out.shape[0]):
             out[i] = iqwaveform.fourier.resample(
-                iq[i],
-                num=size_out,
-                axis=0,
-                overwrite_x=False,
-                shift=shift
+                iq[i], num=size_out, axis=0, overwrite_x=False, shift=shift
             )
 
     return out

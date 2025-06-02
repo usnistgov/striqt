@@ -112,7 +112,7 @@ def sync_aggregate_5g_pss(
         nwindow=round(window_fill * Ragg.size),
         nzero=round((1 - window_fill) * Ragg.size),
         norm=False,
-        xp=xp
+        xp=xp,
     )
     weights = xp.roll(weights, round((1 - window_fill) * Ragg.size / 2))
 
