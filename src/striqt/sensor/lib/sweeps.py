@@ -199,7 +199,10 @@ class SweepIterator:
         ):
             labels = []
             for c in (capture_intake, _, capture_this, capture_next):
-                labels.append(f'{c.center_frequency/1e6} MHz switch {getattr(c, "switch_input", None)}')
+                if c is None:
+                    labels.append('None')
+                else:
+                    labels.append(f'{c.center_frequency/1e6} MHz switch {getattr(c, "switch_input", None)}')
             print(f'captures: {", ".join(labels)}')
             calls = {}
 
