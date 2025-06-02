@@ -111,7 +111,6 @@ def channel_power_histogram(
         iq,
         capture=capture,
         spec=pvt_spec,
-        as_xarray=False,
     )
 
     count_dtype = xp.finfo(iq.dtype).dtype

@@ -54,6 +54,7 @@ _channel_power_cache = register.KeywordArgumentCache(['capture', 'spec'])
 def evaluate_channel_power_time_series(
     iq, capture: specs.Capture, spec: ChannelPowerTimeSeriesSpec
 ):
+    print('pvt evaluate')
     results = []
     for d in spec.power_detectors:
         power = iqwaveform.iq_to_bin_power(
