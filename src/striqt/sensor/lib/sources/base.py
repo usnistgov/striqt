@@ -948,7 +948,6 @@ def alloc_empty_iq(
         channels = tuple(channels)
 
     if prior is None or (prior.shape[0] < len(channels) or prior.shape[1] < count):
-        print('*** alloc new empty', None if prior is None else prior.shape, (len(channels), count))
         all_samples = empty((len(channels), count), dtype=np.complex64)
     else:
         all_samples = prior
@@ -973,11 +972,9 @@ def alloc_empty_iq(
     i = 0
     for channel in range(radio.rx_channel_count):
         if channel in channels:
-            print(f'- set buffer {i} to channel {channel}')
             buffers.append(samples[i].view(buf_dtype))
             i += 1
         elif radio._stream_all_rx_channels:
-            print(f'- throw away channel {channel}')
             buffers.append(extra)
 
     return all_samples, (samples, buffers)
