@@ -51,7 +51,7 @@ def power_detector(
     coord_factories=[power_detector, time_elapsed],
     dtype='float32',
     spec_type=ChannelPowerTimeSeriesSpec,
-    attrs={'standard_name': 'Fraction of detector periods', 'units': 'dBm'},
+    attrs={'standard_name': 'Channel Power', 'units': 'dBm'},
 )
 def channel_power_time_series(
     iq, capture: specs.Capture, **kwargs: typing.Unpack[ChannelPowerTimeSeriesKeywords]
