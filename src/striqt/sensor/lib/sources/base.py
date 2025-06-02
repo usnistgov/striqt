@@ -121,6 +121,8 @@ def _cast_iq(
 
         buffer = xp.array(buffer)
 
+    print('buffer in: ', buffer[-1, :10])
+
     # what follows is some acrobatics to minimize new memory allocation and copy
     if dtype_in.kind == 'i':
         # the same memory buffer, interpreted as int16 without casting

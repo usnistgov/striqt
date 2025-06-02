@@ -90,8 +90,6 @@ def resampling_correction(
 
     needs_resample = base.needs_resample(design, capture)
 
-    print('iq 0: ', iq[-1, :10])
-
     # apply the filter here and ensure we're working with a copy if needed
     if not USE_OARESAMPLE and np.isfinite(capture.analysis_bandwidth):
         h = iqwaveform.design_fir_lpf(
@@ -161,8 +159,6 @@ def resampling_correction(
             axis=axis,
             scale=1 if scale is None else scale,
         )
-
-    print('iq 1: ', iq[-1, :10])
 
     size_out = round(capture.duration * capture.sample_rate)
 
