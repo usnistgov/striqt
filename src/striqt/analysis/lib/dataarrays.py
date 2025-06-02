@@ -392,6 +392,8 @@ def evaluate_by_spec(
             func_kws = spec_dict[name]
             if not func_kws:
                 continue
+            if not isinstance(iq, IQPair):
+                iq_sel = iq
             if iq.aligned is None or meas.prefer_unaligned_input:
                 iq_sel = iq.raw
             else:
