@@ -503,6 +503,8 @@ class SourceBase(lb.Device):
             capture=capture,
         )
 
+        print('^^^ stream_bufs: ', stream_bufs[-1][stream_bufs[-1].size//2:][:10])
+
         # it seems to be important to convert to cupy here in order
         # to get a full view of the underlying pinned memory. cuda
         # memory corruption has been observed when waiting until after
@@ -923,6 +925,8 @@ def alloc_empty_iq(
     """
     count = get_channel_read_buffer_count(radio, capture, include_holdoff=True)
 
+    print('***alloc ', capture.center_frequency, capture.channel)
+
     if radio.array_backend == 'cupy':
         try:
             util.configure_cupy()
@@ -968,9 +972,11 @@ def alloc_empty_iq(
     i = 0
     for channel in range(radio.rx_channel_count):
         if channel in channels:
-            buffers.append(all_samples.view(buf_dtype)[i, :count])
+            print(f'- set buffer {i} to channel {channel}')
+            buffers.append(samples[i].view(buf_dtype))
             i += 1
         elif radio._stream_all_rx_channels:
+            print(f'- throw away channel {channel}')
             buffers.append(extra)
 
     return all_samples, (samples, buffers)
