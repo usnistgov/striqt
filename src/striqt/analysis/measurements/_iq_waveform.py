@@ -21,8 +21,8 @@ class IQWaveformSpec(
     kw_only=True,
     frozen=True,
 ):
-    start_time_sec: typing.Optional[float] = (None,)
-    stop_time_sec: typing.Optional[float] = (None,)
+    start_time_sec: typing.Optional[float] = None
+    stop_time_sec: typing.Optional[float] = None
 
 
 class IQWaveformKeywords(specs.AnalysisKeywords):
