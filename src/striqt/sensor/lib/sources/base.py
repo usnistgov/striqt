@@ -503,6 +503,8 @@ class SourceBase(lb.Device):
             capture=capture,
         )
 
+        print('^^^ stream_bufs: ', stream_bufs[-1][stream_bufs[-1].size//2:][:10])
+
         # it seems to be important to convert to cupy here in order
         # to get a full view of the underlying pinned memory. cuda
         # memory corruption has been observed when waiting until after
