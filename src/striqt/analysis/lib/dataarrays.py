@@ -373,6 +373,8 @@ def evaluate_by_spec(
 ):
     """evaluate each analysis for the given IQ waveform"""
 
+    print('evaluate ', capture.center_frequency, capture.switch_input)
+
     if isinstance(spec, specs.Analysis):
         spec = spec.validate()
     else:
