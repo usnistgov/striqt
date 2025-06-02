@@ -948,7 +948,7 @@ def alloc_empty_iq(
         channels = tuple(channels)
 
     if prior is None or (prior.shape[0] < len(channels) or prior.shape[1] < count):
-        print('*** alloc new empty', prior.shape, (len(channels), count))
+        print('*** alloc new empty', None if prior is None else prior.shape, (len(channels), count))
         all_samples = empty((len(channels), count), dtype=np.complex64)
     else:
         all_samples = prior
