@@ -345,7 +345,7 @@ class SweepIterator:
             )
 
         desc = f'{capture.center_frequency/1e6} MHz switch {getattr(capture, "switch_input", None)}'
-        print('intake: ', desc, results.channel_power_time_series.values)
+        print('intake: ', desc, results.channel_power_time_series.values[-1])
 
         if self._sink is None:
             return results
