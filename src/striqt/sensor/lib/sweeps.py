@@ -197,6 +197,10 @@ class SweepIterator:
         for i, (capture_intake, _, capture_this, capture_next) in enumerate(
             offset_captures
         ):
+            labels = []
+            for c in (capture_intake, _, capture_this, capture_next):
+                labels.append(f'{c.center_frequency/1e6} MHz switch {getattr(c, "switch_input", None)}')
+            print(f'captures: {", ".join(labels)}')
             calls = {}
 
             if iq is None:
@@ -263,8 +267,6 @@ class SweepIterator:
             if sweep_time is None and capture_prev is not None:
                 sweep_time = capture_prev.start_time
 
-        if result is not None:
-            self._intake(results=result.to_xarray(), capture=captures[-1])
 
     def _acquire(self, iq_prev, capture_prev, capture_this, capture_next):
         if self._reuse_iq:
