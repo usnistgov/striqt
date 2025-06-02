@@ -344,7 +344,7 @@ class SweepIterator:
                 f'expected DelayedAnalysisResult type for data, not {type(results)}'
             )
         
-        desc = f'{capture.center_frequency/1e6} MHz switch {getattr(capture, "switch_input", None)}
+        desc = f'{capture.center_frequency/1e6} MHz switch {getattr(capture, "switch_input", None)}'
         print('intake: ', desc)
 
         if self._sink is None:
