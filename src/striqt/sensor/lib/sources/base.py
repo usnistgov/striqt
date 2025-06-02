@@ -14,7 +14,7 @@ from . import method_attr
 from striqt.analysis.lib.util import pinned_array_as_cupy
 from striqt.analysis.lib.specs import Analysis
 from striqt.analysis.lib import register
-from striqt.analysis.lib.xarray_ops import IQPair
+from striqt.analysis.lib.dataarrays import IQPair
 
 
 if typing.TYPE_CHECKING:

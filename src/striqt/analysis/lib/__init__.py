@@ -1,1 +1,1 @@
-from . import io, register, specs, util, xarray_ops
+from . import dataarrays, io, register, specs, util

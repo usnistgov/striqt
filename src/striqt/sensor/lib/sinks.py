@@ -2,7 +2,7 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 import typing
-from . import captures, specs, util, xarray_ops
+from . import captures, datasets, specs, util
 from concurrent.futures import ThreadPoolExecutor
 
 from striqt import analysis
@@ -153,7 +153,7 @@ class CaptureAppender(ZarrSinkBase):
 
     def _flush_thread(self, data_list):
         with lb.stopwatch('build dataset', threshold=0.5):
-            dataset = xr.concat(data_list, xarray_ops.CAPTURE_DIM)
+            dataset = xr.concat(data_list, datasets.CAPTURE_DIM)
 
         with lb.stopwatch(f'write to {self.output_path}'):
             analysis.dump(self.store, dataset)
@@ -186,7 +186,7 @@ class SpectrogramTimeAppender(ZarrSinkBase):
 
     def _flush_thread(self, data_list):
         with lb.stopwatch('build dataset'):
-            by_spectrogram = xarray_ops.concat_time_dim(data_list, 'spectrogram_time')
+            by_spectrogram = datasets.concat_time_dim(data_list, 'spectrogram_time')
 
         with lb.stopwatch('dump data'):
             analysis.dump(by_spectrogram, data_list, compression=False)

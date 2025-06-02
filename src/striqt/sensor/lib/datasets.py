@@ -247,7 +247,7 @@ class AnalysisCaller:
                         iq, capture, self.radio, overwrite_x=overwrite_x
                     )
 
-            result = striqt_analysis.lib.xarray_ops.analyze_by_spec(
+            result = striqt_analysis.lib.dataarrays.analyze_by_spec(
                 iq,
                 capture=capture,
                 spec=self.analysis_spec,
@@ -273,7 +273,7 @@ class AnalysisCaller:
 
 @dataclasses.dataclass()
 class DelayedDataset:
-    delayed: dict[str, striqt_analysis.lib.xarray_ops.DelayedDataArray]
+    delayed: dict[str, striqt_analysis.lib.dataarrays.DelayedDataArray]
     capture: specs.Capture
     sweep: specs.Sweep
     radio_id: str
@@ -290,7 +290,7 @@ class DelayedDataset:
         with lb.stopwatch(
             'residual calculations', threshold=10e-3, logger_level='debug'
         ):
-            analysis = striqt_analysis.lib.xarray_ops.package_analysis(
+            analysis = striqt_analysis.lib.dataarrays.package_analysis(
                 self.capture, self.delayed, expand_dims=(CAPTURE_DIM,)
             )
             coords = build_coords(

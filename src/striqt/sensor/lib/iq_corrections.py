@@ -3,7 +3,7 @@ import typing
 
 from .sources import base, SourceBase, design_capture_resampler
 from . import calibration, specs, util
-from striqt.analysis.lib.xarray_ops import IQPair
+from striqt.analysis.lib.dataarrays import IQPair
 from striqt.analysis.lib.util import free_cupy_mempool, sync_if_cupy
 
 if typing.TYPE_CHECKING:

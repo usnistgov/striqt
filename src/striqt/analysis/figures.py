@@ -9,7 +9,7 @@ import typing
 import warnings
 
 from .lib.specs import Capture
-from .lib import xarray_ops
+from .lib import dataarrays
 
 import matplotlib as mpl
 from matplotlib import pyplot as plt
@@ -436,7 +436,7 @@ def capture_to_dicts(capture: xr.DataArray, title_case=False) -> dict[str]:
     for k, v in coords.items():
         if isinstance(v['data'], numbers.Number):
             prefix = _FORCE_UNIT_PREFIXES.get(k, None)
-            d[k] = xarray_ops.describe_value(v['data'], v['attrs'], unit_prefix=prefix)
+            d[k] = dataarrays.describe_value(v['data'], v['attrs'], unit_prefix=prefix)
         elif isinstance(v['data'], str):
             d[k] = v['data'].replace('_', ' ')
             if title_case:

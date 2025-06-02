@@ -287,7 +287,7 @@ class _MeasurementRegistry(
         def wrapper(func: _TMeasCallable) -> _TMeasCallable:
             @functools.wraps(func)
             def wrapped(iq, capture, *, as_xarray=True, **kws):
-                from .xarray_ops import DelayedDataArray
+                from .dataarrays import DelayedDataArray
 
                 # handle the additional argument 'as_xarray' that allows
                 # the return of a _DelayedDataArray result for fast serialization and

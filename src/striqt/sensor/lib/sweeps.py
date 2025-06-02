@@ -4,7 +4,7 @@ from __future__ import annotations
 import itertools
 import typing
 
-from . import captures, sources, specs, util, xarray_ops
+from . import captures, datasets, sources, specs, util
 from .calibration import lookup_system_noise_power
 from .peripherals import PeripheralsBase
 from .sinks import SinkBase
@@ -163,7 +163,7 @@ class SweepIterator:
     def setup(self, sweep: specs.Sweep):
         self.sweep: specs.Sweep = sweep.validate()
 
-        self._analyze = xarray_ops.AnalysisCaller(
+        self._analyze = datasets.AnalysisCaller(
             radio=self.radio,
             sweep=sweep,
             analysis_spec=sweep.analysis,

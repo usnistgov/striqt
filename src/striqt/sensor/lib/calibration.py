@@ -4,7 +4,7 @@ import itertools
 from pathlib import Path
 import typing
 
-from . import peripherals, sinks, sources, specs, util, xarray_ops
+from . import datasets, peripherals, sinks, sources, specs, util
 from .captures import split_capture_channels
 from .specs import Annotated, meta
 
@@ -456,7 +456,7 @@ class YFactorSink(sinks.SinkBase):
             'calibration_fields': fields,
         }
         capture_data = (
-            xr.concat(data, xarray_ops.CAPTURE_DIM)
+            xr.concat(data, datasets.CAPTURE_DIM)
             .assign_attrs(attrs)
             .drop_vars(self._DROP_FIELDS)
             .set_xindex(fields)
