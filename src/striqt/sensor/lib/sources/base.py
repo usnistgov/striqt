@@ -136,9 +136,6 @@ def _cast_iq(
     else:
         buffer_out = buffer
 
-
-    
-
     return buffer_out
 
 
@@ -948,7 +945,7 @@ def alloc_empty_iq(
         samples = all_samples
     else:
         # we need contiguous blocks of memory for the conversion to cuda
-        flat_prior = prior.flatten()[:len(channels) * count]
+        flat_prior = prior.flatten()[: len(channels) * count]
         samples = flat_prior.reshape(len(channels), count)
 
     # build the list of channel buffers, including references to the throwaway

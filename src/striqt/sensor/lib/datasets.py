@@ -12,7 +12,7 @@ from . import captures, specs, util
 from .sources import SourceBase
 
 from striqt.analysis import register
-from striqt.analysis.lib.dataarrays import CAPTURE_DIM, CHANNEL_DIM # noqa: F401
+from striqt.analysis.lib.dataarrays import CAPTURE_DIM, CHANNEL_DIM  # noqa: F401
 
 if typing.TYPE_CHECKING:
     import iqwaveform

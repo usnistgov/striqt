@@ -473,7 +473,9 @@ class YFactorSink(sinks.SinkBase):
             print('merging results from previous file')
             if channel in self.prev_corrections.channel:
                 self.prev_corrections = self.prev_corrections.drop_sel(channel=channel)
-            corrections = xr.concat([corrections, self.prev_corrections], dim=datasets.CHANNEL_DIM)
+            corrections = xr.concat(
+                [corrections, self.prev_corrections], dim=datasets.CHANNEL_DIM
+            )
 
         print(f'calibration results on channel {channel} (shown for max gain)')
         summary = summarize_calibration(corrections, channel=channel)

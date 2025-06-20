@@ -202,7 +202,9 @@ class SweepIterator:
                 if c is None:
                     labels.append('None')
                 else:
-                    labels.append(f'{c.center_frequency/1e6} MHz switch {getattr(c, "switch_input", None)}')
+                    labels.append(
+                        f'{c.center_frequency / 1e6} MHz switch {getattr(c, "switch_input", None)}'
+                    )
             calls = {}
 
             if iq is None:
@@ -268,7 +270,6 @@ class SweepIterator:
 
             if sweep_time is None and capture_prev is not None:
                 sweep_time = capture_prev.start_time
-
 
     def _acquire(self, iq_prev, capture_prev, capture_this, capture_next):
         if self._reuse_iq:
