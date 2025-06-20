@@ -88,6 +88,7 @@ def _run_click_plotter(
 
     from matplotlib import pyplot as plt
     from striqt import analysis
+    from striqt.analysis.lib.dataarrays import CHANNEL_DIM
     from pathlib import Path
     import numpy as np
 
@@ -100,7 +101,7 @@ def _run_click_plotter(
 
     # index on the following fields in order, matching the input options
     dataset = analysis.load(zarr_path).set_xindex(
-        ['channel', 'center_frequency', 'start_time', 'sweep_start_time']
+        [CHANNEL_DIM, 'center_frequency', 'start_time', 'sweep_start_time']
     )
 
     valid_freqs = tuple(dataset.indexes['center_frequency'].levels[1])

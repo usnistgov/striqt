@@ -154,7 +154,7 @@ class CapturePlotter:
     ):
         self.interactive: bool = interactive
         if subplot_by_channel:
-            self.facet_col = 'capture'
+            self.facet_col = dataarrays.CAPTURE_DIM
         else:
             self.facet_col = None
 
@@ -498,8 +498,8 @@ def plot_cyclic_channel_power(
         plot_kws = plot_kws | {'drawstyle': 'steps-post'}
         fill_kws['step'] = 'post'
 
-    if 'capture' in cyclic_channel_power.dims:
-        cyclic_channel_power = cyclic_channel_power.squeeze('capture')
+    if dataarrays.CAPTURE_DIM in cyclic_channel_power.dims:
+        cyclic_channel_power = cyclic_channel_power.squeeze(dataarrays.CAPTURE_DIM)
 
     for i, detector in enumerate(cyclic_channel_power.power_detector.values):
         a = cyclic_channel_power.sel(power_detector=detector)
@@ -635,7 +635,9 @@ def label_selection(
         ax = plt.gca()
     coord_names = {}
     for name, coord in sel.coords.items():
-        if name == 'capture' or name in sel.indexes or coord.values.size == 0:
+        if name == dataarrays.CAPTURE_DIM:
+            continue
+        elif name in sel.indexes or coord.values.size == 0:
             continue
 
         units = coord.attrs.get('units', None)

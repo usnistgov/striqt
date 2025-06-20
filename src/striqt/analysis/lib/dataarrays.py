@@ -25,6 +25,10 @@ else:
     xr = util.lazy_import('xarray')
 
 
+CAPTURE_DIM = 'capture'
+CHANNEL_DIM = 'channel'
+
+
 class IQPair(typing.NamedTuple):
     raw: 'iqwaveform.type_stubs.ArrayType'
     aligned: 'iqwaveform.type_stubs.ArrayType' | None = None
@@ -354,7 +358,7 @@ class DelayedDataArray(collections.UserDict):
         return build_dataarray(self, expand_dims=expand_dims)
 
 
-def select_parameter_kws(locals_: dict, omit=('capture', 'out')) -> dict:
+def select_parameter_kws(locals_: dict, omit=(CHANNEL_DIM, 'out')) -> dict:
     """return the analysis parameters from the locals() evaluated at the beginning of analysis function"""
 
     items = list(locals_.items())

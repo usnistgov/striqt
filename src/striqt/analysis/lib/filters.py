@@ -5,7 +5,7 @@ from __future__ import annotations
 import functools
 import typing
 
-from . import specs, util
+from . import dataarrays, specs, util
 
 
 if typing.TYPE_CHECKING:
@@ -20,7 +20,7 @@ else:
     iqwaveform = util.lazy_import('iqwaveform')
 
 
-def select_parameter_kws(locals_: dict, omit=('capture', 'out')) -> dict:
+def select_parameter_kws(locals_: dict, omit=(dataarrays.CAPTURE_DIM, 'out')) -> dict:
     """return the analysis parameters from the locals() evaluated at the beginning of analysis function"""
 
     items = list(locals_.items())

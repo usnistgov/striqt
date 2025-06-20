@@ -9,13 +9,11 @@ from .captures import split_capture_channels
 from .specs import Annotated, meta
 
 if typing.TYPE_CHECKING:
-    import gzip
     import numpy as np
     import pandas as pd
     import scipy
     import xarray as xr
 else:
-    gzip = util.lazy_import('gzip')
     np = util.lazy_import('numpy')
     pd = util.lazy_import('pandas')
     scipy = util.lazy_import('scipy')
@@ -105,7 +103,7 @@ def _cached_calibration_captures(
     # subclasses
     analysis_bandwidths = variables.pop('analysis_bandwidth')
     variables = {
-        'channel': variables['channel'],
+        datasets.CHANNEL_DIM: variables[datasets.CHANNEL_DIM],
         'noise_diode_enabled': variables['noise_diode_enabled'],
         **variables,
         'analysis_bandwidth': analysis_bandwidths,
@@ -308,8 +306,8 @@ def _lookup_calibration_var(
         else:
             exc = None
 
-        if 'channel' in sel.coords:
-            sel = sel.dropna('channel').squeeze()
+        if datasets.CHANNEL_DIM in sel.coords:
+            sel = sel.dropna(datasets.CHANNEL_DIM).squeeze()
 
         if exc is not None:
             raise exc
@@ -393,6 +391,8 @@ def lookup_system_noise_power(
     k = scipy.constants.Boltzmann * 1000  # scaled from W/K to mW/K
     noise_psd = (10 ** (noise_figure / 10) - 1) * k * T
 
+    print('system noise shape: ', noise_psd.shape)
+
     return xr.DataArray(
         data=10 * np.log10(noise_psd),
         # coords={"temperature_source": list(temps.keys())},
@@ -463,7 +463,7 @@ class YFactorSink(sinks.SinkBase):
         )
 
         # break out each remaining capture coordinate into its own dimension
-        by_field = capture_data.unstack('capture')
+        by_field = capture_data.unstack(datasets.CAPTURE_DIM)
         by_field['noise_diode_enabled'] = by_field.noise_diode_enabled.astype('bool')
 
         # compute and merge corrections
@@ -473,7 +473,7 @@ class YFactorSink(sinks.SinkBase):
             print('merging results from previous file')
             if channel in self.prev_corrections.channel:
                 self.prev_corrections = self.prev_corrections.drop_sel(channel=channel)
-            corrections = xr.concat([corrections, self.prev_corrections], dim='channel')
+            corrections = xr.concat([corrections, self.prev_corrections], dim=datasets.CHANNEL_DIM)
 
         print(f'calibration results on channel {channel} (shown for max gain)')
         summary = summarize_calibration(corrections, channel=channel)

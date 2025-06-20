@@ -2,9 +2,7 @@ from __future__ import annotations
 import decimal
 import typing
 
-from ..lib import register, specs, util
-
-import array_api_compat
+from ..lib import dataarrays, register, specs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -188,7 +186,7 @@ def correlate_sync_sequence(
     return R
 
 
-ssb_iq_cache = register.KeywordArgumentCache(['capture', 'spec'])
+ssb_iq_cache = register.KeywordArgumentCache([dataarrays.CAPTURE_DIM, 'spec'])
 
 
 @ssb_iq_cache.apply
@@ -346,7 +344,7 @@ def evaluate_spectrogram(
     return spg, attrs
 
 
-spectrogram_cache = register.KeywordArgumentCache(['capture', 'spec'])
+spectrogram_cache = register.KeywordArgumentCache([dataarrays.CAPTURE_DIM, 'spec'])
 
 
 def truncate_spectrogram_bandwidth(x, nfft, fs, bandwidth, axis=0):

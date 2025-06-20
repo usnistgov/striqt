@@ -1,7 +1,7 @@
 from __future__ import annotations
 import typing
 
-from ..lib import register, specs, util
+from ..lib import dataarrays, register, specs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -47,7 +47,7 @@ def power_detector(
     return np.array(spec.power_detectors)
 
 
-_channel_power_cache = register.KeywordArgumentCache(['capture', 'spec'])
+_channel_power_cache = register.KeywordArgumentCache([dataarrays.CAPTURE_DIM, 'spec'])
 
 
 @_channel_power_cache.apply

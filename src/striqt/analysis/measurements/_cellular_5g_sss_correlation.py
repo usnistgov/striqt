@@ -2,7 +2,7 @@ from __future__ import annotations
 import typing
 
 from . import shared
-from ..lib import register, specs, util
+from ..lib import dataarrays, register, specs, util
 
 import array_api_compat
 
@@ -53,7 +53,7 @@ _coord_factories = [
 dtype = 'complex64'
 
 
-sss_alignment_cache = register.KeywordArgumentCache(['capture', 'spec'])
+sss_alignment_cache = register.KeywordArgumentCache([dataarrays.CAPTURE_DIM, 'spec'])
 
 
 @sss_alignment_cache.apply

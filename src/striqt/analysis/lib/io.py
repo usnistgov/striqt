@@ -8,7 +8,7 @@ from collections import defaultdict
 
 import numcodecs
 
-from . import util
+from . import dataarrays, util
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -144,7 +144,7 @@ def dump(
         data = data.assign({name: data[name].astype(target_dtype)})
 
     if append_dim is None:
-        append_dim = 'capture'
+        append_dim = dataarrays.CAPTURE_DIM
 
     data = data.chunk(chunks)
 
@@ -256,7 +256,7 @@ class MATNewFileStream(_FileStreamBase):
             tally += x.shape[1]
 
         iq = xp.concat(array_list, axis=1)
-        self._meta['channel'] = list(range(iq.shape[0]))
+        self._meta[dataarrays.CHANNEL_DIM] = list(range(iq.shape[0]))
 
         if count is None:
             self._leftover = None
@@ -346,7 +346,7 @@ class MATLegacyFileStream(_FileStreamBase):
             tally += x.shape[1]
 
         iq = xp.concat(array_list, axis=1)
-        self._meta['channel'] = list(range(iq.shape[0]))
+        self._meta[dataarrays.CHANNEL_DIM] = list(range(iq.shape[0]))
 
         if count is None:
             self._leftover = None
@@ -424,7 +424,7 @@ class NPYFileStream(_FileStreamBase):
             tally += ref.shape[1]
 
         iq = xp.concat(array_list, axis=1)
-        self._meta['channel'] = list(range(iq.shape[0]))
+        self._meta[dataarrays.CHANNEL_DIM] = list(range(iq.shape[0]))
 
         if count is None:
             self._leftover = None

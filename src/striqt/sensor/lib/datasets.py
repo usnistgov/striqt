@@ -12,6 +12,7 @@ from . import captures, specs, util
 from .sources import SourceBase
 
 from striqt.analysis import register
+from striqt.analysis.lib.dataarrays import CAPTURE_DIM, CHANNEL_DIM # noqa: F401
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -28,7 +29,6 @@ else:
     xr = util.lazy_import('xarray')
     striqt_analysis = util.lazy_import('striqt.analysis')
 
-CAPTURE_DIM = 'capture'
 SWEEP_TIMESTAMP_NAME = 'sweep_start_time'
 RADIO_ID_NAME = 'radio_id'
 

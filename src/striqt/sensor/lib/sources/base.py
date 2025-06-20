@@ -943,13 +943,13 @@ def alloc_empty_iq(
     else:
         channels = tuple(channels)
 
-    if prior is None or (prior.shape[0] < len(channels) or prior.shape[1] < count):
+    if prior is None or prior.size < len(channels) * count:
         all_samples = empty((len(channels), count), dtype=np.complex64)
+        samples = all_samples
     else:
-        all_samples = prior
-
-    # the subset that we'll return for use by the next acquisition
-    samples = all_samples[: len(channels), :count]
+        # we need contiguous blocks of memory for the conversion to cuda
+        flat_prior = prior.flatten()[:len(channels) * count]
+        samples = flat_prior.reshape(len(channels), count)
 
     # build the list of channel buffers, including references to the throwaway
     # in case of radio._stream_all_rx_channels
