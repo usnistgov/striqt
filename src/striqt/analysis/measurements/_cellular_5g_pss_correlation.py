@@ -2,7 +2,8 @@ from __future__ import annotations
 import typing
 
 from . import shared
-from ..lib import dataarrays, register, specs, util
+from ..lib import register, specs, util
+from ..lib.dataarrays import CAPTURE_DIM
 
 import array_api_compat
 
@@ -37,7 +38,7 @@ _coord_factories = [
 dtype = 'complex64'
 
 
-pss_alignment_cache = register.KeywordArgumentCache([dataarrays, 'spec'])
+pss_alignment_cache = register.KeywordArgumentCache([CAPTURE_DIM, 'spec'])
 
 
 @pss_alignment_cache.apply
