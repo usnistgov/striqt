@@ -947,6 +947,7 @@ def alloc_empty_iq(
         # we need contiguous blocks of memory for the conversion to cuda
         flat_prior = prior.flatten()[: len(channels) * count]
         samples = flat_prior.reshape(len(channels), count)
+        all_samples = prior
 
     # build the list of channel buffers, including references to the throwaway
     # in case of radio._stream_all_rx_channels
