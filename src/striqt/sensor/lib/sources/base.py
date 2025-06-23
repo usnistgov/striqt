@@ -429,13 +429,15 @@ class SourceBase(lb.Device):
 
         fs = self.backend_sample_rate()
 
-        # sample counters
-        sample_count = get_channel_read_buffer_count(
+        # the number of valid samples to return per channel
+        output_count = get_channel_read_buffer_count(
             self, capture, include_holdoff=False
         )
-        fill_count = get_channel_read_buffer_count(self, capture, include_holdoff=True)
+
+        # the total number of samples to acquire per channel
+        buffer_count = get_channel_read_buffer_count(self, capture, include_holdoff=True)
         received_count = 0
-        chunk_count = remaining = sample_count - carryover_count
+        chunk_count = remaining = output_count - carryover_count
 
         if self.time_sync_every_capture:
             self.rx_enabled(False)
@@ -452,7 +454,7 @@ class SourceBase(lb.Device):
 
             request_count = min(chunk_count, remaining)
 
-            if (received_count + request_count) > fill_count:
+            if (received_count + request_count) > buffer_count:
                 # this could happen if there is a slight mismatch between
                 # the requested and realized sample rate
                 break
@@ -466,7 +468,7 @@ class SourceBase(lb.Device):
                 on_overflow=on_overflow,
             )
 
-            if (this_count + received_count) > fill_count:
+            if (this_count + received_count) > buffer_count:
                 # this should never happen
                 raise MemoryError(
                     f'overfilled receive buffer by {(this_count + received_count) - samples.size}'
@@ -491,9 +493,9 @@ class SourceBase(lb.Device):
 
         samples = samples.view('complex64')
         sample_offs = included_holdoff - dsp_pad_before
-        sample_span = slice(sample_offs, sample_offs + sample_count)
+        sample_span = slice(sample_offs, sample_offs + output_count)
 
-        unused_count = sample_count - round(capture.duration * fs)
+        unused_count = output_count - round(capture.duration * fs)
         self._carryover.stash(
             samples[:, sample_span],
             start_ns,
@@ -504,7 +506,7 @@ class SourceBase(lb.Device):
         # it seems to be important to convert to cupy here in order
         # to get a full view of the underlying pinned memory. cuda
         # memory corruption has been observed when waiting until after
-        samples = _cast_iq(self, samples, fill_count)
+        samples = _cast_iq(self, samples, buffer_count)
 
         return samples[:, sample_span], start_ns
 
