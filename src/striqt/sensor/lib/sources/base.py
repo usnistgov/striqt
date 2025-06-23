@@ -106,7 +106,7 @@ class _ReceiveBufferCarryover:
 
 
 def _cast_iq(
-    radio: SourceBase, buffer: 'iqwaveform.util.ArrayType'
+    radio: SourceBase, buffer: 'iqwaveform.util.ArrayType', samples_per_channel
 ) -> 'iqwaveform.util.ArrayType':
     """cast the buffer to floating point, if necessary"""
     # array_namespace will categorize cupy pinned memory as numpy
@@ -124,8 +124,8 @@ def _cast_iq(
     # what follows is some acrobatics to minimize new memory allocation and copy
     if dtype_in.kind == 'i':
         # the same memory buffer, interpreted as int16 without casting
-        buffer_int16 = buffer.view('int16')[:, : 2 * buffer.shape[1]]
-        buffer_float32 = buffer.view('float32')
+        buffer_int16 = buffer.view('int16')[:, : 2 * samples_per_channel]
+        buffer_float32 = buffer.view('float32')[:, :samples_per_channel]
 
         # in-place cast from the int16 samples, filling the extra allocation in self.buffer
         xp.copyto(buffer_float32, buffer_int16, casting='unsafe')
@@ -134,7 +134,7 @@ def _cast_iq(
         buffer_out = buffer_float32.view('complex64')
 
     else:
-        buffer_out = buffer
+        buffer_out = buffer[:, :samples_per_channel]
 
     return buffer_out
 
@@ -413,6 +413,8 @@ class SourceBase(lb.Device):
         # the return buffer
         samples, stream_bufs = self._get_next_buffers(capture)
 
+        samples_per_channel = get_channel_read_buffer_count(self, capture, include_holdoff=True)        
+
         # holdoff parameters, valid when we already have a clock reading
         dsp_pad_before, _ = _get_dsp_pad_size(
             self.base_clock_rate, capture, self._aligner
@@ -430,11 +432,11 @@ class SourceBase(lb.Device):
         fs = self.backend_sample_rate()
 
         # sample counters
-        sample_count = get_channel_read_buffer_count(
+        samples_per_channel = get_channel_read_buffer_count(
             self, capture, include_holdoff=False
         )
         received_count = 0
-        chunk_count = remaining = sample_count - carryover_count
+        chunk_count = remaining = samples_per_channel - carryover_count
 
         if self.time_sync_every_capture:
             self.rx_enabled(False)
@@ -451,7 +453,7 @@ class SourceBase(lb.Device):
 
             request_count = min(chunk_count, remaining)
 
-            if (received_count + request_count) > samples.shape[1]:
+            if (received_count + request_count) > samples_per_channel:
                 # this could happen if there is a slight mismatch between
                 # the requested and realized sample rate
                 break
@@ -465,7 +467,7 @@ class SourceBase(lb.Device):
                 on_overflow=on_overflow,
             )
 
-            if (this_count + received_count) > samples.shape[1]:
+            if (this_count + received_count) > samples_per_channel:
                 # this should never happen
                 raise MemoryError(
                     f'overfilled receive buffer by {(this_count + received_count) - samples.size}'
@@ -490,9 +492,9 @@ class SourceBase(lb.Device):
 
         samples = samples.view('complex64')
         sample_offs = included_holdoff - dsp_pad_before
-        sample_span = slice(sample_offs, sample_offs + sample_count)
+        sample_span = slice(sample_offs, sample_offs + samples_per_channel)
 
-        unused_count = sample_count - round(capture.duration * fs)
+        unused_count = samples_per_channel - round(capture.duration * fs)
         self._carryover.stash(
             samples[:, sample_span],
             start_ns,
@@ -503,7 +505,7 @@ class SourceBase(lb.Device):
         # it seems to be important to convert to cupy here in order
         # to get a full view of the underlying pinned memory. cuda
         # memory corruption has been observed when waiting until after
-        samples = _cast_iq(self, samples)
+        samples = _cast_iq(self, samples, samples_per_channel=samples_per_channel)
 
         return samples[:, sample_span], start_ns
 
@@ -940,17 +942,15 @@ def alloc_empty_iq(
     else:
         channels = tuple(channels)
 
-    if prior is None or prior.size < len(channels) * count:
+    if prior is None or prior.shape < (len(channels), count):
         all_samples = empty((len(channels), count), dtype=np.complex64)
         samples = all_samples
     else:
-        # we need contiguous blocks of memory for the conversion to cuda
-        flat_prior = prior.flatten()[: len(channels) * count]
-        samples = flat_prior.reshape(len(channels), count)
-        all_samples = prior
+        samples = all_samples = prior
 
-    # build the list of channel buffers, including references to the throwaway
-    # in case of radio._stream_all_rx_channels
+    # build the list of channel buffers that will actuall be filled with data,
+    # including references to the throwaway buffer of extras in case of
+    # radio._stream_all_rx_channels
     if radio._stream_all_rx_channels and len(channels) != radio.rx_channel_count:
         if radio._transport_dtype == 'complex64':
             # a throwaway buffer for samples that won't be returned
