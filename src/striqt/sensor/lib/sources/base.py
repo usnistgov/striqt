@@ -435,7 +435,9 @@ class SourceBase(lb.Device):
         )
 
         # the total number of samples to acquire per channel
-        buffer_count = get_channel_read_buffer_count(self, capture, include_holdoff=True)
+        buffer_count = get_channel_read_buffer_count(
+            self, capture, include_holdoff=True
+        )
         received_count = 0
         chunk_count = remaining = output_count - carryover_count
 
