@@ -134,7 +134,7 @@ def _cast_iq(
         buffer_out = buffer_float32.view('complex64')
 
     else:
-        buffer_out = buffer[:, acquired_count]
+        buffer_out = buffer[:, :acquired_count]
 
     return buffer_out
 
