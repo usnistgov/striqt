@@ -9,6 +9,7 @@ import rpyc
 from . import captures, sweeps, util
 from . import specs
 from .sources import find_radio_cls_by_name, is_same_resource, SourceBase
+from striqt.analysis.lib.dataarrays import AcquiredIQ
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -300,19 +301,6 @@ class _ServerService(rpyc.Service, SweepController):
         else:
             return (conn.root.deliver(r, d) for r, d in desc_pairs)
 
-    def exposed_acquire(
-        self,
-        capture: specs.RadioCapture,
-        next_capture: typing.Union[specs.RadioCapture, None] = None,
-        correction: bool = True,
-    ) -> tuple['np.array', 'pd.Timestamp']:
-        iq = self.radio.acquire(capture, next_capture, correction)
-
-        if self.conn is None:
-            raise RuntimeError('not connected')
-
-        return self.conn.root.remote_shared_array(iq.shm_info())
-
     def exposed_read_stream(self, samples: int):
         return self.radio._read_stream(samples)
 
@@ -343,10 +331,6 @@ class _ClientService(rpyc.Service):
                 return pickle.loads(pickled_dataset)
             elif isinstance(pickled_dataset, str):
                 raise TypeError('expected pickle bytes but got str')
-
-    def exposed_remote_shared_array(self, info):
-        info = rpyc.utils.classic.obtain(info)
-        return util.reference_shared_array(info)
 
 
 def start_server(host=None, port=4567, default_driver: str | None = None):

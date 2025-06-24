@@ -9,6 +9,7 @@ from labbench import paramattr as attr
 
 from . import base, method_attr
 from .. import captures, specs
+from striqt.analysis.lib.dataarrays import AcquiredIQ
 
 
 if typing.TYPE_CHECKING:
@@ -359,7 +360,7 @@ class SoapyRadioSource(base.SourceBase):
         capture: specs.RadioCapture = None,
         next_capture: typing.Union[specs.RadioCapture, None] = None,
         correction: bool = True,
-    ) -> tuple[np.array, 'pd.Timestamp']:
+    ) -> AcquiredIQ:
         return super().acquire(
             capture=capture, next_capture=next_capture, correction=correction
         )

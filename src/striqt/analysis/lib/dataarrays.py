@@ -29,9 +29,10 @@ CAPTURE_DIM = 'capture'
 CHANNEL_DIM = 'channel'
 
 
-class IQPair(typing.NamedTuple):
+class AcquiredIQ(typing.NamedTuple):
     raw: 'iqwaveform.type_stubs.ArrayType'
     aligned: 'iqwaveform.type_stubs.ArrayType' | None = None
+    capture: specs.Capture = None
 
 
 _ENG_PREFIXES = {
@@ -366,7 +367,7 @@ def select_parameter_kws(locals_: dict, omit=(CHANNEL_DIM, 'out')) -> dict:
 
 
 def evaluate_by_spec(
-    iq: 'iqwaveform.type_stubs.ArrayType' | IQPair,
+    iq: 'iqwaveform.type_stubs.ArrayType' | AcquiredIQ,
     capture: specs.Capture,
     *,
     spec: str | dict | specs.Measurement,
@@ -396,7 +397,7 @@ def evaluate_by_spec(
             func_kws = spec_dict[name]
             if not func_kws:
                 continue
-            if not isinstance(iq, IQPair):
+            if not isinstance(iq, AcquiredIQ):
                 iq_sel = iq
             if iq.aligned is None or meas.prefer_unaligned_input:
                 iq_sel = iq.raw
@@ -450,7 +451,7 @@ def package_analysis(
 
 
 def analyze_by_spec(
-    iq: 'iqwaveform.type_stubs.ArrayType' | IQPair,
+    iq: 'iqwaveform.type_stubs.ArrayType' | AcquiredIQ,
     capture: specs.Capture,
     *,
     spec: str | dict | specs.Measurement,

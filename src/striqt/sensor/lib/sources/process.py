@@ -36,23 +36,6 @@ class RadioProcessService(rpyc.Service):
     # TODO: wrap self.radio._read_stream to pull from a queue?
     # TODO: implement a low-level acquisition loop?
 
-    def exposed_acquire(
-        self,
-        capture: specs.RadioCapture,
-        next_capture: typing.Union[specs.RadioCapture, None] = None,
-        correction: bool = True,
-    ) -> tuple[np.array, 'pd.Timestamp']:
-        iq = self.radio.acquire(capture, next_capture, correction)
-
-        if self.conn is None:
-            raise RuntimeError('not connected')
-
-        return self.conn.root.remote_shared_array(iq)
-
-    def exposed_read_stream(self, samples: int):
-        iq = self.radio._read_stream(samples)
-        return self.conn.root.remote_shared_array(iq)
-
     def exposed_setup(self, radio_setup: specs.RadioSetup, analysis=None):
         radio_setup = rpyc.utils.classic.obtain(radio_setup)
         return self.radio.setup(radio_setup, analysis)

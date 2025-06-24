@@ -14,7 +14,7 @@ from . import method_attr
 from striqt.analysis.lib.util import pinned_array_as_cupy
 from striqt.analysis.lib.specs import Analysis
 from striqt.analysis.lib import register
-from striqt.analysis.lib.dataarrays import IQPair
+from striqt.analysis.lib.dataarrays import AcquiredIQ
 
 
 if typing.TYPE_CHECKING:
@@ -524,7 +524,7 @@ class SourceBase(lb.Device):
         capture: specs.RadioCapture = None,
         next_capture: typing.Union[specs.RadioCapture, None] = None,
         correction: bool = True,
-    ) -> tuple[np.array | IQPair, 'pd.Timestamp']:
+    ) -> AcquiredIQ:
         """arm a capture and enable the channel (if necessary), read the resulting IQ waveform.
 
         Optionally, calibration corrections can be applied, and the radio can be left ready for the next capture.
@@ -559,16 +559,15 @@ class SourceBase(lb.Device):
                 iq = iq_corrections.resampling_correction(
                     iq, capture, self, overwrite_x=True
                 )
+        else:
+            iq = AcquiredIQ(raw=iq, aligned=None)
 
-                if self._aligner is None:
-                    iq = iq.unsync_span
-
-        acquired_capture = capture.replace(
+        actual_capture = capture.replace(
             start_time=pd.Timestamp(time_ns, unit='ns'),
             backend_sample_rate=fs,
         )
 
-        return iq, acquired_capture
+        return AcquiredIQ(iq.raw, iq.aligned, actual_capture)
 
     def _read_stream(
         self, buffers, offset, count, timeout_sec, *, on_overflow='except'

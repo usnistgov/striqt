@@ -121,6 +121,8 @@ class NullSource(base.SourceBase):
         if setup._rx_channel_count is not None:
             self.rx_channel_count = setup._rx_channel_count
 
+        self.reset_sample_counter()
+
         return setup
 
     @method_attr.FloatMaybeTupleMethod(inherit=True)
@@ -141,7 +143,6 @@ class NullSource(base.SourceBase):
 
     def open(self):
         self._logger.propagate = False
-        self.reset_sample_counter(0)
         self.backend = {}
 
     @attr.property.str(inherit=True)
@@ -165,19 +166,15 @@ class NullSource(base.SourceBase):
         self._samples_elapsed += count
 
         return count, round(timestamp_ns)
+    
+    def arm(self, capture=None, **kwargs):
+        super().arm(capture, **kwargs)
+        self.reset_sample_counter()
 
-    def reset_sample_counter(self, value=None):
+    def reset_sample_counter(self, value=0):
         self.sync_time_source()
-
-        if value is not None:
-            self._samples_elapsed = value
-            self._sample_start_index = value
-            return
-        capture = self.get_capture_struct()
-        pad, _ = base._get_dsp_pad_size(self.base_clock_rate, capture)
-        holdoff = base.find_trigger_holdoff(self, 0, dsp_pad_before=pad)
-        self._samples_elapsed = -holdoff
-        self._sample_start_index = -holdoff
+        self._samples_elapsed = value
+        self._sample_start_index = value
 
 
 class NullRadio(NullSource):

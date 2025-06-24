@@ -3,8 +3,7 @@ import typing
 
 from .sources import base, SourceBase, design_capture_resampler
 from . import calibration, specs, util
-from striqt.analysis.lib.dataarrays import IQPair
-from striqt.analysis.lib.util import free_cupy_mempool, sync_if_cupy
+from striqt.analysis.lib.dataarrays import AcquiredIQ
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -19,6 +18,8 @@ else:
     xr = util.lazy_import('xarray')
 
 
+# this is experimental, and currently leaves some residual
+# offset in some circumstances
 USE_OARESAMPLE = False
 
 
@@ -64,7 +65,7 @@ def resampling_correction(
     *,
     overwrite_x=False,
     axis=1,
-) -> IQPair:
+) -> AcquiredIQ:
     """apply a bandpass filter implemented through STFT overlap-and-add.
 
     Args:
@@ -76,7 +77,7 @@ def resampling_correction(
         overwrite_x: if True, modify the contents of IQ in-place; otherwise, a copy will be returned
 
     Returns:
-        the filtered IQ capture
+        the filtered IQ waveform
     """
 
     xp = iqwaveform.util.array_namespace(iq)
@@ -179,7 +180,7 @@ def resampling_correction(
     assert iq_unaligned.shape[axis] == size_out
     assert iq_aligned is None or iq_aligned.shape[axis] == size_out
 
-    return IQPair(aligned=iq_aligned, raw=iq_unaligned)
+    return AcquiredIQ(aligned=iq_aligned, raw=iq_unaligned, capture=capture)
 
     # nfft = analysis_filter['nfft']
     # nfft_out, noverlap, overlap_scale, _ = iqwaveform.fourier._ola_filter_parameters(

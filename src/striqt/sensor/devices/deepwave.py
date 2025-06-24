@@ -134,5 +134,5 @@ class Air7101B(Air7x01B):
 
 if __name__ == '__main__':
     airt = Air7201B(freq=2.44e9, fs=2 * 31.25e6)
-    iq = airt.acquire(256 * 1024)
+    iq, *_ = airt.acquire(256 * 1024)
     airt.close()
