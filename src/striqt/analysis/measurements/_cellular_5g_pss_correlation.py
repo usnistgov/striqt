@@ -100,11 +100,13 @@ def sync_aggregate_5g_pss(
 
     R, _ = cellular_5g_pss_correlation(iq, capture, **kwargs)
 
+    global Ragg, weights, est
+
     # start dimensions: (..., port index, cell Nid2, sync block index, symbol pair index, IQ sample index)
-    Ragg = iqwaveform.envtopow(R.sum(axis=(-4, -2)))
+    Ragg = iqwaveform.envtopow(R.max(axis=(-4, -2)))
 
     # reduce port index, etc in power space
-    Ragg = Ragg.mean(axis=tuple(range(Ragg.ndim - 1)))
+    Ragg = Ragg.max(axis=tuple(range(Ragg.ndim - 1)))
     Ragg = Ragg - xp.median(Ragg)
     assert Ragg.ndim == 1
 
@@ -115,7 +117,8 @@ def sync_aggregate_5g_pss(
         norm=False,
         xp=xp,
     )
-    weights = xp.roll(weights, round((1 - window_fill) * Ragg.size / 2))
+    weight_shift = Ragg.size // 2 - round((1 - window_fill) * Ragg.size / 2)
+    weights = xp.roll(weights, weight_shift)
 
     if array_api_compat.is_cupy_array(Ragg):
         from cupyx.scipy import ndimage

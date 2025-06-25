@@ -57,6 +57,9 @@ class TestSource(NullSource):
     def get_waveform(self, count, start_index: int, *, channel: int = 0, xp):
         raise NotImplementedError
 
+    def sync_time_source(self):
+        self._sync_time_ns = round(1_000_000_000 * self._samples_elapsed)
+
 
 class SingleToneSource(TestSource):
     baseband_frequency: float = attr.value.float(
@@ -264,6 +267,9 @@ class FileSource(TestSource):
     file_metadata: dict = attr.value.dict(
         default={}, help='any capture fields not included in the file'
     )
+    loop: bool = attr.value.bool(
+        False, help='whether to loop the file to create longer IQ waveforms'
+    )
 
     _iq_capture = specs.FileSourceCapture()
 
@@ -353,13 +359,16 @@ class FileSource(TestSource):
         if self._file_stream is not None:
             self._file_stream.close()
 
+        meta = self.file_metadata
+
         self._file_stream = striqt_analysis.io.open_bare_iq(
             self.path,
             format=self.file_format,
             rx_channel_count=self.rx_channel_count,
             dtype='complex64',
             xp=self.get_array_namespace(),
-            **self.file_metadata,
+            loop=self.loop,
+            **meta,
         )
 
         metadata = self._file_stream.get_metadata()
@@ -391,18 +400,6 @@ class FileSource(TestSource):
         ret = self._file_stream.read(count)
         assert ret.shape[1] == count
         return ret.copy()
-
-    def reset_sample_counter(self, value=None):
-        # pad_size = sum(base._get_dsp_pad_size(self.base_clock_rate))
-        capture = self.get_capture_struct()
-        pad_start = base._get_dsp_pad_size(self.base_clock_rate, capture)[0]
-        holdoff = base.find_trigger_holdoff(self, 0, dsp_pad_before=pad_start)
-
-        if self.periodic_trigger is None or holdoff == 0:
-            super().reset_sample_counter(0)
-        else:
-            samples = self.periodic_trigger * self.backend_sample_rate()
-            super().reset_sample_counter(-samples)
 
 
 class ZarrIQSource(TestSource):

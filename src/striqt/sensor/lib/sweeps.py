@@ -8,6 +8,7 @@ from . import captures, datasets, sources, specs, util
 from .calibration import lookup_system_noise_power
 from .peripherals import PeripheralsBase
 from .sinks import SinkBase
+from striqt.analysis.lib.dataarrays import AcquiredIQ
 
 if typing.TYPE_CHECKING:
     import xarray as xr
@@ -256,7 +257,8 @@ class SweepIterator:
             result = ret.get('analyze', None)
 
             if 'acquire' in ret:
-                iq, capture_prev = ret['acquire']['radio']
+                iq = ret['acquire']['radio']
+                capture_prev = iq.capture
                 prior_ext_data = this_ext_data
                 this_ext_data = ret['acquire'].get('peripherals', {}) or {}
             else:
@@ -388,7 +390,7 @@ def iter_raw_iq(
     radio: 'sources.SourceBase',
     sweep: specs.Sweep,
     quiet=False,
-) -> typing.Generator['xr.Dataset' | bytes | None]:
+) -> typing.Generator[AcquiredIQ]:
     """iterate through the sweep and yield the raw IQ vector for each.
 
     Normally, for performance reasons, the first iteration consists of
@@ -409,7 +411,6 @@ def iter_raw_iq(
     if len(sweep.captures) == 0:
         return
 
-    iq = None
     capture_prev = None
 
     # iterate across (previous, current, next) captures to support concurrency
@@ -422,10 +423,8 @@ def iter_raw_iq(
 
         with lb.stopwatch(f'{desc} •', logger_level='debug' if quiet else 'info'):
             # extra iteration at the end for the last analysis
-            iq, capture = radio.acquire(
+            yield radio.acquire(
                 capture_this,
                 next_capture=capture_next,
                 correction=False,
             )
-
-        yield iq, capture

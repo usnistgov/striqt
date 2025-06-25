@@ -122,7 +122,6 @@ def empty_5g_sync_measurement(
     coord_factories: list[callable],
     dtype='complex64',
 ):
-    global n
     xp = iqwaveform.util.array_namespace(iq)
     meas_ax_shape = [len(f(capture, spec)) for f in coord_factories]
     new_shape = iq.shape[:-1] + tuple(meas_ax_shape)

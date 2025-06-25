@@ -14,7 +14,7 @@ from . import method_attr
 from striqt.analysis.lib.util import pinned_array_as_cupy
 from striqt.analysis.lib.specs import Analysis
 from striqt.analysis.lib import register
-from striqt.analysis.lib.dataarrays import IQPair
+from striqt.analysis.lib.dataarrays import AcquiredIQ
 
 
 if typing.TYPE_CHECKING:
@@ -125,7 +125,7 @@ def _cast_iq(
     if dtype_in.kind == 'i':
         # the same memory buffer, interpreted as int16 without casting
         buffer_int16 = buffer.view('int16')[:, : 2 * acquired_count]
-        buffer_float32 = buffer.view('float32')[:, :2 * acquired_count]
+        buffer_float32 = buffer.view('float32')[:, : 2 * acquired_count]
 
         # in-place cast from the int16 samples, filling the extra allocation in self.buffer
         xp.copyto(buffer_float32, buffer_int16, casting='unsafe')
@@ -134,7 +134,7 @@ def _cast_iq(
         buffer_out = buffer_float32.view('complex64')
 
     else:
-        buffer_out = buffer[:, :2 * acquired_count]
+        buffer_out = buffer[:, : 2 * acquired_count]
 
     return buffer_out
 
@@ -524,7 +524,7 @@ class SourceBase(lb.Device):
         capture: specs.RadioCapture = None,
         next_capture: typing.Union[specs.RadioCapture, None] = None,
         correction: bool = True,
-    ) -> tuple[np.array | IQPair, 'pd.Timestamp']:
+    ) -> AcquiredIQ:
         """arm a capture and enable the channel (if necessary), read the resulting IQ waveform.
 
         Optionally, calibration corrections can be applied, and the radio can be left ready for the next capture.
@@ -559,16 +559,15 @@ class SourceBase(lb.Device):
                 iq = iq_corrections.resampling_correction(
                     iq, capture, self, overwrite_x=True
                 )
+        else:
+            iq = AcquiredIQ(raw=iq, aligned=None)
 
-                if self._aligner is None:
-                    iq = iq.unsync_span
-
-        acquired_capture = capture.replace(
+        actual_capture = capture.replace(
             start_time=pd.Timestamp(time_ns, unit='ns'),
             backend_sample_rate=fs,
         )
 
-        return iq, acquired_capture
+        return AcquiredIQ(iq.raw, iq.aligned, actual_capture)
 
     def _read_stream(
         self, buffers, offset, count, timeout_sec, *, on_overflow='except'
