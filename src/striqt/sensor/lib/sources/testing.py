@@ -60,6 +60,7 @@ class TestSource(NullSource):
     def sync_time_source(self):
         self._sync_time_ns = round(1_000_000_000 * self._samples_elapsed)
 
+
 class SingleToneSource(TestSource):
     baseband_frequency: float = attr.value.float(
         default=0, help='baseband frequency of the tone to generate', label='Hz'
@@ -266,7 +267,9 @@ class FileSource(TestSource):
     file_metadata: dict = attr.value.dict(
         default={}, help='any capture fields not included in the file'
     )
-    loop: bool = attr.value.bool(False, help='whether to loop the file to create longer IQ waveforms')
+    loop: bool = attr.value.bool(
+        False, help='whether to loop the file to create longer IQ waveforms'
+    )
 
     _iq_capture = specs.FileSourceCapture()
 

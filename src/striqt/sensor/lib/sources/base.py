@@ -125,7 +125,7 @@ def _cast_iq(
     if dtype_in.kind == 'i':
         # the same memory buffer, interpreted as int16 without casting
         buffer_int16 = buffer.view('int16')[:, : 2 * acquired_count]
-        buffer_float32 = buffer.view('float32')[:, :2 * acquired_count]
+        buffer_float32 = buffer.view('float32')[:, : 2 * acquired_count]
 
         # in-place cast from the int16 samples, filling the extra allocation in self.buffer
         xp.copyto(buffer_float32, buffer_int16, casting='unsafe')
@@ -134,7 +134,7 @@ def _cast_iq(
         buffer_out = buffer_float32.view('complex64')
 
     else:
-        buffer_out = buffer[:, :2 * acquired_count]
+        buffer_out = buffer[:, : 2 * acquired_count]
 
     return buffer_out
 

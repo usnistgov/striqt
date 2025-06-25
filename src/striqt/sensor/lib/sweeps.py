@@ -257,7 +257,8 @@ class SweepIterator:
             result = ret.get('analyze', None)
 
             if 'acquire' in ret:
-                iq, capture_prev = ret['acquire']['radio']
+                iq = ret['acquire']['radio']
+                capture_prev = iq.capture
                 prior_ext_data = this_ext_data
                 this_ext_data = ret['acquire'].get('peripherals', {}) or {}
             else:

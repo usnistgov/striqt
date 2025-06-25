@@ -166,7 +166,7 @@ class NullSource(base.SourceBase):
         self._samples_elapsed += count
 
         return count, round(timestamp_ns)
-    
+
     def arm(self, capture=None, **kwargs):
         super().arm(capture, **kwargs)
         self.reset_sample_counter()

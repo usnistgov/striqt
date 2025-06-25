@@ -220,7 +220,7 @@ class MATNewFileStream(_FileStreamBase):
             'skip_samples': skip_samples,
             'dtype': dtype,
             'input_dtype': input_dtype,
-            'xp': xp
+            'xp': xp,
         }
 
         import h5py  # noqa
@@ -229,7 +229,7 @@ class MATNewFileStream(_FileStreamBase):
         self._input_dtype = input_dtype
         self._loop = loop
 
-        super().__init__(path, **(kws|meta))
+        super().__init__(path, **(kws | meta))
 
     def close(self):
         self._fd.close()
@@ -315,7 +315,15 @@ class MATLegacyFileStream(_FileStreamBase):
         self._key = key
         self._loop = loop
 
-        super().__init__(path, rx_channel_count=rx_channel_count, skip_samples=skip_samples, dtype=dtype, xp=xp, sample_rate=sample_rate, **meta)
+        super().__init__(
+            path,
+            rx_channel_count=rx_channel_count,
+            skip_samples=skip_samples,
+            dtype=dtype,
+            xp=xp,
+            sample_rate=sample_rate,
+            **meta,
+        )
 
     @staticmethod
     def list_variables(path: str) -> list[str]:
@@ -402,7 +410,15 @@ class NPYFileStream(_FileStreamBase):
                 f'rx_channel_count exceeds input data channel dimension size ({self._data.shape[-2]})'
             )
 
-        super().__init__(path, rx_channel_count=rx_channel_count, skip_samples=skip_samples, dtype=dtype, xp=xp, sample_rate=sample_rate, **meta)
+        super().__init__(
+            path,
+            rx_channel_count=rx_channel_count,
+            skip_samples=skip_samples,
+            dtype=dtype,
+            xp=xp,
+            sample_rate=sample_rate,
+            **meta,
+        )
 
     def close(self):
         pass
@@ -458,14 +474,28 @@ class NPYFileStream(_FileStreamBase):
 
 class TDMSFileStream(_FileStreamBase):
     def __init__(
-        self, path, rx_channel_count=1, skip_samples=0, dtype='complex64', loop=False, xp=np, **meta
+        self,
+        path,
+        rx_channel_count=1,
+        skip_samples=0,
+        dtype='complex64',
+        loop=False,
+        xp=np,
+        **meta,
     ):
         from nptdms import TdmsFile  # noqa
 
         self._fd = TdmsFile.read(self.path)
         self._header_fd, self._iq_fd = self._fd.groups()
 
-        super().__init__(path, rx_channel_count=rx_channel_count, skip_samples=skip_samples, dtype=dtype, xp=xp, **meta)
+        super().__init__(
+            path,
+            rx_channel_count=rx_channel_count,
+            skip_samples=skip_samples,
+            dtype=dtype,
+            xp=xp,
+            **meta,
+        )
 
     def close(self):
         self._fd.close()
@@ -533,4 +563,13 @@ def open_bare_iq(
     else:
         raise ValueError(f'unsupported file format "{format}"')
 
-    return cls(path, *args, loop=loop, skip_samples=skip_samples, rx_channel_count=rx_channel_count, dtype=dtype, xp=xp, **kws)
+    return cls(
+        path,
+        *args,
+        loop=loop,
+        skip_samples=skip_samples,
+        rx_channel_count=rx_channel_count,
+        dtype=dtype,
+        xp=xp,
+        **kws,
+    )

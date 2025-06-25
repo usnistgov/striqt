@@ -104,7 +104,7 @@ def sync_aggregate_5g_pss(
 
     # start dimensions: (..., port index, cell Nid2, sync block index, symbol pair index, IQ sample index)
     Ragg = iqwaveform.envtopow(R.max(axis=(-4, -2)))
-    
+
     # reduce port index, etc in power space
     Ragg = Ragg.max(axis=tuple(range(Ragg.ndim - 1)))
     Ragg = Ragg - xp.median(Ragg)
