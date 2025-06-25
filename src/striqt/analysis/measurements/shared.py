@@ -53,7 +53,7 @@ def cellular_cell_id2(capture: specs.Capture, spec: typing.Any):
 
 
 @register.coordinate_factory(
-    dtype='uint16', attrs={'standard_name': 'SSB symbol index'}
+    dtype='uint16', attrs={'standard_name': 'SSB beam index'}
 )
 @util.lru_cache()
 def cellular_ssb_beam_index(
