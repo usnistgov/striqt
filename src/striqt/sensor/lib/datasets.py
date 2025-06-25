@@ -12,7 +12,7 @@ from . import captures, specs, util
 from .sources import SourceBase
 
 from striqt.analysis import register
-from striqt.analysis.lib.dataarrays import CAPTURE_DIM, CHANNEL_DIM  # noqa: F401
+from striqt.analysis.lib.dataarrays import CAPTURE_DIM, CHANNEL_DIM, AcquiredIQ  # noqa: F401
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -224,7 +224,7 @@ class AnalysisCaller:
 
     def __call__(
         self,
-        iq: 'iqwaveform.type_stubs.ArrayType',
+        iq: AcquiredIQ,
         sweep_time,
         capture: specs.RadioCapture,
         pickled=False,
@@ -244,7 +244,7 @@ class AnalysisCaller:
             if self.correction:
                 with lb.stopwatch('resample, filter, calibrate', logger_level='debug'):
                     iq = iq_corrections.resampling_correction(
-                        iq, capture, self.radio, overwrite_x=overwrite_x
+                        iq.raw, capture, self.radio, overwrite_x=overwrite_x
                     )
 
             result = striqt_analysis.lib.dataarrays.analyze_by_spec(
