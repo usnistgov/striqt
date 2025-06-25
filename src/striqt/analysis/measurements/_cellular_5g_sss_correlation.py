@@ -53,7 +53,7 @@ _coord_factories = [
 dtype = 'complex64'
 
 
-sss_alignment_cache = register.KeywordArgumentCache([dataarrays.CAPTURE_DIM, 'spec'])
+sss_alignment_cache = register.KeywordArgumentCache(['capture', 'spec'])
 
 
 @sss_alignment_cache.apply
@@ -83,7 +83,7 @@ def correlate_5g_sss(
     )
 
     if array_api_compat.is_cupy_array(ssb_iq):
-        cell_id_split = 3
+        cell_id_split = 24
     else:
         cell_id_split = None
 

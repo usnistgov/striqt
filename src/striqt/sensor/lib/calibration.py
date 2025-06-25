@@ -395,7 +395,7 @@ def lookup_system_noise_power(
 
     return xr.DataArray(
         data=10 * np.log10(noise_psd),
-        # coords={"temperature_source": list(temps.keys())},
+        dims=datasets.CAPTURE_DIM,
         attrs={'name': 'Sensor system noise PSD', 'units': 'dBm/Hz'},
     )
 

@@ -25,7 +25,7 @@ class Cellular5GNRSyncCorrelationSpec(
     dict=True,
 ):
     subcarrier_spacing: float
-    sample_rate: float = 15.36e6
+    sample_rate: float = 15.36e6/2
     discovery_periodicity: float = 20e-3
     frequency_offset: typing.Union[float, dict[float, float]] = 0
     shared_spectrum: bool = False
