@@ -158,9 +158,6 @@ def dump(
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', xr.SerializationWarning)
             encodings = _build_encodings(data, compression=compression, filter=filter)
-            import pickle
-
-            pickle.dump(data, open('debug.p', 'wb'))
             return data.to_zarr(store, encoding=encodings, mode='w', **kws)
 
 

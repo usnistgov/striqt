@@ -142,6 +142,8 @@ class NullSource(base.SourceBase):
             self.backend['tx_gain'] = gain
 
     def open(self):
+        if 'rx_channel_count' in self.resource:
+            self.rx_channel_count = self.resource['rx_channel_count']
         self._logger.propagate = False
         self.backend = {}
 
