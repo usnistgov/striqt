@@ -25,7 +25,7 @@ class Cellular5GNRSyncCorrelationSpec(
     dict=True,
 ):
     subcarrier_spacing: float
-    sample_rate: float = 15.36e6/2
+    sample_rate: float = 15.36e6 / 2
     discovery_periodicity: float = 20e-3
     frequency_offset: typing.Union[float, dict[float, float]] = 0
     shared_spectrum: bool = False
@@ -52,9 +52,7 @@ def cellular_cell_id2(capture: specs.Capture, spec: typing.Any):
     return values
 
 
-@register.coordinate_factory(
-    dtype='uint16', attrs={'standard_name': 'SSB beam index'}
-)
+@register.coordinate_factory(dtype='uint16', attrs={'standard_name': 'SSB beam index'})
 @util.lru_cache()
 def cellular_ssb_beam_index(
     capture: specs.Capture, spec: Cellular5GNRSyncCorrelationSpec
@@ -158,7 +156,7 @@ def correlate_sync_sequence(
     template_bcast = sync_seq[xp.newaxis, :, xp.newaxis, :]
     # pad_size = template_bcast.shape[-1]
     # print(iq_bcast.shape, template_bcast.shape)
-    # template_bcast = iqwaveform.util.pad_along_axis(template_bcast, [[0,pad_size]], axis=3) 
+    # template_bcast = iqwaveform.util.pad_along_axis(template_bcast, [[0,pad_size]], axis=3)
 
     cp_samples = round(9 / 128 * spec.sample_rate / spec.subcarrier_spacing)
     offs = round(spec.sample_rate / spec.subcarrier_spacing + 2 * cp_samples)
