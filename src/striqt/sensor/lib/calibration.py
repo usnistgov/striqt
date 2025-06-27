@@ -391,8 +391,6 @@ def lookup_system_noise_power(
     k = scipy.constants.Boltzmann * 1000  # scaled from W/K to mW/K
     noise_psd = (10 ** (noise_figure / 10) - 1) * k * T
 
-    print('system noise shape: ', noise_psd.shape)
-
     return xr.DataArray(
         data=10 * np.log10(noise_psd),
         dims=datasets.CAPTURE_DIM,
