@@ -7,6 +7,7 @@ from __future__ import annotations
 import collections
 import functools
 import msgspec
+import textwrap
 import typing
 import typing_extensions
 from . import specs, util
@@ -18,8 +19,10 @@ if typing.TYPE_CHECKING:
     _R = typing_extensions.TypeVar('_R')
     import labbench as lb
     import iqwaveform
+    import inspect
 else:
     lb = util.lazy_import('labbench')
+    inspect = util.lazy_import('inspect')
 
 
 class _MeasurementCallable(typing.Protocol):
@@ -230,6 +233,38 @@ class MeasurementInfo(typing.NamedTuple):
     dims: typing.Iterable[str] | str | None = (None,)
 
 
+@functools.lru_cache()
+def _make_measurement_signature(spec_cls):
+    """
+    Generates an inspect.Signature object from a specs.Measurement subclass.
+    """
+    kw_parameters = inspect.signature(spec_cls).parameters
+
+    parameters = [
+        inspect.Parameter(
+            'iq',
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            annotation='iqwaveform.type_stubs.ArrayType',
+        ),
+        inspect.Parameter(
+            'capture', inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=specs.Capture
+        ),
+    ]
+
+    return inspect.Signature(parameters + list(kw_parameters.values()))
+
+
+def _make_measurement_docstring(spec_cls):
+    skip = len(specs.Measurement.__mro__) + 1
+    docs = [
+        cls.__doc__.strip()
+        for cls in spec_cls.__mro__[-skip::-1]
+        if cls.__doc__ is not None
+    ]
+    args = textwrap.indent('\n'.join(docs), 4 * ' ')
+    return f'{specs.Measurement.__doc__.rstrip()}\n{args}'
+
+
 class _MeasurementRegistry(
     collections.UserDict[type[specs.Measurement], MeasurementInfo]
 ):
@@ -350,6 +385,11 @@ class _MeasurementRegistry(
                 )
 
             self[spec_type] = MeasurementInfo(func=wrapped, **info_kws)
+
+            wrapped.__signature__ = _make_measurement_signature(spec_type)
+            wrapped.__doc__ = (
+                f'{wrapped.__doc__}\n{_make_measurement_docstring(spec_type)}'
+            )
 
             return wrapped
 

@@ -253,7 +253,7 @@ class AnalysisCaller:
                 spec=self.analysis_spec,
                 block_each=block_each,
                 as_xarray='delayed' if delayed else True,
-                expand_dims=(CAPTURE_DIM,)
+                expand_dims=(CAPTURE_DIM,),
             )
 
         if delayed:

@@ -274,8 +274,10 @@ channel_analysis:
             - dpss
             - 3.87638403
 
-        # Report the frequency bin average of this size
-        frequency_bin_averaging: 12 # default: None (no averaging)
+        # Performs video averaging along the frequency axis on
+        # (video_bandwidth/frequency_resolution) bins and reduces
+        # the returned resolution
+        video_bandwidth: 360e3 # default: None (no averaging)
 
     # a histogram of all spectrogram power bins
     spectrogram_histogram:
@@ -285,7 +287,7 @@ channel_analysis:
         window:
             - dpss
             - 3.87638403 # enbw/resolution ≈ 2
-        frequency_bin_averaging: 12
+        video_bandwidth: 360e3
 
         # Same power bin parameters as channel_power_histogram
         power_low: -150

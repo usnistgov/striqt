@@ -259,17 +259,18 @@ def cellular_resource_power_histogram(
 
     link_direction = 'downlink', 'uplink'
 
+    rb_bandwidth = 12 * spec.subcarrier_spacing
     if spec.average_rbs == 'half':
-        frequency_bin_averaging = 12
+        video_bandwidth = rb_bandwidth / 2
     elif spec.average_rbs:
-        frequency_bin_averaging = 24
+        video_bandwidth = rb_bandwidth
     else:
-        frequency_bin_averaging = None
+        video_bandwidth = None
 
     if spec.average_slots:
         time_bin_averaging = 14
     else:
-        time_bin_averaging = None
+        time_bin_averaing = None
 
     grid_spec = specs.maybe_lookup_with_capture_key(
         capture,
@@ -309,8 +310,17 @@ def cellular_resource_power_histogram(
         frequency_resolution=spec.subcarrier_spacing / 2,
         fractional_overlap=fractional_overlap,
         window_fill=window_fill,
-        frequency_bin_averaging=frequency_bin_averaging,
+        video_bandwidth=video_bandwidth,
     )
+
+    if spec.time_aperture is None:
+        time_bin_averaging = None
+    else:
+        assert iqwaveform.isroundmod(
+            (1 - fractional_overlap) / spec.frequency_resolution, 1
+        )
+
+        time_bin_averaging = round((1 - fractional_overlap) / spec.frequency_resolution)
 
     spg, metadata = shared.evaluate_spectrogram(
         iq, capture, spg_spec, dtype='float32', dB=False

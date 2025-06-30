@@ -20,11 +20,9 @@ from striqt.analysis.lib.dataarrays import AcquiredIQ
 if typing.TYPE_CHECKING:
     import iqwaveform
     import pandas as pd
-    import scipy
 else:
     iqwaveform = util.lazy_import('iqwaveform')
     pd = util.lazy_import('pandas')
-    scipy = util.lazy_import('scipy')
 
 
 FILTER_SIZE = 4001

@@ -24,6 +24,18 @@ class Cellular5GNRSyncCorrelationSpec(
     frozen=True,
     dict=True,
 ):
+    """
+    subcarrier_spacing (float): 3GPP channel subcarrier spacing (Hz)
+    sample_rate (float): output sample rate for the resampled synchronization waveform (samples/s)
+    discovery_periodicity (float): time period between synchronization blocks (s)
+    frequency_offset (float or dict[float, float]):
+        center frequency offset (see notes)
+    shared_spectrum:
+        whether to follow the 3GPP "shared spectrum" synchronizatio block layout
+    max_block_count: number of synchronization blocks to evaluate
+    trim_cp: whether to trim the cyclic prefix duration from the output
+    """
+
     subcarrier_spacing: float
     sample_rate: float = 15.36e6 / 2
     discovery_periodicity: float = 20e-3
@@ -275,11 +287,24 @@ class FrequencyAnalysisSpecBase(
     kw_only=True,
     frozen=True,
 ):
+    """
+    window (specs.WindowType): a window specification, following `scipy.signal.get_window`
+    frequency_resolution (float): the STFT resolution (in Hz)
+    fractional_overlap (float):
+        fraction of each FFT window that overlaps with its neighbor
+    window_fill (float):
+        fraction of each FFT window that is filled with the window function
+        (leaving the rest zeroed)
+    video_bandwidth (float): typing.Optional[float] = None
+    trim_stopband (bool):
+        whether to trim the frequency axis to capture.analysis_bandwidth
+    """
+
     window: specs.WindowType
     frequency_resolution: float
     fractional_overlap: float = 0
     window_fill: float = 1
-    frequency_bin_averaging: typing.Optional[int] = None
+    video_bandwidth: typing.Optional[float] = None
     trim_stopband: bool = True
 
 
@@ -288,7 +313,7 @@ class FrequencyAnalysisKeywords(specs.AnalysisKeywords):
     frequency_resolution: float
     fractional_overlap: typing.NotRequired[float]
     window_fill: typing.NotRequired[float]
-    frequency_bin_averaging: typing.NotRequired[typing.Optional[int]]
+    video_bandwidth: typing.NotRequired[typing.Optional[float]]
 
 
 class SpectrogramSpec(
@@ -298,12 +323,19 @@ class SpectrogramSpec(
     kw_only=True,
     frozen=True,
 ):
-    time_bin_averaging: typing.Optional[int] = None
+    """
+    time_aperture (float):
+        if specified, binned RMS averaging is applied along time axis in the
+        spectrogram to yield this coarser resolution (s)
+    dB (bool): if True, returned power is transformed into dB units
+    """
+
+    time_aperture: typing.Optional[float] = None
     dB = True
 
 
 class SpectrogramKeywords(FrequencyAnalysisKeywords):
-    time_bin_averaging: typing.NotRequired[typing.Optional[int]]
+    time_aperture: typing.NotRequired[typing.Optional[float]]
 
 
 @util.lru_cache()
@@ -380,6 +412,28 @@ def _cached_spectrogram(
             '(1-window_fill) * (sample_rate/frequency_resolution) must be a counting number'
         )
 
+    if spec.video_bandwidth is None:
+        frequency_bin_averaging = None
+    elif iqwaveform.isroundmod(spec.video_bandwidth, spec.frequency_resolution):
+        frequency_bin_averaging = round(
+            spec.video_bandwidth / spec.frequency_resolution
+        )
+    else:
+        raise ValueError(
+            'when specified, video_bandwidth must be a multiple of frequency_resolution'
+        )
+
+    hop_size = nfft - noverlap
+    hop_period = hop_size / capture.sample_rate
+    if spec.time_aperture is None:
+        time_bin_averaging = None
+    elif iqwaveform.isroundmod(spec.time_aperture, hop_period):
+        time_bin_averaging = round(spec.time_aperture / hop_period)
+    else:
+        raise ValueError(
+            'when specified, time_aperture must be a multiple of (1-fractional_overlap)/frequency_resolution'
+        )
+
     spg = iqwaveform.fourier.spectrogram(
         iq,
         window=spec.window,
@@ -398,17 +452,13 @@ def _cached_spectrogram(
             spg, nfft, capture.sample_rate, bandwidth=capture.analysis_bandwidth, axis=2
         )
 
-    if spec.frequency_bin_averaging is not None:
+    if frequency_bin_averaging is not None:
         spg = iqwaveform.util.binned_mean(
-            spg, spec.frequency_bin_averaging, axis=2, fft=True
+            spg, frequency_bin_averaging, axis=2, fft=True
         )
 
-    if spec.time_bin_averaging is not None:
-        spg = iqwaveform.util.binned_mean(
-            spg, spec.time_bin_averaging, axis=1, fft=False
-        )
-
-    # util.sync_if_cupy(iq)
+    if time_bin_averaging is not None:
+        spg = iqwaveform.util.binned_mean(spg, time_bin_averaging, axis=1, fft=False)
 
     enbw = spec.frequency_resolution * equivalent_noise_bandwidth(spec.window, nfft)
 
@@ -452,6 +502,17 @@ def spectrogram_baseband_frequency(
     else:
         raise ValueError('sample_rate/resolution must be a counting number')
 
+    if spec.video_bandwidth is None:
+        frequency_bin_averaging = None
+    elif iqwaveform.isroundmod(spec.video_bandwidth, spec.frequency_resolution):
+        frequency_bin_averaging = round(
+            spec.video_bandwidth / spec.frequency_resolution
+        )
+    else:
+        raise ValueError(
+            'when specified, video_bandwidth must be a multiple of frequency_resolution'
+        )
+
     # use the iqwaveform.fourier fftfreq for higher precision, which avoids
     # headaches when merging spectra with different sampling parameters due
     # to rounding errors.
@@ -463,8 +524,8 @@ def spectrogram_baseband_frequency(
             freqs, nfft, capture.sample_rate, capture.analysis_bandwidth, axis=0
         )
 
-    if spec.frequency_bin_averaging is not None:
-        freqs = iqwaveform.util.binned_mean(freqs, spec.frequency_bin_averaging)
+    if spec.video_bandwidth is not None:
+        freqs = iqwaveform.util.binned_mean(freqs, frequency_bin_averaging)
         freqs -= freqs[freqs.size // 2]
 
     # only now downconvert. round to a still-large number of digits

@@ -160,15 +160,25 @@ class FilteredCapture(Capture, kw_only=True, frozen=True, cache_hash=True):
 
 
 class AnalysisKeywords(typing.TypedDict):
-    """base class for groups of keyword arguments that define calls to a set of analysis functions"""
-
     as_xarray: typing.NotRequired[bool | typing.Literal['delayed']]
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        print(cls, kwargs)
 
 
 class Measurement(
     SpecBase, forbid_unknown_fields=True, cache_hash=True, kw_only=True, frozen=True
 ):
-    """base class for groups of keyword arguments that define calls to a set of analysis functions"""
+    """
+    Returns:
+        Analysis result of type `(xarray.DataArray if as_xarray else type(iq))`
+
+    Args:
+        iq (numpy.ndarray or cupy.ndarray): the M-channel input waveform of shape (M,N)
+        capture:
+        as_xarray (bool): True to return xarray.DataArray or False to match type(iq)
+    """
 
 
 class Analysis(
