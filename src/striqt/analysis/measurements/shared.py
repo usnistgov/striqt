@@ -295,7 +295,7 @@ class FrequencyAnalysisSpecBase(
     window_fill (float):
         fraction of each FFT window that is filled with the window function
         (leaving the rest zeroed)
-    video_bandwidth (float): typing.Optional[float] = None
+    video_bandwidth (float): bin bandwidth for RMS averaging in the frequency domain
     trim_stopband (bool):
         whether to trim the frequency axis to capture.analysis_bandwidth
     """
