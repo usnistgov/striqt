@@ -1,7 +1,6 @@
 # add GPU compute via CUDA
 
 channels:
-  - nvidia
   - conda-forge
   - file://opt/deepwave/conda-channels/airstack-conda
 

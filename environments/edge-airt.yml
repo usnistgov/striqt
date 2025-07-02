@@ -4,7 +4,6 @@ name: striqt
 
 channels:
 - conda-forge
-- nvidia
 - file://opt/deepwave/conda-channels/airstack-conda
 - nodefaults
 dependencies:
