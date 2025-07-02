@@ -80,6 +80,7 @@ def sync_aggregate_5g_pss(
     iq,
     capture: specs.Capture,
     window_fill=0.5,
+    snr_window_fill=0.08,
     **kwargs: typing.Unpack[shared.Cellular5GNRSyncCorrelationKeywords],
 ):
     """compute alignment index offsets based on correlate_5g_pss.
@@ -98,16 +99,28 @@ def sync_aggregate_5g_pss(
 
     kwargs['as_xarray'] = False
 
+    # R.shape -> (..., port index, cell Nid2, SSB index, symbol start index, IQ sample index)
     R, _ = cellular_5g_pss_correlation(iq, capture, **kwargs)
 
-    global Ragg, weights, est
+    # R.shape -> (..., port index, cell Nid2, symbol start index, IQ sample index)
+    R = R.mean(axis=-3)
 
-    # start dimensions: (..., port index, cell Nid2, sync block index, symbol pair index, IQ sample index)
-    Ragg = iqwaveform.envtopow(R.max(axis=(-4, -2)))
+    if iqwaveform.util.is_cupy_array(iq):
+        from cupyx.scipy import ndimage
+    else:
+        from scipy import ndimage
 
-    # reduce port index, etc in power space
-    Ragg = Ragg.max(axis=tuple(range(Ragg.ndim - 1)))
-    Ragg = Ragg - xp.median(Ragg)
+    Rpow = iqwaveform.envtopow(R)
+
+    # estimate an SNR
+    window_size = round(snr_window_fill * R.shape[-1])
+    Rpow_median = ndimage.median_filter(
+        Rpow, size=(Rpow.ndim - 1) * (1,) + (window_size,)
+    )
+    Rsnr = (Rpow / Rpow_median) - 1
+
+    # Ragg.shape: (IQ sample index,)
+    Ragg = Rsnr.max(axis=-4).max(axis=(-3, -2))
     assert Ragg.ndim == 1
 
     weights = iqwaveform.get_window(

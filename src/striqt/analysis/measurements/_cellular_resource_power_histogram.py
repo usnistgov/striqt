@@ -268,9 +268,9 @@ def cellular_resource_power_histogram(
         video_bandwidth = None
 
     if spec.average_slots:
-        time_bin_averaging = 14
+        time_aperture = 1e-3 * (15e3 / spec.subcarrier_spacing)
     else:
-        time_bin_averaing = None
+        time_aperture = None
 
     grid_spec = specs.maybe_lookup_with_capture_key(
         capture,
@@ -313,14 +313,16 @@ def cellular_resource_power_histogram(
         video_bandwidth=video_bandwidth,
     )
 
-    if spec.time_aperture is None:
+    if time_aperture is None:
         time_bin_averaging = None
     else:
-        assert iqwaveform.isroundmod(
-            (1 - fractional_overlap) / spec.frequency_resolution, 1
-        )
+        nfft = capture.sample_rate / spg_spec.frequency_resolution
+        noverlap = fractional_overlap * nfft
+        hop_size = nfft - noverlap
+        hop_period = hop_size / capture.sample_rate
+        time_bin_averaging = round(time_aperture / hop_period)
 
-        time_bin_averaging = round((1 - fractional_overlap) / spec.frequency_resolution)
+        assert iqwaveform.isroundmod(time_aperture / hop_period, 1)
 
     spg, metadata = shared.evaluate_spectrogram(
         iq, capture, spg_spec, dtype='float32', dB=False

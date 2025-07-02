@@ -292,7 +292,7 @@ def build_dataarray(
 
         da[coord_info.name] = da[coord_info.name].assign_attrs(metadata)
 
-    return da.assign_attrs(delayed.info.attrs | delayed.attrs)
+    return da.assign_attrs(delayed.info.attrs | delayed.spec.todict() | delayed.attrs)
 
 
 @util.lru_cache()
