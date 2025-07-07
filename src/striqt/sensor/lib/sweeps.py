@@ -273,7 +273,7 @@ class SweepIterator:
             if sweep_time is None and capture_prev is not None:
                 sweep_time = capture_prev.start_time
 
-    def _acquire(self, iq_prev, capture_prev, capture_this, capture_next):
+    def _acquire(self, iq_prev: AcquiredIQ, capture_prev, capture_this, capture_next):
         if self._reuse_iq:
             reuse_this = _iq_is_reusable(
                 capture_prev, capture_this, self.radio.base_clock_rate
@@ -294,7 +294,8 @@ class SweepIterator:
                 backend_sample_rate=self.radio.backend_sample_rate(),
                 start_time=None,
             )
-            calls['radio'] = lb.Call(tuple, (iq_prev, capture_ret))
+            ret_iq = AcquiredIQ(raw=iq_prev.raw, aligned=iq_prev.aligned, capture=capture_ret)
+            calls['radio'] = lb.Call(lambda: ret_iq)
         else:
             calls['radio'] = lb.Call(
                 self.radio.acquire,
