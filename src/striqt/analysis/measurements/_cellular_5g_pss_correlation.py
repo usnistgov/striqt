@@ -110,6 +110,7 @@ def sync_aggregate_5g_pss(
     else:
         from scipy import ndimage
 
+    global Rpow, Rsnr, ipeak, Rpow_corr
     Rpow = iqwaveform.envtopow(R)
 
     # estimate an SNR
@@ -117,10 +118,18 @@ def sync_aggregate_5g_pss(
     Rpow_median = ndimage.median_filter(
         Rpow, size=(Rpow.ndim - 1) * (1,) + (window_size,)
     )
-    Rsnr = (Rpow / Rpow_median) - 1
+    Rsnr = Rpow / Rpow_median
+
+    # scale by the
+    ipeak = xp.argmax(Rsnr, axis=-1, keepdims=True)
+
+    Rpow_corr = Rsnr * (
+        np.take_along_axis(Rpow, ipeak, axis=-1)
+        / np.take_along_axis(Rsnr, ipeak, axis=-1)
+    )
 
     # Ragg.shape: (IQ sample index,)
-    Ragg = Rsnr.max(axis=-4).max(axis=(-3, -2))
+    Ragg = Rpow_corr.mean(axis=-4).max(axis=(-3, -2))
     assert Ragg.ndim == 1
 
     weights = iqwaveform.get_window(

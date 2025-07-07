@@ -38,7 +38,7 @@ def spectrogram_time(
     elif iqwaveform.isroundmod(spec.time_aperture, hop_period):
         average_bins = round(spec.time_aperture / hop_period)
         size = size // average_bins
-        hop_period = hop_period / average_bins
+        hop_period = hop_period * average_bins
     else:
         raise ValueError(
             'when specified, time_aperture must be a multiple of (1-fractional_overlap)/frequency_resolution'
