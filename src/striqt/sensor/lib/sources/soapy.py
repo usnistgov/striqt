@@ -355,16 +355,6 @@ class SoapyRadioSource(base.SourceBase):
         time_to_set_ns = int((full_secs + 1) * 1e9)
         self.backend.setHardwareTime(time_to_set_ns, 'pps')
 
-    def acquire(
-        self,
-        capture: specs.RadioCapture = None,
-        next_capture: typing.Union[specs.RadioCapture, None] = None,
-        correction: bool = True,
-    ) -> AcquiredIQ:
-        return super().acquire(
-            capture=capture, next_capture=next_capture, correction=correction
-        )
-
     def _needs_reenable(self, next_capture: specs.RadioCapture):
         """returns True if the channel needs to be disabled and re-enabled between the specified capture"""
 
