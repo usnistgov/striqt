@@ -1,9 +1,16 @@
 from __future__ import annotations
+import typing
+
 from labbench import paramattr as attr
 
 from ..lib.sources import soapy
-from ..lib import specs
-import uuid
+from ..lib import specs, util
+
+
+if typing.TYPE_CHECKING:
+    import psutil
+else:
+    psutil = util.lazy_import('psutil')
 
 
 def _reenable_loop(radio, count):
@@ -114,9 +121,21 @@ class Air7x01B(soapy.SoapyRadioSource):
 
     @attr.property.str(inherit=True)
     def id(self):
-        # this is the Jetson hardware UUID. as of 1.0.0, AirStack doesn't seem to
-        # return a serial through Soapy
-        return hex(uuid.getnode())[2:]
+        # as of 1.0.0, AirStack doesn't seem to return a serial through Soapy
+        # instead, take the Jetson ethernet MAC address as the radio id.
+        try:
+            if_addrs = psutil.net_if_addrs()['eth0']
+        except KeyError:
+            raise OSError('no eth0 to create radio_id')
+
+        for snic_addr in if_addrs:
+            if snic_addr.address[2] == ':':
+                eth0_mac = snic_addr.address.replace(':', '')
+                break
+        else:
+            raise OSError('no MAC address reported for the eth0 interface')
+
+        return eth0_mac
 
 
 class AirT7x01B(Air7x01B):

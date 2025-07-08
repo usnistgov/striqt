@@ -294,7 +294,9 @@ class SweepIterator:
                 backend_sample_rate=self.radio.backend_sample_rate(),
                 start_time=None,
             )
-            ret_iq = AcquiredIQ(raw=iq_prev.raw, aligned=iq_prev.aligned, capture=capture_ret)
+            ret_iq = AcquiredIQ(
+                raw=iq_prev.raw, aligned=iq_prev.aligned, capture=capture_ret
+            )
             calls['radio'] = lb.Call(lambda: ret_iq)
         else:
             calls['radio'] = lb.Call(
