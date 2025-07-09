@@ -100,7 +100,7 @@ def cellular_resource_power_bin(
     else:
         raise ValueError('sample_rate/resolution must be a counting number')
 
-    enbw = fres * 2 * shared.equivalent_noise_bandwidth(spec.window, nfft)
+    enbw = fres * shared.equivalent_noise_bandwidth(spec.window, nfft)
 
     return bins, {'units': f'dBm/{enbw / 1e3:0.0f} kHz'}
 
@@ -328,15 +328,13 @@ def cellular_resource_power_histogram(
         iq, capture, spg_spec, dtype='float32', dB=False
     )
 
+    metadata= dict(metadata)
+    del metadata['units'], metadata['noise_bandwidth']
+
     # we really wanted to sum bins pairwise, instead of averaging them, but
     # it was simpler to average across all 24 bins rather than sum 2 and average 12.
     # this compensates for the difference.
     spg *= 2
-    enbw = 2 * metadata['noise_bandwidth']
-    metadata = metadata | {
-        'noise_bandwidth': enbw,
-        'units': f'dBm/{enbw / 1e3:0.0f} kHz',
-    }
 
     freqs = shared.spectrogram_baseband_frequency(capture, spg_spec, xp=xp)
 
