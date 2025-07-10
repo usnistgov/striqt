@@ -1,5 +1,6 @@
 from __future__ import annotations
 import decimal
+import fractions
 import typing
 
 from ..lib import dataarrays, register, specs, util
@@ -302,15 +303,15 @@ class FrequencyAnalysisSpecBase(
 
     window: specs.WindowType
     frequency_resolution: float
-    fractional_overlap: float = 0
-    window_fill: float = 1
+    fractional_overlap: fractions.Fraction = 0
+    window_fill: fractions.Fraction = 1
     video_bandwidth: typing.Optional[float] = None
     trim_stopband: bool = True
 
 
 class FrequencyAnalysisKeywords(specs.AnalysisKeywords):
-    window: specs.WindowType
-    frequency_resolution: float
+    window: typing.NotRequired[specs.WindowType]
+    frequency_resolution: typing.NotRequired[float]
     fractional_overlap: typing.NotRequired[float]
     window_fill: typing.NotRequired[float]
     video_bandwidth: typing.NotRequired[typing.Optional[float]]
