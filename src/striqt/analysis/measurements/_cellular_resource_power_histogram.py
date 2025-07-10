@@ -328,7 +328,7 @@ def cellular_resource_power_histogram(
         iq, capture, spg_spec, dtype='float32', dB=False
     )
 
-    metadata= dict(metadata)
+    metadata = dict(metadata)
     del metadata['units'], metadata['noise_bandwidth']
 
     # we really wanted to sum bins pairwise, instead of averaging them, but
