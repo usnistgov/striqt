@@ -6,21 +6,17 @@ from pathlib import Path
 import sys
 import typing
 
-import msgspec
-
 from striqt import analysis
-from striqt.analysis import load, dump  # noqa: F401
+from striqt.analysis.lib.io import decode_from_yaml_file, load, dump  # noqa: F401
 
 from . import specs, util, captures
 
 if typing.TYPE_CHECKING:
     import iqwaveform
     import numpy as np
-    import pandas as pd
 else:
     iqwaveform = util.lazy_import('iqwaveform')
     np = util.lazy_import('numpy')
-    pd = util.lazy_import('pandas')
 
 
 def _get_default_format_fields(
@@ -142,11 +138,8 @@ def read_yaml_sweep(
         specified by `extensions.sweep_struct`)
     """
 
-    with open(path, 'rb') as fd:
-        text = fd.read()
-
     # build a dict to extract the list of sweep fields and apply defaults
-    tree = msgspec.yaml.decode(text, type=dict, strict=False)
+    tree = decode_from_yaml_file(path)
 
     # apply default capture settings
     defaults = tree['defaults']
