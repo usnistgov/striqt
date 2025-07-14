@@ -324,6 +324,9 @@ class SoapyRadioSource(base.SourceBase):
         else:
             self._sync_to_external_time_source()
 
+    def get_temperatures(self) -> dict[str, float]:
+        return {}
+
     def _sync_to_os_time_source(self):
         hardware_time = self.backend.getHardwareTime('now') / 1e9
         if abs(hardware_time - time.time()) >= 0.2:
