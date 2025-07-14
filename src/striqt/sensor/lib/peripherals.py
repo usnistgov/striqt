@@ -1,5 +1,5 @@
 from __future__ import annotations
-from . import specs
+from . import specs, sources
 
 
 class PeripheralsBase:
@@ -9,8 +9,11 @@ class PeripheralsBase:
     methods for arming and acquisition.
     """
 
-    def __init__(self, sweep: specs.Sweep | None):
+    def __init__(
+        self, sweep: specs.Sweep | None, source: sources.SourceBase | None = None
+    ):
         self.set_sweep(sweep)
+        self.source = source
         super().__init__()
 
     def open(self):
@@ -38,6 +41,9 @@ class PeripheralsBase:
     def set_sweep(self, sweep: specs.Sweep):
         self.sweep = sweep
 
+    def set_source(self, source: sources.SourceBase | None = None):
+        self.source = source
+
     def __enter__(self):
         self.open()
         return self
@@ -47,5 +53,5 @@ class PeripheralsBase:
 
 
 class NoPeripherals(PeripheralsBase):
-    def __init__(self, sweep=None):
+    def __init__(self, sweep=None, source=None):
         pass

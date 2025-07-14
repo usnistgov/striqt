@@ -9,18 +9,13 @@ from labbench import paramattr as attr
 
 from . import base, method_attr
 from .. import captures, specs
-from striqt.analysis.lib.dataarrays import AcquiredIQ
 
 
 if typing.TYPE_CHECKING:
-    import iqwaveform
     import numpy as np
-    import pandas as pd
     import SoapySDR
 else:
-    iqwaveform = lb.util.lazy_import('iqwaveform')
     np = lb.util.lazy_import('numpy')
-    pd = lb.util.lazy_import('pandas')
     SoapySDR = lb.util.lazy_import('SoapySDR')
 
 
@@ -54,7 +49,7 @@ def validate_stream_result(
 
 
 class SoapyRadioSource(base.SourceBase):
-    """single-channel sensor waveform acquisition through SoapySDR and pre-processed with iqwaveform"""
+    """Specialize SoapySDR for signal analyzer acquisition"""
 
     resource: dict = attr.value.dict(
         inherit=True,
