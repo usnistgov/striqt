@@ -38,9 +38,7 @@ dependencies:
 - frozendict
 
   # for documentation and plotting
-- schemdraw
 - mscorefonts
 
 - pip:
-  - iqwaveform @ git+https://github.com/usnistgov/iqwaveform
   - striqt @ https://github.com/usnistgov/striqt
