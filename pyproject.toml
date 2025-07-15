@@ -6,7 +6,7 @@ requires-python = ">=3.9"
 dependencies = [ "array-api-compat",
  "dask",
  "frozendict",
- "iqwaveform",
+ "iqwaveform @ git+https://github.com/usnistgov/iqwaveform",
  "labbench>=0.42.0,<1",
  "matplotlib~=3.7",
  "methodtools",
@@ -67,6 +67,9 @@ packages = ["src/striqt"]
 
 [tool.hatch.build.targets.sdist]
 packages = ["src/striqt"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.ruff]
 target-version = "py39"
