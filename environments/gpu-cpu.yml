@@ -36,4 +36,4 @@ dependencies:
 - cython
 - pip:
   - iqwaveform @ git+https://github.com/usnistgov/iqwaveform
-  - -e ..[gpu-cpu]
+  - striqt @ https://github.com/usnistgov/striqt

@@ -202,7 +202,6 @@ class RadioSetup(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=T
     time_sync_every_capture: TimeSyncEveryCaptureType = False
     warmup_sweep: WarmupSweepType = True
     array_backend: ArrayBackendType = 'cupy'
-    fast_lo: FastLOType = True
 
     time_source: TimeSourceType = 'host'
     clock_source: ClockSourceType = 'internal'
@@ -247,7 +246,6 @@ class _RadioSetupKeywords(typing.TypedDict, total=False):
     time_sync_every_capture: TimeSyncEveryCaptureType
     warmup_sweep: WarmupSweepType
     array_backend: ArrayBackendType
-    fast_lo: FastLOType
 
 
 class Description(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):

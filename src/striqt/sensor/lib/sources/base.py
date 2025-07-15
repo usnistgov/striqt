@@ -183,11 +183,6 @@ class SourceBase(lb.Device):
         help='whether to synchronize sample timestamps external PPS on each capture',
     )
 
-    fast_lo = attr.value.bool(
-        False,
-        help='if False, permit the radio to use slower frequency changes/channel enables to improve LO spurs',
-    )
-
     _downsample = attr.value.float(1.0, min=0, help='backend_sample_rate/sample_rate')
 
     # these must be implemented by child classes
@@ -304,7 +299,6 @@ class SourceBase(lb.Device):
         self.time_sync_every_capture = radio_setup.time_sync_every_capture
         self.time_source(radio_setup.time_source)
         self.clock_source(radio_setup.clock_source)
-        self.fast_lo = radio_setup.fast_lo
 
         if not self.time_sync_every_capture:
             self.rx_enabled(False)

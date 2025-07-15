@@ -1,4 +1,5 @@
 from __future__ import annotations
+import fractions
 import typing
 
 from ..lib import dataarrays, register, specs, util
@@ -20,13 +21,13 @@ class ChannelPowerTimeSeriesSpec(
     kw_only=True,
     frozen=True,
 ):
-    detector_period: float
+    detector_period: fractions.Fraction
     power_detectors: tuple[str, ...] = ('rms', 'peak')
 
 
 class ChannelPowerTimeSeriesKeywords(specs.AnalysisKeywords):
     # for setting the type hints in **kwargs below
-    detector_period: float
+    detector_period: fractions.Fraction
     power_detectors: typing.NotRequired[tuple[str, ...]]
 
 

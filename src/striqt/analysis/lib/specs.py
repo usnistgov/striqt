@@ -1,7 +1,9 @@
 """data structures that specify waveform characteristics"""
 
 from __future__ import annotations
+import fractions
 import functools
+import numbers
 import typing
 from typing import Annotated
 import warnings
@@ -29,14 +31,21 @@ WindowType = typing.Union[str, tuple[str, float]]
 def _enc_hook(obj):
     if isinstance(obj, (np.float16, np.float32, np.float64)):
         return float(obj)
+    elif isinstance(obj, fractions.Fraction):
+        return str(obj)
     else:
         return obj
 
 
 def _dec_hook(type_, obj):
-    if typing.get_origin(type_) is pd.Timestamp:
+    origin_cls = typing.get_origin(type_) or type_
+    np_float_types = (np.float16, np.float32, np.float64)
+
+    if issubclass(origin_cls, pd.Timestamp):
         return pd.to_datetime(obj)
-    elif isinstance(obj, (np.float16, np.float32, np.float64)):
+    elif issubclass(origin_cls, fractions.Fraction):
+        return fractions.Fraction(obj)
+    elif issubclass(origin_cls, numbers.Number) and isinstance(obj, np_float_types):
         return float(obj)
     else:
         return obj

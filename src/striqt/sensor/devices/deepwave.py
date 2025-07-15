@@ -4,24 +4,13 @@ import typing
 from labbench import paramattr as attr
 
 from ..lib.sources import soapy
-from ..lib import specs, util
+from ..lib import util
 
 
 if typing.TYPE_CHECKING:
     import psutil
 else:
     psutil = util.lazy_import('psutil')
-
-
-def _reenable_loop(radio, count):
-    import numpy as np
-
-    buf = np.empty((radio.rx_channel_count, 2), dtype=radio._transport_dtype)
-
-    for _ in range(count):
-        radio.backend.activateStream(radio._rx_stream)
-        radio._read_stream(buf, 0, 1, timeout_sec=200e-3, on_overflow='ignore')
-        radio.backend.deactivateStream(radio._rx_stream)
 
 
 # for TX only (RX channel is accessed through the AirT7201B.channel method)
@@ -50,10 +39,8 @@ class Air7x01B(soapy.SoapyRadioSource):
     # across channels, resulting in streaming errors
     _rx_enable_delay = attr.value.float(0.31, inherit=True)
 
-    # use of float32 saves the gpu a slight amount of work, but
-    # demands more memory bandwidth
+    # float32 or int16: gpu work vs memory bandwidth tradeoff
     _transport_dtype = attr.value.str('int16', inherit=True)
-    _reenable_cycles = 0
 
     def open(self):
         # in some cases specifying the driver has caused exceptions on connect
@@ -61,28 +48,6 @@ class Air7x01B(soapy.SoapyRadioSource):
         driver = self.backend.getDriverKey()
         if driver != 'SoapyAIRT':
             raise IOError(f'connected to {driver}, but expected SoapyAirT')
-
-    def arm(self, capture: specs.RadioCapture = None, **capture_kws):
-        if capture is None:
-            capture = self.get_capture_struct()
-
-        fc_current = self.center_frequency()
-        if capture.center_frequency != fc_current:
-            # empirical thresholds for the number of reenable cycles
-            # needed to establish IQ balancing (about 60 dB, in one unit)
-            ratio = capture.center_frequency / fc_current
-
-            if max(1 / ratio, ratio) >= 4.5:
-                reenable_count = 5
-            else:
-                reenable_count = 4
-        else:
-            reenable_count = 2
-
-        super().arm(capture, **capture_kws)
-
-        if not self.fast_lo:
-            _reenable_loop(self, reenable_count)
 
     def _post_connect(self):
         self._set_jesd_sysref_delay(0)
@@ -136,6 +101,11 @@ class Air7x01B(soapy.SoapyRadioSource):
             raise OSError('no MAC address reported for the eth0 interface')
 
         return eth0_mac
+
+    def get_temperatures(self) -> dict[str, float]:
+        """returns the transceiver temperature in Celsius"""
+
+        return {'transceiver': self.backend.readSensorFloat('xcvr_temp')}
 
 
 class AirT7x01B(Air7x01B):

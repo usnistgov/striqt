@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 import typing
 import warnings
 
@@ -8,14 +9,14 @@ from collections import defaultdict
 
 import numcodecs
 
-from . import dataarrays, util
+from . import dataarrays, specs, util
 
 if typing.TYPE_CHECKING:
     import numpy as np
     import xarray as xr
     import zarr
     import pandas as pd
-    import iqwaveform
+    import yaml
 
     if hasattr(zarr.storage, 'Store'):
         # zarr 2.x
@@ -29,7 +30,7 @@ else:
     pd = util.lazy_import('pandas')
     xr = util.lazy_import('xarray')
     zarr = util.lazy_import('zarr')
-    iqwaveform = util.lazy_import('iqwaveform')
+    yaml = util.lazy_import('yaml')
 
 warnings.filterwarnings(
     'ignore',
@@ -168,6 +169,75 @@ def load(path: str | Path) -> 'xr.DataArray' | 'xr.Dataset':
         store = open_store(path, mode='r')
 
     return xr.open_dataset(store, engine='zarr')
+
+
+class _YAMLIncludeConstructor:
+    _lock = threading.RLock()
+
+    def __init__(self, path):
+        self.nested_paths: list[Path] = [Path(path)]
+
+    def __enter__(self):
+        self._lock.acquire()
+        yaml.add_constructor('!include', self, Loader=yaml.CSafeLoader)
+
+    def __exit__(self, *args):
+        self._lock.release()
+
+    def get_include_path(self, s: str):
+        s = Path(s)
+        if s.is_absolute():
+            path = s
+        else:
+            path = self.nested_paths[-1].parent / s
+        self.nested_paths.append(path)
+
+        return path
+
+    def pop_include_path(self):
+        self.nested_paths.pop()
+
+    def __call__(self, _, node):
+        path = self.get_include_path(node.value)
+        with open(path, 'rb') as stream:
+            content = yaml.load(stream, yaml.CSafeLoader)
+
+        self.pop_include_path()
+        return content
+
+
+def decode_from_yaml_file(path: str | Path, *, type=typing.Any):
+    """Deserialize an object from YAML.
+
+    Parameters
+    ----------
+    buf : path
+        Path to the YAML file.
+    type : type, optional
+        A type that is a subclass of `striqt.analysis.specs.SpecBase`
+        to decode the object as. If provided, the message will be type checked
+        and decoded as the specified type. Defaults to `Any`, in which case
+        the message will be decoded using the default YAML types.
+
+    Returns
+    -------
+    obj : Any
+        The deserialized object.
+
+    See Also
+    --------
+    `msgspec.yaml.decode`
+    """
+
+    with open(path) as f, _YAMLIncludeConstructor(path):
+        obj = yaml.load(f, yaml.CSafeLoader)
+
+    if type is typing.Any:
+        return obj
+    elif issubclass(type, specs.SpecBase):
+        return type.fromdict(obj)
+    else:
+        raise TypeError(f'unsupported type {repr(type)}')
 
 
 class _FileStreamBase:

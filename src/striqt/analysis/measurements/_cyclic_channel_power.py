@@ -1,4 +1,5 @@
 from __future__ import annotations
+import fractions
 import typing
 
 from ._channel_power_time_series import power_detector
@@ -21,14 +22,14 @@ class CyclicChannelPowerSpec(
     frozen=True,
 ):
     cyclic_period: float
-    detector_period: float
+    detector_period: fractions.Fraction
     power_detectors: tuple[str, ...] = ('rms', 'peak')
     cyclic_statistics: tuple[typing.Union[str, float], ...] = ('min', 'mean', 'max')
 
 
 class CyclicChannelPowerKeywords(specs.AnalysisKeywords):
     cyclic_period: float
-    detector_period: float
+    detector_period: fractions.Fraction
     power_detectors: typing.Optional[tuple[str, ...]]
     cyclic_statistics: typing.Optional[tuple[typing.Union[str, float], ...]]
 
