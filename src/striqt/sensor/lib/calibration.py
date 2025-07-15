@@ -4,6 +4,8 @@ import itertools
 from pathlib import Path
 import typing
 
+import msgspec
+
 from . import datasets, peripherals, sinks, sources, specs, util
 from .captures import split_capture_channels
 from .specs import Annotated, meta
@@ -13,11 +15,13 @@ if typing.TYPE_CHECKING:
     import pandas as pd
     import scipy
     import xarray as xr
+    import labbench as lb
 else:
     np = util.lazy_import('numpy')
     pd = util.lazy_import('pandas')
     scipy = util.lazy_import('scipy')
     xr = util.lazy_import('xarray')
+    lb = util.lazy_import('labbench')
 
 NoiseDiodeEnabledType = Annotated[bool, meta(standard_name='Noise diode enabled')]
 
@@ -484,8 +488,8 @@ class YFactorSink(sinks.SinkBase):
         print(f'saved to {str(self.output_path)!r}')
 
 
-class ManualYFactorPeripheral(peripherals.PeripheralsBase):
-    """Human input "peripheral" to prompt noise diode connection changes"""
+class ManualYFactorPeripherals(peripherals.PeripheralsBase):
+    """Human input "peripheral" that prompts noise diode connection changes"""
 
     sweep: ManualYFactorSweep
 
@@ -520,3 +524,122 @@ class ManualYFactorPeripheral(peripherals.PeripheralsBase):
             'enr_dB': self.sweep.calibration_setup.enr,
             'Tamb_K': self.sweep.calibration_setup.ambient_temperature,
         }
+
+
+def _field_tuple(info: msgspec.structs.FieldInfo) -> tuple:
+    return (
+        info.name,
+        info.type,
+        msgspec.field(
+            name=info.name, default=info.default, default_factory=info.default_factory
+        ),
+    )
+
+
+def _merge_specs(
+    name: str, module: str, cls_list: list[type[specs.SpecBase]]
+) -> type[specs.SpecBase]:
+    # for each field name, the definition that will be returned is the
+    # the last defined in cls_list
+    all_fields = sum((msgspec.structs.fields(c) for c in cls_list), tuple())
+    fields = {info.name: _field_tuple(info) for info in all_fields}
+
+    return msgspec.defstruct(name, fields.values(), bases=(cls_list[0],), module=module)
+
+
+def specialize_cal_sweep(
+    name: str,
+    cal_cls: type[specs.Sweep],
+    sensor_cls: type[specs.Sweep],
+) -> type[specs.Sweep]:
+    """build a type calibration sweep specification struct for the given sensor.
+
+    The idea is to generate a `cal_cls` subclass that can be applied
+    to a `sensor_cls` that has been extended with additional fields.
+
+    As such, the `captures` and `radio_setup` fields in the returned class
+    have been updated with fields and defaults from `sensor_cls`.
+    """
+    all_fields = {}
+    module = sensor_cls.__module__
+
+    for cls in (cal_cls, sensor_cls):
+        for info in msgspec.structs.fields(cls):
+            all_fields.setdefault(info.name, []).append(info.type)
+
+    capture_cls = _merge_specs(
+        'CalibrationRadioCapture', module, all_fields['defaults']
+    )
+    setup_cls = _merge_specs('CalibrationRadioSetup', module, all_fields['radio_setup'])
+
+    class sweep_cls(
+        cal_cls,
+        forbid_unknown_fields=True,
+        frozen=True,
+        cache_hash=True,
+    ):
+        captures: tuple[capture_cls, ...] = tuple()
+        defaults: capture_cls = capture_cls()
+        radio_setup: setup_cls = setup_cls()
+
+    sweep_cls.__name__ = name
+    sweep_cls.__module__ = sensor_cls.__module__
+    sweep_cls.__qualname__ = name
+
+    return sweep_cls
+
+
+def specialize_cal_peripherals(
+    name: str,
+    cal_cls: type[peripherals.PeripheralsBase],
+    sensor_cls: type[peripherals.PeripheralsBase],
+) -> type[peripherals.PeripheralsBase]:
+    """extend a Peripherals class to perform calibrations.
+
+    The idea is to generate a `cal_cls` subclass that can be applied
+    to a custom `sensor_cls` peripheral class that has been extended with
+    additional fields.
+    """
+
+    class peripheral_cls(sensor_cls, cal_cls):
+        """A collection of peripheral devices (switches, thermometers, etc.) used in sensing.
+
+        For remote control, devices connections should be accessible to the client PC.
+        The `edge-sweep.py` script expects this object to have `setup` and `acquire` methods.
+        """
+
+        def open(self):
+            lb.concurrently(
+                integrations=lb.Call(sensor_cls.open, self),
+                calibration=lb.Call(cal_cls.open, self),
+            )
+
+        def close(self):
+            lb.concurrently(
+                integrations=lb.Call(sensor_cls.close, self),
+                calibration=lb.Call(cal_cls.close, self),
+            )
+
+        def arm(self, capture):
+            """runs before each capture"""
+
+            return lb.concurrently(
+                integrations=lb.Call(sensor_cls.arm, self, capture),
+                calibration=lb.Call(cal_cls.arm, self, capture),
+                flatten=True,
+            )
+
+        def acquire(self, capture) -> dict:
+            """runs during each capture, and returns a dictionary of results keyed by name"""
+
+            return lb.concurrently(
+                integrations=lb.Call(sensor_cls.acquire, self, capture),
+                calibration=lb.Call(cal_cls.acquire, self, capture),
+                flatten=True,
+            )
+
+    peripheral_cls.__name__ = name
+    peripheral_cls.__module__ = sensor_cls.__module__
+    peripheral_cls.__qualname__ = name
+
+    return peripheral_cls

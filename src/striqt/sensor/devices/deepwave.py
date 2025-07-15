@@ -105,7 +105,7 @@ class Air7x01B(soapy.SoapyRadioSource):
     def get_temperatures(self) -> dict[str, float]:
         """returns the transceiver temperature in Celsius"""
 
-        return {'radio_transceiver': self.backend.readSensorFloat('xcvr_temp')}
+        return {'transceiver': self.backend.readSensorFloat('xcvr_temp')}
 
 
 class AirT7x01B(Air7x01B):
