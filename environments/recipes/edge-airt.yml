@@ -1,8 +1,0 @@
-# the CPU computation requirements plus CUDA (GPU compute) and the proprietary AirStack SDR drivers
-
-# CPU computations (no GPU and no SDR hardware support)
-
-inherit:
-  - layers/base.yml
-  - layers/add-airt.yml
-  - layers/add-edge-io.yml
