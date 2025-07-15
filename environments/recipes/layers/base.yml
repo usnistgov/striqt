@@ -38,7 +38,6 @@ dependencies:
   - frozendict
 
   # for documentation and plotting
-  - schemdraw
   - mscorefonts
 
   - pip:
