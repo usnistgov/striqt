@@ -29,4 +29,3 @@ dependencies:
     - https://archive.deepwavedigital.com/pytools/pytools-2022.1.12-py2.py3-none-any.whl
     - --extra-index-url https://pip.cupy.dev/aarch64
     - cupy-cuda102
-    - -e ..[edge-airt]

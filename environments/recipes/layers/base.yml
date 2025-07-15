@@ -43,6 +43,4 @@ dependencies:
 
   - pip:
       - iqwaveform @ git+https://github.com/usnistgov/iqwaveform
-
-      # allows imports from the src/ directory in this repo
-      - -e ..
+      - striqt @ https://github.com/usnistgov/striqt
