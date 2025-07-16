@@ -35,26 +35,62 @@ def broadcast_to_channels(
     return res
 
 
-def _match_capture_fields(
-    capture: specs.RadioCapture, fields: dict[str], radio_id: str | None = None
+class _UNDEFINED_FIELD:
+    pass
+
+
+def _match_fields(
+    fields: dict[str],
+    capture: specs.RadioCapture,
+    **extras: dict[str],
 ) -> bool:
+    """return True if all fields match in the specified fields.
+
+    For each `{key: value}` in `fields`, a match requires that 
+    either `extras[key] == value` or `getattr(capture, key) == value`.
+    """
     if isinstance(capture.channel, tuple):
         raise ValueError('split the capture to evaluate alias matches')
 
     for name, value in fields.items():
-        if name == 'radio_id' and radio_id is not None and value == radio_id:
-            continue
+        capture_value = getattr(capture, name, _UNDEFINED_FIELD)
+        extras_value = extras.get(capture, name, _UNDEFINED_FIELD)
 
-        if not hasattr(capture, name):
+        if capture_value is not _UNDEFINED_FIELD:
+            if isinstance(capture_value, tuple):
+                capture_value = capture_value[0]
+
+            if capture_value == value:
+                continue
+            else:
+                return False
+            
+        elif extras_value is not _UNDEFINED_FIELD:
+            if value == extras_value:
+                continue
+            else:
+                return False
+            
+        else:
             return False
 
-        capture_value = getattr(capture, name)
+        # if name not in extras:
+        #     pass
+        # elif value == extras[name]:
+        #     continue
+        # else:
+        #     return False
 
-        if isinstance(capture_value, tuple):
-            capture_value = capture_value[0]
+        # if not hasattr(capture, name):
+        #     return False
 
-        if capture_value != value:
-            return False
+        # capture_value = getattr(capture, name)
+
+        # if isinstance(capture_value, tuple):
+        #     capture_value = capture_value[0]
+
+        # if capture_value != value:
+        #     return False
 
     return True
 
@@ -72,7 +108,9 @@ def evaluate_aliases(
 
     for coord_name, coord_spec in output.coord_aliases.items():
         for alias_value, field_spec in coord_spec.items():
-            if _match_capture_fields(capture, field_spec, radio_id):
+            if _match_fields(
+                capture, field_spec, radio_id=radio_id, extras=ret
+            ):
                 ret[coord_name] = alias_value
                 break
     return ret
