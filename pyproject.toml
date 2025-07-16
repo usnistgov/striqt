@@ -5,7 +5,6 @@ description = "tooling to support precision gpu-accelerated radio signal analysi
 requires-python = ">=3.9"
 dependencies = [ "array-api-compat",
  "dask",
- "frozendict",
  "iqwaveform @ git+https://github.com/dgkuester/iqwaveform",
  "labbench>=0.42.0,<1",
  "matplotlib~=3.7",
@@ -17,15 +16,18 @@ dependencies = [ "array-api-compat",
  "numpy>=1.21,<3",
  "pandas",
  "rpyc~=5.3",
- "schemdraw",
  "scipy>=1.13,<2",
  "xarray>=2024.3",
  "zarr>=2.18,<4",
 ]
-
 [[project.authors]]
 name = "Dan Kuester"
 email = "daniel.kuester@nist.gov"
+
+[build-system]
+requires = [ "hatchling",
+]
+build-backend = "hatchling.build"
 
 [project.optional-dependencies]
 dev = [ "jupyter",
@@ -58,19 +60,6 @@ sensor-sweep = "striqt.cli.sweep:run"
 plot-sensor-captures = "striqt.cli.plot:run"
 serve-sensor = "striqt.cli.server:run"
 
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/striqt"]
-
-[tool.hatch.build.targets.sdist]
-packages = ["src/striqt"]
-
-[tool.hatch.metadata]
-allow-direct-references = true
-
 [tool.ruff]
 target-version = "py39"
 extend-include = [ "*.ipynb",
@@ -83,8 +72,19 @@ line-ending = "lf"
 docstring-code-format = true
 docstring-code-line-length = "dynamic"
 
+[tool.hatch.metadata]
+allow-direct-references = true
+
 [tool.ruff.lint.extend-per-file-ignores]
 "**/__init__.py" = [ "F401",
  "F403",
  "E402",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = [ "src/striqt",
+]
+
+[tool.hatch.build.targets.sdist]
+packages = [ "src/striqt",
 ]

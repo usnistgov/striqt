@@ -9,6 +9,7 @@ from pathlib import Path
 from functools import lru_cache
 
 CONDA_SKIP = {
+    'striqt',
     'python',
     'pip',
     'mscorefonts',
@@ -16,6 +17,11 @@ CONDA_SKIP = {
     'soapysdr-module-airt',
     'pigz',
 }
+
+ADD_PIP = {
+    'iqwaveform @ git+https://github.com/dgkuester/iqwaveform'
+}
+
 DEV_DEPENDENCIES = {'jupyter', 'ruff', 'toml', 'ruamel.yaml'}
 PYPI_RENAME = {'ruamel.yaml': 'ruamel_yaml', 'matplotlib-base': 'matplotlib'}
 
@@ -50,10 +56,23 @@ def ordered_dependency_merge(l1, l2):
 
 
 def pop_pip(dependency_list):
+    def keep(n: str):
+        if n.startswith(('-', 'http')):
+            return False
+        elif n.split()[0].lower().startswith(tuple(CONDA_SKIP)):
+            return False
+        else:
+            return True
+
     for i, obj in enumerate(dependency_list):
         if isinstance(obj, dict):
-            return dependency_list.pop(i)['pip']
-    return None
+            deps = dependency_list.pop(i)['pip']
+            break
+    else:
+        return []
+    
+    return [n for n in deps if keep(n)] + list(ADD_PIP)
+
 
 
 def rename_pypi_deps(dep_map):
@@ -67,13 +86,14 @@ def rename_pypi_deps(dep_map):
 pyproject = toml.load(PYPROJECT_PATH)
 deps_base = None
 # merge layers in recipes
-for recipe_file in ('cpu.yml', 'gpu-cpu.yml', 'edge-airt.yml'):
+for recipe_file in ('cpu.yml', 'gpu-cpu.yml'):
     recipe_name = recipe_file.rsplit('.', 1)[0]
     env = yaml.load(open(ENV_DIR / recipe_file, 'r'))
 
     # list of pip dependencies, without any editable install lines
-    pip_deps = pop_pip(env['dependencies']) or []
+    pip_deps = pop_pip(env['dependencies'])
     pip_deps = [s for s in pip_deps if not s.startswith(('-', 'http'))]
+    print(recipe_file, pip_deps)
 
     yml_deps = {package_name(p): p for p in env['dependencies']}
     yml_deps = {k: yml_deps[k] for k in yml_deps.keys() - CONDA_SKIP}
