@@ -254,11 +254,17 @@ class Description(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=
     signal_chain: Optional[tuple[str, ...]] = tuple()
     version: str = 'unversioned'
 
+AliasMatchType = Annotated[
+    typing.Union[dict[str, Any],tuple[dict[str, Any], ...]],
+    meta(
+        'name of a registered waveform alignment function for analysis-based IQ synchronization'
+    ),
+]
 
 class Output(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     path: Optional[str] = '{yaml_name}-{start_time}'
     store: typing.Union[Literal['zip'], Literal['directory']] = 'directory'
-    coord_aliases: dict[str, dict[str, typing.Union[dict[str, Any],list[dict[str, Any]]]]] = {}
+    coord_aliases: dict[str, dict[str, AliasMatchType]] = {}
 
 
 SweepStructType = Annotated[
