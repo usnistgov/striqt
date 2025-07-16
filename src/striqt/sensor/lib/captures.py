@@ -46,7 +46,7 @@ def _match_fields(
 ) -> bool:
     """return True if all fields match in the specified fields.
 
-    For each `{key: value}` in `fields`, a match requires that 
+    For each `{key: value}` in `fields`, a match requires that
     either `extras[key] == value` or `getattr(capture, key) == value`.
     """
     if isinstance(capture.channel, tuple):
@@ -64,13 +64,13 @@ def _match_fields(
                 continue
             else:
                 return False
-            
+
         elif extras_value is not _UNDEFINED_FIELD:
             if value == extras_value:
                 continue
             else:
                 return False
-            
+
         else:
             return False
 
@@ -108,9 +108,7 @@ def evaluate_aliases(
 
     for coord_name, coord_spec in output.coord_aliases.items():
         for alias_value, field_spec in coord_spec.items():
-            if _match_fields(
-                capture, field_spec, radio_id=radio_id, extras=ret
-            ):
+            if _match_fields(capture, field_spec, radio_id=radio_id, **ret):
                 ret[coord_name] = alias_value
                 break
     return ret
