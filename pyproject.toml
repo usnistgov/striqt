@@ -6,7 +6,7 @@ requires-python = ">=3.9"
 dependencies = [ "array-api-compat",
  "dask",
  "frozendict",
- "iqwaveform @ git+https://github.com/usnistgov/iqwaveform",
+ "iqwaveform @ git+https://github.com/dgkuester/iqwaveform",
  "labbench>=0.42.0,<1",
  "matplotlib~=3.7",
  "methodtools",

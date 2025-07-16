@@ -29,7 +29,6 @@ dependencies:
 - dask
 - msgspec~=0.18
 - netCDF4
-- frozendict
 - mscorefonts
 - cupy ~= 12.2
 - cython
