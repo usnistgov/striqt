@@ -54,7 +54,7 @@ def _match_fields(
 
     for name, value in fields.items():
         capture_value = getattr(capture, name, _UNDEFINED_FIELD)
-        extras_value = extras.get(capture, name, _UNDEFINED_FIELD)
+        extras_value = extras.get(name, _UNDEFINED_FIELD)
 
         if capture_value is not _UNDEFINED_FIELD:
             if isinstance(capture_value, tuple):
