@@ -34,4 +34,4 @@ dependencies:
 - cupy ~= 12.2
 - cython
 - pip:
-  - striqt @ https://github.com/usnistgov/striqt
+  - striqt @ git+https://github.com/usnistgov/striqt
