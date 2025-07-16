@@ -39,7 +39,7 @@ class _UNDEFINED_FIELD:
     pass
 
 
-def _match_fields(
+def _single_match(
     fields: dict[str],
     capture: specs.RadioCapture,
     **extras: dict[str],
@@ -55,7 +55,7 @@ def _match_fields(
     for name, value in fields.items():
         hits = (
             getattr(capture, name, _UNDEFINED_FIELD),
-            extras.get(name, _UNDEFINED_FIELD)
+            extras.get(name, _UNDEFINED_FIELD),
         )
 
         if value in hits:
@@ -66,43 +66,21 @@ def _match_fields(
         else:
             return False
 
-        # if capture_value is not _UNDEFINED_FIELD:
-        #     if isinstance(capture_value, tuple):
-        #         capture_value = capture_value[0]
-
-        #     if capture_value == value:
-        #         continue
-        #     else:
-        #         return False
-
-        # elif extras_value is not _UNDEFINED_FIELD:
-        #     if value == extras_value:
-        #         continue
-        #     else:
-        #         return False
-
-        # else:
-        #     return False
-
-        # if name not in extras:
-        #     pass
-        # elif value == extras[name]:
-        #     continue
-        # else:
-        #     return False
-
-        # if not hasattr(capture, name):
-        #     return False
-
-        # capture_value = getattr(capture, name)
-
-        # if isinstance(capture_value, tuple):
-        #     capture_value = capture_value[0]
-
-        # if capture_value != value:
-        #     return False
-
     return True
+
+
+def _match_fields(
+    multi_fields: list[dict[str]],
+    capture: specs.RadioCapture,
+    **extras: dict[str],
+) -> bool:
+    """return True if all fields match in the specified fields.
+
+    For each `{key: value}` in `fields`, a match requires that
+    either `extras[key] == value` or `getattr(capture, key) == value`.
+    """
+
+    return any(_single_match(f, capture=capture, **extras) for f in multi_fields)
 
 
 @util.lru_cache()
@@ -118,6 +96,15 @@ def evaluate_aliases(
 
     for coord_name, coord_spec in output.coord_aliases.items():
         for alias_value, field_spec in coord_spec.items():
+            if isinstance(field_spec, dict):
+                # "or" across the list of field specs
+                field_spec = [field_spec]
+
+            if not isinstance(field_spec, (list, tuple)):
+                raise TypeError(
+                    'match specification for field {alias_value!r} must be list or dict'
+                )
+
             if _match_fields(field_spec, capture=capture, radio_id=radio_id, **ret):
                 ret[coord_name] = alias_value
                 break
