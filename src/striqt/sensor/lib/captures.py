@@ -53,26 +53,36 @@ def _match_fields(
         raise ValueError('split the capture to evaluate alias matches')
 
     for name, value in fields.items():
-        capture_value = getattr(capture, name, _UNDEFINED_FIELD)
-        extras_value = extras.get(name, _UNDEFINED_FIELD)
+        hits = (
+            getattr(capture, name, _UNDEFINED_FIELD),
+            extras.get(name, _UNDEFINED_FIELD)
+        )
 
-        if capture_value is not _UNDEFINED_FIELD:
-            if isinstance(capture_value, tuple):
-                capture_value = capture_value[0]
-
-            if capture_value == value:
-                continue
-            else:
-                return False
-
-        elif extras_value is not _UNDEFINED_FIELD:
-            if value == extras_value:
-                continue
-            else:
-                return False
-
+        if value in hits:
+            continue
+        elif isinstance(hits[0], tuple) and hits[0][0] == value:
+            # is this special case still necessary?
+            continue
         else:
             return False
+
+        # if capture_value is not _UNDEFINED_FIELD:
+        #     if isinstance(capture_value, tuple):
+        #         capture_value = capture_value[0]
+
+        #     if capture_value == value:
+        #         continue
+        #     else:
+        #         return False
+
+        # elif extras_value is not _UNDEFINED_FIELD:
+        #     if value == extras_value:
+        #         continue
+        #     else:
+        #         return False
+
+        # else:
+        #     return False
 
         # if name not in extras:
         #     pass
@@ -99,7 +109,7 @@ def _match_fields(
 def evaluate_aliases(
     capture: specs.RadioCapture,
     *,
-    radio_id: str | None = None,
+    radio_id: str | None = _UNDEFINED_FIELD,
     output: specs.Output,
 ) -> dict[str]:
     """evaluate the field values"""
