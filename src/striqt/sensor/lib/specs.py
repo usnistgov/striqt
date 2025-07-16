@@ -257,7 +257,7 @@ class Description(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=
 AliasMatchType = Annotated[
     typing.Union[dict[str, Any],tuple[dict[str, Any], ...]],
     meta(
-        'name of a registered waveform alignment function for analysis-based IQ synchronization'
+        'one or more dictionaries of valid match sets to "or"'
     ),
 ]
 
