@@ -32,9 +32,21 @@ output:
   # File format for the zarr data save: 'directory' or 'zip'
   store: zip
 
-  # A list of new alias to add. In this example, a new
-  # coordinate 'antenna_name' in the capture dimension, containing a string label
-  # determined by the value of the 'channel' field
+  #   Additional capture fields in output zarr data files are defined here
+  #   - Each first level key defines the name of the new coordinate that will
+  #     be added in the capture dimension
+  #   - The second level is a list of possible values for that coordinate
+  #   - The third level is a list of already-defined capture fields and field values.
+  #     All of these must match in order to use this coordinate value.
+  # 
+  #   Update these site-specific parameters when
+  #   - Radios in each sensor are swapped or newly deployed
+  #   - antenna connections are changed, or new antennas are added
+  # 
+  #   The match fields for an alias may be defined in terms of
+  #   - Fields of the RadioCapture object, including extensions from this file
+  #   - `radio_id`, `yaml_name`
+  #   - Other previously defined aliases from this file
   coord_aliases:
     antenna_name:
       # category names and dependent values
