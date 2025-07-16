@@ -258,7 +258,7 @@ class Description(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=
 class Output(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     path: Optional[str] = '{yaml_name}-{start_time}'
     store: typing.Union[Literal['zip'], Literal['directory']] = 'directory'
-    coord_aliases: dict[str, dict[str, dict[str, Any]|list[dict[str, Any]]]] = {}
+    coord_aliases: dict[str, dict[str, typing.Union[dict[str, Any],list[dict[str, Any]]]]] = {}
 
 
 SweepStructType = Annotated[
