@@ -108,7 +108,7 @@ def evaluate_aliases(
 
     for coord_name, coord_spec in output.coord_aliases.items():
         for alias_value, field_spec in coord_spec.items():
-            if _match_fields(capture, field_spec, radio_id=radio_id, **ret):
+            if _match_fields(field_spec, capture=capture, radio_id=radio_id, **ret):
                 ret[coord_name] = alias_value
                 break
     return ret
