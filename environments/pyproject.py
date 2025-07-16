@@ -18,11 +18,11 @@ CONDA_SKIP = {
     'pigz',
 }
 
-ADD_PIP = {
+EXTRA_DEPS = {
     'iqwaveform @ git+https://github.com/dgkuester/iqwaveform'
 }
 
-DEV_DEPENDENCIES = {'jupyter', 'ruff', 'toml', 'ruamel.yaml'}
+DEV_DEPS = {'jupyter', 'ruff', 'toml', 'ruamel.yaml'}
 PYPI_RENAME = {'ruamel.yaml': 'ruamel_yaml', 'matplotlib-base': 'matplotlib'}
 
 ENV_DIR = Path(__file__).parent
@@ -71,7 +71,7 @@ def pop_pip(dependency_list):
     else:
         return []
     
-    return [n for n in deps if keep(n)] + list(ADD_PIP)
+    return [n for n in deps if keep(n)] + list(EXTRA_DEPS)
 
 
 
@@ -99,7 +99,7 @@ for recipe_file in ('cpu.yml', 'gpu-cpu.yml'):
     yml_deps = {k: yml_deps[k] for k in yml_deps.keys() - CONDA_SKIP}
 
     # split the packages into development and base dependencies
-    deps = {k: yml_deps[k] for k in yml_deps.keys() - DEV_DEPENDENCIES}
+    deps = {k: yml_deps[k] for k in yml_deps.keys() - DEV_DEPS}
     deps = rename_pypi_deps(deps)
     deps = sorted(list(deps.values()) + pip_deps)
 
@@ -113,7 +113,7 @@ for recipe_file in ('cpu.yml', 'gpu-cpu.yml'):
         pyproject['project']['optional-dependencies'][recipe_name] = deps
 
     if recipe_file == 'cpu.yml':
-        deps_dev = {k: yml_deps[k] for k in (yml_deps.keys() & DEV_DEPENDENCIES)}
+        deps_dev = {k: yml_deps[k] for k in (yml_deps.keys() & DEV_DEPS)}
         deps_dev = rename_pypi_deps(deps_dev)
         deps_dev_list = sorted(deps_dev.values())
         pyproject['project']['optional-dependencies'].update(dev=deps_dev_list)
