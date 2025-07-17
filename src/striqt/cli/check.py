@@ -15,6 +15,7 @@ def run(yaml_path):
     import labbench as lb
     from pathlib import Path
     import pandas as pd
+    import itertools
 
     lb.show_messages('warning')
 
@@ -56,7 +57,6 @@ def run(yaml_path):
         print(f'\tRaw input: {pu!r}')
         print(f'\tEvaluated: {pe!r}')
         print('\tExists: ', 'yes' if Path(pe).exists() else 'no')
-    import itertools
 
     kws = {'sweep': sweep, 'radio_id': radio_id, 'yaml_path': yaml_path}
     field_sets = {}
