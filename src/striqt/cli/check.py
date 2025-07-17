@@ -79,7 +79,8 @@ def run(yaml_path):
     print('\n\nUnique capture field coordinates in output:')
     print(60 * '=')
     omit = {'start_time', 'delay'}
-    pprint({k: field_sets[k] for k in (cfields-omit)}, width=40)
+    pprint({k: field_sets[k] for k in (cfields - omit) if k in field_sets}, width=40)
+
 
 if __name__ == '__main__':
     run()
