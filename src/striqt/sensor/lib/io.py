@@ -19,9 +19,12 @@ else:
     np = util.lazy_import('numpy')
 
 
-
 def _get_capture_format_fields(
-    capture: specs.RadioCapture, sweep: specs.Sweep, *, radio_id: str | None = None, yaml_path: Path | str | None
+    capture: specs.RadioCapture,
+    sweep: specs.Sweep,
+    *,
+    radio_id: str | None = None,
+    yaml_path: Path | str | None,
 ) -> dict[str, str]:
     """return a mapping for string `'{field_name}'.format()` style mapping values"""
     fields = captures.capture_fields_with_aliases(

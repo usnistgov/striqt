@@ -51,7 +51,7 @@ def _dec_hook(type_, obj):
         return obj
 
 
-def _deep_hash(obj: typing.Mapping|tuple):
+def _deep_hash(obj: typing.Mapping | tuple):
     """compute the hash of a dict or other mapping based on its key, value pairs.
 
     The hash is evaluated recursively for nested structures.
@@ -144,7 +144,7 @@ class SpecBase(msgspec.Struct, kw_only=True, frozen=True, cache_hash=True):
         # work through the values
         for name in self.__struct_fields__:
             value = getattr(self, name)
-            if isinstance(value, (tuple,dict)):
+            if isinstance(value, (tuple, dict)):
                 h ^= _deep_hash(value)
             else:
                 h ^= hash(value)

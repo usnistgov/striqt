@@ -254,12 +254,12 @@ class Description(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=
     signal_chain: Optional[tuple[str, ...]] = tuple()
     version: str = 'unversioned'
 
+
 AliasMatchType = Annotated[
-    typing.Union[dict[str, Any],tuple[dict[str, Any], ...]],
-    meta(
-        'one or more dictionaries of valid match sets to "or"'
-    ),
+    typing.Union[dict[str, Any], tuple[dict[str, Any], ...]],
+    meta('one or more dictionaries of valid match sets to "or"'),
 ]
+
 
 class Output(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     path: Optional[str] = '{yaml_name}-{start_time}'
