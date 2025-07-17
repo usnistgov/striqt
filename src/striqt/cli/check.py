@@ -8,7 +8,7 @@ import click
 def run(yaml_path):
     print('Initializing...')
     # instantiate sweep objects
-    from striqt.sensor.lib import frontend, calibration
+    from striqt.sensor.lib import captures, frontend, calibration
     from striqt import sensor
     from pprint import pprint
     from striqt.sensor.lib.io import _get_capture_format_fields
@@ -56,18 +56,17 @@ def run(yaml_path):
         print(f'\tRaw input: {pu!r}')
         print(f'\tEvaluated: {pe!r}')
         print('\tExists: ', 'yes' if Path(pe).exists() else 'no')
-
+    import itertools
 
     kws = {'sweep': sweep, 'radio_id': radio_id, 'yaml_path': yaml_path}
     field_sets = {}
-    for c in sweep.captures:
+    splits = (captures.split_capture_channels(c) for c in sweep.captures)
+    for c in itertools.chain(*splits):
         fields = _get_capture_format_fields(c, **kws)
-        fields = [dict(fields, channel=[i]) for i in fields['channel']]
-        for f in fields:
-            for k, v in f.items():
-                if k in sweep.defaults.__struct_fields__ and k != 'start_time':
-                    continue
-                field_sets.setdefault(k, set()).add(v)
+        for k, v in fields.items():
+            if k in sweep.defaults.__struct_fields__ and k != 'start_time':
+                continue
+            field_sets.setdefault(k, set()).add(v)
 
     print('\n\nAlias {field} names and expanded values:')
     print(60 * '=')
