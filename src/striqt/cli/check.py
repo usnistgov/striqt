@@ -11,7 +11,7 @@ def run(yaml_path):
     from striqt.sensor.lib import frontend, calibration
     from striqt import sensor
     from pprint import pprint
-    from striqt.sensor.lib.io import _get_default_format_fields
+    from striqt.sensor.lib.io import _get_capture_format_fields
     import labbench as lb
     from pathlib import Path
     import pandas as pd
@@ -59,7 +59,7 @@ def run(yaml_path):
 
     print('\n\nAlias {field} names and expanded values:')
     print(60 * '=')
-    all_fields = _get_default_format_fields(
+    all_fields = _get_capture_format_fields(
         sweep, radio_id=radio_id, yaml_path=yaml_path
     )
     fields = {

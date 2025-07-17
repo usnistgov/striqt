@@ -19,12 +19,26 @@ else:
     np = util.lazy_import('numpy')
 
 
-def _get_default_format_fields(
+
+def _get_format_field_sets(
     sweep: specs.Sweep, *, radio_id: str | None = None, yaml_path: Path | str | None
 ) -> dict[str, str]:
     """return a mapping for string `'{field_name}'.format()` style mapping values"""
+    kws = {'sweep': sweep, 'radio_id': radio_id, 'yaml_path': yaml_path}
+    field_sets = {}
+    for c in sweep.captures:
+        fields = _get_capture_format_fields(c, **kws)
+        for k, v in fields.items():
+            field_sets.setdefault(k, set()).add(v)
+
+    return field_sets
+
+def _get_capture_format_fields(
+    capture: specs.RadioCapture, sweep: specs.Sweep, *, radio_id: str | None = None, yaml_path: Path | str | None
+) -> dict[str, str]:
+    """return a mapping for string `'{field_name}'.format()` style mapping values"""
     fields = captures.capture_fields_with_aliases(
-        sweep.defaults, radio_id=radio_id, output=sweep.output
+        capture, radio_id=radio_id, output=sweep.output
     )
 
     fields['start_time'] = datetime.now().strftime('%Y%m%d-%Hh%Mm%S')
@@ -49,8 +63,8 @@ def expand_path(
 
     path = Path(path).expanduser()
     if sweep is not None:
-        fields = _get_default_format_fields(
-            sweep, radio_id=radio_id, yaml_path=relative_to_file
+        fields = _get_capture_format_fields(
+            sweep.defaults, sweep, radio_id=radio_id, yaml_path=relative_to_file
         )
         try:
             path = Path(str(path).format(**fields))
