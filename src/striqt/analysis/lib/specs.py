@@ -57,7 +57,7 @@ def _deep_hash(obj: typing.Mapping|tuple):
     The hash is evaluated recursively for nested structures.
     """
     if isinstance(obj, (tuple, list)):
-        keys = None
+        keys = ()
         values = obj
     elif isinstance(obj, dict):
         keys = frozenset(obj.keys())
@@ -68,9 +68,8 @@ def _deep_hash(obj: typing.Mapping|tuple):
     deep_values = tuple(
         _deep_hash(v) if isinstance(v, (tuple, dict)) else v for v in values
     )
-    key_hash = frozenset(keys)
 
-    return hash(key_hash) ^ hash(deep_values)
+    return hash(keys) ^ hash(deep_values)
 
 
 def meta(standard_name: str, units: str | None = None, **kws) -> msgspec.Meta:
