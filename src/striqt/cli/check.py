@@ -56,6 +56,8 @@ def run(yaml_path):
         print(f'{name}:')
         print(f'\tRaw input: {pu!r}')
         print(f'\tEvaluated: {pe!r}')
+        if pe is None:
+            continue
         print('\tExists: ', 'yes' if Path(pe).exists() else 'no')
 
     kws = {'sweep': sweep, 'radio_id': radio_id, 'yaml_path': yaml_path}
@@ -69,18 +71,15 @@ def run(yaml_path):
             field_sets.setdefault(k, set()).add(v)
 
     print('\n\nUnique alias field coordinates in output:')
-    print(60 * '=')    
+    print(60 * '=')
     cfields = set(sweep.defaults.__struct_fields__)
     afields = set(field_sets.keys()) - cfields
-    d = {k: v for k, v in field_sets.items() if k in afields}
-    pprint(d, width=40)
+    pprint({k: field_sets[k] for k in afields}, width=40)
 
     print('\n\nUnique capture field coordinates in output:')
     print(60 * '=')
     omit = {'start_time', 'delay'}
-    d = {k: v for k, v in field_sets.items() if k in (cfields - omit)}
-    pprint(d, width=40)
-
+    pprint({k: field_sets[k] for k in (cfields-omit)}, width=40)
 
 if __name__ == '__main__':
     run()
