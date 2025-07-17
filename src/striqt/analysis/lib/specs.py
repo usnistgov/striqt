@@ -51,16 +51,26 @@ def _dec_hook(type_, obj):
         return obj
 
 
-def _dict_hash(d: typing.Mapping):
+def _deep_hash(obj: typing.Mapping|tuple):
     """compute the hash of a dict or other mapping based on its key, value pairs.
 
-    The hash is evaluated recursively for nested dictionaries.
+    The hash is evaluated recursively for nested structures.
     """
-    key_hash = frozenset(d.keys())
-    value_hash = tuple(
-        [_dict_hash(v) if isinstance(v, dict) else v for v in d.values()]
+    if isinstance(obj, (tuple, list)):
+        keys = None
+        values = obj
+    elif isinstance(obj, dict):
+        keys = frozenset(obj.keys())
+        values = obj.values()
+    else:
+        return hash(obj)
+
+    deep_values = tuple(
+        _deep_hash(v) if isinstance(v, (tuple, dict)) else v for v in values
     )
-    return hash(key_hash) ^ hash(value_hash)
+    key_hash = frozenset(keys)
+
+    return hash(key_hash) ^ hash(deep_values)
 
 
 def meta(standard_name: str, units: str | None = None, **kws) -> msgspec.Meta:
@@ -126,7 +136,7 @@ class SpecBase(msgspec.Struct, kw_only=True, frozen=True, cache_hash=True):
         try:
             return msgspec.Struct.__hash__(self)
         except TypeError:
-            # presume a dict from here on
+            # presume a dict or tuple from here on
             pass
 
         # attr names come with the type, so get them for free here
@@ -135,8 +145,8 @@ class SpecBase(msgspec.Struct, kw_only=True, frozen=True, cache_hash=True):
         # work through the values
         for name in self.__struct_fields__:
             value = getattr(self, name)
-            if isinstance(value, dict):
-                h ^= _dict_hash(value)
+            if isinstance(value, (tuple,dict)):
+                h ^= _deep_hash(value)
             else:
                 h ^= hash(value)
 
