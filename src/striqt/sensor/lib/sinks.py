@@ -155,7 +155,7 @@ class CaptureAppender(ZarrSinkBase):
         with lb.stopwatch('build dataset', threshold=0.5):
             dataset = xr.concat(data_list, datasets.CAPTURE_DIM)
 
-        with lb.stopwatch(f'write to {self.output_path}'):
+        with lb.stopwatch(f'write to {self.store.path}'):
             analysis.dump(self.store, dataset)
 
 

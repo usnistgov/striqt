@@ -8,6 +8,7 @@ from pathlib import Path
 from collections import defaultdict
 
 import numcodecs
+import zarr.storage
 
 from . import dataarrays, specs, util
 
