@@ -62,10 +62,12 @@ def run(yaml_path):
     field_sets = {}
     for c in sweep.captures:
         fields = _get_capture_format_fields(c, **kws)
-        for k, v in fields.items():
-            if k in sweep.defaults.__struct_fields__ and k != 'start_time':
-                continue
-            field_sets.setdefault(k, set()).add(v)
+        fields = [dict(fields, channel=[i]) for i in fields['channel']]
+        for f in fields:
+            for k, v in f.items():
+                if k in sweep.defaults.__struct_fields__ and k != 'start_time':
+                    continue
+                field_sets.setdefault(k, set()).add(v)
 
     print('\n\nAlias {field} names and expanded values:')
     print(60 * '=')
