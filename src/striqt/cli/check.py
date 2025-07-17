@@ -68,9 +68,18 @@ def run(yaml_path):
                 continue
             field_sets.setdefault(k, set()).add(v)
 
-    print('\n\nAlias {field} names and expanded values:')
+    print('\n\nUnique alias field coordinates in output:')
+    print(60 * '=')    
+    cfields = set(sweep.defaults.__struct_fields__)
+    afields = set(field_sets.keys()) - cfields
+    d = {k: v for k, v in field_sets.items() if k in afields}
+    pprint(d, width=40)
+
+    print('\n\nUnique capture field coordinates in output:')
     print(60 * '=')
-    pprint(field_sets, width=40)
+    omit = {'start_time', 'delay'}
+    d = {k: v for k, v in field_sets.items() if k in (cfields - omit)}
+    pprint(d, width=40)
 
 
 if __name__ == '__main__':
