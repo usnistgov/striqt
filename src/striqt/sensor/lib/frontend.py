@@ -161,7 +161,7 @@ def init_sweep_cli(
         ):
             opened = lb.concurrently(**calls)
 
-        peripherals.set_source(controller.radios[radio_id])
+        peripherals.set_source(controller.radios[sweep_spec.radio_setup.driver])
 
     except BaseException as ex:
         if debug_handler.enable:
