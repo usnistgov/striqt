@@ -57,17 +57,19 @@ def run(yaml_path):
         print(f'\tEvaluated: {pe!r}')
         print('\tExists: ', 'yes' if Path(pe).exists() else 'no')
 
+
+    kws = {'sweep': sweep, 'radio_id': radio_id, 'yaml_path': yaml_path}
+    field_sets = {}
+    for c in sweep.captures:
+        fields = _get_capture_format_fields(c, **kws)
+        for k, v in fields.items():
+            if k in sweep.defaults.__struct_fields__ and k != 'start_time':
+                continue
+            field_sets.setdefault(k, set()).add(v)
+
     print('\n\nAlias {field} names and expanded values:')
     print(60 * '=')
-    all_fields = _get_capture_format_fields(
-        sweep, radio_id=radio_id, yaml_path=yaml_path
-    )
-    fields = {
-        k: v
-        for k, v in all_fields.items()
-        if k == 'start_time' or k not in sweep.defaults.__struct_fields__
-    }
-    pprint(fields, width=40)
+    pprint(field_sets, width=40)
 
 
 if __name__ == '__main__':
