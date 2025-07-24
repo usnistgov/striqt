@@ -73,19 +73,7 @@ def _get_extension_classes(sweep_spec: specs.Sweep) -> SweepSpecClasses:
     )
 
 
-class _LogFilter(logging.Filter):
-    def __init__(self, name='', search=None):
-        super().__init__(name)
-        self._search = search
-
-    def filter(self, record):
-        if self._search is None:
-            return True
-        else:
-            return self._search in record.getMessage().lower()
-
-
-def _log_to_file(path: str, filter=None):
+def _log_to_file(path: str):
     import logging.handlers
 
     logger = logging.getLogger('labbench')
@@ -94,8 +82,6 @@ def _log_to_file(path: str, filter=None):
         path, maxBytes=50_000_000, backupCount=5
     )
     handler.setFormatter(formatter)
-    if filter is not None:
-        handler.addFilter(_LogFilter(search=filter))
     handler.setLevel(logging.DEBUG)
 
     for other in logger.handlers:

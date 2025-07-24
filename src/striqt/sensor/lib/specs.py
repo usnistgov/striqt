@@ -264,7 +264,6 @@ AliasMatchType = Annotated[
 class Output(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     path: Optional[str] = '{yaml_name}-{start_time}'
     log_path: Optional[str] = None
-    log_filter: Optional[str] = None
     store: typing.Union[Literal['zip'], Literal['directory']] = 'directory'
     coord_aliases: dict[str, dict[str, AliasMatchType]] = {}
 
