@@ -230,6 +230,7 @@ class MeasurementInfo(typing.NamedTuple):
     dtype: str
     attrs: dict
     depends: typing.Iterable[_MeasurementCallable]
+    store_compressed: bool    
     dims: typing.Iterable[str] | str | None = (None,)
 
 
@@ -288,6 +289,7 @@ class _MeasurementRegistry(
         depends: typing.Iterable[callable] = [],
         caches: typing.Iterable[KeywordArgumentCache] | None = None,
         prefer_unaligned_input=False,
+        store_compressed=True,
         attrs={},
     ) -> typing.Callable[[_TMeasCallable], _TMeasCallable]:
         """add decorated `func` and its keyword arguments in the self.tostruct() schema"""
@@ -316,6 +318,7 @@ class _MeasurementRegistry(
             dtype=dtype,
             attrs=attrs,
             depends=depends,
+            store_compressed=store_compressed,
             dims=dims,
         )
 

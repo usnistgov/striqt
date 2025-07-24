@@ -148,6 +148,7 @@ def sync_aggregate_5g_sss(
     dtype=dtype,
     caches=(sss_alignment_cache, shared.ssb_iq_cache),
     prefer_unaligned_input=True,
+    store_compressed=False,    
     attrs={'standard_name': 'SSS Cross-Covariance', 'units': '√mW'},
 )
 def cellular_5g_sss_correlation(

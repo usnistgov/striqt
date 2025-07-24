@@ -10,7 +10,7 @@ from collections import defaultdict
 import numcodecs
 import zarr.storage
 
-from . import dataarrays, specs, util
+from . import dataarrays, register, specs, util
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -81,9 +81,8 @@ def _build_encodings(data, compression=None, filter: bool = True):
     encodings = defaultdict(dict)
 
     for name in data.data_vars.keys():
-        # skip compression of iq waveforms, which is slow and
-        # ineffective due to high entropy
-        if name == measurements.iq_waveform.__name__:
+        meas_info = register.measurement.get(name, None)
+        if meas_info is None or not meas_info.store_compressed:
             encodings[name]['compressor'] = None
         else:
             encodings[name]['compressor'] = compressor

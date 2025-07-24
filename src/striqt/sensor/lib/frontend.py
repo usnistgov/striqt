@@ -1,4 +1,5 @@
 from pathlib import Path
+import logging
 import sys
 import typing
 
@@ -72,6 +73,37 @@ def _get_extension_classes(sweep_spec: specs.Sweep) -> SweepSpecClasses:
     )
 
 
+class _LogFilter(logging.Filter):
+    def __init__(self, name="", search=None):
+        super().__init__(name)
+        self._search = search
+
+    def filter(self, record):
+        if self._search is None:
+            return True
+        else:
+            return self._search in record.getMessage().lower()
+
+
+def _log_to_file(path: str, filter=None):
+    import logging.handlers
+
+    logger = logging.getLogger('labbench')
+    formatter = lb._host.JSONFormatter()
+    handler = logging.handlers.RotatingFileHandler(path, maxBytes=50_000_000, backupCount=5)
+    handler.setFormatter(formatter)
+    if filter is not None:
+        handler.addFilter(_LogFilter(search=filter))
+    handler.setLevel(logging.DEBUG)
+
+    for other in logger.handlers:
+        if isinstance(other, logging.handlers.FileHandler):
+            logger.removeHandler(other)
+
+    # logger.setLevel(logging.DEBUG)
+    logger.addHandler(handler)
+
+
 def init_sweep_cli(
     *,
     yaml_path: Path,
@@ -137,6 +169,9 @@ def init_sweep_cli(
             yaml_path,
             radio_id=radio_id,
         )
+
+        if sweep_spec.output.log_path is not None:
+            _log_to_file(sweep_spec.output.log_path, sweep_spec.output.log_filter)
 
         peripherals = yaml_classes.peripherals_cls(sweep_spec)
 
