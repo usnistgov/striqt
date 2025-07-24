@@ -85,7 +85,7 @@ def _log_to_file(path: str):
     handler.setLevel(logging.DEBUG)
 
     for other in logger.handlers:
-        if isinstance(other, logging.handlers.FileHandler):
+        if isinstance(other, logging.FileHandler):
             logger.removeHandler(other)
 
     # logger.setLevel(logging.DEBUG)
@@ -159,7 +159,7 @@ def init_sweep_cli(
         )
 
         if sweep_spec.output.log_path is not None:
-            _log_to_file(sweep_spec.output.log_path, sweep_spec.output.log_filter)
+            _log_to_file(sweep_spec.output.log_path)
 
         peripherals = yaml_classes.peripherals_cls(sweep_spec)
 
