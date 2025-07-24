@@ -104,7 +104,10 @@ class NullSource(base.SourceBase):
 
     @attr.method.bool(sets=True, gets=True)
     def rx_enabled(self):
-        return self.backend.get('rx_enabled', False)
+        if not self.isopen:
+            return False
+        else:
+            return self.backend.get('rx_enabled', False)
 
     @rx_enabled.setter
     def _(self, enable: bool):

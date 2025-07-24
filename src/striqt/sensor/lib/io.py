@@ -180,7 +180,8 @@ def read_yaml_sweep(
         kws = dict(relative_to_file=path, sweep=sweep, radio_id=radio_id)
 
         output_path = expand_path(sweep.output.path, **kws)
-        output_spec = sweep.output.replace(path=output_path)
+        log_path = expand_path(sweep.output.log_path, **kws)
+        output_spec = sweep.output.replace(path=output_path, log_path=log_path)
 
         cal_path = expand_path(sweep.radio_setup.calibration, **kws)
         setup_spec = sweep.radio_setup.replace(calibration=cal_path)
