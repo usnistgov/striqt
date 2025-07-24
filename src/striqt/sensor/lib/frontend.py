@@ -76,20 +76,22 @@ def _get_extension_classes(sweep_spec: specs.Sweep) -> SweepSpecClasses:
 def _log_to_file(path: str):
     import logging.handlers
 
+    Path(path).parent.mkdir(exist_ok=True, parents=True)
+
     logger = logging.getLogger('labbench')
     formatter = lb._host.JSONFormatter()
     handler = logging.handlers.RotatingFileHandler(
-        path, maxBytes=50_000_000, backupCount=5
+        path, maxBytes=50_000_000, backupCount=5, encoding='utf8'
     )
     handler.setFormatter(formatter)
     handler.setLevel(logging.DEBUG)
 
-    for other in logger.handlers:
-        if isinstance(other, logging.FileHandler):
-            logger.removeHandler(other)
+    if hasattr(handler, '_striqt_handler'):
+        logger.removeHandler(handler._striqt_handler)
 
-    # logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.DEBUG)
     logger.addHandler(handler)
+    logger._striqt_handler = handler
 
 
 def init_sweep_cli(
