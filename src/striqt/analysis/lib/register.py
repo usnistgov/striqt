@@ -230,7 +230,7 @@ class MeasurementInfo(typing.NamedTuple):
     dtype: str
     attrs: dict
     depends: typing.Iterable[_MeasurementCallable]
-    store_compressed: bool    
+    store_compressed: bool
     dims: typing.Iterable[str] | str | None = (None,)
 
 

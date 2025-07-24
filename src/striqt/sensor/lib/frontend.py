@@ -74,7 +74,7 @@ def _get_extension_classes(sweep_spec: specs.Sweep) -> SweepSpecClasses:
 
 
 class _LogFilter(logging.Filter):
-    def __init__(self, name="", search=None):
+    def __init__(self, name='', search=None):
         super().__init__(name)
         self._search = search
 
@@ -90,7 +90,9 @@ def _log_to_file(path: str, filter=None):
 
     logger = logging.getLogger('labbench')
     formatter = lb._host.JSONFormatter()
-    handler = logging.handlers.RotatingFileHandler(path, maxBytes=50_000_000, backupCount=5)
+    handler = logging.handlers.RotatingFileHandler(
+        path, maxBytes=50_000_000, backupCount=5
+    )
     handler.setFormatter(formatter)
     if filter is not None:
         handler.addFilter(_LogFilter(search=filter))
