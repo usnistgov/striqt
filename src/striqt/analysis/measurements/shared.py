@@ -386,10 +386,7 @@ spectrogram_cache = register.KeywordArgumentCache([dataarrays.CAPTURE_DIM, 'spec
 def truncate_spectrogram_bandwidth(x, nfft, fs, bandwidth, *, offset=0, axis=0):
     """trim an array outside of the specified bandwidth on a frequency axis"""
     edges = iqwaveform.fourier._freq_band_edges(
-        nfft,
-        1.0 / fs,
-        cutoff_low=offset - bandwidth / 2,
-        cutoff_hi=offset + bandwidth / 2,
+        nfft, 1.0 / fs, cutoff_low=offset-bandwidth / 2, cutoff_hi=offset + bandwidth / 2
     )
     return iqwaveform.util.axis_slice(x, *edges, axis=axis)
 

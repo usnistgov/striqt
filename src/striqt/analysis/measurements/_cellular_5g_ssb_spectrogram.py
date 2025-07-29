@@ -6,8 +6,10 @@ from ..lib import register, specs, util
 
 if typing.TYPE_CHECKING:
     import numpy as np
+    import iqwaveform
 else:
     np = util.lazy_import('numpy')
+    iqwaveform = util.lazy_import('iqwaveform')
 
 
 # %% Cellular 5G NR synchronizatino
@@ -82,8 +84,31 @@ def cellular_ssb_baseband_frequency(
     )
 
 
+@register.coordinate_factory(
+    dtype='uint16', attrs={'standard_name': 'Capture SSB index'}
+)
+@util.lru_cache()
+def cellular_ssb_index(
+    capture: specs.Capture, spec: Cellular5GNRSSBSpectrogramSpec
+):
+    # pss_params and sss_params return the same number of symbol indexes
+    params = iqwaveform.ofdm.pss_params(
+        sample_rate=spec.sample_rate,
+        subcarrier_spacing=spec.subcarrier_spacing,
+        discovery_periodicity=spec.discovery_periodicity,
+        shared_spectrum=spec.shared_spectrum,
+    )
+    total_blocks = round(params.duration / spec.discovery_periodicity)
+    if spec.max_block_count is None:
+        count = total_blocks
+    else:
+        count = min(spec.max_block_count, total_blocks)
+
+    return np.arange(max(count, 1), dtype='uint16')
+
+
 _coord_factories = [
-    shared.cellular_ssb_start_time,
+    cellular_ssb_index,
     cellular_ssb_symbol_index,
     cellular_ssb_baseband_frequency,
 ]
