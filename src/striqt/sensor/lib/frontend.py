@@ -74,15 +74,14 @@ def _get_extension_classes(sweep_spec: specs.Sweep) -> SweepSpecClasses:
 
 
 def _log_to_file(path: str):
-    import logging.handlers
-
     Path(path).parent.mkdir(exist_ok=True, parents=True)
 
     logger = logging.getLogger('labbench')
     formatter = lb._host.JSONFormatter()
-    handler = logging.handlers.RotatingFileHandler(
+    handler = lb._host.RotatingJSONFileHandler(
         path, maxBytes=50_000_000, backupCount=5, encoding='utf8'
     )
+
     handler.setFormatter(formatter)
     handler.setLevel(logging.DEBUG)
 

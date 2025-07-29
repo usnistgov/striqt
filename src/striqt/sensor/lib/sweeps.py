@@ -198,14 +198,6 @@ class SweepIterator:
         for i, (capture_intake, _, capture_this, capture_next) in enumerate(
             offset_captures
         ):
-            labels = []
-            for c in (capture_intake, _, capture_this, capture_next):
-                if c is None:
-                    labels.append('None')
-                else:
-                    labels.append(
-                        f'{c.center_frequency / 1e6} MHz switch {getattr(c, "switch_input", None)}'
-                    )
             calls = {}
 
             if iq is None:

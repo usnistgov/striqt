@@ -1,7 +1,10 @@
 from __future__ import annotations
 import decimal
 import fractions
+import functools
 import typing
+
+import array_api_compat
 
 from ..lib import dataarrays, register, specs, util
 
@@ -380,10 +383,13 @@ def evaluate_spectrogram(
 spectrogram_cache = register.KeywordArgumentCache([dataarrays.CAPTURE_DIM, 'spec'])
 
 
-def truncate_spectrogram_bandwidth(x, nfft, fs, bandwidth, axis=0):
+def truncate_spectrogram_bandwidth(x, nfft, fs, bandwidth, *, offset=0, axis=0):
     """trim an array outside of the specified bandwidth on a frequency axis"""
     edges = iqwaveform.fourier._freq_band_edges(
-        nfft, 1.0 / fs, cutoff_low=-bandwidth / 2, cutoff_hi=bandwidth / 2
+        nfft,
+        1.0 / fs,
+        cutoff_low=offset - bandwidth / 2,
+        cutoff_hi=offset + bandwidth / 2,
     )
     return iqwaveform.util.axis_slice(x, *edges, axis=axis)
 
@@ -471,13 +477,17 @@ def _cached_spectrogram(
     return spg, attrs
 
 
-def fftfreq(nfft, fs, dtype='float64') -> 'np.ndarray':
+@util.lru_cache()
+def fftfreq(nfft, fs, dtype='float64', xp=np) -> 'iqwaveform.type_stubs.ArrayType':
     """compute fftfreq for a specified sample rate.
 
     This is meant to produce higher-precision results for
     rational sample rates in order to avoid rounding errors
     when merging captures with different sample rates.
     """
+    if not array_api_compat.is_numpy_namespace(np):
+        return xp.asarray(fftfreq(nfft, fs, dtype))
+
     # high resolution rational representation of frequency resolution
     fres = decimal.Decimal(fs) / nfft
     span = range(-nfft // 2, -nfft // 2 + nfft)
@@ -494,7 +504,7 @@ def fftfreq(nfft, fs, dtype='float64') -> 'np.ndarray':
 @util.lru_cache()
 def spectrogram_baseband_frequency(
     capture: specs.Capture, spec: SpectrogramSpec, xp=np
-) -> dict[str, np.ndarray]:
+) -> np.ndarray:
     if xp is not np:
         return xp.array(spectrogram_baseband_frequency(capture, spec))
 

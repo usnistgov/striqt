@@ -13,10 +13,6 @@ else:
     psutil = util.lazy_import('psutil')
 
 
-# for TX only (RX channel is accessed through the AirT7201B.channel method)
-channel_kwarg = attr.method_kwarg.int('channel', min=0, help='hardware port number')
-
-
 class Air7x01B(soapy.SoapyRadioSource):
     resource = attr.value.dict({}, inherit=True)
 
