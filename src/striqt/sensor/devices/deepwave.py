@@ -33,7 +33,7 @@ class Air7x01B(soapy.SoapyRadioSource):
 
     # without this, multichannel acquisition start time will vary
     # across channels, resulting in streaming errors
-    _rx_enable_delay = attr.value.float(0.31, inherit=True)
+    _rx_enable_delay = attr.value.float(0.33, inherit=True)
 
     # float32 or int16: gpu work vs memory bandwidth tradeoff
     _transport_dtype = attr.value.str('int16', inherit=True)
