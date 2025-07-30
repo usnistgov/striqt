@@ -10,7 +10,7 @@ import msgspec
 from . import util
 
 from striqt import analysis
-from striqt.analysis.lib.specs import meta, SpecBase
+from striqt.analysis.lib.specs import meta, SpecBase, _deep_hash
 
 if typing.TYPE_CHECKING:
     import pandas as pd
@@ -259,27 +259,6 @@ AliasMatchType = Annotated[
     typing.Union[dict[str, Any], tuple[dict[str, Any], ...]],
     meta('one or more dictionaries of valid match sets to "or"'),
 ]
-
-
-def _deep_hash(obj: typing.Mapping | tuple):
-    """compute the hash of a dict or other mapping based on its key, value pairs.
-
-    The hash is evaluated recursively for nested structures.
-    """
-    if isinstance(obj, (tuple, list)):
-        keys = ()
-        values = obj
-    elif isinstance(obj, dict):
-        keys = frozenset(obj.keys())
-        values = obj.values()
-    else:
-        return hash(obj)
-
-    deep_values = tuple(
-        _deep_hash(v) if isinstance(v, (tuple, dict)) else v for v in values
-    )
-
-    return hash(keys) ^ hash(deep_values)
 
 
 class Output(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
