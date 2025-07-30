@@ -314,7 +314,7 @@ WindowFillType = Annotated[
 ]
 
 
-class Sweep(_SlowHashSpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
+class Sweep(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     captures: tuple[RadioCapture, ...] = tuple()
     radio_setup: RadioSetup = RadioSetup()
     defaults: RadioCapture = RadioCapture()
