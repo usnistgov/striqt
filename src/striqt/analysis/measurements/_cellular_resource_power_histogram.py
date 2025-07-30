@@ -215,7 +215,9 @@ def build_tdd_link_symbol_masks(
     return out
 
 
-def _get_integration_bandwidth(spec: CellularResourcePowerHistogramSpec) -> float|None:
+def _get_integration_bandwidth(
+    spec: CellularResourcePowerHistogramSpec,
+) -> float | None:
     if spec.average_rbs == 'half':
         return 6 * spec.subcarrier_spacing
     elif spec.average_rbs:

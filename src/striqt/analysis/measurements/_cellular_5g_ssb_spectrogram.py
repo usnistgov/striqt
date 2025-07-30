@@ -88,9 +88,7 @@ def cellular_ssb_baseband_frequency(
     dtype='uint16', attrs={'standard_name': 'Capture SSB index'}
 )
 @util.lru_cache()
-def cellular_ssb_index(
-    capture: specs.Capture, spec: Cellular5GNRSSBSpectrogramSpec
-):
+def cellular_ssb_index(capture: specs.Capture, spec: Cellular5GNRSSBSpectrogramSpec):
     # pss_params and sss_params return the same number of symbol indexes
     params = iqwaveform.ofdm.pss_params(
         sample_rate=spec.sample_rate,
