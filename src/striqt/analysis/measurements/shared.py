@@ -481,6 +481,9 @@ def _cached_spectrogram(
             spg, frequency_bin_averaging, axis=2, fft=True
         )
 
+        # mean -> sum
+        spg *= frequency_bin_averaging
+
     if time_bin_averaging is not None:
         spg = iqwaveform.util.binned_mean(spg, time_bin_averaging, axis=1, fft=False)
 
