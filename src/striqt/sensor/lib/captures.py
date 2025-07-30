@@ -191,9 +191,6 @@ def concat_group_sizes(
     remaining = _MinSweep(captures=captures).validate().captures
     whole_set = set(remaining)
 
-    # require uniqueness
-    assert len(whole_set) == len(remaining)
-
     pending = []
     sizes = []
     count = 0
