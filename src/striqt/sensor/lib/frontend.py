@@ -73,13 +73,13 @@ def _get_extension_classes(sweep_spec: specs.Sweep) -> SweepSpecClasses:
     )
 
 
-def _log_to_file(path: str, log_level: str):
-    Path(path).parent.mkdir(exist_ok=True, parents=True)
+def _log_to_file(output: specs.Output):
+    Path(output.log_path).parent.mkdir(exist_ok=True, parents=True)
 
     logger = logging.getLogger('labbench')
     formatter = lb._host.JSONFormatter()
     handler = lb._host.RotatingJSONFileHandler(
-        path, maxBytes=50_000_000, backupCount=5, encoding='utf8'
+        output.path, maxBytes=50_000_000, backupCount=5, encoding='utf8'
     )
 
     handler.setFormatter(formatter)
@@ -88,7 +88,7 @@ def _log_to_file(path: str, log_level: str):
     if hasattr(handler, '_striqt_handler'):
         logger.removeHandler(handler._striqt_handler)
 
-    logger.setLevel(lb.util._LOG_LEVEL_NAMES[log_level])
+    logger.setLevel(lb.util._LOG_LEVEL_NAMES[output.log_level])
     logger.addHandler(handler)
     logger._striqt_handler = handler
 
@@ -160,7 +160,7 @@ def init_sweep_cli(
         )
 
         if sweep_spec.output.log_path is not None:
-            _log_to_file(sweep_spec.output.log_path)
+            _log_to_file(sweep_spec.output)
 
         peripherals = yaml_classes.peripherals_cls(sweep_spec)
 

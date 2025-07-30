@@ -59,6 +59,7 @@ class Cellular5GNRSSBSpectrogramKeywords(specs.AnalysisKeywords, total=False):
     window: typing.Optional[specs.WindowType]
     lo_bandstop: typing.Optional[float]
 
+
 @register.coordinate_factory(dtype='uint16', attrs={'standard_name': 'Symbols elapsed'})
 @util.lru_cache()
 def cellular_ssb_symbol_index(_: specs.Capture, spec: Cellular5GNRSSBSpectrogramSpec):
