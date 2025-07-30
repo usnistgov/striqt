@@ -261,12 +261,53 @@ AliasMatchType = Annotated[
 ]
 
 
+def _deep_hash(obj: typing.Mapping | tuple):
+    """compute the hash of a dict or other mapping based on its key, value pairs.
+
+    The hash is evaluated recursively for nested structures.
+    """
+    if isinstance(obj, (tuple, list)):
+        keys = ()
+        values = obj
+    elif isinstance(obj, dict):
+        keys = frozenset(obj.keys())
+        values = obj.values()
+    else:
+        return hash(obj)
+
+    deep_values = tuple(
+        _deep_hash(v) if isinstance(v, (tuple, dict)) else v for v in values
+    )
+
+    return hash(keys) ^ hash(deep_values)
+
+
 class Output(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     path: Optional[str] = '{yaml_name}-{start_time}'
     log_path: Optional[str] = None
     log_level: str = 'info'
     store: typing.Union[Literal['zip'], Literal['directory']] = 'directory'
     coord_aliases: dict[str, dict[str, AliasMatchType]] = {}
+
+    def __hash__(self):
+        try:
+            return msgspec.Struct.__hash__(self)
+        except TypeError:
+            # presume a dict or tuple from here on
+            pass
+
+        # attr names come with the type, so get them for free here
+        h = hash(type(self))
+
+        # work through the values
+        for name in self.__struct_fields__:
+            value = getattr(self, name)
+            if isinstance(value, (tuple, dict)):
+                h ^= _deep_hash(value)
+            else:
+                h ^= hash(value)
+
+        return h
 
 
 SweepStructType = Annotated[

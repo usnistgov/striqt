@@ -51,27 +51,6 @@ def _dec_hook(type_, obj):
         return obj
 
 
-def _deep_hash(obj: typing.Mapping | tuple):
-    """compute the hash of a dict or other mapping based on its key, value pairs.
-
-    The hash is evaluated recursively for nested structures.
-    """
-    if isinstance(obj, (tuple, list)):
-        keys = ()
-        values = obj
-    elif isinstance(obj, dict):
-        keys = frozenset(obj.keys())
-        values = obj.values()
-    else:
-        return hash(obj)
-
-    deep_values = tuple(
-        _deep_hash(v) if isinstance(v, (tuple, dict)) else v for v in values
-    )
-
-    return hash(keys) ^ hash(deep_values)
-
-
 def meta(standard_name: str, units: str | None = None, **kws) -> msgspec.Meta:
     """annotation that is used to generate 'standard_name' and 'units' fields of xarray attrs objects"""
     extra = {'standard_name': standard_name}
@@ -130,26 +109,6 @@ class SpecBase(msgspec.Struct, kw_only=True, frozen=True, cache_hash=True):
 
     def validate(self) -> type[typing.Self]:
         return self.fromdict(self.todict())
-
-    def __hash__(self):
-        try:
-            return msgspec.Struct.__hash__(self)
-        except TypeError:
-            # presume a dict or tuple from here on
-            pass
-
-        # attr names come with the type, so get them for free here
-        h = hash(type(self))
-
-        # work through the values
-        for name in self.__struct_fields__:
-            value = getattr(self, name)
-            if isinstance(value, (tuple, dict)):
-                h ^= _deep_hash(value)
-            else:
-                h ^= hash(value)
-
-        return h
 
 
 class Capture(SpecBase, kw_only=True, frozen=True):
