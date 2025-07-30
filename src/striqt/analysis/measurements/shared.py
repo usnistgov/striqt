@@ -328,17 +328,22 @@ class SpectrogramSpec(
     frozen=True,
 ):
     """
+    lo_bandstop (float):
+        if specified, invalidate LO leakage by setting spectrogram bins to
+        NaN across this bandwidth at DC in the baseband
     time_aperture (float):
         if specified, binned RMS averaging is applied along time axis in the
         spectrogram to yield this coarser resolution (s)
     dB (bool): if True, returned power is transformed into dB units
     """
 
+    lo_bandstop: typing.Optional[float] = None
     time_aperture: typing.Optional[float] = None
     dB = True
 
 
 class SpectrogramKeywords(FrequencyAnalysisKeywords):
+    lo_bandstop: typing.NotRequired[typing.Optional[float]]
     time_aperture: typing.NotRequired[typing.Optional[float]]
 
 
@@ -385,6 +390,20 @@ def truncate_spectrogram_bandwidth(x, nfft, fs, bandwidth, *, offset=0, axis=0):
         cutoff_hi=offset + bandwidth / 2,
     )
     return iqwaveform.util.axis_slice(x, *edges, axis=axis)
+
+
+def _null_stopband(x, nfft, fs, bandwidth, *, offset=0, axis=0):
+    """sets samples to nan within the specified bandwidth on a frequency axis"""
+    # to make the top bound inclusive
+    pad_hi = fs / nfft / 2
+    edges = iqwaveform.fourier._freq_band_edges(
+        nfft,
+        1.0 / fs,
+        cutoff_low=offset - bandwidth / 2,
+        cutoff_hi=offset + bandwidth / 2 + pad_hi,
+    )
+    view = iqwaveform.util.axis_slice(x, *edges, axis=axis)
+    view[:] = float('nan')
 
 
 @spectrogram_cache.apply
@@ -444,6 +463,11 @@ def _cached_spectrogram(
         axis=1,
         return_axis_arrays=False,
     )
+
+    if spec.lo_bandstop is not None:
+        _null_stopband(
+            spg, nfft, capture.sample_rate, spec.lo_bandstop, axis=2
+        )
 
     # truncate to the analysis bandwidth
     if spec.trim_stopband and np.isfinite(capture.analysis_bandwidth):

@@ -43,6 +43,7 @@ class Cellular5GNRSSBSpectrogramSpec(
 
     # spectrogram info
     window: specs.WindowType = ('kaiser_by_enbw', 2)
+    lo_bandstop: typing.Optional[float] = None
 
     # hard-coded for re-use of PSS/SSS functions
     shared_spectrum = False
@@ -56,7 +57,7 @@ class Cellular5GNRSSBSpectrogramKeywords(specs.AnalysisKeywords, total=False):
     frequency_offset: typing.Union[float, dict[float, float]]
     max_block_count: typing.Optional[int]
     window: typing.Optional[specs.WindowType]
-
+    lo_bandstop: typing.Optional[float]
 
 @register.coordinate_factory(dtype='uint16', attrs={'standard_name': 'Symbols elapsed'})
 @util.lru_cache()
@@ -152,6 +153,7 @@ def cellular_5g_ssb_spectrogram(
         fractional_overlap=13 / 28,
         window_fill=15 / 28,
         window=spec.window,
+        lo_bandstop=spec.lo_bandstop,
         trim_stopband=False,
     )
 
