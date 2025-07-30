@@ -10,7 +10,7 @@ import msgspec
 from . import util
 
 from striqt import analysis
-from striqt.analysis.lib.specs import meta, SpecBase, _deep_hash
+from striqt.analysis.lib.specs import meta, SpecBase, _SlowHashSpecBase
 
 if typing.TYPE_CHECKING:
     import pandas as pd
@@ -261,32 +261,12 @@ AliasMatchType = Annotated[
 ]
 
 
-class Output(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
+class Output(_SlowHashSpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     path: Optional[str] = '{yaml_name}-{start_time}'
     log_path: Optional[str] = None
     log_level: str = 'info'
     store: typing.Union[Literal['zip'], Literal['directory']] = 'directory'
     coord_aliases: dict[str, dict[str, AliasMatchType]] = {}
-
-    def __hash__(self):
-        try:
-            return msgspec.Struct.__hash__(self)
-        except TypeError:
-            # presume a dict or tuple from here on
-            pass
-
-        # attr names come with the type, so get them for free here
-        h = hash(type(self))
-
-        # work through the values
-        for name in self.__struct_fields__:
-            value = getattr(self, name)
-            if isinstance(value, (tuple, dict)):
-                h ^= _deep_hash(value)
-            else:
-                h ^= hash(value)
-
-        return h
 
 
 SweepStructType = Annotated[
