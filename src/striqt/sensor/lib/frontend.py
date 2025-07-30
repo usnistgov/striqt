@@ -73,7 +73,7 @@ def _get_extension_classes(sweep_spec: specs.Sweep) -> SweepSpecClasses:
     )
 
 
-def _log_to_file(path: str):
+def _log_to_file(path: str, log_level: str):
     Path(path).parent.mkdir(exist_ok=True, parents=True)
 
     logger = logging.getLogger('labbench')
@@ -88,7 +88,7 @@ def _log_to_file(path: str):
     if hasattr(handler, '_striqt_handler'):
         logger.removeHandler(handler._striqt_handler)
 
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(lb.util._LOG_LEVEL_NAMES[log_level])
     logger.addHandler(handler)
     logger._striqt_handler = handler
 
