@@ -261,11 +261,11 @@ def cellular_resource_power_histogram(
 
     rb_bandwidth = 12 * spec.subcarrier_spacing
     if spec.average_rbs == 'half':
-        video_bandwidth = rb_bandwidth / 2
+        integration_bandwidth = rb_bandwidth / 2
     elif spec.average_rbs:
-        video_bandwidth = rb_bandwidth
+        integration_bandwidth = rb_bandwidth
     else:
-        video_bandwidth = None
+        integration_bandwidth = None
 
     if spec.average_slots:
         time_aperture = 1e-3 * (15e3 / spec.subcarrier_spacing)
@@ -310,7 +310,7 @@ def cellular_resource_power_histogram(
         frequency_resolution=spec.subcarrier_spacing / 2,
         fractional_overlap=fractional_overlap,
         window_fill=window_fill,
-        video_bandwidth=video_bandwidth,
+        integration_bandwidth=integration_bandwidth,
     )
 
     if time_aperture is None:

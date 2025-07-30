@@ -299,7 +299,7 @@ class FrequencyAnalysisSpecBase(
     window_fill (float):
         fraction of each FFT window that is filled with the window function
         (leaving the rest zeroed)
-    video_bandwidth (float): bin bandwidth for RMS averaging in the frequency domain
+    integration_bandwidth (float): bin bandwidth for RMS averaging in the frequency domain
     trim_stopband (bool):
         whether to trim the frequency axis to capture.analysis_bandwidth
     """
@@ -308,7 +308,7 @@ class FrequencyAnalysisSpecBase(
     frequency_resolution: float
     fractional_overlap: fractions.Fraction = 0
     window_fill: fractions.Fraction = 1
-    video_bandwidth: typing.Optional[float] = None
+    integration_bandwidth: typing.Optional[float] = None
     trim_stopband: bool = True
 
 
@@ -317,7 +317,7 @@ class FrequencyAnalysisKeywords(specs.AnalysisKeywords):
     frequency_resolution: typing.NotRequired[float]
     fractional_overlap: typing.NotRequired[float]
     window_fill: typing.NotRequired[float]
-    video_bandwidth: typing.NotRequired[typing.Optional[float]]
+    integration_bandwidth: typing.NotRequired[typing.Optional[float]]
 
 
 class SpectrogramSpec(
@@ -416,15 +416,15 @@ def _cached_spectrogram(
             '(1-window_fill) * (sample_rate/frequency_resolution) must be a counting number'
         )
 
-    if spec.video_bandwidth is None:
+    if spec.integration_bandwidth is None:
         frequency_bin_averaging = None
-    elif iqwaveform.isroundmod(spec.video_bandwidth, spec.frequency_resolution):
+    elif iqwaveform.isroundmod(spec.integration_bandwidth, spec.frequency_resolution):
         frequency_bin_averaging = round(
-            spec.video_bandwidth / spec.frequency_resolution
+            spec.integration_bandwidth / spec.frequency_resolution
         )
     else:
         raise ValueError(
-            'when specified, video_bandwidth must be a multiple of frequency_resolution'
+            'when specified, integration_bandwidth must be a multiple of frequency_resolution'
         )
 
     hop_size = nfft - noverlap
@@ -510,15 +510,15 @@ def spectrogram_baseband_frequency(
     else:
         raise ValueError('sample_rate/resolution must be a counting number')
 
-    if spec.video_bandwidth is None:
+    if spec.integration_bandwidth is None:
         frequency_bin_averaging = None
-    elif iqwaveform.isroundmod(spec.video_bandwidth, spec.frequency_resolution):
+    elif iqwaveform.isroundmod(spec.integration_bandwidth, spec.frequency_resolution):
         frequency_bin_averaging = round(
-            spec.video_bandwidth / spec.frequency_resolution
+            spec.integration_bandwidth / spec.frequency_resolution
         )
     else:
         raise ValueError(
-            'when specified, video_bandwidth must be a multiple of frequency_resolution'
+            'when specified, integration_bandwidth must be a multiple of frequency_resolution'
         )
 
     # use the iqwaveform.fourier fftfreq for higher precision, which avoids
@@ -532,7 +532,7 @@ def spectrogram_baseband_frequency(
             freqs, nfft, capture.sample_rate, capture.analysis_bandwidth, axis=0
         )
 
-    if spec.video_bandwidth is not None:
+    if spec.integration_bandwidth is not None:
         freqs = iqwaveform.util.binned_mean(freqs, frequency_bin_averaging)
         freqs -= freqs[freqs.size // 2]
 
