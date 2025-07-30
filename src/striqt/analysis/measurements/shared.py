@@ -342,13 +342,6 @@ class SpectrogramKeywords(FrequencyAnalysisKeywords):
     time_aperture: typing.NotRequired[typing.Optional[float]]
 
 
-@util.lru_cache()
-def equivalent_noise_bandwidth(window: specs.WindowType, nfft: int):
-    """return the equivalent noise bandwidth (ENBW) of a window, in bins"""
-    w = iqwaveform.fourier.get_window(window, nfft)
-    return float(len(w) * np.sum(w**2) / np.sum(w) ** 2)
-
-
 def evaluate_spectrogram(
     iq: 'iqwaveform.util.Array',
     capture: specs.Capture,
@@ -464,7 +457,10 @@ def _cached_spectrogram(
     if time_bin_averaging is not None:
         spg = iqwaveform.util.binned_mean(spg, time_bin_averaging, axis=1, fft=False)
 
-    enbw = spec.frequency_resolution * equivalent_noise_bandwidth(spec.window, nfft)
+    if spec.integration_bandwidth is None:
+        enbw = spec.frequency_resolution
+    else:
+        enbw = spec.integration_bandwidth
 
     attrs = {
         'noise_bandwidth': float(enbw),
