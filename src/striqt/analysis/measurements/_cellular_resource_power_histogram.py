@@ -100,9 +100,8 @@ def cellular_resource_power_bin(
     else:
         raise ValueError('sample_rate/resolution must be a counting number')
 
-    enbw = fres * shared.equivalent_noise_bandwidth(spec.window, nfft)
-
-    return bins, {'units': f'dBm/{enbw / 1e3:0.0f} kHz'}
+    integration_bandwidth = _get_integration_bandwidth(spec)
+    return bins, {'units': f'dBm/{integration_bandwidth / 1e3:0.0f} kHz'}
 
 
 def apply_mask(
@@ -216,6 +215,17 @@ def build_tdd_link_symbol_masks(
     return out
 
 
+def _get_integration_bandwidth(
+    spec: CellularResourcePowerHistogramSpec,
+) -> float | None:
+    if spec.average_rbs == 'half':
+        return 6 * spec.subcarrier_spacing
+    elif spec.average_rbs:
+        return 12 * spec.subcarrier_spacing
+    else:
+        return spec.subcarrier_spacing
+
+
 @register.measurement(
     coord_factories=[link_direction, cellular_resource_power_bin],
     dtype='float32',
@@ -259,13 +269,7 @@ def cellular_resource_power_histogram(
 
     link_direction = 'downlink', 'uplink'
 
-    rb_bandwidth = 12 * spec.subcarrier_spacing
-    if spec.average_rbs == 'half':
-        video_bandwidth = rb_bandwidth / 2
-    elif spec.average_rbs:
-        video_bandwidth = rb_bandwidth
-    else:
-        video_bandwidth = None
+    integration_bandwidth = _get_integration_bandwidth(spec)
 
     if spec.average_slots:
         time_aperture = 1e-3 * (15e3 / spec.subcarrier_spacing)
@@ -310,7 +314,7 @@ def cellular_resource_power_histogram(
         frequency_resolution=spec.subcarrier_spacing / 2,
         fractional_overlap=fractional_overlap,
         window_fill=window_fill,
-        video_bandwidth=video_bandwidth,
+        integration_bandwidth=integration_bandwidth,
     )
 
     if time_aperture is None:
@@ -327,14 +331,6 @@ def cellular_resource_power_histogram(
     spg, metadata = shared.evaluate_spectrogram(
         iq, capture, spg_spec, dtype='float32', dB=False
     )
-
-    metadata = dict(metadata)
-    del metadata['units'], metadata['noise_bandwidth']
-
-    # we really wanted to sum bins pairwise, instead of averaging them, but
-    # it was simpler to average across all 24 bins rather than sum 2 and average 12.
-    # this compensates for the difference.
-    spg *= 2
 
     freqs = shared.spectrogram_baseband_frequency(capture, spg_spec, xp=xp)
 

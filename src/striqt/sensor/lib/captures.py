@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 import numbers
+from collections import Counter
 
 from . import specs, util
 
@@ -190,13 +191,14 @@ def concat_group_sizes(
 
     remaining = _MinSweep(captures=captures).validate().captures
     whole_set = set(remaining)
+    counts = Counter(remaining)
 
     pending = []
     sizes = []
     count = 0
 
     while len(remaining) > 0:
-        if count >= min_size and set(pending) == set(remaining) == whole_set:
+        if count >= min_size and set(pending) == set(counts) == whole_set:
             # make sure that the pending and remaining captures
             # will result in equivalent shapes when concatenated
             sizes.append(count)
@@ -204,7 +206,12 @@ def concat_group_sizes(
             pending = []
 
         count += 1
-        pending.append(remaining.pop(0))
+        new = remaining.pop(0)
+        pending.append(new)
+
+        counts[new] -= 1
+        if counts[new] == 0:
+            del counts[new]
 
     if count > 0:
         sizes.append(count)

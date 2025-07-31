@@ -1,4 +1,5 @@
 from pathlib import Path
+import logging
 import sys
 import typing
 
@@ -72,6 +73,26 @@ def _get_extension_classes(sweep_spec: specs.Sweep) -> SweepSpecClasses:
     )
 
 
+def _log_to_file(output: specs.Output):
+    Path(output.log_path).parent.mkdir(exist_ok=True, parents=True)
+
+    logger = logging.getLogger('labbench')
+    formatter = lb._host.JSONFormatter()
+    handler = lb._host.RotatingJSONFileHandler(
+        output.log_path, maxBytes=50_000_000, backupCount=5, encoding='utf8'
+    )
+
+    handler.setFormatter(formatter)
+    handler.setLevel(logging.DEBUG)
+
+    if hasattr(handler, '_striqt_handler'):
+        logger.removeHandler(handler._striqt_handler)
+
+    logger.setLevel(lb.util._LOG_LEVEL_NAMES[output.log_level])
+    logger.addHandler(handler)
+    logger._striqt_handler = handler
+
+
 def init_sweep_cli(
     *,
     yaml_path: Path,
@@ -137,6 +158,9 @@ def init_sweep_cli(
             yaml_path,
             radio_id=radio_id,
         )
+
+        if sweep_spec.output.log_path is not None:
+            _log_to_file(sweep_spec.output)
 
         peripherals = yaml_classes.peripherals_cls(sweep_spec)
 

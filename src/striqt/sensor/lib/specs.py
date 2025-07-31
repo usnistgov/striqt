@@ -10,7 +10,7 @@ import msgspec
 from . import util
 
 from striqt import analysis
-from striqt.analysis.lib.specs import meta, SpecBase
+from striqt.analysis.lib.specs import meta, SpecBase, _SlowHashSpecBase
 
 if typing.TYPE_CHECKING:
     import pandas as pd
@@ -261,8 +261,12 @@ AliasMatchType = Annotated[
 ]
 
 
-class Output(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
+class Output(
+    _SlowHashSpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True
+):
     path: Optional[str] = '{yaml_name}-{start_time}'
+    log_path: Optional[str] = None
+    log_level: str = 'info'
     store: typing.Union[Literal['zip'], Literal['directory']] = 'directory'
     coord_aliases: dict[str, dict[str, AliasMatchType]] = {}
 

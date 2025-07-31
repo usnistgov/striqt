@@ -50,9 +50,10 @@ def spectrogram_power_bin(
     else:
         raise ValueError('sample_rate/resolution must be a counting number')
 
-    enbw = spec.frequency_resolution * shared.equivalent_noise_bandwidth(
-        spec.window, nfft
-    )
+    if spec.integration_bandwidth is None:
+        enbw = spec.frequency_resolution
+    else:
+        enbw = spec.integration_bandwidth
 
     return bins, {'units': f'dBm/{enbw / 1e3:0.0f} kHz'}
 

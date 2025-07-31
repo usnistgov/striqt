@@ -13,10 +13,6 @@ else:
     psutil = util.lazy_import('psutil')
 
 
-# for TX only (RX channel is accessed through the AirT7201B.channel method)
-channel_kwarg = attr.method_kwarg.int('channel', min=0, help='hardware port number')
-
-
 class Air7x01B(soapy.SoapyRadioSource):
     resource = attr.value.dict({}, inherit=True)
 
@@ -37,7 +33,7 @@ class Air7x01B(soapy.SoapyRadioSource):
 
     # without this, multichannel acquisition start time will vary
     # across channels, resulting in streaming errors
-    _rx_enable_delay = attr.value.float(0.31, inherit=True)
+    _rx_enable_delay = attr.value.float(0.33, inherit=True)
 
     # float32 or int16: gpu work vs memory bandwidth tradeoff
     _transport_dtype = attr.value.str('int16', inherit=True)

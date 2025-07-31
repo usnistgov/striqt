@@ -10,7 +10,7 @@ from collections import defaultdict
 import numcodecs
 import zarr.storage
 
-from . import dataarrays, specs, util
+from . import dataarrays, register, specs, util
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -71,19 +71,17 @@ def open_store(
 def _build_encodings(data, compression=None, filter: bool = True):
     # todo: this will need to be updated to work with zarr 3
 
-    from .. import measurements
-
     if compression is None:
         compressor = numcodecs.Blosc('zlib', clevel=6)
     elif compression is False:
         compressor = None
 
     encodings = defaultdict(dict)
+    info_map = {info.name: info for info in register.measurement.values()}
 
     for name in data.data_vars.keys():
-        # skip compression of iq waveforms, which is slow and
-        # ineffective due to high entropy
-        if name == measurements.iq_waveform.__name__:
+        meas_info = info_map.get(name, None)
+        if meas_info is None or not meas_info.store_compressed:
             encodings[name]['compressor'] = None
         else:
             encodings[name]['compressor'] = compressor

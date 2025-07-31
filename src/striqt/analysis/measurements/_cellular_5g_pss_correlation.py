@@ -159,6 +159,7 @@ def sync_aggregate_5g_pss(
     dtype=dtype,
     caches=(pss_alignment_cache, shared.ssb_iq_cache),
     prefer_unaligned_input=True,
+    store_compressed=False,
     attrs={'standard_name': 'PSS Cross-Covariance', 'units': '√mW'},
 )
 def cellular_5g_pss_correlation(

@@ -131,6 +131,8 @@ class SpecBase(msgspec.Struct, kw_only=True, frozen=True, cache_hash=True):
     def validate(self) -> type[typing.Self]:
         return self.fromdict(self.todict())
 
+
+class _SlowHashSpecBase(SpecBase, kw_only=True, frozen=True, cache_hash=True):
     def __hash__(self):
         try:
             return msgspec.Struct.__hash__(self)
@@ -186,7 +188,11 @@ class AnalysisKeywords(typing.TypedDict):
 
 
 class Measurement(
-    SpecBase, forbid_unknown_fields=True, cache_hash=True, kw_only=True, frozen=True
+    _SlowHashSpecBase,
+    forbid_unknown_fields=True,
+    cache_hash=True,
+    kw_only=True,
+    frozen=True,
 ):
     """
     Returns:
@@ -198,9 +204,33 @@ class Measurement(
         as_xarray (bool): True to return xarray.DataArray or False to match type(iq)
     """
 
+    def __hash__(self):
+        try:
+            return msgspec.Struct.__hash__(self)
+        except TypeError:
+            # presume a dict or tuple from here on
+            pass
+
+        # attr names come with the type, so get them for free here
+        h = hash(type(self))
+
+        # work through the values
+        for name in self.__struct_fields__:
+            value = getattr(self, name)
+            if isinstance(value, (tuple, dict)):
+                h ^= _deep_hash(value)
+            else:
+                h ^= hash(value)
+
+        return h
+
 
 class Analysis(
-    SpecBase, forbid_unknown_fields=True, cache_hash=True, kw_only=True, frozen=True
+    _SlowHashSpecBase,
+    forbid_unknown_fields=True,
+    cache_hash=True,
+    kw_only=True,
+    frozen=True,
 ):
     """base class for a set of Measurement specifications"""
 

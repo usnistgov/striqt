@@ -1,7 +1,10 @@
 from __future__ import annotations
 import decimal
 import fractions
+import functools
 import typing
+
+import array_api_compat
 
 from ..lib import dataarrays, register, specs, util
 
@@ -296,7 +299,7 @@ class FrequencyAnalysisSpecBase(
     window_fill (float):
         fraction of each FFT window that is filled with the window function
         (leaving the rest zeroed)
-    video_bandwidth (float): bin bandwidth for RMS averaging in the frequency domain
+    integration_bandwidth (float): bin bandwidth for RMS averaging in the frequency domain
     trim_stopband (bool):
         whether to trim the frequency axis to capture.analysis_bandwidth
     """
@@ -305,7 +308,7 @@ class FrequencyAnalysisSpecBase(
     frequency_resolution: float
     fractional_overlap: fractions.Fraction = 0
     window_fill: fractions.Fraction = 1
-    video_bandwidth: typing.Optional[float] = None
+    integration_bandwidth: typing.Optional[float] = None
     trim_stopband: bool = True
 
 
@@ -314,7 +317,7 @@ class FrequencyAnalysisKeywords(specs.AnalysisKeywords):
     frequency_resolution: typing.NotRequired[float]
     fractional_overlap: typing.NotRequired[float]
     window_fill: typing.NotRequired[float]
-    video_bandwidth: typing.NotRequired[typing.Optional[float]]
+    integration_bandwidth: typing.NotRequired[typing.Optional[float]]
 
 
 class SpectrogramSpec(
@@ -325,25 +328,23 @@ class SpectrogramSpec(
     frozen=True,
 ):
     """
+    lo_bandstop (float):
+        if specified, invalidate LO leakage by setting spectrogram bins to
+        NaN across this bandwidth at DC in the baseband
     time_aperture (float):
         if specified, binned RMS averaging is applied along time axis in the
         spectrogram to yield this coarser resolution (s)
     dB (bool): if True, returned power is transformed into dB units
     """
 
+    lo_bandstop: typing.Optional[float] = None
     time_aperture: typing.Optional[float] = None
     dB = True
 
 
 class SpectrogramKeywords(FrequencyAnalysisKeywords):
+    lo_bandstop: typing.NotRequired[typing.Optional[float]]
     time_aperture: typing.NotRequired[typing.Optional[float]]
-
-
-@util.lru_cache()
-def equivalent_noise_bandwidth(window: specs.WindowType, nfft: int):
-    """return the equivalent noise bandwidth (ENBW) of a window, in bins"""
-    w = iqwaveform.fourier.get_window(window, nfft)
-    return float(len(w) * np.sum(w**2) / np.sum(w) ** 2)
 
 
 def evaluate_spectrogram(
@@ -380,12 +381,29 @@ def evaluate_spectrogram(
 spectrogram_cache = register.KeywordArgumentCache([dataarrays.CAPTURE_DIM, 'spec'])
 
 
-def truncate_spectrogram_bandwidth(x, nfft, fs, bandwidth, axis=0):
+def truncate_spectrogram_bandwidth(x, nfft, fs, bandwidth, *, offset=0, axis=0):
     """trim an array outside of the specified bandwidth on a frequency axis"""
     edges = iqwaveform.fourier._freq_band_edges(
-        nfft, 1.0 / fs, cutoff_low=-bandwidth / 2, cutoff_hi=bandwidth / 2
+        nfft,
+        1.0 / fs,
+        cutoff_low=offset - bandwidth / 2,
+        cutoff_hi=offset + bandwidth / 2,
     )
     return iqwaveform.util.axis_slice(x, *edges, axis=axis)
+
+
+def _null_stopband(x, nfft, fs, bandwidth, *, offset=0, axis=0):
+    """sets samples to nan within the specified bandwidth on a frequency axis"""
+    # to make the top bound inclusive
+    pad_hi = fs / nfft / 2
+    edges = iqwaveform.fourier._freq_band_edges(
+        nfft,
+        1.0 / fs,
+        cutoff_low=offset - bandwidth / 2,
+        cutoff_hi=offset + bandwidth / 2 + pad_hi,
+    )
+    view = iqwaveform.util.axis_slice(x, *edges, axis=axis)
+    view[:] = float('nan')
 
 
 @spectrogram_cache.apply
@@ -413,15 +431,15 @@ def _cached_spectrogram(
             '(1-window_fill) * (sample_rate/frequency_resolution) must be a counting number'
         )
 
-    if spec.video_bandwidth is None:
+    if spec.integration_bandwidth is None:
         frequency_bin_averaging = None
-    elif iqwaveform.isroundmod(spec.video_bandwidth, spec.frequency_resolution):
+    elif iqwaveform.isroundmod(spec.integration_bandwidth, spec.frequency_resolution):
         frequency_bin_averaging = round(
-            spec.video_bandwidth / spec.frequency_resolution
+            spec.integration_bandwidth / spec.frequency_resolution
         )
     else:
         raise ValueError(
-            'when specified, video_bandwidth must be a multiple of frequency_resolution'
+            'when specified, integration_bandwidth must be a multiple of frequency_resolution'
         )
 
     hop_size = nfft - noverlap
@@ -446,6 +464,9 @@ def _cached_spectrogram(
         return_axis_arrays=False,
     )
 
+    if spec.lo_bandstop is not None:
+        _null_stopband(spg, nfft, capture.sample_rate, spec.lo_bandstop, axis=2)
+
     # truncate to the analysis bandwidth
     if spec.trim_stopband and np.isfinite(capture.analysis_bandwidth):
         # stick with python arithmetic to ensure consistency with axis bounds calculations
@@ -458,10 +479,16 @@ def _cached_spectrogram(
             spg, frequency_bin_averaging, axis=2, fft=True
         )
 
+        # mean -> sum
+        spg *= frequency_bin_averaging
+
     if time_bin_averaging is not None:
         spg = iqwaveform.util.binned_mean(spg, time_bin_averaging, axis=1, fft=False)
 
-    enbw = spec.frequency_resolution * equivalent_noise_bandwidth(spec.window, nfft)
+    if spec.integration_bandwidth is None:
+        enbw = spec.frequency_resolution
+    else:
+        enbw = spec.integration_bandwidth
 
     attrs = {
         'noise_bandwidth': float(enbw),
@@ -471,13 +498,17 @@ def _cached_spectrogram(
     return spg, attrs
 
 
-def fftfreq(nfft, fs, dtype='float64') -> 'np.ndarray':
+@util.lru_cache()
+def fftfreq(nfft, fs, dtype='float64', xp=np) -> 'iqwaveform.type_stubs.ArrayType':
     """compute fftfreq for a specified sample rate.
 
     This is meant to produce higher-precision results for
     rational sample rates in order to avoid rounding errors
     when merging captures with different sample rates.
     """
+    if not array_api_compat.is_numpy_namespace(np):
+        return xp.asarray(fftfreq(nfft, fs, dtype))
+
     # high resolution rational representation of frequency resolution
     fres = decimal.Decimal(fs) / nfft
     span = range(-nfft // 2, -nfft // 2 + nfft)
@@ -494,7 +525,7 @@ def fftfreq(nfft, fs, dtype='float64') -> 'np.ndarray':
 @util.lru_cache()
 def spectrogram_baseband_frequency(
     capture: specs.Capture, spec: SpectrogramSpec, xp=np
-) -> dict[str, np.ndarray]:
+) -> np.ndarray:
     if xp is not np:
         return xp.array(spectrogram_baseband_frequency(capture, spec))
 
@@ -503,15 +534,15 @@ def spectrogram_baseband_frequency(
     else:
         raise ValueError('sample_rate/resolution must be a counting number')
 
-    if spec.video_bandwidth is None:
+    if spec.integration_bandwidth is None:
         frequency_bin_averaging = None
-    elif iqwaveform.isroundmod(spec.video_bandwidth, spec.frequency_resolution):
+    elif iqwaveform.isroundmod(spec.integration_bandwidth, spec.frequency_resolution):
         frequency_bin_averaging = round(
-            spec.video_bandwidth / spec.frequency_resolution
+            spec.integration_bandwidth / spec.frequency_resolution
         )
     else:
         raise ValueError(
-            'when specified, video_bandwidth must be a multiple of frequency_resolution'
+            'when specified, integration_bandwidth must be a multiple of frequency_resolution'
         )
 
     # use the iqwaveform.fourier fftfreq for higher precision, which avoids
@@ -525,9 +556,8 @@ def spectrogram_baseband_frequency(
             freqs, nfft, capture.sample_rate, capture.analysis_bandwidth, axis=0
         )
 
-    if spec.video_bandwidth is not None:
-        freqs = iqwaveform.util.binned_mean(freqs, frequency_bin_averaging)
-        freqs -= freqs[freqs.size // 2]
+    if spec.integration_bandwidth is not None:
+        freqs = iqwaveform.util.binned_mean(freqs, frequency_bin_averaging, fft=True)
 
     # only now downconvert. round to a still-large number of digits
     return freqs.astype('float64').round(16)
