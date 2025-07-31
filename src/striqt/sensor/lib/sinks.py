@@ -63,7 +63,6 @@ class SinkBase:
         try:
             if exc_info == (None, None, None):
                 self.wait()
-                self.flush()
         finally:
             self.close()
 
