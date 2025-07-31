@@ -60,17 +60,13 @@ class SinkBase:
         return self
 
     def __exit__(self, *exc_info):
-        try:
-            if exc_info == (None, None, None):
-                self.wait()
-        finally:
-            self.close()
+        self.close(*exc_info)
 
-    def close(self):
+    def close(self, *exc_info):
         try:
             self.wait()
         finally:
-            self._executor.__exit__(*sys.exc_info())
+            self._executor.__exit__(*exc_info)
 
     def append(self, capture_data: 'xr.Dataset' | None, capture: specs.RadioCapture):
         if capture_data is None:
@@ -95,7 +91,7 @@ class NullSink(SinkBase):
     def open(self):
         pass
 
-    def close(self):
+    def close(self, *exc_info):
         pass
 
     def flush(self):
@@ -124,11 +120,11 @@ class ZarrSinkBase(SinkBase):
 
         self.store = analysis.open_store(fixed_path, mode='w' if self.force else 'a')
 
-    def close(self):
-        super().close()
+    def close(self, *exc_info):
+        super().close(*exc_info)
+
         if getattr(self.store, '_is_open', True):
             self.store.close()
-        self.wait()
 
 
 class CaptureAppender(ZarrSinkBase):
