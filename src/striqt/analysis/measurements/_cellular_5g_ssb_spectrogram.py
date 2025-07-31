@@ -86,7 +86,7 @@ def cellular_ssb_baseband_frequency(
     )
 
     # due to integration_bandwidth=2*subcarrier_spacing
-    return iqwaveform.util.binned_mean(freqs, 2, axis=0, fft=True)
+    return iqwaveform.util.binned_mean(freqs, count=2, axis=0, fft=True)
 
 
 @register.coordinate_factory(
@@ -158,34 +158,21 @@ def cellular_5g_ssb_spectrogram(
         window_fill=15 / 28,
         window=spec.window,
         lo_bandstop=spec.lo_bandstop,
-        trim_stopband=False
+        integration_bandwidth=spec.subcarrier_spacing,
+        trim_stopband=True
     )
+
+    spg_capture = capture.replace(analysis_bandwidth=spec.sample_rate)
 
     spg, attrs = shared.evaluate_spectrogram(
-        iq, capture=capture, spec=spg_spec, limit_digits=3
+        iq, capture=spg_capture, spec=spg_spec, limit_digits=3, dtype='float16'
     )
-
-    nfft = round(2 * capture.sample_rate / spec.subcarrier_spacing)
 
     slot_period = 1e-3 * (15e3 / spec.subcarrier_spacing)
     symbol_period = slot_period / 14
     discovery_symbols = round(spec.discovery_periodicity / symbol_period)
 
-    # downselect
-    spg = shared.truncate_spectrogram_bandwidth(
-        spg,
-        nfft,
-        capture.sample_rate,
-        spec.sample_rate,
-        offset=spec.frequency_offset,
-        axis=2,
-    )
-
-    # integrate power bins to the subcarrier spacing
-    spg = 2*iqwaveform.util.binned_mean(spg, 2, axis=2, fft=True)
-    spg = spg.astype('float16')
-
-    # the first two slots in each
+    # keep only the first two slots in the frame
     symbol_index = np.arange(spg.shape[1])
     mask_time = (symbol_index % discovery_symbols) < 28
     spg = spg[:, mask_time]
