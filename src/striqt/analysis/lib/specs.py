@@ -188,7 +188,11 @@ class AnalysisKeywords(typing.TypedDict):
 
 
 class Measurement(
-    _SlowHashSpecBase, forbid_unknown_fields=True, cache_hash=True, kw_only=True, frozen=True
+    _SlowHashSpecBase,
+    forbid_unknown_fields=True,
+    cache_hash=True,
+    kw_only=True,
+    frozen=True,
 ):
     """
     Returns:
@@ -222,7 +226,11 @@ class Measurement(
 
 
 class Analysis(
-    _SlowHashSpecBase, forbid_unknown_fields=True, cache_hash=True, kw_only=True, frozen=True
+    _SlowHashSpecBase,
+    forbid_unknown_fields=True,
+    cache_hash=True,
+    kw_only=True,
+    frozen=True,
 ):
     """base class for a set of Measurement specifications"""
 

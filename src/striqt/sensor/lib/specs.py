@@ -261,7 +261,9 @@ AliasMatchType = Annotated[
 ]
 
 
-class Output(_SlowHashSpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
+class Output(
+    _SlowHashSpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True
+):
     path: Optional[str] = '{yaml_name}-{start_time}'
     log_path: Optional[str] = None
     log_level: str = 'info'
