@@ -92,7 +92,6 @@ def cellular_ssb_baseband_frequency(
     return freqs
 
 
-
 @register.coordinate_factory(
     dtype='uint16', attrs={'standard_name': 'Capture SSB index'}
 )
