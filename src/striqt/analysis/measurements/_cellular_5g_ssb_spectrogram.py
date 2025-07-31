@@ -76,7 +76,7 @@ def cellular_ssb_baseband_frequency(
 ) -> np.ndarray:
     nfft = round(2 * capture.sample_rate / spec.subcarrier_spacing)
     freqs = shared.fftfreq(nfft, capture.sample_rate)
-    return shared.truncate_spectrogram_bandwidth(
+    freqs = shared.truncate_spectrogram_bandwidth(
         freqs,
         nfft,
         capture.sample_rate,
@@ -84,6 +84,13 @@ def cellular_ssb_baseband_frequency(
         offset=spec.frequency_offset,
         axis=0,
     )
+
+    # due to integration_bandwidth = 2 * subcarrier_spacing
+    freqs = iqwaveform.util.binned_mean(freqs, 2)
+    freqs = freqs - freqs[freqs.size // 2]
+
+    return freqs
+
 
 
 @register.coordinate_factory(
