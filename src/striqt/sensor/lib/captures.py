@@ -209,11 +209,9 @@ def concat_group_sizes(
         new = remaining.pop(0)
         pending.append(new)
 
-        if counts[new] > 1:
-            counts[new] -= 1
-        else:
+        counts[new] -= 1
+        if counts[new] == 0:
             del counts[new]
-
 
     if count > 0:
         sizes.append(count)

@@ -156,6 +156,7 @@ def cellular_5g_ssb_spectrogram(
         window=spec.window,
         lo_bandstop=spec.lo_bandstop,
         trim_stopband=False,
+        integration_bandwidth=spec.subcarrier_spacing
     )
 
     spg, attrs = shared.evaluate_spectrogram(
