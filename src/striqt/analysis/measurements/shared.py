@@ -557,8 +557,7 @@ def spectrogram_baseband_frequency(
         )
 
     if spec.integration_bandwidth is not None:
-        freqs = iqwaveform.util.binned_mean(freqs, frequency_bin_averaging)
-        freqs = freqs - freqs[freqs.size // 2]
+        freqs = iqwaveform.util.binned_mean(freqs, frequency_bin_averaging, fft=True)
 
     # only now downconvert. round to a still-large number of digits
     return freqs.astype('float64').round(16)
