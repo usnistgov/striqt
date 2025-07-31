@@ -79,7 +79,7 @@ def _log_to_file(output: specs.Output):
     logger = logging.getLogger('labbench')
     formatter = lb._host.JSONFormatter()
     handler = lb._host.RotatingJSONFileHandler(
-        output.path, maxBytes=50_000_000, backupCount=5, encoding='utf8'
+        output.log_path, maxBytes=50_000_000, backupCount=5, encoding='utf8'
     )
 
     handler.setFormatter(formatter)
