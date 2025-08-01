@@ -72,7 +72,7 @@ def _build_encodings(data, compression=None, filter: bool = True):
     # todo: this will need to be updated to work with zarr 3
 
     if compression is None:
-        compressor = numcodecs.Blosc('zlib', clevel=6)
+        compressor = numcodecs.Blosc('zlib', clevel=1)
     elif compression is False:
         compressor = None
 
