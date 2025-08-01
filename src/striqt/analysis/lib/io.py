@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import threading
 import typing
 import warnings
@@ -44,15 +45,19 @@ warnings.filterwarnings(
 )
 
 
+@functools.cache()
+def _zarr_version() -> tuple[int, ...]:
+    return tuple(int(n) for n in zarr.__version__.split('.'))
+
+
 def open_store(
     path: str | Path, *, mode: str
 ) -> 'zarr.storage.Store|zarr.abc.store.Store':
-    if hasattr(zarr.storage, 'Store'):
-        # zarr 2.x
+
+    if _zarr_version < (3, 0, 0):
         StoreBase = zarr.storage.Store
         DirectoryStore = zarr.storage.DirectoryStore
     else:
-        # zarr 3.x
         StoreBase = zarr.abc.store.Store
         DirectoryStore = zarr.storage.LocalStore
 
