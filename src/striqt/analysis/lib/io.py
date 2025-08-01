@@ -4,7 +4,6 @@ import functools
 import threading
 import typing
 import warnings
-
 from pathlib import Path
 from collections import defaultdict
 
@@ -55,10 +54,23 @@ def _xarray_version() -> tuple[int, ...]:
     return tuple(int(n) for n in xr.__version__.split('.'))
 
 
-def _get_store_info(store) -> tuple[bool, dict]:
+def _get_store_info(store, zarr_format='auto') -> tuple[bool, dict]:
     path = store.path if hasattr(store, 'path') else store.root
 
-    if zarr.__version__.startswith('2'):
+    if isinstance(zarr_format, str):
+        zarr_format = zarr_format.lower()
+
+    if zarr_format in (2, 3):
+        pass
+    elif zarr_format == 'auto':
+        if _zarr_version() < (3,0,0):
+            zarr_format = 2
+        else:
+            zarr_format = 3
+    else:
+        raise TypeError('zarr_format must be one of (2,3,"auto")')
+
+    if zarr_format == 2:
         exists = len(store) > 0
         kws = {'zarr_version': 2}
     else:
@@ -167,14 +179,10 @@ def dump(
     append_dim: str = 'capture',
     compression=True,
     zarr_format='auto',
-    compute=True
+    compute=True,
+    chunk_bytes=50_000_000
 ) -> 'StoreType':
     """serialize a dataset into a zarr directory or zipfile"""
-
-    if isinstance(zarr_format, str):
-        zarr_format = zarr_format.lower()
-    if zarr_format not in (2, 3, 'auto'):
-        raise TypeError('zarr_format must be one of (2,3,"auto")')
 
     for name in dict(data.coords).keys():
         if data[name].size == 0:
@@ -191,10 +199,10 @@ def dump(
 
         data = data.assign({name: data[name].astype(target_dtype)})
 
-    chunk_size, shards = _choose_chunk_and_shard(data, dim=append_dim)
+    chunk_size, shards = _choose_chunk_and_shard(data, dim=append_dim, target_bytes=chunk_bytes)
     data = data.chunk({append_dim: chunk_size})
 
-    exists, kws = _get_store_info(store)
+    exists, kws = _get_store_info(store, zarr_format)
     kws['compute'] = compute
 
     if exists:
