@@ -159,7 +159,7 @@ def cellular_5g_ssb_spectrogram(
         window=spec.window,
         lo_bandstop=spec.lo_bandstop,
         integration_bandwidth=spec.subcarrier_spacing,
-        trim_stopband=True
+        trim_stopband=True,
     )
 
     spg_capture = capture.replace(analysis_bandwidth=spec.sample_rate)
