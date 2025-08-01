@@ -105,7 +105,6 @@ def _build_encodings_zarr_v3(
     data, shards: dict[str, int], compression=True, dim='capture'
 ):
     # todo: this will need to be updated to work with zarr 3
-
     if compression:
         num_compressors = [zarr.codecs.BloscCodec(cname='zlib', clevel=1)]
     else:
@@ -130,7 +129,7 @@ def _build_encodings_zarr_v3(
     return encodings
 
 
-def _build_encodings_zarr_v2(data, shards: dict[str, int], compression=True):
+def _build_encodings_zarr_v2(data, compression=True):
     # todo: this will need to be updated to work with zarr 3
 
     if compression:
