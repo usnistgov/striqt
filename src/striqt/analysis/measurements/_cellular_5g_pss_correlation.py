@@ -222,7 +222,7 @@ def cellular_5g_pss_sync_offset(
     store_compressed=False,
     attrs={'standard_name': 'PSS Cross-Covariance', 'units': '√mW'},
 )
-def cellular_5g_pss_sync_offset(
+def cellular_5g_pss_correlation(
     iq,
     capture: specs.Capture,
     **kwargs: typing.Unpack[shared.Cellular5GNRSyncCorrelationKeywords],
