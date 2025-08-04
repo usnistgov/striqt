@@ -73,8 +73,9 @@ def correlate_5g_pss(
     )
 
 
-
-pss_local_weighted_correlator_cache = register.KeywordArgumentCache([CAPTURE_DIM, 'spec', 'window_fill', 'snr_window_fill'])
+pss_local_weighted_correlator_cache = register.KeywordArgumentCache(
+    [CAPTURE_DIM, 'spec', 'window_fill', 'snr_window_fill']
+)
 
 
 def locally_weighted_correlation(R, window_fill=0.5, snr_window_fill=0.08):
@@ -130,10 +131,12 @@ def locally_weighted_correlation(R, window_fill=0.5, snr_window_fill=0.08):
 
 class Cellular5GNRWeightedCorrelationSpec(Cellular5GNRPSSCorrelationSpec):
     window_fill: float = 0.5
-    snr_window_fill: float =0.08
+    snr_window_fill: float = 0.08
 
 
-class Cellular5GNRWeightedCorrelationKeywords(shared.Cellular5GNRSyncCorrelationKeywords):
+class Cellular5GNRWeightedCorrelationKeywords(
+    shared.Cellular5GNRSyncCorrelationKeywords
+):
     window_fill: typing.NotRequired[float]
     snr_window_fill: typing.NotRequired[float]
 
@@ -145,18 +148,20 @@ def pss_local_weighted_correlator(
     capture: specs.Capture,
     spec: Cellular5GNRPSSCorrelationSpec,
     window_fill=0.5,
-    snr_window_fill=0.08
+    snr_window_fill=0.08,
 ):
     # R.shape -> (..., port index, cell Nid2, SSB index, symbol start index, IQ sample index)
     R = correlate_5g_pss(iq, capture=capture, spec=spec)
 
-    return locally_weighted_correlation(R, window_fill=window_fill, snr_window_fill=snr_window_fill)
+    return locally_weighted_correlation(
+        R, window_fill=window_fill, snr_window_fill=snr_window_fill
+    )
 
 
 @register.alignment_source(
     Cellular5GNRPSSCorrelationSpec, lag_coord_func=shared.cellular_ssb_lag
 )
-def sync_aggregate_5g_pss(
+def cellular_5g_pss_sync(
     iq,
     capture: specs.Capture,
     **kwargs: typing.Unpack[Cellular5GNRWeightedCorrelationKeywords],
@@ -179,7 +184,7 @@ def sync_aggregate_5g_pss(
         capture=capture,
         spec=spec,
         window_fill=weighted_spec.window_fill,
-        snr_window_fill=weighted_spec.snr_window_fill
+        snr_window_fill=weighted_spec.snr_window_fill,
     )
 
     i = int(est.argmax())
@@ -191,7 +196,11 @@ def sync_aggregate_5g_pss(
     Cellular5GNRWeightedCorrelationSpec,
     coord_factories=[],
     dtype='float32',
-    caches=(pss_correlator_cache, shared.ssb_iq_cache, pss_local_weighted_correlator_cache),
+    caches=(
+        pss_correlator_cache,
+        shared.ssb_iq_cache,
+        pss_local_weighted_correlator_cache,
+    ),
     prefer_unaligned_input=True,
     store_compressed=False,
     attrs={'standard_name': 'PSS Synchronization Delay', 'units': 's'},
@@ -201,7 +210,7 @@ def cellular_5g_pss_sync_offset(
     capture: specs.Capture,
     **kwargs: typing.Unpack[Cellular5GNRWeightedCorrelationKeywords],
 ):
-    return sync_aggregate_5g_pss(iq, capture, **kwargs)
+    return cellular_5g_pss_sync(iq, capture, **kwargs)
 
 
 @register.measurement(
