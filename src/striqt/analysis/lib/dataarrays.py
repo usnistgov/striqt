@@ -244,19 +244,18 @@ def build_dataarray(
 
     # allow unused dimensions before those of the template
     # (for e.g. multichannel acquisition)
-    target_shape = data.shape[-len(template.dims) :]
-
-    # broadcast the first dimension, if applicable
-    if target_shape == () and isinstance(delayed.capture.channel, Number):
-        pass
-    elif target_shape[0] <= 1:
+    
+    if isinstance(delayed.capture.channel, Number):
+        target_shape = data.shape
+    else:
+        # allow broadcasting on the capture dimension
         data = np.atleast_1d(delayed.data)
-        extra = target_shape[1:] if len(target_shape) >= 1 else ()
-        target_shape = (len(delayed.capture.channel), *extra)
+        target_shape = (len(delayed.capture.channel), *data.shape)
 
-    print(template.dims)
+    print(template.dims, target_shape)
 
     # to bypass initialization overhead, grow from the empty template
+
     pad = {dim: [0, target_shape[i]] for i, dim in enumerate(template.dims)}
     da = template.pad(pad)
 
