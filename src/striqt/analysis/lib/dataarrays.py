@@ -314,7 +314,7 @@ def _infer_coord_dims(coord_factories: typing.Iterable[callable]) -> list[str]:
     """
 
     # build an ordered list of unique coordinates
-    coord_dims = {CAPTURE_DIM: None}
+    coord_dims = {}
     for func in coord_factories:
         coord = register.coordinate_factory[func]
         if coord is None:
