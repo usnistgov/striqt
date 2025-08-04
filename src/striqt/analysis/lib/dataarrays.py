@@ -246,9 +246,9 @@ def build_dataarray(
     # (for e.g. multichannel acquisition)
     target_shape = data.shape[-len(template.dims) :]
 
-    if target_shape == () or isinstance(delayed.capture.channel, Number):
+    if target_shape == ():
         pass
-    elif target_shape[0] <= 1:
+    elif target_shape[0] <= 1 and not isinstance(delayed.capture.channel, Number):
         # broadcast the first dimension, if applicable
         data = np.atleast_1d(delayed.data)
         extra = target_shape[1:] if len(target_shape) >= 1 else ()
