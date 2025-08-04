@@ -33,6 +33,7 @@ class AcquiredIQ(typing.NamedTuple):
     raw: 'iqwaveform.type_stubs.ArrayType'
     aligned: 'iqwaveform.type_stubs.ArrayType' | None = None
     capture: specs.Capture = None
+    alignment_offset: int | None = None
 
 
 _ENG_PREFIXES = {
@@ -246,13 +247,16 @@ def build_dataarray(
     # to bypass initialization overhead, grow from the empty template
     pad = {dim: [0, target_shape[i]] for i, dim in enumerate(template.dims)}
     da = template.pad(pad)
-
-    try:
-        da.values[:] = data
-    except ValueError as ex:
-        raise ValueError(
-            f'{delayed.info.name} measurement data has unexpected shape {data.shape}'
-        ) from ex
+    
+    if da.ndim == 0:
+        da.values = data
+    else:
+        try:
+            da.values[:] = data
+        except ValueError as ex:
+            raise ValueError(
+                f'{delayed.info.name} measurement data has unexpected shape {data.shape}'
+            ) from ex
 
     for coord_factory in delayed.info.coord_factories:
         coord_info = register.coordinate_factory[coord_factory]
@@ -322,7 +326,10 @@ def _validate_delayed_ndim(delayed: DelayedDataArray) -> None:
 
     ndim = delayed.data.ndim
 
-    if len(expect_dims) + 1 != ndim:
+    if len(expect_dims) == ndim == 0:
+        # allow scalar values
+        pass
+    elif len(expect_dims) + 1 != ndim:
         raise ValueError(
             f'coordinates of {delayed.info.name!r} indicate {len(expect_dims) + 1} '
             f'dimensions, but the data has {ndim}'
@@ -410,9 +417,6 @@ def evaluate_by_spec(
                 results[name] = ret.compute()
             else:
                 results[name] = ret
-
-    # if array_api_compat.is_cupy_array(iq):
-    #     util.free_cupy_mempool()
 
     if as_xarray == 'delayed' and block_each:
         return results

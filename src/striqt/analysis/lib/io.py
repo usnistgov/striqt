@@ -80,21 +80,35 @@ def _get_store_info(store, zarr_format='auto') -> tuple[bool, dict]:
     return exists, kws
 
 
+def _nextmultiple(i, d):
+    # i > 0, d > 0
+    return i + (d - i % d)
+
+
 def _choose_chunk_and_shard(
-    data, target_bytes=100_000_000, dim='capture'
+    data, data_bytes=100_000_000, coord_bytes=250_000, dim='capture'
 ) -> tuple[int, dict[str, int]]:
     """pick chunk and shard sizing for each data variable in data"""
     count = data.capture.size
+
     target_shards = {
-        name: min(count, round(count * target_bytes / da.nbytes))
-        for name, da in data.variables.items()
+        name: min(count, round(count * data_bytes / da.nbytes))
+        for name, da in data.data_vars.items()
         if dim in da.dims
     }
+
+    target_shards.update(
+        {
+            name: min(count, round(count * coord_bytes / da.nbytes))
+            for name, da in data.coords.items()
+            if dim in da.dims
+        }
+    )
 
     chunk_size = min(target_shards.values())
 
     shards = {
-        name: max(chunk_size, size - (size % chunk_size))
+        name: chunk_size  # _nextmultiple(size, chunk_size)
         for name, size in target_shards.items()
     }
 
@@ -119,6 +133,7 @@ def _build_encodings_zarr_v3(
             shape = list(var.shape)
             shape[var.dims.index(dim)] = shards[name]
             encodings[name]['shards'] = shape
+            print(name, var.shape, shape)
         if meas_info is None or not meas_info.store_compressed:
             encodings[name]['compressors'] = None
         elif issubclass(var.dtype.type, np.str_):
@@ -203,9 +218,14 @@ def dump(
         data = data.assign({name: data[name].astype(target_dtype)})
 
     chunk_size, shards = _choose_chunk_and_shard(
-        data, dim=append_dim, target_bytes=chunk_bytes
+        data, dim=append_dim, data_bytes=chunk_bytes
     )
-    data = data.chunk({append_dim: chunk_size})
+    import pprint
+
+    print(chunk_size)
+    pprint.pprint(shards)
+
+    data = data.chunk(dict(data.sizes, **{append_dim: chunk_size}))
 
     exists, kws = _get_store_info(store, zarr_format)
     kws['compute'] = compute

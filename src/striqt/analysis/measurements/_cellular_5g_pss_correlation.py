@@ -38,10 +38,10 @@ _coord_factories = [
 dtype = 'complex64'
 
 
-pss_alignment_cache = register.KeywordArgumentCache([CAPTURE_DIM, 'spec'])
+pss_correlator_cache = register.KeywordArgumentCache([CAPTURE_DIM, 'spec'])
 
 
-@pss_alignment_cache.apply
+@pss_correlator_cache.apply
 def correlate_5g_pss(
     iq: 'iqwaveform.type_stubs.ArrayType',
     *,
@@ -73,39 +73,17 @@ def correlate_5g_pss(
     )
 
 
-@register.alignment_source(
-    Cellular5GNRPSSCorrelationSpec, lag_coord_func=shared.cellular_ssb_lag
-)
-def sync_aggregate_5g_pss(
-    iq,
-    capture: specs.Capture,
-    window_fill=0.5,
-    snr_window_fill=0.08,
-    **kwargs: typing.Unpack[shared.Cellular5GNRSyncCorrelationKeywords],
-):
-    """compute alignment index offsets based on correlate_5g_pss.
 
-    This approach is meant to account for a weighted average of nearby peaks
-    to reduce mis-alignment errors in measurements of aggregate interference.
+pss_local_weighted_correlator_cache = register.KeywordArgumentCache([CAPTURE_DIM, 'spec', 'window_fill', 'snr_window_fill'])
 
-    The underlying heuristic is a triangular weighting function to include energy
-    within +/- 1/4 symbol of each peak. Outside of this range, spectrogram errors
-    due to "ISI" begin to increase quickly.
-    """
 
-    spec = Cellular5GNRPSSCorrelationSpec.fromdict(kwargs).validate()
-
-    xp = iqwaveform.util.array_namespace(iq)
-
-    kwargs['as_xarray'] = False
-
-    # R.shape -> (..., port index, cell Nid2, SSB index, symbol start index, IQ sample index)
-    R, _ = cellular_5g_pss_correlation(iq, capture, **kwargs)
+def locally_weighted_correlation(R, window_fill=0.5, snr_window_fill=0.08):
+    xp = iqwaveform.util.array_namespace(R)
 
     # R.shape -> (..., port index, cell Nid2, symbol start index, IQ sample index)
     R = R.mean(axis=-3)
 
-    if iqwaveform.util.is_cupy_array(iq):
+    if iqwaveform.util.is_cupy_array(R):
         from cupyx.scipy import ndimage
     else:
         from scipy import ndimage
@@ -147,22 +125,95 @@ def sync_aggregate_5g_pss(
     else:
         from scipy import ndimage
 
-    est = ndimage.correlate1d(Ragg, weights, mode='wrap')
+    return ndimage.correlate1d(Ragg, weights, mode='wrap')
+
+
+class Cellular5GNRWeightedCorrelationSpec(Cellular5GNRPSSCorrelationSpec):
+    window_fill: float = 0.5
+    snr_window_fill: float =0.08
+
+
+class Cellular5GNRWeightedCorrelationKeywords(shared.Cellular5GNRSyncCorrelationKeywords):
+    window_fill: typing.NotRequired[float]
+    snr_window_fill: typing.NotRequired[float]
+
+
+@pss_local_weighted_correlator_cache.apply
+def pss_local_weighted_correlator(
+    iq: 'iqwaveform.type_stubs.ArrayType',
+    *,
+    capture: specs.Capture,
+    spec: Cellular5GNRPSSCorrelationSpec,
+    window_fill=0.5,
+    snr_window_fill=0.08
+):
+    # R.shape -> (..., port index, cell Nid2, SSB index, symbol start index, IQ sample index)
+    R = correlate_5g_pss(iq, capture=capture, spec=spec)
+
+    return locally_weighted_correlation(R, window_fill=window_fill, snr_window_fill=snr_window_fill)
+
+
+@register.alignment_source(
+    Cellular5GNRPSSCorrelationSpec, lag_coord_func=shared.cellular_ssb_lag
+)
+def sync_aggregate_5g_pss(
+    iq,
+    capture: specs.Capture,
+    **kwargs: typing.Unpack[Cellular5GNRWeightedCorrelationKeywords],
+):
+    """compute alignment index offsets based on correlate_5g_pss.
+
+    This approach is meant to account for a weighted average of nearby peaks
+    to reduce mis-alignment errors in measurements of aggregate interference.
+
+    The underlying heuristic is a triangular weighting function to include energy
+    within +/- 1/4 symbol of each peak. Outside of this range, spectrogram errors
+    due to "ISI" begin to increase quickly.
+    """
+
+    weighted_spec = Cellular5GNRWeightedCorrelationSpec.fromdict(kwargs).validate()
+    spec = Cellular5GNRPSSCorrelationSpec.fromspec(weighted_spec).validate()
+
+    est = pss_local_weighted_correlator(
+        iq,
+        capture=capture,
+        spec=spec,
+        window_fill=weighted_spec.window_fill,
+        snr_window_fill=weighted_spec.snr_window_fill
+    )
+
     i = int(est.argmax())
 
     return shared.cellular_ssb_lag(capture, spec)[i]
 
 
 @register.measurement(
+    Cellular5GNRWeightedCorrelationSpec,
+    coord_factories=[],
+    dtype='float32',
+    caches=(pss_correlator_cache, shared.ssb_iq_cache, pss_local_weighted_correlator_cache),
+    prefer_unaligned_input=True,
+    store_compressed=False,
+    attrs={'standard_name': 'PSS Synchronization Delay', 'units': 's'},
+)
+def cellular_5g_pss_sync_offset(
+    iq,
+    capture: specs.Capture,
+    **kwargs: typing.Unpack[Cellular5GNRWeightedCorrelationKeywords],
+):
+    return sync_aggregate_5g_pss(iq, capture, **kwargs)
+
+
+@register.measurement(
     Cellular5GNRPSSCorrelationSpec,
     coord_factories=_coord_factories,
     dtype=dtype,
-    caches=(pss_alignment_cache, shared.ssb_iq_cache),
+    caches=(pss_correlator_cache, shared.ssb_iq_cache),
     prefer_unaligned_input=True,
     store_compressed=False,
     attrs={'standard_name': 'PSS Cross-Covariance', 'units': '√mW'},
 )
-def cellular_5g_pss_correlation(
+def cellular_5g_pss_sync_offset(
     iq,
     capture: specs.Capture,
     **kwargs: typing.Unpack[shared.Cellular5GNRSyncCorrelationKeywords],

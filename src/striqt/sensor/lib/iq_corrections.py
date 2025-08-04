@@ -170,6 +170,7 @@ def resampling_correction(
         iq_unaligned = iq[:, :size_out]
 
     else:
+        align_start = None
         iq_aligned = None
         iq_unaligned = iq[:, :size_out]
 
@@ -178,7 +179,12 @@ def resampling_correction(
     assert iq_unaligned.shape[axis] == size_out
     assert iq_aligned is None or iq_aligned.shape[axis] == size_out
 
-    return AcquiredIQ(aligned=iq_aligned, raw=iq_unaligned, capture=capture)
+    return AcquiredIQ(
+        aligned=iq_aligned,
+        raw=iq_unaligned,
+        capture=capture,
+        alignment_offset=align_start,
+    )
 
     # nfft = analysis_filter['nfft']
     # nfft_out, noverlap, overlap_scale, _ = iqwaveform.fourier._ola_filter_parameters(

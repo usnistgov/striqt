@@ -31,6 +31,7 @@ else:
 
 SWEEP_TIMESTAMP_NAME = 'sweep_start_time'
 RADIO_ID_NAME = 'radio_id'
+ALIGNMENT_DELAY = 'alignment_offset'
 
 
 def concat_time_dim(datasets: list['xr.Dataset'], time_dim: str) -> 'xr.Dataset':
@@ -108,6 +109,13 @@ def coord_template(
         fastpath=True,
         attrs={'standard_name': 'Sweep start time'},
     )
+
+    vars[RADIO_ID_NAME] = xr.Variable(
+        (CAPTURE_DIM,),
+        broadcast_defaults('unspecified-radio'),
+        fastpath=True,
+        attrs={'standard_name': 'Radio hardware ID'},
+    ).astype('object')
 
     vars[RADIO_ID_NAME] = xr.Variable(
         (CAPTURE_DIM,),
