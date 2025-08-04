@@ -63,7 +63,7 @@ def _get_store_info(store, zarr_format='auto') -> tuple[bool, dict]:
     if zarr_format in (2, 3):
         pass
     elif zarr_format == 'auto':
-        if _zarr_version() < (3,0,0):
+        if _zarr_version() < (3, 0, 0):
             zarr_format = 2
         else:
             zarr_format = 3
@@ -176,12 +176,16 @@ def dump(
     store: 'StoreType',
     data: typing.Optional['xr.DataArray' | 'xr.Dataset'] = None,
     append_dim: str = 'capture',
-    compression=True,
-    zarr_format='auto',
-    compute=True,
-    chunk_bytes=50_000_000
+    compression: bool = True,
+    zarr_format: str | typing.Literal[2] | typing.Literal[3] = 'auto',
+    compute: bool = True,
+    chunk_bytes: int = 50_000_000,
+    max_threads: int | None = None,
 ) -> 'StoreType':
     """serialize a dataset into a zarr directory or zipfile"""
+
+    if max_threads is not None:
+        numcodecs.blosc.set_nthreads(max_threads)
 
     for name in dict(data.coords).keys():
         if data[name].size == 0:
@@ -198,7 +202,9 @@ def dump(
 
         data = data.assign({name: data[name].astype(target_dtype)})
 
-    chunk_size, shards = _choose_chunk_and_shard(data, dim=append_dim, target_bytes=chunk_bytes)
+    chunk_size, shards = _choose_chunk_and_shard(
+        data, dim=append_dim, target_bytes=chunk_bytes
+    )
     data = data.chunk({append_dim: chunk_size})
 
     exists, kws = _get_store_info(store, zarr_format)

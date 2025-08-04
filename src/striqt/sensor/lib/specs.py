@@ -269,6 +269,7 @@ class Output(
     log_level: str = 'info'
     store: typing.Union[Literal['zip'], Literal['directory']] = 'directory'
     coord_aliases: dict[str, dict[str, AliasMatchType]] = {}
+    max_threads: Optional[int] = None
 
 
 SweepStructType = Annotated[

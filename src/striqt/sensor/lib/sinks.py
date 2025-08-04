@@ -150,7 +150,9 @@ class CaptureAppender(ZarrSinkBase):
             dataset = xr.concat(data_list, datasets.CAPTURE_DIM)
 
         with lb.stopwatch(f'write to {self.store.path}'):
-            analysis.dump(self.store, dataset)
+            analysis.dump(
+                self.store, dataset, max_threads=self.sweep_spec.output.max_threads
+            )
 
 
 class SpectrogramTimeAppender(ZarrSinkBase):
@@ -183,4 +185,9 @@ class SpectrogramTimeAppender(ZarrSinkBase):
             by_spectrogram = datasets.concat_time_dim(data_list, 'spectrogram_time')
 
         with lb.stopwatch('dump data'):
-            analysis.dump(by_spectrogram, data_list, compression=False)
+            analysis.dump(
+                by_spectrogram,
+                data_list,
+                compression=False,
+                max_threads=self.sweep_spec.output.max_threads,
+            )
