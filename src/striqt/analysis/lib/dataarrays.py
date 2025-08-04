@@ -247,7 +247,7 @@ def build_dataarray(
     target_shape = data.shape[-len(template.dims) :]
 
     if target_shape == ():
-        pass
+        pad = {}
     elif target_shape[0] <= 1 and not isinstance(delayed.capture.channel, Number):
         # broadcast the first dimension, if applicable
         data = np.atleast_1d(delayed.data)
@@ -256,7 +256,8 @@ def build_dataarray(
 
         # to bypass initialization overhead, grow from the empty template
         pad = {dim: [0, target_shape[i]] for i, dim in enumerate(template.dims)}
-        da = template.pad(pad)
+    
+    da = template.pad(pad)
 
     try:
         if da.values.ndim == 0:
