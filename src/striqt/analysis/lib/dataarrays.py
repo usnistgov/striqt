@@ -250,7 +250,7 @@ def build_dataarray(
     else:
         # allow broadcasting on the capture dimension
         data = np.atleast_1d(delayed.data)
-        target_shape = (len(delayed.capture.channel), *data.shape)
+        target_shape = (len(delayed.capture.channel), *data.shape[1:])
 
     print(template.dims, target_shape)
 
