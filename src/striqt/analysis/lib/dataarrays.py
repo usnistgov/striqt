@@ -244,10 +244,14 @@ def build_dataarray(
 
     # allow unused dimensions before those of the template
     # (for e.g. multichannel acquisition)
-    
     if isinstance(delayed.capture.channel, Number):
+        if data.ndim == len(template.dims) + 1:
+            # "unbroadcast" dimension of a single-channel
+            assert data.shape[0] == 1
+            data = data[0]
         target_shape = data.shape
     else:
+        print('b')
         # broadcast on the capture dimension
         data = np.atleast_1d(delayed.data)
         target_shape = (len(delayed.capture.channel), *data.shape[1:])
