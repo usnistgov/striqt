@@ -93,7 +93,7 @@ def correlate_5g_sss(
 @register.alignment_source(
     Cellular5GNRSSSCorrelationSpec, lag_coord_func=shared.cellular_ssb_lag
 )
-def sync_aggregate_5g_sss(
+def cellular_5g_sss_sync(
     iq,
     capture: specs.Capture,
     window_fill=0.5,
