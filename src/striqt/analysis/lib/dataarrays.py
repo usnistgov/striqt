@@ -248,7 +248,7 @@ def build_dataarray(
     if isinstance(delayed.capture.channel, Number):
         target_shape = data.shape
     else:
-        # allow broadcasting on the capture dimension
+        # broadcast on the capture dimension
         data = np.atleast_1d(delayed.data)
         target_shape = (len(delayed.capture.channel), *data.shape[1:])
 
