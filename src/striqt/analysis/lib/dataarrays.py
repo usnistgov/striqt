@@ -246,18 +246,18 @@ def build_dataarray(
     # (for e.g. multichannel acquisition)
     target_shape = data.shape[-len(template.dims) :]
 
-    if target_shape == ():
-        pad = {}
-    else:
-        if target_shape[0] <= 1 and not isinstance(delayed.capture.channel, Number):
-            # broadcast the first dimension, if applicable
-            data = np.atleast_1d(delayed.data)
-            extra = target_shape[1:] if len(target_shape) >= 1 else ()
-            target_shape = (len(delayed.capture.channel), *extra)
+    # broadcast the first dimension, if applicable
+    if target_shape == () and isinstance(delayed.capture.channel, Number):
+        pass
+    elif target_shape[0] <= 1:
+        data = np.atleast_1d(delayed.data)
+        extra = target_shape[1:] if len(target_shape) >= 1 else ()
+        target_shape = (len(delayed.capture.channel), *extra)
 
-        # to bypass initialization overhead, grow from the empty template
-        pad = {dim: [0, target_shape[i]] for i, dim in enumerate(template.dims)}
-    
+    print(template.dims)
+
+    # to bypass initialization overhead, grow from the empty template
+    pad = {dim: [0, target_shape[i]] for i, dim in enumerate(template.dims)}
     da = template.pad(pad)
 
     try:
