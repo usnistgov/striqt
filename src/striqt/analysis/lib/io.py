@@ -220,10 +220,6 @@ def dump(
     chunk_size, shards = _choose_chunk_and_shard(
         data, dim=append_dim, data_bytes=chunk_bytes
     )
-    import pprint
-
-    print(chunk_size)
-    pprint.pprint(shards)
 
     data = data.chunk(dict(data.sizes, **{append_dim: chunk_size}))
 
