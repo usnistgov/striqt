@@ -242,8 +242,7 @@ def build_dataarray(
 
     _validate_delayed_ndim(delayed)
 
-    # allow unused dimensions before those of the template
-    # (for e.g. multichannel acquisition)
+    # handle the presence of a capture dimension at the start
     if isinstance(delayed.capture.channel, Number):
         if data.ndim == len(template.dims) + 1:
             # "unbroadcast" dimension of a single-channel
@@ -251,15 +250,11 @@ def build_dataarray(
             data = data[0]
         target_shape = data.shape
     else:
-        print('b')
         # broadcast on the capture dimension
         data = np.atleast_1d(delayed.data)
         target_shape = (len(delayed.capture.channel), *data.shape[1:])
 
-    print(template.dims, target_shape)
-
     # to bypass initialization overhead, grow from the empty template
-
     pad = {dim: [0, target_shape[i]] for i, dim in enumerate(template.dims)}
     da = template.pad(pad)
 
@@ -269,7 +264,6 @@ def build_dataarray(
         else:
             da.values[:] = data
     except ValueError as ex:
-        print(da.shape, data.shape)
         raise ValueError(
             f'{delayed.info.name} measurement data has unexpected shape {data.shape}'
         ) from ex
