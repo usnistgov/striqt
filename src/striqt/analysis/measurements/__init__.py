@@ -1,5 +1,8 @@
 from ._cellular_cyclic_autocorrelation import cellular_cyclic_autocorrelation
-from ._cellular_5g_pss_correlation import cellular_5g_pss_correlation, cellular_5g_pss_sync_offset
+from ._cellular_5g_pss_correlation import (
+    cellular_5g_pss_correlation,
+    cellular_5g_pss_sync_offset,
+)
 from ._cellular_5g_sss_correlation import cellular_5g_sss_correlation
 from ._cellular_5g_ssb_spectrogram import cellular_5g_ssb_spectrogram
 from ._cellular_resource_power_histogram import cellular_resource_power_histogram
