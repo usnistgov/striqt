@@ -254,9 +254,9 @@ def build_dataarray(
         extra = target_shape[1:] if len(target_shape) >= 1 else ()
         target_shape = (len(delayed.capture.channel), *extra)
 
-    # to bypass initialization overhead, grow from the empty template
-    pad = {dim: [0, target_shape[i]] for i, dim in enumerate(template.dims)}
-    da = template.pad(pad)
+        # to bypass initialization overhead, grow from the empty template
+        pad = {dim: [0, target_shape[i]] for i, dim in enumerate(template.dims)}
+        da = template.pad(pad)
 
     try:
         if da.values.ndim == 0:
