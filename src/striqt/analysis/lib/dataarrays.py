@@ -246,9 +246,9 @@ def build_dataarray(
     target_shape = data.shape[-len(template.dims) :]
 
     # broadcast the first dimension
-    if target_shape[0] <= 1 and len(delayed.capture.channels) > 1:
+    if target_shape[0] <= 1 and len(delayed.capture.channel) > 1:
         extra = target_shape[1:] if len(target_shape) >= 1 else ()
-        target_shape = (len(delayed.capture.channels), *extra)
+        target_shape = (len(delayed.capture.channel), *extra)
 
     print(template.dims)
 
