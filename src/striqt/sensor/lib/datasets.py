@@ -29,6 +29,7 @@ else:
     xr = util.lazy_import('xarray')
     striqt_analysis = util.lazy_import('striqt.analysis')
 
+
 SWEEP_TIMESTAMP_NAME = 'sweep_start_time'
 RADIO_ID_NAME = 'radio_id'
 ALIGNMENT_DELAY = 'alignment_offset'
@@ -296,28 +297,28 @@ class DelayedDataset:
     def to_xarray(self) -> 'xr.Dataset':
         """complete any remaining calculations, transfer from the device, and build an output dataset"""
 
-        with lb.stopwatch(
-            'residual calculations', threshold=10e-3, logger_level='debug'
-        ):
-            analysis = striqt_analysis.lib.dataarrays.package_analysis(
-                self.capture, self.delayed, expand_dims=(CAPTURE_DIM,)
-            )
-            coords = build_coords(
-                self.capture,
-                output=self.sweep.output,
-                radio_id=self.radio_id,
-                sweep_time=self.sweep_time,
-            )
-            analysis = analysis.assign_coords(coords)
+        # with lb.stopwatch(
+        #     'residual calculations', threshold=10e-3, logger_level='debug'
+        # ):
+        analysis = striqt_analysis.lib.dataarrays.package_analysis(
+            self.capture, self.delayed, expand_dims=(CAPTURE_DIM,)
+        )
+        coords = build_coords(
+            self.capture,
+            output=self.sweep.output,
+            radio_id=self.radio_id,
+            sweep_time=self.sweep_time,
+        )
+        analysis = analysis.assign_coords(coords)
 
-            # these are coordinates - drop from attrs
-            for name in coords.keys():
-                analysis.attrs.pop(name, None)
+        # these are coordinates - drop from attrs
+        for name in coords.keys():
+            analysis.attrs.pop(name, None)
 
-            if self.extra_attrs is not None:
-                analysis.attrs.update(self.extra_attrs)
+        if self.extra_attrs is not None:
+            analysis.attrs.update(self.extra_attrs)
 
-            analysis[SWEEP_TIMESTAMP_NAME].attrs.update(label='Sweep start time')
+        analysis[SWEEP_TIMESTAMP_NAME].attrs.update(label='Sweep start time')
 
         if self.extra_data is not None:
             update_ext_dims = {CAPTURE_DIM: analysis.capture.size}
