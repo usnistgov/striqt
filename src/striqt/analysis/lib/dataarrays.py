@@ -209,7 +209,7 @@ def dataarray_stub(
         info = register.coordinate_factory[func]
         coord_stubs[info.name] = _empty_stub(info.dims, info.dtype, attrs=info.attrs)
 
-    if not dims:
+    if dims is None or dims == ():
         dims = _infer_coord_dims(coord_factories)
 
     data_stub = _empty_stub(dims, dtype)
@@ -229,13 +229,14 @@ def build_dataarray(
     expand_dims=None,
 ) -> 'xr.DataArray':
     """build an `xarray.DataArray` from an ndarray, capture information, and channel analysis keyword arguments"""
+
     template = dataarray_stub(
         delayed.info.dims,
         delayed.info.coord_factories,
         delayed.info.dtype,
         expand_dims=expand_dims,
     )
-    data = np.asarray(delayed.data)
+    data = np.atleast_1d(delayed.data)
     delayed.spec.validate()
 
     _validate_delayed_ndim(delayed)
@@ -244,19 +245,21 @@ def build_dataarray(
     # (for e.g. multichannel acquisition)
     target_shape = data.shape[-len(template.dims) :]
 
+    # broadcast the first dimension
+    if target_shape[0] <= 1 and len(delayed.capture.channels) > 1:
+        extra = target_shape[1:] if len(target_shape) >= 1 else ()
+        target_shape = (len(delayed.capture.channels), *extra)
+
     # to bypass initialization overhead, grow from the empty template
     pad = {dim: [0, target_shape[i]] for i, dim in enumerate(template.dims)}
     da = template.pad(pad)
 
-    if da.ndim == 0:
-        da.values = data
-    else:
-        try:
-            da.values[:] = data
-        except ValueError as ex:
-            raise ValueError(
-                f'{delayed.info.name} measurement data has unexpected shape {data.shape}'
-            ) from ex
+    try:
+        da.values[:] = data
+    except ValueError as ex:
+        raise ValueError(
+            f'{delayed.info.name} measurement data has unexpected shape {data.shape}'
+        ) from ex
 
     for coord_factory in delayed.info.coord_factories:
         coord_info = register.coordinate_factory[coord_factory]
@@ -309,7 +312,7 @@ def _infer_coord_dims(coord_factories: typing.Iterable[callable]) -> list[str]:
     """
 
     # build an ordered list of unique coordinates
-    coord_dims = {}
+    coord_dims = {CAPTURE_DIM: None}
     for func in coord_factories:
         coord = register.coordinate_factory[func]
         if coord is None:
