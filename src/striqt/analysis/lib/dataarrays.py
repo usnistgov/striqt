@@ -34,7 +34,6 @@ class AcquiredIQ(typing.NamedTuple):
     raw: 'iqwaveform.type_stubs.ArrayType'
     aligned: 'iqwaveform.type_stubs.ArrayType' | None = None
     capture: specs.Capture = None
-    alignment_offset: int | None = None
 
 
 _ENG_PREFIXES = {

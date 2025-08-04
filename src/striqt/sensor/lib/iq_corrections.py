@@ -170,7 +170,6 @@ def resampling_correction(
         iq_unaligned = iq[:, :size_out]
 
     else:
-        align_start = None
         iq_aligned = None
         iq_unaligned = iq[:, :size_out]
 
@@ -183,7 +182,6 @@ def resampling_correction(
         aligned=iq_aligned,
         raw=iq_unaligned,
         capture=capture,
-        alignment_offset=align_start,
     )
 
     # nfft = analysis_filter['nfft']

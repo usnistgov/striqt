@@ -304,17 +304,17 @@ class SourceBase(lb.Device):
             self.rx_enabled(False)
             self.sync_time_source()
 
-        if radio_setup.alignment_source is None:
+        if radio_setup.sync_source is None:
             self._aligner = None
         elif analysis is None:
-            name = register.get_alignment_measurement_name(radio_setup.alignment_source)
+            name = register.get_sync_source_measurement_name(radio_setup.sync_source)
             raise ValueError(
-                f'alignment source {name!r} requires an analysis '
-                f'specification for {radio_setup.alignment_source!r}'
+                f'sync_source {name!r} requires an analysis '
+                f'specification for {radio_setup.sync_source!r}'
             )
         else:
             self._aligner = register.get_aligner(
-                radio_setup.alignment_source, analysis=analysis
+                radio_setup.sync_source, analysis=analysis
             )
 
         return radio_setup

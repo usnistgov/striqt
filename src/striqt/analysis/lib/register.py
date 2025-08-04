@@ -173,14 +173,14 @@ class _CoordinateRegistry(
 coordinate_factory = _CoordinateRegistry()
 
 
-class AlignmentInfo(typing.NamedTuple):
+class SyncInfo(typing.NamedTuple):
     name: str
     func: callable
     lag_coord_func: _CoordinateFactoryCallable
     meas_spec_type: type[specs.Measurement]
 
 
-class _AlignmentSourceRegistry(collections.UserDict[str, AlignmentInfo]):
+class _AlignmentSourceRegistry(collections.UserDict[str, SyncInfo]):
     def __call__(
         self,
         meas_spec_type: type[specs.Measurement],
@@ -208,17 +208,17 @@ class _AlignmentSourceRegistry(collections.UserDict[str, AlignmentInfo]):
 
             if info_kws['name'] in self:
                 raise TypeError(
-                    f'an alignment source named {info_kws["name"]} was already registered'
+                    f'a sync_source named {info_kws["name"]} was already registered'
                 )
 
-            self[info_kws['name']] = AlignmentInfo(func=func, **info_kws)
+            self[info_kws['name']] = SyncInfo(func=func, **info_kws)
 
             return func
 
         return wrapper
 
 
-alignment_source = _AlignmentSourceRegistry()
+sync_source = _AlignmentSourceRegistry()
 
 
 class MeasurementInfo(typing.NamedTuple):
@@ -433,13 +433,13 @@ def to_analysis_spec_type(
 
 class AlignmentCaller:
     def __init__(self, name: str, analysis: specs.Analysis):
-        self.info: AlignmentInfo = alignment_source[name]
+        self.info: SyncInfo = sync_source[name]
         self.meas_info = measurement[self.info.meas_spec_type]
 
         self.meas_spec = getattr(analysis, self.meas_info.name, None)
         if self.meas_spec is None:
             raise ValueError(
-                f'alignment source {name!r} requires an analysis '
+                f'sync_source {name!r} requires an analysis '
                 f'specification for {self.meas_info.name!r}'
             )
 
@@ -463,7 +463,7 @@ def get_aligner(name: str, analysis: specs.Analysis) -> AlignmentCaller:
     return AlignmentCaller(name, analysis)
 
 
-def get_alignment_measurement_name(name: str):
-    info: AlignmentInfo = alignment_source[name]
+def get_sync_source_measurement_name(name: str):
+    info: SyncInfo = sync_source[name]
     meas_info = measurement[info.meas_spec_type]
     return meas_info.name

@@ -182,10 +182,10 @@ FastLOType = Annotated[
     ),
 ]
 
-AlignmentSourceType = Annotated[
+SyncSourceType = Annotated[
     str,
     meta(
-        'name of a registered waveform alignment function for analysis-based IQ synchronization'
+        'name of a registered waveform sync function for analysis-based IQ synchronization'
     ),
 ]
 
@@ -206,7 +206,7 @@ class RadioSetup(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=T
     time_source: TimeSourceType = 'host'
     clock_source: ClockSourceType = 'internal'
     periodic_trigger: Optional[float] = None
-    alignment_source: Optional[str] = None
+    sync_source: Optional[str] = None
 
     # this is enabled by a calibration subclass to skip unecessary
     # re-acquisitions
@@ -221,12 +221,12 @@ class RadioSetup(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=T
                 'time_sync_every_capture and gapless_repeats are mutually exclusive'
             )
 
-        if self.alignment_source is None:
+        if self.sync_source is None:
             pass
-        elif self.alignment_source not in analysis.register.alignment_source:
-            registered = set(analysis.register.alignment_source)
+        elif self.sync_source not in analysis.register.sync_source:
+            registered = set(analysis.register.sync_source)
             raise ValueError(
-                f'alignment_source "{self.alignment_source!r}" is not one of the registered functions {registered!r}'
+                f'sync_source "{self.sync_source!r}" is not one of the registered functions {registered!r}'
             )
 
 
@@ -304,7 +304,7 @@ class Extensions(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=T
 # dynamically generate Analysis type for "built-in" measurements in to striqt.analysis
 BundledAnalysis = analysis.register.to_analysis_spec_type(analysis.register.measurement)
 BundledAlignmentAnalysis = analysis.register.to_analysis_spec_type(
-    analysis.register.alignment_source
+    analysis.register.sync_source
 )
 
 WindowFillType = Annotated[

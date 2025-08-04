@@ -32,7 +32,6 @@ else:
 
 SWEEP_TIMESTAMP_NAME = 'sweep_start_time'
 RADIO_ID_NAME = 'radio_id'
-ALIGNMENT_DELAY = 'alignment_offset'
 
 
 def concat_time_dim(datasets: list['xr.Dataset'], time_dim: str) -> 'xr.Dataset':

@@ -158,7 +158,7 @@ def pss_local_weighted_correlator(
     )
 
 
-@register.alignment_source(
+@register.sync_source(
     Cellular5GNRPSSCorrelationSpec, lag_coord_func=shared.cellular_ssb_lag
 )
 def cellular_5g_pss_sync(
@@ -166,7 +166,7 @@ def cellular_5g_pss_sync(
     capture: specs.Capture,
     **kwargs: typing.Unpack[Cellular5GNRWeightedCorrelationKeywords],
 ):
-    """compute alignment index offsets based on correlate_5g_pss.
+    """compute sync index offsets based on correlate_5g_pss.
 
     This approach is meant to account for a weighted average of nearby peaks
     to reduce mis-alignment errors in measurements of aggregate interference.
