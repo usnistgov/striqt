@@ -6,6 +6,7 @@ import collections
 import functools
 import dataclasses
 import math
+from numbers import Number
 import typing
 
 from . import register, specs, util
@@ -236,7 +237,7 @@ def build_dataarray(
         delayed.info.dtype,
         expand_dims=expand_dims,
     )
-    data = np.atleast_1d(delayed.data)
+    data = np.asarray(delayed.data)
     delayed.spec.validate()
 
     _validate_delayed_ndim(delayed)
@@ -245,20 +246,25 @@ def build_dataarray(
     # (for e.g. multichannel acquisition)
     target_shape = data.shape[-len(template.dims) :]
 
-    # broadcast the first dimension
-    if target_shape[0] <= 1 and len(delayed.capture.channel) > 1:
+    if target_shape == () or isinstance(delayed.capture.channel, Number):
+        pass
+    elif target_shape[0] <= 1:
+        # broadcast the first dimension, if applicable
+        data = np.atleast_1d(delayed.data)
         extra = target_shape[1:] if len(target_shape) >= 1 else ()
         target_shape = (len(delayed.capture.channel), *extra)
-
-    print(template.dims)
 
     # to bypass initialization overhead, grow from the empty template
     pad = {dim: [0, target_shape[i]] for i, dim in enumerate(template.dims)}
     da = template.pad(pad)
 
     try:
-        da.values[:] = data
+        if da.values.ndim == 0:
+            da.values = data
+        else:
+            da.values[:] = data
     except ValueError as ex:
+        print(da.shape, data.shape)
         raise ValueError(
             f'{delayed.info.name} measurement data has unexpected shape {data.shape}'
         ) from ex
