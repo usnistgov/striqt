@@ -51,7 +51,7 @@ def design_warmup_sweep(
 
     # captures that have unique sampling parameters, which are those
     # specified in structs.WaveformCapture
-    wcaptures = [specs.WaveformCapture.fromspec(c) for c in sweep.capture]
+    wcaptures = [specs.WaveformCapture.fromspec(c) for c in sweep.captures]
     unique_map = dict(zip(wcaptures, sweep.captures))
     skip_wcaptures = {specs.WaveformCapture.fromspec(c) for c in skip}
     captures = [unique_map[c] for c in unique_map.keys() if c not in skip_wcaptures]

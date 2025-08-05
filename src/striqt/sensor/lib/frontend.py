@@ -137,7 +137,7 @@ def init_sweep_cli(
     peripherals = None
     sink = None
     controller = None
-    
+
     try:
         calls = {}
         calls['controller'] = lb.Call(get_controller, remote, sweep_spec)
