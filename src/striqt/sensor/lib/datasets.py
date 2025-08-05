@@ -296,38 +296,38 @@ class DelayedDataset:
     def to_xarray(self) -> 'xr.Dataset':
         """complete any remaining calculations, transfer from the device, and build an output dataset"""
 
-        # with lb.stopwatch(
-        #     'residual calculations', threshold=10e-3, logger_level='debug'
-        # ):
-        analysis = striqt_analysis.lib.dataarrays.package_analysis(
-            self.capture, self.delayed, expand_dims=(CAPTURE_DIM,)
-        )
-        coords = build_coords(
-            self.capture,
-            output=self.sweep.output,
-            radio_id=self.radio_id,
-            sweep_time=self.sweep_time,
-        )
-        analysis = analysis.assign_coords(coords)
+        with lb.stopwatch(
+            'residual calculations', threshold=10e-3, logger_level='debug'
+        ):
+            analysis = striqt_analysis.lib.dataarrays.package_analysis(
+                self.capture, self.delayed, expand_dims=(CAPTURE_DIM,)
+            )
+            coords = build_coords(
+                self.capture,
+                output=self.sweep.output,
+                radio_id=self.radio_id,
+                sweep_time=self.sweep_time,
+            )
+            analysis = analysis.assign_coords(coords)
 
-        # these are coordinates - drop from attrs
-        for name in coords.keys():
-            analysis.attrs.pop(name, None)
+            # these are coordinates - drop from attrs
+            for name in coords.keys():
+                analysis.attrs.pop(name, None)
 
-        if self.extra_attrs is not None:
-            analysis.attrs.update(self.extra_attrs)
+            if self.extra_attrs is not None:
+                analysis.attrs.update(self.extra_attrs)
 
-        analysis[SWEEP_TIMESTAMP_NAME].attrs.update(label='Sweep start time')
+            analysis[SWEEP_TIMESTAMP_NAME].attrs.update(label='Sweep start time')
 
-        if self.extra_data is not None:
-            update_ext_dims = {CAPTURE_DIM: analysis.capture.size}
-            new_arrays = {
-                k: xr.DataArray(v).expand_dims(
-                    {} if CAPTURE_DIM in getattr(v, 'dims', {}) else update_ext_dims
-                )
-                for k, v in self.extra_data.items()
-            }
-            analysis = analysis.assign(new_arrays)
+            if self.extra_data is not None:
+                update_ext_dims = {CAPTURE_DIM: analysis.capture.size}
+                new_arrays = {
+                    k: xr.DataArray(v).expand_dims(
+                        {} if CAPTURE_DIM in getattr(v, 'dims', {}) else update_ext_dims
+                    )
+                    for k, v in self.extra_data.items()
+                }
+                analysis = analysis.assign(new_arrays)
 
         return analysis
 
