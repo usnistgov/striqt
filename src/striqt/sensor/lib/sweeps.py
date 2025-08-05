@@ -241,7 +241,7 @@ class SweepIterator:
 
             hide_message = self._quiet or capture_this is None and capture_prev is None
             print(f'{desc} •', 'debug' if hide_message else 'info')
-            print(self._quiet,  capture_this, capture_prev is None)
+            print(self._quiet,  capture_this, capture_prev)
             with lb.stopwatch(
                 f'{desc} •', logger_level='debug' if hide_message else 'info'
             ):

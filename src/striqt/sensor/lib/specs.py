@@ -397,13 +397,13 @@ def _expand_loops(
     for f in fields:
         if f not in explicit_captures[0].__struct_fields__:
             raise TypeError(f'loop specifies capture field {f!r} that is not defined')
-        
+
     loop_points = [loop.get_points() for loop in loops]
-    combinations = itertools.product(*loop_points[::-1])
+    combinations = itertools.product(*loop_points)
 
     result = []
     for values in combinations:
-        updates = dict(zip(fields[::-1], values))
+        updates = dict(zip(fields, values))
         result += [c.replace(**updates) for c in explicit_captures]
 
     if len(result) == 0:
