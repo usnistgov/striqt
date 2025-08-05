@@ -189,7 +189,7 @@ def concat_group_sizes(
         The list l of sizes of each group such that sum(l) == len(captures)
     """
 
-    remaining = _MinSweep(captures=captures).validate().captures
+    remaining = list(_MinSweep(captures=captures).validate().captures)
     whole_set = set(remaining)
     counts = Counter(remaining)
 
