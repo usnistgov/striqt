@@ -322,6 +322,17 @@ class SweepIterator:
 
         data = self._peripherals.acquire(capture)
 
+        if data is None:
+            data = {}
+        else:
+            try:
+                data = dict(data)
+            except TypeError:
+                raise TypeError(
+                    f'{self._peripherals.acquire!r} must return a '
+                    f'dict or None, not {type(data)!r}'
+                )
+
         if self.sweep.radio_setup.calibration is None:
             return data
 
