@@ -80,36 +80,23 @@ def _get_store_info(store, zarr_format='auto') -> tuple[bool, dict]:
     return exists, kws
 
 
-def _nextmultiple(i, d):
-    # i > 0, d > 0
-    return i + (d - i % d)
-
-
 def _choose_chunk_and_shard(
-    data, data_bytes=100_000_000, coord_bytes=250_000, dim='capture'
+    data, data_bytes=100_000_000, coord_bytes=1_000_000, dim='capture'
 ) -> tuple[int, dict[str, int]]:
     """pick chunk and shard sizing for each data variable in data"""
     count = data.capture.size
 
     target_shards = {
         name: min(count, round(count * data_bytes / da.nbytes))
-        for name, da in data.data_vars.items()
+        for name, da in data.variables.items()
         if dim in da.dims
     }
-
-    target_shards.update(
-        {
-            name: min(count, round(count * coord_bytes / da.nbytes))
-            for name, da in data.coords.items()
-            if dim in da.dims
-        }
-    )
 
     chunk_size = min(target_shards.values())
 
     shards = {
-        name: chunk_size  # _nextmultiple(size, chunk_size)
-        for name, size in target_shards.items()
+        name: chunk_size
+        for name in target_shards
     }
 
     return chunk_size, shards
@@ -118,9 +105,8 @@ def _choose_chunk_and_shard(
 def _build_encodings_zarr_v3(
     data, shards: dict[str, int], compression=True, dim='capture'
 ):
-    # todo: this will need to be updated to work with zarr 3
     if compression:
-        num_compressors = [zarr.codecs.BloscCodec(cname='zlib', clevel=1)]
+        num_compressors = [zarr.codecs.BloscCodec(cname='zstd', clevel=1)]
     else:
         num_compressors = None
 
@@ -201,6 +187,9 @@ def dump(
     if max_threads is not None:
         numcodecs.blosc.set_nthreads(max_threads)
 
+    # prefer the variable-length string dtype from numpy 2, if available
+    string_dtype = getattr(np.dtype, 'StrDType', 'str')
+
     for name in dict(data.coords).keys():
         if data[name].size == 0:
             continue
@@ -210,7 +199,7 @@ def dump(
             target_dtype = 'datetime64[ns]'
         elif _xarray_version() < (2025, 7, 1) and isinstance(data[name].values[0], str):
             # avoid potential truncation bug due to fixed-length strings
-            target_dtype = 'str'
+            target_dtype = string_dtype
         else:
             continue
 
