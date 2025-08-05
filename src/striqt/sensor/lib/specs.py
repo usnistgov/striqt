@@ -427,7 +427,7 @@ class Sweep(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
         """subclasses may use this to autogenerate capture sequences"""
         explicit_captures = object.__getattribute__(self, 'captures')
         if with_loops:
-            return _expand_loops(explicit_captures, self.loops)
+            return _expand_loops(tuple(explicit_captures), self.loops)
         else:
             return explicit_captures
 
