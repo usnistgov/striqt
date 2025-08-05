@@ -114,9 +114,6 @@ class RadioCapture(
     delay: Optional[DelayType] = None
     start_time: Optional[StartTimeType] = None
 
-    # looping variables
-    repeat: int = 0
-
     def __post_init__(self):
         _validate_multichannel(self.channel, self.gain)
 
@@ -396,6 +393,11 @@ def _expand_loops(
 ) -> tuple[RadioCapture, ...]:
     """evaluate the loop specification, and flatten into one list of loops"""
     fields = tuple(loop.field for loop in loops)
+
+    for f in fields:
+        if f not in explicit_captures[0].__struct_fields__:
+            raise TypeError(f'loop specifies capture field {f!r} that is not defined')
+        
     loop_points = [loop.get_points() for loop in loops]
     combinations = itertools.product(*loop_points[::-1])
 
