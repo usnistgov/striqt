@@ -133,7 +133,6 @@ def _build_encodings_zarr_v3(
             shape = list(var.shape)
             shape[var.dims.index(dim)] = shards[name]
             encodings[name]['shards'] = shape
-            print(name, var.shape, shape)
         if meas_info is None or not meas_info.store_compressed:
             encodings[name]['compressors'] = None
         elif issubclass(var.dtype.type, np.str_):

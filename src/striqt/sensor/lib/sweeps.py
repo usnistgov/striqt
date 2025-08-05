@@ -51,7 +51,8 @@ def design_warmup_sweep(
 
     # captures that have unique sampling parameters, which are those
     # specified in structs.WaveformCapture
-    wcaptures = [specs.WaveformCapture.fromspec(c) for c in sweep.captures]
+    explicit_captures = sweep.get_captures(with_loops=False)
+    wcaptures = [specs.WaveformCapture.fromspec(c) for c in explicit_captures]
     unique_map = dict(zip(wcaptures, sweep.captures))
     skip_wcaptures = {specs.WaveformCapture.fromspec(c) for c in skip}
     captures = [unique_map[c] for c in unique_map.keys() if c not in skip_wcaptures]
@@ -240,8 +241,6 @@ class SweepIterator:
             )
 
             hide_message = self._quiet or capture_this is None and capture_prev is None
-            print(f'{desc} •', 'debug' if hide_message else 'info')
-            print(self._quiet,  capture_this, capture_prev)
             with lb.stopwatch(
                 f'{desc} •', logger_level='debug' if hide_message else 'info'
             ):

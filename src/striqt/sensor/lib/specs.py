@@ -423,10 +423,13 @@ class Sweep(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     extensions: Extensions = Extensions()
     output: Output = Output()
 
-    def get_captures(self):
+    def get_captures(self, with_loops=True):
         """subclasses may use this to autogenerate capture sequences"""
         explicit_captures = object.__getattribute__(self, 'captures')
-        return _expand_loops(explicit_captures, self.loops)
+        if with_loops:
+            return _expand_loops(explicit_captures, self.loops)
+        else:
+            return explicit_captures
 
     def __getattribute__(self, name):
         if name == 'captures':
