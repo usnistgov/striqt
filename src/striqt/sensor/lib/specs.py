@@ -114,6 +114,9 @@ class RadioCapture(
     delay: Optional[DelayType] = None
     start_time: Optional[StartTimeType] = None
 
+    # looping variables
+    repeat: int = 0
+
     def __post_init__(self):
         _validate_multichannel(self.channel, self.gain)
 
@@ -393,14 +396,18 @@ def _expand_loops(
 ) -> tuple[RadioCapture, ...]:
     """evaluate the loop specification, and flatten into one list of loops"""
     fields = tuple(loop.field for loop in loops)
-    combinations = itertools.product(*(loop.get_points() for loop in loops))
+    loop_points = [loop.get_points() for loop in loops]
+    combinations = itertools.product(*loop_points[::-1])
 
     result = []
     for values in combinations:
         updates = dict(zip(fields, values))
         result += [c.replace(**updates) for c in explicit_captures]
 
-    return tuple(result)
+    if len(result) == 0:
+        return explicit_captures
+    else:
+        return tuple(result)
 
 
 class Sweep(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
