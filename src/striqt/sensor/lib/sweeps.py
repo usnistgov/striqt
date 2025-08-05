@@ -51,12 +51,12 @@ def design_warmup_sweep(
 
     # captures that have unique sampling parameters, which are those
     # specified in structs.WaveformCapture
-    explicit_captures = sweep.get_captures(with_loops=False)
-    wcaptures = [specs.WaveformCapture.fromspec(c) for c in explicit_captures]
+    wcaptures = [specs.WaveformCapture.fromspec(c) for c in sweep.capture]
     unique_map = dict(zip(wcaptures, sweep.captures))
     skip_wcaptures = {specs.WaveformCapture.fromspec(c) for c in skip}
     captures = [unique_map[c] for c in unique_map.keys() if c not in skip_wcaptures]
 
+    print('unique captures: ', len(captures))
     if len(captures) > 1:
         captures = captures[:1]
 
@@ -75,7 +75,7 @@ def design_warmup_sweep(
     class WarmupSweep(type(sweep)):
         def get_captures(self):
             # override any capture auto-generating logic
-            return specs.Sweep.get_captures(self)
+            return specs.Sweep.get_captures(self, with_loops=False)
 
     warmup = WarmupSweep.fromdict(sweep.todict())
 
