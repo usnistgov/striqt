@@ -136,6 +136,8 @@ def init_sweep_cli(
     # as a file naming field
     peripherals = None
     sink = None
+    controller = None
+    
     try:
         calls = {}
         calls['controller'] = lb.Call(get_controller, remote, sweep_spec)
@@ -149,6 +151,7 @@ def init_sweep_cli(
                 sweep_spec, output_path=output_path, store_backend=store_backend
             )
             calls['open sink'] = lb.Call(sink.open)
+
         with lb.stopwatch(f'open {", ".join(calls)}', logger_level='info', threshold=1):
             controller = util.concurrently_with_fg(calls, False)['controller']
 

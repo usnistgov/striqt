@@ -403,7 +403,7 @@ def _expand_loops(
 
     result = []
     for values in combinations:
-        updates = dict(zip(fields, values))
+        updates = dict(zip(fields[::-1], values))
         result += [c.replace(**updates) for c in explicit_captures]
 
     if len(result) == 0:
