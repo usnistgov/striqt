@@ -81,7 +81,7 @@ def _get_store_info(store, zarr_format='auto') -> tuple[bool, dict]:
 
 
 def _choose_chunk_and_shard(
-    data, data_bytes=100_000_000, coord_bytes=1_000_000, dim='capture'
+    data, data_bytes=100_000_000, dim='capture'
 ) -> tuple[int, dict[str, int]]:
     """pick chunk and shard sizing for each data variable in data"""
     count = data.capture.size
