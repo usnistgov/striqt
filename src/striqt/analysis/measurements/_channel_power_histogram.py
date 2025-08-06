@@ -67,7 +67,7 @@ def make_power_histogram_bin_edges(power_low, power_high, power_resolution, xp=n
 
 
 @register.coordinate_factory(
-    dtype='float32', attrs={'standard_name': 'Channel power'}
+    dtype='float32', attrs={'standard_name': 'Channel power', 'units': 'dBm'}
 )
 @util.lru_cache()
 def channel_power_bin(
@@ -82,7 +82,7 @@ def channel_power_bin(
     depends=[_channel_power_time_series.channel_power_time_series],
     spec_type=ChannelPowerHistogramSpec,
     dtype='float32',
-    attrs={'standard_name': 'Channel power', 'units': 'dBm'},
+    attrs={'standard_name': 'Fraction of channel power readings'},
 )
 def channel_power_histogram(
     iq, capture: specs.Capture, **kwargs: typing.Unpack[ChannelPowerHistogramKeywords]
@@ -122,7 +122,7 @@ def channel_power_histogram(
             hist = xp.histogram(power_dB[i_chan, i_detector], bin_edges)[0]
             counts.append(hist)
         counts = xp.asarray(counts, dtype=count_dtype)
-        data.append(counts / xp.sum(counts))
+        data.append(counts / (xp.sum(counts) / power_dB.shape[1]) )
 
     data = xp.asarray(data, dtype=count_dtype)
 
