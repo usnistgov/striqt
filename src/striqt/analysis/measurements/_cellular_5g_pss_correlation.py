@@ -78,8 +78,11 @@ pss_local_weighted_correlator_cache = register.KeywordArgumentCache(
 )
 
 
-def locally_weighted_correlation(R, window_fill=0.5, snr_window_fill=0.08):
+def weight_correlation_locally(R, window_fill=0.5, snr_window_fill=0.08):
     xp = iqwaveform.util.array_namespace(R)
+
+    if R.ndim == 4:
+        R = R[np.newaxis, ...]
 
     # R.shape -> (..., port index, cell Nid2, symbol start index, IQ sample index)
     R = R.mean(axis=-3)
@@ -153,7 +156,7 @@ def pss_local_weighted_correlator(
     # R.shape -> (..., port index, cell Nid2, SSB index, symbol start index, IQ sample index)
     R = correlate_5g_pss(iq, capture=capture, spec=spec)
 
-    return locally_weighted_correlation(
+    return weight_correlation_locally(
         R, window_fill=window_fill, snr_window_fill=snr_window_fill
     )
 

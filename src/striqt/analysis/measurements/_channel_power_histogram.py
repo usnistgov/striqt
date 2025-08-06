@@ -67,7 +67,7 @@ def make_power_histogram_bin_edges(power_low, power_high, power_resolution, xp=n
 
 
 @register.coordinate_factory(
-    dtype='float32', attrs={'standard_name': 'Channel power', 'units': 'dBm'}
+    dtype='float32', attrs={'standard_name': 'Channel power'}
 )
 @util.lru_cache()
 def channel_power_bin(
