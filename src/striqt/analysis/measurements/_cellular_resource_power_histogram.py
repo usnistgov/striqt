@@ -335,6 +335,7 @@ def cellular_resource_power_histogram(
     spg, metadata = shared.evaluate_spectrogram(
         iq, capture, spg_spec, dtype='float32', dB=False
     )
+    del metadata['units']
 
     freqs = shared.spectrogram_baseband_frequency(capture, spg_spec, xp=xp)
 
