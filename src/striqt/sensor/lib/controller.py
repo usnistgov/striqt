@@ -12,12 +12,14 @@ from .sources import find_radio_cls_by_name, is_same_resource, SourceBase
 from striqt.analysis.lib.dataarrays import AcquiredIQ
 
 if typing.TYPE_CHECKING:
+    import iqwaveform
     import numpy as np
     import xarray as xr
     import labbench as lb
     import pandas as pd
     from striqt import analysis
 else:
+    iqwaveform = util.lazy_import('numpy')
     np = util.lazy_import('numpy')
     xr = util.lazy_import('xarray')
     lb = util.lazy_import('labbench')
@@ -50,7 +52,8 @@ class SweepController:
             # for performance, do any warmup runs and open a device connection
             self.warmup_sweep(sweep, calibration=None)
 
-        util.set_cuda_mem_limit()
+        if sweep.radio_setup.array_backend == 'cupy':
+            iqwaveform.set_max_cupy_fft_chunk(sweep.radio_setup.cupy_max_fft_chunk_size)
 
     def __enter__(self):
         return self

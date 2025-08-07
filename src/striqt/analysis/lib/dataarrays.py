@@ -403,8 +403,9 @@ def evaluate_by_spec(
     results: dict[str, DelayedDataArray] = {}
     as_xarray = 'delayed' if as_xarray else False
 
-    if array_api_compat.is_cupy_array(iq):
+    if array_api_compat.is_cupy_array(getattr(iq, 'raw', iq)):
         util.configure_cupy()
+
 
     for name in spec_dict.keys():
         meas = register.measurement[type(getattr(spec, name))]
@@ -441,6 +442,9 @@ def evaluate_by_spec(
         else:
             results[name] = res.to_xarray()
 
+    if array_api_compat.is_cupy_array(getattr(iq, 'raw', iq)):
+        util.free_cupy_mempool()
+
     return results
 
 
@@ -473,6 +477,7 @@ def analyze_by_spec(
     expand_dims=None,
 ) -> 'xr.Dataset':
     """evaluate a set of different channel analyses on the iq waveform as specified by spec"""
+
     results = evaluate_by_spec(
         iq,
         capture,

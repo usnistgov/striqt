@@ -278,6 +278,8 @@ class RadioSetup(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=T
     periodic_trigger: Optional[float] = None
     sync_source: Optional[str] = None
 
+    cupy_max_fft_chunk_size: int = 2**22
+
     # this is enabled by a calibration subclass to skip unecessary
     # re-acquisitions
     reuse_iq = False
@@ -316,6 +318,7 @@ class _RadioSetupKeywords(typing.TypedDict, total=False):
     time_sync_every_capture: TimeSyncEveryCaptureType
     warmup_sweep: WarmupSweepType
     array_backend: ArrayBackendType
+    cupy_max_fft_chunk_size: int
 
 
 class Description(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):

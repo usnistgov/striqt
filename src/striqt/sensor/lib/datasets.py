@@ -15,14 +15,12 @@ from striqt.analysis import register
 from striqt.analysis.lib.dataarrays import CAPTURE_DIM, CHANNEL_DIM, AcquiredIQ  # noqa: F401
 
 if typing.TYPE_CHECKING:
-    import iqwaveform
     import labbench as lb
     import numpy as np
     import pandas as pd
     import xarray as xr
     import striqt.analysis as striqt_analysis
 else:
-    iqwaveform = util.lazy_import('iqwaveform')
     lb = util.lazy_import('labbench')
     np = util.lazy_import('numpy')
     pd = util.lazy_import('pandas')
