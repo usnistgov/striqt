@@ -73,12 +73,39 @@ def _get_extension_classes(sweep_spec: specs.Sweep) -> SweepSpecClasses:
     )
 
 
+class RotatingJSONFileHandler(logging.handlers.RotatingFileHandler):
+    def __init__(self, path, *args, **kws):
+        path = Path(path)
+        if path.exists() and path.stat().st_size > 2:
+            self.empty = False
+        else:
+            self.empty = True
+
+        self.terminator = ''
+
+        super().__init__(path, *args, **kws)
+
+        self.stream.write('[\n')
+
+    def emit(self, rec):
+        super().emit(rec + ',\n')
+
+    def close(self):
+        if len(self.cached_recs) == 0:
+            super().close()
+            return
+
+        self.stream.write('{}')
+        self.stream.write('\n]')
+        super().close()
+
+
 def _log_to_file(output: specs.Output):
     Path(output.log_path).parent.mkdir(exist_ok=True, parents=True)
 
     logger = logging.getLogger('labbench')
     formatter = lb._host.JSONFormatter()
-    handler = lb._host.RotatingJSONFileHandler(
+    handler = RotatingJSONFileHandler(
         output.log_path, maxBytes=50_000_000, backupCount=5, encoding='utf8'
     )
 
@@ -136,6 +163,8 @@ def init_sweep_cli(
     # as a file naming field
     peripherals = None
     sink = None
+    controller = None
+
     try:
         calls = {}
         calls['controller'] = lb.Call(get_controller, remote, sweep_spec)
@@ -149,6 +178,7 @@ def init_sweep_cli(
                 sweep_spec, output_path=output_path, store_backend=store_backend
             )
             calls['open sink'] = lb.Call(sink.open)
+
         with lb.stopwatch(f'open {", ".join(calls)}', logger_level='info', threshold=1):
             controller = util.concurrently_with_fg(calls, False)['controller']
 

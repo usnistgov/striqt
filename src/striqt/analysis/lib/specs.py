@@ -182,10 +182,6 @@ class FilteredCapture(Capture, kw_only=True, frozen=True, cache_hash=True):
 class AnalysisKeywords(typing.TypedDict):
     as_xarray: typing.NotRequired[bool | typing.Literal['delayed']]
 
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-        print(cls, kwargs)
-
 
 class Measurement(
     _SlowHashSpecBase,

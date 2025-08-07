@@ -6,6 +6,7 @@ import collections
 import functools
 import dataclasses
 import math
+from numbers import Number
 import typing
 
 from . import register, specs, util
@@ -208,7 +209,7 @@ def dataarray_stub(
         info = register.coordinate_factory[func]
         coord_stubs[info.name] = _empty_stub(info.dims, info.dtype, attrs=info.attrs)
 
-    if not dims:
+    if dims is None or dims == ():
         dims = _infer_coord_dims(coord_factories)
 
     data_stub = _empty_stub(dims, dtype)
@@ -228,6 +229,7 @@ def build_dataarray(
     expand_dims=None,
 ) -> 'xr.DataArray':
     """build an `xarray.DataArray` from an ndarray, capture information, and channel analysis keyword arguments"""
+
     template = dataarray_stub(
         delayed.info.dims,
         delayed.info.coord_factories,
@@ -239,16 +241,27 @@ def build_dataarray(
 
     _validate_delayed_ndim(delayed)
 
-    # allow unused dimensions before those of the template
-    # (for e.g. multichannel acquisition)
-    target_shape = data.shape[-len(template.dims) :]
+    # handle the presence of a capture dimension at the start
+    if isinstance(delayed.capture.channel, Number):
+        if data.ndim == len(template.dims) + 1:
+            # "unbroadcast" dimension of a single-channel
+            assert data.shape[0] == 1
+            data = data[0]
+        target_shape = data.shape
+    else:
+        # broadcast on the capture dimension
+        data = np.atleast_1d(delayed.data)
+        target_shape = (len(delayed.capture.channel), *data.shape[1:])
 
     # to bypass initialization overhead, grow from the empty template
     pad = {dim: [0, target_shape[i]] for i, dim in enumerate(template.dims)}
     da = template.pad(pad)
 
     try:
-        da.values[:] = data
+        if da.values.ndim == 0:
+            da.values = data
+        else:
+            da.values[:] = data
     except ValueError as ex:
         raise ValueError(
             f'{delayed.info.name} measurement data has unexpected shape {data.shape}'
@@ -322,7 +335,10 @@ def _validate_delayed_ndim(delayed: DelayedDataArray) -> None:
 
     ndim = delayed.data.ndim
 
-    if len(expect_dims) + 1 != ndim:
+    if len(expect_dims) == ndim == 0:
+        # allow scalar values
+        pass
+    elif len(expect_dims) + 1 != ndim:
         raise ValueError(
             f'coordinates of {delayed.info.name!r} indicate {len(expect_dims) + 1} '
             f'dimensions, but the data has {ndim}'
@@ -387,8 +403,9 @@ def evaluate_by_spec(
     results: dict[str, DelayedDataArray] = {}
     as_xarray = 'delayed' if as_xarray else False
 
-    if array_api_compat.is_cupy_array(iq):
+    if array_api_compat.is_cupy_array(getattr(iq, 'raw', iq)):
         util.configure_cupy()
+
 
     for name in spec_dict.keys():
         meas = register.measurement[type(getattr(spec, name))]
@@ -411,9 +428,6 @@ def evaluate_by_spec(
             else:
                 results[name] = ret
 
-    # if array_api_compat.is_cupy_array(iq):
-    #     util.free_cupy_mempool()
-
     if as_xarray == 'delayed' and block_each:
         return results
 
@@ -427,6 +441,9 @@ def evaluate_by_spec(
             results[name] = res
         else:
             results[name] = res.to_xarray()
+
+    if array_api_compat.is_cupy_array(getattr(iq, 'raw', iq)):
+        util.free_cupy_mempool()
 
     return results
 
@@ -460,6 +477,7 @@ def analyze_by_spec(
     expand_dims=None,
 ) -> 'xr.Dataset':
     """evaluate a set of different channel analyses on the iq waveform as specified by spec"""
+
     results = evaluate_by_spec(
         iq,
         capture,

@@ -53,10 +53,10 @@ _coord_factories = [
 dtype = 'complex64'
 
 
-sss_alignment_cache = register.KeywordArgumentCache(['capture', 'spec'])
+sss_correlation_cache = register.KeywordArgumentCache(['capture', 'spec'])
 
 
-@sss_alignment_cache.apply
+@sss_correlation_cache.apply
 def correlate_5g_sss(
     iq: 'iqwaveform.type_stubs.ArrayType',
     *,
@@ -90,16 +90,16 @@ def correlate_5g_sss(
     return iqwaveform.util.to_blocks(meas, 3, axis=-4)
 
 
-@register.alignment_source(
+@register.sync_source(
     Cellular5GNRSSSCorrelationSpec, lag_coord_func=shared.cellular_ssb_lag
 )
-def sync_aggregate_5g_sss(
+def cellular_5g_sss_sync(
     iq,
     capture: specs.Capture,
     window_fill=0.5,
     **kwargs: typing.Unpack[shared.Cellular5GNRSyncCorrelationKeywords],
 ):
-    """compute alignment index offsets based on correlate_5g_sss.
+    """compute sync index offsets based on correlate_5g_sss.
 
     This approach is meant to account for a weighted average of nearby peaks
     to reduce mis-alignment errors in measurements of aggregate interference.
@@ -146,7 +146,7 @@ def sync_aggregate_5g_sss(
     Cellular5GNRSSSCorrelationSpec,
     coord_factories=_coord_factories,
     dtype=dtype,
-    caches=(sss_alignment_cache, shared.ssb_iq_cache),
+    caches=(sss_correlation_cache, shared.ssb_iq_cache),
     prefer_unaligned_input=True,
     store_compressed=False,
     attrs={'standard_name': 'SSS Cross-Covariance', 'units': '√mW'},

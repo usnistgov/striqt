@@ -15,19 +15,18 @@ from striqt.analysis import register
 from striqt.analysis.lib.dataarrays import CAPTURE_DIM, CHANNEL_DIM, AcquiredIQ  # noqa: F401
 
 if typing.TYPE_CHECKING:
-    import iqwaveform
     import labbench as lb
     import numpy as np
     import pandas as pd
     import xarray as xr
     import striqt.analysis as striqt_analysis
 else:
-    iqwaveform = util.lazy_import('iqwaveform')
     lb = util.lazy_import('labbench')
     np = util.lazy_import('numpy')
     pd = util.lazy_import('pandas')
     xr = util.lazy_import('xarray')
     striqt_analysis = util.lazy_import('striqt.analysis')
+
 
 SWEEP_TIMESTAMP_NAME = 'sweep_start_time'
 RADIO_ID_NAME = 'radio_id'
@@ -108,6 +107,13 @@ def coord_template(
         fastpath=True,
         attrs={'standard_name': 'Sweep start time'},
     )
+
+    vars[RADIO_ID_NAME] = xr.Variable(
+        (CAPTURE_DIM,),
+        broadcast_defaults('unspecified-radio'),
+        fastpath=True,
+        attrs={'standard_name': 'Radio hardware ID'},
+    ).astype('object')
 
     vars[RADIO_ID_NAME] = xr.Variable(
         (CAPTURE_DIM,),
@@ -311,15 +317,15 @@ class DelayedDataset:
 
             analysis[SWEEP_TIMESTAMP_NAME].attrs.update(label='Sweep start time')
 
-        if self.extra_data is not None:
-            update_ext_dims = {CAPTURE_DIM: analysis.capture.size}
-            new_arrays = {
-                k: xr.DataArray(v).expand_dims(
-                    {} if CAPTURE_DIM in getattr(v, 'dims', {}) else update_ext_dims
-                )
-                for k, v in self.extra_data.items()
-            }
-            analysis = analysis.assign(new_arrays)
+            if self.extra_data is not None:
+                update_ext_dims = {CAPTURE_DIM: analysis.capture.size}
+                new_arrays = {
+                    k: xr.DataArray(v).expand_dims(
+                        {} if CAPTURE_DIM in getattr(v, 'dims', {}) else update_ext_dims
+                    )
+                    for k, v in self.extra_data.items()
+                }
+                analysis = analysis.assign(new_arrays)
 
         return analysis
 

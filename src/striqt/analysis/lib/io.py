@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import functools
 import threading
 import typing
 import warnings
-
 from pathlib import Path
 from collections import defaultdict
 
@@ -44,36 +44,97 @@ warnings.filterwarnings(
 )
 
 
-def open_store(
-    path: str | Path, *, mode: str
-) -> 'zarr.storage.Store|zarr.abc.store.Store':
-    if hasattr(zarr.storage, 'Store'):
-        # zarr 2.x
-        StoreBase = zarr.storage.Store
-        DirectoryStore = zarr.storage.DirectoryStore
+@functools.cache
+def _zarr_version() -> tuple[int, ...]:
+    return tuple(int(n) for n in zarr.__version__.split('.'))
+
+
+@functools.cache
+def _xarray_version() -> tuple[int, ...]:
+    return tuple(int(n) for n in xr.__version__.split('.'))
+
+
+def _get_store_info(store, zarr_format='auto') -> tuple[bool, dict]:
+    path = store.path if hasattr(store, 'path') else store.root
+
+    if isinstance(zarr_format, str):
+        zarr_format = zarr_format.lower()
+
+    if zarr_format in (2, 3):
+        pass
+    elif zarr_format == 'auto':
+        if _zarr_version() < (3, 0, 0):
+            zarr_format = 2
+        else:
+            zarr_format = 3
     else:
-        # zarr 3.x
-        StoreBase = zarr.abc.store.Store
-        DirectoryStore = zarr.storage.LocalStore
+        raise TypeError('zarr_format must be one of (2,3,"auto")')
 
-    if isinstance(path, StoreBase):
-        store = path
-    elif not isinstance(path, (str, Path)):
-        raise ValueError('must pass a string or Path savefile or zarr Store')
-    elif str(path).endswith('.zip'):
-        store = zarr.storage.ZipStore(path, mode=mode, compression=0)
+    if zarr_format == 2:
+        exists = len(store) > 0
+        kws = {'zarr_version': 2}
     else:
-        store = DirectoryStore(path)
+        exists = Path(path).exists()
+        kws = {'zarr_format': 3}
 
-    return store
+    return exists, kws
 
 
-def _build_encodings(data, compression=None, filter: bool = True):
+def _choose_chunk_and_shard(
+    data, data_bytes=100_000_000, dim='capture'
+) -> tuple[int, dict[str, int]]:
+    """pick chunk and shard sizing for each data variable in data"""
+    count = data.capture.size
+
+    target_shards = {
+        name: min(count, round(count * data_bytes / da.nbytes))
+        for name, da in data.variables.items()
+        if dim in da.dims
+    }
+
+    chunk_size = min(target_shards.values())
+
+    shards = {
+        name: chunk_size
+        for name in target_shards
+    }
+
+    return chunk_size, shards
+
+
+def _build_encodings_zarr_v3(
+    data, shards: dict[str, int], compression=True, dim='capture'
+):
+    if compression:
+        num_compressors = [zarr.codecs.BloscCodec(cname='zstd', clevel=1)]
+    else:
+        num_compressors = None
+
+    encodings = defaultdict(dict)
+    info_map = {info.name: info for info in register.measurement.values()}
+
+    for name, var in data.variables.items():
+        meas_info = info_map.get(name, None)
+        if dim in var.dims and name in shards:
+            shape = list(var.shape)
+            shape[var.dims.index(dim)] = shards[name]
+            encodings[name]['shards'] = shape
+        if meas_info is None or not meas_info.store_compressed:
+            encodings[name]['compressors'] = None
+        elif issubclass(var.dtype.type, np.str_):
+            encodings[name]['compressors'] = None
+        else:
+            encodings[name]['compressors'] = num_compressors
+
+    return encodings
+
+
+def _build_encodings_zarr_v2(data, compression=True):
     # todo: this will need to be updated to work with zarr 3
 
-    if compression is None:
+    if compression:
         compressor = numcodecs.Blosc('zlib', clevel=1)
-    elif compression is False:
+    else:
         compressor = None
 
     encodings = defaultdict(dict)
@@ -89,76 +150,84 @@ def _build_encodings(data, compression=None, filter: bool = True):
     return encodings
 
 
-def _get_store_info(store: StoreType) -> tuple[bool, dict]:
-    path = store.path if hasattr(store, 'path') else store.root
-
-    if zarr.__version__.startswith('2'):
-        exists = len(store) > 0
-        kws = {'zarr_version': 2}
+def open_store(
+    path: str | Path, *, mode: str
+) -> 'zarr.storage.Store|zarr.abc.store.Store':
+    if _zarr_version() < (3, 0, 0):
+        StoreBase = zarr.storage.Store
+        DirectoryStore = zarr.storage.DirectoryStore
     else:
-        exists = Path(path).exists()
-        kws = {'zarr_format': 2}
+        StoreBase = zarr.abc.store.Store
+        DirectoryStore = zarr.storage.LocalStore
 
-    return exists, kws
+    if isinstance(path, StoreBase):
+        store = path
+    elif not isinstance(path, (str, Path)):
+        raise ValueError('must pass a string or Path savefile or zarr Store')
+    elif str(path).endswith('.zip'):
+        store = zarr.storage.ZipStore(path, mode=mode, compression=0)
+    else:
+        store = DirectoryStore(path)
+
+    return store
 
 
 def dump(
     store: 'StoreType',
     data: typing.Optional['xr.DataArray' | 'xr.Dataset'] = None,
-    append_dim=None,
-    compression=None,
-    filter=True,
-    overwrite=False,
+    append_dim: str = 'capture',
+    compression: bool = True,
+    zarr_format: str | typing.Literal[2] | typing.Literal[3] = 'auto',
+    compute: bool = True,
+    chunk_bytes: int = 50_000_000,
+    max_threads: int | None = None,
 ) -> 'StoreType':
-    """serialize a dataset into a zarr directory structure"""
+    """serialize a dataset into a zarr directory or zipfile"""
 
-    from ..measurements._iq_waveform import iq_index
+    if max_threads is not None:
+        numcodecs.blosc.set_nthreads(max_threads)
 
-    if hasattr(data, iq_index.__name__):
-        if 'sample_rate' in data.attrs:
-            # sample rate is metadata
-            sample_rate = data.attrs['sample_rate']
-        else:
-            # sample rate is a variate
-            sample_rate = data.sample_rate.values.flatten()[0]
-
-        chunks = {iq_index.__name__: round(sample_rate * 100e-3)}
-    else:
-        chunks = {}
-
-    # take object dtypes to mean variable length strings for coordinates
-    # and make fixed length now
+    # prefer the variable-length string dtype from numpy 2, if available
+    string_dtype = getattr(np.dtype, 'StrDType', 'str')
 
     for name in dict(data.coords).keys():
         if data[name].size == 0:
             continue
 
-        if isinstance(data[name].values[0], str):
-            # avoid potential truncation due to fixed-length strings
-            target_dtype = 'str'
-        elif isinstance(data[name].values[0], pd.Timestamp):
+        if isinstance(data[name].values[0], pd.Timestamp):
+            # ensure nanosecond resolution
             target_dtype = 'datetime64[ns]'
+        elif _xarray_version() < (2025, 7, 1) and isinstance(data[name].values[0], str):
+            # avoid potential truncation bug due to fixed-length strings
+            target_dtype = string_dtype
         else:
             continue
 
         data = data.assign({name: data[name].astype(target_dtype)})
 
-    if append_dim is None:
-        append_dim = dataarrays.CAPTURE_DIM
+    chunk_size, shards = _choose_chunk_and_shard(
+        data, dim=append_dim, data_bytes=chunk_bytes
+    )
 
-    data = data.chunk(chunks)
+    data = data.chunk(dict(data.sizes, **{append_dim: chunk_size}))
 
-    exists, kws = _get_store_info(store)
+    exists, kws = _get_store_info(store, zarr_format)
+    kws['compute'] = compute
 
     if exists:
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', UserWarning)
             return data.to_zarr(store, mode='a', append_dim=append_dim, **kws)
-    else:
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore', xr.SerializationWarning)
-            encodings = _build_encodings(data, compression=compression, filter=filter)
-            return data.to_zarr(store, encoding=encodings, mode='w', **kws)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', xr.SerializationWarning)
+        if _zarr_version() >= (3, 0, 0):
+            encodings = _build_encodings_zarr_v3(
+                data, shards, compression=compression, dim=append_dim
+            )
+        else:
+            encodings = _build_encodings_zarr_v2(data, compression=compression)
+        return data.to_zarr(store, encoding=encodings, mode='w', **kws)
 
 
 def load(path: str | Path) -> 'xr.DataArray' | 'xr.Dataset':

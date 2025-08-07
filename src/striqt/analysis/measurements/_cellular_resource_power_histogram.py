@@ -101,7 +101,11 @@ def cellular_resource_power_bin(
         raise ValueError('sample_rate/resolution must be a counting number')
 
     integration_bandwidth = _get_integration_bandwidth(spec)
-    return bins, {'units': f'dBm/{integration_bandwidth / 1e3:0.0f} kHz'}
+    metadata = {
+        'noise_bandwidth': float(integration_bandwidth),
+        'units': f'dBm/{integration_bandwidth / 1e3:0.0f} kHz'
+    }
+    return bins, metadata
 
 
 def apply_mask(
@@ -331,6 +335,7 @@ def cellular_resource_power_histogram(
     spg, metadata = shared.evaluate_spectrogram(
         iq, capture, spg_spec, dtype='float32', dB=False
     )
+    del metadata['units']
 
     freqs = shared.spectrogram_baseband_frequency(capture, spg_spec, xp=xp)
 

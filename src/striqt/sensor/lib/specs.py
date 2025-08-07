@@ -1,6 +1,8 @@
 """data structures that specify operation of radio hardware, captures, and sweeps"""
 
 from __future__ import annotations
+import itertools
+import functools
 import numbers
 import typing
 from typing import Annotated, Optional, Literal, Any, Union
@@ -137,6 +139,74 @@ class FileSourceCapture(RadioCapture, forbid_unknown_fields=True, cache_hash=Tru
     backend_sample_rate: Optional[float] = float('nan')
 
 
+class LoopBase(
+    SpecBase,
+    tag=str.lower,
+    tag_field='kind',
+    forbid_unknown_fields=True,
+    frozen=True,
+    kw_only=True,
+):
+    field: str
+
+    def get_points(self):
+        raise NotImplementedError
+
+
+class Range(LoopBase, forbid_unknown_fields=True, frozen=True, kw_only=True):
+    start: float
+    stop: float
+    step: float
+
+    def get_points(self):
+        import numpy as np
+
+        if self.start == self.stop:
+            return np.array([self.start])
+
+        a = np.arange(self.start, self.stop + self.step / 2, self.step)
+        return list(a)
+
+
+class Repeat(LoopBase, forbid_unknown_fields=True, frozen=True, kw_only=True):
+    count: int = 1
+
+    def get_points(self):
+        return list(range(self.count))
+
+
+class List(LoopBase, forbid_unknown_fields=True, frozen=True, kw_only=True):
+    values: tuple[typing.Any, ...]
+
+    def get_points(self):
+        return self.values
+
+
+class FrequencyBinRange(
+    LoopBase, forbid_unknown_fields=True, frozen=True, kw_only=True
+):
+    start: float
+    stop: float
+    step: float
+
+    def get_points(self):
+        from math import ceil
+        import numpy as np
+
+        span = self.stop - self.start
+        count = ceil(span / self.step)
+        expanded_span = count * self.step
+        points = np.linspace(-expanded_span / 2, expanded_span / 2, count + 1)
+        if points[0] < self.start:
+            points = points[1:]
+        if points[-1] > self.stop:
+            points = points[:-1]
+        return list(points)
+
+
+LoopSpecifier = typing.Union[Repeat, List, Range, FrequencyBinRange]
+
+
 TimeSourceType = Annotated[
     Literal['host', 'internal', 'external', 'gps'],
     meta('Hardware source for timestamps'),
@@ -182,10 +252,10 @@ FastLOType = Annotated[
     ),
 ]
 
-AlignmentSourceType = Annotated[
+SyncSourceType = Annotated[
     str,
     meta(
-        'name of a registered waveform alignment function for analysis-based IQ synchronization'
+        'name of a registered waveform sync function for analysis-based IQ synchronization'
     ),
 ]
 
@@ -206,7 +276,9 @@ class RadioSetup(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=T
     time_source: TimeSourceType = 'host'
     clock_source: ClockSourceType = 'internal'
     periodic_trigger: Optional[float] = None
-    alignment_source: Optional[str] = None
+    sync_source: Optional[str] = None
+
+    cupy_max_fft_chunk_size: int = 2**22
 
     # this is enabled by a calibration subclass to skip unecessary
     # re-acquisitions
@@ -221,12 +293,12 @@ class RadioSetup(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=T
                 'time_sync_every_capture and gapless_repeats are mutually exclusive'
             )
 
-        if self.alignment_source is None:
+        if self.sync_source is None:
             pass
-        elif self.alignment_source not in analysis.register.alignment_source:
-            registered = set(analysis.register.alignment_source)
+        elif self.sync_source not in analysis.register.sync_source:
+            registered = set(analysis.register.sync_source)
             raise ValueError(
-                f'alignment_source "{self.alignment_source!r}" is not one of the registered functions {registered!r}'
+                f'sync_source "{self.sync_source!r}" is not one of the registered functions {registered!r}'
             )
 
 
@@ -246,6 +318,7 @@ class _RadioSetupKeywords(typing.TypedDict, total=False):
     time_sync_every_capture: TimeSyncEveryCaptureType
     warmup_sweep: WarmupSweepType
     array_backend: ArrayBackendType
+    cupy_max_fft_chunk_size: int
 
 
 class Description(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
@@ -269,6 +342,7 @@ class Output(
     log_level: str = 'info'
     store: typing.Union[Literal['zip'], Literal['directory']] = 'directory'
     coord_aliases: dict[str, dict[str, AliasMatchType]] = {}
+    max_threads: Optional[int] = None
 
 
 SweepStructType = Annotated[
@@ -303,7 +377,7 @@ class Extensions(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=T
 # dynamically generate Analysis type for "built-in" measurements in to striqt.analysis
 BundledAnalysis = analysis.register.to_analysis_spec_type(analysis.register.measurement)
 BundledAlignmentAnalysis = analysis.register.to_analysis_spec_type(
-    analysis.register.alignment_source
+    analysis.register.sync_source
 )
 
 WindowFillType = Annotated[
@@ -316,19 +390,49 @@ WindowFillType = Annotated[
 ]
 
 
+@functools.lru_cache(2)
+def _expand_loops(
+    explicit_captures: tuple[RadioCapture, ...], loops: tuple[LoopSpecifier, ...]
+) -> tuple[RadioCapture, ...]:
+    """evaluate the loop specification, and flatten into one list of loops"""
+    fields = tuple(loop.field for loop in loops)
+
+    for f in fields:
+        if f not in explicit_captures[0].__struct_fields__:
+            raise TypeError(f'loop specifies capture field {f!r} that is not defined')
+
+    loop_points = [loop.get_points() for loop in loops]
+    combinations = itertools.product(*loop_points)
+
+    result = []
+    for values in combinations:
+        updates = dict(zip(fields, values))
+        result += [c.replace(**updates) for c in explicit_captures]
+
+    if len(result) == 0:
+        return explicit_captures
+    else:
+        return tuple(result)
+
+
 class Sweep(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     captures: tuple[RadioCapture, ...] = tuple()
     radio_setup: RadioSetup = RadioSetup()
     defaults: RadioCapture = RadioCapture()
+    loops: tuple[LoopSpecifier, ...] = ()
 
     analysis: BundledAnalysis = BundledAnalysis()  # type: ignore
     description: Description = Description()
     extensions: Extensions = Extensions()
     output: Output = Output()
 
-    def get_captures(self):
+    def get_captures(self, with_loops=True):
         """subclasses may use this to autogenerate capture sequences"""
-        return object.__getattribute__(self, 'captures')
+        explicit_captures = object.__getattribute__(self, 'captures')
+        if with_loops:
+            return _expand_loops(tuple(explicit_captures), self.loops)
+        else:
+            return explicit_captures
 
     def __getattribute__(self, name):
         if name == 'captures':

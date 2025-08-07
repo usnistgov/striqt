@@ -543,28 +543,42 @@ def label_axis(
     coord_name: typing.Optional['xr.Coordinates'] = None,
     tick_units=True,
     short=False,
-    ax: typing.Optional['mpl.axes.Ax'] = None,
+    ax: typing.Optional['mpl.axes.Ax'|list['mpl.axes.Ax']] = None,
+    fig: typing.Optional['mpl.figure.FigureBase'] = None
 ):
     """apply axis labeling based on label and unit metadata in the specified dimension of `a`.
 
     If dimension is None, then labeling is applied from metadata in a.attrs
     """
 
+    if which_axis not in ('x', 'y', 'colorbar'):
+        raise ValueError("which_axis must be one of 'x', 'y', 'colorbar'")
+
+    if fig is None:
+        fig = plt.gcf()
+        do_suplabel = False
+    else:
+        do_suplabel = False if which_axis == 'colorbar' else True
+
     if ax is None:
         if which_axis == 'colorbar':
-            fig = plt.gcf()
             colorbars = [ax for ax in fig.axes if 'colorbar' in repr(ax)]
             if len(colorbars) == 0:
                 raise ValueError('no colorbars found')
             else:
                 ax = colorbars[0]
         else:
-            ax = plt.gca()
+            ax = fig.gca()
+
+    if hasattr(ax, '__len__') or hasattr(ax, '__iter__'):
+        axs = list(ax)
+    else:
+        axs = [ax]
 
     if which_axis == 'x':
-        target_ax = ax.xaxis
+        target_axs = [a.xaxis for a in axs]
     elif which_axis in ('y', 'colorbar'):
-        target_ax = ax.yaxis
+        target_axs = [a.yaxis for a in axs]
 
     if coord_name is None:
         # label = a.attrs.get('standard_name', None)
@@ -583,16 +597,32 @@ def label_axis(
 
     if units is not None:
         formatter = FixedEngFormatter(unit=units, unitInTick=tick_units)
-        target_ax.set_major_formatter(formatter)
+
+        for target in target_axs:
+            target.set_major_formatter(formatter)
         ax_finite_data = ax_data.values[np.isfinite(ax_data.values)]
 
         if len(ax_finite_data) > 0:
             unit_suffix = formatter.get_axis_unit_suffix(
                 ax_finite_data.min(), ax_finite_data.max()
             )
-            target_ax.set_label_text(f'{desc_text}{unit_suffix}')
+            label_str = f'{desc_text}{unit_suffix}'
+        else:
+            label_str = None
     else:
-        target_ax.set_label_text(desc_text)
+        label_str = desc_text
+
+    if do_suplabel:
+        if which_axis == 'x':
+            fig.supxlabel(label_str)
+        elif which_axis == 'y':
+            fig.supylabel(label_str)
+
+        for target in target_axs:
+            target.label.set_visible(False)
+    else:
+        for target in target_axs:
+            target.set_label_text(label_str)
 
 
 def label_legend(

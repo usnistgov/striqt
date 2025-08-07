@@ -74,7 +74,7 @@ def design_warmup_sweep(
     class WarmupSweep(type(sweep)):
         def get_captures(self):
             # override any capture auto-generating logic
-            return specs.Sweep.get_captures(self)
+            return specs.Sweep.get_captures(self, with_loops=False)
 
     warmup = WarmupSweep.fromdict(sweep.todict())
 
@@ -240,7 +240,6 @@ class SweepIterator:
             )
 
             hide_message = self._quiet or capture_this is None and capture_prev is None
-
             with lb.stopwatch(
                 f'{desc} •', logger_level='debug' if hide_message else 'info'
             ):
@@ -321,6 +320,17 @@ class SweepIterator:
             return {}
 
         data = self._peripherals.acquire(capture)
+
+        if data is None:
+            data = {}
+        else:
+            try:
+                data = dict(data)
+            except TypeError:
+                raise TypeError(
+                    f'{self._peripherals.acquire!r} must return a '
+                    f'dict or None, not {type(data)!r}'
+                )
 
         if self.sweep.radio_setup.calibration is None:
             return data
