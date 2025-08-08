@@ -21,24 +21,12 @@ class Cellular5GNRSSBSpectrogramSpec(
     frozen=True,
     dict=True,
 ):
-    """
-    subcarrier_spacing (float): 3GPP channel subcarrier spacing (Hz)
-    sample_rate (float): output sample rate for the resampled synchronization waveform (samples/s)
-    discovery_periodicity (float): time period between synchronization blocks (s)
-    frequency_offset (float or dict[float, float]):
-        center frequency offset (see notes)
-    shared_spectrum:
-        whether to follow the 3GPP "shared spectrum" synchronizatio block layout
-    max_block_count: number of synchronization blocks to evaluate
-    trim_cp: whether to trim the cyclic prefix duration from the output
-    """
-
     subcarrier_spacing: float
 
     # ssb parameters
     sample_rate: float = 15.36e6 / 2
     discovery_periodicity: float = 20e-3
-    frequency_offset: typing.Union[float, dict[float, float]] = 0
+    resource_grid: typing.Union[shared.ResourceGridConfigSpec, dict[float, shared.ResourceGridConfigSpec]] = shared.ResourceGridConfigSpec()
     max_block_count: typing.Optional[int] = None
 
     # spectrogram info
@@ -54,7 +42,7 @@ class Cellular5GNRSSBSpectrogramKeywords(specs.AnalysisKeywords, total=False):
     subcarrier_spacing: float
     sample_rate: float
     discovery_periodicity: float
-    frequency_offset: typing.Union[float, dict[float, float]]
+    resource_grid: typing.Union[shared.ResourceGridConfigSpec, dict[float, shared.ResourceGridConfigSpec]]
     max_block_count: typing.Optional[int]
     window: typing.Optional[specs.WindowType]
     lo_bandstop: typing.Optional[float]
@@ -81,7 +69,7 @@ def cellular_ssb_baseband_frequency(
         nfft,
         capture.sample_rate,
         spec.sample_rate,
-        offset=spec.frequency_offset,
+        offset=spec.resource_grid.ssb_frequency_offset,
         axis=0,
     )
 
@@ -137,13 +125,17 @@ def cellular_5g_ssb_spectrogram(
     Args:
         iq: the vector of size (N, M) for N channels and M IQ waveform samples
         capture: capture structure that describes the iq acquisition parameters
-        sample_rate (samples/s): downsample to this rate before analysis (or None to follow capture.sample_rate)
+        sample_rate (samples/s): downsample to this rate before analysis (or None to
+            follow capture.sample_rate)
         subcarrier_spacing (Hz): OFDM subcarrier spacing
         discovery_periodicity (s): interval between synchronization blocks
-        frequency_offset (Hz): baseband center frequency of the synchronization block,
-            (or a mapping to look up frequency_offset[capture.center_frequency])
+        resource_grid: cellular resource grid spec, or a mapping to look up a resource
+            grid by center_frequency
+        shared_spectrum: whether to assume "shared_spectrum" symbol layout in the SSB
+            according to 3GPP TS 138 213: Section 4.1)
         max_block_count: if not None, the number of synchronization blocks to analyze
-        as_xarray: if True (default), return an xarray.DataArray, otherwise a ChannelAnalysisResult object
+        as_xarray: if True (default), return an xarray.DataArray, otherwise a
+            ChannelAnalysisResult object
 
     References:
         3GPP TS 138 211: Table 7.4.3.1-1, Section 7.4.2.2

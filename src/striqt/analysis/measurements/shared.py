@@ -19,7 +19,28 @@ else:
     pd = util.lazy_import('pandas')
 
 
-# %% Cellular 5G NR synchronizatino
+# %% Cellular 5G NR synchronization
+class ResourceGridConfigSpec(
+    specs.SpecBase,
+    forbid_unknown_fields=True,
+    cache_hash=True,
+    kw_only=True,
+    frozen=True,
+):
+    guard_bandwidths: tuple[float, float] = (0, 0)
+    frame_slots: typing.Optional[str] = None
+    special_symbols: typing.Optional[str] = None
+    ssb_frequency_offset: float = 0
+
+
+class _ResourceGridConfigKeywords(typing.TypedDict, total=False):
+    # for IDE type hinting of the measurement function
+    guard_bandwidths: typing.NotRequired[tuple[float, float]]
+    frame_slots: typing.NotRequired[str]
+    special_symbols: typing.NotRequired[str]
+    ssb_frequency_offset: typing.NotRequired[float]
+
+
 class Cellular5GNRSyncCorrelationSpec(
     specs.Measurement,
     forbid_unknown_fields=True,
@@ -43,7 +64,7 @@ class Cellular5GNRSyncCorrelationSpec(
     subcarrier_spacing: float
     sample_rate: float = 15.36e6 / 2
     discovery_periodicity: float = 20e-3
-    frequency_offset: typing.Union[float, dict[float, float]] = 0
+    resource_grid: typing.Union[ResourceGridConfigSpec, dict[float, ResourceGridConfigSpec]] = ResourceGridConfigSpec()
     shared_spectrum: bool = False
     max_block_count: typing.Optional[int] = 1
     trim_cp: bool = True
@@ -53,7 +74,7 @@ class Cellular5GNRSyncCorrelationKeywords(specs.AnalysisKeywords, total=False):
     subcarrier_spacing: float
     sample_rate: float
     discovery_periodicity: float
-    frequency_offset: typing.Union[float, dict[float, float]]
+    resource_grid: typing.Union[ResourceGridConfigSpec, dict[float, ResourceGridConfigSpec]]
     shared_spectrum: bool
     max_block_count: typing.Optional[int]
     trim_cp: bool
@@ -217,13 +238,15 @@ def get_5g_ssb_iq(
 
     xp = iqwaveform.util.array_namespace(iq)
 
-    frequency_offset = specs.maybe_lookup_with_capture_key(
+    resource_grid = specs.maybe_lookup_with_capture_key(
         capture,
-        spec.frequency_offset,
+        spec.resource_grid,
         capture_attr='center_frequency',
-        error_label='frequency_offset',
+        error_label='resource_grid',
         default=None,
     )
+
+    frequency_offset = resource_grid.ssb_frequency_offset
 
     if frequency_offset is None:
         return None

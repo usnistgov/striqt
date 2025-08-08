@@ -2,6 +2,7 @@ from __future__ import annotations
 import numbers
 import typing
 
+from . import shared
 from ..lib import register, specs, util
 
 
@@ -24,15 +25,15 @@ class CellularCyclicAutocorrelationSpec(
 ):
     subcarrier_spacings: typing.Union[float, tuple[float, ...]] = (15e3, 30e3, 60e3)
     frame_range: typing.Union[int, tuple[int, typing.Optional[int]]] = (0, 1)
-    frame_slots: typing.Union[str, dict[float, str], None] = None
+    resource_grid: typing.Union[shared.ResourceGridConfigSpec, dict[float, shared.ResourceGridConfigSpec], None] = None
     symbol_range: typing.Union[int, tuple[int, typing.Optional[int]]] = (0, None)
 
 
 class CellularCyclicAutocorrelationKeywords(specs.AnalysisKeywords, total=False):
-    subcarrier_spacings: typing.Union[float, tuple[float, ...]]
-    frame_range: typing.Union[int, tuple[int, typing.Optional[int]]]
-    frame_slots: typing.Optional[str]
-    symbol_range: typing.Union[int, tuple[int, typing.Optional[int]]]
+    subcarrier_spacings: typing.NotRequired[typing.Union[float, tuple[float, ...]]]
+    frame_range: typing.NotRequired[typing.Union[int, tuple[int, typing.Optional[int]]]]
+    resource_grid: typing.NotRequired[shared.ResourceGridConfigSpec | dict[float, shared.ResourceGridConfigSpec] | None]
+    symbol_range: typing.NotRequired[typing.Union[int, tuple[int, typing.Optional[int]]]]
 
 
 class NormalizedTDDSlotConfig(typing.NamedTuple):
@@ -223,7 +224,9 @@ def cellular_cyclic_autocorrelation(
         capture: the waveform capture specification
         subcarrier_spacings: cellular SCS to evaluate (currently supports 15e3, 30e3, or 60e3)
         frame_range: the frame indices to evaluate
-        frame_slots: string composed of {'d', 'u', 's'} that specify the sequence
+        resource_grid: a string, CellularResourceGrid struct, or a dictionary of
+            CellularResourceGrid keyed on center frequency.
+            resource_grid.frame_slots must be a string composed of the characters {'d', 'u', 's'} that specify the sequence
             of link direction of each slot in 1 TDD cellular frame (or None to fill with downlink)
         symbol_range: the symbols to evaluate within all indexed slots
 
@@ -242,9 +245,11 @@ def cellular_cyclic_autocorrelation(
     )
     metadata = {}
 
-    frame_slots = specs.maybe_lookup_with_capture_key(
-        capture, spec.frame_slots, 'center_frequency', 'frame_slots', default='d'
+    resource_grid = specs.maybe_lookup_with_capture_key(
+        capture, spec.resource_grid, 'center_frequency', 'resource_grid', default=shared.ResourceGridConfigSpec()
     )
+
+    frame_slots = resource_grid.frame_slots
 
     if isinstance(subcarrier_spacings, numbers.Number):
         subcarrier_spacings = tuple(

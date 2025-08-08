@@ -19,6 +19,8 @@ else:
     np = util.lazy_import('numpy')
 
 
+FILE_TIMESTAMP_FORMAT = '%Y%m%d-%Hh%Mm%S'
+
 def _get_capture_format_fields(
     capture: specs.RadioCapture,
     sweep: specs.Sweep,
@@ -31,7 +33,7 @@ def _get_capture_format_fields(
         capture, radio_id=radio_id, output=sweep.output
     )
 
-    fields['start_time'] = datetime.now().strftime('%Y%m%d-%Hh%Mm%S')
+    fields['start_time'] = datetime.now().strftime(FILE_TIMESTAMP_FORMAT)
     fields['driver'] = sweep.radio_setup.driver
     if yaml_path is not None:
         fields['yaml_name'] = Path(yaml_path).stem

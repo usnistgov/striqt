@@ -18,25 +18,6 @@ else:
     np = util.lazy_import('numpy')
 
 
-class ResourceGridConfigSpec(
-    specs.SpecBase,
-    forbid_unknown_fields=True,
-    cache_hash=True,
-    kw_only=True,
-    frozen=True,
-):
-    guard_bandwidths: tuple[float, float] = (0, 0)
-    frame_slots: typing.Optional[str] = None
-    special_symbols: typing.Optional[str] = None
-
-
-class _ResourceGridConfigKeywords(typing.TypedDict, total=False):
-    # for IDE type hinting of the measurement function
-    guard_bandwidths: tuple[float, float]
-    frame_slots: typing.Optional[str]
-    special_symbols: typing.Optional[str]
-
-
 class CellularResourcePowerHistogramSpec(
     specs.Measurement,
     forbid_unknown_fields=True,
@@ -51,7 +32,7 @@ class CellularResourcePowerHistogramSpec(
     power_resolution: float
     average_rbs: typing.Union[bool, typing.Literal['half']] = False
     average_slots: bool = False
-    resource_grid: dict[float, ResourceGridConfigSpec] = ResourceGridConfigSpec()
+    resource_grid: dict[float, shared.ResourceGridConfigSpec] = shared.ResourceGridConfigSpec()
     cyclic_prefix: typing.Union[
         typing.Literal['normal'], typing.Literal['extended']
     ] = 'normal'
@@ -66,7 +47,7 @@ class _CellularResourcePowerHistogramKeywords(typing.TypedDict, total=False):
     power_resolution: float
     average_rbs: typing.Union[bool, typing.Literal['half']]
     average_slots: bool
-    resource_grid: dict[float, _ResourceGridConfigKeywords]
+    resource_grid: dict[float, shared._ResourceGridConfigKeywords]
     cyclic_prefix: typing.Union[typing.Literal['normal'], typing.Literal['extended']]
 
 
@@ -285,7 +266,7 @@ def cellular_resource_power_histogram(
         spec.resource_grid,
         'center_frequency',
         'resource_grid',
-        default=ResourceGridConfigSpec(),
+        default=shared.ResourceGridConfigSpec(),
     )
 
     slot_count = round(10 * spec.subcarrier_spacing / 15e3)
