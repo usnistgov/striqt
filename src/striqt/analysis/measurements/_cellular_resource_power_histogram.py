@@ -18,25 +18,6 @@ else:
     np = util.lazy_import('numpy')
 
 
-class ResourceGridConfigSpec(
-    specs.SpecBase,
-    forbid_unknown_fields=True,
-    cache_hash=True,
-    kw_only=True,
-    frozen=True,
-):
-    guard_bandwidths: tuple[float, float] = (0, 0)
-    frame_slots: typing.Optional[str] = None
-    special_symbols: typing.Optional[str] = None
-
-
-class _ResourceGridConfigKeywords(typing.TypedDict, total=False):
-    # for IDE type hinting of the measurement function
-    guard_bandwidths: tuple[float, float]
-    frame_slots: typing.Optional[str]
-    special_symbols: typing.Optional[str]
-
-
 class CellularResourcePowerHistogramSpec(
     specs.Measurement,
     forbid_unknown_fields=True,
@@ -51,7 +32,10 @@ class CellularResourcePowerHistogramSpec(
     power_resolution: float
     average_rbs: typing.Union[bool, typing.Literal['half']] = False
     average_slots: bool = False
-    resource_grid: dict[float, ResourceGridConfigSpec] = ResourceGridConfigSpec()
+    guard_bandwidths: typing.Union[tuple[float, float], dict[float,tuple[float,float]]] = (0, 0)
+    frame_slots: typing.Union[str, dict[float,str], None] = None
+    special_symbols: typing.Union[str, dict[float,str], None] = None
+
     cyclic_prefix: typing.Union[
         typing.Literal['normal'], typing.Literal['extended']
     ] = 'normal'
@@ -62,11 +46,13 @@ class _CellularResourcePowerHistogramKeywords(typing.TypedDict, total=False):
     window: specs.WindowType
     subcarrier_spacing: float
     power_low: float
-    power_hixgh: float
+    power_high: float
     power_resolution: float
     average_rbs: typing.Union[bool, typing.Literal['half']]
     average_slots: bool
-    resource_grid: dict[float, _ResourceGridConfigKeywords]
+    guard_bandwidths: typing.Union[tuple[float, float], dict[float,tuple[float,float]]]
+    frame_slots: typing.Union[str, dict[float,str], None]
+    special_symbols: typing.Union[str, dict[float,str], None]
     cyclic_prefix: typing.Union[typing.Literal['normal'], typing.Literal['extended']]
 
 
@@ -267,7 +253,9 @@ def cellular_resource_power_histogram(
     Returns:
         `xarray.DataArray` or `(array, dict)` based on `as_xarray`
     """
-    spec = CellularResourcePowerHistogramSpec.fromdict(kwargs)
+    spec_type = CellularResourcePowerHistogramSpec
+    spec = spec_type.fromdict(kwargs)
+    spec_defaults = defaults = dict(zip(spec_type.__struct_fields__, spec_type.__struct_defaults__))
 
     xp = iqwaveform.util.array_namespace(iq)
 
@@ -280,28 +268,40 @@ def cellular_resource_power_histogram(
     else:
         time_aperture = None
 
-    grid_spec = specs.maybe_lookup_with_capture_key(
-        capture,
-        spec.resource_grid,
-        'center_frequency',
-        'resource_grid',
-        default=ResourceGridConfigSpec(),
-    )
-
     slot_count = round(10 * spec.subcarrier_spacing / 15e3)
-    if grid_spec.frame_slots is None:
+    frame_slots = specs.maybe_lookup_with_capture_key(
+        capture,
+        spec.frame_slots,
+        'center_frequency',
+        'frame_slots',
+        default=spec_defaults['frame_slots'],
+    )
+    if frame_slots is None:
         frame_slots = slot_count * 'd'
-    elif len(grid_spec.frame_slots) != slot_count:
+    elif len(frame_slots) != slot_count:
         raise ValueError(
             f'expected a string with {slot_count} characters, but received {len(frame_slots)}'
         )
-    else:
-        frame_slots = grid_spec.frame_slots
 
-    if 's' in frame_slots and grid_spec.special_symbols is None:
+    special_symbols = specs.maybe_lookup_with_capture_key(
+        capture,
+        spec.special_symbols,
+        'center_frequency',
+        'special_symbols',
+        default=spec_defaults['special_symbols'],
+    )
+    if 's' in frame_slots and special_symbols is None:
         raise ValueError(
             'specify special_symbols that implement the requested "s" special slot'
         )
+
+    guard_bandwidths = specs.maybe_lookup_with_capture_key(
+        capture,
+        spec.guard_bandwidths,
+        'center_frequency',
+        'guard_bandwidths',
+        default=spec_defaults['guard_bandwidths'],
+    )
 
     # set STFT overlap and the fractional fill in the window
     if spec.cyclic_prefix == 'normal':
@@ -346,9 +346,9 @@ def cellular_resource_power_histogram(
         link_direction=link_direction,
         channel_bandwidth=capture.analysis_bandwidth,
         frame_slots=frame_slots,
-        special_symbols=grid_spec.special_symbols,
-        guard_left=grid_spec.guard_bandwidths[0],
-        guard_right=grid_spec.guard_bandwidths[1],
+        special_symbols=special_symbols,
+        guard_left=guard_bandwidths[0],
+        guard_right=guard_bandwidths[1],
         xp=xp,
     )
 
