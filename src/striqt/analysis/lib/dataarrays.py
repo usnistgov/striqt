@@ -406,7 +406,6 @@ def evaluate_by_spec(
     if array_api_compat.is_cupy_array(getattr(iq, 'raw', iq)):
         util.configure_cupy()
 
-
     for name in spec_dict.keys():
         meas = register.measurement[type(getattr(spec, name))]
 

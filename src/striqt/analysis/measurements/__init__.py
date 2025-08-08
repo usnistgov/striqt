@@ -2,7 +2,7 @@ from ._cellular_cyclic_autocorrelation import cellular_cyclic_autocorrelation
 from ._cellular_5g_pss_correlation import (
     cellular_5g_pss_correlation,
     cellular_5g_pss_sync_offset,
-    weight_correlation_locally
+    weight_correlation_locally,
 )
 from ._cellular_5g_sss_correlation import cellular_5g_sss_correlation
 from ._cellular_5g_ssb_spectrogram import cellular_5g_ssb_spectrogram

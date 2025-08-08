@@ -543,8 +543,8 @@ def label_axis(
     coord_name: typing.Optional['xr.Coordinates'] = None,
     tick_units=True,
     short=False,
-    ax: typing.Optional['mpl.axes.Ax'|list['mpl.axes.Ax']] = None,
-    fig: typing.Optional['mpl.figure.FigureBase'] = None
+    ax: typing.Optional['mpl.axes.Ax' | list['mpl.axes.Ax']] = None,
+    fig: typing.Optional['mpl.figure.FigureBase'] = None,
 ):
     """apply axis labeling based on label and unit metadata in the specified dimension of `a`.
 

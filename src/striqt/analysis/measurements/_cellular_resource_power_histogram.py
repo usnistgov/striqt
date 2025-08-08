@@ -32,9 +32,11 @@ class CellularResourcePowerHistogramSpec(
     power_resolution: float
     average_rbs: typing.Union[bool, typing.Literal['half']] = False
     average_slots: bool = False
-    guard_bandwidths: typing.Union[tuple[float, float], dict[float,tuple[float,float]]] = (0, 0)
-    frame_slots: typing.Union[str, dict[float,str], None] = None
-    special_symbols: typing.Union[str, dict[float,str], None] = None
+    guard_bandwidths: typing.Union[
+        tuple[float, float], dict[float, tuple[float, float]]
+    ] = (0, 0)
+    frame_slots: typing.Union[str, dict[float, str], None] = None
+    special_symbols: typing.Union[str, dict[float, str], None] = None
 
     cyclic_prefix: typing.Union[
         typing.Literal['normal'], typing.Literal['extended']
@@ -50,9 +52,11 @@ class _CellularResourcePowerHistogramKeywords(typing.TypedDict, total=False):
     power_resolution: float
     average_rbs: typing.Union[bool, typing.Literal['half']]
     average_slots: bool
-    guard_bandwidths: typing.Union[tuple[float, float], dict[float,tuple[float,float]]]
-    frame_slots: typing.Union[str, dict[float,str], None]
-    special_symbols: typing.Union[str, dict[float,str], None]
+    guard_bandwidths: typing.Union[
+        tuple[float, float], dict[float, tuple[float, float]]
+    ]
+    frame_slots: typing.Union[str, dict[float, str], None]
+    special_symbols: typing.Union[str, dict[float, str], None]
     cyclic_prefix: typing.Union[typing.Literal['normal'], typing.Literal['extended']]
 
 
@@ -89,7 +93,7 @@ def cellular_resource_power_bin(
     integration_bandwidth = _get_integration_bandwidth(spec)
     metadata = {
         'noise_bandwidth': float(integration_bandwidth),
-        'units': f'dBm/{integration_bandwidth / 1e3:0.0f} kHz'
+        'units': f'dBm/{integration_bandwidth / 1e3:0.0f} kHz',
     }
     return bins, metadata
 
@@ -255,7 +259,9 @@ def cellular_resource_power_histogram(
     """
     spec_type = CellularResourcePowerHistogramSpec
     spec = spec_type.fromdict(kwargs)
-    spec_defaults = defaults = dict(zip(spec_type.__struct_fields__, spec_type.__struct_defaults__))
+    spec_defaults = defaults = dict(
+        zip(spec_type.__struct_fields__, spec_type.__struct_defaults__)
+    )
 
     xp = iqwaveform.util.array_namespace(iq)
 

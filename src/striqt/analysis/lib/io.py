@@ -94,10 +94,7 @@ def _choose_chunk_and_shard(
 
     chunk_size = max(min(target_shards.values()), 1)
 
-    shards = {
-        name: chunk_size
-        for name in target_shards
-    }
+    shards = {name: chunk_size for name in target_shards}
 
     return chunk_size, shards
 

@@ -122,7 +122,7 @@ def channel_power_histogram(
             hist = xp.histogram(power_dB[i_chan, i_detector], bin_edges)[0]
             counts.append(hist)
         counts = xp.asarray(counts, dtype=count_dtype)
-        data.append(counts / (xp.sum(counts) / power_dB.shape[1]) )
+        data.append(counts / (xp.sum(counts) / power_dB.shape[1]))
 
     data = xp.asarray(data, dtype=count_dtype)
 
