@@ -53,11 +53,17 @@ def _single_match(
     if isinstance(capture.channel, tuple):
         raise ValueError('split the capture to evaluate alias matches')
 
-    for name, value in fields.items():
+    # ensure type conversion of the search fields
+    valid_fields = {k: v for k, v in fields.items() if k in capture.__struct_fields__}
+    converted_fields = capture.replace(**valid_fields).todict()
+
+    for name in valid_fields.keys():
         hits = (
             getattr(capture, name, _UNDEFINED_FIELD),
             extras.get(name, _UNDEFINED_FIELD),
         )
+
+        value = converted_fields[name]
 
         if value in hits:
             continue
