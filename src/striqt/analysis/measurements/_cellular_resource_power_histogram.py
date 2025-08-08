@@ -218,6 +218,14 @@ def _get_integration_bandwidth(
         return 12 * spec.subcarrier_spacing
     else:
         return spec.subcarrier_spacing
+    
+
+def _struct_defaults(spec_type: type[specs.SpecBase]) -> dict[str, typing.Any]:
+    defaults = spec_type.__struct_defaults__
+    fields = spec_type.__struct_fields__
+    
+    # defaults specify only the end of the fields list
+    return dict(zip(fields[-len(defaults):], defaults))
 
 
 @register.measurement(
@@ -257,11 +265,8 @@ def cellular_resource_power_histogram(
     Returns:
         `xarray.DataArray` or `(array, dict)` based on `as_xarray`
     """
-    spec_type = CellularResourcePowerHistogramSpec
-    spec = spec_type.fromdict(kwargs)
-    spec_defaults = defaults = dict(
-        zip(spec_type.__struct_fields__, spec_type.__struct_defaults__)
-    )
+    spec = CellularResourcePowerHistogramSpec.fromdict(kwargs)
+    spec_defaults = _struct_defaults(CellularResourcePowerHistogramSpec)
 
     xp = iqwaveform.util.array_namespace(iq)
 
