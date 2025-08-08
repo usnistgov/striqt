@@ -568,7 +568,10 @@ def label_axis(
             else:
                 ax = colorbars[0]
         else:
-            ax = fig.gca()
+            if do_suplabel:
+                ax = fig.axes
+            else:
+                ax = fig.gca()
 
     if hasattr(ax, '__len__') or hasattr(ax, '__iter__'):
         axs = list(ax)

@@ -92,7 +92,7 @@ def _choose_chunk_and_shard(
         if dim in da.dims
     }
 
-    chunk_size = min(target_shards.values())
+    chunk_size = max(min(target_shards.values()), 1)
 
     shards = {
         name: chunk_size
