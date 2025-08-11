@@ -133,8 +133,8 @@ def _build_encodings_zarr_v3(
 
 
 def _build_encodings_zarr_v2(data, compression=True):
-    if isinstance(compression, zarr.core.codec_pipeline.Codec):
-        compressors = [compression]
+    if isinstance(compression, numcodecs.abc.Codec):
+        compressor = compression
     elif compression:
         compressor = numcodecs.Blosc('zstd', clevel=1)
     else:
