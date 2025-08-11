@@ -136,7 +136,7 @@ def _build_encodings_zarr_v2(data, compression=True):
     if isinstance(compression, numcodecs.abc.Codec):
         compressor = compression
     elif compression:
-        compressor = numcodecs.Blosc('zstd', clevel=1)
+        compressor = numcodecs.Blosc('lz4', clevel=3)
     else:
         compressor = None
 
