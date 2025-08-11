@@ -84,6 +84,9 @@ def _choose_chunk_and_shard(
     data, data_bytes=100_000_000, dim='capture'
 ) -> tuple[int, dict[str, int]]:
     """pick chunk and shard sizing for each data variable in data"""
+    if data_bytes is None:
+        return None, {}
+    
     count = data.capture.size
 
     target_shards = {
@@ -102,10 +105,13 @@ def _choose_chunk_and_shard(
 def _build_encodings_zarr_v3(
     data, shards: dict[str, int], compression=True, dim='capture'
 ):
-    if compression:
-        num_compressors = [zarr.codecs.BloscCodec(cname='zstd', clevel=1)]
+    if isinstance(compression, zarr.core.codec_pipeline.Codec):
+        compressors = [compression]
+    elif compression:
+        shuffle = zarr.codecs.BloscShuffle.shuffle
+        compressors = [zarr.codecs.BloscCodec(cname='zstd', clevel=1, shuffle=shuffle)]
     else:
-        num_compressors = None
+        compressors = None
 
     encodings = defaultdict(dict)
     info_map = {info.name: info for info in register.measurement.values()}
@@ -121,16 +127,16 @@ def _build_encodings_zarr_v3(
         elif issubclass(var.dtype.type, np.str_):
             encodings[name]['compressors'] = None
         else:
-            encodings[name]['compressors'] = num_compressors
+            encodings[name]['compressors'] = compressors
 
     return encodings
 
 
 def _build_encodings_zarr_v2(data, compression=True):
-    # todo: this will need to be updated to work with zarr 3
-
-    if compression:
-        compressor = numcodecs.Blosc('zlib', clevel=1)
+    if isinstance(compression, zarr.core.codec_pipeline.Codec):
+        compressors = [compression]
+    elif compression:
+        compressor = numcodecs.Blosc('zstd', clevel=1)
     else:
         compressor = None
 
@@ -206,7 +212,8 @@ def dump(
         data, dim=append_dim, data_bytes=chunk_bytes
     )
 
-    data = data.chunk(dict(data.sizes, **{append_dim: chunk_size}))
+    if chunk_size is not None:
+        data = data.chunk(dict(data.sizes, **{append_dim: chunk_size}))
 
     exists, kws = _get_store_info(store, zarr_format)
     kws['compute'] = compute
