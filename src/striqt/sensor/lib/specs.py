@@ -278,7 +278,7 @@ class RadioSetup(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=T
     periodic_trigger: Optional[float] = None
     sync_source: Optional[str] = None
 
-    cupy_max_fft_chunk_size: int = 2**24
+    cupy_max_fft_chunk_size: Optional[int] = 2**24
 
     # this is enabled by a calibration subclass to skip unecessary
     # re-acquisitions
