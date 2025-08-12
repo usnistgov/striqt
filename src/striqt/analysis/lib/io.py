@@ -213,6 +213,7 @@ def dump(
 
     if exists:
         kws['mode'] = 'a'
+        kws['append_dim'] = append_dim
 
     else:
         # establish the chunking and encodings for this and any subsequent writes
