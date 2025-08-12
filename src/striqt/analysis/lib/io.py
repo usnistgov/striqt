@@ -208,30 +208,36 @@ def dump(
 
         data = data.assign({name: data[name].astype(target_dtype)})
 
-    chunk_size, shards = _choose_chunk_and_shard(
-        data, dim=append_dim, data_bytes=chunk_bytes
-    )
-
-    if chunk_size is not None:
-        data = data.chunk(dict(data.sizes, **{append_dim: chunk_size}))
-
     exists, kws = _get_store_info(store, zarr_format)
     kws['compute'] = compute
 
     if exists:
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore', UserWarning)
-            return data.to_zarr(store, mode='a', append_dim=append_dim, **kws)
+        kws['mode'] = 'a'
 
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore', xr.SerializationWarning)
+    else:
+        # establish the chunking and encodings for this and any subsequent writes
+        kws['mode'] = 'w'
+
+        chunk_size, shards = _choose_chunk_and_shard(
+            data, dim=append_dim, data_bytes=chunk_bytes
+        )
+
+        if chunk_size is not None:
+            data = data.chunk(dict(data.sizes, **{append_dim: chunk_size}))
+
         if _zarr_version() >= (3, 0, 0):
-            encodings = _build_encodings_zarr_v3(
+            kws['encodings'] = _build_encodings_zarr_v3(
                 data, shards, compression=compression, dim=append_dim
             )
         else:
-            encodings = _build_encodings_zarr_v2(data, compression=compression)
-        return data.to_zarr(store, encoding=encodings, mode='w', **kws)
+            kws['encodings'] = _build_encodings_zarr_v2(data, compression=compression)
+
+    with warnings.catch_warnings():
+        # xarray.to_xarr will follow these parameters on future writes
+        warnings.simplefilter('ignore', xr.SerializationWarning)
+        warnings.simplefilter('ignore', UserWarning)
+
+        return data.to_zarr(store, **kws)
 
 
 def load(path: str | Path) -> 'xr.DataArray' | 'xr.Dataset':
