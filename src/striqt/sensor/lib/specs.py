@@ -422,7 +422,7 @@ class Sweep(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     loops: tuple[LoopSpecifier, ...] = ()
 
     analysis: BundledAnalysis = BundledAnalysis()  # type: ignore
-    description: Description|str = ''
+    description: typing.Union[Description,str] = ''
     extensions: Extensions = Extensions()
     output: Output = Output()
 
