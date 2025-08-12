@@ -234,7 +234,6 @@ def dump(
             kws['encoding'] = _build_encodings_zarr_v2(data, compression=compression)
 
     with warnings.catch_warnings():
-        # xarray.to_xarr will follow these parameters on future writes
         warnings.simplefilter('ignore', xr.SerializationWarning)
         warnings.simplefilter('ignore', UserWarning)
 
