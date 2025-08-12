@@ -274,9 +274,9 @@ class RadioSetup(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=T
     array_backend: ArrayBackendType = 'cupy'
 
     time_source: TimeSourceType = 'host'
+    sync_source: Optional[str] = None
     clock_source: ClockSourceType = 'internal'
     periodic_trigger: Optional[float] = None
-    sync_source: Optional[str] = None
 
     cupy_max_fft_chunk_size: Optional[int] = None
 
@@ -422,7 +422,7 @@ class Sweep(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     loops: tuple[LoopSpecifier, ...] = ()
 
     analysis: BundledAnalysis = BundledAnalysis()  # type: ignore
-    description: Description = Description()
+    description: Description|str = ''
     extensions: Extensions = Extensions()
     output: Output = Output()
 
