@@ -117,9 +117,13 @@ def _build_attrs(sweep: specs.Sweep):
     fields = set(type(sweep).__struct_fields__)
     base_fields = set(specs.Sweep.__struct_fields__)
     new_fields = list(fields - base_fields)
-    attr_fields = ['description', 'radio_setup'] + new_fields
+    attr_fields = ['radio_setup'] + new_fields
 
-    attrs = {}
+    if isinstance(sweep.description, str):
+        attrs = {'description': sweep.description}
+    else:
+        attrs = {'description': sweep.description.todict()}
+    
     for field in attr_fields[::-1]:
         obj = getattr(sweep, field)
         new_attrs = obj.todict()
