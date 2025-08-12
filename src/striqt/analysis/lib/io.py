@@ -226,11 +226,11 @@ def dump(
             data = data.chunk(dict(data.sizes, **{append_dim: chunk_size}))
 
         if _zarr_version() >= (3, 0, 0):
-            kws['encodings'] = _build_encodings_zarr_v3(
+            kws['encoding'] = _build_encodings_zarr_v3(
                 data, shards, compression=compression, dim=append_dim
             )
         else:
-            kws['encodings'] = _build_encodings_zarr_v2(data, compression=compression)
+            kws['encoding'] = _build_encodings_zarr_v2(data, compression=compression)
 
     with warnings.catch_warnings():
         # xarray.to_xarr will follow these parameters on future writes
