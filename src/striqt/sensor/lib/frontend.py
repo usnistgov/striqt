@@ -88,7 +88,8 @@ class RotatingJSONFileHandler(logging.handlers.RotatingFileHandler):
         self.stream.write('[\n')
 
     def emit(self, rec):
-        super().emit(rec + ',\n')
+        super().emit(rec)
+        self.stream.write(',\n')
 
     def close(self):
         self.stream.write('\n]')
