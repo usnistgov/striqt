@@ -91,11 +91,6 @@ class RotatingJSONFileHandler(logging.handlers.RotatingFileHandler):
         super().emit(rec + ',\n')
 
     def close(self):
-        if len(self.cached_recs) == 0:
-            super().close()
-            return
-
-        self.stream.write('{}')
         self.stream.write('\n]')
         super().close()
 
