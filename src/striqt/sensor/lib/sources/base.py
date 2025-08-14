@@ -143,6 +143,7 @@ def _cast_iq(
 
 class SourceBase(lb.Device):
     _carryover = _ReceiveBufferCarryover()
+    _hold_buffer_swap = False
 
     analysis_bandwidth = attr.value.float(
         float('inf'),
@@ -491,8 +492,10 @@ class SourceBase(lb.Device):
 
     def _get_next_buffers(self, capture) -> tuple[np.ndarray, np.ndarray]:
         """swap the buffers, and reallocate if needed"""
-        self._buffers = [self._buffers[1], self._buffers[0]]
+        if not self._hold_buffer_swap:
+            self._buffers = [self._buffers[1], self._buffers[0]]
         self._buffers[0], ret = alloc_empty_iq(self, capture, self._buffers[0])
+        self._hold_buffer_swap = False
         return ret
 
     @lb.stopwatch('acquire', logger_level='debug')
@@ -526,6 +529,7 @@ class SourceBase(lb.Device):
 
             def prepare_retry(*args, **kws):
                 self.rx_enabled(False)
+                self._hold_buffer_swap = True
                 if not self._setup.time_sync_every_capture:
                     self.sync_time_source()
 
