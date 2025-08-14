@@ -67,7 +67,7 @@ def design_warmup_sweep(
     null_radio_setup = sweep.radio_setup.replace(
         driver=sources.NullSource.__name__,
         resource={},
-        _rx_channel_count=radio_cls.rx_channel_count.default,
+        _rx_port_count=radio_cls.rx_port_count.default,
         calibration=None,
     )
 

@@ -27,7 +27,7 @@ USE_OARESAMPLE = False
 def _get_voltage_scale(
     capture: specs.RadioCapture, radio: SourceBase, *, force_calibration=False, xp=np
 ) -> 'iqwaveform.type_stubs.ArrayLike':
-    """compute the scaling factor needed to scale each of N channels of an IQ waveform
+    """compute the scaling factor needed to scale each of N ports of an IQ waveform
 
     Returns:
         an array of type `xp.ndarray` with shape (N,)
@@ -36,7 +36,11 @@ def _get_voltage_scale(
     # fields in case this is a specialized capture subclass
     bare_capture = capture.replace(start_time=None)
 
-    cal_data = radio.calibration if force_calibration is None else force_calibration
+    if force_calibration is None:
+        cal_data = getattr(radio._setup, 'calibration', None)
+    else:
+        cal_data = force_calibration
+
     power_scale = calibration.lookup_power_correction(
         cal_data, bare_capture, radio.base_clock_rate, xp=xp
     )

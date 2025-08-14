@@ -208,7 +208,7 @@ class _AlignmentSourceRegistry(collections.UserDict[str, SyncInfo]):
 
             if info_kws['name'] in self:
                 raise TypeError(
-                    f'a sync_source named {info_kws["name"]} was already registered'
+                    f'a channel_sync_source named {info_kws["name"]} was already registered'
                 )
 
             self[info_kws['name']] = SyncInfo(func=func, **info_kws)
@@ -218,7 +218,7 @@ class _AlignmentSourceRegistry(collections.UserDict[str, SyncInfo]):
         return wrapper
 
 
-sync_source = _AlignmentSourceRegistry()
+channel_sync_source = _AlignmentSourceRegistry()
 
 
 class MeasurementInfo(typing.NamedTuple):
@@ -433,13 +433,13 @@ def to_analysis_spec_type(
 
 class AlignmentCaller:
     def __init__(self, name: str, analysis: specs.Analysis):
-        self.info: SyncInfo = sync_source[name]
+        self.info: SyncInfo = channel_sync_source[name]
         self.meas_info = measurement[self.info.meas_spec_type]
 
         self.meas_spec = getattr(analysis, self.meas_info.name, None)
         if self.meas_spec is None:
             raise ValueError(
-                f'sync_source {name!r} requires an analysis '
+                f'channel_sync_source {name!r} requires an analysis '
                 f'specification for {self.meas_info.name!r}'
             )
 
@@ -463,7 +463,7 @@ def get_aligner(name: str, analysis: specs.Analysis) -> AlignmentCaller:
     return AlignmentCaller(name, analysis)
 
 
-def get_sync_source_measurement_name(name: str):
-    info: SyncInfo = sync_source[name]
+def get_channel_sync_source_measurement_name(name: str):
+    info: SyncInfo = channel_sync_source[name]
     meas_info = measurement[info.meas_spec_type]
     return meas_info.name

@@ -116,7 +116,7 @@ class ChannelMaybeTupleMethod(IntMaybeTupleMethod):
 
     def validate(self, obj: int | tuple[int, ...], owner=None):
         if self.max is None and owner is not None:
-            max_ = owner.rx_channel_count - 1
+            max_ = owner.rx_port_count - 1
         else:
             max_ = None
 

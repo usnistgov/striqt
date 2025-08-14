@@ -27,7 +27,7 @@ else:
 
 
 CAPTURE_DIM = 'capture'
-CHANNEL_DIM = 'channel'
+PORT_DIM = 'port'
 
 
 class AcquiredIQ(typing.NamedTuple):
@@ -241,8 +241,8 @@ def build_dataarray(
 
     _validate_delayed_ndim(delayed)
 
-    # handle the presence of a capture dimension at the start
-    if isinstance(delayed.capture.channel, Number):
+    # handle the presence of a port dimension at the start
+    if isinstance(delayed.capture.port, Number):
         if data.ndim == len(template.dims) + 1:
             # "unbroadcast" dimension of a single-channel
             assert data.shape[0] == 1
@@ -251,7 +251,7 @@ def build_dataarray(
     else:
         # broadcast on the capture dimension
         data = np.atleast_1d(delayed.data)
-        target_shape = (len(delayed.capture.channel), *data.shape[1:])
+        target_shape = (len(delayed.capture.port), *data.shape[1:])
 
     # to bypass initialization overhead, grow from the empty template
     pad = {dim: [0, target_shape[i]] for i, dim in enumerate(template.dims)}
@@ -375,7 +375,7 @@ class DelayedDataArray(collections.UserDict):
         return build_dataarray(self, expand_dims=expand_dims)
 
 
-def select_parameter_kws(locals_: dict, omit=(CHANNEL_DIM, 'out')) -> dict:
+def select_parameter_kws(locals_: dict, omit=(PORT_DIM, 'out')) -> dict:
     """return the analysis parameters from the locals() evaluated at the beginning of analysis function"""
 
     items = list(locals_.items())

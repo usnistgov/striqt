@@ -12,7 +12,7 @@ from . import captures, specs, util
 from .sources import SourceBase
 
 from striqt.analysis import register
-from striqt.analysis.lib.dataarrays import CAPTURE_DIM, CHANNEL_DIM, AcquiredIQ  # noqa: F401
+from striqt.analysis.lib.dataarrays import CAPTURE_DIM, PORT_DIM, AcquiredIQ  # noqa: F401
 
 if typing.TYPE_CHECKING:
     import labbench as lb
@@ -69,15 +69,15 @@ def concat_time_dim(datasets: list['xr.Dataset'], time_dim: str) -> 'xr.Dataset'
 @util.lru_cache()
 def coord_template(
     capture_cls: type[specs.RadioCapture],
-    channels: tuple[int, ...],
+    ports: tuple[int, ...],
     **alias_dtypes: dict[str, type],
 ):
     """returns a cached xr.Coordinates object to use as a template for data results"""
 
     def broadcast_defaults(v, allow_mismatch=False):
-        # match the number of channels, duplicating if necessary
-        (values,) = captures.broadcast_to_channels(
-            channels, v, allow_mismatch=allow_mismatch
+        # match the number of ports, duplicating if necessary
+        (values,) = captures.broadcast_to_ports(
+            ports, v, allow_mismatch=allow_mismatch
         )
         return list(values)
 
@@ -160,16 +160,16 @@ def build_coords(
 ):
     alias_dtypes = _get_alias_dtypes(output)
 
-    if isinstance(capture.channel, numbers.Number):
-        channels = (capture.channel,)
+    if isinstance(capture.port, numbers.Number):
+        ports = (capture.port,)
     else:
-        channels = tuple(capture.channel)
+        ports = tuple(capture.port)
 
-    coords = coord_template(type(capture), channels, **alias_dtypes).copy(deep=True)
+    coords = coord_template(type(capture), ports, **alias_dtypes).copy(deep=True)
 
     updates = {}
 
-    for c in captures.split_capture_channels(capture):
+    for c in captures.split_capture_ports(capture):
         alias_hits = captures.evaluate_aliases(c, radio_id=radio_id, output=output)
 
         for field in coords.keys():
@@ -347,7 +347,7 @@ def analyze_capture(
         correction: set True if the corresponding argument to .acquire() was False
 
     Returns:
-        an xarray dataset containing the analysis specified by sweep.channel_analysis
+        an xarray dataset containing the analysis specified by sweep.analysis
     """
 
     # metadata fields

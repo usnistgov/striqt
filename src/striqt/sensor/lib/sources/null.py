@@ -18,7 +18,7 @@ else:
     np = lazy_import('numpy')
 
 
-channel_kwarg = attr.method_kwarg.int('channel', min=0, help='hardware port number')
+port_kwarg = attr.method_kwarg.int('port', min=0, help='hardware port number')
 
 
 class NullSource(base.SourceBase):
@@ -28,15 +28,15 @@ class NullSource(base.SourceBase):
     _samples_elapsed = 0
     _transient_holdoff_time: float = attr.value.float(0.0, sets=True, inherit=True)
     _transport_dtype = attr.value.str('complex64', inherit=True)
-    rx_channel_count: int = attr.value.int(1, cache=True, help='number of input ports')
+    rx_port_count: int = attr.value.int(1, cache=True, help='number of input ports')
 
     @method_attr.ChannelMaybeTupleMethod(inherit=True)
-    def channel(self):
+    def port(self):
         # return none until this is set, then the cached value is returned
         return (0,)
 
-    @channel.setter
-    def _(self, channels: int):
+    @port.setter
+    def _(self, ports: int):
         pass
 
     @attr.method.float(
@@ -45,12 +45,12 @@ class NullSource(base.SourceBase):
         help='direct conversion LO frequency of the RX',
     )
     def lo_frequency(self):
-        # there is only one RX LO, shared by both channels
+        # there is only one RX LO, shared by all ports
         return self.backend.setdefault('lo_frequency', 3e9)
 
     @lo_frequency.setter
     def _(self, value):
-        # there is only one RX LO, shared by both channels
+        # there is only one RX LO, shared by all ports
         self.backend['lo_frequency'] = value
 
     center_frequency = lo_frequency.corrected_from_expression(
@@ -121,8 +121,8 @@ class NullSource(base.SourceBase):
     def setup(self, setup: specs.RadioSetup = None, analysis=None, **kws):
         setup = super().setup(setup, analysis, **kws)
 
-        if setup._rx_channel_count is not None:
-            self.rx_channel_count = setup._rx_channel_count
+        if setup._rx_port_count is not None:
+            self.rx_port_count = setup._rx_port_count
 
         self.reset_sample_counter()
 
@@ -137,7 +137,7 @@ class NullSource(base.SourceBase):
         self.backend['gain'] = gain
 
     @attr.method.float(label='dB', help='SDR TX hardware gain')
-    @channel_kwarg
+    @port_kwarg
     def tx_gain(self, gain: float = lb.Undefined, /, *, channel: int = 0):
         if gain is lb.Undefined:
             return self.backend.setdefault('tx_gain', default=0)
@@ -145,8 +145,8 @@ class NullSource(base.SourceBase):
             self.backend['tx_gain'] = gain
 
     def open(self):
-        if 'rx_channel_count' in self.resource:
-            self.rx_channel_count = self.resource['rx_channel_count']
+        if 'rx_port_count' in self.resource:
+            self.rx_port_count = self.resource['rx_port_count']
         self._logger.propagate = False
         self.backend = {}
 
