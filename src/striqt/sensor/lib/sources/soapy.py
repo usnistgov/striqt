@@ -74,10 +74,10 @@ class SoapyRadioSource(base.SourceBase):
 
     @attr.method.float(inherit=True)
     def backend_sample_rate(self):
-        ports = self.ports()
-        if isinstance(ports, numbers.Number):
-            ports = (ports,)
-        for channel in ports:
+        port = self.port()
+        if isinstance(port, numbers.Number):
+            port = (port,)
+        for channel in port:
             return self.backend.getSampleRate(SoapySDR.SOAPY_SDR_RX, channel)
 
     @backend_sample_rate.setter
@@ -87,10 +87,10 @@ class SoapyRadioSource(base.SourceBase):
             # avoid exceptions due to rounding error
             backend_sample_rate = rate
 
-        ports = self.ports()
-        if isinstance(ports, numbers.Number):
-            ports = (ports,)
-        for channel in ports:
+        port = self.port()
+        if isinstance(port, numbers.Number):
+            port = (port,)
+        for channel in port:
             self.backend.setSampleRate(
                 SoapySDR.SOAPY_SDR_RX, channel, backend_sample_rate
             )
@@ -116,7 +116,7 @@ class SoapyRadioSource(base.SourceBase):
         elif self._stream_all_rx_ports:
             ports = list(range(self.rx_port_count))
         else:
-            ports = self.ports()
+            ports = self.port()
 
         if self._transport_dtype == 'int16':
             soapy_type = SoapySDR.SOAPY_SDR_CS16
@@ -134,18 +134,18 @@ class SoapyRadioSource(base.SourceBase):
             self._rx_stream = None
 
     @method_attr.ChannelMaybeTupleMethod(inherit=True)
-    def ports(self):
+    def port(self):
         # return none until this is set, then the cached value is returned
         return 0
 
-    @ports.setter
+    @port.setter
     def _(self, ports: tuple[int, ...] | None):
         if self._stream_all_rx_ports:
             # in this case, the stream is controlled only on open
             return
 
         elif getattr(self, '_rx_stream', None) is not None:
-            if self.ports() == ports:
+            if self.port() == ports:
                 # already set up
                 return
             else:
@@ -171,7 +171,7 @@ class SoapyRadioSource(base.SourceBase):
     )
     def lo_frequency(self):
         # there is only one RX LO, shared by both ports
-        ports = self.ports()
+        ports = self.port()
         if isinstance(ports, numbers.Number):
             ports = (ports,)
         for channel in ports:
@@ -181,7 +181,7 @@ class SoapyRadioSource(base.SourceBase):
     @lo_frequency.setter
     def _(self, center_frequency):
         # there is only one RX LO, shared by both ports
-        ports = self.ports()
+        ports = self.port()
         if isinstance(ports, numbers.Number):
             ports = (ports,)
         for channel in ports:
@@ -252,7 +252,7 @@ class SoapyRadioSource(base.SourceBase):
 
     @method_attr.FloatMaybeTupleMethod(inherit=True)
     def gain(self):
-        ports = self.ports()
+        ports = self.port()
         if isinstance(ports, numbers.Number):
             ports = (ports,)
         values = [self.backend.getGain(SoapySDR.SOAPY_SDR_RX, c) for c in ports]
@@ -261,7 +261,7 @@ class SoapyRadioSource(base.SourceBase):
     @gain.setter
     def _(self, gains: float | tuple[float, ...]):
         ports, gains = captures.broadcast_to_ports(
-            self.ports(), self.ports(), gains
+            self.port(), self.port(), gains
         )
 
         for channel, gain in zip(ports, gains):
