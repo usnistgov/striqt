@@ -45,7 +45,8 @@ def validate_stream_result(
             raise OverflowError(msg)
         return 0, sr.timeNs
     else:
-        raise IOError(f'{SoapySDR.errToStr(sr.ret)} (error code {sr.ret})')
+        err_str = SoapySDR.errToStr(sr.ret)
+        raise base.ReceiveStreamError(f'{err_str} (error code {sr.ret})')
 
 
 class SoapyRadioSource(base.SourceBase):

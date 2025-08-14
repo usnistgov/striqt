@@ -259,6 +259,22 @@ SyncSourceType = Annotated[
     ),
 ]
 
+SyncSourceType = Annotated[
+    str,
+    meta(
+        'name of a registered waveform sync function for analysis-based IQ synchronization'
+    ),
+]
+
+
+ReceiveRetriesType = Annotated[
+    int,
+    meta(
+        'number of attempts to retry acquisition on a stream error',
+        ge=0,
+    ),
+]
+
 
 class RadioSetup(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     """run-time characteristics of the radio that are left invariant during a sweep"""
@@ -278,6 +294,8 @@ class RadioSetup(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=T
     clock_source: ClockSourceType = 'internal'
     periodic_trigger: Optional[float] = None
 
+    receive_retries: ReceiveRetriesType = 0
+
     cupy_max_fft_chunk_size: Optional[int] = None
 
     # this is enabled by a calibration subclass to skip unecessary
@@ -288,9 +306,15 @@ class RadioSetup(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=T
     _rx_channel_count: Optional[int] = None
 
     def __post_init__(self):
-        if self.gapless_repeats and self.time_sync_every_capture:
+        if not self.gapless_repeats:
+            pass
+        elif self.time_sync_every_capture:
             raise ValueError(
                 'time_sync_every_capture and gapless_repeats are mutually exclusive'
+            )
+        elif self.receive_retries > 0:
+            raise ValueError(
+                'receive_retries must be 0 when gapless_repeats is enabled'
             )
 
         if self.sync_source is None:
@@ -422,7 +446,7 @@ class Sweep(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     loops: tuple[LoopSpecifier, ...] = ()
 
     analysis: BundledAnalysis = BundledAnalysis()  # type: ignore
-    description: typing.Union[Description,str] = ''
+    description: typing.Union[Description, str] = ''
     extensions: Extensions = Extensions()
     output: Output = Output()
 

@@ -86,7 +86,7 @@ def _choose_chunk_and_shard(
     """pick chunk and shard sizing for each data variable in data"""
     if data_bytes is None:
         return None, {}
-    
+
     count = data.capture.size
 
     target_shards = {

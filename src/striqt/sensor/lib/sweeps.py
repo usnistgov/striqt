@@ -123,7 +123,7 @@ def _build_attrs(sweep: specs.Sweep):
         attrs = {'description': sweep.description}
     else:
         attrs = {'description': sweep.description.todict()}
-    
+
     for field in attr_fields[::-1]:
         obj = getattr(sweep, field)
         new_attrs = obj.todict()

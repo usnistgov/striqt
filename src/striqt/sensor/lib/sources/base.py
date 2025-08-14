@@ -31,6 +31,10 @@ RESAMPLE_COLA_WINDOW = 'hamming'
 FILTER_DOMAIN = 'time'
 
 
+class ReceiveStreamError(IOError):
+    pass
+
+
 class _ReceiveBufferCarryover:
     """remember unused samples from the previous IQ capture"""
 
@@ -253,6 +257,10 @@ class SourceBase(lb.Device):
         None, help='if specified, only the specified backend sample rate will be used'
     )
 
+    receive_retries = attr.value.int(
+        0, min=0, help='number of attempts to retry acquisition on stream errors'
+    )
+
     resource: dict = attr.value.dict(
         default={}, help='resource dictionary to specify the device connection'
     )
@@ -299,6 +307,7 @@ class SourceBase(lb.Device):
         self.time_sync_every_capture = radio_setup.time_sync_every_capture
         self.time_source(radio_setup.time_source)
         self.clock_source(radio_setup.clock_source)
+        self.receive_retries = radio_setup.receive_retries
 
         if not self.time_sync_every_capture:
             self.rx_enabled(False)
@@ -323,6 +332,8 @@ class SourceBase(lb.Device):
     def arm(
         self,
         capture: specs.RadioCapture = None,
+        *,
+        force_time_sync: bool = False,
         **capture_kws: typing.Unpack[specs._RadioCaptureKeywords],
     ) -> specs.RadioCapture:
         """stop the stream, apply a capture configuration, and start it"""
@@ -535,7 +546,23 @@ class SourceBase(lb.Device):
         fs = self.backend_sample_rate()
 
         # the low-level acquisition
-        iq, time_ns = self.read_iq(capture)
+        if self.receive_retries == 0:
+            read_func = self.read_iq
+        else:
+
+            def prepare_retry(*args, **kws):
+                self.rx_enabled(False)
+                if not self.time_sync_every_capture:
+                    self.sync_time_source()
+
+            read_func = lb.retry(
+                self.read_iq,
+                ReceiveStreamError,
+                tries=self.receive_retries + 1,
+                exception_func=prepare_retry,
+            )
+
+        iq, time_ns = read_func(capture)
 
         if next_capture == capture and self.gapless_repeats:
             # the one case where we leave it running
