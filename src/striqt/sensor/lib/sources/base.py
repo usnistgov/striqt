@@ -533,8 +533,7 @@ class SourceBase(lb.Device):
                 if not self._setup.time_sync_every_capture:
                     self.sync_time_source()
 
-            read_func = lb.retry(
-                self.read_iq,
+            read_func = lb.retry(self.read_iq)(
                 ReceiveStreamError,
                 tries=self._setup.receive_retries + 1,
                 exception_func=prepare_retry,
