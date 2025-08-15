@@ -526,18 +526,7 @@ class SourceBase(lb.Device):
         if self._setup.receive_retries == 0:
             read_func = self.read_iq
         else:
-
-            def prepare_retry(*args, **kws):
-                self.rx_enabled(False)
-                self._hold_buffer_swap = True
-                if not self._setup.time_sync_every_capture:
-                    self.sync_time_source()
-
-            read_func = lb.retry(self.read_iq)(
-                ReceiveStreamError,
-                tries=self._setup.receive_retries + 1,
-                exception_func=prepare_retry,
-            )
+            read_func = _read_iq_with_retries(self)
 
         iq, time_ns = read_func(capture)
 
@@ -648,6 +637,22 @@ def find_trigger_holdoff(
         )
 
     return holdoff
+
+
+def _read_iq_with_retries(radio: SourceBase):
+    def prepare_retry(*args, **kws):
+        radio.rx_enabled(False)
+        radio._hold_buffer_swap = True
+        if not radio._setup.time_sync_every_capture:
+            radio.sync_time_source()
+
+    decorate = lb.retry(
+        ReceiveStreamError,
+        tries=radio._setup.receive_retries + 1,
+        exception_func=prepare_retry,
+    )
+
+    return decorate(radio.read_iq)
 
 
 @util.lru_cache(30000)
