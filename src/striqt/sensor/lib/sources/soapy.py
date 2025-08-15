@@ -19,7 +19,7 @@ else:
     SoapySDR = lb.util.lazy_import('SoapySDR')
 
 
-channel_kwarg = attr.method_kwarg.int('channel', min=0, help='hardware port number')
+port_kwarg = attr.method_kwarg.int('port', min=0, help='hardware port index')
 
 
 def validate_stream_result(
@@ -45,7 +45,8 @@ def validate_stream_result(
             raise OverflowError(msg)
         return 0, sr.timeNs
     else:
-        raise IOError(f'{SoapySDR.errToStr(sr.ret)} (error code {sr.ret})')
+        err_str = SoapySDR.errToStr(sr.ret)
+        raise base.ReceiveStreamError(f'{err_str} (error code {sr.ret})')
 
 
 class SoapyRadioSource(base.SourceBase):
@@ -73,10 +74,10 @@ class SoapyRadioSource(base.SourceBase):
 
     @attr.method.float(inherit=True)
     def backend_sample_rate(self):
-        channels = self.channel()
-        if isinstance(channels, numbers.Number):
-            channels = (channels,)
-        for channel in channels:
+        port = self.port()
+        if isinstance(port, numbers.Number):
+            port = (port,)
+        for channel in port:
             return self.backend.getSampleRate(SoapySDR.SOAPY_SDR_RX, channel)
 
     @backend_sample_rate.setter
@@ -86,10 +87,10 @@ class SoapyRadioSource(base.SourceBase):
             # avoid exceptions due to rounding error
             backend_sample_rate = rate
 
-        channels = self.channel()
-        if isinstance(channels, numbers.Number):
-            channels = (channels,)
-        for channel in channels:
+        port = self.port()
+        if isinstance(port, numbers.Number):
+            port = (port,)
+        for channel in port:
             self.backend.setSampleRate(
                 SoapySDR.SOAPY_SDR_RX, channel, backend_sample_rate
             )
@@ -106,16 +107,16 @@ class SoapyRadioSource(base.SourceBase):
         return self.backend.getSampleRate(SoapySDR.SOAPY_SDR_RX, 0) / self._downsample
 
     @lb.stopwatch('stream initialization', logger_level='debug')
-    def _setup_rx_stream(self, channels=None):
+    def _setup_rx_stream(self, ports=None):
         if self._rx_stream is not None:
             return
 
-        if channels is not None:
+        if ports is not None:
             pass
-        elif self._stream_all_rx_channels:
-            channels = list(range(self.rx_channel_count))
+        elif self._stream_all_rx_ports:
+            ports = list(range(self.rx_port_count))
         else:
-            channels = self.channels()
+            ports = self.port()
 
         if self._transport_dtype == 'int16':
             soapy_type = SoapySDR.SOAPY_SDR_CS16
@@ -124,7 +125,7 @@ class SoapyRadioSource(base.SourceBase):
         else:
             raise ValueError(f'unsupported transport type {self._transport_type}')
         self._rx_stream = self.backend.setupStream(
-            SoapySDR.SOAPY_SDR_RX, soapy_type, list(channels)
+            SoapySDR.SOAPY_SDR_RX, soapy_type, list(ports)
         )
 
     def _disable_rx_stream(self):
@@ -133,18 +134,18 @@ class SoapyRadioSource(base.SourceBase):
             self._rx_stream = None
 
     @method_attr.ChannelMaybeTupleMethod(inherit=True)
-    def channel(self):
+    def port(self):
         # return none until this is set, then the cached value is returned
         return 0
 
-    @channel.setter
-    def _(self, channels: tuple[int, ...] | None):
-        if self._stream_all_rx_channels:
+    @port.setter
+    def _(self, ports: tuple[int, ...] | None):
+        if self._stream_all_rx_ports:
             # in this case, the stream is controlled only on open
             return
 
         elif getattr(self, '_rx_stream', None) is not None:
-            if self.channel() == channels:
+            if self.port() == ports:
                 # already set up
                 return
             else:
@@ -152,7 +153,7 @@ class SoapyRadioSource(base.SourceBase):
                 self.backend.closeStream(self._rx_stream)
 
         # if we make it this far, we need to build and enable the RX stream
-        self._setup_rx_stream(channels)
+        self._setup_rx_stream(ports)
 
     def setup(self, radio_setup: specs.RadioSetup, analysis=None):
         if radio_setup.clock_source != self.clock_source():
@@ -169,21 +170,21 @@ class SoapyRadioSource(base.SourceBase):
         help='direct conversion LO frequency of the RX',
     )
     def lo_frequency(self):
-        # there is only one RX LO, shared by both channels
-        channels = self.channel()
-        if isinstance(channels, numbers.Number):
-            channels = (channels,)
-        for channel in channels:
+        # there is only one RX LO, shared by both ports
+        ports = self.port()
+        if isinstance(ports, numbers.Number):
+            ports = (ports,)
+        for channel in ports:
             ret = self.backend.getFrequency(SoapySDR.SOAPY_SDR_RX, channel)
             return ret
 
     @lo_frequency.setter
     def _(self, center_frequency):
-        # there is only one RX LO, shared by both channels
-        channels = self.channel()
-        if isinstance(channels, numbers.Number):
-            channels = (channels,)
-        for channel in channels:
+        # there is only one RX LO, shared by both ports
+        ports = self.port()
+        if isinstance(ports, numbers.Number):
+            ports = (ports,)
+        for channel in ports:
             self.backend.setFrequency(SoapySDR.SOAPY_SDR_RX, channel, center_frequency)
 
     center_frequency = lo_frequency.corrected_from_expression(
@@ -205,7 +206,8 @@ class SoapyRadioSource(base.SourceBase):
         if time_source == 'host':
             self.backend.setTimeSource('internal')
             self.on_overflow = 'log'
-            if self.periodic_trigger is not None:
+            periodic_trigger = getattr(self._setup, 'periodic_trigger', None)
+            if periodic_trigger is not None:
                 self._logger.warning(
                     'periodic trigger with host time will suffer from inaccuracy on overflow'
                 )
@@ -250,24 +252,24 @@ class SoapyRadioSource(base.SourceBase):
 
     @method_attr.FloatMaybeTupleMethod(inherit=True)
     def gain(self):
-        channels = self.channel()
-        if isinstance(channels, numbers.Number):
-            channels = (channels,)
-        values = [self.backend.getGain(SoapySDR.SOAPY_SDR_RX, c) for c in channels]
+        ports = self.port()
+        if isinstance(ports, numbers.Number):
+            ports = (ports,)
+        values = [self.backend.getGain(SoapySDR.SOAPY_SDR_RX, c) for c in ports]
         return method_attr._number_if_single(tuple(values))
 
     @gain.setter
     def _(self, gains: float | tuple[float, ...]):
-        channels, gains = captures.broadcast_to_channels(
-            self.channel(), self.channel(), gains
+        ports, gains = captures.broadcast_to_ports(
+            self.port(), self.port(), gains
         )
 
-        for channel, gain in zip(channels, gains):
+        for channel, gain in zip(ports, gains):
             self._logger.debug(f'set channel {channel} gain: {gain} dB')
             self.backend.setGain(SoapySDR.SOAPY_SDR_RX, channel, gain)
 
     @attr.method.float(label='dB', help='SDR TX hardware gain')
-    @channel_kwarg
+    @port_kwarg
     def tx_gain(self, gain: float = lb.Undefined, /, *, channel: int = 0):
         if gain is lb.Undefined:
             return self.backend.getGain(SoapySDR.SOAPY_SDR_TX, channel)
@@ -284,9 +286,8 @@ class SoapyRadioSource(base.SourceBase):
 
         self._post_connect()
 
-        channels = list(range(self.rx_channel_count))
-        for channel in channels:
-            self.backend.setGainMode(SoapySDR.SOAPY_SDR_RX, channel, False)
+        for ports in range(self.rx_port_count):
+            self.backend.setGainMode(SoapySDR.SOAPY_SDR_RX, ports, False)
 
         # may have to re-enable this to change the clock source, but
         # this doesn't cost much due to GPU prep and warming up times
@@ -358,7 +359,7 @@ class SoapyRadioSource(base.SourceBase):
 
         current = self.get_capture_struct()
 
-        for field in ('center_frequency', 'channel'):
+        for field in ('center_frequency', 'port'):
             if getattr(next_capture, field) != getattr(current, field):
                 return True
 

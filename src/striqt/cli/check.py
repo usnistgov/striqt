@@ -62,7 +62,7 @@ def run(yaml_path):
 
     kws = {'sweep': sweep, 'radio_id': radio_id, 'yaml_path': yaml_path}
     field_sets = {}
-    splits = (captures.split_capture_channels(c) for c in sweep.captures)
+    splits = (captures.split_capture_ports(c) for c in sweep.captures)
     for c in itertools.chain(*splits):
         fields = _get_capture_format_fields(c, **kws)
         for k, v in fields.items():

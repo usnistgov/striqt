@@ -90,7 +90,7 @@ def correlate_5g_sss(
     return iqwaveform.util.to_blocks(meas, 3, axis=-4)
 
 
-@register.sync_source(
+@register.channel_sync_source(
     Cellular5GNRSSSCorrelationSpec, lag_coord_func=shared.cellular_ssb_lag
 )
 def cellular_5g_sss_sync(

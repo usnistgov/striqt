@@ -37,11 +37,11 @@ class TestSource(NullSource):
     def _read_stream(
         self, buffers, offset, count, timeout_sec=None, *, on_overflow='except'
     ) -> tuple[int, int]:
-        channels = self.channel()
-        if isinstance(channels, numbers.Number):
-            channels = (channels,)
+        ports = self.port()
+        if isinstance(ports, numbers.Number):
+            ports = (ports,)
 
-        for channel, buf in zip(channels, buffers):
+        for channel, buf in zip(ports, buffers):
             values = self.get_waveform(
                 count,
                 self._samples_elapsed,
@@ -339,14 +339,14 @@ class FileSource(TestSource):
         pass
 
     @method_attr.ChannelMaybeTupleMethod(inherit=True)
-    def channel(self):
-        return self._iq_capture.channel
+    def port(self):
+        return self._iq_capture.port
 
-    @channel.setter
+    @port.setter
     def _(self, value):
-        actual = self.channel()
+        actual = self.port()
         if value != actual:
-            self._logger.warning(f'channel ignored, using {actual / 1e6} MHz from file')
+            self._logger.warning(f'port ignored, using {actual / 1e6} MHz from file')
 
     def open(self):
         self._file_stream = None
@@ -364,7 +364,7 @@ class FileSource(TestSource):
         self._file_stream = striqt_analysis.io.open_bare_iq(
             self.path,
             format=self.file_format,
-            rx_channel_count=self.rx_channel_count,
+            rx_port_count=self.rx_port_count,
             dtype='complex64',
             xp=self.get_array_namespace(),
             loop=self.loop,
@@ -429,7 +429,7 @@ class ZarrIQSource(TestSource):
         if waveform.ndim != 2:
             raise ValueError('expected 2 dimensions (capture, iq_sample)')
 
-        self.rx_channel_count = waveform.shape[0]
+        self.rx_port_count = waveform.shape[0]
 
         self._waveform = waveform
 

@@ -22,17 +22,17 @@ class Air7x01B(soapy.SoapyRadioSource):
     backend_sample_rate = attr.method.float(min=3.906250e6, max=125e6, inherit=True)
     gain = type(soapy.SoapyRadioSource.gain)(min=-30, max=0, step=0.5, inherit=True)
     tx_gain = attr.method.float(min=-41.95, max=0, step=0.1, inherit=True)
-    rx_channel_count = attr.value.int(2, inherit=True)
+    rx_port_count = attr.value.int(2, inherit=True)
 
     # set based on gain setting sweep tests
     _transient_holdoff_time = attr.value.float(2e-3, inherit=True)
 
     # stream setup and teardown for channel configuration are slow;
-    # instead, stream all RX channels
-    _stream_all_rx_channels = attr.value.bool(True, inherit=True)
+    # instead, stream all RX ports
+    _stream_all_rx_ports = attr.value.bool(True, inherit=True)
 
     # without this, multichannel acquisition start time will vary
-    # across channels, resulting in streaming errors
+    # across ports, resulting in streaming errors
     _rx_enable_delay = attr.value.float(0.35, inherit=True)
 
     # float32 or int16: gpu work vs memory bandwidth tradeoff

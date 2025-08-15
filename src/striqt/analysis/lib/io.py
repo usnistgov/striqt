@@ -86,7 +86,7 @@ def _choose_chunk_and_shard(
     """pick chunk and shard sizing for each data variable in data"""
     if data_bytes is None:
         return None, {}
-    
+
     count = data.capture.size
 
     target_shards = {
@@ -414,7 +414,7 @@ class MATNewFileStream(_FileStreamBase):
             tally += x.shape[1]
 
         iq = xp.concat(array_list, axis=1)
-        self._meta[dataarrays.CHANNEL_DIM] = list(range(iq.shape[0]))
+        self._meta[dataarrays.PORT_DIM] = list(range(iq.shape[0]))
 
         if count is None:
             self._leftover = None
@@ -514,7 +514,7 @@ class MATLegacyFileStream(_FileStreamBase):
             tally += x.shape[1]
 
         iq = xp.concat(array_list, axis=1)
-        self._meta[dataarrays.CHANNEL_DIM] = list(range(iq.shape[0]))
+        self._meta[dataarrays.PORT_DIM] = list(range(iq.shape[0]))
 
         if count is None:
             self._leftover = None
@@ -597,7 +597,7 @@ class NPYFileStream(_FileStreamBase):
             tally += ref.shape[1]
 
         iq = xp.concat(array_list, axis=1)
-        self._meta[dataarrays.CHANNEL_DIM] = list(range(iq.shape[0]))
+        self._meta[dataarrays.PORT_DIM] = list(range(iq.shape[0]))
 
         if count is None:
             self._leftover = None

@@ -161,7 +161,7 @@ def pss_local_weighted_correlator(
     )
 
 
-@register.sync_source(
+@register.channel_sync_source(
     Cellular5GNRPSSCorrelationSpec, lag_coord_func=shared.cellular_ssb_lag
 )
 def cellular_5g_pss_sync(

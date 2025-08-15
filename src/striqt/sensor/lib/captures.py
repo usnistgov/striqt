@@ -8,18 +8,18 @@ from . import specs, util
 
 
 @util.lru_cache(10000)
-def broadcast_to_channels(
-    channels: int | tuple[int, ...], *params, allow_mismatch=False
+def broadcast_to_ports(
+    ports: int | tuple[int, ...], *params, allow_mismatch=False
 ) -> list[tuple[int, ...]]:
     """broadcast sequences in each element in `params` up to the
-    length of capture.channel.
+    length of capture.port.
     """
 
     res = []
-    if isinstance(channels, numbers.Number):
+    if isinstance(ports, numbers.Number):
         count = 1
     else:
-        count = len(channels)
+        count = len(ports)
 
     for p in params:
         if not isinstance(p, (tuple, list)):
@@ -30,7 +30,7 @@ def broadcast_to_channels(
             res.append(tuple(p[:1]) * count)
         else:
             raise ValueError(
-                f'cannot broadcast tuple of length {len(p)} to {count} channels'
+                f'cannot broadcast tuple of length {len(p)} to {count} ports'
             )
 
     return res
@@ -50,7 +50,7 @@ def _single_match(
     For each `{key: value}` in `fields`, a match requires that
     either `extras[key] == value` or `getattr(capture, key) == value`.
     """
-    if isinstance(capture.channel, tuple):
+    if isinstance(capture.port, tuple):
         raise ValueError('split the capture to evaluate alias matches')
 
     # type conversion for any search fields that are in 'capture'
@@ -117,17 +117,17 @@ def evaluate_aliases(
 
 
 @util.lru_cache()
-def split_capture_channels(capture: specs.RadioCapture) -> list[specs.RadioCapture]:
+def split_capture_ports(capture: specs.RadioCapture) -> list[specs.RadioCapture]:
     """split a multi-channel capture into a list of single-channel captures.
 
     If capture is not a multi-channel capture (its channel field is just a number),
     then the returned list will be [capture].
     """
 
-    if isinstance(capture.channel, numbers.Number):
+    if isinstance(capture.port, numbers.Number):
         return [capture]
 
-    remaps = [dict() for i in range(len(capture.channel))]
+    remaps = [dict() for i in range(len(capture.port))]
 
     for field in capture.__struct_fields__:
         values = getattr(capture, field)
@@ -144,7 +144,7 @@ def capture_fields_with_aliases(
     capture: specs.RadioCapture, *, radio_id: str = None, output: specs.Output
 ) -> dict:
     attrs = capture.todict()
-    c = split_capture_channels(capture)[0]
+    c = split_capture_ports(capture)[0]
     aliases = evaluate_aliases(c, radio_id=radio_id, output=output)
 
     return dict(attrs, **aliases)
@@ -158,7 +158,7 @@ def get_field_value(
     extra_field_values: dict = {},
 ):
     """get the value of a field in `capture`, injecting values for aliases"""
-    if isinstance(capture.channel, tuple):
+    if isinstance(capture.port, tuple):
         raise ValueError('split the capture before the call to get_capture_field')
 
     if hasattr(capture, name):

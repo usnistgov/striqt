@@ -7,7 +7,7 @@ import typing
 import msgspec
 
 from . import datasets, peripherals, sinks, sources, specs, util
-from .captures import split_capture_channels
+from .captures import split_capture_ports
 from .specs import Annotated, meta
 
 if typing.TYPE_CHECKING:
@@ -50,7 +50,7 @@ class CalibrationVariables(
     noise_diode_enabled: tuple[NoiseDiodeEnabledType, ...] = (False, True)
     sample_rate: tuple[specs.BackendSampleRateType, ...]
     center_frequency: tuple[specs.CenterFrequencyType, ...] = (3700e6,)
-    channel: tuple[specs.ChannelType, ...] = (0,)
+    channel: tuple[specs.PortType, ...] = (0,)
     gain: tuple[specs.GainType, ...] = (0,)
 
     # filtering and resampling
@@ -107,7 +107,7 @@ def _cached_calibration_captures(
     # subclasses
     analysis_bandwidths = variables.pop('analysis_bandwidth')
     variables = {
-        datasets.CHANNEL_DIM: variables[datasets.CHANNEL_DIM],
+        datasets.PORT_DIM: variables[datasets.PORT_DIM],
         'noise_diode_enabled': variables['noise_diode_enabled'],
         **variables,
         'analysis_bandwidth': analysis_bandwidths,
@@ -285,12 +285,12 @@ def _lookup_calibration_var(
 ):
     results = []
 
-    for capture_chan in split_capture_channels(capture):
+    for capture_chan in split_capture_ports(capture):
         fs = sources.design_capture_resampler(base_clock_rate, capture_chan)['fs_sdr']
 
         # these capture fields must match the calibration conditions exactly
         exact_matches = dict(
-            channel=capture_chan.channel,
+            channel=capture_chan.port,
             gain=capture_chan.gain,
             lo_shift=capture_chan.lo_shift,
             backend_sample_rate=fs,
@@ -310,8 +310,8 @@ def _lookup_calibration_var(
         else:
             exc = None
 
-        if datasets.CHANNEL_DIM in sel.coords:
-            sel = sel.dropna(datasets.CHANNEL_DIM).squeeze()
+        if datasets.PORT_DIM in sel.coords:
+            sel = sel.dropna(datasets.PORT_DIM).squeeze()
 
         if exc is not None:
             raise exc
@@ -446,7 +446,7 @@ class YFactorSink(sinks.SinkBase):
         super().flush()
 
         # re-index by radio setting rather than capture
-        channel = int(data[0].channel)
+        port = int(data[0].port)
 
         fields = list(self.sweep_spec.calibration_variables.__struct_fields__)
         if 'sample_rate' in fields:
@@ -471,16 +471,22 @@ class YFactorSink(sinks.SinkBase):
         # compute and merge corrections
         corrections = compute_y_factor_corrections(by_field)
 
+        if datasets.PORT_DIM in self.prev_corrections.variables():
+            prev_port_key = datasets.PORT_DIM
+        else:
+            prev_port_key = 'channel'
+
         if not self.force and Path(self.output_path).exists():
             print('merging results from previous file')
-            if channel in self.prev_corrections.channel:
-                self.prev_corrections = self.prev_corrections.drop_sel(channel=channel)
+            if port in self.prev_corrections[prev_port_key]:
+                self.prev_corrections = self.prev_corrections.drop_sel({prev_port_key: port})
+
             corrections = xr.concat(
-                [corrections, self.prev_corrections], dim=datasets.CHANNEL_DIM
+                [corrections, self.prev_corrections], dim=datasets.PORT_DIM
             )
 
-        print(f'calibration results on channel {channel} (shown for max gain)')
-        summary = summarize_calibration(corrections, channel=channel)
+        print(f'calibration results on channel {port} (shown for max gain)')
+        summary = summarize_calibration(corrections, port=port)
         with pd.option_context('display.max_rows', None):
             print(summary.sort_index(axis=1).sort_index(axis=0))
 
@@ -497,16 +503,16 @@ class ManualYFactorPeripherals(peripherals.PeripheralsBase):
 
     def arm(self, capture: ManualYFactorCapture):
         """This is run before each capture"""
-        state = (capture.channel, capture.noise_diode_enabled)
+        state = (capture.port, capture.noise_diode_enabled)
 
         if state != self._last_state:
             if capture.noise_diode_enabled:
                 input(
-                    f'enable noise diode at channel {capture.channel} and press enter'
+                    f'enable noise diode at channel {capture.port} and press enter'
                 )
             else:
                 input(
-                    f'disable noise diode at channel {capture.channel} and press enter'
+                    f'disable noise diode at channel {capture.port} and press enter'
                 )
 
         self._last_state = state
