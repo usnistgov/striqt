@@ -568,7 +568,7 @@ class SourceBase(lb.Device):
     ) -> specs.RadioCapture:
         """generate the currently armed capture configuration for the specified channel.
 
-        If the truth of actual evaluates as False, only the requested value
+        If the truth of realized evaluates as False, only the requested value
         of backend_sample_rate is returned in the given radio capture.
         """
 

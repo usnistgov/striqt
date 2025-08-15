@@ -104,6 +104,10 @@ class Air7x01B(soapy.SoapyRadioSource):
         return {'transceiver': self.backend.readSensorFloat('xcvr_temp')}
 
 
+class Air8201B(Air7x01B):
+    _rx_enable_delay = attr.value.float(0.4, inherit=True)
+
+
 class AirT7x01B(Air7x01B):
     # for backward compatibility
     pass
