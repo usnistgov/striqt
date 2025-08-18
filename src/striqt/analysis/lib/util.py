@@ -4,11 +4,39 @@ import contextlib
 import functools
 import importlib
 import importlib.util
+import logging
+import time
 import sys
 import threading
 import typing
 import iqwaveform.type_stubs
 import typing_extensions
+
+
+_logger_adapters = {}
+
+
+class _StriqtLogger(logging.LoggerAdapter):
+    def __init__(self, name_suffix, extra={'capture': None}):
+        _logger = logging.getLogger('striqt').getChild(name_suffix)
+        super().__init__(_logger, extra, merge_extra=True)
+        _logger_adapters[name_suffix] = self
+
+
+def get_logger(name_suffix) -> _StriqtLogger:
+    return _logger_adapters[name_suffix]
+
+
+@contextlib.contextmanager
+def log_extras(name_suffix, /, **kws):
+    logger = get_logger(name_suffix)
+    start_extra = logger.extra
+    logger.extra = logger.extra | kws
+    yield
+    logger.extra = start_extra
+
+
+_StriqtLogger('analysis')
 
 
 def lazy_import(module_name: str, package=None):
@@ -34,6 +62,47 @@ def lazy_import(module_name: str, package=None):
     sys.modules[module_name] = module
     spec.loader.exec_module(module)
     return module
+
+
+@contextlib.contextmanager
+def stopwatch(
+    desc: str = '', logger_suffix: str = 'analysis', threshold: float = 0, logger_level: int = logging.INFO
+):
+    """Time a block of code using a with statement like this:
+
+    >>> with stopwatch('sleep statement'):
+    >>>     time.sleep(2)
+    sleep statement time elapsed 1.999s.
+
+    Arguments:
+        desc: text for display that describes the event being timed
+        logger_suffix: the name of the child logger to use
+        threshold: only show timing if at least this much time (in s) elapsed
+    :
+    Returns:
+        context manager
+    """
+    t0 = time.perf_counter()
+    logger = get_logger(logger_suffix)
+
+    try:
+        yield
+    finally:
+        elapsed = time.perf_counter() - t0
+
+        if elapsed < threshold:
+            return
+
+        msg = str(desc) + ' ' if len(desc) else ''
+        msg += f'{elapsed:0.3f} s elapsed'
+
+        exc_info = sys.exc_info()
+        if exc_info != (None, None, None):
+            msg += f' before exception {exc_info[1]}'
+            logger_level = logging.ERROR
+
+        extra = {'stopwatch_name': desc, 'stopwatch_time': elapsed}
+        logger.log(logger_level, msg.strip().lstrip(), logger.extra|extra)
 
 
 if typing.TYPE_CHECKING:
@@ -106,7 +175,7 @@ def sync_if_cupy(x: 'iqwaveform.type_stubs.ArrayType'):
         import cupy
 
         stream = cupy.cuda.get_current_stream()
-        with lb.stopwatch('cuda synchronize', threshold=10e-3):
+        with stopwatch('cuda synchronize', threshold=10e-3):
             stream.synchronize()
 
 

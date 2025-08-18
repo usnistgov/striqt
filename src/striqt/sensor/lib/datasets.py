@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import logging
 import msgspec
 import numbers
 import pickle
@@ -13,6 +14,7 @@ from .sources import SourceBase
 
 from striqt.analysis import register
 from striqt.analysis.lib.dataarrays import CAPTURE_DIM, PORT_DIM, AcquiredIQ  # noqa: F401
+from striqt.analysis.lib.util import log_extras, stopwatch
 
 if typing.TYPE_CHECKING:
     import labbench as lb
@@ -228,6 +230,7 @@ class AnalysisCaller:
     extra_attrs: dict[str, typing.Any] | None = None
     correction: bool = False
 
+    @util.stopwatch('analysis', 'analysis')
     def __call__(
         self,
         iq: AcquiredIQ,
@@ -244,11 +247,11 @@ class AnalysisCaller:
         from . import iq_corrections
 
         with (
-            lb.stopwatch('analysis', logger_level='debug'),
+            log_extras('analysis', capture=capture),
             register.measurement.cache_context(),
         ):
             if self.correction:
-                with lb.stopwatch('resample, filter, calibrate', logger_level='debug'):
+                with stopwatch('resample, filter, calibrate', logger_level=logging.DEBUG):
                     iq = iq_corrections.resampling_correction(
                         iq.raw, capture, self.radio, overwrite_x=overwrite_x
                     )
@@ -294,8 +297,8 @@ class DelayedDataset:
     def to_xarray(self) -> 'xr.Dataset':
         """complete any remaining calculations, transfer from the device, and build an output dataset"""
 
-        with lb.stopwatch(
-            'residual calculations', threshold=10e-3, logger_level='debug'
+        with stopwatch(
+            'residual calculations', 'analysis', threshold=10e-3, logger_level=logging.DEBUG
         ):
             analysis = striqt_analysis.lib.dataarrays.package_analysis(
                 self.capture, self.delayed, expand_dims=(CAPTURE_DIM,)

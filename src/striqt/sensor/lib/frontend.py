@@ -175,7 +175,7 @@ def init_sweep_cli(
             )
             calls['open sink'] = lb.Call(sink.open)
 
-        with lb.stopwatch(f'open {", ".join(calls)}', logger_level='info', threshold=1):
+        with util.stopwatch(f'open {", ".join(calls)}', 'controller', logger_level=logging.INFO, threshold=1):
             controller = util.concurrently_with_fg(calls, False)['controller']
 
         yaml_classes = _get_extension_classes(sweep_spec)
@@ -206,8 +206,8 @@ def init_sweep_cli(
             )
             calls['open sink'] = lb.Call(sink.open)
 
-        with lb.stopwatch(
-            f'load {", ".join(calls)}', logger_level='info', threshold=0.25
+        with util.stopwatch(
+            f'load {", ".join(calls)}', 'controller', logger_level='info', threshold=0.25
         ):
             opened = lb.concurrently(**calls)
 
@@ -258,6 +258,44 @@ def execute_sweep_cli(
             # step through captures
             for _ in sweep_iter:
                 pass
+
+            cli.sink.flush()
+        except BaseException as ex:
+            if cli_objects.debugger.enable:
+                print(ex)
+                cli_objects.debugger.run(*sys.exc_info())
+                sys.exit(1)
+            else:
+                raise
+
+
+def iterate_sweep_cli(
+    cli: CLIObjects,
+    *,
+    remote=None,
+):
+    # pull out the cli elements that have context
+    cli_objects = cli
+    *cli_context, sweep, cal = cli_objects
+
+    with lb.sequentially(*cli_context):
+        try:
+            reuse_iq = cli.sweep_spec.radio_setup.reuse_iq
+            # iterate through the sweep specification, yielding a dataset for each capture
+            sweep_iter = cli.controller.iter_sweep(
+                sweep,
+                calibration=cal,
+                prepare=False,
+                always_yield=True,
+                reuse_compatible_iq=reuse_iq,  # calibration-specific optimization
+            )
+
+            sweep_iter.set_peripherals(cli.peripherals)
+            sweep_iter.set_writer(cli.sink)
+
+            # step through captures
+            for _ in sweep_iter:
+                yield None
 
             cli.sink.flush()
         except BaseException as ex:

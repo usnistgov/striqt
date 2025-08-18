@@ -1,5 +1,6 @@
 from __future__ import annotations
 import functools
+import logging
 from math import ceil
 import numbers
 import typing
@@ -300,7 +301,7 @@ class SourceBase(lb.Device):
 
         return _setup
 
-    @lb.stopwatch('arm', logger_level='debug')
+    @util.stopwatch('arm', 'source', logger_level=logging.DEBUG)
     def arm(
         self,
         capture: specs.RadioCapture = None,
@@ -383,7 +384,7 @@ class SourceBase(lb.Device):
 
         return capture
 
-    @lb.stopwatch('read_iq', logger_level='debug')
+    @util.stopwatch('read_iq', 'source', logger_level=logging.DEBUG)
     def read_iq(
         self,
         capture: specs.RadioCapture,
@@ -498,7 +499,7 @@ class SourceBase(lb.Device):
         self._hold_buffer_swap = False
         return ret
 
-    @lb.stopwatch('acquire', logger_level='debug')
+    @util.stopwatch('acquire', 'source', logger_level=logging.DEBUG)
     def acquire(
         self,
         capture: specs.RadioCapture = None,
@@ -540,7 +541,7 @@ class SourceBase(lb.Device):
             self.arm(next_capture)
 
         if correction:
-            with lb.stopwatch('resample and calibrate', logger_level='debug'):
+            with util.stopwatch('resample and calibrate', 'analysis', threshold=capture.duration/2):
                 iq = iq_corrections.resampling_correction(
                     iq, capture, self, overwrite_x=True
                 )
@@ -647,7 +648,7 @@ def _read_iq_with_retries(radio: SourceBase):
             radio.sync_time_source()
 
     decorate = lb.retry(
-        ReceiveStreamError,
+        (ReceiveStreamError, OverflowError),
         tries=radio._setup.receive_retries + 1,
         exception_func=prepare_retry,
     )
@@ -912,7 +913,7 @@ def get_channel_read_buffer_count(
     )
 
 
-@lb.stopwatch('allocate acquisition buffer', logger_level='debug')
+@util.stopwatch('allocate acquisition buffer', 'source', logger_level=logging.DEBUG)
 def alloc_empty_iq(
     radio: SourceBase,
     capture: specs.RadioCapture,

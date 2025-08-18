@@ -239,13 +239,14 @@ class SweepIterator:
                     capture=capture_intake,
                 )
 
-            desc = analysis.describe_capture(
-                capture_this, capture_prev, index=i, count=count
-            )
+            # desc = analysis.describe_capture(
+            #     capture_this, capture_prev, index=i, count=count
+            # )
 
-            hide_message = self._quiet or capture_this is None and capture_prev is None
-            with lb.stopwatch(
-                f'{desc} •', logger_level='debug' if hide_message else 'info'
+            with (
+                util.log_extras('analysis', capture=capture_prev),
+                util.log_extras('source', capture=capture_this),
+                util.log_extras('sink', capture=capture_intake)
             ):
                 ret = util.concurrently_with_fg(calls, flatten=False)
 
@@ -268,6 +269,7 @@ class SweepIterator:
             if sweep_time is None and capture_prev is not None:
                 sweep_time = capture_prev.start_time
 
+    @util.stopwatch('acquire', 'source')
     def _acquire(self, iq_prev: AcquiredIQ, capture_prev, capture_this, capture_next):
         if self._reuse_iq:
             reuse_this = _iq_is_reusable(
@@ -345,6 +347,7 @@ class SweepIterator:
 
         return dict(data, sensor_system_noise=system_noise)
 
+    @util.stopwatch('store', 'sink', threshold=0.1)
     def _intake(
         self,
         results: 'xr.Dataset',
@@ -430,7 +433,9 @@ def iter_raw_iq(
             capture_this, capture_prev, index=i, count=len(sweep.captures)
         )
 
-        with lb.stopwatch(f'{desc} •', logger_level='debug' if quiet else 'info'):
+        with (
+            util.stopwatch(desc, 'source', logger_level='debug' if quiet else 'info')
+        ):
             # extra iteration at the end for the last analysis
             yield radio.acquire(
                 capture_this,

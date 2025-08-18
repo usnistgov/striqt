@@ -4,12 +4,17 @@ import itertools
 import typing
 import typing_extensions
 import sys
+from striqt.analysis.lib.util import stopwatch, log_extras, get_logger, _StriqtLogger
 
 TGen = type[typing.Any]
 
 if typing.TYPE_CHECKING:
     _P = typing_extensions.ParamSpec('_P')
     _R = typing_extensions.TypeVar('_R')
+
+_StriqtLogger('controller')
+_StriqtLogger('source')
+_StriqtLogger('sink')
 
 
 def lazy_import(module_name: str):
