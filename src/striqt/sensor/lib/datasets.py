@@ -78,9 +78,7 @@ def coord_template(
 
     def broadcast_defaults(v, allow_mismatch=False):
         # match the number of ports, duplicating if necessary
-        (values,) = captures.broadcast_to_ports(
-            ports, v, allow_mismatch=allow_mismatch
-        )
+        (values,) = captures.broadcast_to_ports(ports, v, allow_mismatch=allow_mismatch)
         return list(values)
 
     capture = capture_cls()
@@ -230,7 +228,7 @@ class AnalysisCaller:
     extra_attrs: dict[str, typing.Any] | None = None
     correction: bool = False
 
-    @util.stopwatch('analysis', 'analysis')
+    @util.stopwatch('✓', 'analysis')
     def __call__(
         self,
         iq: AcquiredIQ,
@@ -246,12 +244,11 @@ class AnalysisCaller:
         # wait to import until here to avoid a circular import
         from . import iq_corrections
 
-        with (
-            log_extras('analysis', capture=capture),
-            register.measurement.cache_context(),
-        ):
+        with register.measurement.cache_context():
             if self.correction:
-                with stopwatch('resample, filter, calibrate', logger_level=logging.DEBUG):
+                with stopwatch(
+                    'resample, filter, calibrate', logger_level=logging.DEBUG
+                ):
                     iq = iq_corrections.resampling_correction(
                         iq.raw, capture, self.radio, overwrite_x=overwrite_x
                     )
@@ -298,7 +295,10 @@ class DelayedDataset:
         """complete any remaining calculations, transfer from the device, and build an output dataset"""
 
         with stopwatch(
-            'residual calculations', 'analysis', threshold=10e-3, logger_level=logging.DEBUG
+            'residual calculations',
+            'analysis',
+            threshold=10e-3,
+            logger_level=logging.DEBUG,
         ):
             analysis = striqt_analysis.lib.dataarrays.package_analysis(
                 self.capture, self.delayed, expand_dims=(CAPTURE_DIM,)

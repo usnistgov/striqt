@@ -287,7 +287,9 @@ class SourceBase(lb.Device):
         if _setup.channel_sync_source is None:
             self._aligner = None
         elif analysis is None:
-            name = register.get_channel_sync_source_measurement_name(spec.channel_sync_source)
+            name = register.get_channel_sync_source_measurement_name(
+                spec.channel_sync_source
+            )
             raise ValueError(
                 f'channel_sync_source {name!r} requires an analysis '
                 f'specification for {spec.channel_sync_source!r}'
@@ -301,7 +303,7 @@ class SourceBase(lb.Device):
 
         return _setup
 
-    @util.stopwatch('arm', 'source', logger_level=logging.DEBUG)
+    @util.stopwatch('arm', 'source', logger_level=logging.DEBUG, threshold=10e-3)
     def arm(
         self,
         capture: specs.RadioCapture = None,
@@ -313,7 +315,7 @@ class SourceBase(lb.Device):
 
         if self._setup is None:
             raise TypeError(f'setup the radio by calling setup(...) before arm(...))')
-        
+
         if capture is None:
             capture = self.get_capture_struct()
 
@@ -541,7 +543,9 @@ class SourceBase(lb.Device):
             self.arm(next_capture)
 
         if correction:
-            with util.stopwatch('resample and calibrate', 'analysis', threshold=capture.duration/2):
+            with util.stopwatch(
+                'resample and calibrate', 'analysis', threshold=capture.duration / 2
+            ):
                 iq = iq_corrections.resampling_correction(
                     iq, capture, self, overwrite_x=True
                 )
@@ -913,7 +917,9 @@ def get_channel_read_buffer_count(
     )
 
 
-@util.stopwatch('allocate acquisition buffer', 'source', logger_level=logging.DEBUG)
+@util.stopwatch(
+    'allocate acquisition buffer', 'source', threshold=5e-3, logger_level=logging.DEBUG
+)
 def alloc_empty_iq(
     radio: SourceBase,
     capture: specs.RadioCapture,

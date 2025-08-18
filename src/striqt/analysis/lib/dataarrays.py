@@ -70,7 +70,7 @@ def describe_capture(
     index: int = None,
     count: int = None,
     constrain: tuple[str] | None = None,
-    join: str = ', '
+    join: str = ', ',
 ) -> str:
     """generate a description of a capture"""
     if this is None:

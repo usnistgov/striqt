@@ -261,9 +261,7 @@ class SoapyRadioSource(base.SourceBase):
 
     @gain.setter
     def _(self, gains: float | tuple[float, ...]):
-        ports, gains = captures.broadcast_to_ports(
-            self.port(), self.port(), gains
-        )
+        ports, gains = captures.broadcast_to_ports(self.port(), self.port(), gains)
 
         for channel, gain in zip(ports, gains):
             self._logger.debug(f'set channel {channel} gain: {gain} dB')

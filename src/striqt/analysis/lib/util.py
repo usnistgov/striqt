@@ -66,7 +66,10 @@ def lazy_import(module_name: str, package=None):
 
 @contextlib.contextmanager
 def stopwatch(
-    desc: str = '', logger_suffix: str = 'analysis', threshold: float = 0, logger_level: int = logging.INFO
+    desc: str = '',
+    logger_suffix: str = 'analysis',
+    threshold: float = 0,
+    logger_level: int = logging.INFO,
 ):
     """Time a block of code using a with statement like this:
 
@@ -78,7 +81,7 @@ def stopwatch(
         desc: text for display that describes the event being timed
         logger_suffix: the name of the child logger to use
         threshold: only show timing if at least this much time (in s) elapsed
-    :
+
     Returns:
         context manager
     """
@@ -102,7 +105,7 @@ def stopwatch(
             logger_level = logging.ERROR
 
         extra = {'stopwatch_name': desc, 'stopwatch_time': elapsed}
-        logger.log(logger_level, msg.strip().lstrip(), logger.extra|extra)
+        logger.log(logger_level, msg.strip().lstrip(), logger.extra | extra)
 
 
 if typing.TYPE_CHECKING:

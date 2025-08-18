@@ -62,9 +62,7 @@ def _validate_multichannel(port, gain):
             )
     else:
         if isinstance(gain, tuple) and len(gain) != len(port):
-            raise ValueError(
-                'gain, when specified as a tuple, must match port count'
-            )
+            raise ValueError('gain, when specified as a tuple, must match port count')
 
 
 class WaveformCapture(

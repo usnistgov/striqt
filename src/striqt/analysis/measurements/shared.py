@@ -171,7 +171,6 @@ def correlate_sync_sequence(
     iq_bcast = iq_bcast[:, xp.newaxis, ::frames_per_sync, :corr_size]
     template_bcast = sync_seq[xp.newaxis, :, xp.newaxis, :]
     # pad_size = template_bcast.shape[-1]
-    # print(iq_bcast.shape, template_bcast.shape)
     # template_bcast = iqwaveform.util.pad_along_axis(template_bcast, [[0,pad_size]], axis=3)
 
     cp_samples = round(9 / 128 * spec.sample_rate / spec.subcarrier_spacing)

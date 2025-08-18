@@ -2,6 +2,7 @@ from pathlib import Path
 import logging
 import sys
 import typing
+from threading import Event
 
 import click
 
@@ -149,11 +150,7 @@ def init_sweep_cli(
         )
         sys.exit(1)
 
-    if verbose:
-        lb.util.force_full_traceback(True)
-        lb.show_messages('debug')
-    else:
-        lb.show_messages('info')
+    lb.show_messages('warning')
 
     # start by connecting to the controller, so that the radio id can be used
     # as a file naming field
@@ -175,7 +172,12 @@ def init_sweep_cli(
             )
             calls['open sink'] = lb.Call(sink.open)
 
-        with util.stopwatch(f'open {", ".join(calls)}', 'controller', logger_level=logging.INFO, threshold=1):
+        with util.stopwatch(
+            f'open {", ".join(calls)}',
+            'controller',
+            logger_level=logging.INFO,
+            threshold=1,
+        ):
             controller = util.concurrently_with_fg(calls, False)['controller']
 
         yaml_classes = _get_extension_classes(sweep_spec)
@@ -207,7 +209,10 @@ def init_sweep_cli(
             calls['open sink'] = lb.Call(sink.open)
 
         with util.stopwatch(
-            f'load {", ".join(calls)}', 'controller', logger_level='info', threshold=0.25
+            f'load {", ".join(calls)}',
+            'controller',
+            logger_level='info',
+            threshold=0.25,
         ):
             opened = lb.concurrently(**calls)
 
@@ -231,7 +236,15 @@ def init_sweep_cli(
     )
 
 
-def execute_sweep_cli(
+def maybe_start_debugger(cli_objects: CLIObjects):
+    if cli_objects.debugger.enable:
+        cli_objects.debugger.run(*sys.exc_info())
+        sys.exit(1)
+    else:
+        raise
+
+
+def iter_sweep_cli(
     cli: CLIObjects,
     *,
     remote=None,
@@ -257,16 +270,11 @@ def execute_sweep_cli(
 
             # step through captures
             for _ in sweep_iter:
-                pass
-
+                yield
+        except:
+            raise
+        else:
             cli.sink.flush()
-        except BaseException as ex:
-            if cli_objects.debugger.enable:
-                print(ex)
-                cli_objects.debugger.run(*sys.exc_info())
-                sys.exit(1)
-            else:
-                raise
 
 
 def iterate_sweep_cli(
