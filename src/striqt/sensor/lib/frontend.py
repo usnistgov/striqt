@@ -2,7 +2,6 @@ from pathlib import Path
 import logging
 import sys
 import typing
-from threading import Event
 
 import click
 
@@ -129,7 +128,6 @@ def init_sweep_cli(
 ) -> CLIObjects:
     # now re-read the yaml, using sweep_cls as the schema, but without knowledge of
     sweep_spec = io.read_yaml_sweep(yaml_path)
-
     debug_handler = DebugOnException(debug)
 
     if '{' in sweep_spec.output.path:
@@ -211,7 +209,7 @@ def init_sweep_cli(
         with util.stopwatch(
             f'load {", ".join(calls)}',
             'controller',
-            logger_level='info',
+            logger_level=logging.INFO,
             threshold=0.25,
         ):
             opened = lb.concurrently(**calls)
@@ -236,12 +234,16 @@ def init_sweep_cli(
     )
 
 
-def maybe_start_debugger(cli_objects: CLIObjects):
-    if cli_objects.debugger.enable:
-        cli_objects.debugger.run(*sys.exc_info())
+def maybe_start_debugger(cli_objects: CLIObjects|None, exc_info):
+    if exc_info == (None, None, None):
+        pass
+    elif cli_objects is None:
+        raise exc_info[1]
+    elif cli_objects.debugger.enable:
+        cli_objects.debugger.run(*exc_info)
         sys.exit(1)
     else:
-        raise
+        raise exc_info[1]
 
 
 def iter_sweep_cli(

@@ -3,12 +3,19 @@
 from . import click_sensor_sweep
 import sys
 import logging
+import io
 
 
-class Handler(logging.Handler):
-    def emit(self, record):
-        if record.name == 'striqt.analysis':
-            print(record.name, record.extra, record.getMessage(), record.args)
+class StderrStreamToLog(io.StringIO):
+    def write(self, data: str):
+        if data.startswith(('DEBUG', 'INFO', 'WARNING', 'ERROR')):
+            sys.stdout.write(data)
+        else:
+            try:
+                from striqt.analysis.lib import util
+                util.get_logger('controller').warning(str(data))
+            except BaseException as ex:
+                print('uncaught build: ', ex)
 
 
 @click_sensor_sweep(
@@ -17,17 +24,32 @@ class Handler(logging.Handler):
 def run(**kws):
     # instantiate sweep objects
     from striqt.sensor.lib import frontend
+    import wurlitzer
 
     app = None
 
-    try:
-        if sys.stdout.isatty():
-            from striqt.sensor.lib import tui
+    do_tui = kws.pop('tui')
 
-            app = tui.SweepHUDApp(kws)
-            app.run()
+    # stderr = StderrStreamToLog()
+    # pipes = wurlitzer.pipes(stderr=stderr, stdout=None)
+    # stdout_r, stderr_r = pipes.__enter__()
 
+    if do_tui and sys.stdout.isatty():
+        from striqt.sensor.lib import tui
+
+        app = tui.SweepHUDApp(kws)
+        app.run()
+
+        cli_objs = app.cli_objs
+
+        if app._exception is not None:
+            exc_info = app._exc_info
         else:
+            exc_info = (None, None, None)
+
+    else:
+        cli_objs = None
+        try:
             cli_objs = frontend.init_sweep_cli(**kws)
 
             if kws['verbose']:
@@ -37,13 +59,6 @@ def run(**kws):
 
             logging.basicConfig(level=log_level)
 
-            handler = Handler()
-
-            for name in ('source', 'analysis', 'sink'):
-                logger = frontend.util.get_logger(name)
-                logger.setLevel(log_level)
-                logger.logger.addHandler(handler)
-
             generator = frontend.iter_sweep_cli(
                 cli_objs,
                 remote=kws.get('remote', None),
@@ -51,11 +66,12 @@ def run(**kws):
 
             for _ in generator:
                 pass
-    except:
-        if app is not None and hasattr(app, 'cli_objs'):
-            cli_objs = app.cli_objs
-        frontend.maybe_start_debugger(cli_objs)
+        except BaseException:
+            exc_info = sys.exc_info()
+        else:
+            exc_info = (None, None, None)
 
+    frontend.maybe_start_debugger(cli_objs, exc_info)
 
 if __name__ == '__main__':
     run()

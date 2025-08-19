@@ -3,6 +3,7 @@
 from __future__ import annotations
 import itertools
 import typing
+from collections import Counter
 
 from . import captures, datasets, sources, specs, util
 from .calibration import lookup_system_noise_power
@@ -18,6 +19,20 @@ else:
     xr = util.lazy_import('xarray')
     lb = util.lazy_import('labbench')
     analysis = util.lazy_import('striqt.analysis')
+
+
+def varied_capture_fields(sweep: specs.Sweep) -> list[str]:
+    """generate a list of capture fields with at least 2 values in the specified sweep"""
+    unlooped_values = (c.todict().values() for c in sweep.get_captures(False))
+    unlooped_counts = [len(Counter(v)) for v in zip(*unlooped_values)]
+    fields = sweep.captures[0].todict().keys()
+    unlooped_counts = dict(zip(fields, unlooped_counts))
+    looped_counts = {loop.field: len(loop.get_points()) for loop in sweep.loops}
+    all_counts = {
+        field: max(unlooped_counts[field], looped_counts.get(field, 0))
+        for field in fields
+    }
+    return [f for f, c in all_counts.items() if c > 1]
 
 
 def sweep_touches_gpu(sweep: specs.Sweep):

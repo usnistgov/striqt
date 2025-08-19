@@ -79,8 +79,8 @@ def stopwatch(
 
     Arguments:
         desc: text for display that describes the event being timed
-        logger_suffix: the name of the child logger to use
-        threshold: only show timing if at least this much time (in s) elapsed
+        logger_level: the name of the child logger to use
+        threshold: if the duration is smaller than this, demote logger level
 
     Returns:
         context manager
@@ -94,7 +94,7 @@ def stopwatch(
         elapsed = time.perf_counter() - t0
 
         if elapsed < threshold:
-            return
+            logger_level = logger_level - 10
 
         msg = str(desc) + ' ' if len(desc) else ''
         msg += f'{elapsed:0.3f} s elapsed'

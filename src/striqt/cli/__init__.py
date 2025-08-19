@@ -36,6 +36,14 @@ def click_sensor_sweep(description: typing.Optional[str] = None):
             help='run on the specified remote host (at host or host:port)',
         ),
         click.option(
+            '--tui/',
+            '-t',
+            is_flag=True,
+            show_default=True,
+            default=False,
+            help='show a fancy progress display (experimental))',
+        ),
+        click.option(
             '--store-backend/',
             '-s',
             type=click.Choice(['zip', 'directory', 'db'], case_sensitive=True),

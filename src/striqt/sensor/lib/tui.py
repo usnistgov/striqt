@@ -1,36 +1,61 @@
+from __future__ import annotations
+
+from contextlib import contextmanager
 import logging
 import math
+import os
+import sys
 import typing
-from collections import Counter
-import time
+import warnings
 
 import rich, textual
+
 from textual.app import App, ComposeResult
 from textual.color import Gradient
-from textual.widgets import Button, DataTable, Label, Header, Footer, ProgressBar
+from textual.widgets import Button, DataTable, Label, Static, Footer, ProgressBar
 from textual.containers import (
     Center,
     CenterMiddle,
     VerticalGroup,
     HorizontalGroup,
-    ScrollableContainer,
 )
-from textual.worker import get_current_worker, Worker
+from textual.worker import Worker
 from textual.screen import Screen
+
 from rich.text import Text
 from rich.segment import Segments
-import labbench as lb
-import xarray as xr
-import warnings
 
-from . import frontend, util
+from . import frontend, sweeps, util
+
+if typing.TYPE_CHECKING:
+    import labbench as lb
+    import xarray as xr
+    import psutil
+else:
+    lb = util.lazy_import('labbench')
+    xr = util.lazy_import('xarray')
+    psutil = util.lazy_import('psutil')
 
 
-def nonunique_capture_fields(captures):
-    values_list = (c.todict().values() for c in captures)
-    counts = [len(Counter(v)) for v in zip(*values_list)]
-    fields = captures[0].todict().keys()
-    return [f for f, c in zip(fields, counts) if c > 1]
+__all__ = ['SweepHUDApp']
+
+
+class SystemMonitorWidget(Static):
+    """A widget to display CPU and memory usage."""
+
+    def on_mount(self) -> None:
+        """Called when the widget is mounted."""
+        self.set_interval(1, self.update_stats) # Update every 1 second
+
+    def update_stats(self) -> None:
+        """Updates the CPU and memory usage statistics."""
+        memory = psutil.virtual_memory()
+        memory_free_gb = memory.free / 1e9
+        memory_total_gb = memory.total / 1e9
+
+        self.update(
+            f" {memory_free_gb:0.1f}/{memory_total_gb:0.1f} GB free"
+        )
 
 
 def any_are_running(workers: typing.Iterable[Worker]) -> bool:
@@ -42,6 +67,51 @@ def any_are_running(workers: typing.Iterable[Worker]) -> bool:
             return True
     else:
         return False
+
+
+def get_log_append(prior_text_size, record):
+    if prior_text_size != 0:
+        prepend = '\n'
+    else:
+        prepend = ''
+
+    if 'stopwatch_name' in record.args:
+        stopwatch_name = record.args['stopwatch_name']
+        stopwatch_time = record.args['stopwatch_time']
+        return prepend + f'⏱ {stopwatch_time * 1000:0.0f} ms {stopwatch_name}'
+    else:
+        return prepend + record.getMessage()
+
+
+class LogNotifier(logging.Handler):
+    def __init__(self, callback: callable, logger_names: list[str], level=logging.INFO):
+        self.callback = callback
+
+        super().__init__(level)
+
+        for name in logger_names:
+            logger = logging.getLogger(name)
+            logger.setLevel(level)
+            logger.addHandler(self)
+
+    def emit(self, record):
+        self.callback(get_log_append(0, record))
+
+
+class SplitLogHandler(logging.Handler):
+    def __init__(self, app: SweepHUDApp, logger_names=[], verbose=False):
+        level = logging.DEBUG if verbose else logging.INFO
+        self.app = app
+
+        super().__init__(level)
+
+        for name in logger_names:
+            logger = util.get_logger(name)
+            logger.logger.setLevel(level)
+            logger.logger.addHandler(self)
+
+    def emit(self, record):
+        self.app.call_from_thread(self.app._update_sweep_status, record)
 
 
 class QuitScreen(Screen):
@@ -61,7 +131,6 @@ class QuitScreen(Screen):
         height: 11;
         border: thick $background 80%;
         background: $surface;
-        content-align: center middle;
     }
 
     #question {
@@ -87,35 +156,6 @@ class QuitScreen(Screen):
             self.app.exit()
 
 
-class LogNotifier(logging.Handler):
-    def __init__(self, callback: callable, logger_names: list[str], level=logging.INFO):
-        self.callback = callback
-
-        super().__init__(level)
-
-        for name in logger_names:
-            logger = logging.getLogger(name)
-            logger.setLevel(level)
-            logger.addHandler(self)
-
-    def emit(self, record):
-        self.callback(get_log_append(0, record))
-
-
-def get_log_append(prior_text_size, record):
-    if prior_text_size != 0:
-        prepend = '\n'
-    else:
-        prepend = ''
-
-    if 'stopwatch_name' in record.args:
-        stopwatch_name = record.args['stopwatch_name']
-        stopwatch_time = record.args['stopwatch_time']
-        return prepend + f'⏱ {stopwatch_time * 1000:0.0f} ms {stopwatch_name}'
-    else:
-        return prepend + record.getMessage()
-
-
 class SweepHUDApp(App):
     BINDINGS = [
         ('q', 'request_quit', 'Quit'),
@@ -126,17 +166,63 @@ class SweepHUDApp(App):
         self.cli_objs = None
         self.cli_kws = cli_kws
         super().__init__()
+        self.title = 'Sensor sweep'
         self.handler = SplitLogHandler(
             self,
-            'source',
-            'analysis',
-            'sink',
+            ('source', 'analysis', 'sink'),
             verbose=cli_kws['verbose'],
         )
         self.row_keys: dict[int, str] = {}
         self.column_keys: dict[str, str] = {}
+        self._original_stderr = sys.stderr
 
+    ### Underlying actions
+    @textual.work(exclusive=True, thread=True)
+    def do_sweep(self):
+        gen = frontend.iter_sweep_cli(
+            self.cli_objs, remote=self.cli_kws.get('remote', None)
+        )
+        for _ in gen:
+            self.refresh()
+
+        self.call_from_thread(self._show_done)
+
+    @textual.work(exclusive=True, thread=True)
+    def do_startup(self):
+        self.cli_objs = frontend.init_sweep_cli(**self.cli_kws)
+        self.display_fields = sweeps.varied_capture_fields(self.cli_objs.sweep_spec)
+        self.call_from_thread(self._show_ready)
+        self.call_from_thread(self.do_sweep)
+
+    ### textual.app.App protocol
     def compose(self) -> ComposeResult:
+        yield DataTable(zebra_stripes=True, cursor_type='row')
+        with Center(), HorizontalGroup():
+            yield ProgressBar(show_percentage=False, id='progress')
+            yield SystemMonitorWidget()
+        yield Footer()
+
+    def action_request_quit(self) -> None:
+        """Action to display the quit dialog."""
+        if any_are_running(self.workers):
+            self.push_screen(QuitScreen(name='Confirm'))
+        else:
+            self.exit()
+
+    def action_request_scroll(self) -> None:
+        """Action to display the quit dialog."""
+        table = self.query_one('DataTable')
+        table.action_scroll_bottom()
+
+    ### Utility
+    def _notify_warnings(self, warn_message, *args, **kws):
+        """A custom function to handle warnings."""
+        self.notify(warn_message)
+        # You can add any custom logic here, like logging, sending notifications, etc.
+
+    def _show_done(self):
+        progress = self.query_one('ProgressBar')
+
         gradient = Gradient.from_colors(
             '#881177',
             '#aa3355',
@@ -152,62 +238,33 @@ class SweepHUDApp(App):
             '#663399',
         )
 
-        yield Header()
-        with Center():
-            yield ProgressBar(
-                show_percentage=False, show_eta=True, gradient=gradient, id='progress'
+        progress.gradient = gradient
+
+
+    def _show_ready(self):
+        def add_column(name: str, width_frac: float):
+            return table.add_column(
+                Text(name, style='content-align-vertical: bottom'),
+                width=round(free_width * width_frac)
             )
-        yield DataTable(zebra_stripes=True, cursor_type='row')
-        yield Footer()
-
-    @textual.work(exclusive=True, thread=True)
-    def start_sweep(self):
-        gen = frontend.iter_sweep_cli(
-            self.cli_objs, remote=self.cli_kws.get('remote', None)
-        )
-        for _ in gen:
-            pass
-
-    def _notify_warnings(self, warn_message, *args, **kws):
-        """A custom function to handle warnings."""
-        self.notify(warn_message)
-        # You can add any custom logic here, like logging, sending notifications, etc.
-
-    @textual.work(exclusive=True, thread=True)
-    def initialize(self):
-        time.sleep(2)
-        self.cli_objs = frontend.init_sweep_cli(**self.cli_kws)
-        self.display_fields = nonunique_capture_fields(
-            self.cli_objs.sweep_spec.captures
-        )
-        self.call_from_thread(self._setup_table)
-        self.call_from_thread(self.start_sweep)
-
-    def _setup_table(self):
-        def col_header(name):
-            return Text(name, style='content-align-vertical: bottom')
 
         table = self.query_one(DataTable)
         index_size = math.ceil(math.log10(len(self.cli_objs.sweep_spec.captures))) + 2
         free_width = self.size.width - index_size
 
         self.column_keys = {
-            'capture': table.add_column('', width=int(free_width * 0.27)),
-            'striqt.source': table.add_column(
-                col_header('Source'), width=round(free_width * 0.18)
-            ),
-            'striqt.analysis': table.add_column(
-                col_header('Analysis'), width=int(free_width * 0.32)
-            ),
-            'striqt.sink': table.add_column(
-                col_header('Sink'), width=round(free_width * 0.23)
-            ),
+            'capture': add_column('', 0.27),
+            'striqt.source': add_column('Source', 0.18),
+            'striqt.analysis': add_column('Analysis', 0.32),
+            'striqt.sink': add_column('Sink', 0.23)
         }
 
         table.loading = False
 
         progress = self.query_one(ProgressBar)
         progress.total = len(self.cli_objs.sweep_spec.captures)
+
+        self.sub_title = 'Running'
 
     def on_mount(self) -> None:
         table = self.query_one(DataTable)
@@ -222,21 +279,11 @@ class SweepHUDApp(App):
 
         # Set a custom showwarning function to intercept warnings
         warnings.showwarning = self._notify_warnings
-        self.initialize()
+        self.do_startup()
 
-    def action_request_quit(self) -> None:
-        """Action to display the quit dialog."""
-        if any_are_running(self.workers):
-            self.push_screen(QuitScreen(name='Confirm'))
-        else:
-            self.exit()
+        self.sub_title = 'Initializing'        
 
-    def action_request_scroll(self) -> None:
-        """Action to display the quit dialog."""
-        table = self.query_one('DataTable')
-        table.action_scroll_bottom()
-
-    def update_table(self, record: logging.LogRecord):
+    def _update_sweep_status(self, record: logging.LogRecord):
         from striqt.analysis.lib.dataarrays import describe_capture
 
         captures = self.cli_objs.sweep_spec.captures
@@ -285,25 +332,10 @@ class SweepHUDApp(App):
         """Exits the app after an unhandled exception."""
         from rich.traceback import Traceback
 
+        self._exc_info = sys.exc_info()
+
         self.bell()
-        traceback = Traceback(show_locals=False, width=None, suppress=[rich, lb, xr])
-        self._exit_renderables.append(
-            Segments(self.console.render(traceback, self.console.options))
-        )
+        traceback = Traceback(show_locals=False, width=None, suppress=[textual, rich, lb, xr])
+        segments = Segments(self.console.render(traceback, self.console.options))
+        self._exit_renderables.append(segments)
         self._close_messages_no_wait()
-
-
-class SplitLogHandler(logging.Handler):
-    def __init__(self, app: SweepHUDApp, logger_names=[], verbose=False):
-        level = logging.DEBUG if verbose else logging.INFO
-        self.app = app
-
-        super().__init__(level)
-
-        for name in logger_names:
-            logger = util.get_logger(name)
-            logger.logger.setLevel(level)
-            logger.logger.addHandler(self)
-
-    def emit(self, record):
-        self.app.call_from_thread(self.app.update_table, record)
