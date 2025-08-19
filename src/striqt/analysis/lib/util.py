@@ -19,7 +19,7 @@ _logger_adapters = {}
 class _StriqtLogger(logging.LoggerAdapter):
     def __init__(self, name_suffix, extra={'capture': None}):
         _logger = logging.getLogger('striqt').getChild(name_suffix)
-        super().__init__(_logger, extra, merge_extra=True)
+        super().__init__(_logger, extra)
         _logger_adapters[name_suffix] = self
 
 
