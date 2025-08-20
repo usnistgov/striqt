@@ -197,7 +197,7 @@ class SweepHUDApp(App):
     ### textual.app.App protocol
     def compose(self) -> ComposeResult:
         yield DataTable(zebra_stripes=True, cursor_type='row')
-        with Center(), HorizontalGroup():
+        with HorizontalGroup(), Center():
             yield ProgressBar(show_percentage=False, id='progress')
             yield SystemMonitorWidget()
         yield Footer()

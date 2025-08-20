@@ -295,7 +295,7 @@ class DelayedDataset:
         """complete any remaining calculations, transfer from the device, and build an output dataset"""
 
         with stopwatch(
-            'residual calculations',
+            'package xarray',
             'analysis',
             threshold=10e-3,
             logger_level=logging.DEBUG,
@@ -303,6 +303,13 @@ class DelayedDataset:
             analysis = striqt_analysis.lib.dataarrays.package_analysis(
                 self.capture, self.delayed, expand_dims=(CAPTURE_DIM,)
             )
+
+        with stopwatch(
+            'build coords',
+            'analysis',
+            threshold=10e-3,
+            logger_level=logging.DEBUG,
+        ):
             coords = build_coords(
                 self.capture,
                 output=self.sweep.output,
@@ -320,6 +327,12 @@ class DelayedDataset:
 
             analysis[SWEEP_TIMESTAMP_NAME].attrs.update(label='Sweep start time')
 
+        with stopwatch(
+            'add peripheral data',
+            'analysis',
+            threshold=10e-3,
+            logger_level=logging.DEBUG,
+        ):
             if self.extra_data is not None:
                 update_ext_dims = {CAPTURE_DIM: analysis.capture.size}
                 new_arrays = {
