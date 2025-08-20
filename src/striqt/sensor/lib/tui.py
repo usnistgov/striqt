@@ -18,6 +18,7 @@ from textual.containers import (
     CenterMiddle,
     VerticalGroup,
     HorizontalGroup,
+    Horizontal, 
 )
 from textual.worker import Worker
 from textual.screen import Screen
@@ -139,7 +140,7 @@ class QuitScreen(Screen):
         width: 1fr;
         content-align: center middle;
     }
-   
+
     """
 
     def compose(self) -> ComposeResult:
@@ -161,6 +162,17 @@ class SweepHUDApp(App):
         ('q', 'request_quit', 'Quit'),
         ('b', 'request_scroll', 'Skip to bottom'),
     ]
+
+    CSS = """
+    Screen {
+        align: center top;
+    }
+
+    #status-group {
+        background: blue 50%;
+        border: wide white;
+    }
+    """
 
     def __init__(self, cli_kws: dict):
         self.cli_objs = None
@@ -197,7 +209,7 @@ class SweepHUDApp(App):
     ### textual.app.App protocol
     def compose(self) -> ComposeResult:
         yield DataTable(zebra_stripes=True, cursor_type='row')
-        with HorizontalGroup(), Center():
+        with Center(), HorizontalGroup(id='status-group'):
             yield ProgressBar(show_percentage=False, id='progress')
             yield SystemMonitorWidget()
         yield Footer()
