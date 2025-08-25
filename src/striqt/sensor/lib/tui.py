@@ -18,7 +18,7 @@ from textual.containers import (
     CenterMiddle,
     VerticalGroup,
     HorizontalGroup,
-    Horizontal, 
+    VerticalScroll
 )
 from textual.worker import Worker
 from textual.screen import Screen
@@ -157,10 +157,20 @@ class QuitScreen(Screen):
             self.app.exit()
 
 
+class VerticalScrollDataTable(DataTable):
+    def action_scroll_end(self):
+        return super().action_scroll_bottom()
+
+    def action_scroll_home(self):
+        return super().action_scroll_top()
+
 class SweepHUDApp(App):
+    _CAPTURE_DISPLAY_LIMIT = 500
+
     BINDINGS = [
         ('q', 'request_quit', 'Quit'),
-        ('b', 'request_scroll', 'Skip to bottom'),
+        ('home', 'scroll_top', 'Skip to top'),
+        ('end', 'scroll_bottom', 'Skip to bottom'),
     ]
 
     CSS = """
@@ -208,7 +218,8 @@ class SweepHUDApp(App):
 
     ### textual.app.App protocol
     def compose(self) -> ComposeResult:
-        yield DataTable(zebra_stripes=True, cursor_type='row')
+        with VerticalScroll():
+            yield VerticalScrollDataTable(zebra_stripes=True, cursor_type='row')
         with Center(), HorizontalGroup(id='status-group'):
             yield ProgressBar(show_percentage=False, id='progress')
             yield SystemMonitorWidget()
@@ -221,10 +232,15 @@ class SweepHUDApp(App):
         else:
             self.exit()
 
-    def action_request_scroll(self) -> None:
-        """Action to display the quit dialog."""
-        table = self.query_one('DataTable')
+    def action_scroll_end(self) -> None:
+        """Action to scroll to the bottom."""
+        table = self.query_one('VerticalScrollDataTable')
         table.action_scroll_bottom()
+
+    def action_scroll_end(self) -> None:
+        """Action to scroll to the bottom."""
+        table = self.query_one('VerticalScrollDataTable')
+        table.action_scroll_top()
 
     ### Utility
     def _notify_warnings(self, warn_message, *args, **kws):
@@ -260,7 +276,7 @@ class SweepHUDApp(App):
                 width=round(free_width * width_frac)
             )
 
-        table = self.query_one(DataTable)
+        table = self.query_one(VerticalScrollDataTable)
         index_size = math.ceil(math.log10(len(self.cli_objs.sweep_spec.captures))) + 2
         free_width = self.size.width - index_size
 
@@ -279,7 +295,7 @@ class SweepHUDApp(App):
         self.sub_title = 'Running'
 
     def on_mount(self) -> None:
-        table = self.query_one(DataTable)
+        table = self.query_one(VerticalScrollDataTable)
         table.loading = True
 
         self._handler = LogNotifier(
@@ -311,7 +327,7 @@ class SweepHUDApp(App):
 
         capture = captures[capture_index]
 
-        table = self.query_one(DataTable)
+        table = self.query_one(VerticalScrollDataTable)
         progress = self.query_one(ProgressBar)
 
         if capture_index not in self.row_keys:
@@ -339,6 +355,11 @@ class SweepHUDApp(App):
         msg = text + get_log_append(len(text), record)
 
         table.update_cell(row_key, col_key, msg)
+
+        if len(self.row_keys) > self._CAPTURE_DISPLAY_LIMIT:
+            capture_index = next(iter(self.row_keys.keys()))
+            row_key = self.row_keys.pop(capture_index)
+            table.remove_row(row_key)
 
     def _fatal_error(self) -> None:
         """Exits the app after an unhandled exception."""

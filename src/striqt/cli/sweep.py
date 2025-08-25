@@ -42,7 +42,7 @@ def run(**kws):
 
         cli_objs = app.cli_objs
 
-        if app._exception is not None:
+        if app._exception is not None and hasattr(app, '_exc_info'):
             exc_info = app._exc_info
         else:
             exc_info = (None, None, None)
