@@ -169,8 +169,6 @@ class SweepHUDApp(App):
 
     BINDINGS = [
         ('q', 'request_quit', 'Quit'),
-        ('home', 'scroll_top', 'Skip to top'),
-        ('end', 'scroll_bottom', 'Skip to bottom'),
     ]
 
     CSS = """
@@ -231,16 +229,6 @@ class SweepHUDApp(App):
             self.push_screen(QuitScreen(name='Confirm'))
         else:
             self.exit()
-
-    def action_scroll_end(self) -> None:
-        """Action to scroll to the bottom."""
-        table = self.query_one('VerticalScrollDataTable')
-        table.action_scroll_bottom()
-
-    def action_scroll_end(self) -> None:
-        """Action to scroll to the bottom."""
-        table = self.query_one('VerticalScrollDataTable')
-        table.action_scroll_top()
 
     ### Utility
     def _notify_warnings(self, warn_message, *args, **kws):
