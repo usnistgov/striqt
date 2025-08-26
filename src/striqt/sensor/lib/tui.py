@@ -40,14 +40,14 @@ __all__ = ['SweepHUDApp']
 
 
 class SystemMonitorWidget(Static):
-    """A widget to display CPU and memory usage."""
+    """A widget to display memory usage."""
 
     def on_mount(self) -> None:
         """Called when the widget is mounted."""
         self.set_interval(1, self.update_stats)  # Update every 1 second
 
     def update_stats(self) -> None:
-        """Updates the CPU and memory usage statistics."""
+        """Updates the memory usage statistics."""
         memory = psutil.virtual_memory()
         memory_free_gb = memory.free / 1e9
         memory_total_gb = memory.total / 1e9

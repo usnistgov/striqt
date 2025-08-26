@@ -4,7 +4,7 @@ import itertools
 import typing
 import typing_extensions
 import sys
-from striqt.analysis.lib.util import stopwatch, log_extras, get_logger, _StriqtLogger
+from striqt.analysis.lib.util import stopwatch, log_capture_context, get_logger, _StriqtLogger
 
 TGen = type[typing.Any]
 

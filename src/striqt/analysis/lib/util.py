@@ -17,9 +17,11 @@ _logger_adapters = {}
 
 
 class _StriqtLogger(logging.LoggerAdapter):
-    def __init__(self, name_suffix, extra={'capture': None}):
+    EXTRA_DEFAULTS = {'capture_index': 0, 'capture_count': 'unknown', 'capture': None}
+
+    def __init__(self, name_suffix, extra={}):
         _logger = logging.getLogger('striqt').getChild(name_suffix)
-        super().__init__(_logger, extra)
+        super().__init__(_logger, self.EXTRA_DEFAULTS|extra)
         _logger_adapters[name_suffix] = self
 
 
@@ -28,10 +30,12 @@ def get_logger(name_suffix) -> _StriqtLogger:
 
 
 @contextlib.contextmanager
-def log_extras(name_suffix, /, **kws):
+def log_capture_context(name_suffix, /, capture_index, capture, capture_count='unknown'):
+    extra = locals()
+    extra['capture_progress'] = f'{capture_index+1}/{capture_count}'
     logger = get_logger(name_suffix)
     start_extra = logger.extra
-    logger.extra = logger.extra | kws
+    logger.extra = start_extra | extra
     yield
     logger.extra = start_extra
 
@@ -53,7 +57,7 @@ def show_messages(
         None
     """
 
-    for name, logger in _logger_adapters.items():
+    for logger in _logger_adapters.values():
         logger.setLevel(logging.DEBUG)
 
         # clear any stale handlers
@@ -69,10 +73,10 @@ def show_messages(
         if colors or (colors is None and sys.stderr.isatty()):
             log_fmt = (
                 '\x1b[32m{asctime}\x1b[0m \x1b[1;30m{name:>15s}\x1b[0m '
-                '\x1b[34mcapture {capture_index} \x1b[0m {message}'
+                '\x1b[34mcapture {capture_progress} \x1b[0m {message}'
             )
         else:
-            log_fmt = '{levelname:^7s} {asctime} • {capture_index}: {message}'
+            log_fmt = '{levelname:^7s} {asctime} • {capture_progress}: {message}'
         formatter = logging.Formatter(log_fmt, style='{', datefmt='%X')
         # formatter.default_msec_format = '%s.%03d'
 

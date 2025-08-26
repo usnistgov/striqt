@@ -14,7 +14,7 @@ from .sources import SourceBase
 
 from striqt.analysis import register
 from striqt.analysis.lib.dataarrays import CAPTURE_DIM, PORT_DIM, AcquiredIQ  # noqa: F401
-from striqt.analysis.lib.util import log_extras, stopwatch
+from striqt.analysis.lib.util import log_capture_context, stopwatch
 
 if typing.TYPE_CHECKING:
     import labbench as lb
