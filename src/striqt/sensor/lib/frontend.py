@@ -235,16 +235,9 @@ def init_sweep_cli(
     )
 
 
-def maybe_start_debugger(cli_objects: CLIObjects|None, exc_info):
-    if exc_info == (None, None, None):
-        pass
-    elif cli_objects is None:
-        raise exc_info[1]
-    elif cli_objects.debugger.enable:
+def maybe_start_debugger(cli_objects: CLIObjects | None, exc_info):
+    if cli_objects is not None and cli_objects.debugger.enable:
         cli_objects.debugger.run(*exc_info)
-        sys.exit(1)
-    else:
-        raise exc_info[1]
 
 
 def iter_sweep_cli(

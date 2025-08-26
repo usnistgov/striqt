@@ -13,6 +13,7 @@ class StderrStreamToLog(io.StringIO):
         else:
             try:
                 from striqt.analysis.lib import util
+
                 util.get_logger('controller').warning(str(data))
             except BaseException as ex:
                 print('uncaught build: ', ex)
@@ -24,17 +25,14 @@ class StderrStreamToLog(io.StringIO):
 def run(**kws):
     # instantiate sweep objects
     from striqt.sensor.lib import frontend
-    import wurlitzer
 
-    app = None
+    cli_objs = None
 
     do_tui = kws.pop('tui')
 
-    # stderr = StderrStreamToLog()
-    # pipes = wurlitzer.pipes(stderr=stderr, stdout=None)
-    # stdout_r, stderr_r = pipes.__enter__()
-
     if do_tui and sys.stdout.isatty():
+        # full TUI
+        app = None
         from striqt.sensor.lib import tui
 
         app = tui.SweepHUDApp(kws)
@@ -42,23 +40,22 @@ def run(**kws):
 
         cli_objs = app.cli_objs
 
-        if app._exception is not None and hasattr(app, '_exc_info'):
-            exc_info = app._exc_info
+        if app._exception is None:
+            pass
+        elif not hasattr(app, '_exc_info'):
+            sys.exit(1)
         else:
-            exc_info = (None, None, None)
+            frontend.maybe_start_debugger(cli_objs, app._exc_info)
+            sys.exit(1)
 
     else:
-        cli_objs = None
+        # simple CLI
         try:
             cli_objs = frontend.init_sweep_cli(**kws)
 
-            if kws['verbose']:
-                log_level = logging.DEBUG
-            else:
-                log_level = logging.INFO
+            from striqt.analysis.lib import util
 
-            logging.basicConfig(level=log_level)
-
+            util.show_messages(logging.INFO)
             generator = frontend.iter_sweep_cli(
                 cli_objs,
                 remote=kws.get('remote', None),
@@ -67,11 +64,17 @@ def run(**kws):
             for _ in generator:
                 pass
         except BaseException:
-            exc_info = sys.exc_info()
-        else:
-            exc_info = (None, None, None)
+            from rich.console import Console
 
-    frontend.maybe_start_debugger(cli_objs, exc_info)
+            console = Console()
+            console.print_exception(
+                show_locals=False,
+                width=None,
+                suppress=['rich', 'zarr', 'xarray', 'pandas'],
+            )
+            frontend.maybe_start_debugger(cli_objs, sys.exc_info())
+            sys.exit(1)
+
 
 if __name__ == '__main__':
     run()

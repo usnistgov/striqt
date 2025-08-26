@@ -39,6 +39,47 @@ def log_extras(name_suffix, /, **kws):
 _StriqtLogger('analysis')
 
 
+def show_messages(
+    level: int,
+    colors: bool | None = None,
+):
+    """filters logging messages displayed to the console by importance
+
+    Arguments:
+        minimum_level: logging level threshold for display (or None to disable)
+        colors: whether to colorize the message output, or None to select automatically
+
+    Returns:
+        None
+    """
+
+    for name, logger in _logger_adapters.items():
+        logger.setLevel(logging.DEBUG)
+
+        # clear any stale handlers
+        if hasattr(logger, '_screen_handler'):
+            logger.logger.removeHandler(logger._screen_handler)
+
+        if level is None:
+            return
+
+        logger._screen_handler = logging.StreamHandler()
+        logger._screen_handler.setLevel(level)
+
+        if colors or (colors is None and sys.stderr.isatty()):
+            log_fmt = (
+                '\x1b[32m{asctime}\x1b[0m \x1b[1;30m{name:>15s}\x1b[0m '
+                '\x1b[34mcapture {capture_index} \x1b[0m {message}'
+            )
+        else:
+            log_fmt = '{levelname:^7s} {asctime} • {capture_index}: {message}'
+        formatter = logging.Formatter(log_fmt, style='{', datefmt='%X')
+        # formatter.default_msec_format = '%s.%03d'
+
+        logger._screen_handler.setFormatter(formatter)
+        logger.logger.addHandler(logger._screen_handler)
+
+
 def lazy_import(module_name: str, package=None):
     """postponed import of the module with the specified name.
 

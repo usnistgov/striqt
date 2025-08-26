@@ -224,7 +224,6 @@ def resampling_correction(
     #     y = iqwaveform.util.pad_along_axis(y, [[pad_left, pad_right]], axis=axis + 1)
 
     # if filter_domain == 'frequency':
-    #     lb.util.logger.debug('applying filter in frequency domain')
     #     y = iqwaveform.fourier.stft_fir_lowpass(
     #         y,
     #         sample_rate=capture.sample_rate,

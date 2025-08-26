@@ -18,7 +18,7 @@ from textual.containers import (
     CenterMiddle,
     VerticalGroup,
     HorizontalGroup,
-    VerticalScroll
+    VerticalScroll,
 )
 from textual.worker import Worker
 from textual.screen import Screen
@@ -46,7 +46,7 @@ class SystemMonitorWidget(Static):
 
     def on_mount(self) -> None:
         """Called when the widget is mounted."""
-        self.set_interval(1, self.update_stats) # Update every 1 second
+        self.set_interval(1, self.update_stats)  # Update every 1 second
 
     def update_stats(self) -> None:
         """Updates the CPU and memory usage statistics."""
@@ -54,9 +54,7 @@ class SystemMonitorWidget(Static):
         memory_free_gb = memory.free / 1e9
         memory_total_gb = memory.total / 1e9
 
-        self.update(
-            f" {memory_free_gb:0.1f}/{memory_total_gb:0.1f} GB free"
-        )
+        self.update(f' {memory_free_gb:0.1f}/{memory_total_gb:0.1f} GB free')
 
 
 def any_are_running(workers: typing.Iterable[Worker]) -> bool:
@@ -164,6 +162,7 @@ class VerticalScrollDataTable(DataTable):
     def action_scroll_home(self):
         return super().action_scroll_top()
 
+
 class SweepHUDApp(App):
     _CAPTURE_DISPLAY_LIMIT = 500
 
@@ -256,12 +255,11 @@ class SweepHUDApp(App):
 
         progress.gradient = gradient
 
-
     def _show_ready(self):
         def add_column(name: str, width_frac: float):
             return table.add_column(
                 Text(name, style='content-align-vertical: bottom'),
-                width=round(free_width * width_frac)
+                width=round(free_width * width_frac),
             )
 
         table = self.query_one(VerticalScrollDataTable)
@@ -272,7 +270,7 @@ class SweepHUDApp(App):
             'capture': add_column('', 0.27),
             'striqt.source': add_column('Source', 0.18),
             'striqt.analysis': add_column('Analysis', 0.32),
-            'striqt.sink': add_column('Sink', 0.23)
+            'striqt.sink': add_column('Sink', 0.23),
         }
 
         table.loading = False
@@ -297,7 +295,7 @@ class SweepHUDApp(App):
         warnings.showwarning = self._notify_warnings
         self.do_startup()
 
-        self.sub_title = 'Initializing'        
+        self.sub_title = 'Initializing'
 
     def _update_sweep_status(self, record: logging.LogRecord):
         from striqt.analysis.lib.dataarrays import describe_capture
@@ -356,7 +354,9 @@ class SweepHUDApp(App):
         self._exc_info = sys.exc_info()
 
         self.bell()
-        traceback = Traceback(show_locals=False, width=None, suppress=[textual, rich, lb, xr])
+        traceback = Traceback(
+            show_locals=False, width=None, suppress=[textual, rich, lb, xr]
+        )
         segments = Segments(self.console.render(traceback, self.console.options))
         self._exit_renderables.append(segments)
         self._close_messages_no_wait()
