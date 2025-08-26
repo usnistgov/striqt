@@ -3,20 +3,6 @@
 from . import click_sensor_sweep
 import sys
 import logging
-import io
-
-
-class StderrStreamToLog(io.StringIO):
-    def write(self, data: str):
-        if data.startswith(('DEBUG', 'INFO', 'WARNING', 'ERROR')):
-            sys.stdout.write(data)
-        else:
-            try:
-                from striqt.analysis.lib import util
-
-                util.get_logger('controller').warning(str(data))
-            except BaseException as ex:
-                print('uncaught build: ', ex)
 
 
 @click_sensor_sweep(
@@ -49,13 +35,16 @@ def run(**kws):
             sys.exit(1)
 
     else:
+        from striqt.analysis.lib import util
+
+        if kws['verbose']:
+            util.show_messages(logging.DEBUG)
+        else:
+            util.show_messages(logging.INFO)
+
         # simple CLI
         try:
             cli_objs = frontend.init_sweep_cli(**kws)
-
-            from striqt.analysis.lib import util
-
-            util.show_messages(logging.INFO)
             generator = frontend.iter_sweep_cli(
                 cli_objs,
                 remote=kws.get('remote', None),
