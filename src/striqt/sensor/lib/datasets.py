@@ -16,6 +16,8 @@ from striqt.analysis import register
 from striqt.analysis.lib.dataarrays import CAPTURE_DIM, PORT_DIM, AcquiredIQ  # noqa: F401
 from striqt.analysis.lib.util import log_capture_context, stopwatch
 
+from iqwaveform.util import is_cupy_array
+
 if typing.TYPE_CHECKING:
     import labbench as lb
     import numpy as np
@@ -262,6 +264,14 @@ class AnalysisCaller:
                 expand_dims=(CAPTURE_DIM,),
             )
 
+        if iq.unscaled_peak is not None:
+            peak = iq.unscaled_peak
+            if is_cupy_array(peak):
+                peak = peak.get()
+            extra_data = {'unscaled_peak_magnitude': peak}
+        else:
+            extra_data = {}
+
         if delayed:
             result = DelayedDataset(
                 delayed=result,
@@ -271,6 +281,10 @@ class AnalysisCaller:
                 sweep_time=sweep_time,
                 extra_attrs=self.extra_attrs,
             )
+            result.set_extra_data(extra_data)
+
+        else:
+            result.update(extra_data)
 
         if pickled:
             return pickle.dumps(result)
