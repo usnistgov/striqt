@@ -69,7 +69,6 @@ def resampling_correction(
     force_calibration: typing.Optional['xr.Dataset'] = None,
     *,
     overwrite_x=False,
-    unscaled_peak=False,
     axis=1,
 ) -> AcquiredIQ:
     """apply a bandpass filter implemented through STFT overlap-and-add.
@@ -93,8 +92,8 @@ def resampling_correction(
         capture, radio, force_calibration=force_calibration, xp=xp
     )
 
-    if unscaled_peak:
-        unscaled_peak = xp.abs(iq).max(axis=-1) * prescale
+    if radio._uncalibrated_peak_detect:
+        unscaled_peak = (xp.abs(iq).max(axis=-1) * prescale)**2
     else:
         unscaled_peak = None
 

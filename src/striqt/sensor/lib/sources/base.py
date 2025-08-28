@@ -172,6 +172,10 @@ class SourceBase(lb.Device):
 
     _downsample = attr.value.float(1.0, min=0, help='backend_sample_rate/sample_rate')
 
+    _uncalibrated_peak_detect = attr.value.bool(
+        False, help='whether to detect and report IQ magnitude peak before processing'
+    )
+
     # these must be implemented by child classes
     port = method_attr.ChannelMaybeTupleMethod(
         cache=True,
@@ -283,6 +287,9 @@ class SourceBase(lb.Device):
         if not _setup.time_sync_every_capture:
             self.rx_enabled(False)
             self.sync_time_source()
+
+        if _setup.uncalibrated_peak_detect != 'auto':
+            self._uncalibrated_peak_detect = _setup.uncalibrated_peak_detect
 
         if _setup.channel_sync_source is None:
             self._aligner = None

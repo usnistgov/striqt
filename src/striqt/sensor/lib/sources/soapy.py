@@ -73,6 +73,8 @@ class SoapyRadioSource(base.SourceBase):
 
     _rx_stream = None
 
+    _uncalibrated_peak_detect = attr.value.bool(True, inherit=True)
+
     @attr.method.float(inherit=True)
     def backend_sample_rate(self):
         port = self.port()

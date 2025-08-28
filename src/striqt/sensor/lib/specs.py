@@ -297,6 +297,9 @@ class RadioSetup(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=T
     array_backend: ArrayBackendType = 'cupy'
     cupy_max_fft_chunk_size: Optional[int] = None
 
+    # validation data
+    uncalibrated_peak_detect: Union[bool, typing.Literal['auto']] = 'auto'
+
     # calibration subclasses set this True to skip unecessary
     # re-acquisitions
     reuse_iq = False
