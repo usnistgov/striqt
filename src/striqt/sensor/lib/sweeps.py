@@ -220,9 +220,21 @@ class SweepIterator:
             calls = {}
 
             with (
-                util.log_capture_context('source', capture_index=i, capture_count=count, capture=capture_this),
-                util.log_capture_context('analysis', capture_index=i - 1, capture_count=count, capture=capture_prev),
-                util.log_capture_context('sink', capture_index=i - 2, capture_count=count, capture=capture_intake),
+                util.log_capture_context(
+                    'source', capture_index=i, capture_count=count, capture=capture_this
+                ),
+                util.log_capture_context(
+                    'analysis',
+                    capture_index=i - 1,
+                    capture_count=count,
+                    capture=capture_prev,
+                ),
+                util.log_capture_context(
+                    'sink',
+                    capture_index=i - 2,
+                    capture_count=count,
+                    capture=capture_intake,
+                ),
             ):
                 if iq is None:
                     # no pending data in the first iteration

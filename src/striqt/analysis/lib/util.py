@@ -21,7 +21,7 @@ class _StriqtLogger(logging.LoggerAdapter):
 
     def __init__(self, name_suffix, extra={}):
         _logger = logging.getLogger('striqt').getChild(name_suffix)
-        super().__init__(_logger, self.EXTRA_DEFAULTS|extra)
+        super().__init__(_logger, self.EXTRA_DEFAULTS | extra)
         _logger_adapters[name_suffix] = self
 
 
@@ -30,9 +30,11 @@ def get_logger(name_suffix) -> _StriqtLogger:
 
 
 @contextlib.contextmanager
-def log_capture_context(name_suffix, /, capture_index, capture, capture_count='unknown'):
+def log_capture_context(
+    name_suffix, /, capture_index, capture, capture_count='unknown'
+):
     extra = locals()
-    extra['capture_progress'] = f'{capture_index+1}/{capture_count}'
+    extra['capture_progress'] = f'{capture_index + 1}/{capture_count}'
     logger = get_logger(name_suffix)
     start_extra = logger.extra
     logger.extra = start_extra | extra

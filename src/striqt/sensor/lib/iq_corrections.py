@@ -93,7 +93,7 @@ def resampling_correction(
     )
 
     if radio._uncalibrated_peak_detect:
-        unscaled_peak = (xp.abs(iq).max(axis=-1) * prescale)**2
+        unscaled_peak = (xp.abs(iq).max(axis=-1) * prescale) ** 2
     else:
         unscaled_peak = None
 
@@ -192,7 +192,7 @@ def resampling_correction(
         aligned=iq_aligned,
         raw=iq_unaligned,
         capture=capture,
-        unscaled_peak=unscaled_peak
+        unscaled_peak=unscaled_peak,
     )
 
     # nfft = analysis_filter['nfft']
