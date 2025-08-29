@@ -268,6 +268,7 @@ class AnalysisCaller:
             peak = iq.unscaled_peak
             if is_cupy_array(peak):
                 peak = peak.get()
+            print(peak)
             extra_data = {'unscaled_peak_magnitude': peak}
         else:
             extra_data = {}
@@ -280,8 +281,8 @@ class AnalysisCaller:
                 radio_id=self.radio.id,
                 sweep_time=sweep_time,
                 extra_attrs=self.extra_attrs,
+                extra_data=extra_data
             )
-            result.set_extra_data(extra_data)
 
         else:
             result.update(extra_data)
