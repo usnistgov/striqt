@@ -4,11 +4,91 @@ import contextlib
 import functools
 import importlib
 import importlib.util
+import logging
+import time
 import sys
 import threading
 import typing
 import iqwaveform.type_stubs
 import typing_extensions
+
+
+_logger_adapters = {}
+
+
+class _StriqtLogger(logging.LoggerAdapter):
+    EXTRA_DEFAULTS = {
+        'capture_index': 0,
+        'capture_progress': 'initializing',
+        'capture_count': 'unknown',
+        'capture': None,
+    }
+
+    def __init__(self, name_suffix, extra={}):
+        _logger = logging.getLogger('striqt').getChild(name_suffix)
+        super().__init__(_logger, self.EXTRA_DEFAULTS | extra)
+        _logger_adapters[name_suffix] = self
+
+
+def get_logger(name_suffix) -> _StriqtLogger:
+    return _logger_adapters[name_suffix]
+
+
+@contextlib.contextmanager
+def log_capture_context(
+    name_suffix, /, capture_index, capture, capture_count='unknown'
+):
+    extra = locals()
+    extra['capture_progress'] = f'{capture_index + 1}/{capture_count}'
+    logger = get_logger(name_suffix)
+    start_extra = logger.extra
+    logger.extra = start_extra | extra
+    yield
+    logger.extra = start_extra
+
+
+_StriqtLogger('analysis')
+
+
+def show_messages(
+    level: int,
+    colors: bool | None = None,
+):
+    """filters logging messages displayed to the console by importance
+
+    Arguments:
+        minimum_level: logging level threshold for display (or None to disable)
+        colors: whether to colorize the message output, or None to select automatically
+
+    Returns:
+        None
+    """
+
+    for logger in _logger_adapters.values():
+        logger.setLevel(logging.DEBUG)
+
+        # clear any stale handlers
+        if hasattr(logger, '_screen_handler'):
+            logger.logger.removeHandler(logger._screen_handler)
+
+        if level is None:
+            return
+
+        logger._screen_handler = logging.StreamHandler()
+        logger._screen_handler.setLevel(level)
+
+        if colors or (colors is None and sys.stderr.isatty()):
+            log_fmt = (
+                '\x1b[32m{asctime}\x1b[0m \x1b[1;30m{name:>15s}\x1b[0m '
+                '\x1b[34mcapture {capture_progress} \x1b[0m {message}'
+            )
+        else:
+            log_fmt = '{levelname:^7s} {asctime} • {capture_progress}: {message}'
+        formatter = logging.Formatter(log_fmt, style='{', datefmt='%X')
+        # formatter.default_msec_format = '%s.%03d'
+
+        logger._screen_handler.setFormatter(formatter)
+        logger.logger.addHandler(logger._screen_handler)
 
 
 def lazy_import(module_name: str, package=None):
@@ -34,6 +114,50 @@ def lazy_import(module_name: str, package=None):
     sys.modules[module_name] = module
     spec.loader.exec_module(module)
     return module
+
+
+@contextlib.contextmanager
+def stopwatch(
+    desc: str = '',
+    logger_suffix: str = 'analysis',
+    threshold: float = 0,
+    logger_level: int = logging.INFO,
+):
+    """Time a block of code using a with statement like this:
+
+    >>> with stopwatch('sleep statement'):
+    >>>     time.sleep(2)
+    sleep statement time elapsed 1.999s.
+
+    Arguments:
+        desc: text for display that describes the event being timed
+        logger_level: the name of the child logger to use
+        threshold: if the duration is smaller than this, demote logger level
+
+    Returns:
+        context manager
+    """
+    t0 = time.perf_counter()
+    logger = get_logger(logger_suffix)
+
+    try:
+        yield
+    finally:
+        elapsed = time.perf_counter() - t0
+
+        if elapsed < threshold:
+            logger_level = logger_level - 10
+
+        msg = str(desc) + ' ' if len(desc) else ''
+        msg += f'{elapsed:0.3f} s elapsed'
+
+        exc_info = sys.exc_info()
+        if exc_info != (None, None, None):
+            msg += f' before exception {exc_info[1]}'
+            logger_level = logging.ERROR
+
+        extra = {'stopwatch_name': desc, 'stopwatch_time': elapsed}
+        logger.log(logger_level, msg.strip().lstrip(), logger.extra | extra)
 
 
 if typing.TYPE_CHECKING:
@@ -106,7 +230,7 @@ def sync_if_cupy(x: 'iqwaveform.type_stubs.ArrayType'):
         import cupy
 
         stream = cupy.cuda.get_current_stream()
-        with lb.stopwatch('cuda synchronize', threshold=10e-3):
+        with stopwatch('cuda synchronize', threshold=10e-3):
             stream.synchronize()
 
 

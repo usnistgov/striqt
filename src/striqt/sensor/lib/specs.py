@@ -62,9 +62,7 @@ def _validate_multichannel(port, gain):
             )
     else:
         if isinstance(gain, tuple) and len(gain) != len(port):
-            raise ValueError(
-                'gain, when specified as a tuple, must match port count'
-            )
+            raise ValueError('gain, when specified as a tuple, must match port count')
 
 
 class WaveformCapture(
@@ -298,6 +296,9 @@ class RadioSetup(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=T
     # in the future, these should probably move to an analysis config
     array_backend: ArrayBackendType = 'cupy'
     cupy_max_fft_chunk_size: Optional[int] = None
+
+    # validation data
+    uncalibrated_peak_detect: Union[bool, typing.Literal['auto']] = 'auto'
 
     # calibration subclasses set this True to skip unecessary
     # re-acquisitions

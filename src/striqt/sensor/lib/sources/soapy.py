@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import time
 import numbers
 import typing
@@ -8,7 +9,7 @@ import labbench as lb
 from labbench import paramattr as attr
 
 from . import base, method_attr
-from .. import captures, specs
+from .. import captures, specs, util
 
 
 if typing.TYPE_CHECKING:
@@ -72,6 +73,8 @@ class SoapyRadioSource(base.SourceBase):
 
     _rx_stream = None
 
+    _uncalibrated_peak_detect = attr.value.bool(True, inherit=True)
+
     @attr.method.float(inherit=True)
     def backend_sample_rate(self):
         port = self.port()
@@ -106,7 +109,7 @@ class SoapyRadioSource(base.SourceBase):
         """the self-reported "actual" sample rate of the radio"""
         return self.backend.getSampleRate(SoapySDR.SOAPY_SDR_RX, 0) / self._downsample
 
-    @lb.stopwatch('stream initialization', logger_level='debug')
+    @util.stopwatch('stream initialization', 'source', logger_level=logging.DEBUG)
     def _setup_rx_stream(self, ports=None):
         if self._rx_stream is not None:
             return
@@ -260,9 +263,7 @@ class SoapyRadioSource(base.SourceBase):
 
     @gain.setter
     def _(self, gains: float | tuple[float, ...]):
-        ports, gains = captures.broadcast_to_ports(
-            self.port(), self.port(), gains
-        )
+        ports, gains = captures.broadcast_to_ports(self.port(), self.port(), gains)
 
         for channel, gain in zip(ports, gains):
             self._logger.debug(f'set channel {channel} gain: {gain} dB')
@@ -276,7 +277,7 @@ class SoapyRadioSource(base.SourceBase):
         else:
             self.backend.setGain(SoapySDR.SOAPY_SDR_TX, channel, gain)
 
-    @lb.stopwatch('soapy radio backend opened')
+    @util.stopwatch('soapy radio backend opened', 'source')
     def open(self):
         if self.resource:
             # prevent race conditions in threaded accesses to the Soapy driver

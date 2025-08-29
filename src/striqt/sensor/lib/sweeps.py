@@ -3,6 +3,7 @@
 from __future__ import annotations
 import itertools
 import typing
+from collections import Counter
 
 from . import captures, datasets, sources, specs, util
 from .calibration import lookup_system_noise_power
@@ -18,6 +19,20 @@ else:
     xr = util.lazy_import('xarray')
     lb = util.lazy_import('labbench')
     analysis = util.lazy_import('striqt.analysis')
+
+
+def varied_capture_fields(sweep: specs.Sweep) -> list[str]:
+    """generate a list of capture fields with at least 2 values in the specified sweep"""
+    unlooped_values = (c.todict().values() for c in sweep.get_captures(False))
+    unlooped_counts = [len(Counter(v)) for v in zip(*unlooped_values)]
+    fields = sweep.captures[0].todict().keys()
+    unlooped_counts = dict(zip(fields, unlooped_counts))
+    looped_counts = {loop.field: len(loop.get_points()) for loop in sweep.loops}
+    all_counts = {
+        field: max(unlooped_counts[field], looped_counts.get(field, 0))
+        for field in fields
+    }
+    return [f for f, c in all_counts.items() if c > 1]
 
 
 def sweep_touches_gpu(sweep: specs.Sweep):
@@ -204,70 +219,80 @@ class SweepIterator:
         ):
             calls = {}
 
-            if iq is None:
-                # no pending data in the first iteration
-                pass
-            else:
-                calls['analyze'] = lb.Call(
-                    self._analyze,
-                    iq,
-                    sweep_time=sweep_time,
+            with (
+                util.log_capture_context(
+                    'source', capture_index=i, capture_count=count, capture=capture_this
+                ),
+                util.log_capture_context(
+                    'analysis',
+                    capture_index=i - 1,
+                    capture_count=count,
                     capture=capture_prev,
-                    pickled=self._pickled,
-                    overwrite_x=not self._reuse_iq,
-                    delayed=True,
-                    block_each=False,
-                )
-
-            if capture_this is None:
-                # this happens at the end during the last post-analysis and intakes
-                pass
-            else:
-                calls['acquire'] = lb.Call(
-                    self._acquire, iq, capture_prev, capture_this, capture_next
-                )
-
-            if result is None:
-                # for the first two iterations, there is no data to save
-                pass
-            else:
-                assert capture_intake is not None
-                result.set_extra_data(prior_ext_data)
-                calls['intake'] = lb.Call(
-                    self._intake,
-                    results=result.to_xarray(),
+                ),
+                util.log_capture_context(
+                    'sink',
+                    capture_index=i - 2,
+                    capture_count=count,
                     capture=capture_intake,
-                )
-
-            desc = analysis.describe_capture(
-                capture_this, capture_prev, index=i, count=count
-            )
-
-            hide_message = self._quiet or capture_this is None and capture_prev is None
-            with lb.stopwatch(
-                f'{desc} •', logger_level='debug' if hide_message else 'info'
+                ),
             ):
+                if iq is None:
+                    # no pending data in the first iteration
+                    pass
+                else:
+                    calls['analyze'] = lb.Call(
+                        self._analyze,
+                        iq,
+                        sweep_time=sweep_time,
+                        capture=capture_prev,
+                        pickled=self._pickled,
+                        overwrite_x=not self._reuse_iq,
+                        delayed=True,
+                        block_each=False,
+                    )
+
+                if capture_this is None:
+                    # this happens at the end during the last post-analysis and intakes
+                    pass
+                else:
+                    calls['acquire'] = lb.Call(
+                        self._acquire, iq, capture_prev, capture_this, capture_next
+                    )
+
+                if result is None:
+                    # for the first two iterations, there is no data to save
+                    pass
+                else:
+                    assert capture_intake is not None
+                    result.set_extra_data(prior_ext_data)
+                    calls['intake'] = lb.Call(
+                        self._intake,
+                        results=result.to_xarray(),
+                        capture=capture_intake,
+                    )
+
                 ret = util.concurrently_with_fg(calls, flatten=False)
 
-            result = ret.get('analyze', None)
+                result = ret.get('analyze', None)
 
-            if 'acquire' in ret:
-                iq = ret['acquire']['radio']
-                capture_prev = iq.capture
-                prior_ext_data = this_ext_data
-                this_ext_data = ret['acquire'].get('peripherals', {}) or {}
-            else:
-                iq = None
-                capture_prev = None
+                if 'acquire' in ret:
+                    iq = ret['acquire']['radio']
+                    capture_prev = iq.capture
+                    prior_ext_data = this_ext_data
+                    this_ext_data = ret['acquire'].get('peripherals', {}) or {}
+                else:
+                    iq = None
+                    capture_prev = None
 
-            if 'intake' in ret:
-                yield ret['intake']
-            elif self._always_yield:
-                yield None
+                if 'intake' in ret:
+                    yield ret['intake']
+                elif self._always_yield:
+                    yield None
 
-            if sweep_time is None and capture_prev is not None:
-                sweep_time = capture_prev.start_time
+                if sweep_time is None and capture_prev is not None:
+                    sweep_time = capture_prev.start_time
 
+    @util.stopwatch('✓', 'source')
     def _acquire(self, iq_prev: AcquiredIQ, capture_prev, capture_this, capture_next):
         if self._reuse_iq:
             reuse_this = _iq_is_reusable(
@@ -345,6 +370,7 @@ class SweepIterator:
 
         return dict(data, sensor_system_noise=system_noise)
 
+    @util.stopwatch('✓', 'sink', threshold=10e-3)
     def _intake(
         self,
         results: 'xr.Dataset',
@@ -430,7 +456,7 @@ def iter_raw_iq(
             capture_this, capture_prev, index=i, count=len(sweep.captures)
         )
 
-        with lb.stopwatch(f'{desc} •', logger_level='debug' if quiet else 'info'):
+        with util.stopwatch(desc, 'source', logger_level='debug' if quiet else 'info'):
             # extra iteration at the end for the last analysis
             yield radio.acquire(
                 capture_this,

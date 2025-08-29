@@ -1,5 +1,6 @@
 from __future__ import annotations
 import functools
+import logging
 from math import ceil
 import numbers
 import typing
@@ -171,6 +172,10 @@ class SourceBase(lb.Device):
 
     _downsample = attr.value.float(1.0, min=0, help='backend_sample_rate/sample_rate')
 
+    _uncalibrated_peak_detect = attr.value.bool(
+        False, help='whether to detect and report IQ magnitude peak before processing'
+    )
+
     # these must be implemented by child classes
     port = method_attr.ChannelMaybeTupleMethod(
         cache=True,
@@ -283,10 +288,15 @@ class SourceBase(lb.Device):
             self.rx_enabled(False)
             self.sync_time_source()
 
+        if _setup.uncalibrated_peak_detect != 'auto':
+            self._uncalibrated_peak_detect = _setup.uncalibrated_peak_detect
+
         if _setup.channel_sync_source is None:
             self._aligner = None
         elif analysis is None:
-            name = register.get_channel_sync_source_measurement_name(spec.channel_sync_source)
+            name = register.get_channel_sync_source_measurement_name(
+                spec.channel_sync_source
+            )
             raise ValueError(
                 f'channel_sync_source {name!r} requires an analysis '
                 f'specification for {spec.channel_sync_source!r}'
@@ -300,7 +310,7 @@ class SourceBase(lb.Device):
 
         return _setup
 
-    @lb.stopwatch('arm', logger_level='debug')
+    @util.stopwatch('arm', 'source', logger_level=logging.DEBUG, threshold=10e-3)
     def arm(
         self,
         capture: specs.RadioCapture = None,
@@ -312,7 +322,7 @@ class SourceBase(lb.Device):
 
         if self._setup is None:
             raise TypeError(f'setup the radio by calling setup(...) before arm(...))')
-        
+
         if capture is None:
             capture = self.get_capture_struct()
 
@@ -383,7 +393,7 @@ class SourceBase(lb.Device):
 
         return capture
 
-    @lb.stopwatch('read_iq', logger_level='debug')
+    @util.stopwatch('read_iq', 'source', logger_level=logging.DEBUG)
     def read_iq(
         self,
         capture: specs.RadioCapture,
@@ -498,7 +508,7 @@ class SourceBase(lb.Device):
         self._hold_buffer_swap = False
         return ret
 
-    @lb.stopwatch('acquire', logger_level='debug')
+    @util.stopwatch('acquire', 'source', logger_level=logging.DEBUG)
     def acquire(
         self,
         capture: specs.RadioCapture = None,
@@ -540,7 +550,9 @@ class SourceBase(lb.Device):
             self.arm(next_capture)
 
         if correction:
-            with lb.stopwatch('resample and calibrate', logger_level='debug'):
+            with util.stopwatch(
+                'resample and calibrate', 'analysis', threshold=capture.duration / 2
+            ):
                 iq = iq_corrections.resampling_correction(
                     iq, capture, self, overwrite_x=True
                 )
@@ -647,7 +659,7 @@ def _read_iq_with_retries(radio: SourceBase):
             radio.sync_time_source()
 
     decorate = lb.retry(
-        ReceiveStreamError,
+        (ReceiveStreamError, OverflowError),
         tries=radio._setup.receive_retries + 1,
         exception_func=prepare_retry,
     )
@@ -912,7 +924,9 @@ def get_channel_read_buffer_count(
     )
 
 
-@lb.stopwatch('allocate acquisition buffer', logger_level='debug')
+@util.stopwatch(
+    'allocate acquisition buffer', 'source', threshold=5e-3, logger_level=logging.DEBUG
+)
 def alloc_empty_iq(
     radio: SourceBase,
     capture: specs.RadioCapture,

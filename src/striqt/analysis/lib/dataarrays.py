@@ -5,6 +5,7 @@ from __future__ import annotations
 import collections
 import functools
 import dataclasses
+import logging
 import math
 from numbers import Number
 import typing
@@ -34,6 +35,7 @@ class AcquiredIQ(typing.NamedTuple):
     raw: 'iqwaveform.type_stubs.ArrayType'
     aligned: 'iqwaveform.type_stubs.ArrayType' | None = None
     capture: specs.Capture = None
+    unscaled_peak: float | None = None
 
 
 _ENG_PREFIXES = {
@@ -66,8 +68,10 @@ def describe_capture(
     this: specs.Capture | None,
     prev: specs.Capture | None = None,
     *,
-    index: int,
-    count: int,
+    index: int = None,
+    count: int = None,
+    constrain: tuple[str] | None = None,
+    join: str = ', ',
 ) -> str:
     """generate a description of a capture"""
     if this is None:
@@ -79,6 +83,8 @@ def describe_capture(
     diffs = []
 
     for name in type(this).__struct_fields__:
+        if constrain is not None and name not in constrain:
+            continue
         if name == 'start_time':
             continue
         value = getattr(this, name)
@@ -87,7 +93,7 @@ def describe_capture(
         elif prev is None or value != getattr(prev, name):
             diffs.append(describe_field(this, name))
 
-    capture_diff = ', '.join(diffs)
+    capture_diff = join.join(diffs)
 
     if index is not None:
         progress = str(index + 1)
@@ -409,7 +415,7 @@ def evaluate_by_spec(
     for name in spec_dict.keys():
         meas = register.measurement[type(getattr(spec, name))]
 
-        with lb.stopwatch(f'analysis: {name}', logger_level='debug'):
+        with util.stopwatch(f'evaluate {name}', 'analysis', logger_level=logging.DEBUG):
             func_kws = spec_dict[name]
             if not func_kws:
                 continue
@@ -453,7 +459,7 @@ def package_analysis(
     expand_dims=None,
 ) -> 'xr.Dataset':
     # materialize as xarrays
-    with lb.stopwatch('package analyses into xarray', logger_level='debug'):
+    with util.stopwatch('package analyses into xarray', logger_level=logging.DEBUG):
         xarrays = {}
         for name, res in results.items():
             xarrays[name] = res.compute().to_xarray(expand_dims)

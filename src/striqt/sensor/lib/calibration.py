@@ -479,7 +479,9 @@ class YFactorSink(sinks.SinkBase):
         if not self.force and Path(self.output_path).exists():
             print('merging results from previous file')
             if port in self.prev_corrections[prev_port_key]:
-                self.prev_corrections = self.prev_corrections.drop_sel({prev_port_key: port})
+                self.prev_corrections = self.prev_corrections.drop_sel(
+                    {prev_port_key: port}
+                )
 
             corrections = xr.concat(
                 [corrections, self.prev_corrections], dim=datasets.PORT_DIM
@@ -507,13 +509,9 @@ class ManualYFactorPeripherals(peripherals.PeripheralsBase):
 
         if state != self._last_state:
             if capture.noise_diode_enabled:
-                input(
-                    f'enable noise diode at channel {capture.port} and press enter'
-                )
+                input(f'enable noise diode at channel {capture.port} and press enter')
             else:
-                input(
-                    f'disable noise diode at channel {capture.port} and press enter'
-                )
+                input(f'disable noise diode at channel {capture.port} and press enter')
 
         self._last_state = state
 

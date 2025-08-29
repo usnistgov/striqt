@@ -26,7 +26,7 @@ USE_OARESAMPLE = False
 
 def _get_voltage_scale(
     capture: specs.RadioCapture, radio: SourceBase, *, force_calibration=False, xp=np
-) -> 'iqwaveform.type_stubs.ArrayLike':
+) -> tuple['iqwaveform.type_stubs.ArrayLike', 'iqwaveform.type_stubs.ArrayLike']:
     """compute the scaling factor needed to scale each of N ports of an IQ waveform
 
     Returns:
@@ -47,19 +47,19 @@ def _get_voltage_scale(
 
     transport_dtype = radio._transport_dtype
     if transport_dtype == 'int16':
-        dtype_scale = 1.0 / float(np.iinfo(transport_dtype).max)
+        adc_scale = 1.0 / float(np.iinfo(transport_dtype).max)
     else:
-        dtype_scale = None
+        adc_scale = None
 
-    if power_scale is None and dtype_scale is None:
-        return None
+    if power_scale is None and adc_scale is None:
+        return None, 1
 
-    if dtype_scale is None:
-        dtype_scale = 1
+    if adc_scale is None:
+        adc_scale = 1
     if power_scale is None:
         power_scale = 1
 
-    return np.sqrt(power_scale) * dtype_scale
+    return np.sqrt(power_scale) * adc_scale, adc_scale
 
 
 def resampling_correction(
@@ -78,6 +78,7 @@ def resampling_correction(
         capture: the capture filter specification structure
         radio: the radio instance that performed the capture
         force_calibration: if specified, this calibration dataset is used rather than loading from file
+        adc_peak: if specified, returns the ADC peak level for overload detection
         axis: the axis of `x` along which to compute the filter
         overwrite_x: if True, modify the contents of IQ in-place; otherwise, a copy will be returned
 
@@ -87,9 +88,18 @@ def resampling_correction(
 
     xp = iqwaveform.util.array_namespace(iq)
 
-    scale = _get_voltage_scale(
+    vscale, prescale = _get_voltage_scale(
         capture, radio, force_calibration=force_calibration, xp=xp
     )
+
+    if radio._uncalibrated_peak_detect:
+        logger = util.get_logger('source')
+        peak_counts = xp.abs(iq).max(axis=-1)
+        unscaled_peak = 20 * xp.log10(peak_counts * prescale) - 3
+        descs = ','.join(f'{p:0.1f}' for p in unscaled_peak)
+        logger.info(f'ADC peaks: ({descs}) dBfs')
+    else:
+        unscaled_peak = None
 
     design = design_capture_resampler(radio.base_clock_rate, capture)
     fs = design['fs_sdr']
@@ -116,10 +126,10 @@ def resampling_correction(
         # bail here if host resampling is not needed
         size = round(capture.duration * capture.sample_rate)
         iq = iq[:, :size]
-        if scale is not None:
-            if scale.ndim == 1:
-                scale = scale[:, None]
-            iq = xp.multiply(iq, scale, out=iq if overwrite_x else None)
+        if vscale is not None:
+            if vscale.ndim == 1:
+                vscale = vscale[:, None]
+            iq = xp.multiply(iq, vscale, out=iq if overwrite_x else None)
         elif not overwrite_x:
             iq = iq.copy()
 
@@ -136,7 +146,7 @@ def resampling_correction(
             frequency_shift=design['lo_offset'],
             filter_bandwidth=capture.analysis_bandwidth,
             transition_bandwidth=250e3,
-            scale=1 if scale is None else scale,
+            scale=1 if vscale is None else vscale,
         )
         scale = design['nfft_out'] / design['nfft']
         oapad = base._get_oaresample_pad(radio.base_clock_rate, capture)
@@ -160,7 +170,7 @@ def resampling_correction(
             resample_size_out,
             overwrite_x=overwrite_x,
             axis=axis,
-            scale=1 if scale is None else scale,
+            scale=1 if vscale is None else vscale,
         )
 
     size_out = round(capture.duration * capture.sample_rate)
@@ -186,6 +196,7 @@ def resampling_correction(
         aligned=iq_aligned,
         raw=iq_unaligned,
         capture=capture,
+        unscaled_peak=unscaled_peak,
     )
 
     # nfft = analysis_filter['nfft']
@@ -224,7 +235,6 @@ def resampling_correction(
     #     y = iqwaveform.util.pad_along_axis(y, [[pad_left, pad_right]], axis=axis + 1)
 
     # if filter_domain == 'frequency':
-    #     lb.util.logger.debug('applying filter in frequency domain')
     #     y = iqwaveform.fourier.stft_fir_lowpass(
     #         y,
     #         sample_rate=capture.sample_rate,

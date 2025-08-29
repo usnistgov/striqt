@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import logging
 import msgspec
 import numbers
 import pickle
@@ -13,6 +14,9 @@ from .sources import SourceBase
 
 from striqt.analysis import register
 from striqt.analysis.lib.dataarrays import CAPTURE_DIM, PORT_DIM, AcquiredIQ  # noqa: F401
+from striqt.analysis.lib.util import log_capture_context, stopwatch
+
+from iqwaveform.util import is_cupy_array
 
 if typing.TYPE_CHECKING:
     import labbench as lb
@@ -76,9 +80,7 @@ def coord_template(
 
     def broadcast_defaults(v, allow_mismatch=False):
         # match the number of ports, duplicating if necessary
-        (values,) = captures.broadcast_to_ports(
-            ports, v, allow_mismatch=allow_mismatch
-        )
+        (values,) = captures.broadcast_to_ports(ports, v, allow_mismatch=allow_mismatch)
         return list(values)
 
     capture = capture_cls()
@@ -228,6 +230,7 @@ class AnalysisCaller:
     extra_attrs: dict[str, typing.Any] | None = None
     correction: bool = False
 
+    @util.stopwatch('✓', 'analysis')
     def __call__(
         self,
         iq: AcquiredIQ,
@@ -243,12 +246,11 @@ class AnalysisCaller:
         # wait to import until here to avoid a circular import
         from . import iq_corrections
 
-        with (
-            lb.stopwatch('analysis', logger_level='debug'),
-            register.measurement.cache_context(),
-        ):
+        with register.measurement.cache_context():
             if self.correction:
-                with lb.stopwatch('resample, filter, calibrate', logger_level='debug'):
+                with stopwatch(
+                    'resample, filter, calibrate', logger_level=logging.DEBUG
+                ):
                     iq = iq_corrections.resampling_correction(
                         iq.raw, capture, self.radio, overwrite_x=overwrite_x
                     )
@@ -262,6 +264,14 @@ class AnalysisCaller:
                 expand_dims=(CAPTURE_DIM,),
             )
 
+        if iq.unscaled_peak is not None:
+            peak = iq.unscaled_peak
+            if is_cupy_array(peak):
+                peak = peak.get()
+            extra_data = {'unscaled_iq_peak': peak}
+        else:
+            extra_data = {}
+
         if delayed:
             result = DelayedDataset(
                 delayed=result,
@@ -270,7 +280,11 @@ class AnalysisCaller:
                 radio_id=self.radio.id,
                 sweep_time=sweep_time,
                 extra_attrs=self.extra_attrs,
+                extra_data=extra_data
             )
+
+        else:
+            result.update(extra_data)
 
         if pickled:
             return pickle.dumps(result)
@@ -289,17 +303,27 @@ class DelayedDataset:
     extra_data: dict | None = None
 
     def set_extra_data(self, extra_data: dict[str]) -> None:
-        self.extra_data = extra_data
+        self.extra_data = self.extra_data | extra_data
 
     def to_xarray(self) -> 'xr.Dataset':
         """complete any remaining calculations, transfer from the device, and build an output dataset"""
 
-        with lb.stopwatch(
-            'residual calculations', threshold=10e-3, logger_level='debug'
+        with stopwatch(
+            'package xarray',
+            'analysis',
+            threshold=10e-3,
+            logger_level=logging.DEBUG,
         ):
             analysis = striqt_analysis.lib.dataarrays.package_analysis(
                 self.capture, self.delayed, expand_dims=(CAPTURE_DIM,)
             )
+
+        with stopwatch(
+            'build coords',
+            'analysis',
+            threshold=10e-3,
+            logger_level=logging.DEBUG,
+        ):
             coords = build_coords(
                 self.capture,
                 output=self.sweep.output,
@@ -317,14 +341,32 @@ class DelayedDataset:
 
             analysis[SWEEP_TIMESTAMP_NAME].attrs.update(label='Sweep start time')
 
+        with stopwatch(
+            'add peripheral data',
+            'analysis',
+            threshold=10e-3,
+            logger_level=logging.DEBUG,
+        ):
             if self.extra_data is not None:
-                update_ext_dims = {CAPTURE_DIM: analysis.capture.size}
-                new_arrays = {
-                    k: xr.DataArray(v).expand_dims(
-                        {} if CAPTURE_DIM in getattr(v, 'dims', {}) else update_ext_dims
-                    )
-                    for k, v in self.extra_data.items()
-                }
+                new_arrays = {}
+                allowed_capture_shapes = (0, 1, analysis.capture.size)
+
+                for k, v in self.extra_data.items():
+                    if not isinstance(v, xr.DataArray):
+                        dims = [CAPTURE_DIM] + [f'{k}_dim{n}' for n in range(1,v.ndim)]
+                        v = xr.DataArray(v, dims=dims)
+
+                    elif v.dims[0] != CAPTURE_DIM:
+                        v = v.expand_dims({CAPTURE_DIM: analysis.capture.size})
+
+                    if v.sizes[CAPTURE_DIM] not in allowed_capture_shapes:
+                        raise ValueError(
+                            f'size of first axis of extra data "{k}" must be one '
+                            f'of {allowed_capture_shapes}'
+                        )
+
+                    new_arrays[k] = v
+
                 analysis = analysis.assign(new_arrays)
 
         return analysis

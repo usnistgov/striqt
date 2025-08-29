@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import functools
+import math
 import threading
 import typing
 import warnings
@@ -80,31 +81,36 @@ def _get_store_info(store, zarr_format='auto') -> tuple[bool, dict]:
     return exists, kws
 
 
-def _choose_chunk_and_shard(
-    data, data_bytes=100_000_000, dim='capture'
-) -> tuple[int, dict[str, int]]:
-    """pick chunk and shard sizing for each data variable in data"""
+def _choose_chunk_sizes(
+    ds: xr.Dataset, data_bytes=100_000_000, dim='capture'
+) -> dict[str, int]:
+    """pick chunk and chunk sizing for each data variable in data"""
+    chunks = {dim: ds.sizes[dim]}
+
     if data_bytes is None:
-        return None, {}
+        return chunks
 
-    count = data.capture.size
+    for name, reduce_dim in ds.data_vars.items():
+        da = ds[name]
 
-    target_shards = {
-        name: min(count, round(count * data_bytes / da.nbytes))
-        for name, da in data.variables.items()
-        if dim in da.dims
-    }
+        if da.nbytes < data_bytes:
+            continue
+        else:
+            reduction = math.ceil(da.nbytes / data_bytes)
 
-    chunk_size = max(min(target_shards.values()), 1)
+        reduce_dim = da.dims[-1]
+        if reduce_dim == dim:
+            continue
 
-    shards = {name: chunk_size for name in target_shards}
+        chunk_size = max(1, da.sizes[reduce_dim] // reduction)
 
-    return chunk_size, shards
+        if reduce_dim not in chunks or chunk_size < chunks[reduce_dim]:
+            chunks[reduce_dim] = chunk_size
+
+    return chunks
 
 
-def _build_encodings_zarr_v3(
-    data, shards: dict[str, int], compression=True, dim='capture'
-):
+def _build_encodings_zarr_v3(data, compression=True, dim='capture'):
     if isinstance(compression, zarr.core.codec_pipeline.Codec):
         compressors = [compression]
     elif compression:
@@ -118,10 +124,6 @@ def _build_encodings_zarr_v3(
 
     for name, var in data.variables.items():
         meas_info = info_map.get(name, None)
-        if dim in var.dims and name in shards:
-            shape = list(var.shape)
-            shape[var.dims.index(dim)] = shards[name]
-            encodings[name]['shards'] = shape
         if meas_info is None or not meas_info.store_compressed:
             encodings[name]['compressors'] = None
         elif issubclass(var.dtype.type, np.str_):
@@ -219,16 +221,12 @@ def dump(
         # establish the chunking and encodings for this and any subsequent writes
         kws['mode'] = 'w'
 
-        chunk_size, shards = _choose_chunk_and_shard(
-            data, dim=append_dim, data_bytes=chunk_bytes
-        )
-
-        if chunk_size is not None:
-            data = data.chunk(dict(data.sizes, **{append_dim: chunk_size}))
+        chunks = _choose_chunk_sizes(data, dim=append_dim, data_bytes=chunk_bytes)
+        data = data.chunk(chunks)
 
         if _zarr_version() >= (3, 0, 0):
             kws['encoding'] = _build_encodings_zarr_v3(
-                data, shards, compression=compression, dim=append_dim
+                data, compression=compression, dim=append_dim
             )
         else:
             kws['encoding'] = _build_encodings_zarr_v2(data, compression=compression)

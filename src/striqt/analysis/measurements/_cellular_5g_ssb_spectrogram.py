@@ -95,13 +95,13 @@ def cellular_ssb_baseband_frequency(
 @util.lru_cache()
 def cellular_ssb_index(capture: specs.Capture, spec: Cellular5GNRSSBSpectrogramSpec):
     # pss_params and sss_params return the same number of symbol indexes
-    params = iqwaveform.ofdm.pss_params(
-        sample_rate=spec.sample_rate,
-        subcarrier_spacing=spec.subcarrier_spacing,
-        discovery_periodicity=spec.discovery_periodicity,
-        shared_spectrum=spec.shared_spectrum,
-    )
-    total_blocks = round(params.duration / spec.discovery_periodicity)
+    # params = iqwaveform.ofdm.pss_params(
+    #     sample_rate=spec.sample_rate,
+    #     subcarrier_spacing=spec.subcarrier_spacing,
+    #     discovery_periodicity=spec.discovery_periodicity,
+    #     shared_spectrum=spec.shared_spectrum,
+    # )
+    total_blocks = round(capture.duration / spec.discovery_periodicity)
     if spec.max_block_count is None:
         count = total_blocks
     else:

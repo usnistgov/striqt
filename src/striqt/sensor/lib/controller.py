@@ -262,8 +262,9 @@ class _ServerService(rpyc.Service, SweepController):
         conn = sweep.____conn__
         sweep = rpyc.utils.classic.obtain(sweep)
 
-        with lb.stopwatch(
+        with util.stopwatch(
             f'obtaining calibration data {str(sweep.radio_setup.calibration)}',
+            'controller',
             threshold=10e-3,
         ):
             calibration = rpyc.utils.classic.obtain(calibration)
@@ -321,7 +322,9 @@ class _ClientService(rpyc.Service):
         """serialize an object back to the client via pickling"""
         if description is not None:
             lb.logger.info(f'{description}')
-        with lb.stopwatch('data transfer', threshold=10e-3, logger_level='debug'):
+        with util.stopwatch(
+            'data transfer', 'controller', threshold=10e-3, logger_level='debug'
+        ):
             if pickled_dataset is None:
                 return None
             elif isinstance(pickled_dataset, bytes):

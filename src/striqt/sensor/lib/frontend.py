@@ -1,3 +1,4 @@
+from __future__ import annotations
 from pathlib import Path
 import logging
 import sys
@@ -128,7 +129,6 @@ def init_sweep_cli(
 ) -> CLIObjects:
     # now re-read the yaml, using sweep_cls as the schema, but without knowledge of
     sweep_spec = io.read_yaml_sweep(yaml_path)
-
     debug_handler = DebugOnException(debug)
 
     if '{' in sweep_spec.output.path:
@@ -149,11 +149,7 @@ def init_sweep_cli(
         )
         sys.exit(1)
 
-    if verbose:
-        lb.util.force_full_traceback(True)
-        lb.show_messages('debug')
-    else:
-        lb.show_messages('info')
+    lb.show_messages('warning')
 
     # start by connecting to the controller, so that the radio id can be used
     # as a file naming field
@@ -175,7 +171,12 @@ def init_sweep_cli(
             )
             calls['open sink'] = lb.Call(sink.open)
 
-        with lb.stopwatch(f'open {", ".join(calls)}', logger_level='info', threshold=1):
+        with util.stopwatch(
+            f'open {", ".join(calls)}',
+            'controller',
+            logger_level=logging.INFO,
+            threshold=1,
+        ):
             controller = util.concurrently_with_fg(calls, False)['controller']
 
         yaml_classes = _get_extension_classes(sweep_spec)
@@ -206,8 +207,11 @@ def init_sweep_cli(
             )
             calls['open sink'] = lb.Call(sink.open)
 
-        with lb.stopwatch(
-            f'load {", ".join(calls)}', logger_level='info', threshold=0.25
+        with util.stopwatch(
+            f'load {", ".join(calls)}',
+            'controller',
+            logger_level=logging.INFO,
+            threshold=0.25,
         ):
             opened = lb.concurrently(**calls)
 
@@ -231,7 +235,12 @@ def init_sweep_cli(
     )
 
 
-def execute_sweep_cli(
+def maybe_start_debugger(cli_objects: CLIObjects | None, exc_info):
+    if cli_objects is not None and cli_objects.debugger.enable:
+        cli_objects.debugger.run(*exc_info)
+
+
+def iter_sweep_cli(
     cli: CLIObjects,
     *,
     remote=None,
@@ -257,7 +266,40 @@ def execute_sweep_cli(
 
             # step through captures
             for _ in sweep_iter:
-                pass
+                yield
+        except:
+            raise
+        else:
+            cli.sink.flush()
+
+
+def iterate_sweep_cli(
+    cli: CLIObjects,
+    *,
+    remote=None,
+):
+    # pull out the cli elements that have context
+    cli_objects = cli
+    *cli_context, sweep, cal = cli_objects
+
+    with lb.sequentially(*cli_context):
+        try:
+            reuse_iq = cli.sweep_spec.radio_setup.reuse_iq
+            # iterate through the sweep specification, yielding a dataset for each capture
+            sweep_iter = cli.controller.iter_sweep(
+                sweep,
+                calibration=cal,
+                prepare=False,
+                always_yield=True,
+                reuse_compatible_iq=reuse_iq,  # calibration-specific optimization
+            )
+
+            sweep_iter.set_peripherals(cli.peripherals)
+            sweep_iter.set_writer(cli.sink)
+
+            # step through captures
+            for _ in sweep_iter:
+                yield None
 
             cli.sink.flush()
         except BaseException as ex:

@@ -16,6 +16,13 @@ from . import click_sensor_sweep
 )
 def run(*, channel, **kws):
     from striqt.sensor.lib import frontend
+    from striqt.analysis.lib import util
+    import logging
+
+    if kws['verbose']:
+        util.show_messages(logging.DEBUG)
+    else:
+        util.show_messages(logging.INFO)
 
     cli_objs = frontend.init_sweep_cli(**kws)
 
