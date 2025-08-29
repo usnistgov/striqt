@@ -93,7 +93,7 @@ def resampling_correction(
     )
 
     if radio._uncalibrated_peak_detect:
-        unscaled_peak = (xp.abs(iq).max(axis=-1) * prescale) ** 2
+        unscaled_peak = (xp.abs(iq).max(axis=-1) * prescale / 2) ** 2
     else:
         unscaled_peak = None
 

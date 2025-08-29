@@ -17,7 +17,12 @@ _logger_adapters = {}
 
 
 class _StriqtLogger(logging.LoggerAdapter):
-    EXTRA_DEFAULTS = {'capture_index': 0, 'capture_count': 'unknown', 'capture': None}
+    EXTRA_DEFAULTS = {
+        'capture_index': 0,
+        'capture_progress': 'initializing',
+        'capture_count': 'unknown',
+        'capture': None,
+    }
 
     def __init__(self, name_suffix, extra={}):
         _logger = logging.getLogger('striqt').getChild(name_suffix)
