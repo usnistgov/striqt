@@ -93,8 +93,11 @@ def resampling_correction(
     )
 
     if radio._uncalibrated_peak_detect:
+        logger = util.get_logger('source')
         peak_counts = xp.abs(iq).max(axis=-1)
         unscaled_peak = 20 * xp.log10(peak_counts * prescale) - 3
+        descs = ','.join(f'{p:0.1f}' for p in unscaled_peak)
+        logger.info(f'ADC peaks: ({descs}) dBfs')
     else:
         unscaled_peak = None
 
@@ -145,13 +148,13 @@ def resampling_correction(
             transition_bandwidth=250e3,
             scale=1 if vscale is None else vscale,
         )
-        vscale = design['nfft_out'] / design['nfft']
+        scale = design['nfft_out'] / design['nfft']
         oapad = base._get_oaresample_pad(radio.base_clock_rate, capture)
         lag_pad = base._get_aligner_pad_size(
             radio.base_clock_rate, capture, radio._aligner
         )
         size_out = round(capture.duration * capture.sample_rate) + round(
-            (oapad[1] + lag_pad) * vscale
+            (oapad[1] + lag_pad) * scale
         )
         offset = design['nfft_out']
 

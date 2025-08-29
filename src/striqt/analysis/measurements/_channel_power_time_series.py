@@ -83,11 +83,5 @@ def channel_power_time_series(
     spec = ChannelPowerTimeSeriesSpec.fromdict(kwargs)
 
     results = evaluate_channel_power_time_series(iq, capture=capture, spec=spec)
-    logger = util.get_logger('analysis')
-
-    if 'peak' in spec.power_detectors:
-        index = spec.power_detectors.index('peak')
-        peak = results[..., index, :].max()
-        logger.info(f'Peak channel power: {peak:0.1f} dBm')
 
     return results, spec.todict()
