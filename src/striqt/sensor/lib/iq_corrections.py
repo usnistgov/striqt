@@ -52,7 +52,7 @@ def _get_voltage_scale(
         adc_scale = None
 
     if power_scale is None and adc_scale is None:
-        return None
+        return None, 1
 
     if adc_scale is None:
         adc_scale = 1
