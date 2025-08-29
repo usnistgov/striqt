@@ -357,7 +357,7 @@ class DelayedDataset:
                         v = xr.DataArray(v, dims=dims)
 
                     elif v.dims[0] != CAPTURE_DIM:
-                        v = v.expand_dims({CAPTURE_DIM: 0})
+                        v = v.expand_dims({CAPTURE_DIM: analysis.capture.size})
 
                     if v.sizes[CAPTURE_DIM] not in allowed_capture_shapes:
                         raise ValueError(
