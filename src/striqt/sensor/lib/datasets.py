@@ -271,6 +271,7 @@ class AnalysisCaller:
             print(peak)
             extra_data = {'unscaled_peak_magnitude': peak}
         else:
+            print('no peak')
             extra_data = {}
 
         if delayed:
