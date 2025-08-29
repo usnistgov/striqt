@@ -37,6 +37,8 @@ def run(**kws):
     else:
         from striqt.analysis.lib import util
 
+        util.show_messages(logging.INFO)
+
         # simple CLI
         try:
             cli_objs = frontend.init_sweep_cli(**kws)
