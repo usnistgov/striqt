@@ -288,10 +288,8 @@ class SourceBase(lb.Device):
             self.rx_enabled(False)
             self.sync_time_source()
 
-        print('setup: ', _setup.uncalibrated_peak_detect, self._uncalibrated_peak_detect)
         if _setup.uncalibrated_peak_detect != 'auto':
             self._uncalibrated_peak_detect = _setup.uncalibrated_peak_detect
-        print('... ', self._uncalibrated_peak_detect)
 
         if _setup.channel_sync_source is None:
             self._aligner = None

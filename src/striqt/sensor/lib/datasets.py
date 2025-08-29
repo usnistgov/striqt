@@ -268,10 +268,8 @@ class AnalysisCaller:
             peak = iq.unscaled_peak
             if is_cupy_array(peak):
                 peak = peak.get()
-            print(peak)
-            extra_data = {'unscaled_peak_magnitude': peak}
+            extra_data = {'unscaled_iq_peak': peak}
         else:
-            print('no peak')
             extra_data = {}
 
         if delayed:
@@ -305,7 +303,7 @@ class DelayedDataset:
     extra_data: dict | None = None
 
     def set_extra_data(self, extra_data: dict[str]) -> None:
-        self.extra_data = extra_data
+        self.extra_data = self.extra_data | extra_data
 
     def to_xarray(self) -> 'xr.Dataset':
         """complete any remaining calculations, transfer from the device, and build an output dataset"""
