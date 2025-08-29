@@ -348,13 +348,25 @@ class DelayedDataset:
             logger_level=logging.DEBUG,
         ):
             if self.extra_data is not None:
-                update_ext_dims = {CAPTURE_DIM: analysis.capture.size}
-                new_arrays = {
-                    k: xr.DataArray(v).expand_dims(
-                        {} if CAPTURE_DIM in getattr(v, 'dims', {}) else update_ext_dims
-                    )
-                    for k, v in self.extra_data.items()
-                }
+                new_arrays = {}
+                allowed_capture_shapes = (0, 1, analysis.capture.size)
+
+                for k, v in self.extra_data.items():
+                    if not isinstance(v, xr.DataArray):
+                        dims = [CAPTURE_DIM] + [f'{k}_dim{n}' for n in range(1,v.ndim)]
+                        v = xr.DataArray(v, dims=dims)
+
+                    elif v.dims[0] != CAPTURE_DIM:
+                        v = v.expand_dims({CAPTURE_DIM: 0})
+
+                    if v.sizes[CAPTURE_DIM] not in allowed_capture_shapes:
+                        raise ValueError(
+                            f'size of first axis of extra data "{k}" must be one '
+                            f'of {allowed_capture_shapes}'
+                        )
+
+                    new_arrays[k] = v
+
                 analysis = analysis.assign(new_arrays)
 
         return analysis
