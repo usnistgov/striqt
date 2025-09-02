@@ -339,7 +339,8 @@ def _lookup_calibration_var(
         try:
             sel = sel.sel(center_frequency=capture_chan.center_frequency)
         except BaseException:
-            sel = sel.interp(center_frequency=capture_chan.center_frequency)
+            fc = [capture_chan.center_frequency]
+            sel = sel.interp(center_frequency=fc).squeeze('center_frequency')
 
         results.append(float(sel))
 
