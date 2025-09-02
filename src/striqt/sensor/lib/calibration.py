@@ -268,11 +268,8 @@ def _describe_missing_data(cal_data: 'xr.DataArray', exact_matches: dict):
         try:
             cal.sel({field: value})
         except KeyError:
-            misses += [
-                f'{repr(value)} in {repr(field)} (available: '
-                + ', '.join([str(v) for v in cal[field].values])
-                + ')'
-            ]
+            available = ', '.join([str(v) for v in cal[field].values])
+            misses += [f'{repr(value)} in {repr(field)} (available: {available})']
     return '; '.join(misses)
 
 
