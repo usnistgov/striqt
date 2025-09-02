@@ -280,7 +280,7 @@ class AnalysisCaller:
                 radio_id=self.radio.id,
                 sweep_time=sweep_time,
                 extra_attrs=self.extra_attrs,
-                extra_data=extra_data
+                extra_data=extra_data,
             )
 
         else:
@@ -353,7 +353,7 @@ class DelayedDataset:
 
                 for k, v in self.extra_data.items():
                     if not isinstance(v, xr.DataArray):
-                        dims = [CAPTURE_DIM] + [f'{k}_dim{n}' for n in range(1,v.ndim)]
+                        dims = [CAPTURE_DIM] + [f'{k}_dim{n}' for n in range(1, v.ndim)]
                         v = xr.DataArray(v, dims=dims)
 
                     elif v.dims[0] != CAPTURE_DIM:

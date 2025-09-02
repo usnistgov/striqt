@@ -63,7 +63,6 @@ class _CellularResourcePowerHistogramKeywords(typing.TypedDict, total=False):
     lo_bandstop: bool
 
 
-
 @dataclasses.dataclass
 class LinkPair:
     downlink: any
@@ -336,7 +335,7 @@ def cellular_resource_power_histogram(
         fractional_overlap=fractional_overlap,
         window_fill=window_fill,
         integration_bandwidth=integration_bandwidth,
-        lo_bandstop=3*spec.subcarrier_spacing if spec.lo_bandstop else None
+        lo_bandstop=3 * spec.subcarrier_spacing if spec.lo_bandstop else None,
     )
 
     if time_aperture is None:

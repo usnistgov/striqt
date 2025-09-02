@@ -243,11 +243,11 @@ def _extract_traceback(
     show_locals: bool = False,
     locals_hide_dunder: bool = True,
     locals_hide_sunder: bool = False,
-    _visited_exceptions: typing.Optional[set[BaseException]] = None,      
+    _visited_exceptions: typing.Optional[set[BaseException]] = None,
 ):
     """labbench implemented ConcurrentException as a container for
     exceptions that occur in multiple threads.
-    
+
     A similar feature was added to python 3.11, ExceptionGroup.
     rich.traceback supports displaying this, so we can
     extract the exceptions in the same way here.
@@ -255,7 +255,14 @@ def _extract_traceback(
     """
 
     from rich.traceback import (
-        Frame, Stack, Trace, Traceback, _SyntaxError, walk_tb, LOCALS_MAX_LENGTH, LOCALS_MAX_STRING
+        Frame,
+        Stack,
+        Trace,
+        Traceback,
+        _SyntaxError,
+        walk_tb,
+        LOCALS_MAX_LENGTH,
+        LOCALS_MAX_STRING,
     )
     from rich import pretty
     from itertools import islice
@@ -267,7 +274,7 @@ def _extract_traceback(
 
     from rich import _IMPORT_CWD
 
-    notes: list[str] = getattr(exc_value, "__notes__", None) or []
+    notes: list[str] = getattr(exc_value, '__notes__', None) or []
 
     grouped_exceptions: set[BaseException] = (
         set() if _visited_exceptions is None else _visited_exceptions
@@ -278,7 +285,7 @@ def _extract_traceback(
         try:
             return str(_object)
         except Exception:
-            return "<exception str() failed>"
+            return '<exception str() failed>'
 
     while True:
         stack = Stack(
@@ -328,9 +335,9 @@ def _extract_traceback(
         if isinstance(exc_value, SyntaxError):
             stack.syntax_error = _SyntaxError(
                 offset=exc_value.offset or 0,
-                filename=exc_value.filename or "?",
+                filename=exc_value.filename or '?',
                 lineno=exc_value.lineno or 0,
-                line=exc_value.text or "",
+                line=exc_value.text or '',
                 msg=exc_value.msg,
                 notes=notes,
             )
@@ -346,9 +353,9 @@ def _extract_traceback(
                 yield from iter_locals
                 return
             for key, value in iter_locals:
-                if locals_hide_dunder and key.startswith("__"):
+                if locals_hide_dunder and key.startswith('__'):
                     continue
-                if locals_hide_sunder and key.startswith("_"):
+                if locals_hide_sunder and key.startswith('_'):
                     continue
                 yield key, value
 
@@ -383,14 +390,14 @@ def _extract_traceback(
                         (end_line, end_column),
                     )
 
-            if filename and not filename.startswith("<"):
+            if filename and not filename.startswith('<'):
                 if not os.path.isabs(filename):
                     filename = os.path.join(_IMPORT_CWD, filename)
-            if frame_summary.f_locals.get("_rich_traceback_omit", False):
+            if frame_summary.f_locals.get('_rich_traceback_omit', False):
                 continue
 
             frame = Frame(
-                filename=filename or "?",
+                filename=filename or '?',
                 lineno=line_no,
                 name=frame_summary.f_code.co_name,
                 locals=(
@@ -409,11 +416,11 @@ def _extract_traceback(
                 last_instruction=last_instruction,
             )
             append(frame)
-            if frame_summary.f_locals.get("_rich_traceback_guard", False):
+            if frame_summary.f_locals.get('_rich_traceback_guard', False):
                 del stack.frames[:]
 
         if not grouped_exceptions:
-            cause = getattr(exc_value, "__cause__", None)
+            cause = getattr(exc_value, '__cause__', None)
             if cause is not None and cause is not exc_value:
                 exc_type = cause.__class__
                 exc_value = cause
@@ -425,7 +432,7 @@ def _extract_traceback(
 
             cause = exc_value.__context__
             if cause is not None and not getattr(
-                exc_value, "__suppress_context__", False
+                exc_value, '__suppress_context__', False
             ):
                 exc_type = cause.__class__
                 exc_value = cause
@@ -446,7 +453,7 @@ def print_exception():
 
     console = Console()
 
-    trace = _extract_traceback(*sys.exc_info, show_locals=False)
+    trace = _extract_traceback(*sys.exc_info(), show_locals=False)
 
     traceback = Traceback(
         trace,
