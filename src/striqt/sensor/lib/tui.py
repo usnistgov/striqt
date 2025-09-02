@@ -298,8 +298,9 @@ class SweepHUDApp(App):
     def _update_sweep_status(self, record: logging.LogRecord):
         from striqt.analysis.lib.dataarrays import describe_capture
 
-        # if self.cli_objs is None:
-
+        if self.cli_objs is None:
+            # warmup captures
+            return
 
         captures = self.cli_objs.sweep_spec.captures
 
