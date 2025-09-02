@@ -460,7 +460,7 @@ def print_exception():
         width=None,
         show_locals=False,
         suppress=[
-            'concurrent.futures',
+            'concurrent',
             'rich',
             'textual',
             'labbench',
