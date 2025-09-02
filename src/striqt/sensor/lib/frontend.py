@@ -459,7 +459,15 @@ def print_exception():
         trace,
         width=None,
         show_locals=False,
-        suppress=['rich', 'labbench', 'zarr', 'xarray', 'pandas'],
+        suppress=[
+            'concurrent.futures',
+            'rich',
+            'textual',
+            'labbench',
+            'zarr',
+            'xarray',
+            'pandas',
+        ],
     )
 
     console.print(traceback)
