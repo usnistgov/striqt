@@ -440,18 +440,13 @@ def _extract_traceback(
     return trace
 
 
-def print_exception(exception: Exception):
+def print_exception():
     from rich.console import Console
     from rich.traceback import Traceback
 
     console = Console()
 
-    trace = _extract_traceback(
-        type(exception),
-        exception,
-        exception.__traceback__,
-        show_locals=False
-    )
+    trace = _extract_traceback(*sys.exc_info, show_locals=False)
 
     traceback = Traceback(
         trace,

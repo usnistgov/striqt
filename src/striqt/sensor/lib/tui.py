@@ -349,12 +349,17 @@ class SweepHUDApp(App):
         """Exits the app after an unhandled exception."""
         from rich.traceback import Traceback
 
-        self._exc_info = sys.exc_info()
+        trace = frontend._extract_traceback(*sys.exc_info, show_locals=False)
+
+        traceback = Traceback(
+            trace,
+            width=None,
+            show_locals=False,
+            suppress=['rich', 'labbench', 'zarr', 'xarray', 'pandas'],
+        )        
 
         self.bell()
-        traceback = Traceback(
-            show_locals=False, width=None, suppress=[textual, rich, lb, xr]
-        )
+
         segments = Segments(self.console.render(traceback, self.console.options))
         self._exit_renderables.append(segments)
         self._close_messages_no_wait()

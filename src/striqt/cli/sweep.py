@@ -31,6 +31,7 @@ def run(**kws):
         elif not hasattr(app, '_exc_info'):
             sys.exit(1)
         else:
+            # exception printing is handled by SweepHUDApp
             frontend.maybe_start_debugger(cli_objs, app._exc_info)
             sys.exit(1)
 
@@ -56,14 +57,7 @@ def run(**kws):
             for _ in generator:
                 pass
         except BaseException:
-            from rich.console import Console
-
-            console = Console()
-            console.print_exception(
-                show_locals=False,
-                width=None,
-                suppress=['rich', 'zarr', 'xarray', 'pandas'],
-            )
+            frontend.print_exception()
             frontend.maybe_start_debugger(cli_objs, sys.exc_info())
             sys.exit(1)
 
