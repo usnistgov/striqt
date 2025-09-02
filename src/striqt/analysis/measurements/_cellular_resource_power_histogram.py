@@ -42,6 +42,8 @@ class CellularResourcePowerHistogramSpec(
         typing.Literal['normal'], typing.Literal['extended']
     ] = 'normal'
 
+    lo_bandstop: bool = False
+
 
 class _CellularResourcePowerHistogramKeywords(typing.TypedDict, total=False):
     # for IDE type hinting of the measurement function
@@ -58,6 +60,8 @@ class _CellularResourcePowerHistogramKeywords(typing.TypedDict, total=False):
     frame_slots: typing.Union[str, dict[float, str], None]
     special_symbols: typing.Union[str, dict[float, str], None]
     cyclic_prefix: typing.Union[typing.Literal['normal'], typing.Literal['extended']]
+    lo_bandstop: bool
+
 
 
 @dataclasses.dataclass
@@ -259,6 +263,8 @@ def cellular_resource_power_histogram(
             if False, resolution is 1 symbol.
         cyclic_prefix: the 3GPP cyclic prefix size, one of
             `('extended','normal')`
+        lo_bandstop: whether to mask the LO frequency with NaN
+            (the baseband LO frequency is assumed to be DC)
         as_xarray: if True (the default), returns an xarray with labeled axes and metadata;
             otherwise, returns an (array, dict) tuple containing the result and metadata
 
@@ -330,6 +336,7 @@ def cellular_resource_power_histogram(
         fractional_overlap=fractional_overlap,
         window_fill=window_fill,
         integration_bandwidth=integration_bandwidth,
+        lo_bandstop=3*spec.subcarrier_spacing if spec.lo_bandstop else None
     )
 
     if time_aperture is None:
