@@ -303,7 +303,7 @@ def _extract_traceback(
                         continue
                     grouped_exceptions.add(exception)
                     stack.exceptions.append(
-                        Traceback.extract(
+                        _extract_traceback(
                             type(exception),
                             exception,
                             exception.__traceback__,
@@ -321,7 +321,7 @@ def _extract_traceback(
                     continue
                 grouped_exceptions.add(exception)
                 stack.exceptions.append(
-                    Traceback.extract(
+                    _extract_traceback(
                         type(exception),
                         exception,
                         exception.__traceback__,
