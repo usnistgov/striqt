@@ -125,6 +125,12 @@ class ZarrSinkBase(SinkBase):
         if getattr(self.store, '_is_open', True):
             self.store.close()
 
+    def get_root_path(self):
+        if hasattr(self.store, 'path'):
+            return self.store.path
+        else:
+            return self.store.root
+
 
 class CaptureAppender(ZarrSinkBase):
     """concatenates the data from each capture and dumps to a zarr data store"""
@@ -151,7 +157,7 @@ class CaptureAppender(ZarrSinkBase):
         with util.stopwatch('build dataset', 'sink'):
             dataset = xr.concat(data_list, datasets.CAPTURE_DIM)
 
-        with util.stopwatch(f'write {self.store.path}', 'sink'):
+        with util.stopwatch(f'write {self.get_root_path()}', 'sink'):
             analysis.dump(
                 self.store, dataset, max_threads=self.sweep_spec.output.max_threads
             )

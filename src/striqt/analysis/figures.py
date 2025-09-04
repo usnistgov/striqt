@@ -132,8 +132,8 @@ def _maybe_skip_missing(func):
         try:
             func(obj, data, *args, **kws)
         except BaseException as ex:
-            new_text = f'while plotting {func.__name__}, {ex.args[0]}'
-            ex.args = (new_text,) + ex.args[1:]
+            # new_text = f'{ex.args[0]} (encountered while plotting {func.__name__})'
+            ex.args = (*ex.args, f'while plotting {func.__name__}')
             raise ex
 
     return wrapped
@@ -147,7 +147,7 @@ class CapturePlotter:
         output_dir: str | Path = None,
         subplot_by_channel: bool = True,
         col_wrap=2,
-        title_fmt='Channel {channel}',
+        title_fmt='Channel {port}',
         suptitle_fmt='{center_frequency}',
         filename_fmt='{name} {center_frequency}.svg',
         ignore_missing=False,
@@ -245,10 +245,10 @@ class CapturePlotter:
             filename = set(
                 label_by_coord(data, self._filename_fmt, name=name, title_case=True)
             )
-            if len(filename) > 1:
-                raise ValueError(
-                    'select a filename format that does not depend on channel index'
-                )
+            # if len(filename) > 1:
+            #     raise ValueError(
+            #         'select a filename format that does not depend on port index'
+            #     )
             path = Path(self.output_dir) / list(filename)[0]
             plt.savefig(path, dpi=300)
 
