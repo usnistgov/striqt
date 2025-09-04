@@ -1,5 +1,6 @@
 """Fake radios for testing"""
 
+from __future__ import annotations
 import numbers
 from pathlib import Path
 import typing
