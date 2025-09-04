@@ -11,6 +11,7 @@ from .. import specs
 import labbench as lb
 from labbench import paramattr as attr
 
+
 if typing.TYPE_CHECKING:
     import numpy as np
     import pandas as pd
@@ -23,14 +24,14 @@ else:
     xr = lb.util.lazy_import('xarray')
 
 
-def lo_shift_tone(inds, radio: base.SourceBase, xp):
-    resampler_design = base.design_capture_resampler(
-        radio.base_clock_rate, radio.get_capture_struct()
-    )
-    lo_offset = resampler_design['lo_offset']
-    return xp.exp((2j * np.pi * lo_offset) / radio.backend_sample_rate() * inds).astype(
-        'complex64'
-    )
+def lo_shift_tone(inds, radio: base.SourceBase, xp, lo_offset=None):
+    if lo_offset is None:
+        resampler_design = base.design_capture_resampler(
+            radio.base_clock_rate, radio.get_capture_struct()
+        )
+        lo_offset = resampler_design['lo_offset']
+    phase_scale = (2j * np.pi * lo_offset) / radio.backend_sample_rate()
+    return xp.exp(phase_scale * inds).astype('complex64')
 
 
 class TestSource(NullSource):
@@ -352,7 +353,10 @@ class FileSource(TestSource):
         self._file_stream = None
 
     def setup(
-        self, radio_setup: specs.RadioSetup = None, analysis=None, **kws
+        self,
+        radio_setup: specs.RadioSetup = None,
+        analysis=None,
+        **kws: typing.Unpack[specs._RadioSetupKeywords],
     ) -> specs.RadioSetup:
         radio_setup = super().setup(radio_setup, analysis, **kws)
 

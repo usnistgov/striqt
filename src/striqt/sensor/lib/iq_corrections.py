@@ -123,15 +123,10 @@ def resampling_correction(
         overwrite_x = True
 
     if not needs_resample:
-        # bail here if host resampling is not needed
-        size = round(capture.duration * capture.sample_rate)
-        iq = iq[:, :size]
         if vscale is not None:
             if vscale.ndim == 1:
                 vscale = vscale[:, None]
             iq = xp.multiply(iq, vscale, out=iq if overwrite_x else None)
-        elif not overwrite_x:
-            iq = iq.copy()
 
     elif USE_OARESAMPLE:
         # this is broken. don't use it yet.
@@ -178,7 +173,9 @@ def resampling_correction(
     if radio._aligner is not None:
         align_start = radio._aligner(iq[:, :size_out], capture)
         offset = round(align_start * capture.sample_rate)
-        assert iq.shape[1] >= offset + size_out
+        assert iq.shape[1] >= offset + size_out, ValueError(
+            'waveform is too short to align'
+        )
 
         iq_aligned = iq[:, offset : offset + size_out]
         iq_unaligned = iq[:, :size_out]

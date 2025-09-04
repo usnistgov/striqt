@@ -345,6 +345,7 @@ class _RadioSetupKeywords(typing.TypedDict, total=False):
     clock_source: ClockSourceType
     periodic_trigger: Optional[float]
     time_sync_every_capture: TimeSyncEveryCaptureType
+    channel_sync_source: Optional[str] = None
 
     array_backend: ArrayBackendType
     cupy_max_fft_chunk_size: int

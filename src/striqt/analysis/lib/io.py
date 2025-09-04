@@ -321,13 +321,13 @@ class _FileStreamBase:
         self,
         path,
         *,
-        rx_channel_count=1,
+        rx_port_count=1,
         skip_samples=0,
         dtype='complex64',
         xp=np,
         **meta,
     ):
-        self._rx_channel_count = rx_channel_count
+        self._rx_port_count = rx_port_count
         self._leftover = None
         self._position = None
         self._skip_samples = skip_samples
@@ -349,7 +349,7 @@ class MATNewFileStream(_FileStreamBase):
         self,
         path,
         sample_rate: float,
-        rx_channel_count=1,
+        rx_port_count=1,
         skip_samples=0,
         dtype='complex64',
         input_dtype='complex128',
@@ -359,7 +359,7 @@ class MATNewFileStream(_FileStreamBase):
     ):
         kws = {
             'sample_rate': sample_rate,
-            'rx_channel_count': rx_channel_count,
+            'rx_port_count': rx_port_count,
             'skip_samples': skip_samples,
             'dtype': dtype,
             'input_dtype': input_dtype,
@@ -438,7 +438,7 @@ class MATLegacyFileStream(_FileStreamBase):
         path,
         sample_rate: float,
         key: str = 'waveform',
-        rx_channel_count=1,
+        rx_port_count=1,
         skip_samples=0,
         dtype='complex64',
         xp=np,
@@ -460,7 +460,7 @@ class MATLegacyFileStream(_FileStreamBase):
 
         super().__init__(
             path,
-            rx_channel_count=rx_channel_count,
+            rx_port_count=rx_port_count,
             skip_samples=skip_samples,
             dtype=dtype,
             xp=xp,
@@ -538,7 +538,7 @@ class NPYFileStream(_FileStreamBase):
         self,
         path,
         sample_rate: float,
-        rx_channel_count=1,
+        rx_port_count=1,
         skip_samples=0,
         dtype='complex64',
         xp=np,
@@ -546,16 +546,16 @@ class NPYFileStream(_FileStreamBase):
     ):
         self._data = xp.asarray(np.atleast_2d(np.load(path))).astype(dtype)
 
-        if rx_channel_count <= self._data.shape[-2]:
-            self._data = self._data[..., :rx_channel_count, :]
+        if rx_port_count <= self._data.shape[-2]:
+            self._data = self._data[..., :rx_port_count, :]
         else:
             raise ValueError(
-                f'rx_channel_count exceeds input data channel dimension size ({self._data.shape[-2]})'
+                f'rx_port_count exceeds input data channel dimension size ({self._data.shape[-2]})'
             )
 
         super().__init__(
             path,
-            rx_channel_count=rx_channel_count,
+            rx_port_count=rx_port_count,
             skip_samples=skip_samples,
             dtype=dtype,
             xp=xp,
@@ -619,7 +619,7 @@ class TDMSFileStream(_FileStreamBase):
     def __init__(
         self,
         path,
-        rx_channel_count=1,
+        rx_port_count=1,
         skip_samples=0,
         dtype='complex64',
         loop=False,
@@ -633,7 +633,7 @@ class TDMSFileStream(_FileStreamBase):
 
         super().__init__(
             path,
-            rx_channel_count=rx_channel_count,
+            rx_port_count=rx_port_count,
             skip_samples=skip_samples,
             dtype=dtype,
             xp=xp,
@@ -683,7 +683,7 @@ def open_bare_iq(
     *args,
     format='auto',
     skip_samples=0,
-    rx_channel_count=1,
+    rx_port_count=1,
     dtype='complex64',
     loop: bool = False,
     xp=np,
@@ -711,7 +711,7 @@ def open_bare_iq(
         *args,
         loop=loop,
         skip_samples=skip_samples,
-        rx_channel_count=rx_channel_count,
+        rx_port_count=rx_port_count,
         dtype=dtype,
         xp=xp,
         **kws,
