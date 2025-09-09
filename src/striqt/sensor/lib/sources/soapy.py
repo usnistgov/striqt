@@ -109,7 +109,7 @@ class SoapyRadioSource(base.SourceBase):
         """the self-reported "actual" sample rate of the radio"""
         return self.backend.getSampleRate(SoapySDR.SOAPY_SDR_RX, 0) / self._downsample
 
-    @util.stopwatch('stream initialization', 'source', logger_level=logging.DEBUG)
+    @util.stopwatch('stream initialization', 'source')
     def _setup_rx_stream(self, ports=None):
         if self._rx_stream is not None:
             return
@@ -277,7 +277,7 @@ class SoapyRadioSource(base.SourceBase):
         else:
             self.backend.setGain(SoapySDR.SOAPY_SDR_TX, channel, gain)
 
-    @util.stopwatch('soapy radio backend opened', 'source')
+    @util.stopwatch('soapy radio backend opened', 'source', util.PERFORMANCE_INFO)
     def open(self):
         if self.resource:
             # prevent race conditions in threaded accesses to the Soapy driver

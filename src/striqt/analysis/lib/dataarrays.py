@@ -415,7 +415,7 @@ def evaluate_by_spec(
     for name in spec_dict.keys():
         meas = register.measurement[type(getattr(spec, name))]
 
-        with util.stopwatch(f'evaluate {name}', 'analysis', logger_level=logging.DEBUG):
+        with util.stopwatch(f'evaluate {name}', 'analysis'):
             func_kws = spec_dict[name]
             if not func_kws:
                 continue
@@ -459,7 +459,7 @@ def package_analysis(
     expand_dims=None,
 ) -> 'xr.Dataset':
     # materialize as xarrays
-    with util.stopwatch('package analyses into xarray', logger_level=logging.DEBUG):
+    with util.stopwatch('package analyses into xarray'):
         xarrays = {}
         for name, res in results.items():
             xarrays[name] = res.compute().to_xarray(expand_dims)

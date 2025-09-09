@@ -36,18 +36,22 @@ def run(**kws):
             sys.exit(1)
 
     else:
+        # simple CLI
         from striqt.analysis.lib import util
 
         util.show_messages(logging.INFO)
 
-        # simple CLI
         try:
             cli_objs = frontend.init_sweep_cli(**kws)
 
-            if kws['verbose']:
-                util.show_messages(logging.DEBUG)
-            else:
+            if kws['verbose'] == 0:
                 util.show_messages(logging.INFO)
+            elif kws['verbose'] == 1:
+                util.show_messages(util.PERFORMANCE_INFO)
+            elif kws['verbose'] == 2:
+                util.show_messages(util.PERFORMANCE_DETAIL)
+            else:
+                util.show_messages(logging.DEBUG)
 
             generator = frontend.iter_sweep_cli(
                 cli_objs,

@@ -230,7 +230,7 @@ class AnalysisCaller:
     extra_attrs: dict[str, typing.Any] | None = None
     correction: bool = False
 
-    @util.stopwatch('✓', 'analysis')
+    @util.stopwatch('✓', 'analysis', logger_level=util.PERFORMANCE_INFO)
     def __call__(
         self,
         iq: AcquiredIQ,
@@ -356,7 +356,9 @@ class DelayedDataset:
 
                     if not isinstance(v, xr.DataArray):
                         if ndim > 0:
-                            dims = [CAPTURE_DIM] + [f'{k}_dim{n}' for n in range(1, ndim)]
+                            dims = [CAPTURE_DIM] + [
+                                f'{k}_dim{n}' for n in range(1, ndim)
+                            ]
                         else:
                             dims = []
                         v = xr.DataArray(v, dims=dims)

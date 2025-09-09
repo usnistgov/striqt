@@ -18,6 +18,7 @@ def run(dataset, output_path: str, interactive: bool):
     import iqwaveform  # needed for plt.style.use()
     from matplotlib import pyplot as plt
     import labbench as lb
+
     lb.util.force_full_traceback(True)
 
     plt.style.use('iqwaveform.ieee_double_column')

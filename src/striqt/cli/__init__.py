@@ -69,9 +69,9 @@ def click_sensor_sweep(description: typing.Optional[str] = None):
         click.option(
             '--verbose/',
             '-v',
-            is_flag=True,
             show_default=True,
             default=False,
+            count=True,
             help='print debug',
         ),
     )

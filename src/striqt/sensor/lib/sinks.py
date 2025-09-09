@@ -97,7 +97,7 @@ class NullSink(SinkBase):
         pass
 
     def append(self, capture_data: 'xr.Dataset' | None, capture: specs.RadioCapture):
-        util.get_logger('sink').info('⊘')
+        pass
 
     def wait(self):
         pass
@@ -142,7 +142,7 @@ class CaptureAppender(ZarrSinkBase):
             self.flush()
             self._group_sizes.pop(0)
         else:
-            util.get_logger('sink').info('…')
+            util.get_logger('sink').debug('queued')
 
     def flush(self):
         self.wait()
@@ -154,10 +154,14 @@ class CaptureAppender(ZarrSinkBase):
         self.submit(self._flush_thread, data_list)
 
     def _flush_thread(self, data_list):
-        with util.stopwatch('build dataset', 'sink'):
+        with util.stopwatch(
+            'merge dataset', 'sink', logger_level=util.PERFORMANCE_INFO
+        ):
             dataset = xr.concat(data_list, datasets.CAPTURE_DIM)
 
-        with util.stopwatch(f'write {self.get_root_path()}', 'sink'):
+        with util.stopwatch(
+            f'write {self.get_root_path()}', 'sink', logger_level=util.PERFORMANCE_INFO
+        ):
             analysis.dump(
                 self.store, dataset, max_threads=self.sweep_spec.output.max_threads
             )
@@ -189,10 +193,12 @@ class SpectrogramTimeAppender(ZarrSinkBase):
         self.submit(self._flush_thread, data_list)
 
     def _flush_thread(self, data_list):
-        with util.stopwatch('build dataset', 'sink'):
+        with util.stopwatch(
+            'build dataset', 'sink', logger_level=util.PERFORMANCE_INFO
+        ):
             by_spectrogram = datasets.concat_time_dim(data_list, 'spectrogram_time')
 
-        with util.stopwatch('dump data', 'sink'):
+        with util.stopwatch('dump data', 'sink', logger_level=util.PERFORMANCE_INFO):
             analysis.dump(
                 by_spectrogram,
                 data_list,

@@ -310,7 +310,7 @@ class SourceBase(lb.Device):
 
         return _setup
 
-    @util.stopwatch('arm', 'source', logger_level=logging.DEBUG, threshold=10e-3)
+    @util.stopwatch('arm', 'source', threshold=10e-3)
     def arm(
         self,
         capture: specs.RadioCapture = None,
@@ -393,7 +393,7 @@ class SourceBase(lb.Device):
 
         return capture
 
-    @util.stopwatch('read_iq', 'source', logger_level=logging.DEBUG)
+    @util.stopwatch('read_iq', 'source')
     def read_iq(
         self,
         capture: specs.RadioCapture,
@@ -508,7 +508,7 @@ class SourceBase(lb.Device):
         self._hold_buffer_swap = False
         return ret
 
-    @util.stopwatch('acquire', 'source', logger_level=logging.DEBUG)
+    @util.stopwatch('acquire', 'source')
     def acquire(
         self,
         capture: specs.RadioCapture = None,

@@ -402,9 +402,9 @@ def lookup_system_noise_power(
     )
 
 
-def _get_port_variable(ds: 'xr.Dataset'):
+def _get_port_variable(ds: 'xr.Dataset') -> str:
     """return the appropriate name of the port coordinate variable.
-    
+
     This is for backward-compatibility with prior versions that used 'channel'
     instead of 'port' nomenclature.
     """
@@ -593,10 +593,10 @@ def specialize_cal_sweep(
         fields=(
             ('captures', tuple[capture_cls, ...], tuple()),
             ('defaults', capture_cls, capture_cls()),
-            ('radio_setup', setup_cls, setup_cls())
+            ('radio_setup', setup_cls, setup_cls()),
         ),
         bases=(cal_cls,),
-        module = sensor_cls.__module__,
+        module=sensor_cls.__module__,
         forbid_unknown_fields=True,
         frozen=True,
         cache_hash=True,

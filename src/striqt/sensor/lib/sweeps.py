@@ -292,7 +292,7 @@ class SweepIterator:
                 if sweep_time is None and capture_prev is not None:
                     sweep_time = capture_prev.start_time
 
-    @util.stopwatch('✓', 'source')
+    @util.stopwatch('✓', 'source', logger_level=util.PERFORMANCE_INFO)
     def _acquire(self, iq_prev: AcquiredIQ, capture_prev, capture_this, capture_next):
         if self._reuse_iq:
             reuse_this = _iq_is_reusable(
@@ -370,7 +370,7 @@ class SweepIterator:
 
         return dict(data, sensor_system_noise=system_noise)
 
-    @util.stopwatch('✓', 'sink', threshold=10e-3)
+    @util.stopwatch('✓', 'sink', threshold=10e-3, logger_level=util.PERFORMANCE_INFO)
     def _intake(
         self,
         results: 'xr.Dataset',
@@ -456,7 +456,11 @@ def iter_raw_iq(
             capture_this, capture_prev, index=i, count=len(sweep.captures)
         )
 
-        with util.stopwatch(desc, 'source', logger_level='debug' if quiet else 'info'):
+        with util.stopwatch(
+            desc,
+            'source',
+            logger_level=util.PERFORMANCE_DETAIL if quiet else util.PERFORMANCE_INFO,
+        ):
             # extra iteration at the end for the last analysis
             yield radio.acquire(
                 capture_this,

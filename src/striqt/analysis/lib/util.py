@@ -15,6 +15,9 @@ import typing_extensions
 
 _logger_adapters = {}
 
+PERFORMANCE_INFO = 15
+PERFORMANCE_DETAIL = 12
+
 
 class _StriqtLogger(logging.LoggerAdapter):
     EXTRA_DEFAULTS = {
@@ -121,7 +124,7 @@ def stopwatch(
     desc: str = '',
     logger_suffix: str = 'analysis',
     threshold: float = 0,
-    logger_level: int = logging.INFO,
+    logger_level: int = PERFORMANCE_DETAIL,
 ):
     """Time a block of code using a with statement like this:
 

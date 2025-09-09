@@ -9,6 +9,8 @@ from striqt.analysis.lib.util import (
     log_capture_context,
     get_logger,
     _StriqtLogger,
+    PERFORMANCE_DETAIL,
+    PERFORMANCE_INFO,
 )
 
 TGen = type[typing.Any]
