@@ -494,9 +494,11 @@ def _cached_spectrogram(
         'units': f'dBm/{enbw / 1e3:0.0f} kHz',
     }
 
-    peak = iqwaveform.powtodB(spg.max())
-    print(peak)
-    util.get_logger('analysis').info(f'spectrogram peak: {peak:0.1f} {attrs["units"]}')
+    # conversion to dB is left for after this function, but display 
+    # log messages in dB
+    peaks = iqwaveform.powtodB(spg.max(axis=tuple(range(1,spg.ndim))))
+    peak_values = ', '.join(f'{p:0.1f}' for p in peaks)
+    util.get_logger('analysis').info(f'spectrogram peak ({peak_values}) {attrs["units"]}')
 
     return spg, attrs
 
