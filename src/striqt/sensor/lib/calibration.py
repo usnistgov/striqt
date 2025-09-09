@@ -410,7 +410,7 @@ def _get_port_variable(ds: 'xr.Dataset'):
     """
     if ds is None:
         return datasets.PORT_DIM
-    if datasets.PORT_DIM in ds.variables:
+    if datasets.PORT_DIM in ds.coords:
         return datasets.PORT_DIM
     else:
         # compatibility
