@@ -66,7 +66,7 @@ def _deep_hash(obj: typing.Mapping | tuple):
         return hash(obj)
 
     deep_values = tuple(
-        _deep_hash(v) if isinstance(v, (tuple, dict)) else v for v in values
+        _deep_hash(v) if isinstance(v, (tuple, list, dict)) else v for v in values
     )
 
     return hash(keys) ^ hash(deep_values)

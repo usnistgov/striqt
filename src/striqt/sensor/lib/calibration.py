@@ -421,7 +421,7 @@ class YFactorSink(sinks.SinkBase):
 
         self.sweep_start_time = None
 
-    def close(self):
+    def close(self, *exc_info):
         # pointedly, do not flush on close - only after a complete
         # dataset
         pass
