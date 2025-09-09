@@ -97,7 +97,7 @@ def resampling_correction(
         peak_counts = xp.abs(iq).max(axis=-1)
         unscaled_peak = 20 * xp.log10(peak_counts * prescale) - 3
         descs = ','.join(f'{p:0.1f}' for p in unscaled_peak)
-        logger.info(f'ADC peak ({descs}) dBfs')
+        logger.info(f'({descs}) dBfs ADC peak')
     else:
         unscaled_peak = None
 
