@@ -39,10 +39,15 @@ def get_logger(name_suffix) -> _StriqtLogger:
 
 @contextlib.contextmanager
 def log_capture_context(
-    name_suffix, /, capture_index, capture, capture_count='unknown'
+    name_suffix, /, capture_index=0, capture=None, capture_count='unknown', description=None
 ):
     extra = locals()
-    extra['capture_progress'] = f'{capture_index + 1}/{capture_count}'
+
+    if description is None:
+        extra['capture_progress'] = f'{capture_index + 1}/{capture_count}'
+    else:
+        extra['capture_progress'] = description
+
     logger = get_logger(name_suffix)
     start_extra = logger.extra
     logger.extra = start_extra | extra

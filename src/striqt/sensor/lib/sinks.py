@@ -14,6 +14,13 @@ else:
     lb = util.lazy_import('labbench')
 
 
+def _log_info(sink: SinkBase):
+    return dict(
+        capture_index=sink.captures_elapsed,
+        description=f'…{sink.captures_elapsed}'    
+    )
+
+
 class SinkBase:
     """intake acquisitions one at a time, and parcel data store"""
 
@@ -26,6 +33,7 @@ class SinkBase:
         force: bool = False,
     ):
         self.sweep_spec = sweep_spec
+        self.captures_elapsed = 0
 
         if output_path is None:
             self.output_path = self.sweep_spec.output.path
@@ -71,6 +79,7 @@ class SinkBase:
         if capture_data is None:
             return
 
+        self.captures_elapsed += 1
         self._pending_data.append(capture_data)
 
     def open(self):
@@ -94,10 +103,11 @@ class NullSink(SinkBase):
         pass
 
     def flush(self):
-        pass
+        with util.log_capture_context('sink', **_log_info(self)):
+            util.get_logger('sink').info(f'finished')
 
     def append(self, capture_data: 'xr.Dataset' | None, capture: specs.RadioCapture):
-        pass
+        self.captures_elapsed += 1
 
     def wait(self):
         pass
@@ -159,13 +169,15 @@ class CaptureAppender(ZarrSinkBase):
         ):
             dataset = xr.concat(data_list, datasets.CAPTURE_DIM)
 
-        with util.stopwatch(
-            f'write {self.get_root_path()}', 'sink', logger_level=util.PERFORMANCE_INFO
+        path = self.get_root_path()
+
+        with (
+            util.log_capture_context('sink', **_log_info(self)),
+            util.stopwatch(f'sync to {path}', 'sink', logger_level=util.INFO)
         ):
             analysis.dump(
                 self.store, dataset, max_threads=self.sweep_spec.output.max_threads
             )
-
 
 class SpectrogramTimeAppender(ZarrSinkBase):
     def open(self):
@@ -198,7 +210,12 @@ class SpectrogramTimeAppender(ZarrSinkBase):
         ):
             by_spectrogram = datasets.concat_time_dim(data_list, 'spectrogram_time')
 
-        with util.stopwatch('dump data', 'sink', logger_level=util.PERFORMANCE_INFO):
+        path = self.get_root_path()
+        
+        with (
+            util.log_capture_context('sink', **_log_info(self)),
+            util.stopwatch(f'sync to {path}', 'sink', logger_level=util.INFO)
+        ):
             analysis.dump(
                 by_spectrogram,
                 data_list,
