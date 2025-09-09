@@ -374,9 +374,6 @@ def evaluate_spectrogram(
 
     attrs = attrs | {'limit_digits': limit_digits}
 
-    util.get_logger('analysis').info(f'spectrogram peak: {spg.max():0.1f} {attrs["units"]}')
-
-
     return spg, attrs
 
 
@@ -496,6 +493,8 @@ def _cached_spectrogram(
         'noise_bandwidth': float(enbw),
         'units': f'dBm/{enbw / 1e3:0.0f} kHz',
     }
+
+    util.get_logger('analysis').info(f'spectrogram peak: {spg.max():0.1f} {attrs["units"]}')
 
     return spg, attrs
 
