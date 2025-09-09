@@ -494,6 +494,8 @@ def _cached_spectrogram(
         'units': f'dBm/{enbw / 1e3:0.0f} kHz',
     }
 
+    print(spg.max())
+
     util.get_logger('analysis').info(f'spectrogram peak: {spg.max():0.1f} {attrs["units"]}')
 
     return spg, attrs
