@@ -1,4 +1,5 @@
 from __future__ import annotations
+import logging
 from pathlib import Path
 import typing
 from . import captures, datasets, specs, util
@@ -173,7 +174,7 @@ class CaptureAppender(ZarrSinkBase):
 
         with (
             util.log_capture_context('sink', **_log_info(self)),
-            util.stopwatch(f'sync to {path}', 'sink', logger_level=util.INFO)
+            util.stopwatch(f'sync to {path}', 'sink', logger_level=logging.INFO)
         ):
             analysis.dump(
                 self.store, dataset, max_threads=self.sweep_spec.output.max_threads
@@ -211,10 +212,10 @@ class SpectrogramTimeAppender(ZarrSinkBase):
             by_spectrogram = datasets.concat_time_dim(data_list, 'spectrogram_time')
 
         path = self.get_root_path()
-        
+
         with (
             util.log_capture_context('sink', **_log_info(self)),
-            util.stopwatch(f'sync to {path}', 'sink', logger_level=util.INFO)
+            util.stopwatch(f'sync to {path}', 'sink', logger_level=logging.INFO)
         ):
             analysis.dump(
                 by_spectrogram,
