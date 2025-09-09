@@ -1,5 +1,6 @@
 from __future__ import annotations
 import dataclasses
+from fractions import Fraction
 from math import ceil
 import typing
 
@@ -321,11 +322,11 @@ def cellular_resource_power_histogram(
 
     # set STFT overlap and the fractional fill in the window
     if spec.cyclic_prefix == 'normal':
-        fractional_overlap = 13 / 28
-        window_fill = 15 / 28
+        fractional_overlap = Fraction(13 / 28)
+        window_fill = Fraction(15 / 28)
     elif spec.cyclic_prefix == 'extended':
-        fractional_overlap = 11 / 24
-        window_fill = 13 / 24
+        fractional_overlap = Fraction(11 / 24)
+        window_fill = Fraction(13 / 24)
     else:
         raise ValueError('cp_guard_period must be "normal" or "extended"')
 
