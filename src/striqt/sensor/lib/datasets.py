@@ -354,10 +354,14 @@ class DelayedDataset:
                 for k, v in self.extra_data.items():
                     if not isinstance(v, xr.DataArray):
                         ndim = getattr(v, 'ndim', 0)
-                        dims = [CAPTURE_DIM] + [f'{k}_dim{n}' for n in range(1, ndim)]
+
+                        if ndim > 0:
+                            dims = [CAPTURE_DIM] + [f'{k}_dim{n}' for n in range(1, ndim)]
+                        else:
+                            dims = []
                         v = xr.DataArray(v, dims=dims)
 
-                    elif v.dims[0] != CAPTURE_DIM:
+                    if v.dims[0] != CAPTURE_DIM:
                         v = v.expand_dims({CAPTURE_DIM: analysis.capture.size})
 
                     if v.sizes[CAPTURE_DIM] not in allowed_capture_shapes:
