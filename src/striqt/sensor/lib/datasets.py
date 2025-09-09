@@ -353,7 +353,8 @@ class DelayedDataset:
 
                 for k, v in self.extra_data.items():
                     if not isinstance(v, xr.DataArray):
-                        dims = [CAPTURE_DIM] + [f'{k}_dim{n}' for n in range(1, v.ndim)]
+                        ndim = getattr(v, 'ndim', 0)
+                        dims = [CAPTURE_DIM] + [f'{k}_dim{n}' for n in range(1, ndim)]
                         v = xr.DataArray(v, dims=dims)
 
                     elif v.dims[0] != CAPTURE_DIM:
