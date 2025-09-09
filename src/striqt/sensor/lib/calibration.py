@@ -285,15 +285,16 @@ def _lookup_calibration_var(
 
     for capture_chan in split_capture_ports(capture):
         fs = sources.design_capture_resampler(base_clock_rate, capture_chan)['fs_sdr']
+        port_key = _get_port_variable(cal_var)
 
         # these capture fields must match the calibration conditions exactly
-        exact_matches = dict(
-            channel=capture_chan.port,
-            gain=capture_chan.gain,
-            lo_shift=capture_chan.lo_shift,
-            backend_sample_rate=fs,
-            analysis_bandwidth=capture_chan.analysis_bandwidth or np.inf,
-        )
+        exact_matches = {
+            port_key: capture_chan.port,
+            'gain': capture_chan.gain,
+            'lo_shift': capture_chan.lo_shift,
+            'backend_sample_rate': fs,
+            'analysis_bandwidth': capture_chan.analysis_bandwidth or np.inf,
+        }
 
         try:
             sel = (
@@ -401,6 +402,21 @@ def lookup_system_noise_power(
     )
 
 
+def _get_port_variable(ds: 'xr.Dataset'):
+    """return the appropriate name of the port coordinate variable.
+    
+    This is for backward-compatibility with prior versions that used 'channel'
+    instead of 'port' nomenclature.
+    """
+    if ds is None:
+        return datasets.PORT_DIM
+    if datasets.PORT_DIM in ds.variables:
+        return datasets.PORT_DIM
+    else:
+        # compatibility
+        return 'channel'
+
+
 class YFactorSink(sinks.SinkBase):
     sweep_spec: ManualYFactorSweep
 
@@ -471,12 +487,7 @@ class YFactorSink(sinks.SinkBase):
         corrections = compute_y_factor_corrections(by_field)
 
         if not self.force and Path(self.output_path).exists():
-            if self.prev_corrections is None:
-                prev_port_key = datasets.PORT_DIM
-            if datasets.PORT_DIM in self.prev_corrections.variables():
-                prev_port_key = datasets.PORT_DIM
-            else:
-                prev_port_key = 'channel'
+            prev_port_key = _get_port_variable(self.prev_corrections)
 
             print('merging results from previous file')
             if port in self.prev_corrections[prev_port_key]:
@@ -488,7 +499,7 @@ class YFactorSink(sinks.SinkBase):
                 [corrections, self.prev_corrections], dim=datasets.PORT_DIM
             )
 
-        print(f'calibration results on channel {port} (shown for max gain)')
+        print(f'calibration results on port {port} (shown for max gain)')
         summary = summarize_calibration(corrections, port=port)
         with pd.option_context('display.max_rows', None):
             print(summary.sort_index(axis=1).sort_index(axis=0))
@@ -510,9 +521,9 @@ class ManualYFactorPeripherals(peripherals.PeripheralsBase):
 
         if state != self._last_state:
             if capture.noise_diode_enabled:
-                input(f'enable noise diode at channel {capture.port} and press enter')
+                input(f'enable noise diode at port {capture.port} and press enter')
             else:
-                input(f'disable noise diode at channel {capture.port} and press enter')
+                input(f'disable noise diode at port {capture.port} and press enter')
 
         self._last_state = state
 
