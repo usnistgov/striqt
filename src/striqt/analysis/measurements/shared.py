@@ -374,6 +374,9 @@ def evaluate_spectrogram(
 
     attrs = attrs | {'limit_digits': limit_digits}
 
+    util.get_logger('analysis').info(f'spectrogram peak: {spg.max():0.1f} {attrs["units"]}')
+
+
     return spg, attrs
 
 

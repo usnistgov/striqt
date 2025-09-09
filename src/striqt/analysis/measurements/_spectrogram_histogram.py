@@ -99,9 +99,4 @@ def spectrogram_histogram(
 
     data = counts / xp.sum(counts[0])
 
-    data_sum = data.sum(axis=tuple(range(data.ndim - 1)))
-
-    i = xp.nonzero(data_sum)[0][-1]
-    util.get_logger('analysis').info(f'spectrogram peak: {bin_edges[i]:0.1f} dBm')
-
     return data, metadata
