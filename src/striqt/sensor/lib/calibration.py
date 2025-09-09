@@ -469,12 +469,14 @@ class YFactorSink(sinks.SinkBase):
         # compute and merge corrections
         corrections = compute_y_factor_corrections(by_field)
 
-        if datasets.PORT_DIM in self.prev_corrections.variables():
-            prev_port_key = datasets.PORT_DIM
-        else:
-            prev_port_key = 'channel'
-
         if not self.force and Path(self.output_path).exists():
+            if self.prev_corrections is None:
+                prev_port_key = datasets.PORT_DIM
+            if datasets.PORT_DIM in self.prev_corrections.variables():
+                prev_port_key = datasets.PORT_DIM
+            else:
+                prev_port_key = 'channel'
+
             print('merging results from previous file')
             if port in self.prev_corrections[prev_port_key]:
                 self.prev_corrections = self.prev_corrections.drop_sel(
