@@ -309,6 +309,7 @@ class FrequencyAnalysisSpecBase(
     window_fill: fractions.Fraction = 1
     integration_bandwidth: typing.Optional[float] = None
     trim_stopband: bool = True
+    lo_bandstop: typing.Optional[float] = None    
 
 
 class FrequencyAnalysisKeywords(specs.AnalysisKeywords):
@@ -317,6 +318,7 @@ class FrequencyAnalysisKeywords(specs.AnalysisKeywords):
     fractional_overlap: typing.NotRequired[float]
     window_fill: typing.NotRequired[float]
     integration_bandwidth: typing.NotRequired[typing.Optional[float]]
+    lo_bandstop: typing.NotRequired[typing.Optional[float]]
 
 
 class SpectrogramSpec(
@@ -336,13 +338,11 @@ class SpectrogramSpec(
     dB (bool): if True, returned power is transformed into dB units
     """
 
-    lo_bandstop: typing.Optional[float] = None
     time_aperture: typing.Optional[float] = None
     dB = True
 
 
 class SpectrogramKeywords(FrequencyAnalysisKeywords):
-    lo_bandstop: typing.NotRequired[typing.Optional[float]]
     time_aperture: typing.NotRequired[typing.Optional[float]]
 
 
@@ -391,7 +391,7 @@ def truncate_spectrogram_bandwidth(x, nfft, fs, bandwidth, *, offset=0, axis=0):
     return iqwaveform.util.axis_slice(x, *edges, axis=axis)
 
 
-def _null_stopband(x, nfft, fs, bandwidth, *, offset=0, axis=0):
+def null_lo(x, nfft, fs, bandwidth, *, offset=0, axis=0):
     """sets samples to nan within the specified bandwidth on a frequency axis"""
     # to make the top bound inclusive
     pad_hi = fs / nfft / 2
@@ -464,7 +464,7 @@ def _cached_spectrogram(
     )
 
     if spec.lo_bandstop is not None:
-        _null_stopband(spg, nfft, capture.sample_rate, spec.lo_bandstop, axis=2)
+        null_lo(spg, nfft, capture.sample_rate, spec.lo_bandstop, axis=2)
 
     # truncate to the analysis bandwidth
     if spec.trim_stopband and np.isfinite(capture.analysis_bandwidth):
@@ -499,7 +499,6 @@ def _cached_spectrogram(
     peaks = iqwaveform.powtodB(spg.max(axis=tuple(range(1,spg.ndim))))
     peak_values = ', '.join(f'{p:0.1f}' for p in peaks)
     util.get_logger('analysis').info(f'({peak_values}) {attrs["units"]} spectrogram peak')
-    print(spec)
 
     return spg, attrs
 

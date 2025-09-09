@@ -43,7 +43,7 @@ class CellularResourcePowerHistogramSpec(
         typing.Literal['normal'], typing.Literal['extended']
     ] = 'normal'
 
-    lo_bandstop: bool = False
+    lo_bandstop: typing.Optional[float] = None
 
 
 class _CellularResourcePowerHistogramKeywords(typing.TypedDict, total=False):
@@ -61,7 +61,7 @@ class _CellularResourcePowerHistogramKeywords(typing.TypedDict, total=False):
     frame_slots: typing.Union[str, dict[float, str], None]
     special_symbols: typing.Union[str, dict[float, str], None]
     cyclic_prefix: typing.Union[typing.Literal['normal'], typing.Literal['extended']]
-    lo_bandstop: bool
+    lo_bandstop: float
 
 
 @dataclasses.dataclass
@@ -263,8 +263,7 @@ def cellular_resource_power_histogram(
             if False, resolution is 1 symbol.
         cyclic_prefix: the 3GPP cyclic prefix size, one of
             `('extended','normal')`
-        lo_bandstop: whether to mask the LO frequency with NaN
-            (the baseband LO frequency is assumed to be DC)
+        lo_bandstop: if specified, null this bandwidth about DC
         as_xarray: if True (the default), returns an xarray with labeled axes and metadata;
             otherwise, returns an (array, dict) tuple containing the result and metadata
 
@@ -322,11 +321,11 @@ def cellular_resource_power_histogram(
 
     # set STFT overlap and the fractional fill in the window
     if spec.cyclic_prefix == 'normal':
-        fractional_overlap = Fraction(13 / 28)
-        window_fill = Fraction(15 / 28)
+        fractional_overlap = Fraction(13, 28)
+        window_fill = Fraction(15, 28)
     elif spec.cyclic_prefix == 'extended':
-        fractional_overlap = Fraction(11 / 24)
-        window_fill = Fraction(13 / 24)
+        fractional_overlap = Fraction(11, 24)
+        window_fill = Fraction(13, 24)
     else:
         raise ValueError('cp_guard_period must be "normal" or "extended"')
 
@@ -336,7 +335,7 @@ def cellular_resource_power_histogram(
         fractional_overlap=fractional_overlap,
         window_fill=window_fill,
         integration_bandwidth=integration_bandwidth,
-        lo_bandstop=3 * spec.subcarrier_spacing if spec.lo_bandstop else None,
+        lo_bandstop=spec.lo_bandstop,
     )
 
     if time_aperture is None:

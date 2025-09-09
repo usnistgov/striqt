@@ -1,4 +1,5 @@
 from __future__ import annotations
+from fractions import Fraction
 import typing
 
 from . import shared
@@ -154,8 +155,8 @@ def cellular_5g_ssb_spectrogram(
 
     spg_spec = shared.SpectrogramSpec(
         frequency_resolution=spec.subcarrier_spacing / 2,
-        fractional_overlap=13 / 28,
-        window_fill=15 / 28,
+        fractional_overlap=Fraction(13, 28),
+        window_fill=Fraction(15, 28),
         window=spec.window,
         lo_bandstop=spec.lo_bandstop,
         integration_bandwidth=spec.subcarrier_spacing,
