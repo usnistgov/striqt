@@ -93,6 +93,7 @@ def read_calibration(path):
 
 
 def save_calibration(path, corrections: 'xr.Dataset'):
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
     corrections.to_netcdf(path)
 
 
