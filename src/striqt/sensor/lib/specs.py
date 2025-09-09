@@ -472,9 +472,11 @@ class Sweep(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
 
     @classmethod
     def _from_registry(cls: type[Sweep]) -> type[Sweep]:
+        bases = typing.get_type_hints(cls, include_extras=True)
+
         Analysis = analysis.register.to_analysis_spec_type(
             analysis.register.measurement,
-            base=typing.get_type_hints(cls)[cls.analysis.__name__],
+            base=bases[cls.analysis.__name__],
         )
 
         fields = ((cls.analysis.__name__, Analysis, Analysis()),)

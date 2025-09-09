@@ -50,7 +50,7 @@ class CalibrationVariables(
     noise_diode_enabled: tuple[NoiseDiodeEnabledType, ...] = (False, True)
     sample_rate: tuple[specs.BackendSampleRateType, ...]
     center_frequency: tuple[specs.CenterFrequencyType, ...] = (3700e6,)
-    channel: tuple[specs.PortType, ...] = (0,)
+    port: tuple[specs.PortType, ...] = (0,)
     gain: tuple[specs.GainType, ...] = (0,)
 
     # filtering and resampling
@@ -574,19 +574,19 @@ def specialize_cal_sweep(
     )
     setup_cls = _merge_specs('CalibrationRadioSetup', module, all_fields['radio_setup'])
 
-    class sweep_cls(
-        cal_cls,
+    sweep_cls = msgspec.defstruct(
+        name,
+        fields=(
+            ('captures', tuple[capture_cls, ...], tuple()),
+            ('defaults', capture_cls, capture_cls()),
+            ('radio_setup', setup_cls, setup_cls())
+        ),
+        bases=(cal_cls,),
+        module = sensor_cls.__module__,
         forbid_unknown_fields=True,
         frozen=True,
         cache_hash=True,
-    ):
-        captures: tuple[capture_cls, ...] = tuple()
-        defaults: capture_cls = capture_cls()
-        radio_setup: setup_cls = setup_cls()
-
-    sweep_cls.__name__ = name
-    sweep_cls.__module__ = sensor_cls.__module__
-    sweep_cls.__qualname__ = name
+    )
 
     return sweep_cls
 
