@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import collections
+from fractions import Fraction
 import functools
 import dataclasses
 import logging
@@ -230,6 +231,22 @@ def dataarray_stub(
     return stub
 
 
+def _reraise_coord_error(*, exc, coord, factory_info, data, name):
+    template_shape = tuple([coord.indexes[d].shape for d in factory_info.dims])
+    data_shape = np.array(data).shape
+
+    if template_shape == data_shape:
+        exc.args = (f'in coordinate {name!r}, {exc.args[0]}',) + exc.args[1:]
+        raise exc
+    else:
+        problem = (
+            f'unexpected shape in coordinate {name!r}: '
+            f'data dimensions {factory_info.dims!r} have shape {template_shape}, '
+            f'but coordinate factory gave {data_shape}'
+        )
+        raise ValueError(problem) from exc
+
+
 def build_dataarray(
     delayed: DelayedDataArray,
     expand_dims=None,
@@ -247,7 +264,7 @@ def build_dataarray(
 
     _validate_delayed_ndim(delayed)
 
-    # handle the presence of a port dimension at the start
+    # add a port dimension if needed
     if isinstance(delayed.capture.port, Number):
         if data.ndim == len(template.dims) + 1:
             # "unbroadcast" dimension of a single-channel
@@ -274,42 +291,26 @@ def build_dataarray(
         ) from ex
 
     for coord_factory in delayed.info.coord_factories:
-        coord_info = register.coordinate_factory[coord_factory]
+        factory_info = register.coordinate_factory[coord_factory]
+        coord = da[factory_info.name]
+
         ret = coord_factory(delayed.capture, delayed.spec)
+        qualname = f'{delayed.info.name}.{factory_info.name}'
+        arr, metadata = register.normalize_factory_return(ret, qualname)
 
         try:
-            if isinstance(ret, tuple):
-                arr, metadata = ret
-            else:
-                arr = ret
-                metadata = {}
-
-            da[coord_info.name].indexes[coord_info.dims[0]].values[:] = arr
-
+            coord.indexes[factory_info.dims[0]].values[:] = arr
         except ValueError as ex:
             exc = ex
         else:
             exc = None
 
         if exc is not None:
-            template_shape = tuple(
-                [da[coord_info.name].indexes[d].shape for d in coord_info.dims]
+            _reraise_coord_error(
+                exc=exc, coord=coord, factory_info=factory_info, data=arr, name=qualname
             )
-            data_shape = np.array(arr).shape
-            name = f'{delayed.info.name}.{coord_info.name}'
 
-            if template_shape == data_shape:
-                exc.args = (f'in coordinate {name!r}, {exc.args[0]}',) + exc.args[1:]
-                raise exc
-            else:
-                problem = (
-                    f'unexpected shape in coordinate {name!r}: '
-                    f'data dimensions {coord_info.dims!r} have shape {template_shape}, '
-                    f'but coordinate factory gave {data_shape}'
-                )
-                raise ValueError(problem) from exc
-
-        da[coord_info.name] = da[coord_info.name].assign_attrs(metadata)
+        da[factory_info.name] = coord.assign_attrs(metadata)
 
     return da.assign_attrs(delayed.info.attrs | delayed.spec.todict() | delayed.attrs)
 

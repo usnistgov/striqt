@@ -5,6 +5,7 @@ into xarray DataArray objects with labeled dimensions and coordinates.
 from __future__ import annotations
 
 import collections
+from fractions import Fraction
 import functools
 import msgspec
 import textwrap
@@ -12,7 +13,6 @@ import typing
 import typing_extensions
 from . import specs, util
 
-import array_api_compat
 
 if typing.TYPE_CHECKING:
     _P = typing_extensions.ParamSpec('_P')
@@ -338,14 +338,10 @@ class _MeasurementRegistry(
                 spec = spec_type.fromdict(kws)
                 ret = func(iq, capture, **spec.todict())
 
-                if not as_xarray:
-                    return ret
+                data, more_attrs = normalize_factory_return(ret, name=func.__name__)
 
-                if isinstance(ret, (list, tuple)) and len(ret) == 2:
-                    data, more_attrs = ret
-                else:
-                    data = ret
-                    more_attrs = {}
+                if not as_xarray:
+                    return data, more_attrs
 
                 data = DelayedDataArray(
                     data=data,
@@ -467,3 +463,31 @@ def get_channel_sync_source_measurement_name(name: str):
     info: SyncInfo = channel_sync_source[name]
     meas_info = measurement[info.meas_spec_type]
     return meas_info.name
+
+
+def normalize_factory_return(ret, name: str):
+    """normalize the coordinate and data factory returns into (data, metadata)"""
+
+    if not isinstance(ret, tuple):
+        arr = ret
+        attrs = {}
+    elif len(ret) == 2:
+        arr, attrs = ret
+    else:
+        raise TypeError(
+            f'tuple returned by {repr(name)} coordinate factory '
+            f'must have length 2, not {len(ret)}. return a list '
+            f'or array if this was meant as data.'
+        )
+
+    if not isinstance(attrs, dict):
+        raise TypeError(
+            f'second item of {repr(name)} coordinate factory return tuple must be dict.'
+            f'return an array or list if this was meant as data.'
+        )
+    else:
+        attrs = {
+            k: (str(v) if isinstance(v, Fraction) else v) for k, v in attrs.items()
+        }
+
+    return arr, attrs

@@ -38,17 +38,20 @@ def get_logger(name_suffix) -> _StriqtLogger:
 
 
 @contextlib.contextmanager
-def log_capture_context(
-    name_suffix, /, capture_index=0, capture=None, capture_count='unknown', description=None
-):
-    extra = locals()
-
-    if description is None:
-        extra['capture_progress'] = f'{capture_index + 1}/{capture_count}'
-    else:
-        extra['capture_progress'] = description
-
+def log_capture_context(name_suffix, /, capture_index=0, capture_count=None):
+    extra = {'capture_index': capture_index}
     logger = get_logger(name_suffix)
+
+    if capture_count is not None:
+        logger.extra['capture_count'] = capture_count
+
+    if capture_count is None:
+        capture_count = extra['capture_count'] = logger.extra.get(
+            'capture_count', 'unknown'
+        )
+
+    extra['capture_progress'] = f'{capture_index + 1}/{capture_count}'
+
     start_extra = logger.extra
     logger.extra = start_extra | extra
     yield
@@ -157,7 +160,7 @@ def stopwatch(
             logger_level = logger_level - 10
 
         msg = str(desc) + ' ' if len(desc) else ''
-        msg += f'{elapsed:0.3f} s elapsed'
+        msg += f'⏱ {elapsed:0.3f} s'
 
         exc_info = sys.exc_info()
         if exc_info != (None, None, None):
