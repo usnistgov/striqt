@@ -62,8 +62,9 @@ _StriqtLogger('analysis')
 
 
 def show_messages(
-    level: int,
+    level: int | None,
     colors: bool | None = None,
+    logger_names: tuple[str] = ('controller', 'source', 'analysis', 'sink'),
 ):
     """filters logging messages displayed to the console by importance
 
@@ -75,15 +76,20 @@ def show_messages(
         None
     """
 
-    for logger in _logger_adapters.values():
-        logger.setLevel(logging.DEBUG)
+    for name in logger_names:
+        logger = _logger_adapters[name]
 
         # clear any stale handlers
         if hasattr(logger, '_screen_handler'):
             logger.logger.removeHandler(logger._screen_handler)
 
         if level is None:
+            logger.setLevel(logging.CRITICAL)
+            logger.logger.setLevel(logging.CRITICAL)
             return
+
+        logger.setLevel(level)
+        logger.logger.setLevel(level)
 
         logger._screen_handler = logging.StreamHandler()
         logger._screen_handler.setLevel(level)

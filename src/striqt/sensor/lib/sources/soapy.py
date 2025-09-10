@@ -375,7 +375,7 @@ class SoapyRadioSource(base.SourceBase):
         total_timeout = self._rx_enable_delay + timeout_sec + 0.5
 
         rx_result = self.backend.readStream(
-            self._rx_stream, 
+            self._rx_stream,
             [buf[offset * 2 :] for buf in buffers],
             count,
             timeoutUs=round(total_timeout * 1e6),

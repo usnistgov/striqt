@@ -131,6 +131,9 @@ def init_sweep_cli(
     sweep_spec = io.read_yaml_sweep(yaml_path)
     debug_handler = DebugOnException(debug)
 
+    util.show_messages(None, logger_names=('sink', 'analysis', 'source'))
+    util.show_messages(logging.INFO, logger_names=('controller',))
+
     if '{' in sweep_spec.output.path:
         # in this case, we're still waiting to fill in radio_id
         open_sink_early = False
@@ -148,8 +151,6 @@ def init_sweep_cli(
             'specify output.path in the yaml file or use -o PATH on the command line'
         )
         sys.exit(1)
-
-    lb.show_messages('warning')
 
     # start by connecting to the controller, so that the radio id can be used
     # as a file naming field
@@ -478,14 +479,19 @@ def maybe_start_debugger(cli_objects: CLIObjects | None, exc_info):
         cli_objects.debugger.run(*exc_info)
 
 
-def iter_sweep_cli(
-    cli: CLIObjects,
-    *,
-    remote=None,
-):
+def iter_sweep_cli(cli: CLIObjects, *, remote=None, verbose: int = 0):
     # pull out the cli elements that have context
     cli_objects = cli
     *cli_context, sweep, cal = cli_objects
+
+    if verbose == 0:
+        util.show_messages(logging.INFO)
+    elif verbose == 1:
+        util.show_messages(util.PERFORMANCE_INFO)
+    elif verbose == 2:
+        util.show_messages(util.PERFORMANCE_DETAIL)
+    else:
+        util.show_messages(logging.DEBUG)
 
     with lb.sequentially(*cli_context):
         try:

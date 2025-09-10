@@ -197,7 +197,9 @@ class SweepHUDApp(App):
     @textual.work(exclusive=True, thread=True)
     def do_sweep(self):
         gen = frontend.iter_sweep_cli(
-            self.cli_objs, remote=self.cli_kws.get('remote', None)
+            self.cli_objs,
+            remote=self.cli_kws.get('remote', None),
+            verbose=self.cli_kws['verbose'],
         )
         for _ in gen:
             self.refresh()

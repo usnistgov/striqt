@@ -407,7 +407,7 @@ class SourceBase(lb.Device):
         )
 
         # carryover from the previous acquisition
-        awaiting_start_time = True
+        missing_start_time = True
         start_ns, carryover_count = self._carryover.apply(samples)
         stream_time_ns = start_ns
 
@@ -469,14 +469,14 @@ class SourceBase(lb.Device):
                 # contiguous unless TimeoutError is raised
                 stream_time_ns = ret_time_ns
 
-            if awaiting_start_time:
+            if missing_start_time:
                 included_holdoff = find_trigger_holdoff(
                     self, stream_time_ns, dsp_pad_before=dsp_pad_before
                 )
                 remaining = remaining + included_holdoff - dsp_pad_before
 
                 start_ns = stream_time_ns + round(included_holdoff * 1e9 / fs)
-                awaiting_start_time = False
+                missing_start_time = False
 
             remaining = remaining - this_count
             received_count += this_count
