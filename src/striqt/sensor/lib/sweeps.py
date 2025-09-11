@@ -265,9 +265,11 @@ class SweepIterator:
             xp=xp
         )
 
+        print(attrs['noise_bandwidth'], noise)
+
         snr = peaks - noise
 
-        snr_desc = ', '.join(f'{p:0.1f}' for p in snr)
+        snr_desc = ', '.join(f'{p:+0.1f}' for p in snr)
         util.get_logger('analysis').info(
             f'({snr_desc}) dB spectrogram peak SNR'
         )
