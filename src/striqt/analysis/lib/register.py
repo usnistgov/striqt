@@ -412,6 +412,7 @@ class _MeasurementRegistry(
         for caches in self.caches.values():
             caches.extend(caches)
         print([cache.name for cache in caches])
+        1//0
         caches = list(set(caches))
 
         cm = contextlib.ExitStack()
