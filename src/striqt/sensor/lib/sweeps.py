@@ -159,6 +159,8 @@ def _update_sweep_time(
         return sweep_time
     elif old._sweep_index != new._sweep_index:
         return new.start_time
+    else:
+        return sweep_time
 
 
 @contextlib.contextmanager
@@ -246,8 +248,6 @@ class SweepIterator:
         sweep_time = None
         canalyze = None
         result = None
-
-        capture_iter: typing.Iterator[specs.RadioCapture]
 
         if self._loop:
             capture_iter = itertools.cycle(self.sweep.captures)
