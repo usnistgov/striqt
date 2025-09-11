@@ -63,7 +63,7 @@ class KeywordArgumentCache:
 
     def __init__(self, fields: list[str]):
         self._fields = fields
-        self._callback = []
+        self._callback = None
 
     def kw_key(self, kws: dict[str, typing.Any]):
         if kws is None:
