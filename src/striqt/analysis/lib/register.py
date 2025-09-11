@@ -95,7 +95,7 @@ class KeywordArgumentCache:
     def apply(self, func: typing.Callable[_P, _R]) -> typing.Callable[_P, _R]:
         @functools.wraps(func)
         def wrapped(iq, capture, *args, **kws):
-            all_kws = kws | {'capture': capture}
+            all_kws = dict(kws, capture=capture)
             match = self.lookup(all_kws)
             if match is not None:
                 return match
