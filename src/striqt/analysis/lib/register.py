@@ -95,12 +95,13 @@ class KeywordArgumentCache:
     def apply(self, func: typing.Callable[_P, _R]) -> typing.Callable[_P, _R]:
         @functools.wraps(func)
         def wrapped(iq, capture, *args, **kws):
-            match = self.lookup(kws)
+            all_kws = kws | {'capture': capture}
+            match = self.lookup(all_kws)
             if match is not None:
                 return match
 
             ret = func(iq, capture, *args, **kws)
-            self.update(kws, ret)
+            self.update(all_kws, ret)
             if self._callback is not None:
                 self._callback(
                     cache=self,
