@@ -237,9 +237,28 @@ class SweepIterator:
             analysis_spec=sweep.analysis,
             extra_attrs=_build_attrs(sweep),
             correction=True,
+            cache_callback=self.show_cache_info
         )
         self._analyze.__name__ = 'analyze'
         self._analyze.__qualname__ = 'analyze'
+
+    def show_cache_info(self, cache, result, args, kws):
+        if 'spectrogram' not in cache.name:
+            return
+        
+        import iqwaveform
+        
+        spg, attrs = result
+
+        # conversion to dB is left for after this function, but display
+        # log messages in dB
+        peaks = iqwaveform.powtodB(spg.max(axis=tuple(range(1, spg.ndim))))
+        peak_values = ', '.join(f'{p:0.1f}' for p in peaks)
+        util.get_logger('analysis').info(
+            f'({peak_values}) {attrs["units"]} spectrogram peak'
+        )
+
+
 
     def __iter__(self) -> typing.Generator['xr.Dataset' | bytes | None]:
         iq = None

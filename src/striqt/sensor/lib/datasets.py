@@ -220,10 +220,6 @@ def _assign_alias_coords(capture_data: 'xr.Dataset', aliases):
     return capture_data
 
 
-def cache_result(cache: striqt_analysis.lib.register.KeywordArgumentCache, result, args, kwargs):
-    print(cache.name)
-
-
 @dataclasses.dataclass
 class AnalysisCaller:
     """Inject radio device and capture metadata and coordinates into a channel analysis result"""
@@ -233,6 +229,7 @@ class AnalysisCaller:
     analysis_spec: list[specs.Measurement]
     extra_attrs: dict[str, typing.Any] | None = None
     correction: bool = False
+    cache_callback: callable | None = None
 
     @util.stopwatch('✓', 'analysis', logger_level=util.PERFORMANCE_INFO)
     def __call__(
@@ -250,7 +247,7 @@ class AnalysisCaller:
         # wait to import until here to avoid a circular import
         from . import iq_corrections
 
-        with register.measurement.cache_context(cache_result):
+        with register.measurement.cache_context(self.cache_callback):
             if self.correction:
                 with stopwatch(
                     'resample, filter, calibrate', logger_level=logging.DEBUG
