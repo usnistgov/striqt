@@ -132,6 +132,11 @@ class ZarrSinkBase(SinkBase):
         if getattr(self.store, '_is_open', True):
             self.store.close()
 
+        path = self.get_root_path()
+
+        with util.log_capture_context('sink', capture_index=i - 1):
+            util.get_logger('sink').info(f'closed "{str(path)}"')
+
     def get_root_path(self):
         if hasattr(self.store, 'path'):
             return self.store.path
