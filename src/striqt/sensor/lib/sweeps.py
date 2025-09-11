@@ -243,7 +243,8 @@ class SweepIterator:
         self._analyze.__qualname__ = 'analyze'
 
     def show_cache_info(self, cache, capture: specs.RadioCapture, result, *_, **__):
-        if self._calibration is None or 'spectrogram' not in cache.name:
+        cal = self.sweep.radio_setup.calibration
+        if cal is None or 'spectrogram' not in cache.name:
             return
         
         import iqwaveform
@@ -260,7 +261,14 @@ class SweepIterator:
             f'({peak_values}) {attrs["units"]} spectrogram peak'
         )
         
-        noise = lookup_system_noise_power(self._calibration, capture, base_clock_rate=capture.backend_sample_rate, B=attrs['noise_bandwidth'], xp=xp)
+        noise = lookup_system_noise_power(
+            cal,
+            capture,
+            base_clock_rate=capture.backend_sample_rate,
+            B=attrs['noise_bandwidth'],
+            xp=xp
+        )
+        
         print(peaks - noise)
 
 
