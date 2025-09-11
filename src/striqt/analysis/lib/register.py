@@ -100,7 +100,7 @@ class KeywordArgumentCache:
             if match is not None:
                 return match
 
-            ret = func(iq, capture, *args, **kws)
+            ret = func(iq, capture=capture, *args, **kws)
             self.update(all_kws, ret)
             if self._callback is not None:
                 self._callback(
@@ -112,7 +112,7 @@ class KeywordArgumentCache:
                 )
 
             return ret
-        
+
         self.name = func.__name__
 
         return wrapped
