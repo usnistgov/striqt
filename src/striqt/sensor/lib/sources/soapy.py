@@ -68,7 +68,7 @@ class HardwareTimeSync:
             pass
 
     def to_host_os(self, source: SoapyRadioSource) -> int:
-        if not self.backend.hasHardwareTime():
+        if not self.source.backend.hasHardwareTime():
             raise IOError('device does not expose hardware time')
 
         hardware_time = source.backend.getHardwareTime('now') / 1e9
@@ -80,7 +80,7 @@ class HardwareTimeSync:
             return self.last_sync_time
 
     def to_external_pps(self, source: SoapyRadioSource) -> int:
-        if not self.backend.hasHardwareTime():
+        if not self.source.backend.hasHardwareTime():
             raise IOError('device does not expose hardware time')
 
         # let a PPS transition pass to avoid race conditions involving
@@ -102,7 +102,7 @@ class HardwareTimeSync:
             full_secs += 1
         elif frac_secs > 0.2:
             # System time and PPS are off, warn caller
-            source._logger.warning(
+            self.source._logger.warning(
                 f'system time and PPS out of sync by {frac_secs:0.3f}s, check NTP'
             )
         time_to_set_ns = int((full_secs + 1) * 1e9)

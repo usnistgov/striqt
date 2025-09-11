@@ -460,6 +460,7 @@ def print_exception():
         trace,
         width=None,
         show_locals=False,
+        word_wrap=True,
         suppress=[
             'concurrent',
             'rich',
