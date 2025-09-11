@@ -376,8 +376,10 @@ def lookup_system_noise_power(
     base_clock_rate: float,
     *,
     T=290,
+    B=1,
     xp=np,
 ):
+    """return the calibrated system noise power, in dBm/Hz"""
     if isinstance(cal_data, xr.Dataset):
         corrections = cal_data
     elif cal_data:
@@ -396,7 +398,7 @@ def lookup_system_noise_power(
     noise_psd = (10 ** (noise_figure / 10) - 1) * k * T
 
     return xr.DataArray(
-        data=10 * np.log10(noise_psd),
+        data=10 * np.log10(noise_psd * B),
         dims=datasets.CAPTURE_DIM,
         attrs={'name': 'Sensor system noise PSD', 'units': 'dBm/Hz'},
     )

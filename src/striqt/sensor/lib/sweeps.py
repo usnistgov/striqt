@@ -242,13 +242,15 @@ class SweepIterator:
         self._analyze.__name__ = 'analyze'
         self._analyze.__qualname__ = 'analyze'
 
-    def show_cache_info(self, cache, result, args, kws):
-        if 'spectrogram' not in cache.name:
+    def show_cache_info(self, cache, capture: specs.RadioCapture, result, *_, **__):
+        if self._calibration is None or 'spectrogram' not in cache.name:
             return
         
         import iqwaveform
         
         spg, attrs = result
+
+        xp = iqwaveform.util.array_namespace(spg)
 
         # conversion to dB is left for after this function, but display
         # log messages in dB
@@ -257,8 +259,9 @@ class SweepIterator:
         util.get_logger('analysis').info(
             f'({peak_values}) {attrs["units"]} spectrogram peak'
         )
-        print(self._calibration)
-
+        
+        noise = lookup_system_noise_power(self._calibration, capture, base_clock_rate=capture.backend_sample_rate, B=attrs['noise_bandwidth'], xp=xp)
+        print(peaks - noise)
 
 
     def __iter__(self) -> typing.Generator['xr.Dataset' | bytes | None]:
