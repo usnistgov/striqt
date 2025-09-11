@@ -461,6 +461,7 @@ def print_exception():
         width=None,
         show_locals=False,
         word_wrap=True,
+        box=None,
         suppress=[
             'concurrent',
             'rich',

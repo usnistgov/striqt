@@ -188,7 +188,7 @@ class CaptureAppender(ZarrSinkBase):
             )
 
             for i in range(count - len(data_list), count):
-                with util.log_capture_context('sink', capture_index=i - 1):
+                with util.log_capture_context('sink', capture_index=i):
                     logger.info('💾')
 
 
