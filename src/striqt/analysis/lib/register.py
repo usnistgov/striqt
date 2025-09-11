@@ -409,10 +409,8 @@ class _MeasurementRegistry(
     @contextlib.contextmanager
     def cache_context(self, callback: callable|None = None):
         caches: list[KeywordArgumentCache] = []
-        for caches in self.caches.values():
-            caches.extend(caches)
-        print([cache.name for cache in caches])
-        1//0
+        for deps in self.caches.values():
+            caches.extend(deps)
         caches = list(set(caches))
 
         cm = contextlib.ExitStack()
