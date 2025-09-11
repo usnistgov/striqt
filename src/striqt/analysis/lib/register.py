@@ -5,6 +5,7 @@ into xarray DataArray objects with labeled dimensions and coordinates.
 from __future__ import annotations
 
 import collections
+import contextlib
 from fractions import Fraction
 import functools
 import msgspec
@@ -62,6 +63,7 @@ class KeywordArgumentCache:
 
     def __init__(self, fields: list[str]):
         self._fields = fields
+        self._callback = []
 
     def kw_key(self, kws: dict[str, typing.Any]):
         if kws is None:
@@ -98,16 +100,23 @@ class KeywordArgumentCache:
 
             ret = func(*args, **kws)
             self.update(kws, ret)
+            if self._callback is not None:
+                self._callback(self, ret, args, kws)
+
             return ret
 
         return wrapped
+
+    def set_callback(self, func: callable):
+        self._callback = func
 
     def __enter__(self):
         self.enabled = True
         return self
 
-    def __exit__(self, *args):
+    def __exit__(self, *exc_info):
         self.enabled = False
+        self._callback = None
         self.clear()
 
 
@@ -275,7 +284,7 @@ class _MeasurementRegistry(
         super().__init__()
         self.depends_on: dict[callable, set[callable]] = {}
         self.names: set[str] = set()
-        self.caches: dict[callable, callable] = {}
+        self.caches: dict[callable, list[callable]] = {} # function -> KeywordArgumentCache
         self.use_unaligned_input: set[callable] = set()
 
     def __call__(
@@ -394,11 +403,24 @@ class _MeasurementRegistry(
 
         return wrapper
 
-    def cache_context(self) -> typing.ContextManager:
-        all_caches = []
+    @contextlib.contextmanager
+    def cache_context(self, callback: callable|None = None):
+        caches: list[KeywordArgumentCache] = []
         for caches in self.caches.values():
-            all_caches.extend(caches)
-        return lb.sequentially(*set(all_caches))
+            caches.extend(caches)
+        caches = list(set(caches))
+
+        cm = contextlib.ExitStack()
+
+        with cm:
+            try:
+                for cache in caches:
+                    cm.enter_context(cache)
+                    cache.set_callback(callback)
+                yield cm
+            except:
+                cm.close()
+                raise
 
 
 measurement = _MeasurementRegistry()
