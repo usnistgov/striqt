@@ -220,8 +220,8 @@ def _assign_alias_coords(capture_data: 'xr.Dataset', aliases):
     return capture_data
 
 
-def cache_result(cache, result, args, kwargs):
-    print(cache, result)
+def cache_result(cache: striqt_analysis.lib.register.KeywordArgumentCache, result, args, kwargs):
+    print(cache.name)
 
 
 @dataclasses.dataclass

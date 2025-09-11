@@ -62,6 +62,7 @@ class KeywordArgumentCache:
     enabled = False
 
     def __init__(self, fields: list[str]):
+        self.name = None
         self._fields = fields
         self._callback = None
 
@@ -104,6 +105,8 @@ class KeywordArgumentCache:
                 self._callback(self, ret, args, kws)
 
             return ret
+        
+        self.name = func.__name__
 
         return wrapped
 
