@@ -150,12 +150,10 @@ def _build_attrs(sweep: specs.Sweep):
 
 def _update_sweep_time(
     sweep_time: specs.StartTimeType | None,
-    new: specs.RadioCapture | None,
+    new: specs.RadioCapture,
     old: specs.RadioCapture | None,
 ) -> specs.StartTimeType:
-    if new is None:
-        return sweep_time
-    elif sweep_time is None:
+    if sweep_time is None:
         return new.start_time
     elif old is None:
         return sweep_time
@@ -309,6 +307,7 @@ class SweepIterator:
 
                 if 'acquire' in ret:
                     iq = ret['acquire']['radio']
+                    sweep_time = _update_sweep_time(sweep_time, iq.capture, canalyze)
                     canalyze = iq.capture
                     prior_ext_data = this_ext_data
                     this_ext_data = ret['acquire'].get('peripherals', {}) or {}
@@ -320,9 +319,6 @@ class SweepIterator:
                     yield ret['intake']
                 elif self._always_yield:
                     yield None
-
-                sweep_time = _update_sweep_time(sweep_time, canalyze, csink)
-
 
     @util.stopwatch('✓', 'source', logger_level=util.PERFORMANCE_INFO)
     def _acquire(self, iq_prev: AcquiredIQ, capture_prev, capture_this, capture_next):
