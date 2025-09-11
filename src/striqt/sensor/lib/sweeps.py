@@ -256,7 +256,7 @@ class SweepIterator:
         # conversion to dB is left for after this function, but display
         # log messages in dB
         peaks = iqwaveform.powtodB(spg.max(axis=tuple(range(1, spg.ndim))))
-        
+
         noise = lookup_system_noise_power(
             cal,
             capture,
@@ -269,9 +269,9 @@ class SweepIterator:
 
         snr = peaks - noise
 
-        snr_desc = ', '.join(f'{p:+0.1f}' for p in snr)
+        snr_desc = ', '.join(f'{p:+0.0f}' for p in snr)
         util.get_logger('analysis').info(
-            f'({snr_desc}) dB spectrogram peak SNR'
+            f'({snr_desc}) dB SNR spectrogram peak'
         )
 
     def __iter__(self) -> typing.Generator['xr.Dataset' | bytes | None]:
