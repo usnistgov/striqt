@@ -133,8 +133,9 @@ class ZarrSinkBase(SinkBase):
             self.store.close()
 
         path = self.get_root_path()
+        count = self.captures_elapsed
 
-        with util.log_capture_context('sink', capture_index=i - 1):
+        with util.log_capture_context('sink', capture_index=count - 1):
             util.get_logger('sink').info(f'closed "{str(path)}"')
 
     def get_root_path(self):
