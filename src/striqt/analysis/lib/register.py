@@ -411,7 +411,7 @@ class _MeasurementRegistry(
         caches: list[KeywordArgumentCache] = []
         for caches in self.caches.values():
             caches.extend(caches)
-        print(caches)
+        print([cache.name for cache in caches])
         caches = list(set(caches))
 
         cm = contextlib.ExitStack()
