@@ -257,6 +257,7 @@ class SweepIterator:
         util.get_logger('analysis').info(
             f'({peak_values}) {attrs["units"]} spectrogram peak'
         )
+        print(self._calibration)
 
 
 
