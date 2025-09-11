@@ -162,7 +162,7 @@ class VerticalScrollDataTable(DataTable):
 
 
 class SweepHUDApp(App):
-    _CAPTURE_DISPLAY_LIMIT = 500
+    _CAPTURE_DISPLAY_LIMIT = 100
 
     BINDINGS = [
         ('q', 'request_quit', 'Quit'),

@@ -82,6 +82,11 @@ def meta(standard_name: str, units: str | None = None, **kws) -> msgspec.Meta:
     return msgspec.Meta(description=standard_name, extra=extra, **kws)
 
 
+@functools.lru_cache()
+def _private_fields(capture_cls: type[SpecBase]) -> tuple[str, ...]:
+    return tuple([n for n in capture_cls.__struct_fields__ if not n.startswith('_')])
+
+
 class SpecBase(msgspec.Struct, kw_only=True, frozen=True, cache_hash=True):
     """Base type for structures that support validated
     (de)serialization.
@@ -98,11 +103,17 @@ class SpecBase(msgspec.Struct, kw_only=True, frozen=True, cache_hash=True):
         """
         return msgspec.structs.replace(self, **attrs).validate()
 
-    def todict(self) -> dict:
+    def todict(self, skip_private=False) -> dict:
         """return a dictinary representation of `self`"""
-        return msgspec.to_builtins(
+        map = msgspec.to_builtins(
             self, builtin_types=_BUILTIN_TYPES, enc_hook=_enc_hook
         )
+
+        if skip_private:
+            for name in _private_fields(type(self)):
+                del map[name]
+
+        return map
 
     def tojson(self) -> bytes:
         return msgspec.json.encode(self, enc_hook=_enc_hook)

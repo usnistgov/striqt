@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import time
 import numbers
 import typing
@@ -109,6 +108,9 @@ class HardwareTimeSync:
         time_to_set_ns = int((full_secs + 1) * 1e9)
         source.backend.setHardwareTime(time_to_set_ns, 'pps')
         return time_to_set_ns
+
+    def validate_timestamp(self, time_ns: int):
+        pass
 
 
 class SoapyRadioSource(base.SourceBase):

@@ -143,7 +143,8 @@ def split_capture_ports(capture: specs.RadioCapture) -> list[specs.RadioCapture]
 def capture_fields_with_aliases(
     capture: specs.RadioCapture, *, radio_id: str = None, output: specs.Output
 ) -> dict:
-    attrs = capture.todict()
+    attrs = capture.todict(skip_private=True)
+
     c = split_capture_ports(capture)[0]
     aliases = evaluate_aliases(c, radio_id=radio_id, output=output)
 

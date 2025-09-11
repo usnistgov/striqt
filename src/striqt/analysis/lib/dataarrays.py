@@ -416,7 +416,7 @@ def evaluate_by_spec(
     for name in spec_dict.keys():
         meas = register.measurement[type(getattr(spec, name))]
 
-        with util.stopwatch(f'evaluate {name}', 'analysis'):
+        with util.stopwatch(name, 'analysis'):
             func_kws = spec_dict[name]
             if not func_kws:
                 continue
