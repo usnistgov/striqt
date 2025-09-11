@@ -265,8 +265,6 @@ class SweepIterator:
             xp=xp
         )
 
-        print(attrs['noise_bandwidth'], noise)
-
         snr = peaks - noise
 
         snr_desc = ', '.join(f'{p:+0.0f}' for p in snr)
