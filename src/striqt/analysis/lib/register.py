@@ -420,6 +420,7 @@ class _MeasurementRegistry(
                 for cache in caches:
                     cm.enter_context(cache)
                     cache.set_callback(callback)
+                    print('set callback in ', cache.name)
                 yield cm
             except:
                 cm.close()
