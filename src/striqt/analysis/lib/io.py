@@ -221,8 +221,10 @@ def dump(
         # establish the chunking and encodings for this and any subsequent writes
         kws['mode'] = 'w'
 
-        chunks = _choose_chunk_sizes(data, dim=append_dim, data_bytes=chunk_bytes)
-        data = data.chunk(chunks)
+        data = data.unify_chunks()
+        if len(data.chunks) == 0:
+            chunks = _choose_chunk_sizes(data, dim=append_dim, data_bytes=chunk_bytes)
+            data = data.chunk(chunks)
 
         if _zarr_version() >= (3, 0, 0):
             kws['encoding'] = _build_encodings_zarr_v3(
