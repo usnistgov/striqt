@@ -110,7 +110,7 @@ def _choose_chunk_sizes(
     return chunks
 
 
-def _build_encodings_zarr_v3(data, compression=True, dim='capture'):
+def _build_encodings_zarr_v3(data, compression=True):
     if isinstance(compression, zarr.core.codec_pipeline.Codec):
         compressors = [compression]
     elif compression:
@@ -170,6 +170,8 @@ def open_store(
     elif not isinstance(path, (str, Path)):
         raise ValueError('must pass a string or Path savefile or zarr Store')
     elif str(path).endswith('.zip'):
+        if mode == 'a':
+            raise IOError('zip store does support append mode')
         store = zarr.storage.ZipStore(path, mode=mode, compression=0)
     else:
         store = DirectoryStore(path)
@@ -221,15 +223,11 @@ def dump(
         # establish the chunking and encodings for this and any subsequent writes
         kws['mode'] = 'w'
 
-        data = data.unify_chunks()
-        if len(data.chunks) == 0:
-            chunks = _choose_chunk_sizes(data, dim=append_dim, data_bytes=chunk_bytes)
-            data = data.chunk(chunks)
+        chunks = _choose_chunk_sizes(data, dim=append_dim, data_bytes=chunk_bytes)
+        data = data.chunk(chunks)
 
         if _zarr_version() >= (3, 0, 0):
-            kws['encoding'] = _build_encodings_zarr_v3(
-                data, compression=compression, dim=append_dim
-            )
+            kws['encoding'] = _build_encodings_zarr_v3(data, compression=compression)
         else:
             kws['encoding'] = _build_encodings_zarr_v2(data, compression=compression)
 
@@ -240,13 +238,28 @@ def dump(
         return data.to_zarr(store, **kws)
 
 
-def load(path: str | Path) -> 'xr.DataArray' | 'xr.Dataset':
-    """load a dataset or data array"""
+def load(
+    path: str | Path,
+    chunks: str | int | Literal['auto'] | tuple[int, ...] | None = None,
+    **kwargs,
+) -> 'xr.DataArray' | 'xr.Dataset':
+    """load a dataset or data array.
+
+    Args:
+        path: location of the data store
+        chunks: None to load the file without dask, or 'auto' to return a dask
+            array with automatically selected chunk sizes
+    """
 
     if isinstance(path, (str, Path)):
         store = open_store(path, mode='r')
 
-    return xr.open_dataset(store, engine='zarr')
+    result = xr.open_dataset(store, chunks=chunks, engine='zarr', **kwargs)
+
+    if chunks is None:
+        return result
+    else:
+        return result.unify_chunks()
 
 
 class _YAMLIncludeConstructor:

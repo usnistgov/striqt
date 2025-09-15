@@ -168,9 +168,7 @@ def log_progress_contexts(index, count):
     """set the log context information for reporting progress"""
 
     contexts = (
-        util.log_capture_context(
-            'source', capture_index=index, capture_count=count
-        ),
+        util.log_capture_context('source', capture_index=index, capture_count=count),
         util.log_capture_context(
             'analysis',
             capture_index=index - 1,
@@ -180,7 +178,7 @@ def log_progress_contexts(index, count):
             'sink',
             capture_index=index - 2,
             capture_count=count,
-        )
+        ),
     )
 
     cm = contextlib.ExitStack()
@@ -237,7 +235,7 @@ class SweepIterator:
             analysis_spec=sweep.analysis,
             extra_attrs=_build_attrs(sweep),
             correction=True,
-            cache_callback=self.show_cache_info
+            cache_callback=self.show_cache_info,
         )
         self._analyze.__name__ = 'analyze'
         self._analyze.__qualname__ = 'analyze'
@@ -246,9 +244,9 @@ class SweepIterator:
         cal = self.sweep.radio_setup.calibration
         if cal is None or 'spectrogram' not in cache.name:
             return
-        
+
         import iqwaveform
-        
+
         spg, attrs = result
 
         xp = iqwaveform.util.array_namespace(spg)
@@ -262,15 +260,13 @@ class SweepIterator:
             capture,
             base_clock_rate=capture.backend_sample_rate,
             B=attrs['noise_bandwidth'],
-            xp=xp
+            xp=xp,
         )
 
         snr = peaks - noise
 
         snr_desc = ','.join(f'{p:+02.0f}' for p in snr)
-        util.get_logger('analysis').info(
-            f'({snr_desc}) dB SNR spectrogram peak'
-        )
+        util.get_logger('analysis').info(f'({snr_desc}) dB SNR spectrogram peak')
 
     def __iter__(self) -> typing.Generator['xr.Dataset' | bytes | None]:
         iq = None

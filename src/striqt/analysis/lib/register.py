@@ -103,13 +103,7 @@ class KeywordArgumentCache:
             ret = func(iq, capture=capture, *args, **kws)
             self.update(all_kws, ret)
             if self._callback is not None:
-                self._callback(
-                    cache=self,
-                    capture=capture,
-                    result=ret,
-                    *args,
-                    **kws
-                )
+                self._callback(cache=self, capture=capture, result=ret, *args, **kws)
 
             return ret
 
@@ -294,7 +288,9 @@ class _MeasurementRegistry(
         super().__init__()
         self.depends_on: dict[callable, set[callable]] = {}
         self.names: set[str] = set()
-        self.caches: dict[callable, list[callable]] = {} # function -> KeywordArgumentCache
+        self.caches: dict[
+            callable, list[callable]
+        ] = {}  # function -> KeywordArgumentCache
         self.use_unaligned_input: set[callable] = set()
 
     def __call__(
@@ -414,7 +410,7 @@ class _MeasurementRegistry(
         return wrapper
 
     @contextlib.contextmanager
-    def cache_context(self, callback: callable|None = None):
+    def cache_context(self, callback: callable | None = None):
         caches: list[KeywordArgumentCache] = []
         for deps in self.caches.values():
             caches.extend(deps)
