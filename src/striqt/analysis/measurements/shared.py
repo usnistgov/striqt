@@ -309,7 +309,7 @@ class FrequencyAnalysisSpecBase(
     window_fill: fractions.Fraction = 1
     integration_bandwidth: typing.Optional[float] = None
     trim_stopband: bool = True
-    lo_bandstop: typing.Optional[float] = None    
+    lo_bandstop: typing.Optional[float] = None
 
 
 class FrequencyAnalysisKeywords(specs.AnalysisKeywords):
@@ -493,12 +493,6 @@ def _cached_spectrogram(
         'noise_bandwidth': float(enbw),
         'units': f'dBm/{enbw / 1e3:0.0f} kHz',
     }
-
-    # conversion to dB is left for after this function, but display 
-    # log messages in dB
-    peaks = iqwaveform.powtodB(spg.max(axis=tuple(range(1,spg.ndim))))
-    peak_values = ', '.join(f'{p:0.1f}' for p in peaks)
-    util.get_logger('analysis').info(f'({peak_values}) {attrs["units"]} spectrogram peak')
 
     return spg, attrs
 

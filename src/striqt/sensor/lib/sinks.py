@@ -15,13 +15,6 @@ else:
     lb = util.lazy_import('labbench')
 
 
-def _log_info(sink: SinkBase):
-    return dict(
-        capture_index=sink.captures_elapsed,
-        description=f'…{sink.captures_elapsed}'    
-    )
-
-
 class SinkBase:
     """intake acquisitions one at a time, and parcel data store"""
 
@@ -56,6 +49,7 @@ class SinkBase:
     def pop(self) -> list['xr.Dataset']:
         result = self._pending_data
         self._pending_data = []
+        self.captures_elapsed += len(result)
         return result
 
     def submit(self, func, *args, **kws):
@@ -80,7 +74,6 @@ class SinkBase:
         if capture_data is None:
             return
 
-        self.captures_elapsed += 1
         self._pending_data.append(capture_data)
 
     def open(self):
@@ -104,8 +97,11 @@ class NullSink(SinkBase):
         pass
 
     def flush(self):
-        with util.log_capture_context('sink', **_log_info(self)):
-            util.get_logger('sink').info(f'finished')
+        count = self.captures_elapsed
+        with util.log_capture_context(
+            'sink', capture_index=count - 1, capture_count=count
+        ):
+            util.get_logger('sink').info(f'done')
 
     def append(self, capture_data: 'xr.Dataset' | None, capture: specs.RadioCapture):
         self.captures_elapsed += 1
@@ -136,6 +132,12 @@ class ZarrSinkBase(SinkBase):
         if getattr(self.store, '_is_open', True):
             self.store.close()
 
+        path = self.get_root_path()
+        count = self.captures_elapsed
+
+        with util.log_capture_context('sink', capture_index=count - 1):
+            util.get_logger('sink').info(f'closed "{str(path)}"')
+
     def get_root_path(self):
         if hasattr(self.store, 'path'):
             return self.store.path
@@ -156,6 +158,7 @@ class CaptureAppender(ZarrSinkBase):
             util.get_logger('sink').debug('queued')
 
     def flush(self):
+        super().flush()
         self.wait()
         data_list = self.pop()
 
@@ -171,14 +174,23 @@ class CaptureAppender(ZarrSinkBase):
             dataset = xr.concat(data_list, datasets.CAPTURE_DIM)
 
         path = self.get_root_path()
+        count = self.captures_elapsed
+        logger = util.get_logger('sink')
 
         with (
-            util.log_capture_context('sink', **_log_info(self)),
-            util.stopwatch(f'sync to {path}', 'sink', logger_level=logging.INFO)
+            util.log_capture_context('sink', capture_index=count - 1),
+            util.stopwatch(
+                f'sync to {path}', 'sink', logger_level=util.PERFORMANCE_INFO
+            ),
         ):
             analysis.dump(
                 self.store, dataset, max_threads=self.sweep_spec.output.max_threads
             )
+
+            for i in range(count - len(data_list), count):
+                with util.log_capture_context('sink', capture_index=i):
+                    logger.info('💾')
+
 
 class SpectrogramTimeAppender(ZarrSinkBase):
     def open(self):
@@ -212,14 +224,22 @@ class SpectrogramTimeAppender(ZarrSinkBase):
             by_spectrogram = datasets.concat_time_dim(data_list, 'spectrogram_time')
 
         path = self.get_root_path()
+        count = self.captures_elapsed
+        logger = util.get_logger('sink')
 
         with (
-            util.log_capture_context('sink', **_log_info(self)),
-            util.stopwatch(f'sync to {path}', 'sink', logger_level=logging.INFO)
+            util.log_capture_context('sink', capture_index=count - 1),
+            util.stopwatch(
+                f'sync {path}', 'sink', logger_level=logging.PERFORMANCE_INFO
+            ),
         ):
             analysis.dump(
+                self.store,
                 by_spectrogram,
-                data_list,
                 compression=False,
                 max_threads=self.sweep_spec.output.max_threads,
             )
+
+            for i in range(count - len(data_list), count):
+                with util.log_capture_context('sink', capture_index=i):
+                    logger.info('💾')

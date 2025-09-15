@@ -112,6 +112,9 @@ class RadioCapture(
     delay: Optional[DelayType] = None
     start_time: Optional[StartTimeType] = None
 
+    # a counter used to reset the sweep timestamp on Repeat(None)
+    _sweep_index: int = 0
+
     def __post_init__(self):
         _validate_multichannel(self.port, self.gain)
 
@@ -141,7 +144,7 @@ class LoopBase(
     SpecBase,
     tag=str.lower,
     tag_field='kind',
-    forbid_unknown_fields=True,
+    forbid_unknown_fields=False,
     frozen=True,
     kw_only=True,
 ):
@@ -167,6 +170,7 @@ class Range(LoopBase, forbid_unknown_fields=True, frozen=True, kw_only=True):
 
 
 class Repeat(LoopBase, forbid_unknown_fields=True, frozen=True, kw_only=True):
+    field: Optional[str] = '_sweep_index'
     count: int = 1
 
     def get_points(self):
@@ -425,9 +429,11 @@ def _expand_loops(
     explicit_captures: tuple[RadioCapture, ...], loops: tuple[LoopSpecifier, ...]
 ) -> tuple[RadioCapture, ...]:
     """evaluate the loop specification, and flatten into one list of loops"""
-    fields = tuple(loop.field for loop in loops)
+    fields = tuple([loop.field for loop in loops])
 
     for f in fields:
+        if f is None:
+            continue
         if f not in explicit_captures[0].__struct_fields__:
             raise TypeError(f'loop specifies capture field {f!r} that is not defined')
 
@@ -437,7 +443,10 @@ def _expand_loops(
     result = []
     for values in combinations:
         updates = dict(zip(fields, values))
-        result += [c.replace(**updates) for c in explicit_captures]
+
+        extras = [c.replace(**updates) for c in explicit_captures]
+
+        result += extras
 
     if len(result) == 0:
         return explicit_captures
@@ -456,10 +465,10 @@ class Sweep(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     extensions: Extensions = Extensions()
     output: Output = Output()
 
-    def get_captures(self, with_loops=True):
+    def get_captures(self, looped=True):
         """subclasses may use this to autogenerate capture sequences"""
         explicit_captures = object.__getattribute__(self, 'captures')
-        if with_loops:
+        if looped:
             return _expand_loops(tuple(explicit_captures), self.loops)
         else:
             return explicit_captures
@@ -469,6 +478,16 @@ class Sweep(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
             return self.get_captures()
         else:
             return super().__getattribute__(name)
+
+    def __post_init__(self):
+        looped_fields = []
+        for loop in self.loops:
+            if loop.field in looped_fields:
+                raise TypeError(
+                    f'multiple loops specified for capture field {repr(loop.field)}'
+                )
+            else:
+                looped_fields.append(loop.field)
 
     @classmethod
     def _from_registry(cls: type[Sweep]) -> type[Sweep]:

@@ -38,17 +38,20 @@ def get_logger(name_suffix) -> _StriqtLogger:
 
 
 @contextlib.contextmanager
-def log_capture_context(
-    name_suffix, /, capture_index=0, capture=None, capture_count='unknown', description=None
-):
-    extra = locals()
-
-    if description is None:
-        extra['capture_progress'] = f'{capture_index + 1}/{capture_count}'
-    else:
-        extra['capture_progress'] = description
-
+def log_capture_context(name_suffix, /, capture_index=0, capture_count=None):
+    extra = {'capture_index': capture_index}
     logger = get_logger(name_suffix)
+
+    if capture_count is not None:
+        logger.extra['capture_count'] = capture_count
+
+    if capture_count is None:
+        capture_count = extra['capture_count'] = logger.extra.get(
+            'capture_count', 'unknown'
+        )
+
+    extra['capture_progress'] = f'{capture_index + 1}/{capture_count}'
+
     start_extra = logger.extra
     logger.extra = start_extra | extra
     yield
@@ -59,8 +62,9 @@ _StriqtLogger('analysis')
 
 
 def show_messages(
-    level: int,
+    level: int | None,
     colors: bool | None = None,
+    logger_names: tuple[str] = ('controller', 'source', 'analysis', 'sink'),
 ):
     """filters logging messages displayed to the console by importance
 
@@ -72,15 +76,20 @@ def show_messages(
         None
     """
 
-    for logger in _logger_adapters.values():
-        logger.setLevel(logging.DEBUG)
+    for name in logger_names:
+        logger = _logger_adapters[name]
 
         # clear any stale handlers
         if hasattr(logger, '_screen_handler'):
             logger.logger.removeHandler(logger._screen_handler)
 
         if level is None:
+            logger.setLevel(logging.CRITICAL)
+            logger.logger.setLevel(logging.CRITICAL)
             return
+
+        logger.setLevel(level)
+        logger.logger.setLevel(level)
 
         logger._screen_handler = logging.StreamHandler()
         logger._screen_handler.setLevel(level)
@@ -157,7 +166,7 @@ def stopwatch(
             logger_level = logger_level - 10
 
         msg = str(desc) + ' ' if len(desc) else ''
-        msg += f'{elapsed:0.3f} s elapsed'
+        msg += f'⏱ {elapsed:0.3f} s'
 
         exc_info = sys.exc_info()
         if exc_info != (None, None, None):

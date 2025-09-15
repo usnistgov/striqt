@@ -375,9 +375,11 @@ def lookup_system_noise_power(
     capture: specs.RadioCapture,
     base_clock_rate: float,
     *,
-    T=290,
+    T=290.0,
+    B=1.0,
     xp=np,
 ):
+    """return the calibrated system noise power, in dBm/Hz"""
     if isinstance(cal_data, xr.Dataset):
         corrections = cal_data
     elif cal_data:
@@ -393,10 +395,10 @@ def lookup_system_noise_power(
     )
 
     k = scipy.constants.Boltzmann * 1000  # scaled from W/K to mW/K
-    noise_psd = (10 ** (noise_figure / 10) - 1) * k * T
+    noise_psd = (10 ** (noise_figure / 10) - 1) * k * T * B
 
     return xr.DataArray(
-        data=10 * np.log10(noise_psd),
+        data=10 * xp.log10(noise_psd),
         dims=datasets.CAPTURE_DIM,
         attrs={'name': 'Sensor system noise PSD', 'units': 'dBm/Hz'},
     )

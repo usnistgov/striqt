@@ -407,9 +407,9 @@ class SourceBase(lb.Device):
         )
 
         # carryover from the previous acquisition
-        awaiting_timestamp = True
+        missing_start_time = True
         start_ns, carryover_count = self._carryover.apply(samples)
-        buf_time_ns = start_ns
+        stream_time_ns = start_ns
 
         # the number of holdoff samples from the end of the holdoff period
         # to include with the returned waveform
@@ -464,19 +464,19 @@ class SourceBase(lb.Device):
                     f'overfilled receive buffer by {(this_count + received_count) - samples.size}'
                 )
 
-            if buf_time_ns is None:
-                # special case for the first read in the stream, because
-                # devices may not always return timestamps
-                buf_time_ns = ret_time_ns
+            if stream_time_ns is None:
+                # after the first stream read, subsequent reads are treated as
+                # contiguous unless TimeoutError is raised
+                stream_time_ns = ret_time_ns
 
-            if awaiting_timestamp:
+            if missing_start_time:
                 included_holdoff = find_trigger_holdoff(
-                    self, buf_time_ns, dsp_pad_before=dsp_pad_before
+                    self, stream_time_ns, dsp_pad_before=dsp_pad_before
                 )
                 remaining = remaining + included_holdoff - dsp_pad_before
 
-                start_ns = buf_time_ns + round(included_holdoff * 1e9 / fs)
-                awaiting_timestamp = False
+                start_ns = stream_time_ns + round(included_holdoff * 1e9 / fs)
+                missing_start_time = False
 
             remaining = remaining - this_count
             received_count += this_count

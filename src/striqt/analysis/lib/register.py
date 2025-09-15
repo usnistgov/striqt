@@ -5,6 +5,8 @@ into xarray DataArray objects with labeled dimensions and coordinates.
 from __future__ import annotations
 
 import collections
+import contextlib
+from fractions import Fraction
 import functools
 import msgspec
 import textwrap
@@ -12,7 +14,6 @@ import typing
 import typing_extensions
 from . import specs, util
 
-import array_api_compat
 
 if typing.TYPE_CHECKING:
     _P = typing_extensions.ParamSpec('_P')
@@ -61,7 +62,9 @@ class KeywordArgumentCache:
     enabled = False
 
     def __init__(self, fields: list[str]):
+        self.name = None
         self._fields = fields
+        self._callback = None
 
     def kw_key(self, kws: dict[str, typing.Any]):
         if kws is None:
@@ -91,23 +94,39 @@ class KeywordArgumentCache:
 
     def apply(self, func: typing.Callable[_P, _R]) -> typing.Callable[_P, _R]:
         @functools.wraps(func)
-        def wrapped(*args, **kws):
-            match = self.lookup(kws)
+        def wrapped(iq, capture, *args, **kws):
+            all_kws = dict(kws, capture=capture)
+            match = self.lookup(all_kws)
             if match is not None:
                 return match
 
-            ret = func(*args, **kws)
-            self.update(kws, ret)
+            ret = func(iq, capture=capture, *args, **kws)
+            self.update(all_kws, ret)
+            if self._callback is not None:
+                self._callback(
+                    cache=self,
+                    capture=capture,
+                    result=ret,
+                    *args,
+                    **kws
+                )
+
             return ret
 
+        self.name = func.__name__
+
         return wrapped
+
+    def set_callback(self, func: callable):
+        self._callback = func
 
     def __enter__(self):
         self.enabled = True
         return self
 
-    def __exit__(self, *args):
+    def __exit__(self, *exc_info):
         self.enabled = False
+        self._callback = None
         self.clear()
 
 
@@ -275,7 +294,7 @@ class _MeasurementRegistry(
         super().__init__()
         self.depends_on: dict[callable, set[callable]] = {}
         self.names: set[str] = set()
-        self.caches: dict[callable, callable] = {}
+        self.caches: dict[callable, list[callable]] = {} # function -> KeywordArgumentCache
         self.use_unaligned_input: set[callable] = set()
 
     def __call__(
@@ -338,14 +357,10 @@ class _MeasurementRegistry(
                 spec = spec_type.fromdict(kws)
                 ret = func(iq, capture, **spec.todict())
 
-                if not as_xarray:
-                    return ret
+                data, more_attrs = normalize_factory_return(ret, name=func.__name__)
 
-                if isinstance(ret, (list, tuple)) and len(ret) == 2:
-                    data, more_attrs = ret
-                else:
-                    data = ret
-                    more_attrs = {}
+                if not as_xarray:
+                    return data, more_attrs
 
                 data = DelayedDataArray(
                     data=data,
@@ -398,11 +413,24 @@ class _MeasurementRegistry(
 
         return wrapper
 
-    def cache_context(self) -> typing.ContextManager:
-        all_caches = []
-        for caches in self.caches.values():
-            all_caches.extend(caches)
-        return lb.sequentially(*set(all_caches))
+    @contextlib.contextmanager
+    def cache_context(self, callback: callable|None = None):
+        caches: list[KeywordArgumentCache] = []
+        for deps in self.caches.values():
+            caches.extend(deps)
+        caches = list(set(caches))
+
+        cm = contextlib.ExitStack()
+
+        with cm:
+            try:
+                for cache in caches:
+                    cm.enter_context(cache)
+                    cache.set_callback(callback)
+                yield cm
+            except:
+                cm.close()
+                raise
 
 
 measurement = _MeasurementRegistry()
@@ -467,3 +495,31 @@ def get_channel_sync_source_measurement_name(name: str):
     info: SyncInfo = channel_sync_source[name]
     meas_info = measurement[info.meas_spec_type]
     return meas_info.name
+
+
+def normalize_factory_return(ret, name: str):
+    """normalize the coordinate and data factory returns into (data, metadata)"""
+
+    if not isinstance(ret, tuple):
+        arr = ret
+        attrs = {}
+    elif len(ret) == 2:
+        arr, attrs = ret
+    else:
+        raise TypeError(
+            f'tuple returned by {repr(name)} coordinate factory '
+            f'must have length 2, not {len(ret)}. return a list '
+            f'or array if this was meant as data.'
+        )
+
+    if not isinstance(attrs, dict):
+        raise TypeError(
+            f'second item of {repr(name)} coordinate factory return tuple must be dict.'
+            f'return an array or list if this was meant as data.'
+        )
+    else:
+        attrs = {
+            k: (str(v) if isinstance(v, Fraction) else v) for k, v in attrs.items()
+        }
+
+    return arr, attrs

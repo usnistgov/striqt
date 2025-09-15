@@ -11,6 +11,7 @@ from striqt.analysis.lib.util import (
     _StriqtLogger,
     PERFORMANCE_DETAIL,
     PERFORMANCE_INFO,
+    show_messages,
 )
 
 TGen = type[typing.Any]

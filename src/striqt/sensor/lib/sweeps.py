@@ -1,6 +1,7 @@
 """implementation of performant acquisition and analysis sequencing for a series of captures"""
 
 from __future__ import annotations
+import contextlib
 import itertools
 import typing
 from collections import Counter
@@ -89,7 +90,7 @@ def design_warmup_sweep(
     class WarmupSweep(type(sweep)):
         def get_captures(self):
             # override any capture auto-generating logic
-            return specs.Sweep.get_captures(self, with_loops=False)
+            return specs.Sweep.get_captures(self, looped=False)
 
     warmup = WarmupSweep.fromdict(sweep.todict())
 
@@ -147,6 +148,53 @@ def _build_attrs(sweep: specs.Sweep):
     return attrs
 
 
+def _update_sweep_time(
+    sweep_time: specs.StartTimeType | None,
+    new: specs.RadioCapture,
+    old: specs.RadioCapture | None,
+) -> specs.StartTimeType:
+    if sweep_time is None:
+        return new.start_time
+    elif old is None:
+        return sweep_time
+    elif old._sweep_index != new._sweep_index:
+        return new.start_time
+    else:
+        return sweep_time
+
+
+@contextlib.contextmanager
+def log_progress_contexts(index, count):
+    """set the log context information for reporting progress"""
+
+    contexts = (
+        util.log_capture_context(
+            'source', capture_index=index, capture_count=count
+        ),
+        util.log_capture_context(
+            'analysis',
+            capture_index=index - 1,
+            capture_count=count,
+        ),
+        util.log_capture_context(
+            'sink',
+            capture_index=index - 2,
+            capture_count=count,
+        )
+    )
+
+    cm = contextlib.ExitStack()
+
+    with cm:
+        try:
+            for ctx in contexts:
+                cm.enter_context(ctx)
+            yield cm
+        except:
+            cm.close()
+            raise
+
+
 class SweepIterator:
     def __init__(
         self,
@@ -189,16 +237,47 @@ class SweepIterator:
             analysis_spec=sweep.analysis,
             extra_attrs=_build_attrs(sweep),
             correction=True,
+            cache_callback=self.show_cache_info
         )
         self._analyze.__name__ = 'analyze'
         self._analyze.__qualname__ = 'analyze'
+
+    def show_cache_info(self, cache, capture: specs.RadioCapture, result, *_, **__):
+        cal = self.sweep.radio_setup.calibration
+        if cal is None or 'spectrogram' not in cache.name:
+            return
+        
+        import iqwaveform
+        
+        spg, attrs = result
+
+        xp = iqwaveform.util.array_namespace(spg)
+
+        # conversion to dB is left for after this function, but display
+        # log messages in dB
+        peaks = iqwaveform.powtodB(spg.max(axis=tuple(range(1, spg.ndim))))
+
+        noise = lookup_system_noise_power(
+            cal,
+            capture,
+            base_clock_rate=capture.backend_sample_rate,
+            B=attrs['noise_bandwidth'],
+            xp=xp
+        )
+
+        snr = peaks - noise
+
+        snr_desc = ','.join(f'{p:+02.0f}' for p in snr)
+        util.get_logger('analysis').info(
+            f'({snr_desc}) dB SNR spectrogram peak'
+        )
 
     def __iter__(self) -> typing.Generator['xr.Dataset' | bytes | None]:
         iq = None
         this_ext_data = {}
         prior_ext_data = {}
         sweep_time = None
-        capture_prev = None
+        canalyze = None
         result = None
 
         if self._loop:
@@ -214,28 +293,10 @@ class SweepIterator:
         # iterate across (previous-1, previous, current, next) captures to support concurrency
         offset_captures = util.zip_offsets(capture_iter, (-2, -1, 0, 1), fill=None)
 
-        for i, (capture_intake, _, capture_this, capture_next) in enumerate(
-            offset_captures
-        ):
+        for i, (csink, _, cacquire, cnext) in enumerate(offset_captures):
             calls = {}
 
-            with (
-                util.log_capture_context(
-                    'source', capture_index=i, capture_count=count, capture=capture_this
-                ),
-                util.log_capture_context(
-                    'analysis',
-                    capture_index=i - 1,
-                    capture_count=count,
-                    capture=capture_prev,
-                ),
-                util.log_capture_context(
-                    'sink',
-                    capture_index=i - 2,
-                    capture_count=count,
-                    capture=capture_intake,
-                ),
-            ):
+            with log_progress_contexts(i, count):
                 if iq is None:
                     # no pending data in the first iteration
                     pass
@@ -244,31 +305,31 @@ class SweepIterator:
                         self._analyze,
                         iq,
                         sweep_time=sweep_time,
-                        capture=capture_prev,
+                        capture=canalyze,
                         pickled=self._pickled,
                         overwrite_x=not self._reuse_iq,
                         delayed=True,
                         block_each=False,
                     )
 
-                if capture_this is None:
+                if cacquire is None:
                     # this happens at the end during the last post-analysis and intakes
                     pass
                 else:
                     calls['acquire'] = lb.Call(
-                        self._acquire, iq, capture_prev, capture_this, capture_next
+                        self._acquire, iq, canalyze, cacquire, cnext
                     )
 
                 if result is None:
                     # for the first two iterations, there is no data to save
                     pass
                 else:
-                    assert capture_intake is not None
+                    assert csink is not None
                     result.set_extra_data(prior_ext_data)
                     calls['intake'] = lb.Call(
                         self._intake,
                         results=result.to_xarray(),
-                        capture=capture_intake,
+                        capture=csink,
                     )
 
                 ret = util.concurrently_with_fg(calls, flatten=False)
@@ -277,20 +338,18 @@ class SweepIterator:
 
                 if 'acquire' in ret:
                     iq = ret['acquire']['radio']
-                    capture_prev = iq.capture
+                    sweep_time = _update_sweep_time(sweep_time, iq.capture, canalyze)
+                    canalyze = iq.capture
                     prior_ext_data = this_ext_data
                     this_ext_data = ret['acquire'].get('peripherals', {}) or {}
                 else:
                     iq = None
-                    capture_prev = None
+                    canalyze = None
 
                 if 'intake' in ret:
                     yield ret['intake']
                 elif self._always_yield:
                     yield None
-
-                if sweep_time is None and capture_prev is not None:
-                    sweep_time = capture_prev.start_time
 
     @util.stopwatch('✓', 'source', logger_level=util.PERFORMANCE_INFO)
     def _acquire(self, iq_prev: AcquiredIQ, capture_prev, capture_this, capture_next):

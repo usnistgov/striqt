@@ -229,6 +229,7 @@ class AnalysisCaller:
     analysis_spec: list[specs.Measurement]
     extra_attrs: dict[str, typing.Any] | None = None
     correction: bool = False
+    cache_callback: callable | None = None
 
     @util.stopwatch('✓', 'analysis', logger_level=util.PERFORMANCE_INFO)
     def __call__(
@@ -246,7 +247,7 @@ class AnalysisCaller:
         # wait to import until here to avoid a circular import
         from . import iq_corrections
 
-        with register.measurement.cache_context():
+        with register.measurement.cache_context(self.cache_callback):
             if self.correction:
                 with stopwatch(
                     'resample, filter, calibrate', logger_level=logging.DEBUG

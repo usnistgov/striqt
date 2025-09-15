@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import time
 import numbers
 import typing
@@ -24,7 +23,7 @@ port_kwarg = attr.method_kwarg.int('port', min=0, help='hardware port index')
 
 
 def validate_stream_result(
-    sr: SoapySDR.StreamResult, on_overflow='except'
+    sr: SoapySDR.StreamResult, on_overflow='except', sync_time_ns: int = None
 ) -> tuple[int, int]:
     """track the number of samples received and remaining in a read stream.
 
@@ -39,15 +38,79 @@ def validate_stream_result(
 
     # ensure the proper number of waveform samples was read
     if sr.ret >= 0:
-        return sr.ret, sr.timeNs
+        result = sr.ret, sr.timeNs
     elif sr.ret == SoapySDR.SOAPY_SDR_OVERFLOW:
         if on_overflow == 'except':
             msg = f'{time.perf_counter()}: overflow'
             raise OverflowError(msg)
-        return 0, sr.timeNs
+        result = 0, sr.timeNs
     else:
         err_str = SoapySDR.errToStr(sr.ret)
         raise base.ReceiveStreamError(f'{err_str} (error code {sr.ret})')
+
+    if sync_time_ns is not None and sync_time_ns > sr.timeNs:
+        raise base.ReceiveStreamError(f'invalid timestamp from before last sync')
+
+    return result
+
+
+class HardwareTimeSync:
+    def __init__(self, source: SoapyRadioSource):
+        self.last_sync_time: int | None = None
+        self.source = source
+
+    def __call__(self):
+        if self.source.time_source() in ('internal', 'host'):
+            self.last_sync_time = self.to_host_os(self.source)
+        elif self.source.time_source() in ('gps', 'external'):
+            self.last_sync_time = self.to_external_pps(self.source)
+        else:
+            pass
+
+    def to_host_os(self, source: SoapyRadioSource) -> int:
+        if not self.source.backend.hasHardwareTime():
+            raise IOError('device does not expose hardware time')
+
+        hardware_time = source.backend.getHardwareTime('now') / 1e9
+        if abs(hardware_time - time.time()) >= 0.2:
+            sync_time = round(time.time() * 1e9)
+            source.backend.setHardwareTime(sync_time, 'now')
+            return sync_time
+        else:
+            return self.last_sync_time
+
+    def to_external_pps(self, source: SoapyRadioSource) -> int:
+        if not self.source.backend.hasHardwareTime():
+            raise IOError('device does not expose hardware time')
+
+        # let a PPS transition pass to avoid race conditions involving
+        # applying the time of the next PPS
+        init_pps_time = source.backend.getHardwareTime('pps')
+        start_time = time.perf_counter()
+        while init_pps_time == source.backend.getHardwareTime('pps'):
+            if time.perf_counter() - start_time > 1.5:
+                raise RuntimeError('no pps input detected for external time source')
+            else:
+                time.sleep(10e-3)
+
+        # PPS transition occurred, should be safe to snag system time and apply it
+        sys_time_now = time.time()
+        full_secs = int(sys_time_now)
+        frac_secs = sys_time_now - full_secs
+        if frac_secs > 0.8:
+            # System time is lagging behind the PPS transition
+            full_secs += 1
+        elif frac_secs > 0.2:
+            # System time and PPS are off, warn caller
+            self.source._logger.warning(
+                f'system time and PPS out of sync by {frac_secs:0.3f}s, check NTP'
+            )
+        time_to_set_ns = int((full_secs + 1) * 1e9)
+        source.backend.setHardwareTime(time_to_set_ns, 'pps')
+        return time_to_set_ns
+
+    def validate_timestamp(self, time_ns: int):
+        pass
 
 
 class SoapyRadioSource(base.SourceBase):
@@ -71,9 +134,9 @@ class SoapyRadioSource(base.SourceBase):
 
     _transport_dtype = attr.value.str('int16', inherit=True)
 
-    _rx_stream = None
-
     _uncalibrated_peak_detect = attr.value.bool(True, inherit=True)
+
+    _rx_stream = None
 
     @attr.method.float(inherit=True)
     def backend_sample_rate(self):
@@ -242,12 +305,16 @@ class SoapyRadioSource(base.SourceBase):
 
         if enable:
             delay = self._rx_enable_delay
-            kws = {'flags': SoapySDR.SOAPY_SDR_HAS_TIME}
+            if self.backend.hasHardwareTime():
+                kws = {'flags': SoapySDR.SOAPY_SDR_HAS_TIME}
+            else:
+                kws = {}
 
             if delay is not None:
                 timeNs = self.backend.getHardwareTime('now') + round(delay * 1e9)
                 kws['timeNs'] = timeNs
 
+            self._checked_timestamp = False
             self.backend.activateStream(self._rx_stream, **kws)
 
         elif self._rx_stream is not None:
@@ -285,6 +352,9 @@ class SoapyRadioSource(base.SourceBase):
         else:
             self.backend = SoapySDR.Device()
 
+        self.sync_time_source: HardwareTimeSync = HardwareTimeSync(self)
+        self._checked_timestamp = False
+
         self._post_connect()
 
         for ports in range(self.rx_port_count):
@@ -313,47 +383,22 @@ class SoapyRadioSource(base.SourceBase):
             timeoutUs=round(total_timeout * 1e6),
         )
 
-        return validate_stream_result(rx_result, on_overflow=on_overflow)
-
-    def sync_time_source(self):
-        if self.time_source() in ('internal', 'host'):
-            self._sync_to_os_time_source()
+        if not self._checked_timestamp and self.backend.hasHardwareTime():
+            # require a valid timestamp only for the first read after channel enables.
+            # subsequent reads are treated as contiguous unless TimeoutError is raised
+            sync_time_ns = self.sync_time_source.last_sync_time
+            self._checked_timestamp = True
         else:
-            self._sync_to_external_time_source()
+            sync_time_ns = None
+
+        return validate_stream_result(
+            rx_result,
+            on_overflow=on_overflow,
+            sync_time_ns=sync_time_ns,
+        )
 
     def get_temperatures(self) -> dict[str, float]:
         return {}
-
-    def _sync_to_os_time_source(self):
-        hardware_time = self.backend.getHardwareTime('now') / 1e9
-        if abs(hardware_time - time.time()) >= 0.2:
-            self.backend.setHardwareTime(round(time.time() * 1e9), 'now')
-
-    def _sync_to_external_time_source(self):
-        # We first wait for a PPS transition to avoid race conditions involving
-        # applying the time of the next PPS
-        init_pps_time = self.backend.getHardwareTime('pps')
-        start_time = time.perf_counter()
-        while init_pps_time == self.backend.getHardwareTime('pps'):
-            if time.perf_counter() - start_time > 1.5:
-                raise RuntimeError('no pps input detected for external time source')
-            else:
-                time.sleep(10e-3)
-
-        # PPS transition occurred, should be safe to snag system time and apply it
-        sys_time_now = time.time()
-        full_secs = int(sys_time_now)
-        frac_secs = sys_time_now - full_secs
-        if frac_secs > 0.8:
-            # System time is lagging behind the PPS transition
-            full_secs += 1
-        elif frac_secs > 0.2:
-            # System time and PPS are off, warn caller
-            self._logger.warning(
-                f'system time and PPS out of sync by {frac_secs:0.3f}s, check NTP'
-            )
-        time_to_set_ns = int((full_secs + 1) * 1e9)
-        self.backend.setHardwareTime(time_to_set_ns, 'pps')
 
     def _needs_reenable(self, next_capture: specs.RadioCapture):
         """returns True if the channel needs to be disabled and re-enabled between the specified capture"""
@@ -364,10 +409,8 @@ class SoapyRadioSource(base.SourceBase):
             if getattr(next_capture, field) != getattr(current, field):
                 return True
 
-        next_backend_sample_rate = base.design_capture_resampler(
-            self.base_clock_rate, next_capture
-        )['fs']
-        if next_backend_sample_rate != self.backend_sample_rate():
+        next_design = base.design_capture_resampler(self.base_clock_rate, next_capture)
+        if next_design['fs'] != self.backend_sample_rate():
             return True
 
         return False
