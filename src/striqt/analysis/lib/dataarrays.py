@@ -289,10 +289,10 @@ def build_dataarray(
     da = template.pad(pad)
 
     try:
-        if da.values.ndim == 0:
-            da.values = data
+        if da.data.ndim == 0:
+            da.data = data
         else:
-            da.values[:] = data
+            da.data[:] = data
     except ValueError as ex:
         raise ValueError(
             f'{delayed.info.name} measurement data has unexpected shape {data.shape}'
