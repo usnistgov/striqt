@@ -218,7 +218,7 @@ def dataarray_stub(
     coord_stubs = {}
     for func in coord_factories:
         info = register.coordinate_factory[func]
-        coord_stubs[info.name] = _empty_stub(info.dims, info.dtype, attrs=info.attrs, xp=xp)
+        coord_stubs[info.name] = _empty_stub(info.dims, info.dtype, attrs=info.attrs)
 
     if dims is None or dims == ():
         dims = _infer_coord_dims(coord_factories)
