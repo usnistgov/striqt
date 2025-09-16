@@ -255,13 +255,16 @@ def build_dataarray(
 ) -> 'xr.DataArray':
     """build an `xarray.DataArray` from an ndarray, capture information, and channel analysis keyword arguments"""
 
+    xp = iqwaveform.util.array_namespace(delayed.data)
+
     template = dataarray_stub(
         delayed.info.dims,
         delayed.info.coord_factories,
         delayed.info.dtype,
         expand_dims=expand_dims,
     )
-    data = np.asarray(delayed.data)
+
+    data = xp.asarray(delayed.data)
     delayed.spec.validate()
 
     _validate_delayed_ndim(delayed)
@@ -275,7 +278,7 @@ def build_dataarray(
         target_shape = data.shape
     else:
         # broadcast on the capture dimension
-        data = np.atleast_1d(delayed.data)
+        data = xp.atleast_1d(delayed.data)
         target_shape = (len(delayed.capture.port), *data.shape[1:])
 
     # to bypass initialization overhead, grow from the empty template
