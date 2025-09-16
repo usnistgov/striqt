@@ -182,6 +182,5 @@ class NullSource(base.SourceBase):
         self._sample_start_index = value
 
 
-class NullRadio(NullSource):
-    # eventually, deprecate this
+class _WarmupSource(NullSource):
     pass
