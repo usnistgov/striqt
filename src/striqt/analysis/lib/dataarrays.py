@@ -199,8 +199,8 @@ def _results_as_arrays(obj: tuple | list | dict | 'iqwaveform.util.Array'):
     return array
 
 
-def _empty_stub(dims, dtype, attrs={}):
-    x = np.empty(len(dims) * (1,), dtype=dtype)
+def _empty_stub(dims, dtype, attrs={}, *, xp=np):
+    x = xp.empty(len(dims) * (1,), dtype=dtype)
     return xr.DataArray(x, dims=dims, attrs=attrs)
 
 
@@ -210,6 +210,8 @@ def dataarray_stub(
     coord_factories: tuple[callable, ...],
     dtype: str,
     expand_dims: tuple[str, ...] | None = None,
+    *,
+    xp=np
 ) -> typing.Any:
     """return an empty array of type `cls`"""
 
@@ -221,7 +223,7 @@ def dataarray_stub(
     if dims is None or dims == ():
         dims = _infer_coord_dims(coord_factories)
 
-    data_stub = _empty_stub(dims, dtype)
+    data_stub = _empty_stub(dims, dtype, xp=xp)
     stub = xr.DataArray(data=data_stub, dims=dims, coords=coord_stubs)
 
     slices = dict.fromkeys(stub.dims, slice(None, 0))
@@ -262,9 +264,10 @@ def build_dataarray(
         delayed.info.coord_factories,
         delayed.info.dtype,
         expand_dims=expand_dims,
+        xp=xp
     )
 
-    data = xp.asarray(delayed.data)
+    # data = xp.asarray(delayed.data)
     delayed.spec.validate()
 
     _validate_delayed_ndim(delayed)
