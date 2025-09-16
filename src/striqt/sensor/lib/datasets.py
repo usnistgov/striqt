@@ -267,8 +267,8 @@ class AnalysisCaller:
 
         if iq.unscaled_peak is not None:
             peak = iq.unscaled_peak
-            if is_cupy_array(peak):
-                peak = peak.get()
+            # if is_cupy_array(peak):
+            #     peak = peak.get()
             extra_data = {'unscaled_iq_peak': peak}
         else:
             extra_data = {}

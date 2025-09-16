@@ -133,8 +133,8 @@ def cellular_5g_sss_sync(
     )
     weights = np.roll(weights, round((1 - window_fill) * Ragg.size / 2))
 
-    if not array_api_compat.is_numpy_array(Ragg):
-        Ragg = Ragg.get()
+    # if not array_api_compat.is_numpy_array(Ragg):
+    #     Ragg = Ragg.get()
 
     est = ndimage.correlate1d(Ragg, weights, mode='wrap')
     i = est.argmax()
