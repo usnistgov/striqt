@@ -81,7 +81,7 @@ def design_warmup_sweep(
     # this may cause problems in the future if its default disagrees with another
     # radio
     null_radio_setup = sweep.radio_setup.replace(
-        driver=sources._WarmupSource.__name__,
+        driver=sources.WarmupSource.__name__,
         resource={},
         _rx_port_count=radio_cls.rx_port_count.default,
         calibration=None,

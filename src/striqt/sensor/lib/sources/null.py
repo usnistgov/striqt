@@ -182,5 +182,5 @@ class NullSource(base.SourceBase):
         self._sample_start_index = value
 
 
-class _WarmupSource(NullSource):
+class WarmupSource(NullSource):
     pass

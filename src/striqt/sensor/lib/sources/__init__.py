@@ -6,7 +6,7 @@ from .base import (
     design_capture_resampler,
 )
 
-from .null import NullSource, _WarmupSource
+from .null import NullSource, WarmupSource
 from .testing import (
     SingleToneSource,
     SawtoothSource,
