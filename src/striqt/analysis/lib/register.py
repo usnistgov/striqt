@@ -109,7 +109,9 @@ class KeywordArgumentCache:
             elif self._callback_capture != capture:
                 pass
             elif self._callback is not None:
-                self._callback(cache=self, capture=self._callback_capture, result=ret, *args, **kws)
+                self._callback(
+                    cache=self, capture=self._callback_capture, result=ret, *args, **kws
+                )
 
             return ret
 
