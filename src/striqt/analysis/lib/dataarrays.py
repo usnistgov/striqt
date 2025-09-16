@@ -312,7 +312,8 @@ def build_dataarray(
 
         da[factory_info.name] = coord.assign_attrs(metadata)
 
-    return da.assign_attrs(delayed.info.attrs | delayed.spec.todict() | delayed.attrs)
+    spec_attrs = delayed.spec.todict(skip_private=True)
+    return da.assign_attrs(delayed.info.attrs | spec_attrs | delayed.attrs)
 
 
 @util.lru_cache()
@@ -465,7 +466,7 @@ def package_analysis(
         for name, res in results.items():
             xarrays[name] = res.compute().to_xarray(expand_dims)
 
-        attrs = capture.todict()
+        attrs = capture.todict(skip_private=True)
         if isinstance(capture, specs.FilteredCapture):
             attrs['analysis_filter'] = capture.analysis_filter.todict()
         ret = xr.Dataset(xarrays, attrs=attrs)

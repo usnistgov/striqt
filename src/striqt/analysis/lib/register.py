@@ -60,6 +60,8 @@ class KeywordArgumentCache:
     _key: frozenset = None
     _value = None
     enabled = False
+    _callback = None
+    _callback_capture = None
 
     def __init__(self, fields: list[str]):
         self.name = None
@@ -102,8 +104,12 @@ class KeywordArgumentCache:
 
             ret = func(iq, capture=capture, *args, **kws)
             self.update(all_kws, ret)
-            if self._callback is not None:
-                self._callback(cache=self, capture=capture, result=ret, *args, **kws)
+            if self._callback_capture is None:
+                pass
+            elif self._callback_capture != capture:
+                pass
+            elif self._callback is not None:
+                self._callback(cache=self, capture=self._callback_capture, result=ret, *args, **kws)
 
             return ret
 
@@ -111,8 +117,9 @@ class KeywordArgumentCache:
 
         return wrapped
 
-    def set_callback(self, func: callable):
+    def set_callback(self, func: callable, capture=None):
         self._callback = func
+        self._callback_capture = capture
 
     def __enter__(self):
         self.enabled = True
@@ -410,7 +417,7 @@ class _MeasurementRegistry(
         return wrapper
 
     @contextlib.contextmanager
-    def cache_context(self, callback: callable | None = None):
+    def cache_context(self, capture: specs.Capture, callback: callable | None = None):
         caches: list[KeywordArgumentCache] = []
         for deps in self.caches.values():
             caches.extend(deps)
@@ -422,7 +429,7 @@ class _MeasurementRegistry(
             try:
                 for cache in caches:
                     cm.enter_context(cache)
-                    cache.set_callback(callback)
+                    cache.set_callback(callback, capture)
                 yield cm
             except:
                 cm.close()
