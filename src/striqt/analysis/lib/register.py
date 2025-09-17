@@ -104,11 +104,9 @@ class KeywordArgumentCache:
 
             ret = func(iq, capture=capture, *args, **kws)
             self.update(all_kws, ret)
-            if self._callback_capture is None:
+            if self._callback is None or self._callback_capture is None:
                 pass
-            elif self._callback_capture != capture:
-                pass
-            elif self._callback is not None:
+            else:
                 self._callback(
                     cache=self, capture=self._callback_capture, result=ret, *args, **kws
                 )
