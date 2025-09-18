@@ -170,8 +170,8 @@ def open_store(
     elif not isinstance(path, (str, Path)):
         raise ValueError('must pass a string or Path savefile or zarr Store')
     elif str(path).endswith('.zip'):
-        if mode == 'a':
-            raise IOError('zip store does support append mode')
+        if mode == 'a' and path.exists():
+            raise IOError('zip store does support appends')
         store = zarr.storage.ZipStore(path, mode=mode, compression=0)
     else:
         store = DirectoryStore(path)
