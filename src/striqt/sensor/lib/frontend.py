@@ -494,7 +494,7 @@ def iter_sweep_cli(cli: CLIObjects, *, remote=None, verbose: int = 0):
             reuse_iq = cli.sweep_spec.radio_setup.reuse_iq
             # iterate through the sweep specification, yielding a dataset for each capture
             sweep_iter = cli.controller.iter_sweep(
-                cli.sweep,
+                cli.sweep_spec,
                 calibration=cli.cal,
                 prepare=False,
                 always_yield=True,
