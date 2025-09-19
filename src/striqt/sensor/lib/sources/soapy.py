@@ -183,6 +183,13 @@ class SoapyRadioSource(base.SourceBase):
         else:
             ports = self.port()
 
+        # minimize signal levels during stream setup, since overloads
+        # may in some cases corrupt all acquisitions on the stream
+        start_gains = self.gains()
+        all_ports = self.capabilities.rx_ports
+        min_gains = [all_ports[p].full_gain_range.minimum for p in ports]
+        self.gains(min_gains)
+
         if self._transport_dtype == 'int16':
             soapy_type = SoapySDR.SOAPY_SDR_CS16
         elif self._transport_dtype == 'float32':
@@ -192,6 +199,7 @@ class SoapyRadioSource(base.SourceBase):
         self._rx_stream = self.backend.setupStream(
             SoapySDR.SOAPY_SDR_RX, soapy_type, list(ports)
         )
+        self.gains(start_gains)
 
     def _disable_rx_stream(self):
         if self._rx_stream is not None:
