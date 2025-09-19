@@ -198,7 +198,6 @@ def init_sweep_cli(
             calibration.read_calibration,
             sweep_spec.radio_setup.calibration,
         )
-        calls['peripherals'] = lb.Call(peripherals.open)
         if not open_sink_early:
             if output_path is None:
                 output_path = sweep_spec.output.path
@@ -481,10 +480,6 @@ def maybe_start_debugger(cli_objects: CLIObjects | None, exc_info):
 
 
 def iter_sweep_cli(cli: CLIObjects, *, remote=None, verbose: int = 0):
-    # pull out the cli elements that have context
-    cli_objects = cli
-    *cli_context, sweep, cal = cli_objects
-
     if verbose == 0:
         util.show_messages(logging.INFO)
     elif verbose == 1:
@@ -494,13 +489,13 @@ def iter_sweep_cli(cli: CLIObjects, *, remote=None, verbose: int = 0):
     else:
         util.show_messages(logging.DEBUG)
 
-    with lb.sequentially(*cli_context):
+    with lb.sequentially(cli.sink, cli.controller, cli.peripherals, cli.debugger):
         try:
             reuse_iq = cli.sweep_spec.radio_setup.reuse_iq
             # iterate through the sweep specification, yielding a dataset for each capture
             sweep_iter = cli.controller.iter_sweep(
-                sweep,
-                calibration=cal,
+                cli.sweep,
+                calibration=cli.cal,
                 prepare=False,
                 always_yield=True,
                 reuse_compatible_iq=reuse_iq,  # calibration-specific optimization
