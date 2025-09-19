@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import time
 import numbers
 import typing
@@ -14,6 +15,7 @@ from .. import captures, specs, util
 if typing.TYPE_CHECKING:
     import numpy as np
     import SoapySDR
+    from . import _soapy_probe
 else:
     np = lb.util.lazy_import('numpy')
     SoapySDR = lb.util.lazy_import('SoapySDR')
@@ -108,9 +110,6 @@ class HardwareTimeSync:
         time_to_set_ns = int((full_secs + 1) * 1e9)
         source.backend.setHardwareTime(time_to_set_ns, 'pps')
         return time_to_set_ns
-
-    def validate_timestamp(self, time_ns: int):
-        pass
 
 
 class SoapyRadioSource(base.SourceBase):
@@ -459,3 +458,8 @@ class SoapyRadioSource(base.SourceBase):
 
     def __del__(self):
         self.close()
+
+    @functools.cached_property
+    def capabilities(self) -> '_soapy_probe.RadioInfo':
+        from ._soapy_probe import probe_radio_capabilities
+        return probe_radio_capabilities(self.backend)

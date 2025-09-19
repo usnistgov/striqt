@@ -14,7 +14,9 @@ class PeripheralsBase:
     ):
         self.set_sweep(sweep)
         self.source = source
-        super().__init__()
+
+    def enable_rf(self, enabled: bool):
+        pass
 
     def open(self):
         pass
