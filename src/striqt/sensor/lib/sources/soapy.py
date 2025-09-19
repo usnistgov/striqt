@@ -374,7 +374,7 @@ class SoapyRadioSource(base.SourceBase):
 
         # may have to re-enable this to change the clock source, but
         # this doesn't cost much due to GPU prep and warming up times
-        self._setup_rx_stream()
+        # self._setup_rx_stream()
 
     def _post_connect(self):
         pass
