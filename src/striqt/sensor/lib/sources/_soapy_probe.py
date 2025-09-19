@@ -59,7 +59,7 @@ class FrequencyInfo(NamedTuple):
 class PortInfo(NamedTuple):
     """Holds all capability metadata for a single RX or TX channel."""
 
-    channel_info: Dict[str, str]
+    port_info: Dict[str, str]
     full_duplex: bool
     agc: bool
     stream_formats: Tuple[str, ...]
@@ -84,8 +84,8 @@ class RadioInfo(NamedTuple):
     driver: str
     hardware: str
     hardware_info: Dict[str, str]
-    num_rx_channels: int
-    num_tx_channels: int
+    num_rx_ports: int
+    num_tx_ports: int
     has_timestamps: bool
     clock_sources: Tuple[str, ...]
     time_sources: Tuple[str, ...]
@@ -94,8 +94,8 @@ class RadioInfo(NamedTuple):
     settings: Tuple[ArgInfo, ...]
     gpios: Tuple[str, ...]
     uarts: Tuple[str, ...]
-    rx_channels: Tuple[PortInfo, ...]
-    tx_channels: Tuple[PortInfo, ...]
+    rx_ports: Tuple[PortInfo, ...]
+    tx_ports: Tuple[PortInfo, ...]
 
 
 def _to_range_tuple(soapy_ranges: List[SoapySDR.Range]) -> Tuple[Range, ...]:
@@ -177,7 +177,7 @@ def _probe_channel(device: SoapySDR.Device, direction: int, channel: int) -> Por
     # native_fmt, full_scale = device.getNativeStreamFormat(direction, channel)
 
     return PortInfo(
-        channel_info=dict(device.getChannelInfo(direction, channel)),
+        port_info=dict(device.getChannelInfo(direction, channel)),
         full_duplex=device.getFullDuplex(direction, channel),
         agc=device.hasGainMode(direction, channel),
         stream_formats=tuple(device.getStreamFormats(direction, channel)),
@@ -235,8 +235,8 @@ def probe_radio_capabilities(device: SoapySDR.Device) -> RadioInfo:
         driver=device.getDriverKey(),
         hardware=device.getHardwareKey(),
         hardware_info=device.getHardwareInfo(),
-        num_rx_channels=num_rx,
-        num_tx_channels=num_tx,
+        num_rx_ports=num_rx,
+        num_tx_ports=num_tx,
         has_timestamps=device.hasHardwareTime(),
         clock_sources=tuple(device.listClockSources()),
         time_sources=tuple(device.listTimeSources()),
@@ -245,6 +245,6 @@ def probe_radio_capabilities(device: SoapySDR.Device) -> RadioInfo:
         settings=_to_arginfo_tuple(device.getSettingInfo()),
         gpios=tuple(device.listGPIOBanks()),
         uarts=tuple(device.listUARTs()),
-        rx_channels=rx_channels,
-        tx_channels=tx_channels,
+        rx_ports=rx_channels,
+        tx_ports=tx_channels,
     )
