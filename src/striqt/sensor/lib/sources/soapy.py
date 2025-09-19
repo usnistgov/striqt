@@ -189,8 +189,8 @@ class SoapyRadioSource(base.SourceBase):
 
         for port, info in enumerate(self.capabilities.rx_ports):
             start_gains[port] = self.backend.getGain(SoapySDR.SOAPY_SDR_RX, port)
-            gain = info.full_gain_range.minimum()
-            self.backend.setGain(SoapySDR.SOAPY_SDR_RX, port, gain)
+            min_gain = info.full_gain_range.minimum
+            self.backend.setGain(SoapySDR.SOAPY_SDR_RX, port, min_gain)
 
         if self._transport_dtype == 'int16':
             soapy_type = SoapySDR.SOAPY_SDR_CS16
