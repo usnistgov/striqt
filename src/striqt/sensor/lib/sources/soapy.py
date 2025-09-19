@@ -185,10 +185,10 @@ class SoapyRadioSource(base.SourceBase):
 
         # minimize signal levels during stream setup, since overloads
         # may in some cases corrupt all acquisitions on the stream
-        start_gains = self.gains()
+        start_gains = self.gain()
         all_ports = self.capabilities.rx_ports
         min_gains = [all_ports[p].full_gain_range.minimum for p in ports]
-        self.gains(min_gains)
+        self.gain(min_gains)
 
         if self._transport_dtype == 'int16':
             soapy_type = SoapySDR.SOAPY_SDR_CS16
