@@ -199,7 +199,7 @@ class SoapyRadioSource(base.SourceBase):
         self._rx_stream = self.backend.setupStream(
             SoapySDR.SOAPY_SDR_RX, soapy_type, list(ports)
         )
-        self.gains(start_gains)
+        self.gain(start_gains)
 
     def _disable_rx_stream(self):
         if self._rx_stream is not None:
