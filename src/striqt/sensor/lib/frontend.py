@@ -495,7 +495,7 @@ def iter_sweep_cli(cli: CLIObjects, *, remote=None, verbose: int = 0):
             # iterate through the sweep specification, yielding a dataset for each capture
             sweep_iter = cli.controller.iter_sweep(
                 cli.sweep_spec,
-                calibration=cli.cal,
+                calibration=cli.calibration,
                 prepare=False,
                 always_yield=True,
                 reuse_compatible_iq=reuse_iq,  # calibration-specific optimization
