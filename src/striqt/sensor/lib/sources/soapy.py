@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import functools
 import time
 import numbers
@@ -54,6 +55,22 @@ def validate_stream_result(
         raise base.ReceiveStreamError(f'invalid timestamp from before last sync')
 
     return result
+
+
+@contextlib.contextmanager
+def minimized_rx_gain(radio: SoapyRadioSource):
+    start_gains = {}
+
+    for port, info in enumerate(radio.capabilities.rx_ports):
+        start_gains[port] = radio.backend.getGain(SoapySDR.SOAPY_SDR_RX, port)
+        min_gain = info.full_gain_range.minimum
+        radio.backend.setGain(SoapySDR.SOAPY_SDR_RX, port, min_gain)
+
+    yield
+
+    # restore the initial gains
+    for port, gain in start_gains.items():
+        radio.backend.setGain(SoapySDR.SOAPY_SDR_RX, port, gain)
 
 
 class HardwareTimeSync:
@@ -172,7 +189,7 @@ class SoapyRadioSource(base.SourceBase):
         return self.backend.getSampleRate(SoapySDR.SOAPY_SDR_RX, 0) / self._downsample
 
     @util.stopwatch('stream initialization', 'source')
-    def _setup_rx_stream(self, ports=None):
+    def _enable_rx_stream(self, ports=None):
         if self._rx_stream is not None:
             return
 
@@ -183,28 +200,17 @@ class SoapyRadioSource(base.SourceBase):
         else:
             ports = self.port()
 
-        # minimize signal levels during stream setup, since overloads
-        # may in some cases corrupt all acquisitions on the stream
-        start_gains = {}
-
-        for port, info in enumerate(self.capabilities.rx_ports):
-            start_gains[port] = self.backend.getGain(SoapySDR.SOAPY_SDR_RX, port)
-            min_gain = info.full_gain_range.minimum
-            self.backend.setGain(SoapySDR.SOAPY_SDR_RX, port, min_gain)
-
         if self._transport_dtype == 'int16':
             soapy_type = SoapySDR.SOAPY_SDR_CS16
         elif self._transport_dtype == 'float32':
             soapy_type = SoapySDR.SOAPY_SDR_CF32
         else:
             raise ValueError(f'unsupported transport type {self._transport_type}')
-        self._rx_stream = self.backend.setupStream(
-            SoapySDR.SOAPY_SDR_RX, soapy_type, list(ports)
-        )
 
-        # restore the initial gains
-        for port, gain in start_gains.items():
-            self.backend.setGain(SoapySDR.SOAPY_SDR_RX, port, gain)
+        with minimized_rx_gain(self):
+            self._rx_stream = self.backend.setupStream(
+                SoapySDR.SOAPY_SDR_RX, soapy_type, list(ports)
+            )
 
     def _disable_rx_stream(self):
         if self._rx_stream is not None:
@@ -231,7 +237,7 @@ class SoapyRadioSource(base.SourceBase):
                 self.backend.closeStream(self._rx_stream)
 
         # if we make it this far, we need to build and enable the RX stream
-        self._setup_rx_stream(ports)
+        self._enable_rx_stream(ports)
 
     def setup(self, radio_setup: specs.RadioSetup, analysis=None):
         if radio_setup.clock_source != self.clock_source():
@@ -240,7 +246,7 @@ class SoapyRadioSource(base.SourceBase):
 
         super().setup(radio_setup, analysis)
 
-        self._setup_rx_stream()
+        self._enable_rx_stream()
 
     @attr.method.float(
         min=0,
@@ -252,8 +258,8 @@ class SoapyRadioSource(base.SourceBase):
         ports = self.port()
         if isinstance(ports, numbers.Number):
             ports = (ports,)
-        for channel in ports:
-            ret = self.backend.getFrequency(SoapySDR.SOAPY_SDR_RX, channel)
+        for port in ports:
+            ret = self.backend.getFrequency(SoapySDR.SOAPY_SDR_RX, port)
             return ret
 
     @lo_frequency.setter
@@ -262,8 +268,8 @@ class SoapyRadioSource(base.SourceBase):
         ports = self.port()
         if isinstance(ports, numbers.Number):
             ports = (ports,)
-        for channel in ports:
-            self.backend.setFrequency(SoapySDR.SOAPY_SDR_RX, channel, center_frequency)
+        for port in ports:
+            self.backend.setFrequency(SoapySDR.SOAPY_SDR_RX, port, center_frequency)
 
     center_frequency = lo_frequency.corrected_from_expression(
         lo_frequency + base.SourceBase.lo_offset,
@@ -316,15 +322,15 @@ class SoapyRadioSource(base.SourceBase):
             return
 
         if enable:
-            delay = self._rx_enable_delay
             if self.backend.hasHardwareTime():
                 kws = {'flags': SoapySDR.SOAPY_SDR_HAS_TIME}
             else:
                 kws = {}
 
-            if delay is not None:
-                timeNs = self.backend.getHardwareTime('now') + round(delay * 1e9)
-                kws['timeNs'] = timeNs
+            if self._rx_enable_delay is not None:
+                delay_ns = round(self._rx_enable_delay * 1e9)
+                time_ns = self.backend.getHardwareTime('now') + delay_ns
+                kws['timeNs'] = time_ns
 
             self._checked_timestamp = False
             self.backend.activateStream(self._rx_stream, **kws)

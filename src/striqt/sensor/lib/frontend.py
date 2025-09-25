@@ -489,7 +489,7 @@ def iter_sweep_cli(cli: CLIObjects, *, remote=None, verbose: int = 0):
     else:
         util.show_messages(logging.DEBUG)
 
-    with lb.sequentially(cli.sink, cli.controller, cli.peripherals, cli.debugger):
+    with lb.sequentially(cli.peripherals, cli.sink, cli.controller, cli.debugger):
         try:
             reuse_iq = cli.sweep_spec.radio_setup.reuse_iq
             # iterate through the sweep specification, yielding a dataset for each capture

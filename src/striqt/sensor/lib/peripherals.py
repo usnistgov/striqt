@@ -15,8 +15,8 @@ class PeripheralsBase:
         self.set_sweep(sweep)
         self.source = source
 
-    def enable_rf(self, enabled: bool):
-        pass
+    def enable_frontend(self, enabled: bool):
+        raise NotImplementedError
 
     def open(self):
         pass
