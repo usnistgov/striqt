@@ -169,8 +169,20 @@ def zip_offsets(
 
 @functools.cache
 def configure_cupy():
+    # Tune cupy to perform large FFTs and allocations more quickly
+    # for 1-D transforms.
+    #
+    # Reference:
+    # https://docs.cupy.dev/en/v12.1.0/reference/fft.html#code-compatibility-features
+
     import cupy
 
-    # the FFT plan sets up large caches that don't help us
+    # the FFT plan sets up large caches that don't seem to help performance
     cupy.fft.config.get_plan_cache().set_size(0)
+
+    # double-buffered streams hold on to their buffers; skip the overhead
+    # of an allocator
     cupy.cuda.set_pinned_memory_allocator(None)
+
+    # reduce memory consumption of 1-D transforms
+    cupy.fft.config.enable_nd_planning = False
