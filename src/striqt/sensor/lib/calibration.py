@@ -656,6 +656,9 @@ def specialize_cal_peripherals(
                 flatten=True,
             )
 
+        def setup(self, radio_setup):
+            return cal_cls.setup(self, radio_setup)
+
     peripheral_cls.__name__ = name
     peripheral_cls.__module__ = sensor_cls.__module__
     peripheral_cls.__qualname__ = name
