@@ -217,7 +217,7 @@ class SoapyRadioSource(base.SourceBase):
             self.backend.closeStream(self._rx_stream)
             self._rx_stream = None
 
-    @method_attr.ChannelMaybeTupleMethod(inherit=True)
+    @method_attr.PortMaybeTupleMethod(inherit=True)
     def port(self):
         # return none until this is set, then the cached value is returned
         return 0

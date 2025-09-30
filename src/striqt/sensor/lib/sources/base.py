@@ -177,7 +177,7 @@ class SourceBase(lb.Device):
     )
 
     # these must be implemented by child classes
-    port = method_attr.ChannelMaybeTupleMethod(
+    port = method_attr.PortMaybeTupleMethod(
         cache=True,
         contained_type=int,
         min=0,

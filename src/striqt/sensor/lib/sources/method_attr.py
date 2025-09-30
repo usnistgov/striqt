@@ -55,7 +55,7 @@ def _validate_tuple_numbers(
     for value in values:
         if not isinstance(value, (bytes, str, bool, numbers.Number)):
             raise ValueError(
-                f"a '{ChannelMaybeTupleMethod.__qualname__}' attribute supports only numerical, str, or bytes types"
+                f"a '{PortMaybeTupleMethod.__qualname__}' attribute supports only numerical, str, or bytes types"
             )
 
         if max is not None and value > max:
@@ -110,7 +110,7 @@ class IntMaybeTupleMethod(BoundedNumberMaybeTupleMethod[tuple[int, ...]]):
     contained_type: ElementType = int
 
 
-class ChannelMaybeTupleMethod(IntMaybeTupleMethod):
+class PortMaybeTupleMethod(IntMaybeTupleMethod):
     min: int = 0
     allow_duplicates: bool = False
 

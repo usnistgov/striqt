@@ -340,7 +340,7 @@ class FileSource(TestSource):
     def _(self, value):
         pass
 
-    @method_attr.ChannelMaybeTupleMethod(inherit=True)
+    @method_attr.PortMaybeTupleMethod(inherit=True)
     def port(self):
         return self._iq_capture.port
 

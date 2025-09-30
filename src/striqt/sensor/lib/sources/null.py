@@ -30,7 +30,7 @@ class NullSource(base.SourceBase):
     _transport_dtype = attr.value.str('complex64', inherit=True)
     rx_port_count: int = attr.value.int(1, cache=True, help='number of input ports')
 
-    @method_attr.ChannelMaybeTupleMethod(inherit=True)
+    @method_attr.PortMaybeTupleMethod(inherit=True)
     def port(self):
         # return none until this is set, then the cached value is returned
         return (0,)
