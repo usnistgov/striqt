@@ -1,4 +1,5 @@
 from __future__ import annotations
+import contextlib
 import functools
 import itertools
 import typing
@@ -125,6 +126,21 @@ def concurrently_with_fg(
         raise ex
 
     return result
+
+
+@contextlib.contextmanager
+def concurrently_enter_with_fg(contexts: dict[str, typing.ContextManager] = {}, flatten=True):
+    import labbench as lb
+    
+    cm = contextlib.ExitStack()
+    calls = {name: lb.Call(cm.enter_context, ctx) for name, ctx in contexts.items()}
+    with cm:
+        try:
+            concurrently_with_fg(calls)
+            yield cm
+        except:
+            cm.close()
+            raise
 
 
 def zip_offsets(

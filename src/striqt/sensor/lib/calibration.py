@@ -638,26 +638,26 @@ def specialize_cal_peripherals(
                 calibration=lb.Call(cal_cls.close, self),
             )
 
-        def arm(self, capture):
+        def arm(self, capture: specs.RadioCapture):
             """runs before each capture"""
 
-            return lb.concurrently(
+            lb.concurrently(
                 integrations=lb.Call(sensor_cls.arm, self, capture),
                 calibration=lb.Call(cal_cls.arm, self, capture),
                 flatten=True,
             )
 
+
         def acquire(self, capture) -> dict:
             """runs during each capture, and returns a dictionary of results keyed by name"""
+            sensor_result = sensor_cls.acquire(self, capture) or {}
+            cal_result = cal_cls.acquire(self, capture) or {}
+            return sensor_result|cal_result
 
-            return lb.concurrently(
-                integrations=lb.Call(sensor_cls.acquire, self, capture),
-                calibration=lb.Call(cal_cls.acquire, self, capture),
-                flatten=True,
-            )
-        
-        def setup(self, radio_setup):
-            return cal_cls.setup(self, radio_setup)
+        def setup(self):
+            sensor_cls.setup(self)
+            cal_cls.setup(self)
+
 
     peripheral_cls.__name__ = name
     peripheral_cls.__module__ = sensor_cls.__module__
