@@ -223,7 +223,7 @@ def cellular_5g_pss_sync_offset(
     caches=(pss_correlator_cache, shared.ssb_iq_cache),
     prefer_unaligned_input=True,
     store_compressed=False,
-    attrs={'standard_name': 'PSS Cross-Covariance', 'units': '√mW'},
+    attrs={'standard_name': 'PSS Cross-Covariance'},
 )
 def cellular_5g_pss_correlation(
     iq,
@@ -256,7 +256,7 @@ def cellular_5g_pss_correlation(
 
     R = correlate_5g_pss(iq, capture=capture, spec=spec)
 
-    enbw = spec.subcarrier_spacing * 127
-    metadata = {'units': f'mW/{enbw / 1e6:0.2f} MHz'}
+    enbw = spec.sample_rate
+    metadata = {'units': f'√mW/{enbw / 1e6:0.2f} MHz', 'noise_bandwidth': enbw}
 
     return R, metadata
