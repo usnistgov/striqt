@@ -77,12 +77,15 @@ def cellular_ssb_baseband_frequency(
 ) -> np.ndarray:
     nfft = round(2 * capture.sample_rate / spec.subcarrier_spacing)
     freqs = shared.fftfreq(nfft, capture.sample_rate)
+    frequency_offset = specs.maybe_lookup_with_capture_key(
+        capture, spec.frequency_offset, 'center_frequency', 'frame_slots'
+    )
     freqs = shared.truncate_spectrogram_bandwidth(
         freqs,
         nfft,
         capture.sample_rate,
         spec.sample_rate,
-        offset=spec.frequency_offset,
+        offset=frequency_offset,
         axis=0,
     )
 
