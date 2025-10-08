@@ -22,6 +22,16 @@ else:
     analysis = util.lazy_import('striqt.analysis')
 
 
+class Resources(typing.TypedDict):
+    """Sensor resources needed to run a sweep"""
+
+    radio: typing.NotRequired['sources.SourceBase']
+    sink: typing.NotRequired[SinkBase]
+    peripherals: typing.NotRequired[PeripheralsBase]
+    sweep_spec: typing.NotRequired[specs.Sweep]
+    calibration: typing.NotRequired['xr.Dataset']
+
+
 def varied_capture_fields(sweep: specs.Sweep) -> list[str]:
     """generate a list of capture fields with at least 2 values in the specified sweep"""
     unlooped_values = (c.todict().values() for c in sweep.get_captures(False))
@@ -85,6 +95,7 @@ def design_warmup_sweep(
         resource={},
         _rx_port_count=radio_cls.rx_port_count.default,
         calibration=None,
+        reuse_iq=False,
     )
 
     class WarmupSweep(type(sweep)):
@@ -194,46 +205,36 @@ def log_progress_contexts(index, count):
 
 
 class SweepIterator:
+    spec: specs.Sweep
+
     def __init__(
         self,
-        radio: 'sources.SourceBase',
-        sweep: specs.Sweep,
+        resources=Resources(),
         *,
-        calibration: 'xr.Dataset' = None,
         always_yield=False,
         quiet=False,
-        pickled=False,
         loop=False,
-        reuse_compatible_iq=False,
+        **extra_resources,
     ):
-        self.radio = radio
+        resources = Resources(resources, **extra_resources)
 
-        self._calibration = calibration
+        self.radio = resources['radio']
+        self._calibration = resources['calibration']
+        self._peripherals = resources['peripherals']
+        self._sink = resources['sink']
+        self.spec = resources['sweep_spec']
+
         self._always_yield = always_yield
         self._quiet = quiet
-        self._pickled = pickled
         self._loop = loop
-        self._reuse_iq = reuse_compatible_iq
 
-        self._peripherals = None
-        self._sink = None
-
-        self.setup(sweep)
-
-    def set_peripherals(self, peripherals: PeripheralsBase | None):
-        self._peripherals = peripherals
-
-    def set_writer(self, writer: SinkBase | None):
-        self._sink = writer
-
-    def setup(self, sweep: specs.Sweep):
-        self.sweep: specs.Sweep = sweep.validate()
+        self.spec.validate()
 
         self._analyze = datasets.AnalysisCaller(
             radio=self.radio,
-            sweep=sweep,
-            analysis_spec=sweep.analysis,
-            extra_attrs=_build_attrs(sweep),
+            sweep=self.spec,
+            analysis_spec=self.spec.analysis,
+            extra_attrs=_build_attrs(self.spec),
             correction=True,
             cache_callback=self.show_cache_info,
         )
@@ -241,7 +242,7 @@ class SweepIterator:
         self._analyze.__qualname__ = 'analyze'
 
     def show_cache_info(self, cache, capture: specs.RadioCapture, result, *_, **__):
-        cal = self.sweep.radio_setup.calibration
+        cal = self.spec.radio_setup.calibration
         if cal is None or 'spectrogram' not in cache.name:
             return
 
@@ -277,11 +278,11 @@ class SweepIterator:
         result = None
 
         if self._loop:
-            capture_iter = itertools.cycle(self.sweep.captures)
+            capture_iter = itertools.cycle(self.spec.captures)
             count = float('inf')
         else:
-            capture_iter = self.sweep.captures
-            count = len(self.sweep.captures)
+            capture_iter = self.spec.captures
+            count = len(self.spec.captures)
 
         if count == 0:
             return
@@ -302,8 +303,7 @@ class SweepIterator:
                         iq,
                         sweep_time=sweep_time,
                         capture=canalyze,
-                        pickled=self._pickled,
-                        overwrite_x=not self._reuse_iq,
+                        overwrite_x=not self.spec.radio_setup.reuse_iq,
                         delayed=True,
                         block_each=False,
                     )
@@ -349,7 +349,7 @@ class SweepIterator:
 
     @util.stopwatch('✓', 'source', logger_level=util.PERFORMANCE_INFO)
     def _acquire(self, iq_prev: AcquiredIQ, capture_prev, capture_this, capture_next):
-        if self._reuse_iq:
+        if self.spec.radio_setup.reuse_iq:
             reuse_this = _iq_is_reusable(
                 capture_prev, capture_this, self.radio.base_clock_rate
             )
@@ -416,11 +416,11 @@ class SweepIterator:
                     f'dict or None, not {type(data)!r}'
                 )
 
-        if self.sweep.radio_setup.calibration is None:
+        if self.spec.radio_setup.calibration is None:
             return data
 
         system_noise = lookup_system_noise_power(
-            self.sweep.radio_setup.calibration, capture, self.radio.base_clock_rate
+            self.spec.radio_setup.calibration, capture, self.radio.base_clock_rate
         )
 
         return dict(data, sensor_system_noise=system_noise)
@@ -443,15 +443,12 @@ class SweepIterator:
 
 
 def iter_sweep(
-    radio: 'sources.SourceBase',
-    sweep: specs.Sweep,
+    resources=Resources(),
     *,
-    calibration: 'xr.Dataset' = None,
     always_yield=False,
     quiet=False,
-    pickled=False,
     loop=False,
-    reuse_compatible_iq=False,
+    **extra_resources: dict[str, typing.Any],
 ) -> SweepIterator:
     """iterate through sweep captures on the radio, yielding a dataset for each.
 
@@ -467,7 +464,6 @@ def iter_sweep(
         calibration: if specified, the calibration data used to scale the output from full-scale to physical power
         always_yield: if `True`, yield `None` before the second capture
         quiet: if True, log at the debug level, and show 'info' level log messages or higher only to the screen
-        pickled: if True, yield pickled `bytes` instead of xr.Datasets
 
     Returns:
         An iterator of analyzed data

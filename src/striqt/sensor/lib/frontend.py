@@ -1,26 +1,14 @@
 from __future__ import annotations
-from pathlib import Path
 import logging
 import sys
 import typing
 
-import click
-
-from . import calibration, controller, io, peripherals, sinks, specs, util
+from . import util
 
 if typing.TYPE_CHECKING:
-    import xarray as xr
     import labbench as lb
 else:
-    xr = util.lazy_import('xarray')
     lb = util.lazy_import('labbench')
-
-
-def get_controller(remote, sweep):
-    if remote is None:
-        return controller.SweepController(sweep)
-    else:
-        return controller.connect(remote).root
 
 
 class DebugOnException:
@@ -37,8 +25,11 @@ class DebugOnException:
         self.run(*args)
 
     def run(self, etype, exc, tb):
-        if self.enable and (etype, exc, tb) != (None, None, None):
-            print('entering debugger')
+        if (etype, exc, tb) == (None, None, None):
+            return 
+
+        if self.enable:
+            print(exc)
             from IPython.core import ultratb
 
             lb.util.force_full_traceback(True)
@@ -50,189 +41,131 @@ class DebugOnException:
             debugger(etype, exc, tb)
 
 
-class CLIObjects(typing.NamedTuple):
-    sink: sinks.SinkBase
-    controller: controller.SweepController
-    peripherals: peripherals.PeripheralsBase
-    debugger: DebugOnException
-    sweep_spec: specs.Sweep
-    calibration: 'xr.Dataset'
+# class CLIObjects(typing.NamedTuple):
+#     sink: sinks.SinkBase
+#     controller: controller.SweepController
+#     peripherals: peripherals.PeripheralsBase
+#     debugger: DebugOnException
+#     sweep_spec: specs.Sweep
+#     calibration: 'xr.Dataset'
 
 
-class SweepSpecClasses(typing.NamedTuple):
-    sink_cls: typing.Type[sinks.SinkBase]
-    peripherals_cls: typing.Type[peripherals.PeripheralsBase]
+# def init_sweep_cli(
+#     *,
+#     yaml_path: Path,
+#     output_path: typing.Optional[str] = None,
+#     store_backend: typing.Optional[str] = None,
+#     remote: typing.Optional[str] = None,
+#     force: bool = False,
+#     verbose: bool = False,
+#     debug: bool = False,
+# ) -> CLIObjects:
+#     # now re-read the yaml, using sweep_cls as the schema, but without knowledge of
+#     sweep_spec = io.read_yaml_sweep(yaml_path)
+#     debug_handler = DebugOnException(debug)
 
+#     util.show_messages(None, logger_names=('sink', 'analysis', 'source'))
+#     util.show_messages(logging.INFO, logger_names=('controller',))
 
-def _get_extension_classes(sweep_spec: specs.Sweep) -> SweepSpecClasses:
-    ext = sweep_spec.extensions.todict()
+#     if '{' in sweep_spec.output.path:
+#         # in this case, we're still waiting to fill in radio_id
+#         open_sink_early = False
+#     else:
+#         open_sink_early = True
 
-    import_cls = io._import_extension
-    return SweepSpecClasses(
-        peripherals_cls=import_cls(ext, 'peripherals'),
-        sink_cls=import_cls(ext, 'sink'),
-    )
+#     if store_backend is None and sweep_spec.output.store is None:
+#         click.echo(
+#             'specify output.store in the yaml file or use -s <NAME> on the command line'
+#         )
+#         sys.exit(1)
 
+#     if output_path is None and sweep_spec.output.path is None:
+#         click.echo(
+#             'specify output.path in the yaml file or use -o PATH on the command line'
+#         )
+#         sys.exit(1)
 
-class RotatingJSONFileHandler(logging.handlers.RotatingFileHandler):
-    def __init__(self, path, *args, **kws):
-        path = Path(path)
-        if path.exists() and path.stat().st_size > 2:
-            self.empty = False
-        else:
-            self.empty = True
+#     # start by connecting to the controller, so that the radio id can be used
+#     # as a file naming field
+#     peripherals = None
+#     sink = None
+#     controller = None
 
-        self.terminator = ''
+#     try:
+#         calls = {}
+#         calls['controller'] = lb.Call(get_controller, remote, sweep_spec)
+#         if open_sink_early:
+#             if output_path is None:
+#                 output_path = sweep_spec.output.path
 
-        super().__init__(path, *args, **kws)
+#             yaml_classes = _get_extension_classes(sweep_spec)
+#             # now, open the store
+#             sink = yaml_classes.sink_cls(
+#                 sweep_spec, output_path=output_path, store_backend=store_backend
+#             )
+#             calls['open sink'] = lb.Call(sink.open)
 
-        self.stream.write('[\n')
+#         with util.stopwatch(
+#             f'open {", ".join(calls)}',
+#             'controller',
+#             logger_level=logging.INFO,
+#             threshold=1,
+#         ):
+#             controller = util.concurrently_with_fg(calls, False)['controller']
 
-    def emit(self, rec):
-        super().emit(rec)
-        self.stream.write(',\n')
+#         yaml_classes = _get_extension_classes(sweep_spec)
+#         radio_id = controller.radio_id(sweep_spec.radio_setup.driver)
+#         sweep_spec = io.read_yaml_sweep(
+#             yaml_path,
+#             radio_id=radio_id,
+#         )
 
-    def close(self):
-        self.stream.write('\n]')
-        super().close()
+#         if sweep_spec.output.log_path is not None:
+#             _log_to_file(sweep_spec.output)
 
+#         peripherals = yaml_classes.peripherals_cls(sweep_spec)
 
-def _log_to_file(output: specs.Output):
-    Path(output.log_path).parent.mkdir(exist_ok=True, parents=True)
+#         # open the rest
+#         calls = {}
+#         calls['calibration'] = lb.Call(
+#             calibration.read_calibration,
+#             sweep_spec.radio_setup.calibration,
+#         )
+#         if not open_sink_early:
+#             if output_path is None:
+#                 output_path = sweep_spec.output.path
 
-    logger = logging.getLogger('labbench')
-    formatter = lb._host.JSONFormatter()
-    handler = RotatingJSONFileHandler(
-        output.log_path, maxBytes=50_000_000, backupCount=5, encoding='utf8'
-    )
+#             sink = yaml_classes.sink_cls(
+#                 sweep_spec, output_path=output_path, store_backend=store_backend
+#             )
+#             calls['open sink'] = lb.Call(sink.open)
 
-    handler.setFormatter(formatter)
-    handler.setLevel(logging.DEBUG)
+#         with util.stopwatch(
+#             f'load {", ".join(calls)}',
+#             'controller',
+#             logger_level=logging.INFO,
+#             threshold=0.25,
+#         ):
+#             opened = lb.concurrently(**calls)
 
-    if hasattr(handler, '_striqt_handler'):
-        logger.removeHandler(handler._striqt_handler)
+#         peripherals.set_source(controller.radios[sweep_spec.radio_setup.driver])
 
-    logger.setLevel(lb.util._LOG_LEVEL_NAMES[output.log_level])
-    logger.addHandler(handler)
-    logger._striqt_handler = handler
+#     except BaseException as ex:
+#         if debug_handler.enable:
+#             print(ex)
+#             debug_handler.run(*sys.exc_info())
+#             sys.exit(1)
+#         else:
+#             raise
 
-
-def init_sweep_cli(
-    *,
-    yaml_path: Path,
-    output_path: typing.Optional[str] = None,
-    store_backend: typing.Optional[str] = None,
-    remote: typing.Optional[str] = None,
-    force: bool = False,
-    verbose: bool = False,
-    debug: bool = False,
-) -> CLIObjects:
-    # now re-read the yaml, using sweep_cls as the schema, but without knowledge of
-    sweep_spec = io.read_yaml_sweep(yaml_path)
-    debug_handler = DebugOnException(debug)
-
-    util.show_messages(None, logger_names=('sink', 'analysis', 'source'))
-    util.show_messages(logging.INFO, logger_names=('controller',))
-
-    if '{' in sweep_spec.output.path:
-        # in this case, we're still waiting to fill in radio_id
-        open_sink_early = False
-    else:
-        open_sink_early = True
-
-    if store_backend is None and sweep_spec.output.store is None:
-        click.echo(
-            'specify output.store in the yaml file or use -s <NAME> on the command line'
-        )
-        sys.exit(1)
-
-    if output_path is None and sweep_spec.output.path is None:
-        click.echo(
-            'specify output.path in the yaml file or use -o PATH on the command line'
-        )
-        sys.exit(1)
-
-    # start by connecting to the controller, so that the radio id can be used
-    # as a file naming field
-    peripherals = None
-    sink = None
-    controller = None
-
-    try:
-        calls = {}
-        calls['controller'] = lb.Call(get_controller, remote, sweep_spec)
-        if open_sink_early:
-            if output_path is None:
-                output_path = sweep_spec.output.path
-
-            yaml_classes = _get_extension_classes(sweep_spec)
-            # now, open the store
-            sink = yaml_classes.sink_cls(
-                sweep_spec, output_path=output_path, store_backend=store_backend
-            )
-            calls['open sink'] = lb.Call(sink.open)
-
-        with util.stopwatch(
-            f'open {", ".join(calls)}',
-            'controller',
-            logger_level=logging.INFO,
-            threshold=1,
-        ):
-            controller = util.concurrently_with_fg(calls, False)['controller']
-
-        yaml_classes = _get_extension_classes(sweep_spec)
-        radio_id = controller.radio_id(sweep_spec.radio_setup.driver)
-        sweep_spec = io.read_yaml_sweep(
-            yaml_path,
-            radio_id=radio_id,
-        )
-
-        if sweep_spec.output.log_path is not None:
-            _log_to_file(sweep_spec.output)
-
-        peripherals = yaml_classes.peripherals_cls(sweep_spec)
-
-        # open the rest
-        calls = {}
-        calls['calibration'] = lb.Call(
-            calibration.read_calibration,
-            sweep_spec.radio_setup.calibration,
-        )
-        if not open_sink_early:
-            if output_path is None:
-                output_path = sweep_spec.output.path
-
-            sink = yaml_classes.sink_cls(
-                sweep_spec, output_path=output_path, store_backend=store_backend
-            )
-            calls['open sink'] = lb.Call(sink.open)
-
-        with util.stopwatch(
-            f'load {", ".join(calls)}',
-            'controller',
-            logger_level=logging.INFO,
-            threshold=0.25,
-        ):
-            opened = lb.concurrently(**calls)
-
-        peripherals.set_source(controller.radios[sweep_spec.radio_setup.driver])
-
-    except BaseException as ex:
-        if debug_handler.enable:
-            print(ex)
-            debug_handler.run(*sys.exc_info())
-            sys.exit(1)
-        else:
-            raise
-
-    return CLIObjects(
-        sink=sink,
-        controller=controller,
-        sweep_spec=sweep_spec,
-        peripherals=peripherals,
-        debugger=debug_handler,
-        calibration=opened.get('calibration', None),
-    )
+#     return CLIObjects(
+#         sink=sink,
+#         controller=controller,
+#         sweep_spec=sweep_spec,
+#         peripherals=peripherals,
+#         debugger=debug_handler,
+#         calibration=opened.get('calibration', None),
+#     )
 
 
 def _extract_traceback(
@@ -474,12 +407,12 @@ def print_exception():
     console.print(traceback)
 
 
-def maybe_start_debugger(cli_objects: CLIObjects | None, exc_info):
-    if cli_objects is not None and cli_objects.debugger.enable:
-        cli_objects.debugger.run(*exc_info)
+# def maybe_start_debugger(cli_objects: CLIObjects | None, exc_info):
+#     if cli_objects is not None and cli_objects.debugger.enable:
+#         cli_objects.debugger.run(*exc_info)
 
 
-def iter_sweep_cli(cli: CLIObjects, *, remote=None, verbose: int = 0):
+def log_verbosity(verbose: int = 0):
     if verbose == 0:
         util.show_messages(logging.INFO)
     elif verbose == 1:
@@ -488,64 +421,3 @@ def iter_sweep_cli(cli: CLIObjects, *, remote=None, verbose: int = 0):
         util.show_messages(util.PERFORMANCE_DETAIL)
     else:
         util.show_messages(logging.DEBUG)
-
-    with lb.sequentially(cli.peripherals, cli.sink, cli.controller, cli.debugger):
-        try:
-            reuse_iq = cli.sweep_spec.radio_setup.reuse_iq
-            # iterate through the sweep specification, yielding a dataset for each capture
-            sweep_iter = cli.controller.iter_sweep(
-                cli.sweep_spec,
-                calibration=cli.calibration,
-                prepare=False,
-                always_yield=True,
-                reuse_compatible_iq=reuse_iq,  # calibration-specific optimization
-            )
-
-            sweep_iter.set_peripherals(cli.peripherals)
-            sweep_iter.set_writer(cli.sink)
-
-            # step through captures
-            for _ in sweep_iter:
-                yield
-        except:
-            raise
-        else:
-            cli.sink.flush()
-
-
-def iterate_sweep_cli(
-    cli: CLIObjects,
-    *,
-    remote=None,
-):
-    # pull out the cli elements that have context
-    cli_objects = cli
-    *cli_context, sweep, cal = cli_objects
-
-    with lb.sequentially(*cli_context):
-        try:
-            reuse_iq = cli.sweep_spec.radio_setup.reuse_iq
-            # iterate through the sweep specification, yielding a dataset for each capture
-            sweep_iter = cli.controller.iter_sweep(
-                sweep,
-                calibration=cal,
-                prepare=False,
-                always_yield=True,
-                reuse_compatible_iq=reuse_iq,  # calibration-specific optimization
-            )
-
-            sweep_iter.set_peripherals(cli.peripherals)
-            sweep_iter.set_writer(cli.sink)
-
-            # step through captures
-            for _ in sweep_iter:
-                yield None
-
-            cli.sink.flush()
-        except BaseException as ex:
-            if cli_objects.debugger.enable:
-                print(ex)
-                cli_objects.debugger.run(*sys.exc_info())
-                sys.exit(1)
-            else:
-                raise

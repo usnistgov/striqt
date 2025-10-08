@@ -131,7 +131,7 @@ class SweepController:
             msgs += ['preparing GPU']
         return ' and '.join(msgs)
 
-    def warmup_sweep(self, sweep_spec: specs.Sweep, calibration, pickled=False):
+    def warmup_sweep(self, sweep_spec: specs.Sweep, calibration):
         """open the radio while warming up the GPU"""
 
         warmup_iter = []
@@ -160,7 +160,6 @@ class SweepController:
                     calibration=None,
                     quiet=True,
                     prepare=False,
-                    pickled=pickled,
                 )
                 calls['warmup'] = lb.Call(
                     _consume_warmup, self, warmup_sweep.radio_setup, warmup_iter
@@ -177,7 +176,6 @@ class SweepController:
         *,
         always_yield: bool = False,
         quiet: bool = False,
-        pickled: bool = False,
         loop: bool = False,
         prepare: bool = False,
         reuse_compatible_iq: bool = False,
@@ -187,7 +185,7 @@ class SweepController:
         del kwargs['self'], kwargs['prepare']
 
         if prepare:
-            self.warmup_sweep(sweep, calibration, pickled=False)
+            self.warmup_sweep(sweep, calibration)
 
         radio = self.open_radio(sweep.radio_setup)
         radio.setup(sweep.radio_setup, sweep.analysis)

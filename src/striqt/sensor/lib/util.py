@@ -1,7 +1,11 @@
 from __future__ import annotations
 import contextlib
+import datetime
 import functools
 import itertools
+import logging
+from pathlib import Path
+import time
 import typing
 import typing_extensions
 import sys
@@ -129,9 +133,11 @@ def concurrently_with_fg(
 
 
 @contextlib.contextmanager
-def concurrently_enter_with_fg(contexts: dict[str, typing.ContextManager] = {}, flatten=True):
+def concurrently_enter_with_fg(
+    contexts: dict[str, typing.ContextManager] = {}, flatten=True
+):
     import labbench as lb
-    
+
     cm = contextlib.ExitStack()
     calls = {name: lb.Call(cm.enter_context, ctx) for name, ctx in contexts.items()}
     with cm:
@@ -202,3 +208,99 @@ def configure_cupy():
 
     # reduce memory consumption of 1-D transforms
     cupy.fft.config.enable_nd_planning = False
+
+
+class _JSONFormatter(logging.Formatter):
+    _last = []
+
+    def __init__(self):
+        super().__init__(style='{')
+        self.t0 = time.time()
+        self.first = True
+
+    @staticmethod
+    def json_serialize_dates(obj):
+        """JSON serializer for objects not serializable by default json code"""
+
+        if isinstance(obj, (datetime.datetime, datetime.date)):
+            return obj.isoformat()
+        raise TypeError(f'Type {type(obj).__qualname__} not serializable')
+
+    def format(self, rec: logging.LogRecord):
+        """Return a YAML string for each logger record"""
+        import json
+        
+        if isinstance(rec.args, dict):
+            kwargs = rec.args
+        else:
+            kwargs = {}
+
+        msg = dict(
+            message=rec.msg,
+            time=datetime.datetime.fromtimestamp(rec.created),
+            elapsed_seconds=rec.created - self.t0,
+            level=rec.levelname,
+            object=getattr(rec, 'object', None),
+            object_log_name=getattr(rec, 'owned_name', None),
+            source_file=rec.pathname,
+            source_line=rec.lineno,
+            process=rec.process,
+            thread=rec.threadName,
+            **kwargs,
+        )
+
+        if rec.threadName != 'MainThread':
+            msg['thread'] = rec.threadName
+
+        etype, einst, exc_tb = sys.exc_info()
+        if etype is not None:
+            import traceback
+            msg['exception'] = traceback.format_exception_only(etype, einst)[0].rstrip()
+            msg['traceback'] = ''.join(traceback.format_tb(exc_tb)).splitlines()
+
+        self._last.append((rec, msg))
+
+        return json.dumps(msg, indent=True, default=self.json_serialize_dates)
+
+
+class _RotatingJSONFileHandler(logging.handlers.RotatingFileHandler):
+    def __init__(self, path, *args, **kws):
+        path = Path(path)
+        if path.exists() and path.stat().st_size > 2:
+            self.empty = False
+        else:
+            self.empty = True
+
+        self.terminator = ''
+
+        super().__init__(path, *args, **kws)
+
+        self.stream.write('[\n')
+
+    def emit(self, rec):
+        super().emit(rec)
+        self.stream.write(',\n')
+
+    def close(self):
+        self.stream.write('\n]')
+        super().close()
+
+
+def log_to_file(log_path: str|Path, log_level: int):
+    Path(log_path).parent.mkdir(exist_ok=True, parents=True)
+
+    logger = logging.getLogger('labbench')
+    formatter = _JSONFormatter()
+    handler = _RotatingJSONFileHandler(
+        log_path, maxBytes=50_000_000, backupCount=5, encoding='utf8'
+    )
+
+    handler.setFormatter(formatter)
+    handler.setLevel(logging.DEBUG)
+
+    if hasattr(handler, '_striqt_handler'):
+        logger.removeHandler(handler._striqt_handler)
+
+    logger.setLevel(log_level)
+    logger.addHandler(handler)
+    logger._striqt_handler = handler

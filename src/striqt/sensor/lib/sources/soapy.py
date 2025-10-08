@@ -481,4 +481,5 @@ class SoapyRadioSource(base.SourceBase):
     @functools.cached_property
     def capabilities(self) -> '_soapy_probe.RadioInfo':
         from ._soapy_probe import probe_radio_capabilities
+
         return probe_radio_capabilities(self.backend)

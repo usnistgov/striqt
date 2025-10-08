@@ -177,21 +177,28 @@ def read_yaml_sweep(
 
     # fill formatting fields in paths
     if radio_id is not None:
-        kws = dict(relative_to_file=path, sweep=sweep, radio_id=radio_id)
+        return fill_aliases(path, sweep, radio_id)
+    else:
+        return sweep
 
-        output_path = expand_path(sweep.output.path, **kws)
-        log_path = expand_path(sweep.output.log_path, **kws)
-        output_spec = sweep.output.replace(path=output_path, log_path=log_path)
 
-        cal_path = expand_path(sweep.radio_setup.calibration, **kws)
-        setup_spec = sweep.radio_setup.replace(calibration=cal_path)
+def fill_aliases(root_file: Path, sweep: specs.Sweep, radio_id):
+    # fill formatting fields like {radio_id} in paths
+    kws = dict(relative_to_file=root_file, sweep=sweep, radio_id=radio_id)
 
-        import_path = expand_path(sweep.extensions.import_path, **kws)
-        extensions_spec = sweep.extensions.replace(import_path=import_path)
+    output_path = expand_path(sweep.output.path, **kws)
+    log_path = expand_path(sweep.output.log_path, **kws)
+    output_spec = sweep.output.replace(path=output_path, log_path=log_path)
 
-        sweep = sweep.replace(
-            output=output_spec, radio_setup=setup_spec, extensions=extensions_spec
-        )
+    cal_path = expand_path(sweep.radio_setup.calibration, **kws)
+    setup_spec = sweep.radio_setup.replace(calibration=cal_path)
+
+    import_path = expand_path(sweep.extensions.import_path, **kws)
+    extensions_spec = sweep.extensions.replace(import_path=import_path)
+
+    sweep = sweep.replace(
+        output=output_spec, radio_setup=setup_spec, extensions=extensions_spec
+    )
 
     return sweep
 

@@ -1,5 +1,6 @@
 """this is installed into the shell PATH environment as configured by pyproject.toml"""
 
+from striqt.sensor.lib import connection
 from . import click_sensor_sweep
 import sys
 import logging
@@ -10,11 +11,20 @@ import logging
 )
 def run(**kws):
     # instantiate sweep objects
-    from striqt.sensor.lib import frontend
+    from striqt.sensor.lib import frontend, sweeps
 
     cli_objs = None
 
     do_tui = kws.pop('tui')
+    debugger = frontend.DebugOnException(enable = kws['debug'])
+
+    yaml_path = kws['yaml_path']
+
+    open_kws = {
+        'output_path': kws['output_path'],
+        'store_backend': kws['store_backend'],
+        'except_context': debugger
+    }
 
     if do_tui and sys.stdout.isatty():
         # full TUI
@@ -24,7 +34,7 @@ def run(**kws):
         app = tui.SweepHUDApp(kws)
         app.run()
 
-        cli_objs = app.cli_objs
+        cli_objs = app.resources
 
         if app._exception is None:
             pass
@@ -36,23 +46,12 @@ def run(**kws):
             sys.exit(1)
 
     else:
-        # simple CLI
-        from striqt.analysis.lib import util
+        frontend.log_verbosity(kws['verbose'])
 
-        try:
-            cli_objs = frontend.init_sweep_cli(**kws)
-
-            generator = frontend.iter_sweep_cli(
-                cli_objs, remote=kws.get('remote', None), verbose=kws['verbose']
-            )
-
-            for _ in generator:
+        with connection.open_sensor_from_yaml(yaml_path, **open_kws) as ctx:
+            sweep_iter = sweeps.SweepIterator(ctx.resources, always_yield=True)
+            for _ in sweep_iter:
                 pass
-
-        except BaseException:
-            frontend.print_exception()
-            frontend.maybe_start_debugger(cli_objs, sys.exc_info())
-            sys.exit(1)
 
 
 if __name__ == '__main__':

@@ -647,17 +647,15 @@ def specialize_cal_peripherals(
                 flatten=True,
             )
 
-
         def acquire(self, capture) -> dict:
             """runs during each capture, and returns a dictionary of results keyed by name"""
             sensor_result = sensor_cls.acquire(self, capture) or {}
             cal_result = cal_cls.acquire(self, capture) or {}
-            return sensor_result|cal_result
+            return sensor_result | cal_result
 
         def setup(self):
             sensor_cls.setup(self)
             cal_cls.setup(self)
-
 
     peripheral_cls.__name__ = name
     peripheral_cls.__module__ = sensor_cls.__module__

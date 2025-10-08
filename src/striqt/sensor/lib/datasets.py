@@ -237,7 +237,6 @@ class AnalysisCaller:
         iq: AcquiredIQ,
         sweep_time,
         capture: specs.RadioCapture,
-        pickled=False,
         overwrite_x=True,
         block_each=False,
         delayed=True,
@@ -287,10 +286,7 @@ class AnalysisCaller:
         else:
             result.update(extra_data)
 
-        if pickled:
-            return pickle.dumps(result)
-        else:
-            return result
+        return result
 
 
 @dataclasses.dataclass()

@@ -24,7 +24,7 @@ from textual.screen import Screen
 from rich.text import Text
 from rich.segment import Segments
 
-from . import frontend, sweeps, util
+from . import connections, frontend, sweeps, util
 
 if typing.TYPE_CHECKING:
     import labbench as lb
@@ -180,7 +180,7 @@ class SweepHUDApp(App):
     """
 
     def __init__(self, cli_kws: dict):
-        self.cli_objs = None
+        self.resources = None
         self.cli_kws = cli_kws
         super().__init__()
         self.title = 'Sensor sweep'
@@ -197,7 +197,7 @@ class SweepHUDApp(App):
     @textual.work(exclusive=True, thread=True)
     def do_sweep(self):
         gen = frontend.iter_sweep_cli(
-            self.cli_objs,
+            self.resources,
             remote=self.cli_kws.get('remote', None),
             verbose=self.cli_kws['verbose'],
         )
@@ -208,8 +208,8 @@ class SweepHUDApp(App):
 
     @textual.work(exclusive=True, thread=True)
     def do_startup(self):
-        self.cli_objs = frontend.init_sweep_cli(**self.cli_kws)
-        self.display_fields = sweeps.varied_capture_fields(self.cli_objs.sweep_spec)
+        self.resources = frontend.init_sweep_cli(**self.cli_kws)
+        self.display_fields = sweeps.varied_capture_fields(self.resources.sweep_spec)
         self.call_from_thread(self._show_ready)
         self.call_from_thread(self.do_sweep)
 
@@ -263,7 +263,7 @@ class SweepHUDApp(App):
             )
 
         table = self.query_one(VerticalScrollDataTable)
-        index_size = math.ceil(math.log10(len(self.cli_objs.sweep_spec.captures))) + 2
+        index_size = math.ceil(math.log10(len(self.resources.sweep_spec.captures))) + 2
         free_width = self.size.width - index_size
 
         self.column_keys = {
@@ -276,7 +276,7 @@ class SweepHUDApp(App):
         table.loading = False
 
         progress = self.query_one(ProgressBar)
-        progress.total = len(self.cli_objs.sweep_spec.captures)
+        progress.total = len(self.resources.sweep_spec.captures)
 
         self.sub_title = 'Running'
 
@@ -300,11 +300,11 @@ class SweepHUDApp(App):
     def _update_sweep_status(self, record: logging.LogRecord):
         from striqt.analysis.lib.dataarrays import describe_capture
 
-        if self.cli_objs is None:
+        if self.resources is None:
             # warmup captures
             return
 
-        captures = self.cli_objs.sweep_spec.captures
+        captures = self.resources['sweep_spec'].captures
 
         logger = util.get_logger(record.name.rsplit('.', 1)[1])
         extra = logger.extra
