@@ -1,5 +1,4 @@
 from __future__ import annotations
-import array_api_compat
 import contextlib
 import functools
 import importlib
@@ -11,7 +10,6 @@ import sys
 import threading
 import typing
 import iqwaveform.type_stubs
-import typing_extensions
 
 
 _logger_adapters = {}
@@ -44,6 +42,7 @@ def isroundmod(value: float, div, atol=1e-6) -> bool:
         return abs(math.remainder(ratio, 1)) <= atol
     except TypeError:
         import numpy as np
+
         return np.abs(np.rint(ratio) - ratio) <= atol
 
 
@@ -188,6 +187,8 @@ def stopwatch(
 
 
 if typing.TYPE_CHECKING:
+    import typing_extensions
+
     _P = typing_extensions.ParamSpec('_P')
     _R = typing_extensions.TypeVar('_R')
     import iqwaveform
@@ -241,6 +242,8 @@ _compute_lock = threading.RLock()
 
 @contextlib.contextmanager
 def compute_lock(array=None):
+    import array_api_compat
+    
     is_cupy = array_api_compat.is_cupy_array(array)
     get_lock = array is None or is_cupy
     if get_lock:

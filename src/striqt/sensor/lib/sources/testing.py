@@ -8,15 +8,13 @@ import typing
 
 from . import base, null
 from .. import specs, util
+from striqt.analysis import Capture, io, simulated_awgn
 
 
 if typing.TYPE_CHECKING:
     import numpy as np
-    import striqt.analysis as striqt_analysis
 else:
     np = util.lazy_import('numpy')
-    striqt_analysis = util.lazy_import('striqt.analysis')
-
 
 FormatType = typing.Literal['auto'] | typing.Literal['mat'] | typing.Literal['tdms']
 
@@ -80,7 +78,7 @@ class SingleToneSource(base.bind_schema(TestSourceBase, capture_cls=SingleToneCa
 
         if capture.snr is not None:
             power = 10 ** (-self.snr / 10)
-            noise = striqt_analysis.simulated_awgn(
+            noise = simulated_awgn(
                 capture.replace(sample_rate=fs),
                 xp=xp,
                 seed=0,
@@ -154,13 +152,13 @@ class NoiseSource(base.bind_schema(TestSourceBase, capture_cls=NoiseCapture)):
     def get_waveform(self, count, start_index: int, *, port: int = 0, xp=np):
         capture = self.get_capture_spec()
 
-        backend_capture = striqt_analysis.Capture(
+        backend_capture = Capture(
             duration=(count + start_index) / capture.backend_sample_rate,
             sample_rate=capture.backend_sample_rate,
             analysis_bandwidth=capture.analysis_bandwidth,
         )
 
-        x = striqt_analysis.simulated_awgn(
+        x = simulated_awgn(
             backend_capture,
             xp=xp,
             seed=0,
@@ -288,7 +286,7 @@ class FileSource(
 
         meta = self.file_metadata
 
-        self._file_stream = striqt_analysis.io.open_bare_iq(
+        self._file_stream = io.open_bare_iq(
             setup.path,
             format=setup.file_format,
             num_rx_ports=self.source_info.num_rx_ports,
@@ -352,7 +350,7 @@ class ZarrIQSource(
     def _connect(self, setup: ZarrFileSetup):
         """set the waveform from an xarray.DataArray containing a single capture of IQ samples"""
 
-        waveform = striqt_analysis.load(setup.path).iq_waveform
+        waveform = io.load(setup.path).iq_waveform
 
         if len(self.select) > 0:
             waveform = waveform.set_xindex(list(setup.select.keys()))

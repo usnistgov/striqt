@@ -8,15 +8,15 @@ import typing
 
 from . import base
 from .. import captures, specs, util
+from striqt.analysis import registry
 
 if typing.TYPE_CHECKING:
     import numpy as np
     import SoapySDR
-    import striqt.analysis as striqt_analysis
+
 else:
     np = util.lazy_import('numpy')
     SoapySDR = util.lazy_import('SoapySDR')
-    striqt_analysis = util.lazy_import('striqt.analysis')
 
 
 _TS = typing.TypeVar('_TS', bound=SoapyRadioSetup)
@@ -336,10 +336,8 @@ class SoapyRadioSetup(specs.RadioSetup):
 
         if self.channel_sync_source is None:
             pass
-        elif (
-            self.channel_sync_source not in striqt_analysis.registry.channel_sync_source
-        ):
-            registered = set(striqt_analysis.registry.channel_sync_source)
+        elif self.channel_sync_source not in registry.channel_sync_source:
+            registered = set(registry.channel_sync_source)
             raise ValueError(
                 f'channel_sync_source "{self.channel_sync_source!r}" is not one of the registered functions {registered!r}'
             )

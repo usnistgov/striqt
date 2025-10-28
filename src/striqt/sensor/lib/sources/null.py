@@ -6,7 +6,13 @@ from . import base
 from .. import specs
 
 
-class NullSetup(specs.RadioSetup, forbid_unknown_fields=True, frozen=True, cache_hash=True, kw_only=True):
+class NullSetup(
+    specs.RadioSetup,
+    forbid_unknown_fields=True,
+    frozen=True,
+    cache_hash=True,
+    kw_only=True,
+):
     # make these configurable, to support matching hardware for warmup sweeps
     num_rx_ports: int
     stream_all_rx_ports: bool = False
@@ -24,9 +30,7 @@ class NullSource(base.SourceBase[_TS, _TC]):
 
     @functools.cached_property
     def source_info(self):
-        return base.BaseSourceInfo(
-            num_rx_ports=self.get_setup_spec().num_rx_ports
-        )
+        return base.BaseSourceInfo(num_rx_ports=self.get_setup_spec().num_rx_ports)
 
     @functools.cached_property
     def id(self):
@@ -57,7 +61,6 @@ class NullSource(base.SourceBase[_TS, _TC]):
         self._samples_elapsed += count
 
         return count, round(timestamp_ns)
-
 
 
 class WarmupSource(NullSource):

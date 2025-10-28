@@ -1,4 +1,8 @@
-from ..lib.register import MeasurementRegistry, AlignmentSourceRegistry, to_analysis_spec_type
+from ..lib.register import (
+    MeasurementRegistry,
+    AlignmentSourceRegistry,
+    to_analysis_spec_type,
+)
 
 measurements = MeasurementRegistry()
 coordinates = measurements.coordinates

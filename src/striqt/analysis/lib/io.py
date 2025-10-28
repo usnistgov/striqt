@@ -110,7 +110,9 @@ def _choose_chunk_sizes(
     return chunks
 
 
-def _build_encodings_zarr_v3(data, registry: register.MeasurementRegistry, compression=True):
+def _build_encodings_zarr_v3(
+    data, registry: register.MeasurementRegistry, compression=True
+):
     if isinstance(compression, zarr.core.codec_pipeline.Codec):
         compressors = [compression]
     elif compression:
@@ -134,7 +136,9 @@ def _build_encodings_zarr_v3(data, registry: register.MeasurementRegistry, compr
     return encodings
 
 
-def _build_encodings_zarr_v2(data, registry: register.MeasurementRegistry, compression=True):
+def _build_encodings_zarr_v2(
+    data, registry: register.MeasurementRegistry, compression=True
+):
     if isinstance(compression, numcodecs.abc.Codec):
         compressor = compression
     elif compression:
@@ -236,9 +240,13 @@ def dump(
             raise TypeError(f'invalid chunk_bytes argument {chunk_bytes!r}')
 
         if _zarr_version() >= (3, 0, 0):
-            kws['encoding'] = _build_encodings_zarr_v3(data, registry=registry, compression=compression)
+            kws['encoding'] = _build_encodings_zarr_v3(
+                data, registry=registry, compression=compression
+            )
         else:
-            kws['encoding'] = _build_encodings_zarr_v2(data, registry=registry, compression=compression)
+            kws['encoding'] = _build_encodings_zarr_v2(
+                data, registry=registry, compression=compression
+            )
 
     with warnings.catch_warnings():
         warnings.simplefilter('ignore', xr.SerializationWarning)

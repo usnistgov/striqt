@@ -16,14 +16,14 @@ def run(**kws):
     cli_objs = None
 
     do_tui = kws.pop('tui')
-    debugger = frontend.DebugOnException(enable = kws['debug'])
+    debugger = frontend.DebugOnException(enable=kws['debug'])
 
     yaml_path = kws['yaml_path']
 
     open_kws = {
         'output_path': kws['output_path'],
         'store_backend': kws['store_backend'],
-        'except_context': debugger
+        'except_context': debugger,
     }
 
     if do_tui and sys.stdout.isatty():

@@ -8,14 +8,16 @@ import collections
 import contextlib
 from fractions import Fraction
 import functools
-import msgspec
 import textwrap
 import typing
-import typing_extensions
+
+import msgspec
+
 from . import specs, util
 
 
 if typing.TYPE_CHECKING:
+    import typing_extensions
     _P = typing_extensions.ParamSpec('_P')
     _R = typing_extensions.TypeVar('_R')
     import iqwaveform
@@ -234,8 +236,10 @@ class AlignmentSourceRegistry(collections.UserDict[str, SyncInfo]):
             return func
 
         return wrapper
-    
-    def to_spec(self, base: type[specs.Analysis] = specs.Analysis) -> type[specs.Analysis]:
+
+    def to_spec(
+        self, base: type[specs.Analysis] = specs.Analysis
+    ) -> type[specs.Analysis]:
         return to_analysis_spec_type(self, base)
 
 
@@ -305,9 +309,13 @@ class MeasurementRegistry(
         result.depends_on = self.depends_on | other.depends_on
         result.names = self.names | other.names
         result.caches = self.caches | other.caches
-        result.use_unaligned_input = self.use_unaligned_input | other.use_unaligned_input
+        result.use_unaligned_input = (
+            self.use_unaligned_input | other.use_unaligned_input
+        )
         result.coordinates = self.coordinates | other.coordinates
-        result.channel_sync_source = self.channel_sync_source | other.channel_sync_source
+        result.channel_sync_source = (
+            self.channel_sync_source | other.channel_sync_source
+        )
         return result
 
     def measurement(
@@ -381,7 +389,7 @@ class MeasurementRegistry(
                     spec=spec,
                     attrs=more_attrs,
                     info=self[spec_type],
-                    coord_registry=self.coordinates
+                    coord_registry=self.coordinates,
                 )
 
                 if as_xarray == 'delayed':
@@ -448,7 +456,9 @@ class MeasurementRegistry(
                 cm.close()
                 raise
 
-    def to_spec(self, base: type[specs.Analysis] = specs.Analysis) -> type[specs.Analysis]:
+    def to_spec(
+        self, base: type[specs.Analysis] = specs.Analysis
+    ) -> type[specs.Analysis]:
         return to_analysis_spec_type(self, base)
 
 
@@ -476,7 +486,9 @@ def to_analysis_spec_type(
 
 
 class AlignmentCaller:
-    def __init__(self, name: str, analysis: specs.Analysis, registry: MeasurementRegistry):
+    def __init__(
+        self, name: str, analysis: specs.Analysis, registry: MeasurementRegistry
+    ):
         self.info: SyncInfo = registry.channel_sync_source[name]
         self.meas_info = registry[self.info.meas_spec_type]
 
@@ -503,11 +515,15 @@ class AlignmentCaller:
 
 
 @util.lru_cache()
-def get_aligner(name: str, analysis: specs.Analysis, registry: MeasurementRegistry) -> AlignmentCaller:
+def get_aligner(
+    name: str, analysis: specs.Analysis, registry: MeasurementRegistry
+) -> AlignmentCaller:
     return AlignmentCaller(name, analysis, registry)
 
 
-def get_channel_sync_source_measurement_name(name: str, registry: MeasurementRegistry) -> str:
+def get_channel_sync_source_measurement_name(
+    name: str, registry: MeasurementRegistry
+) -> str:
     info: SyncInfo = registry.channel_sync_source[name]
     meas_info = registry[info.meas_spec_type]
     return meas_info.name

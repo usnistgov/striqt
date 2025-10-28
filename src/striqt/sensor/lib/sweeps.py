@@ -98,10 +98,8 @@ def design_warmup_sweep(
     # TODO: currently, the base_clock_rate is left as the null radio default.
     # this may cause problems in the future if its default disagrees with another
     # radio
-    null_radio_setup = (
-        sources.NullSetup
-        .fromspec(sweep.radio_setup)
-        .replace(num_rx_ports=num_rx_ports, calibration=None, reuse_iq=False)
+    null_radio_setup = sources.NullSetup.fromspec(sweep.radio_setup).replace(
+        num_rx_ports=num_rx_ports, calibration=None, reuse_iq=False
     )
 
     null_radio_setup = sweep.radio_setup.replace(

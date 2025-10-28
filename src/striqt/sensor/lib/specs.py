@@ -281,7 +281,7 @@ class RadioSetup(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=T
     """run-time characteristics of the radio that are left invariant during a sweep"""
 
     driver: Optional[str]
-    
+
     # acquisition
     base_clock_rate: BaseClockRateType
     calibration: Optional[str] = None
@@ -308,8 +308,6 @@ class RadioSetup(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=T
     transient_holdoff_time = None
     stream_all_rx_ports = False
     transport_dtype: Literal['int16'] | Literal['complex64'] = 'complex64'
-
-
 
 
 class Description(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
@@ -410,7 +408,9 @@ def _expand_loops(
         return tuple(result)
 
 
-class Sweep(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True, kw_only=True):
+class Sweep(
+    SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True, kw_only=True
+):
     radio_setup: RadioSetup
     captures: tuple[RadioCapture, ...] = tuple()
     defaults: RadioCapture = RadioCapture()

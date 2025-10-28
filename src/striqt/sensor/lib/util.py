@@ -10,6 +10,7 @@ import time
 import threading
 import typing
 import sys
+
 from striqt.analysis.lib.util import (
     stopwatch,
     log_capture_context,
@@ -42,8 +43,10 @@ class ThreadEndedByMaster(Exception):
 
 
 if typing.TYPE_CHECKING:
-    _P = typing.ParamSpec('_P')
-    _R = typing.TypeVar('_R')
+    import typing_extensions
+
+    _P = typing_extensions.ParamSpec('_P')
+    _R = typing_extensions.TypeVar('_R')
     _T = typing.TypeVar('_T')
 
 _StriqtLogger('controller')
@@ -560,7 +563,7 @@ class MultipleContexts:
 
         try:
             with stopwatch(
-                f"entry into context for {self.params['name']}",
+                f'entry into context for {self.params["name"]}',
                 0.5,
                 logger_level='debug',
             ):
@@ -574,7 +577,7 @@ class MultipleContexts:
     def __exit__(self, *exc):
         logger = get_logger('controller')
         with stopwatch(
-            f"{self.params['name']} - context exit", 0.5, logger_level='debug'
+            f'{self.params["name"]} - context exit', 0.5, logger_level='debug'
         ):
             for name in tuple(self._entered.keys())[::-1]:
                 context = self._entered[name]
@@ -659,7 +662,7 @@ def _select_enter_or_call(
     which = 'both'
 
     for k, obj in candidate_objs:
-        is_callable = callable(obj)# and not hasattr(obj, '__enter__')
+        is_callable = callable(obj)  # and not hasattr(obj, '__enter__')
         is_cm = hasattr(obj, '__enter__')
 
         if not is_callable and not is_cm:
@@ -698,7 +701,7 @@ def _select_enter_or_call(
 
 def enter_or_call(
     flexible_caller: callable,
-    objs: typing.Iterable[_ContextManagerType| callable],
+    objs: typing.Iterable[_ContextManagerType | callable],
     kws: dict[str, typing.Any],
 ):
     """Extract value traits from the keyword arguments flags, decide whether
@@ -755,7 +758,7 @@ def enter_or_call(
     if params['name'] is None:
         import hashlib
         import inspect
-        
+
         # come up with a gobbledigook name that is at least unique
         frame = inspect.currentframe().f_back.f_back
         params['name'] = (
@@ -824,7 +827,9 @@ def concurrently_call(params: dict, name_func_pairs: list) -> dict:
     # Setup calls then funcs
     # Set up mappings between wrappers, threads, and the function to call
     wrappers = Call.wrap_list_to_dict(name_func_pairs)
-    threads = {name: threading.Thread(target=w, name=name) for name, w in wrappers.items()}
+    threads = {
+        name: threading.Thread(target=w, name=name) for name, w in wrappers.items()
+    }
 
     # Start threads with calls to each function
     finished = queue.Queue()
@@ -904,6 +909,7 @@ def concurrently_call(params: dict, name_func_pairs: list) -> dict:
 
         if len(tracebacks) > 1:
             import traceback
+
             for tb in tracebacks:
                 try:
                     traceback.print_exception(*tb)

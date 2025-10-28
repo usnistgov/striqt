@@ -6,17 +6,17 @@ from .shared import registry
 from ..lib import register, specs, util
 from ..lib.dataarrays import CAPTURE_DIM
 
-import array_api_compat
 
 if typing.TYPE_CHECKING:
     import iqwaveform
     import numpy as np
-    import pandas as pd
     import iqwaveform.type_stubs
+    import array_api_compat
+
 else:
     iqwaveform = util.lazy_import('iqwaveform')
     np = util.lazy_import('numpy')
-    pd = util.lazy_import('pandas')
+    array_api_compat = util.lazy_import('array_api_compat')
 
 
 class Cellular5GNRPSSCorrelationSpec(

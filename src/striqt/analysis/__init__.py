@@ -1,6 +1,6 @@
 """implementations of channel analysis measurements packaged into xarray.DataArray and xarray.Dataset"""
 
-from .lib import io, source, specs, util
+from .lib import dataarrays, io, source, specs, util
 from .lib.io import load, dump, open_store
 from .lib.register import MeasurementRegistry
 from .lib.source import simulated_awgn, filter_iq_capture

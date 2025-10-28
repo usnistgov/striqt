@@ -3,9 +3,6 @@ import decimal
 import fractions
 import typing
 
-import array_api_compat
-
-# from .shared import registry
 from ..lib import dataarrays, register, specs, util
 
 if typing.TYPE_CHECKING:
@@ -13,10 +10,12 @@ if typing.TYPE_CHECKING:
     import numpy as np
     import iqwaveform.type_stubs
     import pandas as pd
+    import array_api_compat
 else:
     iqwaveform = util.lazy_import('iqwaveform')
     np = util.lazy_import('numpy')
     pd = util.lazy_import('pandas')
+    array_api_compat = util.lazy_import('array_api_compat')
 
 
 registry = register.MeasurementRegistry()

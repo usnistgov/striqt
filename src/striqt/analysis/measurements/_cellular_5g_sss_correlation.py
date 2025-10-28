@@ -5,20 +5,18 @@ from . import shared
 from .shared import registry
 from ..lib import register, specs, util
 
-import array_api_compat
 
 if typing.TYPE_CHECKING:
     import iqwaveform
     import numpy as np
-    import pandas as pd
     from scipy import ndimage
     import iqwaveform.type_stubs
+    import array_api_compat
 else:
     iqwaveform = util.lazy_import('iqwaveform')
     np = util.lazy_import('numpy')
-    pd = util.lazy_import('pandas')
     ndimage = util.lazy_import('scipy.ndimage')
-
+    array_api_compat = util.lazy_import('array_api_compat')
 
 class Cellular5GNRSSSCorrelationSpec(
     shared.Cellular5GNRSyncCorrelationSpec,

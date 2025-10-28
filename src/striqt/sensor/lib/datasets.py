@@ -11,7 +11,7 @@ import typing
 from . import captures, specs, util
 from .sources import SourceBase
 
-from striqt.analysis import measurements
+from striqt.analysis import dataarrays, measurements
 from striqt.analysis.lib.dataarrays import CAPTURE_DIM, PORT_DIM, AcquiredIQ  # noqa: F401
 from striqt.analysis.lib import register
 
@@ -21,12 +21,11 @@ if typing.TYPE_CHECKING:
     import numpy as np
     import pandas as pd
     import xarray as xr
-    import striqt.analysis as striqt_analysis
+
 else:
     np = util.lazy_import('numpy')
     pd = util.lazy_import('pandas')
     xr = util.lazy_import('xarray')
-    striqt_analysis = util.lazy_import('striqt.analysis')
 
 
 SWEEP_TIMESTAMP_NAME = 'sweep_start_time'
@@ -252,7 +251,7 @@ class AnalysisCaller:
                         iq.raw, capture, self.radio, overwrite_x=overwrite_x
                     )
 
-            result = striqt_analysis.lib.dataarrays.analyze_by_spec(
+            result = dataarrays.analyze_by_spec(
                 iq,
                 capture=capture,
                 spec=self.analysis_spec,
@@ -288,7 +287,7 @@ class AnalysisCaller:
 
 @dataclasses.dataclass()
 class DelayedDataset:
-    delayed: dict[str, striqt_analysis.lib.dataarrays.DelayedDataArray]
+    delayed: dict[str, dataarrays.DelayedDataArray]
     capture: specs.Capture
     sweep: specs.Sweep
     radio_id: str
@@ -308,7 +307,7 @@ class DelayedDataset:
             threshold=10e-3,
             logger_level=logging.DEBUG,
         ):
-            analysis = striqt_analysis.lib.dataarrays.package_analysis(
+            analysis = dataarrays.package_analysis(
                 self.capture, self.delayed, expand_dims=(CAPTURE_DIM,)
             )
 

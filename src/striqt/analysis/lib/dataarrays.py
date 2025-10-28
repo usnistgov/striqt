@@ -11,17 +11,18 @@ import typing
 
 from . import register, specs, util
 
-import array_api_compat
 
 if typing.TYPE_CHECKING:
     import iqwaveform
     import iqwaveform.type_stubs
     import numpy as np
     import xarray as xr
+    import array_api_compat
 else:
     iqwaveform = util.lazy_import('iqwaveform')
     np = util.lazy_import('numpy')
     xr = util.lazy_import('xarray')
+    array_api_compat = util.lazy_import('array_api_compat')
 
 
 CAPTURE_DIM = 'capture'
@@ -317,7 +318,10 @@ def build_dataarray(
 
 
 @util.lru_cache()
-def _infer_coord_dims(coord_factories: typing.Iterable[callable], coord_registry: register.CoordinateRegistry) -> list[str]:
+def _infer_coord_dims(
+    coord_factories: typing.Iterable[callable],
+    coord_registry: register.CoordinateRegistry,
+) -> list[str]:
     """guess dimensions of a dataarray based on its coordinates.
 
     This orders the dimensions according to (1) first appearance in each
@@ -367,7 +371,7 @@ class DelayedDataArray(collections.UserDict):
     data: typing.Union['iqwaveform.type_stubs.ArrayLike', dict]
     info: register.MeasurementInfo
     attrs: dict
-    coord_registry: register.CoordinateRegistry|None = None
+    coord_registry: register.CoordinateRegistry | None = None
 
     def compute(self) -> DelayedDataArray:
         return DelayedDataArray(
@@ -377,11 +381,13 @@ class DelayedDataArray(collections.UserDict):
             data=_results_as_arrays(self.data),
             info=self.info,
             attrs=self.attrs,
-            coord_registry=self.coord_registry
+            coord_registry=self.coord_registry,
         )
 
     def to_xarray(self, expand_dims=None) -> 'xr.DataArray':
-        return build_dataarray(self, coord_registry=self.coord_registry, expand_dims=expand_dims)
+        return build_dataarray(
+            self, coord_registry=self.coord_registry, expand_dims=expand_dims
+        )
 
 
 def select_parameter_kws(locals_: dict, omit=(PORT_DIM, 'out')) -> dict:
