@@ -207,15 +207,15 @@ def read_tdms_iq(
     path: Path | str,
     duration: float = None,
     *,
-    rx_port_count=1,
+    num_rx_ports=1,
     dtype='complex64',
     skip_samples=0,
     xp=np,
 ) -> tuple['iqwaveform.type_stubs.ArrayLike', specs.FileSourceCapture]:
     from .sources.testing import TDMSFileSource
 
-    source = TDMSFileSource(path=path, rx_port_count=rx_port_count)
-    capture = source.get_capture_struct()
+    source = TDMSFileSource(path=path, num_rx_ports=num_rx_ports)
+    capture = source.get_capture_spec()
 
     source.arm(capture)
     iq, _ = source.read_iq(capture)

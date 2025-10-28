@@ -4,7 +4,8 @@ from fractions import Fraction
 from math import ceil
 import typing
 
-from ..lib import register, specs, util
+from .shared import registry
+from ..lib import specs, util
 
 from . import shared, _spectrogram, _channel_power_histogram
 from ._cellular_cyclic_autocorrelation import link_direction, tdd_config_from_str
@@ -70,7 +71,7 @@ class LinkPair:
     uplink: any
 
 
-@register.coordinate_factory(
+@registry.coordinates(
     dtype='float32',
     attrs={'standard_name': 'Cellular resource grid bin power', 'units': 'dBm'},
 )
@@ -232,7 +233,7 @@ def _struct_defaults(spec_type: type[specs.SpecBase]) -> dict[str, typing.Any]:
     return dict(zip(fields[-len(defaults) :], defaults))
 
 
-@register.measurement(
+@registry.measurement(
     coord_factories=[link_direction, cellular_resource_power_bin],
     dtype='float32',
     depends=_spectrogram.spectrogram,

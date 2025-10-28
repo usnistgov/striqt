@@ -3,7 +3,8 @@ from fractions import Fraction
 import typing
 
 from . import shared
-from ..lib import register, specs, util
+from .shared import registry
+from ..lib import specs, util
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -61,14 +62,14 @@ class Cellular5GNRSSBSpectrogramKeywords(specs.AnalysisKeywords, total=False):
     lo_bandstop: typing.Optional[float]
 
 
-@register.coordinate_factory(dtype='uint16', attrs={'standard_name': 'Symbols elapsed'})
+@registry.coordinates(dtype='uint16', attrs={'standard_name': 'Symbols elapsed'})
 @util.lru_cache()
 def cellular_ssb_symbol_index(_: specs.Capture, spec: Cellular5GNRSSBSpectrogramSpec):
     symbol_count = round(14 * spec.subcarrier_spacing / 15e3)
     return np.arange(symbol_count, dtype='uint16')
 
 
-@register.coordinate_factory(
+@registry.coordinates(
     dtype='float64', attrs={'standard_name': 'SSB Baseband Frequency', 'units': 'Hz'}
 )
 @util.lru_cache()
@@ -90,7 +91,7 @@ def cellular_ssb_baseband_frequency(
     return iqwaveform.util.binned_mean(freqs, count=2, axis=0, fft=True)
 
 
-@register.coordinate_factory(
+@registry.coordinates(
     dtype='uint16', attrs={'standard_name': 'Capture SSB index'}
 )
 @util.lru_cache()
@@ -118,7 +119,7 @@ _coord_factories = [
 ]
 
 
-@register.measurement(
+@registry.measurement(
     Cellular5GNRSSBSpectrogramSpec,
     coord_factories=_coord_factories,
     dtype='float16',

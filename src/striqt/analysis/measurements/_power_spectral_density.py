@@ -2,7 +2,8 @@ from __future__ import annotations
 import typing
 
 from . import _spectrogram, shared
-from ..lib import register, specs, util
+from .shared import registry
+from ..lib import specs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -26,7 +27,7 @@ class PowerSpectralDensityKeywords(shared.FrequencyAnalysisKeywords, total=False
     time_statistic: tuple[typing.Union[str, float], ...]
 
 
-@register.coordinate_factory(dtype='str', attrs={'standard_name': 'Time statistic'})
+@registry.coordinates(dtype='str', attrs={'standard_name': 'Time statistic'})
 @util.lru_cache()
 def time_statistic(
     capture: specs.Capture, spec: PowerSpectralDensitySpec
@@ -35,7 +36,7 @@ def time_statistic(
     return np.asarray(time_statistic, dtype=object)
 
 
-@register.coordinate_factory(
+@registry.coordinates(
     dtype='float64', attrs={'standard_name': 'Baseband frequency', 'units': 'Hz'}
 )
 @util.lru_cache()
@@ -46,7 +47,7 @@ def baseband_frequency(
     return shared.spectrogram_baseband_frequency(capture, spg_spec)
 
 
-@register.measurement(
+@registry.measurement(
     depends=_spectrogram.spectrogram,
     coord_factories=[time_statistic, baseband_frequency],
     spec_type=PowerSpectralDensitySpec,

@@ -2,6 +2,7 @@ from __future__ import annotations
 import fractions
 import typing
 
+from .shared import registry
 from ..lib import dataarrays, register, specs, util
 
 if typing.TYPE_CHECKING:
@@ -31,7 +32,7 @@ class ChannelPowerTimeSeriesKeywords(specs.AnalysisKeywords):
     power_detectors: typing.NotRequired[tuple[str, ...]]
 
 
-@register.coordinate_factory(
+@registry.coordinates(
     dtype='float32', attrs={'standard_name': 'Time elapsed', 'units': 's'}
 )
 @util.lru_cache()
@@ -40,7 +41,7 @@ def time_elapsed(capture: specs.Capture, spec: ChannelPowerTimeSeriesSpec):
     return pd.RangeIndex(length) * spec.detector_period
 
 
-@register.coordinate_factory(dtype=object, attrs={'standard_name': 'Power detector'})
+@registry.coordinates(dtype=object, attrs={'standard_name': 'Power detector'})
 @util.lru_cache()
 def power_detector(
     capture: specs.Capture, spec: ChannelPowerTimeSeriesSpec
@@ -70,7 +71,7 @@ def evaluate_channel_power_time_series(
     return results
 
 
-@register.measurement(
+@registry.measurement(
     coord_factories=[power_detector, time_elapsed],
     dtype='float32',
     spec_type=ChannelPowerTimeSeriesSpec,

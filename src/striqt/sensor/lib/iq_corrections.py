@@ -42,10 +42,10 @@ def _get_voltage_scale(
         cal_data = force_calibration
 
     power_scale = calibration.lookup_power_correction(
-        cal_data, bare_capture, radio.base_clock_rate, xp=xp
+        cal_data, bare_capture, radio.get_setup_spec().base_clock_rate, xp=xp
     )
 
-    transport_dtype = radio._transport_dtype
+    transport_dtype = radio._setup.transport_dtype
     if transport_dtype == 'int16':
         adc_scale = 1.0 / float(np.iinfo(transport_dtype).max)
     else:
@@ -92,7 +92,7 @@ def resampling_correction(
         capture, radio, force_calibration=force_calibration, xp=xp
     )
 
-    if radio._uncalibrated_peak_detect:
+    if radio._setup.uncalibrated_peak_detect:
         logger = util.get_logger('analysis')
         peak_counts = xp.abs(iq).max(axis=-1)
         unscaled_peak = 20 * xp.log10(peak_counts * prescale) - 3
@@ -101,7 +101,7 @@ def resampling_correction(
     else:
         unscaled_peak = None
 
-    design = design_capture_resampler(radio.base_clock_rate, capture)
+    design = design_capture_resampler(radio.get_setup_spec().base_clock_rate, capture)
     fs = design['fs_sdr']
 
     needs_resample = base.needs_resample(design, capture)
@@ -144,9 +144,11 @@ def resampling_correction(
             scale=1 if vscale is None else vscale,
         )
         scale = design['nfft_out'] / design['nfft']
-        oapad = base._get_oaresample_pad(radio.base_clock_rate, capture)
+        oapad = base._get_oaresample_pad(
+            radio.get_setup_spec().base_clock_rate, capture
+        )
         lag_pad = base._get_aligner_pad_size(
-            radio.base_clock_rate, capture, radio._aligner
+            radio.get_setup_spec().base_clock_rate, capture, radio._aligner
         )
         size_out = round(capture.duration * capture.sample_rate) + round(
             (oapad[1] + lag_pad) * scale

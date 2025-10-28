@@ -25,6 +25,9 @@ else:
 _BUILTIN_TYPES = (pd.Timestamp,)
 
 
+_TK = typing.TypeVar('_TK', bound=dict)
+
+
 WindowType = typing.Union[str, tuple[str, float]]
 
 
@@ -95,7 +98,7 @@ class SpecBase(msgspec.Struct, kw_only=True, frozen=True, cache_hash=True):
     methods that fix encoding and decoding hooks for extra types.
     """
 
-    def replace(self, **attrs) -> type[typing.Self]:
+    def replace(self, **attrs) -> typing.Self:
         """returns a copy of self with changed attributes.
 
         See also:
@@ -174,6 +177,12 @@ class Capture(SpecBase, kw_only=True, frozen=True):
     analysis_bandwidth: Annotated[float, meta('Analysis bandwidth', 'Hz')] = float(
         'inf'
     )
+
+    def __post_init__(self):
+        if not util.isroundmod(self.duration * self.sample_rate, 1):
+            raise ValueError(
+                f'duration {self.duration!r} is not an integer multiple of sample period'
+            )
 
 
 class AnalysisFilter(SpecBase, kw_only=True, frozen=True, cache_hash=True):

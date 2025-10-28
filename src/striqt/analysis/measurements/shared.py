@@ -1,11 +1,11 @@
 from __future__ import annotations
 import decimal
 import fractions
-import functools
 import typing
 
 import array_api_compat
 
+# from .shared import registry
 from ..lib import dataarrays, register, specs, util
 
 if typing.TYPE_CHECKING:
@@ -17,6 +17,9 @@ else:
     iqwaveform = util.lazy_import('iqwaveform')
     np = util.lazy_import('numpy')
     pd = util.lazy_import('pandas')
+
+
+registry = register.MeasurementRegistry()
 
 
 # %% Cellular 5G NR synchronizatino
@@ -59,7 +62,7 @@ class Cellular5GNRSyncCorrelationKeywords(specs.AnalysisKeywords, total=False):
     trim_cp: bool
 
 
-@register.coordinate_factory(
+@registry.coordinates(
     dtype='uint16', attrs={'standard_name': r'Cell Sector ID ($N_{ID}^\text{(2)}$)'}
 )
 @util.lru_cache()
@@ -68,7 +71,7 @@ def cellular_cell_id2(capture: specs.Capture, spec: typing.Any):
     return values
 
 
-@register.coordinate_factory(dtype='uint16', attrs={'standard_name': 'SSB beam index'})
+@registry.coordinates(dtype='uint16', attrs={'standard_name': 'SSB beam index'})
 @util.lru_cache()
 def cellular_ssb_beam_index(
     capture: specs.Capture, spec: Cellular5GNRSyncCorrelationSpec
@@ -84,7 +87,7 @@ def cellular_ssb_beam_index(
     return list(range(len(params.symbol_indexes)))
 
 
-@register.coordinate_factory(
+@registry.coordinates(
     dtype='float32', attrs={'standard_name': 'Time Elapsed', 'units': 's'}
 )
 @util.lru_cache()
@@ -107,7 +110,7 @@ def cellular_ssb_start_time(
     return np.arange(max(count, 1)) * spec.discovery_periodicity
 
 
-@register.coordinate_factory(
+@registry.coordinates(
     dtype='float32', attrs={'standard_name': 'Symbol lag', 'units': 's'}
 )
 @util.lru_cache()
@@ -518,7 +521,7 @@ def fftfreq(nfft, fs, dtype='float64', xp=np) -> 'iqwaveform.type_stubs.ArrayTyp
     return np.array(values, dtype=dtype)
 
 
-@register.coordinate_factory(
+@registry.coordinates(
     dtype='float64', attrs={'standard_name': 'Baseband Frequency', 'units': 'Hz'}
 )
 @util.lru_cache()

@@ -6,15 +6,14 @@ import dataclasses
 import logging
 import msgspec
 import numbers
-import pickle
 import typing
 
 from . import captures, specs, util
 from .sources import SourceBase
 
-from striqt.analysis import register
+from striqt.analysis import measurements
 from striqt.analysis.lib.dataarrays import CAPTURE_DIM, PORT_DIM, AcquiredIQ  # noqa: F401
-from striqt.analysis.lib.util import log_capture_context, stopwatch
+from striqt.analysis.lib import register
 
 from iqwaveform.util import is_cupy_array
 
@@ -246,9 +245,9 @@ class AnalysisCaller:
         # wait to import until here to avoid a circular import
         from . import iq_corrections
 
-        with register.measurement.cache_context(self.cache_callback):
+        with measurements.registry.cache_context(self.cache_callback):
             if self.correction:
-                with stopwatch(
+                with util.stopwatch(
                     'resample, filter, calibrate', logger_level=logging.DEBUG
                 ):
                     iq = iq_corrections.resampling_correction(
@@ -305,7 +304,7 @@ class DelayedDataset:
     def to_xarray(self) -> 'xr.Dataset':
         """complete any remaining calculations, transfer from the device, and build an output dataset"""
 
-        with stopwatch(
+        with util.stopwatch(
             'package xarray',
             'analysis',
             threshold=10e-3,
@@ -315,7 +314,7 @@ class DelayedDataset:
                 self.capture, self.delayed, expand_dims=(CAPTURE_DIM,)
             )
 
-        with stopwatch(
+        with util.stopwatch(
             'build coords',
             'analysis',
             threshold=10e-3,
@@ -338,7 +337,7 @@ class DelayedDataset:
 
             analysis[SWEEP_TIMESTAMP_NAME].attrs.update(label='Sweep start time')
 
-        with stopwatch(
+        with util.stopwatch(
             'add peripheral data',
             'analysis',
             threshold=10e-3,

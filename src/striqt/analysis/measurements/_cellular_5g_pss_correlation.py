@@ -2,6 +2,7 @@ from __future__ import annotations
 import typing
 
 from . import shared
+from .shared import registry
 from ..lib import register, specs, util
 from ..lib.dataarrays import CAPTURE_DIM
 
@@ -161,7 +162,7 @@ def pss_local_weighted_correlator(
     )
 
 
-@register.channel_sync_source(
+@registry.channel_sync_source(
     Cellular5GNRPSSCorrelationSpec, lag_coord_func=shared.cellular_ssb_lag
 )
 def cellular_5g_pss_sync(
@@ -195,7 +196,7 @@ def cellular_5g_pss_sync(
     return shared.cellular_ssb_lag(capture, spec)[i]
 
 
-@register.measurement(
+@registry.measurement(
     Cellular5GNRWeightedCorrelationSpec,
     coord_factories=[],
     dtype='float32',
@@ -216,7 +217,7 @@ def cellular_5g_pss_sync_offset(
     return cellular_5g_pss_sync(iq, capture, **kwargs)
 
 
-@register.measurement(
+@registry.measurement(
     Cellular5GNRPSSCorrelationSpec,
     coord_factories=_coord_factories,
     dtype=dtype,

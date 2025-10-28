@@ -5,6 +5,7 @@ import functools
 import importlib
 import importlib.util
 import logging
+import math
 import time
 import sys
 import threading
@@ -35,6 +36,15 @@ class _StriqtLogger(logging.LoggerAdapter):
 
 def get_logger(name_suffix) -> _StriqtLogger:
     return _logger_adapters[name_suffix]
+
+
+def isroundmod(value: float, div, atol=1e-6) -> bool:
+    ratio = value / div
+    try:
+        return abs(math.remainder(ratio, 1)) <= atol
+    except TypeError:
+        import numpy as np
+        return np.abs(np.rint(ratio) - ratio) <= atol
 
 
 @contextlib.contextmanager

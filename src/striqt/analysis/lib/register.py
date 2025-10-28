@@ -139,7 +139,7 @@ class CoordinateInfo(typing.NamedTuple):
     attrs: dict = {}
 
 
-class _CoordinateRegistry(
+class CoordinateRegistry(
     collections.UserDict[_CoordinateFactoryCallable, CoordinateInfo]
 ):
     def __call__(
@@ -189,8 +189,8 @@ class _CoordinateRegistry(
 
         return wrapper
 
-
-coordinate_factory = _CoordinateRegistry()
+    def __hash__(self):
+        return hash(frozenset(self.items()))
 
 
 class SyncInfo(typing.NamedTuple):
@@ -200,7 +200,7 @@ class SyncInfo(typing.NamedTuple):
     meas_spec_type: type[specs.Measurement]
 
 
-class _AlignmentSourceRegistry(collections.UserDict[str, SyncInfo]):
+class AlignmentSourceRegistry(collections.UserDict[str, SyncInfo]):
     def __call__(
         self,
         meas_spec_type: type[specs.Measurement],
@@ -236,9 +236,9 @@ class _AlignmentSourceRegistry(collections.UserDict[str, SyncInfo]):
             return func
 
         return wrapper
-
-
-channel_sync_source = _AlignmentSourceRegistry()
+    
+    def to_spec(self, base: type[specs.Analysis] = specs.Analysis) -> type[specs.Analysis]:
+        return to_analysis_spec_type(self, base)
 
 
 class MeasurementInfo(typing.NamedTuple):
@@ -286,7 +286,7 @@ def _make_measurement_docstring(spec_cls):
     return f'{specs.Measurement.__doc__.rstrip()}\n{args}'
 
 
-class _MeasurementRegistry(
+class MeasurementRegistry(
     collections.UserDict[type[specs.Measurement], MeasurementInfo]
 ):
     """a registry of keyword-only arguments for decorated functions"""
@@ -299,8 +299,20 @@ class _MeasurementRegistry(
             callable, list[callable]
         ] = {}  # function -> KeywordArgumentCache
         self.use_unaligned_input: set[callable] = set()
+        self.coordinates = CoordinateRegistry()
+        self.channel_sync_source = AlignmentSourceRegistry()
 
-    def __call__(
+    def __or__(self, other: MeasurementRegistry) -> MeasurementRegistry:
+        result = super().__or__(other)
+        result.depends_on = self.depends_on | other.depends_on
+        result.names = self.names | other.names
+        result.caches = self.caches | other.caches
+        result.use_unaligned_input = self.use_unaligned_input | other.use_unaligned_input
+        result.coordinates = self.coordinates | other.coordinates
+        result.channel_sync_source = self.channel_sync_source | other.channel_sync_source
+        return result
+
+    def measurement(
         self,
         spec_type: type[specs.Measurement],
         *,
@@ -371,6 +383,7 @@ class _MeasurementRegistry(
                     spec=spec,
                     attrs=more_attrs,
                     info=self[spec_type],
+                    coord_registry=self.coordinates
                 )
 
                 if as_xarray == 'delayed':
@@ -416,6 +429,8 @@ class _MeasurementRegistry(
 
         return wrapper
 
+    __call__ = measurement
+
     @contextlib.contextmanager
     def cache_context(self, capture: specs.Capture, callback: callable | None = None):
         caches: list[KeywordArgumentCache] = []
@@ -435,12 +450,12 @@ class _MeasurementRegistry(
                 cm.close()
                 raise
 
-
-measurement = _MeasurementRegistry()
+    def to_spec(self, base: type[specs.Analysis] = specs.Analysis) -> type[specs.Analysis]:
+        return to_analysis_spec_type(self, base)
 
 
 def to_analysis_spec_type(
-    registry: _AlignmentSourceRegistry | _MeasurementRegistry,
+    registry: AlignmentSourceRegistry | MeasurementRegistry,
     base: type[specs.Analysis] = specs.Analysis,
 ) -> type[specs.Analysis]:
     """return a Struct subclass type representing a specification for calls to all registered functions"""
@@ -463,9 +478,9 @@ def to_analysis_spec_type(
 
 
 class AlignmentCaller:
-    def __init__(self, name: str, analysis: specs.Analysis):
-        self.info: SyncInfo = channel_sync_source[name]
-        self.meas_info = measurement[self.info.meas_spec_type]
+    def __init__(self, name: str, analysis: specs.Analysis, registry: MeasurementRegistry):
+        self.info: SyncInfo = registry.channel_sync_source[name]
+        self.meas_info = registry[self.info.meas_spec_type]
 
         self.meas_spec = getattr(analysis, self.meas_info.name, None)
         if self.meas_spec is None:
@@ -490,13 +505,13 @@ class AlignmentCaller:
 
 
 @util.lru_cache()
-def get_aligner(name: str, analysis: specs.Analysis) -> AlignmentCaller:
-    return AlignmentCaller(name, analysis)
+def get_aligner(name: str, analysis: specs.Analysis, registry: MeasurementRegistry) -> AlignmentCaller:
+    return AlignmentCaller(name, analysis, registry)
 
 
-def get_channel_sync_source_measurement_name(name: str):
-    info: SyncInfo = channel_sync_source[name]
-    meas_info = measurement[info.meas_spec_type]
+def get_channel_sync_source_measurement_name(name: str, registry: MeasurementRegistry) -> str:
+    info: SyncInfo = registry.channel_sync_source[name]
+    meas_info = registry[info.meas_spec_type]
     return meas_info.name
 
 

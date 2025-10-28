@@ -11,15 +11,15 @@ from .calibration import lookup_system_noise_power
 from .peripherals import PeripheralsBase
 from .sinks import SinkBase
 from striqt.analysis.lib.dataarrays import AcquiredIQ
+from striqt.analysis.lib import register
+from striqt.analysis import measurements
 
 if typing.TYPE_CHECKING:
     import xarray as xr
     import labbench as lb
-    from striqt import analysis
 else:
     xr = util.lazy_import('xarray')
     lb = util.lazy_import('labbench')
-    analysis = util.lazy_import('striqt.analysis')
 
 
 class Resources(typing.TypedDict):
@@ -48,13 +48,12 @@ def varied_capture_fields(sweep: specs.Sweep) -> list[str]:
 
 def sweep_touches_gpu(sweep: specs.Sweep):
     """returns True if the sweep would benefit from the GPU"""
-    IQ_MEAS_NAME = analysis.measurements.iq_waveform.__name__
 
     if sweep.radio_setup.calibration is not None:
         return True
 
     analysis_dict = sweep.analysis.todict()
-    if tuple(analysis_dict.keys()) != (IQ_MEAS_NAME,):
+    if tuple(analysis_dict.keys()) != (measurements.iq_waveform.__name__,):
         # everything except iq_clipping requires a warmup
         return True
 
@@ -82,6 +81,17 @@ def design_warmup_sweep(
     skip_wcaptures = {specs.WaveformCapture.fromspec(c) for c in skip}
     captures = [unique_map[c] for c in unique_map.keys() if c not in skip_wcaptures]
 
+    num_rx_ports = 0
+    for c in captures:
+        if c.port is None:
+            continue
+        if isinstance(c.port, tuple):
+            n = max(c.port)
+        else:
+            n = c.port
+        if n > num_rx_ports:
+            num_rx_ports = n
+
     if len(captures) > 1:
         captures = captures[:1]
 
@@ -90,12 +100,15 @@ def design_warmup_sweep(
     # TODO: currently, the base_clock_rate is left as the null radio default.
     # this may cause problems in the future if its default disagrees with another
     # radio
+    null_radio_setup = (
+        sources.NullSetup
+        .fromspec(sweep.radio_setup)
+        .replace(num_rx_ports=num_rx_ports, calibration=None, reuse_iq=False)
+    )
+
     null_radio_setup = sweep.radio_setup.replace(
         driver=sources.WarmupSource.__name__,
         resource={},
-        _rx_port_count=radio_cls.rx_port_count.default,
-        calibration=None,
-        reuse_iq=False,
     )
 
     class WarmupSweep(type(sweep)):
@@ -168,7 +181,7 @@ def _update_sweep_time(
         return new.start_time
     elif old is None:
         return sweep_time
-    elif old._sweep_index != new._sweep_index:
+    elif old.sweep_index != new.sweep_index:
         return new.start_time
     else:
         return sweep_time
@@ -351,10 +364,10 @@ class SweepIterator:
     def _acquire(self, iq_prev: AcquiredIQ, capture_prev, capture_this, capture_next):
         if self.spec.radio_setup.reuse_iq:
             reuse_this = _iq_is_reusable(
-                capture_prev, capture_this, self.radio.base_clock_rate
+                capture_prev, capture_this, self.radio.get_setup_spec().base_clock_rate
             )
             reuse_next = _iq_is_reusable(
-                capture_this, capture_next, self.radio.base_clock_rate
+                capture_this, capture_next, self.radio.get_setup_spec().base_clock_rate
             )
         else:
             reuse_this = reuse_next = False
@@ -366,7 +379,7 @@ class SweepIterator:
         calls = {}
         if reuse_this:
             capture_ret = capture_this.replace(
-                backend_sample_rate=self.radio.backend_sample_rate(),
+                backend_sample_rate=self.radio._capture.backend_sample_rate,
                 start_time=None,
             )
             ret_iq = AcquiredIQ(
@@ -420,7 +433,9 @@ class SweepIterator:
             return data
 
         system_noise = lookup_system_noise_power(
-            self.spec.radio_setup.calibration, capture, self.radio.base_clock_rate
+            self.spec.radio_setup.calibration,
+            capture,
+            self.radio.get_setup_spec().base_clock_rate,
         )
 
         return dict(data, sensor_system_noise=system_noise)

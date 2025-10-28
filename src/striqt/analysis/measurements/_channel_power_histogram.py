@@ -1,7 +1,8 @@
 from __future__ import annotations
 import typing
 
-from ..lib import register, specs, util
+from .shared import registry
+from ..lib import specs, util
 from . import _channel_power_time_series
 
 if typing.TYPE_CHECKING:
@@ -66,7 +67,7 @@ def make_power_histogram_bin_edges(power_low, power_high, power_resolution, xp=n
     return xp.concatenate((bin_centers[:-1] - power_resolution, top_edge))
 
 
-@register.coordinate_factory(
+@registry.coordinates(
     dtype='float32', attrs={'standard_name': 'Channel power', 'units': 'dBm'}
 )
 @util.lru_cache()
@@ -77,7 +78,7 @@ def channel_power_bin(
     return make_power_bins(spec.power_low, spec.power_high, spec.power_resolution)
 
 
-@register.measurement(
+@registry.measurement(
     coord_factories=[_channel_power_time_series.power_detector, channel_power_bin],
     depends=[_channel_power_time_series.channel_power_time_series],
     spec_type=ChannelPowerHistogramSpec,

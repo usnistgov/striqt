@@ -5,7 +5,7 @@ import itertools
 import functools
 import numbers
 import typing
-from typing import Annotated, Optional, Literal, Any, Union
+from typing import Annotated, ClassVar, Optional, Literal, Any, Union
 
 import msgspec
 
@@ -34,8 +34,9 @@ GainType = Annotated[
 LOShiftType = Annotated[Literal['left', 'right', 'none'], meta('LO shift direction')]
 DelayType = Annotated[float, meta('Delay in acquisition start time', 's', gt=0)]
 StartTimeType = Annotated['pd.Timestamp', meta('Acquisition start time')]
-BackendSampleRateType = Annotated[
-    float, meta('Force the specified sample rate in the source', 'Hz', gt=0)
+BackendSampleRateType = Annotated[float, meta('Source sample rate', 'Hz', gt=0)]
+BaseClockRateType = Annotated[
+    float, meta('Base sample rate used inside the source', 'Hz', gt=0)
 ]
 
 
@@ -54,7 +55,7 @@ AnalysisBandwidthType = Annotated[
 
 @util.lru_cache()
 def _validate_multichannel(port, gain):
-    """guarantee that self.gain is a number or matches the length of self.port"""
+    """guarantee that self.gain is a number, or matches the length of self.port"""
     if isinstance(port, numbers.Number):
         if isinstance(gain, tuple):
             raise ValueError(
@@ -113,9 +114,15 @@ class RadioCapture(
     start_time: Optional[StartTimeType] = None
 
     # a counter used to reset the sweep timestamp on Repeat(None)
-    _sweep_index: int = 0
+    sweep_index: typing.ClassVar[int] = 0
+
+    # for tracking between captures
+    lo_offset: typing.ClassVar[float] = 0
+    forced_backend_sample_rate: typing.ClassVar[typing.Optional[float]] = None
+    downsample: typing.ClassVar[float] = 1
 
     def __post_init__(self):
+        super().__post_init__()
         _validate_multichannel(self.port, self.gain)
 
 
@@ -209,28 +216,9 @@ class FrequencyBinRange(
 LoopSpecifier = typing.Union[Repeat, List, Range, FrequencyBinRange]
 
 
-TimeSourceType = Annotated[
-    Literal['host', 'internal', 'external', 'gps'],
-    meta('Hardware source for timestamps'),
-]
-
-ClockSourceType = Annotated[
-    Literal['internal', 'external', 'gps'],
-    meta('Hardware source for the frequency reference'),
-]
-
-ContinuousTriggerType = Annotated[
-    bool,
-    meta('Whether to trigger immediately after each call to acquire() when armed'),
-]
-
 GaplessRepeatType = Annotated[
     bool,
     meta('whether to raise an exception on overflows between identical captures'),
-]
-
-TimeSyncEveryCaptureType = Annotated[
-    bool, meta('whether to sync to PPS before each capture in a sweep')
 ]
 
 WarmupSweepType = Annotated[
@@ -269,33 +257,42 @@ SyncSourceType = Annotated[
 ]
 
 
-ReceiveRetriesType = Annotated[
-    int,
-    meta(
-        'number of attempts to retry acquisition on a stream error',
-        ge=0,
-    ),
-]
+class _RadioSetupKeywords(typing.TypedDict, total=False):
+    # this needs to be kept in sync with WaveformCapture in order to
+    # properly provide type hints for IDEs in the setup
+    # call signature of source.Base objects
+
+    driver: Optional[str]
+    resource: dict
+    calibration: Optional[str]
+
+    gapless_repeats: GaplessRepeatType
+    warmup_sweep: WarmupSweepType
+
+    periodic_trigger: Optional[float]
+    channel_sync_source: typing.Optional[str] = None
+
+    array_backend: ArrayBackendType
+    cupy_max_fft_chunk_size: int
+    uncalibrated_peak_detect: Union[bool, typing.Literal['auto']]
 
 
 class RadioSetup(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     """run-time characteristics of the radio that are left invariant during a sweep"""
 
-    driver: Optional[str] = None
-    resource: dict = {}
+    driver: Optional[str]
+    
+    # acquisition
+    base_clock_rate: BaseClockRateType
     calibration: Optional[str] = None
 
     # sequencing
-    gapless_repeats: GaplessRepeatType = False
     warmup_sweep: WarmupSweepType = True
-    receive_retries: ReceiveRetriesType = 0
+    gapless_repeats: GaplessRepeatType = False
 
     # synchronization and triggering
-    time_source: TimeSourceType = 'host'
-    time_sync_every_capture: TimeSyncEveryCaptureType = False
-    channel_sync_source: Optional[str] = None
-    clock_source: ClockSourceType = 'internal'
     periodic_trigger: Optional[float] = None
+    channel_sync_source: typing.Optional[str] = None
 
     # in the future, these should probably move to an analysis config
     array_backend: ArrayBackendType = 'cupy'
@@ -306,53 +303,13 @@ class RadioSetup(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=T
 
     # calibration subclasses set this True to skip unecessary
     # re-acquisitions
-    reuse_iq = False
+    reuse_iq: ClassVar[bool] = False
 
-    _transient_holdoff_time: Optional[float] = None
-    _rx_port_count: Optional[int] = None
-
-    def __post_init__(self):
-        if not self.gapless_repeats:
-            pass
-        elif self.time_sync_every_capture:
-            raise ValueError(
-                'time_sync_every_capture and gapless_repeats are mutually exclusive'
-            )
-        elif self.receive_retries > 0:
-            raise ValueError(
-                'receive_retries must be 0 when gapless_repeats is enabled'
-            )
-
-        if self.channel_sync_source is None:
-            pass
-        elif self.channel_sync_source not in analysis.register.channel_sync_source:
-            registered = set(analysis.register.channel_sync_source)
-            raise ValueError(
-                f'channel_sync_source "{self.channel_sync_source!r}" is not one of the registered functions {registered!r}'
-            )
+    transient_holdoff_time = None
+    stream_all_rx_ports = False
+    transport_dtype: Literal['int16'] | Literal['complex64'] = 'complex64'
 
 
-class _RadioSetupKeywords(typing.TypedDict, total=False):
-    # this needs to be kept in sync with WaveformCapture in order to
-    # properly provide type hints for IDEs in the setup
-    # call signature of source.Base objects
-
-    driver: typing.NotRequired[Optional[str]]
-    resource: typing.NotRequired[dict]
-    calibration: typing.NotRequired[Optional[str]]
-
-    gapless_repeats: typing.NotRequired[GaplessRepeatType]
-    warmup_sweep: typing.NotRequired[WarmupSweepType]
-    receive_retries: typing.NotRequired[ReceiveRetriesType]
-
-    time_source: TimeSourceType
-    clock_source: ClockSourceType
-    periodic_trigger: Optional[float]
-    time_sync_every_capture: TimeSyncEveryCaptureType
-    channel_sync_source: Optional[str] = None
-
-    array_backend: ArrayBackendType
-    cupy_max_fft_chunk_size: int
 
 
 class Description(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
@@ -409,10 +366,9 @@ class Extensions(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=T
 
 
 # dynamically generate Analysis type for "built-in" measurements in to striqt.analysis
-BundledAnalysis = analysis.register.to_analysis_spec_type(analysis.register.measurement)
-BundledAlignmentAnalysis = analysis.register.to_analysis_spec_type(
-    analysis.register.channel_sync_source
-)
+BundledAnalysis = analysis.registry.to_spec()
+BundledAlignmentAnalysis = analysis.registry.channel_sync_source.to_spec()
+
 
 WindowFillType = Annotated[
     float,
@@ -454,9 +410,9 @@ def _expand_loops(
         return tuple(result)
 
 
-class Sweep(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
+class Sweep(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True, kw_only=True):
+    radio_setup: RadioSetup
     captures: tuple[RadioCapture, ...] = tuple()
-    radio_setup: RadioSetup = RadioSetup()
     defaults: RadioCapture = RadioCapture()
     loops: tuple[LoopSpecifier, ...] = ()
 
@@ -490,15 +446,14 @@ class Sweep(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
                 looped_fields.append(loop.field)
 
     @classmethod
-    def _from_registry(cls: type[Sweep]) -> type[Sweep]:
+    def _from_registry(
+        cls: type[Sweep], registry: analysis.MeasurementRegistry
+    ) -> type[Sweep]:
         bases = typing.get_type_hints(cls, include_extras=True)
 
-        Analysis = analysis.register.to_analysis_spec_type(
-            analysis.register.measurement,
-            base=bases[cls.analysis.__name__],
-        )
+        AnalysisCls = registry.to_spec(bases[cls.analysis.__name__])
 
-        fields = ((cls.analysis.__name__, Analysis, Analysis()),)
+        fields = ((cls.analysis.__name__, AnalysisCls, AnalysisCls()),)
 
         return msgspec.defstruct(
             cls.__name__,

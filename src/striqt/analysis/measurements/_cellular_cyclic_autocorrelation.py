@@ -2,7 +2,8 @@ from __future__ import annotations
 import numbers
 import typing
 
-from ..lib import register, specs, util
+from .shared import registry
+from ..lib import specs, util
 
 
 if typing.TYPE_CHECKING:
@@ -142,7 +143,7 @@ def tdd_config_from_str(
     )
 
 
-@register.coordinate_factory(
+@registry.coordinates(
     dtype='float32', attrs={'standard_name': 'Cyclic sample lag', 'units': 's'}
 )
 @util.lru_cache()
@@ -158,7 +159,7 @@ def cyclic_sample_lag(
 SubcarrierSpacingAxis = typing.Literal['subcarrier_spacing']
 
 
-@register.coordinate_factory(
+@registry.coordinates(
     dtype='float32', attrs={'standard_name': 'Subcarrier spacing', 'units': 'Hz'}
 )
 @util.lru_cache()
@@ -166,7 +167,7 @@ def subcarrier_spacing(capture: specs.Capture, spec: CellularCyclicAutocorrelati
     return list(spec.subcarrier_spacings)
 
 
-@register.coordinate_factory(dtype='str', attrs={'standard_name': 'Link direction'})
+@registry.coordinates(dtype='str', attrs={'standard_name': 'Link direction'})
 @util.lru_cache()
 def link_direction(capture: specs.Capture, spec: CellularCyclicAutocorrelationSpec):
     values = np.array(['downlink', 'uplink'], dtype='U8')
@@ -198,7 +199,7 @@ def _get_max_corr_size(
     return max([np.diff(phy.cp_start_idx).min() for phy in phy_scs.values()])
 
 
-@register.measurement(
+@registry.measurement(
     coord_factories=[link_direction, subcarrier_spacing, cyclic_sample_lag],
     dtype='float32',
     prefer_unaligned_input=True,

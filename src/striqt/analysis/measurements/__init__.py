@@ -15,3 +15,5 @@ from ._power_spectral_density import power_spectral_density
 from ._spectrogram import spectrogram
 from ._spectrogram_histogram import spectrogram_histogram
 from ._spectrogram_ratio_histogram import spectrogram_ratio_histogram
+
+from .shared import registry

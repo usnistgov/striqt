@@ -66,8 +66,8 @@ class ManualYFactorSweep(
 
     calibration_variables: CalibrationVariables
     defaults: ManualYFactorCapture = ManualYFactorCapture()
-    calibration_setup: ManualYFactorSetup = ManualYFactorSetup()
-    radio_setup: CalibrationRadioSetup = CalibrationRadioSetup()
+    calibration_setup: ManualYFactorSetup
+    radio_setup: CalibrationRadioSetup
 
     def __post_init__(self):
         if self.radio_setup.calibration is not None:

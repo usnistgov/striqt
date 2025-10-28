@@ -2,7 +2,8 @@ from __future__ import annotations
 import typing
 
 from . import shared
-from ..lib import dataarrays, register, specs, util
+from .shared import registry
+from ..lib import register, specs, util
 
 import array_api_compat
 
@@ -30,7 +31,7 @@ class Cellular5GNRSSSCorrelationSpec(
     pass
 
 
-@register.coordinate_factory(
+@registry.coordinates(
     dtype='uint16', attrs={'standard_name': r'Cell gNodeB ID ($N_\text{ID}^{(1)}$)'}
 )
 @util.lru_cache()
@@ -90,7 +91,7 @@ def correlate_5g_sss(
     return iqwaveform.util.to_blocks(meas, 3, axis=-4)
 
 
-@register.channel_sync_source(
+@registry.channel_sync_source(
     Cellular5GNRSSSCorrelationSpec, lag_coord_func=shared.cellular_ssb_lag
 )
 def cellular_5g_sss_sync(
@@ -142,7 +143,7 @@ def cellular_5g_sss_sync(
     return shared.cellular_ssb_lag(capture, spec)[i]
 
 
-@register.measurement(
+@registry.measurement(
     Cellular5GNRSSSCorrelationSpec,
     coord_factories=_coord_factories,
     dtype=dtype,

@@ -58,10 +58,7 @@ def _do_warmup(sweep_spec):
         resources = sweeps.Resources(radio=source, sweep_spec=warmup_sweep)
 
         warmup_iter = sweeps.iter_sweep(
-            resources,
-            always_yield=True,
-            calibration=None,
-            quiet=True
+            resources, always_yield=True, calibration=None, quiet=True
         )
 
         for _ in warmup_iter:
@@ -126,7 +123,10 @@ def open_sensor_from_spec(
             ext_types = _get_extension_classes(aliased_spec)
 
         if aliased_spec.output.log_path is not None:
-            util.log_to_file(aliased_spec.output.log_path, lb.util._LOG_LEVEL_NAMES[aliased_spec.output.log_level])
+            util.log_to_file(
+                aliased_spec.output.log_path,
+                lb.util._LOG_LEVEL_NAMES[aliased_spec.output.log_level],
+            )
 
         # open the rest
         calls = {}

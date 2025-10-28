@@ -110,7 +110,7 @@ def _choose_chunk_sizes(
     return chunks
 
 
-def _build_encodings_zarr_v3(data, compression=True):
+def _build_encodings_zarr_v3(data, registry: register.MeasurementRegistry, compression=True):
     if isinstance(compression, zarr.core.codec_pipeline.Codec):
         compressors = [compression]
     elif compression:
@@ -120,7 +120,7 @@ def _build_encodings_zarr_v3(data, compression=True):
         compressors = None
 
     encodings = defaultdict(dict)
-    info_map = {info.name: info for info in register.measurement.values()}
+    info_map = {info.name: info for info in registry.values()}
 
     for name, var in data.variables.items():
         meas_info = info_map.get(name, None)
@@ -134,7 +134,7 @@ def _build_encodings_zarr_v3(data, compression=True):
     return encodings
 
 
-def _build_encodings_zarr_v2(data, compression=True):
+def _build_encodings_zarr_v2(data, registry: register.MeasurementRegistry, compression=True):
     if isinstance(compression, numcodecs.abc.Codec):
         compressor = compression
     elif compression:
@@ -143,7 +143,7 @@ def _build_encodings_zarr_v2(data, compression=True):
         compressor = None
 
     encodings = defaultdict(dict)
-    info_map = {info.name: info for info in register.measurement.values()}
+    info_map = {info.name: info for info in registry.values()}
 
     for name in data.data_vars.keys():
         meas_info = info_map.get(name, None)
@@ -186,7 +186,7 @@ def dump(
     compression: bool = True,
     zarr_format: str | typing.Literal[2] | typing.Literal[3] = 'auto',
     compute: bool = True,
-    chunk_bytes: int = 50_000_000,
+    chunk_bytes: int | typing.Literal['auto'] = 50_000_000,
     max_threads: int | None = None,
 ) -> 'StoreType':
     """serialize a dataset into a zarr directory or zipfile"""
@@ -196,6 +196,8 @@ def dump(
 
     # prefer the variable-length string dtype from numpy 2, if available
     string_dtype = getattr(np.dtype, 'StrDType', 'str')
+
+    from ..measurements.registry import measurements as registry
 
     for name in dict(data.coords).keys():
         if data[name].size == 0:
@@ -223,13 +225,18 @@ def dump(
         # establish the chunking and encodings for this and any subsequent writes
         kws['mode'] = 'w'
 
-        chunks = _choose_chunk_sizes(data, dim=append_dim, data_bytes=chunk_bytes)
-        data = data.chunk(chunks)
+        if isinstance(chunk_bytes, int):
+            chunks = _choose_chunk_sizes(data, dim=append_dim, data_bytes=chunk_bytes)
+            data = data.chunk(chunks)
+        elif chunk_bytes == 'auto':
+            data = data.chunk('auto')
+        else:
+            raise TypeError(f'invalid chunk_bytes argument {chunk_bytes!r}')
 
         if _zarr_version() >= (3, 0, 0):
-            kws['encoding'] = _build_encodings_zarr_v3(data, compression=compression)
+            kws['encoding'] = _build_encodings_zarr_v3(data, registry=registry, compression=compression)
         else:
-            kws['encoding'] = _build_encodings_zarr_v2(data, compression=compression)
+            kws['encoding'] = _build_encodings_zarr_v2(data, registry=registry, compression=compression)
 
     with warnings.catch_warnings():
         warnings.simplefilter('ignore', xr.SerializationWarning)
@@ -240,7 +247,7 @@ def dump(
 
 def load(
     path: str | Path,
-    chunks: str | int | Literal['auto'] | tuple[int, ...] | None = None,
+    chunks: str | int | typing.Literal['auto'] | tuple[int, ...] | None = None,
     **kwargs,
 ) -> 'xr.DataArray' | 'xr.Dataset':
     """load a dataset or data array.
@@ -336,27 +343,27 @@ class _FileStreamBase:
         self,
         path,
         *,
-        rx_port_count=1,
+        num_rx_ports=1,
         skip_samples=0,
         dtype='complex64',
         xp=np,
-        **meta,
+        **capture_dict: dict[str],
     ):
-        self._rx_port_count = rx_port_count
+        self._num_rx_ports = num_rx_ports
         self._leftover = None
         self._position = None
         self._skip_samples = skip_samples
         self.dtype = dtype
         self._xp = xp
-        self._meta = meta
+        self._capture_dict = capture_dict
         self.seek(0)
 
     def seek(self, pos):
         self._leftover = None
         self._position = pos
 
-    def get_metadata(self) -> dict:
-        return self._meta
+    def get_capture_fields(self) -> dict:
+        return self._capture_dict
 
 
 class MATNewFileStream(_FileStreamBase):
@@ -364,7 +371,7 @@ class MATNewFileStream(_FileStreamBase):
         self,
         path,
         sample_rate: float,
-        rx_port_count=1,
+        num_rx_ports=1,
         skip_samples=0,
         dtype='complex64',
         input_dtype='complex128',
@@ -374,7 +381,7 @@ class MATNewFileStream(_FileStreamBase):
     ):
         kws = {
             'sample_rate': sample_rate,
-            'rx_port_count': rx_port_count,
+            'num_rx_ports': num_rx_ports,
             'skip_samples': skip_samples,
             'dtype': dtype,
             'input_dtype': input_dtype,
@@ -427,7 +434,7 @@ class MATNewFileStream(_FileStreamBase):
             tally += x.shape[1]
 
         iq = xp.concat(array_list, axis=1)
-        self._meta[dataarrays.PORT_DIM] = list(range(iq.shape[0]))
+        self._capture_dict[dataarrays.PORT_DIM] = list(range(iq.shape[0]))
 
         if count is None:
             self._leftover = None
@@ -453,7 +460,7 @@ class MATLegacyFileStream(_FileStreamBase):
         path,
         sample_rate: float,
         key: str = 'waveform',
-        rx_port_count=1,
+        num_rx_ports=1,
         skip_samples=0,
         dtype='complex64',
         xp=np,
@@ -475,7 +482,7 @@ class MATLegacyFileStream(_FileStreamBase):
 
         super().__init__(
             path,
-            rx_port_count=rx_port_count,
+            num_rx_ports=num_rx_ports,
             skip_samples=skip_samples,
             dtype=dtype,
             xp=xp,
@@ -527,7 +534,7 @@ class MATLegacyFileStream(_FileStreamBase):
             tally += x.shape[1]
 
         iq = xp.concat(array_list, axis=1)
-        self._meta[dataarrays.PORT_DIM] = list(range(iq.shape[0]))
+        self._capture_dict[dataarrays.PORT_DIM] = list(range(iq.shape[0]))
 
         if count is None:
             self._leftover = None
@@ -553,7 +560,7 @@ class NPYFileStream(_FileStreamBase):
         self,
         path,
         sample_rate: float,
-        rx_port_count=1,
+        num_rx_ports=1,
         skip_samples=0,
         dtype='complex64',
         xp=np,
@@ -561,16 +568,16 @@ class NPYFileStream(_FileStreamBase):
     ):
         self._data = xp.asarray(np.atleast_2d(np.load(path))).astype(dtype)
 
-        if rx_port_count <= self._data.shape[-2]:
-            self._data = self._data[..., :rx_port_count, :]
+        if num_rx_ports <= self._data.shape[-2]:
+            self._data = self._data[..., :num_rx_ports, :]
         else:
             raise ValueError(
-                f'rx_port_count exceeds input data channel dimension size ({self._data.shape[-2]})'
+                f'num_rx_ports exceeds input data channel dimension size ({self._data.shape[-2]})'
             )
 
         super().__init__(
             path,
-            rx_port_count=rx_port_count,
+            num_rx_ports=num_rx_ports,
             skip_samples=skip_samples,
             dtype=dtype,
             xp=xp,
@@ -610,7 +617,7 @@ class NPYFileStream(_FileStreamBase):
             tally += ref.shape[1]
 
         iq = xp.concat(array_list, axis=1)
-        self._meta[dataarrays.PORT_DIM] = list(range(iq.shape[0]))
+        self._capture_dict[dataarrays.PORT_DIM] = list(range(iq.shape[0]))
 
         if count is None:
             self._leftover = None
@@ -634,7 +641,7 @@ class TDMSFileStream(_FileStreamBase):
     def __init__(
         self,
         path,
-        rx_port_count=1,
+        num_rx_ports=1,
         skip_samples=0,
         dtype='complex64',
         loop=False,
@@ -648,7 +655,7 @@ class TDMSFileStream(_FileStreamBase):
 
         super().__init__(
             path,
-            rx_port_count=rx_port_count,
+            num_rx_ports=num_rx_ports,
             skip_samples=skip_samples,
             dtype=dtype,
             xp=xp,
@@ -685,7 +692,7 @@ class TDMSFileStream(_FileStreamBase):
 
         return iq[np.newaxis, :]
 
-    def get_metadata(self):
+    def get_capture_fields(self):
         fs = self._header_fd['IQ_samples_per_second'][0]
         fc = self._header_fd['carrier_frequency'][0]
         duration = self._header_fd['header_fd']['total_samples'][0] * fs
@@ -698,7 +705,7 @@ def open_bare_iq(
     *args,
     format='auto',
     skip_samples=0,
-    rx_port_count=1,
+    num_rx_ports=1,
     dtype='complex64',
     loop: bool = False,
     xp=np,
@@ -726,7 +733,7 @@ def open_bare_iq(
         *args,
         loop=loop,
         skip_samples=skip_samples,
-        rx_port_count=rx_port_count,
+        num_rx_ports=num_rx_ports,
         dtype=dtype,
         xp=xp,
         **kws,

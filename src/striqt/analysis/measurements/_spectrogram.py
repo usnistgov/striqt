@@ -3,7 +3,8 @@ import typing
 import warnings
 
 from . import shared
-from ..lib import register, specs, util
+from .shared import registry
+from ..lib import specs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -17,7 +18,7 @@ warnings.filterwarnings(
 )
 
 
-@register.coordinate_factory(
+@registry.coordinates(
     dtype='float32', attrs={'standard_name': 'Time Elapsed', 'units': 's'}
 )
 @util.lru_cache()
@@ -47,7 +48,7 @@ def spectrogram_time(
     return pd.RangeIndex(size) * hop_period
 
 
-@register.measurement(
+@registry.measurement(
     coord_factories=[spectrogram_time, shared.spectrogram_baseband_frequency],
     spec_type=shared.SpectrogramSpec,
     dtype='float16',

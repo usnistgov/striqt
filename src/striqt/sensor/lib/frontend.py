@@ -26,7 +26,7 @@ class DebugOnException:
 
     def run(self, etype, exc, tb):
         if (etype, exc, tb) == (None, None, None):
-            return 
+            return
 
         if self.enable:
             print(exc)

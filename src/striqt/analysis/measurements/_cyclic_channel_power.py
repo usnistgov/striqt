@@ -4,7 +4,8 @@ import typing
 
 from ._channel_power_time_series import power_detector
 
-from ..lib import register, specs, util
+from .shared import registry
+from ..lib import specs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -34,13 +35,13 @@ class CyclicChannelPowerKeywords(specs.AnalysisKeywords):
     cyclic_statistics: typing.Optional[tuple[typing.Union[str, float], ...]]
 
 
-@register.coordinate_factory(dtype=object, attrs={'standard_name': 'Cyclic statistic'})
+@registry.coordinates(dtype=object, attrs={'standard_name': 'Cyclic statistic'})
 @util.lru_cache()
 def cyclic_statistic(capture: specs.Capture, spec: CyclicChannelPowerSpec):
     return list(spec.cyclic_statistics)
 
 
-@register.coordinate_factory(
+@registry.coordinates(
     dtype='float32', attrs={'standard_name': 'Cyclic lag', 'units': 's'}
 )
 @util.lru_cache()
@@ -50,7 +51,7 @@ def cyclic_lag(capture: specs.Capture, spec: CyclicChannelPowerSpec):
     return np.arange(lag_count) * spec.detector_period
 
 
-@register.measurement(
+@registry.measurement(
     coord_factories=[power_detector, cyclic_statistic, cyclic_lag],
     spec_type=CyclicChannelPowerSpec,
     dtype='float32',

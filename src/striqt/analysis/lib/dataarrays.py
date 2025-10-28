@@ -207,13 +207,14 @@ def dataarray_stub(
     dims: tuple[str, ...],
     coord_factories: tuple[callable, ...],
     dtype: str,
+    coord_registry: register.CoordinateRegistry,
     expand_dims: tuple[str, ...] | None = None,
 ) -> typing.Any:
     """return an empty array of type `cls`"""
 
     coord_stubs = {}
     for func in coord_factories:
-        info = register.coordinate_factory[func]
+        info = coord_registry[func]
         coord_stubs[info.name] = _empty_stub(info.dims, info.dtype, attrs=info.attrs)
 
     if dims is None or dims == ():
@@ -249,6 +250,8 @@ def _reraise_coord_error(*, exc, coord, factory_info, data, name):
 
 def build_dataarray(
     delayed: DelayedDataArray,
+    *,
+    coord_registry: register.CoordinateRegistry,
     expand_dims=None,
 ) -> 'xr.DataArray':
     """build an `xarray.DataArray` from an ndarray, capture information, and channel analysis keyword arguments"""
@@ -257,6 +260,7 @@ def build_dataarray(
         delayed.info.dims,
         delayed.info.coord_factories,
         delayed.info.dtype,
+        coord_registry=coord_registry,
         expand_dims=expand_dims,
     )
     data = np.asarray(delayed.data)
@@ -291,7 +295,7 @@ def build_dataarray(
         ) from ex
 
     for coord_factory in delayed.info.coord_factories:
-        factory_info = register.coordinate_factory[coord_factory]
+        factory_info = coord_registry[coord_factory]
         coord = da[factory_info.name]
 
         ret = coord_factory(delayed.capture, delayed.spec)
@@ -317,7 +321,7 @@ def build_dataarray(
 
 
 @util.lru_cache()
-def _infer_coord_dims(coord_factories: typing.Iterable[callable]) -> list[str]:
+def _infer_coord_dims(coord_factories: typing.Iterable[callable], coord_registry: register.CoordinateRegistry) -> list[str]:
     """guess dimensions of a dataarray based on its coordinates.
 
     This orders the dimensions according to (1) first appearance in each
@@ -328,7 +332,7 @@ def _infer_coord_dims(coord_factories: typing.Iterable[callable]) -> list[str]:
     # build an ordered list of unique coordinates
     coord_dims = {}
     for func in coord_factories:
-        coord = register.coordinate_factory[func]
+        coord = coord_registry[func]
         if coord is None:
             continue
         coord_dims.update(dict.fromkeys(coord.dims, None))
@@ -362,12 +366,12 @@ class DelayedDataArray(collections.UserDict):
     analyses before we materialize them on the CPU.
     """
 
-    # datacls: type
     capture: specs.RadioCapture
     spec: specs.Measurement
     data: typing.Union['iqwaveform.type_stubs.ArrayLike', dict]
     info: register.MeasurementInfo
     attrs: dict
+    coord_registry: register.CoordinateRegistry|None = None
 
     def compute(self) -> DelayedDataArray:
         return DelayedDataArray(
@@ -377,10 +381,11 @@ class DelayedDataArray(collections.UserDict):
             data=_results_as_arrays(self.data),
             info=self.info,
             attrs=self.attrs,
+            coord_registry=self.coord_registry
         )
 
     def to_xarray(self, expand_dims=None) -> 'xr.DataArray':
-        return build_dataarray(self, expand_dims=expand_dims)
+        return build_dataarray(self, coord_registry=self.coord_registry, expand_dims=expand_dims)
 
 
 def select_parameter_kws(locals_: dict, omit=(PORT_DIM, 'out')) -> dict:
@@ -395,6 +400,7 @@ def evaluate_by_spec(
     capture: specs.Capture,
     *,
     spec: str | dict | specs.Measurement,
+    registry: register.MeasurementRegistry,
     as_xarray: typing.Literal[True]
     | typing.Literal[False]
     | typing.Literal['delayed'] = 'delayed',
@@ -405,7 +411,7 @@ def evaluate_by_spec(
     if isinstance(spec, specs.Analysis):
         spec = spec.validate()
     else:
-        spec = register.to_analysis_spec_type(register.measurement).fromdict(spec)
+        spec = registry.tospec().fromdict(spec)
 
     spec_dict = spec.todict()
     results: dict[str, DelayedDataArray] = {}
@@ -415,7 +421,7 @@ def evaluate_by_spec(
         util.configure_cupy()
 
     for name in spec_dict.keys():
-        meas = register.measurement[type(getattr(spec, name))]
+        meas = registry[type(getattr(spec, name))]
 
         with util.stopwatch(name, 'analysis'):
             func_kws = spec_dict[name]
@@ -479,6 +485,7 @@ def analyze_by_spec(
     capture: specs.Capture,
     *,
     spec: str | dict | specs.Measurement,
+    registry: register.MeasurementRegistry,
     as_xarray: bool | typing.Literal['delayed'] = True,
     block_each: bool = True,
     expand_dims=None,
@@ -488,6 +495,7 @@ def analyze_by_spec(
     results = evaluate_by_spec(
         iq,
         capture,
+        registry=registry,
         spec=spec,
         block_each=block_each,
         as_xarray='delayed' if as_xarray else False,

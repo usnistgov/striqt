@@ -1,7 +1,8 @@
 from __future__ import annotations
 import typing
 
-from ..lib import register, specs, util
+from .shared import registry
+from ..lib import specs, util
 
 if typing.TYPE_CHECKING:
     import iqwaveform
@@ -54,14 +55,14 @@ def _get_start_stop_index(
     return start, stop
 
 
-@register.coordinate_factory(dtype='uint64', attrs={'standard_name': 'Sample Index'})
+@registry.coordinates(dtype='uint64', attrs={'standard_name': 'Sample Index'})
 @util.lru_cache()
 def iq_index(capture: specs.Capture, spec: IQWaveformSpec) -> typing.Iterable[int]:
     start, stop = _get_start_stop_index(capture, spec, allow_none=False)
     return pd.RangeIndex(start, stop, name=iq_index.__name__)
 
 
-@register.measurement(
+@registry.measurement(
     coord_factories=[iq_index],
     spec_type=IQWaveformSpec,
     dtype='complex64',

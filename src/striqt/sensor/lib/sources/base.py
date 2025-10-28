@@ -5,12 +5,9 @@ from math import ceil
 import numbers
 import typing
 
-import labbench as lb
-from labbench import paramattr as attr
 import numpy as np
 
 from .. import specs, util
-from . import method_attr
 
 from striqt.analysis.lib.util import pinned_array_as_cupy
 from striqt.analysis.lib.specs import Analysis
@@ -32,22 +29,28 @@ RESAMPLE_COLA_WINDOW = 'hamming'
 FILTER_DOMAIN = 'time'
 
 
+_TS = typing.TypeVar('_TS', bound=specs.RadioSetup)
+_TC = typing.TypeVar('_TC', bound=specs.RadioCapture)
+_TS2 = typing.TypeVar('_TS2', bound=specs.RadioSetup)
+_TC2 = typing.TypeVar('_TC2', bound=specs.RadioCapture)
+
+
 class ReceiveStreamError(IOError):
     pass
 
 
-class _ReceiveBufferCarryover:
+class _ReceiveBuffering:
     """remember unused samples from the previous IQ capture"""
 
-    samples: 'np.ndarray' | None
+    carryover_samples: 'np.ndarray' | None
     start_time_ns: int | None
+    buffers: list | None = None
+    hold_buffer_swap = False
 
     def __init__(self, radio=None):
         self.radio = radio
-        if radio is not None:
-            attr.observe(radio, self.on_radio_attr_change, type_='set')
-
         self.clear()
+        self.buffers = [None, None]
 
     def apply(self, samples: 'np.ndarray') -> tuple[int | None, int]:
         """carry over samples into `samples` from the previous capture.
@@ -55,21 +58,31 @@ class _ReceiveBufferCarryover:
         Returns:
             (start_time_ns, number of samples)
         """
-        if self.start_time_ns is None and self.samples is not None:
+        if self.start_time_ns is None and self.carryover_samples is not None:
             raise ValueError(
                 'carryover time information present, but missing timestamp'
             )
 
-        if self.samples is None:
+        if self.carryover_samples is None:
             carryover_count = 0
         else:
             # note: carryover.samples.dtype is np.complex64, samples.dtype is np.float32
-            carryover_count = self.samples.shape[1]
-            samples[:, : 2 * carryover_count] = self.samples.view(samples.dtype)
+            carryover_count = self.carryover_samples.shape[1]
+            samples[:, : 2 * carryover_count] = self.carryover_samples.view(
+                samples.dtype
+            )
 
         return self.start_time_ns, carryover_count
 
-    def stash(
+    def get_next(self, capture) -> tuple[np.ndarray, np.ndarray]:
+        """swap the buffers, and reallocate if needed"""
+        if not self.hold_buffer_swap:
+            self.buffers = [self.buffers[1], self.buffers[0]]
+        self.buffers[0], ret = alloc_empty_iq(self.radio, capture, self.buffers[0])
+        self.hold_buffer_swap = False
+        return ret
+
+    def stash_carryover(
         self,
         samples: 'np.ndarray',
         sample_start_ns,
@@ -78,34 +91,15 @@ class _ReceiveBufferCarryover:
     ):
         """stash data needed to carry over extra samples into the next capture"""
         carryover_count = unused_sample_count
-        self.samples = samples[:, -carryover_count:].copy()
+        self.carryover_samples = samples[:, -carryover_count:].copy()
         self.start_time_ns = sample_start_ns + round(1e9 * capture.duration)
 
     def clear(self):
-        self.samples = None
+        self.carryover_samples = None
         self.start_time_ns = None
-
-    def on_radio_attr_change(self, msg):
-        """invalidate on notification of paramattr changes"""
-
-        if self.samples is None:
-            return
-
-        # TODO: proper gapless capturing will to manage this case, but
-        # there is troubleshooting to do
-        # elif msg['name'] == RadioDevice.rx_enabled.name:
-        #     return
-
-        if msg['new'] != msg['old']:
-            self.clear()
 
     def __del__(self):
         self.unobserve()
-
-    def unobserve(self):
-        if self.radio is None:
-            return
-        attr.unobserve(self.radio, self.on_radio_attr_change)
 
 
 def _cast_iq(
@@ -113,7 +107,7 @@ def _cast_iq(
 ) -> 'iqwaveform.util.ArrayType':
     """cast the buffer to floating point, if necessary"""
     # array_namespace will categorize cupy pinned memory as numpy
-    dtype_in = np.dtype(radio._transport_dtype)
+    dtype_in = np.dtype(radio._setup.transport_dtype)
 
     if radio._setup.array_backend == 'cupy':
         import cupy as xp
@@ -142,299 +136,152 @@ def _cast_iq(
     return buffer_out
 
 
-class SourceBase(lb.Device):
-    _carryover = _ReceiveBufferCarryover()
-    _hold_buffer_swap = False
+class BaseSourceInfo(typing.NamedTuple):
+    num_rx_ports: int
 
-    analysis_bandwidth = attr.value.float(
-        float('inf'),
-        allow_none=False,
-        min=1e-6,
-        label='Hz',
-        help='bandwidth of the digital bandpass filter (or None to bypass)',
-    )
 
-    duration = attr.value.float(
-        100e-3, min=0, label='s', help='receive waveform capture duration'
-    )
+class SourceBase(typing.Generic[_TS, _TC]):
+    _buffers: _ReceiveBuffering | None = None
+    _capture_cls: typing.ClassVar[type[_TC]] = specs.RadioCapture
+    _setup_cls: typing.ClassVar[type[_TS]] = specs.RadioSetup
+    _capture: _TC | None = None
+    _setup: _TS | None = None
+    _is_open: bool = False
 
-    periodic_trigger = attr.value.float(
-        None,
-        allow_none=True,
-        help='if specified, acquisition start times will begin at even multiples of this',
-    )
+    def __init__(
+        self,
+        setup: _TS,
+        analysis: Analysis = None,
+        **setup_kws: typing.Unpack[specs._RadioSetupKeywords],
+    ):
+        self._aligner: register.AlignmentCaller | None = None
 
-    lo_offset = attr.value.float(
-        0.0,
-        label='Hz',
-        help='digital frequency shift of the RX center frequency',
-    )
+        if setup.driver is None:
+            setup_kws['driver'] = self.__class__.__name__
 
-    _downsample = attr.value.float(1.0, min=0, help='backend_sample_rate/sample_rate')
+        if setup is None:
+            setup = self._setup_cls(**setup_kws)
+        else:
+            setup = setup.replace(**setup_kws)
 
-    _uncalibrated_peak_detect = attr.value.bool(
-        False, help='whether to detect and report IQ magnitude peak before processing'
-    )
+        if setup.channel_sync_source is None:
+            self._aligner = None
+        elif analysis is None:
+            name = register.get_channel_sync_source_measurement_name(
+                setup.channel_sync_source, register
+            )
+            raise ValueError(
+                f'channel_sync_source {name!r} requires an analysis '
+                f'specification for {setup.channel_sync_source!r}'
+            )
+        else:
+            self._aligner = register.get_aligner(
+                setup.channel_sync_source, analysis=analysis
+            )
 
-    # these must be implemented by child classes
-    port = method_attr.PortMaybeTupleMethod(
-        cache=True,
-        contained_type=int,
-        min=0,
-        help='list of RX channel port indexes to acquire',
-    )
+        self._setup = setup
 
-    gain = method_attr.FloatMaybeTupleMethod(
-        label='dB', help='receive gain for each channel in hardware'
-    )
+    @functools.cached_property
+    def source_info(self) -> BaseSourceInfo:
+        raise NotImplementedError
 
-    center_frequency = attr.method.float(
-        min=0,
-        label='Hz',
-        help='RF frequency at the baseband DC',
-    )
-
-    backend_sample_rate = attr.method.float(
-        min=0,
-        label='Hz',
-        help='sample rate before resampling',
-    )
-
-    rx_enabled = attr.method.bool()
-
-    time_source = attr.method.str(
-        only=['host', 'internal', 'external', 'gps'],
-        help='time base for sample timestamps',
-    )
-
-    clock_source = attr.method.str(
-        only=['internal', 'external', 'gps'],
-        help='frequency reference source',
-    )
-
-    rx_port_count = attr.value.int(
-        1, sets=False, min=1, cache=True, help='number of input ports'
-    )
-
-    # constants that can be adjusted by device-specific classes to tune streaming behavior
-    _stream_all_rx_ports = attr.value.bool(
-        False,
-        sets=False,
-        help='whether to stream all ports even when only one is selected',
-    )
-
-    _transient_holdoff_time = attr.value.float(
-        0.0, sets=False, label='s', help='holdoff time before valid data after enable'
-    )
-
-    _transport_dtype = attr.value.str(
-        'complex64',
-        only=('int16', 'float32', 'complex64'),
-        sets=False,
-        help='buffer and transport dtype',
-    )
-
-    _forced_backend_sample_rate = attr.value.float(
-        None, help='if specified, only the specified backend sample rate will be used'
-    )
-
-    resource: dict = attr.value.dict(
-        default={}, help='resource dictionary to specify the device connection'
-    )
-
-    @attr.property.str(sets=False, cache=True, help='unique radio hardware identifier')
+    @property
     def id(self):
         raise NotImplementedError
 
     @property
-    def base_clock_rate(self):
-        return type(self).backend_sample_rate.max
-
-    def open(self):
-        self._capture: specs.RadioCapture | None = None
-        self._carryover = _ReceiveBufferCarryover(self)
-        self._buffers = [None, None]
-        self._aligner: register.AlignmentCaller | None = None
-        self._setup: specs.RadioSetup | None = None
+    def is_open(self) -> bool:
+        return self._is_open
 
     def close(self):
-        self._carryover = None
+        self._is_open = False
         self._buffers = None
 
-    def setup(
-        self,
-        spec: specs.RadioSetup,
-        analysis: Analysis = None,
-        **setup_kws: typing.Unpack[specs._RadioSetupKeywords],
-    ):
-        """disarm acquisition and apply the given radio setup"""
+    def __del__(self):
+        self.close()
 
-        if spec is None:
-            _setup = specs.RadioSetup()
-        else:
-            _setup = spec
+    def __enter__(self):
+        if self.is_open:
+            raise RuntimeError('cannot enter context for an open device')
+        self.open()
 
-        if _setup.driver is None:
-            setup_kws['driver'] = self.__class__.__name__
+    def __exit__(self, *exc_info):
+        if self.is_open:
+            self.close()
 
-        _setup = _setup.replace(**setup_kws)
+    def open(self):
+        if self.is_open:
+            return
 
-        self.time_source(_setup.time_source)
-        self.clock_source(_setup.clock_source)
-
-        # self.receive_retries = radio_setup.receive_retries
-
-        if not _setup.time_sync_every_capture:
-            self.rx_enabled(False)
-            self.sync_time_source()
-
-        if _setup.uncalibrated_peak_detect != 'auto':
-            self._uncalibrated_peak_detect = _setup.uncalibrated_peak_detect
-
-        if _setup.channel_sync_source is None:
-            self._aligner = None
-        elif analysis is None:
-            name = register.get_channel_sync_source_measurement_name(
-                spec.channel_sync_source
-            )
-            raise ValueError(
-                f'channel_sync_source {name!r} requires an analysis '
-                f'specification for {spec.channel_sync_source!r}'
-            )
-        else:
-            self._aligner = register.get_aligner(
-                _setup.channel_sync_source, analysis=analysis
-            )
-
-        self._setup = _setup
-
-        return _setup
+        setup = self._setup
+        self._connect(setup)
+        self._setup = self._apply_setup(setup) or setup
+        self._is_open = True
+        return self._setup
 
     @util.stopwatch('arm', 'source', threshold=10e-3)
     def arm(
         self,
-        capture: specs.RadioCapture = None,
+        capture: _TC = None,
         *,
         force_time_sync: bool = False,
         **capture_kws: typing.Unpack[specs._RadioCaptureKeywords],
-    ) -> specs.RadioCapture:
+    ) -> _TC:
         """stop the stream, apply a capture configuration, and start it"""
-
-        if self._setup is None:
-            raise TypeError(f'setup the radio by calling setup(...) before arm(...))')
+        if not self.is_open:
+            raise RuntimeError('open the radio before arming')
 
         if capture is None:
-            capture = self.get_capture_struct()
-
-        capture = capture.replace(**capture_kws)
-
-        self._forced_backend_sample_rate = capture.backend_sample_rate
-
-        if iqwaveform.power_analysis.isroundmod(
-            capture.duration * capture.sample_rate, 1
-        ):
-            self.duration = capture.duration
+            capture = self._capture_cls(**capture_kws)
         else:
-            raise ValueError(
-                f'duration {capture.duration} is not an integer multiple of sample period'
-            )
+            capture = capture.replace(**capture_kws)
 
-        if not self._setup.gapless_repeats:
-            self.rx_enabled(False)
-
-        if method_attr._number_if_single(capture.port) != self.port():
-            # TODO: support the case of multichannel -> single channel elegantly
-            self.rx_enabled(False)
-            self.port(capture.port)
-
-        if method_attr._number_if_single(capture.gain) != self.gain():
-            self.rx_enabled(False)
-            self.gain(capture.gain)
-
-        resampler_design = design_capture_resampler(self.base_clock_rate, capture)
-        fs_backend = resampler_design['fs_sdr']
-        lo_offset = resampler_design['lo_offset']
-
-        if (
-            lo_offset != self.lo_offset
-            or capture.center_frequency != self.center_frequency()
-        ):
-            self.rx_enabled(False)
-            self.center_frequency(capture.center_frequency)
-            self.lo_offset = lo_offset
-
+        resampler_design = design_capture_resampler(
+            self._setup.base_clock_rate, capture
+        )
         nfft_out = resampler_design.get('nfft_out', resampler_design['nfft'])
-        downsample = resampler_design['nfft'] / nfft_out
+        capture.backend_sample_rate = resampler_design['fs_sdr']
+        capture.lo_offset = resampler_design['lo_offset']
+        capture.downsample = resampler_design['nfft'] / nfft_out
 
-        if fs_backend != self.backend_sample_rate() or downsample != self._downsample:
-            self.rx_enabled(False)
-            with attr.hold_attr_notifications(self):
-                self._downsample = 1  # temporarily avoid a potential bounding error
-            self.backend_sample_rate(fs_backend)
-            self._downsample = downsample
+        if not self._setup.gapless_repeats or capture != self._capture:
+            self._buffers.clear()
 
-        if capture.sample_rate != self.sample_rate():
-            # in this case, it's only a post-processing (GPU resampling) change
-            self.rx_enabled(False)
-            self.sample_rate(capture.sample_rate)
-
-        if (
-            self._setup.periodic_trigger is not None
-            and capture.duration < self._setup.periodic_trigger
-        ):
-            self._logger.warning(
-                'periodic trigger duration exceeds capture duration, '
-                'which creates a large buffer of unused samples'
-            )
-
-        self.analysis_bandwidth = capture.analysis_bandwidth
-
-        self._capture = capture
-
-        return capture
+        self._capture = self._prepare_capture(capture) or capture
+        return self._capture
 
     @util.stopwatch('read_iq', 'source')
     def read_iq(
         self,
-        capture: specs.RadioCapture,
+        capture: _TC,
     ) -> tuple['np.ndarray[np.complex64]', int]:
         # the return buffer
         samples, stream_bufs = self._get_next_buffers(capture)
 
         # holdoff parameters, valid when we already have a clock reading
         dsp_pad_before, _ = _get_dsp_pad_size(
-            self.base_clock_rate, capture, self._aligner
+            self._setup.base_clock_rate, capture, self._aligner
         )
 
         # carryover from the previous acquisition
         missing_start_time = True
-        start_ns, carryover_count = self._carryover.apply(samples)
+        start_ns, carryover_count = self._buffers.apply(samples)
         stream_time_ns = start_ns
 
         # the number of holdoff samples from the end of the holdoff period
         # to include with the returned waveform
         included_holdoff = dsp_pad_before
 
-        fs = self.backend_sample_rate()
+        fs = capture.backend_sample_rate
 
         # the number of valid samples to return per channel
-        output_count = get_channel_read_buffer_count(
-            self, capture, include_holdoff=False
-        )
+        output_count = get_channel_read_buffer_count(self, include_holdoff=False)
 
         # the total number of samples to acquire per channel
-        buffer_count = get_channel_read_buffer_count(
-            self, capture, include_holdoff=True
-        )
+        buffer_count = get_channel_read_buffer_count(self, include_holdoff=True)
+
         received_count = 0
         chunk_count = remaining = output_count - carryover_count
-
-        if self._setup.time_sync_every_capture:
-            self.rx_enabled(False)
-            self.sync_time_source()
-
-        if not self.rx_enabled():
-            self.rx_enabled(True)
 
         while remaining > 0:
             if received_count > 0 or self._setup.gapless_repeats:
@@ -486,7 +333,7 @@ class SourceBase(lb.Device):
         sample_span = slice(sample_offs, sample_offs + output_count)
 
         unused_count = output_count - round(capture.duration * fs)
-        self._carryover.stash(
+        self._buffers.stash_carryover(
             samples[:, sample_span],
             start_ns,
             unused_sample_count=unused_count,
@@ -500,19 +347,11 @@ class SourceBase(lb.Device):
 
         return samples[:, sample_span], start_ns
 
-    def _get_next_buffers(self, capture) -> tuple[np.ndarray, np.ndarray]:
-        """swap the buffers, and reallocate if needed"""
-        if not self._hold_buffer_swap:
-            self._buffers = [self._buffers[1], self._buffers[0]]
-        self._buffers[0], ret = alloc_empty_iq(self, capture, self._buffers[0])
-        self._hold_buffer_swap = False
-        return ret
-
     @util.stopwatch('acquire', 'source')
     def acquire(
         self,
-        capture: specs.RadioCapture = None,
-        next_capture: typing.Union[specs.RadioCapture, None] = None,
+        capture: _TC = None,
+        next_capture: typing.Union[_TC, None] = None,
         correction: bool = True,
     ) -> AcquiredIQ:
         """arm a capture and enable the channel (if necessary), read the resulting IQ waveform.
@@ -522,29 +361,11 @@ class SourceBase(lb.Device):
         from .. import iq_corrections
 
         if capture is None:
-            capture = self.get_capture_struct()
-
-        # allocate (and arm the capture if necessary)
-        if capture != getattr(self, '_capture', None):
-            self.arm(capture)
-
-        # this must be here, _after_ the possible arm call, and before possibly
-        # arming the next
-        fs = self.backend_sample_rate()
-
-        # the low-level acquisition
-        if self._setup.receive_retries == 0:
-            read_func = self.read_iq
+            capture = self.get_capture_spec()
         else:
-            read_func = _read_iq_with_retries(self)
+            capture = self.arm(capture)
 
-        iq, time_ns = read_func(capture)
-
-        if next_capture == capture and self._setup.gapless_repeats:
-            # the one case where we leave it running
-            pass
-        else:
-            self.rx_enabled(False)
+        iq, time_ns = self.read_iq(capture)
 
         if next_capture is not None and capture != next_capture:
             self.arm(next_capture)
@@ -561,10 +382,19 @@ class SourceBase(lb.Device):
 
         actual_capture = capture.replace(
             start_time=pd.Timestamp(time_ns, unit='ns'),
-            backend_sample_rate=fs,
+            backend_sample_rate=capture.backend_sample_rate,
         )
 
         return AcquiredIQ(iq.raw, iq.aligned, actual_capture)
+
+    def _connect(self, spec: _TS) -> None:
+        pass
+
+    def _apply_setup(self, spec: _TS):
+        pass
+
+    def _prepare_capture(self, capture: _TC) -> _TC | None:
+        pass
 
     def _read_stream(
         self, buffers, offset, count, timeout_sec, *, on_overflow='except'
@@ -572,43 +402,22 @@ class SourceBase(lb.Device):
         """to be implemented in subclasses"""
         raise NotImplementedError
 
-    def sync_time_source(self):
-        raise NotImplementedError
+    def get_setup_spec(self) -> _TS:
+        if not self.is_open:
+            raise RuntimeError('open device to get setup spec')
+        return self._setup
 
-    def get_capture_struct(
-        self, cls=specs.RadioCapture, *, realized: bool = False
-    ) -> specs.RadioCapture:
+    def get_capture_spec(self) -> _TC:
         """generate the currently armed capture configuration for the specified channel.
 
         If the truth of realized evaluates as False, only the requested value
         of backend_sample_rate is returned in the given radio capture.
         """
 
-        if self.lo_offset == 0:
-            lo_shift = 'none'
-        elif self.lo_offset < 0:
-            lo_shift = 'left'
-        elif self.lo_offset > 0:
-            lo_shift = 'right'
+        if self._capture is None:
+            raise RuntimeError('arm first to get capture spec')
 
-        if realized:
-            backend_sample_rate = self.backend_sample_rate()
-        else:
-            backend_sample_rate = self._forced_backend_sample_rate
-
-        return cls(
-            # RF and leveling
-            center_frequency=self.center_frequency(),
-            port=self.port(),
-            gain=self.gain(),
-            # acquisition
-            duration=self.duration,
-            sample_rate=self.sample_rate(),
-            # filtering and resampling
-            analysis_bandwidth=self.analysis_bandwidth,
-            lo_shift=lo_shift,
-            backend_sample_rate=backend_sample_rate,
-        )
+        return self._capture
 
     def get_array_namespace(self: SourceBase):
         if self._setup.array_backend == 'cupy':
@@ -624,12 +433,14 @@ class SourceBase(lb.Device):
 def find_trigger_holdoff(
     radio: SourceBase, start_time_ns: int, dsp_pad_before: int = 0
 ):
-    sample_rate = radio.backend_sample_rate()
+    sample_rate = radio._capture.backend_sample_rate
     min_holdoff = dsp_pad_before
 
     # transient holdoff if we've rearmed as indicated by the presence of carryover samples
-    if radio._carryover.start_time_ns is None:
-        min_holdoff = min_holdoff + round(radio._transient_holdoff_time * sample_rate)
+    if radio._buffers.start_time_ns is None:
+        min_holdoff = min_holdoff + round(
+            radio._setup._transient_holdoff_time * sample_rate
+        )
 
     periodic_trigger = radio._setup.periodic_trigger
     if periodic_trigger in (0, None):
@@ -649,22 +460,6 @@ def find_trigger_holdoff(
         )
 
     return holdoff
-
-
-def _read_iq_with_retries(radio: SourceBase):
-    def prepare_retry(*args, **kws):
-        radio.rx_enabled(False)
-        radio._hold_buffer_swap = True
-        if not radio._setup.time_sync_every_capture:
-            radio.sync_time_source()
-
-    decorate = lb.retry(
-        (ReceiveStreamError, OverflowError),
-        tries=radio._setup.receive_retries + 1,
-        exception_func=prepare_retry,
-    )
-
-    return decorate(radio.read_iq)
 
 
 @util.lru_cache(30000)
@@ -769,7 +564,7 @@ def _get_filter_pad(capture: specs.RadioCapture):
 
 @util.lru_cache(30000)
 def _get_dsp_pad_size(
-    base_clock_rate: float,
+    setup: specs.RadioSetup,
     capture: specs.RadioCapture,
     aligner: register.AlignmentCaller | None = None,
 ) -> tuple[int, int]:
@@ -777,17 +572,17 @@ def _get_dsp_pad_size(
 
     from .. import iq_corrections
 
-    min_lag_pad = _get_aligner_pad_size(base_clock_rate, capture, aligner)
+    min_lag_pad = _get_aligner_pad_size(setup.base_clock_rate, capture, aligner)
 
     if iq_corrections.USE_OARESAMPLE:
-        oa_pad_low, oa_pad_high = _get_oaresample_pad(base_clock_rate, capture)
+        oa_pad_low, oa_pad_high = _get_oaresample_pad(setup.base_clock_rate, capture)
         return (oa_pad_low, oa_pad_high + min_lag_pad)
     else:
         # this is removed before the FFT, so no need to micromanage its size
         filter_pad = _get_filter_pad(capture)
 
         # accommodate the large fft by padding to a fast size that includes at least lag_pad
-        design = design_capture_resampler(base_clock_rate, capture)
+        design = design_capture_resampler(setup.base_clock_rate, capture)
         analysis_size = round(capture.duration * design['fs_sdr'])
 
         # treat the block size as the minimum number of samples needed for the resampler
@@ -809,7 +604,7 @@ def _get_aligner_pad_size(
     base_clock_rate: float,
     capture: specs.RadioCapture,
     aligner: register.AlignmentCaller | None = None,
-) -> tuple[int, int]:
+) -> int:
     if aligner is None:
         return 0
 
@@ -854,27 +649,26 @@ def _get_oaresample_pad(base_clock_rate: float, capture: specs.RadioCapture):
 
 
 @util.lru_cache(30000)
-def _get_input_buffer_count_cached(
-    base_clock_rate: float,
-    periodic_trigger: float | None,
+def _cached_channel_read_buffer_count(
+    setup: specs.RadioSetup,
     capture: specs.RadioCapture,
-    transient_holdoff: float = 0,
+    *,
     include_holdoff: bool = False,
     aligner: register.AlignmentCaller | None = None,
-):
+) -> int:
     if iqwaveform.power_analysis.isroundmod(capture.duration * capture.sample_rate, 1):
         samples_out = round(capture.duration * capture.sample_rate)
     else:
         msg = f'duration must be an integer multiple of the sample period (1/{capture.sample_rate} s)'
         raise ValueError(msg)
 
-    resampler_design = design_capture_resampler(base_clock_rate, capture)
+    resampler_design = design_capture_resampler(setup.base_clock_rate, capture)
     if capture.host_resample:
         sample_rate = resampler_design['fs']
     else:
         sample_rate = capture.sample_rate
 
-    pad_size = sum(_get_dsp_pad_size(base_clock_rate, capture, aligner))
+    pad_size = sum(_get_dsp_pad_size(setup, capture, aligner))
     if needs_resample(resampler_design, capture):
         nfft = resampler_design['nfft']
         min_samples_in = ceil(samples_out * nfft / resampler_design['nfft_out'])
@@ -884,43 +678,18 @@ def _get_input_buffer_count_cached(
 
     if include_holdoff:
         # pad the buffer for triggering and transient holdoff
-        extra_time = transient_holdoff + 2 * (periodic_trigger or 0)
+        extra_time = setup.transient_holdoff + 2 * (setup.periodic_trigger or 0)
         samples_in += ceil(sample_rate * extra_time)
 
     return samples_in
 
 
-def get_channel_resample_buffer_count(radio: SourceBase, capture):
-    resampler_design = design_capture_resampler(radio.base_clock_rate, capture)
-
-    if capture.host_resample and needs_resample(resampler_design, capture):
-        input_size = get_channel_read_buffer_count(radio, capture, True)
-        buf_size = iqwaveform.fourier._istft_buffer_size(
-            input_size,
-            window=resampler_design['window'],
-            nfft_out=resampler_design['nfft_out'],
-            nfft=resampler_design['nfft'],
-            extend=True,
-        )
-    else:
-        buf_size = round(capture.duration * capture.sample_rate)
-
-    return buf_size
-
-
-def get_channel_read_buffer_count(
-    radio: SourceBase, capture: specs.RadioCapture | None = None, include_holdoff=False
-) -> int:
-    if capture is None:
-        capture = radio.get_capture_struct()
-
-    return _get_input_buffer_count_cached(
-        base_clock_rate=radio.base_clock_rate,
-        periodic_trigger=radio._setup.periodic_trigger,
-        capture=capture,
-        transient_holdoff=radio._transient_holdoff_time,
+def get_channel_read_buffer_count(source: SourceBase, include_holdoff=False) -> int:
+    return _cached_channel_read_buffer_count(
+        setup=source._setup,
+        capture=source._capture,
         include_holdoff=include_holdoff,
-        aligner=radio._aligner,
+        aligner=source._aligner,
     )
 
 
@@ -937,7 +706,7 @@ def alloc_empty_iq(
     Returns:
         The buffer and the list of buffer references for streaming.
     """
-    count = get_channel_read_buffer_count(radio, capture, include_holdoff=True)
+    count = get_channel_read_buffer_count(radio, include_holdoff=True)
 
     if radio._setup.array_backend == 'cupy':
         try:
@@ -950,7 +719,7 @@ def alloc_empty_iq(
     else:
         empty = np.empty
 
-    buf_dtype = np.dtype(radio._transport_dtype)
+    buf_dtype = np.dtype(radio._setup.transport_dtype)
 
     # fast reinterpretation between dtypes requires the waveform to be in the last axis
     ports = capture.port
@@ -967,9 +736,12 @@ def alloc_empty_iq(
 
     # build the list of channel buffers that will actuall be filled with data,
     # including references to the throwaway buffer of extras in case of
-    # radio._stream_all_rx_ports
-    if radio._stream_all_rx_ports and len(ports) != radio.rx_port_count:
-        if radio._transport_dtype == 'complex64':
+    # radio._setup.stream_all_rx_ports
+    if (
+        radio._setup.stream_all_rx_ports
+        and len(ports) != radio.source_info.num_rx_ports
+    ):
+        if radio._setup.transport_dtype == 'complex64':
             # a throwaway buffer for samples that won't be returned
             extra_count = count
         else:
@@ -981,11 +753,11 @@ def alloc_empty_iq(
 
     buffers = []
     i = 0
-    for channel in range(radio.rx_port_count):
+    for channel in range(radio.source_info.num_rx_ports):
         if channel in ports:
             buffers.append(samples[i].view(buf_dtype))
             i += 1
-        elif radio._stream_all_rx_ports:
+        elif radio._setup.stream_all_rx_ports:
             buffers.append(extra)
 
     return all_samples, (samples, buffers)
@@ -1017,3 +789,42 @@ def find_radio_cls_helper(
         raise AttributeError(
             f'invalid driver {repr(name)}. valid names: {tuple(mapping.keys())}'
         )
+
+
+@typing.overload
+def bind_schema(
+    cls: type[SourceBase[_TS, _TC]],
+    *,
+    setup_cls: type[_TS2] | None,
+    capture_cls: type[_TC2] | None,
+) -> type[SourceBase[_TS2, _TC2]]: ...
+
+
+@typing.overload
+def bind_schema(
+    cls: type[SourceBase[_TS, _TC]], *, setup_cls: type[_TS2], capture_cls: None = None
+) -> type[SourceBase[_TS2, _TC]]: ...
+
+
+@typing.overload
+def bind_schema(
+    cls: type[SourceBase[_TS, _TC]], *, setup_cls: None = None, capture_cls: type[_TC2]
+) -> type[SourceBase[_TS, _TC2]]: ...
+
+
+@typing.overload
+def bind_schema(
+    cls: type[SourceBase[_TS, _TC]], *, setup_cls: None = None, capture_cls: None = None
+) -> type[SourceBase[_TS, _TC]]: ...
+
+
+def bind_schema(
+    cls: type[SourceBase[_TS, _TC]],
+    *,
+    setup_cls: type[_TS2] | None = None,
+    capture_cls: type[_TC2] | None = None,
+) -> type[SourceBase[_TS2, _TC2]]:
+    """return a specialized new source that subclasses a generic SourceBase with setup and capture types"""
+    return type(
+        cls.__name__, (cls,), dict(_capture_cls=capture_cls, _setup_cls=setup_cls)
+    )

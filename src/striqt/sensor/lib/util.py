@@ -4,6 +4,7 @@ import datetime
 import functools
 import itertools
 import logging
+import logging.handlers
 from pathlib import Path
 import time
 import typing
@@ -17,6 +18,7 @@ from striqt.analysis.lib.util import (
     PERFORMANCE_DETAIL,
     PERFORMANCE_INFO,
     show_messages,
+    isroundmod,
 )
 
 TGen = type[typing.Any]
@@ -55,6 +57,85 @@ def lazy_import(module_name: str):
     sys.modules[module_name] = module
     spec.loader.exec_module(module)
     return module
+
+
+_Tfunc = typing.Callable[..., typing.Any]
+
+
+def retry(
+    exception_or_exceptions: typing.Union[
+        BaseException, typing.Iterable[BaseException]
+    ],
+    tries: int,
+    *,
+    delay: float = 0,
+    backoff: float = 0,
+    exception_func=lambda *args, **kws: None,
+    logger: logging.Logger | logging.LoggerAdapter | None = None,
+) -> callable[[_Tfunc], _Tfunc]:
+    """calls to the decorated function are repeated, suppressing specified exception(s), until a
+    maximum number of retries has been attempted.
+
+    If the function raises the exception the specified number of times, the underlying exception is raised.
+    Otherwise, return the result of the function call.
+
+    Example:
+
+        The following retries the telnet connection 5 times on ConnectionRefusedError::
+
+            import telnetlib
+
+
+            # Retry a telnet connection 5 times if the telnet library raises ConnectionRefusedError
+            @retry(ConnectionRefusedError, tries=5)
+            def open(host, port):
+                t = telnetlib.Telnet()
+                t.open(host, port, 5)
+                return t
+
+
+    Arguments:
+        exception_or_exceptions: Exception (sub)class (or tuple of exception classes) to watch for
+        tries: number of times to try before giving up
+        delay: initial delay between retries in seconds
+        backoff: backoff to multiply to the delay for each retry
+        exception_func: function to call on exception before the next retry
+        logger: if specified, a log info message is emitted on the first retry
+    """
+
+    def decorator(f):
+        @functools.wraps(f)
+        def do_retry(*args, **kwargs):
+            notified = False
+            active_delay = delay
+            for retry in range(tries):
+                try:
+                    ret = f(*args, **kwargs)
+                except exception_or_exceptions as e:
+                    if not notified and logger is not None:
+                        etype = type(e).__qualname__
+                        msg = (
+                            f"caught '{etype}' on first call to '{f.__name__}' - repeating the call "
+                            f'{tries - 1} more times or until no exception is raised'
+                        )
+
+                        logger.info(msg)
+
+                        notified = True
+                    ex = e
+                    exception_func(*args, **kwargs)
+                    time.sleep(active_delay)
+                    active_delay = active_delay * backoff
+                else:
+                    break
+            else:
+                raise ex
+
+            return ret
+
+        return do_retry
+
+    return decorator
 
 
 @functools.wraps(functools.lru_cache)
@@ -229,7 +310,7 @@ class _JSONFormatter(logging.Formatter):
     def format(self, rec: logging.LogRecord):
         """Return a YAML string for each logger record"""
         import json
-        
+
         if isinstance(rec.args, dict):
             kwargs = rec.args
         else:
@@ -255,6 +336,7 @@ class _JSONFormatter(logging.Formatter):
         etype, einst, exc_tb = sys.exc_info()
         if etype is not None:
             import traceback
+
             msg['exception'] = traceback.format_exception_only(etype, einst)[0].rstrip()
             msg['traceback'] = ''.join(traceback.format_tb(exc_tb)).splitlines()
 
@@ -286,7 +368,7 @@ class _RotatingJSONFileHandler(logging.handlers.RotatingFileHandler):
         super().close()
 
 
-def log_to_file(log_path: str|Path, log_level: int):
+def log_to_file(log_path: str | Path, log_level: int):
     Path(log_path).parent.mkdir(exist_ok=True, parents=True)
 
     logger = logging.getLogger('labbench')

@@ -13,14 +13,14 @@ else:
     psutil = util.lazy_import('psutil')
 
 
-class Air7x01B(soapy.SoapyRadioSource):
+class Air7x01B(soapy.SoapySourceBase):
     resource = attr.value.dict({}, inherit=True)
 
     # adjust bounds based on the hardware
     lo_offset = attr.value.float(0.0, min=-125e6, max=125e6, inherit=True)
     lo_frequency = attr.method.float(min=300e6, max=6000e6, inherit=True)
     backend_sample_rate = attr.method.float(min=3.906250e6, max=125e6, inherit=True)
-    gain = type(soapy.SoapyRadioSource.gain)(min=-30, max=0, step=0.5, inherit=True)
+    gain = type(soapy.SoapySourceBase.gain)(min=-30, max=0, step=0.5, inherit=True)
     tx_gain = attr.method.float(min=-41.95, max=0, step=0.1, inherit=True)
     rx_port_count = attr.value.int(2, inherit=True)
 
@@ -41,11 +41,12 @@ class Air7x01B(soapy.SoapyRadioSource):
     def open(self):
         # in some cases specifying the driver has caused exceptions on connect
         # validate it after the fact instead
-        driver = self.backend.getDriverKey()
+        driver = self._device.getDriverKey()
         if driver != 'SoapyAIRT':
             raise IOError(f'connected to {driver}, but expected SoapyAirT')
 
-    def _post_connect(self):
+    def _connect(self, spec: soapy.SoapyRadioSetup):
+        super()._connect(spec)
         self._set_jesd_sysref_delay(0)
 
     def _set_jesd_sysref_delay(self, value: int):
@@ -69,7 +70,7 @@ class Air7x01B(soapy.SoapyRadioSource):
             field_mask |= 1 << bit
 
         # Read curr value
-        reg = self.backend.readRegister('FPGA', addr)
+        reg = self._device.readRegister('FPGA', addr)
         # Clear the bit field
         reg &= ~field_mask
         # Set values of mask, dropping extra bits
@@ -78,7 +79,7 @@ class Air7x01B(soapy.SoapyRadioSource):
         # Set the bits
         reg |= field_val_mask
         # Write reg back
-        self.backend.writeRegister('FPGA', addr, reg)
+        self._device.writeRegister('FPGA', addr, reg)
 
     @attr.property.str(inherit=True)
     def id(self):
@@ -101,7 +102,7 @@ class Air7x01B(soapy.SoapyRadioSource):
     def get_temperatures(self) -> dict[str, float]:
         """returns the transceiver temperature in Celsius"""
 
-        return {'transceiver': self.backend.readSensorFloat('xcvr_temp')}
+        return {'transceiver': self._device.readSensorFloat('xcvr_temp')}
 
 
 class Air8201B(Air7x01B):
