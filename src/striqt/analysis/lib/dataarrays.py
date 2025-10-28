@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import collections
-from fractions import Fraction
 import functools
 import dataclasses
-import logging
 import math
 from numbers import Number
 import typing
@@ -18,12 +16,10 @@ import array_api_compat
 if typing.TYPE_CHECKING:
     import iqwaveform
     import iqwaveform.type_stubs
-    import labbench as lb
     import numpy as np
     import xarray as xr
 else:
     iqwaveform = util.lazy_import('iqwaveform')
-    lb = util.lazy_import('labbench')
     np = util.lazy_import('numpy')
     xr = util.lazy_import('xarray')
 

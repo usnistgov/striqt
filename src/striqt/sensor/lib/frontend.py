@@ -2,13 +2,7 @@ from __future__ import annotations
 import logging
 import sys
 import typing
-
 from . import util
-
-if typing.TYPE_CHECKING:
-    import labbench as lb
-else:
-    lb = util.lazy_import('labbench')
 
 
 class DebugOnException:
@@ -32,7 +26,6 @@ class DebugOnException:
             print(exc)
             from IPython.core import ultratb
 
-            lb.util.force_full_traceback(True)
             if not hasattr(sys, 'last_value'):
                 sys.last_value = exc
             if not hasattr(sys, 'last_traceback'):
@@ -93,7 +86,7 @@ class DebugOnException:
 
 #     try:
 #         calls = {}
-#         calls['controller'] = lb.Call(get_controller, remote, sweep_spec)
+#         calls['controller'] = util.Call(get_controller, remote, sweep_spec)
 #         if open_sink_early:
 #             if output_path is None:
 #                 output_path = sweep_spec.output.path
@@ -103,7 +96,7 @@ class DebugOnException:
 #             sink = yaml_classes.sink_cls(
 #                 sweep_spec, output_path=output_path, store_backend=store_backend
 #             )
-#             calls['open sink'] = lb.Call(sink.open)
+#             calls['open sink'] = util.Call(sink.open)
 
 #         with util.stopwatch(
 #             f'open {", ".join(calls)}',
@@ -127,7 +120,7 @@ class DebugOnException:
 
 #         # open the rest
 #         calls = {}
-#         calls['calibration'] = lb.Call(
+#         calls['calibration'] = util.Call(
 #             calibration.read_calibration,
 #             sweep_spec.radio_setup.calibration,
 #         )
@@ -138,7 +131,7 @@ class DebugOnException:
 #             sink = yaml_classes.sink_cls(
 #                 sweep_spec, output_path=output_path, store_backend=store_backend
 #             )
-#             calls['open sink'] = lb.Call(sink.open)
+#             calls['open sink'] = util.Call(sink.open)
 
 #         with util.stopwatch(
 #             f'load {", ".join(calls)}',
@@ -146,7 +139,7 @@ class DebugOnException:
 #             logger_level=logging.INFO,
 #             threshold=0.25,
 #         ):
-#             opened = lb.concurrently(**calls)
+#             opened = util.concurrently(**calls)
 
 #         peripherals.set_source(controller.radios[sweep_spec.radio_setup.driver])
 
@@ -247,7 +240,7 @@ def _extract_traceback(
                         )
                     )
 
-        if isinstance(exc_value, lb.util.ConcurrentException):
+        if isinstance(exc_value, util.ConcurrentException):
             stack.is_group = True
             for exception in exc_value.thread_exceptions:
                 if exception in grouped_exceptions:

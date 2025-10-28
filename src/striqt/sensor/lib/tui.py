@@ -6,7 +6,7 @@ import sys
 import typing
 import warnings
 
-import rich, textual
+import textual
 
 from textual.app import App, ComposeResult
 from textual.color import Gradient
@@ -27,12 +27,8 @@ from rich.segment import Segments
 from . import connections, frontend, sweeps, util
 
 if typing.TYPE_CHECKING:
-    import labbench as lb
-    import xarray as xr
     import psutil
 else:
-    lb = util.lazy_import('labbench')
-    xr = util.lazy_import('xarray')
     psutil = util.lazy_import('psutil')
 
 
@@ -60,7 +56,7 @@ def any_are_running(workers: typing.Iterable[Worker]) -> bool:
 
     for worker in workers:
         if worker.is_running:
-            lb.logger.error(f'still running: {str(worker)}')
+            util.get_logger('controller').logger.error(f'still running: {str(worker)}')
             return True
     else:
         return False

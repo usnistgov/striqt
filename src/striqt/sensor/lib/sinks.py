@@ -9,10 +9,8 @@ from striqt import analysis
 
 if typing.TYPE_CHECKING:
     import xarray as xr
-    import labbench as lb
 else:
     xr = util.lazy_import('xarray')
-    lb = util.lazy_import('labbench')
 
 
 class SinkBase:

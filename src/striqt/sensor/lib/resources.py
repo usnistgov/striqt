@@ -12,10 +12,8 @@ from .sources import find_radio_cls_by_name, SourceBase
 
 if typing.TYPE_CHECKING:
     import iqwaveform
-    import labbench as lb
 else:
     iqwaveform = util.lazy_import('iqwaveform')
-    lb = util.lazy_import('labbench')
 
 
 class SweepSpecClasses(typing.NamedTuple):
@@ -100,13 +98,13 @@ def open_sensor_from_spec(
 
     try:
         calls = {}
-        calls['radio'] = lb.Call(
+        calls['radio'] = util.Call(
             conns.open_by_name, 'radio', _get_source(unaliased_spec.radio_setup)
         )
 
         if open_sink_early:
             ext_types = _get_extension_classes(unaliased_spec)
-            calls['sink'] = lb.Call(
+            calls['sink'] = util.Call(
                 conns.open_by_name, 'sink', ext_types.sink_cls(unaliased_spec)
             )
 
@@ -125,35 +123,35 @@ def open_sensor_from_spec(
         if aliased_spec.output.log_path is not None:
             util.log_to_file(
                 aliased_spec.output.log_path,
-                lb.util._LOG_LEVEL_NAMES[aliased_spec.output.log_level],
+                aliased_spec.output.log_level,
             )
 
         # open the rest
         calls = {}
-        calls['calibration'] = lb.Call(
+        calls['calibration'] = util.Call(
             calibration.read_calibration,
             aliased_spec.radio_setup.calibration,
         )
 
         if not open_sink_early:
-            calls['sink'] = lb.Call(
+            calls['sink'] = util.Call(
                 conns.open_by_name, 'sink', ext_types.sink_cls(aliased_spec)
             )
 
-        calls['peripherals'] = lb.Call(
+        calls['peripherals'] = util.Call(
             conns.open_by_name,
             'peripherals',
             ext_types.peripherals_cls(aliased_spec, source=conns.resources['radio']),
         )
 
-        calls['radio'] = lb.Call(
+        calls['radio'] = util.Call(
             conns.resources['radio'].setup,
             aliased_spec.radio_setup,
             analysis=aliased_spec.analysis,
         )
 
         with util.stopwatch('setup ' + ', '.join(calls), threshold=1, **timer_kws):
-            lb.concurrently(**calls)
+            util.concurrently(**calls)
 
         # in case peripherals enable e.g. an amplifier, run this here after
         # any radio stream has already been established to avoid undesired
@@ -194,7 +192,7 @@ def open_sensor_from_yaml(
     unaliased_spec = unaliased_spec.replace(output=output)
 
     calls = {}
-    calls['context'] = lb.Call(
+    calls['context'] = util.Call(
         open_sensor_from_spec, unaliased_spec, yaml_path, except_context
     )
     calls['warmup'] = _do_warmup(unaliased_spec)

@@ -191,10 +191,8 @@ if typing.TYPE_CHECKING:
     _P = typing_extensions.ParamSpec('_P')
     _R = typing_extensions.TypeVar('_R')
     import iqwaveform
-    import labbench as lb
 else:
     iqwaveform = lazy_import('iqwaveform')
-    lb = lazy_import('labbench')
 
 
 @functools.wraps(functools.lru_cache)

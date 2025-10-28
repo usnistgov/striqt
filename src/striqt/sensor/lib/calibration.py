@@ -15,13 +15,11 @@ if typing.TYPE_CHECKING:
     import pandas as pd
     import scipy
     import xarray as xr
-    import labbench as lb
 else:
     np = util.lazy_import('numpy')
     pd = util.lazy_import('pandas')
     scipy = util.lazy_import('scipy')
     xr = util.lazy_import('xarray')
-    lb = util.lazy_import('labbench')
 
 NoiseDiodeEnabledType = Annotated[bool, meta(standard_name='Noise diode enabled')]
 
@@ -627,23 +625,23 @@ def specialize_cal_peripherals(
         """
 
         def open(self):
-            lb.concurrently(
-                integrations=lb.Call(sensor_cls.open, self),
-                calibration=lb.Call(cal_cls.open, self),
+            util.concurrently(
+                integrations=util.Call(sensor_cls.open, self),
+                calibration=util.Call(cal_cls.open, self),
             )
 
         def close(self):
-            lb.concurrently(
-                integrations=lb.Call(sensor_cls.close, self),
-                calibration=lb.Call(cal_cls.close, self),
+            util.concurrently(
+                integrations=util.Call(sensor_cls.close, self),
+                calibration=util.Call(cal_cls.close, self),
             )
 
         def arm(self, capture: specs.RadioCapture):
             """runs before each capture"""
 
-            lb.concurrently(
-                integrations=lb.Call(sensor_cls.arm, self, capture),
-                calibration=lb.Call(cal_cls.arm, self, capture),
+            util.concurrently(
+                integrations=util.Call(sensor_cls.arm, self, capture),
+                calibration=util.Call(cal_cls.arm, self, capture),
                 flatten=True,
             )
 

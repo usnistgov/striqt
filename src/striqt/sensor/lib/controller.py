@@ -13,11 +13,9 @@ from .sources import find_radio_cls_by_name, is_same_resource, SourceBase
 if typing.TYPE_CHECKING:
     import iqwaveform
     import xarray as xr
-    import labbench as lb
 else:
     iqwaveform = util.lazy_import('iqwaveform')
     xr = util.lazy_import('xarray')
-    lb = util.lazy_import('labbench')
 
 
 def _consume_warmup(controller, radio_setup, gen: typing.Generator[typing.Any]):
@@ -26,7 +24,6 @@ def _consume_warmup(controller, radio_setup, gen: typing.Generator[typing.Any]):
         pass
 
     controller.close_radio(radio_setup)
-
 
 class SweepController:
     """Manage local edge sensor operation, encapsulating radio connection logic.
@@ -68,20 +65,22 @@ class SweepController:
             raise last_ex
 
     def open_radio(self, radio_setup: specs.RadioSetup):
+        logger = util.get_logger('controller')
+
         driver_name = radio_setup.driver
         radio_cls = find_radio_cls_by_name(driver_name)
 
         if driver_name in self.radios and self.radios[driver_name].isopen:
             if is_same_resource(self.radios[driver_name], radio_setup):
-                lb.logger.debug(f'reusing open {repr(driver_name)}')
+                logger.debug(f'reusing open {repr(driver_name)}')
                 return self.radios[driver_name]
             else:
-                lb.logger.debug(
+                logger.debug(
                     f're-opening {repr(driver_name)} to set resource={repr(radio_setup.resource)}'
                 )
                 self.radios[driver_name].close()
         else:
-            lb.logger.debug(f'opening driver {repr(driver_name)}')
+            logger.debug(f'opening driver {repr(driver_name)}')
 
         radio = self.radios[driver_name] = radio_cls(resource=radio_setup.resource)
 
@@ -99,14 +98,11 @@ class SweepController:
         if radio_setup is None:
             # close all
             for name, radio in self.radios.items():
-                if lb.paramattr._bases.get_class_attrs is None:
-                    # accommodate a strange side effect of partially
-                    # torn down python. TODO: proper fix for this
-                    continue
                 try:
                     radio.close()
                 except BaseException as ex:
-                    lb.logger.warning(f'failed to close radio {name}: {str(ex)}')
+                    msg = f'failed to close radio {name}: {str(ex)}'
+                    util.get_logger('controller').warning(msg)
         else:
             self.radios[radio_setup.driver].close()
 
@@ -134,6 +130,8 @@ class SweepController:
     def warmup_sweep(self, sweep_spec: specs.Sweep, calibration):
         """open the radio while warming up the GPU"""
 
+        logger = util.get_logger('controller')
+
         warmup_iter = []
         warmup_sweep = None
 
@@ -152,7 +150,7 @@ class SweepController:
             if len(warmup_sweep.captures) > 0:
                 prep_msg = self._describe_preparation(sweep_spec)
                 if prep_msg:
-                    lb.logger.info(prep_msg)
+                    logger.info(prep_msg)
 
                 warmup_iter = self.iter_sweep(
                     warmup_sweep,
@@ -161,11 +159,11 @@ class SweepController:
                     quiet=True,
                     prepare=False,
                 )
-                calls['warmup'] = lb.Call(
+                calls['warmup'] = util.Call(
                     _consume_warmup, self, warmup_sweep.radio_setup, warmup_iter
                 )
 
-        calls['open_radio'] = lb.Call(self.open_radio, sweep_spec.radio_setup)
+        calls['open_radio'] = util.Call(self.open_radio, sweep_spec.radio_setup)
 
         util.concurrently_with_fg(calls)
 
@@ -204,11 +202,12 @@ class SweepController:
         # take args {3,4...N}
         kwargs = dict(locals())
         del kwargs['self'], kwargs['prepare']
+        logger = util.get_logger('controller')
 
         if prepare:
             prep_msg = self._describe_preparation(sweep)
             if prep_msg:
-                lb.logger.info(prep_msg)
+                logger.info(prep_msg)
             self.warmup_sweep(sweep, calibration, pickled=True)
 
         radio = self.open_radio(sweep.radio_setup)
@@ -226,7 +225,7 @@ class _ServerService(rpyc.Service, SweepController):
             source = eval(info[1:-1].split('raddr=', 1)[1])
         except IndexError:
             source = 'unknown address'
-        lb.logger.info(f'new client connection from {source}')
+        util.get_logger('controller').info(f'new client connection from {source}')
 
     def on_disconnect(self, conn: rpyc.Service):
         info = repr(conn._channel.stream.sock)
@@ -235,7 +234,7 @@ class _ServerService(rpyc.Service, SweepController):
         except IndexError:
             source = 'unknown address'
 
-        lb.logger.info(f'client at {source} disconnected')
+        util.get_logger('controller').info(f'client at {source} disconnected')
 
     def exposed_radio_id(self, driver_name: str) -> str:
         return self.radios[driver_name].id
@@ -270,7 +269,7 @@ class _ServerService(rpyc.Service, SweepController):
         prep_msg = self._describe_preparation(sweep)
         if prep_msg:
             conn.root.deliver(None, prep_msg)
-            lb.logger.info(prep_msg)
+            util.get_logger('controller').info(prep_msg)
         self.warmup_sweep(sweep, calibration, pickled=True)
 
         capture_pairs = util.zip_offsets(sweep.captures, (0, -1), fill=None)
@@ -309,17 +308,17 @@ class _ClientService(rpyc.Service):
     """API exposed to a server by clients"""
 
     def on_connect(self, conn: rpyc.Service):
-        lb.logger.info('connected to server')
+        util.get_logger('controller').info('connected to server')
 
     def on_disconnect(self, conn: rpyc.Service):
-        lb.logger.info('disconnected from server')
+        util.get_logger('controller').info('disconnected from server')
 
     def exposed_deliver(
         self, pickled_dataset: 'xr.Dataset', description: str | None = None
     ):
         """serialize an object back to the client via pickling"""
         if description is not None:
-            lb.logger.info(f'{description}')
+            util.get_logger('controller').info(f'{description}')
 
         with util.stopwatch('data transfer', 'controller', threshold=10e-3):
             if pickled_dataset is None:
@@ -342,9 +341,9 @@ def start_server(host=None, port=4567, default_driver: str | None = None):
         _ServerService(default_setup),
         hostname=host,
         port=port,
-        protocol_config={'logger': lb.logger, 'allow_pickle': True},
+        protocol_config={'logger': util.get_logger('controller'), 'allow_pickle': True},
     )
-    lb.logger.info(f'hosting at {t.host}:{t.port}')
+    util.get_logger('controller').info(f'hosting at {t.host}:{t.port}')
     t.start()
 
 
@@ -368,6 +367,6 @@ def connect(host='localhost', port=4567) -> rpyc.Connection:
     return rpyc.connect(
         host=host,
         port=port,
-        config={'logger': lb.logger, 'allow_pickle': True},
+        config={'logger': util.get_logger('controller'), 'allow_pickle': True},
         service=_ClientService,
     )

@@ -22,12 +22,6 @@ else:
     np = util.lazy_import('numpy')
 
 
-_BUILTIN_TYPES = (pd.Timestamp,)
-
-
-_TK = typing.TypeVar('_TK', bound=dict)
-
-
 WindowType = typing.Union[str, tuple[str, float]]
 
 
@@ -109,7 +103,7 @@ class SpecBase(msgspec.Struct, kw_only=True, frozen=True, cache_hash=True):
     def todict(self, skip_private=False) -> dict:
         """return a dictinary representation of `self`"""
         map = msgspec.to_builtins(
-            self, builtin_types=_BUILTIN_TYPES, enc_hook=_enc_hook
+            self, builtin_types=(pd.Timestamp,), enc_hook=_enc_hook
         )
 
         if skip_private:
@@ -124,7 +118,7 @@ class SpecBase(msgspec.Struct, kw_only=True, frozen=True, cache_hash=True):
     @classmethod
     def fromdict(cls: type[_T], d: dict) -> _T:
         return msgspec.convert(
-            d, type=cls, strict=False, dec_hook=_dec_hook, builtin_types=_BUILTIN_TYPES
+            d, type=cls, strict=False, dec_hook=_dec_hook, builtin_types=(pd.Timestamp,)
         )
 
     @classmethod
@@ -135,7 +129,7 @@ class SpecBase(msgspec.Struct, kw_only=True, frozen=True, cache_hash=True):
             strict=False,
             from_attributes=True,
             dec_hook=_dec_hook,
-            builtin_types=_BUILTIN_TYPES,
+            builtin_types=(pd.Timestamp,),
         )
 
     @classmethod

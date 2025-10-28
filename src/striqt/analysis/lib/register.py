@@ -18,11 +18,9 @@ from . import specs, util
 if typing.TYPE_CHECKING:
     _P = typing_extensions.ParamSpec('_P')
     _R = typing_extensions.TypeVar('_R')
-    import labbench as lb
     import iqwaveform
     import inspect
 else:
-    lb = util.lazy_import('labbench')
     inspect = util.lazy_import('inspect')
 
 

@@ -16,10 +16,8 @@ from striqt.analysis import measurements
 
 if typing.TYPE_CHECKING:
     import xarray as xr
-    import labbench as lb
 else:
     xr = util.lazy_import('xarray')
-    lb = util.lazy_import('labbench')
 
 
 class Resources(typing.TypedDict):
@@ -311,7 +309,7 @@ class SweepIterator:
                     # no pending data in the first iteration
                     pass
                 else:
-                    calls['analyze'] = lb.Call(
+                    calls['analyze'] = util.Call(
                         self._analyze,
                         iq,
                         sweep_time=sweep_time,
@@ -325,7 +323,7 @@ class SweepIterator:
                     # this happens at the end during the last post-analysis and intakes
                     pass
                 else:
-                    calls['acquire'] = lb.Call(
+                    calls['acquire'] = util.Call(
                         self._acquire, iq, canalyze, cacquire, cnext
                     )
 
@@ -335,7 +333,7 @@ class SweepIterator:
                 else:
                     assert csink is not None
                     result.set_extra_data(prior_ext_data)
-                    calls['intake'] = lb.Call(
+                    calls['intake'] = util.Call(
                         self._intake,
                         results=result.to_xarray(),
                         capture=csink,
@@ -385,18 +383,18 @@ class SweepIterator:
             ret_iq = AcquiredIQ(
                 raw=iq_prev.raw, aligned=iq_prev.aligned, capture=capture_ret
             )
-            calls['radio'] = lb.Call(lambda: ret_iq)
+            calls['radio'] = util.Call(lambda: ret_iq)
         else:
-            calls['radio'] = lb.Call(
+            calls['radio'] = util.Call(
                 self.radio.acquire,
                 capture_this,
                 correction=False,
             )
 
         if self._peripherals is not None:
-            calls['peripherals'] = lb.Call(self._peripherals_acquire, capture_next)
+            calls['peripherals'] = util.Call(self._peripherals_acquire, capture_next)
 
-        result = lb.concurrently(**calls, flatten=False)
+        result = util.concurrently(**calls, flatten=False)
 
         if capture_next is not None and not reuse_next:
             self._arm(capture_next)
@@ -406,11 +404,11 @@ class SweepIterator:
     def _arm(self, capture):
         calls = {}
 
-        calls['radio'] = lb.Call(self.radio.arm, capture)
+        calls['radio'] = util.Call(self.radio.arm, capture)
         if self._peripherals is not None:
-            calls['peripherals'] = lb.Call(self._peripherals.arm, capture)
+            calls['peripherals'] = util.Call(self._peripherals.arm, capture)
 
-        return lb.concurrently(**calls)
+        return util.concurrently(**calls)
 
     def _peripherals_acquire(self, capture):
         if capture is None:

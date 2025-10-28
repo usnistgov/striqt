@@ -18,13 +18,11 @@ from striqt.analysis.lib import register
 from iqwaveform.util import is_cupy_array
 
 if typing.TYPE_CHECKING:
-    import labbench as lb
     import numpy as np
     import pandas as pd
     import xarray as xr
     import striqt.analysis as striqt_analysis
 else:
-    lb = util.lazy_import('labbench')
     np = util.lazy_import('numpy')
     pd = util.lazy_import('pandas')
     xr = util.lazy_import('xarray')

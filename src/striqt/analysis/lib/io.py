@@ -8,15 +8,14 @@ import warnings
 from pathlib import Path
 from collections import defaultdict
 
-import numcodecs
-import zarr.storage
-
 from . import dataarrays, register, specs, util
 
 if typing.TYPE_CHECKING:
+    import numcodecs
     import numpy as np
     import xarray as xr
     import zarr
+    import zarr.storage
     import pandas as pd
     import yaml
 
@@ -28,6 +27,7 @@ if typing.TYPE_CHECKING:
         StoreType = typing.TypeVar('StoreType', bound=zarr.abc.store.Store)
 
 else:
+    numcodecs = util.lazy_import('numcodecs')
     np = util.lazy_import('numpy')
     pd = util.lazy_import('pandas')
     xr = util.lazy_import('xarray')
@@ -158,6 +158,8 @@ def _build_encodings_zarr_v2(data, registry: register.MeasurementRegistry, compr
 def open_store(
     path: str | Path, *, mode: str
 ) -> 'zarr.storage.Store|zarr.abc.store.Store':
+    import zarr.storage
+
     if _zarr_version() < (3, 0, 0):
         StoreBase = zarr.storage.Store
         DirectoryStore = zarr.storage.DirectoryStore
