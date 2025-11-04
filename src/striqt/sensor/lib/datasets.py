@@ -15,7 +15,7 @@ from striqt.analysis import dataarrays, measurements
 from striqt.analysis.lib.dataarrays import CAPTURE_DIM, PORT_DIM, AcquiredIQ  # noqa: F401
 from striqt.analysis.lib import register
 
-from iqwaveform.util import is_cupy_array
+from striqt.waveform.util import is_cupy_array
 
 if typing.TYPE_CHECKING:
     import numpy as np

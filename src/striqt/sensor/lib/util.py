@@ -89,7 +89,7 @@ _Tfunc = typing.Callable[..., typing.Any]
 
 def retry(
     exception_or_exceptions: typing.Union[
-        BaseException, typing.Iterable[BaseException]
+        type[BaseException], typing.Iterable[type[BaseException]]
     ],
     tries: int,
     *,
@@ -97,7 +97,7 @@ def retry(
     backoff: float = 0,
     exception_func=lambda *args, **kws: None,
     logger: logging.Logger | logging.LoggerAdapter | None = None,
-) -> callable[[_Tfunc], _Tfunc]:
+) -> typing.Callable[[_Tfunc], _Tfunc]:
     """calls to the decorated function are repeated, suppressing specified exception(s), until a
     maximum number of retries has been attempted.
 
@@ -461,7 +461,9 @@ class Call:
         self.queue = queue
 
     @classmethod
-    def wrap_list_to_dict(cls, name_func_pairs: dict[str, callable]) -> dict[str, Call]:
+    def wrap_list_to_dict(
+        cls, name_func_pairs: dict[str, typing.Callable]
+    ) -> dict[str, Call]:
         """adjusts naming and wraps callables with Call"""
         ret = {}
         # First, generate the list of callables
@@ -511,7 +513,10 @@ class MultipleContexts:
     """
 
     def __init__(
-        self, call_handler: callable[[dict, list, dict], dict], params: dict, objs: list
+        self,
+        call_handler: typing.Callable[[dict, list, dict], dict],
+        params: dict,
+        objs: list,
     ):
         """
             call_handler: one of `sequentially_call` or `concurrently_call`

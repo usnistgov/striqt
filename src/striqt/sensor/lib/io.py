@@ -12,10 +12,10 @@ from striqt.analysis.lib.io import decode_from_yaml_file, load, dump  # noqa: F4
 from . import specs, util, captures
 
 if typing.TYPE_CHECKING:
-    import iqwaveform
+    import striqt.waveform
     import numpy as np
 else:
-    iqwaveform = util.lazy_import('iqwaveform')
+    striqt.waveform = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
 
 
@@ -52,9 +52,10 @@ def expand_path(
         return None
 
     path = Path(path).expanduser()
-    if sweep is not None:
+    captures = sweep.get_captures
+    if sweep is not None and len(captures) > 0:
         fields = _get_capture_format_fields(
-            sweep.defaults, sweep, radio_id=radio_id, yaml_path=relative_to_file
+            captures[0], sweep, radio_id=radio_id, yaml_path=relative_to_file
         )
         try:
             path = Path(str(path).format(**fields))
@@ -146,7 +147,6 @@ def read_yaml_sweep(
     tree = decode_from_yaml_file(path)
 
     # apply default capture settings
-    defaults = tree['defaults']
     if tree['radio_setup'].get('calibration', None):
         cal_path = Path(tree['radio_setup']['calibration'])
         sweep_parent = Path(path).parent
@@ -156,8 +156,6 @@ def read_yaml_sweep(
             cal_path = cal_path.relative_to(sweep_parent)
         cal_path = str(cal_path)
         tree['radio_setup']['calibration'] = cal_path
-
-    tree['captures'] = [defaults | c for c in tree.get('captures', ())]
 
     extensions = tree.get('extensions', {})
     if 'import_path' in extensions:
@@ -211,7 +209,7 @@ def read_tdms_iq(
     dtype='complex64',
     skip_samples=0,
     xp=np,
-) -> tuple['iqwaveform.type_stubs.ArrayLike', specs.FileSourceCapture]:
+) -> tuple['striqt.waveform.type_stubs.ArrayLike', specs.FileCapture]:
     from .sources.testing import TDMSFileSource
 
     source = TDMSFileSource(path=path, num_rx_ports=num_rx_ports)

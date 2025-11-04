@@ -18,9 +18,10 @@ from . import specs, util
 
 if typing.TYPE_CHECKING:
     import typing_extensions
+
     _P = typing_extensions.ParamSpec('_P')
     _R = typing_extensions.TypeVar('_R')
-    import iqwaveform
+    import striqt.waveform
     import inspect
 else:
     inspect = util.lazy_import('inspect')
@@ -28,10 +29,10 @@ else:
 
 class _MeasurementCallable(typing.Protocol):
     def __call__(
-        iq: 'iqwaveform.type_stubs.ArrayType', capture: specs.Capture, **kwargs
+        iq: 'striqt.waveform.type_stubs.ArrayType', capture: specs.Capture, **kwargs
     ) -> typing.Union[
-        'iqwaveform.type_stubs.ArrayType',
-        tuple['iqwaveform.type_stubs.ArrayType', dict[str]],
+        'striqt.waveform.type_stubs.ArrayType',
+        tuple['striqt.waveform.type_stubs.ArrayType', dict[str]],
     ]: ...
 
 
@@ -42,8 +43,8 @@ class _CoordinateFactoryCallable(typing.Protocol):
     def __call__(
         capture: specs.Capture, spec: specs.Measurement
     ) -> typing.Union[
-        'iqwaveform.type_stubs.ArrayType',
-        tuple['iqwaveform.type_stubs.ArrayType', dict[str]],
+        'striqt.waveform.type_stubs.ArrayType',
+        tuple['striqt.waveform.type_stubs.ArrayType', dict[str]],
     ]: ...
 
 
@@ -267,7 +268,7 @@ def _make_measurement_signature(spec_cls):
         inspect.Parameter(
             'iq',
             inspect.Parameter.POSITIONAL_OR_KEYWORD,
-            annotation='iqwaveform.type_stubs.ArrayType',
+            annotation='striqt.waveform.type_stubs.ArrayType',
         ),
         inspect.Parameter(
             'capture', inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=specs.Capture
@@ -502,7 +503,7 @@ class AlignmentCaller:
         self.meas_kws = self.meas_spec.todict()
 
     def __call__(
-        self, iq: 'iqwaveform.type_stubs.ArrayType', capture: specs.Capture
+        self, iq: 'striqt.waveform.type_stubs.ArrayType', capture: specs.Capture
     ) -> float:
         ret = self.info.func(iq, capture, **self.meas_kws)
 

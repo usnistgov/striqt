@@ -1,8 +1,10 @@
 """utility functions for structs.RadioCapture data structures"""
 
 from __future__ import annotations
+import functools
 import numbers
 from collections import Counter
+import typing
 
 from . import specs, util
 
@@ -34,6 +36,12 @@ def broadcast_to_ports(
             )
 
     return res
+
+
+@functools.lru_cache
+def get_capture_type(sweep_cls: type[specs.Sweep]) -> type[specs.RadioCapture]:
+    captures_type = typing.get_type_hints(sweep_cls)['captures']
+    return typing.get_args(captures_type)[0]
 
 
 class _UNDEFINED_FIELD:
@@ -75,9 +83,9 @@ def _single_match(
 
 
 def _match_fields(
-    multi_fields: list[dict[str]],
+    multi_fields: list[dict[str, typing.Any]],
     capture: specs.RadioCapture,
-    **extras: dict[str],
+    **extras: dict[str, typing.Any],
 ) -> bool:
     """return True if all fields match in the specified fields.
 
@@ -94,7 +102,7 @@ def evaluate_aliases(
     *,
     radio_id: str | None = _UNDEFINED_FIELD,
     output: specs.Output,
-) -> dict[str]:
+) -> dict[str, typing.Any]:
     """evaluate the field values"""
 
     ret = {}
@@ -116,8 +124,11 @@ def evaluate_aliases(
     return ret
 
 
+Capture = typing.TypeVar('Capture', bound=specs.RadioCapture)
+
+
 @util.lru_cache()
-def split_capture_ports(capture: specs.RadioCapture) -> list[specs.RadioCapture]:
+def split_capture_ports(capture: Capture) -> list[Capture]:
     """split a multi-channel capture into a list of single-channel captures.
 
     If capture is not a multi-channel capture (its channel field is just a number),
@@ -126,6 +137,8 @@ def split_capture_ports(capture: specs.RadioCapture) -> list[specs.RadioCapture]
 
     if isinstance(capture.port, numbers.Number):
         return [capture]
+    else:
+        assert isinstance(capture.port, tuple)
 
     remaps = [dict() for i in range(len(capture.port))]
 
@@ -141,7 +154,7 @@ def split_capture_ports(capture: specs.RadioCapture) -> list[specs.RadioCapture]
 
 
 def capture_fields_with_aliases(
-    capture: specs.RadioCapture, *, radio_id: str = None, output: specs.Output
+    capture: specs.RadioCapture, *, radio_id: str | None = None, output: specs.Output
 ) -> dict:
     attrs = capture.todict(skip_private=True)
 
@@ -177,9 +190,9 @@ def get_field_value(
     return value
 
 
-class _MinSweep(specs.Sweep):
+class _MinSweep(specs.Sweep, frozen=True):
     # a sweep with captures that express only the parameters that impact data shape
-    captures: list[specs.analysis.Capture]
+    captures: tuple[specs.analysis.Capture, ...] = ()
 
 
 def concat_group_sizes(

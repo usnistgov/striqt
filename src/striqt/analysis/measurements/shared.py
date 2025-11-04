@@ -6,13 +6,13 @@ import typing
 from ..lib import dataarrays, register, specs, util
 
 if typing.TYPE_CHECKING:
-    import iqwaveform
+    import striqt.waveform
     import numpy as np
-    import iqwaveform.type_stubs
+    import striqt.waveform.type_stubs
     import pandas as pd
     import array_api_compat
 else:
-    iqwaveform = util.lazy_import('iqwaveform')
+    striqt.waveform = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
     pd = util.lazy_import('pandas')
     array_api_compat = util.lazy_import('array_api_compat')
@@ -76,7 +76,7 @@ def cellular_ssb_beam_index(
     capture: specs.Capture, spec: Cellular5GNRSyncCorrelationSpec
 ):
     # pss_params and sss_params return the same number of symbol indexes
-    params = iqwaveform.ofdm.sss_params(
+    params = striqt.waveform.ofdm.sss_params(
         sample_rate=spec.sample_rate,
         subcarrier_spacing=spec.subcarrier_spacing,
         discovery_periodicity=spec.discovery_periodicity,
@@ -94,7 +94,7 @@ def cellular_ssb_start_time(
     capture: specs.Capture, spec: Cellular5GNRSyncCorrelationSpec
 ):
     # pss_params and sss_params return the same number of symbol indexes
-    params = iqwaveform.ofdm.pss_params(
+    params = striqt.waveform.ofdm.pss_params(
         sample_rate=spec.sample_rate,
         subcarrier_spacing=spec.subcarrier_spacing,
         discovery_periodicity=spec.discovery_periodicity,
@@ -114,7 +114,7 @@ def cellular_ssb_start_time(
 )
 @util.lru_cache()
 def cellular_ssb_lag(capture: specs.Capture, spec: Cellular5GNRSyncCorrelationSpec):
-    params = iqwaveform.ofdm.sss_params(
+    params = striqt.waveform.ofdm.sss_params(
         sample_rate=spec.sample_rate,
         subcarrier_spacing=spec.subcarrier_spacing,
         discovery_periodicity=spec.discovery_periodicity,
@@ -138,7 +138,7 @@ def empty_5g_sync_measurement(
     coord_factories: list[callable],
     dtype='complex64',
 ):
-    xp = iqwaveform.util.array_namespace(iq)
+    xp = striqt.waveform.util.array_namespace(iq)
     meas_ax_shape = [len(f(capture, spec)) for f in coord_factories]
     new_shape = iq.shape[:-1] + tuple(meas_ax_shape)
     return xp.full(new_shape, 0, dtype=dtype)
@@ -149,19 +149,19 @@ def correlate_sync_sequence(
     sync_seq,
     *,
     spec: Cellular5GNRSyncCorrelationSpec,
-    params: 'iqwaveform.ofdm.SyncParams',
+    params: 'striqt.waveform.ofdm.SyncParams',
     cell_id_split: int | None = None,
 ):
     """correlate the IQ of a synchronization block against a synchronization sequence.
 
     Arguments:
         ssb_iq: The synchronization block IQ waveform (e.g., from `get_5g_ssb_iq`)
-        sync_seq: The reference sequence (e.g. from `iqwaveform.ofdm.pss_5g_nr` or `iqwaveform.ofdm.sss_5g_nr`)
+        sync_seq: The reference sequence (e.g. from `striqt.waveform.ofdm.pss_5g_nr` or `striqt.waveform.ofdm.sss_5g_nr`)
         spec: The measurement specification
-        params: The cell synchronization parameters (e.g. from `iqwaveform.ofdm.pss_params` or `iqwaveform.ofdm.sss_params`)
+        params: The cell synchronization parameters (e.g. from `striqt.waveform.ofdm.pss_params` or `striqt.waveform.ofdm.sss_params`)
         cell_id_split: if not None, operate on groups of this size along the cell id axis (to reduce memory usage)
     """
-    xp = iqwaveform.util.array_namespace(ssb_iq)
+    xp = striqt.waveform.util.array_namespace(ssb_iq)
 
     slot_count = params.slot_count
     corr_size = params.corr_size
@@ -173,7 +173,7 @@ def correlate_sync_sequence(
     iq_bcast = iq_bcast[:, xp.newaxis, ::frames_per_sync, :corr_size]
     template_bcast = sync_seq[xp.newaxis, :, xp.newaxis, :]
     # pad_size = template_bcast.shape[-1]
-    # template_bcast = iqwaveform.util.pad_along_axis(template_bcast, [[0,pad_size]], axis=3)
+    # template_bcast = striqt.waveform.util.pad_along_axis(template_bcast, [[0,pad_size]], axis=3)
 
     cp_samples = round(9 / 128 * spec.sample_rate / spec.subcarrier_spacing)
     offs = round(spec.sample_rate / spec.subcarrier_spacing + 2 * cp_samples)
@@ -183,7 +183,7 @@ def correlate_sync_sequence(
     R = xp.empty(tuple(R_shape), dtype='complex64')
 
     for cell_id in range(template_bcast.shape[1]):
-        R[:, cell_id] = iqwaveform.oaconvolve(
+        R[:, cell_id] = striqt.waveform.oaconvolve(
             iq_bcast[:, 0], template_bcast[:, cell_id], axes=2, mode='full'
         )
     R = xp.roll(R, -offs, axis=-1)[..., :corr_size]
@@ -208,15 +208,15 @@ ssb_iq_cache = register.KeywordArgumentCache([dataarrays.CAPTURE_DIM, 'spec'])
 
 @ssb_iq_cache.apply
 def get_5g_ssb_iq(
-    iq: 'iqwaveform.type_stubs.ArrayType',
+    iq: 'striqt.waveform.type_stubs.ArrayType',
     capture: specs.Capture,
     spec: Cellular5GNRSyncCorrelationSpec,
     oaresample=False,
-) -> 'iqwaveform.type_stubs.ArrayType':
+) -> 'striqt.waveform.type_stubs.ArrayType':
     """return a sync block waveform, which returns IQ that is recentered
     at baseband frequency spec.frequency_offset and downsampled to spec.sample_rate."""
 
-    xp = iqwaveform.util.array_namespace(iq)
+    xp = striqt.waveform.util.array_namespace(iq)
 
     frequency_offset = specs.maybe_lookup_with_capture_key(
         capture,
@@ -251,7 +251,7 @@ def get_5g_ssb_iq(
         out = xp.empty((iq.shape[0], size_out), dtype=iq.dtype)
 
         for i in range(out.shape[0]):
-            out[i] = iqwaveform.fourier.oaresample(
+            out[i] = striqt.waveform.fourier.oaresample(
                 iq[i],
                 fs=capture.sample_rate,
                 up=up,
@@ -275,7 +275,7 @@ def get_5g_ssb_iq(
         shift = round(iq.shape[1] * frequency_offset / capture.sample_rate)
 
         for i in range(out.shape[0]):
-            out[i] = iqwaveform.fourier.resample(
+            out[i] = striqt.waveform.fourier.resample(
                 iq[i], num=size_out, axis=0, overwrite_x=False, shift=shift
             )
 
@@ -349,7 +349,7 @@ class SpectrogramKeywords(FrequencyAnalysisKeywords):
 
 
 def evaluate_spectrogram(
-    iq: 'iqwaveform.util.Array',
+    iq: 'striqt.waveform.util.Array',
     capture: specs.Capture,
     spec: SpectrogramSpec,
     *,
@@ -360,11 +360,11 @@ def evaluate_spectrogram(
     dB=True,
 ):
     spg, attrs = _cached_spectrogram(iq=iq, capture=capture, spec=spec)
-    xp = iqwaveform.util.array_namespace(iq)
+    xp = striqt.waveform.util.array_namespace(iq)
 
     copied = False
     if dB:
-        spg = iqwaveform.powtodB(spg, eps=1e-25)
+        spg = striqt.waveform.powtodB(spg, eps=1e-25)
         copied = True
 
     if limit_digits is not None:
@@ -384,48 +384,48 @@ spectrogram_cache = register.KeywordArgumentCache([dataarrays.CAPTURE_DIM, 'spec
 
 def truncate_spectrogram_bandwidth(x, nfft, fs, bandwidth, *, offset=0, axis=0):
     """trim an array outside of the specified bandwidth on a frequency axis"""
-    edges = iqwaveform.fourier._freq_band_edges(
+    edges = striqt.waveform.fourier._freq_band_edges(
         nfft,
         1.0 / fs,
         cutoff_low=offset - bandwidth / 2,
         cutoff_hi=offset + bandwidth / 2,
     )
-    return iqwaveform.util.axis_slice(x, *edges, axis=axis)
+    return striqt.waveform.util.axis_slice(x, *edges, axis=axis)
 
 
 def null_lo(x, nfft, fs, bandwidth, *, offset=0, axis=0):
     """sets samples to nan within the specified bandwidth on a frequency axis"""
     # to make the top bound inclusive
     pad_hi = fs / nfft / 2
-    edges = iqwaveform.fourier._freq_band_edges(
+    edges = striqt.waveform.fourier._freq_band_edges(
         nfft,
         1.0 / fs,
         cutoff_low=offset - bandwidth / 2,
         cutoff_hi=offset + bandwidth / 2 + pad_hi,
     )
-    view = iqwaveform.util.axis_slice(x, *edges, axis=axis)
+    view = striqt.waveform.util.axis_slice(x, *edges, axis=axis)
     view[:] = float('nan')
 
 
 @spectrogram_cache.apply
 def _cached_spectrogram(
-    iq: 'iqwaveform.util.Array',
+    iq: 'striqt.waveform.util.Array',
     capture: specs.Capture,
     spec: SpectrogramSpec,
 ):
     spec = spec.validate()
 
-    if iqwaveform.isroundmod(capture.sample_rate, spec.frequency_resolution):
+    if striqt.waveform.isroundmod(capture.sample_rate, spec.frequency_resolution):
         nfft = round(capture.sample_rate / spec.frequency_resolution)
     else:
         raise ValueError('sample_rate/resolution must be a counting number')
 
-    if iqwaveform.isroundmod(capture.sample_rate, spec.frequency_resolution):
+    if striqt.waveform.isroundmod(capture.sample_rate, spec.frequency_resolution):
         noverlap = round(spec.fractional_overlap * nfft)
     else:
         raise ValueError('sample_rate_Hz/resolution must be a counting number')
 
-    if iqwaveform.isroundmod((1 - spec.window_fill) * nfft, 1):
+    if striqt.waveform.isroundmod((1 - spec.window_fill) * nfft, 1):
         nzero = round((1 - spec.window_fill) * nfft)
     else:
         raise ValueError(
@@ -434,7 +434,7 @@ def _cached_spectrogram(
 
     if spec.integration_bandwidth is None:
         frequency_bin_averaging = None
-    elif iqwaveform.isroundmod(spec.integration_bandwidth, spec.frequency_resolution):
+    elif striqt.waveform.isroundmod(spec.integration_bandwidth, spec.frequency_resolution):
         frequency_bin_averaging = round(
             spec.integration_bandwidth / spec.frequency_resolution
         )
@@ -447,14 +447,14 @@ def _cached_spectrogram(
     hop_period = hop_size / capture.sample_rate
     if spec.time_aperture is None:
         time_bin_averaging = None
-    elif iqwaveform.isroundmod(spec.time_aperture, hop_period):
+    elif striqt.waveform.isroundmod(spec.time_aperture, hop_period):
         time_bin_averaging = round(spec.time_aperture / hop_period)
     else:
         raise ValueError(
             'when specified, time_aperture must be a multiple of (1-fractional_overlap)/frequency_resolution'
         )
 
-    spg = iqwaveform.fourier.spectrogram(
+    spg = striqt.waveform.fourier.spectrogram(
         iq,
         window=spec.window,
         fs=capture.sample_rate,
@@ -476,7 +476,7 @@ def _cached_spectrogram(
         )
 
     if frequency_bin_averaging is not None:
-        spg = iqwaveform.util.binned_mean(
+        spg = striqt.waveform.util.binned_mean(
             spg, frequency_bin_averaging, axis=2, fft=True
         )
 
@@ -484,7 +484,7 @@ def _cached_spectrogram(
         spg *= frequency_bin_averaging
 
     if time_bin_averaging is not None:
-        spg = iqwaveform.util.binned_mean(spg, time_bin_averaging, axis=1, fft=False)
+        spg = striqt.waveform.util.binned_mean(spg, time_bin_averaging, axis=1, fft=False)
 
     if spec.integration_bandwidth is None:
         enbw = spec.frequency_resolution
@@ -500,7 +500,7 @@ def _cached_spectrogram(
 
 
 @util.lru_cache()
-def fftfreq(nfft, fs, dtype='float64', xp=np) -> 'iqwaveform.type_stubs.ArrayType':
+def fftfreq(nfft, fs, dtype='float64', xp=np) -> 'striqt.waveform.type_stubs.ArrayType':
     """compute fftfreq for a specified sample rate.
 
     This is meant to produce higher-precision results for
@@ -530,14 +530,14 @@ def spectrogram_baseband_frequency(
     if xp is not np:
         return xp.array(spectrogram_baseband_frequency(capture, spec))
 
-    if iqwaveform.isroundmod(capture.sample_rate, spec.frequency_resolution):
+    if striqt.waveform.isroundmod(capture.sample_rate, spec.frequency_resolution):
         nfft = round(capture.sample_rate / spec.frequency_resolution)
     else:
         raise ValueError('sample_rate/resolution must be a counting number')
 
     if spec.integration_bandwidth is None:
         frequency_bin_averaging = None
-    elif iqwaveform.isroundmod(spec.integration_bandwidth, spec.frequency_resolution):
+    elif striqt.waveform.isroundmod(spec.integration_bandwidth, spec.frequency_resolution):
         frequency_bin_averaging = round(
             spec.integration_bandwidth / spec.frequency_resolution
         )
@@ -546,7 +546,7 @@ def spectrogram_baseband_frequency(
             'when specified, integration_bandwidth must be a multiple of frequency_resolution'
         )
 
-    # use the iqwaveform.fourier fftfreq for higher precision, which avoids
+    # use the striqt.waveform.fourier fftfreq for higher precision, which avoids
     # headaches when merging spectra with different sampling parameters due
     # to rounding errors.
     freqs = fftfreq(nfft, capture.sample_rate)
@@ -558,7 +558,7 @@ def spectrogram_baseband_frequency(
         )
 
     if spec.integration_bandwidth is not None:
-        freqs = iqwaveform.util.binned_mean(freqs, frequency_bin_averaging, fft=True)
+        freqs = striqt.waveform.util.binned_mean(freqs, frequency_bin_averaging, fft=True)
 
     # only now downconvert. round to a still-large number of digits
     return freqs.astype('float64').round(16)

@@ -7,6 +7,7 @@ from .base import (
 )
 
 from .null import NullSetup, NullSource, WarmupSource
+
 from .testing import (
     SingleToneSource,
     SawtoothSource,
@@ -40,9 +41,10 @@ def find_radio_cls_by_name(
 
 
 def is_same_resource(radio: SourceBase, radio_setup: base.specs.RadioSetup) -> bool:
-    expect_cls = find_radio_cls_by_name(radio_setup.driver)
-    if not isinstance(radio, expect_cls):
-        return False
+    if radio_setup.driver is not None:
+        expect_cls = find_radio_cls_by_name(radio_setup.driver)
+        if not isinstance(radio, expect_cls):
+            return False
     elif radio_setup.resource != radio.resource:
         return False
     else:

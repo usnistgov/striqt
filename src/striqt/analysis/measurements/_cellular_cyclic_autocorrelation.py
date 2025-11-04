@@ -7,11 +7,11 @@ from ..lib import specs, util
 
 
 if typing.TYPE_CHECKING:
-    import iqwaveform
+    import striqt.waveform
     import numpy as np
     import pandas as pd
 else:
-    iqwaveform = util.lazy_import('iqwaveform')
+    striqt.waveform = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
     pd = util.lazy_import('pandas')
 
@@ -180,9 +180,9 @@ def _get_phy_mapping(
     sample_rate: float,
     subcarrier_spacings: tuple[float, ...],
     xp=np,
-) -> dict[str, iqwaveform.ofdm.Phy3GPP]:
+) -> dict[str, striqt.waveform.ofdm.Phy3GPP]:
     return {
-        scs: iqwaveform.ofdm.Phy3GPP(
+        scs: striqt.waveform.ofdm.Phy3GPP(
             channel_bandwidth, scs, sample_rate=sample_rate, xp=xp
         )
         for scs in subcarrier_spacings
@@ -207,10 +207,10 @@ def _get_max_corr_size(
     attrs={'units': 'mW', 'standard_name': 'Cyclic Autocovariance'},
 )
 def cellular_cyclic_autocorrelation(
-    iq: 'iqwaveform.util.Array',
+    iq: 'striqt.waveform.util.Array',
     capture: specs.Capture,
     **kwargs: typing.Unpack[CellularCyclicAutocorrelationKeywords],
-) -> 'iqwaveform.util.Array':
+) -> 'striqt.waveform.util.Array':
     """evaluate the cyclic autocorrelation of the IQ sequence based on 4G or 5G cellular
     cyclic prefix sample lag offsets.
 
@@ -236,7 +236,7 @@ def cellular_cyclic_autocorrelation(
 
     RANGE_MAP = {'frames': spec.frame_range, 'symbols': spec.symbol_range}
 
-    xp = iqwaveform.util.array_namespace(iq)
+    xp = striqt.waveform.util.array_namespace(iq)
     subcarrier_spacings = tuple(spec.subcarrier_spacings)
     phy_scs = _get_phy_mapping(
         capture.analysis_bandwidth, capture.sample_rate, subcarrier_spacings, xp=xp
@@ -284,7 +284,7 @@ def cellular_cyclic_autocorrelation(
             # shift index to the symbol boundary rather than the CP
             cyclic_shift = -phy.cp_sizes[0] * 2 // cp_inds.shape[1]
 
-            R = iqwaveform.ofdm.corr_at_indices(cp_inds, iq[chan], phy.nfft, norm=False)
+            R = striqt.waveform.ofdm.corr_at_indices(cp_inds, iq[chan], phy.nfft, norm=False)
             R = xp.roll(R, cyclic_shift)
             result[chan][0][iscs][: R.size] = xp.abs(R)
 
@@ -292,7 +292,7 @@ def cellular_cyclic_autocorrelation(
                 cp_inds = phy.index_cyclic_prefix(
                     **idx_kws, slots=tdd_config.uplink_slot_indexes
                 )
-                R = iqwaveform.ofdm.corr_at_indices(
+                R = striqt.waveform.ofdm.corr_at_indices(
                     cp_inds, iq[chan], phy.nfft, norm=False
                 )
                 R = xp.roll(R, cyclic_shift)

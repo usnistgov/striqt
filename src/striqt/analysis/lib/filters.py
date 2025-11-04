@@ -1,4 +1,4 @@
-"""wrap lower-level iqwaveform DSP calls to accept physical inputs and return xarray.DataArray"""
+"""wrap lower-level striqt.waveform DSP calls to accept physical inputs and return xarray.DataArray"""
 
 from __future__ import annotations
 
@@ -12,12 +12,12 @@ if typing.TYPE_CHECKING:
     import numpy as np
     import scipy
     import array_api_compat
-    import iqwaveform
+    import striqt.waveform
 else:
     np = util.lazy_import('numpy')
     scipy = util.lazy_import('scipy')
     array_api_compat = util.lazy_import('array_api_compat')
-    iqwaveform = util.lazy_import('iqwaveform')
+    striqt.waveform = util.lazy_import('striqt.waveform')
 
 
 def select_parameter_kws(locals_: dict, omit=(dataarrays.CAPTURE_DIM, 'out')) -> dict:
@@ -74,7 +74,7 @@ def _generate_iir_lpf(
 
 
 def iir_filter(
-    iq: 'iqwaveform.util.Array',
+    iq: 'striqt.waveform.util.Array',
     capture: specs.Capture,
     *,
     passband_ripple: float | int,
@@ -86,7 +86,7 @@ def iir_filter(
     filter_kws = select_parameter_kws(locals())
     sos = _generate_iir_lpf(capture, **filter_kws)
 
-    xp = iqwaveform.util.array_namespace(iq)
+    xp = striqt.waveform.util.array_namespace(iq)
 
     if array_api_compat.is_cupy_array(iq):
         from . import cuda_kernels
@@ -99,7 +99,7 @@ def iir_filter(
 
 
 def ola_filter(
-    iq: 'iqwaveform.util.Array',
+    iq: 'striqt.waveform.util.Array',
     capture: specs.Capture,
     *,
     nfft: int,
@@ -109,7 +109,7 @@ def ola_filter(
 ):
     kwargs = select_parameter_kws(locals())
 
-    return iqwaveform.fourier.ola_filter(
+    return striqt.waveform.fourier.ola_filter(
         iq,
         fs=capture.sample_rate,
         passband=(-capture.analysis_bandwidth / 2, capture.analysis_bandwidth / 2),

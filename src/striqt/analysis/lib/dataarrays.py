@@ -1,4 +1,4 @@
-"""wrap lower-level iqwaveform DSP calls to accept physical inputs and return xarray.DataArray"""
+"""wrap lower-level striqt.waveform DSP calls to accept physical inputs and return xarray.DataArray"""
 
 from __future__ import annotations
 
@@ -13,13 +13,13 @@ from . import register, specs, util
 
 
 if typing.TYPE_CHECKING:
-    import iqwaveform
-    import iqwaveform.type_stubs
+    import striqt.waveform
+    import striqt.waveform.type_stubs
     import numpy as np
     import xarray as xr
     import array_api_compat
 else:
-    iqwaveform = util.lazy_import('iqwaveform')
+    striqt.waveform = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
     xr = util.lazy_import('xarray')
     array_api_compat = util.lazy_import('array_api_compat')
@@ -30,8 +30,8 @@ PORT_DIM = 'port'
 
 
 class AcquiredIQ(typing.NamedTuple):
-    raw: 'iqwaveform.type_stubs.ArrayType'
-    aligned: 'iqwaveform.type_stubs.ArrayType' | None = None
+    raw: 'striqt.waveform.type_stubs.ArrayType'
+    aligned: 'striqt.waveform.type_stubs.ArrayType' | None = None
     capture: specs.Capture = None
     unscaled_peak: float | None = None
 
@@ -179,7 +179,7 @@ def describe_value(value, attrs: dict, unit_prefix=None):
     return value_str
 
 
-def _results_as_arrays(obj: tuple | list | dict | 'iqwaveform.util.Array'):
+def _results_as_arrays(obj: tuple | list | dict | 'striqt.waveform.util.Array'):
     """convert an array, or a container of arrays, into a numpy array (or container of numpy arrays)"""
 
     if array_api_compat.is_torch_array(obj):
@@ -368,7 +368,7 @@ class DelayedDataArray(collections.UserDict):
 
     capture: specs.RadioCapture
     spec: specs.Measurement
-    data: typing.Union['iqwaveform.type_stubs.ArrayLike', dict]
+    data: typing.Union['striqt.waveform.type_stubs.ArrayLike', dict]
     info: register.MeasurementInfo
     attrs: dict
     coord_registry: register.CoordinateRegistry | None = None
@@ -398,7 +398,7 @@ def select_parameter_kws(locals_: dict, omit=(PORT_DIM, 'out')) -> dict:
 
 
 def evaluate_by_spec(
-    iq: 'iqwaveform.type_stubs.ArrayType' | AcquiredIQ,
+    iq: 'striqt.waveform.type_stubs.ArrayType' | AcquiredIQ,
     capture: specs.Capture,
     *,
     spec: str | dict | specs.Measurement,
@@ -483,7 +483,7 @@ def package_analysis(
 
 
 def analyze_by_spec(
-    iq: 'iqwaveform.type_stubs.ArrayType' | AcquiredIQ,
+    iq: 'striqt.waveform.type_stubs.ArrayType' | AcquiredIQ,
     capture: specs.Capture,
     *,
     spec: str | dict | specs.Measurement,

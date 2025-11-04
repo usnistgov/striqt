@@ -6,10 +6,10 @@ from ..lib import specs, util
 from . import _channel_power_time_series
 
 if typing.TYPE_CHECKING:
-    import iqwaveform
+    import striqt.waveform
     import numpy as np
 else:
-    iqwaveform = util.lazy_import('iqwaveform')
+    striqt.waveform = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
 
 
@@ -98,7 +98,7 @@ def channel_power_histogram(
     if typing.TYPE_CHECKING:
         import array_api_compat.numpy as xp
     else:
-        xp = iqwaveform.util.array_namespace(iq)
+        xp = striqt.waveform.util.array_namespace(iq)
 
     bin_edges = make_power_histogram_bin_edges(
         power_low=spec.power_low,

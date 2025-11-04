@@ -1,10 +1,12 @@
 from __future__ import annotations
+
+import functools
 import typing
 
-from labbench import paramattr as attr
+# from labbench import paramattr as attr
 
-from ..lib.sources import soapy
-from ..lib import util
+from ..lib.sources import soapy, base
+from ..lib import specs, util
 
 
 if typing.TYPE_CHECKING:
@@ -13,40 +15,51 @@ else:
     psutil = util.lazy_import('psutil')
 
 
-class Air7x01B(soapy.SoapySourceBase):
-    resource = attr.value.dict({}, inherit=True)
+class Air7101BSetup(
+    specs.SoapySetup,
+    forbid_unknown_fields=True,
+    frozen=True,
+    cache_hash=True,
+    kw_only=True,
+):
+    base_clock_rate: specs.BaseClockRateType = 125e6
+    rx_enable_delay = 0.35
+    transient_holdoff_time = 2e-3
 
-    # adjust bounds based on the hardware
-    lo_offset = attr.value.float(0.0, min=-125e6, max=125e6, inherit=True)
-    lo_frequency = attr.method.float(min=300e6, max=6000e6, inherit=True)
-    backend_sample_rate = attr.method.float(min=3.906250e6, max=125e6, inherit=True)
-    gain = type(soapy.SoapySourceBase.gain)(min=-30, max=0, step=0.5, inherit=True)
-    tx_gain = attr.method.float(min=-41.95, max=0, step=0.1, inherit=True)
-    rx_port_count = attr.value.int(2, inherit=True)
 
-    # set based on gain setting sweep tests
-    _transient_holdoff_time = attr.value.float(2e-3, inherit=True)
+class Air7201BSetup(
+    specs.SoapySetup,
+    forbid_unknown_fields=True,
+    frozen=True,
+    cache_hash=True,
+    kw_only=True,
+):
+    base_clock_rate: specs.BaseClockRateType = 125e6
+    rx_enable_delay = 0.35
+    transient_holdoff_time = 2e-3
 
-    # stream setup and teardown for channel configuration are slow;
-    # instead, stream all RX ports
-    _stream_all_rx_ports = attr.value.bool(True, inherit=True)
 
-    # without this, multichannel acquisition start time will vary
-    # across ports, resulting in streaming errors
-    _rx_enable_delay = attr.value.float(0.35, inherit=True)
+class Air8201BSetup(
+    specs.SoapySetup,
+    forbid_unknown_fields=True,
+    frozen=True,
+    cache_hash=True,
+    kw_only=True,
+):
+    base_clock_rate: specs.BaseClockRateType = 125e6
+    rx_enable_delay = 0.4
+    transient_holdoff_time = 2e-3
 
-    # float32 or int16: gpu work vs memory bandwidth tradeoff
-    _transport_dtype = attr.value.str('int16', inherit=True)
 
-    def open(self):
-        # in some cases specifying the driver has caused exceptions on connect
-        # validate it after the fact instead
+class Airstack1Source(soapy.SoapySourceBase):
+    def _connect(self, spec: specs.SoapySetup):
+        super()._connect(spec)
+        assert self._device is not None
+
         driver = self._device.getDriverKey()
         if driver != 'SoapyAIRT':
             raise IOError(f'connected to {driver}, but expected SoapyAirT')
 
-    def _connect(self, spec: soapy.SoapyRadioSetup):
-        super()._connect(spec)
         self._set_jesd_sysref_delay(0)
 
     def _set_jesd_sysref_delay(self, value: int):
@@ -61,6 +74,7 @@ class Air7x01B(soapy.SoapySourceBase):
 
         Ref: https://docs.deepwavedigital.com/Tutorials/8_triggered_signal_stream/#maintaining-fixed-delay-between-calibrations
         """
+        assert self._device is not None
         addr = 0x00040010
         start_bit = 8
         field_size = 4
@@ -81,7 +95,7 @@ class Air7x01B(soapy.SoapySourceBase):
         # Write reg back
         self._device.writeRegister('FPGA', addr, reg)
 
-    @attr.property.str(inherit=True)
+    @functools.cached_property
     def id(self):
         # as of 1.0.0, AirStack doesn't seem to return a serial through Soapy
         # instead, take the Jetson ethernet MAC address as the radio id.
@@ -101,28 +115,12 @@ class Air7x01B(soapy.SoapySourceBase):
 
     def get_temperatures(self) -> dict[str, float]:
         """returns the transceiver temperature in Celsius"""
+        assert self._device is not None
 
         return {'transceiver': self._device.readSensorFloat('xcvr_temp')}
 
 
-class Air8201B(Air7x01B):
-    _rx_enable_delay = attr.value.float(0.4, inherit=True)
-
-
-class AirT7x01B(Air7x01B):
-    # for backward compatibility
-    pass
-
-
-class Air7201B(Air7x01B):
-    pass
-
-
-class Air7101B(Air7x01B):
-    pass
-
-
-if __name__ == '__main__':
-    airt = Air7201B(freq=2.44e9, fs=2 * 31.25e6)
-    iq, *_ = airt.acquire(256 * 1024)
-    airt.close()
+# if __name__ == '__main__':
+#     airt = Airstack1Source(freq=2.44e9, fs=2 * 31.25e6)
+#     iq, *_ = airt.acquire(256 * 1024)
+#     airt.close()

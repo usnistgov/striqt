@@ -3,6 +3,10 @@
 import click
 
 
+def name_capture_fields(sweep):
+    return sweep.get_captures(False)[0].__struct_fields__
+
+
 @click.command('runtime information about running a sweep')
 @click.argument('yaml_path', type=click.Path(exists=True, dir_okay=False))
 def run(yaml_path):
@@ -60,19 +64,24 @@ def run(yaml_path):
             continue
         print('\tExists: ', 'yes' if Path(pe).exists() else 'no')
 
+    if len(sweep.get_captures(looped=False)) == 0:
+        print('No captures in sweep')
+        return
+    else:
+        cfields = frozenset(name_capture_fields(sweep))
+
     kws = {'sweep': sweep, 'radio_id': radio_id, 'yaml_path': yaml_path}
     field_sets = {}
     splits = (captures.split_capture_ports(c) for c in sweep.captures)
     for c in itertools.chain(*splits):
         fields = _get_capture_format_fields(c, **kws)
         for k, v in fields.items():
-            if k in sweep.defaults.__struct_fields__ and k != 'start_time':
+            if k in cfields and k != 'start_time':
                 continue
             field_sets.setdefault(k, set()).add(v)
 
     print('\n\nUnique alias field coordinates in output:')
     print(60 * '=')
-    cfields = set(sweep.defaults.__struct_fields__)
     afields = set(field_sets.keys()) - cfields
     pprint({k: field_sets[k] for k in afields}, width=40)
 

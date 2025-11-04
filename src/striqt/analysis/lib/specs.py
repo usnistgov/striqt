@@ -26,7 +26,7 @@ WindowType = typing.Union[str, tuple[str, float]]
 
 
 def _enc_hook(obj):
-    if isinstance(obj, (np.float16, np.float32, np.float64)):
+    if isinstance(obj, np.floating):
         return float(obj)
     elif isinstance(obj, fractions.Fraction):
         return str(obj)
@@ -136,7 +136,7 @@ class SpecBase(msgspec.Struct, kw_only=True, frozen=True, cache_hash=True):
     def fromjson(cls: type[_T], d: str | bytes) -> _T:
         return msgspec.json.decode(d, type=cls, strict=False, dec_hook=_dec_hook)
 
-    def validate(self) -> type[typing.Self]:
+    def validate(self) -> typing.Self:
         return self.fromdict(self.todict())
 
 

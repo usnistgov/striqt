@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import numbers
 from pathlib import Path
 import typing
 
@@ -16,10 +15,13 @@ if typing.TYPE_CHECKING:
 else:
     np = util.lazy_import('numpy')
 
+
 FormatType = typing.Literal['auto'] | typing.Literal['mat'] | typing.Literal['tdms']
 
 
 def lo_shift_tone(inds, radio: base.SourceBase, xp, lo_offset=None):
+    assert radio._capture is not None
+
     if lo_offset is None:
         resampler_design = base.design_capture_resampler(
             radio.get_setup_spec().base_clock_rate, radio.get_capture_spec()
@@ -29,13 +31,22 @@ def lo_shift_tone(inds, radio: base.SourceBase, xp, lo_offset=None):
     return xp.exp(phase_scale * inds).astype('complex64')
 
 
-class TestSourceBase(null.NullSource):
+class TestSourceBase(null.NullSource[null._TS, null._TC]):
     def _read_stream(
-        self, buffers, offset, count, timeout_sec=None, *, on_overflow='except'
-    ) -> tuple[int, int]:
-        ports = self.port()
-        if isinstance(ports, numbers.Number):
-            ports = (ports,)
+        self,
+        buffers,
+        offset,
+        count,
+        timeout_sec=None,
+        *,
+        on_overflow: base.OnOverflowType = 'except',
+    ):
+        assert self._capture is not None
+
+        if not isinstance(self._capture.port, tuple):
+            ports = (self._capture.port,)
+        else:
+            ports = self._capture.port
 
         for port, buf in zip(ports, buffers):
             values = self.get_waveform(
@@ -50,25 +61,34 @@ class TestSourceBase(null.NullSource):
             buffers, offset, count, timeout_sec=timeout_sec, on_overflow=on_overflow
         )
 
-    def get_waveform(self, count, start_index: int, *, port: int = 0, xp):
+    def get_waveform(
+        self, count: int, offset: int, *, port: int = 0, xp=np, dtype='complex64'
+    ):
         raise NotImplementedError
 
     def _sync_time_source(self):
         self._sync_time_ns = round(1_000_000_000 * self._samples_elapsed)
 
 
-class SingleToneCapture(specs.RadioCapture):
+class SingleToneCapture(
+    specs.RadioCapture,
+    forbid_unknown_fields=True,
+    frozen=True,
+    cache_hash=True,
+    kw_only=True,
+):
     frequency_offset: specs.Annotated[float, specs.meta('Input tone ', 'Hz')] = 0
     snr: typing.Optional[
-        specs.Annotated[float, specs.meta('SNR with added noise ', 'dB', gt=0)]
+        specs.Annotated[float, specs.meta('SNR with added noise ', 'dB')]
     ] = None
 
 
-class SingleToneSource(base.bind_schema(TestSourceBase, capture_cls=SingleToneCapture)):
-    def get_waveform(self, count, start_index: int, *, port: int = 0, xp=np):
+class SingleToneSource(TestSourceBase[null.NullSetup, SingleToneCapture]):
+    def get_waveform(self, count: int, offset: int, *, port: int = 0, xp=np, dtype='complex64'):
         capture = self.get_capture_spec()
-        fs = capture.backend_sample_rate
-        i = xp.arange(start_index, count + start_index, dtype='int64')
+
+        fs = self._resampler['fs_sdr']
+        i = xp.arange(offset, count + offset, dtype='int64')
 
         lo = lo_shift_tone(i, self, xp)
 
@@ -77,7 +97,7 @@ class SingleToneSource(base.bind_schema(TestSourceBase, capture_cls=SingleToneCa
         ret = ret.astype(self._setup.transport_dtype)
 
         if capture.snr is not None:
-            power = 10 ** (-self.snr / 10)
+            power = 10 ** (-capture.snr / 10)
             noise = simulated_awgn(
                 capture.replace(sample_rate=fs),
                 xp=xp,
@@ -90,10 +110,17 @@ class SingleToneSource(base.bind_schema(TestSourceBase, capture_cls=SingleToneCa
         return ret
 
 
-class DiracDeltaCapture(specs.RadioCapture):
+class DiracDeltaCapture(
+    specs.RadioCapture,
+    forbid_unknown_fields=True,
+    frozen=True,
+    cache_hash=True,
+    kw_only=True,
+):
     time: specs.Annotated[
         float, specs.meta('pulse start time relative to the start of the waveform', 's')
     ] = 0
+
     power: typing.Optional[
         specs.Annotated[
             float,
@@ -102,11 +129,12 @@ class DiracDeltaCapture(specs.RadioCapture):
     ] = 0
 
 
-class DiracDeltaSource(base.bind_schema(TestSourceBase, capture_cls=DiracDeltaCapture)):
-    def get_waveform(self, count, start_index: int, *, port: int = 0, xp=np):
+class DiracDeltaSource(TestSourceBase):
+    def get_waveform(self, count: int, offset: int, *, port: int = 0, xp=np, dtype='complex64'):
         capture = self.get_capture_spec()
-        abs_pulse_index = round(capture.time * self._capture.backend_sample_rate)
-        rel_pulse_index = abs_pulse_index - start_index
+        
+        abs_pulse_index = round(capture.time * capture.backend_sample_rate)
+        rel_pulse_index = abs_pulse_index - offset
 
         ret = xp.zeros(count, dtype=self._setup.transport_dtype)
 
@@ -116,25 +144,29 @@ class DiracDeltaSource(base.bind_schema(TestSourceBase, capture_cls=DiracDeltaCa
         return ret[np.newaxis,]
 
 
-class SawtoothCapture(specs.RadioCapture):
+class SawtoothCapture(
+    specs.RadioCapture,
+    forbid_unknown_fields=True,
+    frozen=True,
+    cache_hash=True,
+    kw_only=True,
+):
     period: specs.Annotated[
         float,
         specs.meta('pulse start time relative to the start of the waveform', 's', ge=0),
     ] = 0.01
-    power: typing.Optional[
-        specs.Annotated[
+    power: specs.Annotated[
             float,
             specs.meta('instantaneous power level of the impulse function', 'dB', gt=0),
-        ]
-    ] = 0.0
+        ] = 1
 
 
-class SawtoothSource(base.bind_schema(TestSourceBase, capture_cls=SawtoothCapture)):
-    def get_waveform(self, count, start_index: int, *, port: int = 0, xp=np):
+class SawtoothSource(TestSourceBase[null.NullSetup, SawtoothCapture]):
+    def get_waveform(self, count: int, offset: int, *, port: int = 0, xp=np, dtype='complex64'):
         capture = self.get_capture_spec()
 
         ret = xp.empty(count, dtype='complex64')
-        ii = xp.arange(start_index, count + start_index, dtype='uint64')
+        ii = xp.arange(offset, count + offset, dtype='uint64')
         t = ii / capture.backend_sample_rate
         magnitude = 2 * np.sqrt(capture.power)
         ret.real[:] = (t % capture.period) * (magnitude / capture.period)
@@ -142,19 +174,24 @@ class SawtoothSource(base.bind_schema(TestSourceBase, capture_cls=SawtoothCaptur
         return ret
 
 
-class NoiseCapture(specs.RadioCapture):
+class NoiseCapture(specs.RadioCapture,     forbid_unknown_fields=True,
+    frozen=True,
+    cache_hash=True,
+    kw_only=True,
+):
     power_spectral_density: specs.Annotated[
         float, specs.meta('noise total channel power', 'mW/Hz', ge=0)
     ] = 1e-17
 
 
-class NoiseSource(base.bind_schema(TestSourceBase, capture_cls=NoiseCapture)):
-    def get_waveform(self, count, start_index: int, *, port: int = 0, xp=np):
+class NoiseSource(TestSourceBase[null.NullSetup, NoiseCapture]):
+    def get_waveform(self, count: int, offset: int, *, port: int = 0, xp=np, dtype='complex64'):
         capture = self.get_capture_spec()
+        fs = self._resampler['fs_sdr']
 
         backend_capture = Capture(
-            duration=(count + start_index) / capture.backend_sample_rate,
-            sample_rate=capture.backend_sample_rate,
+            duration=(count + offset) / fs,
+            sample_rate=fs,
             analysis_bandwidth=capture.analysis_bandwidth,
         )
 
@@ -166,14 +203,14 @@ class NoiseSource(base.bind_schema(TestSourceBase, capture_cls=NoiseCapture)):
         )
         # x /= np.sqrt(self._capture.backend_sample_rate / self.sample_rate())
 
-        if start_index < 0:
-            pad = -start_index
+        if offset < 0:
+            pad = -offset
             start_index = 0
             count = count - pad
         else:
             pad = 0
 
-        ret = x[start_index : count + start_index]
+        ret = x[offset : count + offset]
 
         if pad:
             return xp.pad(ret, [[pad, 0]], mode='constant')
@@ -181,46 +218,67 @@ class NoiseSource(base.bind_schema(TestSourceBase, capture_cls=NoiseCapture)):
             return ret
 
 
-class TDMSFileSetup(specs.RadioSetup):
-    path: specs.Annotated[Path, specs.meta('path to the tdms file')] | None = None
+class TDMSFileSetup(
+    null.NullSetup,
+    forbid_unknown_fields=True,
+    frozen=True,
+    cache_hash=True,
+    kw_only=True,
+):
+    path: specs.Annotated[Path, specs.meta('path to the tdms file')]
+
+
+class FileCapture(
+    specs.RadioCapture,
+    forbid_unknown_fields=True,
+    frozen=True,
+    cache_hash=True,
+    kw_only=True,
+):
+    """Capture specification read from a file, with support for None sentinels"""
+
+    # RF and leveling
+    center_frequency: typing.Optional[specs.CenterFrequencyType] = None
+    port: specs.PortType = 0
+    gain: typing.Optional[specs.GainType] = None
+    backend_sample_rate: typing.Optional[specs.BackendSampleRateType] = None
 
 
 class TDMSFileSource(
-    base.bind_schema(
-        TestSourceBase, setup_cls=TDMSFileSetup, capture_cls=SawtoothCapture
-    )
+    TestSourceBase[TDMSFileSetup, FileCapture]
 ):
     """returns IQ waveforms from a TDMS file"""
 
-    def _connect(self, setup: TDMSFileSetup):
+    def _connect(self, spec):
         from nptdms import TdmsFile
 
-        fd = TdmsFile.read(setup.path)
+        fd = TdmsFile.read(spec.path)
         header_fd, iq_fd = fd.groups()
         self._handle = dict(header_fd=header_fd, iq_fd=iq_fd)
 
-    def _prepare_capture(self, capture: specs.RadioCapture) -> specs.RadioCapture:
+    def _apply_setup(self, spec):
+        return spec.replace(
+            base_clock_rate=self._handle['header_fd']['IQ_samples_per_second'][0]
+        )
+
+    def _prepare_capture(self, capture):
         fc = self._handle['header_fd']['carrier_frequency'][0]
         if capture.center_frequency is not None:
-            self._logger.warning(
+            logger = util.get_logger('acquisition')
+            logger.warning(
                 f'center_frequency ignored, using {fc / 1e6} MHz from file'
             )
 
         mcr = self._setup.base_clock_rate
         if capture.backend_sample_rate is not None:
-            self._logger.warning(
+            logger = util.get_logger('acquisition')
+            logger.warning(
                 f'backend_sample_rate ignored, using {mcr / 1e6} MHz from file'
             )
 
         return capture.replace(center_frequency=fc, backend_sample_rate=mcr)
 
-    @property
-    def base_clock_rate(self):
-        return self._handle['header_fd']['IQ_samples_per_second'][0]
-
-    def get_waveform(
-        self, count: int, offset: int, *, channel: int = 0, xp=np, dtype='complex64'
-    ):
+    def get_waveform(self, count: int, offset: int, *, port: int = 0, xp=np, dtype='complex64'):
         size = int(self._handle['header_fd']['total_samples'][0])
         ref_level = self._handle['header_fd']['reference_level_dBm'][0]
 
@@ -240,7 +298,13 @@ class TDMSFileSource(
         return (iq * float_dtype(scale)).view(dtype).copy()
 
 
-class FileSetup(specs.RadioSetup):
+class FileSetup(
+    null.NullSetup,
+    forbid_unknown_fields=True,
+    frozen=True,
+    cache_hash=True,
+    kw_only=True,
+):
     path: specs.Annotated[Path, specs.meta('path to the waveform data file')] | None = (
         None
     )
@@ -255,51 +319,39 @@ class FileSetup(specs.RadioSetup):
     ] = False
 
 
-class FileCapture(specs.RadioCapture, forbid_unknown_fields=True, cache_hash=True):
-    """Capture specification read from a file, with support for None sentinels"""
-
-    # RF and leveling
-    center_frequency: typing.Optional[specs.CenterFrequencyType] = None
-    port: typing.Optional[specs.PortType] = None
-    gain: typing.Optional[specs.GainType] = None
-    backend_sample_rate: typing.Optional[specs.BackendSampleRateType] = None
-
-
-class FileSource(
-    base.bind_schema(TestSourceBase, setup_cls=FileSetup, capture_cls=FileCapture)
-):
+class FileSource(TestSourceBase[FileSetup,FileCapture]):
     """returns IQ waveforms from a file"""
 
     _file_capture: FileCapture | None = None
     _file_stream = None
 
-    @property
-    def base_clock_rate(self):
-        return self._file_capture.backend_sample_rate
+    def _apply_setup(self, spec: FileSetup) -> FileSetup:
+        assert self._file_capture is not None
+        return spec.replace(base_clock_rate=self._file_capture.backend_sample_rate)
 
-    def _connect(
-        self,
-        setup: FileSetup,
-    ) -> specs.RadioSetup:
+    def _connect(self, spec):
         if self._file_stream is not None:
             self.close()
 
-        meta = self.file_metadata
+        meta = spec.file_metadata
 
         self._file_stream = io.open_bare_iq(
-            setup.path,
-            format=setup.file_format,
-            num_rx_ports=self.source_info.num_rx_ports,
+            spec.path,
+            format=spec.file_format,
+            num_rx_ports=self.info.num_rx_ports,
             dtype='complex64',
             xp=self.get_array_namespace(),
-            loop=setup.loop,
+            loop=spec.loop,
             **meta,
         )
 
         fields = self._file_stream.get_capture_fields()
-        self._file_capture = specs.FileSourceCapture.fromdict(fields)
+        self._file_capture = FileCapture.fromdict(fields)
 
-    def _prepare_capture(self, capture: specs.RadioCapture):
+    def _prepare_capture(self, capture):
+        assert self._file_capture is not None
+        assert self._file_stream is not None
+        
         for field in ('center_frequency', 'port', 'gain', 'backend_sample_rate'):
             file_value = getattr(self._file_capture, field)
             if getattr(capture, field) not in (None, file_value):
@@ -318,26 +370,28 @@ class FileSource(
     def get_waveform(
         self, count: int, offset: int, *, port: int = 0, xp=np, dtype='complex64'
     ):
-        if self._file_stream is None:
-            raise RuntimeError('call setup() before reading samples')
+        assert self._file_stream is not None, 'call setup() before reading samples'
+
         self._file_stream.seek(offset - self._sample_start_index)
         ret = self._file_stream.read(count)
         assert ret.shape[1] == count
         return ret.copy()
 
 
-class ZarrFileSetup(specs.RadioSetup):
-    path: specs.Annotated[Path, specs.meta('path to the waveform data file')] | None = (
-        None
-    )
+class ZarrFileSetup(
+    null.NullSetup,
+    forbid_unknown_fields=True,
+    frozen=True,
+    cache_hash=True,
+    kw_only=True,
+):
+    path: specs.Annotated[Path, specs.meta('path to the waveform data file')]
     select: specs.Annotated[
         dict, specs.meta('dictionary to select in the data as .sel(**select)')
     ] = {}
 
 
-class ZarrIQSource(
-    base.bind_schema(TestSourceBase, setup_cls=ZarrFileSetup, capture_cls=FileCapture)
-):
+class ZarrIQSource(TestSourceBase[ZarrFileSetup, FileCapture]):
     """Emulate an SDR by drawing IQ samples from an xarray returned by
     a striqt.analysis.iq_waveform measurement.
     """
@@ -345,16 +399,17 @@ class ZarrIQSource(
     _waveform = None
 
     def _read_coord(self, name):
+        assert self._waveform is not None
         return np.atleast_1d(self._waveform[name])[0]
 
-    def _connect(self, setup: ZarrFileSetup):
+    def _connect(self, spec):
         """set the waveform from an xarray.DataArray containing a single capture of IQ samples"""
 
-        waveform = io.load(setup.path).iq_waveform
+        waveform = io.load(spec.path).iq_waveform
 
-        if len(self.select) > 0:
-            waveform = waveform.set_xindex(list(setup.select.keys()))
-            waveform = waveform.sel(**setup.select)
+        if len(spec.select) > 0:
+            waveform = waveform.set_xindex(list(spec.select.keys()))
+            waveform = waveform.sel(**spec.select)
 
         if waveform.ndim != 2:
             raise ValueError('expected 2 dimensions (capture, iq_sample)')
@@ -362,11 +417,10 @@ class ZarrIQSource(
         self._source_info = base.BaseSourceInfo(num_rx_ports=waveform.shape[0])
         self._waveform = waveform
 
-    @property
-    def base_clock_rate(self):
-        return self._read_coord('sample_rate')
+    def _apply_setup(self, spec):
+        return spec.replace(base_clock_rate=self._read_coord('sample_rate'))
 
-    def _prepare_capture(self, capture: FileCapture):
+    def _prepare_capture(self, capture):
         file_capture = capture.replace(
             center_frequency=self._read_coord('center_frequency'),
             gain=self._read_coord('gain'),
@@ -381,6 +435,7 @@ class ZarrIQSource(
     def _read_stream(
         self, buffers, offset, count, timeout_sec=None, *, on_overflow='except'
     ) -> tuple[int, int]:
+        assert self._waveform is not None
         iq, _ = super()._read_stream(
             buffers, offset, count, timeout_sec=timeout_sec, on_overflow=on_overflow
         )
@@ -393,8 +448,9 @@ class ZarrIQSource(
         return iq, time_ns
 
     def get_waveform(
-        self, count: int, offset: int, *, channel: int = 0, xp=np, dtype='complex64'
+        self, count: int, offset: int, *, port: int = 0, xp=np, dtype='complex64'
     ):
+        assert self._waveform is not None
         iq_size = self._waveform.shape[1]
 
         if iq_size < count + offset:
@@ -402,14 +458,14 @@ class ZarrIQSource(
                 f'requested {count + offset} samples but file capture length is {iq_size} samples'
             )
 
-        if channel > self._waveform.shape[0]:
+        if port > self._waveform.shape[0]:
             raise ValueError(
                 f'requested channel exceeds data channel count of {self._waveform.shape[0]}'
             )
 
         start = offset - self._sample_start_index
 
-        iq = self._waveform.values[[channel], start : count + start]
+        iq = self._waveform.values[[port], start : count + start]
 
         if dtype is None or self._waveform.dtype == dtype:
             return iq.copy()

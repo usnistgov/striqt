@@ -11,9 +11,9 @@ from .sources import find_radio_cls_by_name, SourceBase
 
 
 if typing.TYPE_CHECKING:
-    import iqwaveform
+    import striqt.waveform
 else:
-    iqwaveform = util.lazy_import('iqwaveform')
+    striqt.waveform = util.lazy_import('striqt.waveform')
 
 
 class SweepSpecClasses(typing.NamedTuple):
@@ -38,7 +38,7 @@ def _get_source(radio_setup: specs.RadioSetup) -> SourceBase:
 
 def _do_warmup(sweep_spec):
     if sweep_spec.radio_setup.array_backend == 'cupy':
-        iqwaveform.set_max_cupy_fft_chunk(
+        striqt.waveform.set_max_cupy_fft_chunk(
             sweep_spec.radio_setup.cupy_max_fft_chunk_size
         )
 

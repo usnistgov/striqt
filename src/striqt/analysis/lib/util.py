@@ -9,7 +9,7 @@ import time
 import sys
 import threading
 import typing
-import iqwaveform.type_stubs
+import striqt.waveform.type_stubs
 
 
 _logger_adapters = {}
@@ -191,9 +191,9 @@ if typing.TYPE_CHECKING:
 
     _P = typing_extensions.ParamSpec('_P')
     _R = typing_extensions.TypeVar('_R')
-    import iqwaveform
+    import striqt.waveform
 else:
-    iqwaveform = lazy_import('iqwaveform')
+    striqt.waveform = lazy_import('striqt.waveform')
 
 
 @functools.wraps(functools.lru_cache)
@@ -243,7 +243,7 @@ _compute_lock = threading.RLock()
 @contextlib.contextmanager
 def compute_lock(array=None):
     import array_api_compat
-    
+
     is_cupy = array_api_compat.is_cupy_array(array)
     get_lock = array is None or is_cupy
     if get_lock:
@@ -253,8 +253,8 @@ def compute_lock(array=None):
         _compute_lock.release()
 
 
-def sync_if_cupy(x: 'iqwaveform.type_stubs.ArrayType'):
-    if iqwaveform.util.is_cupy_array(x):
+def sync_if_cupy(x: 'striqt.waveform.type_stubs.ArrayType'):
+    if striqt.waveform.util.is_cupy_array(x):
         import cupy
 
         stream = cupy.cuda.get_current_stream()

@@ -11,10 +11,10 @@ from . import specs
 from .sources import find_radio_cls_by_name, is_same_resource, SourceBase
 
 if typing.TYPE_CHECKING:
-    import iqwaveform
+    import striqt.waveform
     import xarray as xr
 else:
-    iqwaveform = util.lazy_import('iqwaveform')
+    striqt.waveform = util.lazy_import('striqt.waveform')
     xr = util.lazy_import('xarray')
 
 
@@ -45,7 +45,7 @@ class SweepController:
             self.warmup_sweep(sweep, calibration=None)
 
         if sweep.radio_setup.array_backend == 'cupy':
-            iqwaveform.set_max_cupy_fft_chunk(sweep.radio_setup.cupy_max_fft_chunk_size)
+            striqt.waveform.set_max_cupy_fft_chunk(sweep.radio_setup.cupy_max_fft_chunk_size)
 
     def __enter__(self):
         return self

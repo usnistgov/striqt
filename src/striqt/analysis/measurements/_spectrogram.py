@@ -7,10 +7,10 @@ from .shared import registry
 from ..lib import specs, util
 
 if typing.TYPE_CHECKING:
-    import iqwaveform
+    import striqt.waveform
     import numpy as np
 else:
-    iqwaveform = util.lazy_import('iqwaveform')
+    striqt.waveform = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
 
 warnings.filterwarnings(
@@ -27,7 +27,7 @@ def spectrogram_time(
 ) -> dict[str, np.ndarray]:
     import pandas as pd
 
-    # validation of these is handled inside iqwaveform
+    # validation of these is handled inside striqt.waveform
     nfft = round(capture.sample_rate / spec.frequency_resolution)
     hop_size = nfft - round(spec.fractional_overlap * nfft)
     hop_period = hop_period = hop_size / capture.sample_rate
@@ -36,7 +36,7 @@ def spectrogram_time(
 
     if spec.time_aperture is None:
         pass
-    elif iqwaveform.isroundmod(spec.time_aperture, hop_period):
+    elif striqt.waveform.isroundmod(spec.time_aperture, hop_period):
         average_bins = round(spec.time_aperture / hop_period)
         size = size // average_bins
         hop_period = hop_period * average_bins
@@ -57,7 +57,7 @@ def spectrogram_time(
     attrs={'standard_name': 'PSD', 'long_name': 'Power Spectral Density'},
 )
 def spectrogram(
-    iq: 'iqwaveform.type_stubs.ArrayType',
+    iq: 'striqt.waveform.type_stubs.ArrayType',
     capture: specs.Capture,
     **kwargs: typing.Unpack[shared.SpectrogramKeywords],
 ):
@@ -67,12 +67,12 @@ def spectrogram(
     based on `capture.sample_rate`. The frequency axis is
     truncated to ±`capture.analysis_bandwidth`.
 
-    The underlying implementation is `iqwaveform.spectrogram`.
+    The underlying implementation is `striqt.waveform.spectrogram`.
     As a result this accepts `cupy` or `numpy` arrays interchangably and
     implements speed optimizations specific to complex-valued IQ waveforms.
 
     See also:
-        `iqwaveform.spectrogram`
+        `striqt.waveform.spectrogram`
         `scipy.signal.spectrogram`
     """
     spec = shared.SpectrogramSpec.fromdict(kwargs).validate()

@@ -16,6 +16,9 @@ from striqt.analysis.lib.specs import meta, SpecBase, _SlowHashSpecBase
 
 if typing.TYPE_CHECKING:
     import pandas as pd
+    _TC = typing.TypeVar('_TC', bound=RadioCapture)
+    _TS = typing.TypeVar('_TS', bound=RadioSetup)
+    _TSW = typing.TypeVar('_TSW', bound=Sweep)
 else:
     # to resolve the 'pd.Timestamp' stub at runtime
     pd = util.lazy_import('pandas')
@@ -53,21 +56,12 @@ AnalysisBandwidthType = Annotated[
 ]
 
 
-@util.lru_cache()
-def _validate_multichannel(port, gain):
-    """guarantee that self.gain is a number, or matches the length of self.port"""
-    if isinstance(port, numbers.Number):
-        if isinstance(gain, tuple):
-            raise ValueError(
-                'gain must be a single number unless multiple ports are specified'
-            )
-    else:
-        if isinstance(gain, tuple) and len(gain) != len(port):
-            raise ValueError('gain, when specified as a tuple, must match port count')
-
-
 class WaveformCapture(
-    analysis.Capture, forbid_unknown_fields=True, frozen=True, cache_hash=True
+    analysis.Capture,
+    forbid_unknown_fields=True,
+    frozen=True,
+    cache_hash=True,
+    kw_only=True,
 ):
     """Capture specification structure for a generic waveform.
 
@@ -78,9 +72,11 @@ class WaveformCapture(
     # acquisition
     duration: Annotated[float, meta('Acquisition duration', 's', gt=0)] = 0.1
     sample_rate: Annotated[float, meta('Sample rate', 'S/s', gt=0)] = 15.36e6
+    port: PortType
 
     # filtering and resampling
     analysis_bandwidth: AnalysisBandwidthType = float('inf')
+
     lo_shift: LOShiftType = 'none'
     host_resample: bool = True
     backend_sample_rate: Optional[BackendSampleRateType] = None
@@ -101,14 +97,13 @@ class _WaveformCaptureKeywords(typing.TypedDict, total=False):
 
 
 class RadioCapture(
-    WaveformCapture, forbid_unknown_fields=True, frozen=True, cache_hash=True
+    WaveformCapture,
+    forbid_unknown_fields=True,
+    frozen=True,
+    cache_hash=True,
+    kw_only=True,
 ):
     """Capture specification for a single radio waveform"""
-
-    # RF and leveling
-    center_frequency: CenterFrequencyType = 3710e6
-    port: PortType = 0
-    gain: GainType = -10
 
     delay: Optional[DelayType] = None
     start_time: Optional[StartTimeType] = None
@@ -118,12 +113,7 @@ class RadioCapture(
 
     # for tracking between captures
     lo_offset: typing.ClassVar[float] = 0
-    forced_backend_sample_rate: typing.ClassVar[typing.Optional[float]] = None
     downsample: typing.ClassVar[float] = 1
-
-    def __post_init__(self):
-        super().__post_init__()
-        _validate_multichannel(self.port, self.gain)
 
 
 class _RadioCaptureKeywords(_WaveformCaptureKeywords, total=False):
@@ -133,16 +123,85 @@ class _RadioCaptureKeywords(_WaveformCaptureKeywords, total=False):
     center_frequency: CenterFrequencyType
     port: PortType
     gain: GainType
-    delay: Optional[DelayType]
-    start_time: Optional[StartTimeType]
+    delay: DelayType
+    start_time: StartTimeType
 
 
-class FileSourceCapture(RadioCapture, forbid_unknown_fields=True, cache_hash=True):
+ReceiveRetriesType = Annotated[
+    int,
+    meta(
+        'number of attempts to retry acquisition on a stream error',
+        ge=0,
+    ),
+]
+
+TimeSyncEveryCaptureType = Annotated[
+    bool, meta('whether to sync to PPS before each capture in a sweep')
+]
+
+
+TimeSourceType = Annotated[
+    Literal['host', 'internal', 'external', 'gps'],
+    meta('Hardware source for timestamps'),
+]
+
+ClockSourceType = Annotated[
+    Literal['internal', 'external', 'gps'],
+    meta('Hardware source for the frequency reference'),
+]
+
+ContinuousTriggerType = Annotated[
+    bool,
+    meta(
+        'Whether to trigger immediately after each call to acquire() when armed'
+    ),
+]
+
+@util.lru_cache()
+def _validate_multichannel(port, gain):
+    """guarantee that self.gain is a number, or matches the length of self.port"""
+    if isinstance(port, numbers.Number):
+        if isinstance(gain, tuple):
+            raise ValueError(
+                'gain must be a single number unless multiple ports are specified'
+            )
+    else:
+        if isinstance(gain, tuple) and len(gain) != len(port):
+            raise ValueError('gain, when specified as a tuple, must match port count')
+
+
+class SoapyCapture(
+    RadioCapture,
+    forbid_unknown_fields=True,
+    frozen=True,
+    cache_hash=True,
+    kw_only=True,
+):
+    center_frequency: CenterFrequencyType
+    gain: GainType
+
+    def __post_init__(self):
+        super().__post_init__()
+        _validate_multichannel(self.port, self.gain)
+
+
+class _SoapyCaptureKeywords(_RadioCaptureKeywords, total=False):
+    # this needs to be kept in sync with WaveformCapture in order to
+    # properly provide type hints for IDEs in the arm and acquire
+    # call signatures of source.Base objects
+    center_frequency: CenterFrequencyType
+    port: PortType
+    gain: GainType
+
+
+class FileCapture(
+    RadioCapture, forbid_unknown_fields=True, cache_hash=True, kw_only=True, frozen=True
+):
     """Capture specification read from a file, with support for None sentinels"""
 
     # RF and leveling
     center_frequency: Optional[CenterFrequencyType] = float('nan')
-    port: Optional[PortType] = 0
+    port: PortType = 0
     gain: Optional[GainType] = float('nan')
     backend_sample_rate: Optional[float] = float('nan')
 
@@ -177,7 +236,7 @@ class Range(LoopBase, forbid_unknown_fields=True, frozen=True, kw_only=True):
 
 
 class Repeat(LoopBase, forbid_unknown_fields=True, frozen=True, kw_only=True):
-    field: Optional[str] = '_sweep_index'
+    field: str = '_sweep_index'
     count: int = 1
 
     def get_points(self):
@@ -262,22 +321,30 @@ class _RadioSetupKeywords(typing.TypedDict, total=False):
     # properly provide type hints for IDEs in the setup
     # call signature of source.Base objects
 
-    driver: Optional[str]
+    driver: str
+    base_clock_rate: BaseClockRateType
+
     resource: dict
-    calibration: Optional[str]
+    calibration: str
 
     gapless_repeats: GaplessRepeatType
     warmup_sweep: WarmupSweepType
 
-    periodic_trigger: Optional[float]
-    channel_sync_source: typing.Optional[str] = None
+    periodic_trigger: float
+    channel_sync_source: str
 
     array_backend: ArrayBackendType
     cupy_max_fft_chunk_size: int
     uncalibrated_peak_detect: Union[bool, typing.Literal['auto']]
 
 
-class RadioSetup(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
+class RadioSetup(
+    SpecBase,
+    forbid_unknown_fields=True,
+    frozen=True,
+    cache_hash=True,
+    kw_only=True,
+):
     """run-time characteristics of the radio that are left invariant during a sweep"""
 
     driver: Optional[str]
@@ -310,6 +377,54 @@ class RadioSetup(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=T
     transport_dtype: Literal['int16'] | Literal['complex64'] = 'complex64'
 
 
+class SoapySetup(
+    RadioSetup,
+    forbid_unknown_fields=True,
+    frozen=True,
+    cache_hash=True,
+    kw_only=True,
+):
+    device_kwargs: typing.ClassVar[dict[str, typing.Any]] = {}
+
+    time_source: TimeSourceType = 'host'
+    time_sync_every_capture: TimeSyncEveryCaptureType = False
+    clock_source: ClockSourceType = 'internal'
+    receive_retries: ReceiveRetriesType = 0
+
+    # True if the same clock drives acquisition on all RX ports
+    shared_rx_sample_clock = True
+    rx_enable_delay = 0.0
+
+    def __post_init__(self):
+        from striqt.analysis import registry
+        
+        if not self.gapless_repeats:
+            pass
+        elif self.time_sync_every_capture:
+            raise ValueError(
+                'time_sync_every_capture and gapless_repeats are mutually exclusive'
+            )
+        elif self.receive_retries > 0:
+            raise ValueError(
+                'receive_retries must be 0 when gapless_repeats is enabled'
+            )
+
+        if self.channel_sync_source is None:
+            pass
+        elif self.channel_sync_source not in registry.channel_sync_source:
+            registered = set(registry.channel_sync_source)
+            raise ValueError(
+                f'channel_sync_source "{self.channel_sync_source!r}" is not one of the registered functions {registered!r}'
+            )
+
+
+class _SoapySetupKeywords(_RadioSetupKeywords, total=False):
+    receive_retries: ReceiveRetriesType
+    time_source: TimeSourceType
+    clock_source: ClockSourceType
+    time_sync_every_capture: TimeSyncEveryCaptureType
+    
+
 class Description(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     summary: Optional[str] = None
     location: Optional[tuple[float, float, float]] = None
@@ -318,7 +433,9 @@ class Description(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=
 
 
 AliasMatchType = Annotated[
-    typing.Union[dict[str, Any], tuple[dict[str, Any], ...]],
+    typing.Union[
+        dict[str, dict[str, typing.Any]], tuple[dict[str, dict[str, typing.Any]], ...]
+    ],
     meta('one or more dictionaries of valid match sets to "or"'),
 ]
 
@@ -413,7 +530,6 @@ class Sweep(
 ):
     radio_setup: RadioSetup
     captures: tuple[RadioCapture, ...] = tuple()
-    defaults: RadioCapture = RadioCapture()
     loops: tuple[LoopSpecifier, ...] = ()
 
     analysis: BundledAnalysis = BundledAnalysis()  # type: ignore
@@ -421,7 +537,7 @@ class Sweep(
     extensions: Extensions = Extensions()
     output: Output = Output()
 
-    def get_captures(self, looped=True):
+    def get_captures(self, looped=True) -> tuple[RadioCapture, ...]:
         """subclasses may use this to autogenerate capture sequences"""
         explicit_captures = object.__getattribute__(self, 'captures')
         if looped:
@@ -455,7 +571,7 @@ class Sweep(
 
         fields = ((cls.analysis.__name__, AnalysisCls, AnalysisCls()),)
 
-        return msgspec.defstruct(
+        subcls = msgspec.defstruct(
             cls.__name__,
             fields,
             bases=(cls,),
@@ -463,3 +579,5 @@ class Sweep(
             forbid_unknown_fields=True,
             cache_hash=True,
         )
+
+        return typing.cast(type[Sweep], subcls)

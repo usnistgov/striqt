@@ -6,11 +6,11 @@ from .shared import registry
 from ..lib import dataarrays, register, specs, util
 
 if typing.TYPE_CHECKING:
-    import iqwaveform
+    import striqt.waveform
     import numpy as np
     import pandas as pd
 else:
-    iqwaveform = util.lazy_import('iqwaveform')
+    striqt.waveform = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
     pd = util.lazy_import('pandas')
 
@@ -58,15 +58,15 @@ def evaluate_channel_power_time_series(
 ):
     results = []
     for d in spec.power_detectors:
-        power = iqwaveform.iq_to_bin_power(
+        power = striqt.waveform.iq_to_bin_power(
             iq, kind=d, Ts=1 / capture.sample_rate, Tbin=spec.detector_period, axis=1
         )
         results.append(power)
 
-    xp = iqwaveform.util.array_namespace(iq)
+    xp = striqt.waveform.util.array_namespace(iq)
     results = xp.array(results)
     results = xp.moveaxis(results, 0, 1)
-    results = iqwaveform.powtodB(results).astype('float32')
+    results = striqt.waveform.powtodB(results).astype('float32')
 
     return results
 

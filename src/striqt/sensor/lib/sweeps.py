@@ -255,15 +255,15 @@ class SweepIterator:
         if cal is None or 'spectrogram' not in cache.name:
             return
 
-        import iqwaveform
+        import striqt.waveform
 
         spg, attrs = result
 
-        xp = iqwaveform.util.array_namespace(spg)
+        xp = striqt.waveform.util.array_namespace(spg)
 
         # conversion to dB is left for after this function, but display
         # log messages in dB
-        peaks = iqwaveform.powtodB(spg.max(axis=tuple(range(1, spg.ndim))))
+        peaks = striqt.waveform.powtodB(spg.max(axis=tuple(range(1, spg.ndim))))
 
         noise = lookup_system_noise_power(
             cal,

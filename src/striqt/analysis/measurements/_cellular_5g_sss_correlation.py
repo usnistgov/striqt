@@ -7,16 +7,17 @@ from ..lib import register, specs, util
 
 
 if typing.TYPE_CHECKING:
-    import iqwaveform
+    import striqt.waveform
     import numpy as np
     from scipy import ndimage
-    import iqwaveform.type_stubs
+    import striqt.waveform.type_stubs
     import array_api_compat
 else:
-    iqwaveform = util.lazy_import('iqwaveform')
+    striqt.waveform = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
     ndimage = util.lazy_import('scipy.ndimage')
     array_api_compat = util.lazy_import('array_api_compat')
+
 
 class Cellular5GNRSSSCorrelationSpec(
     shared.Cellular5GNRSyncCorrelationSpec,
@@ -57,12 +58,12 @@ sss_correlation_cache = register.KeywordArgumentCache(['capture', 'spec'])
 
 @sss_correlation_cache.apply
 def correlate_5g_sss(
-    iq: 'iqwaveform.type_stubs.ArrayType',
+    iq: 'striqt.waveform.type_stubs.ArrayType',
     *,
     capture: specs.Capture,
     spec: Cellular5GNRSSSCorrelationSpec,
-) -> 'iqwaveform.type_stubs.ArrayType':
-    xp = iqwaveform.util.array_namespace(iq)
+) -> 'striqt.waveform.type_stubs.ArrayType':
+    xp = striqt.waveform.util.array_namespace(iq)
 
     ssb_iq = shared.get_5g_ssb_iq(iq, capture=capture, spec=spec)
     if ssb_iq is None:
@@ -70,14 +71,14 @@ def correlate_5g_sss(
             iq, capture=capture, spec=spec, coord_factories=_coord_factories
         )
 
-    params = iqwaveform.ofdm.sss_params(
+    params = striqt.waveform.ofdm.sss_params(
         sample_rate=spec.sample_rate,
         subcarrier_spacing=spec.subcarrier_spacing,
         discovery_periodicity=spec.discovery_periodicity,
         shared_spectrum=spec.shared_spectrum,
     )
 
-    sss_seq = iqwaveform.ofdm.sss_5g_nr(
+    sss_seq = striqt.waveform.ofdm.sss_5g_nr(
         spec.sample_rate, spec.subcarrier_spacing, xp=xp
     )
 
@@ -86,7 +87,7 @@ def correlate_5g_sss(
     )
 
     # split Nid into (Nid1, Nid2)
-    return iqwaveform.util.to_blocks(meas, 3, axis=-4)
+    return striqt.waveform.util.to_blocks(meas, 3, axis=-4)
 
 
 @registry.channel_sync_source(
@@ -110,21 +111,21 @@ def cellular_5g_sss_sync(
 
     spec = Cellular5GNRSSSCorrelationSpec.fromdict(kwargs).validate()
 
-    xp = iqwaveform.util.array_namespace(iq)
+    xp = striqt.waveform.util.array_namespace(iq)
 
     kwargs['as_xarray'] = False
 
     R, _ = cellular_5g_sss_correlation(iq, capture, **kwargs)
 
     # start dimensions: (..., port index, cell Nid2, sync block index, symbol pair index, IQ sample index)
-    Ragg = iqwaveform.envtopow(R.sum(axis=(-4, -2)))
+    Ragg = striqt.waveform.envtopow(R.sum(axis=(-4, -2)))
 
     # reduce port index, etc in power space
     Ragg = Ragg.mean(axis=tuple(range(Ragg.ndim - 1)))
     Ragg = Ragg - xp.median(Ragg)
     assert Ragg.ndim == 1
 
-    weights = iqwaveform.get_window(
+    weights = striqt.waveform.get_window(
         'triang',
         nwindow=round(window_fill * Ragg.size),
         nzero=round((1 - window_fill) * Ragg.size),

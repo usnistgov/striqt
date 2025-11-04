@@ -5,12 +5,12 @@ from .shared import registry
 from ..lib import specs, util
 
 if typing.TYPE_CHECKING:
-    import iqwaveform
+    import striqt.waveform
     import pandas as pd
     import numpy as np
 
 else:
-    iqwaveform = util.lazy_import('iqwaveform')
+    striqt.waveform = util.lazy_import('striqt.waveform')
     pd = util.lazy_import('pandas')
     np = util.lazy_import('numpy')
 
@@ -70,10 +70,10 @@ def iq_index(capture: specs.Capture, spec: IQWaveformSpec) -> typing.Iterable[in
     store_compressed=False,
 )
 def iq_waveform(
-    iq: 'iqwaveform.util.Array',
+    iq: 'striqt.waveform.util.Array',
     capture: specs.Capture,
     **kwargs: typing.Unpack[IQWaveformKeywords],
-) -> 'iqwaveform.util.Array':
+) -> 'striqt.waveform.util.Array':
     """package a clipping of the IQ waveform"""
 
     spec = IQWaveformSpec.fromdict(kwargs)

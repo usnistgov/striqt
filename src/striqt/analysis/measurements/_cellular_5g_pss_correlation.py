@@ -8,13 +8,13 @@ from ..lib.dataarrays import CAPTURE_DIM
 
 
 if typing.TYPE_CHECKING:
-    import iqwaveform
+    import striqt.waveform
     import numpy as np
-    import iqwaveform.type_stubs
+    import striqt.waveform.type_stubs
     import array_api_compat
 
 else:
-    iqwaveform = util.lazy_import('iqwaveform')
+    striqt.waveform = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
     array_api_compat = util.lazy_import('array_api_compat')
 
@@ -44,12 +44,12 @@ pss_correlator_cache = register.KeywordArgumentCache([CAPTURE_DIM, 'spec'])
 
 @pss_correlator_cache.apply
 def correlate_5g_pss(
-    iq: 'iqwaveform.type_stubs.ArrayType',
+    iq: 'striqt.waveform.type_stubs.ArrayType',
     *,
     capture: specs.Capture,
     spec: Cellular5GNRPSSCorrelationSpec,
-) -> 'iqwaveform.type_stubs.ArrayType':
-    xp = iqwaveform.util.array_namespace(iq)
+) -> 'striqt.waveform.type_stubs.ArrayType':
+    xp = striqt.waveform.util.array_namespace(iq)
 
     ssb_iq = shared.get_5g_ssb_iq(iq, capture=capture, spec=spec)
 
@@ -58,14 +58,14 @@ def correlate_5g_pss(
             iq, capture=capture, spec=spec, coord_factories=_coord_factories
         )
 
-    params = iqwaveform.ofdm.pss_params(
+    params = striqt.waveform.ofdm.pss_params(
         sample_rate=spec.sample_rate,
         subcarrier_spacing=spec.subcarrier_spacing,
         discovery_periodicity=spec.discovery_periodicity,
         shared_spectrum=spec.shared_spectrum,
     )
 
-    pss_seq = iqwaveform.ofdm.pss_5g_nr(
+    pss_seq = striqt.waveform.ofdm.pss_5g_nr(
         spec.sample_rate, spec.subcarrier_spacing, xp=xp
     )
 
@@ -80,7 +80,7 @@ pss_local_weighted_correlator_cache = register.KeywordArgumentCache(
 
 
 def weight_correlation_locally(R, window_fill=0.5, snr_window_fill=0.08):
-    xp = iqwaveform.util.array_namespace(R)
+    xp = striqt.waveform.util.array_namespace(R)
 
     if R.ndim == 4:
         R = R[np.newaxis, ...]
@@ -88,13 +88,13 @@ def weight_correlation_locally(R, window_fill=0.5, snr_window_fill=0.08):
     # R.shape -> (..., port index, cell Nid2, symbol start index, IQ sample index)
     R = R.mean(axis=-3)
 
-    if iqwaveform.util.is_cupy_array(R):
+    if striqt.waveform.util.is_cupy_array(R):
         from cupyx.scipy import ndimage
     else:
         from scipy import ndimage
 
     global Rpow, Rsnr, ipeak, Rpow_corr
-    Rpow = iqwaveform.envtopow(R)
+    Rpow = striqt.waveform.envtopow(R)
 
     # estimate an SNR
     window_size = round(snr_window_fill * R.shape[-1])
@@ -115,7 +115,7 @@ def weight_correlation_locally(R, window_fill=0.5, snr_window_fill=0.08):
     Ragg = Rpow_corr.mean(axis=-4).max(axis=(-3, -2))
     assert Ragg.ndim == 1
 
-    weights = iqwaveform.get_window(
+    weights = striqt.waveform.get_window(
         'triang',
         nwindow=round(window_fill * Ragg.size),
         nzero=round((1 - window_fill) * Ragg.size),
@@ -147,7 +147,7 @@ class Cellular5GNRWeightedCorrelationKeywords(
 
 @pss_local_weighted_correlator_cache.apply
 def pss_local_weighted_correlator(
-    iq: 'iqwaveform.type_stubs.ArrayType',
+    iq: 'striqt.waveform.type_stubs.ArrayType',
     *,
     capture: specs.Capture,
     spec: Cellular5GNRPSSCorrelationSpec,

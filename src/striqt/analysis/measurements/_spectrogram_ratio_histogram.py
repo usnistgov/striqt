@@ -7,10 +7,10 @@ from .shared import registry
 from ..lib import specs, util
 
 if typing.TYPE_CHECKING:
-    import iqwaveform
+    import striqt.waveform
     import numpy as np
 else:
-    iqwaveform = util.lazy_import('iqwaveform')
+    striqt.waveform = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
 
 
@@ -54,7 +54,7 @@ def spectrogram_ratio_power_bin(
     attrs={'standard_name': 'Fraction of counts'},
 )
 def spectrogram_ratio_histogram(
-    iq: 'iqwaveform.util.Array',
+    iq: 'striqt.waveform.util.Array',
     capture: specs.Capture,
     **kwargs: typing.Unpack[SpectrogramHistogramRatioKeywords],
 ):
@@ -78,7 +78,7 @@ def spectrogram_ratio_histogram(
     metadata = dict(metadata)
     metadata.pop('units')
 
-    xp = iqwaveform.util.array_namespace(iq)
+    xp = striqt.waveform.util.array_namespace(iq)
     bin_edges = _channel_power_histogram.make_power_histogram_bin_edges(
         power_low=spec.power_low,
         power_high=spec.power_high,

@@ -18,6 +18,7 @@ if typing.TYPE_CHECKING:
     import zarr.storage
     import pandas as pd
     import yaml
+    from striqt.waveform.type_stubs import ArrayType
 
     if hasattr(zarr.storage, 'Store'):
         # zarr 2.x
@@ -82,7 +83,7 @@ def _get_store_info(store, zarr_format='auto') -> tuple[bool, dict]:
 
 
 def _choose_chunk_sizes(
-    ds: xr.Dataset, data_bytes=100_000_000, dim='capture'
+    ds: 'xr.Dataset|xr.DataArray', data_bytes=100_000_000, dim='capture'
 ) -> dict[str, int]:
     """pick chunk and chunk sizing for each data variable in data"""
     chunks = {dim: ds.sizes[dim]}
@@ -187,7 +188,8 @@ def open_store(
 
 def dump(
     store: 'StoreType',
-    data: typing.Optional['xr.DataArray' | 'xr.Dataset'] = None,
+    data: 'xr.DataArray | xr.Dataset',
+    *,
     append_dim: str = 'capture',
     compression: bool = True,
     zarr_format: str | typing.Literal[2] | typing.Literal[3] = 'auto',
@@ -259,7 +261,7 @@ def load(
     path: str | Path,
     chunks: str | int | typing.Literal['auto'] | tuple[int, ...] | None = None,
     **kwargs,
-) -> 'xr.DataArray' | 'xr.Dataset':
+) -> 'xr.DataArray | xr.Dataset':
     """load a dataset or data array.
 
     Args:
@@ -348,7 +350,15 @@ def decode_from_yaml_file(path: str | Path, *, type=typing.Any):
         raise TypeError(f'unsupported type {repr(type)}')
 
 
-class _FileStreamBase:
+class _FileStreamProtocol(typing.Protocol):
+    def close(self):
+        pass
+
+    def read(self, count: int) -> ArrayType:
+        pass
+
+
+class _FileStreamBase(_FileStreamProtocol):
     def __init__(
         self,
         path,
@@ -409,7 +419,7 @@ class MATNewFileStream(_FileStreamBase):
     def close(self):
         self._fd.close()
 
-    def read(self, count=None):
+    def read(self, count: int):
         if count == 0:
             return
 
@@ -564,7 +574,6 @@ class MATLegacyFileStream(_FileStreamBase):
         self._refs = [iq]
         self.read(self._skip_samples + pos)
 
-
 class NPYFileStream(_FileStreamBase):
     def __init__(
         self,
@@ -584,6 +593,8 @@ class NPYFileStream(_FileStreamBase):
             raise ValueError(
                 f'num_rx_ports exceeds input data channel dimension size ({self._data.shape[-2]})'
             )
+        
+        self.meta = meta
 
         super().__init__(
             path,
@@ -662,6 +673,7 @@ class TDMSFileStream(_FileStreamBase):
 
         self._fd = TdmsFile.read(self.path)
         self._header_fd, self._iq_fd = self._fd.groups()
+        self._position = 0
 
         super().__init__(
             path,
@@ -680,8 +692,8 @@ class TDMSFileStream(_FileStreamBase):
 
         offset = self._position
 
-        size = int(self.backend['header_fd']['total_samples'][0])
-        ref_level = self.backend['header_fd']['reference_level_dBm'][0]
+        size = int(self._fd['header_fd']['total_samples'][0])
+        ref_level = self._fd['header_fd']['reference_level_dBm'][0]
 
         if size < count:
             raise ValueError(
@@ -689,7 +701,7 @@ class TDMSFileStream(_FileStreamBase):
             )
 
         scale = 10 ** (float(ref_level) / 20.0) / np.iinfo(xp.int16).max
-        i, q = self.backend['iq_fd'].channels()
+        i, q = self._fd['iq_fd'].channels()
         iq = xp.empty((2 * count,), dtype=xp.int16)
         iq[offset * 2 :: 2] = xp.asarray(i[offset : count + offset])
         iq[1 + offset * 2 :: 2] = xp.asarray(q[offset : count + offset])
