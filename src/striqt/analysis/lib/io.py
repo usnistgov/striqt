@@ -574,6 +574,7 @@ class MATLegacyFileStream(_FileStreamBase):
         self._refs = [iq]
         self.read(self._skip_samples + pos)
 
+
 class NPYFileStream(_FileStreamBase):
     def __init__(
         self,
@@ -593,7 +594,7 @@ class NPYFileStream(_FileStreamBase):
             raise ValueError(
                 f'num_rx_ports exceeds input data channel dimension size ({self._data.shape[-2]})'
             )
-        
+
         self.meta = meta
 
         super().__init__(

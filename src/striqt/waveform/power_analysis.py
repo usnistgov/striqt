@@ -102,7 +102,7 @@ def stat_ufunc_from_shorthand(kind, xp=np, axis=0):
 
 
 def _arraylike_with_buffer(
-    x: Union[ArrayLike, Number], out: Optional[ArrayLike] = None, min_dtype: Any=None
+    x: Union[ArrayLike, Number], out: Optional[ArrayLike] = None, min_dtype: Any = None
 ) -> tuple[ArrayType, ArrayType, ModuleType]:
     """interpret the array-like input and output buffer arguments.
 
@@ -141,7 +141,7 @@ def _repackage_arraylike(
     values: ArrayType,
     obj: Union[ArrayLike, Number],
     *,
-    unit_transform: Optional[callable] = None,
+    unit_transform: Optional[typing.Callable] = None,
 ) -> Union[ArrayLike, Number]:
     """package `values` into a data type matching `obj`"""
 

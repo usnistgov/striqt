@@ -3,9 +3,9 @@ name = "striqt"
 version = "0.0.3"
 description = "tooling to support precision gpu-accelerated radio signal analysis and software radio automation"
 requires-python = ">=3.9"
-dependencies = [ "array-api-compat",
+dependencies = [
+ "array-api-compat>=1.6",
  "dask",
- "iqwaveform @ git+https://github.com/dgkuester/iqwaveform",
  "labbench>=0.42.0,<1",
  "matplotlib~=3.7",
  "methodtools",
@@ -14,12 +14,14 @@ dependencies = [ "array-api-compat",
  "numba",
  "numexpr~=2.8",
  "numpy>=1.21,<3",
- "pandas",
+ "pandas>=1.5",
  "rpyc~=5.3",
  "scipy>=1.13,<2",
+ "typing-extensions",
  "xarray>=2024.3",
  "zarr>=2.18,<4",
 ]
+
 [[project.authors]]
 name = "Dan Kuester"
 email = "daniel.kuester@nist.gov"

@@ -18,11 +18,13 @@ def register_source(
     setup_cls: type[specs.RadioSetup],
     capture_cls: type[specs.RadioCapture],
     source_cls: type[sources.SourceBase],
-    sweep_cls: type[specs.Sweep]=specs.Sweep,
+    sweep_cls: type[specs.Sweep] = specs.Sweep,
     schema: typing.Any = None,
     **setup_defaults: dict[str, typing.Any],
 ):
-    registry[name] = RegistryItem(capture=capture_cls, setup=setup_cls, source=source_cls, sweep=sweep_cls)
+    registry[name] = RegistryItem(
+        capture=capture_cls, setup=setup_cls, source=source_cls, sweep=sweep_cls
+    )
 
 
 def lookup(name: str) -> RegistryItem:

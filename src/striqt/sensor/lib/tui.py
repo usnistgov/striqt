@@ -77,7 +77,9 @@ def get_log_append(prior_text_size, record):
 
 
 class LogNotifier(logging.Handler):
-    def __init__(self, callback: callable, logger_names: list[str], level=logging.INFO):
+    def __init__(
+        self, callback: typing.Callable, logger_names: list[str], level=logging.INFO
+    ):
         self.callback = callback
 
         super().__init__(level)

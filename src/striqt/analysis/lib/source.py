@@ -34,12 +34,14 @@ def filter_iq_capture(
 
     nfft = capture.analysis_filter.nfft
 
-    nfft_out, noverlap, overlap_scale, _ = striqt.waveform.fourier._ola_filter_parameters(
-        iq.size,
-        window=capture.analysis_filter.window,
-        nfft_out=capture.analysis_filter.nfft_out,
-        nfft=nfft,
-        extend=True,
+    nfft_out, noverlap, overlap_scale, _ = (
+        striqt.waveform.fourier._ola_filter_parameters(
+            iq.size,
+            window=capture.analysis_filter.window,
+            nfft_out=capture.analysis_filter.nfft_out,
+            nfft=nfft,
+            extend=True,
+        )
     )
 
     w = striqt.waveform.fourier.get_window(
@@ -76,7 +78,9 @@ def filter_iq_capture(
             out=xstft,
         )
 
-    striqt.waveform.fourier.zero_stft_by_freq(freqs, xstft, passband=passband, axis=axis)
+    striqt.waveform.fourier.zero_stft_by_freq(
+        freqs, xstft, passband=passband, axis=axis
+    )
 
     return striqt.waveform.fourier.istft(
         xstft,

@@ -20,6 +20,7 @@ from striqt.analysis.lib.dataarrays import AcquiredIQ
 if typing.TYPE_CHECKING:
     import striqt.waveform
     from striqt.waveform.type_stubs import ArrayType
+    from striqt.waveform.fourier import ResamplerDesign
     import pandas as pd
 else:
     striqt.waveform = util.lazy_import('striqt.waveform')
@@ -274,7 +275,7 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
         return self._setup
 
     @property
-    def _resampler(self) -> 'striqt.waveform.fourier.ResamplerDesign':
+    def _resampler(self) -> ResamplerDesign:
         if self._capture is None:
             raise RuntimeError('arm before designing the resampler')
         return design_capture_resampler(self._setup.base_clock_rate, self._capture)
@@ -517,7 +518,7 @@ def _design_capture_resampler(
     min_oversampling=1.1,
     window=RESAMPLE_COLA_WINDOW,
     min_fft_size=MIN_OARESAMPLE_FFT_SIZE,
-) -> 'striqt.waveform.fourier.ResamplerDesign':
+) -> ResamplerDesign:
     """design a filter specified by the capture for a radio with the specified MCR.
 
     For the return value, see `striqt.waveform.fourier.design_cola_resampler`
@@ -573,7 +574,7 @@ def _design_capture_resampler(
 @functools.wraps(_design_capture_resampler)
 def design_capture_resampler(
     base_clock_rate, capture: specs.WaveformCapture, *args, **kws
-) -> 'striqt.waveform.fourier.ResamplerDesign':
+) -> ResamplerDesign:
     # cast the struct in case it's a subclass
     fixed_capture = specs.WaveformCapture.fromspec(capture)
     kws.setdefault('window', RESAMPLE_COLA_WINDOW)
@@ -595,7 +596,9 @@ def design_capture_resampler(
     )
 
 
-def needs_resample(analysis_filter: dict, capture: specs.RadioCapture) -> bool:
+def needs_resample(
+    analysis_filter: ResamplerDesign, capture: specs.RadioCapture
+) -> bool:
     """determine whether an STFT will be needed to filter or resample"""
 
     is_resample = analysis_filter['nfft'] != analysis_filter['nfft_out']
@@ -703,7 +706,9 @@ def _cached_channel_read_buffer_count(
     include_holdoff: bool = False,
     aligner: register.AlignmentCaller | None = None,
 ) -> int:
-    if striqt.waveform.power_analysis.isroundmod(capture.duration * capture.sample_rate, 1):
+    if striqt.waveform.power_analysis.isroundmod(
+        capture.duration * capture.sample_rate, 1
+    ):
         samples_out = round(capture.duration * capture.sample_rate)
     else:
         msg = f'duration must be an integer multiple of the sample period (1/{capture.sample_rate} s)'
@@ -716,7 +721,7 @@ def _cached_channel_read_buffer_count(
         sample_rate = capture.sample_rate
 
     pad_size = sum(_get_dsp_pad_size(setup, capture, aligner))
-    if needs_resample(typing.cast(dict, resampler_design), capture):
+    if needs_resample(resampler_design, capture):
         nfft = resampler_design['nfft']
         min_samples_in = ceil(samples_out * nfft / resampler_design['nfft_out'])
         samples_in = min_samples_in + pad_size

@@ -45,7 +45,9 @@ class SweepController:
             self.warmup_sweep(sweep, calibration=None)
 
         if sweep.radio_setup.array_backend == 'cupy':
-            striqt.waveform.set_max_cupy_fft_chunk(sweep.radio_setup.cupy_max_fft_chunk_size)
+            striqt.waveform.set_max_cupy_fft_chunk(
+                sweep.radio_setup.cupy_max_fft_chunk_size
+            )
 
     def __enter__(self):
         return self
@@ -95,7 +97,7 @@ class SweepController:
     def radio_id(self, driver_name: str) -> str:
         return self.radios[driver_name].id
 
-    def close_radio(self, radio_setup: specs.RadioSetup = None):
+    def close_radio(self, radio_setup: specs.RadioSetup | None = None):
         if radio_setup is None:
             # close all
             for name, radio in self.radios.items():

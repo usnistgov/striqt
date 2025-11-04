@@ -178,7 +178,7 @@ def open_sensor_from_spec(
 
 def open_sensor_from_yaml(
     yaml_path: Path,
-    except_context: callable | None = None,
+    except_context: typing.Callable | None = None,
     output_path: typing.Optional[str] = None,
     store_backend: typing.Optional[str] = None,
 ) -> Connections:

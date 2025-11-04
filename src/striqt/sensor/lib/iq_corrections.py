@@ -8,7 +8,7 @@ from striqt.analysis.lib.dataarrays import AcquiredIQ
 
 if typing.TYPE_CHECKING:
     import striqt.waveform
-    import striqt.waveform.type_stubs
+    from striqt.waveform.type_stubs import ArrayLike, ArrayType
     import numpy as np
     import xarray as xr
 
@@ -25,8 +25,12 @@ USE_OARESAMPLE = False
 
 
 def _get_voltage_scale(
-    capture: specs.RadioCapture, radio: SourceBase, *, force_calibration:'xr.Dataset|None'=None, xp=np
-) -> tuple['striqt.waveform.type_stubs.ArrayLike', 'striqt.waveform.type_stubs.ArrayLike']:
+    capture: specs.RadioCapture,
+    radio: SourceBase,
+    *,
+    force_calibration: 'xr.Dataset|None' = None,
+    xp=np,
+) -> tuple['ArrayLike', 'ArrayLike']:
     """compute the scaling factor needed to scale each of N ports of an IQ waveform
 
     Returns:
@@ -66,7 +70,7 @@ def _get_voltage_scale(
 
 
 def resampling_correction(
-    iq: 'striqt.waveform.type_stubs.ArrayType',
+    iq: ArrayType,
     capture: specs.RadioCapture,
     radio: SourceBase,
     force_calibration: typing.Optional['xr.Dataset'] = None,

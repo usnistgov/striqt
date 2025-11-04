@@ -4,7 +4,9 @@ import click
 import typing
 
 
-def _chain_decorators(decorators: list[callable], func: callable) -> callable:
+def _chain_decorators(
+    decorators: list[typing.Callable], func: typing.Callable
+) -> callable:
     for option in decorators:
         func = option(func)
     return func
@@ -83,7 +85,7 @@ def click_sensor_sweep(description: typing.Optional[str] = None):
 
 
 def _run_click_plotter(
-    plot_func: callable,
+    plot_func: typing.Callable,
     zarr_path: str,
     center_frequency=None,
     interactive=False,

@@ -5,16 +5,14 @@ from __future__ import annotations
 import dataclasses
 import logging
 import msgspec
-import numbers
 import typing
 
 from . import captures, specs, util
 from .sources import SourceBase
 
 from striqt.analysis import dataarrays, measurements
+from striqt.analysis import specs as analysis_specs
 from striqt.analysis.lib.dataarrays import CAPTURE_DIM, PORT_DIM, AcquiredIQ  # noqa: F401
-from striqt.analysis.lib import register
-
 from striqt.waveform.util import is_cupy_array
 
 if typing.TYPE_CHECKING:
@@ -70,8 +68,8 @@ def concat_time_dim(datasets: list['xr.Dataset'], time_dim: str) -> 'xr.Dataset'
 def coord_template(
     capture_cls: type[specs.RadioCapture],
     ports: tuple[int, ...],
-    **alias_dtypes: dict[str, type],
-):
+    **alias_dtypes: dict[str, np.dtype],
+) -> 'xr.Coordinates':
     """returns a cached xr.Coordinates object to use as a template for data results"""
 
     def broadcast_defaults(v, allow_mismatch=False):
@@ -79,7 +77,7 @@ def coord_template(
         (values,) = captures.broadcast_to_ports(ports, v, allow_mismatch=allow_mismatch)
         return list(values)
 
-    capture = capture_cls()
+    capture = capture_cls(port=ports)
     vars = {}
 
     for field in capture_cls.__struct_fields__:
@@ -124,12 +122,13 @@ def coord_template(
 
 
 @util.lru_cache()
-def _get_alias_dtypes(output: specs.Output):
+def _get_alias_dtypes(output: specs.Output) -> dict[str, typing.Any]:
     aliases = output.coord_aliases
 
     alias_dtypes = {}
     for field, entries in aliases.items():
         alias_dtypes[field] = np.array(list(entries.keys())).dtype
+
     return alias_dtypes
 
 
@@ -158,10 +157,10 @@ def build_coords(
 ):
     alias_dtypes = _get_alias_dtypes(output)
 
-    if isinstance(capture.port, numbers.Number):
-        ports = (capture.port,)
+    if isinstance(capture.port, tuple):
+        ports = capture.port
     else:
-        ports = tuple(capture.port)
+        ports = (capture.port,)
 
     coords = coord_template(type(capture), ports, **alias_dtypes).copy(deep=True)
 
@@ -174,6 +173,8 @@ def build_coords(
             if field == RADIO_ID_NAME:
                 updates.setdefault(field, []).append(radio_id)
                 continue
+
+            assert isinstance(field, str)
 
             try:
                 value = captures.get_field_value(
@@ -222,10 +223,10 @@ class AnalysisCaller:
 
     radio: SourceBase
     sweep: specs.Sweep
-    analysis_spec: list[specs.Measurement]
+    analysis_spec: list[analysis_specs.Measurement]
     extra_attrs: dict[str, typing.Any] | None = None
     correction: bool = False
-    cache_callback: callable | None = None
+    cache_callback: typing.Callable | None = None
 
     @util.stopwatch('✓', 'analysis', logger_level=util.PERFORMANCE_INFO)
     def __call__(
@@ -236,7 +237,7 @@ class AnalysisCaller:
         overwrite_x=True,
         block_each=False,
         delayed=True,
-    ) -> 'xr.Dataset' | dict[str] | str:
+    ) -> 'xr.Dataset | dict[str, typing.Any] | str':
         """Inject radio device and capture info into a channel analysis result."""
 
         # wait to import until here to avoid a circular import

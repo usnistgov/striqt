@@ -1,5 +1,6 @@
 from __future__ import annotations
 import functools
+from numbers import Number
 import typing
 
 from os import cpu_count
@@ -39,7 +40,7 @@ else:
     scipy = lazy_import('scipy')
     signal = lazy_import('scipy.signal')
 
-CPU_COUNT = cpu_count()
+CPU_COUNT = cpu_count() or 1
 OLA_MAX_FFT_SIZE = 128 * 1024
 INF = float('inf')
 
@@ -58,7 +59,7 @@ _COLA_WINDOW_SIZE_DIVISOR = {
 }
 
 
-def set_max_cupy_fft_chunk(count: int|None):
+def set_max_cupy_fft_chunk(count: int | None):
     global MAX_CUPY_FFT_SAMPLES
     MAX_CUPY_FFT_SAMPLES = count
 
@@ -173,7 +174,7 @@ def _cupy_fftn_helper(
     overwrite_x=False,
     plan=None,
 ):
-    import cupy as cp
+    import cupy as cp  # pyright: ignore[reportMissingImports]
 
     kws = dict(overwrite_x=overwrite_x, plan=plan, order='C')
     args = (None,), (axis,), None, direction
@@ -197,9 +198,9 @@ def _cupy_fftn_helper(
     return out
 
 
-def fft(x, axis=-1, out=None, overwrite_x=False, plan=None, workers=None):
+def fft(x, axis=-1, out=None, overwrite_x=False, plan=None, workers: int | None = None):
     if is_cupy_array(x):
-        import cupy as cp
+        import cupy as cp  # pyright: ignore[reportMissingImports]
 
         return _cupy_fftn_helper(
             x,
@@ -227,7 +228,7 @@ def ifft(
     workers=None,
 ):
     if is_cupy_array(x):
-        import cupy as cp
+        import cupy as cp  # pyright: ignore[reportMissingImports]
 
         return _cupy_fftn_helper(
             x,
@@ -329,7 +330,10 @@ def find_window_param_from_enbw(
     else:
         raise ValueError('window_name must be one of ("kaiser", "dpss", "chebwin")')
 
-    return bisect(err, a, b, xtol=atol)
+    result = bisect(err, a, b, xtol=atol)
+    assert isinstance(result, float)
+
+    return result
 
 
 def broadcast_onto(a: ArrayType, other: ArrayType, *, axis: int) -> ArrayType:
@@ -374,14 +378,18 @@ class ResamplerDesign(typing.TypedDict):
     window: str | tuple[str, float]
     nfft: int
     nfft_out: int
-    frequency_shift: (
-        typing.Literal['left'] | typing.Literal['right'] | typing.Literal['none']
-    )
+    frequency_shift: ShiftType
     passband: tuple[float | None, float | None]
     fs: float
 
 
-ShiftType = typing.Literal['left']|typing.Literal['right']|typing.Literal['none']|typing.Literal[False]
+ShiftType = (
+    typing.Literal['left']
+    | typing.Literal['right']
+    | typing.Literal['none']
+    | typing.Literal[False]
+)
+
 
 @lru_cache()
 def design_cola_resampler(
@@ -391,7 +399,7 @@ def design_cola_resampler(
     bw_lo: float = 0,
     min_oversampling: float = 1.1,
     min_fft_size=2 * 4096 - 1,
-    shift:ShiftType=False,
+    shift: ShiftType = False,
     avoid_primes=True,
     window=None,
     fs_sdr: typing.Optional[float] = None,
@@ -541,7 +549,7 @@ def design_fir_resampler(
         'down': design['nfft'],
     }
 
-    return design.fs, fir_params
+    return design['fs'], fir_params
 
 
 def _stack_stft_windows(
@@ -816,7 +824,7 @@ def stft_fir_lowpass(
 
 @lru_cache(100)
 def _find_downsample_copy_range(
-    nfft_in: int, nfft_out: int, edge_in_start: int, edge_in_end: int
+    nfft_in: int, nfft_out: int, edge_in_start: int | None, edge_in_end: int | None
 ):
     if edge_in_start is None:
         edge_in_start = 0
@@ -870,7 +878,7 @@ def downsample_stft(
     y: ArrayType,
     nfft_out: int,
     *,
-    passband: tuple[float, float] = (None, None),
+    passband: tuple[float | None, float | None] = (None, None),
     axis=0,
     out=None,
 ) -> tuple[ArrayType, ArrayType]:
@@ -1011,7 +1019,7 @@ def stft(
             fftshift=True,
         )
     else:
-        w = w * get_window(
+        w = window * get_window(
             'rect', nfft - nzero, nzero=nzero, xp=xp, dtype=x.dtype, fftshift=True
         )
 
@@ -1113,7 +1121,7 @@ def ola_filter(
     nfft: int,
     window: str | tuple = 'hamming',
     passband: tuple[float, float],
-    nfft_out: int = None,
+    nfft_out: int | None = None,
     frequency_shift=False,
     axis=0,
     extend=False,
@@ -1141,7 +1149,7 @@ def ola_filter(
     nfft_out, noverlap, overlap_scale, _ = _ola_filter_parameters(
         x.size,
         window=window,
-        nfft_out=nfft_out,
+        nfft_out=nfft_out or nfft,
         nfft=nfft,
         extend=extend,
     )
@@ -1167,7 +1175,7 @@ def ola_filter(
         freqs, y = downsample_stft(
             freqs,
             y,
-            nfft_out=nfft_out,
+            nfft_out=nfft_out or nfft,
             passband=passband,
             axis=axis,
             out=y,
@@ -1176,7 +1184,7 @@ def ola_filter(
     return istft(
         y,
         round(x.shape[axis] * nfft_out / nfft),
-        nfft=nfft_out,
+        nfft=nfft_out or nfft,
         noverlap=noverlap,
         overwrite_x=True,
         axis=axis,
@@ -1215,7 +1223,7 @@ def spectrogram(
     return_axis_arrays: bool = True,
 ):
     """evaluate the power spectrogram of x with the given arguments.
-    
+
     The output is scaled such that the noise bandwidth is equal to the
     frequency resolution.
     """
@@ -1224,15 +1232,9 @@ def spectrogram(
     ret = stft(norm='power', **kws)
     if return_axis_arrays:
         freqs, times, X = ret
+        return freqs, times, power_analysis.envtopow(X)
     else:
-        X = ret
-
-    spg = power_analysis.envtopow(X)
-
-    if return_axis_arrays:
-        return freqs, times, spg
-    else:
-        return spg
+        return power_analysis.envtopow(ret)
 
 
 def power_spectral_density(
@@ -1367,7 +1369,7 @@ def channelize_power(
 
         analysis_bins_per_channel: the number of bins to keep in each channel
 
-        window: callable window function to use in the analysis
+        window: typing.Callable window function to use in the analysis
 
         axis: the axis along which to perform the FFT (for now, require axis=0)
 
@@ -1389,7 +1391,7 @@ def channelize_power(
     freqs, times, X = stft(
         iq,
         fs=1.0 / Ts,
-        w=window,
+        window=window,
         nperseg=fft_size_per_channel * channel_count,
         noverlap=fft_overlap_per_channel * channel_count,
         norm='power',
@@ -1462,7 +1464,9 @@ def time_to_frequency(iq, Ts, window=None, axis=0):
     xp = array_namespace(iq)
 
     if window is None:
-        window = signal.windows.blackmanharris(iq.shape[0], sym=False)
+        from scipy.signal import windows
+
+        window = windows.blackmanharris(iq.shape[0], sym=False)
 
     window /= iq.shape[0] * xp.sqrt((window).mean())
     window = broadcast_onto(window, iq, axis=0)
@@ -1504,19 +1508,22 @@ def oaconvolve(x1, x2, mode='full', axes=-1):
         `scipy.signal.oaconvolve`
     """
     if is_cupy_array(x1):
-        from cupyx.scipy.signal import oaconvolve as func
+        from cupyx.scipy.signal import oaconvolve as func  # pyright: ignore[reportMissingImports]
     else:
         from scipy.signal import oaconvolve as func
 
     return func(x1, x2, mode=mode, axes=axes)
 
 
-def time_fftshift(x, scale=None, overwrite_x=False, axis=0):
-    if scale is None and overwrite_x:
-        # short path: no scale and write directly to x
-        xview = axis_slice(x, start=1, step=2, axis=axis)
-        xview *= -1
-        return x
+def time_fftshift(x, scale: ArrayType | float | None = None, overwrite_x=False, axis=0):
+    if scale is None:
+        if overwrite_x:
+            # short path: no scale and write directly to x
+            xview = axis_slice(x, start=1, step=2, axis=axis)
+            xview *= -1
+            return x
+        else:
+            scale = 1
 
     xp = array_namespace(x)
 
@@ -1542,12 +1549,12 @@ time_ifftshift = time_fftshift
 def resample(
     x,
     num,
-    axis=0,
-    window=None,
-    domain='time',
+    axis: int = 0,
+    window: str | tuple[str, float] | None = None,
+    domain: typing.Literal['time'] | typing.Literal['frequency'] = 'time',
     overwrite_x=False,
-    scale=1,
-    shift=0,
+    scale: ArrayType | float = 1,
+    shift: float = 0,
 ):
     """limited reimplementation of scipy.signal.resample optimized for reduced memory.
 
@@ -1633,13 +1640,13 @@ def oaresample(
     fs,
     # analysis_filter: dict,
     *,
-    window='hamming',
-    overwrite_x=False,
-    axis=1,
-    frequency_shift=0,
-    filter_bandwidth=None,
-    transition_bandwidth=250e3,
-    scale: float = 1.0,
+    window: str | tuple[str, float] = 'hamming',
+    overwrite_x: bool = False,
+    axis: int = 1,
+    frequency_shift: float = 0,
+    filter_bandwidth: float | None = None,
+    transition_bandwidth: float = 250e3,
+    scale: ArrayType | float = 1.0,
 ):
     """apply resampler implemented through STFT overlap-and-add.
 

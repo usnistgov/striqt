@@ -202,7 +202,7 @@ def _empty_stub(dims, dtype, attrs={}):
 @util.lru_cache()
 def dataarray_stub(
     dims: tuple[str, ...],
-    coord_factories: tuple[callable, ...],
+    coord_factories: tuple[typing.Callable, ...],
     dtype: str,
     coord_registry: register.CoordinateRegistry,
     expand_dims: tuple[str, ...] | None = None,
@@ -319,7 +319,7 @@ def build_dataarray(
 
 @util.lru_cache()
 def _infer_coord_dims(
-    coord_factories: typing.Iterable[callable],
+    coord_factories: typing.Iterable[typing.Callable],
     coord_registry: register.CoordinateRegistry,
 ) -> list[str]:
     """guess dimensions of a dataarray based on its coordinates.

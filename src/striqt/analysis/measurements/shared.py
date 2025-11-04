@@ -135,7 +135,7 @@ def empty_5g_sync_measurement(
     *,
     capture: specs.Capture,
     spec: Cellular5GNRSyncCorrelationSpec,
-    coord_factories: list[callable],
+    coord_factories: list[typing.Callable],
     dtype='complex64',
 ):
     xp = striqt.waveform.util.array_namespace(iq)
@@ -434,7 +434,9 @@ def _cached_spectrogram(
 
     if spec.integration_bandwidth is None:
         frequency_bin_averaging = None
-    elif striqt.waveform.isroundmod(spec.integration_bandwidth, spec.frequency_resolution):
+    elif striqt.waveform.isroundmod(
+        spec.integration_bandwidth, spec.frequency_resolution
+    ):
         frequency_bin_averaging = round(
             spec.integration_bandwidth / spec.frequency_resolution
         )
@@ -484,7 +486,9 @@ def _cached_spectrogram(
         spg *= frequency_bin_averaging
 
     if time_bin_averaging is not None:
-        spg = striqt.waveform.util.binned_mean(spg, time_bin_averaging, axis=1, fft=False)
+        spg = striqt.waveform.util.binned_mean(
+            spg, time_bin_averaging, axis=1, fft=False
+        )
 
     if spec.integration_bandwidth is None:
         enbw = spec.frequency_resolution
@@ -537,7 +541,9 @@ def spectrogram_baseband_frequency(
 
     if spec.integration_bandwidth is None:
         frequency_bin_averaging = None
-    elif striqt.waveform.isroundmod(spec.integration_bandwidth, spec.frequency_resolution):
+    elif striqt.waveform.isroundmod(
+        spec.integration_bandwidth, spec.frequency_resolution
+    ):
         frequency_bin_averaging = round(
             spec.integration_bandwidth / spec.frequency_resolution
         )
@@ -558,7 +564,9 @@ def spectrogram_baseband_frequency(
         )
 
     if spec.integration_bandwidth is not None:
-        freqs = striqt.waveform.util.binned_mean(freqs, frequency_bin_averaging, fft=True)
+        freqs = striqt.waveform.util.binned_mean(
+            freqs, frequency_bin_averaging, fft=True
+        )
 
     # only now downconvert. round to a still-large number of digits
     return freqs.astype('float64').round(16)

@@ -418,7 +418,7 @@ class Call:
     keep track of some call metadata during execution.
     """
 
-    def __init__(self, func: callable, *args, **kws):
+    def __init__(self, func: typing.Callable, *args, **kws):
         if not callable(func):
             raise ValueError('`func` argument is not callable')
         self.func = func
@@ -655,7 +655,7 @@ class _ContextManagerType(typing.Protocol):
 
 
 def _select_enter_or_call(
-    candidate_objs: typing.Iterable[_ContextManagerType | callable],
+    candidate_objs: typing.Iterable[_ContextManagerType | typing.Callable],
 ) -> typing.Literal['context'] | typing.Literal['call'] | None:
     """ensure candidates are either (1) all context managers
     or (2) all callables. Decide what type of operation to proceed with.
@@ -705,8 +705,8 @@ def _select_enter_or_call(
 
 
 def enter_or_call(
-    flexible_caller: callable,
-    objs: typing.Iterable[_ContextManagerType | callable],
+    flexible_caller: typing.Callable,
+    objs: typing.Iterable[_ContextManagerType | typing.Callable],
     kws: dict[str, typing.Any],
 ):
     """Extract value traits from the keyword arguments flags, decide whether

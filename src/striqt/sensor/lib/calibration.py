@@ -91,7 +91,7 @@ class ManualYFactorSweep(
 
 
 @util.lru_cache()
-def read_calibration(path: str|Path) -> 'xr.Dataset':
+def read_calibration(path: str | Path) -> 'xr.Dataset':
     if path is None:
         return None
 
@@ -104,7 +104,9 @@ def save_calibration(path, corrections: 'xr.Dataset'):
 
 
 @util.lru_cache()
-def _cached_calibration_captures(variables: CalibrationVariables, capture_cls: type[_TC]) -> tuple[_TC, ...]:
+def _cached_calibration_captures(
+    variables: CalibrationVariables, capture_cls: type[_TC]
+) -> tuple[_TC, ...]:
     var_fields = variables.todict()
 
     # enforce ordering to place difficult-to-change variables in
@@ -365,7 +367,7 @@ def lookup_power_correction(
         corrections = read_calibration(cal_data)
     else:
         raise TypeError('invalid cal_data input type')
-    
+
     return _lookup_calibration_var(
         corrections.power_correction,
         capture=capture,
@@ -439,7 +441,11 @@ class YFactorSink(sinks.SinkBase):
     )
 
     def open(self):
-        if self.output_path is not None and not self.force and Path(self.output_path).exists():
+        if (
+            self.output_path is not None
+            and not self.force
+            and Path(self.output_path).exists()
+        ):
             print('reading results from previous file')
             self.prev_corrections = read_calibration(self.output_path)
         else:
@@ -495,7 +501,12 @@ class YFactorSink(sinks.SinkBase):
         # compute and merge corrections
         corrections = compute_y_factor_corrections(by_field)
 
-        if not self.force and self.output_path is not None and Path(self.output_path).exists() and self.prev_corrections is not None:
+        if (
+            not self.force
+            and self.output_path is not None
+            and Path(self.output_path).exists()
+            and self.prev_corrections is not None
+        ):
             prev_port_key = _get_port_variable(self.prev_corrections)
 
             print('merging results from previous file')
@@ -549,13 +560,9 @@ class ManualYFactorPeripherals(peripherals.PeripheralsBase[_TMSW, _TMC]):
 
 def _field_tuple(info: msgspec.structs.FieldInfo) -> tuple[str, type, typing.Any]:
     if info.default is msgspec.NODEFAULT:
-        field = msgspec.field(
-            name=info.name, default_factory=info.default_factory
-        )
+        field = msgspec.field(name=info.name, default_factory=info.default_factory)
     else:
-        field = msgspec.field(
-            name=info.name, default=info.default
-        )
+        field = msgspec.field(name=info.name, default=info.default)
 
     return (
         info.name,
@@ -572,9 +579,10 @@ def _merge_specs(
     all_fields = sum((msgspec.structs.fields(c) for c in cls_list), tuple())
     fields = {info.name: _field_tuple(info) for info in all_fields}
 
-    spec_cls = msgspec.defstruct(name, fields.values(), bases=(cls_list[0],), module=module)
+    spec_cls = msgspec.defstruct(
+        name, fields.values(), bases=(cls_list[0],), module=module
+    )
     return typing.cast(type[specs.SpecBase], spec_cls)
-
 
 
 def specialize_cal_sweep(

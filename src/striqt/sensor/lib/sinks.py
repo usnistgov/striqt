@@ -229,9 +229,7 @@ class SpectrogramTimeAppender(ZarrSinkBase):
 
         with (
             util.log_capture_context('sink', capture_index=count - 1),
-            util.stopwatch(
-                f'sync {path}', 'sink', logger_level=util.PERFORMANCE_INFO
-            ),
+            util.stopwatch(f'sync {path}', 'sink', logger_level=util.PERFORMANCE_INFO),
         ):
             analysis.dump(
                 self.store,

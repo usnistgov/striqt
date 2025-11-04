@@ -284,7 +284,9 @@ def cellular_cyclic_autocorrelation(
             # shift index to the symbol boundary rather than the CP
             cyclic_shift = -phy.cp_sizes[0] * 2 // cp_inds.shape[1]
 
-            R = striqt.waveform.ofdm.corr_at_indices(cp_inds, iq[chan], phy.nfft, norm=False)
+            R = striqt.waveform.ofdm.corr_at_indices(
+                cp_inds, iq[chan], phy.nfft, norm=False
+            )
             R = xp.roll(R, cyclic_shift)
             result[chan][0][iscs][: R.size] = xp.abs(R)
 

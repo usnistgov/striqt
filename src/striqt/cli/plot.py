@@ -3,7 +3,7 @@
 from . import click_capture_plotter
 
 
-def _submit_if_available(executor, func: callable, data, *args, **kws) -> list:
+def _submit_if_available(executor, func: typing.Callable, data, *args, **kws) -> list:
     if func.__name__ in data.data_vars:
         return [executor.submit(func, data, *args, **kws)]
     else:

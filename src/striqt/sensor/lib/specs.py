@@ -16,6 +16,7 @@ from striqt.analysis.lib.specs import meta, SpecBase, _SlowHashSpecBase
 
 if typing.TYPE_CHECKING:
     import pandas as pd
+
     _TC = typing.TypeVar('_TC', bound=RadioCapture)
     _TS = typing.TypeVar('_TS', bound=RadioSetup)
     _TSW = typing.TypeVar('_TSW', bound=Sweep)
@@ -152,10 +153,9 @@ ClockSourceType = Annotated[
 
 ContinuousTriggerType = Annotated[
     bool,
-    meta(
-        'Whether to trigger immediately after each call to acquire() when armed'
-    ),
+    meta('Whether to trigger immediately after each call to acquire() when armed'),
 ]
+
 
 @util.lru_cache()
 def _validate_multichannel(port, gain):
@@ -397,7 +397,7 @@ class SoapySetup(
 
     def __post_init__(self):
         from striqt.analysis import registry
-        
+
         if not self.gapless_repeats:
             pass
         elif self.time_sync_every_capture:
@@ -423,7 +423,7 @@ class _SoapySetupKeywords(_RadioSetupKeywords, total=False):
     time_source: TimeSourceType
     clock_source: ClockSourceType
     time_sync_every_capture: TimeSyncEveryCaptureType
-    
+
 
 class Description(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
     summary: Optional[str] = None

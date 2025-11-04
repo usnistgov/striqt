@@ -42,13 +42,13 @@ def _dec_hook(type_, obj):
         return pd.to_datetime(obj)
     elif issubclass(origin_cls, fractions.Fraction):
         return fractions.Fraction(obj)
-    elif issubclass(origin_cls, numbers.Number) and isinstance(obj, np_float_types):
+    elif issubclass(origin_cls, numbers.Number) and isinstance(obj, np.floating):
         return float(obj)
     else:
         return obj
 
 
-def _deep_hash(obj: typing.Mapping | tuple):
+def _deep_hash(obj: typing.Mapping | typing.Sequence) -> int:
     """compute the hash of a dict or other mapping based on its key, value pairs.
 
     The hash is evaluated recursively for nested structures.
@@ -182,7 +182,7 @@ class Capture(SpecBase, kw_only=True, frozen=True):
 class AnalysisFilter(SpecBase, kw_only=True, frozen=True, cache_hash=True):
     nfft: int = 8192
     window: typing.Union[tuple[str, ...], str] = 'hamming'
-    nfft_out: int = None
+    nfft_out: int | None = None
 
 
 class FilteredCapture(Capture, kw_only=True, frozen=True, cache_hash=True):
@@ -248,7 +248,7 @@ class Analysis(
 
 
 @util.lru_cache()
-def get_capture_type_attrs(capture_cls: type[Capture]) -> dict[str]:
+def get_capture_type_attrs(capture_cls: type[Capture]) -> dict[str, typing.Any]:
     """return attrs metadata for each field in `capture`"""
     info = msgspec.inspect.type_info(capture_cls)
 
@@ -284,8 +284,8 @@ def maybe_lookup_with_capture_key(
     value: _T | typing.Mapping[str, _T],
     capture_attr: str,
     error_label: str,
-    default=None,
-) -> _T:
+    default: _T | None = None,
+) -> _T | None:
     """evaluate a lookup table based on an attribute in a capture object.
 
     Returns:
@@ -293,6 +293,7 @@ def maybe_lookup_with_capture_key(
     - Otherwise, returns value
     """
     if hasattr(value, 'keys') and hasattr(value, '__getitem__'):
+        value = typing.cast(typing.Mapping, value)
         try:
             capture_value = getattr(capture, capture_attr)
         except AttributeError:
@@ -312,4 +313,4 @@ def maybe_lookup_with_capture_key(
             return default
 
     else:
-        return value
+        return typing.cast(_T, value)

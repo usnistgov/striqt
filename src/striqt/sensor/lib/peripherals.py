@@ -12,9 +12,7 @@ class PeripheralsBase(typing.Generic[specs._TSW, specs._TC]):
 
     sweep: specs._TSW
 
-    def __init__(
-        self, sweep: specs._TSW, source: sources.SourceBase | None = None
-    ):
+    def __init__(self, sweep: specs._TSW, source: sources.SourceBase | None = None):
         self.set_sweep(sweep)
         self.source = source
 

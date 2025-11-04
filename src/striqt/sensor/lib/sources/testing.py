@@ -84,7 +84,9 @@ class SingleToneCapture(
 
 
 class SingleToneSource(TestSourceBase[null.NullSetup, SingleToneCapture]):
-    def get_waveform(self, count: int, offset: int, *, port: int = 0, xp=np, dtype='complex64'):
+    def get_waveform(
+        self, count: int, offset: int, *, port: int = 0, xp=np, dtype='complex64'
+    ):
         capture = self.get_capture_spec()
 
         fs = self._resampler['fs_sdr']
@@ -130,9 +132,11 @@ class DiracDeltaCapture(
 
 
 class DiracDeltaSource(TestSourceBase):
-    def get_waveform(self, count: int, offset: int, *, port: int = 0, xp=np, dtype='complex64'):
+    def get_waveform(
+        self, count: int, offset: int, *, port: int = 0, xp=np, dtype='complex64'
+    ):
         capture = self.get_capture_spec()
-        
+
         abs_pulse_index = round(capture.time * capture.backend_sample_rate)
         rel_pulse_index = abs_pulse_index - offset
 
@@ -156,13 +160,15 @@ class SawtoothCapture(
         specs.meta('pulse start time relative to the start of the waveform', 's', ge=0),
     ] = 0.01
     power: specs.Annotated[
-            float,
-            specs.meta('instantaneous power level of the impulse function', 'dB', gt=0),
-        ] = 1
+        float,
+        specs.meta('instantaneous power level of the impulse function', 'dB', gt=0),
+    ] = 1
 
 
 class SawtoothSource(TestSourceBase[null.NullSetup, SawtoothCapture]):
-    def get_waveform(self, count: int, offset: int, *, port: int = 0, xp=np, dtype='complex64'):
+    def get_waveform(
+        self, count: int, offset: int, *, port: int = 0, xp=np, dtype='complex64'
+    ):
         capture = self.get_capture_spec()
 
         ret = xp.empty(count, dtype='complex64')
@@ -174,7 +180,9 @@ class SawtoothSource(TestSourceBase[null.NullSetup, SawtoothCapture]):
         return ret
 
 
-class NoiseCapture(specs.RadioCapture,     forbid_unknown_fields=True,
+class NoiseCapture(
+    specs.RadioCapture,
+    forbid_unknown_fields=True,
     frozen=True,
     cache_hash=True,
     kw_only=True,
@@ -185,7 +193,9 @@ class NoiseCapture(specs.RadioCapture,     forbid_unknown_fields=True,
 
 
 class NoiseSource(TestSourceBase[null.NullSetup, NoiseCapture]):
-    def get_waveform(self, count: int, offset: int, *, port: int = 0, xp=np, dtype='complex64'):
+    def get_waveform(
+        self, count: int, offset: int, *, port: int = 0, xp=np, dtype='complex64'
+    ):
         capture = self.get_capture_spec()
         fs = self._resampler['fs_sdr']
 
@@ -244,9 +254,7 @@ class FileCapture(
     backend_sample_rate: typing.Optional[specs.BackendSampleRateType] = None
 
 
-class TDMSFileSource(
-    TestSourceBase[TDMSFileSetup, FileCapture]
-):
+class TDMSFileSource(TestSourceBase[TDMSFileSetup, FileCapture]):
     """returns IQ waveforms from a TDMS file"""
 
     def _connect(self, spec):
@@ -265,9 +273,7 @@ class TDMSFileSource(
         fc = self._handle['header_fd']['carrier_frequency'][0]
         if capture.center_frequency is not None:
             logger = util.get_logger('acquisition')
-            logger.warning(
-                f'center_frequency ignored, using {fc / 1e6} MHz from file'
-            )
+            logger.warning(f'center_frequency ignored, using {fc / 1e6} MHz from file')
 
         mcr = self._setup.base_clock_rate
         if capture.backend_sample_rate is not None:
@@ -278,7 +284,9 @@ class TDMSFileSource(
 
         return capture.replace(center_frequency=fc, backend_sample_rate=mcr)
 
-    def get_waveform(self, count: int, offset: int, *, port: int = 0, xp=np, dtype='complex64'):
+    def get_waveform(
+        self, count: int, offset: int, *, port: int = 0, xp=np, dtype='complex64'
+    ):
         size = int(self._handle['header_fd']['total_samples'][0])
         ref_level = self._handle['header_fd']['reference_level_dBm'][0]
 
@@ -319,7 +327,7 @@ class FileSetup(
     ] = False
 
 
-class FileSource(TestSourceBase[FileSetup,FileCapture]):
+class FileSource(TestSourceBase[FileSetup, FileCapture]):
     """returns IQ waveforms from a file"""
 
     _file_capture: FileCapture | None = None
@@ -351,7 +359,7 @@ class FileSource(TestSourceBase[FileSetup,FileCapture]):
     def _prepare_capture(self, capture):
         assert self._file_capture is not None
         assert self._file_stream is not None
-        
+
         for field in ('center_frequency', 'port', 'gain', 'backend_sample_rate'):
             file_value = getattr(self._file_capture, field)
             if getattr(capture, field) not in (None, file_value):

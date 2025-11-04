@@ -112,7 +112,10 @@ def lru_cache(
 ) -> typing.Callable[[typing.Callable[_P, _R]], typing.Callable[_P, _R]]:
     # presuming that the API is designed to accept only hashable types, set
     # the type hint to match the wrapped function
-    return functools.lru_cache(maxsize, typed)
+    func = functools.lru_cache(maxsize, typed)
+    return typing.cast(
+        typing.Callable[[typing.Callable[_P, _R]], typing.Callable[_P, _R]], func
+    )
 
 
 _input_domain = []
@@ -133,7 +136,7 @@ def find_float_inds(seq: tuple[str | float, ...]) -> list[bool]:
     return ret
 
 
-def isroundmod(value: float, div, atol=1e-6) -> bool:
+def isroundmod(value: float | np.ndarray, div, atol=1e-6) -> bool:
     ratio = value / div
     try:
         return abs(math.remainder(ratio, 1)) <= atol
@@ -362,7 +365,7 @@ def sliding_window_view(x, window_shape, axis=None, *, subok=False, writeable=Fa
     return xp.lib.stride_tricks.as_strided(x, strides=out_strides, shape=out_shape)
 
 
-def float_dtype_like(x: type_stubs.ArrayType, min_dtype: Any|None = None):
+def float_dtype_like(x: type_stubs.ArrayType, min_dtype: Any | None = None):
     """returns a floating-point dtype corresponding to x.
 
     `x` may be complex, in which case the returned data type corresponds to
@@ -389,11 +392,11 @@ def float_dtype_like(x: type_stubs.ArrayType, min_dtype: Any|None = None):
 
     if min_dtype is None:
         pass
-    else: 
+    else:
         min_dtype = np.dtype(min_dtype)
         if min_dtype.itemsize > dtype.itemsize:
             dtype = min_dtype
-    
+
     return dtype
 
 
