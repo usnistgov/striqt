@@ -11,9 +11,9 @@ from .sources import find_radio_cls_by_name, SourceBase
 
 
 if typing.TYPE_CHECKING:
-    import striqt.waveform
+    import striqt.waveform as iqwaveform
 else:
-    striqt.waveform = util.lazy_import('striqt.waveform')
+    iqwaveform = util.lazy_import('striqt.waveform')
 
 
 class SweepSpecClasses(typing.NamedTuple):

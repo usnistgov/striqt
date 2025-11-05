@@ -6,7 +6,7 @@ import typing
 
 from . import fourier
 from .util import lru_cache, array_namespace, isroundmod, pad_along_axis
-from .type_stubs import ArrayType
+from ._typing import ArrayType
 
 import array_api_compat
 import numpy as np

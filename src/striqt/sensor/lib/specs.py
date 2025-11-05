@@ -17,31 +17,35 @@ from striqt.analysis.lib.specs import meta, SpecBase, _SlowHashSpecBase
 if typing.TYPE_CHECKING:
     import pandas as pd
 
-    _TC = typing.TypeVar('_TC', bound=RadioCapture)
-    _TS = typing.TypeVar('_TS', bound=RadioSetup)
-    _TSW = typing.TypeVar('_TSW', bound=Sweep)
 else:
     # to resolve the 'pd.Timestamp' stub at runtime
     pd = util.lazy_import('pandas')
 
-SingleChannelType = Annotated[int, meta('Input port index', ge=0)]
-SingleGainType = Annotated[float, meta('Gain setting', 'dB')]
-CenterFrequencyType = Annotated[float, meta('RF center frequency', 'Hz', gt=0)]
-PortType = Annotated[
-    Union[SingleChannelType, tuple[SingleChannelType, ...]],
-    meta('Input port indices'),
+_TC = typing.TypeVar('_TC', bound='RadioCapture')
+_TS = typing.TypeVar('_TS', bound='RadioSetup')
+_TSW = typing.TypeVar('_TSW', bound='Sweep')
+
+AnalysisBandwidthType = Annotated[
+    float, meta('Bandwidth of the analysis filter (or inf to disable)', 'Hz', gt=0)
 ]
-GainType = Annotated[
-    Union[SingleGainType, tuple[SingleGainType, ...]],
-    meta('Gain setting for each channel', 'dB'),
-]
-LOShiftType = Annotated[Literal['left', 'right', 'none'], meta('LO shift direction')]
-DelayType = Annotated[float, meta('Delay in acquisition start time', 's', gt=0)]
-StartTimeType = Annotated['pd.Timestamp', meta('Acquisition start time')]
 BackendSampleRateType = Annotated[float, meta('Source sample rate', 'Hz', gt=0)]
 BaseClockRateType = Annotated[
     float, meta('Base sample rate used inside the source', 'Hz', gt=0)
 ]
+CenterFrequencyType = Annotated[float, meta('RF center frequency', 'Hz', gt=0)]
+DelayType = Annotated[float, meta('Delay in acquisition start time', 's', gt=0)]
+GainScalarType = Annotated[float, meta('Gain setting', 'dB')]
+GainType = Annotated[
+    Union[GainScalarType, tuple[GainScalarType, ...]],
+    meta('Gain setting for each channel', 'dB'),
+]
+LOShiftType = Annotated[Literal['left', 'right', 'none'], meta('LO shift direction')]
+PortScalarType = Annotated[int, meta('Input port index', ge=0)]
+PortType = Annotated[
+    Union[PortScalarType, tuple[PortScalarType, ...]],
+    meta('Input port indices'),
+]
+StartTimeType = Annotated['pd.Timestamp', meta('Acquisition start time')]
 
 
 def _dict_hash(d):
@@ -50,11 +54,6 @@ def _dict_hash(d):
         [_dict_hash(v) if isinstance(v, dict) else v for v in d.values()]
     )
     return hash(key_hash) ^ hash(value_hash)
-
-
-AnalysisBandwidthType = Annotated[
-    float, meta('Bandwidth of the analysis filter (or inf to disable)', 'Hz', gt=0)
-]
 
 
 class WaveformCapture(
@@ -112,10 +111,6 @@ class RadioCapture(
     # a counter used to reset the sweep timestamp on Repeat(None)
     sweep_index: typing.ClassVar[int] = 0
 
-    # for tracking between captures
-    lo_offset: typing.ClassVar[float] = 0
-    downsample: typing.ClassVar[float] = 1
-
 
 class _RadioCaptureKeywords(_WaveformCaptureKeywords, total=False):
     # this needs to be kept in sync with WaveformCapture in order to
@@ -128,24 +123,6 @@ class _RadioCaptureKeywords(_WaveformCaptureKeywords, total=False):
     start_time: StartTimeType
 
 
-ReceiveRetriesType = Annotated[
-    int,
-    meta(
-        'number of attempts to retry acquisition on a stream error',
-        ge=0,
-    ),
-]
-
-TimeSyncEveryCaptureType = Annotated[
-    bool, meta('whether to sync to PPS before each capture in a sweep')
-]
-
-
-TimeSourceType = Annotated[
-    Literal['host', 'internal', 'external', 'gps'],
-    meta('Hardware source for timestamps'),
-]
-
 ClockSourceType = Annotated[
     Literal['internal', 'external', 'gps'],
     meta('Hardware source for the frequency reference'),
@@ -154,6 +131,24 @@ ClockSourceType = Annotated[
 ContinuousTriggerType = Annotated[
     bool,
     meta('Whether to trigger immediately after each call to acquire() when armed'),
+]
+
+ReceiveRetriesType = Annotated[
+    int,
+    meta(
+        'number of attempts to retry acquisition on a stream error',
+        ge=0,
+    ),
+]
+
+TimeSourceType = Annotated[
+    Literal['host', 'internal', 'external', 'gps'],
+    meta('Hardware source for timestamps'),
+]
+
+
+TimeSyncEveryCaptureType = Annotated[
+    bool, meta('whether to sync to PPS before each capture in a sweep')
 ]
 
 
@@ -481,7 +476,7 @@ class Extensions(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=T
 
 
 # dynamically generate Analysis type for "built-in" measurements in to striqt.analysis
-BundledAnalysis = analysis.registry.to_spec()
+BundledAnalysis = analysis.registry.tospec()
 BundledAlignmentAnalysis = analysis.registry.channel_sync_source.to_spec()
 
 
@@ -567,7 +562,7 @@ class Sweep(
     ) -> type[Sweep]:
         bases = typing.get_type_hints(cls, include_extras=True)
 
-        AnalysisCls = registry.to_spec(bases[cls.analysis.__name__])
+        AnalysisCls = registry.tospec(bases[cls.analysis.__name__])
 
         fields = ((cls.analysis.__name__, AnalysisCls, AnalysisCls()),)
 

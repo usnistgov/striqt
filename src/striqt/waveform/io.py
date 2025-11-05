@@ -4,7 +4,7 @@ import numpy as np
 import json
 from pathlib import Path
 from .util import lazy_import
-from . import type_stubs
+from . import _typing
 
 signal = lazy_import('scipy.signal')
 pd = lazy_import('pandas')
@@ -32,9 +32,7 @@ def extract_ntia_calibration_metadata(metadata: dict) -> dict:
     }
 
 
-def read_sigmf_metadata(
-    metadata_fn, ntia=False
-) -> tuple[type_stubs.DataFrameType, float]:
+def read_sigmf_metadata(metadata_fn, ntia=False) -> tuple[_typing.DataFrameType, float]:
     with open(metadata_fn, 'r') as fd:
         metadata = json.load(fd)
 
@@ -109,9 +107,9 @@ def read_sigmf_to_df(
 def waveform_to_frame(
     waveform: np.array,
     Ts: float,
-    columns: type_stubs.IndexType = None,
+    columns: _typing.IndexType = None,
     column_name=None,
-) -> tuple[type_stubs.SeriesType, type_stubs.DataFrameType]:
+) -> tuple[_typing.SeriesType, _typing.DataFrameType]:
     """packs IQ data into a pandas Series or DataFrame object.
 
     The input waveform `iq` may have shape (N,) or (N,M), representing a single

@@ -8,10 +8,10 @@ from .shared import registry
 from ..lib import specs, util
 
 if typing.TYPE_CHECKING:
-    import striqt.waveform
+    import striqt.waveform as iqwaveform
     import numpy as np
 else:
-    striqt.waveform = util.lazy_import('striqt.waveform')
+    iqwaveform = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
 
 
@@ -62,9 +62,9 @@ def cyclic_channel_power(
 ):
     spec = CyclicChannelPowerSpec.fromdict(kwargs)
 
-    xp = striqt.waveform.util.array_namespace(iq)
+    xp = iqwaveform.util.array_namespace(iq)
 
-    nested_ret = striqt.waveform.iq_to_cyclic_power(
+    nested_ret = iqwaveform.iq_to_cyclic_power(
         iq,
         1 / capture.sample_rate,
         cyclic_period=spec.cyclic_period,

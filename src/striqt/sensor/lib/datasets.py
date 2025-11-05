@@ -10,10 +10,11 @@ import typing
 from . import captures, specs, util
 from .sources import SourceBase
 
-from striqt.analysis import dataarrays, measurements
-from striqt.analysis import specs as analysis_specs
+from striqt.analysis import dataarrays
+from striqt.analysis.lib.specs import Measurement
+from striqt.analysis.measurements import registry
 from striqt.analysis.lib.dataarrays import CAPTURE_DIM, PORT_DIM, AcquiredIQ  # noqa: F401
-from striqt.waveform.util import is_cupy_array
+from striqt.analysis.lib.util import is_cupy_array
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -68,7 +69,7 @@ def concat_time_dim(datasets: list['xr.Dataset'], time_dim: str) -> 'xr.Dataset'
 def coord_template(
     capture_cls: type[specs.RadioCapture],
     ports: tuple[int, ...],
-    **alias_dtypes: dict[str, np.dtype],
+    **alias_dtypes: np.dtype,
 ) -> 'xr.Coordinates':
     """returns a cached xr.Coordinates object to use as a template for data results"""
 
@@ -223,10 +224,24 @@ class AnalysisCaller:
 
     radio: SourceBase
     sweep: specs.Sweep
-    analysis_spec: list[analysis_specs.Measurement]
     extra_attrs: dict[str, typing.Any] | None = None
     correction: bool = False
     cache_callback: typing.Callable | None = None
+
+    block_each: bool = False
+    delayed: bool = True
+
+    def __post_init__(self):
+        self._overwrite_x = not self.sweep.radio_setup.reuse_iq
+        self._eval_options = dataarrays.EvaluationOptions(
+            spec=self.sweep.analysis,
+            block_each=self.block_each,
+            as_xarray='delayed' if self.delayed else True,
+            expand_dims=(CAPTURE_DIM,),
+            registry=registry,
+        )
+        self.__name__ = 'analyze'
+        self.__qualname__ = 'analyze'
 
     @util.stopwatch('✓', 'analysis', logger_level=util.PERFORMANCE_INFO)
     def __call__(
@@ -234,32 +249,22 @@ class AnalysisCaller:
         iq: AcquiredIQ,
         sweep_time,
         capture: specs.RadioCapture,
-        overwrite_x=True,
-        block_each=False,
-        delayed=True,
     ) -> 'xr.Dataset | dict[str, typing.Any] | str':
         """Inject radio device and capture info into a channel analysis result."""
 
         # wait to import until here to avoid a circular import
         from . import iq_corrections
 
-        with measurements.registry.cache_context(self.cache_callback):
+        with registry.cache_context(capture, self.cache_callback):
             if self.correction:
                 with util.stopwatch(
                     'resample, filter, calibrate', logger_level=logging.DEBUG
                 ):
                     iq = iq_corrections.resampling_correction(
-                        iq.raw, capture, self.radio, overwrite_x=overwrite_x
+                        iq.raw, capture, self.radio, overwrite_x=self._overwrite_x
                     )
 
-            result = dataarrays.analyze_by_spec(
-                iq,
-                capture=capture,
-                spec=self.analysis_spec,
-                block_each=block_each,
-                as_xarray='delayed' if delayed else True,
-                expand_dims=(CAPTURE_DIM,),
-            )
+            result = dataarrays.analyze_by_spec(iq, capture, self._eval_options)
 
         if iq.unscaled_peak is not None:
             peak = iq.unscaled_peak
@@ -269,7 +274,7 @@ class AnalysisCaller:
         else:
             extra_data = {}
 
-        if delayed:
+        if self.delayed:
             result = DelayedDataset(
                 delayed=result,
                 capture=capture,
@@ -371,37 +376,3 @@ class DelayedDataset:
                 analysis = analysis.assign(new_arrays)
 
         return analysis
-
-
-def analyze_capture(
-    radio: SourceBase,
-    iq: util.ArrayType,
-    capture: specs.Capture,
-    sweep: specs.Sweep,
-    *,
-    sweep_start_time=None,
-    correction: bool = False,
-) -> 'xr.Dataset':
-    """a convenience function to analyze the output of a radio.acquire().
-
-    Arguments:
-        iq: the array containing
-        capture: the specification structure the IQ capture returned from .acquire()
-        correction: set True if the corresponding argument to .acquire() was False
-
-    Returns:
-        an xarray dataset containing the analysis specified by sweep.analysis
-    """
-
-    # metadata fields
-    attrs = sweep.radio_setup.todict() | sweep.description.todict()
-
-    func = AnalysisCaller(
-        radio=radio,
-        sweep=sweep,
-        analysis_spec=sweep.analysis,
-        extra_attrs=attrs,
-        correction=correction,
-    )
-
-    return func(iq, sweep_time=sweep_start_time, capture=capture)

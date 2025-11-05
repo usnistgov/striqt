@@ -6,15 +6,21 @@ import math
 from numbers import Number
 import sys
 import typing
-import typing_extensions
 
 import array_api_compat
-from array_api_compat import is_cupy_array
 import numpy as np
 
 from contextlib import contextmanager
 from enum import Enum
-from . import type_stubs
+
+if typing.TYPE_CHECKING:
+    from ._typing import ArrayLike, ArrayType
+    import typing_extensions
+    import cupy
+
+    _P = typing_extensions.ParamSpec('_P')
+    _R = typing_extensions.TypeVar('_R')
+
 
 __all__ = [
     'Domain',
@@ -27,9 +33,6 @@ __all__ = [
     'sliding_window_view',
     'float_dtype_like',
 ]
-
-_P = typing_extensions.ParamSpec('_P')
-_R = typing_extensions.TypeVar('_R')
 
 
 def lazy_import(module_name: str):
@@ -57,14 +60,14 @@ def lazy_import(module_name: str):
 
 
 def binned_mean(
-    x: type_stubs.ArrayType,
+    x: ArrayType,
     count,
     *,
     axis=0,
     truncate=True,
     reject_extrema=False,
     fft=True,
-) -> type_stubs.ArrayType:
+) -> ArrayType:
     """reduce an array by averaging into bins on the specified axis.
 
     Arguments:
@@ -144,6 +147,12 @@ def isroundmod(value: float | np.ndarray, div, atol=1e-6) -> bool:
         return np.abs(np.rint(ratio) - ratio) <= atol
 
 
+def is_cupy_array(x: object) -> typing_extensions.TypeIs['cupy.ndarray']:
+    import array_api_compat
+
+    return array_api_compat.is_cupy_array(x)
+
+
 class Domain(Enum):
     TIME = 'time'
     FREQUENCY = 'frequency'
@@ -188,7 +197,7 @@ class NonStreamContext:
         pass
 
 
-def array_stream(obj: type_stubs.ArrayType, null=False, non_blocking=False, ptds=False):
+def array_stream(obj: ArrayType, null=False, non_blocking=False, ptds=False):
     """returns a cupy.Stream (or a do-nothing stand in) object as appropriate for obj"""
     if is_cupy_array(obj):
         import cupy
@@ -365,7 +374,7 @@ def sliding_window_view(x, window_shape, axis=None, *, subok=False, writeable=Fa
     return xp.lib.stride_tricks.as_strided(x, strides=out_strides, shape=out_shape)
 
 
-def float_dtype_like(x: type_stubs.ArrayType, min_dtype: Any | None = None):
+def float_dtype_like(x: ArrayType, min_dtype: Any | None = None):
     """returns a floating-point dtype corresponding to x.
 
     `x` may be complex, in which case the returned data type corresponds to
@@ -400,9 +409,7 @@ def float_dtype_like(x: type_stubs.ArrayType, min_dtype: Any | None = None):
     return dtype
 
 
-def to_blocks(
-    y: type_stubs.ArrayType, size: int, truncate=False, axis=0
-) -> type_stubs.ArrayType:
+def to_blocks(y: ArrayType, size: int, truncate=False, axis=0) -> ArrayType:
     """Returns a view on y reshaped into blocks along axis `axis`.
 
     Args:
@@ -498,8 +505,8 @@ def axis_slice(a, start, stop=None, step=None, axis=-1):
 
 
 def histogram_last_axis(
-    x: type_stubs.ArrayType, bins: int | type_stubs.ArrayType, range: tuple = None
-) -> type_stubs.ArrayType:
+    x: ArrayType, bins: int | ArrayType, range: tuple = None
+) -> ArrayType:
     """computes a histogram along the last axis of an input array.
 
     For reference see https://stackoverflow.com/questions/44152436/calculate-histograms-along-axis
@@ -572,7 +579,7 @@ def dtype_change_float(dtype, float_basis_dtype) -> np.dtype:
 
 
 def iter_along_axes(
-    x: type_stubs.ArrayType, axes: typing.Iterable[int] | None
+    x: ArrayType, axes: typing.Iterable[int] | None
 ) -> typing.Iterable[tuple[int, ...]]:
     empty_slice = slice(None, None)
     if axes is None:
@@ -624,8 +631,8 @@ def grouped_slices_along_axis(shape: tuple[int, ...], max_size: int, axis: int):
 
 
 def grouped_views_along_axis(
-    x: type_stubs.ArrayType, max_size: int, axis: int = 0
-) -> typing.Generator[type_stubs.ArrayLike]:
+    x: ArrayType, max_size: int, axis: int = 0
+) -> typing.Generator[ArrayLike]:
     if x.size < max_size:
         yield x
         return

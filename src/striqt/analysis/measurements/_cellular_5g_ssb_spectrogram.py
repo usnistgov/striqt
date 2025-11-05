@@ -8,10 +8,10 @@ from ..lib import specs, util
 
 if typing.TYPE_CHECKING:
     import numpy as np
-    import striqt.waveform
+    import striqt.waveform as iqwaveform
 else:
     np = util.lazy_import('numpy')
-    striqt.waveform = util.lazy_import('striqt.waveform')
+    iqwaveform = util.lazy_import('striqt.waveform')
 
 
 # %% Cellular 5G NR synchronizatino
@@ -88,14 +88,14 @@ def cellular_ssb_baseband_frequency(
     )
 
     # due to integration_bandwidth=2*subcarrier_spacing
-    return striqt.waveform.util.binned_mean(freqs, count=2, axis=0, fft=True)
+    return iqwaveform.util.binned_mean(freqs, count=2, axis=0, fft=True)
 
 
 @registry.coordinates(dtype='uint16', attrs={'standard_name': 'Capture SSB index'})
 @util.lru_cache()
 def cellular_ssb_index(capture: specs.Capture, spec: Cellular5GNRSSBSpectrogramSpec):
     # pss_params and sss_params return the same number of symbol indexes
-    # params = striqt.waveform.ofdm.pss_params(
+    # params  = iqwaveform.ofdm.pss_params(
     #     sample_rate=spec.sample_rate,
     #     subcarrier_spacing=spec.subcarrier_spacing,
     #     discovery_periodicity=spec.discovery_periodicity,

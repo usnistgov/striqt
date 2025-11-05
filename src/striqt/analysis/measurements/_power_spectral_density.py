@@ -6,10 +6,10 @@ from .shared import registry
 from ..lib import specs, util
 
 if typing.TYPE_CHECKING:
-    import striqt.waveform
+    import striqt.waveform as iqwaveform
     import numpy as np
 else:
-    striqt.waveform = util.lazy_import('striqt.waveform')
+    iqwaveform = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
 
 
@@ -55,7 +55,7 @@ def baseband_frequency(
     attrs={'standard_name': 'Power spectral density'},
 )
 def power_spectral_density(
-    iq: 'striqt.waveform.util.Array',
+    iq: 'iqwaveform.util.Array',
     capture: specs.Capture,
     **kwargs: typing.Unpack[PowerSpectralDensityKeywords],
 ):
@@ -84,7 +84,7 @@ def power_spectral_density(
         dtype=working_dtype,
     )
 
-    findquantile = striqt.waveform.util.find_float_inds(tuple(spec.time_statistic))
+    findquantile = iqwaveform.util.find_float_inds(tuple(spec.time_statistic))
 
     newshape = list(spg.shape)
     newshape[axis] = len(spec.time_statistic)
@@ -104,6 +104,6 @@ def power_spectral_density(
         ufunc = stat_ufunc_from_shorthand(spec.time_statistic[i], xp=xp)
         axis_index(psd, i, axis=axis)[:] = ufunc(spg, axis=axis)
 
-    psd = striqt.waveform.powtodB(psd).astype('float16')
+    psd = iqwaveform.powtodB(psd).astype('float16')
 
     return psd, metadata

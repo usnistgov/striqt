@@ -18,51 +18,50 @@ from . import specs, util
 
 if typing.TYPE_CHECKING:
     import typing_extensions
-    import striqt.waveform
     import inspect
-    from striqt.waveform.type_stubs import ArrayType
+    from striqt.waveform._typing import ArrayType
 
     _P = typing_extensions.ParamSpec('_P')
-    _R = typing_extensions.TypeVar('_R')
+    _R = typing.TypeVar('_R', covariant=True)
 
-    _RMeas = typing.Union[
-        ArrayType,
-        tuple[ArrayType, dict[str, typing.Any]],
+    _TC = typing.TypeVar('_TC', bound='specs.Capture', contravariant=True)
+    _TM = typing.TypeVar('_TM', bound='specs.Measurement', contravariant=True)
+
+    _RM = typing.Union[
+        'ArrayType',
+        tuple['ArrayType', dict[str, typing.Any]],
     ]
 
-    class _MeasurementCallable(typing.Protocol):
+    _TCoord = typing.TypeVar('_TCoord', bound='CallableCoordinateFactory')
+
+    class CallableMeasurement(typing.Protocol[_P, _R]):
         __name__: str
 
-        @typing.overload
         def __call__(
             self,
             iq: ArrayType,
             capture: specs.Capture,
-            *,
-            as_xarray: bool = True,
-            **kwargs,
-        ) -> _RMeas: ...
+            *args: _P.args,
+            **kwargs: _P.kwargs,
+        ) -> _R: ...
 
-        @typing.overload
+    class CallableMeasurementWrapper(typing.Protocol[_P, _R]):
+        __name__: str
+
         def __call__(
-            self, iq: ArrayType, capture: specs.Capture, **kwargs
-        ) -> _RMeas: ...
+            self,
+            iq: ArrayType,
+            capture: specs.Capture,
+            as_xarray: bool = True,
+            *args: _P.args,
+            **kwargs: _P.kwargs,
+        ) -> _R: ...
 
-    _TMeasCallable = typing.TypeVar('_TMeasCallable', bound=_MeasurementCallable)
-
-    class _CoordinateFactoryCallable(typing.Protocol):
+    class CallableCoordinateFactory(typing.Protocol[_TC, _TM, _R]):
         __name__: typing.Optional[str]
 
-        def __call__(
-            self, capture: specs.Capture, spec: specs.Measurement
-        ) -> typing.Union[
-            ArrayType,
-            tuple[ArrayType, dict[str, typing.Any]],
-        ]: ...
+        def __call__(self, capture: _TC, spec: _TM) -> _R: ...
 
-    _TCoordCallable = typing.TypeVar(
-        '_TCoordCallable', bound=_CoordinateFactoryCallable
-    )
 
 else:
     inspect = util.lazy_import('inspect')
@@ -113,15 +112,17 @@ class KeywordArgumentCache:
         self._key = self.kw_key(kws)
         self._value = value
 
-    def apply(self, func: _MeasurementCallable) -> _MeasurementCallable:
+    def apply(self, func: CallableMeasurement[_P, _RM]) -> CallableMeasurement[_P, _RM]:
         @functools.wraps(func)
-        def wrapped(iq: ArrayType, capture: specs.Capture, **kwargs) -> _RMeas:
+        def wrapped(
+            iq: ArrayType, capture: specs.Capture, *args: _P.args, **kwargs: _P.kwargs
+        ) -> _RM:
             all_kws = dict(kwargs, capture=capture)
             match = self.lookup(all_kws)
             if match is not None:
                 return match
 
-            ret = func(iq, capture=capture, **kwargs)
+            ret = func(iq, capture, *args, **kwargs)
             self.update(all_kws, ret)
             if self._callback is None or self._callback_capture is None:
                 pass
@@ -152,14 +153,14 @@ class KeywordArgumentCache:
 
 class CoordinateInfo(typing.NamedTuple):
     name: str
-    func: _CoordinateFactoryCallable
+    func: CallableCoordinateFactory
     dtype: str
     dims: tuple[str, ...] | None = None
     attrs: dict = {}
 
 
 class CoordinateRegistry(
-    collections.UserDict[_CoordinateFactoryCallable, CoordinateInfo]
+    collections.UserDict['CallableCoordinateFactory', CoordinateInfo]
 ):
     def __call__(
         self,
@@ -168,7 +169,7 @@ class CoordinateRegistry(
         name: str | None = None,
         dims: tuple[str, ...] | None = None,
         attrs={},
-    ) -> typing.Callable[[_TCoordCallable], _TCoordCallable]:
+    ) -> typing.Callable[[_TCoord], _TCoord]:
         """register a coordinate factory function.
 
         The factory function should return an iterable containing coordinate
@@ -176,7 +177,7 @@ class CoordinateRegistry(
         """
         kws = locals()
 
-        def wrapper(func: _TCoordCallable) -> _TCoordCallable:
+        def wrapper(func: _TCoord) -> _TCoord:
             if isinstance(kws['dims'], str):
                 dims = tuple((kws['dims'],))
             else:
@@ -217,7 +218,7 @@ class CoordinateRegistry(
 class SyncInfo(typing.NamedTuple):
     name: str
     func: typing.Callable
-    lag_coord_func: _CoordinateFactoryCallable
+    lag_coord_func: CallableCoordinateFactory
     meas_spec_type: type[specs.Measurement]
 
 
@@ -226,9 +227,9 @@ class AlignmentSourceRegistry(collections.UserDict[str, SyncInfo]):
         self,
         meas_spec_type: type[specs.Measurement],
         *,
-        lag_coord_func: _CoordinateFactoryCallable,
+        lag_coord_func: CallableCoordinateFactory,
         name=None,
-    ) -> typing.Callable[[_TMeasCallable], _TMeasCallable]:
+    ) -> typing.Callable[[CallableMeasurement[_P, _RM]], CallableMeasurement[_P, _RM]]:
         """register a coordinate factory function.
 
         The proper dimension to evaluate in the data is determined from
@@ -243,7 +244,7 @@ class AlignmentSourceRegistry(collections.UserDict[str, SyncInfo]):
             'meas_spec_type': meas_spec_type,
         }
 
-        def wrapper(func):
+        def wrapper(func: CallableMeasurement[_P, _RM]) -> CallableMeasurement[_P, _RM]:
             if info_kws['name'] is None:
                 info_kws['name'] = func.__name__
 
@@ -266,13 +267,13 @@ class AlignmentSourceRegistry(collections.UserDict[str, SyncInfo]):
 
 class MeasurementInfo(typing.NamedTuple):
     name: str
-    func: _MeasurementCallable
-    coord_factories: typing.Iterable[_CoordinateFactoryCallable]
+    func: CallableMeasurement
+    coord_factories: typing.Iterable[CallableCoordinateFactory]
     prefer_unaligned_input: bool
     cache: KeywordArgumentCache | None
     dtype: str
     attrs: dict
-    depends: typing.Iterable[_MeasurementCallable]
+    depends: typing.Iterable[CallableMeasurement]
     store_compressed: bool
     dims: tuple[str, ...] | str | None = None
 
@@ -286,9 +287,7 @@ def _make_measurement_signature(spec_cls):
 
     parameters = [
         inspect.Parameter(
-            'iq',
-            inspect.Parameter.POSITIONAL_OR_KEYWORD,
-            annotation='striqt.waveform.type_stubs.ArrayType',
+            'iq', inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation='ArrayType'
         ),
         inspect.Parameter(
             'capture', inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=specs.Capture
@@ -316,7 +315,7 @@ class MeasurementRegistry(
 ):
     """a registry of keyword-only arguments for decorated functions"""
 
-    caches: dict[_MeasurementCallable, list[KeywordArgumentCache]]
+    caches: dict[CallableMeasurement, list[KeywordArgumentCache]]
 
     def __init__(self):
         super().__init__()
@@ -349,15 +348,17 @@ class MeasurementRegistry(
         dtype: str,
         name: str | None = None,
         dims: tuple[str, ...] | str | None = None,
-        coord_factories: typing.Iterable[_CoordinateFactoryCallable]
-        | _CoordinateFactoryCallable
+        coord_factories: typing.Iterable[CallableCoordinateFactory]
+        | CallableCoordinateFactory
         | None = None,
         depends: typing.Iterable[typing.Callable] = [],
         caches: typing.Iterable[KeywordArgumentCache] | None = None,
         prefer_unaligned_input=False,
         store_compressed=True,
         attrs={},
-    ) -> typing.Callable[[_TMeasCallable], _TMeasCallable]:
+    ) -> typing.Callable[
+        [CallableMeasurement[_P, _RM]], CallableMeasurementWrapper[_P, _RM]
+    ]:
         """add decorated `func` and its keyword arguments in the self.tostruct() schema"""
 
         if isinstance(dims, str):
@@ -388,11 +389,17 @@ class MeasurementRegistry(
         else:
             info_kws['depends'] = depends
 
-        def wrapper(func: _TMeasCallable) -> _TMeasCallable:
+        def wrapper(
+            func: CallableMeasurement[_P, _RM],
+        ) -> CallableMeasurementWrapper[_P, _RM]:
             @functools.wraps(func)
             def wrapped(
-                iq: ArrayType, capture: specs.Capture, as_xarray: bool = True, **kwargs
-            ) -> _RMeas:
+                iq: ArrayType,
+                capture: specs.Capture,
+                as_xarray: bool = True,
+                *args: _P.args,
+                **kwargs: _P.kwargs,
+            ) -> _RM:
                 from .dataarrays import DelayedDataArray
 
                 # handle the additional argument 'as_xarray' that allows
@@ -404,7 +411,7 @@ class MeasurementRegistry(
                     )
 
                 spec = spec_type.fromdict(kwargs)
-                ret = func(iq, capture, **spec.todict())
+                ret = func(iq, capture, *args, **spec.todict())
 
                 data, more_attrs = normalize_factory_return(ret, name=func.__name__)
 
@@ -412,7 +419,7 @@ class MeasurementRegistry(
                     return data, more_attrs
 
                 data = DelayedDataArray(
-                    data=data,
+                    result=data,
                     capture=capture,
                     spec=spec,
                     attrs=more_attrs,
@@ -437,7 +444,7 @@ class MeasurementRegistry(
                 self.names.add(info_kws['name'])
 
             self.depends_on[wrapped] = set()
-            for dep in depends:
+            for dep in info_kws['depends']:
                 self.depends_on[dep].add(wrapped)
 
             if caches is None:
@@ -453,7 +460,6 @@ class MeasurementRegistry(
                     'cache argument must be an tuple or list of KeywordArgumentCache'
                 )
 
-            MeasurementInfo(**info_kws)
             self[spec_type] = MeasurementInfo(func=wrapped, **info_kws)
 
             setattr(wrapped, '__signature__', _make_measurement_signature(spec_type))
@@ -463,38 +469,46 @@ class MeasurementRegistry(
                 f'{wrapped.__doc__}\n{_make_measurement_docstring(spec_type)}',
             )
 
-            return typing.cast(_TMeasCallable, wrapped)
+            return wrapped
 
         return wrapper
 
     __call__ = measurement
 
-    @contextlib.contextmanager
-    def cache_context(
-        self, capture: specs.Capture, callback: typing.Callable | None = None
-    ):
-        caches: list[KeywordArgumentCache] = []
-        for deps in self.caches.values():
-            caches.extend(deps)
-        caches = list(set(caches))
-
-        cm = contextlib.ExitStack()
-
-        with cm:
-            try:
-                for cache in caches:
-                    cm.enter_context(cache)
-                    if callback is not None:
-                        cache.set_callback(callback, capture)
-                yield cm
-            except:
-                cm.close()
-                raise
-
-    def to_spec(
+    def tospec(
         self, base: type[specs.Analysis] = specs.Analysis
     ) -> type[specs.Analysis]:
         return to_analysis_spec_type(self, base)
+
+    def cache_context(
+        self, capture: specs.Capture, callback: typing.Callable | None = None
+    ):
+        return cached_registry_context(self, capture, callback)
+
+
+@contextlib.contextmanager
+def cached_registry_context(
+    registry: MeasurementRegistry,
+    capture: specs.Capture,
+    callback: typing.Callable | None = None,
+):
+    caches: list[KeywordArgumentCache] = []
+    for deps in registry.caches.values():
+        caches.extend(deps)
+    caches = list(set(caches))
+
+    cm = contextlib.ExitStack()
+
+    with cm:
+        try:
+            for cache in caches:
+                cm.enter_context(cache)
+                if callback is not None:
+                    cache.set_callback(callback, capture)
+            yield cm
+        except:
+            cm.close()
+            raise
 
 
 def to_analysis_spec_type(

@@ -5,10 +5,10 @@ import typing
 
 from .power_analysis import powtodB, dBtopow, envtodB, sample_ccdf, iq_to_bin_power
 from .fourier import iq_to_stft_spectrogram
-from . import type_stubs
+from . import _typing
 from .util import lazy_import, lru_cache
 
-if typing.TYPE_CHECKING:
+if _typing.TYPE_CHECKING:
     import matplotlib as mpl
     from scipy import stats
     import pandas as pd
@@ -466,7 +466,7 @@ def plot_spectrogram_heatmap_from_iq(
     vmin: float = None,
     cmap=None,
     time_span=(None, None),
-) -> tuple[type_stubs.AxesType, type_stubs.DataFrameType]:
+) -> tuple[_typing.AxesType, _typing.DataFrameType]:
     # lazy import of submodules seems to cause problems for matplotlib
     from matplotlib import pyplot as plt
 
@@ -516,7 +516,7 @@ def plot_spectrogram_heatmap_from_iq(
 
 
 def plot_spectrogram_heatmap(
-    spg: type_stubs.DataFrameType,
+    spg: _typing.DataFrameType,
     Ts: float,
     ax=None,
     vmin: float = None,
@@ -526,7 +526,7 @@ def plot_spectrogram_heatmap(
     transpose=False,
     colorbar=True,
     rasterized=True,
-) -> tuple[type_stubs.AxesType, type_stubs.DataFrameType]:
+) -> tuple[_typing.AxesType, _typing.DataFrameType]:
     # lazy import of submodules seems to cause problems for matplotlib
     from matplotlib import pyplot as plt
 
@@ -584,7 +584,7 @@ def plot_spectrogram_heatmap(
 
 
 def plot_power_histogram_heatmap(
-    rolling_histogram: type_stubs.DataFrameType,
+    rolling_histogram: _typing.DataFrameType,
     contiguous_threshold=None,
     log_counts=True,
     title: str = None,

@@ -7,10 +7,10 @@ from .shared import registry
 from ..lib import specs, util
 
 if typing.TYPE_CHECKING:
-    import striqt.waveform
+    import striqt.waveform as iqwaveform
     import numpy as np
 else:
-    striqt.waveform = util.lazy_import('striqt.waveform')
+    iqwaveform = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
 
 warnings.filterwarnings(
@@ -36,7 +36,7 @@ def spectrogram_time(
 
     if spec.time_aperture is None:
         pass
-    elif striqt.waveform.isroundmod(spec.time_aperture, hop_period):
+    elif iqwaveform.isroundmod(spec.time_aperture, hop_period):
         average_bins = round(spec.time_aperture / hop_period)
         size = size // average_bins
         hop_period = hop_period * average_bins

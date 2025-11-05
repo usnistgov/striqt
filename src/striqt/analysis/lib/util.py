@@ -9,7 +9,15 @@ import time
 import sys
 import threading
 import typing
-import striqt.waveform.type_stubs
+
+
+if typing.TYPE_CHECKING:
+    import typing_extensions
+    import cupy
+    from striqt.waveform._typing import ArrayType
+
+    _P = typing_extensions.ParamSpec('_P')
+    _R = typing_extensions.TypeVar('_R')
 
 
 _logger_adapters = {}
@@ -51,6 +59,8 @@ def log_capture_context(name_suffix, /, capture_index=0, capture_count=None):
     extra = {'capture_index': capture_index}
     logger = get_logger(name_suffix)
 
+    assert isinstance(logger.extra, dict)
+
     if capture_count is not None:
         logger.extra['capture_count'] = capture_count
 
@@ -73,7 +83,7 @@ _StriqtLogger('analysis')
 def show_messages(
     level: int | None,
     colors: bool | None = None,
-    logger_names: tuple[str] = ('controller', 'source', 'analysis', 'sink'),
+    logger_names: tuple[str, ...] = ('controller', 'source', 'analysis', 'sink'),
 ):
     """filters logging messages displayed to the console by importance
 
@@ -135,6 +145,9 @@ def lazy_import(module_name: str, package=None):
     spec = importlib.util.find_spec(module_name, package=package)
     if spec is None:
         raise ImportError(f'no module found named "{module_name}"')
+    else:
+        assert spec.loader is not None
+
     spec.loader = importlib.util.LazyLoader(spec.loader)
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
@@ -165,6 +178,7 @@ def stopwatch(
     """
     t0 = time.perf_counter()
     logger = get_logger(logger_suffix)
+    assert isinstance(logger.extra, dict)
 
     try:
         yield
@@ -186,22 +200,13 @@ def stopwatch(
         logger.log(logger_level, msg.strip().lstrip(), logger.extra | extra)
 
 
-if typing.TYPE_CHECKING:
-    import typing_extensions
-
-    _P = typing_extensions.ParamSpec('_P')
-    _R = typing_extensions.TypeVar('_R')
-    import striqt.waveform
-else:
-    striqt.waveform = lazy_import('striqt.waveform')
-
-
 @functools.wraps(functools.lru_cache)
 def lru_cache(
     maxsize: int | None = 128, typed: bool = False
 ) -> typing.Callable[[typing.Callable[_P, _R]], typing.Callable[_P, _R]]:
     # presuming that the API is designed to accept only hashable types, set
     # the type hint to match the wrapped function
+
     return functools.lru_cache(maxsize, typed)
 
 
@@ -242,9 +247,7 @@ _compute_lock = threading.RLock()
 
 @contextlib.contextmanager
 def compute_lock(array=None):
-    import array_api_compat
-
-    is_cupy = array_api_compat.is_cupy_array(array)
+    is_cupy = is_cupy_array(array)
     get_lock = array is None or is_cupy
     if get_lock:
         _compute_lock.acquire()
@@ -253,8 +256,8 @@ def compute_lock(array=None):
         _compute_lock.release()
 
 
-def sync_if_cupy(x: 'striqt.waveform.type_stubs.ArrayType'):
-    if striqt.waveform.util.is_cupy_array(x):
+def sync_if_cupy(x: ArrayType):
+    if is_cupy_array(x):
         import cupy
 
         stream = cupy.cuda.get_current_stream()
@@ -269,3 +272,9 @@ def configure_cupy():
     # the FFT plan sets up large caches that don't help us
     cupy.fft.config.get_plan_cache().set_size(0)
     cupy.cuda.set_pinned_memory_allocator(None)
+
+
+def is_cupy_array(x: object) -> typing_extensions.TypeIs['cupy.ndarray']:
+    import array_api_compat
+
+    return array_api_compat.is_cupy_array(x)

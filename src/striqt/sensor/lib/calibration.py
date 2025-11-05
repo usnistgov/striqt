@@ -16,14 +16,16 @@ if typing.TYPE_CHECKING:
     import scipy
     import xarray as xr
 
-    _TC = typing.TypeVar('_TC', bound=specs.SoapyCapture)
-    _TMSW = typing.TypeVar('_TMSW', bound=ManualYFactorSweep)
-    _TMC = typing.TypeVar('_TMC', bound=ManualYFactorCapture)
 else:
     np = util.lazy_import('numpy')
     pd = util.lazy_import('pandas')
     scipy = util.lazy_import('scipy')
     xr = util.lazy_import('xarray')
+
+
+_TC = typing.TypeVar('_TC', bound=specs.SoapyCapture)
+_TMSW = typing.TypeVar('_TMSW', bound='ManualYFactorSweep')
+_TMC = typing.TypeVar('_TMC', bound='ManualYFactorCapture')
 
 
 NoiseDiodeEnabledType = Annotated[bool, meta(standard_name='Noise diode enabled')]

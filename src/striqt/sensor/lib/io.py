@@ -12,10 +12,10 @@ from striqt.analysis.lib.io import decode_from_yaml_file, load, dump  # noqa: F4
 from . import specs, util, captures
 
 if typing.TYPE_CHECKING:
-    import striqt.waveform
+    import striqt.waveform as iqwaveform
     import numpy as np
 else:
-    striqt.waveform = util.lazy_import('striqt.waveform')
+    iqwaveform = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
 
 

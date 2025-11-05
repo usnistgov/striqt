@@ -17,6 +17,7 @@ if typing.TYPE_CHECKING:
     import numpy as np
 
     _T = typing.TypeVar('_T')
+
 else:
     pd = util.lazy_import('pandas')
     np = util.lazy_import('numpy')

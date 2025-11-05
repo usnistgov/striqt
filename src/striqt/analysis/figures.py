@@ -15,7 +15,7 @@ import matplotlib as mpl
 from matplotlib import pyplot as plt
 import numpy as np
 import xarray as xr
-import striqt.waveform
+import striqt.waveform as iqwaveform
 
 # avoid lazy loading, since this module isn't imported with striqt.analysis
 # and lazy loading seems to lead to problems with matplotlib in some cases
@@ -505,7 +505,7 @@ def plot_cyclic_channel_power(
         a = cyclic_channel_power.sel(power_detector=detector)
 
         if not dB:
-            a = striqt.waveform.dBtopow(a)
+            a = iqwaveform.dBtopow(a)
 
         ax.plot(
             time,
@@ -518,7 +518,7 @@ def plot_cyclic_channel_power(
         a = cyclic_channel_power.sel(power_detector=detector)
 
         if not dB:
-            a = striqt.waveform.dBtopow(a)
+            a = iqwaveform.dBtopow(a)
 
         ax.fill_between(
             time,

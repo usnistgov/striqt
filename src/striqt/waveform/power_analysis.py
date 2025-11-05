@@ -17,14 +17,22 @@ from .util import (
 
 import array_api_compat.numpy as np
 import re
+
+# import typing
 import warnings
 from numbers import Number
 from functools import partial
+import typing
 from typing import Union, Any, Optional
 from types import ModuleType
-import typing_extensions
-from . import type_stubs
-from .type_stubs import ArrayType, ArrayLike
+
+from . import _typing
+from ._typing import ArrayType, ArrayLike
+
+if typing.TYPE_CHECKING:
+    import typing_extensions
+
+    _T = typing_extensions.TypeVar('_T')
 
 signal = lazy_import('scipy.signal')
 pd = lazy_import('pandas')
@@ -33,8 +41,6 @@ xr = lazy_import('xarray')
 
 warnings.filterwarnings('ignore', message='.*divide by zero.*')
 warnings.filterwarnings('ignore', message='.*invalid value encountered.*')
-
-_T = typing_extensions.TypeVar('_T')
 
 
 _DB_UNIT_MAPPING = {'dBm': 'mW', 'dBW': 'W', 'dB': 'unitless'}
@@ -102,7 +108,7 @@ def stat_ufunc_from_shorthand(kind, xp=np, axis=0):
 
 
 def _arraylike_with_buffer(
-    x: Union[ArrayLike, Number], out: Optional[ArrayLike] = None, min_dtype: Any = None
+    x: ArrayLike | Number, out: ArrayLike | None = None, min_dtype: Any = None
 ) -> tuple[ArrayType, ArrayType, ModuleType]:
     """interpret the array-like input and output buffer arguments.
 
@@ -137,12 +143,30 @@ def _arraylike_with_buffer(
     return values, out, xp
 
 
+@typing.overload
 def _repackage_arraylike(
     values: ArrayType,
-    obj: Union[ArrayLike, Number],
+    obj: Number,
     *,
     unit_transform: Optional[typing.Callable] = None,
-) -> Union[ArrayLike, Number]:
+) -> Number: ...
+
+
+@typing.overload
+def _repackage_arraylike(
+    values: ArrayType,
+    obj: ArrayLike,
+    *,
+    unit_transform: Optional[typing.Callable] = None,
+) -> ArrayLike: ...
+
+
+def _repackage_arraylike(
+    values: ArrayType,
+    obj: ArrayLike | Number,
+    *,
+    unit_transform: Optional[typing.Callable] = None,
+) -> ArrayLike | Number:
     """package `values` into a data type matching `obj`"""
 
     # accessing each of these forces imports of each module.
@@ -165,9 +189,15 @@ def _repackage_arraylike(
         raise TypeError(f'unrecognized input type {type(obj)}')
 
 
-def powtodB(
-    x: Union[ArrayLike, Number], abs: bool = True, eps: float = 0, out=None
-) -> Any:
+@typing.overload
+def powtodB(x: Number, abs: bool = True, eps: float = 0, out=None) -> Number: ...
+
+
+@typing.overload
+def powtodB(x: ArrayLike, abs: bool = True, eps: float = 0, out=None) -> ArrayLike: ...
+
+
+def powtodB(x: ArrayLike | Number, abs: bool = True, eps: float = 0, out=None) -> Any:
     """compute `10*log10(abs(x) + eps)` or `10*log10(x + eps)` with speed optimizations"""
 
     eps_str = '' if eps == 0 else '+eps'
@@ -511,8 +541,8 @@ def iq_to_frame_power(
 
 
 def unstack_series_to_bins(
-    pvt: type_stubs.SeriesType, Tbin: float, truncate: bool = False
-) -> type_stubs.DataFrameType:
+    pvt: _typing.SeriesType, Tbin: float, truncate: bool = False
+) -> _typing.DataFrameType:
     """unstack time series of power vs time (time axis) `pvt` into
     a pd.DataFrame in which row consists of time series of time duration `Twindow`.
 
@@ -550,8 +580,8 @@ def unstack_series_to_bins(
 
 
 def sample_ccdf(
-    a: type_stubs.ArrayType, edges: type_stubs.ArrayType, density: bool = True
-) -> type_stubs.ArrayType:
+    a: _typing.ArrayType, edges: _typing.ArrayType, density: bool = True
+) -> _typing.ArrayType:
     """computes the fraction (or total number) of samples in `a` that
     exceed each edge value.
 
@@ -581,14 +611,14 @@ def sample_ccdf(
 
 
 def power_histogram_along_axis(
-    pvt: type_stubs.DataFrameType,
+    pvt: _typing.DataFrameType,
     bounds: tuple[float, float],
     resolution_db: float,
     resolution_axis: int = 1,
     truncate: bin = True,
     dtype='uint32',
     axis=0,
-) -> type_stubs.DataFrameType:
+) -> _typing.DataFrameType:
     """Computes a histogram along the index of a pd.Series time series of power readings.
 
     Args:

@@ -18,12 +18,12 @@ from striqt.analysis.lib.dataarrays import AcquiredIQ
 
 
 if typing.TYPE_CHECKING:
-    import striqt.waveform
-    from striqt.waveform.type_stubs import ArrayType
+    import striqt.waveform as iqwaveform
+    from striqt.waveform._typing import ArrayType
     from striqt.waveform.fourier import ResamplerDesign
     import pandas as pd
 else:
-    striqt.waveform = util.lazy_import('striqt.waveform')
+    iqwaveform = util.lazy_import('striqt.waveform')
     pd = util.lazy_import('pandas')
 
 
@@ -538,8 +538,8 @@ def _design_capture_resampler(
 
     if capture.host_resample:
         # use GPU DSP to resample from integer divisor of the MCR
-        # fs_sdr, lo_offset, kws = striqt.waveform.fourier.design_cola_resampler(
-        design = striqt.waveform.fourier.design_cola_resampler(
+        # fs_sdr, lo_offset, kws  = iqwaveform.fourier.design_cola_resampler(
+        design = iqwaveform.fourier.design_cola_resampler(
             fs_base=base_clock_rate,
             fs_target=capture.sample_rate,
             bw=capture.analysis_bandwidth,
@@ -563,7 +563,7 @@ def _design_capture_resampler(
         )
     else:
         # use the SDR firmware to implement the desired sample rate
-        return striqt.waveform.fourier.design_cola_resampler(
+        return iqwaveform.fourier.design_cola_resampler(
             fs_base=capture.sample_rate,
             fs_target=capture.sample_rate,
             bw=capture.analysis_bandwidth,
@@ -639,7 +639,7 @@ def _get_dsp_pad_size(
         # output to have an integral number of samples
         block_size = design['nfft']
         block_count = analysis_size // block_size
-        min_blocks = block_count + striqt.waveform.util.ceildiv(min_lag_pad, block_size)
+        min_blocks = block_count + iqwaveform.util.ceildiv(min_lag_pad, block_size)
 
         # since design_capture_resampler gives us a nice fft size
         # for block_size, then if we make sure pad_blocks is also a nice fft size,
@@ -685,7 +685,7 @@ def _get_oaresample_pad(base_clock_rate: float, capture: specs.RadioCapture):
     # round up to an integral number of FFT windows
     samples_in = ceil(min_samples_in / nfft) * nfft + nfft
 
-    noverlap_out = striqt.waveform.fourier._ola_filter_parameters(
+    noverlap_out = iqwaveform.fourier._ola_filter_parameters(
         samples_in,
         window=resampler_design['window'],
         nfft_out=nfft_out,

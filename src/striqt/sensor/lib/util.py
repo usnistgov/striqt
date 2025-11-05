@@ -189,7 +189,7 @@ def set_cuda_mem_limit(fraction=0.75):
 
 def concurrently_with_fg(
     calls: dict[str, callable] = {}, flatten=True
-) -> tuple[typing.Any, typing.Any]:
+) -> dict[typing.Any, typing.Any]:
     """runs foreground() in the current thread, and util.concurrently(**background) in another thread"""
     from concurrent.futures import ThreadPoolExecutor
 
@@ -655,8 +655,8 @@ class _ContextManagerType(typing.Protocol):
 
 
 def _select_enter_or_call(
-    candidate_objs: typing.Iterable[_ContextManagerType | typing.Callable],
-) -> typing.Literal['context'] | typing.Literal['call'] | None:
+    candidate_objs: typing.Sequence[tuple[str|None, _ContextManagerType | typing.Callable]],
+) -> typing.Literal['context'] | typing.Literal['callable'] | None:
     """ensure candidates are either (1) all context managers
     or (2) all callables. Decide what type of operation to proceed with.
     """
@@ -697,8 +697,8 @@ def _select_enter_or_call(
         )
 
     # Enforce uniqueness in the (callable or context manager) object
-    candidate_objs = [c[1] for c in candidate_objs]
-    if len(set(candidate_objs)) != len(candidate_objs):
+    check_objs = [c[1] for c in candidate_objs]
+    if len(set(check_objs)) != len(check_objs):
         raise ValueError('each callable and context manager must be unique')
 
     return which

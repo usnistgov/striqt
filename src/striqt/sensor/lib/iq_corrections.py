@@ -7,14 +7,14 @@ from striqt.analysis.lib.dataarrays import AcquiredIQ
 
 
 if typing.TYPE_CHECKING:
-    import striqt.waveform
-    from striqt.waveform.type_stubs import ArrayLike, ArrayType
+    import striqt.waveform as iqwaveform
+    from striqt.waveform._typing import ArrayLike, ArrayType
     import numpy as np
     import xarray as xr
 
 else:
     array_api_compat = util.lazy_import('array_api_compat')
-    striqt.waveform = util.lazy_import('striqt.waveform')
+    iqwaveform = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
     xr = util.lazy_import('xarray')
 
@@ -93,7 +93,7 @@ def resampling_correction(
         the filtered IQ waveform
     """
 
-    xp = striqt.waveform.util.array_namespace(iq)
+    xp = iqwaveform.util.array_namespace(iq)
 
     vscale, prescale = _get_voltage_scale(
         capture, radio, force_calibration=force_calibration, xp=xp
@@ -115,7 +115,7 @@ def resampling_correction(
 
     # apply the filter here and ensure we're working with a copy if needed
     if not USE_OARESAMPLE and np.isfinite(capture.analysis_bandwidth):
-        h = striqt.waveform.design_fir_lpf(
+        h = iqwaveform.design_fir_lpf(
             bandwidth=capture.analysis_bandwidth,
             sample_rate=fs,
             transition_bandwidth=250e3,
@@ -123,8 +123,8 @@ def resampling_correction(
             xp=xp,
         )
         pad = base._get_filter_pad(capture)
-        iq = striqt.waveform.oaconvolve(iq, h[xp.newaxis, :], 'same', axes=axis)
-        iq = striqt.waveform.util.axis_slice(iq, pad, iq.shape[axis], axis=axis)
+        iq = iqwaveform.oaconvolve(iq, h[xp.newaxis, :], 'same', axes=axis)
+        iq = iqwaveform.util.axis_slice(iq, pad, iq.shape[axis], axis=axis)
 
         # iq is now a copy, so it can be safely overridden
         overwrite_x = True
@@ -137,7 +137,7 @@ def resampling_correction(
 
     elif USE_OARESAMPLE:
         # this is broken. don't use it yet.
-        iq = striqt.waveform.fourier.oaresample(
+        iq = iqwaveform.fourier.oaresample(
             iq,
             up=design['nfft_out'],
             down=design['nfft'],
@@ -163,13 +163,13 @@ def resampling_correction(
         offset = design['nfft_out']
 
         assert size_out + offset <= iq.shape[axis]
-        iq = striqt.waveform.util.axis_slice(iq, offset, offset + size_out, axis=axis)
+        iq = iqwaveform.util.axis_slice(iq, offset, offset + size_out, axis=axis)
         assert iq.shape[axis] == size_out
 
     else:
-        assert striqt.waveform.util.isroundmod(iq.shape[1] * capture.sample_rate, fs)
+        assert iqwaveform.util.isroundmod(iq.shape[1] * capture.sample_rate, fs)
         resample_size_out = round(iq.shape[1] * capture.sample_rate / fs)
-        iq = striqt.waveform.fourier.resample(
+        iq = iqwaveform.fourier.resample(
             iq,
             resample_size_out,
             overwrite_x=overwrite_x,
@@ -206,7 +206,7 @@ def resampling_correction(
     )
 
     # nfft = analysis_filter['nfft']
-    # nfft_out, noverlap, overlap_scale, _ = striqt.waveform.fourier._ola_filter_parameters(
+    # nfft_out, noverlap, overlap_scale, _  = iqwaveform.fourier._ola_filter_parameters(
     #     iq.size,
     #     window=analysis_filter['window'],
     #     nfft_out=analysis_filter.get('nfft_out', nfft),
@@ -214,7 +214,7 @@ def resampling_correction(
     #     extend=True,
     # )
 
-    # y = striqt.waveform.stft(
+    # y  = iqwaveform.stft(
     #     iq,
     #     fs=fs,
     #     window=analysis_filter['window'],
@@ -230,18 +230,18 @@ def resampling_correction(
     # except_on_low_memory()
     # if nfft_out < nfft:
     #     # downsample by trimming frequency
-    #     freqs = striqt.waveform.fftfreq(nfft, 1 / fs)
-    #     freqs, y = striqt.waveform.fourier.downsample_stft(
+    #     freqs  = iqwaveform.fftfreq(nfft, 1 / fs)
+    #     freqs, y  = iqwaveform.fourier.downsample_stft(
     #         freqs, y, nfft_out=nfft_out, axis=axis, out=y
     #     )
     # elif nfft_out > nfft:
     #     # upsample by zero-padding frequency
     #     pad_left = (nfft_out - nfft) // 2
     #     pad_right = pad_left + (nfft_out - nfft) % 2
-    #     y = striqt.waveform.util.pad_along_axis(y, [[pad_left, pad_right]], axis=axis + 1)
+    #     y  = iqwaveform.util.pad_along_axis(y, [[pad_left, pad_right]], axis=axis + 1)
 
     # if filter_domain == 'frequency':
-    #     y = striqt.waveform.fourier.stft_fir_lowpass(
+    #     y  = iqwaveform.fourier.stft_fir_lowpass(
     #         y,
     #         sample_rate=capture.sample_rate,
     #         bandwidth=capture.analysis_bandwidth,
@@ -253,7 +253,7 @@ def resampling_correction(
 
     # # reconstruct into a resampled waveform
     # except_on_low_memory()
-    # iq = striqt.waveform.istft(
+    # iq  = iqwaveform.istft(
     #     y, nfft=nfft_out, noverlap=noverlap, axis=axis, overwrite_x=True
     # )
     # scale = iq.size/size_in
@@ -261,7 +261,7 @@ def resampling_correction(
     # start the capture after the padding for transients
     # size_out = round(capture.duration * capture.sample_rate)
     # assert size_out <= iq.shape[axis]
-    # iq = striqt.waveform.util.axis_slice(iq, -size_out, iq.shape[axis], axis=axis)
+    # iq  = iqwaveform.util.axis_slice(iq, -size_out, iq.shape[axis], axis=axis)
     # assert iq.shape[axis] == size_out
 
     # # apply final scaling

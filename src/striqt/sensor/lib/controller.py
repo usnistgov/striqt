@@ -6,15 +6,16 @@ import typing
 
 import rpyc
 
-from . import captures, sweeps, util
+from . import sweeps, util
 from . import specs
 from .sources import find_radio_cls_by_name, is_same_resource, SourceBase
+from striqt.analysis.lib import dataarrays
 
 if typing.TYPE_CHECKING:
-    import striqt.waveform
+    import striqt.waveform as iqwaveform
     import xarray as xr
 else:
-    striqt.waveform = util.lazy_import('striqt.waveform')
+    iqwaveform = util.lazy_import('striqt.waveform')
     xr = util.lazy_import('xarray')
 
 
@@ -278,7 +279,7 @@ class _ServerService(rpyc.Service, SweepController):
         capture_pairs = util.zip_offsets(sweep.captures, (0, -1), fill=None)
 
         descs = (
-            captures.describe_capture(c1, c2, index=i, count=len(sweep.captures))
+            dataarrays.describe_capture(c1, c2, index=i, count=len(sweep.captures))
             for i, (c1, c2) in enumerate(capture_pairs)
         )
 

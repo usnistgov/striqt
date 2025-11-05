@@ -5,19 +5,20 @@ from . import specs, util
 
 if typing.TYPE_CHECKING:
     import numpy as np
-    import striqt.waveform
+    import striqt.waveform as iqwaveform
+    from striqt.waveform._typing import ArrayType
 else:
     np = util.lazy_import('numpy')
-    striqt.waveform = util.lazy_import('striqt.waveform')
+    iqwaveform = util.lazy_import('striqt.waveform')
 
 
 def filter_iq_capture(
-    iq: 'striqt.waveform.util.Array',
+    iq: ArrayType,
     capture: specs.FilteredCapture,
     *,
     axis=0,
     out=None,
-) -> 'striqt.waveform.util.Array':
+) -> ArrayType:
     """apply a bandpass filter implemented through STFT overlap-and-add.
 
     Args:
@@ -30,24 +31,23 @@ def filter_iq_capture(
         the filtered IQ capture
     """
 
-    xp = striqt.waveform.util.array_namespace(iq)
+    xp = iqwaveform.util.array_namespace(iq)
 
     nfft = capture.analysis_filter.nfft
+    nfft_out = capture.analysis_filter.nfft_out or nfft
 
-    nfft_out, noverlap, overlap_scale, _ = (
-        striqt.waveform.fourier._ola_filter_parameters(
-            iq.size,
-            window=capture.analysis_filter.window,
-            nfft_out=capture.analysis_filter.nfft_out,
-            nfft=nfft,
-            extend=True,
-        )
+    nfft_out, noverlap, overlap_scale, _ = iqwaveform.fourier._ola_filter_parameters(
+        iq.size,
+        window=capture.analysis_filter.window,
+        nfft_out=nfft_out,
+        nfft=nfft,
+        extend=True,
     )
 
-    w = striqt.waveform.fourier.get_window(
+    w = iqwaveform.fourier.get_window(
         capture.analysis_filter.window, nfft, fftbins=False, xp=xp
     )
-    freqs, _, xstft = striqt.waveform.fourier.stft(
+    freqs, _, xstft = iqwaveform.fourier.stft(
         iq,
         fs=capture.sample_rate,
         window=w,
@@ -59,7 +59,7 @@ def filter_iq_capture(
     )
 
     freq_res = capture.sample_rate / nfft
-    enbw = freq_res * striqt.waveform.fourier.equivalent_noise_bandwidth(
+    enbw = freq_res * iqwaveform.fourier.equivalent_noise_bandwidth(
         capture.analysis_filter.window, nfft, fftbins=False
     )
 
@@ -69,7 +69,7 @@ def filter_iq_capture(
     )
 
     if nfft_out != capture.analysis_filter.nfft:
-        freqs, xstft = striqt.waveform.fourier.downsample_stft(
+        freqs, xstft = iqwaveform.fourier.downsample_stft(
             freqs,
             xstft,
             nfft_out=capture.analysis_filter.nfft_out or capture.analysis_filter.nfft,
@@ -78,11 +78,9 @@ def filter_iq_capture(
             out=xstft,
         )
 
-    striqt.waveform.fourier.zero_stft_by_freq(
-        freqs, xstft, passband=passband, axis=axis
-    )
+    iqwaveform.fourier.zero_stft_by_freq(freqs, xstft, passband=passband, axis=axis)
 
-    return striqt.waveform.fourier.istft(
+    return iqwaveform.fourier.istft(
         xstft,
         iq.shape[axis],
         nfft=nfft_out,
@@ -100,7 +98,7 @@ def simulated_awgn(
     pinned_cuda=False,
     seed=None,
     out=None,
-) -> 'striqt.waveform.util.Array':
+) -> ArrayType:
     # use the slower RandomState for maximum compatibility
     # across array module namespaces
     gen = xp.random.RandomState(seed=seed)
@@ -140,7 +138,7 @@ def simulated_awgn(
     return samples
 
 
-def read_tdms(path, analysis_bandwidth: float = None):
+def read_tdms(path, analysis_bandwidth: float = float('nan')):
     from nptdms import TdmsFile
 
     fd = TdmsFile.read(path)

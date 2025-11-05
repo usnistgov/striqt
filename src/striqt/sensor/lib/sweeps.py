@@ -10,7 +10,7 @@ from . import captures, datasets, sources, specs, util
 from .calibration import lookup_system_noise_power
 from .peripherals import PeripheralsBase
 from .sinks import SinkBase
-from striqt.analysis.lib.dataarrays import AcquiredIQ
+from striqt.analysis.lib.dataarrays import AcquiredIQ, describe_capture
 from striqt.analysis.lib import register
 from striqt.analysis import measurements
 
@@ -23,11 +23,11 @@ else:
 class Resources(typing.TypedDict):
     """Sensor resources needed to run a sweep"""
 
-    radio: typing.NotRequired['sources.SourceBase']
-    sink: typing.NotRequired[SinkBase]
-    peripherals: typing.NotRequired[PeripheralsBase]
-    sweep_spec: typing.NotRequired[specs.Sweep]
-    calibration: typing.NotRequired['xr.Dataset']
+    radio: 'sources.SourceBase'
+    sink: SinkBase
+    peripherals: PeripheralsBase
+    sweep_spec: specs.Sweep
+    calibration: 'xr.Dataset'
 
 
 def varied_capture_fields(sweep: specs.Sweep) -> list[str]:
@@ -242,28 +242,27 @@ class SweepIterator:
         self._analyze = datasets.AnalysisCaller(
             radio=self.radio,
             sweep=self.spec,
-            analysis_spec=self.spec.analysis,
             extra_attrs=_build_attrs(self.spec),
             correction=True,
             cache_callback=self.show_cache_info,
+            delayed=True,
+            block_each=False,
         )
-        self._analyze.__name__ = 'analyze'
-        self._analyze.__qualname__ = 'analyze'
 
     def show_cache_info(self, cache, capture: specs.RadioCapture, result, *_, **__):
         cal = self.spec.radio_setup.calibration
         if cal is None or 'spectrogram' not in cache.name:
             return
 
-        import striqt.waveform
+        import striqt.waveform as iqwaveform
 
         spg, attrs = result
 
-        xp = striqt.waveform.util.array_namespace(spg)
+        xp = iqwaveform.util.array_namespace(spg)
 
         # conversion to dB is left for after this function, but display
         # log messages in dB
-        peaks = striqt.waveform.powtodB(spg.max(axis=tuple(range(1, spg.ndim))))
+        peaks = iqwaveform.powtodB(spg.max(axis=tuple(range(1, spg.ndim))))
 
         noise = lookup_system_noise_power(
             cal,
@@ -278,7 +277,7 @@ class SweepIterator:
         snr_desc = ','.join(f'{p:+02.0f}' for p in snr)
         util.get_logger('analysis').info(f'({snr_desc}) dB SNR spectrogram peak')
 
-    def __iter__(self) -> typing.Generator['xr.Dataset' | bytes | None]:
+    def __iter__(self) -> typing.Generator['xr.Dataset | bytes | None']:
         iq = None
         this_ext_data = {}
         prior_ext_data = {}
@@ -312,9 +311,6 @@ class SweepIterator:
                         iq,
                         sweep_time=sweep_time,
                         capture=canalyze,
-                        overwrite_x=not self.spec.radio_setup.reuse_iq,
-                        delayed=True,
-                        block_each=False,
                     )
 
                 if cacquire is None:
@@ -441,7 +437,7 @@ class SweepIterator:
         self,
         results: 'xr.Dataset',
         capture: specs.RadioCapture,
-    ) -> 'xr.Dataset' | None:
+    ) -> 'xr.Dataset | None':
         if not isinstance(results, xr.Dataset):
             raise ValueError(
                 f'expected DelayedAnalysisResult type for data, not {type(results)}'
@@ -514,7 +510,7 @@ def iter_raw_iq(
     offset_captures = util.zip_offsets(sweep.captures, (0, 1), fill=None)
 
     for i, (capture_this, capture_next) in enumerate(offset_captures):
-        desc = captures.describe_capture(
+        desc = describe_capture(
             capture_this, capture_prev, index=i, count=len(sweep.captures)
         )
 

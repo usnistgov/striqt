@@ -18,7 +18,7 @@ if typing.TYPE_CHECKING:
     import zarr.storage
     import pandas as pd
     import yaml
-    from striqt.waveform.type_stubs import ArrayType
+    from striqt.waveform._typing import ArrayType
 
     if hasattr(zarr.storage, 'Store'):
         # zarr 2.x

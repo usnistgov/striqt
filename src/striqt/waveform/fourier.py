@@ -27,7 +27,7 @@ from .util import (
 
 from .windows import register_extra_windows
 
-from .type_stubs import ArrayType
+from ._typing import ArrayType
 
 if typing.TYPE_CHECKING:
     import numpy as np

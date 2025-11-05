@@ -13,16 +13,23 @@ from . import register, specs, util
 
 
 if typing.TYPE_CHECKING:
-    import striqt.waveform
-    import striqt.waveform.type_stubs
+    from striqt.waveform._typing import ArrayType
     import numpy as np
     import xarray as xr
     import array_api_compat
+
+    AnalysisResult: typing.TypeAlias = (
+        'dict[str, ArrayType] | xr.Dataset | dict[str, DelayedDataArray]'
+    )
+
 else:
-    striqt.waveform = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
     xr = util.lazy_import('xarray')
     array_api_compat = util.lazy_import('array_api_compat')
+
+
+AnalysisReturnFlag: typing.TypeAlias = bool | typing.Literal['delayed']
+_TA = typing.TypeVar('_TA', bound=AnalysisReturnFlag)
 
 
 CAPTURE_DIM = 'capture'
@@ -30,9 +37,9 @@ PORT_DIM = 'port'
 
 
 class AcquiredIQ(typing.NamedTuple):
-    raw: 'striqt.waveform.type_stubs.ArrayType'
-    aligned: 'striqt.waveform.type_stubs.ArrayType' | None = None
-    capture: specs.Capture = None
+    raw: ArrayType
+    aligned: ArrayType | None = None
+    capture: specs.Capture | None = None
     unscaled_peak: float | None = None
 
 
@@ -66,8 +73,8 @@ def describe_capture(
     this: specs.Capture | None,
     prev: specs.Capture | None = None,
     *,
-    index: int = None,
-    count: int = None,
+    index: int | None = None,
+    count: int | None = None,
     constrain: tuple[str] | None = None,
     join: str = ', ',
 ) -> str:
@@ -179,12 +186,12 @@ def describe_value(value, attrs: dict, unit_prefix=None):
     return value_str
 
 
-def _results_as_arrays(obj: tuple | list | dict | 'striqt.waveform.util.Array'):
+def _results_as_arrays(obj: tuple | list | dict | ArrayType):
     """convert an array, or a container of arrays, into a numpy array (or container of numpy arrays)"""
 
     if array_api_compat.is_torch_array(obj):
         array = obj.cpu()
-    elif array_api_compat.is_cupy_array(obj):
+    elif util.is_cupy_array(obj):
         array = obj.get()
     elif array_api_compat.is_numpy_array(obj):
         return obj
@@ -202,7 +209,7 @@ def _empty_stub(dims, dtype, attrs={}):
 @util.lru_cache()
 def dataarray_stub(
     dims: tuple[str, ...],
-    coord_factories: tuple[typing.Callable, ...],
+    coord_factories: tuple[register.CallableCoordinateFactory, ...],
     dtype: str,
     coord_registry: register.CoordinateRegistry,
     expand_dims: tuple[str, ...] | None = None,
@@ -215,7 +222,7 @@ def dataarray_stub(
         coord_stubs[info.name] = _empty_stub(info.dims, info.dtype, attrs=info.attrs)
 
     if dims is None or dims == ():
-        dims = _infer_coord_dims(coord_factories)
+        dims = _infer_coord_dims(coord_factories, coord_registry)
 
     data_stub = _empty_stub(dims, dtype)
     stub = xr.DataArray(data=data_stub, dims=dims, coords=coord_stubs)
@@ -260,7 +267,7 @@ def build_dataarray(
         coord_registry=coord_registry,
         expand_dims=expand_dims,
     )
-    data = np.asarray(delayed.data)
+    data = np.asarray(delayed.result)
     delayed.spec.validate()
 
     _validate_delayed_ndim(delayed)
@@ -274,7 +281,7 @@ def build_dataarray(
         target_shape = data.shape
     else:
         # broadcast on the capture dimension
-        data = np.atleast_1d(delayed.data)
+        data = np.atleast_1d(delayed.result)
         target_shape = (len(delayed.capture.port), *data.shape[1:])
 
     # to bypass initialization overhead, grow from the empty template
@@ -319,9 +326,9 @@ def build_dataarray(
 
 @util.lru_cache()
 def _infer_coord_dims(
-    coord_factories: typing.Iterable[typing.Callable],
+    coord_factories: tuple[register.CallableCoordinateFactory, ...],
     coord_registry: register.CoordinateRegistry,
-) -> list[str]:
+) -> tuple[str, ...]:
     """guess dimensions of a dataarray based on its coordinates.
 
     This orders the dimensions according to (1) first appearance in each
@@ -335,17 +342,20 @@ def _infer_coord_dims(
         coord = coord_registry[func]
         if coord is None:
             continue
-        coord_dims.update(dict.fromkeys(coord.dims, None))
-    return list(coord_dims.keys())
+        empty_coords = dict.fromkeys(coord.dims or {}, None)
+        coord_dims.update(empty_coords)
+    return tuple(coord_dims.keys())
 
 
 def _validate_delayed_ndim(delayed: DelayedDataArray) -> None:
     if delayed.info.dims is None:
-        expect_dims = _infer_coord_dims(delayed.info.coord_factories)
+        expect_dims = _infer_coord_dims(
+            delayed.info.coord_factories, delayed.coord_registry
+        )
     else:
         expect_dims = delayed.info.dims
 
-    ndim = delayed.data.ndim
+    ndim = delayed.result.ndim
 
     if len(expect_dims) == ndim == 0:
         # allow scalar values
@@ -366,19 +376,19 @@ class DelayedDataArray(collections.UserDict):
     analyses before we materialize them on the CPU.
     """
 
-    capture: specs.RadioCapture
+    capture: specs.Capture
     spec: specs.Measurement
-    data: typing.Union['striqt.waveform.type_stubs.ArrayLike', dict]
+    result: AnalysisResult
     info: register.MeasurementInfo
     attrs: dict
-    coord_registry: register.CoordinateRegistry | None = None
+    coord_registry: register.CoordinateRegistry
 
     def compute(self) -> DelayedDataArray:
         return DelayedDataArray(
             # datacls=self.datacls,
             capture=self.capture,
             spec=self.spec,
-            data=_results_as_arrays(self.data),
+            result=_results_as_arrays(self.result),
             info=self.info,
             attrs=self.attrs,
             coord_registry=self.coord_registry,
@@ -397,33 +407,39 @@ def select_parameter_kws(locals_: dict, omit=(PORT_DIM, 'out')) -> dict:
     return {k: v for k, v in items[1:] if k not in omit}
 
 
+@dataclasses.dataclass
+class EvaluationOptions(typing.NamedTuple, typing.Generic[_TA]):
+    spec: dict[str, specs.Measurement] | specs.Analysis
+    registry: register.MeasurementRegistry
+    as_xarray: _TA
+    block_each: bool = True
+    expand_dims: typing.Sequence[str] | None = None
+
+
 def evaluate_by_spec(
-    iq: 'striqt.waveform.type_stubs.ArrayType' | AcquiredIQ,
-    capture: specs.Capture,
-    *,
-    spec: str | dict | specs.Measurement,
-    registry: register.MeasurementRegistry,
-    as_xarray: typing.Literal[True]
-    | typing.Literal[False]
-    | typing.Literal['delayed'] = 'delayed',
-    block_each=True,
+    iq: ArrayType | AcquiredIQ, capture: specs.Capture, options: EvaluationOptions
 ):
     """evaluate each analysis for the given IQ waveform"""
 
-    if isinstance(spec, specs.Analysis):
-        spec = spec.validate()
+    if isinstance(options.spec, specs.Analysis):
+        spec = options.spec.validate()
+    elif isinstance(options.spec, dict):
+        spec = options.registry.tospec().fromdict(options.spec)
     else:
-        spec = registry.tospec().fromdict(spec)
+        raise TypeError('invalid analysis spec argument')
+
+    if not isinstance(iq, AcquiredIQ):
+        iq = AcquiredIQ(raw=iq)
 
     spec_dict = spec.todict()
-    results: dict[str, DelayedDataArray] = {}
-    as_xarray = 'delayed' if as_xarray else False
+    results: dict[str, DelayedDataArray] | dict[str, ArrayType] = {}
+    as_xarray = 'delayed' if options.as_xarray else False
 
-    if array_api_compat.is_cupy_array(getattr(iq, 'raw', iq)):
+    if util.is_cupy_array(getattr(iq, 'raw', iq)):
         util.configure_cupy()
 
     for name in spec_dict.keys():
-        meas = registry[type(getattr(spec, name))]
+        meas = options.registry[type(getattr(spec, name))]
 
         with util.stopwatch(name, 'analysis'):
             func_kws = spec_dict[name]
@@ -438,16 +454,16 @@ def evaluate_by_spec(
 
             ret = meas.func(iq=iq_sel, capture=capture, as_xarray=as_xarray, **func_kws)
 
-            if block_each:
+            if options.block_each:
                 results[name] = ret.compute()
             else:
                 results[name] = ret
 
-    if as_xarray == 'delayed' and block_each:
+    if as_xarray == 'delayed' and options.block_each:
         return results
 
     for name in list(results.keys()):
-        if block_each:
+        if options.block_each:
             res = results[name]
         else:
             res = results[name].compute()
@@ -455,9 +471,10 @@ def evaluate_by_spec(
         if as_xarray == 'delayed':
             results[name] = res
         else:
+            assert isinstance(res, DelayedDataArray)
             results[name] = res.to_xarray()
 
-    if array_api_compat.is_cupy_array(getattr(iq, 'raw', iq)):
+    if util.is_cupy_array(getattr(iq, 'raw', iq)):
         util.free_cupy_mempool()
 
     return results
@@ -482,28 +499,38 @@ def package_analysis(
     return ret
 
 
+@typing.overload
 def analyze_by_spec(
-    iq: 'striqt.waveform.type_stubs.ArrayType' | AcquiredIQ,
+    iq: ArrayType | AcquiredIQ,
     capture: specs.Capture,
-    *,
-    spec: str | dict | specs.Measurement,
-    registry: register.MeasurementRegistry,
-    as_xarray: bool | typing.Literal['delayed'] = True,
-    block_each: bool = True,
-    expand_dims=None,
-) -> 'xr.Dataset':
+    options: EvaluationOptions[typing.Literal[True]],
+) -> 'xr.Dataset': ...
+
+
+@typing.overload
+def analyze_by_spec(
+    iq: ArrayType | AcquiredIQ,
+    capture: specs.Capture,
+    options: EvaluationOptions[typing.Literal['delayed']],
+) -> 'dict[str, DelayedDataArray]': ...
+
+
+@typing.overload
+def analyze_by_spec(
+    iq: ArrayType | AcquiredIQ,
+    capture: specs.Capture,
+    options: EvaluationOptions[typing.Literal[False]],
+) -> 'dict[str, ArrayType]': ...
+
+
+def analyze_by_spec(
+    iq: ArrayType | AcquiredIQ, capture: specs.Capture, options: EvaluationOptions
+) -> AnalysisResult:
     """evaluate a set of different channel analyses on the iq waveform as specified by spec"""
 
-    results = evaluate_by_spec(
-        iq,
-        capture,
-        registry=registry,
-        spec=spec,
-        block_each=block_each,
-        as_xarray='delayed' if as_xarray else False,
-    )
+    results = evaluate_by_spec(iq, capture, options)
 
-    if not as_xarray or as_xarray == 'delayed':
+    if not options.as_xarray or options.as_xarray == 'delayed':
         return results
     else:
-        return package_analysis(capture, results, expand_dims=expand_dims)
+        return package_analysis(capture, results, expand_dims=options.expand_dims)

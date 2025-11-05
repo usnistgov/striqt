@@ -1,8 +1,6 @@
-from ._version import __version__
-
 from . import fourier, io, ofdm, power_analysis, util, windows
 
-figures = util.lazy_import('iqwaveform.figures')
+figures = util.lazy_import('striqt.waveform.figures')
 
 from .fourier import (
     design_fir_lpf,
