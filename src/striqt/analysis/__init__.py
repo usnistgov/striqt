@@ -4,7 +4,7 @@ from .lib import dataarrays, io, source, specs, util
 from .lib.io import load, dump, open_store
 from .lib.register import MeasurementRegistry
 from .lib.source import simulated_awgn, filter_iq_capture
-from .lib.specs import Capture
+from .lib.specs import CaptureBase
 from .lib.dataarrays import describe_capture, describe_value, analyze_by_spec
 
 from .measurements import *

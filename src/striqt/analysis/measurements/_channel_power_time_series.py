@@ -36,7 +36,7 @@ class ChannelPowerTimeSeriesKeywords(specs.AnalysisKeywords):
     dtype='float32', attrs={'standard_name': 'Time elapsed', 'units': 's'}
 )
 @util.lru_cache()
-def time_elapsed(capture: specs.Capture, spec: ChannelPowerTimeSeriesSpec):
+def time_elapsed(capture: specs.CaptureBase, spec: ChannelPowerTimeSeriesSpec):
     length = round(capture.duration / spec.detector_period)
     return pd.RangeIndex(length) * spec.detector_period
 
@@ -44,7 +44,7 @@ def time_elapsed(capture: specs.Capture, spec: ChannelPowerTimeSeriesSpec):
 @registry.coordinates(dtype=object, attrs={'standard_name': 'Power detector'})
 @util.lru_cache()
 def power_detector(
-    capture: specs.Capture, spec: ChannelPowerTimeSeriesSpec
+    capture: specs.CaptureBase, spec: ChannelPowerTimeSeriesSpec
 ) -> 'np.ndarray':
     return np.array(spec.power_detectors)
 
@@ -54,7 +54,7 @@ _channel_power_cache = register.KeywordArgumentCache([dataarrays.CAPTURE_DIM, 's
 
 @_channel_power_cache.apply
 def evaluate_channel_power_time_series(
-    iq, capture: specs.Capture, spec: ChannelPowerTimeSeriesSpec
+    iq, capture: specs.CaptureBase, spec: ChannelPowerTimeSeriesSpec
 ):
     results = []
     for d in spec.power_detectors:
@@ -79,7 +79,9 @@ def evaluate_channel_power_time_series(
     attrs={'standard_name': 'Channel Power', 'units': 'dBm'},
 )
 def channel_power_time_series(
-    iq, capture: specs.Capture, **kwargs: typing.Unpack[ChannelPowerTimeSeriesKeywords]
+    iq,
+    capture: specs.CaptureBase,
+    **kwargs: typing.Unpack[ChannelPowerTimeSeriesKeywords],
 ):
     spec = ChannelPowerTimeSeriesSpec.fromdict(kwargs)
 

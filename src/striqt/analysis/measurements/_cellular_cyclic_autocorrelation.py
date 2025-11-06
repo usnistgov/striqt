@@ -148,7 +148,7 @@ def tdd_config_from_str(
 )
 @util.lru_cache()
 def cyclic_sample_lag(
-    capture: specs.Capture, spec: CellularCyclicAutocorrelationSpec
+    capture: specs.CaptureBase, spec: CellularCyclicAutocorrelationSpec
 ) -> dict[str, np.ndarray]:
     max_len = _get_max_corr_size(capture, subcarrier_spacings=spec.subcarrier_spacings)
     name = cyclic_sample_lag.__name__
@@ -163,13 +163,15 @@ SubcarrierSpacingAxis = typing.Literal['subcarrier_spacing']
     dtype='float32', attrs={'standard_name': 'Subcarrier spacing', 'units': 'Hz'}
 )
 @util.lru_cache()
-def subcarrier_spacing(capture: specs.Capture, spec: CellularCyclicAutocorrelationSpec):
+def subcarrier_spacing(
+    capture: specs.CaptureBase, spec: CellularCyclicAutocorrelationSpec
+):
     return list(spec.subcarrier_spacings)
 
 
 @registry.coordinates(dtype='str', attrs={'standard_name': 'Link direction'})
 @util.lru_cache()
-def link_direction(capture: specs.Capture, spec: CellularCyclicAutocorrelationSpec):
+def link_direction(capture: specs.CaptureBase, spec: CellularCyclicAutocorrelationSpec):
     values = np.array(['downlink', 'uplink'], dtype='U8')
     return values, {}
 
@@ -191,7 +193,7 @@ def _get_phy_mapping(
 
 @util.lru_cache()
 def _get_max_corr_size(
-    capture: specs.Capture, *, subcarrier_spacings: tuple[float, ...]
+    capture: specs.CaptureBase, *, subcarrier_spacings: tuple[float, ...]
 ):
     phy_scs = _get_phy_mapping(
         capture.analysis_bandwidth, capture.sample_rate, subcarrier_spacings
@@ -208,7 +210,7 @@ def _get_max_corr_size(
 )
 def cellular_cyclic_autocorrelation(
     iq: 'iqwaveform.util.Array',
-    capture: specs.Capture,
+    capture: specs.CaptureBase,
     **kwargs: typing.Unpack[CellularCyclicAutocorrelationKeywords],
 ) -> 'iqwaveform.util.Array':
     """evaluate the cyclic autocorrelation of the IQ sequence based on 4G or 5G cellular

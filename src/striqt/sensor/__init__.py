@@ -12,6 +12,6 @@ from .lib.sources import (
     ZarrIQSource,
     design_capture_resampler,
 )
-from .lib.specs import RadioCapture, RadioSetup, Sweep, Description
+from .lib.specs import CaptureSpec, SourceSpec, SweepSpec, Description
 from .lib.sweeps import iter_sweep
 from .lib.datasets import CAPTURE_DIM, concat_time_dim, analyze_capture

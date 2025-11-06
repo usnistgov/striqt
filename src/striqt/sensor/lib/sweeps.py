@@ -10,6 +10,7 @@ from . import captures, datasets, sources, specs, util
 from .calibration import lookup_system_noise_power
 from .peripherals import PeripheralsBase
 from .sinks import SinkBase
+from .specs import _TS, _TC
 from striqt.analysis.lib.dataarrays import AcquiredIQ, describe_capture
 from striqt.analysis.lib import register
 from striqt.analysis import measurements
@@ -20,17 +21,17 @@ else:
     xr = util.lazy_import('xarray')
 
 
-class Resources(typing.TypedDict):
+class Resources(typing.TypedDict, typing.Generic[_TS, _TC], total=False):
     """Sensor resources needed to run a sweep"""
 
-    radio: 'sources.SourceBase'
+    source: typing.Required[sources.SourceBase[_TS, _TC]]
     sink: SinkBase
-    peripherals: PeripheralsBase
-    sweep_spec: specs.Sweep
+    peripherals: PeripheralsBase[_TS, _TC]
+    sweep_spec: specs.SweepSpec[_TS, _TC]
     calibration: 'xr.Dataset'
 
 
-def varied_capture_fields(sweep: specs.Sweep) -> list[str]:
+def varied_capture_fields(sweep: specs.SweepSpec) -> list[str]:
     """generate a list of capture fields with at least 2 values in the specified sweep"""
     unlooped_values = (c.todict().values() for c in sweep.get_captures(False))
     unlooped_counts = [len(Counter(v)) for v in zip(*unlooped_values)]
@@ -44,10 +45,10 @@ def varied_capture_fields(sweep: specs.Sweep) -> list[str]:
     return [f for f, c in all_counts.items() if c > 1]
 
 
-def sweep_touches_gpu(sweep: specs.Sweep):
+def sweep_touches_gpu(sweep: specs.SweepSpec):
     """returns True if the sweep would benefit from the GPU"""
 
-    if sweep.radio_setup.calibration is not None:
+    if sweep.source.calibration is not None:
         return True
 
     analysis_dict = sweep.analysis.todict()
@@ -63,8 +64,8 @@ def sweep_touches_gpu(sweep: specs.Sweep):
 
 
 def design_warmup_sweep(
-    sweep: specs.Sweep, skip: tuple[specs.RadioCapture, ...]
-) -> specs.Sweep:
+    sweep: specs.SweepSpec[_TS, _TC], skip: tuple[_TC, ...] = ()
+) -> specs.SweepSpec:
     """returns a Sweep object for a NullRadio consisting of capture combinations from
     `sweep`.
 
@@ -93,24 +94,24 @@ def design_warmup_sweep(
     if len(captures) > 1:
         captures = captures[:1]
 
-    radio_cls = sources.find_radio_cls_by_name(sweep.radio_setup.driver)
+    radio_cls = sources.find_radio_cls_by_name(sweep.source.driver)
 
     # TODO: currently, the base_clock_rate is left as the null radio default.
     # this may cause problems in the future if its default disagrees with another
     # radio
-    null_radio_setup = sources.NullSetup.fromspec(sweep.radio_setup).replace(
+    null_radio_setup = sources.NullSetup.fromspec(sweep.source).replace(
         num_rx_ports=num_rx_ports, calibration=None, reuse_iq=False
     )
 
-    null_radio_setup = sweep.radio_setup.replace(
+    null_radio_setup = sweep.source.replace(
         driver=sources.WarmupSource.__name__,
         resource={},
     )
 
     class WarmupSweep(type(sweep)):
-        def get_captures(self):
+        def get_captures(self, looped):
             # override any capture auto-generating logic
-            return specs.Sweep.get_captures(self, looped=False)
+            return specs.SweepSpec.get_captures(self, looped=False)
 
     warmup = WarmupSweep.fromdict(sweep.todict())
 
@@ -118,7 +119,7 @@ def design_warmup_sweep(
 
 
 def _iq_is_reusable(
-    c1: specs.RadioCapture | None, c2: specs.RadioCapture, base_clock_rate
+    c1: specs.CaptureSpec | None, c2: specs.CaptureSpec, base_clock_rate
 ):
     """return True if c2 is compatible with the raw and uncalibrated IQ acquired for c1"""
 
@@ -149,9 +150,9 @@ def _iq_is_reusable(
     return c1_compare == c2_compare
 
 
-def _build_attrs(sweep: specs.Sweep):
+def _build_attrs(sweep: specs.SweepSpec):
     fields = set(type(sweep).__struct_fields__)
-    base_fields = set(specs.Sweep.__struct_fields__)
+    base_fields = set(specs.SweepSpec.__struct_fields__)
     new_fields = list(fields - base_fields)
     attr_fields = ['radio_setup'] + new_fields
 
@@ -170,8 +171,8 @@ def _build_attrs(sweep: specs.Sweep):
 
 def _update_sweep_time(
     sweep_time: specs.StartTimeType | None,
-    new: specs.RadioCapture,
-    old: specs.RadioCapture | None,
+    new: specs.CaptureSpec,
+    old: specs.CaptureSpec | None,
 ) -> specs.StartTimeType:
     if sweep_time is None:
         return new.start_time
@@ -214,7 +215,7 @@ def log_progress_contexts(index, count):
 
 
 class SweepIterator:
-    spec: specs.Sweep
+    spec: specs.SweepSpec
 
     def __init__(
         self,
@@ -249,8 +250,8 @@ class SweepIterator:
             block_each=False,
         )
 
-    def show_cache_info(self, cache, capture: specs.RadioCapture, result, *_, **__):
-        cal = self.spec.radio_setup.calibration
+    def show_cache_info(self, cache, capture: specs.CaptureSpec, result, *_, **__):
+        cal = self.spec.source.calibration
         if cal is None or 'spectrogram' not in cache.name:
             return
 
@@ -354,7 +355,7 @@ class SweepIterator:
 
     @util.stopwatch('✓', 'source', logger_level=util.PERFORMANCE_INFO)
     def _acquire(self, iq_prev: AcquiredIQ, capture_prev, capture_this, capture_next):
-        if self.spec.radio_setup.reuse_iq:
+        if self.spec.source.reuse_iq:
             reuse_this = _iq_is_reusable(
                 capture_prev, capture_this, self.radio.get_setup_spec().base_clock_rate
             )
@@ -421,11 +422,11 @@ class SweepIterator:
                     f'dict or None, not {type(data)!r}'
                 )
 
-        if self.spec.radio_setup.calibration is None:
+        if self.spec.source.calibration is None:
             return data
 
         system_noise = lookup_system_noise_power(
-            self.spec.radio_setup.calibration,
+            self.spec.source.calibration,
             capture,
             self.radio.get_setup_spec().base_clock_rate,
         )
@@ -436,7 +437,7 @@ class SweepIterator:
     def _intake(
         self,
         results: 'xr.Dataset',
-        capture: specs.RadioCapture,
+        capture: specs.CaptureSpec,
     ) -> 'xr.Dataset | None':
         if not isinstance(results, xr.Dataset):
             raise ValueError(
@@ -481,7 +482,7 @@ def iter_sweep(
 
 def iter_raw_iq(
     radio: 'sources.SourceBase',
-    sweep: specs.Sweep,
+    sweep: specs.SweepSpec,
     quiet=False,
 ) -> typing.Generator[AcquiredIQ]:
     """iterate through the sweep and yield the raw IQ vector for each.

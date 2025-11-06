@@ -8,7 +8,7 @@ from pathlib import Path
 import typing
 import warnings
 
-from .lib.specs import Capture
+from .lib.specs import CaptureBase
 from .lib import dataarrays
 
 import matplotlib as mpl
@@ -454,7 +454,7 @@ def label_by_coord(data: xr.DataArray, fmt: str, *, title_case=True, **extra_fie
 
 def summarize_metadata(
     source: xr.Dataset,
-    capture_type: type[Capture],
+    capture_type: type[CaptureBase],
     array: 'xr.DataArray ' = None,
     *,
     as_str: bool = False,

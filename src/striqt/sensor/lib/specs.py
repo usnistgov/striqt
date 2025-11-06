@@ -21,9 +21,66 @@ else:
     # to resolve the 'pd.Timestamp' stub at runtime
     pd = util.lazy_import('pandas')
 
-_TC = typing.TypeVar('_TC', bound='RadioCapture')
-_TS = typing.TypeVar('_TS', bound='RadioSetup')
-_TSW = typing.TypeVar('_TSW', bound='Sweep')
+_TC = typing.TypeVar('_TC', bound='CaptureSpec')
+_TS = typing.TypeVar('_TS', bound='SourceSpec')
+
+spec_kws = dict(
+    forbid_unknown_fields=True,
+    cache_hash=True,
+    kw_only=True,
+)
+
+
+def _dict_hash(d):
+    key_hash = frozenset(d.keys())
+    value_hash = tuple(
+        [_dict_hash(v) if isinstance(v, dict) else v for v in d.values()]
+    )
+    return hash(key_hash) ^ hash(value_hash)
+
+
+@util.lru_cache()
+def _validate_multichannel(port, gain):
+    """guarantee that self.gain is a number, or matches the length of self.port"""
+    if isinstance(port, numbers.Number):
+        if isinstance(gain, tuple):
+            raise ValueError(
+                'gain must be a single number unless multiple ports are specified'
+            )
+    else:
+        if isinstance(gain, tuple) and len(gain) != len(port):
+            raise ValueError('gain, when specified as a tuple, must match port count')
+
+
+@functools.lru_cache(2)
+def _expand_loops(
+    explicit: tuple[_TC, ...], loops: tuple[LoopSpec, ...]
+) -> tuple[_TC, ...]:
+    """evaluate the loop specification, and flatten into one list of loops"""
+    fields = tuple([loop.field for loop in loops])
+
+    for f in fields:
+        if f is None:
+            continue
+        if f not in explicit[0].__struct_fields__:
+            raise TypeError(f'loop specifies capture field {f!r} that is not defined')
+
+    loop_points = [loop.get_points() for loop in loops]
+    combinations = itertools.product(*loop_points)
+
+    result = []
+    for values in combinations:
+        updates = dict(zip(fields, values))
+
+        extras = [c.replace(**updates) for c in explicit]
+
+        result += extras
+
+    if len(result) == 0:
+        return explicit
+    else:
+        return tuple(result)
+
 
 AnalysisBandwidthType = Annotated[
     float, meta('Bandwidth of the analysis filter (or inf to disable)', 'Hz', gt=0)
@@ -48,21 +105,7 @@ PortType = Annotated[
 StartTimeType = Annotated['pd.Timestamp', meta('Acquisition start time')]
 
 
-def _dict_hash(d):
-    key_hash = frozenset(d.keys())
-    value_hash = tuple(
-        [_dict_hash(v) if isinstance(v, dict) else v for v in d.values()]
-    )
-    return hash(key_hash) ^ hash(value_hash)
-
-
-class WaveformCapture(
-    analysis.Capture,
-    forbid_unknown_fields=True,
-    frozen=True,
-    cache_hash=True,
-    kw_only=True,
-):
+class WaveformCapture(analysis.CaptureBase, frozen=True, **spec_kws):
     """Capture specification structure for a generic waveform.
 
     This subset of RadioCapture is broken out here to simplify the evaluation of
@@ -70,9 +113,9 @@ class WaveformCapture(
     """
 
     # acquisition
+    port: PortType
     duration: Annotated[float, meta('Acquisition duration', 's', gt=0)] = 0.1
     sample_rate: Annotated[float, meta('Sample rate', 'S/s', gt=0)] = 15.36e6
-    port: PortType
 
     # filtering and resampling
     analysis_bandwidth: AnalysisBandwidthType = float('inf')
@@ -86,6 +129,7 @@ class _WaveformCaptureKeywords(typing.TypedDict, total=False):
     # this needs to be kept in sync with WaveformCapture in order to
     # properly provide type hints for IDEs in the arm and acquire
     # call signatures of source.Base objects
+    port: PortType
     duration: Annotated[float, meta('Acquisition duration', 's', gt=0)]
     sample_rate: Annotated[float, meta('Sample rate', 'S/s', gt=0)]
 
@@ -96,13 +140,7 @@ class _WaveformCaptureKeywords(typing.TypedDict, total=False):
     backend_sample_rate: Optional[BackendSampleRateType]
 
 
-class RadioCapture(
-    WaveformCapture,
-    forbid_unknown_fields=True,
-    frozen=True,
-    cache_hash=True,
-    kw_only=True,
-):
+class CaptureSpec(WaveformCapture, frozen=True, **spec_kws):
     """Capture specification for a single radio waveform"""
 
     delay: Optional[DelayType] = None
@@ -112,15 +150,39 @@ class RadioCapture(
     sweep_index: typing.ClassVar[int] = 0
 
 
-class _RadioCaptureKeywords(_WaveformCaptureKeywords, total=False):
+class _CaptureSpecKeywords(_WaveformCaptureKeywords, total=False):
+    # this needs to be kept in sync with WaveformCapture in order to
+    # properly provide type hints for IDEs in the arm and acquire
+    # call signatures of source.Base objects
+    delay: DelayType
+    start_time: StartTimeType
+
+
+class SoapyCaptureSpec(CaptureSpec, frozen=True, kw_only=True, **spec_kws):
+    center_frequency: CenterFrequencyType
+    gain: GainType
+
+    def __post_init__(self):
+        super().__post_init__()
+        _validate_multichannel(self.port, self.gain)
+
+
+class _SoapyCaptureSpecKeywords(_CaptureSpecKeywords, total=False):
     # this needs to be kept in sync with WaveformCapture in order to
     # properly provide type hints for IDEs in the arm and acquire
     # call signatures of source.Base objects
     center_frequency: CenterFrequencyType
-    port: PortType
     gain: GainType
-    delay: DelayType
-    start_time: StartTimeType
+
+
+class FileCaptureSpec(CaptureSpec, frozen=True, **spec_kws):
+    """Capture specification read from a file, with support for None sentinels"""
+
+    # RF and leveling
+    center_frequency: Optional[CenterFrequencyType] = float('nan')
+    port: PortType = 0
+    gain: Optional[GainType] = float('nan')
+    backend_sample_rate: Optional[float] = float('nan')
 
 
 ClockSourceType = Annotated[
@@ -146,129 +208,9 @@ TimeSourceType = Annotated[
     meta('Hardware source for timestamps'),
 ]
 
-
 TimeSyncEveryCaptureType = Annotated[
     bool, meta('whether to sync to PPS before each capture in a sweep')
 ]
-
-
-@util.lru_cache()
-def _validate_multichannel(port, gain):
-    """guarantee that self.gain is a number, or matches the length of self.port"""
-    if isinstance(port, numbers.Number):
-        if isinstance(gain, tuple):
-            raise ValueError(
-                'gain must be a single number unless multiple ports are specified'
-            )
-    else:
-        if isinstance(gain, tuple) and len(gain) != len(port):
-            raise ValueError('gain, when specified as a tuple, must match port count')
-
-
-class SoapyCapture(
-    RadioCapture,
-    forbid_unknown_fields=True,
-    frozen=True,
-    cache_hash=True,
-    kw_only=True,
-):
-    center_frequency: CenterFrequencyType
-    gain: GainType
-
-    def __post_init__(self):
-        super().__post_init__()
-        _validate_multichannel(self.port, self.gain)
-
-
-class _SoapyCaptureKeywords(_RadioCaptureKeywords, total=False):
-    # this needs to be kept in sync with WaveformCapture in order to
-    # properly provide type hints for IDEs in the arm and acquire
-    # call signatures of source.Base objects
-    center_frequency: CenterFrequencyType
-    port: PortType
-    gain: GainType
-
-
-class FileCapture(
-    RadioCapture, forbid_unknown_fields=True, cache_hash=True, kw_only=True, frozen=True
-):
-    """Capture specification read from a file, with support for None sentinels"""
-
-    # RF and leveling
-    center_frequency: Optional[CenterFrequencyType] = float('nan')
-    port: PortType = 0
-    gain: Optional[GainType] = float('nan')
-    backend_sample_rate: Optional[float] = float('nan')
-
-
-class LoopBase(
-    SpecBase,
-    tag=str.lower,
-    tag_field='kind',
-    forbid_unknown_fields=False,
-    frozen=True,
-    kw_only=True,
-):
-    field: str
-
-    def get_points(self):
-        raise NotImplementedError
-
-
-class Range(LoopBase, forbid_unknown_fields=True, frozen=True, kw_only=True):
-    start: float
-    stop: float
-    step: float
-
-    def get_points(self):
-        import numpy as np
-
-        if self.start == self.stop:
-            return np.array([self.start])
-
-        a = np.arange(self.start, self.stop + self.step / 2, self.step)
-        return list(a)
-
-
-class Repeat(LoopBase, forbid_unknown_fields=True, frozen=True, kw_only=True):
-    field: str = '_sweep_index'
-    count: int = 1
-
-    def get_points(self):
-        return list(range(self.count))
-
-
-class List(LoopBase, forbid_unknown_fields=True, frozen=True, kw_only=True):
-    values: tuple[typing.Any, ...]
-
-    def get_points(self):
-        return self.values
-
-
-class FrequencyBinRange(
-    LoopBase, forbid_unknown_fields=True, frozen=True, kw_only=True
-):
-    start: float
-    stop: float
-    step: float
-
-    def get_points(self):
-        from math import ceil
-        import numpy as np
-
-        span = self.stop - self.start
-        count = ceil(span / self.step)
-        expanded_span = count * self.step
-        points = np.linspace(-expanded_span / 2, expanded_span / 2, count + 1)
-        if points[0] < self.start:
-            points = points[1:]
-        if points[-1] > self.stop:
-            points = points[:-1]
-        return list(points)
-
-
-LoopSpecifier = typing.Union[Repeat, List, Range, FrequencyBinRange]
-
 
 GaplessRepeatType = Annotated[
     bool,
@@ -311,7 +253,7 @@ SyncSourceType = Annotated[
 ]
 
 
-class _RadioSetupKeywords(typing.TypedDict, total=False):
+class _SourceSpecKeywords(typing.TypedDict, total=False):
     # this needs to be kept in sync with WaveformCapture in order to
     # properly provide type hints for IDEs in the setup
     # call signature of source.Base objects
@@ -333,16 +275,10 @@ class _RadioSetupKeywords(typing.TypedDict, total=False):
     uncalibrated_peak_detect: Union[bool, typing.Literal['auto']]
 
 
-class RadioSetup(
-    SpecBase,
-    forbid_unknown_fields=True,
-    frozen=True,
-    cache_hash=True,
-    kw_only=True,
-):
+class SourceSpec(SpecBase, frozen=True, **spec_kws):
     """run-time characteristics of the radio that are left invariant during a sweep"""
 
-    driver: Optional[str]
+    # driver: Optional[str]
 
     # acquisition
     base_clock_rate: BaseClockRateType
@@ -372,13 +308,7 @@ class RadioSetup(
     transport_dtype: Literal['int16'] | Literal['complex64'] = 'complex64'
 
 
-class SoapySetup(
-    RadioSetup,
-    forbid_unknown_fields=True,
-    frozen=True,
-    cache_hash=True,
-    kw_only=True,
-):
+class SoapySourceSpec(SourceSpec, frozen=True, **spec_kws):
     device_kwargs: typing.ClassVar[dict[str, typing.Any]] = {}
 
     time_source: TimeSourceType = 'host'
@@ -413,18 +343,78 @@ class SoapySetup(
             )
 
 
-class _SoapySetupKeywords(_RadioSetupKeywords, total=False):
+class _SoapySourceSpecKeywords(_SourceSpecKeywords, total=False):
     receive_retries: ReceiveRetriesType
     time_source: TimeSourceType
     clock_source: ClockSourceType
     time_sync_every_capture: TimeSyncEveryCaptureType
 
 
-class Description(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
+class Description(SpecBase, frozen=True, **spec_kws):
     summary: Optional[str] = None
     location: Optional[tuple[float, float, float]] = None
     signal_chain: Optional[tuple[str, ...]] = tuple()
     version: str = 'unversioned'
+
+
+class LoopBase(SpecBase, tag=str.lower, tag_field='kind', frozen=True, **spec_kws):
+    field: str
+
+    def get_points(self):
+        raise NotImplementedError
+
+
+class Range(LoopBase, frozen=True, **spec_kws):
+    start: float
+    stop: float
+    step: float
+
+    def get_points(self):
+        import numpy as np
+
+        if self.start == self.stop:
+            return np.array([self.start])
+
+        a = np.arange(self.start, self.stop + self.step / 2, self.step)
+        return list(a)
+
+
+class Repeat(LoopBase, frozen=True, **spec_kws):
+    field: str = '_sweep_index'
+    count: int = 1
+
+    def get_points(self):
+        return list(range(self.count))
+
+
+class List(LoopBase, frozen=True, **spec_kws):
+    values: tuple[typing.Any, ...]
+
+    def get_points(self):
+        return self.values
+
+
+class FrequencyBinRange(LoopBase, frozen=True, **spec_kws):
+    start: float
+    stop: float
+    step: float
+
+    def get_points(self):
+        from math import ceil
+        import numpy as np
+
+        span = self.stop - self.start
+        count = ceil(span / self.step)
+        expanded_span = count * self.step
+        points = np.linspace(-expanded_span / 2, expanded_span / 2, count + 1)
+        if points[0] < self.start:
+            points = points[1:]
+        if points[-1] > self.stop:
+            points = points[:-1]
+        return list(points)
+
+
+LoopSpec = typing.Union[Repeat, List, Range, FrequencyBinRange]
 
 
 AliasMatchType = Annotated[
@@ -435,9 +425,7 @@ AliasMatchType = Annotated[
 ]
 
 
-class Output(
-    _SlowHashSpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True
-):
+class Output(_SlowHashSpecBase, frozen=True, **spec_kws):
     path: Optional[str] = '{yaml_name}-{start_time}'
     log_path: Optional[str] = None
     log_level: str = 'info'
@@ -468,7 +456,7 @@ ExtensionPathType = Annotated[
 ]
 
 
-class Extensions(SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True):
+class Extensions(SpecBase, frozen=True, **spec_kws):
     peripherals: PeripheralClassType = 'striqt.sensor.peripherals.NoPeripherals'
     sink: SinkClassType = 'striqt.sensor.sinks.CaptureAppender'
     sweep_struct: SweepStructType = 'striqt.sensor.Sweep'
@@ -490,49 +478,17 @@ WindowFillType = Annotated[
 ]
 
 
-@functools.lru_cache(2)
-def _expand_loops(
-    explicit_captures: tuple[RadioCapture, ...], loops: tuple[LoopSpecifier, ...]
-) -> tuple[RadioCapture, ...]:
-    """evaluate the loop specification, and flatten into one list of loops"""
-    fields = tuple([loop.field for loop in loops])
-
-    for f in fields:
-        if f is None:
-            continue
-        if f not in explicit_captures[0].__struct_fields__:
-            raise TypeError(f'loop specifies capture field {f!r} that is not defined')
-
-    loop_points = [loop.get_points() for loop in loops]
-    combinations = itertools.product(*loop_points)
-
-    result = []
-    for values in combinations:
-        updates = dict(zip(fields, values))
-
-        extras = [c.replace(**updates) for c in explicit_captures]
-
-        result += extras
-
-    if len(result) == 0:
-        return explicit_captures
-    else:
-        return tuple(result)
-
-
-class Sweep(
-    SpecBase, forbid_unknown_fields=True, frozen=True, cache_hash=True, kw_only=True
-):
-    radio_setup: RadioSetup
-    captures: tuple[RadioCapture, ...] = tuple()
-    loops: tuple[LoopSpecifier, ...] = ()
+class SweepSpec(SpecBase, typing.Generic[_TS, _TC], frozen=True, **spec_kws):
+    source: _TS
+    captures: tuple[_TC, ...] = tuple()
+    loops: tuple[LoopSpec, ...] = ()
 
     analysis: BundledAnalysis = BundledAnalysis()  # type: ignore
     description: typing.Union[Description, str] = ''
     extensions: Extensions = Extensions()
     output: Output = Output()
 
-    def get_captures(self, looped=True) -> tuple[RadioCapture, ...]:
+    def get_captures(self, looped=True) -> tuple[_TC, ...]:
         """subclasses may use this to autogenerate capture sequences"""
         explicit_captures = object.__getattribute__(self, 'captures')
         if looped:
@@ -558,8 +514,8 @@ class Sweep(
 
     @classmethod
     def _from_registry(
-        cls: type[Sweep], registry: analysis.MeasurementRegistry
-    ) -> type[Sweep]:
+        cls: type[SweepSpec], registry: analysis.MeasurementRegistry
+    ) -> type[SweepSpec]:
         bases = typing.get_type_hints(cls, include_extras=True)
 
         AnalysisCls = registry.tospec(bases[cls.analysis.__name__])
@@ -575,4 +531,4 @@ class Sweep(
             cache_hash=True,
         )
 
-        return typing.cast(type[Sweep], subcls)
+        return typing.cast(type[SweepSpec], subcls)

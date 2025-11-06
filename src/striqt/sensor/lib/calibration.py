@@ -23,7 +23,7 @@ else:
     xr = util.lazy_import('xarray')
 
 
-_TC = typing.TypeVar('_TC', bound=specs.SoapyCapture)
+_TC = typing.TypeVar('_TC', bound=specs.SoapyCaptureSpec)
 _TMSW = typing.TypeVar('_TMSW', bound='ManualYFactorSweep')
 _TMC = typing.TypeVar('_TMC', bound='ManualYFactorCapture')
 
@@ -31,7 +31,9 @@ _TMC = typing.TypeVar('_TMC', bound='ManualYFactorCapture')
 NoiseDiodeEnabledType = Annotated[bool, meta(standard_name='Noise diode enabled')]
 
 
-class ManualYFactorCapture(specs.SoapyCapture, forbid_unknown_fields=True, frozen=True):
+class ManualYFactorCapture(
+    specs.SoapyCaptureSpec, forbid_unknown_fields=True, frozen=True
+):
     """Specialize fields to add to the RadioCapture type"""
 
     # RadioCapture with added fields
@@ -45,7 +47,7 @@ class ManualYFactorSetup(specs.SpecBase, forbid_unknown_fields=True, frozen=True
     ] = 294.5389
 
 
-class CalibrationRadioSetup(specs.RadioSetup, forbid_unknown_fields=True, frozen=True):
+class CalibrationRadioSetup(specs.SourceSpec, forbid_unknown_fields=True, frozen=True):
     reuse_iq = True
 
 
@@ -64,7 +66,7 @@ class CalibrationVariables(
 
 
 class ManualYFactorSweep(
-    specs.Sweep, forbid_unknown_fields=True, kw_only=True, frozen=True
+    specs.SweepSpec, forbid_unknown_fields=True, kw_only=True, frozen=True
 ):
     """This specialized sweep is fed to the YAML file loader
     to specify the change in expected capture structure."""
@@ -283,7 +285,7 @@ def _describe_missing_data(cal_data: 'xr.DataArray', exact_matches: dict):
 
 def _lookup_calibration_var(
     cal_var: 'xr.DataArray',
-    capture: specs.SoapyCapture,
+    capture: specs.SoapyCaptureSpec,
     base_clock_rate: float,
     *,
     xp,
@@ -356,7 +358,7 @@ def _lookup_calibration_var(
 @util.lru_cache()
 def lookup_power_correction(
     cal_data: 'str | Path | xr.Dataset | None',
-    capture: specs.SoapyCapture,
+    capture: specs.SoapyCaptureSpec,
     base_clock_rate: float,
     *,
     xp=np,
@@ -381,7 +383,7 @@ def lookup_power_correction(
 @util.lru_cache()
 def lookup_system_noise_power(
     cal_data: 'Path | str | xr.Dataset | None',
-    capture: specs.SoapyCapture,
+    capture: specs.SoapyCaptureSpec,
     base_clock_rate: float,
     *,
     T=290.0,
@@ -460,7 +462,7 @@ class YFactorSink(sinks.SinkBase):
         # dataset
         pass
 
-    def append(self, capture_data: 'xr.Dataset | None', capture: specs.RadioCapture):
+    def append(self, capture_data: 'xr.Dataset | None', capture: specs.CaptureSpec):
         if capture_data is None:
             return
 
@@ -589,9 +591,9 @@ def _merge_specs(
 
 def specialize_cal_sweep(
     name: str,
-    cal_cls: type[specs.Sweep],
-    sensor_cls: type[specs.Sweep],
-) -> type[specs.Sweep]:
+    cal_cls: type[specs.SweepSpec],
+    sensor_cls: type[specs.SweepSpec],
+) -> type[specs.SweepSpec]:
     """build a type calibration sweep specification struct for the given sensor.
 
     The idea is to generate a `cal_cls` subclass that can be applied
@@ -625,7 +627,7 @@ def specialize_cal_sweep(
         cache_hash=True,
     )
 
-    return typing.cast(type[specs.Sweep], sweep_cls)
+    return typing.cast(type[specs.SweepSpec], sweep_cls)
 
 
 def specialize_cal_peripherals(
@@ -659,7 +661,7 @@ def specialize_cal_peripherals(
                 calibration=util.Call(cal_cls.close, self),
             )
 
-        def arm(self, capture: specs.SoapyCapture):
+        def arm(self, capture: specs.SoapyCaptureSpec):
             """runs before each capture"""
 
             util.concurrently(

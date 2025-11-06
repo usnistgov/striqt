@@ -67,7 +67,7 @@ def concat_time_dim(datasets: list['xr.Dataset'], time_dim: str) -> 'xr.Dataset'
 
 @util.lru_cache()
 def coord_template(
-    capture_cls: type[specs.RadioCapture],
+    capture_cls: type[specs.CaptureSpec],
     ports: tuple[int, ...],
     **alias_dtypes: np.dtype,
 ) -> 'xr.Coordinates':
@@ -154,7 +154,7 @@ def get_attrs(struct: type[specs.SpecBase], field: str) -> dict[str, str]:
 
 
 def build_coords(
-    capture: specs.RadioCapture, output: specs.Output, radio_id: str, sweep_time
+    capture: specs.CaptureSpec, output: specs.Output, radio_id: str, sweep_time
 ):
     alias_dtypes = _get_alias_dtypes(output)
 
@@ -223,7 +223,7 @@ class AnalysisCaller:
     """Inject radio device and capture metadata and coordinates into a channel analysis result"""
 
     radio: SourceBase
-    sweep: specs.Sweep
+    sweep: specs.SweepSpec
     extra_attrs: dict[str, typing.Any] | None = None
     correction: bool = False
     cache_callback: typing.Callable | None = None
@@ -232,7 +232,7 @@ class AnalysisCaller:
     delayed: bool = True
 
     def __post_init__(self):
-        self._overwrite_x = not self.sweep.radio_setup.reuse_iq
+        self._overwrite_x = not self.sweep.source.reuse_iq
         self._eval_options = dataarrays.EvaluationOptions(
             spec=self.sweep.analysis,
             block_each=self.block_each,
@@ -248,7 +248,7 @@ class AnalysisCaller:
         self,
         iq: AcquiredIQ,
         sweep_time,
-        capture: specs.RadioCapture,
+        capture: specs.CaptureSpec,
     ) -> 'xr.Dataset | dict[str, typing.Any] | str':
         """Inject radio device and capture info into a channel analysis result."""
 
@@ -295,7 +295,7 @@ class AnalysisCaller:
 class DelayedDataset:
     delayed: dict[str, dataarrays.DelayedDataArray]
     capture: specs.Capture
-    sweep: specs.Sweep
+    sweep: specs.SweepSpec
     radio_id: str
     sweep_time: typing.Any
     extra_attrs: dict | None = None

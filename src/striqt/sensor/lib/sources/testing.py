@@ -7,7 +7,7 @@ import typing
 
 from . import base, null
 from .. import specs, util
-from striqt.analysis import Capture, io, simulated_awgn
+from striqt.analysis import CaptureBase, io, simulated_awgn
 
 
 if typing.TYPE_CHECKING:
@@ -71,7 +71,7 @@ class TestSourceBase(null.NullSource[null._TS, null._TC]):
 
 
 class SingleToneCapture(
-    specs.RadioCapture,
+    specs.CaptureSpec,
     forbid_unknown_fields=True,
     frozen=True,
     cache_hash=True,
@@ -113,7 +113,7 @@ class SingleToneSource(TestSourceBase[null.NullSetup, SingleToneCapture]):
 
 
 class DiracDeltaCapture(
-    specs.RadioCapture,
+    specs.CaptureSpec,
     forbid_unknown_fields=True,
     frozen=True,
     cache_hash=True,
@@ -149,7 +149,7 @@ class DiracDeltaSource(TestSourceBase):
 
 
 class SawtoothCapture(
-    specs.RadioCapture,
+    specs.CaptureSpec,
     forbid_unknown_fields=True,
     frozen=True,
     cache_hash=True,
@@ -181,7 +181,7 @@ class SawtoothSource(TestSourceBase[null.NullSetup, SawtoothCapture]):
 
 
 class NoiseCapture(
-    specs.RadioCapture,
+    specs.CaptureSpec,
     forbid_unknown_fields=True,
     frozen=True,
     cache_hash=True,
@@ -199,7 +199,7 @@ class NoiseSource(TestSourceBase[null.NullSetup, NoiseCapture]):
         capture = self.get_capture_spec()
         fs = self._resampler['fs_sdr']
 
-        backend_capture = Capture(
+        backend_capture = CaptureBase(
             duration=(count + offset) / fs,
             sample_rate=fs,
             analysis_bandwidth=capture.analysis_bandwidth,
@@ -238,8 +238,8 @@ class TDMSFileSetup(
     path: specs.Annotated[Path, specs.meta('path to the tdms file')]
 
 
-class FileCapture(
-    specs.RadioCapture,
+class FileCaptureSpec(
+    specs.CaptureSpec,
     forbid_unknown_fields=True,
     frozen=True,
     cache_hash=True,
@@ -254,7 +254,7 @@ class FileCapture(
     backend_sample_rate: typing.Optional[specs.BackendSampleRateType] = None
 
 
-class TDMSFileSource(TestSourceBase[TDMSFileSetup, FileCapture]):
+class TDMSFileSource(TestSourceBase[TDMSFileSetup, FileCaptureSpec]):
     """returns IQ waveforms from a TDMS file"""
 
     def _connect(self, spec):
@@ -327,10 +327,10 @@ class FileSetup(
     ] = False
 
 
-class FileSource(TestSourceBase[FileSetup, FileCapture]):
+class FileSource(TestSourceBase[FileSetup, FileCaptureSpec]):
     """returns IQ waveforms from a file"""
 
-    _file_capture: FileCapture | None = None
+    _file_capture: FileCaptureSpec | None = None
     _file_stream = None
 
     def _apply_setup(self, spec: FileSetup) -> FileSetup:
@@ -354,7 +354,7 @@ class FileSource(TestSourceBase[FileSetup, FileCapture]):
         )
 
         fields = self._file_stream.get_capture_fields()
-        self._file_capture = FileCapture.fromdict(fields)
+        self._file_capture = FileCaptureSpec.fromdict(fields)
 
     def _prepare_capture(self, capture):
         assert self._file_capture is not None
@@ -386,7 +386,7 @@ class FileSource(TestSourceBase[FileSetup, FileCapture]):
         return ret.copy()
 
 
-class ZarrFileSetup(
+class ZarrFileSourceSpec(
     null.NullSetup,
     forbid_unknown_fields=True,
     frozen=True,
@@ -399,7 +399,7 @@ class ZarrFileSetup(
     ] = {}
 
 
-class ZarrIQSource(TestSourceBase[ZarrFileSetup, FileCapture]):
+class ZarrIQSource(TestSourceBase[ZarrFileSourceSpec, FileCaptureSpec]):
     """Emulate an SDR by drawing IQ samples from an xarray returned by
     a striqt.analysis.iq_waveform measurement.
     """

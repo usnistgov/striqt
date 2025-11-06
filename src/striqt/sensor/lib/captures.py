@@ -39,7 +39,7 @@ def broadcast_to_ports(
 
 
 @functools.lru_cache
-def get_capture_type(sweep_cls: type[specs.Sweep]) -> type[specs.RadioCapture]:
+def get_capture_type(sweep_cls: type[specs.SweepSpec]) -> type[specs.CaptureSpec]:
     captures_type = typing.get_type_hints(sweep_cls)['captures']
     return typing.get_args(captures_type)[0]
 
@@ -50,7 +50,7 @@ class _UNDEFINED_FIELD:
 
 def _single_match(
     fields: dict[str],
-    capture: specs.RadioCapture,
+    capture: specs.CaptureSpec,
     **extras: dict[str],
 ) -> bool:
     """return True if all fields match in the specified fields.
@@ -84,7 +84,7 @@ def _single_match(
 
 def _match_fields(
     multi_fields: list[dict[str, typing.Any]],
-    capture: specs.RadioCapture,
+    capture: specs.CaptureSpec,
     **extras: dict[str, typing.Any],
 ) -> bool:
     """return True if all fields match in the specified fields.
@@ -98,7 +98,7 @@ def _match_fields(
 
 @util.lru_cache()
 def evaluate_aliases(
-    capture: specs.RadioCapture,
+    capture: specs.CaptureSpec,
     *,
     radio_id: str | None = _UNDEFINED_FIELD,
     output: specs.Output,
@@ -124,7 +124,7 @@ def evaluate_aliases(
     return ret
 
 
-Capture = typing.TypeVar('Capture', bound=specs.RadioCapture)
+Capture = typing.TypeVar('Capture', bound=specs.CaptureSpec)
 
 
 @util.lru_cache()
@@ -154,7 +154,7 @@ def split_capture_ports(capture: Capture) -> list[Capture]:
 
 
 def capture_fields_with_aliases(
-    capture: specs.RadioCapture, *, radio_id: str | None = None, output: specs.Output
+    capture: specs.CaptureSpec, *, radio_id: str | None = None, output: specs.Output
 ) -> dict:
     attrs = capture.todict(skip_private=True)
 
@@ -166,7 +166,7 @@ def capture_fields_with_aliases(
 
 def get_field_value(
     name: str,
-    capture: specs.RadioCapture,
+    capture: specs.CaptureSpec,
     radio_id: str,
     alias_hits: dict,
     extra_field_values: dict = {},
@@ -190,13 +190,13 @@ def get_field_value(
     return value
 
 
-class _MinSweep(specs.Sweep, frozen=True):
+class _MinSweep(specs.SweepSpec, frozen=True):
     # a sweep with captures that express only the parameters that impact data shape
-    captures: tuple[specs.analysis.Capture, ...] = ()
+    captures: tuple[specs.analysis.CaptureBase, ...] = ()
 
 
 def concat_group_sizes(
-    captures: tuple[specs.RadioCapture, ...], *, min_size: int = 1
+    captures: tuple[specs.CaptureSpec, ...], *, min_size: int = 1
 ) -> list[int]:
     """return the minimum sizes of groups of captures that can be concatenated.
 

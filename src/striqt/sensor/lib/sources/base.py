@@ -38,8 +38,8 @@ RESAMPLE_COLA_WINDOW = 'hamming'
 FILTER_DOMAIN = 'time'
 
 
-_TS = typing.TypeVar('_TS', bound=specs.RadioSetup)
-_TC = typing.TypeVar('_TC', bound=specs.RadioCapture)
+_TS = typing.TypeVar('_TS', bound=specs.SourceSpec)
+_TC = typing.TypeVar('_TC', bound=specs.CaptureSpec)
 
 
 class ReceiveStreamError(IOError):
@@ -93,7 +93,7 @@ class _ReceiveBuffers:
         samples: 'np.ndarray',
         sample_start_ns,
         unused_sample_count: int,
-        capture: specs.RadioCapture,
+        capture: specs.CaptureSpec,
     ):
         """stash data needed to carry over extra samples into the next capture"""
         carryover_count = unused_sample_count
@@ -146,10 +146,10 @@ def _cast_iq(
 class BaseSourceInfo(specs.SpecBase, kw_only=True, frozen=True, cache_hash=True):
     num_rx_ports: int
 
-    def to_capture_cls(self, base_cls: type[_TC] = specs.RadioCapture) -> type[_TC]:
+    def to_capture_cls(self, base_cls: type[_TC] = specs.CaptureSpec) -> type[_TC]:
         return base_cls
 
-    def to_setup_cls(self, base_cls: type[_TS] = specs.RadioSetup) -> type[_TS]:
+    def to_setup_cls(self, base_cls: type[_TS] = specs.SourceSpec) -> type[_TS]:
         return base_cls
 
 
@@ -160,7 +160,7 @@ class HasSetupType(typing.Protocol[_TS]):
         self,
         setup: _TS,
         analysis: Analysis | None = None,
-        **setup_kws: typing.Unpack[specs._RadioSetupKeywords],
+        **setup_kws: typing.Unpack[specs._SourceSpecKeywords],
     ): ...
 
     def get_setup_spec(self) -> _TS: ...
@@ -178,7 +178,7 @@ class HasCaptureType(typing.Protocol[_TC]):
         capture: _TC,
         *,
         force_time_sync: bool = False,
-        **capture_kws: typing.Unpack[specs._RadioCaptureKeywords],
+        **capture_kws: typing.Unpack[specs._CaptureSpecKeywords],
     ) -> _TC: ...
 
     def acquire(
@@ -597,7 +597,7 @@ def design_capture_resampler(
 
 
 def needs_resample(
-    analysis_filter: ResamplerDesign, capture: specs.RadioCapture
+    analysis_filter: ResamplerDesign, capture: specs.CaptureSpec
 ) -> bool:
     """determine whether an STFT will be needed to filter or resample"""
 
@@ -605,7 +605,7 @@ def needs_resample(
     return is_resample and capture.host_resample
 
 
-def _get_filter_pad(capture: specs.RadioCapture):
+def _get_filter_pad(capture: specs.CaptureSpec):
     if np.isfinite(capture.analysis_bandwidth):
         return FILTER_SIZE // 2 + 1
     else:
@@ -614,8 +614,8 @@ def _get_filter_pad(capture: specs.RadioCapture):
 
 @util.lru_cache(30000)
 def _get_dsp_pad_size(
-    setup: specs.RadioSetup,
-    capture: specs.RadioCapture,
+    setup: specs.SourceSpec,
+    capture: specs.CaptureSpec,
     aligner: register.AlignmentCaller | None = None,
 ) -> tuple[int, int]:
     """returns the padding before and after a waveform to achieve an integral number of FFT windows"""
@@ -652,7 +652,7 @@ def _get_dsp_pad_size(
 
 def _get_aligner_pad_size(
     base_clock_rate: float,
-    capture: specs.RadioCapture,
+    capture: specs.CaptureSpec,
     aligner: register.AlignmentCaller | None = None,
 ) -> int:
     if aligner is None:
@@ -673,7 +673,7 @@ def _get_next_fast_len(n):
     return scipy.fft.next_fast_len(n)
 
 
-def _get_oaresample_pad(base_clock_rate: float, capture: specs.RadioCapture):
+def _get_oaresample_pad(base_clock_rate: float, capture: specs.CaptureSpec):
     resampler_design = design_capture_resampler(base_clock_rate, capture)
 
     nfft = resampler_design['nfft']
@@ -700,8 +700,8 @@ def _get_oaresample_pad(base_clock_rate: float, capture: specs.RadioCapture):
 
 @util.lru_cache(30000)
 def _cached_channel_read_buffer_count(
-    setup: specs.RadioSetup,
-    capture: specs.RadioCapture,
+    setup: specs.SourceSpec,
+    capture: specs.CaptureSpec,
     *,
     include_holdoff: bool = False,
     aligner: register.AlignmentCaller | None = None,
@@ -754,7 +754,7 @@ def get_channel_read_buffer_count(source: SourceBase, include_holdoff=False) -> 
 )
 def alloc_empty_iq(
     radio: SourceBase,
-    capture: specs.RadioCapture,
+    capture: specs.CaptureSpec,
     prior: typing.Optional[np.ndarray] = None,
 ) -> tuple[np.ndarray, tuple[np.ndarray, list[np.ndarray]]]:
     """allocate a buffer of IQ return values.

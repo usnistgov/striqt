@@ -7,7 +7,7 @@ from .. import specs
 
 
 class NullSetup(
-    specs.RadioSetup,
+    specs.SourceSpec,
     forbid_unknown_fields=True,
     frozen=True,
     cache_hash=True,
@@ -19,7 +19,7 @@ class NullSetup(
 
 
 _TS = typing.TypeVar('_TS', bound=NullSetup)
-_TC = typing.TypeVar('_TC', bound=specs.RadioCapture)
+_TC = typing.TypeVar('_TC', bound=specs.CaptureSpec)
 
 
 class NullSource(base.SourceBase[_TS, _TC]):

@@ -30,7 +30,7 @@ class PowerSpectralDensityKeywords(shared.FrequencyAnalysisKeywords, total=False
 @registry.coordinates(dtype='str', attrs={'standard_name': 'Time statistic'})
 @util.lru_cache()
 def time_statistic(
-    capture: specs.Capture, spec: PowerSpectralDensitySpec
+    capture: specs.CaptureBase, spec: PowerSpectralDensitySpec
 ) -> np.ndarray:
     time_statistic = [str(s) for s in spec.time_statistic]
     return np.asarray(time_statistic, dtype=object)
@@ -41,7 +41,7 @@ def time_statistic(
 )
 @util.lru_cache()
 def baseband_frequency(
-    capture: specs.Capture, spec: PowerSpectralDensitySpec
+    capture: specs.CaptureBase, spec: PowerSpectralDensitySpec
 ) -> dict[str, np.ndarray]:
     spg_spec = shared.SpectrogramSpec.fromspec(spec)
     return shared.spectrogram_baseband_frequency(capture, spg_spec)
@@ -56,7 +56,7 @@ def baseband_frequency(
 )
 def power_spectral_density(
     iq: 'iqwaveform.util.Array',
-    capture: specs.Capture,
+    capture: specs.CaptureBase,
     **kwargs: typing.Unpack[PowerSpectralDensityKeywords],
 ):
     """estimate power spectral density using the Welch method.

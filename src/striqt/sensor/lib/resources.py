@@ -1,3 +1,5 @@
+"""mangle dynamic imports and context management of multiple resources"""
+
 from __future__ import annotations
 
 import contextlib
@@ -21,7 +23,7 @@ class SweepSpecClasses(typing.NamedTuple):
     peripherals_cls: typing.Type[peripherals.PeripheralsBase]
 
 
-def _get_extension_classes(sweep_spec: specs.Sweep) -> SweepSpecClasses:
+def _get_extension_classes(sweep_spec: specs.SweepSpec) -> SweepSpecClasses:
     ext = sweep_spec.extensions.todict()
 
     import_cls = io._import_extension
@@ -31,14 +33,14 @@ def _get_extension_classes(sweep_spec: specs.Sweep) -> SweepSpecClasses:
     )
 
 
-def _get_source(radio_setup: specs.RadioSetup) -> SourceBase:
+def _get_source(radio_setup: specs.SourceSpec) -> SourceBase:
     radio_cls = find_radio_cls_by_name(radio_setup.driver)
     return radio_cls(resource=radio_setup.resource)
 
 
-def _do_warmup(sweep_spec):
+def run_warmup(sweep_spec):
     if sweep_spec.radio_setup.array_backend == 'cupy':
-        striqt.waveform.set_max_cupy_fft_chunk(
+        iqwaveform.set_max_cupy_fft_chunk(
             sweep_spec.radio_setup.cupy_max_fft_chunk_size
         )
 
@@ -50,7 +52,7 @@ def _do_warmup(sweep_spec):
     if len(warmup_sweep.captures) == 0:
         return
 
-    source = _get_source(warmup_sweep.radio_setup)
+    source = _get_source(warmup_sweep.source)
 
     with source:
         resources = sweeps.Resources(radio=source, sweep_spec=warmup_sweep)
@@ -75,7 +77,7 @@ class Connections(contextlib.ExitStack):
 
 
 def open_sensor_from_spec(
-    unaliased_spec: specs.Sweep,
+    unaliased_spec: specs.SweepSpec,
     origin_path: str | Path,
     except_context: typing.ContextManager | None = None,
 ) -> Connections:
@@ -88,7 +90,7 @@ def open_sensor_from_spec(
     timer_kws = dict(logger_suffix='controller', logger_level=logging.INFO)
     ext_types = None
 
-    if '{' in unaliased_spec.output.path:
+    if unaliased_spec.output.path is None or '{' in unaliased_spec.output.path:
         # in this case, we're still waiting to fill in radio_id
         open_sink_early = False
     else:
@@ -99,7 +101,7 @@ def open_sensor_from_spec(
     try:
         calls = {}
         calls['radio'] = util.Call(
-            conns.open_by_name, 'radio', _get_source(unaliased_spec.radio_setup)
+            conns.open_by_name, 'radio', _get_source(unaliased_spec.source)
         )
 
         if open_sink_early:
@@ -111,6 +113,7 @@ def open_sensor_from_spec(
         with util.stopwatch('open ' + ', '.join(calls), threshold=1, **timer_kws):
             util.concurrently_with_fg(calls, False)
 
+        assert 'radio' in conns.resources
         aliased_spec = io.fill_aliases(
             origin_path,
             unaliased_spec,
@@ -128,10 +131,11 @@ def open_sensor_from_spec(
 
         # open the rest
         calls = {}
-        calls['calibration'] = util.Call(
-            calibration.read_calibration,
-            aliased_spec.radio_setup.calibration,
-        )
+        if aliased_spec.source.calibration is not None:
+            calls['calibration'] = util.Call(
+                calibration.read_calibration,
+                aliased_spec.source.calibration,
+            )
 
         if not open_sink_early:
             calls['sink'] = util.Call(
@@ -144,19 +148,13 @@ def open_sensor_from_spec(
             ext_types.peripherals_cls(aliased_spec, source=conns.resources['radio']),
         )
 
-        calls['radio'] = util.Call(
-            conns.resources['radio'].setup,
-            aliased_spec.radio_setup,
-            analysis=aliased_spec.analysis,
-        )
-
         with util.stopwatch('setup ' + ', '.join(calls), threshold=1, **timer_kws):
             util.concurrently(**calls)
 
-        # in case peripherals enable e.g. an amplifier, run this here after
-        # any radio stream has already been established to avoid undesired
-        # input signals during the readio setup
-        conns.resources['peripherals'].setup()
+        # run this here after any radio stream has already been established to
+        # avoid side-effects during the radio setup
+        if 'peripherals' in conns.resources:
+            conns.resources['peripherals'].setup()
 
         if except_context is not None:
             conns.open_by_name('exception_handler', except_context)
@@ -184,7 +182,7 @@ def open_sensor_from_yaml(
 ) -> Connections:
     unaliased_spec = io.read_yaml_sweep(yaml_path)
 
-    output = unaliased_spec.output.replace
+    output = unaliased_spec.output
     if output_path is not None:
         output = output.replace(path=output_path)
     if store_backend is not None:
@@ -195,5 +193,5 @@ def open_sensor_from_yaml(
     calls['context'] = util.Call(
         open_sensor_from_spec, unaliased_spec, yaml_path, except_context
     )
-    calls['warmup'] = _do_warmup(unaliased_spec)
+    calls['warmup'] = util.Call(run_warmup, unaliased_spec)
     return util.concurrently_with_fg(calls)['context']

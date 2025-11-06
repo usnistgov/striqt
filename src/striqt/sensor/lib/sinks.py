@@ -18,7 +18,7 @@ class SinkBase:
 
     def __init__(
         self,
-        sweep_spec: specs.Sweep,
+        sweep_spec: specs.SweepSpec,
         *,
         output_path: str | None = None,
         store_backend: str | None = None,
@@ -70,7 +70,7 @@ class SinkBase:
         finally:
             self._executor.__exit__(*exc_info)
 
-    def append(self, capture_data: 'xr.Dataset | None', capture: specs.RadioCapture):
+    def append(self, capture_data: 'xr.Dataset | None', capture: specs.CaptureSpec):
         if capture_data is None:
             return
 
@@ -103,7 +103,7 @@ class NullSink(SinkBase):
         ):
             util.get_logger('sink').info(f'done')
 
-    def append(self, capture_data: 'xr.Dataset | None', capture: specs.RadioCapture):
+    def append(self, capture_data: 'xr.Dataset | None', capture: specs.CaptureSpec):
         self.captures_elapsed += 1
 
     def wait(self):
@@ -148,7 +148,7 @@ class ZarrSinkBase(SinkBase):
 class CaptureAppender(ZarrSinkBase):
     """concatenates the data from each capture and dumps to a zarr data store"""
 
-    def append(self, capture_data: 'xr.Dataset | None', capture: specs.RadioCapture):
+    def append(self, capture_data: 'xr.Dataset | None', capture: specs.CaptureSpec):
         super().append(capture_data, capture)
 
         if len(self._pending_data) == self._group_sizes[0]:
@@ -201,7 +201,7 @@ class SpectrogramTimeAppender(ZarrSinkBase):
 
         super().open()
 
-    def append(self, capture_data: 'xr.Dataset | None', capture: specs.RadioCapture):
+    def append(self, capture_data: 'xr.Dataset | None', capture: specs.CaptureSpec):
         super().append(capture_data, capture)
 
         if len(self._pending_data) == self._group_sizes[0]:

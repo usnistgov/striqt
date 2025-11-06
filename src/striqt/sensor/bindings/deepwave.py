@@ -15,8 +15,8 @@ else:
     psutil = util.lazy_import('psutil')
 
 
-class Air7101BSetup(
-    specs.SoapySetup,
+class Air7101BSourceSpec(
+    specs.SoapySourceSpec,
     forbid_unknown_fields=True,
     frozen=True,
     cache_hash=True,
@@ -27,8 +27,8 @@ class Air7101BSetup(
     transient_holdoff_time = 2e-3
 
 
-class Air7201BSetup(
-    specs.SoapySetup,
+class Air7201BSourceSpec(
+    specs.SoapySourceSpec,
     forbid_unknown_fields=True,
     frozen=True,
     cache_hash=True,
@@ -39,8 +39,8 @@ class Air7201BSetup(
     transient_holdoff_time = 2e-3
 
 
-class Air8201BSetup(
-    specs.SoapySetup,
+class Air8201BSourceSpec(
+    specs.SoapySourceSpec,
     forbid_unknown_fields=True,
     frozen=True,
     cache_hash=True,
@@ -52,7 +52,7 @@ class Air8201BSetup(
 
 
 class Airstack1Source(soapy.SoapySourceBase):
-    def _connect(self, spec: specs.SoapySetup):
+    def _connect(self, spec: specs.SoapySourceSpec):
         super()._connect(spec)
         assert self._device is not None
 

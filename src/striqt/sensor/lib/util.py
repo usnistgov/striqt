@@ -329,31 +329,31 @@ class _JSONFormatter(logging.Formatter):
             return obj.isoformat()
         raise TypeError(f'Type {type(obj).__qualname__} not serializable')
 
-    def format(self, rec: logging.LogRecord):
+    def format(self, record: logging.LogRecord):
         """Return a YAML string for each logger record"""
         import json
 
-        if isinstance(rec.args, dict):
-            kwargs = rec.args
+        if isinstance(record.args, dict):
+            kwargs = record.args
         else:
             kwargs = {}
 
         msg = dict(
-            message=rec.msg,
-            time=datetime.datetime.fromtimestamp(rec.created),
-            elapsed_seconds=rec.created - self.t0,
-            level=rec.levelname,
-            object=getattr(rec, 'object', None),
-            object_log_name=getattr(rec, 'owned_name', None),
-            source_file=rec.pathname,
-            source_line=rec.lineno,
-            process=rec.process,
-            thread=rec.threadName,
+            message=record.msg,
+            time=datetime.datetime.fromtimestamp(record.created),
+            elapsed_seconds=record.created - self.t0,
+            level=record.levelname,
+            object=getattr(record, 'object', None),
+            object_log_name=getattr(record, 'owned_name', None),
+            source_file=record.pathname,
+            source_line=record.lineno,
+            process=record.process,
+            thread=record.threadName,
             **kwargs,
         )
 
-        if rec.threadName != 'MainThread':
-            msg['thread'] = rec.threadName
+        if record.threadName != 'MainThread':
+            msg['thread'] = record.threadName
 
         etype, einst, exc_tb = sys.exc_info()
         if etype is not None:
@@ -362,7 +362,7 @@ class _JSONFormatter(logging.Formatter):
             msg['exception'] = traceback.format_exception_only(etype, einst)[0].rstrip()
             msg['traceback'] = ''.join(traceback.format_tb(exc_tb)).splitlines()
 
-        self._last.append((rec, msg))
+        self._last.append((record, msg))
 
         return json.dumps(msg, indent=True, default=self.json_serialize_dates)
 
@@ -411,14 +411,20 @@ def log_to_file(log_path: str | Path, level_name: str):
     logger._striqt_handler = handler
 
 
-class Call:
+if typing.TYPE_CHECKING:
+    _CallBase = typing.Generic[_P, _R]
+else:
+    _CallBase = object
+
+
+class Call(_CallBase):
     """Wrap a function to apply arguments for threaded calls to `concurrently`.
     This can be passed in directly by a user in order to provide arguments;
     otherwise, it will automatically be wrapped inside `concurrently` to
     keep track of some call metadata during execution.
     """
 
-    def __init__(self, func: typing.Callable, *args, **kws):
+    def __init__(self, func: typing.Callable[_P, _R], *args: _P.args, **kws: _P.kwargs):
         if not callable(func):
             raise ValueError('`func` argument is not callable')
         self.func = func
@@ -442,7 +448,7 @@ class Call:
             name = self.name
         return f'Call({name},{args})'
 
-    def __call__(self):
+    def __call__(self) -> _R | None:
         try:
             self.result = self.func(*self.args, **self.kws)
         except BaseException:
@@ -655,7 +661,9 @@ class _ContextManagerType(typing.Protocol):
 
 
 def _select_enter_or_call(
-    candidate_objs: typing.Sequence[tuple[str|None, _ContextManagerType | typing.Callable]],
+    candidate_objs: typing.Sequence[
+        tuple[str | None, _ContextManagerType | typing.Callable]
+    ],
 ) -> typing.Literal['context'] | typing.Literal['callable'] | None:
     """ensure candidates are either (1) all context managers
     or (2) all callables. Decide what type of operation to proceed with.

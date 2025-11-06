@@ -45,7 +45,7 @@ pss_correlator_cache = register.KeywordArgumentCache([CAPTURE_DIM, 'spec'])
 @pss_correlator_cache.apply
 def correlate_5g_pss(
     iq: ArrayType,
-    capture: specs.Capture,
+    capture: specs.CaptureBase,
     spec: Cellular5GNRPSSCorrelationSpec,
 ) -> ArrayType:
     xp = iqwaveform.util.array_namespace(iq)
@@ -147,7 +147,7 @@ class Cellular5GNRWeightedCorrelationKeywords(
 @pss_local_weighted_correlator_cache.apply
 def pss_local_weighted_correlator(
     iq: ArrayType,
-    capture: specs.Capture,
+    capture: specs.CaptureBase,
     *,
     spec: Cellular5GNRPSSCorrelationSpec,
     window_fill=0.5,
@@ -166,7 +166,7 @@ def pss_local_weighted_correlator(
 )
 def cellular_5g_pss_sync(
     iq,
-    capture: specs.Capture,
+    capture: specs.CaptureBase,
     **kwargs: typing.Unpack[Cellular5GNRWeightedCorrelationKeywords],
 ):
     """compute sync index offsets based on correlate_5g_pss.
@@ -210,7 +210,7 @@ def cellular_5g_pss_sync(
 )
 def cellular_5g_pss_sync_offset(
     iq,
-    capture: specs.Capture,
+    capture: specs.CaptureBase,
     **kwargs: typing.Unpack[Cellular5GNRWeightedCorrelationKeywords],
 ):
     return cellular_5g_pss_sync(iq, capture, **kwargs)
@@ -227,7 +227,7 @@ def cellular_5g_pss_sync_offset(
 )
 def cellular_5g_pss_correlation(
     iq,
-    capture: specs.Capture,
+    capture: specs.CaptureBase,
     **kwargs: typing.Unpack[shared.Cellular5GNRSyncCorrelationKeywords],
 ):
     """correlate each channel of the IQ against the cellular primary synchronization signal (PSS) waveform.

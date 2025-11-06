@@ -36,7 +36,7 @@ class SpectrogramHistogramRatioKeywords(
 )
 @util.lru_cache()
 def spectrogram_ratio_power_bin(
-    capture: specs.Capture, spec: SpectrogramHistogramRatioSpec
+    capture: specs.CaptureBase, spec: SpectrogramHistogramRatioSpec
 ) -> dict[str, np.ndarray]:
     """returns a dictionary of coordinate values, keyed by axis dimension name"""
 
@@ -55,7 +55,7 @@ def spectrogram_ratio_power_bin(
 )
 def spectrogram_ratio_histogram(
     iq: 'iqwaveform.util.Array',
-    capture: specs.Capture,
+    capture: specs.CaptureBase,
     **kwargs: typing.Unpack[SpectrogramHistogramRatioKeywords],
 ):
     spec = SpectrogramHistogramRatioSpec.fromdict(kwargs)

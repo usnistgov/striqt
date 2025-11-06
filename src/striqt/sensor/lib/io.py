@@ -20,8 +20,8 @@ else:
 
 
 def _get_capture_format_fields(
-    capture: specs.RadioCapture,
-    sweep: specs.Sweep,
+    capture: specs.CaptureSpec,
+    sweep: specs.SweepSpec,
     *,
     radio_id: str | None = None,
     yaml_path: Path | str | None,
@@ -32,7 +32,7 @@ def _get_capture_format_fields(
     )
 
     fields['start_time'] = datetime.now().strftime('%Y%m%d-%Hh%Mm%S')
-    fields['driver'] = sweep.radio_setup.driver
+    fields['driver'] = sweep.source.driver
     if yaml_path is not None:
         fields['yaml_name'] = Path(yaml_path).stem
     fields['radio_id'] = radio_id
@@ -42,7 +42,7 @@ def _get_capture_format_fields(
 
 def expand_path(
     path: str | Path,
-    sweep: specs.Sweep | None = None,
+    sweep: specs.SweepSpec | None = None,
     *,
     radio_id: str | None = None,
     relative_to_file=None,
@@ -131,7 +131,7 @@ def read_yaml_sweep(
     path: str | Path,
     *,
     radio_id: str | None = None,
-) -> specs.Sweep:
+) -> specs.SweepSpec:
     """build a Sweep struct from the contents of specified yaml file.
 
     Args:
@@ -163,15 +163,15 @@ def read_yaml_sweep(
             extensions.get('import_path', None), relative_to_file=path
         )
 
-    sweep_cls = _import_extension(extensions, 'sweep_struct', default=specs.Sweep)
-    if not issubclass(sweep_cls, specs.Sweep):
+    sweep_cls = _import_extension(extensions, 'sweep_struct', default=specs.SweepSpec)
+    if not issubclass(sweep_cls, specs.SweepSpec):
         name = extensions['sweep_struct']
         raise TypeError(
             f'extension.sweep_struct is {name!r}, which exists but is not subclass of striqt.sinks.Sweep'
         )
 
     # update any new registered analysis
-    sweep: specs.Sweep = sweep_cls._from_registry().fromdict(tree)
+    sweep: specs.SweepSpec = sweep_cls._from_registry().fromdict(tree)
 
     # fill formatting fields in paths
     if radio_id is not None:
@@ -180,7 +180,7 @@ def read_yaml_sweep(
         return sweep
 
 
-def fill_aliases(root_file: Path, sweep: specs.Sweep, radio_id):
+def fill_aliases(root_file: Path | str, sweep: specs.SweepSpec, radio_id):
     # fill formatting fields like {radio_id} in paths
     kws = dict(relative_to_file=root_file, sweep=sweep, radio_id=radio_id)
 
@@ -188,8 +188,8 @@ def fill_aliases(root_file: Path, sweep: specs.Sweep, radio_id):
     log_path = expand_path(sweep.output.log_path, **kws)
     output_spec = sweep.output.replace(path=output_path, log_path=log_path)
 
-    cal_path = expand_path(sweep.radio_setup.calibration, **kws)
-    setup_spec = sweep.radio_setup.replace(calibration=cal_path)
+    cal_path = expand_path(sweep.source.calibration, **kws)
+    setup_spec = sweep.source.replace(calibration=cal_path)
 
     import_path = expand_path(sweep.extensions.import_path, **kws)
     extensions_spec = sweep.extensions.replace(import_path=import_path)
@@ -209,7 +209,7 @@ def read_tdms_iq(
     dtype='complex64',
     skip_samples=0,
     xp=np,
-) -> tuple['striqt.waveform.type_stubs.ArrayLike', specs.FileCapture]:
+) -> tuple['striqt.waveform.type_stubs.ArrayLike', specs.FileCaptureSpec]:
     from .sources.testing import TDMSFileSource
 
     source = TDMSFileSource(path=path, num_rx_ports=num_rx_ports)

@@ -16,8 +16,8 @@ else:
     SoapySDR = util.lazy_import('SoapySDR')
 
 
-_TS = typing.TypeVar('_TS', bound=specs.SoapySetup)
-_TC = typing.TypeVar('_TC', bound=specs.SoapyCapture)
+_TS = typing.TypeVar('_TS', bound=specs.SoapySourceSpec)
+_TC = typing.TypeVar('_TC', bound=specs.SoapyCaptureSpec)
 
 
 def _tuplize_port(obj: specs.PortType) -> tuple[int, ...]:
@@ -469,7 +469,7 @@ class RxStream:
     def is_enabled(self) -> bool:
         return self._enabled
 
-    def capture_changes_port(self, capture: specs.SoapyCapture) -> bool:
+    def capture_changes_port(self, capture: specs.SoapyCaptureSpec) -> bool:
         return _tuplize_port(capture.port) == self._ports
 
     def set_ports(self, ports: specs.PortType):
@@ -560,7 +560,9 @@ def split_this_prev_captures(
     return c1_split, c2_split
 
 
-def set_gain(source: SoapySourceBase, capture: specs.SoapyCapture, ports_changed: bool):
+def set_gain(
+    source: SoapySourceBase, capture: specs.SoapyCaptureSpec, ports_changed: bool
+):
     assert source._device is not None, 'soapy source is not open'
 
     this_split, prev_split = split_this_prev_captures(
@@ -573,7 +575,7 @@ def set_gain(source: SoapySourceBase, capture: specs.SoapyCapture, ports_changed
 
 
 def set_center_frequency(
-    source: SoapySourceBase, capture: specs.SoapyCapture, ports_changed: bool
+    source: SoapySourceBase, capture: specs.SoapyCaptureSpec, ports_changed: bool
 ):
     assert source._device is not None, 'soapy source is not open'
 
@@ -598,7 +600,7 @@ def set_center_frequency(
 
 
 def set_sample_rate(
-    source: SoapySourceBase, capture: specs.SoapyCapture, ports_changed: bool
+    source: SoapySourceBase, capture: specs.SoapyCaptureSpec, ports_changed: bool
 ):
     assert source._device is not None
 

@@ -24,7 +24,7 @@ from .testing import (
 
 def find_radio_cls_by_name(
     name: str, parent_cls: type[SourceBase] = SourceBase
-) -> SourceBase:
+) -> type[SourceBase]:
     """returns a list of radio subclasses that have been imported"""
 
     try:
@@ -33,14 +33,14 @@ def find_radio_cls_by_name(
     except AttributeError:
         # then: with optional imports
         from . import soapy
-        from ... import devices
+        from ... import bindings
 
         radio_cls = base.find_radio_cls_helper(name)
 
     return radio_cls
 
 
-def is_same_resource(radio: SourceBase, radio_setup: base.specs.RadioSetup) -> bool:
+def is_same_resource(radio: SourceBase, radio_setup: base.specs.SourceSpec) -> bool:
     if radio_setup.driver is not None:
         expect_cls = find_radio_cls_by_name(radio_setup.driver)
         if not isinstance(radio, expect_cls):

@@ -33,9 +33,9 @@ class SweepController:
     This is also used by `start_sensor_server` to serve remote operations.
     """
 
-    def __init__(self, sweep: specs.Sweep = None):
+    def __init__(self, sweep: specs.SweepSpec = None):
         self.radios: dict[str, SourceBase] = {}
-        self.warmed_captures: set[specs.RadioCapture] = set()
+        self.warmed_captures: set[specs.CaptureSpec] = set()
         self.handlers: dict[rpyc.Connection, typing.Any] = {}
 
         if sweep is None:
@@ -45,10 +45,8 @@ class SweepController:
             # for performance, do any warmup runs and open a device connection
             self.warmup_sweep(sweep, calibration=None)
 
-        if sweep.radio_setup.array_backend == 'cupy':
-            striqt.waveform.set_max_cupy_fft_chunk(
-                sweep.radio_setup.cupy_max_fft_chunk_size
-            )
+        if sweep.source.array_backend == 'cupy':
+            striqt.waveform.set_max_cupy_fft_chunk(sweep.source.cupy_max_fft_chunk_size)
 
     def __enter__(self):
         return self
@@ -68,7 +66,7 @@ class SweepController:
         if last_ex is not None:
             raise last_ex
 
-    def open_radio(self, radio_setup: specs.RadioSetup):
+    def open_radio(self, radio_setup: specs.SourceSpec):
         logger = util.get_logger('controller')
 
         driver_name = radio_setup.driver
@@ -98,7 +96,7 @@ class SweepController:
     def radio_id(self, driver_name: str) -> str:
         return self.radios[driver_name].id
 
-    def close_radio(self, radio_setup: specs.RadioSetup | None = None):
+    def close_radio(self, radio_setup: specs.SourceSpec | None = None):
         if radio_setup is None:
             # close all
             for name, radio in self.radios.items():
@@ -110,11 +108,8 @@ class SweepController:
         else:
             self.radios[radio_setup.driver].close()
 
-    def _describe_preparation(self, target_sweep: specs.Sweep) -> str:
-        if (
-            sweeps.sweep_touches_gpu(target_sweep)
-            and target_sweep.radio_setup.warmup_sweep
-        ):
+    def _describe_preparation(self, target_sweep: specs.SweepSpec) -> str:
+        if sweeps.sweep_touches_gpu(target_sweep) and target_sweep.source.warmup_sweep:
             warmup_sweep = sweeps.design_warmup_sweep(
                 target_sweep, skip=tuple(self.warmed_captures)
             )
@@ -122,16 +117,16 @@ class SweepController:
             warmup_sweep = None
 
         msgs = []
-        if target_sweep.radio_setup.driver.startswith('Null'):
+        if target_sweep.source.driver.startswith('Null'):
             pass
-        elif target_sweep.radio_setup.driver not in self.radios:
+        elif target_sweep.source.driver not in self.radios:
             msgs += ['opening radio']
 
         if warmup_sweep is not None and len(warmup_sweep.captures) > 0:
             msgs += ['preparing GPU']
         return ' and '.join(msgs)
 
-    def warmup_sweep(self, sweep_spec: specs.Sweep, calibration):
+    def warmup_sweep(self, sweep_spec: specs.SweepSpec, calibration):
         """open the radio while warming up the GPU"""
 
         logger = util.get_logger('controller')
@@ -143,7 +138,7 @@ class SweepController:
 
         if not sweeps.sweep_touches_gpu(sweep_spec):
             pass
-        elif not sweep_spec.radio_setup.warmup_sweep:
+        elif not sweep_spec.source.warmup_sweep:
             pass
         elif len(self.warmed_captures) == 0:
             # maybe lead to a sweep iterator
@@ -164,16 +159,16 @@ class SweepController:
                     prepare=False,
                 )
                 calls['warmup'] = util.Call(
-                    _consume_warmup, self, warmup_sweep.radio_setup, warmup_iter
+                    _consume_warmup, self, warmup_sweep.source, warmup_iter
                 )
 
-        calls['open_radio'] = util.Call(self.open_radio, sweep_spec.radio_setup)
+        calls['open_radio'] = util.Call(self.open_radio, sweep_spec.source)
 
         util.concurrently_with_fg(calls)
 
     def iter_sweep(
         self,
-        sweep: specs.Sweep,
+        sweep: specs.SweepSpec,
         calibration: 'xr.Dataset' = None,
         *,
         always_yield: bool = False,
@@ -189,14 +184,14 @@ class SweepController:
         if prepare:
             self.warmup_sweep(sweep, calibration)
 
-        radio = self.open_radio(sweep.radio_setup)
-        radio.setup(sweep.radio_setup, sweep.analysis)
+        radio = self.open_radio(sweep.source)
+        radio.setup(sweep.source, sweep.analysis)
 
         return sweeps.iter_sweep(radio, **kwargs)
 
     def iter_raw_iq(
         self,
-        sweep: specs.Sweep,
+        sweep: specs.SweepSpec,
         calibration: 'xr.Dataset' = None,
         always_yield: bool = False,
         quiet: bool = False,
@@ -214,8 +209,8 @@ class SweepController:
                 logger.info(prep_msg)
             self.warmup_sweep(sweep, calibration, pickled=True)
 
-        radio = self.open_radio(sweep.radio_setup)
-        radio.setup(sweep.radio_setup, sweep.analysis)
+        radio = self.open_radio(sweep.source)
+        radio.setup(sweep.source, sweep.analysis)
 
         return sweeps.iter_raw_iq(radio, sweep)
 
@@ -245,7 +240,7 @@ class _ServerService(rpyc.Service, SweepController):
 
     def exposed_iter_sweep(
         self,
-        sweep: specs.Sweep,
+        sweep: specs.SweepSpec,
         calibration: 'xr.Dataset' = None,
         *,
         loop: bool = False,
@@ -264,7 +259,7 @@ class _ServerService(rpyc.Service, SweepController):
         sweep = rpyc.utils.classic.obtain(sweep)
 
         with util.stopwatch(
-            f'obtaining calibration data {str(sweep.radio_setup.calibration)}',
+            f'obtaining calibration data {str(sweep.source.calibration)}',
             'controller',
             threshold=10e-3,
         ):
@@ -303,7 +298,7 @@ class _ServerService(rpyc.Service, SweepController):
     def exposed_read_stream(self, samples: int):
         return self.radio._read_stream(samples)
 
-    def exposed_close_radio(self, radio_setup: specs.RadioSetup = None):
+    def exposed_close_radio(self, radio_setup: specs.SourceSpec = None):
         radio_setup = rpyc.utils.classic.obtain(radio_setup)
         self.close_radio(radio_setup)
 
@@ -339,7 +334,7 @@ def start_server(host=None, port=4567, default_driver: str | None = None):
     if default_driver is None:
         default_setup = None
     else:
-        default_setup = specs.RadioSetup(driver=default_driver)
+        default_setup = specs.SourceSpec(driver=default_driver)
 
     t = rpyc.ThreadedServer(
         _ServerService(default_setup),

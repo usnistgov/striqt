@@ -23,7 +23,7 @@ warnings.filterwarnings(
 )
 @util.lru_cache()
 def spectrogram_time(
-    capture: specs.Capture, spec: shared.SpectrogramSpec
+    capture: specs.CaptureBase, spec: shared.SpectrogramSpec
 ) -> dict[str, np.ndarray]:
     import pandas as pd
 
@@ -58,7 +58,7 @@ def spectrogram_time(
 )
 def spectrogram(
     iq: 'striqt.waveform.type_stubs.ArrayType',
-    capture: specs.Capture,
+    capture: specs.CaptureBase,
     **kwargs: typing.Unpack[shared.SpectrogramKeywords],
 ):
     """Evaluate a spectrogram based on an STFT.

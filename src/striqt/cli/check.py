@@ -24,20 +24,20 @@ def run(yaml_path):
     lb.show_messages('warning')
 
     init_sweep = sensor.read_yaml_sweep(yaml_path)
-    print(f'Testing connect with driver {init_sweep.radio_setup.driver!r}...')
+    print(f'Testing connect with driver {init_sweep.source.driver!r}...')
     controller = frontend.get_controller(None, init_sweep)
-    radio_id = controller.radio_id(init_sweep.radio_setup.driver)
+    radio_id = controller.radio_id(init_sweep.source.driver)
     print(f'Connected, radio_id is {radio_id!r}')
     sweep = sensor.read_yaml_sweep(yaml_path, radio_id=radio_id)
 
     print('\nCalibration info')
     print(60 * '=')
-    if sweep.radio_setup.calibration is None:
+    if sweep.source.calibration is None:
         print('Configured for uncalibrated operation')
-    elif not Path(sweep.radio_setup.calibration).exists():
+    elif not Path(sweep.source.calibration).exists():
         print('No file at configured path!')
     else:
-        cal = calibration.read_calibration(sweep.radio_setup.calibration)
+        cal = calibration.read_calibration(sweep.source.calibration)
         summary = calibration.summarize_calibration(cal)
         with pd.option_context('display.max_rows', None):
             print(summary.sort_index(axis=1).sort_index(axis=0))
@@ -51,8 +51,8 @@ def run(yaml_path):
             init_sweep.extensions.import_path,
         ),
         'radio_setup.calibration': (
-            sweep.radio_setup.calibration,
-            init_sweep.radio_setup.calibration,
+            sweep.source.calibration,
+            init_sweep.source.calibration,
         ),
     }
 

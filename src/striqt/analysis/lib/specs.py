@@ -163,7 +163,7 @@ class _SlowHashSpecBase(SpecBase, kw_only=True, frozen=True, cache_hash=True):
         return h
 
 
-class Capture(SpecBase, kw_only=True, frozen=True):
+class CaptureBase(SpecBase, kw_only=True, frozen=True):
     """bare minimum information about an IQ acquisition"""
 
     # acquisition
@@ -186,7 +186,7 @@ class AnalysisFilter(SpecBase, kw_only=True, frozen=True, cache_hash=True):
     nfft_out: int | None = None
 
 
-class FilteredCapture(Capture, kw_only=True, frozen=True, cache_hash=True):
+class FilteredCapture(CaptureBase, kw_only=True, frozen=True, cache_hash=True):
     # filtering and resampling
     analysis_filter: AnalysisFilter = msgspec.field(default_factory=AnalysisFilter)
     # analysis_filter: dict = msgspec.field(
@@ -249,7 +249,7 @@ class Analysis(
 
 
 @util.lru_cache()
-def get_capture_type_attrs(capture_cls: type[Capture]) -> dict[str, typing.Any]:
+def get_capture_type_attrs(capture_cls: type[CaptureBase]) -> dict[str, typing.Any]:
     """return attrs metadata for each field in `capture`"""
     info = msgspec.inspect.type_info(capture_cls)
 
@@ -281,7 +281,7 @@ def _warn_on_capture_lookup_miss(capture_value, capture_attr, error_label, defau
 
 
 def maybe_lookup_with_capture_key(
-    capture: Capture,
+    capture: CaptureBase,
     value: _T | typing.Mapping[str, _T],
     capture_attr: str,
     error_label: str,
