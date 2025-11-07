@@ -5,7 +5,7 @@ import itertools
 import functools
 import numbers
 import typing
-from typing import Annotated, ClassVar, Optional, Literal, Any, Union
+from typing import Annotated, ClassVar, Optional, Literal, Union
 
 import msgspec
 
@@ -179,22 +179,20 @@ class FileCaptureSpec(CaptureSpec, frozen=True, **spec_kws):
     """Capture specification read from a file, with support for None sentinels"""
 
     # RF and leveling
-    center_frequency: Optional[CenterFrequencyType] = float('nan')
+    center_frequency: CenterFrequencyType = float('nan')
     port: PortType = 0
-    gain: Optional[GainType] = float('nan')
-    backend_sample_rate: Optional[float] = float('nan')
+    gain: GainType = float('nan')
+    backend_sample_rate: float = float('nan')
 
 
 ClockSourceType = Annotated[
     Literal['internal', 'external', 'gps'],
     meta('Hardware source for the frequency reference'),
 ]
-
 ContinuousTriggerType = Annotated[
     bool,
     meta('Whether to trigger immediately after each call to acquire() when armed'),
 ]
-
 ReceiveRetriesType = Annotated[
     int,
     meta(
@@ -202,7 +200,6 @@ ReceiveRetriesType = Annotated[
         ge=0,
     ),
 ]
-
 TimeSourceType = Annotated[
     Literal['host', 'internal', 'external', 'gps'],
     meta('Hardware source for timestamps'),
@@ -216,35 +213,30 @@ GaplessRepeatType = Annotated[
     bool,
     meta('whether to raise an exception on overflows between identical captures'),
 ]
-
 WarmupSweepType = Annotated[
     bool,
     meta(
         'whether to run the GPU compute on empty buffers before sweeping for more even run time'
     ),
 ]
-
 ArrayBackendType = Annotated[
     Union[Literal['numpy'], Literal['cupy']],
     meta(
         'array module to use, which sets the type of compute device (numpy = cpu, cupy = gpu)'
     ),
 ]
-
 FastLOType = Annotated[
     bool,
     meta(
         'if False, permit the radio to use slower frequency changes/channel enables to improve LO spurs'
     ),
 ]
-
 SyncSourceType = Annotated[
     str,
     meta(
         'name of a registered waveform sync function for analysis-based IQ synchronization'
     ),
 ]
-
 SyncSourceType = Annotated[
     str,
     meta(
@@ -350,6 +342,12 @@ class _SoapySourceSpecKeywords(_SourceSpecKeywords, total=False):
     time_sync_every_capture: TimeSyncEveryCaptureType
 
 
+class NullSourceSpec(SourceSpec, frozen=True, kw_only=True, **spec_kws):
+    # make these configurable, to support matching hardware for warmup sweeps
+    num_rx_ports: int
+    stream_all_rx_ports: bool = False
+
+
 class Description(SpecBase, frozen=True, **spec_kws):
     summary: Optional[str] = None
     location: Optional[tuple[float, float, float]] = None
@@ -425,7 +423,7 @@ AliasMatchType = Annotated[
 ]
 
 
-class Output(_SlowHashSpecBase, frozen=True, **spec_kws):
+class SinkSpec(_SlowHashSpecBase, frozen=True, **spec_kws):
     path: Optional[str] = '{yaml_name}-{start_time}'
     log_path: Optional[str] = None
     log_level: str = 'info'
@@ -444,23 +442,20 @@ SinkClassType = Annotated[
     typing.Union[str, Literal['striqt.sensor.writers.CaptureAppender']],
     meta('data sink class to import and use'),
 ]
-PeripheralClassType = Annotated[
-    typing.Union[str, Literal['striqt.sensor.peripherals.NoPeripherals']],
-    meta('peripheral manager class for import'),
+ModuleNameType = Annotated[
+    str | None,
+    meta('name of the extension module that calls bind_sensor'),
 ]
 ExtensionPathType = Annotated[
     Optional[str],
-    meta(
-        'optional import path to add (if relative, specified with regard to this yaml)'
-    ),
+    meta('optional import path to add, with the yaml parent as the working directory'),
 ]
 
 
-class Extensions(SpecBase, frozen=True, **spec_kws):
-    peripherals: PeripheralClassType = 'striqt.sensor.peripherals.NoPeripherals'
+class ExtensionSpec(SpecBase, frozen=True, **spec_kws):
     sink: SinkClassType = 'striqt.sensor.sinks.CaptureAppender'
-    sweep_struct: SweepStructType = 'striqt.sensor.Sweep'
     import_path: ExtensionPathType = None
+    import_name: ModuleNameType = None
 
 
 # dynamically generate Analysis type for "built-in" measurements in to striqt.analysis
@@ -470,11 +465,7 @@ BundledAlignmentAnalysis = analysis.registry.channel_sync_source.to_spec()
 
 WindowFillType = Annotated[
     float,
-    meta(
-        'size of the averaging window as a fraction of the analysis interval',
-        ge=0,
-        le=1,
-    ),
+    meta('averaging window size as a fraction of analysis interval', ge=0, le=1),
 ]
 
 
@@ -485,8 +476,8 @@ class SweepSpec(SpecBase, typing.Generic[_TS, _TC], frozen=True, **spec_kws):
 
     analysis: BundledAnalysis = BundledAnalysis()  # type: ignore
     description: typing.Union[Description, str] = ''
-    extensions: Extensions = Extensions()
-    output: Output = Output()
+    extensions: ExtensionSpec = ExtensionSpec()
+    sink: SinkSpec = SinkSpec()
 
     def get_captures(self, looped=True) -> tuple[_TC, ...]:
         """subclasses may use this to autogenerate capture sequences"""

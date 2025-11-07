@@ -552,8 +552,7 @@ class AlignmentCaller:
         self.meas_spec = typing.cast(specs.Measurement, meas_attr)
         if self.meas_spec is None:
             raise ValueError(
-                f'channel_sync_source {name!r} requires an analysis '
-                f'specification for {self.meas_info.name!r}'
+                f'channel_sync_source {name!r} requires an analysis specification for {self.meas_info.name!r}'
             )
 
         self.meas_kws = self.meas_spec.todict()
@@ -594,15 +593,12 @@ def normalize_factory_return(ret, name: str):
         arr, attrs = ret
     else:
         raise TypeError(
-            f'tuple returned by {repr(name)} coordinate factory '
-            f'must have length 2, not {len(ret)}. return a list '
-            f'or array if this was meant as data.'
+            f'tuple returned by {repr(name)} coordinate factory must have length 2, not {len(ret)}. return a list or array if this was meant as data.'
         )
 
     if not isinstance(attrs, dict):
         raise TypeError(
-            f'second item of {repr(name)} coordinate factory return tuple must be dict.'
-            f'return an array or list if this was meant as data.'
+            f'second item of {repr(name)} coordinate factory return tuple must be dict.return an array or list if this was meant as data.'
         )
     else:
         attrs = {

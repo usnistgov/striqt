@@ -257,18 +257,13 @@ def sliding_window_output_shape(array_shape: tuple | int, window_shape: tuple, a
         axis = tuple(range(ndim))
         if len(window_shape) != len(axis):
             raise ValueError(
-                f'Since axis is `None`, must provide '
-                f'window_shape for all dimensions of `x`; '
-                f'got {len(window_shape)} window_shape elements '
-                f'and `x.ndim` is {ndim}.'
+                f'Since axis is `None`, must provide window_shape for all dimensions of `x`; got {len(window_shape)} window_shape elements and `x.ndim` is {ndim}.'
             )
     else:
         axis = stride_tricks.normalize_axis_tuple(axis, ndim, allow_duplicate=True)
         if len(window_shape) != len(axis):
             raise ValueError(
-                f'Must provide matching length window_shape and '
-                f'axis; got {len(window_shape)} window_shape '
-                f'elements and {len(axis)} axes elements.'
+                f'Must provide matching length window_shape and axis; got {len(window_shape)} window_shape elements and {len(axis)} axes elements.'
             )
 
     window_shape = tuple(window_shape) if np.iterable(window_shape) else (window_shape,)

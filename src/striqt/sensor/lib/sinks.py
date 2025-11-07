@@ -1,5 +1,4 @@
 from __future__ import annotations
-import logging
 from pathlib import Path
 import typing
 from . import captures, datasets, specs, util
@@ -28,14 +27,14 @@ class SinkBase:
         self.captures_elapsed = 0
 
         if output_path is None:
-            if self.sweep_spec.output.path is None:
+            if self.sweep_spec.sink.path is None:
                 raise TypeError('sweep output data path is not specified')
-            self.output_path = self.sweep_spec.output.path
+            self.output_path = self.sweep_spec.sink.path
         else:
             self.output_path = output_path
 
         if store_backend is None:
-            self.store_backend = self.sweep_spec.output.store.lower()
+            self.store_backend = self.sweep_spec.sink.store.lower()
         else:
             self.store_backend = store_backend.lower()
 
@@ -184,7 +183,7 @@ class CaptureAppender(ZarrSinkBase):
             ),
         ):
             analysis.dump(
-                self.store, dataset, max_threads=self.sweep_spec.output.max_threads
+                self.store, dataset, max_threads=self.sweep_spec.sink.max_threads
             )
 
             for i in range(count - len(data_list), count):
@@ -235,7 +234,7 @@ class SpectrogramTimeAppender(ZarrSinkBase):
                 self.store,
                 by_spectrogram,
                 compression=False,
-                max_threads=self.sweep_spec.output.max_threads,
+                max_threads=self.sweep_spec.sink.max_threads,
             )
 
             for i in range(count - len(data_list), count):

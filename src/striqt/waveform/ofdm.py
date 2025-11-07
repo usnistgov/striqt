@@ -1021,8 +1021,7 @@ class BasebandClockSynchronizer:  # other base classes are basic_block, decim_bl
                 )
 
         print(
-            f'corrected baseband clock slip by {total_sample_slip} samples'
-            f'({total_sample_slip / x.size * self.phy.sample_rate:0.2f} Hz clock mismatch)'
+            f'corrected baseband clock slip by {total_sample_slip} samples({total_sample_slip / x.size * self.phy.sample_rate:0.2f} Hz clock mismatch)'
         )
 
         # last, correct the fixed offset at the beginning in an attempt to align

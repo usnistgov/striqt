@@ -77,9 +77,7 @@ class ManualYFactorSweep(
 
     def __post_init__(self):
         if self.radio_setup.calibration is not None:
-            raise ValueError(
-                'radio_setup.calibration must be None for a calibration sweep'
-            )
+            raise ValueError('source.calibration must be None for a calibration sweep')
 
     # the top here is just to set the annotation for msgspec
     captures: tuple[ManualYFactorCapture, ...] = tuple()
@@ -612,13 +610,13 @@ def specialize_cal_sweep(
     capture_cls = _merge_specs(
         'CalibrationRadioCapture', module, [get_capture_type(sensor_cls)]
     )
-    setup_cls = _merge_specs('CalibrationRadioSetup', module, all_fields['radio_setup'])
+    setup_cls = _merge_specs('CalibrationRadioSetup', module, all_fields['source'])
 
     sweep_cls = msgspec.defstruct(
         name,
         fields=(
             ('captures', tuple[capture_cls, ...], tuple()),
-            ('radio_setup', setup_cls, setup_cls()),
+            ('source', setup_cls, setup_cls()),
         ),
         bases=(cal_cls,),
         module=sensor_cls.__module__,

@@ -8,7 +8,7 @@ _TS = typing.TypeVar('_TS', bound=specs.SourceSpec, covariant=True)
 
 
 class PeripheralsProtocol(typing.Protocol[_TC]):
-    """the methods that a peripherals extension class should implement"""
+    """a peripherals extension class must implement these"""
 
     def open(self): ...
 

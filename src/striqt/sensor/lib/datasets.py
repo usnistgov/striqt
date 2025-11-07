@@ -123,7 +123,7 @@ def coord_template(
 
 
 @util.lru_cache()
-def _get_alias_dtypes(output: specs.Output) -> dict[str, typing.Any]:
+def _get_alias_dtypes(output: specs.SinkSpec) -> dict[str, typing.Any]:
     aliases = output.coord_aliases
 
     alias_dtypes = {}
@@ -154,7 +154,7 @@ def get_attrs(struct: type[specs.SpecBase], field: str) -> dict[str, str]:
 
 
 def build_coords(
-    capture: specs.CaptureSpec, output: specs.Output, radio_id: str, sweep_time
+    capture: specs.CaptureSpec, output: specs.SinkSpec, radio_id: str, sweep_time
 ):
     alias_dtypes = _get_alias_dtypes(output)
 
@@ -325,7 +325,7 @@ class DelayedDataset:
         ):
             coords = build_coords(
                 self.capture,
-                output=self.sweep.output,
+                output=self.sweep.sink,
                 radio_id=self.radio_id,
                 sweep_time=self.sweep_time,
             )
@@ -367,8 +367,7 @@ class DelayedDataset:
 
                     if v.sizes[CAPTURE_DIM] not in allowed_capture_shapes:
                         raise ValueError(
-                            f'size of first axis of extra data "{k}" must be one '
-                            f'of {allowed_capture_shapes}'
+                            f'size of first axis of extra data "{k}" must be one of {allowed_capture_shapes}'
                         )
 
                     new_arrays[k] = v

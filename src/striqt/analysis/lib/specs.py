@@ -85,6 +85,12 @@ def _private_fields(capture_cls: type[SpecBase]) -> tuple[str, ...]:
     return tuple([n for n in capture_cls.__struct_fields__ if not n.startswith('_')])
 
 
+def convert_dict(obj: typing.Any, type: type[_T]) -> _T:
+    return msgspec.convert(
+        obj, type=type, strict=False, dec_hook=_dec_hook, builtin_types=(pd.Timestamp,)
+    )
+
+
 class SpecBase(msgspec.Struct, kw_only=True, frozen=True, cache_hash=True):
     """Base type for structures that support validated
     (de)serialization.
@@ -118,9 +124,7 @@ class SpecBase(msgspec.Struct, kw_only=True, frozen=True, cache_hash=True):
 
     @classmethod
     def fromdict(cls: type[_T], d: dict) -> _T:
-        return msgspec.convert(
-            d, type=cls, strict=False, dec_hook=_dec_hook, builtin_types=(pd.Timestamp,)
-        )
+        return convert_dict(d, type=cls)
 
     @classmethod
     def fromspec(cls: type[_T], other: SpecBase) -> _T:
@@ -275,8 +279,7 @@ def get_capture_type_attrs(capture_cls: type[CaptureBase]) -> dict[str, typing.A
 @functools.cache
 def _warn_on_capture_lookup_miss(capture_value, capture_attr, error_label, default):
     warnings.warn(
-        f'{error_label} is missing key {capture_attr}=={capture_value!r}; '
-        f'using default {default}'
+        f'{error_label} is missing key {capture_attr}=={capture_value!r}; using default {default}'
     )
 
 
@@ -299,8 +302,7 @@ def maybe_lookup_with_capture_key(
             capture_value = getattr(capture, capture_attr)
         except AttributeError:
             raise AttributeError(
-                f'can only look up {error_label} when an attribute {capture_attr!r} '
-                f'exists in the capture type'
+                f'can only look up {error_label} when an attribute {capture_attr!r} exists in the capture type'
             )
         try:
             return value[capture_value]

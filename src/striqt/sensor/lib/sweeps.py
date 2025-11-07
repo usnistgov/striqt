@@ -21,14 +21,20 @@ else:
     xr = util.lazy_import('xarray')
 
 
-class Resources(typing.TypedDict, typing.Generic[_TS, _TC], total=False):
+class ConnectionResources(typing.TypedDict, typing.Generic[_TS, _TC], total=False):
     """Sensor resources needed to run a sweep"""
 
-    source: typing.Required[sources.SourceBase[_TS, _TC]]
+    source: sources.SourceBase[_TS, _TC]
     sink: SinkBase
     peripherals: PeripheralsBase[_TS, _TC]
+    except_context: typing.ContextManager
+
+
+class Resources(ConnectionResources[_TS, _TC], total=False):
+    """Sensor resources needed to run a sweep"""
+
     sweep_spec: specs.SweepSpec[_TS, _TC]
-    calibration: 'xr.Dataset'
+    calibration: 'xr.Dataset|None'
 
 
 def varied_capture_fields(sweep: specs.SweepSpec) -> list[str]:
@@ -154,7 +160,7 @@ def _build_attrs(sweep: specs.SweepSpec):
     fields = set(type(sweep).__struct_fields__)
     base_fields = set(specs.SweepSpec.__struct_fields__)
     new_fields = list(fields - base_fields)
-    attr_fields = ['radio_setup'] + new_fields
+    attr_fields = ['source'] + new_fields
 
     if isinstance(sweep.description, str):
         attrs = {'description': sweep.description}
@@ -219,16 +225,16 @@ class SweepIterator:
 
     def __init__(
         self,
-        resources=Resources(),
+        resources,
         *,
         always_yield=False,
         quiet=False,
         loop=False,
-        **extra_resources,
+        **extra_resources: typing.Unpack[Resources],
     ):
         resources = Resources(resources, **extra_resources)
 
-        self.radio = resources['radio']
+        self.source = resources['source']
         self._calibration = resources['calibration']
         self._peripherals = resources['peripherals']
         self._sink = resources['sink']
@@ -241,7 +247,7 @@ class SweepIterator:
         self.spec.validate()
 
         self._analyze = datasets.AnalysisCaller(
-            radio=self.radio,
+            radio=self.source,
             sweep=self.spec,
             extra_attrs=_build_attrs(self.spec),
             correction=True,
@@ -357,10 +363,10 @@ class SweepIterator:
     def _acquire(self, iq_prev: AcquiredIQ, capture_prev, capture_this, capture_next):
         if self.spec.source.reuse_iq:
             reuse_this = _iq_is_reusable(
-                capture_prev, capture_this, self.radio.get_setup_spec().base_clock_rate
+                capture_prev, capture_this, self.source.get_setup_spec().base_clock_rate
             )
             reuse_next = _iq_is_reusable(
-                capture_this, capture_next, self.radio.get_setup_spec().base_clock_rate
+                capture_this, capture_next, self.source.get_setup_spec().base_clock_rate
             )
         else:
             reuse_this = reuse_next = False
@@ -372,7 +378,7 @@ class SweepIterator:
         calls = {}
         if reuse_this:
             capture_ret = capture_this.replace(
-                backend_sample_rate=self.radio._capture.backend_sample_rate,
+                backend_sample_rate=self.source._capture.backend_sample_rate,
                 start_time=None,
             )
             ret_iq = AcquiredIQ(
@@ -381,7 +387,7 @@ class SweepIterator:
             calls['radio'] = util.Call(lambda: ret_iq)
         else:
             calls['radio'] = util.Call(
-                self.radio.acquire,
+                self.source.acquire,
                 capture_this,
                 correction=False,
             )
@@ -399,7 +405,7 @@ class SweepIterator:
     def _arm(self, capture):
         calls = {}
 
-        calls['radio'] = util.Call(self.radio.arm, capture)
+        calls['radio'] = util.Call(self.source.arm, capture)
         if self._peripherals is not None:
             calls['peripherals'] = util.Call(self._peripherals.arm, capture)
 
@@ -418,8 +424,7 @@ class SweepIterator:
                 data = dict(data)
             except TypeError:
                 raise TypeError(
-                    f'{self._peripherals.acquire!r} must return a '
-                    f'dict or None, not {type(data)!r}'
+                    f'{self._peripherals.acquire!r} must return a dict or None, not {type(data)!r}'
                 )
 
         if self.spec.source.calibration is None:
@@ -428,7 +433,7 @@ class SweepIterator:
         system_noise = lookup_system_noise_power(
             self.spec.source.calibration,
             capture,
-            self.radio.get_setup_spec().base_clock_rate,
+            self.source.get_setup_spec().base_clock_rate,
         )
 
         return dict(data, sensor_system_noise=system_noise)
@@ -451,12 +456,12 @@ class SweepIterator:
 
 
 def iter_sweep(
-    resources=Resources(),
+    resources: Resources,
     *,
     always_yield=False,
     quiet=False,
     loop=False,
-    **extra_resources: dict[str, typing.Any],
+    **extra_resources: typing.Unpack[Resources],
 ) -> SweepIterator:
     """iterate through sweep captures on the radio, yielding a dataset for each.
 

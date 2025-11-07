@@ -14,4 +14,6 @@ from .lib.sources import (
 )
 from .lib.specs import CaptureSpec, SourceSpec, SweepSpec, Description
 from .lib.sweeps import iter_sweep
-from .lib.datasets import CAPTURE_DIM, concat_time_dim, analyze_capture
+from .lib.datasets import CAPTURE_DIM, concat_time_dim
+
+from .bindings import bind_sensor, registry

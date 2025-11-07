@@ -139,10 +139,7 @@ def retry(
                 except exception_or_exceptions as e:
                     if not notified and logger is not None:
                         etype = type(e).__qualname__
-                        msg = (
-                            f"caught '{etype}' on first call to '{f.__name__}' - repeating the call "
-                            f'{tries - 1} more times or until no exception is raised'
-                        )
+                        msg = f"caught '{etype}' on first call to '{f.__name__}' - repeating the call {tries - 1} more times or until no exception is raised"
 
                         logger.info(msg)
 
@@ -489,10 +486,7 @@ class Call(_CallBase):
                 func.name = name
 
                 if name in ret:
-                    msg = (
-                        f'another callable is already named {name!r} - '
-                        'pass as a keyword argument to specify a different name'
-                    )
+                    msg = f'another callable is already named {name!r} - pass as a keyword argument to specify a different name'
                     raise KeyError(msg)
 
                 ret[name] = func
@@ -614,10 +608,7 @@ class MultipleContexts:
                         contexts[name].__exit__(None, None, None)
                     except BaseException as e:
                         if e is not self.exc[name][1]:
-                            msg = (
-                                f'{name}.__exit__ raised {e} in cleanup attempt after another '
-                                f'exception in {name}.__enter__'
-                            )
+                            msg = f'{name}.__exit__ raised {e} in cleanup attempt after another exception in {name}.__enter__'
 
                             logger.warning(msg)
 

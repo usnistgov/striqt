@@ -66,47 +66,47 @@ class SweepController:
         if last_ex is not None:
             raise last_ex
 
-    def open_radio(self, radio_setup: specs.SourceSpec):
-        logger = util.get_logger('controller')
+    # def open_radio(self, radio_setup: specs.SourceSpec):
+    #     logger = util.get_logger('controller')
 
-        driver_name = radio_setup.driver
-        radio_cls = find_radio_cls_by_name(driver_name)
+    #     driver_name = radio_setup.driver
+    #     radio_cls = find_radio_cls_by_name(driver_name)
 
-        if driver_name in self.radios and self.radios[driver_name].isopen:
-            if is_same_resource(self.radios[driver_name], radio_setup):
-                logger.debug(f'reusing open {repr(driver_name)}')
-                return self.radios[driver_name]
-            else:
-                logger.debug(
-                    f're-opening {repr(driver_name)} to set resource={repr(radio_setup.resource)}'
-                )
-                self.radios[driver_name].close()
-        else:
-            logger.debug(f'opening driver {repr(driver_name)}')
+    #     if driver_name in self.radios and self.radios[driver_name].isopen:
+    #         if is_same_resource(self.radios[driver_name], radio_setup):
+    #             logger.debug(f'reusing open {repr(driver_name)}')
+    #             return self.radios[driver_name]
+    #         else:
+    #             logger.debug(
+    #                 f're-opening {repr(driver_name)} to set resource={repr(radio_setup.resource)}'
+    #             )
+    #             self.radios[driver_name].close()
+    #     else:
+    #         logger.debug(f'opening driver {repr(driver_name)}')
 
-        radio = self.radios[driver_name] = radio_cls(resource=radio_setup.resource)
+    #     radio = self.radios[driver_name] = radio_cls(resource=radio_setup.resource)
 
-        if radio_setup.transient_holdoff_time is not None:
-            radio._setup._transient_holdoff_time = radio_setup.transient_holdoff_time
+    #     if radio_setup.transient_holdoff_time is not None:
+    #         radio._setup._transient_holdoff_time = radio_setup.transient_holdoff_time
 
-        radio.open()
+    #     radio.open()
 
-        return radio
+    #     return radio
 
-    def radio_id(self, driver_name: str) -> str:
-        return self.radios[driver_name].id
+    # def radio_id(self, driver_name: str) -> str:
+    #     return self.radios[driver_name].id
 
-    def close_radio(self, radio_setup: specs.SourceSpec | None = None):
-        if radio_setup is None:
-            # close all
-            for name, radio in self.radios.items():
-                try:
-                    radio.close()
-                except BaseException as ex:
-                    msg = f'failed to close radio {name}: {str(ex)}'
-                    util.get_logger('controller').warning(msg)
-        else:
-            self.radios[radio_setup.driver].close()
+    # def close_radio(self, radio_setup: specs.SourceSpec | None = None):
+    #     if radio_setup is None:
+    #         # close all
+    #         for name, radio in self.radios.items():
+    #             try:
+    #                 radio.close()
+    #             except BaseException as ex:
+    #                 msg = f'failed to close radio {name}: {str(ex)}'
+    #                 util.get_logger('controller').warning(msg)
+    #     else:
+    #         self.radios[radio_setup.driver].close()
 
     def _describe_preparation(self, target_sweep: specs.SweepSpec) -> str:
         if sweeps.sweep_touches_gpu(target_sweep) and target_sweep.source.warmup_sweep:

@@ -28,7 +28,7 @@ def run(yaml_path):
     controller = frontend.get_controller(None, init_sweep)
     radio_id = controller.radio_id(init_sweep.source.driver)
     print(f'Connected, radio_id is {radio_id!r}')
-    sweep = sensor.read_yaml_sweep(yaml_path, radio_id=radio_id)
+    sweep = sensor.read_yaml_sweep(yaml_path, source_id=radio_id)
 
     print('\nCalibration info')
     print(60 * '=')
@@ -45,7 +45,7 @@ def run(yaml_path):
     print('\nPaths')
     print(60 * '=')
     expanded_paths = {
-        'output.path': (sweep.output.path, init_sweep.output.path),
+        'output.path': (sweep.sink.path, init_sweep.sink.path),
         'extensions.import_path': (
             sweep.extensions.import_path,
             init_sweep.extensions.import_path,

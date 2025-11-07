@@ -6,19 +6,7 @@ from . import base
 from .. import specs
 
 
-class NullSetup(
-    specs.SourceSpec,
-    forbid_unknown_fields=True,
-    frozen=True,
-    cache_hash=True,
-    kw_only=True,
-):
-    # make these configurable, to support matching hardware for warmup sweeps
-    num_rx_ports: int
-    stream_all_rx_ports: bool = False
-
-
-_TS = typing.TypeVar('_TS', bound=NullSetup)
+_TS = typing.TypeVar('_TS', bound=specs.NullSourceSpec)
 _TC = typing.TypeVar('_TC', bound=specs.CaptureSpec)
 
 
@@ -60,7 +48,3 @@ class NullSource(base.SourceBase[_TS, _TC]):
         self._samples_elapsed += count
 
         return count, round(timestamp_ns)
-
-
-class WarmupSource(NullSource):
-    pass

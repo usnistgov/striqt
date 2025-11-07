@@ -212,8 +212,7 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
                 setup.channel_sync_source, registry
             )
             raise ValueError(
-                f'channel_sync_source {name!r} requires an analysis '
-                f'specification for {setup.channel_sync_source!r}'
+                f'channel_sync_source {name!r} requires an analysis specification for {setup.channel_sync_source!r}'
             )
         else:
             self._aligner = register.get_aligner(

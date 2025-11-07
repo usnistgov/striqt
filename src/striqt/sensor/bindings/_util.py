@@ -1,11 +1,26 @@
-import functools
 import msgspec
 import typing
 from dataclasses import dataclass
 
-from ..lib.specs import SourceSpec, CaptureSpec, SweepSpec, _TS, _TC
 from ..lib.peripherals import PeripheralsBase, NoPeripherals
 from ..lib.sources import SourceBase
+from ..lib.specs import SourceSpec, CaptureSpec, SweepSpec, _TS, _TC
+
+
+def _tagged_sweep_subclass(name: str, cls: type[SweepSpec]) -> type[SweepSpec]:
+    """build a subclass of binding.sweep_spec for use in a tagged union"""
+    kls = msgspec.defstruct(
+        name,
+        (),
+        bases=(cls,),
+        frozen=True,
+        forbid_unknown_fields=True,
+        cache_hash=True,
+        tag_field='bind',
+        kw_only=True,
+    )
+
+    return typing.cast(type[SweepSpec], kls)
 
 
 @dataclass(kw_only=True, frozen=True)
@@ -24,10 +39,11 @@ class SensorBinding(typing.Generic[_TS, _TC]):
         assert issubclass(self.peripherals, PeripheralsBase)
 
 
-_registry: dict[str, SensorBinding[typing.Any, typing.Any]] = {}
+registry: dict[str, SensorBinding[typing.Any, typing.Any]] = {}
+tagged_sweep_spec_type = _tagged_sweep_subclass('SweepSpec', SweepSpec)
 
 
-def bind(key: str, sensor: SensorBinding[_TS, _TC]) -> SensorBinding[_TS, _TC]:
+def bind_sensor(key: str, sensor: SensorBinding[_TS, _TC]) -> SensorBinding[_TS, _TC]:
     """register a binding between specifications and controller classes.
 
     Args:
@@ -36,38 +52,30 @@ def bind(key: str, sensor: SensorBinding[_TS, _TC]) -> SensorBinding[_TS, _TC]:
     """
     if not isinstance(sensor, SensorBinding):
         raise TypeError('sensor argument must be a SensorBindings instance')
-    _registry[key] = sensor
+    registry[key] = sensor
+
+    global tagged_sweep_spec_type
+    tagged_cls = _tagged_sweep_subclass(key, sensor.sweep_spec)
+    tagged_sweep_spec_type = typing.Union[tagged_sweep_spec_type, tagged_cls]
+
     return sensor
 
 
-def get(key: str | type[SweepSpec]) -> SensorBinding:
+def get_registry() -> dict[str, SensorBinding[typing.Any, typing.Any]]:
+    return dict(registry)
+
+
+def get_binding(key: str | SweepSpec) -> SensorBinding:
     if isinstance(key, str):
-        return _registry[key]
-    elif not issubclass(key, SweepSpec):
+        return registry[key]
+    elif not isinstance(key, SweepSpec):
         raise TypeError('key must be a string or a SweepSpec')
     elif key is SweepSpec:
         raise TypeError('must provide a tagged SweepSpec')
     else:
-        return _registry[key.__name__]
+        return registry[type(key).__name__]
 
 
-@functools.lru_cache
-def _tag(name: str, binding: SensorBinding):
-    """build a subclass of binding.sweep_spec for use in a tagged union"""
-    return msgspec.defstruct(
-        name,
-        (),
-        bases=(binding.sweep_spec,),
-        frozen=True,
-        forbid_unknown_fields=True,
-        cache_hash=True,
-        tag_field='bind',
-        kw_only=True,
-    )
-
-
-def tagged_union_spec():
+def get_tagged_sweep_spec() -> type:
     """return a tagged union type that msgspec can decode"""
-    types = [_tag(n, b) for n, b in _registry.items()]
-
-    return typing.Union[*types]
+    return tagged_sweep_spec_type

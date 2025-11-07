@@ -101,7 +101,7 @@ def evaluate_aliases(
     capture: specs.CaptureSpec,
     *,
     radio_id: str | None = _UNDEFINED_FIELD,
-    output: specs.Output,
+    output: specs.SinkSpec,
 ) -> dict[str, typing.Any]:
     """evaluate the field values"""
 
@@ -154,12 +154,12 @@ def split_capture_ports(capture: Capture) -> list[Capture]:
 
 
 def capture_fields_with_aliases(
-    capture: specs.CaptureSpec, *, radio_id: str | None = None, output: specs.Output
+    capture: specs.CaptureSpec, *, source_id: str | None = None, output: specs.SinkSpec
 ) -> dict:
     attrs = capture.todict(skip_private=True)
 
     c = split_capture_ports(capture)[0]
-    aliases = evaluate_aliases(c, radio_id=radio_id, output=output)
+    aliases = evaluate_aliases(c, radio_id=source_id, output=output)
 
     return dict(attrs, **aliases)
 

@@ -244,11 +244,7 @@ def _reraise_coord_error(*, exc, coord, factory_info, data, name):
         exc.args = (f'in coordinate {name!r}, {exc.args[0]}',) + exc.args[1:]
         raise exc
     else:
-        problem = (
-            f'unexpected shape in coordinate {name!r}: '
-            f'data dimensions {factory_info.dims!r} have shape {template_shape}, '
-            f'but coordinate factory gave {data_shape}'
-        )
+        problem = f'unexpected shape in coordinate {name!r}: data dimensions {factory_info.dims!r} have shape {template_shape}, but coordinate factory gave {data_shape}'
         raise ValueError(problem) from exc
 
 
@@ -362,8 +358,7 @@ def _validate_delayed_ndim(delayed: DelayedDataArray) -> None:
         pass
     elif len(expect_dims) + 1 != ndim:
         raise ValueError(
-            f'coordinates of {delayed.info.name!r} indicate {len(expect_dims) + 1} '
-            f'dimensions, but the data has {ndim}'
+            f'coordinates of {delayed.info.name!r} indicate {len(expect_dims) + 1} dimensions, but the data has {ndim}'
         )
 
 
