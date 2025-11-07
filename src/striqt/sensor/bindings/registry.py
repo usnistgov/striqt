@@ -1,17 +1,15 @@
-"""A registry of sensor data <-> source class bindings"""
+"""
+A registry of data class <-> IQ acquisition control class bindings.
+These are taken to define sensors. Extension classes can implement
+peripherals and expanded data fields elsewhere.
+"""
 
 from . import deepwave
 from ..lib import specs as _specs
 from ..lib import sources as _sources
-from ._util import (
-    bind_sensor,
-    SensorBinding,
-    get_registry,
-    get_binding,
-    get_tagged_sweep_spec,
-)
+from ._util import bind_sensor, SensorBinding
 
-#%% Synthetic data sources for testing, warmup, and post-analysis
+# %% Synthetic data sources for testing, warmup, and post-analysis
 Warmup = bind_sensor(
     'Warmup',
     SensorBinding(
@@ -30,7 +28,7 @@ ZarrIQFile = bind_sensor(
     ),
 )
 
-#%% Hardware data sources
+# %% Hardware data sources
 Air7101B = bind_sensor(
     'Air7101B',
     SensorBinding(

@@ -16,7 +16,7 @@ def _tagged_sweep_subclass(name: str, cls: type[SweepSpec]) -> type[SweepSpec]:
         frozen=True,
         forbid_unknown_fields=True,
         cache_hash=True,
-        tag_field='bind',
+        tag_field='sensor',
         kw_only=True,
     )
 
