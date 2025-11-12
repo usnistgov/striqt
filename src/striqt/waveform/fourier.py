@@ -27,16 +27,14 @@ from .util import (
 
 from .windows import register_extra_windows
 
-from ._typing import ArrayType
-
 if typing.TYPE_CHECKING:
     import numpy as np
-    import pandas as pd
     import scipy
     from scipy import signal
+    from ._typing import ArrayType
+
 else:
     np = lazy_import('numpy')
-    pd = lazy_import('pandas')
     scipy = lazy_import('scipy')
     signal = lazy_import('scipy.signal')
 
@@ -1417,47 +1415,6 @@ def channelize_power(
         channel_power = power_analysis.envtopow(X).sum(axis=axis + 2)
 
         return freqs[0], times, channel_power
-
-
-def iq_to_stft_spectrogram(
-    iq: ArrayType,
-    window: ArrayType | str | tuple[str, float],
-    nfft: int,
-    Ts,
-    overlap=True,
-    analysis_bandwidth=None,
-):
-    xp = array_namespace(iq)
-
-    freqs, times, X = stft(
-        iq,
-        fs=1.0 / Ts,
-        window=window,
-        nperseg=nfft,
-        noverlap=nfft // 2 if overlap else 0,
-        norm='power',
-        axis=0,
-    )
-
-    # X = xp.fft.fftshift(X, axes=0)/xp.sqrt(nfft*Ts)
-    X = power_analysis.envtopow(X)
-
-    spg = pd.DataFrame(X, columns=freqs, index=times)
-
-    if analysis_bandwidth is not None:
-        throwaway = spg.shape[1] * (
-            1 - analysis_bandwidth * Ts
-        )  # (len(freqs)-int(xp.rint(nfft*analysis_bandwidth*Ts)))//2
-        if len(times) > 1 and xp.abs(throwaway - xp.rint(throwaway)) > 1e-6:
-            raise ValueError(
-                f'analysis bandwidth yield integral number of samples, but got {throwaway}'
-            )
-        # throwaway = throwaway
-        # if throwaway % 2 == 1:
-        #     raise ValueError('should have been even')
-        spg = spg.iloc[:, int(xp.floor(throwaway / 2)) : -int(xp.ceil(throwaway // 2))]
-
-    return spg
 
 
 def time_to_frequency(iq, Ts, window=None, axis=0):

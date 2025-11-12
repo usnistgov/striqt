@@ -281,7 +281,7 @@ class MeasurementInfo(typing.NamedTuple):
     dims: tuple[str, ...] | str | None = None
 
 
-@functools.lru_cache()
+@util.lru_cache()
 def _make_measurement_signature(spec_cls):
     """
     Generates an inspect.Signature object from a specs.Measurement subclass.

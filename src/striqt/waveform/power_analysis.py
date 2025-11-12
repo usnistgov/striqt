@@ -27,17 +27,19 @@ from typing import Union, Any, Optional
 from types import ModuleType
 
 from . import _typing
-from ._typing import ArrayType, ArrayLike
 
 if typing.TYPE_CHECKING:
-    import typing_extensions
+    from ._typing import ArrayType, ArrayLike
 
-    _T = typing_extensions.TypeVar('_T')
+    _T = typing.TypeVar('_T')
+    import pandas as pd
+    import numexpr as ne
+    import xarray as xr
 
-signal = lazy_import('scipy.signal')
-pd = lazy_import('pandas')
-ne = lazy_import('numexpr')
-xr = lazy_import('xarray')
+else:
+    pd = lazy_import('pandas')
+    ne = lazy_import('numexpr')
+    xr = lazy_import('xarray')
 
 warnings.filterwarnings('ignore', message='.*divide by zero.*')
 warnings.filterwarnings('ignore', message='.*invalid value encountered.*')
@@ -540,45 +542,6 @@ def iq_to_frame_power(
     return iq_to_cyclic_power(**locals())
 
 
-def unstack_series_to_bins(
-    pvt: _typing.SeriesType, Tbin: float, truncate: bool = False
-) -> _typing.DataFrameType:
-    """unstack time series of power vs time (time axis) `pvt` into
-    a pd.DataFrame in which row consists of time series of time duration `Twindow`.
-
-    Arguments:
-
-        pvt: indexed by TimedeltaIndex or TimeIndex
-
-        Tblock: time duration of the block
-
-    """
-
-    Ts = pvt.index[1] - pvt.index[0]
-
-    if not truncate and not isroundmod(Tbin, Ts):
-        raise ValueError(
-            'analysis window length must be multiple of the power INTEGRATION length'
-        )
-
-    N = int(np.rint(Tbin / Ts))
-
-    pvt = pvt.iloc[: N * (pvt.shape[0] // N)]
-
-    values = (
-        pvt.values
-        # insert a new axis with bin size N
-        .reshape(pvt.shape[0] // N, N)
-    )
-
-    df = pd.DataFrame(values, index=pvt.index[::N], columns=pvt.index[:N])
-
-    df.columns.name = 'Analysis window time elapsed (s)'
-    df.index = pd.TimedeltaIndex(df.index, unit='s')
-
-    return df
-
-
 def sample_ccdf(
     a: _typing.ArrayType, edges: _typing.ArrayType, density: bool = True
 ) -> _typing.ArrayType:
@@ -608,71 +571,3 @@ def sample_ccdf(
         ccdf /= a.shape[0]
 
     return ccdf
-
-
-def power_histogram_along_axis(
-    pvt: _typing.DataFrameType,
-    bounds: tuple[float, float],
-    resolution_db: float,
-    resolution_axis: int = 1,
-    truncate: bin = True,
-    dtype='uint32',
-    axis=0,
-) -> _typing.DataFrameType:
-    """Computes a histogram along the index of a pd.Series time series of power readings.
-
-    Args:
-        pvt: a pd.Series or pd.DataFrame of power levels in linear units
-
-        bounds: [lower, upper] bounds for the histogram power level bins (upper-bound inclusive)
-
-        resolution_db: step size of the histogram power level bins
-
-        resolution_axis: number of indices to group into a single time bin
-
-        truncate: whether to truncate pvt to an integer factor of `resolution_axis`
-
-        dtype: the integer data type to return for histogram counts
-
-        axis: the axis along which to compute the histogram, if `pvt` is a DataFrame
-
-    Returns:
-        `pd.DataFrame` instance, indexed on time, columned by power transformed into dB, with values of type `dtype`
-
-    Raises:
-        ValueError: if not truncate and len(pvt) % resolution_axis != 0
-
-    """
-
-    if isinstance(pvt, pd.Series) and axis != 0:
-        raise ValueError('axis argument is invalid for pd.Series')
-
-    if axis == 0:
-        pvt = pvt.T
-    elif axis != 1:
-        raise ValueError('axis argument must be 0 or 1')
-
-    # truncate to an integer number of sweep blocks
-    pvt = powtodB(pvt, abs=False)
-
-    if not truncate and len(pvt) % resolution_axis != 0:
-        raise ValueError(
-            'non-integer number of sweeps in pvt; pass truncate=False to truncate'
-        )
-
-    pvt = pvt.iloc[: resolution_axis * (len(pvt) // resolution_axis)]
-
-    # use hist_laxis to compute the histogram at each time point
-    shape = pvt.shape[0] // resolution_axis, pvt.shape[1] * resolution_axis
-    reshaped = pvt.values.reshape(shape)
-    n_bins = 1 + int((bounds[1] - bounds[0]) / resolution_db)
-    h, _ = histogram_last_axis(reshaped, n_bins, bounds).astype(dtype)
-
-    # pack a DataFrame with the bin labels
-    #     timestamps = pvt.index.get_level_values('Time')
-    #     time_bins = pd.to_datetime(timestamps[::resolution_axis])
-    power_bins = np.linspace(bounds[0], bounds[1], n_bins).astype('float64')
-    power_bins = 0.5 * (power_bins[:-1] + power_bins[1:])
-    df = pd.DataFrame(h, index=pvt.index[::resolution_axis], columns=power_bins)
-
-    return df

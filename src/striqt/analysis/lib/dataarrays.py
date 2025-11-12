@@ -113,7 +113,7 @@ def describe_capture(
     return progress + capture_diff
 
 
-@functools.lru_cache()
+@util.lru_cache()
 def format_units(value, unit='', places=None, force_prefix=None, sep=' ') -> str:
     """Format a number with SI unit prefixes"""
 

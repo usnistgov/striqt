@@ -103,7 +103,6 @@ def set_matplotlib_formats(formats, *args, **kws):
     pylabtools.print_figure, pylabtools._print_figure = wrapper, pylabtools.print_figure
 
 
-# requires pandas >= 1.0.0
 convert_datetime = mpl.units.registry[np.datetime64]
 
 

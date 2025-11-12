@@ -2,12 +2,19 @@
 
 import numpy as np
 import json
+import typing
 from pathlib import Path
+
 from .util import lazy_import
 from . import _typing
 
-signal = lazy_import('scipy.signal')
-pd = lazy_import('pandas')
+
+if typing.TYPE_CHECKING:
+    from scipy import signal
+    import pandas as pd
+else:
+    signal = lazy_import('scipy.signal')
+    pd = lazy_import('pandas')
 
 
 def extract_ntia_calibration_metadata(metadata: dict) -> dict:
@@ -32,7 +39,7 @@ def extract_ntia_calibration_metadata(metadata: dict) -> dict:
     }
 
 
-def read_sigmf_metadata(metadata_fn, ntia=False) -> tuple[_typing.DataFrameType, float]:
+def read_sigmf_metadata(metadata_fn, ntia=False) -> tuple['_typing.DataFrameType', float]:
     with open(metadata_fn, 'r') as fd:
         metadata = json.load(fd)
 
@@ -102,47 +109,6 @@ def read_sigmf_to_df(
     return waveform_to_frame(
         x_split, Ts, columns=pd.Index(center_freqs / 1e9), name='Frequency (Hz)'
     )
-
-
-def waveform_to_frame(
-    waveform: np.array,
-    Ts: float,
-    columns: _typing.IndexType = None,
-    column_name=None,
-) -> tuple[_typing.SeriesType, _typing.DataFrameType]:
-    """packs IQ data into a pandas Series or DataFrame object.
-
-    The input waveform `iq` may have shape (N,) or (N,M), representing a single
-    waveform or M different waveforms, respectively.
-
-    Args:
-        iq: Complex-valued time series representing an IQ waveform.
-        Ts: The sample period of the IQ waveform.
-        columns: The list of column names to use if `iq` has 2-dimensions
-
-    Returns:
-        If iq.ndim == 1, then pd.Series, otherwise pd.DataFrame, with a time index
-    """
-
-    if waveform.ndim == 2:
-        if columns is None:
-            columns = np.arange(waveform.shape[1])
-        obj = pd.DataFrame(waveform, columns=columns)
-
-        if column_name is not None:
-            obj.columns.name = column_name
-
-    elif waveform.ndim == 1:
-        obj = pd.Series(waveform)
-    else:
-        raise TypeError('iq must have 1 or 2 dimensions')
-
-    obj.index = pd.Index(
-        np.linspace(0, Ts * waveform.shape[0], waveform.shape[0], endpoint=False),
-        name='Time elapsed (s)',
-    )
-
-    return obj
 
 
 def resample_iq(iq: np.array, Ts, scale, axis=0):

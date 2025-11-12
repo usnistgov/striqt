@@ -197,7 +197,7 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
     _buffers: _ReceiveBuffers
     _is_open: bool = False
 
-    def __init__(self, setup, *, analysis=None, **setup_kws):
+    def __init__(self, setup: _TS, *, analysis=None, **setup_kws: typing.Unpack[specs._SourceSpecKeywords]):
         self._aligner: register.AlignmentCaller | None = None
 
         # if setup.driver is None:
@@ -223,6 +223,10 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
         self._capture = None
         self._buffers = _ReceiveBuffers(self)
 
+        self._connect(setup)
+        self._setup = self._apply_setup(setup) or setup
+        self._is_open = True
+
     @functools.cached_property
     def info(self) -> BaseSourceInfo:
         raise NotImplementedError
@@ -242,24 +246,12 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
     def __del__(self):
         self.close()
 
-    def __enter__(self):
-        if self.is_open:
-            raise RuntimeError('cannot enter context for an open device')
-        self.open()
+    def __enter__(self) -> typing.Self:
+        return self
 
     def __exit__(self, *exc_info):
         if self.is_open:
             self.close()
-
-    def open(self):
-        if self.is_open:
-            return
-
-        setup = self._setup
-        self._connect(setup)
-        self._setup = self._apply_setup(setup) or setup
-        self._is_open = True
-        return self._setup
 
     def get_setup_spec(self):
         """generate the currently armed capture configuration for the specified channel.

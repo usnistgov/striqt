@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import functools
 import typing
 
 from . import dataarrays, specs, util
@@ -28,7 +27,7 @@ def select_parameter_kws(locals_: dict, omit=(dataarrays.CAPTURE_DIM, 'out')) ->
     return {k: v for k, v in items[1:] if k not in omit}
 
 
-@functools.lru_cache(8)
+@util.lru_cache(8)
 def _generate_iir_lpf(
     capture: specs.CaptureBase,
     *,

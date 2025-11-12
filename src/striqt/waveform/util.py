@@ -16,23 +16,13 @@ from enum import Enum
 if typing.TYPE_CHECKING:
     from ._typing import ArrayLike, ArrayType
     import typing_extensions
-    import cupy
-
-    _P = typing_extensions.ParamSpec('_P')
-    _R = typing_extensions.TypeVar('_R')
+    import cupy  # pyright: ignore[reportMissingImports]
 
 
-__all__ = [
-    'Domain',
-    'set_input_domain',
-    'get_input_domain',
-    'NonStreamContext',
-    'array_stream',
-    'pad_along_axis',
-    'array_namespace',
-    'sliding_window_view',
-    'float_dtype_like',
-]
+_TC = typing.TypeVar('_TC', bound=typing.Callable)
+
+
+_input_domain = []
 
 
 def lazy_import(module_name: str):
@@ -112,16 +102,11 @@ def binned_mean(
 @functools.wraps(functools.lru_cache)
 def lru_cache(
     maxsize: int | None = 128, typed: bool = False
-) -> typing.Callable[[typing.Callable[_P, _R]], typing.Callable[_P, _R]]:
+) -> typing.Callable[[_TC], _TC]:
     # presuming that the API is designed to accept only hashable types, set
     # the type hint to match the wrapped function
     func = functools.lru_cache(maxsize, typed)
-    return typing.cast(
-        typing.Callable[[typing.Callable[_P, _R]], typing.Callable[_P, _R]], func
-    )
-
-
-_input_domain = []
+    return typing.cast(typing.Callable[[_TC], _TC], func)
 
 
 @lru_cache()
@@ -643,3 +628,68 @@ def grouped_views_along_axis(
 
     if empty:
         yield x
+
+
+def sync_if_cupy(x: ArrayType):
+    if is_cupy_array(x):
+        import cupy
+
+        stream = cupy.cuda.get_current_stream()
+        with stopwatch('cuda synchronize', threshold=10e-3):
+            stream.synchronize()
+
+
+@functools.cache
+def configure_cupy():
+    import cupy
+
+    # the FFT plan sets up large caches that don't help us
+    cupy.fft.config.get_plan_cache().set_size(0)
+    cupy.cuda.set_pinned_memory_allocator(None)
+
+
+def pinned_array_as_cupy(x, stream=None):
+    import cupy as cp
+
+    out = cp.empty_like(x)
+    out.data.copy_from_host_async(x.ctypes.data, x.data.nbytes, stream=stream)
+    return out
+
+
+def free_cupy_mempool():
+    try:
+        import cupy as cp
+    except ModuleNotFoundError:
+        pass
+    else:
+        mempool = cp.get_default_memory_pool()
+        if mempool is not None:
+            mempool.free_all_blocks()
+
+
+def except_on_low_memory(threshold_bytes=500_000_000):
+    try:
+        import cupy as cp
+    except ModuleNotFoundError:
+        return
+    import psutil
+
+    if psutil.virtual_memory().available >= threshold_bytes:
+        return
+
+    raise MemoryError('too little memory to proceed')
+
+
+@lru_cache()
+def set_cuda_mem_limit(fraction=0.75):
+    try:
+        import cupy
+    except ModuleNotFoundError:
+        return
+
+    # Alternative: select an absolute amount of memory
+    #
+    # import psutil
+    # available = psutil.virtual_memory().available
+
+    cupy.get_default_memory_pool().set_limit(fraction=fraction)

@@ -160,32 +160,8 @@ def retry(
     return decorator
 
 
-@functools.wraps(functools.lru_cache)
-def lru_cache(
-    maxsize: int | None = 128, typed: bool = False
-) -> typing.Callable[[typing.Callable[_P, _R]], typing.Callable[_P, _R]]:
-    # presuming that the API is designed to accept only hashable types, set
-    # the type hint to match the wrapped function
-    return functools.lru_cache(maxsize, typed)
-
-
-@lru_cache()
-def set_cuda_mem_limit(fraction=0.75):
-    try:
-        import cupy
-    except ModuleNotFoundError:
-        return
-
-    # Alternative: select an absolute amount of memory
-    #
-    # import psutil
-    # available = psutil.virtual_memory().available
-
-    cupy.get_default_memory_pool().set_limit(fraction=fraction)
-
-
 def concurrently_with_fg(
-    calls: dict[str, callable] = {}, flatten=True
+    calls: dict[str, typing.Callable] = {}, flatten=True
 ) -> dict[typing.Any, typing.Any]:
     """runs foreground() in the current thread, and util.concurrently(**background) in another thread"""
     from concurrent.futures import ThreadPoolExecutor
@@ -629,14 +605,6 @@ class MultipleContexts:
                 h.flush()
 
             raise exc[1]
-
-
-RUNNERS = {
-    (False, False): None,
-    (False, True): 'context',
-    (True, False): 'callable',
-    (True, True): 'both',
-}
 
 
 def isdictducktype(cls):

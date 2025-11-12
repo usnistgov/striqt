@@ -80,7 +80,7 @@ def meta(standard_name: str, units: str | None = None, **kws) -> msgspec.Meta:
     return msgspec.Meta(description=standard_name, extra=extra, **kws)
 
 
-@functools.lru_cache()
+@util.lru_cache()
 def _private_fields(capture_cls: type[SpecBase]) -> tuple[str, ...]:
     return tuple([n for n in capture_cls.__struct_fields__ if not n.startswith('_')])
 

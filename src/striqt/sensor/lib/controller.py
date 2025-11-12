@@ -8,7 +8,7 @@ import rpyc
 
 from . import sweeps, util
 from . import specs
-from .sources import find_radio_cls_by_name, is_same_resource, SourceBase
+from .sources import SourceBase
 from striqt.analysis.lib import dataarrays
 
 if typing.TYPE_CHECKING:

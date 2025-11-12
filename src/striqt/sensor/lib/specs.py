@@ -24,10 +24,10 @@ else:
 _TC = typing.TypeVar('_TC', bound='CaptureSpec')
 _TS = typing.TypeVar('_TS', bound='SourceSpec')
 
+
 spec_kws = dict(
     forbid_unknown_fields=True,
     cache_hash=True,
-    kw_only=True,
 )
 
 
@@ -105,7 +105,7 @@ PortType = Annotated[
 StartTimeType = Annotated['pd.Timestamp', meta('Acquisition start time')]
 
 
-class WaveformCapture(analysis.CaptureBase, frozen=True, **spec_kws):
+class WaveformCapture(analysis.CaptureBase, frozen=True, kw_only=True, **spec_kws):
     """Capture specification structure for a generic waveform.
 
     This subset of RadioCapture is broken out here to simplify the evaluation of
@@ -140,7 +140,7 @@ class _WaveformCaptureKeywords(typing.TypedDict, total=False):
     backend_sample_rate: Optional[BackendSampleRateType]
 
 
-class CaptureSpec(WaveformCapture, frozen=True, **spec_kws):
+class CaptureSpec(WaveformCapture, frozen=True, kw_only=True, **spec_kws):
     """Capture specification for a single radio waveform"""
 
     delay: Optional[DelayType] = None
@@ -175,7 +175,7 @@ class _SoapyCaptureSpecKeywords(_CaptureSpecKeywords, total=False):
     gain: GainType
 
 
-class FileCaptureSpec(CaptureSpec, frozen=True, **spec_kws):
+class FileCaptureSpec(CaptureSpec, frozen=True, kw_only=True, **spec_kws):
     """Capture specification read from a file, with support for None sentinels"""
 
     # RF and leveling
@@ -267,7 +267,7 @@ class _SourceSpecKeywords(typing.TypedDict, total=False):
     uncalibrated_peak_detect: Union[bool, typing.Literal['auto']]
 
 
-class SourceSpec(SpecBase, frozen=True, **spec_kws):
+class SourceSpec(SpecBase, frozen=True, kw_only=True, **spec_kws):
     """run-time characteristics of the radio that are left invariant during a sweep"""
 
     # driver: Optional[str]
@@ -300,7 +300,7 @@ class SourceSpec(SpecBase, frozen=True, **spec_kws):
     transport_dtype: Literal['int16'] | Literal['complex64'] = 'complex64'
 
 
-class SoapySourceSpec(SourceSpec, frozen=True, **spec_kws):
+class SoapySourceSpec(SourceSpec, frozen=True, kw_only=True, **spec_kws):
     device_kwargs: typing.ClassVar[dict[str, typing.Any]] = {}
 
     time_source: TimeSourceType = 'host'
@@ -348,21 +348,21 @@ class NullSourceSpec(SourceSpec, frozen=True, kw_only=True, **spec_kws):
     stream_all_rx_ports: bool = False
 
 
-class Description(SpecBase, frozen=True, **spec_kws):
+class Description(SpecBase, frozen=True, kw_only=True, **spec_kws):
     summary: Optional[str] = None
     location: Optional[tuple[float, float, float]] = None
     signal_chain: Optional[tuple[str, ...]] = tuple()
     version: str = 'unversioned'
 
 
-class LoopBase(SpecBase, tag=str.lower, tag_field='kind', frozen=True, **spec_kws):
+class LoopBase(SpecBase, tag=str.lower, tag_field='kind', frozen=True, kw_only=True, **spec_kws):
     field: str
 
     def get_points(self):
         raise NotImplementedError
 
 
-class Range(LoopBase, frozen=True, **spec_kws):
+class Range(LoopBase, frozen=True, kw_only=True, **spec_kws):
     start: float
     stop: float
     step: float
@@ -377,7 +377,7 @@ class Range(LoopBase, frozen=True, **spec_kws):
         return list(a)
 
 
-class Repeat(LoopBase, frozen=True, **spec_kws):
+class Repeat(LoopBase, frozen=True, kw_only=True, **spec_kws):
     field: str = '_sweep_index'
     count: int = 1
 
@@ -385,14 +385,14 @@ class Repeat(LoopBase, frozen=True, **spec_kws):
         return list(range(self.count))
 
 
-class List(LoopBase, frozen=True, **spec_kws):
+class List(LoopBase, frozen=True, kw_only=True, **spec_kws):
     values: tuple[typing.Any, ...]
 
     def get_points(self):
         return self.values
 
 
-class FrequencyBinRange(LoopBase, frozen=True, **spec_kws):
+class FrequencyBinRange(LoopBase, frozen=True, kw_only=True, **spec_kws):
     start: float
     stop: float
     step: float
@@ -423,7 +423,7 @@ AliasMatchType = Annotated[
 ]
 
 
-class SinkSpec(_SlowHashSpecBase, frozen=True, **spec_kws):
+class SinkSpec(_SlowHashSpecBase, frozen=True, kw_only=True, **spec_kws):
     path: Optional[str] = '{yaml_name}-{start_time}'
     log_path: Optional[str] = None
     log_level: str = 'info'
@@ -452,7 +452,7 @@ ExtensionPathType = Annotated[
 ]
 
 
-class ExtensionSpec(SpecBase, frozen=True, **spec_kws):
+class ExtensionSpec(SpecBase, frozen=True, kw_only=True, **spec_kws):
     sink: SinkClassType = 'striqt.sensor.sinks.CaptureAppender'
     import_path: ExtensionPathType = None
     import_name: ModuleNameType = None
@@ -469,7 +469,7 @@ WindowFillType = Annotated[
 ]
 
 
-class SweepSpec(SpecBase, typing.Generic[_TS, _TC], frozen=True, **spec_kws):
+class SweepSpec(SpecBase, typing.Generic[_TS, _TC], frozen=True, kw_only=True, **spec_kws):
     source: _TS
     captures: tuple[_TC, ...] = tuple()
     loops: tuple[LoopSpec, ...] = ()
