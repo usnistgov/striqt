@@ -1,14 +1,12 @@
 from __future__ import annotations
 import functools
-from numbers import Number
 import typing
 
 from os import cpu_count
-from array_api_compat import is_cupy_array
 from math import ceil
 
-from . import power_analysis, util
-from .power_analysis import stat_ufunc_from_shorthand
+from . import power_analysis
+
 from .util import (
     array_namespace,
     axis_index,
@@ -16,6 +14,7 @@ from .util import (
     Domain,
     dtype_change_float,
     find_float_inds,
+    grouped_views_along_axis,
     get_input_domain,
     lazy_import,
     lru_cache,
@@ -23,6 +22,7 @@ from .util import (
     sliding_window_view,
     to_blocks,
     isroundmod,
+    is_cupy_array
 )
 
 from .windows import register_extra_windows
@@ -36,7 +36,7 @@ if typing.TYPE_CHECKING:
 else:
     np = lazy_import('numpy')
     scipy = lazy_import('scipy')
-    signal = lazy_import('scipy.signal')
+    signal = lazy_import('signal', 'scipy')
 
 CPU_COUNT = cpu_count() or 1
 OLA_MAX_FFT_SIZE = 128 * 1024
@@ -187,8 +187,8 @@ def _cupy_fftn_helper(
     if MAX_CUPY_FFT_SAMPLES is None:
         return cp.fft._fft._fftn(x, out=out, *args, **kws)
 
-    x_views = util.grouped_views_along_axis(x, MAX_CUPY_FFT_SAMPLES, axis=axis)
-    out_views = util.grouped_views_along_axis(out, MAX_CUPY_FFT_SAMPLES, axis=axis)
+    x_views = grouped_views_along_axis(x, MAX_CUPY_FFT_SAMPLES, axis=axis)
+    out_views = grouped_views_along_axis(out, MAX_CUPY_FFT_SAMPLES, axis=axis)
 
     for x_view, out_view in zip(x_views, out_views):
         out_view[:] = cp.fft._fft._fftn(x_view, out=out_view, *args, **kws)
@@ -244,7 +244,7 @@ def ifft(
         )
 
 
-def fftfreq(n, d, *, xp=np, dtype='float64') -> ArrayType:
+def fftfreq(n, d, *, xp=None, dtype='float64') -> ArrayType:
     """A replacement for `scipy.fft.fftfreq` that mitigates
     some rounding errors underlying `np.fft.fftfreq`.
 
@@ -260,6 +260,9 @@ def fftfreq(n, d, *, xp=np, dtype='float64') -> ArrayType:
     Returns:
         an array of type `xp.ndarray`
     """
+    if xp is None:
+        xp = np
+
     dtype = np.dtype(dtype)
     fnyq = 1 / (2 * dtype.type(d))
     if n % 2 == 0:
@@ -269,13 +272,13 @@ def fftfreq(n, d, *, xp=np, dtype='float64') -> ArrayType:
 
 
 def _enbw_uncached(
-    window: str | tuple[str, float], N, fftbins=True, cached=True, xp=np
+    window: str | tuple[str, float], N, fftbins=True, cached=True, xp=None
 ):
     """return the equivalent noise bandwidth (ENBW) of a window, in bins"""
     if cached:
         w = get_window(window, N, fftbins=fftbins, xp=xp)
     else:
-        w = _get_window_uncached(window, N, fftbins=fftbins, xp=xp)
+        w = _get_window_uncached(window, N, fftbins=fftbins, xp=xp or None)
     return len(w) * xp.sum(w**2) / xp.sum(w) ** 2
 
 
@@ -287,7 +290,7 @@ equivalent_noise_bandwidth = functools.wraps(_enbw_uncached)(
 
 @lru_cache()
 def find_window_param_from_enbw(
-    window_name: str, enbw: float, *, nfft: int = 4096, atol=1e-6, xp=np
+    window_name: str, enbw: float, *, nfft: int = 4096, atol=1e-6, xp=None
 ) -> float:
     """find the parameter that satistifes the specified equivalent-noise bandwidth (ENBW)
     for a given single-parameter window.
@@ -314,7 +317,7 @@ def find_window_param_from_enbw(
         raise ValueError('enbw must be greater than 1')
 
     def err(x):
-        return _enbw_uncached((window_name, x), nfft, cached=False, xp=xp) - enbw
+        return _enbw_uncached((window_name, x), nfft, cached=False, xp=xp or np) - enbw
 
     if window_name == 'kaiser':
         a = np.pi * 1e-2
@@ -349,9 +352,11 @@ def broadcast_onto(a: ArrayType, other: ArrayType, *, axis: int) -> ArrayType:
 
 @lru_cache(16)
 def _get_stft_axes(
-    fs: float, nfft: int, time_size: int, overlap_frac: float = 0, *, xp=np
+    fs: float, nfft: int, time_size: int, overlap_frac: float = 0, *, xp=None
 ) -> tuple[ArrayType, ArrayType]:
     """returns stft (freqs, times) array tuple appropriate to the array module xp"""
+    if xp is None:
+        xp = np
 
     freqs = fftfreq(nfft, 1 / fs, xp=xp)
     times = xp.arange(time_size) * ((1 - overlap_frac) * nfft / fs)
@@ -735,8 +740,10 @@ def design_fir_lpf(
     numtaps=4001,
     transition_bandwidth=250e3,
     dtype='float32',
-    xp=np,
+    xp=None,
 ):
+    if xp is None:
+        xp = np
     edges = [
         0,
         bandwidth / 2 - transition_bandwidth / 2,
@@ -759,7 +766,7 @@ def _fir_lowpass_fft(
     cutoff: float,
     transition: float,
     window='hamming',
-    xp=np,
+    xp=None,
     dtype='complex64',
 ):
     """returns the complex frequency response of an FIR filter suited for filtering in the frequency domain
@@ -773,6 +780,9 @@ def _fir_lowpass_fft(
     Returns:
         a frequency-domain window
     """
+
+    if xp is None:
+        xp = np
 
     if cutoff == float('inf'):
         h = np.ones(size, dtype=dtype)
@@ -856,8 +866,8 @@ def _find_downsample_copy_range(
 
 
 @lru_cache(16)
-def _find_downsampled_freqs(nfft_out, freq_step, xp=np):
-    return fftfreq(nfft_out, 1.0 / (freq_step * nfft_out), xp=xp)
+def _find_downsampled_freqs(nfft_out, freq_step, xp=None):
+    return fftfreq(nfft_out, 1.0 / (freq_step * nfft_out), xp=xp or None)
 
 
 def _same_base_memory(a: ArrayType, b: ArrayType) -> bool:
@@ -1190,7 +1200,9 @@ def ola_filter(
 
 
 @lru_cache()
-def _freq_band_edges(n, d, cutoff_low, cutoff_hi, *, xp=np):
+def _freq_band_edges(n, d, cutoff_low, cutoff_hi, *, xp=None):
+    if xp is None:
+        xp = np
     freqs = fftfreq(n, d, xp=xp)
 
     if cutoff_low is None:
@@ -1323,7 +1335,7 @@ def power_spectral_density(
 
     for i, isquantile in enumerate(isquantile):
         if not isquantile:
-            ufunc = stat_ufunc_from_shorthand(statistics[i], xp=xp)
+            ufunc = power_analysis.stat_ufunc_from_shorthand(statistics[i], xp=xp)
             axis_index(out, i, axis=axis)[...] = ufunc(spg, axis=axis)
 
     return out
@@ -1415,25 +1427,6 @@ def channelize_power(
         channel_power = power_analysis.envtopow(X).sum(axis=axis + 2)
 
         return freqs[0], times, channel_power
-
-
-def time_to_frequency(iq, Ts, window=None, axis=0):
-    xp = array_namespace(iq)
-
-    if window is None:
-        from scipy.signal import windows
-
-        window = windows.blackmanharris(iq.shape[0], sym=False)
-
-    window /= iq.shape[0] * xp.sqrt((window).mean())
-    window = broadcast_onto(window, iq, axis=0)
-
-    X = xp.fft.fftshift(
-        fft(iq * window, axis=0),
-        axes=0,
-    )
-    fftfreqs = fftfreq(X.shape[0], Ts, xp=xp)
-    return fftfreqs, X
 
 
 def upfirdn(h, x, up=1, down=1, axis=-1, mode='constant', cval=0, overwrite_x=False):

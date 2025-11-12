@@ -9,10 +9,8 @@ from . import base
 from .. import captures, specs, util
 
 if typing.TYPE_CHECKING:
-    import numpy as np
     import SoapySDR
 else:
-    np = util.lazy_import('numpy')
     SoapySDR = util.lazy_import('SoapySDR')
 
 

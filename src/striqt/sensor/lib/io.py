@@ -205,7 +205,7 @@ def read_tdms_iq(
     num_rx_ports=1,
     dtype='complex64',
     skip_samples=0,
-    xp=np,
+    array_backend: specs.ArrayBackendType,
 ) -> tuple['np.ndarray', specs.FileCaptureSpec]:
     from .sources.testing import TDMSFileSource, TDMSSourceSpec
 

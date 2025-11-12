@@ -271,14 +271,14 @@ class AlignmentSourceRegistry(collections.UserDict[str, SyncInfo]):
 class MeasurementInfo(typing.NamedTuple):
     name: str
     func: CallableMeasurement
-    coord_factories: typing.Iterable[CallableCoordinateFactory]
+    coord_factories: tuple[CallableCoordinateFactory, ...]
     prefer_unaligned_input: bool
     cache: KeywordArgumentCache | None
     dtype: str
     attrs: dict
     depends: typing.Iterable[CallableMeasurement]
     store_compressed: bool
-    dims: tuple[str, ...] | str | None = None
+    dims: tuple[str, ...] | None = None
 
 
 @util.lru_cache()

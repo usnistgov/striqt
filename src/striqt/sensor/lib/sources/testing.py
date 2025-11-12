@@ -62,7 +62,7 @@ class TestSourceBase(null.NullSource[null._TS, null._TC]):
         )
 
     def get_waveform(
-        self, count: int, offset: int, *, port: int = 0, xp=np, dtype='complex64'
+        self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
     ):
         raise NotImplementedError
 
@@ -85,7 +85,7 @@ class SingleToneCapture(
 
 class SingleToneSource(TestSourceBase[specs.NullSourceSpec, SingleToneCapture]):
     def get_waveform(
-        self, count: int, offset: int, *, port: int = 0, xp=np, dtype='complex64'
+        self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
     ):
         capture = self.get_capture_spec()
 
@@ -133,7 +133,7 @@ class DiracDeltaCapture(
 
 class DiracDeltaSource(TestSourceBase):
     def get_waveform(
-        self, count: int, offset: int, *, port: int = 0, xp=np, dtype='complex64'
+        self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
     ):
         capture = self.get_capture_spec()
 
@@ -167,7 +167,7 @@ class SawtoothCapture(
 
 class SawtoothSource(TestSourceBase[specs.NullSourceSpec, SawtoothCapture]):
     def get_waveform(
-        self, count: int, offset: int, *, port: int = 0, xp=np, dtype='complex64'
+        self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
     ):
         capture = self.get_capture_spec()
 
@@ -194,7 +194,7 @@ class NoiseCapture(
 
 class NoiseSource(TestSourceBase[specs.NullSourceSpec, NoiseCapture]):
     def get_waveform(
-        self, count: int, offset: int, *, port: int = 0, xp=np, dtype='complex64'
+        self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
     ):
         capture = self.get_capture_spec()
         fs = self._resampler['fs_sdr']
@@ -269,7 +269,7 @@ class TDMSFileSource(TestSourceBase[TDMSSourceSpec, specs.FileCaptureSpec]):
         return capture.replace(center_frequency=fc, backend_sample_rate=mcr)
 
     def get_waveform(
-        self, count: int, offset: int, *, port: int = 0, xp=np, dtype='complex64'
+        self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
     ):
         size = int(self._handle['header_fd']['total_samples'][0])
         ref_level = self._handle['header_fd']['reference_level_dBm'][0]
@@ -360,7 +360,7 @@ class FileSource(TestSourceBase[FileSetup, specs.FileCaptureSpec]):
             self._file_stream.close()
 
     def get_waveform(
-        self, count: int, offset: int, *, port: int = 0, xp=np, dtype='complex64'
+        self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
     ):
         assert self._file_stream is not None, 'call setup() before reading samples'
 
@@ -440,7 +440,7 @@ class ZarrIQSource(TestSourceBase[ZarrFileSourceSpec, specs.FileCaptureSpec]):
         return iq, time_ns
 
     def get_waveform(
-        self, count: int, offset: int, *, port: int = 0, xp=np, dtype='complex64'
+        self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
     ):
         assert self._waveform is not None
         iq_size = self._waveform.shape[1]

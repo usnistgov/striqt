@@ -359,7 +359,7 @@ def lookup_power_correction(
     capture: specs.SoapyCaptureSpec,
     base_clock_rate: float,
     *,
-    xp=np,
+    xp=None,
 ):
     if isinstance(cal_data, xr.Dataset):
         corrections = cal_data
@@ -374,7 +374,7 @@ def lookup_power_correction(
         corrections.power_correction,
         capture=capture,
         base_clock_rate=base_clock_rate,
-        xp=xp,
+        xp=xp or np,
     )
 
 
@@ -386,9 +386,12 @@ def lookup_system_noise_power(
     *,
     T=290.0,
     B=1.0,
-    xp=np,
+    xp=None,
 ):
     """return the calibrated system noise power, in dBm/Hz"""
+    if xp is None:
+        xp = np
+        
     if isinstance(cal_data, xr.Dataset):
         corrections = cal_data
     elif cal_data is None:

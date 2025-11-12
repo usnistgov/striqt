@@ -69,7 +69,7 @@ def concat_time_dim(datasets: list['xr.Dataset'], time_dim: str) -> 'xr.Dataset'
 def coord_template(
     capture_cls: type[specs.CaptureSpec],
     ports: tuple[int, ...],
-    **alias_dtypes: np.dtype,
+    **alias_dtypes: 'np.dtype',
 ) -> 'xr.Coordinates':
     """returns a cached xr.Coordinates object to use as a template for data results"""
 

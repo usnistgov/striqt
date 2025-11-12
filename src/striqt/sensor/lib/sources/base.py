@@ -6,8 +6,6 @@ import numbers
 import types
 import typing
 
-import numpy as np
-
 from .. import specs, util
 
 from striqt.analysis import registry
@@ -22,9 +20,11 @@ if typing.TYPE_CHECKING:
     from striqt.waveform._typing import ArrayType
     from striqt.waveform.fourier import ResamplerDesign
     import pandas as pd
+    import numpy as np
 else:
     iqwaveform = util.lazy_import('striqt.waveform')
     pd = util.lazy_import('pandas')
+    np = util.lazy_import('numpy')
 
 
 OnOverflowType = (
@@ -58,7 +58,7 @@ class _ReceiveBuffers:
         self.radio = source
         self.clear()
 
-    def apply(self, samples: np.ndarray) -> tuple[int | None, int]:
+    def apply(self, samples: 'np.ndarray') -> tuple[int | None, int]:
         """carry over samples into `samples` from the previous capture.
 
         Returns:
@@ -80,7 +80,7 @@ class _ReceiveBuffers:
 
         return self.start_time_ns, carryover_count
 
-    def get_next(self, capture) -> tuple[np.ndarray, list[np.ndarray]]:
+    def get_next(self, capture) -> 'tuple[np.ndarray, list[np.ndarray]]':
         """swap the buffers, and reallocate if needed"""
         if not self.hold_buffer_swap:
             self.buffers = [self.buffers[1], self.buffers[0]]
@@ -746,8 +746,8 @@ def get_channel_read_buffer_count(source: SourceBase, include_holdoff=False) -> 
 def alloc_empty_iq(
     radio: SourceBase,
     capture: specs.CaptureSpec,
-    prior: typing.Optional[np.ndarray] = None,
-) -> tuple[np.ndarray, tuple[np.ndarray, list[np.ndarray]]]:
+    prior: typing.Optional['np.ndarray'] = None,
+) -> 'tuple[np.ndarray, tuple[np.ndarray, list[np.ndarray]]]':
     """allocate a buffer of IQ return values.
 
     Returns:

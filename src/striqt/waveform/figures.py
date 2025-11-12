@@ -4,17 +4,16 @@ import numpy as np
 import typing
 
 from .power_analysis import powtodB, dBtopow, envtodB, sample_ccdf, iq_to_bin_power
-from .fourier import iq_to_stft_spectrogram
 from . import _typing
 from .util import lazy_import, lru_cache
 
-if _typing.TYPE_CHECKING:
+if typing.TYPE_CHECKING:
     import matplotlib as mpl
     from scipy import stats
     import pandas as pd
 else:
     mpl = lazy_import('matplotlib')
-    stats = lazy_import('scipy.stats')
+    stats = lazy_import('stats', package='scipy')
     pd = lazy_import('pandas')
 
 

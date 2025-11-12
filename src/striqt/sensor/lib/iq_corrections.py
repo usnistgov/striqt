@@ -29,13 +29,15 @@ def _get_voltage_scale(
     radio: SourceBase,
     *,
     force_calibration: 'xr.Dataset|None' = None,
-    xp=np,
+    xp=None,
 ) -> tuple['ArrayLike', 'ArrayLike']:
     """compute the scaling factor needed to scale each of N ports of an IQ waveform
 
     Returns:
         an array of type `xp.ndarray` with shape (N,)
     """
+    xp = xp or np
+
     # to make the best use of the calibration lookup cache, remove extraneous
     # fields in case this is a specialized capture subclass
     bare_capture = capture.replace(start_time=None)
@@ -66,7 +68,7 @@ def _get_voltage_scale(
     if power_scale is None:
         power_scale = 1
 
-    return np.sqrt(power_scale) * adc_scale, adc_scale
+    return xp.sqrt(power_scale) * adc_scale, adc_scale
 
 
 def resampling_correction(

@@ -15,13 +15,11 @@ from .util import (
     to_blocks,
 )
 
-import array_api_compat.numpy as np
-import re
-
 # import typing
 import warnings
 from numbers import Number
 from functools import partial
+import re
 import typing
 from typing import Union, Any, Optional
 from types import ModuleType
@@ -30,16 +28,18 @@ from . import _typing
 
 if typing.TYPE_CHECKING:
     from ._typing import ArrayType, ArrayLike
-
-    _T = typing.TypeVar('_T')
     import pandas as pd
     import numexpr as ne
     import xarray as xr
+    import array_api_compat.numpy as np
+
+    _T = typing.TypeVar('_T')
 
 else:
     pd = lazy_import('pandas')
     ne = lazy_import('numexpr')
     xr = lazy_import('xarray')
+    np = lazy_import('numpy')
 
 warnings.filterwarnings('ignore', message='.*divide by zero.*')
 warnings.filterwarnings('ignore', message='.*invalid value encountered.*')
@@ -79,7 +79,10 @@ def unit_wave_to_linear(s: str):
 
 
 @lru_cache()
-def stat_ufunc_from_shorthand(kind, xp=np, axis=0):
+def stat_ufunc_from_shorthand(kind, xp=None, axis=0):
+    if xp is None:
+        xp = np
+
     NAMED_UFUNCS = {
         'min': xp.min,
         'max': xp.max,
@@ -526,7 +529,7 @@ def iq_to_cyclic_power(
 
 
 def iq_to_frame_power(
-    iq: np.ndarray,
+    iq: 'np.ndarray',
     Ts: float,
     detector_period: float,
     frame_period: float,

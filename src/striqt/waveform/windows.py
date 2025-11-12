@@ -1,10 +1,16 @@
 """Some window functions not included by scipy.signal"""
 
-import numpy as np
-from .util import lazy_import
 
-special = lazy_import('scipy.special')
-signal = lazy_import('scipy.signal')
+from .util import lazy_import
+import typing
+
+
+if typing.TYPE_CHECKING:
+    import numpy as np
+    from scipy import signal
+else:
+    signal = lazy_import('signal', package='scipy')
+    np = lazy_import('numpy')
 
 
 def _len_guards(M):
@@ -30,7 +36,7 @@ def _truncate(w, needed):
         return w
 
 
-def knab(M: int, alpha, sym=True) -> np.ndarray:
+def knab(M: int, alpha, sym=True) -> 'np.ndarray':
     if _len_guards(M):
         return np.ones(M)
     M, needs_trunc = _extend(M, sym)
@@ -47,6 +53,8 @@ def knab(M: int, alpha, sym=True) -> np.ndarray:
 
 
 def modified_bessel(M, alpha, sym=True):
+    from scipy import special
+
     if _len_guards(M):
         return np.ones(M)
     M, needs_trunc = _extend(M, sym)
@@ -65,7 +73,7 @@ def modified_bessel(M, alpha, sym=True):
     return _truncate(w, needs_trunc)
 
 
-def cosh(M: int, alpha, sym=True) -> np.ndarray:
+def cosh(M: int, alpha, sym=True) -> 'np.ndarray':
     if _len_guards(M):
         return np.ones(M)
     M, needs_trunc = _extend(M, sym)

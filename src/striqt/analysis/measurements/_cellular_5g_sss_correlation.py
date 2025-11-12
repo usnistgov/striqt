@@ -9,13 +9,11 @@ from ..lib import register, specs, util
 if typing.TYPE_CHECKING:
     import striqt.waveform as iqwaveform
     import numpy as np
-    from scipy import ndimage
     import striqt.waveform._typing
     import array_api_compat
 else:
     iqwaveform = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
-    ndimage = util.lazy_import('scipy.ndimage')
     array_api_compat = util.lazy_import('array_api_compat')
 
 
@@ -108,6 +106,8 @@ def cellular_5g_sss_sync(
     within +/- 1/4 symbol of each peak. Outside of this range, spectrogram errors
     due to "ISI" begin to increase quickly.
     """
+
+    from scipy import ndimage
 
     spec = Cellular5GNRSSSCorrelationSpec.fromdict(kwargs).validate()
 

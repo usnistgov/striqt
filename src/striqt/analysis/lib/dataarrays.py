@@ -19,7 +19,7 @@ if typing.TYPE_CHECKING:
     import array_api_compat
 
     AnalysisResult: typing.TypeAlias = (
-        'dict[str, ArrayType] | xr.Dataset | dict[str, DelayedDataArray]'
+        'ArrayType | dict[str, ArrayType] | xr.Dataset | dict[str, DelayedDataArray]'
     )
 
 else:
@@ -186,7 +186,7 @@ def describe_value(value, attrs: dict, unit_prefix=None):
     return value_str
 
 
-def _results_as_arrays(obj: tuple | list | dict | ArrayType):
+def _results_as_arrays(obj: tuple | list | dict | ArrayType) -> AnalysisResult:
     """convert an array, or a container of arrays, into a numpy array (or container of numpy arrays)"""
 
     if array_api_compat.is_torch_array(obj):
@@ -208,7 +208,7 @@ def _empty_stub(dims, dtype, attrs={}):
 
 @util.lru_cache()
 def dataarray_stub(
-    dims: tuple[str, ...],
+    dims: tuple[str, ...]|None,
     coord_factories: tuple[register.CallableCoordinateFactory, ...],
     dtype: str,
     coord_registry: register.CoordinateRegistry,
@@ -255,7 +255,7 @@ def build_dataarray(
     expand_dims=None,
 ) -> 'xr.DataArray':
     """build an `xarray.DataArray` from an ndarray, capture information, and channel analysis keyword arguments"""
-
+    delayed.info.coord_factories
     template = dataarray_stub(
         delayed.info.dims,
         delayed.info.coord_factories,

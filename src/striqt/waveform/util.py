@@ -8,16 +8,9 @@ import sys
 import typing
 
 import array_api_compat
-import numpy as np
 
 from contextlib import contextmanager
 from enum import Enum
-
-if typing.TYPE_CHECKING:
-    from ._typing import ArrayLike, ArrayType
-    import typing_extensions
-    import cupy  # pyright: ignore[reportMissingImports]
-
 
 _TC = typing.TypeVar('_TC', bound=typing.Callable)
 
@@ -25,7 +18,7 @@ _TC = typing.TypeVar('_TC', bound=typing.Callable)
 _input_domain = []
 
 
-def lazy_import(module_name: str):
+def lazy_import(module_name: str, package=None):
     """postponed import of the module with the specified name.
 
     The import is not performed until the module is accessed in the code. This
@@ -39,8 +32,8 @@ def lazy_import(module_name: str):
     except KeyError:
         pass
 
-    spec = importlib.util.find_spec(module_name)
-    if spec is None:
+    spec = importlib.util.find_spec(module_name, package=package)
+    if spec is None or spec.loader is None:
         raise ImportError(f'no module found named "{module_name}"')
     spec.loader = importlib.util.LazyLoader(spec.loader)
     module = importlib.util.module_from_spec(spec)
@@ -48,6 +41,14 @@ def lazy_import(module_name: str):
     spec.loader.exec_module(module)
     return module
 
+
+if typing.TYPE_CHECKING:
+    from ._typing import ArrayLike, ArrayType
+    import typing_extensions
+    import cupy  # pyright: ignore[reportMissingImports]
+    import numpy as np
+else:
+    np = lazy_import('numpy')
 
 def binned_mean(
     x: ArrayType,
@@ -133,8 +134,6 @@ def isroundmod(value: float | np.ndarray, div, atol=1e-6) -> bool:
 
 
 def is_cupy_array(x: object) -> typing_extensions.TypeIs['cupy.ndarray']:
-    import array_api_compat
-
     return array_api_compat.is_cupy_array(x)
 
 

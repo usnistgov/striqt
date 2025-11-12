@@ -4,16 +4,18 @@ from numbers import Number
 import typing
 
 from . import fourier
-from .util import lru_cache, array_namespace, isroundmod, pad_along_axis
+from .util import lazy_import, lru_cache, array_namespace, isroundmod, pad_along_axis
 
-import array_api_compat
-import numpy as np
 import methodtools
 
 
 if typing.TYPE_CHECKING:
+    import array_api_compat
+    import numpy as np
     from ._typing import ArrayType
-
+else:
+    np = lazy_import('numpy')
+    array_api_compat = lazy_import('array_api_compat')
 
 def correlate_along_axis(a, b, axis=0):
     """cross-correlate `a` and `b` along the specified axis.
@@ -78,7 +80,10 @@ def to_blocks(y, size, truncate=False):
     return y[..., :new_size].reshape(new_shape)
 
 
-def _index_or_all(x, name, size, xp=np):
+def _index_or_all(x, name, size, xp=None):
+    if xp is None:
+        xp = np
+
     if isinstance(x, str) and x == 'all':
         if size is None:
             raise ValueError('must set max to allow "all" value')
@@ -198,9 +203,12 @@ def _generate_5g_nr_sync_sequence(
     center_frequency=0,
     pad_cp=True,
     *,
-    xp=np,
+    xp=None,
     dtype='complex64',
 ):
+    if xp is None:
+        xp = np
+
     # number of occupied subcarriers in the PSS
     SC_COUNT = 127
 
@@ -267,7 +275,7 @@ def pss_5g_nr(
     center_frequency=0,
     pad_cp=True,
     *,
-    xp=np,
+    xp=None,
     dtype='complex64',
 ):
     """compute the PSS correlation sequences at the given sample rate for each N_id2.
@@ -291,7 +299,7 @@ def pss_5g_nr(
         subcarrier_spacing=subcarrier_spacing,
         center_frequency=center_frequency,
         pad_cp=pad_cp,
-        xp=xp,
+        xp=xp or np,
         dtype=dtype,
     )
 
@@ -303,7 +311,7 @@ def sss_5g_nr(
     center_frequency=0,
     pad_cp=True,
     *,
-    xp=np,
+    xp=None,
     dtype='complex64',
 ):
     """compute the PSS correlation sequences at the given sample rate for each N_id2.
@@ -327,7 +335,7 @@ def sss_5g_nr(
         subcarrier_spacing=subcarrier_spacing,
         center_frequency=center_frequency,
         pad_cp=pad_cp,
-        xp=xp,
+        xp=xp or np,
         dtype=dtype,
     )
 
@@ -553,7 +561,7 @@ class Phy3GPP(PhyOFDM):
     # 3GPP TS 38.211, Section 5.3.1. Below are the sizes of all CPs (in samples)
     # in 1 slot for FFT size 128 at 15 kHz SCS. CP size then scales proportionally
     # to FFT size. 1 slot is the minimum number of contiguous symbols in a sequence.
-    MIN_CP_SIZES = np.array((10, 9, 9, 9, 9, 9, 9, 10, 9, 9, 9, 9, 9, 9), dtype=int)
+    MIN_CP_SIZES = (10, 9, 9, 9, 9, 9, 9, 10, 9, 9, 9, 9, 9, 9)
 
     SCS_TO_SLOTS_PER_FRAME = {15e3: 10, 30e3: 20, 60e3: 40}
 
@@ -561,8 +569,11 @@ class Phy3GPP(PhyOFDM):
     SUBCARRIER_SPACINGS = {15e3, 30e3, 60e3}
 
     def __init__(
-        self, channel_bandwidth, subcarrier_spacing=15e3, sample_rate=None, xp=np
+        self, channel_bandwidth, subcarrier_spacing=15e3, sample_rate=None, xp=None
     ):
+        if xp is None:
+            xp = np
+
         if subcarrier_spacing not in self.SUBCARRIER_SPACINGS:
             raise ValueError(
                 f'subcarrier_spacing must be one of {self.SUBCARRIER_SPACINGS}'
@@ -581,7 +592,7 @@ class Phy3GPP(PhyOFDM):
         if nfft in self.FFT_SIZE_TO_SUBCARRIERS:
             self.subcarriers = self.FFT_SIZE_TO_SUBCARRIERS[nfft]
 
-        cp_sizes = xp.array((nfft * self.MIN_CP_SIZES) // 128)
+        cp_sizes = nfft * xp.array(self.MIN_CP_SIZES, dtype=int) // 128
 
         super().__init__(
             channel_bandwidth=channel_bandwidth,
@@ -682,7 +693,7 @@ class Phy802_16(PhyOFDM):
         frame_duration: float = 5e-3,
         nfft: float = 2048,
         cp_ratio: float = 1 / 8,
-        xp=np,
+        xp=None,
     ):
         """
         Args:
@@ -692,6 +703,9 @@ class Phy802_16(PhyOFDM):
             nfft: the fft size corresponding to the length of the useful portion of each symbol. Defaults to 2048.
             cp_ratio: the size of the cyclic prefix as a fraction of nfft. Defaults to 1/8.
         """
+        if xp is None:
+            xp = np
+
         if not isinstance(channel_bandwidth, Number):
             raise TypeError('expected numeric value for channel_bandwidth')
         elif channel_bandwidth < 1.25e6:
