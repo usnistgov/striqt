@@ -24,7 +24,7 @@ def lo_shift_tone(inds, radio: base.SourceBase, xp, lo_offset=None):
 
     if lo_offset is None:
         resampler_design = base.design_capture_resampler(
-            radio.setup_spec.base_clock_rate, radio.get_capture_spec()
+            radio.setup_spec.base_clock_rate, radio.capture_spec
         )
         lo_offset = resampler_design['lo_offset']
     phase_scale = (2j * np.pi * lo_offset) / radio._capture.backend_sample_rate
@@ -87,7 +87,7 @@ class SingleToneSource(TestSourceBase[specs.NullSourceSpec, SingleToneCapture]):
     def get_waveform(
         self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
     ):
-        capture = self.get_capture_spec()
+        capture = self.capture_spec
 
         fs = self._resampler['fs_sdr']
         i = xp.arange(offset, count + offset, dtype='int64')
@@ -135,7 +135,7 @@ class DiracDeltaSource(TestSourceBase):
     def get_waveform(
         self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
     ):
-        capture = self.get_capture_spec()
+        capture = self.capture_spec
 
         abs_pulse_index = round(capture.time * capture.backend_sample_rate)
         rel_pulse_index = abs_pulse_index - offset
@@ -169,7 +169,7 @@ class SawtoothSource(TestSourceBase[specs.NullSourceSpec, SawtoothCapture]):
     def get_waveform(
         self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
     ):
-        capture = self.get_capture_spec()
+        capture = self.capture_spec
 
         ret = xp.empty(count, dtype='complex64')
         ii = xp.arange(offset, count + offset, dtype='uint64')
@@ -196,7 +196,7 @@ class NoiseSource(TestSourceBase[specs.NullSourceSpec, NoiseCapture]):
     def get_waveform(
         self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
     ):
-        capture = self.get_capture_spec()
+        capture = self.capture_spec
         fs = self._resampler['fs_sdr']
 
         backend_capture = CaptureBase(

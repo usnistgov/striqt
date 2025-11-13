@@ -83,7 +83,7 @@ def read_tdms_iq(
     )
     source = TDMSFileSource(source_spec)
 
-    capture = source.get_capture_spec()
+    capture = source.capture_spec
 
     source.arm(capture)
     iq, _ = source.read_iq()

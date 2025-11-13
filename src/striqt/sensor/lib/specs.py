@@ -167,8 +167,8 @@ class AcquisitionInfo(
 ):
     """extra coordinate information returned from an acquisition"""
 
-    sweep_time: SweepStartTimeType|None
-    start_time: StartTimeType|None
+    sweep_time: SweepStartTimeType | None
+    start_time: StartTimeType | None
     backend_sample_rate: BackendSampleRateType
     source_id: SourceIDType
 

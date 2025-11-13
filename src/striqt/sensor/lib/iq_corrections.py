@@ -1,7 +1,13 @@
 from __future__ import annotations
 import typing
 
-from .sources import base, AcquiredIQ, OptionalData, SourceBase, design_capture_resampler
+from .sources import (
+    base,
+    AcquiredIQ,
+    OptionalData,
+    SourceBase,
+    design_capture_resampler,
+)
 from . import calibration, specs, util
 
 

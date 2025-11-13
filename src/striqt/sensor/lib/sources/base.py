@@ -220,7 +220,8 @@ class HasCaptureType(typing.Protocol[_TC]):
         correction: bool = True,
     ) -> AcquiredIQ: ...
 
-    def get_capture_spec(self) -> _TC: ...
+    @property
+    def capture_spec(self) -> _TC: ...
 
     def _prepare_capture(self, capture: _TC) -> _TC | None: ...
 
@@ -428,7 +429,7 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
         from .. import iq_corrections
 
         if capture is None:
-            capture = self.get_capture_spec()
+            capture = self.capture_spec
         else:
             capture = self.arm(capture)
 
@@ -476,7 +477,8 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
         """to be implemented in subclasses"""
         raise NotImplementedError
 
-    def get_capture_spec(self) -> _TC:
+    @property
+    def capture_spec(self) -> _TC:
         """generate the currently armed capture configuration for the specified channel.
 
         If the truth of realized evaluates as False, only the requested value

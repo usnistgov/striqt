@@ -114,7 +114,7 @@ def design_warmup_sweep(
         resource={},
     )
 
-    class WarmupSweep(registry.Warmup.sweep_spec): # type: ignore
+    class WarmupSweep(registry.Warmup.sweep_spec):  # type: ignore
         def get_captures(self, looped=True):
             # override any capture auto-generating logic
             return specs.SweepSpec.get_captures(self, looped=False)
@@ -219,11 +219,11 @@ class SweepIterator:
     ):
         resources = Resources(resources, **extra_resources)
 
-        self.source = resources['source'] # type: ignore
-        self._calibration = resources['calibration'] # type: ignore
-        self._peripherals = resources['peripherals'] # type: ignore
-        self._sink = resources['sink'] # type: ignore
-        self.spec = resources['sweep_spec'] # type: ignore
+        self.source = resources['source']  # type: ignore
+        self._calibration = resources['calibration']  # type: ignore
+        self._peripherals = resources['peripherals']  # type: ignore
+        self._sink = resources['sink']  # type: ignore
+        self.spec = resources['sweep_spec']  # type: ignore
 
         self._always_yield = always_yield
         self._quiet = quiet
@@ -347,7 +347,9 @@ class SweepIterator:
                     yield None
 
     @util.stopwatch('✓', 'source', logger_level=util.PERFORMANCE_INFO)
-    def _acquire(self, iq_prev: sources.AcquiredIQ, capture_prev, capture_this, capture_next):
+    def _acquire(
+        self, iq_prev: sources.AcquiredIQ, capture_prev, capture_this, capture_next
+    ):
         if self.spec.source.reuse_iq:
             reuse_this = _iq_is_reusable(
                 capture_prev, capture_this, self.source.setup_spec.base_clock_rate
@@ -369,7 +371,7 @@ class SweepIterator:
                 aligned=iq_prev.aligned,
                 capture=capture_this,
                 info=iq_prev.info.replace(start_time=None),
-                extra_data=iq_prev.extra_data
+                extra_data=iq_prev.extra_data,
             )
             calls['radio'] = util.Call(lambda: ret_iq)
         else:
