@@ -1,9 +1,8 @@
 from __future__ import annotations
 import typing
 
-from .sources import base, SourceBase, design_capture_resampler
+from .sources import base, AcquiredIQ, OptionalData, SourceBase, design_capture_resampler
 from . import calibration, specs, util
-from striqt.analysis.lib.dataarrays import AcquiredIQ
 
 
 if typing.TYPE_CHECKING:
@@ -43,18 +42,18 @@ def _get_voltage_scale(
     bare_capture = capture.replace(start_time=None)
 
     if force_calibration is None:
-        cal_data = getattr(radio._setup, 'calibration', None)
+        cal_data = getattr(radio.__setup__, 'calibration', None)
     else:
         cal_data = force_calibration
 
     if isinstance(bare_capture, specs.SoapyCaptureSpec):
         power_scale = calibration.lookup_power_correction(
-            cal_data, bare_capture, radio.get_setup_spec().base_clock_rate, xp=xp
+            cal_data, bare_capture, radio.setup_spec.base_clock_rate, xp=xp
         )
     else:
         power_scale = None
 
-    transport_dtype = radio._setup.transport_dtype
+    transport_dtype = radio.__setup__.transport_dtype
     if transport_dtype == 'int16':
         adc_scale = 1.0 / float(np.iinfo(transport_dtype).max)
     else:
@@ -72,7 +71,7 @@ def _get_voltage_scale(
 
 
 def resampling_correction(
-    iq: ArrayType,
+    iq_in: AcquiredIQ,
     capture: specs.CaptureSpec,
     radio: SourceBase,
     force_calibration: typing.Optional['xr.Dataset'] = None,
@@ -95,22 +94,24 @@ def resampling_correction(
         the filtered IQ waveform
     """
 
+    iq = iq_in.raw
     xp = iqwaveform.util.array_namespace(iq)
 
     vscale, prescale = _get_voltage_scale(
         capture, radio, force_calibration=force_calibration, xp=xp
     )
 
-    if radio._setup.uncalibrated_peak_detect:
+    if radio.__setup__.uncalibrated_peak_detect:
         logger = util.get_logger('analysis')
         peak_counts = xp.abs(iq).max(axis=-1)
         unscaled_peak = 20 * xp.log10(peak_counts * prescale) - 3
         descs = ','.join(f'{p:0.0f}' for p in unscaled_peak)
         logger.info(f'({descs}) dBfs ADC peak')
+        extra_data = OptionalData(unscaled_iq_peak=unscaled_peak)
     else:
-        unscaled_peak = None
+        extra_data = OptionalData()
 
-    design = design_capture_resampler(radio.get_setup_spec().base_clock_rate, capture)
+    design = design_capture_resampler(radio.setup_spec.base_clock_rate, capture)
     fs = design['fs_sdr']
 
     needs_resample = base.needs_resample(design, capture)
@@ -153,11 +154,9 @@ def resampling_correction(
             scale=1 if vscale is None else vscale,
         )
         scale = design['nfft_out'] / design['nfft']
-        oapad = base._get_oaresample_pad(
-            radio.get_setup_spec().base_clock_rate, capture
-        )
+        oapad = base._get_oaresample_pad(radio.setup_spec.base_clock_rate, capture)
         lag_pad = base._get_aligner_pad_size(
-            radio.get_setup_spec().base_clock_rate, capture, radio._aligner
+            radio.setup_spec.base_clock_rate, capture, radio._aligner
         )
         size_out = round(capture.duration * capture.sample_rate) + round(
             (oapad[1] + lag_pad) * scale
@@ -204,7 +203,8 @@ def resampling_correction(
         aligned=iq_aligned,
         raw=iq_unaligned,
         capture=capture,
-        unscaled_peak=unscaled_peak,
+        info=iq_in.info,
+        extra_data=iq_in.extra_data | extra_data,
     )
 
     # nfft = analysis_filter['nfft']

@@ -284,7 +284,7 @@ def _describe_missing_data(cal_data: 'xr.DataArray', exact_matches: dict):
 def _lookup_calibration_var(
     cal_var: 'xr.DataArray',
     capture: specs.SoapyCaptureSpec,
-    base_clock_rate: float,
+    base_clock_rate: float | None,
     *,
     xp,
 ):
@@ -322,7 +322,7 @@ def _lookup_calibration_var(
         if exc is not None:
             raise exc
 
-        for name in ('duration', 'radio_id', 'delay'):
+        for name in ('duration', 'source_id', 'delay'):
             if name in sel.coords:
                 sel = sel.drop_vars(name)
 
@@ -357,7 +357,7 @@ def _lookup_calibration_var(
 def lookup_power_correction(
     cal_data: 'str | Path | xr.Dataset | None',
     capture: specs.SoapyCaptureSpec,
-    base_clock_rate: float,
+    base_clock_rate: float | None,
     *,
     xp=None,
 ):
@@ -382,7 +382,7 @@ def lookup_power_correction(
 def lookup_system_noise_power(
     cal_data: 'Path | str | xr.Dataset | None',
     capture: specs.SoapyCaptureSpec,
-    base_clock_rate: float,
+    base_clock_rate: float | None,
     *,
     T=290.0,
     B=1.0,
@@ -391,7 +391,7 @@ def lookup_system_noise_power(
     """return the calibrated system noise power, in dBm/Hz"""
     if xp is None:
         xp = np
-        
+
     if isinstance(cal_data, xr.Dataset):
         corrections = cal_data
     elif cal_data is None:

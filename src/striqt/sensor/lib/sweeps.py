@@ -11,7 +11,7 @@ from .calibration import lookup_system_noise_power
 from .peripherals import PeripheralsBase
 from .sinks import SinkBase
 from .specs import _TS, _TC
-from striqt.analysis.lib.dataarrays import AcquiredIQ, describe_capture
+from striqt.analysis.lib.dataarrays import describe_capture
 from striqt.analysis.lib import register
 from striqt.analysis import measurements
 
@@ -175,21 +175,6 @@ def _build_attrs(sweep: specs.SweepSpec):
     return attrs
 
 
-def _update_sweep_time(
-    sweep_time: specs.StartTimeType | None,
-    new: specs.CaptureSpec,
-    old: specs.CaptureSpec | None,
-) -> specs.StartTimeType:
-    if sweep_time is None:
-        return new.start_time
-    elif old is None:
-        return sweep_time
-    elif old.sweep_index != new.sweep_index:
-        return new.start_time
-    else:
-        return sweep_time
-
-
 @contextlib.contextmanager
 def log_progress_contexts(index, count):
     """set the log context information for reporting progress"""
@@ -273,7 +258,7 @@ class SweepIterator:
 
         noise = lookup_system_noise_power(
             cal,
-            capture,
+            specs.SoapyCaptureSpec.fromspec(capture),
             base_clock_rate=capture.backend_sample_rate,
             B=attrs['noise_bandwidth'],
             xp=xp,
@@ -316,7 +301,6 @@ class SweepIterator:
                     calls['analyze'] = util.Call(
                         self._analyze,
                         iq,
-                        sweep_time=sweep_time,
                         capture=canalyze,
                     )
 
@@ -346,7 +330,6 @@ class SweepIterator:
 
                 if 'acquire' in ret:
                     iq = ret['acquire']['radio']
-                    sweep_time = _update_sweep_time(sweep_time, iq.capture, canalyze)
                     canalyze = iq.capture
                     prior_ext_data = this_ext_data
                     this_ext_data = ret['acquire'].get('peripherals', {}) or {}
@@ -360,13 +343,13 @@ class SweepIterator:
                     yield None
 
     @util.stopwatch('✓', 'source', logger_level=util.PERFORMANCE_INFO)
-    def _acquire(self, iq_prev: AcquiredIQ, capture_prev, capture_this, capture_next):
+    def _acquire(self, iq_prev: sources.AcquiredIQ, capture_prev, capture_this, capture_next):
         if self.spec.source.reuse_iq:
             reuse_this = _iq_is_reusable(
-                capture_prev, capture_this, self.source.get_setup_spec().base_clock_rate
+                capture_prev, capture_this, self.source.setup_spec.base_clock_rate
             )
             reuse_next = _iq_is_reusable(
-                capture_this, capture_next, self.source.get_setup_spec().base_clock_rate
+                capture_this, capture_next, self.source.setup_spec.base_clock_rate
             )
         else:
             reuse_this = reuse_next = False
@@ -377,12 +360,12 @@ class SweepIterator:
         # acquire from the radio and any peripherals
         calls = {}
         if reuse_this:
-            capture_ret = capture_this.replace(
-                backend_sample_rate=self.source._capture.backend_sample_rate,
-                start_time=None,
-            )
-            ret_iq = AcquiredIQ(
-                raw=iq_prev.raw, aligned=iq_prev.aligned, capture=capture_ret
+            ret_iq = sources.AcquiredIQ(
+                raw=iq_prev.raw,
+                aligned=iq_prev.aligned,
+                capture=capture_this,
+                info=iq_prev.info.replace(start_time=None),
+                extra_data=iq_prev.extra_data
             )
             calls['radio'] = util.Call(lambda: ret_iq)
         else:
@@ -433,7 +416,7 @@ class SweepIterator:
         system_noise = lookup_system_noise_power(
             self.spec.source.calibration,
             capture,
-            self.source.get_setup_spec().base_clock_rate,
+            self.source.setup_spec.base_clock_rate,
         )
 
         return dict(data, sensor_system_noise=system_noise)
@@ -489,7 +472,7 @@ def iter_raw_iq(
     radio: 'sources.SourceBase',
     sweep: specs.SweepSpec,
     quiet=False,
-) -> typing.Generator[AcquiredIQ]:
+) -> typing.Generator[sources.AcquiredIQ]:
     """iterate through the sweep and yield the raw IQ vector for each.
 
     Normally, for performance reasons, the first iteration consists of

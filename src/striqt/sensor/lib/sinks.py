@@ -1,7 +1,7 @@
 from __future__ import annotations
 from pathlib import Path
 import typing
-from . import captures, datasets, specs, util
+from . import captures, datasets, io, specs, util
 from concurrent.futures import ThreadPoolExecutor
 
 from striqt import analysis
@@ -18,25 +18,13 @@ class SinkBase:
     def __init__(
         self,
         sweep_spec: specs.SweepSpec,
+        alias_func: captures.PathAliasFormatter | None = None,
         *,
-        output_path: str | None = None,
-        store_backend: str | None = None,
         force: bool = False,
     ):
-        self.sweep_spec = sweep_spec
+        self._spec = sweep_spec.sink
         self.captures_elapsed = 0
-
-        if output_path is None:
-            if self.sweep_spec.sink.path is None:
-                raise TypeError('sweep output data path is not specified')
-            self.output_path = self.sweep_spec.sink.path
-        else:
-            self.output_path = output_path
-
-        if store_backend is None:
-            self.store_backend = self.sweep_spec.sink.store.lower()
-        else:
-            self.store_backend = store_backend.lower()
+        self._alias_func = alias_func
 
         self.store = None
         self.force = force
@@ -111,19 +99,9 @@ class NullSink(SinkBase):
 
 class ZarrSinkBase(SinkBase):
     def open(self):
-        if self.store is not None:
-            return
-
-        if self.store_backend == 'directory':
-            fixed_path = Path(self.output_path).with_suffix('.zarr')
-        elif self.store_backend == 'zip':
-            fixed_path = Path(self.output_path).with_suffix('.zarr.zip')
-        else:
-            raise ValueError(f'unsupported store type {self.store_backend!r}')
-
-        fixed_path.parent.mkdir(parents=True, exist_ok=True)
-
-        self.store = analysis.open_store(fixed_path, mode='w' if self.force else 'a')
+        self.store = io.open_store(
+            self._spec, alias_func=self._alias_func, force=self.force
+        )
 
     def close(self, *exc_info):
         super().close(*exc_info)
@@ -182,9 +160,7 @@ class CaptureAppender(ZarrSinkBase):
                 f'sync to {path}', 'sink', logger_level=util.PERFORMANCE_INFO
             ),
         ):
-            analysis.dump(
-                self.store, dataset, max_threads=self.sweep_spec.sink.max_threads
-            )
+            analysis.dump(self.store, dataset, max_threads=self._spec.max_threads)
 
             for i in range(count - len(data_list), count):
                 with util.log_capture_context('sink', capture_index=i):
@@ -192,13 +168,19 @@ class CaptureAppender(ZarrSinkBase):
 
 
 class SpectrogramTimeAppender(ZarrSinkBase):
-    def open(self):
-        if 'spectrogram' not in self.sweep_spec.analysis:
+    def __init__(
+        self,
+        sweep_spec: specs.SweepSpec,
+        alias_func: captures.PathAliasFormatter | None = None,
+        *,
+        force: bool = False,
+    ):
+        if 'spectrogram' not in sweep_spec.analysis:
             raise ValueError(
                 '"analysis" spec must include "spectrogram" to append on spectrogram time axis'
             )
 
-        super().open()
+        super().__init__(sweep_spec, alias_func, force=force)
 
     def append(self, capture_data: 'xr.Dataset | None', capture: specs.CaptureSpec):
         super().append(capture_data, capture)
@@ -234,7 +216,7 @@ class SpectrogramTimeAppender(ZarrSinkBase):
                 self.store,
                 by_spectrogram,
                 compression=False,
-                max_threads=self.sweep_spec.sink.max_threads,
+                max_threads=self._spec.max_threads,
             )
 
             for i in range(count - len(data_list), count):

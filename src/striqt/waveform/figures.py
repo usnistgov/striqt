@@ -13,7 +13,6 @@ if typing.TYPE_CHECKING:
     import pandas as pd
 else:
     mpl = lazy_import('matplotlib')
-    stats = lazy_import('stats', package='scipy')
     pd = lazy_import('pandas')
 
 
@@ -245,6 +244,8 @@ class GammaQQScale(mpl.scale.FuncScale):
         vmax=None,
         db_ordinal=True,
     ):
+        from scipy import stats
+
         def forward(q):
             x = stats.gamma.isf(q, a=k, scale=1)
             if db_ordinal:

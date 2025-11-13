@@ -102,7 +102,7 @@ class Airstack1Source(soapy.SoapySourceBase):
         try:
             if_addrs = psutil.net_if_addrs()['eth0']
         except KeyError:
-            raise OSError('no eth0 to create radio_id')
+            raise OSError('no eth0 to create source_id')
 
         for snic_addr in if_addrs:
             if snic_addr.address[2] == ':':

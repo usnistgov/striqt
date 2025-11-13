@@ -34,4 +34,6 @@ if typing.TYPE_CHECKING:
     LocatorType: TypeAlias = 'matplotlib.ticker.MaxNLocator'
 
     # Union types
-    ArrayLike: TypeAlias = typing.Union[ArrayType, SeriesType, DataFrameType, DataArrayType]
+    ArrayLike: TypeAlias = typing.Union[
+        ArrayType, SeriesType, DataFrameType, DataArrayType
+    ]

@@ -61,7 +61,7 @@ class DebugOnException:
 #     util.show_messages(logging.INFO, logger_names=('controller',))
 
 #     if '{' in sweep_spec.output.path:
-#         # in this case, we're still waiting to fill in radio_id
+#         # in this case, we're still waiting to fill in source_id
 #         open_sink_early = False
 #     else:
 #         open_sink_early = True
@@ -107,10 +107,10 @@ class DebugOnException:
 #             controller = util.concurrently_with_fg(calls, False)['controller']
 
 #         yaml_classes = _get_extension_classes(sweep_spec)
-#         radio_id = controller.radio_id(sweep_spec.radio_setup.driver)
+#         source_id = controller.source_id(sweep_spec.radio_setup.driver)
 #         sweep_spec = io.read_yaml_sweep(
 #             yaml_path,
-#             radio_id=radio_id,
+#             source_id=source_id,
 #         )
 
 #         if sweep_spec.output.log_path is not None:

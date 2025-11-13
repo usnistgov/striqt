@@ -1,41 +1,17 @@
-"""utility functions for structs.RadioCapture data structures"""
+"""utility functions for structs.CaptureBase data structures and their aliases"""
 
 from __future__ import annotations
+from collections import Counter
+from datetime import datetime
 import functools
 import numbers
-from collections import Counter
+from pathlib import Path
 import typing
 
+from msgspec import UNSET, UnsetType
+
 from . import specs, util
-
-
-@util.lru_cache(10000)
-def broadcast_to_ports(
-    ports: int | tuple[int, ...], *params, allow_mismatch=False
-) -> list[tuple[int, ...]]:
-    """broadcast sequences in each element in `params` up to the
-    length of capture.port.
-    """
-
-    res = []
-    if isinstance(ports, numbers.Number):
-        count = 1
-    else:
-        count = len(ports)
-
-    for p in params:
-        if not isinstance(p, (tuple, list)):
-            res.append((p,) * count)
-        elif len(p) == count:
-            res.append(tuple(p))
-        elif allow_mismatch:
-            res.append(tuple(p[:1]) * count)
-        else:
-            raise ValueError(
-                f'cannot broadcast tuple of length {len(p)} to {count} ports'
-            )
-
-    return res
+from striqt.analysis import dataarrays
 
 
 @functools.lru_cache
@@ -44,31 +20,32 @@ def get_capture_type(sweep_cls: type[specs.SweepSpec]) -> type[specs.CaptureSpec
     return typing.get_args(captures_type)[0]
 
 
-class _UNDEFINED_FIELD:
-    pass
-
-
 def _single_match(
-    fields: dict[str],
-    capture: specs.CaptureSpec,
-    **extras: dict[str],
+    fields: dict[str, typing.Any],
+    capture: specs.CaptureSpec | None,
+    **extras: typing.Any,
 ) -> bool:
     """return True if all fields match in the specified fields.
 
     For each `{key: value}` in `fields`, a match requires that
     either `extras[key] == value` or `getattr(capture, key) == value`.
     """
-    if isinstance(capture.port, tuple):
-        raise ValueError('split the capture to evaluate alias matches')
 
-    # type conversion for any search fields that are in 'capture'
-    valid_fields = {k: v for k, v in fields.items() if k in capture.__struct_fields__}
-    converted_fields = fields | capture.replace(**valid_fields).todict()
+    if capture is None:
+        converted_fields = fields
+    elif isinstance(capture.port, tuple):
+        raise ValueError('split the capture to evaluate alias matches')
+    else:
+        all_fields = frozenset(capture.__struct_fields__)
+
+        # type conversion for any search fields that are in 'capture'
+        valid_fields = {k: v for k, v in fields.items() if k in all_fields}
+        converted_fields = fields | capture.replace(**valid_fields).todict()
 
     for name, value in converted_fields.items():
         hits = (
-            getattr(capture, name, _UNDEFINED_FIELD),
-            extras.get(name, _UNDEFINED_FIELD),
+            getattr(capture, name, UNSET),
+            extras.get(name, UNSET),
         )
 
         if value in hits:
@@ -83,9 +60,9 @@ def _single_match(
 
 
 def _match_fields(
-    multi_fields: list[dict[str, typing.Any]],
-    capture: specs.CaptureSpec,
-    **extras: dict[str, typing.Any],
+    multi_fields: typing.Iterable[dict[str, typing.Any]],
+    capture: specs.CaptureSpec | None,
+    **extras: typing.Any,
 ) -> bool:
     """return True if all fields match in the specified fields.
 
@@ -98,9 +75,9 @@ def _match_fields(
 
 @util.lru_cache()
 def evaluate_aliases(
-    capture: specs.CaptureSpec,
+    capture: specs.CaptureSpec | None,
     *,
-    radio_id: str | None = _UNDEFINED_FIELD,
+    source_id: str | UnsetType | None = UNSET,
     output: specs.SinkSpec,
 ) -> dict[str, typing.Any]:
     """evaluate the field values"""
@@ -118,7 +95,7 @@ def evaluate_aliases(
                     'match specification for field {alias_value!r} must be list or dict'
                 )
 
-            if _match_fields(field_spec, capture=capture, radio_id=radio_id, **ret):
+            if _match_fields(field_spec, capture=capture, source_id=source_id, **ret):
                 ret[coord_name] = alias_value
                 break
     return ret
@@ -154,12 +131,18 @@ def split_capture_ports(capture: Capture) -> list[Capture]:
 
 
 def capture_fields_with_aliases(
-    capture: specs.CaptureSpec, *, source_id: str | None = None, output: specs.SinkSpec
+    capture: specs.CaptureSpec | None = None,
+    *,
+    source_id: str | None = None,
+    sink_spec: specs.SinkSpec,
 ) -> dict:
-    attrs = capture.todict(skip_private=True)
-
-    c = split_capture_ports(capture)[0]
-    aliases = evaluate_aliases(c, radio_id=source_id, output=output)
+    if capture is None:
+        attrs = {}
+        c = None
+    else:
+        attrs = capture.todict(skip_private=True)
+        c = split_capture_ports(capture)[0]
+    aliases = evaluate_aliases(c, source_id=source_id, output=sink_spec)
 
     return dict(attrs, **aliases)
 
@@ -167,9 +150,8 @@ def capture_fields_with_aliases(
 def get_field_value(
     name: str,
     capture: specs.CaptureSpec,
-    radio_id: str,
+    info: specs.AcquisitionInfo,
     alias_hits: dict,
-    extra_field_values: dict = {},
 ):
     """get the value of a field in `capture`, injecting values for aliases"""
     if isinstance(capture.port, tuple):
@@ -179,19 +161,70 @@ def get_field_value(
         value = getattr(capture, name)
         if isinstance(value, tuple):
             value = value[0]
+    elif hasattr(info, name):
+        value = getattr(info, name)
     elif name in alias_hits:
         value = alias_hits[name]
-    elif name == 'radio_id':
-        value = radio_id
-    elif name in extra_field_values:
-        value = extra_field_values[name]
     else:
         raise KeyError
     return value
 
 
-class _MinSweep(specs.SweepSpec, frozen=True):
-    # a sweep with captures that express only the parameters that impact data shape
+@util.lru_cache()
+def _get_path_fields(
+    sweep: specs.SweepSpec,
+    *,
+    source_id: str | typing.Callable[[], str],
+    spec_path: Path | str | None = None,
+    json_path: Path | str | None = None,
+) -> dict[str, str]:
+    """return a mapping for string `'{field_name}'.format()` style mapping values"""
+
+    if callable(source_id):
+        id_ = source_id()
+    else:
+        id_ = source_id
+
+    fields = capture_fields_with_aliases(source_id=id_, sink_spec=sweep.sink)
+
+    fields['start_time'] = datetime.now().strftime('%Y%m%d-%Hh%Mm%S')
+    fields['sensor_bindings'] = type(sweep).__name__
+    if spec_path is not None:
+        fields['spec_name'] = Path(spec_path).stem
+    fields['source_id'] = id_
+
+    return fields
+
+
+class PathAliasFormatter:
+    def __init__(self, sweep: specs.SweepSpec, spec_path: Path | str | None = None):
+        self.sweep_spec = sweep
+        self.spec_path = spec_path
+
+    def __call__(self, path: str | Path) -> str:
+        from .sources.base import get_source_id
+
+        id_ = get_source_id(self.sweep_spec.source)
+        path = Path(path).expanduser()
+
+        fields = _get_path_fields(
+            self.sweep_spec, source_id=id_, spec_path=self.spec_path
+        )
+
+        try:
+            path = Path(str(path).format(**fields))
+        except KeyError as ex:
+            valid_fields = ', '.join(fields.keys())
+            raise ValueError(f'valid formatting fields are {valid_fields!r}') from ex
+
+        return str(path)
+
+
+class _NoSweep(specs.SweepSpec, frozen=True):
+    # a sweep with captures that express only the parameters that impact capture shape
+    source: specs.NullSourceSpec = specs.NullSourceSpec(
+        base_clock_rate=0, num_rx_ports=1
+    )
     captures: tuple[specs.analysis.CaptureBase, ...] = ()
 
 
@@ -207,7 +240,7 @@ def concat_group_sizes(
         The list l of sizes of each group such that sum(l) == len(captures)
     """
 
-    remaining = list(_MinSweep(captures=captures).validate().captures)
+    remaining = list(_NoSweep(captures=captures).validate().captures)
     whole_set = set(remaining)
     counts = Counter(remaining)
 

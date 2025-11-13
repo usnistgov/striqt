@@ -24,7 +24,7 @@ def lo_shift_tone(inds, radio: base.SourceBase, xp, lo_offset=None):
 
     if lo_offset is None:
         resampler_design = base.design_capture_resampler(
-            radio.get_setup_spec().base_clock_rate, radio.get_capture_spec()
+            radio.setup_spec.base_clock_rate, radio.get_capture_spec()
         )
         lo_offset = resampler_design['lo_offset']
     phase_scale = (2j * np.pi * lo_offset) / radio._capture.backend_sample_rate
@@ -96,7 +96,7 @@ class SingleToneSource(TestSourceBase[specs.NullSourceSpec, SingleToneCapture]):
 
         phi = (2 * np.pi * capture.frequency_offset) / fs * i + np.pi / 2
         ret = lo * xp.exp(1j * phi)
-        ret = ret.astype(self._setup.transport_dtype)
+        ret = ret.astype(self.__setup__.transport_dtype)
 
         if capture.snr is not None:
             power = 10 ** (-capture.snr / 10)
@@ -140,7 +140,7 @@ class DiracDeltaSource(TestSourceBase):
         abs_pulse_index = round(capture.time * capture.backend_sample_rate)
         rel_pulse_index = abs_pulse_index - offset
 
-        ret = xp.zeros(count, dtype=self._setup.transport_dtype)
+        ret = xp.zeros(count, dtype=self.__setup__.transport_dtype)
 
         if rel_pulse_index >= 0 and rel_pulse_index < count:
             ret[rel_pulse_index] = 10 ** (capture.power / 20)
@@ -248,25 +248,24 @@ class TDMSFileSource(TestSourceBase[TDMSSourceSpec, specs.FileCaptureSpec]):
         header_fd, iq_fd = fd.groups()
         self._handle = dict(header_fd=header_fd, iq_fd=iq_fd)
 
-    def _apply_setup(self, spec):
-        return spec.replace(
-            base_clock_rate=self._handle['header_fd']['IQ_samples_per_second'][0]
-        )
-
-    def _prepare_capture(self, capture):
-        fc = self._handle['header_fd']['carrier_frequency'][0]
+    def _prepare_capture(self, capture: specs.FileCaptureSpec):
+        header = self._handle['header_fd']
+        fc = header['carrier_frequency'][0]
         if capture.center_frequency is not None:
             logger = util.get_logger('acquisition')
             logger.warning(f'center_frequency ignored, using {fc / 1e6} MHz from file')
 
-        mcr = self._setup.base_clock_rate
-        if capture.backend_sample_rate is not None:
+        base_rate = header['IQ_samples_per_second'][0]
+        if (
+            self.setup_spec.base_clock_rate is not None
+            or capture.backend_sample_rate is not None
+        ):
             logger = util.get_logger('acquisition')
             logger.warning(
-                f'backend_sample_rate ignored, using {mcr / 1e6} MHz from file'
+                f'backend_sample_rate ignored, using {base_rate / 1e6} MHz from file'
             )
 
-        return capture.replace(center_frequency=fc, backend_sample_rate=mcr)
+        return capture.replace(center_frequency=fc, backend_sample_rate=base_rate)
 
     def get_waveform(
         self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
@@ -316,10 +315,6 @@ class FileSource(TestSourceBase[FileSetup, specs.FileCaptureSpec]):
 
     _file_capture: specs.FileCaptureSpec | None = None
     _file_stream = None
-
-    def _apply_setup(self, spec: FileSetup) -> FileSetup:
-        assert self._file_capture is not None
-        return spec.replace(base_clock_rate=self._file_capture.backend_sample_rate)
 
     def _connect(self, spec):
         if self._file_stream is not None:

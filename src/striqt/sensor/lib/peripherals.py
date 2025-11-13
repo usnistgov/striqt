@@ -3,25 +3,25 @@ from . import specs, sources
 import typing
 
 
-_TC = typing.TypeVar('_TC', bound=specs.CaptureSpec, contravariant=True)
-_TS = typing.TypeVar('_TS', bound=specs.SourceSpec, covariant=True)
+_TC = typing.TypeVar('_TC', bound=specs.CaptureSpec)
+_TS = typing.TypeVar('_TS', bound=specs.SourceSpec)
 
 
-class PeripheralsProtocol(typing.Protocol[_TC]):
+class PeripheralsProtocol(typing.Protocol[_TS, _TC]):
     """a peripherals extension class must implement these"""
 
     def open(self): ...
 
     def close(self): ...
 
-    def setup(self) -> None: ...
+    def setup(self, source: sources.SourceBase[_TS, _TC]) -> None: ...
 
     def arm(self, capture: specs._TC) -> None: ...
 
     def acquire(self, capture: specs._TC) -> dict[str, typing.Any]: ...
 
 
-class PeripheralsBase(typing.Generic[_TS, _TC], PeripheralsProtocol[_TC]):
+class PeripheralsBase(PeripheralsProtocol[_TS, _TC]):
     """base class defining the object protocol peripheral hardware support.
 
     This is implemented primarily through connection management and callback
@@ -31,11 +31,9 @@ class PeripheralsBase(typing.Generic[_TS, _TC], PeripheralsProtocol[_TC]):
     sweep: specs.SweepSpec[_TS, _TC]
     source: sources.SourceBase[_TS, _TC]
 
-    def __init__(
-        self, sweep: specs.SweepSpec[_TS, _TC], source: sources.SourceBase[_TS, _TC]
-    ):
+    def __init__(self, sweep: specs.SweepSpec[_TS, _TC]):
         self.sweep = sweep
-        self.source = source
+        self.open()
 
     def __enter__(self):
         self.open()
@@ -52,7 +50,7 @@ class NoPeripherals(PeripheralsBase):
     def close(self):
         return
 
-    def setup(self):
+    def setup(self, source):
         return
 
     def arm(self, capture):

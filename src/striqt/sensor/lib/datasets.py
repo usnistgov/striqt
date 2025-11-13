@@ -8,18 +8,18 @@ import msgspec
 import typing
 
 from . import captures, specs, util
-from .sources import SourceBase
+from .sources import SourceBase, OptionalData, AcquiredIQ
 
 from striqt.analysis import dataarrays
-from striqt.analysis.lib.specs import Measurement
 from striqt.analysis.measurements import registry
-from striqt.analysis.lib.dataarrays import CAPTURE_DIM, PORT_DIM, AcquiredIQ  # noqa: F401
+from striqt.analysis.lib.dataarrays import CAPTURE_DIM, PORT_DIM  # noqa: F401
 from striqt.analysis.lib.util import is_cupy_array
 
 if typing.TYPE_CHECKING:
     import numpy as np
     import pandas as pd
     import xarray as xr
+    from striqt.waveform._typing import ArrayType
 
 else:
     np = util.lazy_import('numpy')
@@ -27,8 +27,7 @@ else:
     xr = util.lazy_import('xarray')
 
 
-SWEEP_TIMESTAMP_NAME = 'sweep_start_time'
-RADIO_ID_NAME = 'radio_id'
+RADIO_ID_NAME = 'source_id'
 
 
 def concat_time_dim(datasets: list['xr.Dataset'], time_dim: str) -> 'xr.Dataset':
@@ -65,59 +64,76 @@ def concat_time_dim(datasets: list['xr.Dataset'], time_dim: str) -> 'xr.Dataset'
     return ds
 
 
+def _msgspec_type_to_coord_info(type_: msgspec.inspect.Type) -> tuple[dict, typing.Any]:
+    """returns an (attrs, default_value) pair for the given msgspec field type"""
+
+    if isinstance(type_, msgspec.inspect.CustomType):
+        if issubclass(type_.cls, pd.Timestamp):
+            return {}, pd.Timestamp(0)
+        else:
+            try:
+                return {}, type_.cls()
+            except Exception as ex:
+                name = type_.cls.__qualname__
+                raise TypeError(f'failed to make default for type {name!r}') from ex
+    elif isinstance(type_, msgspec.inspect.Metadata):
+        return type_.extra or {}, _msgspec_type_to_coord_info(type_.type)[1]
+    elif isinstance(type_, msgspec.inspect.FloatType):
+        return {}, float()
+    elif isinstance(type_, msgspec.inspect.BoolType):
+        return {}, bool()
+    elif isinstance(type_, msgspec.inspect.IntType):
+        return {}, int()
+    elif isinstance(type_, msgspec.inspect.StrType):
+        return {}, str()
+    elif isinstance(type_, msgspec.inspect.LiteralType):
+        return {}, type(type_.values[0])
+    elif isinstance(type_, msgspec.inspect.UnionType):
+        UNION_SKIP = (msgspec.inspect.NoneType, msgspec.inspect.VarTupleType)
+        types = [t for t in type_.types if not isinstance(t, UNION_SKIP)]
+        if len(types) == 1:
+            return _msgspec_type_to_coord_info(types[0])
+        else:
+            names = tuple(type(t).__qualname__ for t in types)
+            raise TypeError(
+                f'cannot determine xarray type for union of msgspec types {names!r}'
+            )
+    else:
+        raise TypeError(f'unsupported msgspec field type {type(type_).__qualname__}')
+
+
 @util.lru_cache()
 def coord_template(
     capture_cls: type[specs.CaptureSpec],
-    ports: tuple[int, ...],
+    info_cls: type[specs.AcquisitionInfo],
+    port_count: int,
     **alias_dtypes: 'np.dtype',
 ) -> 'xr.Coordinates':
     """returns a cached xr.Coordinates object to use as a template for data results"""
 
-    def broadcast_defaults(v, allow_mismatch=False):
-        # match the number of ports, duplicating if necessary
-        (values,) = captures.broadcast_to_ports(ports, v, allow_mismatch=allow_mismatch)
-        return list(values)
-
-    capture = capture_cls(port=ports)
+    capture_fields = msgspec.inspect.type_info(capture_cls).fields  # type: ignore
+    info_fields = msgspec.inspect.type_info(info_cls).fields  # type: ignore
     vars = {}
 
-    for field in capture_cls.__struct_fields__:
-        entry = getattr(capture, field)
+    for field in capture_fields + info_fields:
+        attrs, default = _msgspec_type_to_coord_info(field.type)
 
-        vars[field] = xr.Variable(
+        vars[field.name] = xr.Variable(
             (CAPTURE_DIM,),
-            broadcast_defaults(entry, allow_mismatch=True),
+            data=port_count * [default],
             fastpath=True,
-            attrs=get_attrs(capture_cls, field),
+            attrs=attrs,
         )
+
+        if isinstance(default, str):
+            vars[field.name] = vars[field.name].astype(object)
 
     for field, dtype in alias_dtypes.items():
         vars[field] = xr.Variable(
             (CAPTURE_DIM,),
-            broadcast_defaults(dtype.type()),
+            data=port_count * [dtype.type()],
             fastpath=True,
         ).astype(dtype)
-
-    vars[SWEEP_TIMESTAMP_NAME] = xr.Variable(
-        (CAPTURE_DIM,),
-        broadcast_defaults(pd.Timestamp('now')),
-        fastpath=True,
-        attrs={'standard_name': 'Sweep start time'},
-    )
-
-    vars[RADIO_ID_NAME] = xr.Variable(
-        (CAPTURE_DIM,),
-        broadcast_defaults('unspecified-radio'),
-        fastpath=True,
-        attrs={'standard_name': 'Radio hardware ID'},
-    ).astype('object')
-
-    vars[RADIO_ID_NAME] = xr.Variable(
-        (CAPTURE_DIM,),
-        broadcast_defaults('unspecified-radio'),
-        fastpath=True,
-        attrs={'standard_name': 'Radio hardware ID'},
-    ).astype('object')
 
     return xr.Coordinates(vars)
 
@@ -153,34 +169,35 @@ def get_attrs(struct: type[specs.SpecBase], field: str) -> dict[str, str]:
         )
 
 
-def build_coords(
-    capture: specs.CaptureSpec, output: specs.SinkSpec, radio_id: str, sweep_time
+def build_capture_coords(
+    capture: specs.CaptureSpec, output: specs.SinkSpec, info: specs.AcquisitionInfo
 ):
     alias_dtypes = _get_alias_dtypes(output)
 
     if isinstance(capture.port, tuple):
-        ports = capture.port
+        port_count = len(capture.port)
     else:
-        ports = (capture.port,)
+        port_count = 1
 
-    coords = coord_template(type(capture), ports, **alias_dtypes).copy(deep=True)
+    coords = coord_template(type(capture), type(info), port_count, **alias_dtypes)
+    coords = coords.copy(deep=True)
 
     updates = {}
 
     for c in captures.split_capture_ports(capture):
-        alias_hits = captures.evaluate_aliases(c, radio_id=radio_id, output=output)
+        alias_hits = captures.evaluate_aliases(
+            c, source_id=info.source_id, output=output
+        )
 
         for field in coords.keys():
             if field == RADIO_ID_NAME:
-                updates.setdefault(field, []).append(radio_id)
+                updates.setdefault(field, []).append(info.source_id)
                 continue
 
             assert isinstance(field, str)
 
             try:
-                value = captures.get_field_value(
-                    field, c, radio_id, alias_hits, {SWEEP_TIMESTAMP_NAME: sweep_time}
-                )
+                value = captures.get_field_value(field, c, info, alias_hits)
             except KeyError:
                 continue
 
@@ -190,32 +207,6 @@ def build_coords(
         coords[field].values[:] = np.array(values)
 
     return coords
-
-
-def _alias_is_in_coord(dataset, alias_spec) -> bool:
-    """return whether the given mapping matches coordinate values in dataset"""
-    for match_name, match_value in alias_spec.items():
-        if match_name in dataset.coords:
-            match_coord = dataset.coords[match_name]
-        else:
-            raise KeyError
-
-        if match_coord.values[0] != match_value:
-            # no match
-            return False
-    else:
-        return False
-
-
-def _assign_alias_coords(capture_data: 'xr.Dataset', aliases):
-    for coord_name, coord_spec in aliases.items():
-        for alias_value, alias_spec in coord_spec.items():
-            if _alias_is_in_coord(capture_data, alias_spec):
-                new_coords = {coord_name: (CAPTURE_DIM, [alias_value])}
-                capture_data = capture_data.assign_coords(new_coords)
-                break
-
-    return capture_data
 
 
 @dataclasses.dataclass
@@ -247,7 +238,6 @@ class AnalysisCaller:
     def __call__(
         self,
         iq: AcquiredIQ,
-        sweep_time,
         capture: specs.CaptureSpec,
     ) -> 'xr.Dataset | dict[str, typing.Any] | str':
         """Inject radio device and capture info into a channel analysis result."""
@@ -266,23 +256,20 @@ class AnalysisCaller:
 
             result = dataarrays.analyze_by_spec(iq, capture, self._eval_options)
 
-        if iq.unscaled_peak is not None:
-            peak = iq.unscaled_peak
+        if 'unscaled_iq_peak' in iq.extra_data:
+            peak = iq.extra_data['unscaled_iq_peak']
             if is_cupy_array(peak):
                 peak = peak.get()
-            extra_data = {'unscaled_iq_peak': peak}
-        else:
-            extra_data = {}
+                iq.extra_data['unscaled_iq_peak'] = peak
 
         if self.delayed:
             result = DelayedDataset(
                 delayed=result,
                 capture=capture,
                 sweep=self.sweep,
-                radio_id=self.radio.id,
-                sweep_time=sweep_time,
-                extra_attrs=self.extra_attrs,
-                extra_data=extra_data,
+                attrs=self.extra_attrs,
+                coords=iq.info,
+                extra_data=iq.extra_data,
             )
 
         else:
@@ -294,14 +281,13 @@ class AnalysisCaller:
 @dataclasses.dataclass()
 class DelayedDataset:
     delayed: dict[str, dataarrays.DelayedDataArray]
-    capture: specs.Capture
+    capture: specs.CaptureSpec
     sweep: specs.SweepSpec
-    radio_id: str
-    sweep_time: typing.Any
-    extra_attrs: dict | None = None
-    extra_data: dict | None = None
+    coords: specs.AcquisitionInfo
+    extra_data: dict[str, typing.Any] | OptionalData
+    attrs: dict | None = None
 
-    def set_extra_data(self, extra_data: dict[str]) -> None:
+    def add_peripheral_data(self, extra_data: dict[str, typing.Any]) -> None:
         self.extra_data = self.extra_data | extra_data
 
     def to_xarray(self) -> 'xr.Dataset':
@@ -323,22 +309,15 @@ class DelayedDataset:
             threshold=10e-3,
             logger_level=logging.DEBUG,
         ):
-            coords = build_coords(
-                self.capture,
-                output=self.sweep.sink,
-                radio_id=self.radio_id,
-                sweep_time=self.sweep_time,
-            )
+            coords = build_capture_coords(self.capture, self.sweep.sink, self.coords)
             analysis = analysis.assign_coords(coords)
 
             # these are coordinates - drop from attrs
             for name in coords.keys():
                 analysis.attrs.pop(name, None)
 
-            if self.extra_attrs is not None:
-                analysis.attrs.update(self.extra_attrs)
-
-            analysis[SWEEP_TIMESTAMP_NAME].attrs.update(label='Sweep start time')
+            if self.attrs is not None:
+                analysis.attrs.update(self.attrs)
 
         with util.stopwatch(
             'add peripheral data',

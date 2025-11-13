@@ -102,7 +102,6 @@ PortType = Annotated[
     Union[PortScalarType, tuple[PortScalarType, ...]],
     meta('Input port indices'),
 ]
-StartTimeType = Annotated['pd.Timestamp', meta('Acquisition start time')]
 
 
 class WaveformCapture(analysis.CaptureBase, frozen=True, kw_only=True, **spec_kws):
@@ -144,7 +143,6 @@ class CaptureSpec(WaveformCapture, frozen=True, kw_only=True, **spec_kws):
     """Capture specification for a single radio waveform"""
 
     delay: Optional[DelayType] = None
-    start_time: Optional[StartTimeType] = None
 
     # a counter used to reset the sweep timestamp on Repeat(None)
     sweep_index: typing.ClassVar[int] = 0
@@ -155,7 +153,24 @@ class _CaptureSpecKeywords(_WaveformCaptureKeywords, total=False):
     # properly provide type hints for IDEs in the arm and acquire
     # call signatures of source.Base objects
     delay: DelayType
-    start_time: StartTimeType
+
+
+SourceIDType = Annotated[str, meta('Source UUID string')]
+StartTimeType = Annotated[
+    'pd.Timestamp', meta('Acquisition start time of the first capture')
+]
+SweepStartTimeType = Annotated['pd.Timestamp', meta('Capture acquisition start time')]
+
+
+class AcquisitionInfo(
+    analysis.specs.AcquisitionInfo, frozen=True, kw_only=True, **spec_kws
+):
+    """extra coordinate information returned from an acquisition"""
+
+    sweep_time: SweepStartTimeType|None
+    start_time: StartTimeType|None
+    backend_sample_rate: BackendSampleRateType
+    source_id: SourceIDType
 
 
 class SoapyCaptureSpec(CaptureSpec, frozen=True, kw_only=True, **spec_kws):
@@ -278,7 +293,7 @@ class SourceSpec(SpecBase, frozen=True, kw_only=True, **spec_kws):
 
     # sequencing
     warmup_sweep: WarmupSweepType = True
-    gapless_repeats: GaplessRepeatType = False
+    gapless_retrigger: GaplessRepeatType = False
 
     # synchronization and triggering
     periodic_trigger: Optional[float] = None
@@ -315,7 +330,7 @@ class SoapySourceSpec(SourceSpec, frozen=True, kw_only=True, **spec_kws):
     def __post_init__(self):
         from striqt.analysis import registry
 
-        if not self.gapless_repeats:
+        if not self.gapless_retrigger:
             pass
         elif self.time_sync_every_capture:
             raise ValueError(
@@ -355,7 +370,9 @@ class Description(SpecBase, frozen=True, kw_only=True, **spec_kws):
     version: str = 'unversioned'
 
 
-class LoopBase(SpecBase, tag=str.lower, tag_field='kind', frozen=True, kw_only=True, **spec_kws):
+class LoopBase(
+    SpecBase, tag=str.lower, tag_field='kind', frozen=True, kw_only=True, **spec_kws
+):
     field: str
 
     def get_points(self):
@@ -424,7 +441,7 @@ AliasMatchType = Annotated[
 
 
 class SinkSpec(_SlowHashSpecBase, frozen=True, kw_only=True, **spec_kws):
-    path: Optional[str] = '{yaml_name}-{start_time}'
+    path: str = '{yaml_name}-{start_time}'
     log_path: Optional[str] = None
     log_level: str = 'info'
     store: typing.Union[Literal['zip'], Literal['directory']] = 'directory'
@@ -469,7 +486,9 @@ WindowFillType = Annotated[
 ]
 
 
-class SweepSpec(SpecBase, typing.Generic[_TS, _TC], frozen=True, kw_only=True, **spec_kws):
+class SweepSpec(
+    SpecBase, typing.Generic[_TS, _TC], frozen=True, kw_only=True, **spec_kws
+):
     source: _TS
     captures: tuple[_TC, ...] = tuple()
     loops: tuple[LoopSpec, ...] = ()

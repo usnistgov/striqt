@@ -17,7 +17,7 @@ class NullSource(base.SourceBase[_TS, _TC]):
 
     @functools.cached_property
     def info(self):
-        return base.BaseSourceInfo(num_rx_ports=self.get_setup_spec().num_rx_ports)
+        return base.BaseSourceInfo(num_rx_ports=self.setup_spec.num_rx_ports)
 
     @functools.cached_property
     def id(self) -> str:
@@ -31,7 +31,7 @@ class NullSource(base.SourceBase[_TS, _TC]):
     def _sync_time_source(self):
         self._sync_time_ns = time.time_ns()
 
-    def _apply_setup(self, spec: _TS) -> _TS | None:
+    def _apply_setup(self, spec: _TS):
         self._source_info = base.BaseSourceInfo(num_rx_ports=spec.num_rx_ports)
         self.reset_sample_counter()
 

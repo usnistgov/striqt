@@ -317,3 +317,7 @@ def maybe_lookup_with_capture_key(
 
     else:
         return typing.cast(_T, value)
+
+
+class AcquisitionInfo(SpecBase, kw_only=True, frozen=True):
+    pass

@@ -17,6 +17,7 @@ else:
     np = lazy_import('numpy')
     array_api_compat = lazy_import('array_api_compat')
 
+
 def correlate_along_axis(a, b, axis=0):
     """cross-correlate `a` and `b` along the specified axis.
     this implementation is optimized for small sequences to replace for

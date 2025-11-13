@@ -4,16 +4,31 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import os
 from pathlib import Path
 import sys
 import typing
 
-from . import calibration, io, peripherals, sinks, specs, sweeps, util
-from ..bindings import get_binding, Warmup
+from . import (
+    calibration,
+    captures,
+    io,
+    peripherals,
+    sinks,
+    sources,
+    specs,
+    sweeps,
+    util,
+)
+from ..bindings import get_binding, registry
 
 
 if typing.TYPE_CHECKING:
     import striqt.waveform as iqwaveform
+
+    _P = typing.ParamSpec('_P')
+    _R = typing.TypeVar('_R')
+
 else:
     iqwaveform = util.lazy_import('striqt.waveform')
 
@@ -23,15 +38,54 @@ class SweepSpecClasses(typing.NamedTuple):
     peripherals_cls: typing.Type[peripherals.PeripheralsBase]
 
 
-def _get_sink(spec: specs.SweepSpec[specs._TS, specs._TC]) -> sinks.SinkBase:
+def _import_sink_type(
+    spec: specs.SweepSpec[specs._TS, specs._TC],
+) -> type[sinks.SinkBase]:
     import importlib
 
     mod_name, *sub_names, obj_name = spec.extensions.sink.rsplit('.')
     mod = importlib.import_module(mod_name)
     for name in sub_names:
         mod = getattr(mod, name)
-    cls = getattr(mod, obj_name)
-    return cls(spec)
+    return getattr(mod, obj_name)
+
+
+def _import_extensions(
+    spec: specs.ExtensionSpec, alias_func: captures.PathAliasFormatter | None = None
+):
+    """import an extension class from a dict representation of structs.Extensions
+
+    Arguments:
+        spec: specification structure for the extension imports
+        alias_func: formatter to fill aliases in the import path
+    """
+    import importlib
+
+    if spec.import_path is None:
+        pass
+    else:
+        if alias_func is None:
+            p = spec.import_path
+        else:
+            p = alias_func(spec.import_path)
+
+        if p != sys.path[0]:
+            assert isinstance(p, (str, Path))
+            sys.path.insert(0, str(p))
+
+    from ..bindings import get_registry
+
+    if spec.import_name is None:
+        return
+
+    start_count = len(get_registry())
+    importlib.import_module(spec.import_name)
+    if len(get_registry()) - start_count == 0:
+        logger = util.get_logger('controller')
+        import_name = spec.import_name
+        logger.warning(
+            f'imported extension module {import_name!r}, but it did not bind a sensor'
+        )
 
 
 def run_warmup(input_spec: specs.SweepSpec[specs._TS, specs._TC]):
@@ -46,7 +100,7 @@ def run_warmup(input_spec: specs.SweepSpec[specs._TS, specs._TC]):
     if len(warmup_spec.captures) == 0:
         return
 
-    source = Warmup.source(warmup_spec.source, analysis=warmup_spec.analysis)
+    source = registry.Warmup.source(warmup_spec.source, analysis=warmup_spec.analysis)
 
     with source:
         resources = sweeps.Resources(source=source, sweep_spec=warmup_spec)
@@ -59,23 +113,37 @@ def run_warmup(input_spec: specs.SweepSpec[specs._TS, specs._TC]):
             pass
 
 
-class Connections(contextlib.ExitStack):
+def _load_calibration(
+    spec: specs.SweepSpec, alias_func: captures.PathAliasFormatter | None
+):
+    p = spec.source.calibration
+    if p is None:
+        return
+
+    if alias_func is not None:
+        p = alias_func(spec.source.calibration)
+
+    calibration.read_calibration(p)
+
+
+class ConnectionManager(contextlib.ExitStack):
     resources: sweeps.Resources
 
     def __init__(self):
         self.resources = sweeps.Resources()
 
-    def open_by_name(self, **contexts: typing.Unpack[sweeps.ConnectionResources]):
-        for name, obj in contexts.items():
-            self.resources[name] = obj
-            self.enter_context(obj)  # type: ignore
+    def open(
+        self, name, func: typing.Callable[_P, _R], *args: _P.args, **kws: _P.kwargs
+    ):
+        self.resources[name] = obj = func(*args, **kws)
+        self.enter_context(obj)  # type: ignore
 
 
 def open_sensor_from_spec(
-    input_spec: specs.SweepSpec[specs._TS, specs._TC],
-    origin_path: str | Path,
+    spec: specs.SweepSpec[specs._TS, specs._TC],
+    spec_path: str | Path | None = None,
     except_context: typing.ContextManager | None = None,
-) -> Connections:
+) -> ConnectionManager:
     """open the sensor hardware and software contexts needed to run the given sweep.
 
     The returned Connections object contains the resulting context. All of its resources
@@ -83,76 +151,52 @@ def open_sensor_from_spec(
     """
 
     timer_kws = dict(threshold=1, logger_suffix='controller', logger_level=logging.INFO)
-    binding = get_binding(input_spec)
-    source = binding.source(input_spec.source, analysis=input_spec.analysis)
+    format_aliases = captures.PathAliasFormatter(spec, spec_path=spec_path)
+
+    if spec_path is not None:
+        os.chdir(str(Path(spec_path).parent))
+
+    _import_extensions(spec.extensions, format_aliases)
+
+    if spec.sink.log_path is not None:
+        util.log_to_file(spec.sink.log_path, spec.sink.log_level)
+
+    binding = get_binding(spec)
+    sink_cls = _import_sink_type(spec)
+
+    conns = ConnectionManager()
 
     try:
-        aliased_spec = io.fill_aliases(origin_path, input_spec, source.id)
-    except (RuntimeError, ConnectionError):
-        # source.id requires a connection
-        aliased_spec = None
-
-        if input_spec.sink.path is None or '{' in input_spec.sink.path:
-            # still waiting to fill in radio_id
-            open_sink_early = False
-        else:
-            # there are no aliases to fill in
-            open_sink_early = True
-    else:
-        open_sink_early = True
-
-    conns = Connections()
-
-    try:
-        calls = {}
-        calls['radio'] = util.Call(conns.open_by_name, source=source)
-
-        if open_sink_early:
-            calls['sink'] = util.Call(conns.open_by_name, sink=_get_sink(input_spec))
+        calls = {
+            'source': util.Call(
+                conns.open,
+                'source',
+                binding.source,
+                spec.source,
+                analysis=spec.analysis,
+            ),
+            'sink': util.Call(
+                conns.open, 'sink', sink_cls, spec, alias_func=format_aliases
+            ),
+            'warmup': util.Call(run_warmup, spec),
+            'load_calibration': util.Call(_load_calibration, spec, format_aliases),
+            'peripherals': util.Call(
+                conns.open, 'peripherals', binding.peripherals, spec
+            ),
+        }
 
         with util.stopwatch(f'open {", ".join(calls)}', threshold=1, **timer_kws):  # type: ignore
             util.concurrently_with_fg(calls, False)
 
-        assert 'radio' in conns.resources
-        if aliased_spec is None:
-            aliased_spec = io.fill_aliases(
-                origin_path,
-                input_spec,
-                source_id=source.id,
-            )
-
-        if aliased_spec.sink.log_path is not None:
-            util.log_to_file(
-                aliased_spec.sink.log_path,
-                aliased_spec.sink.log_level,
-            )
-
-        # open the rest
-        calls = {}
-        if aliased_spec.source.calibration is not None:
-            calls['calibration'] = util.Call(
-                calibration.read_calibration,
-                aliased_spec.source.calibration,
-            )
-
-        if not open_sink_early:
-            calls['sink'] = util.Call(conns.open_by_name, sink=_get_sink(aliased_spec))
-
-        peripherals = binding.peripherals(aliased_spec, source=source)
-        calls['peripherals'] = util.Call(conns.open_by_name, peripherals=peripherals)
-
         with util.stopwatch(f'setup {", ".join(calls)}', **timer_kws):  # type: ignore
-            util.concurrently(**calls)
-
-        # run this here after any radio stream has already been established to
-        # avoid side-effects during the radio setup
-        if 'peripherals' in conns.resources:
-            conns.resources['peripherals'].setup()
+            if 'peripherals' in conns.resources:
+                assert 'source' in conns.resources
+                conns.resources['peripherals'].setup(conns.resources['source'])
 
         if except_context is not None:
-            conns.open_by_name(except_context=except_context)
+            conns.enter_context(except_context)
 
-        conns.resources['sweep_spec'] = aliased_spec
+        conns.resources['sweep_spec'] = spec
 
     except BaseException as ex:
         if except_context is not None:
@@ -172,19 +216,14 @@ def open_sensor_from_yaml(
     except_context: typing.ContextManager | None = None,
     output_path: typing.Optional[str] = None,
     store_backend: typing.Optional[str] = None,
-) -> Connections:
-    unaliased_spec = io.read_yaml_sweep(yaml_path)
+) -> ConnectionManager:
+    spec = io.read_yaml_sweep(yaml_path)
 
-    output = unaliased_spec.sink
+    sink = spec.sink
     if output_path is not None:
-        output = output.replace(path=output_path)
+        sink = sink.replace(path=output_path)
     if store_backend is not None:
-        output = output.replace(store=store_backend)
-    unaliased_spec = unaliased_spec.replace(output=output)
+        sink = sink.replace(store=store_backend)
+    spec = spec.replace(output=sink)
 
-    calls = {}
-    calls['context'] = util.Call(
-        open_sensor_from_spec, unaliased_spec, yaml_path, except_context
-    )
-    calls['warmup'] = util.Call(run_warmup, unaliased_spec)
-    return util.concurrently_with_fg(calls)['context']
+    return open_sensor_from_spec(spec, yaml_path, except_context)

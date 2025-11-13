@@ -50,6 +50,7 @@ if typing.TYPE_CHECKING:
 else:
     np = lazy_import('numpy')
 
+
 def binned_mean(
     x: ArrayType,
     count,

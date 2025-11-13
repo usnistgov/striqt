@@ -22,7 +22,7 @@ from .util import (
     sliding_window_view,
     to_blocks,
     isroundmod,
-    is_cupy_array
+    is_cupy_array,
 )
 
 from .windows import register_extra_windows
@@ -275,6 +275,9 @@ def _enbw_uncached(
     window: str | tuple[str, float], N, fftbins=True, cached=True, xp=None
 ):
     """return the equivalent noise bandwidth (ENBW) of a window, in bins"""
+    if xp is None:
+        xp = np
+
     if cached:
         w = get_window(window, N, fftbins=fftbins, xp=xp)
     else:
