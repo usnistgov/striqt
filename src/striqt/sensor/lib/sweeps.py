@@ -79,6 +79,8 @@ def design_warmup_sweep(
     in order to avoid analysis slowdowns during sweeps.
     """
 
+    from ..bindings import registry
+
     # captures that have unique sampling parameters, which are those
     # specified in structs.WaveformCapture
     wcaptures = [specs.WaveformCapture.fromspec(c) for c in sweep.captures]
@@ -100,22 +102,20 @@ def design_warmup_sweep(
     if len(captures) > 1:
         captures = captures[:1]
 
-    radio_cls = sources.find_radio_cls_by_name(sweep.source.driver)
-
     # TODO: currently, the base_clock_rate is left as the null radio default.
     # this may cause problems in the future if its default disagrees with another
     # radio
-    null_radio_setup = sources.NullSetup.fromspec(sweep.source).replace(
+    null_radio_setup = specs.NullSourceSpec.fromspec(sweep.source).replace(
         num_rx_ports=num_rx_ports, calibration=None, reuse_iq=False
     )
 
     null_radio_setup = sweep.source.replace(
-        driver=sources.WarmupSource.__name__,
+        driver=sources.NullSource.__name__,
         resource={},
     )
 
-    class WarmupSweep(type(sweep)):
-        def get_captures(self, looped):
+    class WarmupSweep(registry.Warmup.sweep_spec): # type: ignore
+        def get_captures(self, looped=True):
             # override any capture auto-generating logic
             return specs.SweepSpec.get_captures(self, looped=False)
 
@@ -219,11 +219,11 @@ class SweepIterator:
     ):
         resources = Resources(resources, **extra_resources)
 
-        self.source = resources['source']
-        self._calibration = resources['calibration']
-        self._peripherals = resources['peripherals']
-        self._sink = resources['sink']
-        self.spec = resources['sweep_spec']
+        self.source = resources['source'] # type: ignore
+        self._calibration = resources['calibration'] # type: ignore
+        self._peripherals = resources['peripherals'] # type: ignore
+        self._sink = resources['sink'] # type: ignore
+        self.spec = resources['sweep_spec'] # type: ignore
 
         self._always_yield = always_yield
         self._quiet = quiet
@@ -298,6 +298,8 @@ class SweepIterator:
                     # no pending data in the first iteration
                     pass
                 else:
+                    assert canalyze is not None
+
                     calls['analyze'] = util.Call(
                         self._analyze,
                         iq,
@@ -308,6 +310,8 @@ class SweepIterator:
                     # this happens at the end during the last post-analysis and intakes
                     pass
                 else:
+                    assert iq is not None
+
                     calls['acquire'] = util.Call(
                         self._acquire, iq, canalyze, cacquire, cnext
                     )
@@ -317,7 +321,7 @@ class SweepIterator:
                     pass
                 else:
                     assert csink is not None
-                    result.set_extra_data(prior_ext_data)
+                    result.set_peripheral_data(prior_ext_data)
                     calls['intake'] = util.Call(
                         self._intake,
                         results=result.to_xarray(),
@@ -455,7 +459,7 @@ def iter_sweep(
     Added checks are needed to handle `None` before recording data.
 
     Args:
-        radio: the device that runs the sweep
+        source: the IQ source
         sweep: the specification that configures the sweep
         calibration: if specified, the calibration data used to scale the output from full-scale to physical power
         always_yield: if `True`, yield `None` before the second capture
