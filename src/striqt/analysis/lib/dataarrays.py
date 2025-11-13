@@ -5,7 +5,6 @@ from __future__ import annotations
 import collections
 import dataclasses
 import math
-from numbers import Number
 import typing
 
 from . import register, specs, util
@@ -16,7 +15,6 @@ if typing.TYPE_CHECKING:
     import numpy as np
     import xarray as xr
     import array_api_compat
-    import pandas as pd
 
     AnalysisResult: typing.TypeAlias = (
         'ArrayType | dict[str, ArrayType] | xr.Dataset | dict[str, DelayedDataArray]'
@@ -25,13 +23,11 @@ if typing.TYPE_CHECKING:
 else:
     np = util.lazy_import('numpy')
     xr = util.lazy_import('xarray')
-    pd = util.lazy_import('pandas')
     array_api_compat = util.lazy_import('array_api_compat')
 
 
 AnalysisReturnFlag: typing.TypeAlias = bool | typing.Literal['delayed']
 _TA = typing.TypeVar('_TA', bound=AnalysisReturnFlag)
-_TI = typing.TypeVar('_TI', bound=specs.AcquisitionInfo)
 
 CAPTURE_DIM = 'capture'
 PORT_DIM = 'port'
@@ -260,7 +256,7 @@ def build_dataarray(
     _validate_delayed_ndim(delayed)
 
     # add a port dimension if needed
-    if isinstance(delayed.capture.port, Number):
+    if not isinstance(delayed.capture.port, tuple):
         if data.ndim == len(template.dims) + 1:
             # "unbroadcast" dimension of a single-channel
             assert data.shape[0] == 1
