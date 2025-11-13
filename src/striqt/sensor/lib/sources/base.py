@@ -859,33 +859,3 @@ def alloc_empty_iq(
             buffers.append(extra)
 
     return all_samples, (samples, buffers)
-
-
-def _list_radio_classes(
-    subclass: type[SourceBase] = SourceBase,
-) -> dict[str, type[SourceBase]]:
-    """returns a list of radio subclasses that have been imported"""
-
-    clsmap = {c.__name__: c for c in subclass.__subclasses__()}
-
-    for subcls in list(clsmap.values()):
-        clsmap.update(_list_radio_classes(subcls))
-
-    clsmap = {name: cls for name, cls in clsmap.items() if not name.startswith('_')}
-
-    return clsmap
-
-
-def find_radio_cls_helper(
-    name: str, parent_cls: type[SourceBase] = SourceBase
-) -> type[SourceBase]:
-    """returns a list of radio subclasses that have been imported"""
-
-    mapping = _list_radio_classes(parent_cls)
-
-    if name in mapping:
-        return mapping[name]
-    else:
-        raise AttributeError(
-            f'invalid driver {repr(name)}. valid names: {tuple(mapping.keys())}'
-        )
