@@ -15,7 +15,7 @@ from striqt.analysis.lib.specs import Analysis
 from striqt.analysis.lib.util import pinned_array_as_cupy
 from striqt.waveform.fourier import ResamplerDesign
 
-from .. import captures, specs, util
+from .. import specs, util
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -24,11 +24,21 @@ if typing.TYPE_CHECKING:
     import striqt.waveform as iqwaveform
     from striqt.waveform._typing import ArrayType
     from striqt.waveform.fourier import ResamplerDesign
+
+    try:
+        import cupy as cp  # pyright: ignore[reportMissingImports]
+    except ModuleNotFoundError:
+        cp = None
+
 else:
     iqwaveform = util.lazy_import('striqt.waveform')
     pd = util.lazy_import('pandas')
     np = util.lazy_import('numpy')
 
+    try:
+        cp = lazy_import('cupy')
+    except ImportError:
+        cp = None
 
 OnOverflowType = typing.Literal['ignore', 'except', 'log']
 
@@ -128,13 +138,12 @@ def _cast_iq(
     dtype_in = np.dtype(radio.__setup__.transport_dtype)
 
     if radio.__setup__.array_backend == 'cupy':
-        import cupy as xp
-
+        xp = cp
         buffer = pinned_array_as_cupy(buffer)
     else:
-        import numpy as xp
-
+        xp = np
         buffer = xp.array(buffer)
+    assert xp is not None
 
     # what follows is some acrobatics to minimize new memory allocation and copy
     if dtype_in.kind == 'i':
@@ -233,7 +242,7 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
     _aligner: register.AlignmentCaller | None
     _is_open: bool | Event = False
     _timeout: float = 10
-    _sweep_time: 'pd.Timestamp' | None = None
+    _sweep_time: 'pd.Timestamp | None' = None
 
     def __init__(self, setup: _TS, *, analysis=None):
         open_event = self._is_open = Event()  # first, to serve other threads
@@ -488,13 +497,13 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
 
     def get_array_namespace(self: SourceBase) -> types.ModuleType:
         if self.__setup__.array_backend == 'cupy':
-            import cupy
-
-            return cupy
+            if cp is None:
+                raise ModuleNotFoundError('cupy array backend is not available')
+            dir(cp)
+            return cp
         elif self.__setup__.array_backend == 'numpy':
-            import numpy
-
-            return numpy
+            dir(np)
+            return np
         else:
             raise TypeError('invalid array_backend argument')
 
@@ -762,7 +771,7 @@ def _get_aligner_pad_size(
 
 def _get_next_fast_len(n):
     try:
-        from cupyx import scipy
+        from cupyx import scipy # type: ignore
     except ModuleNotFoundError:
         import scipy
 
@@ -861,7 +870,7 @@ def alloc_empty_iq(
     if radio.__setup__.array_backend == 'cupy':
         try:
             util.configure_cupy()
-            from cupyx import empty_pinned as empty
+            from cupyx import empty_pinned as empty # type: ignore
         except ModuleNotFoundError as ex:
             raise RuntimeError(
                 'could not import the configured array backend, "cupy"'

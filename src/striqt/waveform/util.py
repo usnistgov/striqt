@@ -46,7 +46,8 @@ if typing.TYPE_CHECKING:
     try:
         import cupy as cp  # pyright: ignore[reportMissingImports]
     except ModuleNotFoundError:
-        cp = None
+        from array_api_compat import cupy as cp
+
     import numpy as np
     import typing_extensions
 
@@ -142,9 +143,8 @@ def isroundmod(value: float | np.ndarray, div, atol=1e-6) -> bool:
         return np.abs(np.rint(ratio) - ratio) <= atol
 
 
-def is_cupy_array(x: object) -> typing_extensions.TypeIs['cupy.ndarray']:
+def is_cupy_array(x: object) -> typing_extensions.TypeIs['cp.ndarray']:
     return array_api_compat.is_cupy_array(x)
-
 
 class Domain(Enum):
     TIME = 'time'
@@ -193,19 +193,19 @@ class NonStreamContext:
 def array_stream(obj: ArrayType, null=False, non_blocking=False, ptds=False):
     """returns a cupy.Stream (or a do-nothing stand in) object as appropriate for obj"""
     if is_cupy_array(obj) and cp is not None:
-        return cp.cuda.Stream(null=null, non_blocking=non_blocking, ptds=ptds)
+        return cp.cuda.Stream(null=null, non_blocking=non_blocking, ptds=ptds) # type: ignore
     else:
         return NonStreamContext()
 
 
-def array_namespace(a, use_compat=False):
+def array_namespace(a, use_compat=False) -> ModuleType:
     try:
         return array_api_compat.array_namespace(a, use_compat=use_compat)
     except TypeError:
         pass
 
     try:
-        import mlx.core as mx
+        import mlx.core as mx # type: ignore
 
         if isinstance(a, mx.array):
             return mx
@@ -228,7 +228,7 @@ def pad_along_axis(a, pad_width: list, axis=0, *args, **kws):
 
 
 @lru_cache()
-def sliding_window_output_shape(array_shape: tuple | int, window_shape: tuple, axis):
+def sliding_window_output_shape(array_shape: tuple[int, ...] | int, window_shape: tuple, axis):
     """return the shape of the output of sliding_window_view, for example
     to pre-create an output buffer."""
     try:
@@ -238,11 +238,11 @@ def sliding_window_output_shape(array_shape: tuple | int, window_shape: tuple, a
         # numpy < 2?
         from numpy.lib import stride_tricks
 
-    window_shape = tuple(window_shape) if np.iterable(window_shape) else (window_shape,)
+    if not isinstance(array_shape, tuple):
+        array_shape = (array_shape,)
 
     if min(window_shape) < 0:
         raise ValueError('`window_shape` cannot contain negative values')
-
     ndim = len(array_shape)
     if axis is None:
         axis = tuple(range(ndim))
@@ -251,7 +251,7 @@ def sliding_window_output_shape(array_shape: tuple | int, window_shape: tuple, a
                 f'Since axis is `None`, must provide window_shape for all dimensions of `x`; got {len(window_shape)} window_shape elements and `x.ndim` is {ndim}.'
             )
     else:
-        axis = stride_tricks.normalize_axis_tuple(axis, ndim, allow_duplicate=True)
+        axis = stride_tricks.normalize_axis_tuple(axis, ndim, allow_duplicate=True) # type: ignore
         if len(window_shape) != len(axis):
             raise ValueError(
                 f'Must provide matching length window_shape and axis; got {len(window_shape)} window_shape elements and {len(axis)} axes elements.'
@@ -491,7 +491,7 @@ def axis_slice(a, start, stop=None, step=None, axis=-1):
 
 
 def histogram_last_axis(
-    x: ArrayType, bins: int | ArrayType, range: tuple = None
+    x: ArrayType, bins: int | ArrayType, range: tuple|None = None
 ) -> ArrayType:
     """computes a histogram along the last axis of an input array.
 
@@ -517,29 +517,31 @@ def histogram_last_axis(
         bins = xp.linspace(range[0], range[1], bins + 1)
     else:
         bins = xp.asarray(bins)
+
+    size = bins.size # type: ignore
     flat = x.reshape(-1, hist_size)
     idx = xp.searchsorted(bins, flat, 'right') - 1
 
     # Some elements would be off limits, so get a mask for those
-    bad_mask = (idx == -1) | (idx == bins.size)
+    bad_mask = (idx == -1) | (idx == size)
 
     # We need to use bincount to get bin based counts. To have unique IDs for
     # each row and not get confused by the ones from other rows, we need to
     # offset each row by a scale (using row length for this).
-    scaled_idx = bins.size * xp.arange(flat.shape[0])[:, None] + idx
+    scaled_idx = size * xp.arange(flat.shape[0])[:, None] + idx
 
     # Set the bad ones to be last possible index+1 : n_bins*data2D.shape[0]
-    limit = bins.size * flat.shape[0]
+    limit = size * flat.shape[0]
     scaled_idx[bad_mask] = limit
 
     # Get the counts and reshape to multi-dim
     counts = xp.bincount(scaled_idx.ravel(), minlength=limit + 1)[:-1]
-    counts.shape = x.shape[:-1] + (bins.size,)
+    counts.shape = x.shape[:-1] + (size,)
     return counts[..., :-1], bins
 
 
 @lru_cache()
-def dtype_change_float(dtype, float_basis_dtype) -> np.dtype:
+def dtype_change_float(dtype, float_basis_dtype) -> type[np.complexfloating] | type[np.floating]:
     """return a complex or float dtype similar to `dtype`, but
     with a float backing with size matching `float_basis_dtype`.
 
@@ -617,7 +619,7 @@ def grouped_views_along_axis(
 
 def sync_if_cupy(x: ArrayType):
     if is_cupy_array(x) and cp is not None:
-        stream = cp.cuda.get_current_stream()
+        stream = cp.cuda.get_current_stream() # type: ignore
         stream.synchronize()
 
 
@@ -625,8 +627,8 @@ def sync_if_cupy(x: ArrayType):
 def configure_cupy():
     if cp is not None:
         # the FFT plan sets up large caches that don't help us
-        cp.fft.config.get_plan_cache().set_size(0)
-        cp.cuda.set_pinned_memory_allocator(None)
+        cp.fft.config.get_plan_cache().set_size(0) # type: ignore
+        cp.cuda.set_pinned_memory_allocator(None) # type: ignore
 
 
 def pinned_array_as_cupy(x, stream=None):
@@ -638,7 +640,7 @@ def pinned_array_as_cupy(x, stream=None):
 
 def free_cupy_mempool():
     if cp is not None:
-        mempool = cp.get_default_memory_pool()
+        mempool = cp.get_default_memory_pool() # type: ignore
         if mempool is not None:
             mempool.free_all_blocks()
 
@@ -657,7 +659,7 @@ def set_cuda_mem_limit(fraction=0.75):
     if cp is None:
         return
 
-    cp.get_default_memory_pool().set_limit(fraction=fraction)
+    cp.get_default_memory_pool().set_limit(fraction=fraction) # type: ignore
 
     # Alternative: select an absolute amount of memory
     #
