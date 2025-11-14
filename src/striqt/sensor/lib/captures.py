@@ -241,7 +241,7 @@ def concat_group_sizes(
         The list l of sizes of each group such that sum(l) == len(captures)
     """
 
-    remaining = list(_NoSweep(captures=captures).validate().captures)
+    remaining = list(_NoSweep(captures=captures).validate().looped_captures)
     whole_set = set(remaining)
     counts = Counter(remaining)
 

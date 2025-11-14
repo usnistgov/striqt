@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import typing
+from typing import Annotated as _Annotated
 
 from striqt.analysis import CaptureBase, simulated_awgn
 
@@ -15,7 +16,7 @@ else:
     np = util.lazy_import('numpy')
 
 
-class FunctionSourceSpec(specs.SourceSpec, kw_only=True, frozen=True, **specs.spec_kws):
+class FunctionSourceSpec(specs.SourceSpec, kw_only=True, frozen=True, **specs.kws):
     # make these configurable, to support matching hardware for warmup sweeps
     num_rx_ports: int
     stream_all_rx_ports: bool = False
@@ -24,20 +25,20 @@ class FunctionSourceSpec(specs.SourceSpec, kw_only=True, frozen=True, **specs.sp
 _TS = typing.TypeVar('_TS', bound=FunctionSourceSpec)
 _TC = typing.TypeVar('_TC', bound=specs.CaptureSpec)
 
+FrequencyOffsetType = _Annotated[float, specs.meta('Baseband frequency offset', 'Hz')]
+SNRType = _Annotated[float, specs.meta('SNR with added noise ', 'dB')]
+PSDType = _Annotated[float, specs.meta('noise total channel power', 'mW/Hz', ge=0)]
+PowerType = _Annotated[float, specs.meta('peak power level', 'dB', gt=0)]
+TimeType = _Annotated[float, specs.meta('start time offset', 's')]
+PeriodType = _Annotated[float, specs.meta('waveform period', 's', ge=0)]
 
-def lo_shift_tone(inds, radio: base.SourceBase, xp, lo_offset=None):
+
+def _lo_shift_tone(inds, radio: base.SourceBase, xp, lo_offset=None):
     design = radio.get_resampler()
     if lo_offset is None:
         lo_offset = design['lo_offset']
     phase_scale = (2j * np.pi * lo_offset) / design['fs_sdr']
     return xp.exp(phase_scale * inds).astype('complex64')
-
-
-FrequencyOffsetType = specs.Annotated[
-    float, specs.meta('Tone frequency offset from center_frequency', 'Hz')
-]
-
-SNRType = specs.Annotated[float, specs.meta('SNR with added noise ', 'dB')]
 
 
 class SingleToneCaptureSpec(
@@ -51,15 +52,6 @@ class SingleToneCaptureSpec(
     snr: typing.Optional[SNRType] = None
 
 
-PowerType = specs.Annotated[
-    float,
-    specs.meta('peak power level', 'dB', gt=0),
-]
-TimeType = specs.Annotated[
-    float, specs.meta('pulse start time relative to the start of the waveform', 's')
-]
-
-
 class DiracDeltaCaptureSpec(
     specs.CaptureSpec,
     forbid_unknown_fields=True,
@@ -68,7 +60,6 @@ class DiracDeltaCaptureSpec(
     kw_only=True,
 ):
     time: TimeType = 0
-
     power: PowerType = 0
 
 
@@ -79,14 +70,8 @@ class SawtoothCaptureSpec(
     cache_hash=True,
     kw_only=True,
 ):
-    period: specs.Annotated[
-        float,
-        specs.meta('pulse start time relative to the start of the waveform', 's', ge=0),
-    ] = 0.01
-    power: specs.Annotated[
-        float,
-        specs.meta('instantaneous power level of the impulse function', 'dB', gt=0),
-    ] = 1
+    period: PeriodType = 0.01
+    power: PowerType = 1
 
 
 class NoiseCaptureSpec(
@@ -96,9 +81,7 @@ class NoiseCaptureSpec(
     cache_hash=True,
     kw_only=True,
 ):
-    power_spectral_density: specs.Annotated[
-        float, specs.meta('noise total channel power', 'mW/Hz', ge=0)
-    ] = 1e-17
+    power_spectral_density: PSDType = 1e-17
 
 
 class TestSourceBase(base.VirtualSourceBase[_TS, _TC]):
@@ -149,7 +132,7 @@ class SingleToneSource(TestSourceBase[FunctionSourceSpec, SingleToneCaptureSpec]
         fs = self.get_resampler()['fs_sdr']
         i = xp.arange(offset, count + offset, dtype='int64')
 
-        lo = lo_shift_tone(i, self, xp)
+        lo = _lo_shift_tone(i, self, xp)
 
         phi = (2 * np.pi * capture.frequency_offset) / fs * i + np.pi / 2
         ret = lo * xp.exp(1j * phi)

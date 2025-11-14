@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import itertools
 import typing
 from pathlib import Path
@@ -51,7 +52,7 @@ class CalibrationRadioSetup(specs.SourceSpec, forbid_unknown_fields=True, frozen
     reuse_iq = True
 
 
-class CalibrationVariables(
+class CalVariables(
     specs.SpecBase, forbid_unknown_fields=True, kw_only=True, frozen=True
 ):
     noise_diode_enabled: tuple[NoiseDiodeEnabledType, ...] = (False, True)
@@ -71,7 +72,7 @@ class ManualYFactorSweep(
     """This specialized sweep is fed to the YAML file loader
     to specify the change in expected capture structure."""
 
-    calibration_variables: CalibrationVariables
+    calibration_variables: CalVariables
     calibration_setup: ManualYFactorSetup
     radio_setup: CalibrationRadioSetup
 
@@ -82,14 +83,10 @@ class ManualYFactorSweep(
     # the top here is just to set the annotation for msgspec
     captures: tuple[ManualYFactorCapture, ...] = tuple()
 
-    def get_captures(self, looped=True) -> tuple[ManualYFactorCapture, ...]:
-        if looped is False:
-            return self.captures
-        if len(self.captures) == 0:
-            return ()
-
+    @property
+    def looped_captures(self):
         variables = self.calibration_variables.validate()
-        return _cached_calibration_captures(variables, type(self.captures[0]))
+        return _cached_cal_captures(variables, type(self.captures[0]))
 
 
 @util.lru_cache()
@@ -106,9 +103,7 @@ def save_calibration(path, corrections: 'xr.Dataset'):
 
 
 @util.lru_cache()
-def _cached_calibration_captures(
-    variables: CalibrationVariables, capture_cls: type[_TC]
-) -> tuple[_TC, ...]:
+def _cached_cal_captures(variables: CalVariables, capture_cls: type[_TC]) -> tuple[_TC, ...]:
     var_fields = variables.todict()
 
     # enforce ordering to place difficult-to-change variables in

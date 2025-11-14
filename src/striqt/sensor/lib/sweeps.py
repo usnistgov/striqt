@@ -40,16 +40,15 @@ class Resources(ConnectionResources[_TS, _TC], total=False):
 
 def varied_capture_fields(sweep: specs.SweepSpec) -> list[str]:
     """generate a list of capture fields with at least 2 values in the specified sweep"""
-    unlooped_values = (c.todict().values() for c in sweep.get_captures(False))
-    unlooped_counts = [len(Counter(v)) for v in zip(*unlooped_values)]
+    inner_values = (c.todict().values() for c in sweep.captures)
+    inner_counts = [len(Counter(v)) for v in zip(*inner_values)]
     fields = sweep.captures[0].todict().keys()
-    unlooped_counts = dict(zip(fields, unlooped_counts))
-    looped_counts = {loop.field: len(loop.get_points()) for loop in sweep.loops}
-    all_counts = {
-        field: max(unlooped_counts[field], looped_counts.get(field, 0))
-        for field in fields
+    inner_counts = dict(zip(fields, inner_counts))
+    outer_counts = {loop.field: len(loop.get_points()) for loop in sweep.loops}
+    totals = {
+        field: max(inner_counts[field], outer_counts.get(field, 0)) for field in fields
     }
-    return [f for f, c in all_counts.items() if c > 1]
+    return [f for f, c in totals.items() if c > 1]
 
 
 def sweep_touches_gpu(sweep: specs.SweepSpec):
@@ -63,8 +62,16 @@ def sweep_touches_gpu(sweep: specs.SweepSpec):
         # everything except iq_clipping requires a warmup
         return True
 
+    # check the inner loop (explicit) values
     for capture in sweep.captures:
         if capture.host_resample or capture.analysis_bandwidth is not None:
+            return True
+
+    # check any values specified in outer loops
+    for loop in sweep.loops:
+        if loop.field == 'host_resample' and True in loop.get_points():
+            return True
+        elif loop.field == 'analysis_bandwidth' and not all(loop.get_points()):
             return True
 
     return False
@@ -84,8 +91,8 @@ def design_warmup_sweep(
 
     # captures that have unique sampling parameters, which are those
     # specified in structs.WaveformCapture
-    wcaptures = [specs.WaveformCapture.fromspec(c) for c in sweep.captures]
-    unique_map = dict(zip(wcaptures, sweep.captures))
+    wcaptures = [specs.WaveformCapture.fromspec(c) for c in sweep.looped_captures]
+    unique_map = dict(zip(wcaptures, sweep.looped_captures))
     skip_wcaptures = {specs.WaveformCapture.fromspec(c) for c in skip}
     captures = [unique_map[c] for c in unique_map.keys() if c not in skip_wcaptures]
 
@@ -110,10 +117,10 @@ def design_warmup_sweep(
         num_rx_ports=num_rx_ports, calibration=None, reuse_iq=False
     )
 
-    class WarmupSweep(registry.warmup.sweep_spec):  # type: ignore
-        def get_captures(self, looped=True):
-            # override any capture auto-generating logic
-            return specs.SweepSpec.get_captures(self, looped=False)
+    class WarmupSweep(
+        registry.warmup.sweep_spec, frozen=True, kw_only=True, **specs.kws
+    ):
+        loops = ()
 
     warmup = WarmupSweep.fromdict(sweep.todict())
 
@@ -268,12 +275,14 @@ class SweepIterator:
         canalyze = None
         result = None
 
+        captures = self.spec.looped_captures
+
         if self._loop:
-            capture_iter = itertools.cycle(self.spec.captures)
+            capture_iter = itertools.cycle(captures)
             count = float('inf')
         else:
-            capture_iter = self.spec.captures
-            count = len(self.spec.captures)
+            capture_iter = captures
+            count = len(captures)
 
         if count == 0:
             return
@@ -490,19 +499,17 @@ def iter_raw_iq(
 
     capture_prev = None
 
+    captures = sweep.looped_captures
+
     # iterate across (previous, current, next) captures to support concurrency
-    offset_captures = util.zip_offsets(sweep.captures, (0, 1), fill=None)
+    offset_captures = util.zip_offsets(captures, (0, 1), fill=None)
 
     for i, (capture_this, capture_next) in enumerate(offset_captures):
         desc = describe_capture(
-            capture_this, capture_prev, index=i, count=len(sweep.captures)
+            capture_this, capture_prev, index=i, count=len(captures)
         )
 
-        with util.stopwatch(
-            desc,
-            'source',
-            logger_level=util.PERFORMANCE_DETAIL if quiet else util.PERFORMANCE_INFO,
-        ):
+        with util.stopwatch(desc, 'source', logger_level=util.PERFORMANCE_INFO):
             # extra iteration at the end for the last analysis
             yield radio.acquire(
                 capture_this,

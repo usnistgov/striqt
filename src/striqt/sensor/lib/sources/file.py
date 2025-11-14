@@ -41,7 +41,7 @@ class ZarrFileSourceSpec(
     ] = {}
 
 
-class FileAcquisitionInfo(specs.SpecBase, frozen=True, kw_only=True, **specs.spec_kws):
+class FileAcquisitionInfo(specs.SpecBase, frozen=True, kw_only=True, **specs.kws):
     center_frequency: specs.CenterFrequencyType = float('nan')
     backend_sample_rate: specs.BackendSampleRateType
     port: specs.PortType = 0

@@ -6,12 +6,21 @@ import functools
 import itertools
 import numbers
 import typing
-from typing import Annotated, ClassVar, Literal, Optional, Union
+from typing import (
+    Annotated,
+    Any,
+    ClassVar,
+    Generic,
+    Literal,
+    Optional,
+    TypedDict,
+    Union,
+)
 
 import msgspec
 
 from striqt import analysis
-from striqt.analysis.lib.specs import SpecBase, _SlowHashSpecBase, meta
+from striqt.analysis.lib.specs import SpecBase, meta
 
 from . import util
 
@@ -26,7 +35,7 @@ _TC = typing.TypeVar('_TC', bound='CaptureSpec')
 _TS = typing.TypeVar('_TS', bound='SourceSpec')
 
 
-spec_kws = dict(
+kws = dict(
     forbid_unknown_fields=True,
     cache_hash=True,
 )
@@ -53,7 +62,7 @@ def _validate_multichannel(port, gain):
             raise ValueError('gain, when specified as a tuple, must match port count')
 
 
-@functools.lru_cache(2)
+@functools.lru_cache(4)
 def _expand_loops(
     explicit: tuple[_TC, ...], loops: tuple[LoopSpec, ...]
 ) -> tuple[_TC, ...]:
@@ -105,7 +114,7 @@ PortType = Annotated[
 ]
 
 
-class WaveformCapture(analysis.CaptureBase, frozen=True, kw_only=True, **spec_kws):
+class WaveformCapture(analysis.CaptureBase, frozen=True, kw_only=True, **kws):
     """Capture specification structure for a generic waveform.
 
     This subset of RadioCapture is broken out here to simplify the evaluation of
@@ -125,7 +134,7 @@ class WaveformCapture(analysis.CaptureBase, frozen=True, kw_only=True, **spec_kw
     backend_sample_rate: Optional[BackendSampleRateType] = None
 
 
-class _WaveformCaptureKeywords(typing.TypedDict, total=False):
+class _WaveformCaptureKeywords(TypedDict, total=False):
     # this needs to be kept in sync with WaveformCapture in order to
     # properly provide type hints for IDEs in the arm and acquire
     # call signatures of source.Base objects
@@ -140,7 +149,7 @@ class _WaveformCaptureKeywords(typing.TypedDict, total=False):
     backend_sample_rate: Optional[BackendSampleRateType]
 
 
-class CaptureSpec(WaveformCapture, frozen=True, kw_only=True, **spec_kws):
+class CaptureSpec(WaveformCapture, frozen=True, kw_only=True, **kws):
     """Capture specification for a single radio waveform"""
 
     delay: Optional[DelayType] = None
@@ -163,9 +172,7 @@ StartTimeType = Annotated[
 SweepStartTimeType = Annotated['pd.Timestamp', meta('Capture acquisition start time')]
 
 
-class AcquisitionInfo(
-    analysis.specs.AcquisitionInfo, frozen=True, kw_only=True, **spec_kws
-):
+class AcquisitionInfo(analysis.specs.AcquisitionInfo, frozen=True, kw_only=True, **kws):
     """extra coordinate information returned from an acquisition"""
 
     sweep_time: SweepStartTimeType | None
@@ -174,7 +181,7 @@ class AcquisitionInfo(
     source_id: SourceIDType
 
 
-class SoapyCaptureSpec(CaptureSpec, frozen=True, kw_only=True, **spec_kws):
+class SoapyCaptureSpec(CaptureSpec, frozen=True, kw_only=True, **kws):
     center_frequency: CenterFrequencyType
     gain: GainType
 
@@ -191,7 +198,7 @@ class _SoapyCaptureSpecKeywords(_CaptureSpecKeywords, total=False):
     gain: GainType
 
 
-class FileCaptureSpec(CaptureSpec, frozen=True, kw_only=True, **spec_kws):
+class FileCaptureSpec(CaptureSpec, frozen=True, kw_only=True, **kws):
     """Capture specification read from a file, with support for None sentinels"""
 
     # RF and leveling
@@ -262,7 +269,7 @@ SyncSourceType = Annotated[
 ]
 
 
-class _SourceSpecKeywords(typing.TypedDict, total=False):
+class _SourceSpecKeywords(TypedDict, total=False):
     # this needs to be kept in sync with WaveformCapture in order to
     # properly provide type hints for IDEs in the setup
     # call signature of source.Base objects
@@ -281,10 +288,10 @@ class _SourceSpecKeywords(typing.TypedDict, total=False):
 
     array_backend: ArrayBackendType
     cupy_max_fft_chunk_size: int
-    uncalibrated_peak_detect: Union[bool, typing.Literal['auto']]
+    uncalibrated_peak_detect: Union[bool, Literal['auto']]
 
 
-class SourceSpec(SpecBase, frozen=True, kw_only=True, **spec_kws):
+class SourceSpec(SpecBase, frozen=True, kw_only=True, **kws):
     """run-time characteristics of the radio that are left invariant during a sweep"""
 
     # driver: Optional[str]
@@ -299,14 +306,14 @@ class SourceSpec(SpecBase, frozen=True, kw_only=True, **spec_kws):
 
     # synchronization and triggering
     periodic_trigger: Optional[float] = None
-    channel_sync_source: typing.Optional[str] = None
+    channel_sync_source: Optional[str] = None
 
     # in the future, these should probably move to an analysis config
     array_backend: ArrayBackendType = 'cupy'
     cupy_max_fft_chunk_size: Optional[int] = None
 
     # validation data
-    uncalibrated_peak_detect: Union[bool, typing.Literal['auto']] = 'auto'
+    uncalibrated_peak_detect: Union[bool, Literal['auto']] = 'auto'
 
     # calibration subclasses set this True to skip unecessary
     # re-acquisitions
@@ -314,11 +321,11 @@ class SourceSpec(SpecBase, frozen=True, kw_only=True, **spec_kws):
 
     transient_holdoff_time = None
     stream_all_rx_ports = False
-    transport_dtype: Literal['int16'] | Literal['complex64'] = 'complex64'
+    transport_dtype: Literal['int16', 'complex64'] = 'complex64'
 
 
-class SoapySourceSpec(SourceSpec, frozen=True, kw_only=True, **spec_kws):
-    device_kwargs: typing.ClassVar[dict[str, typing.Any]] = {}
+class SoapySourceSpec(SourceSpec, frozen=True, kw_only=True, **kws):
+    device_kwargs: ClassVar[dict[str, Any]] = {}
 
     time_source: TimeSourceType = 'host'
     time_sync_every_capture: TimeSyncEveryCaptureType = False
@@ -359,13 +366,13 @@ class _SoapySourceSpecKeywords(_SourceSpecKeywords, total=False):
     time_sync_every_capture: TimeSyncEveryCaptureType
 
 
-class NullSourceSpec(SourceSpec, frozen=True, kw_only=True, **spec_kws):
+class NullSourceSpec(SourceSpec, frozen=True, kw_only=True, **kws):
     # make these configurable, to support matching hardware for warmup sweeps
     num_rx_ports: int
     stream_all_rx_ports: bool = False
 
 
-class Description(SpecBase, frozen=True, kw_only=True, **spec_kws):
+class Description(SpecBase, frozen=True, kw_only=True, **kws):
     summary: Optional[str] = None
     location: Optional[tuple[float, float, float]] = None
     signal_chain: Optional[tuple[str, ...]] = tuple()
@@ -373,7 +380,7 @@ class Description(SpecBase, frozen=True, kw_only=True, **spec_kws):
 
 
 class LoopBase(
-    SpecBase, tag=str.lower, tag_field='kind', frozen=True, kw_only=True, **spec_kws
+    SpecBase, tag=str.lower, tag_field='kind', frozen=True, kw_only=True, **kws
 ):
     field: str
 
@@ -381,7 +388,7 @@ class LoopBase(
         raise NotImplementedError
 
 
-class Range(LoopBase, frozen=True, kw_only=True, **spec_kws):
+class Range(LoopBase, frozen=True, kw_only=True, **kws):
     start: float
     stop: float
     step: float
@@ -396,7 +403,7 @@ class Range(LoopBase, frozen=True, kw_only=True, **spec_kws):
         return list(a)
 
 
-class Repeat(LoopBase, frozen=True, kw_only=True, **spec_kws):
+class Repeat(LoopBase, frozen=True, kw_only=True, **kws):
     field: str = '_sweep_index'
     count: int = 1
 
@@ -404,14 +411,14 @@ class Repeat(LoopBase, frozen=True, kw_only=True, **spec_kws):
         return list(range(self.count))
 
 
-class List(LoopBase, frozen=True, kw_only=True, **spec_kws):
-    values: tuple[typing.Any, ...]
+class List(LoopBase, frozen=True, kw_only=True, **kws):
+    values: tuple[Any, ...]
 
     def get_points(self):
         return self.values
 
 
-class FrequencyBinRange(LoopBase, frozen=True, kw_only=True, **spec_kws):
+class FrequencyBinRange(LoopBase, frozen=True, kw_only=True, **kws):
     start: float
     stop: float
     step: float
@@ -432,88 +439,63 @@ class FrequencyBinRange(LoopBase, frozen=True, kw_only=True, **spec_kws):
         return list(points)
 
 
-LoopSpec = typing.Union[Repeat, List, Range, FrequencyBinRange]
+LoopSpec = Union[Repeat, List, Range, FrequencyBinRange]
 
 
 AliasMatchType = Annotated[
-    typing.Union[
-        dict[str, dict[str, typing.Any]], tuple[dict[str, dict[str, typing.Any]], ...]
-    ],
+    Union[dict[str, dict[str, Any]], tuple[dict[str, dict[str, Any]], ...]],
     meta('one or more dictionaries of valid match sets to "or"'),
 ]
 
 
-class SinkSpec(_SlowHashSpecBase, frozen=True, kw_only=True, **spec_kws):
+class SinkSpec(analysis.specs._SlowHashSpecBase, frozen=True, kw_only=True, **kws):
     path: str = '{yaml_name}-{start_time}'
     log_path: Optional[str] = None
     log_level: str = 'info'
-    store: typing.Union[Literal['zip'], Literal['directory']] = 'directory'
+    store: Literal['zip', 'directory'] = 'directory'
     coord_aliases: dict[str, dict[str, AliasMatchType]] = {}
     max_threads: Optional[int] = None
 
 
-SweepStructType = Annotated[
-    typing.Union[str, Literal['striqt.sensor.Sweep']],
-    meta(
-        'striqt.sensor.Sweep subclass to import to decode the sweep specification structure'
-    ),
-]
 SinkClassType = Annotated[
-    typing.Union[str, Literal['striqt.sensor.writers.CaptureAppender']],
+    Union[str, Literal['striqt.sensor.writers.CaptureAppender']],
     meta('data sink class to import and use'),
 ]
 ModuleNameType = Annotated[
-    str | None,
+    Union[str, None],
     meta('name of the extension module that calls bind_sensor'),
 ]
 ExtensionPathType = Annotated[
-    Optional[str],
-    meta('optional import path to add, with the yaml parent as the working directory'),
+    str,
+    meta('path to append to sys.path before extension imports'),
 ]
 
 
-class ExtensionSpec(SpecBase, frozen=True, kw_only=True, **spec_kws):
+class ExtensionSpec(SpecBase, frozen=True, kw_only=True, **kws):
     sink: SinkClassType = 'striqt.sensor.sinks.CaptureAppender'
-    import_path: ExtensionPathType = None
+    import_path: typing.Optional[ExtensionPathType] = None
     import_name: ModuleNameType = None
 
 
-# dynamically generate Analysis type for "built-in" measurements in to striqt.analysis
+# registered striqt.analysis.measurements -> Analysis spec
 BundledAnalysis = analysis.registry.tospec()
 BundledAlignmentAnalysis = analysis.registry.channel_sync_source.to_spec()
 
 
-WindowFillType = Annotated[
-    float,
-    meta('averaging window size as a fraction of analysis interval', ge=0, le=1),
-]
-
-
-class SweepSpec(
-    SpecBase, typing.Generic[_TS, _TC], frozen=True, kw_only=True, **spec_kws
-):
+class SweepSpec(SpecBase, Generic[_TS, _TC], frozen=True, kw_only=True, **kws):
     source: _TS
     captures: tuple[_TC, ...] = tuple()
     loops: tuple[LoopSpec, ...] = ()
 
     analysis: BundledAnalysis = BundledAnalysis()  # type: ignore
-    description: typing.Union[Description, str] = ''
+    description: Union[Description, str] = ''
     extensions: ExtensionSpec = ExtensionSpec()
     sink: SinkSpec = SinkSpec()
 
-    def get_captures(self, looped=True) -> tuple[_TC, ...]:
+    @property
+    def looped_captures(self) -> tuple[_TC, ...]:
         """subclasses may use this to autogenerate capture sequences"""
-        explicit_captures = object.__getattribute__(self, 'captures')
-        if looped:
-            return _expand_loops(tuple(explicit_captures), self.loops)
-        else:
-            return explicit_captures
-
-    def __getattribute__(self, name):
-        if name == 'captures':
-            return self.get_captures()
-        else:
-            return super().__getattribute__(name)
+        return _expand_loops(self.captures, self.loops)
 
     def __post_init__(self):
         looped_fields = []

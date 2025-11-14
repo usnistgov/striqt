@@ -259,7 +259,8 @@ class SweepHUDApp(App):
             )
 
         table = self.query_one(VerticalScrollDataTable)
-        index_size = math.ceil(math.log10(len(self.resources.sweep_spec.captures))) + 2
+        captures = self.resources['sweep_spec'].looped_captures
+        index_size = math.ceil(math.log10(len(captures))) + 2
         free_width = self.size.width - index_size
 
         self.column_keys = {
@@ -272,7 +273,7 @@ class SweepHUDApp(App):
         table.loading = False
 
         progress = self.query_one(ProgressBar)
-        progress.total = len(self.resources.sweep_spec.captures)
+        progress.total = len(captures)
 
         self.sub_title = 'Running'
 
@@ -300,7 +301,7 @@ class SweepHUDApp(App):
             # warmup captures
             return
 
-        captures = self.resources['sweep_spec'].captures
+        captures = self.resources['sweep_spec'].looped_captures
 
         logger = util.get_logger(record.name.rsplit('.', 1)[1])
         extra = logger.extra
