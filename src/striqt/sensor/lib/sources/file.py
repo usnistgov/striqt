@@ -6,10 +6,10 @@ import functools
 import typing
 from pathlib import Path
 
-from striqt.analysis import CaptureBase, io, simulated_awgn
-
 from .. import specs, util
-from . import base, null
+from striqt.analysis.lib import io
+
+from . import base
 
 if typing.TYPE_CHECKING:
     import numpy as np

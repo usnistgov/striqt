@@ -1,4 +1,4 @@
-from . import base, file, null
+from . import base, file, function, null
 
 from .base import (
     AcquiredIQ,
@@ -15,6 +15,8 @@ from .file import (
     TDMSFileSource,
     ZarrFileSourceSpec,
     ZarrIQSource,
+    FileSourceSpec,
+    TDMSSourceSpec
 )
 
 from .function import (
@@ -22,4 +24,9 @@ from .function import (
     NoiseSource,
     SawtoothSource,
     SingleToneSource,
+    NoiseCaptureSpec,
+    SawtoothCaptureSpec,
+    DiracDeltaCaptureSpec,
+    FunctionSourceSpec,
+    SingleToneCaptureSpec
 )

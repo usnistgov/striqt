@@ -3,17 +3,26 @@
 from __future__ import annotations
 
 import typing
-from pathlib import Path
 
-from striqt.analysis import CaptureBase, io, simulated_awgn
+from striqt.analysis import CaptureBase, simulated_awgn
 
 from .. import specs, util
-from . import base, null
+from . import base
 
 if typing.TYPE_CHECKING:
     import numpy as np
 else:
     np = util.lazy_import('numpy')
+
+
+class FunctionSourceSpec(specs.SourceSpec, kw_only=True, frozen=True, **specs.spec_kws):
+    # make these configurable, to support matching hardware for warmup sweeps
+    num_rx_ports: int
+    stream_all_rx_ports: bool = False
+
+
+_TS = typing.TypeVar('_TS', bound=FunctionSourceSpec)
+_TC = typing.TypeVar('_TC', bound=specs.CaptureSpec)
 
 
 def lo_shift_tone(inds, radio: base.SourceBase, xp, lo_offset=None):
@@ -24,7 +33,7 @@ def lo_shift_tone(inds, radio: base.SourceBase, xp, lo_offset=None):
     return xp.exp(phase_scale * inds).astype('complex64')
 
 
-class SingleToneCapture(
+class SingleToneCaptureSpec(
     specs.CaptureSpec,
     forbid_unknown_fields=True,
     frozen=True,
@@ -39,7 +48,7 @@ class SingleToneCapture(
     ] = None
 
 
-class DiracDeltaCapture(
+class DiracDeltaCaptureSpec(
     specs.CaptureSpec,
     forbid_unknown_fields=True,
     frozen=True,
@@ -50,15 +59,13 @@ class DiracDeltaCapture(
         float, specs.meta('pulse start time relative to the start of the waveform', 's')
     ] = 0
 
-    power: typing.Optional[
-        specs.Annotated[
+    power: specs.Annotated[
             float,
             specs.meta('instantaneous power level of the impulse function', 'dB', gt=0),
-        ]
-    ] = 0
+        ] = 0
 
 
-class SawtoothCapture(
+class SawtoothCaptureSpec(
     specs.CaptureSpec,
     forbid_unknown_fields=True,
     frozen=True,
@@ -75,7 +82,7 @@ class SawtoothCapture(
     ] = 1
 
 
-class NoiseCapture(
+class NoiseCaptureSpec(
     specs.CaptureSpec,
     forbid_unknown_fields=True,
     frozen=True,
@@ -85,10 +92,6 @@ class NoiseCapture(
     power_spectral_density: specs.Annotated[
         float, specs.meta('noise total channel power', 'mW/Hz', ge=0)
     ] = 1e-17
-
-
-_TS = typing.TypeVar('_TS', bound=specs.NullSourceSpec)
-_TC = typing.TypeVar('_TC', bound=specs.CaptureSpec)
 
 
 class TestSourceBase(base.VirtualSourceBase[_TS, _TC]):
@@ -130,7 +133,7 @@ class TestSourceBase(base.VirtualSourceBase[_TS, _TC]):
         self._sync_time_ns = round(1_000_000_000 * self._samples_elapsed)
 
 
-class SingleToneSource(TestSourceBase[specs.NullSourceSpec, SingleToneCapture]):
+class SingleToneSource(TestSourceBase[FunctionSourceSpec, SingleToneCaptureSpec]):
     def get_waveform(
         self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
     ):
@@ -159,13 +162,14 @@ class SingleToneSource(TestSourceBase[specs.NullSourceSpec, SingleToneCapture]):
         return ret
 
 
-class DiracDeltaSource(TestSourceBase):
+class DiracDeltaSource(TestSourceBase[FunctionSourceSpec, DiracDeltaCaptureSpec]):
     def get_waveform(
         self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
     ):
+        fs = self.get_resampler()['fs_sdr']
         capture = self.capture_spec
 
-        abs_pulse_index = round(capture.time * capture.backend_sample_rate)
+        abs_pulse_index = round(capture.time * fs)
         rel_pulse_index = abs_pulse_index - offset
 
         ret = xp.zeros(count, dtype=self.__setup__.transport_dtype)
@@ -176,7 +180,7 @@ class DiracDeltaSource(TestSourceBase):
         return ret[np.newaxis,]
 
 
-class SawtoothSource(TestSourceBase[specs.NullSourceSpec, SawtoothCapture]):
+class SawtoothSource(TestSourceBase[FunctionSourceSpec, SawtoothCaptureSpec]):
     def get_waveform(
         self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
     ):
@@ -191,7 +195,7 @@ class SawtoothSource(TestSourceBase[specs.NullSourceSpec, SawtoothCapture]):
         return ret
 
 
-class NoiseSource(TestSourceBase[specs.NullSourceSpec, NoiseCapture]):
+class NoiseSource(TestSourceBase[FunctionSourceSpec, NoiseCaptureSpec]):
     def get_waveform(
         self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
     ):
