@@ -771,7 +771,7 @@ def _get_aligner_pad_size(
 
 def _get_next_fast_len(n):
     try:
-        from cupyx import scipy # type: ignore
+        from cupyx import scipy  # type: ignore
     except ModuleNotFoundError:
         import scipy
 
@@ -870,7 +870,7 @@ def alloc_empty_iq(
     if radio.__setup__.array_backend == 'cupy':
         try:
             util.configure_cupy()
-            from cupyx import empty_pinned as empty # type: ignore
+            from cupyx import empty_pinned as empty  # type: ignore
         except ModuleNotFoundError as ex:
             raise RuntimeError(
                 'could not import the configured array backend, "cupy"'

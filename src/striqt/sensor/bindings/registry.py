@@ -9,7 +9,7 @@ from ..lib import specs as _specs
 from . import deepwave
 from ._util import SensorBinding, bind_sensor
 
-#%% Synthetic data sources for testing, warmup, and post-analysis
+# %% Synthetic data sources for testing, warmup, and post-analysis
 warmup = bind_sensor(
     'warmup',
     SensorBinding(
@@ -19,7 +19,7 @@ warmup = bind_sensor(
     ),
 )
 
-#%% File sources
+# %% File sources
 file = bind_sensor(
     'file',
     SensorBinding(

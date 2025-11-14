@@ -33,6 +33,13 @@ def lo_shift_tone(inds, radio: base.SourceBase, xp, lo_offset=None):
     return xp.exp(phase_scale * inds).astype('complex64')
 
 
+FrequencyOffsetType = specs.Annotated[
+    float, specs.meta('Tone frequency offset from center_frequency', 'Hz')
+]
+
+SNRType = specs.Annotated[float, specs.meta('SNR with added noise ', 'dB')]
+
+
 class SingleToneCaptureSpec(
     specs.CaptureSpec,
     forbid_unknown_fields=True,
@@ -40,12 +47,17 @@ class SingleToneCaptureSpec(
     cache_hash=True,
     kw_only=True,
 ):
-    frequency_offset: specs.Annotated[
-        float, specs.meta('Input tone frequency offset to band center', 'Hz')
-    ] = 0
-    snr: typing.Optional[
-        specs.Annotated[float, specs.meta('SNR with added noise ', 'dB')]
-    ] = None
+    frequency_offset: FrequencyOffsetType = 0
+    snr: typing.Optional[SNRType] = None
+
+
+PowerType = specs.Annotated[
+    float,
+    specs.meta('peak power level', 'dB', gt=0),
+]
+TimeType = specs.Annotated[
+    float, specs.meta('pulse start time relative to the start of the waveform', 's')
+]
 
 
 class DiracDeltaCaptureSpec(
@@ -55,14 +67,9 @@ class DiracDeltaCaptureSpec(
     cache_hash=True,
     kw_only=True,
 ):
-    time: specs.Annotated[
-        float, specs.meta('pulse start time relative to the start of the waveform', 's')
-    ] = 0
+    time: TimeType = 0
 
-    power: specs.Annotated[
-            float,
-            specs.meta('instantaneous power level of the impulse function', 'dB', gt=0),
-        ] = 0
+    power: PowerType = 0
 
 
 class SawtoothCaptureSpec(

@@ -16,7 +16,7 @@ from .file import (
     ZarrFileSourceSpec,
     ZarrIQSource,
     FileSourceSpec,
-    TDMSSourceSpec
+    TDMSSourceSpec,
 )
 
 from .function import (
@@ -28,5 +28,5 @@ from .function import (
     SawtoothCaptureSpec,
     DiracDeltaCaptureSpec,
     FunctionSourceSpec,
-    SingleToneCaptureSpec
+    SingleToneCaptureSpec,
 )

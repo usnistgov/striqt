@@ -146,6 +146,7 @@ def isroundmod(value: float | np.ndarray, div, atol=1e-6) -> bool:
 def is_cupy_array(x: object) -> typing_extensions.TypeIs['cp.ndarray']:
     return array_api_compat.is_cupy_array(x)
 
+
 class Domain(Enum):
     TIME = 'time'
     FREQUENCY = 'frequency'
@@ -193,7 +194,7 @@ class NonStreamContext:
 def array_stream(obj: ArrayType, null=False, non_blocking=False, ptds=False):
     """returns a cupy.Stream (or a do-nothing stand in) object as appropriate for obj"""
     if is_cupy_array(obj) and cp is not None:
-        return cp.cuda.Stream(null=null, non_blocking=non_blocking, ptds=ptds) # type: ignore
+        return cp.cuda.Stream(null=null, non_blocking=non_blocking, ptds=ptds)  # type: ignore
     else:
         return NonStreamContext()
 
@@ -205,7 +206,7 @@ def array_namespace(a, use_compat=False) -> ModuleType:
         pass
 
     try:
-        import mlx.core as mx # type: ignore
+        import mlx.core as mx  # type: ignore
 
         if isinstance(a, mx.array):
             return mx
@@ -228,7 +229,9 @@ def pad_along_axis(a, pad_width: list, axis=0, *args, **kws):
 
 
 @lru_cache()
-def sliding_window_output_shape(array_shape: tuple[int, ...] | int, window_shape: tuple, axis):
+def sliding_window_output_shape(
+    array_shape: tuple[int, ...] | int, window_shape: tuple, axis
+):
     """return the shape of the output of sliding_window_view, for example
     to pre-create an output buffer."""
     try:
@@ -251,7 +254,7 @@ def sliding_window_output_shape(array_shape: tuple[int, ...] | int, window_shape
                 f'Since axis is `None`, must provide window_shape for all dimensions of `x`; got {len(window_shape)} window_shape elements and `x.ndim` is {ndim}.'
             )
     else:
-        axis = stride_tricks.normalize_axis_tuple(axis, ndim, allow_duplicate=True) # type: ignore
+        axis = stride_tricks.normalize_axis_tuple(axis, ndim, allow_duplicate=True)  # type: ignore
         if len(window_shape) != len(axis):
             raise ValueError(
                 f'Must provide matching length window_shape and axis; got {len(window_shape)} window_shape elements and {len(axis)} axes elements.'
@@ -491,7 +494,7 @@ def axis_slice(a, start, stop=None, step=None, axis=-1):
 
 
 def histogram_last_axis(
-    x: ArrayType, bins: int | ArrayType, range: tuple|None = None
+    x: ArrayType, bins: int | ArrayType, range: tuple | None = None
 ) -> ArrayType:
     """computes a histogram along the last axis of an input array.
 
@@ -518,7 +521,7 @@ def histogram_last_axis(
     else:
         bins = xp.asarray(bins)
 
-    size = bins.size # type: ignore
+    size = bins.size  # type: ignore
     flat = x.reshape(-1, hist_size)
     idx = xp.searchsorted(bins, flat, 'right') - 1
 
@@ -541,7 +544,9 @@ def histogram_last_axis(
 
 
 @lru_cache()
-def dtype_change_float(dtype, float_basis_dtype) -> type[np.complexfloating] | type[np.floating]:
+def dtype_change_float(
+    dtype, float_basis_dtype
+) -> type[np.complexfloating] | type[np.floating]:
     """return a complex or float dtype similar to `dtype`, but
     with a float backing with size matching `float_basis_dtype`.
 
@@ -619,7 +624,7 @@ def grouped_views_along_axis(
 
 def sync_if_cupy(x: ArrayType):
     if is_cupy_array(x) and cp is not None:
-        stream = cp.cuda.get_current_stream() # type: ignore
+        stream = cp.cuda.get_current_stream()  # type: ignore
         stream.synchronize()
 
 
@@ -627,8 +632,8 @@ def sync_if_cupy(x: ArrayType):
 def configure_cupy():
     if cp is not None:
         # the FFT plan sets up large caches that don't help us
-        cp.fft.config.get_plan_cache().set_size(0) # type: ignore
-        cp.cuda.set_pinned_memory_allocator(None) # type: ignore
+        cp.fft.config.get_plan_cache().set_size(0)  # type: ignore
+        cp.cuda.set_pinned_memory_allocator(None)  # type: ignore
 
 
 def pinned_array_as_cupy(x, stream=None):
@@ -640,7 +645,7 @@ def pinned_array_as_cupy(x, stream=None):
 
 def free_cupy_mempool():
     if cp is not None:
-        mempool = cp.get_default_memory_pool() # type: ignore
+        mempool = cp.get_default_memory_pool()  # type: ignore
         if mempool is not None:
             mempool.free_all_blocks()
 
@@ -659,7 +664,7 @@ def set_cuda_mem_limit(fraction=0.75):
     if cp is None:
         return
 
-    cp.get_default_memory_pool().set_limit(fraction=fraction) # type: ignore
+    cp.get_default_memory_pool().set_limit(fraction=fraction)  # type: ignore
 
     # Alternative: select an absolute amount of memory
     #
