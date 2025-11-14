@@ -93,7 +93,7 @@ def run_warmup(input_spec: specs.SweepSpec[specs._TS, specs._TC]):
     if len(warmup_spec.captures) == 0:
         return
 
-    source = registry.Warmup.source(warmup_spec.source, analysis=warmup_spec.analysis)
+    source = registry.warmup.source(warmup_spec.source, analysis=warmup_spec.analysis)
 
     with source:
         resources = sweeps.Resources(source=source, sweep_spec=warmup_spec)

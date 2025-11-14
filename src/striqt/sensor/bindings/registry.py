@@ -10,8 +10,8 @@ from . import deepwave
 from ._util import SensorBinding, bind_sensor
 
 #%% Synthetic data sources for testing, warmup, and post-analysis
-Warmup = bind_sensor(
-    'Warmup',
+warmup = bind_sensor(
+    'warmup',
     SensorBinding(
         source_spec=_specs.NullSourceSpec,
         capture_spec=_specs.CaptureSpec,
@@ -20,8 +20,8 @@ Warmup = bind_sensor(
 )
 
 #%% File sources
-File = bind_sensor(
-    'File',
+file = bind_sensor(
+    'file',
     SensorBinding(
         source_spec=_sources.FileSourceSpec,
         capture_spec=_specs.FileCaptureSpec,
@@ -29,8 +29,8 @@ File = bind_sensor(
     ),
 )
 
-TDMSFile = bind_sensor(
-    'TDMSFile',
+tdms_file = bind_sensor(
+    'tdms_file',
     SensorBinding(
         source_spec=_sources.TDMSSourceSpec,
         capture_spec=_specs.FileCaptureSpec,
@@ -38,8 +38,8 @@ TDMSFile = bind_sensor(
     ),
 )
 
-ZarrIQFile = bind_sensor(
-    'ZarrIQFile',
+zarr_iq = bind_sensor(
+    'zarr_iq',
     SensorBinding(
         source_spec=_sources.ZarrFileSourceSpec,
         capture_spec=_specs.FileCaptureSpec,
@@ -48,8 +48,8 @@ ZarrIQFile = bind_sensor(
 )
 
 # %% Function generator sources
-Noise = bind_sensor(
-    'Noise',
+noise = bind_sensor(
+    'noise',
     SensorBinding(
         source_spec=_sources.FunctionSourceSpec,
         capture_spec=_sources.NoiseCaptureSpec,
@@ -57,8 +57,8 @@ Noise = bind_sensor(
     ),
 )
 
-DiractDeltaFunction = bind_sensor(
-    'DiracDeltaFunction',
+dirac_delta = bind_sensor(
+    'dirac_delta',
     SensorBinding(
         source_spec=_sources.FunctionSourceSpec,
         capture_spec=_sources.DiracDeltaCaptureSpec,
@@ -66,8 +66,8 @@ DiractDeltaFunction = bind_sensor(
     ),
 )
 
-SingleToneFunction = bind_sensor(
-    'SingleToneFunction',
+single_tone = bind_sensor(
+    'single_tone',
     SensorBinding(
         source_spec=_sources.FunctionSourceSpec,
         capture_spec=_sources.SingleToneCaptureSpec,
@@ -75,8 +75,8 @@ SingleToneFunction = bind_sensor(
     ),
 )
 
-SawtoothFunction = bind_sensor(
-    'SawtoothFunction',
+sawtooth = bind_sensor(
+    'sawtooth',
     SensorBinding(
         source_spec=_sources.FunctionSourceSpec,
         capture_spec=_sources.SawtoothCaptureSpec,
@@ -86,8 +86,8 @@ SawtoothFunction = bind_sensor(
 
 
 # %% Hardware data sources
-Air7101B = bind_sensor(
-    'Air7101B',
+air7101b = bind_sensor(
+    'air7101b',
     SensorBinding(
         source_spec=deepwave.Air7101BSourceSpec,
         capture_spec=_specs.SoapyCaptureSpec,
@@ -95,8 +95,8 @@ Air7101B = bind_sensor(
     ),
 )
 
-Air7201B = bind_sensor(
-    'Air7201B',
+air7201b = bind_sensor(
+    'air7201b',
     SensorBinding(
         source_spec=deepwave.Air7201BSourceSpec,
         capture_spec=_specs.SoapyCaptureSpec,
@@ -104,8 +104,8 @@ Air7201B = bind_sensor(
     ),
 )
 
-Air8201b = bind_sensor(
-    'Air8201B',
+air8201b = bind_sensor(
+    'air8201b',
     SensorBinding(
         source_spec=deepwave.Air8201BSourceSpec,
         capture_spec=_specs.SoapyCaptureSpec,

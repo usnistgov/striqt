@@ -110,7 +110,7 @@ def design_warmup_sweep(
         num_rx_ports=num_rx_ports, calibration=None, reuse_iq=False
     )
 
-    class WarmupSweep(registry.Warmup.sweep_spec):  # type: ignore
+    class WarmupSweep(registry.warmup.sweep_spec):  # type: ignore
         def get_captures(self, looped=True):
             # override any capture auto-generating logic
             return specs.SweepSpec.get_captures(self, looped=False)
