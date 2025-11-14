@@ -23,10 +23,10 @@ if typing.TYPE_CHECKING:
 
     if hasattr(zarr.storage, 'Store'):
         # zarr 2.x
-        StoreType = typing.TypeVar('StoreType', bound=zarr.storage.Store)
+        StoreType = typing.TypeVar('StoreType', bound=zarr.storage.Store)  # type: ignore
     else:
         # zarr 3.x
-        StoreType = typing.TypeVar('StoreType', bound=zarr.abc.store.Store)
+        StoreType = typing.TypeVar('StoreType', bound=zarr.abc.store.Store)  # type: ignore
 
 else:
     numcodecs = util.lazy_import('numcodecs')
@@ -141,7 +141,7 @@ def _build_encodings_zarr_v3(
 def _build_encodings_zarr_v2(
     data, registry: register.MeasurementRegistry, compression=True
 ):
-    if isinstance(compression, numcodecs.abc.Codec):
+    if isinstance(compression, numcodecs.abc.Codec):  # type: ignore
         compressor = compression
     elif compression:
         compressor = numcodecs.Blosc('lz4', clevel=3)
@@ -167,19 +167,21 @@ def open_store(
     import zarr.storage
 
     if _zarr_version() < (3, 0, 0):
-        StoreBase = zarr.storage.Store
-        DirectoryStore = zarr.storage.DirectoryStore
+        StoreBase = zarr.storage.Store  # type: ignore
+        DirectoryStore = zarr.storage.DirectoryStore  # type: ignore
     else:
-        StoreBase = zarr.abc.store.Store
-        DirectoryStore = zarr.storage.LocalStore
+        StoreBase = zarr.abc.store.Store  # type: ignore
+        DirectoryStore = zarr.storage.LocalStore  # type: ignore
 
     if isinstance(path, StoreBase):
         store = path
     elif not isinstance(path, (str, Path)):
         raise ValueError('must pass a string or Path savefile or zarr Store')
     elif str(path).endswith('.zip'):
-        if mode == 'a' and path.exists():
+        if mode == 'a' and Path(path).exists():
             raise IOError('zip store does support appends')
+        else:
+            assert mode in ('r', 'w', 'a')
         store = zarr.storage.ZipStore(path, mode=mode, compression=0)
     else:
         store = DirectoryStore(path)
@@ -193,7 +195,7 @@ def dump(
     *,
     append_dim: str = 'capture',
     compression: bool = True,
-    zarr_format: str | typing.Literal[2] | typing.Literal[3] = 'auto',
+    zarr_format: str | typing.Literal[2, 3] = 'auto',
     compute: bool = True,
     chunk_bytes: int | typing.Literal['auto'] = 50_000_000,
     max_threads: int | None = None,
@@ -296,14 +298,14 @@ class _YAMLIncludeConstructor:
         self._lock.release()
 
     def get_include_path(self, s: str):
-        s = Path(s)
-        if s.is_absolute():
-            path = s
+        p = Path(s)
+        if p.is_absolute():
+            pass
         else:
-            path = self.nested_paths[-1].parent / s
-        self.nested_paths.append(path)
+            p = self.nested_paths[-1].parent / p
+        self.nested_paths.append(p)
 
-        return path
+        return p
 
     def pop_include_path(self):
         self.nested_paths.pop()
@@ -368,7 +370,7 @@ class _FileStreamBase(_FileStreamProtocol):
         skip_samples=0,
         dtype='complex64',
         xp=np,
-        **capture_dict: dict[str],
+        **capture_dict: typing.Any,
     ):
         self._num_rx_ports = num_rx_ports
         self._leftover = None
@@ -409,7 +411,7 @@ class MATNewFileStream(_FileStreamBase):
             'xp': xp,
         }
 
-        import h5py  # noqa
+        import h5py  # noqa # type: ignore
 
         self._fd = h5py.File(path, 'r')
         self._input_dtype = input_dtype
@@ -462,7 +464,10 @@ class MATNewFileStream(_FileStreamBase):
             return iq
 
         self._leftover = iq[:, count:]
-        self._position += count
+        if self._position is None:
+            self._position = count
+        else:
+            self._position += count
         return iq[:, :count]
 
     def seek(self, pos):
@@ -562,7 +567,10 @@ class MATLegacyFileStream(_FileStreamBase):
             return iq
 
         self._leftover = iq[:, count:]
-        self._position += count
+        if self._position is None:
+            self._position = count
+        else:
+            self._position += count
         return iq[:, :count]
 
     def seek(self, pos):
@@ -647,7 +655,10 @@ class NPYFileStream(_FileStreamBase):
             return iq
 
         self._leftover = iq[:, count:]
-        self._position += count
+        if self._position is None:
+            self._position = count
+        else:
+            self._position += count
         return iq[:, :count]
 
     def seek(self, pos):
@@ -673,7 +684,7 @@ class TDMSFileStream(_FileStreamBase):
     ):
         from nptdms import TdmsFile  # noqa
 
-        self._fd = TdmsFile.read(self.path)
+        self._fd = TdmsFile.read(path)
         self._header_fd, self._iq_fd = self._fd.groups()
         self._position = 0
 
@@ -708,13 +719,11 @@ class TDMSFileStream(_FileStreamBase):
         iq[offset * 2 :: 2] = xp.asarray(i[offset : count + offset])
         iq[1 + offset * 2 :: 2] = xp.asarray(q[offset : count + offset])
 
-        float_dtype = np.finfo(np.dtype(self.dtype)).dtype
-
         self._position += count
 
-        iq = (iq * float_dtype(scale)).view(self.dtype).copy()
+        iq = (iq * float_dtype(scale)).view(self.dtype)  # type: ignore
 
-        return iq[np.newaxis, :]
+        return iq[np.newaxis, :].copy()
 
     def get_capture_fields(self):
         fs = self._header_fd['IQ_samples_per_second'][0]

@@ -195,10 +195,11 @@ class FileCaptureSpec(CaptureSpec, frozen=True, kw_only=True, **spec_kws):
     """Capture specification read from a file, with support for None sentinels"""
 
     # RF and leveling
-    center_frequency: CenterFrequencyType = float('nan')
-    port: PortType = 0
-    gain: GainType = float('nan')
-    backend_sample_rate: float = float('nan')
+    backend_sample_rate: BackendSampleRateType | None = None
+
+    def __post_init__(self):
+        if self.backend_sample_rate is not None:
+            raise TypeError('backend_sample_rate is fixed by the file source')
 
 
 ClockSourceType = Annotated[

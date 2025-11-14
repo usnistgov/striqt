@@ -58,7 +58,6 @@ else:
     except ImportError:
         cp = None
 
-types.
 
 def binned_mean(
     x: ArrayType,
@@ -355,7 +354,7 @@ def sliding_window_view(x, window_shape, axis=None, *, subok=False, writeable=Fa
     x = xp.array(x, copy=False, subok=subok)
 
     out_shape = sliding_window_output_shape(x.shape, window_shape, axis)
-    axis = stride_tricks.normalize_axis_tuple(axis, x.ndim) # type: ignore
+    axis = stride_tricks.normalize_axis_tuple(axis, x.ndim)  # type: ignore
     out_strides = x.strides + tuple(x.strides[ax] for ax in axis)
 
     return xp.lib.stride_tricks.as_strided(x, strides=out_strides, shape=out_shape)
@@ -657,9 +656,9 @@ def except_on_low_memory(threshold_bytes=500_000_000):
 def set_cuda_mem_limit(fraction=0.75):
     if cp is None:
         return
-    
+
     cp.get_default_memory_pool().set_limit(fraction=fraction)
-    
+
     # Alternative: select an absolute amount of memory
     #
     # import psutil

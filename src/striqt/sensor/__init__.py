@@ -6,10 +6,9 @@ from .lib.io import dump, load, open_store, read_yaml_sweep
 from .lib.iq_corrections import resampling_correction
 from .lib.sources import (
     FileSource,
-    NullSource,
+    WarmupSource,
     SourceBase,
     ZarrIQSource,
-    design_capture_resampler,
 )
 from .lib.specs import CaptureSpec, Description, SourceSpec, SweepSpec
 from .lib.sweeps import iter_sweep

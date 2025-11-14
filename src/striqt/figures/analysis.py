@@ -534,7 +534,7 @@ def plot_cyclic_channel_power(
 
 
 def label_axis(
-    which_axis: typing.Literal['x'] | typing.Literal['y'] | typing.Literal['colorbar'],
+    which_axis: typing.Literal['x', 'y', 'colorbar'],
     ax_data: typing.Union[xr.DataArray, xr.Dataset],
     *,
     coord_name: typing.Optional['xr.Coordinates'] = None,

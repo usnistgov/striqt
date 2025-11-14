@@ -388,12 +388,7 @@ class ResamplerDesign(typing.TypedDict):
     fs: float
 
 
-ShiftType = (
-    typing.Literal['left']
-    | typing.Literal['right']
-    | typing.Literal['none']
-    | typing.Literal[False]
-)
+ShiftType = typing.Literal['left', 'right', 'none', False]
 
 
 @lru_cache()
@@ -1417,7 +1412,7 @@ def resample(
     num,
     axis: int = 0,
     window: str | tuple[str, float] | None = None,
-    domain: typing.Literal['time'] | typing.Literal['frequency'] = 'time',
+    domain: typing.Literal['time', 'frequency'] = 'time',
     overwrite_x=False,
     scale: ArrayType | float = 1,
     shift: float = 0,

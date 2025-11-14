@@ -593,7 +593,7 @@ def _select_enter_or_call(
     candidate_objs: typing.Sequence[
         tuple[str | None, _ContextManagerType | typing.Callable]
     ],
-) -> typing.Literal['context'] | typing.Literal['callable'] | None:
+) -> typing.Literal['context', 'callable'] | None:
     """ensure candidates are either (1) all context managers
     or (2) all callables. Decide what type of operation to proceed with.
     """

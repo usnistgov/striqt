@@ -8,7 +8,6 @@ from .sources import (
     OptionalData,
     SourceBase,
     base,
-    design_capture_resampler,
 )
 
 if typing.TYPE_CHECKING:
@@ -118,10 +117,10 @@ def resampling_correction(
     else:
         extra_data = OptionalData()
 
-    design = design_capture_resampler(radio.setup_spec.base_clock_rate, capture)
-    fs = design['fs_sdr']
+    resampler = radio.get_resampler()
+    fs = resampler['fs_sdr']
 
-    needs_resample = base.needs_resample(design, capture)
+    needs_resample = base.needs_resample(resampler, capture)
 
     # apply the filter here and ensure we're working with a copy if needed
     if not USE_OARESAMPLE and np.isfinite(capture.analysis_bandwidth):
@@ -149,18 +148,18 @@ def resampling_correction(
         # this is broken. don't use it yet.
         iq = iqwaveform.fourier.oaresample(
             iq,
-            up=design['nfft_out'],
-            down=design['nfft'],
+            up=resampler['nfft_out'],
+            down=resampler['nfft'],
             fs=fs,
-            window=design['window'],
+            window=resampler['window'],
             overwrite_x=overwrite_x,
             axis=axis,
-            frequency_shift=design['lo_offset'],
+            frequency_shift=resampler['lo_offset'],
             filter_bandwidth=capture.analysis_bandwidth,
             transition_bandwidth=250e3,
             scale=1 if vscale is None else vscale,
         )
-        scale = design['nfft_out'] / design['nfft']
+        scale = resampler['nfft_out'] / resampler['nfft']
         oapad = base._get_oaresample_pad(radio.setup_spec.base_clock_rate, capture)
         lag_pad = base._get_aligner_pad_size(
             radio.setup_spec.base_clock_rate, capture, radio._aligner
@@ -168,7 +167,7 @@ def resampling_correction(
         size_out = round(capture.duration * capture.sample_rate) + round(
             (oapad[1] + lag_pad) * scale
         )
-        offset = design['nfft_out']
+        offset = resampler['nfft_out']
 
         assert size_out + offset <= iq.shape[axis]
         iq = iqwaveform.util.axis_slice(iq, offset, offset + size_out, axis=axis)

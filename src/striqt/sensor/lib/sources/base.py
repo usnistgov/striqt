@@ -13,6 +13,7 @@ from striqt.analysis import dataarrays, registry
 from striqt.analysis.lib import register
 from striqt.analysis.lib.specs import Analysis
 from striqt.analysis.lib.util import pinned_array_as_cupy
+from striqt.waveform.fourier import ResamplerDesign
 
 from .. import captures, specs, util
 
@@ -29,9 +30,7 @@ else:
     np = util.lazy_import('numpy')
 
 
-OnOverflowType = (
-    typing.Literal['ignore'] | typing.Literal['except'] | typing.Literal['log']
-)
+OnOverflowType = typing.Literal['ignore', 'except', 'log']
 
 
 FILTER_SIZE = 4001
@@ -50,7 +49,7 @@ class OptionalData(typing.TypedDict, total=False):
 
 @dataclasses.dataclass(kw_only=True)
 class AcquiredIQ(dataarrays.AcquiredIQ):
-    info: specs.AcquisitionInfo
+    info: specs.SpecBase
     extra_data: OptionalData = OptionalData()
 
 
@@ -226,6 +225,8 @@ class HasCaptureType(typing.Protocol[_TC]):
 
     def _prepare_capture(self, capture: _TC) -> _TC | None: ...
 
+    def get_resampler(self, capture: _TC | None = None) -> ResamplerDesign: ...
+
 
 class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
     _buffers: _ReceiveBuffers
@@ -302,12 +303,6 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
     def setup_spec(self) -> _TS:
         return self.__setup__
 
-    @property
-    def _resampler(self) -> ResamplerDesign:
-        if self._capture is None:
-            raise RuntimeError('arm before designing the resampler')
-        return design_capture_resampler(self.__setup__.base_clock_rate, self._capture)
-
     @util.stopwatch('arm', 'source', threshold=10e-3)
     def arm(self, capture, *, force_time_sync: bool = False, **capture_kws):
         """stop the stream, apply a capture configuration, and start it"""
@@ -346,7 +341,7 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
         # to include with the returned waveform
         included_holdoff = dsp_pad_before
 
-        fs = self._resampler['fs_sdr']
+        fs = self.get_resampler()['fs_sdr']
 
         # the number of valid samples to return per channel
         output_count = get_channel_read_buffer_count(self, include_holdoff=False)
@@ -450,7 +445,7 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
         info = specs.AcquisitionInfo(
             sweep_time=self._sweep_time,
             start_time=ts,
-            backend_sample_rate=self._resampler['fs_sdr'],
+            backend_sample_rate=self.get_resampler()['fs_sdr'],
             source_id=self.id,
         )
 
@@ -504,6 +499,62 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
             raise TypeError('invalid array_backend argument')
 
 
+class VirtualSourceBase(SourceBase[_TS, _TC]):
+    _samples_elapsed = 0
+
+    def reset_sample_counter(self, value=0):
+        self._sync_time_source()
+        self._samples_elapsed = value
+        self._sample_start_index = value
+
+    def _apply_setup(self, spec):
+        self.reset_sample_counter()
+
+    def _prepare_capture(self, capture):
+        self.reset_sample_counter()
+
+    def _read_stream(
+        self,
+        buffers,
+        offset,
+        count,
+        timeout_sec=None,
+        *,
+        on_overflow: OnOverflowType = 'except',
+    ):
+        assert self._capture is not None
+
+        if not isinstance(self._capture.port, tuple):
+            ports = (self._capture.port,)
+        else:
+            ports = self._capture.port
+
+        for port, buf in zip(ports, buffers):
+            values = self.get_waveform(
+                count,
+                self._samples_elapsed,
+                port=port,
+                xp=getattr(self, 'xp', np),
+            )
+            buf[offset : (offset + count)] = values
+
+        fs = float(self.get_resampler()['fs_sdr'])
+        sample_period_ns = 1_000_000_000 / fs
+        timestamp_ns = self._sync_time_ns + self._samples_elapsed * sample_period_ns
+
+        self._samples_elapsed += count
+
+        return count, round(timestamp_ns)
+
+    def get_waveform(
+        self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
+    ):
+        raise NotImplementedError
+
+    def _sync_time_source(self):
+        self._sync_time_ns = round(1_000_000_000 * self._samples_elapsed)
+
+
 def assert_open(radio: SourceBase):
     if not radio.is_open():
         raise RuntimeError('radio is not open')
@@ -518,7 +569,7 @@ def assert_armed(radio: SourceBase):
 def find_trigger_holdoff(
     radio: SourceBase, start_time_ns: int, dsp_pad_before: int = 0
 ):
-    sample_rate = radio._resampler['fs_sdr']
+    sample_rate = radio.get_resampler()['fs_sdr']
     min_holdoff = dsp_pad_before
 
     # transient holdoff if we've rearmed as indicated by the presence of carryover samples
@@ -793,7 +844,7 @@ def get_channel_read_buffer_count(source: SourceBase, include_holdoff=False) -> 
 
 
 @util.stopwatch(
-    'allocate acquisition buffer', 'source', threshold=5e-3, logger_level=logging.DEBUG
+    'allocate buffers', 'source', threshold=5e-3, logger_level=logging.DEBUG
 )
 def alloc_empty_iq(
     radio: SourceBase,

@@ -69,6 +69,7 @@ def concat_time_dim(datasets: list['xr.Dataset'], time_dim: str) -> 'xr.Dataset'
 def _msgspec_type_to_coord_info(type_: msgspec.inspect.Type) -> tuple[dict, typing.Any]:
     """returns an (attrs, default_value) pair for the given msgspec field type"""
     from msgspec import inspect as mi
+
     BUILTINS = {mi.FloatType: 0.0, mi.BoolType: False, mi.IntType: 0, mi.StrType: ''}
 
     if isinstance(type_, tuple(BUILTINS.keys())):
@@ -250,7 +251,7 @@ class AnalysisCaller:
                     'resample, filter, calibrate', logger_level=logging.DEBUG
                 ):
                     iq = iq_corrections.resampling_correction(
-                        iq.raw, capture, self.radio, overwrite_x=self._overwrite_x
+                        iq, capture, self.radio, overwrite_x=self._overwrite_x
                     )
 
             result = dataarrays.analyze_by_spec(iq, capture, self._eval_options)

@@ -9,7 +9,7 @@ _TS = typing.TypeVar('_TS', bound=specs.NullSourceSpec)
 _TC = typing.TypeVar('_TC', bound=specs.CaptureSpec)
 
 
-class NullSource(base.SourceBase[_TS, _TC]):
+class WarmupSource(base.SourceBase[_TS, _TC]):
     """emulate a radio with fake data"""
 
     _samples_elapsed = 0
@@ -40,10 +40,16 @@ class NullSource(base.SourceBase[_TS, _TC]):
     def _read_stream(
         self, buffers, offset, count, timeout_sec=None, *, on_overflow='except'
     ) -> tuple[int, int]:
-        fs = float(self._resampler['fs_sdr'])
+        fs = float(self.get_resampler()['fs_sdr'])
         sample_period_ns = 1_000_000_000 / fs
         timestamp_ns = self._sync_time_ns + self._samples_elapsed * sample_period_ns
 
         self._samples_elapsed += count
 
         return count, round(timestamp_ns)
+
+    def get_resampler(self, capture: _TC | None = None) -> base.ResamplerDesign:
+        if capture is None:
+            capture = self.capture_spec
+
+        return base.design_capture_resampler(self.__setup__.base_clock_rate, capture)

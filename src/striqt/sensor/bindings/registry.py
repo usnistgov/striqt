@@ -15,7 +15,7 @@ Warmup = bind_sensor(
     SensorBinding(
         source_spec=_specs.NullSourceSpec,
         capture_spec=_specs.CaptureSpec,
-        source=_sources.NullSource,
+        source=_sources.WarmupSource,
     ),
 )
 

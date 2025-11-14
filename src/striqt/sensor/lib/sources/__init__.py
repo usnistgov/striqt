@@ -1,4 +1,5 @@
-from . import base, null, testing
+from . import base, file, null
+
 from .base import (
     AcquiredIQ,
     OptionalData,
@@ -6,14 +7,19 @@ from .base import (
     design_capture_resampler,
     get_channel_read_buffer_count,
 )
-from .null import NullSource
-from .testing import (
-    DiracDeltaSource,
+
+from .null import WarmupSource
+
+from .file import (
     FileSource,
-    NoiseSource,
-    SawtoothSource,
-    SingleToneSource,
     TDMSFileSource,
     ZarrFileSourceSpec,
     ZarrIQSource,
+)
+
+from .function import (
+    DiracDeltaSource,
+    NoiseSource,
+    SawtoothSource,
+    SingleToneSource,
 )
