@@ -1,8 +1,8 @@
 from . import registry
 from ._util import (
-    bind_sensor,
     SensorBinding,
-    get_registry,
+    bind_sensor,
     get_binding,
+    get_registry,
     get_tagged_sweep_spec,
 )

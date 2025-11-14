@@ -2,9 +2,8 @@ import functools
 import time
 import typing
 
-from . import base
 from .. import specs
-
+from . import base
 
 _TS = typing.TypeVar('_TS', bound=specs.NullSourceSpec)
 _TC = typing.TypeVar('_TC', bound=specs.CaptureSpec)

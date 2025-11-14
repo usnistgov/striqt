@@ -1,10 +1,12 @@
 from __future__ import annotations
+
 import typing
 
 from . import specs, util
 
 if typing.TYPE_CHECKING:
     import numpy as np
+
     import striqt.waveform as iqwaveform
     from striqt.waveform._typing import ArrayType
 else:

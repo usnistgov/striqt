@@ -1,18 +1,18 @@
 from __future__ import annotations
+
 import dataclasses
+import typing
 from fractions import Fraction
 from math import ceil
-import typing
 
-from .shared import registry
 from ..lib import specs, util
-
-from . import shared, _spectrogram, _channel_power_histogram
+from . import _channel_power_histogram, _spectrogram, shared
 from ._cellular_cyclic_autocorrelation import link_direction, tdd_config_from_str
-
+from .shared import registry
 
 if typing.TYPE_CHECKING:
     import numpy as np
+
     import striqt.waveform as iqwaveform
     import striqt.waveform._typing
 else:

@@ -1,15 +1,12 @@
 from . import fourier, ofdm, power_analysis, util, windows
-
-figures = util.lazy_import('striqt.waveform.figures')
-
 from .fourier import (
-    design_fir_lpf,
     design_cola_resampler,
+    design_fir_lpf,
     equivalent_noise_bandwidth,
     fftfreq,
     find_window_param_from_enbw,
-    get_window,
     get_max_cupy_fft_chunk,
+    get_window,
     istft,
     oaconvolve,
     oaresample,
@@ -19,11 +16,10 @@ from .fourier import (
     stft,
     to_blocks,
 )
-
 from .power_analysis import (
-    dBtopow,
     dBlinmean,
     dBlinsum,
+    dBtopow,
     envtodB,
     envtopow,
     iq_to_bin_power,
@@ -31,5 +27,4 @@ from .power_analysis import (
     powtodB,
     sample_ccdf,
 )
-
 from .util import histogram_last_axis, isroundmod

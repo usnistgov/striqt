@@ -1,15 +1,16 @@
 """just a stub for now in case we change this in the future"""
 
 from __future__ import annotations
-from pathlib import Path
+
 import sys
 import typing
+from pathlib import Path
 
 from striqt import analysis
+from striqt.analysis.lib.io import decode_from_yaml_file, dump, load  # noqa: F401
 from striqt.analysis.lib.specs import convert_dict
-from striqt.analysis.lib.io import decode_from_yaml_file, load, dump  # noqa: F401
 
-from . import specs, util, captures
+from . import captures, specs, util
 
 if typing.TYPE_CHECKING:
     import numpy as np

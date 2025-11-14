@@ -1,16 +1,25 @@
 from __future__ import annotations
+
 import math
-import numpy as np
 import typing
 
-from .power_analysis import powtodB, dBtopow, envtodB, sample_ccdf, iq_to_bin_power
-from . import _typing
-from .util import lazy_import, lru_cache
+import numpy as np
+
+from ..waveform import _typing
+from ..waveform.power_analysis import (
+    dBtopow,
+    envtodB,
+    iq_to_bin_power,
+    powtodB,
+    sample_ccdf,
+)
+from ..waveform.util import lazy_import, lru_cache
 
 if typing.TYPE_CHECKING:
     import matplotlib as mpl
-    from scipy import stats
     import pandas as pd
+    from matplotlib import ticker
+    from scipy import stats
 else:
     mpl = lazy_import('matplotlib')
     pd = lazy_import('pandas')
@@ -46,7 +55,7 @@ def _log_tick_range(vlo, vhi, count, subs=(1.0,)):
     Compared to np.logspace, this results in the use of round(er) numbers
     that are not necessarily evenly spaced.
     """
-    locator = mpl.ticker.LogLocator(base=10.0, subs=subs, numticks=count)
+    locator = ticker.LogLocator(base=10.0, subs=subs, numticks=count)
     ticks = locator.tick_values(vlo, vhi)
     return ticks[(ticks >= vlo) & (ticks < vhi)]
 
@@ -58,13 +67,13 @@ def _linear_tick_range(vlo, vhi, count, steps=(1.0,)):
     Compared to np.linspace, this results in the use of round(er) numbers
     that are not necessarily evenly spaced.
     """
-    locator = mpl.ticker.MaxNLocator(nbins=count, steps=steps)
+    locator = ticker.MaxNLocator(nbins=count, steps=steps)
     ticks = locator.tick_values(vlo, vhi)
     return ticks[(ticks >= vlo) & (ticks < vhi)]
 
 
 @lru_cache()
-def _prune_ticks(ticks: tuple, count: int, prefer: tuple = tuple()) -> np.array:
+def _prune_ticks(ticks: tuple, count: int, prefer: tuple = tuple()) -> np.ndarray:
     """prune a sequence of tick marks to the specified count, attempting to spread
     them out evenly.
 
@@ -93,7 +102,7 @@ def _prune_ticks(ticks: tuple, count: int, prefer: tuple = tuple()) -> np.array:
     return ticks
 
 
-class GammaMaxNLocator(mpl.ticker.MaxNLocator):
+class GammaMaxNLocator(ticker.MaxNLocator):
     """The ticker locator for linearized gamma-distributed survival functions"""
 
     # avoid removing these quantiles when selecting ticks
@@ -126,12 +135,12 @@ class GammaMaxNLocator(mpl.ticker.MaxNLocator):
         self._minor = minor
         super().__init__(nbins)
 
-    def __call__(self):
+    def __call__(self) -> typing.Sequence[float]:
         dmin, dmax = self.axis.get_data_interval()
         vmin, vmax = self.axis.get_view_interval()
         return self.tick_values(max(vmin, dmin), min(vmax, dmax))
 
-    def tick_values(self, vmin, vmax):
+    def tick_values(self, vmin, vmax) -> typing.Sequence[float]:
         vmin, vmax = min((vmin, vmax)), max((vmin, vmax))
         vmin, vmax = self.limit_range_for_scale(vmin, vmax, 1e-9)
 
@@ -158,7 +167,7 @@ class GammaMaxNLocator(mpl.ticker.MaxNLocator):
         )
         tr_ticks = _prune_ticks(tuple(tr_ticks), self._nbins, tuple(tr_prefer))
         ticks = self._transform.inverted().transform(tr_ticks)
-        return np.sort(ticks)
+        return np.sort(ticks)  # type: ignore
 
     def get_transform(self):
         return self._transform

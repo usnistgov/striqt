@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import decimal
 import fractions
 import typing
@@ -6,12 +7,14 @@ import typing
 from ..lib import dataarrays, register, specs, util
 
 if typing.TYPE_CHECKING:
-    import striqt.waveform as iqwaveform
-    from striqt.waveform._typing import ArrayType
+    from types import ModuleType
+
+    import array_api_compat
     import numpy as np
     import pandas as pd
-    import array_api_compat
-    from types import ModuleType
+
+    import striqt.waveform as iqwaveform
+    from striqt.waveform._typing import ArrayType
 else:
     iqwaveform = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
@@ -183,6 +186,7 @@ def correlate_sync_sequence(
     R_shape[-1] = iq_bcast.shape[-1] + template_bcast.shape[-1] - 1
     R = xp.empty(tuple(R_shape), dtype='complex64')
 
+    # TODO: cell_id_split wasn't implemented restore it here
     for cell_id in range(template_bcast.shape[1]):
         R[:, cell_id] = iqwaveform.oaconvolve(
             iq_bcast[:, 0], template_bcast[:, cell_id], axes=2, mode='full'

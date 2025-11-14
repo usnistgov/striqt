@@ -1,27 +1,28 @@
 from __future__ import annotations
-from collections import defaultdict
+
 import dataclasses
 import functools
 import logging
-from math import ceil
-from threading import Event
 import types
 import typing
+from collections import defaultdict
+from math import ceil
+from threading import Event
+
+from striqt.analysis import dataarrays, registry
+from striqt.analysis.lib import register
+from striqt.analysis.lib.specs import Analysis
+from striqt.analysis.lib.util import pinned_array_as_cupy
 
 from .. import captures, specs, util
 
-from striqt.analysis import dataarrays, registry
-from striqt.analysis.lib.util import pinned_array_as_cupy
-from striqt.analysis.lib.specs import Analysis
-from striqt.analysis.lib import register
-
-
 if typing.TYPE_CHECKING:
+    import numpy as np
+    import pandas as pd
+
     import striqt.waveform as iqwaveform
     from striqt.waveform._typing import ArrayType
     from striqt.waveform.fourier import ResamplerDesign
-    import pandas as pd
-    import numpy as np
 else:
     iqwaveform = util.lazy_import('striqt.waveform')
     pd = util.lazy_import('pandas')

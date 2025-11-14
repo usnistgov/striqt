@@ -1,36 +1,35 @@
 from __future__ import annotations
+
 import functools
 import typing
-
-from os import cpu_count
 from math import ceil
+from os import cpu_count
 
 from . import power_analysis
-
 from .util import (
+    Domain,
     array_namespace,
     axis_index,
     axis_slice,
-    Domain,
     dtype_change_float,
     find_float_inds,
-    grouped_views_along_axis,
     get_input_domain,
+    grouped_views_along_axis,
+    is_cupy_array,
+    isroundmod,
     lazy_import,
     lru_cache,
     pad_along_axis,
     sliding_window_view,
     to_blocks,
-    isroundmod,
-    is_cupy_array,
 )
-
 from .windows import register_extra_windows
 
 if typing.TYPE_CHECKING:
     import numpy as np
     import scipy
     from scipy import signal
+
     from ._typing import ArrayType
 
 else:
@@ -1344,94 +1343,6 @@ def power_spectral_density(
     return out
 
 
-def channelize_power(
-    iq: ArrayType,
-    Ts: float,
-    fft_size_per_channel: int,
-    *,
-    analysis_bins_per_channel: int,
-    window: ArrayType,
-    fft_overlap_per_channel=0,
-    channel_count: int = 1,
-    axis=0,
-):
-    """Channelizes the input waveform and returns a time series of power in each channel.
-
-    The calculation is performed by transformation into the frequency domain. Power is
-    summed across the bins in the analysis bandwidth, ignoring those in bins outside
-    of the analysis bandwidth.
-
-    The total analysis bandwidth (i.e., covering all channels) is equal to
-    `(analysis_bins_per_channel/fft_size_per_channel)/Ts`,
-    occupying the center of the total sampling bandwidth. The bandwidth in each power bin is equal to
-    `(analysis_bins_per_channel/fft_size_per_channel)/Ts/channel_count`.
-
-    The time spacing of the power samples is equal to `Ts * fft_size_per_channel * channel_count`
-    if `fft_overlap_per_channel` is 0, otherwise, `Ts * fft_size_per_channel * channel_count / 2`.
-
-    Args:
-        iq: an input waveform or set of input waveforms, with time along axis 0
-
-        Ts: the sampling period (1/sampling_rate)
-
-        fft_size_per_channel: the size of the fft to use in each channel; total fft size is (channel_count * fft_size_per_channel)
-
-        channel_count: the number of channels to analyze
-
-        fft_overlap_per_channel: equal to 0 to disable overlapping windows, or to disable overlap, or fft_size_per_channel // 2)
-
-        analysis_bins_per_channel: the number of bins to keep in each channel
-
-        window: typing.Callable window function to use in the analysis
-
-        axis: the axis along which to perform the FFT (for now, require axis=0)
-
-    Raises:
-        NotImplementedError: if axis != 0
-
-        NotImplementedError: if fft_overlap_per_channel is not one of (0, fft_size_per_channel//2)
-
-        ValueError: if analysis_bins_per_channel > fft_size_per_channel
-
-        ValueError: if channel_count * (fft_size_per_channel - analysis_bins_per_channel) is not even
-    """
-    if axis != 0:
-        raise NotImplementedError('sorry, only axis=0 implemented for now')
-
-    if analysis_bins_per_channel > fft_size_per_channel:
-        raise ValueError('the number of analysis bins cannot be greater than FFT size')
-
-    freqs, times, X = stft(
-        iq,
-        fs=1.0 / Ts,
-        window=window,
-        nperseg=fft_size_per_channel * channel_count,
-        noverlap=fft_overlap_per_channel * channel_count,
-        norm='power',
-        axis=axis,
-    )
-
-    # extract only the bins inside the analysis bandwidth
-    skip_bins = channel_count * (fft_size_per_channel - analysis_bins_per_channel)
-    if skip_bins % 2 == 1:
-        raise ValueError('must pass an even number of bins to skip')
-    X = X[:, skip_bins // 2 : -skip_bins // 2]
-    freqs = freqs[skip_bins // 2 : -skip_bins // 2]
-
-    if channel_count == 1:
-        channel_power = power_analysis.envtopow(X).sum(axis=axis + 1)
-
-        return times, channel_power
-
-    else:
-        freqs = to_blocks(freqs, analysis_bins_per_channel)
-        X = to_blocks(X, analysis_bins_per_channel, axis=axis + 1)
-
-        channel_power = power_analysis.envtopow(X).sum(axis=axis + 2)
-
-        return freqs[0], times, channel_power
-
-
 def upfirdn(h, x, up=1, down=1, axis=-1, mode='constant', cval=0, overwrite_x=False):
     kws = dict(locals())
     del kws['overwrite_x']
@@ -1461,7 +1372,9 @@ def oaconvolve(x1, x2, mode='full', axes=-1):
         `scipy.signal.oaconvolve`
     """
     if is_cupy_array(x1):
-        from cupyx.scipy.signal import oaconvolve as func  # pyright: ignore[reportMissingImports]
+        from cupyx.scipy.signal import (
+            oaconvolve as func,  # pyright: ignore[reportMissingImports]
+        )
     else:
         from scipy.signal import oaconvolve as func
 

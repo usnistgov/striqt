@@ -5,23 +5,21 @@ from __future__ import annotations
 import contextlib
 import logging
 import os
-from pathlib import Path
 import sys
 import typing
+from pathlib import Path
 
+from ..bindings import get_binding, registry
 from . import (
     calibration,
     captures,
     io,
     peripherals,
     sinks,
-    sources,
     specs,
     sweeps,
     util,
 )
-from ..bindings import get_binding, registry
-
 
 if typing.TYPE_CHECKING:
     import striqt.waveform as iqwaveform
@@ -33,12 +31,7 @@ else:
     iqwaveform = util.lazy_import('striqt.waveform')
 
 
-class SweepSpecClasses(typing.NamedTuple):
-    sink_cls: typing.Type[sinks.SinkBase]
-    peripherals_cls: typing.Type[peripherals.PeripheralsBase]
-
-
-def _import_sink_type(
+def _import_sink_cls(
     spec: specs.SweepSpec[specs._TS, specs._TC],
 ) -> type[sinks.SinkBase]:
     import importlib
@@ -105,9 +98,7 @@ def run_warmup(input_spec: specs.SweepSpec[specs._TS, specs._TC]):
     with source:
         resources = sweeps.Resources(source=source, sweep_spec=warmup_spec)
 
-        warmup_iter = sweeps.iter_sweep(
-            resources, always_yield=True, calibration=None, quiet=True
-        )
+        warmup_iter = sweeps.iter_sweep(resources, always_yield=True, calibration=None)
 
         for _ in warmup_iter:
             pass
@@ -162,7 +153,7 @@ def open_sensor_from_spec(
         util.log_to_file(spec.sink.log_path, spec.sink.log_level)
 
     binding = get_binding(spec)
-    sink_cls = _import_sink_type(spec)
+    sink_cls = _import_sink_cls(spec)
 
     conns = ConnectionManager()
 

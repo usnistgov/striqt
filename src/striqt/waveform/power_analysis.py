@@ -2,9 +2,20 @@
 
 from __future__ import annotations
 
+import re
+import typing
+
+# import typing
+import warnings
+from functools import partial
+from numbers import Number
+from types import ModuleType
+from typing import Any, Optional, Union
+
+from . import _typing
 from .util import (
-    array_namespace,
     Domain,
+    array_namespace,
     float_dtype_like,
     get_input_domain,
     histogram_last_axis,
@@ -15,23 +26,13 @@ from .util import (
     to_blocks,
 )
 
-# import typing
-import warnings
-from numbers import Number
-from functools import partial
-import re
-import typing
-from typing import Union, Any, Optional
-from types import ModuleType
-
-from . import _typing
-
 if typing.TYPE_CHECKING:
-    from ._typing import ArrayType, ArrayLike
-    import pandas as pd
-    import numexpr as ne
-    import xarray as xr
     import array_api_compat.numpy as np
+    import numexpr as ne
+    import pandas as pd
+    import xarray as xr
+
+    from ._typing import ArrayLike, ArrayType
 
     _T = typing.TypeVar('_T')
 
@@ -526,23 +527,6 @@ def iq_to_cyclic_power(
             ret[detector][cycle_stat] = func(x, axis=axis)
 
     return ret
-
-
-def iq_to_frame_power(
-    iq: 'np.ndarray',
-    Ts: float,
-    detector_period: float,
-    frame_period: float,
-    truncate=False,
-) -> dict:
-    warnings.warn(
-        'iq_to_frame_power has been deprecated. use iq_to_cyclic_power instead'
-    )
-
-    cyclic_period = frame_period
-    del frame_period
-
-    return iq_to_cyclic_power(**locals())
 
 
 def sample_ccdf(

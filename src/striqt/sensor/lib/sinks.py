@@ -1,10 +1,12 @@
 from __future__ import annotations
-from pathlib import Path
+
 import typing
-from . import captures, datasets, io, specs, util
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 from striqt import analysis
+
+from . import captures, datasets, io, specs, util
 
 if typing.TYPE_CHECKING:
     import xarray as xr

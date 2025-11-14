@@ -1,6 +1,6 @@
 from ..lib.register import (
-    MeasurementRegistry,
     AlignmentSourceRegistry,
+    MeasurementRegistry,
     to_analysis_spec_type,
 )
 

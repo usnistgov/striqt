@@ -1,17 +1,18 @@
 from __future__ import annotations
+
+import typing
 from math import ceil
 from numbers import Number
-import typing
-
-from . import fourier
-from .util import lazy_import, lru_cache, array_namespace, isroundmod, pad_along_axis
 
 import methodtools
 
+from . import fourier
+from .util import array_namespace, isroundmod, lazy_import, lru_cache, pad_along_axis
 
 if typing.TYPE_CHECKING:
     import array_api_compat
     import numpy as np
+
     from ._typing import ArrayType
 else:
     np = lazy_import('numpy')

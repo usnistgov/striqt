@@ -4,10 +4,10 @@ These are taken to define sensors. Extension classes can implement
 peripherals and expanded data fields elsewhere.
 """
 
-from . import deepwave
-from ..lib import specs as _specs
 from ..lib import sources as _sources
-from ._util import bind_sensor, SensorBinding
+from ..lib import specs as _specs
+from . import deepwave
+from ._util import SensorBinding, bind_sensor
 
 # %% Synthetic data sources for testing, warmup, and post-analysis
 Warmup = bind_sensor(

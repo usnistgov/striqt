@@ -1,15 +1,15 @@
 from __future__ import annotations
+
 import contextlib
 import functools
 import importlib
 import importlib.util
 import logging
 import math
-import time
 import sys
 import threading
+import time
 import typing
-
 
 from striqt.waveform.util import (
     configure_cupy,
@@ -17,10 +17,8 @@ from striqt.waveform.util import (
     free_cupy_mempool,
     is_cupy_array,
     lru_cache,
-    sync_if_cupy,
     pinned_array_as_cupy,
 )
-
 
 if typing.TYPE_CHECKING:
     from striqt.waveform._typing import ArrayType

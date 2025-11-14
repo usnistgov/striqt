@@ -1,11 +1,11 @@
 """cupyx.scipy IIR filter functions backported from cupy 13.x"""
 
+from itertools import product
+
 import cupy
 from cupy._core._scalar import get_typename
 from cupy._core.internal import _normalize_axis_index
-from itertools import product
 from cupy_backends.cuda.api import runtime
-
 
 IIR_SOS_KERNEL = r"""
 #include <cupy/math_constants.h>

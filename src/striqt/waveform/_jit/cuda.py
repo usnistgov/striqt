@@ -1,7 +1,8 @@
+import math
+
+import cupy
 import numba as nb
 import numba.cuda
-import cupy
-import math
 
 
 @numba.cuda.jit(cache=True)

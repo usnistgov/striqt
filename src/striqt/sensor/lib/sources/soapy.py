@@ -5,8 +5,8 @@ import functools
 import time
 import typing
 
-from . import base
 from .. import captures, specs, util
+from . import base
 
 if typing.TYPE_CHECKING:
     import SoapySDR

@@ -7,22 +7,20 @@ import typing
 import warnings
 
 import textual
-
+from rich.segment import Segments
+from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.color import Gradient
-from textual.widgets import Button, DataTable, Label, Static, Footer, ProgressBar
 from textual.containers import (
     Center,
     CenterMiddle,
-    VerticalGroup,
     HorizontalGroup,
+    VerticalGroup,
     VerticalScroll,
 )
-from textual.worker import Worker
 from textual.screen import Screen
-
-from rich.text import Text
-from rich.segment import Segments
+from textual.widgets import Button, DataTable, Footer, Label, ProgressBar, Static
+from textual.worker import Worker
 
 from . import connections, frontend, sweeps, util
 

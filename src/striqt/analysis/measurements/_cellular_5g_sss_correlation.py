@@ -1,16 +1,17 @@
 from __future__ import annotations
+
 import typing
 
+from ..lib import register, specs, util
 from . import shared
 from .shared import registry
-from ..lib import register, specs, util
-
 
 if typing.TYPE_CHECKING:
-    import striqt.waveform as iqwaveform
-    import numpy as np
-    import striqt.waveform._typing
     import array_api_compat
+    import numpy as np
+
+    import striqt.waveform as iqwaveform
+    import striqt.waveform._typing
 else:
     iqwaveform = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')

@@ -2,17 +2,15 @@
 
 # Set up the plotting environment for notebooks that convert cleanly
 # to pdf or html output.
-import numpy as np
-
-import matplotlib as mpl
-import matplotlib.pyplot as plt
+import datetime
+import functools
 
 import IPython
 import IPython.display
-from IPython.display import display, HTML, set_matplotlib_formats
-
-import datetime
-import functools
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import numpy as np
+from IPython.display import HTML, display, set_matplotlib_formats
 
 _captions = {}
 
@@ -63,9 +61,9 @@ def set_matplotlib_formats(formats, *args, **kws):
     IPython.display.set_matplotlib_formats(formats, *args, **kws)
 
     # monkeypatch IPython's internal print_figure to include title metadata
-    from IPython.core import pylabtools
-
     from importlib import reload
+
+    from IPython.core import pylabtools
 
     pylabtools = reload(pylabtools)
 

@@ -1,17 +1,19 @@
 """utility functions for structs.CaptureBase data structures and their aliases"""
 
 from __future__ import annotations
-from collections import Counter
-from datetime import datetime
+
 import functools
 import numbers
-from pathlib import Path
 import typing
+from collections import Counter
+from datetime import datetime
+from pathlib import Path
 
 from msgspec import UNSET, UnsetType
 
-from . import specs, util
 from striqt.analysis import dataarrays
+
+from . import specs, util
 
 
 @functools.lru_cache
@@ -176,7 +178,6 @@ def _get_path_fields(
     *,
     source_id: str | typing.Callable[[], str],
     spec_path: Path | str | None = None,
-    json_path: Path | str | None = None,
 ) -> dict[str, str]:
     """return a mapping for string `'{field_name}'.format()` style mapping values"""
 

@@ -6,11 +6,11 @@ import typing
 
 from . import dataarrays, specs, util
 
-
 if typing.TYPE_CHECKING:
+    import array_api_compat
     import numpy as np
     import scipy
-    import array_api_compat
+
     import striqt.waveform as iqwaveform
     from striqt.waveform._typing import ArrayType
 else:

@@ -1,13 +1,15 @@
 from __future__ import annotations
-from fractions import Fraction
-import typing
 
+import typing
+from fractions import Fraction
+
+from ..lib import specs, util
 from . import shared
 from .shared import registry
-from ..lib import specs, util
 
 if typing.TYPE_CHECKING:
     import numpy as np
+
     import striqt.waveform as iqwaveform
 else:
     np = util.lazy_import('numpy')

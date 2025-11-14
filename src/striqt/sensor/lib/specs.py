@@ -1,18 +1,19 @@
 """data structures that specify operation of radio hardware, captures, and sweeps"""
 
 from __future__ import annotations
-import itertools
+
 import functools
+import itertools
 import numbers
 import typing
-from typing import Annotated, ClassVar, Optional, Literal, Union
+from typing import Annotated, ClassVar, Literal, Optional, Union
 
 import msgspec
 
-from . import util
-
 from striqt import analysis
-from striqt.analysis.lib.specs import meta, SpecBase, _SlowHashSpecBase
+from striqt.analysis.lib.specs import SpecBase, _SlowHashSpecBase, meta
+
+from . import util
 
 if typing.TYPE_CHECKING:
     import pandas as pd
@@ -416,6 +417,7 @@ class FrequencyBinRange(LoopBase, frozen=True, kw_only=True, **spec_kws):
 
     def get_points(self):
         from math import ceil
+
         import numpy as np
 
         span = self.stop - self.start

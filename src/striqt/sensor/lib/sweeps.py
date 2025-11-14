@@ -1,19 +1,20 @@
 """implementation of performant acquisition and analysis sequencing for a series of captures"""
 
 from __future__ import annotations
+
 import contextlib
 import itertools
 import typing
 from collections import Counter
 
-from . import captures, datasets, sources, specs, util
+import striqt.waveform as iqwaveform
+from striqt.analysis import measurements, describe_capture
+
+from . import datasets, sources, specs, util
 from .calibration import lookup_system_noise_power
 from .peripherals import PeripheralsBase
 from .sinks import SinkBase
-from .specs import _TS, _TC
-from striqt.analysis.lib.dataarrays import describe_capture
-from striqt.analysis.lib import register
-from striqt.analysis import measurements
+from .specs import _TC, _TS
 
 if typing.TYPE_CHECKING:
     import xarray as xr
@@ -105,13 +106,8 @@ def design_warmup_sweep(
     # TODO: currently, the base_clock_rate is left as the null radio default.
     # this may cause problems in the future if its default disagrees with another
     # radio
-    null_radio_setup = specs.NullSourceSpec.fromspec(sweep.source).replace(
+    source_spec = specs.NullSourceSpec.fromspec(sweep.source).replace(
         num_rx_ports=num_rx_ports, calibration=None, reuse_iq=False
-    )
-
-    null_radio_setup = sweep.source.replace(
-        driver=sources.NullSource.__name__,
-        resource={},
     )
 
     class WarmupSweep(registry.Warmup.sweep_spec):  # type: ignore
@@ -121,7 +117,7 @@ def design_warmup_sweep(
 
     warmup = WarmupSweep.fromdict(sweep.todict())
 
-    return warmup.replace(captures=captures, radio_setup=null_radio_setup)
+    return warmup.replace(captures=captures, source=source_spec)
 
 
 def _iq_is_reusable(
@@ -210,23 +206,20 @@ class SweepIterator:
 
     def __init__(
         self,
-        resources,
+        resources: Resources,
         *,
         always_yield=False,
-        quiet=False,
         loop=False,
         **extra_resources: typing.Unpack[Resources],
     ):
         resources = Resources(resources, **extra_resources)
 
         self.source = resources['source']  # type: ignore
-        self._calibration = resources['calibration']  # type: ignore
         self._peripherals = resources['peripherals']  # type: ignore
         self._sink = resources['sink']  # type: ignore
         self.spec = resources['sweep_spec']  # type: ignore
 
         self._always_yield = always_yield
-        self._quiet = quiet
         self._loop = loop
 
         self.spec.validate()
@@ -246,15 +239,13 @@ class SweepIterator:
         if cal is None or 'spectrogram' not in cache.name:
             return
 
-        import striqt.waveform as iqwaveform
-
         spg, attrs = result
 
         xp = iqwaveform.util.array_namespace(spg)
 
         # conversion to dB is left for after this function, but display
         # log messages in dB
-        peaks = iqwaveform.powtodB(spg.max(axis=tuple(range(1, spg.ndim))))
+        peaks = spg.max(axis=tuple(range(1, spg.ndim)))
 
         noise = lookup_system_noise_power(
             cal,
@@ -264,7 +255,7 @@ class SweepIterator:
             xp=xp,
         )
 
-        snr = peaks - noise
+        snr = iqwaveform.powtodB(peaks) - noise
 
         snr_desc = ','.join(f'{p:+02.0f}' for p in snr)
         util.get_logger('analysis').info(f'({snr_desc}) dB SNR spectrogram peak')
@@ -448,7 +439,6 @@ def iter_sweep(
     resources: Resources,
     *,
     always_yield=False,
-    quiet=False,
     loop=False,
     **extra_resources: typing.Unpack[Resources],
 ) -> SweepIterator:
@@ -477,7 +467,6 @@ def iter_sweep(
 def iter_raw_iq(
     radio: 'sources.SourceBase',
     sweep: specs.SweepSpec,
-    quiet=False,
 ) -> typing.Generator[sources.AcquiredIQ]:
     """iterate through the sweep and yield the raw IQ vector for each.
 

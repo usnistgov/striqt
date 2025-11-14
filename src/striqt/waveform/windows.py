@@ -1,8 +1,8 @@
 """Some window functions not included by scipy.signal"""
 
-from .util import lazy_import
 import typing
 
+from .util import lazy_import
 
 if typing.TYPE_CHECKING:
     import numpy as np

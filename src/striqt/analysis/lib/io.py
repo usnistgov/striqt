@@ -5,19 +5,20 @@ import math
 import threading
 import typing
 import warnings
-from pathlib import Path
 from collections import defaultdict
+from pathlib import Path
 
 from . import dataarrays, register, specs, util
 
 if typing.TYPE_CHECKING:
     import numcodecs
     import numpy as np
+    import pandas as pd
     import xarray as xr
+    import yaml
     import zarr
     import zarr.storage
-    import pandas as pd
-    import yaml
+
     from striqt.waveform._typing import ArrayType
 
     if hasattr(zarr.storage, 'Store'):

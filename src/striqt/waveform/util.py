@@ -1,16 +1,16 @@
 from __future__ import annotations
-import importlib.util
+
 import functools
+import importlib.util
 import itertools
 import math
-from numbers import Number
 import sys
 import typing
-
-import array_api_compat
-
 from contextlib import contextmanager
 from enum import Enum
+from numbers import Number
+from types import ModuleType
+import array_api_compat
 
 _TC = typing.TypeVar('_TC', bound=typing.Callable)
 
@@ -43,13 +43,22 @@ def lazy_import(module_name: str, package=None):
 
 
 if typing.TYPE_CHECKING:
-    from ._typing import ArrayLike, ArrayType
-    import typing_extensions
-    import cupy  # pyright: ignore[reportMissingImports]
+    try:
+        import cupy as cp  # pyright: ignore[reportMissingImports]
+    except ModuleNotFoundError:
+        cp = None
     import numpy as np
+    import typing_extensions
+
+    from ._typing import ArrayLike, ArrayType
 else:
     np = lazy_import('numpy')
+    try:
+        cp = lazy_import('cupy')
+    except ImportError:
+        cp = None
 
+types.
 
 def binned_mean(
     x: ArrayType,
@@ -184,10 +193,8 @@ class NonStreamContext:
 
 def array_stream(obj: ArrayType, null=False, non_blocking=False, ptds=False):
     """returns a cupy.Stream (or a do-nothing stand in) object as appropriate for obj"""
-    if is_cupy_array(obj):
-        import cupy
-
-        return cupy.cuda.Stream(null=null, non_blocking=non_blocking, ptds=ptds)
+    if is_cupy_array(obj) and cp is not None:
+        return cp.cuda.Stream(null=null, non_blocking=non_blocking, ptds=ptds)
     else:
         return NonStreamContext()
 
@@ -348,13 +355,13 @@ def sliding_window_view(x, window_shape, axis=None, *, subok=False, writeable=Fa
     x = xp.array(x, copy=False, subok=subok)
 
     out_shape = sliding_window_output_shape(x.shape, window_shape, axis)
-    axis = stride_tricks.normalize_axis_tuple(axis, x.ndim)
+    axis = stride_tricks.normalize_axis_tuple(axis, x.ndim) # type: ignore
     out_strides = x.strides + tuple(x.strides[ax] for ax in axis)
 
     return xp.lib.stride_tricks.as_strided(x, strides=out_strides, shape=out_shape)
 
 
-def float_dtype_like(x: ArrayType, min_dtype: Any | None = None):
+def float_dtype_like(x: ArrayType, min_dtype: typing.Any | None = None):
     """returns a floating-point dtype corresponding to x.
 
     `x` may be complex, in which case the returned data type corresponds to
@@ -558,27 +565,6 @@ def dtype_change_float(dtype, float_basis_dtype) -> np.dtype:
     )
 
 
-def iter_along_axes(
-    x: ArrayType, axes: typing.Iterable[int] | None
-) -> typing.Iterable[tuple[int, ...]]:
-    empty_slice = slice(None, None)
-    if axes is None:
-        return (empty_slice,)
-    elif isinstance(axes, Number):
-        axes = (axes,)
-
-    axes = [(ax if ax >= 0 else ax + x.ndim) for ax in axes]
-
-    ax_inds = []
-    for i in range(x.ndim):
-        if i in axes:
-            ax_inds.append(((n,) for n in range(x.shape[i])))
-        else:
-            ax_inds.append((empty_slice,))
-
-    return itertools.product(*ax_inds)
-
-
 def ceildiv(a: int, b: int) -> int:
     """Returns ceil(a/b)."""
     return -(-a // b)
@@ -631,47 +617,34 @@ def grouped_views_along_axis(
 
 
 def sync_if_cupy(x: ArrayType):
-    if is_cupy_array(x):
-        import cupy
-
-        stream = cupy.cuda.get_current_stream()
-        with stopwatch('cuda synchronize', threshold=10e-3):
-            stream.synchronize()
+    if is_cupy_array(x) and cp is not None:
+        stream = cp.cuda.get_current_stream()
+        stream.synchronize()
 
 
 @functools.cache
 def configure_cupy():
-    import cupy
-
-    # the FFT plan sets up large caches that don't help us
-    cupy.fft.config.get_plan_cache().set_size(0)
-    cupy.cuda.set_pinned_memory_allocator(None)
+    if cp is not None:
+        # the FFT plan sets up large caches that don't help us
+        cp.fft.config.get_plan_cache().set_size(0)
+        cp.cuda.set_pinned_memory_allocator(None)
 
 
 def pinned_array_as_cupy(x, stream=None):
-    import cupy as cp
-
+    assert cp is not None
     out = cp.empty_like(x)
     out.data.copy_from_host_async(x.ctypes.data, x.data.nbytes, stream=stream)
     return out
 
 
 def free_cupy_mempool():
-    try:
-        import cupy as cp
-    except ModuleNotFoundError:
-        pass
-    else:
+    if cp is not None:
         mempool = cp.get_default_memory_pool()
         if mempool is not None:
             mempool.free_all_blocks()
 
 
 def except_on_low_memory(threshold_bytes=500_000_000):
-    try:
-        import cupy as cp
-    except ModuleNotFoundError:
-        return
     import psutil
 
     if psutil.virtual_memory().available >= threshold_bytes:
@@ -682,14 +655,12 @@ def except_on_low_memory(threshold_bytes=500_000_000):
 
 @lru_cache()
 def set_cuda_mem_limit(fraction=0.75):
-    try:
-        import cupy
-    except ModuleNotFoundError:
+    if cp is None:
         return
-
+    
+    cp.get_default_memory_pool().set_limit(fraction=fraction)
+    
     # Alternative: select an absolute amount of memory
     #
     # import psutil
     # available = psutil.virtual_memory().available
-
-    cupy.get_default_memory_pool().set_limit(fraction=fraction)

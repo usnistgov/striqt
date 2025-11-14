@@ -9,12 +9,12 @@ import typing
 
 from . import register, specs, util
 
-
 if typing.TYPE_CHECKING:
-    from striqt.waveform._typing import ArrayType
+    import array_api_compat
     import numpy as np
     import xarray as xr
-    import array_api_compat
+
+    from striqt.waveform._typing import ArrayType
 
     AnalysisResult: typing.TypeAlias = (
         'ArrayType | dict[str, ArrayType] | xr.Dataset | dict[str, DelayedDataArray]'

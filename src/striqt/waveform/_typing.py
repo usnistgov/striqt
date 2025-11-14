@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import typing
 
 if typing.TYPE_CHECKING:
@@ -11,10 +12,7 @@ if typing.TYPE_CHECKING:
     except ModuleNotFoundError:
         import numpy as cp
     import numpy as np
-
     import pandas as pd
-    from matplotlib import axes
-    import matplotlib.ticker
     import xarray as xr
 
     # union of supported array types
@@ -23,15 +21,10 @@ if typing.TYPE_CHECKING:
     # pandas types
     DataFrameType: TypeAlias = 'pd.DataFrame'
     SeriesType: TypeAlias = 'pd.Series'
-    IndexType: TypeAlias = 'pd.Index'
 
     # xarray types
     DataArrayType: TypeAlias = 'xr.DataArray'
     DatasetType: TypeAlias = 'xr.Dataset'
-
-    # Matplotlib types
-    AxisType: TypeAlias = 'axes.Axes'
-    LocatorType: TypeAlias = 'matplotlib.ticker.MaxNLocator'
 
     # Union types
     ArrayLike: TypeAlias = typing.Union[

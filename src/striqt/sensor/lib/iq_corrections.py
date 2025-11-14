@@ -1,21 +1,22 @@
 from __future__ import annotations
+
 import typing
 
+from . import calibration, specs, util
 from .sources import (
-    base,
     AcquiredIQ,
     OptionalData,
     SourceBase,
+    base,
     design_capture_resampler,
 )
-from . import calibration, specs, util
-
 
 if typing.TYPE_CHECKING:
-    import striqt.waveform as iqwaveform
-    from striqt.waveform._typing import ArrayLike, ArrayType
     import numpy as np
     import xarray as xr
+
+    import striqt.waveform as iqwaveform
+    from striqt.waveform._typing import ArrayLike, ArrayType
 
 else:
     array_api_compat = util.lazy_import('array_api_compat')
@@ -212,67 +213,3 @@ def resampling_correction(
         info=iq_in.info,
         extra_data=iq_in.extra_data | extra_data,
     )
-
-    # nfft = analysis_filter['nfft']
-    # nfft_out, noverlap, overlap_scale, _  = iqwaveform.fourier._ola_filter_parameters(
-    #     iq.size,
-    #     window=analysis_filter['window'],
-    #     nfft_out=analysis_filter.get('nfft_out', nfft),
-    #     nfft=nfft,
-    #     extend=True,
-    # )
-
-    # y  = iqwaveform.stft(
-    #     iq,
-    #     fs=fs,
-    #     window=analysis_filter['window'],
-    #     nperseg=nfft,
-    #     noverlap=round(nfft * overlap_scale),
-    #     axis=axis,
-    #     truncate=False,
-    #     overwrite_x=overwrite_x,
-    #     return_axis_arrays=False,
-    # )
-
-    # # resample
-    # except_on_low_memory()
-    # if nfft_out < nfft:
-    #     # downsample by trimming frequency
-    #     freqs  = iqwaveform.fftfreq(nfft, 1 / fs)
-    #     freqs, y  = iqwaveform.fourier.downsample_stft(
-    #         freqs, y, nfft_out=nfft_out, axis=axis, out=y
-    #     )
-    # elif nfft_out > nfft:
-    #     # upsample by zero-padding frequency
-    #     pad_left = (nfft_out - nfft) // 2
-    #     pad_right = pad_left + (nfft_out - nfft) % 2
-    #     y  = iqwaveform.util.pad_along_axis(y, [[pad_left, pad_right]], axis=axis + 1)
-
-    # if filter_domain == 'frequency':
-    #     y  = iqwaveform.fourier.stft_fir_lowpass(
-    #         y,
-    #         sample_rate=capture.sample_rate,
-    #         bandwidth=capture.analysis_bandwidth,
-    #         transition_bandwidth=500e3,
-    #         axis=axis,
-    #         out=y
-    #     )
-    # del iq
-
-    # # reconstruct into a resampled waveform
-    # except_on_low_memory()
-    # iq  = iqwaveform.istft(
-    #     y, nfft=nfft_out, noverlap=noverlap, axis=axis, overwrite_x=True
-    # )
-    # scale = iq.size/size_in
-
-    # start the capture after the padding for transients
-    # size_out = round(capture.duration * capture.sample_rate)
-    # assert size_out <= iq.shape[axis]
-    # iq  = iqwaveform.util.axis_slice(iq, -size_out, iq.shape[axis], axis=axis)
-    # assert iq.shape[axis] == size_out
-
-    # # apply final scaling
-    # if power_scale is not None:
-    #     scale *= np.sqrt(power_scale)
-    # iq *= scale

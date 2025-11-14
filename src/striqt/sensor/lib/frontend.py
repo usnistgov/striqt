@@ -1,7 +1,9 @@
 from __future__ import annotations
+
 import logging
 import sys
 import typing
+
 from . import util
 
 
@@ -180,20 +182,21 @@ def _extract_traceback(
 
     """
 
+    import inspect
+    import os
+    from itertools import islice
+
+    from rich import pretty
     from rich.traceback import (
+        LOCALS_MAX_LENGTH,
+        LOCALS_MAX_STRING,
         Frame,
         Stack,
         Trace,
         Traceback,
         _SyntaxError,
         walk_tb,
-        LOCALS_MAX_LENGTH,
-        LOCALS_MAX_STRING,
     )
-    from rich import pretty
-    from itertools import islice
-    import inspect
-    import os
 
     stacks: list[Stack] = []
     is_cause = False

@@ -3,11 +3,10 @@ from __future__ import annotations
 import functools
 import typing
 
-# from labbench import paramattr as attr
-
-from ..lib.sources import soapy, base
 from ..lib import specs, util
 
+# from labbench import paramattr as attr
+from ..lib.sources import base, soapy
 
 if typing.TYPE_CHECKING:
     import psutil

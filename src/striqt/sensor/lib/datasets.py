@@ -4,21 +4,23 @@ from __future__ import annotations
 
 import dataclasses
 import logging
-import msgspec
 import typing
 
-from . import captures, specs, util
-from .sources import SourceBase, OptionalData, AcquiredIQ
+import msgspec
 
 from striqt.analysis import dataarrays
-from striqt.analysis.measurements import registry
 from striqt.analysis.lib.dataarrays import CAPTURE_DIM, PORT_DIM  # noqa: F401
 from striqt.analysis.lib.util import is_cupy_array
+from striqt.analysis.measurements import registry
+
+from . import captures, specs, util
+from .sources import AcquiredIQ, OptionalData, SourceBase
 
 if typing.TYPE_CHECKING:
     import numpy as np
     import pandas as pd
     import xarray as xr
+
     from striqt.waveform._typing import ArrayType
 
 else:
@@ -66,8 +68,13 @@ def concat_time_dim(datasets: list['xr.Dataset'], time_dim: str) -> 'xr.Dataset'
 
 def _msgspec_type_to_coord_info(type_: msgspec.inspect.Type) -> tuple[dict, typing.Any]:
     """returns an (attrs, default_value) pair for the given msgspec field type"""
+    from msgspec import inspect as mi
+    BUILTINS = {mi.FloatType: 0.0, mi.BoolType: False, mi.IntType: 0, mi.StrType: ''}
 
-    if isinstance(type_, msgspec.inspect.CustomType):
+    if isinstance(type_, tuple(BUILTINS.keys())):
+        # dicey if subclasses show up
+        return {}, BUILTINS[type(type_)]
+    elif isinstance(type_, mi.CustomType):
         if issubclass(type_.cls, pd.Timestamp):
             return {}, pd.Timestamp(0)
         else:
@@ -76,20 +83,12 @@ def _msgspec_type_to_coord_info(type_: msgspec.inspect.Type) -> tuple[dict, typi
             except Exception as ex:
                 name = type_.cls.__qualname__
                 raise TypeError(f'failed to make default for type {name!r}') from ex
-    elif isinstance(type_, msgspec.inspect.Metadata):
+    elif isinstance(type_, mi.Metadata):
         return type_.extra or {}, _msgspec_type_to_coord_info(type_.type)[1]
-    elif isinstance(type_, msgspec.inspect.FloatType):
-        return {}, float()
-    elif isinstance(type_, msgspec.inspect.BoolType):
-        return {}, bool()
-    elif isinstance(type_, msgspec.inspect.IntType):
-        return {}, int()
-    elif isinstance(type_, msgspec.inspect.StrType):
-        return {}, str()
-    elif isinstance(type_, msgspec.inspect.LiteralType):
+    elif isinstance(type_, mi.LiteralType):
         return {}, type(type_.values[0])
-    elif isinstance(type_, msgspec.inspect.UnionType):
-        UNION_SKIP = (msgspec.inspect.NoneType, msgspec.inspect.VarTupleType)
+    elif isinstance(type_, mi.UnionType):
+        UNION_SKIP = (mi.NoneType, mi.VarTupleType)
         types = [t for t in type_.types if not isinstance(t, UNION_SKIP)]
         if len(types) == 1:
             return _msgspec_type_to_coord_info(types[0])

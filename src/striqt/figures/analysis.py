@@ -4,23 +4,20 @@ import contextlib
 import functools
 import math
 import numbers
-from pathlib import Path
 import typing
 import warnings
-
-from .lib.specs import CaptureBase
-from .lib import dataarrays
+from pathlib import Path
 
 import matplotlib as mpl
-from matplotlib import pyplot as plt
 import numpy as np
 import xarray as xr
+from matplotlib import pyplot as plt
+from matplotlib import ticker
+
 import striqt.waveform as iqwaveform
 
-# avoid lazy loading, since this module isn't imported with striqt.analysis
-# and lazy loading seems to lead to problems with matplotlib in some cases
-import striqt.waveform.figures  # noqa: F401
-
+from ..analysis.lib import dataarrays
+from ..analysis.lib.specs import CaptureBase
 
 _FORCE_UNIT_PREFIXES = {'center_frequency': 'M'}
 
@@ -29,7 +26,7 @@ class MissingDataError(AttributeError):
     pass
 
 
-class FixedEngFormatter(mpl.ticker.EngFormatter):
+class FixedEngFormatter(ticker.EngFormatter):
     """Behave as mpl.ticker.EngFormatter, but also support an
     invariant the unit suffix across the entire axis"""
 

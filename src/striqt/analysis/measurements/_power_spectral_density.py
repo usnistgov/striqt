@@ -1,13 +1,15 @@
 from __future__ import annotations
+
 import typing
 
+from ..lib import specs, util
 from . import _spectrogram, shared
 from .shared import registry
-from ..lib import specs, util
 
 if typing.TYPE_CHECKING:
-    import striqt.waveform as iqwaveform
     import numpy as np
+
+    import striqt.waveform as iqwaveform
 else:
     iqwaveform = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
@@ -68,8 +70,8 @@ def power_spectral_density(
     spec = PowerSpectralDensitySpec.fromdict(kwargs)
     spg_spec = shared.SpectrogramSpec.fromspec(spec)
 
-    from striqt.waveform.util import axis_index, array_namespace
     from striqt.waveform.fourier import stat_ufunc_from_shorthand
+    from striqt.waveform.util import array_namespace, axis_index
 
     working_dtype = 'float32'
 

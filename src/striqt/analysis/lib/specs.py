@@ -1,20 +1,21 @@
 """data structures that specify waveform characteristics"""
 
 from __future__ import annotations
+
 import fractions
 import functools
 import numbers
 import typing
-from typing import Annotated
 import warnings
+from typing import Annotated
 
 import msgspec
 
 from . import util
 
 if typing.TYPE_CHECKING:
-    import pandas as pd
     import numpy as np
+    import pandas as pd
 
     _T = typing.TypeVar('_T')
 

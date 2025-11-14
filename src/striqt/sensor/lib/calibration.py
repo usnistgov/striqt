@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import itertools
-from pathlib import Path
 import typing
+from pathlib import Path
 
 import msgspec
 
 from . import datasets, peripherals, sinks, sources, specs, util
-from .captures import split_capture_ports, get_capture_type
+from .captures import get_capture_type, split_capture_ports
 from .specs import Annotated, meta
 
 if typing.TYPE_CHECKING:

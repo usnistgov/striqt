@@ -1,15 +1,16 @@
 from __future__ import annotations
+
 import numbers
 import typing
 
-from .shared import registry
 from ..lib import specs, util
-
+from .shared import registry
 
 if typing.TYPE_CHECKING:
-    import striqt.waveform as iqwaveform
     import numpy as np
     import pandas as pd
+
+    import striqt.waveform as iqwaveform
 else:
     iqwaveform = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')

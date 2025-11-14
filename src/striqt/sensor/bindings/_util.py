@@ -1,10 +1,11 @@
-import msgspec
 import typing
 from dataclasses import dataclass
 
-from ..lib.peripherals import PeripheralsBase, NoPeripherals
+import msgspec
+
+from ..lib.peripherals import NoPeripherals, PeripheralsBase
 from ..lib.sources import SourceBase
-from ..lib.specs import SourceSpec, CaptureSpec, SweepSpec, _TS, _TC
+from ..lib.specs import _TC, _TS, CaptureSpec, SourceSpec, SweepSpec
 
 
 def _tagged_sweep_subclass(name: str, cls: type[SweepSpec]) -> type[SweepSpec]:

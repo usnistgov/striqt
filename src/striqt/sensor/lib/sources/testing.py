@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import typing
+from pathlib import Path
 
-from . import base, null
-from .. import specs, util
 from striqt.analysis import CaptureBase, io, simulated_awgn
 
+from .. import specs, util
+from . import base, null
 
 if typing.TYPE_CHECKING:
     import numpy as np

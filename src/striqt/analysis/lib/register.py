@@ -6,19 +6,20 @@ from __future__ import annotations
 
 import collections
 import contextlib
-from fractions import Fraction
 import functools
 import textwrap
 import typing
+from fractions import Fraction
 
 import msgspec
 
 from . import specs, util
 
-
 if typing.TYPE_CHECKING:
-    import typing_extensions
     import inspect
+
+    import typing_extensions
+
     from striqt.waveform._typing import ArrayType
 
     _P = typing_extensions.ParamSpec('_P')

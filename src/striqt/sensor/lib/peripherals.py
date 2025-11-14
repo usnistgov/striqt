@@ -1,7 +1,8 @@
 from __future__ import annotations
-from . import specs, sources
+
 import typing
 
+from . import sources, specs
 
 _TC = typing.TypeVar('_TC', bound=specs.CaptureSpec)
 _TS = typing.TypeVar('_TS', bound=specs.SourceSpec)

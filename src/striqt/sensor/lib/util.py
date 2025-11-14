@@ -1,29 +1,27 @@
 from __future__ import annotations
+
 import contextlib
 import datetime
 import functools
 import itertools
 import logging
 import queue
-from pathlib import Path
-import time
 import threading
+import time
 import typing
+from pathlib import Path
 
 from striqt.analysis.lib.util import (
-    stopwatch,
-    log_capture_context,
-    get_logger,
-    _StriqtLogger,
     PERFORMANCE_DETAIL,
     PERFORMANCE_INFO,
-    show_messages,
+    _StriqtLogger,
+    get_logger,
     isroundmod,
+    log_capture_context,
+    show_messages,
+    stopwatch,
 )
-
-
 from striqt.waveform.util import lazy_import, lru_cache
-
 
 _LOG_LEVEL_NAMES = {
     'debug': logging.DEBUG,
@@ -267,7 +265,6 @@ class _JSONFormatter(logging.Formatter):
     def __init__(self):
         super().__init__(style='{')
         self.t0 = time.time()
-        self.first = True
 
     @staticmethod
     def json_serialize_dates(obj):
@@ -325,8 +322,6 @@ def log_to_file(log_path: str | Path, level_name: str):
                 self.empty = False
             else:
                 self.empty = True
-
-            self.terminator = ''
 
             super().__init__(path, *args, **kws)
 
