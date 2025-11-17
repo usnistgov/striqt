@@ -389,8 +389,8 @@ def select_parameter_kws(locals_: dict, omit=(PORT_DIM, 'out')) -> dict:
     return {k: v for k, v in items[1:] if k not in omit}
 
 
-@dataclasses.dataclass
-class EvaluationOptions(typing.NamedTuple, typing.Generic[_TA]):
+@dataclasses.dataclass(kw_only=True)
+class EvaluationOptions(typing.Generic[_TA]):
     spec: dict[str, specs.Measurement] | specs.Analysis
     registry: register.MeasurementRegistry
     as_xarray: _TA

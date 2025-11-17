@@ -14,7 +14,7 @@ from striqt.analysis.lib.util import is_cupy_array
 from striqt.analysis.measurements import registry
 
 from . import captures, specs, util
-from .sources import AcquiredIQ, OptionalData, SourceBase
+from .sources import AcquiredIQ, SourceBase
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -224,13 +224,23 @@ class AnalysisCaller:
 
     def __post_init__(self):
         self._overwrite_x = not self.sweep.source.reuse_iq
-        self._eval_options = dataarrays.EvaluationOptions(
-            spec=self.sweep.analysis,
-            block_each=self.block_each,
-            as_xarray='delayed' if self.delayed else True,
-            expand_dims=(CAPTURE_DIM,),
-            registry=registry,
-        )
+        if self.delayed:
+            self._eval_options = dataarrays.EvaluationOptions(
+                spec=self.sweep.analysis,
+                block_each=self.block_each,
+                as_xarray='delayed',
+                expand_dims=(CAPTURE_DIM,),
+                registry=registry,
+            )
+        else:
+            self._eval_options = dataarrays.EvaluationOptions(
+                spec=self.sweep.analysis,
+                block_each=self.block_each,
+                as_xarray=True,
+                expand_dims=(CAPTURE_DIM,),
+                registry=registry,
+            )
+
         self.__name__ = 'analyze'
         self.__qualname__ = 'analyze'
 
@@ -239,7 +249,7 @@ class AnalysisCaller:
         self,
         iq: AcquiredIQ,
         capture: specs.CaptureSpec,
-    ) -> 'xr.Dataset | dict[str, typing.Any] | str':
+    ) -> 'xr.Dataset | DelayedDataset':
         """Inject radio device and capture info into a channel analysis result."""
 
         # wait to import until here to avoid a circular import
@@ -254,7 +264,11 @@ class AnalysisCaller:
                         iq, capture, self.radio, overwrite_x=self._overwrite_x
                     )
 
-            result = dataarrays.analyze_by_spec(iq, capture, self._eval_options)
+            opts = typing.cast(
+                dataarrays.EvaluationOptions[typing.Literal['delayed']],
+                self._eval_options,
+            )
+            result = dataarrays.analyze_by_spec(iq, capture, opts)
 
         if 'unscaled_iq_peak' in iq.extra_data:
             peak = iq.extra_data['unscaled_iq_peak']
@@ -273,7 +287,8 @@ class AnalysisCaller:
             )
 
         else:
-            result.update(extra_data)
+            assert isinstance(result, xr.Dataset)
+            result.update(extra_data)  # type: ignore
 
         return result
 
@@ -284,7 +299,7 @@ class DelayedDataset:
     capture: specs.CaptureSpec
     sweep: specs.SweepSpec
     coords: specs.AcquisitionInfo
-    extra_data: dict[str, typing.Any] | OptionalData
+    extra_data: dict[str, typing.Any]
     attrs: dict | None = None
 
     def add_peripheral_data(self, extra_data: dict[str, typing.Any]) -> None:

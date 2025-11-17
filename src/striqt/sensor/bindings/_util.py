@@ -5,7 +5,7 @@ import msgspec
 
 from ..lib.peripherals import NoPeripherals, PeripheralsBase
 from ..lib.sources import SourceBase
-from ..lib.specs import _TC, _TS, CaptureSpec, SourceSpec, SweepSpec
+from ..lib.specs import _TC, _TS, _TP, CaptureSpec, SourceSpec, SweepSpec
 
 
 def _tagged_sweep_subclass(name: str, cls: type[SweepSpec]) -> type[SweepSpec]:
@@ -25,12 +25,12 @@ def _tagged_sweep_subclass(name: str, cls: type[SweepSpec]) -> type[SweepSpec]:
 
 
 @dataclass(kw_only=True, frozen=True)
-class SensorBinding(typing.Generic[_TS, _TC]):
+class SensorBinding(typing.Generic[_TS, _TP, _TC]):
     source_spec: type[_TS]
     capture_spec: type[_TC]
     source: type[SourceBase[_TS, _TC]]
-    peripherals: type[PeripheralsBase[_TS, _TC]] = NoPeripherals
-    sweep_spec: type[SweepSpec[_TS, _TC]] = SweepSpec
+    peripherals: type[PeripheralsBase[_TP, _TC]] = NoPeripherals
+    sweep_spec: type[SweepSpec[_TS, _TP, _TC]] = SweepSpec
 
     def __post_init__(self):
         assert issubclass(self.source_spec, SourceSpec)
@@ -40,11 +40,11 @@ class SensorBinding(typing.Generic[_TS, _TC]):
         assert issubclass(self.peripherals, PeripheralsBase)
 
 
-registry: dict[str, SensorBinding[typing.Any, typing.Any]] = {}
+registry: dict[str, SensorBinding[typing.Any, typing.Any, typing.Any]] = {}
 tagged_sweep_spec_type = _tagged_sweep_subclass('SweepSpec', SweepSpec)
 
 
-def bind_sensor(key: str, sensor: SensorBinding[_TS, _TC]) -> SensorBinding[_TS, _TC]:
+def bind_sensor(key: str, sensor: SensorBinding[_TS, _TP, _TC]) -> SensorBinding[_TS, _TP, _TC]:
     """register a binding between specifications and controller classes.
 
     Args:
@@ -62,7 +62,7 @@ def bind_sensor(key: str, sensor: SensorBinding[_TS, _TC]) -> SensorBinding[_TS,
     return sensor
 
 
-def get_registry() -> dict[str, SensorBinding[typing.Any, typing.Any]]:
+def get_registry() -> dict[str, SensorBinding]:
     return dict(registry)
 
 

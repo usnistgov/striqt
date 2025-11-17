@@ -25,7 +25,7 @@ else:
 
 
 _TC = typing.TypeVar('_TC', bound=specs.SoapyCaptureSpec)
-_TMSW = typing.TypeVar('_TMSW', bound='ManualYFactorSweep')
+_TMP = typing.TypeVar('_TMP', bound='ManualYFactorPeripheralSpec')
 _TMC = typing.TypeVar('_TMC', bound='ManualYFactorCapture')
 
 
@@ -33,7 +33,7 @@ NoiseDiodeEnabledType = Annotated[bool, meta(standard_name='Noise diode enabled'
 
 
 class ManualYFactorCapture(
-    specs.SoapyCaptureSpec, forbid_unknown_fields=True, frozen=True
+    specs.SoapyCaptureSpec, frozen=True, kw_only=True, **specs.kws
 ):
     """Specialize fields to add to the RadioCapture type"""
 
@@ -41,19 +41,19 @@ class ManualYFactorCapture(
     noise_diode_enabled: NoiseDiodeEnabledType = False
 
 
-class ManualYFactorSetup(specs.SpecBase, forbid_unknown_fields=True, frozen=True):
+class ManualYFactorPeripheralSpec(specs.PeripheralSpec, frozen=True, kw_only=True, **specs.kws):
     enr: Annotated[float, meta(standard_name='Excess noise ratio', units='dB')] = 20.87
     ambient_temperature: Annotated[
         float, meta(standard_name='Ambient temperature', units='K')
     ] = 294.5389
 
 
-class CalibrationRadioSetup(specs.SourceSpec, forbid_unknown_fields=True, frozen=True):
+class CalibrationRadioSetup(specs.SourceSpec, frozen=True, kw_only=True, **specs.kws):
     reuse_iq = True
 
 
 class CalVariables(
-    specs.SpecBase, forbid_unknown_fields=True, kw_only=True, frozen=True
+    specs.SpecBase, frozen=True, kw_only=True, **specs.kws
 ):
     noise_diode_enabled: tuple[NoiseDiodeEnabledType, ...] = (False, True)
     sample_rate: tuple[specs.BackendSampleRateType, ...]
@@ -67,17 +67,17 @@ class CalVariables(
 
 
 class ManualYFactorSweep(
-    specs.SweepSpec, forbid_unknown_fields=True, kw_only=True, frozen=True
+    specs.SweepSpec, frozen=True, kw_only=True, **specs.kws
 ):
     """This specialized sweep is fed to the YAML file loader
     to specify the change in expected capture structure."""
 
     calibration_variables: CalVariables
-    calibration_setup: ManualYFactorSetup
-    radio_setup: CalibrationRadioSetup
+    peripherals: ManualYFactorPeripheralSpec|None = None
+    source: CalibrationRadioSetup
 
     def __post_init__(self):
-        if self.radio_setup.calibration is not None:
+        if self.source.calibration is not None:
             raise ValueError('source.calibration must be None for a calibration sweep')
 
     # the top here is just to set the annotation for msgspec
@@ -103,7 +103,9 @@ def save_calibration(path, corrections: 'xr.Dataset'):
 
 
 @util.lru_cache()
-def _cached_cal_captures(variables: CalVariables, capture_cls: type[_TC]) -> tuple[_TC, ...]:
+def _cached_cal_captures(
+    variables: CalVariables, capture_cls: type[_TC]
+) -> tuple[_TC, ...]:
     var_fields = variables.todict()
 
     # enforce ordering to place difficult-to-change variables in
@@ -440,14 +442,23 @@ class YFactorSink(sinks.SinkBase):
         'sample_rate',
     )
 
+    def _get_path(self) -> Path|None:
+        path = self._spec.path
+
+        if self._alias_func is not None:
+            path = self._alias_func(path)
+
+        if path is not None:
+            return Path(path)
+        else:
+            return None
+
     def open(self):
-        if (
-            self.output_path is not None
-            and not self.force
-            and Path(self.output_path).exists()
-        ):
+        path = self._get_path()
+
+        if path is not None and not self.force and Path(path).exists():
             print('reading results from previous file')
-            self.prev_corrections = read_calibration(self.output_path)
+            self.prev_corrections = read_calibration(path)
         else:
             self.prev_corrections = None
 
@@ -501,12 +512,11 @@ class YFactorSink(sinks.SinkBase):
         # compute and merge corrections
         corrections = compute_y_factor_corrections(by_field)
 
-        if (
-            not self.force
-            and self.output_path is not None
-            and Path(self.output_path).exists()
-            and self.prev_corrections is not None
-        ):
+        path = self._get_path()
+
+        if self.prev_corrections is None or path is None or self.force:
+            pass
+        elif Path(path).exists():
             prev_port_key = _get_port_variable(self.prev_corrections)
 
             print('merging results from previous file')
@@ -524,16 +534,16 @@ class YFactorSink(sinks.SinkBase):
         with pd.option_context('display.max_rows', None):
             print(summary.sort_index(axis=1).sort_index(axis=0))
 
-        save_calibration(self.output_path, corrections)
-        print(f'saved to {str(self.output_path)!r}')
+        save_calibration(path, corrections)
+        print(f'saved to {str(path)!r}')
 
 
-class ManualYFactorPeripherals(peripherals.PeripheralsBase[_TMSW, _TMC]):
+class ManualYFactorPeripherals(peripherals.PeripheralsBase[_TMP, _TMC]):
     """Human input "peripheral" that prompts noise diode connection changes"""
 
     _last_state = (None, None)
 
-    def arm(self, capture: _TMC):
+    def arm(self, capture):
         """This is run before each capture"""
         state = (capture.port, capture.noise_diode_enabled)
 
@@ -545,16 +555,9 @@ class ManualYFactorPeripherals(peripherals.PeripheralsBase[_TMSW, _TMC]):
 
         self._last_state = state
 
-    def acquire(self, capture: _TMC):
-        """This runs during each capture.
-
-        It should return a dictionary of results keyed by name
-        with (float, int, str, xr.DataArray, etc)
-        """
-
+    def acquire(self, capture):
         return {
-            'enr_dB': self.sweep.calibration_setup.enr,
-            'Tamb_K': self.sweep.calibration_setup.ambient_temperature,
+            'enr_dB': self.spec.enr, 'Tamb_K': self.spec.ambient_temperature,
         }
 
 

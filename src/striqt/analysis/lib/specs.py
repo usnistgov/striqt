@@ -24,6 +24,12 @@ else:
     np = util.lazy_import('numpy')
 
 
+kws = dict(
+    forbid_unknown_fields=True,
+    cache_hash=True,
+)
+
+
 WindowType = typing.Union[str, tuple[str, float]]
 
 
@@ -92,7 +98,7 @@ def convert_dict(obj: typing.Any, type: type[_T]) -> _T:
     )
 
 
-class SpecBase(msgspec.Struct, kw_only=True, frozen=True, cache_hash=True):
+class SpecBase(msgspec.Struct, kw_only=True, frozen=True, **kws):
     """Base type for structures that support validated
     (de)serialization.
 
@@ -146,7 +152,7 @@ class SpecBase(msgspec.Struct, kw_only=True, frozen=True, cache_hash=True):
         return self.fromdict(self.todict())
 
 
-class _SlowHashSpecBase(SpecBase, kw_only=True, frozen=True, cache_hash=True):
+class _SlowHashSpecBase(SpecBase, kw_only=True, frozen=True, **kws):
     def __hash__(self):
         try:
             return msgspec.Struct.__hash__(self)
@@ -168,7 +174,7 @@ class _SlowHashSpecBase(SpecBase, kw_only=True, frozen=True, cache_hash=True):
         return h
 
 
-class CaptureBase(SpecBase, kw_only=True, frozen=True):
+class CaptureBase(SpecBase, kw_only=True, frozen=True, **kws):
     """bare minimum information about an IQ acquisition"""
 
     # acquisition
@@ -185,13 +191,13 @@ class CaptureBase(SpecBase, kw_only=True, frozen=True):
             )
 
 
-class AnalysisFilter(SpecBase, kw_only=True, frozen=True, cache_hash=True):
+class AnalysisFilter(SpecBase, kw_only=True, frozen=True, **kws):
     nfft: int = 8192
     window: typing.Union[tuple[str, ...], str] = 'hamming'
     nfft_out: int | None = None
 
 
-class FilteredCapture(CaptureBase, kw_only=True, frozen=True, cache_hash=True):
+class FilteredCapture(CaptureBase, kw_only=True, frozen=True, **kws):
     # filtering and resampling
     analysis_filter: AnalysisFilter = msgspec.field(default_factory=AnalysisFilter)
     # analysis_filter: dict = msgspec.field(
@@ -203,13 +209,7 @@ class AnalysisKeywords(typing.TypedDict):
     as_xarray: typing.NotRequired[bool | typing.Literal['delayed']]
 
 
-class Measurement(
-    _SlowHashSpecBase,
-    forbid_unknown_fields=True,
-    cache_hash=True,
-    kw_only=True,
-    frozen=True,
-):
+class Measurement(_SlowHashSpecBase, kw_only=True, frozen=True, **kws):
     """
     Returns:
         Analysis result of type `(xarray.DataArray if as_xarray else type(iq))`
@@ -241,13 +241,7 @@ class Measurement(
         return h
 
 
-class Analysis(
-    _SlowHashSpecBase,
-    forbid_unknown_fields=True,
-    cache_hash=True,
-    kw_only=True,
-    frozen=True,
-):
+class Analysis(_SlowHashSpecBase, kw_only=True, frozen=True, **kws):
     """base class for a set of Measurement specifications"""
 
     pass
@@ -318,7 +312,3 @@ def maybe_lookup_with_capture_key(
 
     else:
         return typing.cast(_T, value)
-
-
-class AcquisitionInfo(SpecBase, kw_only=True, frozen=True):
-    pass

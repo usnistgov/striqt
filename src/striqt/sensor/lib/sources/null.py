@@ -3,7 +3,7 @@ import time
 import typing
 
 from .. import specs
-from . import base
+from . import base, null
 
 _TS = typing.TypeVar('_TS', bound=specs.NullSourceSpec)
 _TC = typing.TypeVar('_TC', bound=specs.CaptureSpec)

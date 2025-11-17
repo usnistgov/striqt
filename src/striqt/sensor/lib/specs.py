@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import functools
 import itertools
 import numbers
 import typing
@@ -20,7 +19,7 @@ from typing import (
 import msgspec
 
 from striqt import analysis
-from striqt.analysis.lib.specs import SpecBase, meta
+from striqt.analysis.lib.specs import SpecBase, meta, kws
 
 from . import util
 
@@ -33,12 +32,7 @@ else:
 
 _TC = typing.TypeVar('_TC', bound='CaptureSpec')
 _TS = typing.TypeVar('_TS', bound='SourceSpec')
-
-
-kws = dict(
-    forbid_unknown_fields=True,
-    cache_hash=True,
-)
+_TP = typing.TypeVar('_TP', bound='PeripheralSpec')
 
 
 def _dict_hash(d):
@@ -62,7 +56,7 @@ def _validate_multichannel(port, gain):
             raise ValueError('gain, when specified as a tuple, must match port count')
 
 
-@functools.lru_cache(4)
+@util.lru_cache(4)
 def _expand_loops(
     explicit: tuple[_TC, ...], loops: tuple[LoopSpec, ...]
 ) -> tuple[_TC, ...]:
@@ -172,13 +166,17 @@ StartTimeType = Annotated[
 SweepStartTimeType = Annotated['pd.Timestamp', meta('Capture acquisition start time')]
 
 
-class AcquisitionInfo(analysis.specs.AcquisitionInfo, frozen=True, kw_only=True, **kws):
+class AcquisitionInfo(SpecBase, kw_only=True, frozen=True):
+    source_id: SourceIDType = ''
+
+
+class SoapyAcquisitionInfo(AcquisitionInfo, frozen=True, kw_only=True, **kws):
     """extra coordinate information returned from an acquisition"""
 
     sweep_time: SweepStartTimeType | None
     start_time: StartTimeType | None
     backend_sample_rate: BackendSampleRateType
-    source_id: SourceIDType
+    source_id: SourceIDType = ''
 
 
 class SoapyCaptureSpec(CaptureSpec, frozen=True, kw_only=True, **kws):
@@ -477,12 +475,16 @@ class ExtensionSpec(SpecBase, frozen=True, kw_only=True, **kws):
     import_name: ModuleNameType = None
 
 
+class PeripheralSpec(SpecBase, frozen=True, kw_only=True, **kws):
+    pass
+
+
 # registered striqt.analysis.measurements -> Analysis spec
 BundledAnalysis = analysis.registry.tospec()
 BundledAlignmentAnalysis = analysis.registry.channel_sync_source.to_spec()
 
 
-class SweepSpec(SpecBase, Generic[_TS, _TC], frozen=True, kw_only=True, **kws):
+class SweepSpec(SpecBase, Generic[_TS, _TP, _TC], frozen=True, kw_only=True, **kws):
     source: _TS
     captures: tuple[_TC, ...] = tuple()
     loops: tuple[LoopSpec, ...] = ()
@@ -491,6 +493,7 @@ class SweepSpec(SpecBase, Generic[_TS, _TC], frozen=True, kw_only=True, **kws):
     description: Union[Description, str] = ''
     extensions: ExtensionSpec = ExtensionSpec()
     sink: SinkSpec = SinkSpec()
+    peripherals: _TP|None = None
 
     @property
     def looped_captures(self) -> tuple[_TC, ...]:

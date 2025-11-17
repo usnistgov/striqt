@@ -53,14 +53,10 @@ _TS = typing.TypeVar('_TS', bound=specs.SourceSpec)
 _TC = typing.TypeVar('_TC', bound=specs.CaptureSpec)
 
 
-class OptionalData(typing.TypedDict, total=False):
-    unscaled_iq_peak: ArrayType
-
-
 @dataclasses.dataclass(kw_only=True)
 class AcquiredIQ(dataarrays.AcquiredIQ):
-    info: specs.SpecBase
-    extra_data: OptionalData = OptionalData()
+    info: specs.AcquisitionInfo
+    extra_data: dict[str, typing.Any]
 
 
 class ReceiveStreamError(IOError):
@@ -451,14 +447,14 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
         if self._sweep_time is None:
             self._sweep_time = ts
 
-        info = specs.AcquisitionInfo(
+        info = specs.SoapyAcquisitionInfo(
             sweep_time=self._sweep_time,
             start_time=ts,
             backend_sample_rate=self.get_resampler()['fs_sdr'],
             source_id=self.id,
         )
 
-        iq = AcquiredIQ(samples, aligned=None, capture=capture, info=info)
+        iq = AcquiredIQ(samples, aligned=None, capture=capture, info=info, extra_data={})
 
         if not correction:
             return iq

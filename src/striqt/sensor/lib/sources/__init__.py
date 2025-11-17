@@ -2,7 +2,6 @@ from . import base, file, function, null
 
 from .base import (
     AcquiredIQ,
-    OptionalData,
     SourceBase,
     design_capture_resampler,
     get_channel_read_buffer_count,

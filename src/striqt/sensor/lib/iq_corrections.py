@@ -5,7 +5,6 @@ import typing
 from . import calibration, specs, util
 from .sources import (
     AcquiredIQ,
-    OptionalData,
     SourceBase,
     base,
 )
@@ -113,9 +112,9 @@ def resampling_correction(
         unscaled_peak = 20 * xp.log10(peak_counts * prescale) - 3
         descs = ','.join(f'{p:0.0f}' for p in unscaled_peak)
         logger.info(f'({descs}) dBfs ADC peak')
-        extra_data = OptionalData(unscaled_iq_peak=unscaled_peak)
+        extra_data = dict(unscaled_iq_peak=unscaled_peak)
     else:
-        extra_data = OptionalData()
+        extra_data = dict()
 
     resampler = radio.get_resampler()
     fs = resampler['fs_sdr']

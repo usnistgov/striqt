@@ -112,7 +112,7 @@ class Airstack1Source(soapy.SoapySourceBase):
 
         return eth0_mac
 
-    def get_temperatures(self) -> dict[str, float]:
+    def read_peripherals(self) -> dict[str, float]:
         """returns the transceiver temperature in Celsius"""
         assert self._device is not None
 

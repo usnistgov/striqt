@@ -729,7 +729,7 @@ class SoapySourceBase(
             on_overflow=on_overflow,
         )
 
-    def get_temperatures(self) -> dict[str, float]:
+    def read_peripherals(self) -> dict[str, typing.Any]:
         return {}
 
     @functools.cached_property
@@ -759,4 +759,6 @@ class SoapySourceBase(
 
     def acquire(self, capture=None, next_capture=None, correction=True):
         with read_retries(self):
-            return super().acquire(capture, next_capture, correction)
+            result = super().acquire(capture, next_capture, correction)
+            result.extra_data.update(self.read_peripherals())  # type: ignore
+            return result
