@@ -22,7 +22,7 @@ from textual.screen import Screen
 from textual.widgets import Button, DataTable, Footer, Label, ProgressBar, Static
 from textual.worker import Worker
 
-from . import frontend, io, resources, sweeps, util
+from . import io, resources, sweeps, util
 
 if typing.TYPE_CHECKING:
     import psutil
