@@ -29,7 +29,7 @@ USE_OARESAMPLE = False
 
 
 def _get_voltage_scale(
-    capture: specs.CaptureSpec,
+    capture: specs.WaveformCaptureSpec,
     radio: SourceBase,
     *,
     force_calibration: 'xr.Dataset|None' = None,
@@ -77,7 +77,7 @@ def _get_voltage_scale(
 
 def resampling_correction(
     iq_in: AcquiredIQ,
-    capture: specs.CaptureSpec,
+    capture: specs.WaveformCaptureSpec,
     radio: SourceBase,
     force_calibration: typing.Optional['xr.Dataset'] = None,
     *,

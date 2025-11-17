@@ -36,7 +36,7 @@ else:
     np = util.lazy_import('numpy')
 
     try:
-        cp = lazy_import('cupy')
+        cp = util.lazy_import('cupy')
     except ImportError:
         cp = None
 
@@ -50,7 +50,7 @@ FILTER_DOMAIN = 'time'
 
 
 _TS = typing.TypeVar('_TS', bound=specs.SourceSpec)
-_TC = typing.TypeVar('_TC', bound=specs.CaptureSpec)
+_TC = typing.TypeVar('_TC', bound=specs.WaveformCaptureSpec)
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -110,7 +110,7 @@ class _ReceiveBuffers:
         samples: 'np.ndarray',
         sample_start_ns,
         unused_sample_count: int,
-        capture: specs.CaptureSpec,
+        capture: specs.WaveformCaptureSpec,
     ):
         """stash data needed to carry over extra samples into the next capture"""
         carryover_count = unused_sample_count
@@ -454,7 +454,9 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
             source_id=self.id,
         )
 
-        iq = AcquiredIQ(samples, aligned=None, capture=capture, info=info, extra_data={})
+        iq = AcquiredIQ(
+            samples, aligned=None, capture=capture, info=info, extra_data={}
+        )
 
         if not correction:
             return iq
@@ -606,7 +608,7 @@ def find_trigger_holdoff(
 @util.lru_cache(30000)
 def _design_capture_resampler(
     base_clock_rate: float | None,
-    capture: specs.WaveformCapture,
+    capture: specs.WaveformCaptureSpec,
     bw_lo=0.25e6,
     min_oversampling=1.1,
     window=RESAMPLE_COLA_WINDOW,
@@ -673,10 +675,10 @@ def _design_capture_resampler(
 
 @functools.wraps(_design_capture_resampler)
 def design_capture_resampler(
-    base_clock_rate: float | None, capture: specs.WaveformCapture, *args, **kws
+    base_clock_rate: float | None, capture: specs.WaveformCaptureSpec, *args, **kws
 ) -> ResamplerDesign:
     # cast the struct in case it's a subclass
-    fixed_capture = specs.WaveformCapture.fromspec(capture)
+    fixed_capture = specs.WaveformCaptureSpec.fromspec(capture)
     kws.setdefault('window', RESAMPLE_COLA_WINDOW)
 
     from .. import iq_corrections
@@ -697,7 +699,7 @@ def design_capture_resampler(
 
 
 def needs_resample(
-    analysis_filter: ResamplerDesign, capture: specs.CaptureSpec
+    analysis_filter: ResamplerDesign, capture: specs.WaveformCaptureSpec
 ) -> bool:
     """determine whether an STFT will be needed to filter or resample"""
 
@@ -705,7 +707,7 @@ def needs_resample(
     return is_resample and capture.host_resample
 
 
-def _get_filter_pad(capture: specs.CaptureSpec):
+def _get_filter_pad(capture: specs.WaveformCaptureSpec):
     if np.isfinite(capture.analysis_bandwidth):
         return FILTER_SIZE // 2 + 1
     else:
@@ -715,7 +717,7 @@ def _get_filter_pad(capture: specs.CaptureSpec):
 @util.lru_cache(30000)
 def _get_dsp_pad_size(
     setup: specs.SourceSpec,
-    capture: specs.CaptureSpec,
+    capture: specs.WaveformCaptureSpec,
     aligner: register.AlignmentCaller | None = None,
 ) -> tuple[int, int]:
     """returns the padding before and after a waveform to achieve an integral number of FFT windows"""
@@ -752,7 +754,7 @@ def _get_dsp_pad_size(
 
 def _get_aligner_pad_size(
     base_clock_rate: float | None,
-    capture: specs.CaptureSpec,
+    capture: specs.WaveformCaptureSpec,
     aligner: register.AlignmentCaller | None = None,
 ) -> int:
     if aligner is None:
@@ -774,7 +776,9 @@ def _get_next_fast_len(n):
     return scipy.fft.next_fast_len(n)
 
 
-def _get_oaresample_pad(base_clock_rate: float | None, capture: specs.CaptureSpec):
+def _get_oaresample_pad(
+    base_clock_rate: float | None, capture: specs.WaveformCaptureSpec
+):
     resampler_design = design_capture_resampler(base_clock_rate, capture)
 
     nfft = resampler_design['nfft']

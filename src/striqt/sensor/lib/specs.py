@@ -30,7 +30,7 @@ else:
     # to resolve the 'pd.Timestamp' stub at runtime
     pd = util.lazy_import('pandas')
 
-_TC = typing.TypeVar('_TC', bound='CaptureSpec')
+_TC = typing.TypeVar('_TC', bound='WaveformCaptureSpec')
 _TS = typing.TypeVar('_TS', bound='SourceSpec')
 _TP = typing.TypeVar('_TP', bound='PeripheralSpec')
 
@@ -108,7 +108,7 @@ PortType = Annotated[
 ]
 
 
-class WaveformCapture(analysis.CaptureBase, frozen=True, kw_only=True, **kws):
+class WaveformCaptureSpec(analysis.CaptureBase, frozen=True, kw_only=True, **kws):
     """Capture specification structure for a generic waveform.
 
     This subset of RadioCapture is broken out here to simplify the evaluation of
@@ -143,7 +143,7 @@ class _WaveformCaptureKeywords(TypedDict, total=False):
     backend_sample_rate: Optional[BackendSampleRateType]
 
 
-class CaptureSpec(WaveformCapture, frozen=True, kw_only=True, **kws):
+class CaptureSpec(WaveformCaptureSpec, frozen=True, kw_only=True, **kws):
     """Capture specification for a single radio waveform"""
 
     delay: Optional[DelayType] = None
@@ -493,7 +493,7 @@ class SweepSpec(SpecBase, Generic[_TS, _TP, _TC], frozen=True, kw_only=True, **k
     description: Union[Description, str] = ''
     extensions: ExtensionSpec = ExtensionSpec()
     sink: SinkSpec = SinkSpec()
-    peripherals: _TP|None = None
+    peripherals: _TP | None = None
 
     @property
     def looped_captures(self) -> tuple[_TC, ...]:

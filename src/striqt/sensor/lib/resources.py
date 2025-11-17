@@ -9,7 +9,9 @@ import sys
 import typing
 from pathlib import Path
 
-from ..bindings import get_binding, registry
+from .. import bindings
+
+from .bindings import get_binding, get_registry
 from . import (
     calibration,
     captures,
@@ -32,11 +34,11 @@ else:
 
 
 def _import_sink_cls(
-    spec: specs.SweepSpec[specs._TS, specs._TC],
+    spec: specs.ExtensionSpec,
 ) -> type[sinks.SinkBase]:
     import importlib
 
-    mod_name, *sub_names, obj_name = spec.extensions.sink.rsplit('.')
+    mod_name, *sub_names, obj_name = spec.sink.rsplit('.')
     mod = importlib.import_module(mod_name)
     for name in sub_names:
         mod = getattr(mod, name)
@@ -66,8 +68,6 @@ def _import_extensions(
             assert isinstance(p, (str, Path))
             sys.path.insert(0, str(p))
 
-    from ..bindings import get_registry
-
     if spec.import_name is None:
         return
 
@@ -81,7 +81,7 @@ def _import_extensions(
         )
 
 
-def run_warmup(input_spec: specs.SweepSpec[specs._TS, specs._TC]):
+def run_warmup(input_spec: specs.SweepSpec):
     if not input_spec.source.warmup_sweep:
         return
 
@@ -93,7 +93,7 @@ def run_warmup(input_spec: specs.SweepSpec[specs._TS, specs._TC]):
     if len(warmup_spec.captures) == 0:
         return
 
-    source = registry.warmup.source(warmup_spec.source, analysis=warmup_spec.analysis)
+    source = bindings.warmup.source(warmup_spec.source, analysis=warmup_spec.analysis)
 
     with source:
         resources = sweeps.Resources(source=source, sweep_spec=warmup_spec)
@@ -117,8 +117,11 @@ def _load_calibration(
     calibration.read_calibration(p)
 
 
-class ConnectionManager(contextlib.ExitStack):
-    resources: sweeps.Resources
+class ConnectionManager(
+    contextlib.ExitStack,
+    typing.Generic[specs._TS, specs._TP, specs._TC],
+):
+    resources: sweeps.Resources[specs._TS, specs._TP, specs._TC]
 
     def __init__(self):
         self.resources = sweeps.Resources()
@@ -131,10 +134,10 @@ class ConnectionManager(contextlib.ExitStack):
 
 
 def open_sensor_from_spec(
-    spec: specs.SweepSpec[specs._TS, specs._TC],
+    spec: specs.SweepSpec[specs._TS, specs._TP, specs._TC],
     spec_path: str | Path | None = None,
     except_context: typing.ContextManager | None = None,
-) -> ConnectionManager:
+) -> ConnectionManager[specs._TS, specs._TP, specs._TC]:
     """open the sensor hardware and software contexts needed to run the given sweep.
 
     The returned Connections object contains the resulting context. All of its resources
@@ -153,7 +156,7 @@ def open_sensor_from_spec(
         util.log_to_file(spec.sink.log_path, spec.sink.log_level)
 
     binding = get_binding(spec)
-    sink_cls = _import_sink_cls(spec)
+    sink_cls = _import_sink_cls(spec.extensions)
 
     conns = ConnectionManager()
 
@@ -172,7 +175,7 @@ def open_sensor_from_spec(
             'warmup': util.Call(run_warmup, spec),
             'load_calibration': util.Call(_load_calibration, spec, format_aliases),
             'peripherals': util.Call(
-                conns.open, 'peripherals', binding.peripherals, spec
+                conns.open, 'peripherals', binding.peripherals, spec.peripherals
             ),
         }
 
@@ -182,7 +185,7 @@ def open_sensor_from_spec(
         with util.stopwatch(f'setup {", ".join(calls)}', **timer_kws):  # type: ignore
             if 'peripherals' in conns.resources:
                 assert 'source' in conns.resources
-                conns.resources['peripherals'].setup(conns.resources['source'])
+                conns.resources['peripherals'].setup()
 
         if except_context is not None:
             conns.enter_context(except_context)

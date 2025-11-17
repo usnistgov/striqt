@@ -733,7 +733,7 @@ class SoapySourceBase(
         return {}
 
     @functools.cached_property
-    def id(self):
+    def id(self) -> str:
         if not self.is_open():
             raise ConnectionError('Device is closed')
 

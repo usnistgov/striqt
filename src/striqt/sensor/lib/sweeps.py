@@ -14,7 +14,7 @@ from . import datasets, sources, specs, util
 from .calibration import lookup_system_noise_power
 from .peripherals import PeripheralsBase
 from .sinks import SinkBase
-from .specs import _TC, _TS
+from .specs import _TC, _TP, _TS
 
 if typing.TYPE_CHECKING:
     import xarray as xr
@@ -22,19 +22,19 @@ else:
     xr = util.lazy_import('xarray')
 
 
-class ConnectionResources(typing.TypedDict, typing.Generic[_TS, _TC], total=False):
+class ConnectionResources(typing.TypedDict, typing.Generic[_TS, _TP, _TC], total=False):
     """Sensor resources needed to run a sweep"""
 
     source: sources.SourceBase[_TS, _TC]
     sink: SinkBase
-    peripherals: PeripheralsBase[_TS, _TC]
+    peripherals: PeripheralsBase[_TP, _TC]
     except_context: typing.ContextManager
 
 
-class Resources(ConnectionResources[_TS, _TC], total=False):
+class Resources(ConnectionResources[_TS, _TP, _TC], total=False):
     """Sensor resources needed to run a sweep"""
 
-    sweep_spec: specs.SweepSpec[_TS, _TC]
+    sweep_spec: specs.SweepSpec[_TS, _TP, _TC]
     calibration: 'xr.Dataset|None'
 
 
@@ -51,7 +51,7 @@ def varied_capture_fields(sweep: specs.SweepSpec) -> list[str]:
     return [f for f, c in totals.items() if c > 1]
 
 
-def sweep_touches_gpu(sweep: specs.SweepSpec):
+def sweep_touches_gpu(sweep: specs.SweepSpec) -> bool:
     """returns True if the sweep would benefit from the GPU"""
 
     if sweep.source.calibration is not None:
@@ -78,8 +78,8 @@ def sweep_touches_gpu(sweep: specs.SweepSpec):
 
 
 def design_warmup_sweep(
-    sweep: specs.SweepSpec[_TS, _TC], skip: tuple[_TC, ...] = ()
-) -> specs.SweepSpec:
+    sweep: specs.SweepSpec[_TS, _TP, _TC], skip: tuple[_TC, ...] = ()
+) -> specs.SweepSpec[specs.NullSourceSpec, _TP, specs.WaveformCaptureSpec]:
     """returns a Sweep object for a NullRadio consisting of capture combinations from
     `sweep`.
 
@@ -87,13 +87,13 @@ def design_warmup_sweep(
     in order to avoid analysis slowdowns during sweeps.
     """
 
-    from ..bindings import registry
+    from .. import bindings
 
     # captures that have unique sampling parameters, which are those
     # specified in structs.WaveformCapture
-    wcaptures = [specs.WaveformCapture.fromspec(c) for c in sweep.looped_captures]
+    wcaptures = [specs.WaveformCaptureSpec.fromspec(c) for c in sweep.looped_captures]
     unique_map = dict(zip(wcaptures, sweep.looped_captures))
-    skip_wcaptures = {specs.WaveformCapture.fromspec(c) for c in skip}
+    skip_wcaptures = {specs.WaveformCaptureSpec.fromspec(c) for c in skip}
     captures = [unique_map[c] for c in unique_map.keys() if c not in skip_wcaptures]
 
     num_rx_ports = 0
@@ -113,18 +113,13 @@ def design_warmup_sweep(
     # TODO: currently, the base_clock_rate is left as the null radio default.
     # this may cause problems in the future if its default disagrees with another
     # radio
-    source_spec = specs.NullSourceSpec.fromspec(sweep.source).replace(
+    source = specs.NullSourceSpec.fromspec(sweep.source).replace(
         num_rx_ports=num_rx_ports, calibration=None, reuse_iq=False
     )
 
-    class WarmupSweep(
-        registry.warmup.sweep_spec, frozen=True, kw_only=True, **specs.kws
-    ):
-        loops = ()
+    warmup = bindings.warmup.sweep_spec.fromspec(sweep)
 
-    warmup = WarmupSweep.fromdict(sweep.todict())
-
-    return warmup.replace(captures=captures, source=source_spec)
+    return warmup.replace(captures=tuple(captures), source=source, loops=())
 
 
 def _iq_is_reusable(

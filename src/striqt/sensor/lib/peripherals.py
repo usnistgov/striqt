@@ -5,7 +5,7 @@ import typing
 from . import specs
 
 
-_TC = typing.TypeVar('_TC', bound=specs.CaptureSpec, contravariant=True)
+_TC = typing.TypeVar('_TC', bound=specs.WaveformCaptureSpec, contravariant=True)
 _TP = typing.TypeVar('_TP', bound=specs.PeripheralSpec)
 
 

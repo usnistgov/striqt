@@ -41,7 +41,9 @@ class ManualYFactorCapture(
     noise_diode_enabled: NoiseDiodeEnabledType = False
 
 
-class ManualYFactorPeripheralSpec(specs.PeripheralSpec, frozen=True, kw_only=True, **specs.kws):
+class ManualYFactorPeripheralSpec(
+    specs.PeripheralSpec, frozen=True, kw_only=True, **specs.kws
+):
     enr: Annotated[float, meta(standard_name='Excess noise ratio', units='dB')] = 20.87
     ambient_temperature: Annotated[
         float, meta(standard_name='Ambient temperature', units='K')
@@ -52,9 +54,7 @@ class CalibrationRadioSetup(specs.SourceSpec, frozen=True, kw_only=True, **specs
     reuse_iq = True
 
 
-class CalVariables(
-    specs.SpecBase, frozen=True, kw_only=True, **specs.kws
-):
+class CalVariables(specs.SpecBase, frozen=True, kw_only=True, **specs.kws):
     noise_diode_enabled: tuple[NoiseDiodeEnabledType, ...] = (False, True)
     sample_rate: tuple[specs.BackendSampleRateType, ...]
     center_frequency: tuple[specs.CenterFrequencyType, ...] = (3700e6,)
@@ -66,14 +66,12 @@ class CalVariables(
     lo_shift: tuple[specs.LOShiftType, ...] = ('none',)
 
 
-class ManualYFactorSweep(
-    specs.SweepSpec, frozen=True, kw_only=True, **specs.kws
-):
+class ManualYFactorSweep(specs.SweepSpec, frozen=True, kw_only=True, **specs.kws):
     """This specialized sweep is fed to the YAML file loader
     to specify the change in expected capture structure."""
 
     calibration_variables: CalVariables
-    peripherals: ManualYFactorPeripheralSpec|None = None
+    peripherals: ManualYFactorPeripheralSpec | None = None
     source: CalibrationRadioSetup
 
     def __post_init__(self):
@@ -442,7 +440,7 @@ class YFactorSink(sinks.SinkBase):
         'sample_rate',
     )
 
-    def _get_path(self) -> Path|None:
+    def _get_path(self) -> Path | None:
         path = self._spec.path
 
         if self._alias_func is not None:
@@ -557,7 +555,8 @@ class ManualYFactorPeripherals(peripherals.PeripheralsBase[_TMP, _TMC]):
 
     def acquire(self, capture):
         return {
-            'enr_dB': self.spec.enr, 'Tamb_K': self.spec.ambient_temperature,
+            'enr_dB': self.spec.enr,
+            'Tamb_K': self.spec.ambient_temperature,
         }
 
 
