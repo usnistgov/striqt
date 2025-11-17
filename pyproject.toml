@@ -35,10 +35,15 @@ dev = [
     "ruff",
     "toml",
 ]
-gpu-cpu = [
+gpu = [
     "cupy >= 12.2",
     "cython",
 ]
+testing = [
+    "pytest",
+    "nptdms",
+]
+# this will still require external SoapySDR
 edge-airstack-1 = [
     "cupy-cuda102",
     "cython<3",
