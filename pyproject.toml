@@ -1,23 +1,23 @@
 [project]
 name = "striqt"
-version = "0.0.3"
+version = "0.0.4"
 description = "tooling to support precision gpu-accelerated radio signal analysis and software radio automation"
 requires-python = ">=3.9"
 dependencies = [
- "array-api-compat>=1.6",
- "dask",
- "matplotlib~=3.7",
- "methodtools",
- "msgspec~=0.19",
- "netCDF4",
- "numba",
- "numexpr~=2.8",
- "numpy>=1.21,<3",
- "pandas>=1.5",
- "scipy>=1.13,<2",
- "typing-extensions",
- "xarray>=2024.3",
- "zarr>=2.18,<4",
+    "array-api-compat>=1.6",
+    "dask",
+    "matplotlib~=3.7",
+    "methodtools",
+    "msgspec~=0.19",
+    "netCDF4",
+    "numba",
+    "numexpr~=2.8",
+    "numpy>=1.21,<3",
+    "pandas>=1.5",
+    "scipy>=1.13,<2",
+    "typing-extensions",
+    "xarray>=2024.3",
+    "zarr>=2.18,<4",
 ]
 
 [[project.authors]]
@@ -29,25 +29,28 @@ requires = [ "hatchling",]
 build-backend = "hatchling.build"
 
 [project.optional-dependencies]
-dev = [ "jupyter",
- "ruamel_yaml",
- "ruff",
- "toml",
+dev = [
+    "jupyter",
+    "ruamel_yaml",
+    "ruff",
+    "toml",
 ]
-gpu-cpu = [ "cupy >= 12.2",
- "cython",
+gpu-cpu = [
+    "cupy >= 12.2",
+    "cython",
 ]
-edge-airstack-1 = [ "cupy-cuda102",
- "cython<3",
- "dulwich",
- "matplotlib>=3.7",
- "numba~=0.56.0",
- "numpy>=1.21,<2",
- "pandas",
- "pytools==2022.1.12",
- "scipy~=1.9",
- "ssmdevices",
- "zarr~=2.18.2",
+edge-airstack-1 = [
+    "cupy-cuda102",
+    "cython<3",
+    "dulwich",
+    "matplotlib>=3.7",
+    "numba~=0.56.0",
+    "numpy>=1.21,<2",
+    "pandas",
+    "pytools==2022.1.12",
+    "scipy~=1.9",
+    "ssmdevices",
+    "zarr~=2.18.2",
 ]
 
 [project.scripts]
@@ -59,8 +62,7 @@ serve-sensor = "striqt.cli.server:run"
 
 [tool.ruff]
 target-version = "py39"
-extend-include = [ "*.ipynb",
-]
+extend-include = [ "*.ipynb", ]
 line-length = 88
 
 [tool.ruff.format]
@@ -73,15 +75,10 @@ docstring-code-line-length = "dynamic"
 allow-direct-references = true
 
 [tool.ruff.lint.extend-per-file-ignores]
-"**/__init__.py" = [ "F401",
- "F403",
- "E402",
-]
+"**/__init__.py" = [ "F401", "F403", "E402"]
 
 [tool.hatch.build.targets.wheel]
-packages = [ "src/striqt",
-]
+packages = [ "src/striqt", ]
 
 [tool.hatch.build.targets.sdist]
-packages = [ "src/striqt",
-]
+packages = [ "src/striqt", ]
