@@ -34,7 +34,7 @@ class IQWaveformKeywords(specs.AnalysisKeywords):
 
 
 def _get_start_stop_index(
-    capture: specs.CaptureBase,
+    capture: specs.Capture,
     spec: IQWaveformSpec,
     allow_none=True,
 ):
@@ -59,7 +59,7 @@ def _get_start_stop_index(
 
 @registry.coordinates(dtype='uint64', attrs={'standard_name': 'Sample Index'})
 @util.lru_cache()
-def iq_index(capture: specs.CaptureBase, spec: IQWaveformSpec) -> typing.Iterable[int]:
+def iq_index(capture: specs.Capture, spec: IQWaveformSpec) -> typing.Iterable[int]:
     start, stop = _get_start_stop_index(capture, spec, allow_none=False)
     return pd.RangeIndex(start, stop, name=iq_index.__name__)
 
@@ -73,7 +73,7 @@ def iq_index(capture: specs.CaptureBase, spec: IQWaveformSpec) -> typing.Iterabl
 )
 def iq_waveform(
     iq: 'iqwaveform.util.Array',
-    capture: specs.CaptureBase,
+    capture: specs.Capture,
     **kwargs: typing.Unpack[IQWaveformKeywords],
 ) -> 'iqwaveform.util.Array':
     """package a clipping of the IQ waveform"""

@@ -74,7 +74,7 @@ def make_power_histogram_bin_edges(power_low, power_high, power_resolution, xp=n
 )
 @util.lru_cache()
 def channel_power_bin(
-    capture: specs.CaptureBase, spec: ChannelPowerHistogramSpec
+    capture: specs.Capture, spec: ChannelPowerHistogramSpec
 ) -> dict[str, np.ndarray]:
     """returns a dictionary of coordinate values, keyed by axis dimension name"""
     return make_power_bins(spec.power_low, spec.power_high, spec.power_resolution)
@@ -89,7 +89,7 @@ def channel_power_bin(
 )
 def channel_power_histogram(
     iq,
-    capture: specs.CaptureBase,
+    capture: specs.Capture,
     **kwargs: typing.Unpack[ChannelPowerHistogramKeywords],
 ):
     """evaluate the fraction of channel power readings binned on a uniform grid spacing.

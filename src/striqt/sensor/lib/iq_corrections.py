@@ -29,7 +29,7 @@ USE_OARESAMPLE = False
 
 
 def _get_voltage_scale(
-    capture: specs.WaveformCaptureSpec,
+    capture: specs.ResampledCapture,
     radio: SourceBase,
     *,
     force_calibration: 'xr.Dataset|None' = None,
@@ -51,7 +51,7 @@ def _get_voltage_scale(
     else:
         cal_data = force_calibration
 
-    if isinstance(bare_capture, specs.SoapyCaptureSpec):
+    if isinstance(bare_capture, specs.SoapyCapture):
         power_scale = calibration.lookup_power_correction(
             cal_data, bare_capture, radio.setup_spec.base_clock_rate, xp=xp
         )
@@ -77,7 +77,7 @@ def _get_voltage_scale(
 
 def resampling_correction(
     iq_in: AcquiredIQ,
-    capture: specs.WaveformCaptureSpec,
+    capture: specs.ResampledCapture,
     radio: SourceBase,
     force_calibration: typing.Optional['xr.Dataset'] = None,
     *,

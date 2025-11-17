@@ -1,15 +1,11 @@
 from __future__ import annotations
 
-import functools
-import itertools
 import typing
 from pathlib import Path
 
 import msgspec
 
-from . import datasets, peripherals, sinks, sources, specs, util
-from .captures import get_capture_type, split_capture_ports
-from .specs import Annotated, meta
+from . import captures, datasets, peripherals, sinks, sources, specs, util
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -24,67 +20,8 @@ else:
     xr = util.lazy_import('xarray')
 
 
-_TC = typing.TypeVar('_TC', bound=specs.SoapyCaptureSpec)
-_TMP = typing.TypeVar('_TMP', bound='ManualYFactorPeripheralSpec')
-_TMC = typing.TypeVar('_TMC', bound='ManualYFactorCapture')
-
-
-NoiseDiodeEnabledType = Annotated[bool, meta(standard_name='Noise diode enabled')]
-
-
-class ManualYFactorCapture(
-    specs.SoapyCaptureSpec, frozen=True, kw_only=True, **specs.kws
-):
-    """Specialize fields to add to the RadioCapture type"""
-
-    # RadioCapture with added fields
-    noise_diode_enabled: NoiseDiodeEnabledType = False
-
-
-class ManualYFactorPeripheralSpec(
-    specs.PeripheralSpec, frozen=True, kw_only=True, **specs.kws
-):
-    enr: Annotated[float, meta(standard_name='Excess noise ratio', units='dB')] = 20.87
-    ambient_temperature: Annotated[
-        float, meta(standard_name='Ambient temperature', units='K')
-    ] = 294.5389
-
-
-class CalibrationRadioSetup(specs.SourceSpec, frozen=True, kw_only=True, **specs.kws):
-    reuse_iq = True
-
-
-class CalVariables(specs.SpecBase, frozen=True, kw_only=True, **specs.kws):
-    noise_diode_enabled: tuple[NoiseDiodeEnabledType, ...] = (False, True)
-    sample_rate: tuple[specs.BackendSampleRateType, ...]
-    center_frequency: tuple[specs.CenterFrequencyType, ...] = (3700e6,)
-    port: tuple[specs.PortType, ...] = (0,)
-    gain: tuple[specs.GainType, ...] = (0,)
-
-    # filtering and resampling
-    analysis_bandwidth: tuple[specs.AnalysisBandwidthType, ...] = (float('inf'),)
-    lo_shift: tuple[specs.LOShiftType, ...] = ('none',)
-
-
-class ManualYFactorSweep(specs.SweepSpec, frozen=True, kw_only=True, **specs.kws):
-    """This specialized sweep is fed to the YAML file loader
-    to specify the change in expected capture structure."""
-
-    calibration_variables: CalVariables
-    peripherals: ManualYFactorPeripheralSpec | None = None
-    source: CalibrationRadioSetup
-
-    def __post_init__(self):
-        if self.source.calibration is not None:
-            raise ValueError('source.calibration must be None for a calibration sweep')
-
-    # the top here is just to set the annotation for msgspec
-    captures: tuple[ManualYFactorCapture, ...] = tuple()
-
-    @property
-    def looped_captures(self):
-        variables = self.calibration_variables.validate()
-        return _cached_cal_captures(variables, type(self.captures[0]))
+_TMP = typing.TypeVar('_TMP', bound=specs.ManualYFactorPeripheral)
+_TMC = typing.TypeVar('_TMC', bound=specs.YFactorCapture)
 
 
 @util.lru_cache()
@@ -98,39 +35,6 @@ def read_calibration(path: str | Path) -> 'xr.Dataset':
 def save_calibration(path, corrections: 'xr.Dataset'):
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     corrections.to_netcdf(path)
-
-
-@util.lru_cache()
-def _cached_cal_captures(
-    variables: CalVariables, capture_cls: type[_TC]
-) -> tuple[_TC, ...]:
-    var_fields = variables.todict()
-
-    # enforce ordering to place difficult-to-change variables in
-    # the outermost loops, in case the ordering is changed by
-    # subclasses
-    analysis_bandwidths = var_fields.pop('analysis_bandwidth')
-    var_fields = {
-        datasets.PORT_DIM: var_fields[datasets.PORT_DIM],
-        'noise_diode_enabled': var_fields['noise_diode_enabled'],
-        **var_fields,
-        'analysis_bandwidth': analysis_bandwidths,
-    }
-
-    # every combination of each variable
-    combos = itertools.product(*var_fields.values())
-
-    captures = []
-    for values in combos:
-        mapping = dict(zip(var_fields, values))
-        if mapping['analysis_bandwidth'] == float('inf'):
-            pass
-        elif mapping['analysis_bandwidth'] > mapping['sample_rate']:
-            # skip cases outside of 1st Nyquist zone
-            continue
-        captures.append(capture_cls.fromdict(mapping))
-
-    return tuple(captures)
 
 
 def _y_factor_temperature(
@@ -278,14 +182,14 @@ def _describe_missing_data(cal_data: 'xr.DataArray', exact_matches: dict):
 
 def _lookup_calibration_var(
     cal_var: 'xr.DataArray',
-    capture: specs.SoapyCaptureSpec,
+    capture: specs.SoapyCapture,
     base_clock_rate: float | None,
     *,
     xp,
 ):
     results = []
 
-    for capture_chan in split_capture_ports(capture):
+    for capture_chan in captures.split_capture_ports(capture):
         fs = sources.design_capture_resampler(base_clock_rate, capture_chan)['fs_sdr']
         port_key = _get_port_variable(cal_var)
 
@@ -351,7 +255,7 @@ def _lookup_calibration_var(
 @util.lru_cache()
 def lookup_power_correction(
     cal_data: 'str | Path | xr.Dataset | None',
-    capture: specs.SoapyCaptureSpec,
+    capture: specs.SoapyCapture,
     base_clock_rate: float | None,
     *,
     xp=None,
@@ -376,7 +280,7 @@ def lookup_power_correction(
 @util.lru_cache()
 def lookup_system_noise_power(
     cal_data: 'Path | str | xr.Dataset | None',
-    capture: specs.SoapyCaptureSpec,
+    capture: specs.SoapyCapture,
     base_clock_rate: float | None,
     *,
     T=290.0,
@@ -429,7 +333,7 @@ def _get_port_variable(ds: 'xr.DataArray|xr.Dataset') -> str:
 
 
 class YFactorSink(sinks.SinkBase):
-    sweep_spec: ManualYFactorSweep
+    sweep_spec: specs.YFactorCalibrationSweep
 
     _DROP_FIELDS = (
         'sweep_start_time',
@@ -467,7 +371,7 @@ class YFactorSink(sinks.SinkBase):
         # dataset
         pass
 
-    def append(self, capture_data: 'xr.Dataset | None', capture: specs.CaptureSpec):
+    def append(self, capture_data: 'xr.Dataset | None', capture: specs.ResampledCapture):
         if capture_data is None:
             return
 
@@ -589,9 +493,9 @@ def _merge_specs(
 
 def specialize_cal_sweep(
     name: str,
-    cal_cls: type[specs.SweepSpec],
-    sensor_cls: type[specs.SweepSpec],
-) -> type[specs.SweepSpec]:
+    cal_cls: type[specs.Sweep],
+    sensor_cls: type[specs.Sweep],
+) -> type[specs.Sweep]:
     """build a type calibration sweep specification struct for the given sensor.
 
     The idea is to generate a `cal_cls` subclass that can be applied
@@ -608,7 +512,7 @@ def specialize_cal_sweep(
             all_fields.setdefault(info.name, []).append(info.type)
 
     capture_cls = _merge_specs(
-        'CalibrationRadioCapture', module, [get_capture_type(sensor_cls)]
+        'CalibrationRadioCapture', module, [captures.get_capture_type(sensor_cls)]
     )
     setup_cls = _merge_specs('CalibrationRadioSetup', module, all_fields['source'])
 
@@ -625,7 +529,7 @@ def specialize_cal_sweep(
         cache_hash=True,
     )
 
-    return typing.cast(type[specs.SweepSpec], sweep_cls)
+    return typing.cast(type[specs.Sweep], sweep_cls)
 
 
 def specialize_cal_peripherals(
@@ -659,7 +563,7 @@ def specialize_cal_peripherals(
                 calibration=util.Call(cal_cls.close, self),
             )
 
-        def arm(self, capture: specs.SoapyCaptureSpec):
+        def arm(self, capture: specs.SoapyCapture):
             """runs before each capture"""
 
             util.concurrently(

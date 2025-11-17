@@ -33,7 +33,7 @@ class Cellular5GNRSSSCorrelationSpec(
     dtype='uint16', attrs={'standard_name': r'Cell gNodeB ID ($N_\text{ID}^{(1)}$)'}
 )
 @util.lru_cache()
-def cellular_cell_id1(capture: specs.CaptureBase, spec: typing.Any):
+def cellular_cell_id1(capture: specs.Capture, spec: typing.Any):
     values = np.arange(336, dtype='uint16')
     return values
 
@@ -59,7 +59,7 @@ sss_correlation_cache = register.KeywordArgumentCache(['capture', 'spec'])
 def correlate_5g_sss(
     iq: 'striqt.waveform._typing.ArrayType',
     *,
-    capture: specs.CaptureBase,
+    capture: specs.Capture,
     spec: Cellular5GNRSSSCorrelationSpec,
 ) -> 'striqt.waveform._typing.ArrayType':
     xp = iqwaveform.util.array_namespace(iq)
@@ -94,7 +94,7 @@ def correlate_5g_sss(
 )
 def cellular_5g_sss_sync(
     iq,
-    capture: specs.CaptureBase,
+    capture: specs.Capture,
     window_fill=0.5,
     **kwargs: typing.Unpack[shared.Cellular5GNRSyncCorrelationKeywords],
 ):
@@ -154,7 +154,7 @@ def cellular_5g_sss_sync(
 )
 def cellular_5g_sss_correlation(
     iq,
-    capture: specs.CaptureBase,
+    capture: specs.Capture,
     **kwargs: typing.Unpack[shared.Cellular5GNRSyncCorrelationKeywords],
 ):
     """correlate each channel of the IQ against the cellular primary synchronization signal (PSS) waveform.

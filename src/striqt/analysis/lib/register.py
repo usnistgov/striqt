@@ -25,7 +25,7 @@ if typing.TYPE_CHECKING:
     _P = typing_extensions.ParamSpec('_P')
     _R = typing.TypeVar('_R', covariant=True)
 
-    _TC = typing.TypeVar('_TC', bound='specs.CaptureBase', contravariant=True)
+    _TC = typing.TypeVar('_TC', bound='specs.Capture', contravariant=True)
     _TM = typing.TypeVar('_TM', bound='specs.Measurement', contravariant=True)
 
     _RM = typing.Union[
@@ -41,7 +41,7 @@ if typing.TYPE_CHECKING:
         def __call__(
             self,
             iq: ArrayType,
-            capture: specs.CaptureBase,
+            capture: specs.Capture,
             *args: _P.args,
             **kwargs: _P.kwargs,
         ) -> _R: ...
@@ -52,7 +52,7 @@ if typing.TYPE_CHECKING:
         def __call__(
             self,
             iq: ArrayType,
-            capture: specs.CaptureBase,
+            capture: specs.Capture,
             as_xarray: bool = True,
             *args: _P.args,
             **kwargs: _P.kwargs,
@@ -117,7 +117,7 @@ class KeywordArgumentCache:
         @functools.wraps(func)
         def wrapped(
             iq: ArrayType,
-            capture: specs.CaptureBase,
+            capture: specs.Capture,
             *args: _P.args,
             **kwargs: _P.kwargs,
         ) -> _RM:
@@ -296,7 +296,7 @@ def _make_measurement_signature(spec_cls):
         inspect.Parameter(
             'capture',
             inspect.Parameter.POSITIONAL_OR_KEYWORD,
-            annotation=specs.CaptureBase,
+            annotation=specs.Capture,
         ),
     ]
 
@@ -401,7 +401,7 @@ class MeasurementRegistry(
             @functools.wraps(func)
             def wrapped(
                 iq: ArrayType,
-                capture: specs.CaptureBase,
+                capture: specs.Capture,
                 as_xarray: bool = True,
                 *args: _P.args,
                 **kwargs: _P.kwargs,
@@ -487,7 +487,7 @@ class MeasurementRegistry(
         return to_analysis_spec_type(self, base)
 
     def cache_context(
-        self, capture: specs.CaptureBase, callback: typing.Callable | None = None
+        self, capture: specs.Capture, callback: typing.Callable | None = None
     ):
         return cached_registry_context(self, capture, callback)
 
@@ -495,7 +495,7 @@ class MeasurementRegistry(
 @contextlib.contextmanager
 def cached_registry_context(
     registry: MeasurementRegistry,
-    capture: specs.CaptureBase,
+    capture: specs.Capture,
     callback: typing.Callable | None = None,
 ):
     caches: list[KeywordArgumentCache] = []
@@ -558,7 +558,7 @@ class AlignmentCaller:
 
         self.meas_kws = self.meas_spec.todict()
 
-    def __call__(self, iq: ArrayType, capture: specs.CaptureBase) -> float:
+    def __call__(self, iq: ArrayType, capture: specs.Capture) -> float:
         ret = self.info.func(iq, capture, **self.meas_kws)
 
         return ret

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import fractions
 import functools
+from math import inf
 import numbers
 import typing
 import warnings
@@ -44,7 +45,6 @@ def _enc_hook(obj):
 
 def _dec_hook(type_, obj):
     origin_cls = typing.get_origin(type_) or type_
-    np_float_types = (np.float16, np.float32, np.float64)
 
     if issubclass(origin_cls, pd.Timestamp):
         return pd.to_datetime(obj)
@@ -173,16 +173,17 @@ class _SlowHashSpecBase(SpecBase, kw_only=True, frozen=True, **kws):
 
         return h
 
+DurationType = Annotated[float, meta('duration of the capture', 's')]
+SampleRateType = Annotated[float, meta('Analysis sample rate', 'S/s')]
+AnalysisBandwidthType = Annotated[float, meta('Analysis bandwidth', 'Hz')]
 
-class CaptureBase(SpecBase, kw_only=True, frozen=True, **kws):
+class Capture(SpecBase, kw_only=True, frozen=True, **kws):
     """bare minimum information about an IQ acquisition"""
 
     # acquisition
-    duration: Annotated[float, meta('duration of the capture', 's')] = 0.1
-    sample_rate: Annotated[float, meta('IQ sample rate', 'S/s')] = 15.36e6
-    analysis_bandwidth: Annotated[float, meta('Analysis bandwidth', 'Hz')] = float(
-        'inf'
-    )
+    duration: DurationType = 0.1
+    sample_rate: SampleRateType = 15.36e6
+    analysis_bandwidth: AnalysisBandwidthType = inf
 
     def __post_init__(self):
         if not util.isroundmod(self.duration * self.sample_rate, 1):
@@ -191,13 +192,20 @@ class CaptureBase(SpecBase, kw_only=True, frozen=True, **kws):
             )
 
 
+class _CaptureKeywords(typing.TypedDict, total=False):
+    duration: DurationType
+    sample_rate: SampleRateType
+    analysis_bandwidth: AnalysisBandwidthType
+
+
+
 class AnalysisFilter(SpecBase, kw_only=True, frozen=True, **kws):
     nfft: int = 8192
     window: typing.Union[tuple[str, ...], str] = 'hamming'
     nfft_out: int | None = None
 
 
-class FilteredCapture(CaptureBase, kw_only=True, frozen=True, **kws):
+class FilteredCapture(Capture, kw_only=True, frozen=True, **kws):
     # filtering and resampling
     analysis_filter: AnalysisFilter = msgspec.field(default_factory=AnalysisFilter)
     # analysis_filter: dict = msgspec.field(
@@ -248,13 +256,13 @@ class Analysis(_SlowHashSpecBase, kw_only=True, frozen=True, **kws):
 
 
 @util.lru_cache()
-def get_capture_type_attrs(capture_cls: type[CaptureBase]) -> dict[str, typing.Any]:
+def get_capture_type_attrs(capture_cls: type[Capture]) -> dict[str, typing.Any]:
     """return attrs metadata for each field in `capture`"""
     info = msgspec.inspect.type_info(capture_cls)
 
     attrs = {}
 
-    for field in info.fields:
+    for field in info.fields: # type: ignore
         if isinstance(field.type, msgspec.inspect.UnionType):
             types = field.type.types
         else:
@@ -279,7 +287,7 @@ def _warn_on_capture_lookup_miss(capture_value, capture_attr, error_label, defau
 
 
 def maybe_lookup_with_capture_key(
-    capture: CaptureBase,
+    capture: Capture,
     value: _T | typing.Mapping[str, _T],
     capture_attr: str,
     error_label: str,

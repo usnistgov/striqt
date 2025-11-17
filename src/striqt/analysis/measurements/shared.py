@@ -69,7 +69,7 @@ class Cellular5GNRSyncCorrelationKeywords(specs.AnalysisKeywords, total=False):
     dtype='uint16', attrs={'standard_name': r'Cell Sector ID ($N_{ID}^\text{(2)}$)'}
 )
 @util.lru_cache()
-def cellular_cell_id2(capture: specs.CaptureBase, spec: typing.Any):
+def cellular_cell_id2(capture: specs.Capture, spec: typing.Any):
     values = np.array([0, 1, 2], dtype='uint16')
     return values
 
@@ -77,7 +77,7 @@ def cellular_cell_id2(capture: specs.CaptureBase, spec: typing.Any):
 @registry.coordinates(dtype='uint16', attrs={'standard_name': 'SSB beam index'})
 @util.lru_cache()
 def cellular_ssb_beam_index(
-    capture: specs.CaptureBase, spec: Cellular5GNRSyncCorrelationSpec
+    capture: specs.Capture, spec: Cellular5GNRSyncCorrelationSpec
 ):
     # pss_params and sss_params return the same number of symbol indexes
     params = iqwaveform.ofdm.sss_params(
@@ -95,7 +95,7 @@ def cellular_ssb_beam_index(
 )
 @util.lru_cache()
 def cellular_ssb_start_time(
-    capture: specs.CaptureBase, spec: Cellular5GNRSyncCorrelationSpec
+    capture: specs.Capture, spec: Cellular5GNRSyncCorrelationSpec
 ):
     # pss_params and sss_params return the same number of symbol indexes
     params = iqwaveform.ofdm.pss_params(
@@ -117,7 +117,7 @@ def cellular_ssb_start_time(
     dtype='float32', attrs={'standard_name': 'Symbol lag', 'units': 's'}
 )
 @util.lru_cache()
-def cellular_ssb_lag(capture: specs.CaptureBase, spec: Cellular5GNRSyncCorrelationSpec):
+def cellular_ssb_lag(capture: specs.Capture, spec: Cellular5GNRSyncCorrelationSpec):
     params = iqwaveform.ofdm.sss_params(
         sample_rate=spec.sample_rate,
         subcarrier_spacing=spec.subcarrier_spacing,
@@ -137,7 +137,7 @@ def cellular_ssb_lag(capture: specs.CaptureBase, spec: Cellular5GNRSyncCorrelati
 def empty_5g_sync_measurement(
     iq,
     *,
-    capture: specs.CaptureBase,
+    capture: specs.Capture,
     spec: Cellular5GNRSyncCorrelationSpec,
     coord_factories: list[typing.Callable],
     dtype='complex64',
@@ -214,7 +214,7 @@ ssb_iq_cache = register.KeywordArgumentCache([dataarrays.CAPTURE_DIM, 'spec'])
 @ssb_iq_cache.apply
 def get_5g_ssb_iq(
     iq: ArrayType,
-    capture: specs.CaptureBase,
+    capture: specs.Capture,
     spec: Cellular5GNRSyncCorrelationSpec,
     oaresample=False,
 ) -> ArrayType:
@@ -357,7 +357,7 @@ class SpectrogramKeywords(FrequencyAnalysisKeywords):
 
 def evaluate_spectrogram(
     iq: ArrayType,
-    capture: specs.CaptureBase,
+    capture: specs.Capture,
     spec: SpectrogramSpec,
     *,
     dtype: typing.Union[
@@ -417,7 +417,7 @@ def null_lo(x, nfft, fs, bandwidth, *, offset=0, axis=0):
 @spectrogram_cache.apply
 def _cached_spectrogram(
     iq: ArrayType,
-    capture: specs.CaptureBase,
+    capture: specs.Capture,
     spec: SpectrogramSpec,
 ):
     spec = spec.validate()
@@ -534,7 +534,7 @@ def fftfreq(nfft: int, fs: float, dtype='float64', xp: ModuleType = np) -> Array
 )
 @util.lru_cache()
 def spectrogram_baseband_frequency(
-    capture: specs.CaptureBase, spec: SpectrogramSpec, xp=np
+    capture: specs.Capture, spec: SpectrogramSpec, xp=np
 ) -> np.ndarray:
     if xp is not np:
         return xp.array(spectrogram_baseband_frequency(capture, spec))

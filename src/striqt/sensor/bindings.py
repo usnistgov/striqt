@@ -12,8 +12,8 @@ from .lib.bindings import SensorBinding, bind_sensor
 warmup = bind_sensor(
     'warmup',
     SensorBinding(
-        source_spec=specs.NullSourceSpec,
-        capture_spec=specs.WaveformCaptureSpec,
+        source_spec=specs.NullSource,
+        capture_spec=specs.ResampledCapture,
         source=sources.WarmupSource,
     ),
 )
@@ -23,7 +23,7 @@ file = bind_sensor(
     'file',
     SensorBinding(
         source_spec=sources.FileSourceSpec,
-        capture_spec=specs.FileCaptureSpec,
+        capture_spec=specs.FileCapture,
         source=sources.FileSource,
     ),
 )
@@ -32,7 +32,7 @@ tdms_file = bind_sensor(
     'tdms_file',
     SensorBinding(
         source_spec=sources.TDMSSourceSpec,
-        capture_spec=specs.FileCaptureSpec,
+        capture_spec=specs.FileCapture,
         source=sources.TDMSFileSource,
     ),
 )
@@ -41,7 +41,7 @@ zarr_iq = bind_sensor(
     'zarr_iq',
     SensorBinding(
         source_spec=sources.ZarrFileSourceSpec,
-        capture_spec=specs.FileCaptureSpec,
+        capture_spec=specs.FileCapture,
         source=sources.ZarrIQSource,
     ),
 )
@@ -89,7 +89,7 @@ air7101b = bind_sensor(
     'air7101b',
     SensorBinding(
         source_spec=deepwave.Air7101BSourceSpec,
-        capture_spec=specs.SoapyCaptureSpec,
+        capture_spec=specs.SoapyCapture,
         source=deepwave.Airstack1Source,
     ),
 )
@@ -98,7 +98,7 @@ air7201b = bind_sensor(
     'air7201b',
     SensorBinding(
         source_spec=deepwave.Air7201BSourceSpec,
-        capture_spec=specs.SoapyCaptureSpec,
+        capture_spec=specs.SoapyCapture,
         source=deepwave.Airstack1Source,
     ),
 )
@@ -107,7 +107,7 @@ air8201b = bind_sensor(
     'air8201b',
     SensorBinding(
         source_spec=deepwave.Air8201BSourceSpec,
-        capture_spec=specs.SoapyCaptureSpec,
+        capture_spec=specs.SoapyCapture,
         source=deepwave.Airstack1Source,
     ),
 )

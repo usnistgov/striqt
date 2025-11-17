@@ -19,7 +19,7 @@ class SinkBase:
 
     def __init__(
         self,
-        sweep_spec: specs.SweepSpec,
+        sweep_spec: specs.Sweep,
         alias_func: captures.PathAliasFormatter | None = None,
         *,
         force: bool = False,
@@ -60,7 +60,7 @@ class SinkBase:
         finally:
             self._executor.__exit__(*exc_info)
 
-    def append(self, capture_data: 'xr.Dataset | None', capture: specs.CaptureSpec):
+    def append(self, capture_data: 'xr.Dataset | None', capture: specs.ResampledCapture):
         if capture_data is None:
             return
 
@@ -93,7 +93,7 @@ class NullSink(SinkBase):
         ):
             util.get_logger('sink').info(f'done')
 
-    def append(self, capture_data: 'xr.Dataset | None', capture: specs.CaptureSpec):
+    def append(self, capture_data: 'xr.Dataset | None', capture: specs.ResampledCapture):
         self.captures_elapsed += 1
 
     def wait(self):
@@ -128,7 +128,7 @@ class ZarrSinkBase(SinkBase):
 class CaptureAppender(ZarrSinkBase):
     """concatenates the data from each capture and dumps to a zarr data store"""
 
-    def append(self, capture_data: 'xr.Dataset | None', capture: specs.CaptureSpec):
+    def append(self, capture_data: 'xr.Dataset | None', capture: specs.ResampledCapture):
         super().append(capture_data, capture)
 
         if len(self._pending_data) == self._group_sizes[0]:
@@ -173,7 +173,7 @@ class CaptureAppender(ZarrSinkBase):
 class SpectrogramTimeAppender(ZarrSinkBase):
     def __init__(
         self,
-        sweep_spec: specs.SweepSpec,
+        sweep_spec: specs.Sweep,
         alias_func: captures.PathAliasFormatter | None = None,
         *,
         force: bool = False,
@@ -185,7 +185,7 @@ class SpectrogramTimeAppender(ZarrSinkBase):
 
         super().__init__(sweep_spec, alias_func, force=force)
 
-    def append(self, capture_data: 'xr.Dataset | None', capture: specs.CaptureSpec):
+    def append(self, capture_data: 'xr.Dataset | None', capture: specs.ResampledCapture):
         super().append(capture_data, capture)
 
         if len(self._pending_data) == self._group_sizes[0]:

@@ -17,10 +17,9 @@ from striqt.analysis.lib.util import (
     PERFORMANCE_INFO,
     _StriqtLogger,
     get_logger,
-    isroundmod,
-    log_capture_context,
     show_messages,
     stopwatch,
+    configure_cupy
 )
 from striqt.waveform.util import lazy_import, lru_cache
 
@@ -47,13 +46,17 @@ if typing.TYPE_CHECKING:
     import typing_extensions
 
     _P = typing_extensions.ParamSpec('_P')
-    _R = typing_extensions.TypeVar('_R')
+    _R = typing_extensions.TypeVar('_R', covariant=True)
     _T = typing.TypeVar('_T')
+else:
+    _P = typing.TypeVar('_P')
+    _R = typing.TypeVar('_R')
 
 _StriqtLogger('controller')
 _StriqtLogger('source')
 _StriqtLogger('sink')
 
+_concurrency_count = 0
 
 stop_request_event = threading.Event()
 
@@ -138,7 +141,7 @@ def retry(
 
 
 def concurrently_with_fg(
-    calls: dict[str, typing.Callable] = {}, flatten=True
+    calls: dict[str, typing.Callable] = {}, flatten: bool =True
 ) -> dict[typing.Any, typing.Any]:
     """runs foreground() in the current thread, and util.concurrently(**background) in another thread"""
     from concurrent.futures import ThreadPoolExecutor
@@ -151,6 +154,8 @@ def concurrently_with_fg(
     else:
         fg = {}
         bg = {}
+
+    fg = typing.cast(dict[str, typing.Callable], fg)
 
     executor = ThreadPoolExecutor()
     exc_list = []
@@ -239,28 +244,7 @@ def zip_offsets(
     if squeeze and len(shifts) == 1:
         return iters[0]
     else:
-        return itertools.zip_longest(*iters, fillvalue=fill)
-
-
-@functools.cache
-def configure_cupy():
-    # Tune cupy to perform large FFTs and allocations more quickly
-    # for 1-D transforms.
-    #
-    # Reference:
-    # https://docs.cupy.dev/en/v12.1.0/reference/fft.html#code-compatibility-features
-
-    import cupy
-
-    # the FFT plan sets up large caches that don't seem to help performance
-    cupy.fft.config.get_plan_cache().set_size(0)
-
-    # double-buffered streams hold on to their buffers; skip the overhead
-    # of an allocator
-    cupy.cuda.set_pinned_memory_allocator(None)
-
-    # reduce memory consumption of 1-D transforms
-    cupy.fft.config.enable_nd_planning = False
+        return itertools.zip_longest(*iters, fillvalue=fill) # type: ignore
 
 
 class _JSONFormatter(logging.Formatter):
@@ -331,8 +315,8 @@ def log_to_file(log_path: str | Path, level_name: str):
 
             self.stream.write('[\n')
 
-        def emit(self, rec):
-            super().emit(rec)
+        def emit(self, record: logging.LogRecord):
+            super().emit(record)
             self.stream.write(',\n')
 
         def close(self):
@@ -351,34 +335,36 @@ def log_to_file(log_path: str | Path, level_name: str):
     handler.setLevel(logging.DEBUG)
 
     if hasattr(handler, '_striqt_handler'):
-        logger.removeHandler(handler._striqt_handler)
+        logger.removeHandler(handler._striqt_handler) # type: ignore
 
     logger.setLevel(_LOG_LEVEL_NAMES[level_name])
     logger.addHandler(handler)
-    logger._striqt_handler = handler
+    logger._striqt_handler = handler # type: ignore
 
 
-if typing.TYPE_CHECKING:
-    _CallBase = typing.Generic[_P, _R]
-else:
-    _CallBase = object
-
-
-class Call(_CallBase):
+class Call(typing.Generic[_P, _R]):
     """Wrap a function to apply arguments for threaded calls to `concurrently`.
     This can be passed in directly by a user in order to provide arguments;
     otherwise, it will automatically be wrapped inside `concurrently` to
     keep track of some call metadata during execution.
     """
+    args: list
+    kws: dict
+    func: typing.Callable
+    name: str
 
-    def __init__(self, func: typing.Callable[_P, _R], *args: _P.args, **kws: _P.kwargs):
-        if not callable(func):
-            raise ValueError('`func` argument is not callable')
-        self.func = func
-        self.name = self.func.__name__
-        self.args = args
-        self.kws = kws
-        self.queue = None
+    if typing.TYPE_CHECKING:
+        def __init__(self, func: typing.Callable[_P, _R], *args: _P.args, **kws: _P.kwargs):
+            ...
+    else:
+        def __init__(self, func, *args, **kws):
+            if not callable(func):
+                raise ValueError('`func` argument is not callable')
+            self.func = func
+            self.name = self.func.__name__
+            self.args = args
+            self.kws = kws
+            self.queue = None
 
     def rename(self, name):
         self.name = name
@@ -402,7 +388,7 @@ class Call(_CallBase):
             self.result = None
             self.traceback = sys.exc_info()
         else:
-            self.traceback = None
+            self.exc_info = None
 
         if self.queue is not None:
             self.queue.put(self)
@@ -415,7 +401,7 @@ class Call(_CallBase):
 
     @classmethod
     def wrap_list_to_dict(
-        cls, name_func_pairs: dict[str, typing.Callable]
+        cls, name_func_pairs: typing.Iterable[tuple[str, Call|typing.Callable]]
     ) -> dict[str, Call]:
         """adjusts naming and wraps callables with Call"""
         ret = {}
@@ -423,15 +409,15 @@ class Call(_CallBase):
         for name, func in name_func_pairs:
             try:
                 if name is None:
-                    if hasattr(func, 'name'):
+                    if isinstance(func, Call):
                         name = func.name
                     elif hasattr(func, '__name__'):
-                        name = func.__name__
+                        name = func.__name__ # type: ignore
                     else:
                         raise TypeError(f'could not find name of {func}')
 
-                if not isinstance(func, cls):
-                    func = cls(func)
+                if not isinstance(func, Call):
+                    func = cls(func) # type: ignore
 
                 func.name = name
 
@@ -464,7 +450,7 @@ class MultipleContexts:
 
     def __init__(
         self,
-        call_handler: typing.Callable[[dict, list, dict], dict],
+        call_handler: typing.Callable,
         params: dict,
         objs: list,
     ):
@@ -498,7 +484,7 @@ class MultipleContexts:
         self.call_handler = call_handler
         self.exc = {}
 
-    def enter(self, name: str, context: object):
+    def enter(self, name: str, context: typing.ContextManager):
         """
         enter!
         """
@@ -515,13 +501,10 @@ class MultipleContexts:
 
     def __enter__(self):
         calls = [(name, Call(self.enter, name, obj)) for name, obj in self.objs]
+        name = self.params["name"]
 
         try:
-            with stopwatch(
-                f'entry into context for {self.params["name"]}',
-                0.5,
-                logger_level='debug',
-            ):
+            with stopwatch(f'enter {name!r} context', 'controller', 0.5, logging.DEBUG):
                 self.call_handler(self.params, calls)
         except BaseException as e:
             try:
@@ -531,9 +514,8 @@ class MultipleContexts:
 
     def __exit__(self, *exc):
         logger = get_logger('controller')
-        with stopwatch(
-            f'{self.params["name"]} - context exit', 0.5, logger_level='debug'
-        ):
+        name = self.params["name"]
+        with stopwatch(f'exit {name} context', 'controller', 0.5, logging.DEBUG):
             for name in tuple(self._entered.keys())[::-1]:
                 context = self._entered[name]
 
@@ -569,15 +551,15 @@ class MultipleContexts:
             ex = ConcurrentException(
                 f'exceptions raised in {len(self.exc)} contexts are printed inline'
             )
-            ex.thread_exceptions = self.exc
+            ex.thread_exceptions = list(self.exc)
             raise ex
-        if exc != (None, None, None):
+
+        if exc[1] is not None:
             # sys.exc_info() may have been
             # changed by one of the exit methods
             # so provide explicit exception info
             for h in logger.logger.handlers:
                 h.flush()
-
             raise exc[1]
 
 
@@ -585,17 +567,9 @@ def isdictducktype(cls):
     return hasattr(cls, 'keys') and hasattr(cls, 'pop')
 
 
-class _ContextManagerType(typing.Protocol):
-    def __enter__(self):
-        pass
-
-    def __exit__(self, /, type, value, traceback):
-        pass
-
-
 def _select_enter_or_call(
     candidate_objs: typing.Sequence[
-        tuple[str | None, _ContextManagerType | typing.Callable]
+        tuple[str | None, typing.ContextManager | typing.Callable]
     ],
 ) -> typing.Literal['context', 'callable'] | None:
     """ensure candidates are either (1) all context managers
@@ -647,7 +621,7 @@ def _select_enter_or_call(
 
 def enter_or_call(
     flexible_caller: typing.Callable,
-    objs: typing.Iterable[_ContextManagerType | typing.Callable],
+    objs: typing.Iterable[typing.ContextManager | typing.Callable],
     kws: dict[str, typing.Any],
 ):
     """Extract value traits from the keyword arguments flags, decide whether
@@ -702,14 +676,7 @@ def enter_or_call(
             params[name] = kws.pop(name)
 
     if params['name'] is None:
-        import hashlib
-        import inspect
-
-        # come up with a gobbledigook name that is at least unique
-        frame = inspect.currentframe().f_back.f_back
-        params['name'] = (
-            f'<{frame.f_code.co_filename}:{frame.f_code.co_firstlineno} call 0x{hashlib.md5().hexdigest()}>'
-        )
+        raise ValueError(f'use Call to assign a name to {flexible_caller!r}')
 
     # Combine the position and keyword arguments, and assign labels
     allobjs = list(objs) + list(kws.values())
@@ -749,7 +716,7 @@ def enter_or_call(
 
 
 def concurrently_call(params: dict, name_func_pairs: list) -> dict:
-    global concurrency_count
+    global _concurrency_count
 
     logger = get_logger('controller')
 
@@ -782,11 +749,12 @@ def concurrently_call(params: dict, name_func_pairs: list) -> dict:
     for name, thread in list(threads.items()):
         wrappers[name].set_queue(finished)
         thread.start()
-        concurrency_count += 1
+        _concurrency_count += 1
 
     # As each thread ends, collect the return value and any exceptions
     tracebacks = []
     parent_exception = None
+    last_exception = None
 
     t0 = time.perf_counter()
 
@@ -816,13 +784,13 @@ def concurrently_call(params: dict, name_func_pairs: list) -> dict:
 
         # if there was an exception that wasn't us ending the thread,
         # show messages
-        if called.traceback is not None:
-            tb = traceback_skip(called.traceback, 1)
+        if called.exc_info is not None:
+            tb = traceback_skip(called.exc_info, 1)
 
-            if called.traceback[0] is not ThreadEndedByMaster:
+            if called.exc_info[0] is not ThreadEndedByMaster:
                 #                exception_count += 1
                 tracebacks.append(tb)
-                last_exception = called.traceback[1]
+                last_exception = called.exc_info[1]
 
             if not traceback_delay:
                 import traceback
@@ -841,11 +809,11 @@ def concurrently_call(params: dict, name_func_pairs: list) -> dict:
 
         # Remove this thread from the dictionary of running threads
         del threads[called.name]
-        concurrency_count -= 1
+        _concurrency_count -= 1
 
     # Clear the stop request, if there are no other threads that
     # still need to exit
-    if concurrency_count == 0 and stop_request_event.is_set():
+    if _concurrency_count == 0 and stop_request_event.is_set():
         stop_request_event.clear()
 
     # Raise exceptions as necessary
@@ -872,6 +840,7 @@ def concurrently_call(params: dict, name_func_pairs: list) -> dict:
         for h in logger.logger.handlers:
             h.flush()
         if len(tracebacks) == 1:
+            assert last_exception is not None
             raise last_exception
         else:
             for tb in tracebacks:
@@ -888,10 +857,17 @@ def concurrently_call(params: dict, name_func_pairs: list) -> dict:
     return results
 
 
-def concurrently(*objs, **kws):
+
+@typing.overload
+def concurrently(*objs: typing.Callable, flatten: bool = False, **kws: typing.Callable) -> dict[str, typing.Any]: ...
+
+@typing.overload
+def concurrently(*objs: typing.ContextManager, flatten: bool = False, **kws: typing.ContextManager) -> dict[str, typing.ContextManager]: ...
+
+def concurrently(*objs: typing.ContextManager|typing.Callable, flatten: bool = False, **kws: typing.Callable|typing.ContextManager) -> typing.Any:
     """see labbench.util for docs"""
 
-    return enter_or_call(concurrently_call, objs, kws)
+    return enter_or_call(concurrently_call, objs, dict(kws, flatten=flatten))
 
 
 def sequentially_call(params: dict, name_func_pairs: list) -> dict:
@@ -903,21 +879,28 @@ def sequentially_call(params: dict, name_func_pairs: list) -> dict:
     # Run each callable
     for name, wrapper in wrappers.items():
         ret = wrapper()
-        if wrapper.traceback is not None:
-            raise wrapper.traceback[1]
+        if wrapper.exc_info is not None:
+            raise wrapper.exc_info[1]
         if ret is not None or params['nones']:
             results[name] = ret
 
     return results
 
 
-def sequentially(*objs, **kws):
+@typing.overload
+def sequentially(*objs: typing.Callable, flatten: bool = False, **kws: typing.Callable) -> dict[str, typing.Any]: ...
+
+@typing.overload
+def sequentially(*objs: typing.ContextManager, flatten: bool = False, **kws: typing.ContextManager) -> dict[str, typing.ContextManager]: ...
+
+def sequentially(*objs: typing.ContextManager|typing.Callable, flatten: bool = False, **kws: typing.Callable|typing.ContextManager) -> typing.Any:
     """see labbench.sequentially for docs"""
 
     if kws.get('catch', False):
         raise ValueError('catch=True is not supported by sequentially')
+    
+    return enter_or_call(sequentially_call, objs, dict(kws, flatten=flatten))
 
-    return enter_or_call(sequentially_call, objs, kws)
 
 
 class DebugOnException:
@@ -1212,3 +1195,25 @@ def print_rich_exception():
     )
 
     console.print(traceback)
+
+
+@contextlib.contextmanager
+def log_capture_context(name_suffix, /, capture_index=0, capture_count=None):
+    extra = {'capture_index': capture_index}
+    logger = get_logger(name_suffix)
+
+    assert isinstance(logger.extra, dict)
+
+    if capture_count is not None:
+        logger.extra['capture_count'] = capture_count
+
+    if capture_count is None:
+        capture_count = logger.extra.get('capture_count', 'unknown')
+        extra['capture_count'] = capture_count # type: ignore
+
+    extra['capture_progress'] = f'{capture_index + 1}/{capture_count}' # type: ignore
+
+    start_extra = logger.extra
+    logger.extra = start_extra | extra
+    yield
+    logger.extra = start_extra

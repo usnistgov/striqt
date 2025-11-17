@@ -17,14 +17,14 @@ from . import specs, util
 
 
 @functools.lru_cache
-def get_capture_type(sweep_cls: type[specs.SweepSpec]) -> type[specs.CaptureSpec]:
+def get_capture_type(sweep_cls: type[specs.Sweep]) -> type[specs.ResampledCapture]:
     captures_type = typing.get_type_hints(sweep_cls)['captures']
     return typing.get_args(captures_type)[0]
 
 
 def _single_match(
     fields: dict[str, typing.Any],
-    capture: specs.CaptureSpec | None,
+    capture: specs.ResampledCapture | None,
     **extras: typing.Any,
 ) -> bool:
     """return True if all fields match in the specified fields.
@@ -63,7 +63,7 @@ def _single_match(
 
 def _match_fields(
     multi_fields: typing.Iterable[dict[str, typing.Any]],
-    capture: specs.CaptureSpec | None,
+    capture: specs.ResampledCapture | None,
     **extras: typing.Any,
 ) -> bool:
     """return True if all fields match in the specified fields.
@@ -77,10 +77,10 @@ def _match_fields(
 
 @util.lru_cache()
 def evaluate_aliases(
-    capture: specs.CaptureSpec | None,
+    capture: specs.ResampledCapture | None,
     *,
     source_id: str | UnsetType | None = UNSET,
-    output: specs.SinkSpec,
+    output: specs.Sink,
 ) -> dict[str, typing.Any]:
     """evaluate the field values"""
 
@@ -103,7 +103,7 @@ def evaluate_aliases(
     return ret
 
 
-Capture = typing.TypeVar('Capture', bound=specs.CaptureSpec)
+Capture = typing.TypeVar('Capture', bound=specs.ResampledCapture)
 
 
 @util.lru_cache()
@@ -133,10 +133,10 @@ def split_capture_ports(capture: Capture) -> list[Capture]:
 
 
 def capture_fields_with_aliases(
-    capture: specs.CaptureSpec | None = None,
+    capture: specs.ResampledCapture | None = None,
     *,
     source_id: str | None = None,
-    sink_spec: specs.SinkSpec,
+    sink_spec: specs.Sink,
 ) -> dict:
     if capture is None:
         attrs = {}
@@ -151,7 +151,7 @@ def capture_fields_with_aliases(
 
 def get_field_value(
     name: str,
-    capture: specs.CaptureSpec,
+    capture: specs.ResampledCapture,
     info: specs.AcquisitionInfo,
     alias_hits: dict,
 ):
@@ -174,7 +174,7 @@ def get_field_value(
 
 @util.lru_cache()
 def _get_path_fields(
-    sweep: specs.SweepSpec,
+    sweep: specs.Sweep,
     *,
     source_id: str | typing.Callable[[], str],
     spec_path: Path | str | None = None,
@@ -198,7 +198,7 @@ def _get_path_fields(
 
 
 class PathAliasFormatter:
-    def __init__(self, sweep: specs.SweepSpec, spec_path: Path | str | None = None):
+    def __init__(self, sweep: specs.Sweep, spec_path: Path | str | None = None):
         self.sweep_spec = sweep
         self.spec_path = spec_path
 
@@ -221,16 +221,16 @@ class PathAliasFormatter:
         return str(path)
 
 
-class _NoSweep(specs.SweepSpec, frozen=True):
+class _NoSweep(specs.Sweep, frozen=True):
     # a sweep with captures that express only the parameters that impact capture shape
-    source: specs.NullSourceSpec = specs.NullSourceSpec(
+    source: specs.NullSource = specs.NullSource(
         base_clock_rate=0, num_rx_ports=1
     )
-    captures: tuple[specs.analysis.CaptureBase, ...] = ()
+    captures: tuple[specs.analysis.Capture, ...] = ()
 
 
 def concat_group_sizes(
-    captures: tuple[specs.CaptureSpec, ...], *, min_size: int = 1
+    captures: tuple[specs.ResampledCapture, ...], *, min_size: int = 1
 ) -> list[int]:
     """return the minimum sizes of groups of captures that can be concatenated.
 

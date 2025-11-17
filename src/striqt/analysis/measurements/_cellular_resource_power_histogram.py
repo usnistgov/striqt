@@ -77,7 +77,7 @@ class LinkPair:
 )
 @util.lru_cache()
 def cellular_resource_power_bin(
-    capture: specs.CaptureBase, spec: CellularResourcePowerHistogramSpec
+    capture: specs.Capture, spec: CellularResourcePowerHistogramSpec
 ) -> dict[str, np.ndarray]:
     """returns a dictionary of coordinate values, keyed by axis dimension name"""
 
@@ -242,7 +242,7 @@ def _struct_defaults(spec_type: type[specs.SpecBase]) -> dict[str, typing.Any]:
 )
 def cellular_resource_power_histogram(
     iq: 'striqt.waveform._typing.ArrayLike',
-    capture: specs.CaptureBase,
+    capture: specs.Capture,
     **kwargs: typing.Unpack[_CellularResourcePowerHistogramKeywords],
 ):
     """

@@ -10,7 +10,7 @@ from collections import Counter
 import striqt.waveform as iqwaveform
 from striqt.analysis import measurements, describe_capture
 
-from . import datasets, sources, specs, util
+from . import datasets, sinks, sources, specs, util
 from .resources import Resources, AnyResources
 from .calibration import lookup_system_noise_power
 from .specs import _TC, _TP, _TS
@@ -21,7 +21,7 @@ else:
     xr = util.lazy_import('xarray')
 
 
-def varied_capture_fields(sweep: specs.SweepSpec) -> list[str]:
+def varied_capture_fields(sweep: specs.Sweep) -> list[str]:
     """generate a list of capture fields with at least 2 values in the specified sweep"""
     inner_values = (c.todict().values() for c in sweep.captures)
     inner_counts = [len(Counter(v)) for v in zip(*inner_values)]
@@ -34,7 +34,7 @@ def varied_capture_fields(sweep: specs.SweepSpec) -> list[str]:
     return [f for f, c in totals.items() if c > 1]
 
 
-def sweep_touches_gpu(sweep: specs.SweepSpec) -> bool:
+def sweep_touches_gpu(sweep: specs.Sweep) -> bool:
     """returns True if the sweep would benefit from the GPU"""
 
     if sweep.source.calibration is not None:
@@ -61,8 +61,8 @@ def sweep_touches_gpu(sweep: specs.SweepSpec) -> bool:
 
 
 def design_warmup(
-    sweep: specs.SweepSpec[_TS, _TP, _TC], skip: tuple[_TC, ...] = ()
-) -> specs.SweepSpec[specs.NullSourceSpec, _TP, specs.WaveformCaptureSpec]:
+    sweep: specs.Sweep[_TS, _TP, _TC], skip: tuple[_TC, ...] = ()
+) -> specs.Sweep[specs.NullSource, _TP, specs.ResampledCapture]:
     """returns a Sweep object for a NullRadio consisting of capture combinations from
     `sweep`.
 
@@ -74,9 +74,9 @@ def design_warmup(
 
     # captures that have unique sampling parameters, which are those
     # specified in structs.WaveformCapture
-    wcaptures = [specs.WaveformCaptureSpec.fromspec(c) for c in sweep.looped_captures]
+    wcaptures = [specs.ResampledCapture.fromspec(c) for c in sweep.looped_captures]
     unique_map = dict(zip(wcaptures, sweep.looped_captures))
-    skip_wcaptures = {specs.WaveformCaptureSpec.fromspec(c) for c in skip}
+    skip_wcaptures = {specs.ResampledCapture.fromspec(c) for c in skip}
     captures = [unique_map[c] for c in unique_map.keys() if c not in skip_wcaptures]
 
     num_rx_ports = 0
@@ -96,8 +96,8 @@ def design_warmup(
     # TODO: currently, the base_clock_rate is left as the null radio default.
     # this may cause problems in the future if its default disagrees with another
     # radio
-    source = specs.NullSourceSpec.fromspec(sweep.source).replace(
-        num_rx_ports=num_rx_ports, calibration=None, reuse_iq=False
+    source = specs.NullSource.fromspec(sweep.source).replace(
+        num_rx_ports=num_rx_ports, calibration=None
     )
 
     warmup = bindings.warmup.sweep_spec.fromspec(sweep)
@@ -105,32 +105,37 @@ def design_warmup(
     return warmup.replace(captures=tuple(captures), source=source, loops=())
 
 
-def run_warmup(input_spec: specs.SweepSpec):
-    from .. import bindings
-
+def run_warmup(input_spec: specs.Sweep):
     if not input_spec.source.warmup_sweep:
         return
 
+    from .. import bindings
+    
     if input_spec.source.array_backend == 'cupy':
         iqwaveform.set_max_cupy_fft_chunk(input_spec.source.cupy_max_fft_chunk_size)
 
-    warmup_spec = design_warmup(input_spec)
+    spec = design_warmup(input_spec)
 
-    if len(warmup_spec.captures) == 0:
+    if len(spec.captures) == 0:
         return
 
-    source = bindings.warmup.source(warmup_spec.source, analysis=warmup_spec.analysis)
+    resources = Resources(
+        sweep_spec=spec,
+        source=bindings.warmup.source(spec.source, analysis=spec.analysis),
+        peripherals=bindings.warmup.peripherals(spec.peripherals),
+        sink=sinks.NullSink(spec),
+        calibration=None
+    )
 
-    with source:
-        resources = Resources(source=source, sweep_spec=warmup_spec)
-        warmup_iter = iter_sweep(resources, always_yield=True, calibration=None)
+    with resources['source']:
+        sweep = SweepIterator(resources, always_yield=True, calibration=None)
 
-        for _ in warmup_iter:
+        for _ in sweep:
             pass
 
 
 def _iq_is_reusable(
-    c1: specs.CaptureSpec | None, c2: specs.CaptureSpec, base_clock_rate
+    c1: specs.ResampledCapture | None, c2: specs.ResampledCapture, base_clock_rate
 ):
     """return True if c2 is compatible with the raw and uncalibrated IQ acquired for c1"""
 
@@ -161,9 +166,9 @@ def _iq_is_reusable(
     return c1_compare == c2_compare
 
 
-def _build_attrs(sweep: specs.SweepSpec):
+def _build_attrs(sweep: specs.Sweep):
     fields = set(type(sweep).__struct_fields__)
-    base_fields = set(specs.SweepSpec.__struct_fields__)
+    base_fields = set(specs.Sweep.__struct_fields__)
     new_fields = list(fields - base_fields)
     attr_fields = ['source'] + new_fields
 
@@ -211,7 +216,7 @@ def log_progress_contexts(index, count):
 
 
 class SweepIterator:
-    spec: specs.SweepSpec
+    spec: specs.Sweep
 
     def __init__(
         self,
@@ -243,7 +248,7 @@ class SweepIterator:
             block_each=False,
         )
 
-    def show_cache_info(self, cache, capture: specs.CaptureSpec, result, *_, **__):
+    def show_cache_info(self, cache, capture: specs.ResampledCapture, result, *_, **__):
         cal = self.spec.source.calibration
         if cal is None or 'spectrogram' not in cache.name:
             return
@@ -258,7 +263,7 @@ class SweepIterator:
 
         noise = lookup_system_noise_power(
             cal,
-            specs.SoapyCaptureSpec.fromspec(capture),
+            specs.SoapyCapture.fromspec(capture),
             base_clock_rate=capture.backend_sample_rate,
             B=attrs['noise_bandwidth'],
             xp=xp,
@@ -273,7 +278,6 @@ class SweepIterator:
         iq = None
         this_ext_data = {}
         prior_ext_data = {}
-        sweep_time = None
         canalyze = None
         result = None
 
@@ -352,7 +356,7 @@ class SweepIterator:
     def _acquire(
         self, iq_prev: sources.AcquiredIQ, capture_prev, capture_this, capture_next
     ):
-        if self.spec.source.reuse_iq:
+        if self.spec.config.reuse_iq and not isinstance(self.spec.source, specs.NullSource):
             reuse_this = _iq_is_reusable(
                 capture_prev, capture_this, self.source.setup_spec.base_clock_rate
             )
@@ -433,7 +437,7 @@ class SweepIterator:
     def _intake(
         self,
         results: 'xr.Dataset',
-        capture: specs.CaptureSpec,
+        capture: specs.ResampledCapture,
     ) -> 'xr.Dataset | None':
         if not isinstance(results, xr.Dataset):
             raise ValueError(
@@ -477,7 +481,7 @@ def iter_sweep(
 
 def iter_raw_iq(
     radio: 'sources.SourceBase',
-    sweep: specs.SweepSpec,
+    sweep: specs.Sweep,
 ) -> typing.Generator[sources.AcquiredIQ]:
     """iterate through the sweep and yield the raw IQ vector for each.
 

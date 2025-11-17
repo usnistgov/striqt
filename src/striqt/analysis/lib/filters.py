@@ -29,7 +29,7 @@ def select_parameter_kws(locals_: dict, omit=(dataarrays.CAPTURE_DIM, 'out')) ->
 
 @util.lru_cache(8)
 def _generate_iir_lpf(
-    capture: specs.CaptureBase,
+    capture: specs.Capture,
     *,
     passband_ripple: float | int,
     stopband_attenuation: float | int,
@@ -75,7 +75,7 @@ def _generate_iir_lpf(
 
 def iir_filter(
     iq: ArrayType,
-    capture: specs.CaptureBase,
+    capture: specs.Capture,
     *,
     passband_ripple: float | int,
     stopband_attenuation: float | int,
@@ -100,7 +100,7 @@ def iir_filter(
 
 def ola_filter(
     iq: ArrayType,
-    capture: specs.CaptureBase,
+    capture: specs.Capture,
     *,
     nfft: int,
     window: typing.Any = 'hamming',

@@ -34,7 +34,7 @@ class Resources(typing.TypedDict, typing.Generic[_TS, _TP, _TC]):
     sink: SinkBase
     peripherals: PeripheralsBase[_TP, _TC]
     except_context: typing.NotRequired[typing.ContextManager]
-    sweep_spec: specs.SweepSpec[_TS, _TP, _TC]
+    sweep_spec: specs.Sweep[_TS, _TP, _TC]
     calibration: 'xr.Dataset|None'
 
 
@@ -45,12 +45,12 @@ class AnyResources(typing.TypedDict, typing.Generic[_TS, _TP, _TC], total=False)
     sink: SinkBase
     peripherals: PeripheralsBase[_TP, _TC]
     except_context: typing.NotRequired[typing.ContextManager]
-    sweep_spec: specs.SweepSpec[_TS, _TP, _TC]
+    sweep_spec: specs.Sweep[_TS, _TP, _TC]
     calibration: 'xr.Dataset|None'
 
 
 def _import_sink_cls(
-    spec: specs.ExtensionSpec,
+    spec: specs.Extension,
 ) -> type[SinkBase]:
     mod_name, *sub_names, obj_name = spec.sink.rsplit('.')
     mod = importlib.import_module(mod_name)
@@ -60,7 +60,7 @@ def _import_sink_cls(
 
 
 def _import_extensions(
-    spec: specs.ExtensionSpec, alias_func: captures.PathAliasFormatter | None = None
+    spec: specs.Extension, alias_func: captures.PathAliasFormatter | None = None
 ):
     """import an extension class from a dict representation of structs.Extensions
 
@@ -95,7 +95,7 @@ def _import_extensions(
 
 
 def _load_calibration(
-    spec: specs.SweepSpec, alias_func: captures.PathAliasFormatter | None
+    spec: specs.Sweep, alias_func: captures.PathAliasFormatter | None
 ):
     p = spec.source.calibration
     if p is None:
@@ -113,7 +113,7 @@ class ConnectionManager(
 ):
     _resources: AnyResources[_TS, _TP, _TC]
 
-    def __init__(self, sweep_spec: specs.SweepSpec[_TS, _TP, _TC]):
+    def __init__(self, sweep_spec: specs.Sweep[_TS, _TP, _TC]):
         self._resources = AnyResources(sweep_spec=sweep_spec)
 
     def open(
@@ -132,7 +132,7 @@ class ConnectionManager(
 
 
 def open_sensor(
-    spec: specs.SweepSpec[_TS, _TP, _TC],
+    spec: specs.Sweep[_TS, _TP, _TC],
     spec_path: str | Path | None = None,
     except_context: typing.ContextManager | None = None,
 ) -> ConnectionManager[_TS, _TP, _TC]:

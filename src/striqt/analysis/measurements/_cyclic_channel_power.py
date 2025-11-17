@@ -38,7 +38,7 @@ class CyclicChannelPowerKeywords(specs.AnalysisKeywords):
 
 @registry.coordinates(dtype=object, attrs={'standard_name': 'Cyclic statistic'})
 @util.lru_cache()
-def cyclic_statistic(capture: specs.CaptureBase, spec: CyclicChannelPowerSpec):
+def cyclic_statistic(capture: specs.Capture, spec: CyclicChannelPowerSpec):
     return list(spec.cyclic_statistics)
 
 
@@ -46,7 +46,7 @@ def cyclic_statistic(capture: specs.CaptureBase, spec: CyclicChannelPowerSpec):
     dtype='float32', attrs={'standard_name': 'Cyclic lag', 'units': 's'}
 )
 @util.lru_cache()
-def cyclic_lag(capture: specs.CaptureBase, spec: CyclicChannelPowerSpec):
+def cyclic_lag(capture: specs.Capture, spec: CyclicChannelPowerSpec):
     lag_count = int(np.rint(spec.cyclic_period / spec.detector_period))
 
     return np.arange(lag_count) * spec.detector_period
@@ -59,7 +59,7 @@ def cyclic_lag(capture: specs.CaptureBase, spec: CyclicChannelPowerSpec):
     attrs={'standard_name': 'Cyclic channel power', 'units': 'dBm'},
 )
 def cyclic_channel_power(
-    iq, capture: specs.CaptureBase, **kwargs: typing.Unpack[CyclicChannelPowerSpec]
+    iq, capture: specs.Capture, **kwargs: typing.Unpack[CyclicChannelPowerSpec]
 ):
     spec = CyclicChannelPowerSpec.fromdict(kwargs)
 

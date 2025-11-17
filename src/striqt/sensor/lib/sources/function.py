@@ -5,7 +5,7 @@ from __future__ import annotations
 import typing
 from typing import Annotated as _Annotated
 
-from striqt.analysis import CaptureBase, simulated_awgn
+from striqt.analysis import Capture, simulated_awgn
 
 from .. import specs, util
 from . import base
@@ -16,14 +16,14 @@ else:
     np = util.lazy_import('numpy')
 
 
-class FunctionSourceSpec(specs.SourceSpec, kw_only=True, frozen=True, **specs.kws):
+class FunctionSourceSpec(specs.Source, kw_only=True, frozen=True, **specs.kws):
     # make these configurable, to support matching hardware for warmup sweeps
     num_rx_ports: int
     stream_all_rx_ports: bool = False
 
 
 _TS = typing.TypeVar('_TS', bound=FunctionSourceSpec)
-_TC = typing.TypeVar('_TC', bound=specs.CaptureSpec)
+_TC = typing.TypeVar('_TC', bound=specs.ResampledCapture)
 
 FrequencyOffsetType = _Annotated[float, specs.meta('Baseband frequency offset', 'Hz')]
 SNRType = _Annotated[float, specs.meta('SNR with added noise ', 'dB')]
@@ -42,7 +42,7 @@ def _lo_shift_tone(inds, radio: base.SourceBase, xp, lo_offset=None):
 
 
 class SingleToneCaptureSpec(
-    specs.CaptureSpec,
+    specs.ResampledCapture,
     forbid_unknown_fields=True,
     frozen=True,
     cache_hash=True,
@@ -53,7 +53,7 @@ class SingleToneCaptureSpec(
 
 
 class DiracDeltaCaptureSpec(
-    specs.CaptureSpec,
+    specs.ResampledCapture,
     forbid_unknown_fields=True,
     frozen=True,
     cache_hash=True,
@@ -64,7 +64,7 @@ class DiracDeltaCaptureSpec(
 
 
 class SawtoothCaptureSpec(
-    specs.CaptureSpec,
+    specs.ResampledCapture,
     forbid_unknown_fields=True,
     frozen=True,
     cache_hash=True,
@@ -75,7 +75,7 @@ class SawtoothCaptureSpec(
 
 
 class NoiseCaptureSpec(
-    specs.CaptureSpec,
+    specs.ResampledCapture,
     forbid_unknown_fields=True,
     frozen=True,
     cache_hash=True,
@@ -192,7 +192,7 @@ class NoiseSource(TestSourceBase[FunctionSourceSpec, NoiseCaptureSpec]):
         capture = self.capture_spec
         fs = self.get_resampler()['fs_sdr']
 
-        backend_capture = CaptureBase(
+        backend_capture = Capture(
             duration=(count + offset) / fs,
             sample_rate=fs,
             analysis_bandwidth=capture.analysis_bandwidth,

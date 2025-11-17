@@ -15,7 +15,7 @@ else:
 
 
 class Air7101BSourceSpec(
-    specs.SoapySourceSpec,
+    specs.SoapySource,
     forbid_unknown_fields=True,
     frozen=True,
     cache_hash=True,
@@ -27,7 +27,7 @@ class Air7101BSourceSpec(
 
 
 class Air7201BSourceSpec(
-    specs.SoapySourceSpec,
+    specs.SoapySource,
     forbid_unknown_fields=True,
     frozen=True,
     cache_hash=True,
@@ -39,7 +39,7 @@ class Air7201BSourceSpec(
 
 
 class Air8201BSourceSpec(
-    specs.SoapySourceSpec,
+    specs.SoapySource,
     forbid_unknown_fields=True,
     frozen=True,
     cache_hash=True,
@@ -51,7 +51,7 @@ class Air8201BSourceSpec(
 
 
 class Airstack1Source(soapy.SoapySourceBase):
-    def _connect(self, spec: specs.SoapySourceSpec):
+    def _connect(self, spec: specs.SoapySource):
         super()._connect(spec)
         assert self._device is not None
 

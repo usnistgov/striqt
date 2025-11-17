@@ -19,7 +19,7 @@ else:
 
 
 class TDMSSourceSpec(
-    specs.NullSourceSpec,
+    specs.NullSource,
     forbid_unknown_fields=True,
     frozen=True,
     cache_hash=True,
@@ -29,7 +29,7 @@ class TDMSSourceSpec(
 
 
 class ZarrFileSourceSpec(
-    specs.NullSourceSpec,
+    specs.NullSource,
     forbid_unknown_fields=True,
     frozen=True,
     cache_hash=True,
@@ -51,7 +51,7 @@ class FileAcquisitionInfo(
     source_id: specs.SourceIDType = ''
 
 
-class TDMSFileSource(base.VirtualSourceBase[TDMSSourceSpec, specs.FileCaptureSpec]):
+class TDMSFileSource(base.VirtualSourceBase[TDMSSourceSpec, specs.FileCapture]):
     """a source of IQ waveforms from a TDMS file"""
 
     _file_info: FileAcquisitionInfo
@@ -95,7 +95,7 @@ class TDMSFileSource(base.VirtualSourceBase[TDMSSourceSpec, specs.FileCaptureSpe
         return iq
 
     def get_resampler(
-        self, capture: specs.FileCaptureSpec | None = None
+        self, capture: specs.FileCapture | None = None
     ) -> base.ResamplerDesign:
         if capture is None:
             capture = self.capture_spec
@@ -112,7 +112,7 @@ FormatType = specs.Annotated[
 
 
 class FileSourceSpec(
-    specs.NullSourceSpec,
+    specs.NullSource,
     forbid_unknown_fields=True,
     frozen=True,
     cache_hash=True,
@@ -130,7 +130,7 @@ class FileSourceSpec(
     ] = False
 
 
-class FileSource(base.VirtualSourceBase[FileSourceSpec, specs.FileCaptureSpec]):
+class FileSource(base.VirtualSourceBase[FileSourceSpec, specs.FileCapture]):
     """returns IQ waveforms from a file"""
 
     _file_info: FileAcquisitionInfo
@@ -175,7 +175,7 @@ class FileSource(base.VirtualSourceBase[FileSourceSpec, specs.FileCaptureSpec]):
         return iq
 
     def get_resampler(
-        self, capture: specs.FileCaptureSpec | None = None
+        self, capture: specs.FileCapture | None = None
     ) -> base.ResamplerDesign:
         if capture is None:
             capture = self.capture_spec
@@ -184,7 +184,7 @@ class FileSource(base.VirtualSourceBase[FileSourceSpec, specs.FileCaptureSpec]):
         )
 
 
-class ZarrIQSource(base.VirtualSourceBase[ZarrFileSourceSpec, specs.FileCaptureSpec]):
+class ZarrIQSource(base.VirtualSourceBase[ZarrFileSourceSpec, specs.FileCapture]):
     """a sources of IQ samples from iq_waveform variables in a zarr store"""
 
     _waveform: 'xr.DataArray'

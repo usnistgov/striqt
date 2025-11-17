@@ -1,4 +1,4 @@
-"""data structures that specify operation of radio hardware, captures, and sweeps"""
+"""schema for the specification of calibration and sweeps"""
 
 from __future__ import annotations
 
@@ -30,9 +30,9 @@ else:
     # to resolve the 'pd.Timestamp' stub at runtime
     pd = util.lazy_import('pandas')
 
-_TC = typing.TypeVar('_TC', bound='WaveformCaptureSpec')
-_TS = typing.TypeVar('_TS', bound='SourceSpec')
-_TP = typing.TypeVar('_TP', bound='PeripheralSpec')
+_TC = typing.TypeVar('_TC', bound='ResampledCapture')
+_TS = typing.TypeVar('_TS', bound='Source')
+_TP = typing.TypeVar('_TP', bound='Peripheral')
 
 
 def _dict_hash(d):
@@ -108,55 +108,26 @@ PortType = Annotated[
 ]
 
 
-class WaveformCaptureSpec(analysis.CaptureBase, frozen=True, kw_only=True, **kws):
-    """Capture specification structure for a generic waveform.
-
-    This subset of RadioCapture is broken out here to simplify the evaluation of
-    sampling parameters that are independent from other radio parameters.
-    """
+class ResampledCapture(analysis.Capture, frozen=True, kw_only=True, **kws):
+    """Capture specification for a generic waveform with resampling support"""
 
     # acquisition
     port: PortType
-    duration: Annotated[float, meta('Acquisition duration', 's', gt=0)] = 0.1
-    sample_rate: Annotated[float, meta('Sample rate', 'S/s', gt=0)] = 15.36e6
-
-    # filtering and resampling
-    analysis_bandwidth: AnalysisBandwidthType = float('inf')
-
     lo_shift: LOShiftType = 'none'
     host_resample: bool = True
     backend_sample_rate: Optional[BackendSampleRateType] = None
+    
+    # a counter used to track the loop index for Repeat(None)
+    sweep_index: int = 0
 
 
-class _WaveformCaptureKeywords(TypedDict, total=False):
-    # this needs to be kept in sync with WaveformCapture in order to
-    # properly provide type hints for IDEs in the arm and acquire
-    # call signatures of source.Base objects
+class _ResampledCaptureKeywords(analysis.specs._CaptureKeywords, total=False):
+    # this needs to be kept in sync with CaptureSpec in order to
+    # properly provide type hints for IDEs for .replace()-ish methods
     port: PortType
-    duration: Annotated[float, meta('Acquisition duration', 's', gt=0)]
-    sample_rate: Annotated[float, meta('Sample rate', 'S/s', gt=0)]
-
-    # filtering and resampling
-    analysis_bandwidth: AnalysisBandwidthType
     lo_shift: LOShiftType
     host_resample: bool
     backend_sample_rate: Optional[BackendSampleRateType]
-
-
-class CaptureSpec(WaveformCaptureSpec, frozen=True, kw_only=True, **kws):
-    """Capture specification for a single radio waveform"""
-
-    delay: Optional[DelayType] = None
-
-    # a counter used to reset the sweep timestamp on Repeat(None)
-    sweep_index: typing.ClassVar[int] = 0
-
-
-class _CaptureSpecKeywords(_WaveformCaptureKeywords, total=False):
-    # this needs to be kept in sync with WaveformCapture in order to
-    # properly provide type hints for IDEs in the arm and acquire
-    # call signatures of source.Base objects
-    delay: DelayType
 
 
 SourceIDType = Annotated[str, meta('Source UUID string')]
@@ -173,13 +144,15 @@ class AcquisitionInfo(SpecBase, kw_only=True, frozen=True):
 class SoapyAcquisitionInfo(AcquisitionInfo, frozen=True, kw_only=True, **kws):
     """extra coordinate information returned from an acquisition"""
 
+    delay: Optional[DelayType] = None
     sweep_time: SweepStartTimeType | None
     start_time: StartTimeType | None
     backend_sample_rate: BackendSampleRateType
     source_id: SourceIDType = ''
 
 
-class SoapyCaptureSpec(CaptureSpec, frozen=True, kw_only=True, **kws):
+class SoapyCapture(ResampledCapture, frozen=True, kw_only=True, **kws):
+    delay: Optional[DelayType] = None
     center_frequency: CenterFrequencyType
     gain: GainType
 
@@ -188,15 +161,26 @@ class SoapyCaptureSpec(CaptureSpec, frozen=True, kw_only=True, **kws):
         _validate_multichannel(self.port, self.gain)
 
 
-class _SoapyCaptureSpecKeywords(_CaptureSpecKeywords, total=False):
+class _SoapyCaptureKeywords(_ResampledCaptureKeywords):
     # this needs to be kept in sync with WaveformCapture in order to
     # properly provide type hints for IDEs in the arm and acquire
     # call signatures of source.Base objects
+    delay: DelayType
     center_frequency: CenterFrequencyType
     gain: GainType
 
 
-class FileCaptureSpec(CaptureSpec, frozen=True, kw_only=True, **kws):
+NoiseDiodeEnabledType = Annotated[bool, meta(standard_name='Noise diode enabled')]
+
+
+class YFactorCapture(SoapyCapture, frozen=True, kw_only=True, **kws):
+    """Specialize fields to add to the RadioCapture type"""
+
+    # RadioCapture with added fields
+    noise_diode_enabled: NoiseDiodeEnabledType = False
+
+
+class FileCapture(ResampledCapture, frozen=True, kw_only=True, **kws):
     """Capture specification read from a file, with support for None sentinels"""
 
     # RF and leveling
@@ -267,7 +251,34 @@ SyncSourceType = Annotated[
 ]
 
 
-class _SourceSpecKeywords(TypedDict, total=False):
+class Source(SpecBase, frozen=True, kw_only=True, **kws):
+    """run-time characteristics of the radio that are left invariant during a sweep"""
+
+    # acquisition
+    base_clock_rate: BaseClockRateType
+    calibration: Optional[str] = None
+
+    # sequencing
+    warmup_sweep: WarmupSweepType = True
+    gapless_retrigger: GaplessRepeatType = False
+
+    # synchronization and triggering
+    periodic_trigger: Optional[float] = None
+    channel_sync_source: Optional[str] = None
+
+    # in the future, these should probably move to an analysis config
+    array_backend: ArrayBackendType = 'cupy'
+    cupy_max_fft_chunk_size: Optional[int] = None
+
+    # validation data
+    uncalibrated_peak_detect: Union[bool, Literal['auto']] = 'auto'
+
+    transient_holdoff_time = None
+    stream_all_rx_ports = False
+    transport_dtype: Literal['int16', 'complex64'] = 'complex64'
+
+
+class _SourceKeywords(TypedDict, total=False):
     # this needs to be kept in sync with WaveformCapture in order to
     # properly provide type hints for IDEs in the setup
     # call signature of source.Base objects
@@ -289,40 +300,7 @@ class _SourceSpecKeywords(TypedDict, total=False):
     uncalibrated_peak_detect: Union[bool, Literal['auto']]
 
 
-class SourceSpec(SpecBase, frozen=True, kw_only=True, **kws):
-    """run-time characteristics of the radio that are left invariant during a sweep"""
-
-    # driver: Optional[str]
-
-    # acquisition
-    base_clock_rate: BaseClockRateType
-    calibration: Optional[str] = None
-
-    # sequencing
-    warmup_sweep: WarmupSweepType = True
-    gapless_retrigger: GaplessRepeatType = False
-
-    # synchronization and triggering
-    periodic_trigger: Optional[float] = None
-    channel_sync_source: Optional[str] = None
-
-    # in the future, these should probably move to an analysis config
-    array_backend: ArrayBackendType = 'cupy'
-    cupy_max_fft_chunk_size: Optional[int] = None
-
-    # validation data
-    uncalibrated_peak_detect: Union[bool, Literal['auto']] = 'auto'
-
-    # calibration subclasses set this True to skip unecessary
-    # re-acquisitions
-    reuse_iq: ClassVar[bool] = False
-
-    transient_holdoff_time = None
-    stream_all_rx_ports = False
-    transport_dtype: Literal['int16', 'complex64'] = 'complex64'
-
-
-class SoapySourceSpec(SourceSpec, frozen=True, kw_only=True, **kws):
+class SoapySource(Source, frozen=True, kw_only=True, **kws):
     device_kwargs: ClassVar[dict[str, Any]] = {}
 
     time_source: TimeSourceType = 'host'
@@ -357,14 +335,14 @@ class SoapySourceSpec(SourceSpec, frozen=True, kw_only=True, **kws):
             )
 
 
-class _SoapySourceSpecKeywords(_SourceSpecKeywords, total=False):
+class _SoapySourceKeywords(_SourceKeywords, total=False):
     receive_retries: ReceiveRetriesType
     time_source: TimeSourceType
     clock_source: ClockSourceType
     time_sync_every_capture: TimeSyncEveryCaptureType
 
 
-class NullSourceSpec(SourceSpec, frozen=True, kw_only=True, **kws):
+class NullSource(Source, frozen=True, kw_only=True, **kws):
     # make these configurable, to support matching hardware for warmup sweeps
     num_rx_ports: int
     stream_all_rx_ports: bool = False
@@ -446,7 +424,7 @@ AliasMatchType = Annotated[
 ]
 
 
-class SinkSpec(analysis.specs._SlowHashSpecBase, frozen=True, kw_only=True, **kws):
+class Sink(analysis.specs._SlowHashSpecBase, frozen=True, kw_only=True, **kws):
     path: str = '{yaml_name}-{start_time}'
     log_path: Optional[str] = None
     log_level: str = 'info'
@@ -469,14 +447,21 @@ ExtensionPathType = Annotated[
 ]
 
 
-class ExtensionSpec(SpecBase, frozen=True, kw_only=True, **kws):
+class Extension(SpecBase, frozen=True, kw_only=True, **kws):
     sink: SinkClassType = 'striqt.sensor.sinks.CaptureAppender'
     import_path: typing.Optional[ExtensionPathType] = None
     import_name: ModuleNameType = None
 
 
-class PeripheralSpec(SpecBase, frozen=True, kw_only=True, **kws):
+class Peripheral(SpecBase, frozen=True, kw_only=True, **kws):
     pass
+
+ENRType = Annotated[float, meta(standard_name='Excess noise ratio', units='dB')]
+AmbientTemperatureType = Annotated[float, meta(standard_name='Ambient temperature', units='K')]
+
+class ManualYFactorPeripheral(Peripheral, frozen=True, kw_only=True, **kws):
+    enr: ENRType
+    ambient_temperature: AmbientTemperatureType
 
 
 # registered striqt.analysis.measurements -> Analysis spec
@@ -484,16 +469,22 @@ BundledAnalysis = analysis.registry.tospec()
 BundledAlignmentAnalysis = analysis.registry.channel_sync_source.to_spec()
 
 
-class SweepSpec(SpecBase, Generic[_TS, _TP, _TC], frozen=True, kw_only=True, **kws):
+class SweepConfig(typing.NamedTuple):
+    reuse_iq: bool
+
+
+class Sweep(SpecBase, Generic[_TS, _TP, _TC], frozen=True, kw_only=True, **kws):
     source: _TS
     captures: tuple[_TC, ...] = tuple()
     loops: tuple[LoopSpec, ...] = ()
 
     analysis: BundledAnalysis = BundledAnalysis()  # type: ignore
     description: Union[Description, str] = ''
-    extensions: ExtensionSpec = ExtensionSpec()
-    sink: SinkSpec = SinkSpec()
+    extensions: Extension = Extension()
+    sink: Sink = Sink()
     peripherals: _TP | None = None
+
+    config: ClassVar[SweepConfig] = SweepConfig(reuse_iq=False)
 
     @property
     def looped_captures(self) -> tuple[_TC, ...]:
@@ -512,8 +503,8 @@ class SweepSpec(SpecBase, Generic[_TS, _TP, _TC], frozen=True, kw_only=True, **k
 
     @classmethod
     def _from_registry(
-        cls: type[SweepSpec], registry: analysis.MeasurementRegistry
-    ) -> type[SweepSpec]:
+        cls: type[Sweep], registry: analysis.MeasurementRegistry
+    ) -> type[Sweep]:
         bases = typing.get_type_hints(cls, include_extras=True)
 
         AnalysisCls = registry.tospec(bases[cls.analysis.__name__])
@@ -529,4 +520,70 @@ class SweepSpec(SpecBase, Generic[_TS, _TP, _TC], frozen=True, kw_only=True, **k
             cache_hash=True,
         )
 
-        return typing.cast(type[SweepSpec], subcls)
+        return typing.cast(type[Sweep], subcls)
+
+
+class CalibrationVariables(SpecBase, frozen=True, kw_only=True, **kws):
+    noise_diode_enabled: tuple[NoiseDiodeEnabledType, ...] = (False, True)
+    sample_rate: tuple[BackendSampleRateType, ...]
+    center_frequency: tuple[CenterFrequencyType, ...] = (3700e6,)
+    port: tuple[PortType, ...] = (0,)
+    gain: tuple[GainType, ...] = (0,)
+
+    # filtering and resampling
+    analysis_bandwidth: tuple[AnalysisBandwidthType, ...] = (float('inf'),)
+    lo_shift: tuple[LOShiftType, ...] = ('none',)
+
+
+@util.lru_cache()
+def _cached_cal_captures(
+    variables: CalibrationVariables, capture_cls: type[_TC]
+) -> tuple[_TC, ...]:
+    var_fields = variables.todict()
+
+    # enforce ordering to place difficult-to-change variables in
+    # the outermost loops, in case the ordering is changed by
+    # subclasses
+    analysis_bandwidths = var_fields.pop('analysis_bandwidth')
+    var_fields = {
+        'port': var_fields['port'],
+        'noise_diode_enabled': var_fields['noise_diode_enabled'],
+        **var_fields,
+        'analysis_bandwidth': analysis_bandwidths,
+    }
+
+    # every combination of each variable
+    combos = itertools.product(*var_fields.values())
+
+    captures = []
+    for values in combos:
+        mapping = dict(zip(var_fields, values))
+        if mapping['analysis_bandwidth'] == float('inf'):
+            pass
+        elif mapping['analysis_bandwidth'] > mapping['sample_rate']:
+            # skip cases outside of 1st Nyquist zone
+            continue
+        captures.append(capture_cls.fromdict(mapping))
+
+    return tuple(captures)
+
+
+class YFactorCalibrationSweep(Sweep, frozen=True, kw_only=True, **kws):
+    """This specialized sweep is fed to the YAML file loader
+    to specify the change in expected capture structure."""
+
+    calibration_variables: CalibrationVariables
+    peripherals: ManualYFactorPeripheral | None = None   
+    config: ClassVar[SweepConfig] = SweepConfig(reuse_iq=True)
+
+    def __post_init__(self):
+        if self.source.calibration is not None:
+            raise ValueError('source.calibration must be None for a calibration sweep')
+
+    # the top here is just to set the annotation for msgspec
+    captures: tuple[YFactorCapture, ...] = tuple()
+
+    @property
+    def looped_captures(self):
+        variables = self.calibration_variables.validate()
+        return _cached_cal_captures(variables, type(self.captures[0]))

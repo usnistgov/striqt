@@ -104,7 +104,7 @@ def _msgspec_type_to_coord_info(type_: msgspec.inspect.Type) -> tuple[dict, typi
 
 @util.lru_cache()
 def coord_template(
-    capture_cls: type[specs.CaptureSpec],
+    capture_cls: type[specs.ResampledCapture],
     info_cls: type[specs.AcquisitionInfo],
     port_count: int,
     **alias_dtypes: 'np.dtype',
@@ -139,7 +139,7 @@ def coord_template(
 
 
 @util.lru_cache()
-def _get_alias_dtypes(output: specs.SinkSpec) -> dict[str, typing.Any]:
+def _get_alias_dtypes(output: specs.Sink) -> dict[str, typing.Any]:
     aliases = output.coord_aliases
 
     alias_dtypes = {}
@@ -170,7 +170,7 @@ def get_attrs(struct: type[specs.SpecBase], field: str) -> dict[str, str]:
 
 
 def build_capture_coords(
-    capture: specs.CaptureSpec, output: specs.SinkSpec, info: specs.AcquisitionInfo
+    capture: specs.ResampledCapture, output: specs.Sink, info: specs.AcquisitionInfo
 ):
     alias_dtypes = _get_alias_dtypes(output)
 
@@ -214,7 +214,7 @@ class AnalysisCaller:
     """Inject radio device and capture metadata and coordinates into a channel analysis result"""
 
     radio: SourceBase
-    sweep: specs.SweepSpec
+    sweep: specs.Sweep
     extra_attrs: dict[str, typing.Any] | None = None
     correction: bool = False
     cache_callback: typing.Callable | None = None
@@ -223,7 +223,7 @@ class AnalysisCaller:
     delayed: bool = True
 
     def __post_init__(self):
-        self._overwrite_x = not self.sweep.source.reuse_iq
+        self._overwrite_x = not self.sweep.config.reuse_iq
         if self.delayed:
             self._eval_options = dataarrays.EvaluationOptions(
                 spec=self.sweep.analysis,
@@ -248,7 +248,7 @@ class AnalysisCaller:
     def __call__(
         self,
         iq: AcquiredIQ,
-        capture: specs.CaptureSpec,
+        capture: specs.ResampledCapture,
     ) -> 'xr.Dataset | DelayedDataset':
         """Inject radio device and capture info into a channel analysis result."""
 
@@ -296,8 +296,8 @@ class AnalysisCaller:
 @dataclasses.dataclass()
 class DelayedDataset:
     delayed: dict[str, dataarrays.DelayedDataArray]
-    capture: specs.CaptureSpec
-    sweep: specs.SweepSpec
+    capture: specs.ResampledCapture
+    sweep: specs.Sweep
     coords: specs.AcquisitionInfo
     extra_data: dict[str, typing.Any]
     attrs: dict | None = None

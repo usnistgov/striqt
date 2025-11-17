@@ -38,7 +38,7 @@ class SpectrogramHistogramKeywords(shared.SpectrogramKeywords):
 )
 @util.lru_cache()
 def spectrogram_power_bin(
-    capture: specs.CaptureBase, spec: SpectrogramHistogramSpec
+    capture: specs.Capture, spec: SpectrogramHistogramSpec
 ) -> dict[str, np.ndarray]:
     """returns a dictionary of coordinate values, keyed by axis dimension name"""
     bins = _channel_power_histogram.make_power_bins(
@@ -70,7 +70,7 @@ def spectrogram_power_bin(
 )
 def spectrogram_histogram(
     iq: 'iqwaveform.util.Array',
-    capture: specs.CaptureBase,
+    capture: specs.Capture,
     **kwargs: typing.Unpack[SpectrogramHistogramKeywords],
 ):
     spec = SpectrogramHistogramSpec.fromdict(kwargs)

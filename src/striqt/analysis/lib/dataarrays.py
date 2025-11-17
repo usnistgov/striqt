@@ -37,7 +37,7 @@ PORT_DIM = 'port'
 class AcquiredIQ:
     raw: ArrayType
     aligned: ArrayType | None = None
-    capture: specs.CaptureBase | None = None
+    capture: specs.Capture | None = None
 
 
 _ENG_PREFIXES = {
@@ -57,8 +57,8 @@ _ENG_PREFIXES = {
 
 @util.lru_cache()
 def describe_capture(
-    this: specs.CaptureBase | None,
-    prev: specs.CaptureBase | None = None,
+    this: specs.Capture | None,
+    prev: specs.Capture | None = None,
     *,
     index: int | None = None,
     count: int | None = None,
@@ -148,7 +148,7 @@ def format_units(value, unit='', places=None, force_prefix=None, sep=' ') -> str
     return f'{mant:{fmt}}{suffix}'
 
 
-def describe_field(capture: specs.CaptureBase, name: str):
+def describe_field(capture: specs.Capture, name: str):
     meta = specs.get_capture_type_attrs(type(capture))
     attrs = meta[name]
     value = getattr(capture, name)
@@ -358,7 +358,7 @@ class DelayedDataArray(collections.UserDict):
     analyses before we materialize them on the CPU.
     """
 
-    capture: specs.CaptureBase
+    capture: specs.Capture
     spec: specs.Measurement
     result: AnalysisResult
     info: register.MeasurementInfo
@@ -399,7 +399,7 @@ class EvaluationOptions(typing.Generic[_TA]):
 
 
 def evaluate_by_spec(
-    iq: ArrayType | AcquiredIQ, capture: specs.CaptureBase, options: EvaluationOptions
+    iq: ArrayType | AcquiredIQ, capture: specs.Capture, options: EvaluationOptions
 ):
     """evaluate each analysis for the given IQ waveform"""
 
@@ -463,7 +463,7 @@ def evaluate_by_spec(
 
 
 def package_analysis(
-    capture: specs.CaptureBase,
+    capture: specs.Capture,
     results: dict[str, DelayedDataArray],
     expand_dims=None,
 ) -> 'xr.Dataset':
@@ -484,7 +484,7 @@ def package_analysis(
 @typing.overload
 def analyze_by_spec(
     iq: ArrayType | AcquiredIQ,
-    capture: specs.CaptureBase,
+    capture: specs.Capture,
     options: EvaluationOptions[typing.Literal[True]],
 ) -> 'xr.Dataset': ...
 
@@ -492,7 +492,7 @@ def analyze_by_spec(
 @typing.overload
 def analyze_by_spec(
     iq: ArrayType | AcquiredIQ,
-    capture: specs.CaptureBase,
+    capture: specs.Capture,
     options: EvaluationOptions[typing.Literal['delayed']],
 ) -> 'dict[str, DelayedDataArray]': ...
 
@@ -500,13 +500,13 @@ def analyze_by_spec(
 @typing.overload
 def analyze_by_spec(
     iq: ArrayType | AcquiredIQ,
-    capture: specs.CaptureBase,
+    capture: specs.Capture,
     options: EvaluationOptions[typing.Literal[False]],
 ) -> 'dict[str, ArrayType]': ...
 
 
 def analyze_by_spec(
-    iq: ArrayType | AcquiredIQ, capture: specs.CaptureBase, options: EvaluationOptions
+    iq: ArrayType | AcquiredIQ, capture: specs.Capture, options: EvaluationOptions
 ) -> AnalysisResult:
     """evaluate a set of different channel analyses on the iq waveform as specified by spec"""
 

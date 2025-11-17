@@ -5,8 +5,8 @@ import typing
 from .. import specs
 from . import base, null
 
-_TS = typing.TypeVar('_TS', bound=specs.NullSourceSpec)
-_TC = typing.TypeVar('_TC', bound=specs.CaptureSpec)
+_TS = typing.TypeVar('_TS', bound=specs.NullSource)
+_TC = typing.TypeVar('_TC', bound=specs.ResampledCapture)
 
 
 class WarmupSource(base.SourceBase[_TS, _TC]):

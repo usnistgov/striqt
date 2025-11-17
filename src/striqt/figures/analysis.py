@@ -17,7 +17,7 @@ from matplotlib import ticker
 import striqt.waveform as iqwaveform
 
 from ..analysis.lib import dataarrays
-from ..analysis.lib.specs import CaptureBase
+from ..analysis.lib.specs import Capture
 
 _FORCE_UNIT_PREFIXES = {'center_frequency': 'M'}
 
@@ -451,7 +451,7 @@ def label_by_coord(data: xr.DataArray, fmt: str, *, title_case=True, **extra_fie
 
 def summarize_metadata(
     source: xr.Dataset,
-    capture_type: type[CaptureBase],
+    capture_type: type[Capture],
     array: 'xr.DataArray ' = None,
     *,
     as_str: bool = False,

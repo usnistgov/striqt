@@ -19,7 +19,7 @@ else:
 
 
 def open_store(
-    spec: specs.SinkSpec,
+    spec: specs.Sink,
     *,
     alias_func: captures.PathAliasFormatter | None = None,
     force=False,
@@ -47,7 +47,7 @@ def read_yaml_sweep(
     path: str | Path,
     output_path: typing.Optional[str] = None,
     store_backend: typing.Optional[str] = None,
-) -> specs.SweepSpec:
+) -> specs.Sweep:
 
     """build a Sweep specification object from the specified yaml file.
 
@@ -86,7 +86,7 @@ def read_tdms_iq(
     dtype='complex64',
     skip_samples=0,
     array_backend: specs.ArrayBackendType,
-) -> tuple['np.ndarray', specs.FileCaptureSpec]:
+) -> tuple['np.ndarray', specs.FileCapture]:
     from .sources.file import TDMSFileSource, TDMSSourceSpec
 
     source_spec = TDMSSourceSpec(

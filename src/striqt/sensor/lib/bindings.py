@@ -5,10 +5,10 @@ import msgspec
 
 from .peripherals import NoPeripherals, PeripheralsBase
 from .sources import SourceBase
-from .specs import _TC, _TS, _TP, WaveformCaptureSpec, SourceSpec, SweepSpec
+from .specs import _TC, _TS, _TP, ResampledCapture, Source, Sweep
 
 
-def _tagged_sweep_subclass(name: str, cls: type[SweepSpec]) -> type[SweepSpec]:
+def _tagged_sweep_subclass(name: str, cls: type[Sweep]) -> type[Sweep]:
     """build a subclass of binding.sweep_spec for use in a tagged union"""
     kls = msgspec.defstruct(
         name,
@@ -21,7 +21,7 @@ def _tagged_sweep_subclass(name: str, cls: type[SweepSpec]) -> type[SweepSpec]:
         kw_only=True,
     )
 
-    return typing.cast(type[SweepSpec], kls)
+    return typing.cast(type[Sweep], kls)
 
 
 @dataclass(kw_only=True, frozen=True)
@@ -30,18 +30,18 @@ class SensorBinding(typing.Generic[_TS, _TP, _TC]):
     capture_spec: type[_TC]
     source: type[SourceBase[_TS, _TC]]
     peripherals: type[PeripheralsBase[_TP, _TC]] = NoPeripherals
-    sweep_spec: type[SweepSpec[_TS, _TP, _TC]] = SweepSpec
+    sweep_spec: type[Sweep[_TS, _TP, _TC]] = Sweep
 
     def __post_init__(self):
-        assert issubclass(self.source_spec, SourceSpec)
-        assert issubclass(self.capture_spec, WaveformCaptureSpec)
+        assert issubclass(self.source_spec, Source)
+        assert issubclass(self.capture_spec, ResampledCapture)
         assert issubclass(self.source, SourceBase)
-        assert issubclass(self.sweep_spec, SweepSpec)
+        assert issubclass(self.sweep_spec, Sweep)
         assert issubclass(self.peripherals, PeripheralsBase)
 
 
 registry: dict[str, SensorBinding[typing.Any, typing.Any, typing.Any]] = {}
-tagged_sweep_spec_type = _tagged_sweep_subclass('SweepSpec', SweepSpec)
+tagged_sweep_spec_type = _tagged_sweep_subclass('SweepSpec', Sweep)
 
 
 def bind_sensor(
@@ -68,12 +68,12 @@ def get_registry() -> dict[str, SensorBinding]:
     return dict(registry)
 
 
-def get_binding(key: str | SweepSpec) -> SensorBinding:
+def get_binding(key: str | Sweep) -> SensorBinding:
     if isinstance(key, str):
         return registry[key]
-    elif not isinstance(key, SweepSpec):
+    elif not isinstance(key, Sweep):
         raise TypeError('key must be a string or a SweepSpec')
-    elif key is SweepSpec:
+    elif key is Sweep:
         raise TypeError('must provide a tagged SweepSpec')
     else:
         return registry[type(key).__name__]

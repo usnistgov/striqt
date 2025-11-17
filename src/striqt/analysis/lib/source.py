@@ -93,7 +93,7 @@ def filter_iq_capture(
 
 
 def simulated_awgn(
-    capture: specs.CaptureBase,
+    capture: specs.Capture,
     *,
     power_spectral_density: float = 1,
     xp=np,
