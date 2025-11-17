@@ -22,7 +22,7 @@ from textual.screen import Screen
 from textual.widgets import Button, DataTable, Footer, Label, ProgressBar, Static
 from textual.worker import Worker
 
-from . import connections, frontend, sweeps, util
+from . import frontend, io, resources, sweeps, util
 
 if typing.TYPE_CHECKING:
     import psutil
@@ -175,8 +175,11 @@ class SweepHUDApp(App):
     }
     """
 
+    _exc_info: tuple|None
+    conns: resources.ConnectionManager|None
+
     def __init__(self, cli_kws: dict):
-        self.resources = None
+        self.conns = None
         self.cli_kws = cli_kws
         super().__init__()
         self.title = 'Sensor sweep'
@@ -192,20 +195,20 @@ class SweepHUDApp(App):
     ### Underlying actions
     @textual.work(exclusive=True, thread=True)
     def do_sweep(self):
-        gen = frontend.iter_sweep_cli(
-            self.resources,
-            remote=self.cli_kws.get('remote', None),
-            verbose=self.cli_kws['verbose'],
-        )
-        for _ in gen:
+        assert self.conns is not None
+
+        sweep_iter = sweeps.SweepIterator(self.conns.resources, always_yield=True)
+        for _ in sweep_iter:
             self.refresh()
 
         self.call_from_thread(self._show_done)
 
     @textual.work(exclusive=True, thread=True)
     def do_startup(self):
-        self.resources = frontend.init_sweep_cli(**self.cli_kws)
-        self.display_fields = sweeps.varied_capture_fields(self.resources.sweep_spec)
+        kws = self.cli_kws
+        spec = io.read_yaml_sweep(kws['yaml_path'], output_path=kws['output_path'], store_backend=kws['store_backend'])
+        self.conns = resources.open_sensor(spec, kws['yaml_path'])
+        self.display_fields = sweeps.varied_capture_fields(self.conns.resources['sweep_spec'])
         self.call_from_thread(self._show_ready)
         self.call_from_thread(self.do_sweep)
 
@@ -232,7 +235,7 @@ class SweepHUDApp(App):
         # You can add any custom logic here, like logging, sending notifications, etc.
 
     def _show_done(self):
-        progress = self.query_one('ProgressBar')
+        progress = typing.cast(ProgressBar, self.query_one('ProgressBar'))
 
         gradient = Gradient.from_colors(
             '#881177',
@@ -252,6 +255,8 @@ class SweepHUDApp(App):
         progress.gradient = gradient
 
     def _show_ready(self):
+        assert self.conns is not None
+        
         def add_column(name: str, width_frac: float):
             return table.add_column(
                 Text(name, style='content-align-vertical: bottom'),
@@ -259,11 +264,11 @@ class SweepHUDApp(App):
             )
 
         table = self.query_one(VerticalScrollDataTable)
-        captures = self.resources['sweep_spec'].looped_captures
+        captures = self.conns.resources['sweep_spec'].looped_captures
         index_size = math.ceil(math.log10(len(captures))) + 2
         free_width = self.size.width - index_size
 
-        self.column_keys = {
+        self.column_keys = { # type: ignore
             'capture': add_column('', 0.27),
             'striqt.source': add_column('Source', 0.18),
             'striqt.analysis': add_column('Analysis', 0.32),
@@ -297,18 +302,19 @@ class SweepHUDApp(App):
     def _update_sweep_status(self, record: logging.LogRecord):
         from striqt.analysis.lib.dataarrays import describe_capture
 
-        if self.resources is None:
+        if self.conns is None:
             # warmup captures
             return
 
-        captures = self.resources['sweep_spec'].looped_captures
+        captures = self.conns.resources['sweep_spec'].looped_captures
 
         logger = util.get_logger(record.name.rsplit('.', 1)[1])
-        extra = logger.extra
+        extra = dict(logger.extra or {})
         if isinstance(record.args, dict):
             extra = extra | record.args
 
         capture_index = extra['capture_index']
+        assert isinstance(capture_index, int)
         if not 0 <= capture_index < len(captures):
             return
 
@@ -327,9 +333,10 @@ class SweepHUDApp(App):
                 desc = ' '
             row = [desc, Text(''), '', '']
             label = Text(str(capture_index), style='#B0FC38 bold')
-            row_key = self.row_keys[capture_index] = table.add_row(
+            row_key = table.add_row(
                 *row, height=None, label=label
             )
+            self.row_keys[capture_index] = row_key # type: ignore
             progress.update(advance=1)
             if table.cursor_row == capture_index - 1:
                 table.move_cursor(row=capture_index)
@@ -353,7 +360,14 @@ class SweepHUDApp(App):
         from rich.traceback import Traceback
 
         self.bell()
-        trace = frontend._extract_traceback(*sys.exc_info(), show_locals=False)
+        exc_type, exc_value, tb = sys.exc_info()
+
+        if exc_type is None:
+            return
+        if exc_value is None:
+            return
+
+        trace = util._extract_traceback(exc_type, exc_value, tb, show_locals=False)
         traceback = Traceback(
             trace,
             width=None,

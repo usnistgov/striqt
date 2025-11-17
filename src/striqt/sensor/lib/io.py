@@ -45,18 +45,22 @@ def open_store(
 
 def read_yaml_sweep(
     path: str | Path,
+    output_path: typing.Optional[str] = None,
+    store_backend: typing.Optional[str] = None,
 ) -> specs.SweepSpec:
+
     """build a Sweep specification object from the specified yaml file.
 
     Args:
         path: path to the yaml file
-        source_id: unique hardware identifier of the radio for filename substitutions
+        output_path: optional override for the specification's output path
+        store_backend: optional override for the specification's output store backend
 
     Returns:
-        an instance of a structs.SweepSpec subclass
+        an instance of structs.SweepSpec (or subclass)
     """
 
-    from ..bindings import get_tagged_sweep_spec
+    from .bindings import get_tagged_sweep_spec
 
     # first pass is a simple dict
     tree = decode_from_yaml_file(path)
@@ -64,7 +68,13 @@ def read_yaml_sweep(
     if not isinstance(tree, dict):
         raise TypeError('yaml file does not specify a dict structure')
 
-    return convert_dict(tree, type=get_tagged_sweep_spec())
+    spec = convert_dict(tree, type=get_tagged_sweep_spec())
+    sink = spec.sink
+    if output_path is not None:
+        sink = sink.replace(path=output_path)
+    if store_backend is not None:
+        sink = sink.replace(store=store_backend)
+    return spec.replace(output=sink)
 
 
 def read_tdms_iq(

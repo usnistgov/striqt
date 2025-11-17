@@ -11,31 +11,14 @@ import striqt.waveform as iqwaveform
 from striqt.analysis import measurements, describe_capture
 
 from . import datasets, sources, specs, util
+from .resources import Resources, AnyResources
 from .calibration import lookup_system_noise_power
-from .peripherals import PeripheralsBase
-from .sinks import SinkBase
 from .specs import _TC, _TP, _TS
 
 if typing.TYPE_CHECKING:
     import xarray as xr
 else:
     xr = util.lazy_import('xarray')
-
-
-class ConnectionResources(typing.TypedDict, typing.Generic[_TS, _TP, _TC], total=False):
-    """Sensor resources needed to run a sweep"""
-
-    source: sources.SourceBase[_TS, _TC]
-    sink: SinkBase
-    peripherals: PeripheralsBase[_TP, _TC]
-    except_context: typing.ContextManager
-
-
-class Resources(ConnectionResources[_TS, _TP, _TC], total=False):
-    """Sensor resources needed to run a sweep"""
-
-    sweep_spec: specs.SweepSpec[_TS, _TP, _TC]
-    calibration: 'xr.Dataset|None'
 
 
 def varied_capture_fields(sweep: specs.SweepSpec) -> list[str]:
@@ -77,7 +60,7 @@ def sweep_touches_gpu(sweep: specs.SweepSpec) -> bool:
     return False
 
 
-def design_warmup_sweep(
+def design_warmup(
     sweep: specs.SweepSpec[_TS, _TP, _TC], skip: tuple[_TC, ...] = ()
 ) -> specs.SweepSpec[specs.NullSourceSpec, _TP, specs.WaveformCaptureSpec]:
     """returns a Sweep object for a NullRadio consisting of capture combinations from
@@ -120,6 +103,30 @@ def design_warmup_sweep(
     warmup = bindings.warmup.sweep_spec.fromspec(sweep)
 
     return warmup.replace(captures=tuple(captures), source=source, loops=())
+
+
+def run_warmup(input_spec: specs.SweepSpec):
+    from .. import bindings
+
+    if not input_spec.source.warmup_sweep:
+        return
+
+    if input_spec.source.array_backend == 'cupy':
+        iqwaveform.set_max_cupy_fft_chunk(input_spec.source.cupy_max_fft_chunk_size)
+
+    warmup_spec = design_warmup(input_spec)
+
+    if len(warmup_spec.captures) == 0:
+        return
+
+    source = bindings.warmup.source(warmup_spec.source, analysis=warmup_spec.analysis)
+
+    with source:
+        resources = Resources(source=source, sweep_spec=warmup_spec)
+        warmup_iter = iter_sweep(resources, always_yield=True, calibration=None)
+
+        for _ in warmup_iter:
+            pass
 
 
 def _iq_is_reusable(
@@ -212,14 +219,14 @@ class SweepIterator:
         *,
         always_yield=False,
         loop=False,
-        **extra_resources: typing.Unpack[Resources],
+        **extra_resources: typing.Unpack[AnyResources],
     ):
         resources = Resources(resources, **extra_resources)
 
-        self.source = resources['source']  # type: ignore
-        self._peripherals = resources['peripherals']  # type: ignore
-        self._sink = resources['sink']  # type: ignore
-        self.spec = resources['sweep_spec']  # type: ignore
+        self.source = resources['source']
+        self._peripherals = resources['peripherals']
+        self._sink = resources['sink']
+        self.spec = resources['sweep_spec']
 
         self._always_yield = always_yield
         self._loop = loop

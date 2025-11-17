@@ -62,9 +62,7 @@ _Tfunc = typing.Callable[..., typing.Any]
 
 
 def retry(
-    exception_or_exceptions: typing.Union[
-        type[BaseException], typing.Iterable[type[BaseException]]
-    ],
+    excs: type[BaseException] | typing.Iterable[type[BaseException]],
     tries: int,
     *,
     delay: float = 0,
@@ -102,15 +100,20 @@ def retry(
         logger: if specified, a log info message is emitted on the first retry
     """
 
+    if isinstance(excs, type) and not issubclass(excs, BaseException):
+        excs = tuple(excs)
+    else:
+        excs = BaseException
+
     def decorator(f):
         @functools.wraps(f)
         def do_retry(*args, **kwargs):
             notified = False
             active_delay = delay
-            for retry in range(tries):
+            for _ in range(tries):
                 try:
                     ret = f(*args, **kwargs)
-                except exception_or_exceptions as e:
+                except excs as e:
                     if not notified and logger is not None:
                         etype = type(e).__qualname__
                         msg = f"caught '{etype}' on first call to '{f.__name__}' - repeating the call {tries - 1} more times or until no exception is raised"
@@ -125,7 +128,7 @@ def retry(
                 else:
                     break
             else:
-                raise ex
+                raise ex # type: ignore
 
             return ret
 
@@ -915,3 +918,297 @@ def sequentially(*objs, **kws):
         raise ValueError('catch=True is not supported by sequentially')
 
     return enter_or_call(sequentially_call, objs, kws)
+
+
+class DebugOnException:
+    def __init__(
+        self,
+        enable: bool = False,
+    ):
+        self.enable = enable
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.run(*args)
+
+    def run(self, etype, exc, tb):
+        if (etype, exc, tb) == (None, None, None):
+            return
+
+        if self.enable:
+            print(exc)
+            from IPython.core import ultratb
+
+            if not hasattr(sys, 'last_value'):
+                sys.last_value = exc
+            if not hasattr(sys, 'last_traceback'):
+                sys.last_traceback = tb
+            debugger = ultratb.FormattedTB(mode='Plain', call_pdb=True)
+            debugger(etype, exc, tb)
+
+
+def exit_context(ctx: typing.ContextManager | None, exc_info=None):
+    if ctx is not None:
+        if exc_info is None:
+            exc_info = sys.exc_info()
+        ctx.__exit__(*exc_info) # type: ignore
+
+
+def log_verbosity(verbose: int = 0):
+    if verbose == 0:
+        show_messages(logging.INFO)
+    elif verbose == 1:
+        show_messages(PERFORMANCE_INFO)
+    elif verbose == 2:
+        show_messages(PERFORMANCE_DETAIL)
+    else:
+        show_messages(logging.DEBUG)
+
+
+def _extract_traceback(
+    exc_type: type[BaseException],
+    exc_value: BaseException,
+    traceback,
+    *,
+    show_locals: bool = False,
+    locals_hide_dunder: bool = True,
+    locals_hide_sunder: bool = False,
+    _visited_exceptions: typing.Optional[set[BaseException]] = None,
+):
+    """labbench implemented ConcurrentException as a container for
+    exceptions that occur in multiple threads.
+
+    A similar feature was added to python 3.11, ExceptionGroup.
+    rich.traceback supports displaying this, so we can
+    extract the exceptions in the same way here.
+
+    """
+
+    import inspect
+    import os
+    from itertools import islice
+
+    from rich import pretty
+    from rich.traceback import (
+        LOCALS_MAX_LENGTH,
+        LOCALS_MAX_STRING,
+        Frame,
+        Stack,
+        Trace,
+        Traceback,
+        _SyntaxError,
+        walk_tb, # type: ignore
+    )
+
+    stacks: list[Stack] = []
+    is_cause = False
+
+    from rich import _IMPORT_CWD
+
+    notes: list[str] = getattr(exc_value, '__notes__', None) or []
+
+    grouped_exceptions: set[BaseException] = (
+        set() if _visited_exceptions is None else _visited_exceptions
+    )
+
+    def safe_str(_object: typing.Any) -> str:
+        """Don't allow exceptions from __str__ to propagate."""
+        try:
+            return str(_object)
+        except Exception:
+            return '<exception str() failed>'
+
+    while True:
+        stack = Stack(
+            exc_type=safe_str(exc_type.__name__),
+            exc_value=safe_str(exc_value),
+            is_cause=is_cause,
+            notes=notes,
+        )
+
+        if sys.version_info >= (3, 11):
+            if isinstance(exc_value, (BaseExceptionGroup, ExceptionGroup)):
+                stack.is_group = True
+                for exception in exc_value.exceptions:
+                    if exception in grouped_exceptions:
+                        continue
+                    grouped_exceptions.add(exception)
+                    stack.exceptions.append(
+                        _extract_traceback(
+                            type(exception),
+                            exception,
+                            exception.__traceback__,
+                            show_locals=show_locals,
+                            locals_hide_dunder=locals_hide_dunder,
+                            locals_hide_sunder=locals_hide_sunder,
+                            _visited_exceptions=grouped_exceptions,
+                        )
+                    )
+
+        if isinstance(exc_value, ConcurrentException):
+            stack.is_group = True
+            for exception in exc_value.thread_exceptions:
+                if exception in grouped_exceptions:
+                    continue
+                grouped_exceptions.add(exception)
+                stack.exceptions.append(
+                    _extract_traceback(
+                        type(exception),
+                        exception,
+                        exception.__traceback__,
+                        show_locals=show_locals,
+                        locals_hide_dunder=locals_hide_dunder,
+                        locals_hide_sunder=locals_hide_sunder,
+                        _visited_exceptions=grouped_exceptions,
+                    )
+                )
+
+        if isinstance(exc_value, SyntaxError):
+            stack.syntax_error = _SyntaxError(
+                offset=exc_value.offset or 0,
+                filename=exc_value.filename or '?',
+                lineno=exc_value.lineno or 0,
+                line=exc_value.text or '',
+                msg=exc_value.msg,
+                notes=notes,
+            )
+
+        stacks.append(stack)
+        append = stack.frames.append
+
+        def get_locals(
+            iter_locals: typing.Iterable[tuple[str, object]],
+        ) -> typing.Iterable[tuple[str, object]]:
+            """Extract locals from an iterator of key pairs."""
+            if not (locals_hide_dunder or locals_hide_sunder):
+                yield from iter_locals
+                return
+            for key, value in iter_locals:
+                if locals_hide_dunder and key.startswith('__'):
+                    continue
+                if locals_hide_sunder and key.startswith('_'):
+                    continue
+                yield key, value
+
+        for frame_summary, line_no in walk_tb(traceback):
+            filename = frame_summary.f_code.co_filename
+
+            last_instruction: typing.Optional[tuple[tuple[int, int], tuple[int, int]]]
+            last_instruction = None
+            if sys.version_info >= (3, 11):
+                instruction_index = frame_summary.f_lasti // 2
+                instruction_position = next(
+                    islice(
+                        frame_summary.f_code.co_positions(),
+                        instruction_index,
+                        instruction_index + 1,
+                    )
+                )
+                (
+                    start_line,
+                    end_line,
+                    start_column,
+                    end_column,
+                ) = instruction_position
+                if (
+                    start_line is not None
+                    and end_line is not None
+                    and start_column is not None
+                    and end_column is not None
+                ):
+                    last_instruction = (
+                        (start_line, start_column),
+                        (end_line, end_column),
+                    )
+
+            if filename and not filename.startswith('<'):
+                if not os.path.isabs(filename):
+                    filename = os.path.join(_IMPORT_CWD, filename)
+            if frame_summary.f_locals.get('_rich_traceback_omit', False):
+                continue
+
+            frame = Frame(
+                filename=filename or '?',
+                lineno=line_no,
+                name=frame_summary.f_code.co_name,
+                locals=(
+                    {
+                        key: pretty.traverse(
+                            value,
+                            max_length=LOCALS_MAX_LENGTH,
+                            max_string=LOCALS_MAX_STRING,
+                        )
+                        for key, value in get_locals(frame_summary.f_locals.items())
+                        if not (inspect.isfunction(value) or inspect.isclass(value))
+                    }
+                    if show_locals
+                    else None
+                ),
+                last_instruction=last_instruction,
+            )
+            append(frame)
+            if frame_summary.f_locals.get('_rich_traceback_guard', False):
+                del stack.frames[:]
+
+        if not grouped_exceptions:
+            cause = getattr(exc_value, '__cause__', None)
+            if cause is not None and cause is not exc_value:
+                exc_type = cause.__class__
+                exc_value = cause
+                # __traceback__ can be None, e.g. for exceptions raised by the
+                # 'multiprocessing' module
+                traceback = cause.__traceback__
+                is_cause = True
+                continue
+
+            cause = exc_value.__context__
+            if cause is not None and not getattr(
+                exc_value, '__suppress_context__', False
+            ):
+                exc_type = cause.__class__
+                exc_value = cause
+                traceback = cause.__traceback__
+                is_cause = False
+                continue
+        # No cover, code is reached but coverage doesn't recognize it.
+        break  # pragma: no cover
+
+    trace = Trace(stacks=stacks)
+
+    return trace
+
+
+def print_rich_exception():
+    from rich.console import Console
+    from rich.traceback import Traceback
+
+    console = Console()
+
+    exc_type, exc_value, tb = sys.exc_info()
+
+    if exc_type is None:
+        return
+    if exc_value is None:
+        return
+
+    trace = _extract_traceback(exc_type, exc_value, tb, show_locals=False)
+
+    traceback = Traceback(
+        trace,
+        width=None,
+        show_locals=False,
+        word_wrap=True,
+        suppress=[
+            'concurrent',
+            'rich',
+            'textual',
+            'labbench',
+            'zarr',
+            'xarray',
+            'pandas',
+        ],
+    )
+
+    console.print(traceback)

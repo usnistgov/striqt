@@ -3,41 +3,55 @@
 from __future__ import annotations
 
 import contextlib
+import functools
 import logging
+import importlib
 import os
 import sys
 import typing
 from pathlib import Path
 
-from .. import bindings
-
 from .bindings import get_binding, get_registry
-from . import (
-    calibration,
-    captures,
-    io,
-    peripherals,
-    sinks,
-    specs,
-    sweeps,
-    util,
-)
+from . import calibration, captures, io, specs, util
+
+from .peripherals import PeripheralsBase
+from .sinks import SinkBase
+from .sources import SourceBase
+from .specs import _TC, _TP, _TS
+
 
 if typing.TYPE_CHECKING:
-    import striqt.waveform as iqwaveform
+    import xarray as xr
 
     _P = typing.ParamSpec('_P')
     _R = typing.TypeVar('_R')
 
-else:
-    iqwaveform = util.lazy_import('striqt.waveform')
+
+class Resources(typing.TypedDict, typing.Generic[_TS, _TP, _TC]):
+    """Sensor resources needed to run a sweep"""
+
+    source: SourceBase[_TS, _TC]
+    sink: SinkBase
+    peripherals: PeripheralsBase[_TP, _TC]
+    except_context: typing.NotRequired[typing.ContextManager]
+    sweep_spec: specs.SweepSpec[_TS, _TP, _TC]
+    calibration: 'xr.Dataset|None'
+
+
+class AnyResources(typing.TypedDict, typing.Generic[_TS, _TP, _TC], total=False):
+    """Sensor resources needed to run a sweep"""
+
+    source: SourceBase[_TS, _TC]
+    sink: SinkBase
+    peripherals: PeripheralsBase[_TP, _TC]
+    except_context: typing.NotRequired[typing.ContextManager]
+    sweep_spec: specs.SweepSpec[_TS, _TP, _TC]
+    calibration: 'xr.Dataset|None'
 
 
 def _import_sink_cls(
     spec: specs.ExtensionSpec,
-) -> type[sinks.SinkBase]:
-    import importlib
-
+) -> type[SinkBase]:
     mod_name, *sub_names, obj_name = spec.sink.rsplit('.')
     mod = importlib.import_module(mod_name)
     for name in sub_names:
@@ -54,7 +68,6 @@ def _import_extensions(
         spec: specification structure for the extension imports
         alias_func: formatter to fill aliases in the import path
     """
-    import importlib
 
     if spec.import_path is None:
         pass
@@ -81,29 +94,6 @@ def _import_extensions(
         )
 
 
-def run_warmup(input_spec: specs.SweepSpec):
-    if not input_spec.source.warmup_sweep:
-        return
-
-    if input_spec.source.array_backend == 'cupy':
-        iqwaveform.set_max_cupy_fft_chunk(input_spec.source.cupy_max_fft_chunk_size)
-
-    warmup_spec = sweeps.design_warmup_sweep(input_spec)
-
-    if len(warmup_spec.captures) == 0:
-        return
-
-    source = bindings.warmup.source(warmup_spec.source, analysis=warmup_spec.analysis)
-
-    with source:
-        resources = sweeps.Resources(source=source, sweep_spec=warmup_spec)
-
-        warmup_iter = sweeps.iter_sweep(resources, always_yield=True, calibration=None)
-
-        for _ in warmup_iter:
-            pass
-
-
 def _load_calibration(
     spec: specs.SweepSpec, alias_func: captures.PathAliasFormatter | None
 ):
@@ -119,30 +109,40 @@ def _load_calibration(
 
 class ConnectionManager(
     contextlib.ExitStack,
-    typing.Generic[specs._TS, specs._TP, specs._TC],
+    typing.Generic[_TS, _TP, _TC],
 ):
-    resources: sweeps.Resources[specs._TS, specs._TP, specs._TC]
+    _resources: AnyResources[_TS, _TP, _TC]
 
-    def __init__(self):
-        self.resources = sweeps.Resources()
+    def __init__(self, sweep_spec: specs.SweepSpec[_TS, _TP, _TC]):
+        self._resources = AnyResources(sweep_spec=sweep_spec)
 
     def open(
         self, name, func: typing.Callable[_P, _R], *args: _P.args, **kws: _P.kwargs
     ):
-        self.resources[name] = obj = func(*args, **kws)
+        self._resources[name] = obj = func(*args, **kws)
         self.enter_context(obj)  # type: ignore
 
+    @functools.cached_property
+    def resources(self) -> Resources[_TS, _TP, _TC]:
+        missing = Resources.__required_keys__ - set(self._resources.keys())
+        if len(missing) == 0:
+            return typing.cast(Resources[_TS, _TP, _TC], self._resources)
+        else:
+            raise TypeError('connections are incomplete')
 
-def open_sensor_from_spec(
-    spec: specs.SweepSpec[specs._TS, specs._TP, specs._TC],
+
+def open_sensor(
+    spec: specs.SweepSpec[_TS, _TP, _TC],
     spec_path: str | Path | None = None,
     except_context: typing.ContextManager | None = None,
-) -> ConnectionManager[specs._TS, specs._TP, specs._TC]:
+) -> ConnectionManager[_TS, _TP, _TC]:
     """open the sensor hardware and software contexts needed to run the given sweep.
 
     The returned Connections object contains the resulting context. All of its resources
     have been opened and set up as needed to run the specified sweep.
     """
+
+    from .sweeps import run_warmup
 
     timer_kws = dict(threshold=1, logger_suffix='controller', logger_level=logging.INFO)
     format_aliases = captures.PathAliasFormatter(spec, spec_path=spec_path)
@@ -158,7 +158,7 @@ def open_sensor_from_spec(
     binding = get_binding(spec)
     sink_cls = _import_sink_cls(spec.extensions)
 
-    conns = ConnectionManager()
+    conns = ConnectionManager(sweep_spec=spec)
 
     try:
         calls = {
@@ -183,9 +183,7 @@ def open_sensor_from_spec(
             util.concurrently_with_fg(calls, False)
 
         with util.stopwatch(f'setup {", ".join(calls)}', **timer_kws):  # type: ignore
-            if 'peripherals' in conns.resources:
-                assert 'source' in conns.resources
-                conns.resources['peripherals'].setup()
+            conns.resources['peripherals'].setup()
 
         if except_context is not None:
             conns.enter_context(except_context)
@@ -207,10 +205,11 @@ def open_sensor_from_spec(
 
 def open_sensor_from_yaml(
     yaml_path: Path,
+    *,
     except_context: typing.ContextManager | None = None,
     output_path: typing.Optional[str] = None,
     store_backend: typing.Optional[str] = None,
-) -> ConnectionManager:
+) -> ConnectionManager[typing.Any, typing.Any, typing.Any]:
     spec = io.read_yaml_sweep(yaml_path)
 
     sink = spec.sink
@@ -220,4 +219,4 @@ def open_sensor_from_yaml(
         sink = sink.replace(store=store_backend)
     spec = spec.replace(output=sink)
 
-    return open_sensor_from_spec(spec, yaml_path, except_context)
+    return open_sensor(spec, yaml_path, except_context)

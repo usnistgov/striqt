@@ -4,36 +4,7 @@ import logging
 import sys
 import typing
 
-from . import util
-
-
-class DebugOnException:
-    def __init__(
-        self,
-        enable: bool = False,
-    ):
-        self.enable = enable
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *args):
-        self.run(*args)
-
-    def run(self, etype, exc, tb):
-        if (etype, exc, tb) == (None, None, None):
-            return
-
-        if self.enable:
-            print(exc)
-            from IPython.core import ultratb
-
-            if not hasattr(sys, 'last_value'):
-                sys.last_value = exc
-            if not hasattr(sys, 'last_traceback'):
-                sys.last_traceback = tb
-            debugger = ultratb.FormattedTB(mode='Plain', call_pdb=1)
-            debugger(etype, exc, tb)
+from . import resources, sweeps, util
 
 
 # class CLIObjects(typing.NamedTuple):
@@ -195,7 +166,7 @@ def _extract_traceback(
         Trace,
         Traceback,
         _SyntaxError,
-        walk_tb,
+        walk_tb, # type: ignore
     )
 
     stacks: list[Stack] = []
@@ -376,13 +347,20 @@ def _extract_traceback(
     return trace
 
 
-def print_exception():
+def print_rich_exception():
     from rich.console import Console
     from rich.traceback import Traceback
 
     console = Console()
 
-    trace = _extract_traceback(*sys.exc_info(), show_locals=False)
+    exc_type, exc_value, tb = sys.exc_info()
+
+    if exc_type is None:
+        return
+    if exc_value is None:
+        return
+
+    trace = _extract_traceback(exc_type, exc_value, tb, show_locals=False)
 
     traceback = Traceback(
         trace,
@@ -403,9 +381,9 @@ def print_exception():
     console.print(traceback)
 
 
-# def maybe_start_debugger(cli_objects: CLIObjects | None, exc_info):
-#     if cli_objects is not None and cli_objects.debugger.enable:
-#         cli_objects.debugger.run(*exc_info)
+def early_context_exit(ctx: typing.ContextManager | None, exc_info):
+    if ctx is not None:
+        ctx.__exit__(*exc_info)
 
 
 def log_verbosity(verbose: int = 0):

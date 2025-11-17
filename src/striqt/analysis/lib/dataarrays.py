@@ -62,7 +62,7 @@ def describe_capture(
     *,
     index: int | None = None,
     count: int | None = None,
-    constrain: tuple[str] | None = None,
+    constrain: tuple[str, ...] | None = None,
     join: str = ', ',
 ) -> str:
     """generate a description of a capture"""
