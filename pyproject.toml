@@ -6,16 +6,14 @@ requires-python = ">=3.9"
 dependencies = [
  "array-api-compat>=1.6",
  "dask",
- "labbench>=0.42.0,<1",
  "matplotlib~=3.7",
  "methodtools",
- "msgspec~=0.18",
+ "msgspec~=0.19",
  "netCDF4",
  "numba",
  "numexpr~=2.8",
  "numpy>=1.21,<3",
  "pandas>=1.5",
- "rpyc~=5.3",
  "scipy>=1.13,<2",
  "typing-extensions",
  "xarray>=2024.3",
@@ -27,8 +25,7 @@ name = "Dan Kuester"
 email = "daniel.kuester@nist.gov"
 
 [build-system]
-requires = [ "hatchling",
-]
+requires = [ "hatchling",]
 build-backend = "hatchling.build"
 
 [project.optional-dependencies]
@@ -37,18 +34,16 @@ dev = [ "jupyter",
  "ruff",
  "toml",
 ]
-gpu-cpu = [ "cupy ~= 12.2",
+gpu-cpu = [ "cupy >= 12.2",
  "cython",
 ]
-edge-airt = [ "cupy-cuda102",
+edge-airstack-1 = [ "cupy-cuda102",
  "cython<3",
  "dulwich",
- "matplotlib>=3.7,<3.10",
+ "matplotlib>=3.7",
  "numba~=0.56.0",
  "numpy>=1.21,<2",
- "pandas~=1.5",
- "pyqtgraph",
- "pyside6",
+ "pandas",
  "pytools==2022.1.12",
  "scipy~=1.9",
  "ssmdevices",

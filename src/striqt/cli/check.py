@@ -8,7 +8,7 @@ import click
 def run(yaml_path):
     print('Initializing...')
     # instantiate sweep objects
-    from striqt.sensor.lib import captures, frontend, calibration
+    from striqt.sensor.lib import captures, frontend, calibration, util
     from striqt import sensor
     from pprint import pprint
     from striqt.sensor.lib.io import _get_capture_format_fields
@@ -17,7 +17,7 @@ def run(yaml_path):
     import pandas as pd
     import itertools
 
-    lb.show_messages('warning')
+    util.show_messages(util.logging.WARNING)
 
     init_sweep = sensor.read_yaml_sweep(yaml_path)
     print(f'Testing connect with driver {init_sweep.radio_setup.driver!r}...')
