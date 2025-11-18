@@ -32,6 +32,7 @@ class SensorBinding(typing.Generic[_TS, _TP, _TC]):
     source: type[SourceBase[_TS, _TC]]
     peripherals: type[PeripheralsBase[_TS, _TP, _TC]] = NoPeripherals
     sweep_spec: type[specs.Sweep[_TS, _TP, _TC]] = specs.Sweep
+    sink: type[sinks.SinkBase[_TC]] | None = None
 
     def __post_init__(self):
         assert issubclass(self.source_spec, specs.Source)
@@ -39,6 +40,7 @@ class SensorBinding(typing.Generic[_TS, _TP, _TC]):
         assert issubclass(self.source, SourceBase)
         assert issubclass(self.sweep_spec, specs.Sweep)
         assert issubclass(self.peripherals, PeripheralsBase)
+        assert self.sink is None or issubclass(self.sink, sinks.SinkBase)
 
 
 registry: dict[str, SensorBinding[typing.Any, typing.Any, typing.Any]] = {}

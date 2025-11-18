@@ -3,9 +3,9 @@ from __future__ import annotations
 import typing
 from pathlib import Path
 
-import msgspec
-
 from . import bindings, captures, datasets, peripherals, sinks, sources, specs, util
+
+import msgspec
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -17,10 +17,6 @@ else:
     pd = util.lazy_import('pandas')
     scipy = util.lazy_import('scipy')
     xr = util.lazy_import('xarray')
-
-
-_TMP = typing.TypeVar('_TMP', bound=specs.ManualYFactorPeripheral)
-_TMC = typing.TypeVar('_TMC', bound=specs.YFactorCapture)
 
 
 @util.lru_cache()
@@ -370,9 +366,7 @@ class YFactorSink(sinks.SinkBase):
         # dataset
         pass
 
-    def append(
-        self, capture_data: 'xr.Dataset | None', capture: specs.ResampledCapture
-    ):
+    def append(self, capture_data, capture):
         if capture_data is None:
             return
 
@@ -441,6 +435,31 @@ class YFactorSink(sinks.SinkBase):
         print(f'saved to {str(path)!r}')
 
 
+def _ensure_loop_at_position(sweep: specs.Sweep):
+    loop_fields = [l.field for l in sweep.loops]
+
+    try:
+        idx = loop_fields.index('noise_diode_enabled')
+    except ValueError:
+        if len(loop_fields) > 0 and loop_fields[0] == 'port':
+            idx = 1
+        else:
+            idx = 0
+
+        toggle_diode = specs.List(field='noise_diode_enabled', values=(False, True))
+        loops = list(sweep.loops)
+        loops.insert(idx, toggle_diode)
+
+        msgspec.structs.force_setattr(sweep, 'loops', tuple(loops))
+    else:
+        if idx == 0:
+            pass
+        elif idx == 1 and loop_fields[0] == 'port':
+            pass
+        else:
+            raise TypeError('noise_diode_enabled must be the first specified loop')
+
+
 def bind_manual_yfactor_calibration(
     name: str,
     sensor: 'bindings.SensorBinding[specs._TS, specs._TP, specs._TC]',
@@ -453,13 +472,6 @@ def bind_manual_yfactor_calibration(
         # RadioCapture with added fields
         noise_diode_enabled: specs.NoiseDiodeEnabledType = False
 
-    peripheral_base_cls = peripherals.CalibrationPeripheralsBase[
-        sensor.source_spec,
-        specs.Peripheral,
-        YFactorCapture,
-        specs.ManualYFactorPeripheral,
-    ]
-
     sweep_base_cls = specs.CalibrationSweep[
         sensor.source_spec,
         specs.Peripheral,
@@ -468,13 +480,19 @@ def bind_manual_yfactor_calibration(
     ]
 
     class YFactorSweep(sweep_base_cls, frozen=True, kw_only=True, **specs.kws):
-        def loop_captures(
-            self,
-            prepend: tuple[specs.LoopSpec, ...] = (),
-            append: tuple[specs.LoopSpec, ...] = (),
-        ) -> tuple[YFactorCapture, ...]:
-            toggle_diode = specs.List(field='noise_diode_enabled', values=(False, True))
-            return super().loop_captures((toggle_diode,) + prepend, append)
+        def loop_captures(self) -> tuple[YFactorCapture, ...]:
+            return specs._expand_loops(self, nyquist_only=True)
+
+        def __post_init__(self):
+            _ensure_loop_at_position(self)
+            super().__post_init__()
+
+    peripheral_base_cls = peripherals.CalibrationPeripheralsBase[
+        sensor.source_spec,
+        specs.Peripheral,
+        YFactorCapture,
+        specs.ManualYFactorPeripheral,
+    ]
 
     class YFactorCalibrationPeripherals(peripheral_base_cls):
         """A collection of peripheral devices (switches, thermometers, etc.) used in sensing.
@@ -525,5 +543,6 @@ def bind_manual_yfactor_calibration(
             source=sensor.source,
             peripherals=YFactorCalibrationPeripherals,
             sweep_spec=YFactorSweep,
+            sink=YFactorSink,
         ),
     )

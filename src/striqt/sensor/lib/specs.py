@@ -3,21 +3,10 @@
 from __future__ import annotations
 
 import itertools
-import numbers
 import typing
-from typing import (
-    Annotated,
-    Any,
-    ClassVar,
-    Generic,
-    Literal,
-    Optional,
-    TypedDict,
-    Union,
-)
+from typing import Annotated, Any, Generic, Literal, Optional, Union
 
 import msgspec
-from msgspec import UNSET, NODEFAULT
 
 from striqt import analysis
 from striqt.analysis.lib.specs import SpecBase, meta, kws
@@ -50,7 +39,7 @@ def _dict_hash(d):
 @util.lru_cache()
 def _validate_multichannel(port, gain):
     """guarantee that self.gain is a number, or matches the length of self.port"""
-    if isinstance(port, numbers.Number):
+    if not isinstance(port, tuple):
         if isinstance(gain, tuple):
             raise ValueError(
                 'gain must be a single number unless multiple ports are specified'
@@ -77,51 +66,6 @@ def _check_fields(cls: type[SpecBase], fields: tuple[str, ...], new_instance=Fal
     extra = available - {f.name for f in info.fields}
     if len(extra) > 0:
         raise TypeError(f'invalid capture fields {extra!r} specified in loops')
-
-
-@util.lru_cache(4)
-def _expand_loops(
-    sweep: Sweep[_TS, _TP, _TC],
-    prepend: tuple[LoopSpec, ...] = (),
-    append: tuple[LoopSpec, ...] = (),
-) -> tuple[_TC, ...]:
-    """evaluate the loop specification, and flatten into one list of loops"""
-
-    loops = prepend + sweep.loops + append
-    loop_fields = tuple([loop.field for loop in loops])
-
-    if len(sweep.captures) > 0:
-        cls = type(sweep.captures[0])
-        _check_fields(cls, loop_fields, False)
-    elif sweep.__bindings__ is None:
-        raise TypeError(
-            'loops may apply only to explicit capture lists unless the sweep '
-            'is bound to a sensor with striqt.sensor.bind_sensor'
-        )
-    else:
-        cls = sweep.__bindings__.capture_spec
-        _check_fields(cls, loop_fields, True)
-
-    assert issubclass(cls, analysis.Capture)
-
-    loop_points = [loop.get_points() for loop in sweep.loops]
-    combinations = itertools.product(*loop_points)
-
-    result = []
-    for values in combinations:
-        updates = dict(zip(loop_fields, values))
-        if len(sweep.captures) > 0:
-            # iterate specified captures if avialable
-            extras = [c.replace(**updates) for c in sweep.captures]
-        else:
-            # otherwise, instances are new captures
-            extras = [cls.fromdict(updates)]
-        result += extras
-
-    if len(result) == 0:
-        return sweep.captures
-    else:
-        return tuple(result)
 
 
 AnalysisBandwidthType = Annotated[
@@ -305,7 +249,7 @@ class Source(SpecBase, frozen=True, kw_only=True, **kws):
     transport_dtype: Literal['int16', 'complex64'] = 'complex64'
 
 
-class _SourceKeywords(TypedDict, total=False):
+class _SourceKeywords(typing.TypedDict, total=False):
     # this needs to be kept in sync with WaveformCapture in order to
     # properly provide type hints for IDEs in the setup
     # call signature of source.Base objects
@@ -328,7 +272,7 @@ class _SourceKeywords(TypedDict, total=False):
 
 
 class SoapySource(Source, frozen=True, kw_only=True, **kws):
-    device_kwargs: ClassVar[dict[str, Any]] = {}
+    device_kwargs: typing.ClassVar[dict[str, Any]] = {}
     time_source: TimeSourceType = 'host'
     time_sync_every_capture: TimeSyncEveryCaptureType = False
     clock_source: ClockSourceType = 'internal'
@@ -474,7 +418,7 @@ ExtensionPathType = Annotated[
 
 
 class Extension(SpecBase, frozen=True, kw_only=True, **kws):
-    sink: SinkClassType = 'striqt.sensor.sinks.CaptureAppender'
+    sink: SinkClassType | None = None
     import_path: typing.Optional[ExtensionPathType] = None
     import_name: ModuleNameType = None
 
@@ -503,8 +447,52 @@ BundledAnalysis = analysis.registry.tospec()
 BundledAlignmentAnalysis = analysis.registry.channel_sync_source.to_spec()
 
 
-class SweepConfig(typing.NamedTuple):
+class SweepInfo(typing.NamedTuple):
     reuse_iq: bool
+
+
+@util.lru_cache(4)
+def _expand_loops(sweep: Sweep[_TS, _TP, _TC], nyquist_only=False) -> tuple[_TC, ...]:
+    """evaluate the loop specification, and flatten into one list of loops"""
+
+    loop_fields = tuple([loop.field for loop in sweep.loops])
+
+    if len(sweep.captures) > 0:
+        cls = type(sweep.captures[0])
+        _check_fields(cls, loop_fields, False)
+    elif sweep.__bindings__ is None:
+        raise TypeError(
+            'loops may apply only to explicit capture lists unless the sweep '
+            'is bound to a sensor with striqt.sensor.bind_sensor'
+        )
+    else:
+        cls = sweep.__bindings__.capture_spec
+        _check_fields(cls, loop_fields, True)
+
+    assert issubclass(cls, analysis.Capture)
+
+    loop_points = [loop.get_points() for loop in sweep.loops]
+    combinations = itertools.product(*loop_points)
+
+    result = []
+    for values in combinations:
+        updates = dict(zip(loop_fields, values))
+        if len(sweep.captures) > 0:
+            # iterate specified captures if avialable
+            new = (c.replace(**updates) for c in sweep.captures)
+        else:
+            # otherwise, instances are new captures
+            new = (cls.fromdict(updates) for _ in range(1))
+
+        if nyquist_only:
+            new = (c for c in new if c.sample_rate >= c.analysis_bandwidth)
+
+        result += list(new)
+
+    if len(result) == 0:
+        return sweep.captures
+    else:
+        return tuple(result)
 
 
 class Sweep(Generic[_TS, _TP, _TC], SpecBase, frozen=True, kw_only=True, **kws):
@@ -517,24 +505,19 @@ class Sweep(Generic[_TS, _TP, _TC], SpecBase, frozen=True, kw_only=True, **kws):
     sink: Sink = Sink()
     peripherals: _TP | None = None
 
-    info: ClassVar[SweepConfig] = SweepConfig(reuse_iq=False)
-    __bindings__: ClassVar['bindings.SensorBinding|None'] = None
+    info: typing.ClassVar[SweepInfo] = SweepInfo(reuse_iq=False)
+    __bindings__: typing.ClassVar['bindings.SensorBinding|None'] = None
 
-    def loop_captures(
-        self, prepend: tuple[LoopSpec, ...] = (), append: tuple[LoopSpec, ...] = ()
-    ) -> tuple[_TC, ...]:
+    def loop_captures(self) -> tuple[_TC, ...]:
         """apply loops to self.captures"""
-        return _expand_loops(self, prepend, append)
+        return _expand_loops(self)
 
     def __post_init__(self):
-        looped_fields = []
-        for loop in self.loops:
-            if loop.field in looped_fields:
-                raise TypeError(
-                    f'multiple loops specified for capture field {repr(loop.field)}'
-                )
-            else:
-                looped_fields.append(loop.field)
+        from collections import Counter
+
+        ((which, howmany),) = Counter(l.field for l in self.loops).most_common(1)
+        if howmany > 1:
+            raise TypeError(f'more than one loop of capture field {which!r}')
 
     # @classmethod
     # def _from_registry(
@@ -558,51 +541,6 @@ class Sweep(Generic[_TS, _TP, _TC], SpecBase, frozen=True, kw_only=True, **kws):
     #     return typing.cast(type[Sweep], subcls)
 
 
-# class CalibrationVariables(SpecBase, frozen=True, kw_only=True, **kws):
-#     noise_diode_enabled: tuple[NoiseDiodeEnabledType, ...] = (False, True)
-#     sample_rate: tuple[BackendSampleRateType, ...]
-#     center_frequency: tuple[CenterFrequencyType, ...] = (3700e6,)
-#     port: tuple[PortType, ...] = (0,)
-#     gain: tuple[GainType, ...] = (0,)
-
-#     # filtering and resampling
-#     analysis_bandwidth: tuple[AnalysisBandwidthType, ...] = (float('inf'),)
-#     lo_shift: tuple[LOShiftType, ...] = ('none',)
-
-
-# @util.lru_cache()
-# def _cached_cal_captures(
-#     variables: CalibrationVariables, capture_cls: type[_TC]
-# ) -> tuple[_TC, ...]:
-#     var_fields = variables.todict()
-
-#     # enforce ordering to place difficult-to-change variables in
-#     # the outermost loops, in case the ordering is changed by
-#     # subclasses
-#     analysis_bandwidths = var_fields.pop('analysis_bandwidth')
-#     var_fields = {
-#         'port': var_fields['port'],
-#         'noise_diode_enabled': var_fields['noise_diode_enabled'],
-#         **var_fields,
-#         'analysis_bandwidth': analysis_bandwidths,
-#     }
-
-#     # every combination of each variable
-#     combos = itertools.product(*var_fields.values())
-
-#     captures = []
-#     for values in combos:
-#         mapping = dict(zip(var_fields, values))
-#         if mapping['analysis_bandwidth'] == float('inf'):
-#             pass
-#         elif mapping['analysis_bandwidth'] > mapping['sample_rate']:
-#             # skip cases outside of 1st Nyquist zone
-#             continue
-#         captures.append(capture_cls.fromdict(mapping))
-
-#     return tuple(captures)
-
-
 class CalibrationSweep(
     Sweep[_TS, _TP, _TC],
     typing.Generic[_TS, _TP, _TC, _TPC],
@@ -613,7 +551,7 @@ class CalibrationSweep(
     """This specialized sweep is fed to the YAML file loader
     to specify the change in expected capture structure."""
 
-    info: ClassVar[SweepConfig] = SweepConfig(reuse_iq=True)
+    info: typing.ClassVar[SweepInfo] = SweepInfo(reuse_iq=True)
     calibration_peripherals: _TPC | None = None
 
     def __post_init__(self):
@@ -623,3 +561,8 @@ class CalibrationSweep(
             )
         if self.source.calibration is not None:
             raise ValueError('source.calibration must be None for a calibration sweep')
+
+        super().__post_init__()
+
+
+del util

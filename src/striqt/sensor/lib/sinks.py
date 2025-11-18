@@ -124,7 +124,7 @@ class ZarrSinkBase(SinkBase):
             return self.store.root
 
 
-class CaptureAppender(ZarrSinkBase):
+class ZarrCaptureSink(ZarrSinkBase):
     """concatenates the data from each capture and dumps to a zarr data store"""
 
     def append(

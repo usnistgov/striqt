@@ -49,9 +49,11 @@ class AnyResources(typing.TypedDict, typing.Generic[_TS, _TP, _TC], total=False)
     calibration: 'xr.Dataset|None'
 
 
-def _import_sink_cls(
+def import_sink_cls(
     spec: specs.Extension,
 ) -> type[SinkBase]:
+    if spec.sink is None:
+        raise TypeError('extension sink was not specified')
     mod_name, *sub_names, obj_name = spec.sink.rsplit('.')
     mod = importlib.import_module(mod_name)
     for name in sub_names:
@@ -59,7 +61,7 @@ def _import_sink_cls(
     return getattr(mod, obj_name)
 
 
-def _import_extensions(
+def import_extensions(
     spec: specs.Extension, alias_func: captures.PathAliasFormatter | None = None
 ):
     """import an extension class from a dict representation of structs.Extensions
@@ -94,9 +96,7 @@ def _import_extensions(
         )
 
 
-def _load_calibration(
-    spec: specs.Sweep, alias_func: captures.PathAliasFormatter | None
-):
+def load_calibration(spec: specs.Sweep, alias_func: captures.PathAliasFormatter | None):
     p = spec.source.calibration
     if p is None:
         return
@@ -145,50 +145,51 @@ def open_sensor(
     from .sweeps import run_warmup
 
     timer_kws = dict(threshold=1, logger_suffix='controller', logger_level=logging.INFO)
-    format_aliases = captures.PathAliasFormatter(spec, spec_path=spec_path)
+    formatter = captures.PathAliasFormatter(spec, spec_path=spec_path)
 
     if spec_path is not None:
         os.chdir(str(Path(spec_path).parent))
 
-    _import_extensions(spec.extensions, format_aliases)
+    import_extensions(spec.extensions, formatter)
 
     if spec.sink.log_path is not None:
         util.log_to_file(spec.sink.log_path, spec.sink.log_level)
 
-    binding = get_binding(spec)
-    sink_cls = _import_sink_cls(spec.extensions)
+    bind = get_binding(spec)
+    conn = ConnectionManager(sweep_spec=spec)
 
-    conns = ConnectionManager(sweep_spec=spec)
+    if spec.extensions.sink is not None:
+        sink_cls = import_sink_cls(spec.extensions)
+    elif bind.sink is not None:
+        sink_cls = bind.sink
+    else:
+        raise TypeError('no sink class in sensor binding or extensions.sink spec')
 
     try:
         calls = {
             'source': util.Call(
-                conns.open,
+                conn.open,
                 'source',
-                binding.source,
+                bind.source,
                 spec.source,
                 analysis=spec.analysis,
             ),
-            'sink': util.Call(
-                conns.open, 'sink', sink_cls, spec, alias_func=format_aliases
-            ),
+            'sink': util.Call(conn.open, 'sink', sink_cls, spec, alias_func=formatter),
             'warmup': util.Call(run_warmup, spec),
-            'load_calibration': util.Call(_load_calibration, spec, format_aliases),
-            'peripherals': util.Call(
-                conns.open, 'peripherals', binding.peripherals, spec.peripherals
-            ),
+            'load_calibration': util.Call(load_calibration, spec, formatter),
+            'peripherals': util.Call(conn.open, 'peripherals', bind.peripherals, spec),
         }
 
         with util.stopwatch(f'open {", ".join(calls)}', threshold=1, **timer_kws):  # type: ignore
             util.concurrently_with_fg(calls, False)
 
         with util.stopwatch(f'setup {", ".join(calls)}', **timer_kws):  # type: ignore
-            conns.resources['peripherals'].setup()
+            conn.resources['peripherals'].setup()
 
         if except_context is not None:
-            conns.enter_context(except_context)
+            conn.enter_context(except_context)
 
-        conns.resources['sweep_spec'] = spec
+        conn.resources['sweep_spec'] = spec
 
     except BaseException as ex:
         if except_context is not None:
@@ -197,18 +198,18 @@ def open_sensor(
         else:
             raise
 
-        conns.__exit__(*sys.exc_info())
+        conn.__exit__(*sys.exc_info())
         raise
 
-    return conns
+    return conn
 
 
 def open_sensor_from_yaml(
     yaml_path: Path,
     *,
     except_context: typing.ContextManager | None = None,
-    output_path: typing.Optional[str] = None,
-    store_backend: typing.Optional[str] = None,
+    output_path: str | None = None,
+    store_backend: str | None = None,
 ) -> ConnectionManager[typing.Any, typing.Any, typing.Any]:
     spec = io.read_yaml_sweep(yaml_path)
 
