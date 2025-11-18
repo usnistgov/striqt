@@ -163,9 +163,7 @@ SubcarrierSpacingAxis = typing.Literal['subcarrier_spacing']
     dtype='float32', attrs={'standard_name': 'Subcarrier spacing', 'units': 'Hz'}
 )
 @util.lru_cache()
-def subcarrier_spacing(
-    capture: specs.Capture, spec: CellularCyclicAutocorrelationSpec
-):
+def subcarrier_spacing(capture: specs.Capture, spec: CellularCyclicAutocorrelationSpec):
     return list(spec.subcarrier_spacings)
 
 

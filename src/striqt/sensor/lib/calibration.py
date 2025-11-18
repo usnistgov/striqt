@@ -5,14 +5,13 @@ from pathlib import Path
 
 import msgspec
 
-from . import captures, datasets, peripherals, sinks, sources, specs, util
+from . import bindings, captures, datasets, peripherals, sinks, sources, specs, util
 
 if typing.TYPE_CHECKING:
     import numpy as np
     import pandas as pd
     import scipy
     import xarray as xr
-
 else:
     np = util.lazy_import('numpy')
     pd = util.lazy_import('pandas')
@@ -333,7 +332,7 @@ def _get_port_variable(ds: 'xr.DataArray|xr.Dataset') -> str:
 
 
 class YFactorSink(sinks.SinkBase):
-    sweep_spec: specs.YFactorCalibrationSweep
+    sweep_spec: specs.CalibrationSweep
 
     _DROP_FIELDS = (
         'sweep_start_time',
@@ -371,7 +370,9 @@ class YFactorSink(sinks.SinkBase):
         # dataset
         pass
 
-    def append(self, capture_data: 'xr.Dataset | None', capture: specs.ResampledCapture):
+    def append(
+        self, capture_data: 'xr.Dataset | None', capture: specs.ResampledCapture
+    ):
         if capture_data is None:
             return
 
@@ -391,10 +392,10 @@ class YFactorSink(sinks.SinkBase):
         # re-index by radio setting rather than capture
         port = int(data[0].port)
 
-        fields = list(self.sweep_spec.calibration_variables.__struct_fields__)
+        fields = list(data[0].attrs['loops'])
         if 'sample_rate' in fields:
-            fields.remove('sample_rate')
-            fields.append('backend_sample_rate')
+            i = fields.index('sample_rate')
+            fields[i] = 'backend_sample_rate'
 
         attrs = {
             'sweep_start_time': self.sweep_start_time,
@@ -440,150 +441,89 @@ class YFactorSink(sinks.SinkBase):
         print(f'saved to {str(path)!r}')
 
 
-class ManualYFactorPeripherals(peripherals.PeripheralsBase[_TMP, _TMC]):
-    """Human input "peripheral" that prompts noise diode connection changes"""
-
-    _last_state = (None, None)
-
-    def arm(self, capture):
-        """This is run before each capture"""
-        state = (capture.port, capture.noise_diode_enabled)
-
-        if state != self._last_state:
-            if capture.noise_diode_enabled:
-                input(f'enable noise diode at port {capture.port} and press enter')
-            else:
-                input(f'disable noise diode at port {capture.port} and press enter')
-
-        self._last_state = state
-
-    def acquire(self, capture):
-        return {
-            'enr_dB': self.spec.enr,
-            'Tamb_K': self.spec.ambient_temperature,
-        }
-
-
-def _field_tuple(info: msgspec.structs.FieldInfo) -> tuple[str, type, typing.Any]:
-    if info.default is msgspec.NODEFAULT:
-        field = msgspec.field(name=info.name, default_factory=info.default_factory)
-    else:
-        field = msgspec.field(name=info.name, default=info.default)
-
-    return (
-        info.name,
-        info.type,
-        field,
-    )
-
-
-def _merge_specs(
-    name: str, module: str, cls_list: list[type[specs.SpecBase]]
-) -> type[specs.SpecBase]:
-    # for each field name, the definition that will be returned is the
-    # the last defined in cls_list
-    all_fields = sum((msgspec.structs.fields(c) for c in cls_list), tuple())
-    fields = {info.name: _field_tuple(info) for info in all_fields}
-
-    spec_cls = msgspec.defstruct(
-        name, fields.values(), bases=(cls_list[0],), module=module
-    )
-    return typing.cast(type[specs.SpecBase], spec_cls)
-
-
-def specialize_cal_sweep(
+def bind_manual_yfactor_calibration(
     name: str,
-    cal_cls: type[specs.Sweep],
-    sensor_cls: type[specs.Sweep],
-) -> type[specs.Sweep]:
-    """build a type calibration sweep specification struct for the given sensor.
+    sensor: 'bindings.SensorBinding[specs._TS, specs._TP, specs._TC]',
+) -> bindings.SensorBinding[specs._TS, typing.Any, typing.Any]:
+    """bind a y-factor calibration onto an existing binding"""
 
-    The idea is to generate a `cal_cls` subclass that can be applied
-    to a `sensor_cls` that has been extended with additional fields.
+    class YFactorCapture(sensor.capture_spec, frozen=True, kw_only=True, **specs.kws):
+        """Specialize fields to add to the RadioCapture type"""
 
-    As such, the `captures` and `radio_setup` fields in the returned class
-    have been updated with fields and defaults from `sensor_cls`.
-    """
-    all_fields = {}
-    module = sensor_cls.__module__
+        # RadioCapture with added fields
+        noise_diode_enabled: specs.NoiseDiodeEnabledType = False
 
-    for cls in (cal_cls, sensor_cls):
-        for info in msgspec.structs.fields(cls):
-            all_fields.setdefault(info.name, []).append(info.type)
+    peripheral_base_cls = peripherals.CalibrationPeripheralsBase[
+        sensor.source_spec,
+        specs.Peripheral,
+        YFactorCapture,
+        specs.ManualYFactorPeripheral,
+    ]
 
-    capture_cls = _merge_specs(
-        'CalibrationRadioCapture', module, [captures.get_capture_type(sensor_cls)]
-    )
-    setup_cls = _merge_specs('CalibrationRadioSetup', module, all_fields['source'])
+    sweep_base_cls = specs.CalibrationSweep[
+        sensor.source_spec,
+        specs.Peripheral,
+        YFactorCapture,
+        specs.ManualYFactorPeripheral,
+    ]
 
-    sweep_cls = msgspec.defstruct(
-        name,
-        fields=(
-            ('captures', tuple[capture_cls, ...], tuple()),
-            ('source', setup_cls, setup_cls()),
-        ),
-        bases=(cal_cls,),
-        module=sensor_cls.__module__,
-        forbid_unknown_fields=True,
-        frozen=True,
-        cache_hash=True,
-    )
+    class YFactorSweep(sweep_base_cls, frozen=True, kw_only=True, **specs.kws):
+        def loop_captures(
+            self,
+            prepend: tuple[specs.LoopSpec, ...] = (),
+            append: tuple[specs.LoopSpec, ...] = (),
+        ) -> tuple[YFactorCapture, ...]:
+            toggle_diode = specs.List(field='noise_diode_enabled', values=(False, True))
+            return super().loop_captures((toggle_diode,) + prepend, append)
 
-    return typing.cast(type[specs.Sweep], sweep_cls)
-
-
-def specialize_cal_peripherals(
-    name: str,
-    cal_cls: type[peripherals.PeripheralsBase],
-    sensor_cls: type,
-) -> type[peripherals.PeripheralsBase]:
-    """extend a Peripherals class to perform calibrations.
-
-    The idea is to generate a `cal_cls` subclass that can be applied
-    to a custom `sensor_cls` peripheral class that has been extended with
-    additional fields.
-    """
-
-    class peripheral_cls(sensor_cls, cal_cls):
+    class YFactorCalibrationPeripherals(peripheral_base_cls):
         """A collection of peripheral devices (switches, thermometers, etc.) used in sensing.
 
         For remote control, devices connections should be accessible to the client PC.
         The `edge-sweep.py` script expects this object to have `setup` and `acquire` methods.
         """
 
+        _last_state = (None, None)
+
         def open(self):
-            util.concurrently(
-                integrations=util.Call(sensor_cls.open, self),
-                calibration=util.Call(cal_cls.open, self),
-            )
+            sensor.peripherals.open(self)  # type: ignore
 
         def close(self):
-            util.concurrently(
-                integrations=util.Call(sensor_cls.close, self),
-                calibration=util.Call(cal_cls.close, self),
-            )
+            sensor.peripherals.close(self)  # type: ignore
 
-        def arm(self, capture: specs.SoapyCapture):
-            """runs before each capture"""
+        def arm(self, capture):
+            state = (capture.port, capture.noise_diode_enabled)
 
-            util.concurrently(
-                integrations=util.Call(sensor_cls.arm, self, capture),
-                calibration=util.Call(cal_cls.arm, self, capture),
-                flatten=True,
-            )
+            if state != self._last_state:
+                if capture.noise_diode_enabled:
+                    input(f'enable noise diode at port {capture.port} and press enter')
+                else:
+                    input(f'disable noise diode at port {capture.port} and press enter')
 
-        def acquire(self, capture) -> dict:
-            """runs during each capture, and returns a dictionary of results keyed by name"""
-            sensor_result = sensor_cls.acquire(self, capture) or {}
-            cal_result = cal_cls.acquire(self, capture) or {}
-            return sensor_result | cal_result
+            self._last_state = state
+
+            sensor.peripherals.arm(capture)  # type: ignore
+
+        def acquire(self, capture):
+            assert self.calibration_spec is not None
+
+            sensor_result = sensor.peripherals.acquire(self)  # type: ignore
+            return sensor_result | self.calibration_spec.todict()
 
         def setup(self):
-            sensor_cls.setup(self)
-            cal_cls.setup(self)
+            sensor.peripherals.setup(self)  # type: ignore
 
-    peripheral_cls.__name__ = name
-    peripheral_cls.__module__ = sensor_cls.__module__
-    peripheral_cls.__qualname__ = name
+    YFactorCalibrationPeripherals.__name__ = name
+    YFactorCalibrationPeripherals.__module__ = __file__
+    YFactorCalibrationPeripherals.__qualname__ = f'{__file__}.{name}'
 
-    return peripheral_cls
+    return bindings.bind_sensor(
+        name,
+        bindings.SensorBinding(
+            source_spec=sensor.source_spec,
+            capture_spec=YFactorCapture,
+            source=sensor.source,
+            peripherals=YFactorCalibrationPeripherals,
+            sweep_spec=YFactorSweep,
+        ),
+    )

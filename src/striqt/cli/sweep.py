@@ -34,12 +34,15 @@ def run(**kws):
 
     else:
         sensor.util.log_verbosity(kws['verbose'])
-        spec = sensor.read_yaml_sweep(yaml_path, output_path=kws['output_path'], store_backend=kws['store_backend'])
+        spec = sensor.read_yaml_sweep(
+            yaml_path,
+            output_path=kws['output_path'],
+            store_backend=kws['store_backend'],
+        )
         with sensor.open_sensor(spec, yaml_path, debugger) as ctx:
             sweep_iter = sensor.SweepIterator(ctx.resources, always_yield=True)
             for _ in sweep_iter:
                 pass
-
 
 
 if __name__ == '__main__':

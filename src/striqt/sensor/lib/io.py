@@ -48,7 +48,6 @@ def read_yaml_sweep(
     output_path: typing.Optional[str] = None,
     store_backend: typing.Optional[str] = None,
 ) -> specs.Sweep:
-
     """build a Sweep specification object from the specified yaml file.
 
     Args:

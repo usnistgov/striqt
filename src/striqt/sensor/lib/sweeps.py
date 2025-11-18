@@ -17,6 +17,7 @@ from .specs import _TC, _TP, _TS
 
 if typing.TYPE_CHECKING:
     import xarray as xr
+    from .. import bindings
 else:
     xr = util.lazy_import('xarray')
 
@@ -62,7 +63,7 @@ def sweep_touches_gpu(sweep: specs.Sweep) -> bool:
 
 def design_warmup(
     sweep: specs.Sweep[_TS, _TP, _TC], skip: tuple[_TC, ...] = ()
-) -> specs.Sweep[specs.NullSource, _TP, specs.ResampledCapture]:
+) -> specs.Sweep[specs.NullSource, specs.NoPeripheral, specs.ResampledCapture]:
     """returns a Sweep object for a NullRadio consisting of capture combinations from
     `sweep`.
 
@@ -74,8 +75,8 @@ def design_warmup(
 
     # captures that have unique sampling parameters, which are those
     # specified in structs.WaveformCapture
-    wcaptures = [specs.ResampledCapture.fromspec(c) for c in sweep.looped_captures]
-    unique_map = dict(zip(wcaptures, sweep.looped_captures))
+    wcaptures = [specs.ResampledCapture.fromspec(c) for c in sweep.loop_captures()]
+    unique_map = dict(zip(wcaptures, sweep.loop_captures()))
     skip_wcaptures = {specs.ResampledCapture.fromspec(c) for c in skip}
     captures = [unique_map[c] for c in unique_map.keys() if c not in skip_wcaptures]
 
@@ -110,7 +111,7 @@ def run_warmup(input_spec: specs.Sweep):
         return
 
     from .. import bindings
-    
+
     if input_spec.source.array_backend == 'cupy':
         iqwaveform.set_max_cupy_fft_chunk(input_spec.source.cupy_max_fft_chunk_size)
 
@@ -122,9 +123,9 @@ def run_warmup(input_spec: specs.Sweep):
     resources = Resources(
         sweep_spec=spec,
         source=bindings.warmup.source(spec.source, analysis=spec.analysis),
-        peripherals=bindings.warmup.peripherals(spec.peripherals),
+        peripherals=bindings.warmup.peripherals(spec),
         sink=sinks.NullSink(spec),
-        calibration=None
+        calibration=None,
     )
 
     with resources['source']:
@@ -164,25 +165,6 @@ def _iq_is_reusable(
     )
 
     return c1_compare == c2_compare
-
-
-def _build_attrs(sweep: specs.Sweep):
-    fields = set(type(sweep).__struct_fields__)
-    base_fields = set(specs.Sweep.__struct_fields__)
-    new_fields = list(fields - base_fields)
-    attr_fields = ['source'] + new_fields
-
-    if isinstance(sweep.description, str):
-        attrs = {'description': sweep.description}
-    else:
-        attrs = {'description': sweep.description.todict()}
-
-    for field in attr_fields[::-1]:
-        obj = getattr(sweep, field)
-        new_attrs = obj.todict()
-        attrs.update(new_attrs)
-
-    return attrs
 
 
 @contextlib.contextmanager
@@ -241,7 +223,7 @@ class SweepIterator:
         self._analyze = datasets.AnalysisCaller(
             radio=self.source,
             sweep=self.spec,
-            extra_attrs=_build_attrs(self.spec),
+            extra_attrs=datasets.build_dataset_attrs(self.spec),
             correction=True,
             cache_callback=self.show_cache_info,
             delayed=True,
@@ -281,7 +263,7 @@ class SweepIterator:
         canalyze = None
         result = None
 
-        captures = self.spec.looped_captures
+        captures = self.spec.loop_captures()
 
         if self._loop:
             capture_iter = itertools.cycle(captures)
@@ -356,7 +338,9 @@ class SweepIterator:
     def _acquire(
         self, iq_prev: sources.AcquiredIQ, capture_prev, capture_this, capture_next
     ):
-        if self.spec.config.reuse_iq and not isinstance(self.spec.source, specs.NullSource):
+        if self.spec.info.reuse_iq and not isinstance(
+            self.spec.source, specs.NullSource
+        ):
             reuse_this = _iq_is_reusable(
                 capture_prev, capture_this, self.source.setup_spec.base_clock_rate
             )
@@ -505,7 +489,7 @@ def iter_raw_iq(
 
     capture_prev = None
 
-    captures = sweep.looped_captures
+    captures = sweep.loop_captures()
 
     # iterate across (previous, current, next) captures to support concurrency
     offset_captures = util.zip_offsets(captures, (0, 1), fill=None)

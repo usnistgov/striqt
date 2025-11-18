@@ -19,7 +19,7 @@ from striqt.analysis.lib.util import (
     get_logger,
     show_messages,
     stopwatch,
-    configure_cupy
+    configure_cupy,
 )
 from striqt.waveform.util import lazy_import, lru_cache
 
@@ -131,7 +131,7 @@ def retry(
                 else:
                     break
             else:
-                raise ex # type: ignore
+                raise ex  # type: ignore
 
             return ret
 
@@ -141,7 +141,7 @@ def retry(
 
 
 def concurrently_with_fg(
-    calls: dict[str, typing.Callable] = {}, flatten: bool =True
+    calls: dict[str, typing.Callable] = {}, flatten: bool = True
 ) -> dict[typing.Any, typing.Any]:
     """runs foreground() in the current thread, and util.concurrently(**background) in another thread"""
     from concurrent.futures import ThreadPoolExecutor
@@ -244,7 +244,7 @@ def zip_offsets(
     if squeeze and len(shifts) == 1:
         return iters[0]
     else:
-        return itertools.zip_longest(*iters, fillvalue=fill) # type: ignore
+        return itertools.zip_longest(*iters, fillvalue=fill)  # type: ignore
 
 
 class _JSONFormatter(logging.Formatter):
@@ -335,11 +335,11 @@ def log_to_file(log_path: str | Path, level_name: str):
     handler.setLevel(logging.DEBUG)
 
     if hasattr(handler, '_striqt_handler'):
-        logger.removeHandler(handler._striqt_handler) # type: ignore
+        logger.removeHandler(handler._striqt_handler)  # type: ignore
 
     logger.setLevel(_LOG_LEVEL_NAMES[level_name])
     logger.addHandler(handler)
-    logger._striqt_handler = handler # type: ignore
+    logger._striqt_handler = handler  # type: ignore
 
 
 class Call(typing.Generic[_P, _R]):
@@ -348,15 +348,19 @@ class Call(typing.Generic[_P, _R]):
     otherwise, it will automatically be wrapped inside `concurrently` to
     keep track of some call metadata during execution.
     """
+
     args: list
     kws: dict
     func: typing.Callable
     name: str
 
     if typing.TYPE_CHECKING:
-        def __init__(self, func: typing.Callable[_P, _R], *args: _P.args, **kws: _P.kwargs):
-            ...
+
+        def __init__(
+            self, func: typing.Callable[_P, _R], *args: _P.args, **kws: _P.kwargs
+        ): ...
     else:
+
         def __init__(self, func, *args, **kws):
             if not callable(func):
                 raise ValueError('`func` argument is not callable')
@@ -401,7 +405,7 @@ class Call(typing.Generic[_P, _R]):
 
     @classmethod
     def wrap_list_to_dict(
-        cls, name_func_pairs: typing.Iterable[tuple[str, Call|typing.Callable]]
+        cls, name_func_pairs: typing.Iterable[tuple[str, Call | typing.Callable]]
     ) -> dict[str, Call]:
         """adjusts naming and wraps callables with Call"""
         ret = {}
@@ -412,12 +416,12 @@ class Call(typing.Generic[_P, _R]):
                     if isinstance(func, Call):
                         name = func.name
                     elif hasattr(func, '__name__'):
-                        name = func.__name__ # type: ignore
+                        name = func.__name__  # type: ignore
                     else:
                         raise TypeError(f'could not find name of {func}')
 
                 if not isinstance(func, Call):
-                    func = cls(func) # type: ignore
+                    func = cls(func)  # type: ignore
 
                 func.name = name
 
@@ -501,7 +505,7 @@ class MultipleContexts:
 
     def __enter__(self):
         calls = [(name, Call(self.enter, name, obj)) for name, obj in self.objs]
-        name = self.params["name"]
+        name = self.params['name']
 
         try:
             with stopwatch(f'enter {name!r} context', 'controller', 0.5, logging.DEBUG):
@@ -514,7 +518,7 @@ class MultipleContexts:
 
     def __exit__(self, *exc):
         logger = get_logger('controller')
-        name = self.params["name"]
+        name = self.params['name']
         with stopwatch(f'exit {name} context', 'controller', 0.5, logging.DEBUG):
             for name in tuple(self._entered.keys())[::-1]:
                 context = self._entered[name]
@@ -857,14 +861,23 @@ def concurrently_call(params: dict, name_func_pairs: list) -> dict:
     return results
 
 
+@typing.overload
+def concurrently(
+    *objs: typing.Callable, flatten: bool = False, **kws: typing.Callable
+) -> dict[str, typing.Any]: ...
+
 
 @typing.overload
-def concurrently(*objs: typing.Callable, flatten: bool = False, **kws: typing.Callable) -> dict[str, typing.Any]: ...
+def concurrently(
+    *objs: typing.ContextManager, flatten: bool = False, **kws: typing.ContextManager
+) -> dict[str, typing.ContextManager]: ...
 
-@typing.overload
-def concurrently(*objs: typing.ContextManager, flatten: bool = False, **kws: typing.ContextManager) -> dict[str, typing.ContextManager]: ...
 
-def concurrently(*objs: typing.ContextManager|typing.Callable, flatten: bool = False, **kws: typing.Callable|typing.ContextManager) -> typing.Any:
+def concurrently(
+    *objs: typing.ContextManager | typing.Callable,
+    flatten: bool = False,
+    **kws: typing.Callable | typing.ContextManager,
+) -> typing.Any:
     """see labbench.util for docs"""
 
     return enter_or_call(concurrently_call, objs, dict(kws, flatten=flatten))
@@ -888,19 +901,28 @@ def sequentially_call(params: dict, name_func_pairs: list) -> dict:
 
 
 @typing.overload
-def sequentially(*objs: typing.Callable, flatten: bool = False, **kws: typing.Callable) -> dict[str, typing.Any]: ...
+def sequentially(
+    *objs: typing.Callable, flatten: bool = False, **kws: typing.Callable
+) -> dict[str, typing.Any]: ...
+
 
 @typing.overload
-def sequentially(*objs: typing.ContextManager, flatten: bool = False, **kws: typing.ContextManager) -> dict[str, typing.ContextManager]: ...
+def sequentially(
+    *objs: typing.ContextManager, flatten: bool = False, **kws: typing.ContextManager
+) -> dict[str, typing.ContextManager]: ...
 
-def sequentially(*objs: typing.ContextManager|typing.Callable, flatten: bool = False, **kws: typing.Callable|typing.ContextManager) -> typing.Any:
+
+def sequentially(
+    *objs: typing.ContextManager | typing.Callable,
+    flatten: bool = False,
+    **kws: typing.Callable | typing.ContextManager,
+) -> typing.Any:
     """see labbench.sequentially for docs"""
 
     if kws.get('catch', False):
         raise ValueError('catch=True is not supported by sequentially')
-    
-    return enter_or_call(sequentially_call, objs, dict(kws, flatten=flatten))
 
+    return enter_or_call(sequentially_call, objs, dict(kws, flatten=flatten))
 
 
 class DebugOnException:
@@ -936,7 +958,7 @@ def exit_context(ctx: typing.ContextManager | None, exc_info=None):
     if ctx is not None:
         if exc_info is None:
             exc_info = sys.exc_info()
-        ctx.__exit__(*exc_info) # type: ignore
+        ctx.__exit__(*exc_info)  # type: ignore
 
 
 def log_verbosity(verbose: int = 0):
@@ -982,7 +1004,7 @@ def _extract_traceback(
         Trace,
         Traceback,
         _SyntaxError,
-        walk_tb, # type: ignore
+        walk_tb,  # type: ignore
     )
 
     stacks: list[Stack] = []
@@ -1209,9 +1231,9 @@ def log_capture_context(name_suffix, /, capture_index=0, capture_count=None):
 
     if capture_count is None:
         capture_count = logger.extra.get('capture_count', 'unknown')
-        extra['capture_count'] = capture_count # type: ignore
+        extra['capture_count'] = capture_count  # type: ignore
 
-    extra['capture_progress'] = f'{capture_index + 1}/{capture_count}' # type: ignore
+    extra['capture_progress'] = f'{capture_index + 1}/{capture_count}'  # type: ignore
 
     start_extra = logger.extra
     logger.extra = start_extra | extra

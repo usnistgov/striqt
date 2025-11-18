@@ -175,8 +175,8 @@ class SweepHUDApp(App):
     }
     """
 
-    _exc_info: tuple|None
-    conns: resources.ConnectionManager|None
+    _exc_info: tuple | None
+    conns: resources.ConnectionManager | None
 
     def __init__(self, cli_kws: dict):
         self.conns = None
@@ -206,9 +206,15 @@ class SweepHUDApp(App):
     @textual.work(exclusive=True, thread=True)
     def do_startup(self):
         kws = self.cli_kws
-        spec = io.read_yaml_sweep(kws['yaml_path'], output_path=kws['output_path'], store_backend=kws['store_backend'])
+        spec = io.read_yaml_sweep(
+            kws['yaml_path'],
+            output_path=kws['output_path'],
+            store_backend=kws['store_backend'],
+        )
         self.conns = resources.open_sensor(spec, kws['yaml_path'])
-        self.display_fields = sweeps.varied_capture_fields(self.conns.resources['sweep_spec'])
+        self.display_fields = sweeps.varied_capture_fields(
+            self.conns.resources['sweep_spec']
+        )
         self.call_from_thread(self._show_ready)
         self.call_from_thread(self.do_sweep)
 
@@ -256,7 +262,7 @@ class SweepHUDApp(App):
 
     def _show_ready(self):
         assert self.conns is not None
-        
+
         def add_column(name: str, width_frac: float):
             return table.add_column(
                 Text(name, style='content-align-vertical: bottom'),
@@ -264,11 +270,11 @@ class SweepHUDApp(App):
             )
 
         table = self.query_one(VerticalScrollDataTable)
-        captures = self.conns.resources['sweep_spec'].looped_captures
+        captures = self.conns.resources['sweep_spec'].loop_captures()
         index_size = math.ceil(math.log10(len(captures))) + 2
         free_width = self.size.width - index_size
 
-        self.column_keys = { # type: ignore
+        self.column_keys = {  # type: ignore
             'capture': add_column('', 0.27),
             'striqt.source': add_column('Source', 0.18),
             'striqt.analysis': add_column('Analysis', 0.32),
@@ -306,7 +312,7 @@ class SweepHUDApp(App):
             # warmup captures
             return
 
-        captures = self.conns.resources['sweep_spec'].looped_captures
+        captures = self.conns.resources['sweep_spec'].loop_captures()
 
         logger = util.get_logger(record.name.rsplit('.', 1)[1])
         extra = dict(logger.extra or {})
@@ -333,10 +339,8 @@ class SweepHUDApp(App):
                 desc = ' '
             row = [desc, Text(''), '', '']
             label = Text(str(capture_index), style='#B0FC38 bold')
-            row_key = table.add_row(
-                *row, height=None, label=label
-            )
-            self.row_keys[capture_index] = row_key # type: ignore
+            row_key = table.add_row(*row, height=None, label=label)
+            self.row_keys[capture_index] = row_key  # type: ignore
             progress.update(advance=1)
             if table.cursor_row == capture_index - 1:
                 table.move_cursor(row=capture_index)

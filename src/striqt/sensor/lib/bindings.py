@@ -1,14 +1,15 @@
 import typing
-from dataclasses import dataclass
+import dataclasses
 
 import msgspec
 
 from .peripherals import NoPeripherals, PeripheralsBase
 from .sources import SourceBase
-from .specs import _TC, _TS, _TP, ResampledCapture, Source, Sweep
+from . import specs, sinks
+from .specs import _TC, _TS, _TP
 
 
-def _tagged_sweep_subclass(name: str, cls: type[Sweep]) -> type[Sweep]:
+def _tagged_sweep_subclass(name: str, cls: type[specs.Sweep]) -> type[specs.Sweep]:
     """build a subclass of binding.sweep_spec for use in a tagged union"""
     kls = msgspec.defstruct(
         name,
@@ -17,31 +18,31 @@ def _tagged_sweep_subclass(name: str, cls: type[Sweep]) -> type[Sweep]:
         frozen=True,
         forbid_unknown_fields=True,
         cache_hash=True,
-        tag_field='sensor_bindings',
+        tag_field='sensor_binding',
         kw_only=True,
     )
 
-    return typing.cast(type[Sweep], kls)
+    return typing.cast(type[specs.Sweep], kls)
 
 
-@dataclass(kw_only=True, frozen=True)
+@dataclasses.dataclass(kw_only=True, frozen=True)
 class SensorBinding(typing.Generic[_TS, _TP, _TC]):
     source_spec: type[_TS]
     capture_spec: type[_TC]
     source: type[SourceBase[_TS, _TC]]
-    peripherals: type[PeripheralsBase[_TP, _TC]] = NoPeripherals
-    sweep_spec: type[Sweep[_TS, _TP, _TC]] = Sweep
+    peripherals: type[PeripheralsBase[_TS, _TP, _TC]] = NoPeripherals
+    sweep_spec: type[specs.Sweep[_TS, _TP, _TC]] = specs.Sweep
 
     def __post_init__(self):
-        assert issubclass(self.source_spec, Source)
-        assert issubclass(self.capture_spec, ResampledCapture)
+        assert issubclass(self.source_spec, specs.Source)
+        assert issubclass(self.capture_spec, specs.ResampledCapture)
         assert issubclass(self.source, SourceBase)
-        assert issubclass(self.sweep_spec, Sweep)
+        assert issubclass(self.sweep_spec, specs.Sweep)
         assert issubclass(self.peripherals, PeripheralsBase)
 
 
 registry: dict[str, SensorBinding[typing.Any, typing.Any, typing.Any]] = {}
-tagged_sweep_spec_type = _tagged_sweep_subclass('SweepSpec', Sweep)
+tagged_sweep_spec_type = _tagged_sweep_subclass('SweepSpec', specs.Sweep)
 
 
 def bind_sensor(
@@ -55,6 +56,15 @@ def bind_sensor(
     """
     if not isinstance(sensor, SensorBinding):
         raise TypeError('sensor argument must be a SensorBindings instance')
+
+    class BoundSweep(sensor.sweep_spec, frozen=True, kw_only=True, **specs.kws):
+        __bindings__ = sensor
+
+    BoundSweep.__qualname__ = sensor.sweep_spec.__qualname__
+    BoundSweep.__name__ = sensor.sweep_spec.__name__
+    BoundSweep.__module__ = sensor.sweep_spec.__module__
+
+    sensor = dataclasses.replace(sensor, sweep_spec=BoundSweep)
     registry[key] = sensor
 
     global tagged_sweep_spec_type
@@ -68,12 +78,12 @@ def get_registry() -> dict[str, SensorBinding]:
     return dict(registry)
 
 
-def get_binding(key: str | Sweep) -> SensorBinding:
+def get_binding(key: str | specs.Sweep) -> SensorBinding:
     if isinstance(key, str):
         return registry[key]
-    elif not isinstance(key, Sweep):
+    elif not isinstance(key, specs.Sweep):
         raise TypeError('key must be a string or a SweepSpec')
-    elif key is Sweep:
+    elif key is specs.Sweep:
         raise TypeError('must provide a tagged SweepSpec')
     else:
         return registry[type(key).__name__]

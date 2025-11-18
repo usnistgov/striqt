@@ -66,9 +66,7 @@ class Cellular5GNRSSBSpectrogramKeywords(specs.AnalysisKeywords, total=False):
 
 @registry.coordinates(dtype='uint16', attrs={'standard_name': 'Symbols elapsed'})
 @util.lru_cache()
-def cellular_ssb_symbol_index(
-    _: specs.Capture, spec: Cellular5GNRSSBSpectrogramSpec
-):
+def cellular_ssb_symbol_index(_: specs.Capture, spec: Cellular5GNRSSBSpectrogramSpec):
     symbol_count = round(14 * spec.subcarrier_spacing / 15e3)
     return np.arange(symbol_count, dtype='uint16')
 
@@ -97,9 +95,7 @@ def cellular_ssb_baseband_frequency(
 
 @registry.coordinates(dtype='uint16', attrs={'standard_name': 'Capture SSB index'})
 @util.lru_cache()
-def cellular_ssb_index(
-    capture: specs.Capture, spec: Cellular5GNRSSBSpectrogramSpec
-):
+def cellular_ssb_index(capture: specs.Capture, spec: Cellular5GNRSSBSpectrogramSpec):
     # pss_params and sss_params return the same number of symbol indexes
     # params  = iqwaveform.ofdm.pss_params(
     #     sample_rate=spec.sample_rate,

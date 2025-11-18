@@ -169,6 +169,33 @@ def get_attrs(struct: type[specs.SpecBase], field: str) -> dict[str, str]:
         )
 
 
+def build_dataset_attrs(sweep: specs.Sweep):
+    FIELDS = [
+        'sensor_binding',
+        'analysis',
+        'extensions',
+        'peripherals',
+        'sink',
+        'source',
+    ]
+
+    attrs = {}
+
+    if isinstance(sweep.description, str):
+        attrs['description'] = sweep.description
+    else:
+        attrs['description'] = sweep.description.todict()
+
+    attrs['loops'] = {l.field: l.get_points() for l in sweep.loops}
+
+    for field in FIELDS:
+        obj = getattr(sweep, field)
+        new_attrs = obj.todict()
+        attrs.update(new_attrs)
+
+    return attrs
+
+
 def build_capture_coords(
     capture: specs.ResampledCapture, output: specs.Sink, info: specs.AcquisitionInfo
 ):
@@ -223,7 +250,7 @@ class AnalysisCaller:
     delayed: bool = True
 
     def __post_init__(self):
-        self._overwrite_x = not self.sweep.config.reuse_iq
+        self._overwrite_x = not self.sweep.info.reuse_iq
         if self.delayed:
             self._eval_options = dataarrays.EvaluationOptions(
                 spec=self.sweep.analysis,

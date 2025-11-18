@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import typing
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
 
 from striqt import analysis
 
@@ -14,12 +13,12 @@ else:
     xr = util.lazy_import('xarray')
 
 
-class SinkBase:
+class SinkBase(typing.Generic[specs._TC]):
     """intake acquisitions one at a time, and parcel data store"""
 
     def __init__(
         self,
-        sweep_spec: specs.Sweep,
+        sweep_spec: specs.Sweep[specs._TS, specs._TP, specs._TC],
         alias_func: captures.PathAliasFormatter | None = None,
         *,
         force: bool = False,
@@ -33,7 +32,7 @@ class SinkBase:
         self._future = None
         self._pending_data: list['xr.Dataset'] = []
         self._executor = ThreadPoolExecutor(1)
-        all_captures = sweep_spec.looped_captures
+        all_captures = sweep_spec.loop_captures()
         self._group_sizes = captures.concat_group_sizes(all_captures, min_size=2)
 
     def pop(self) -> list['xr.Dataset']:
@@ -60,7 +59,7 @@ class SinkBase:
         finally:
             self._executor.__exit__(*exc_info)
 
-    def append(self, capture_data: 'xr.Dataset | None', capture: specs.ResampledCapture):
+    def append(self, capture_data: 'xr.Dataset | None', capture: specs._TC):
         if capture_data is None:
             return
 
@@ -93,7 +92,7 @@ class NullSink(SinkBase):
         ):
             util.get_logger('sink').info(f'done')
 
-    def append(self, capture_data: 'xr.Dataset | None', capture: specs.ResampledCapture):
+    def append(self, capture_data, capture):
         self.captures_elapsed += 1
 
     def wait(self):
@@ -128,7 +127,9 @@ class ZarrSinkBase(SinkBase):
 class CaptureAppender(ZarrSinkBase):
     """concatenates the data from each capture and dumps to a zarr data store"""
 
-    def append(self, capture_data: 'xr.Dataset | None', capture: specs.ResampledCapture):
+    def append(
+        self, capture_data: 'xr.Dataset | None', capture: specs.ResampledCapture
+    ):
         super().append(capture_data, capture)
 
         if len(self._pending_data) == self._group_sizes[0]:
@@ -185,7 +186,9 @@ class SpectrogramTimeAppender(ZarrSinkBase):
 
         super().__init__(sweep_spec, alias_func, force=force)
 
-    def append(self, capture_data: 'xr.Dataset | None', capture: specs.ResampledCapture):
+    def append(
+        self, capture_data: 'xr.Dataset | None', capture: specs.ResampledCapture
+    ):
         super().append(capture_data, capture)
 
         if len(self._pending_data) == self._group_sizes[0]:

@@ -776,9 +776,7 @@ def _get_next_fast_len(n):
     return scipy.fft.next_fast_len(n)
 
 
-def _get_oaresample_pad(
-    base_clock_rate: float | None, capture: specs.ResampledCapture
-):
+def _get_oaresample_pad(base_clock_rate: float | None, capture: specs.ResampledCapture):
     resampler_design = design_capture_resampler(base_clock_rate, capture)
 
     nfft = resampler_design['nfft']

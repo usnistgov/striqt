@@ -558,9 +558,7 @@ def split_this_prev_captures(
     return c1_split, c2_split
 
 
-def set_gain(
-    source: SoapySourceBase, capture: specs.SoapyCapture, ports_changed: bool
-):
+def set_gain(source: SoapySourceBase, capture: specs.SoapyCapture, ports_changed: bool):
     assert source._device is not None, 'soapy source is not open'
 
     this_split, prev_split = split_this_prev_captures(

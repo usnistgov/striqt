@@ -32,7 +32,7 @@ class Resources(typing.TypedDict, typing.Generic[_TS, _TP, _TC]):
 
     source: SourceBase[_TS, _TC]
     sink: SinkBase
-    peripherals: PeripheralsBase[_TP, _TC]
+    peripherals: PeripheralsBase[_TS, _TP, _TC]
     except_context: typing.NotRequired[typing.ContextManager]
     sweep_spec: specs.Sweep[_TS, _TP, _TC]
     calibration: 'xr.Dataset|None'
@@ -43,7 +43,7 @@ class AnyResources(typing.TypedDict, typing.Generic[_TS, _TP, _TC], total=False)
 
     source: SourceBase[_TS, _TC]
     sink: SinkBase
-    peripherals: PeripheralsBase[_TP, _TC]
+    peripherals: PeripheralsBase[_TS, _TP, _TC]
     except_context: typing.NotRequired[typing.ContextManager]
     sweep_spec: specs.Sweep[_TS, _TP, _TC]
     calibration: 'xr.Dataset|None'

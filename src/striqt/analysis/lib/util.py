@@ -61,29 +61,6 @@ def isroundmod(value: float, div, atol=1e-6) -> bool:
         return np.abs(np.rint(ratio) - ratio) <= atol
 
 
-@contextlib.contextmanager
-def log_capture_context(name_suffix, /, capture_index=0, capture_count=None):
-    extra = {'capture_index': capture_index}
-    logger = get_logger(name_suffix)
-
-    assert isinstance(logger.extra, dict)
-
-    if capture_count is not None:
-        logger.extra['capture_count'] = capture_count
-
-    if capture_count is None:
-        capture_count = extra['capture_count'] = logger.extra.get(
-            'capture_count', 'unknown'
-        )
-
-    extra['capture_progress'] = f'{capture_index + 1}/{capture_count}'
-
-    start_extra = logger.extra
-    logger.extra = start_extra | extra
-    yield
-    logger.extra = start_extra
-
-
 _StriqtLogger('analysis')
 
 

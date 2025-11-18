@@ -173,9 +173,11 @@ class _SlowHashSpecBase(SpecBase, kw_only=True, frozen=True, **kws):
 
         return h
 
+
 DurationType = Annotated[float, meta('duration of the capture', 's')]
 SampleRateType = Annotated[float, meta('Analysis sample rate', 'S/s')]
 AnalysisBandwidthType = Annotated[float, meta('Analysis bandwidth', 'Hz')]
+
 
 class Capture(SpecBase, kw_only=True, frozen=True, **kws):
     """bare minimum information about an IQ acquisition"""
@@ -196,7 +198,6 @@ class _CaptureKeywords(typing.TypedDict, total=False):
     duration: DurationType
     sample_rate: SampleRateType
     analysis_bandwidth: AnalysisBandwidthType
-
 
 
 class AnalysisFilter(SpecBase, kw_only=True, frozen=True, **kws):
@@ -262,7 +263,7 @@ def get_capture_type_attrs(capture_cls: type[Capture]) -> dict[str, typing.Any]:
 
     attrs = {}
 
-    for field in info.fields: # type: ignore
+    for field in info.fields:  # type: ignore
         if isinstance(field.type, msgspec.inspect.UnionType):
             types = field.type.types
         else:
