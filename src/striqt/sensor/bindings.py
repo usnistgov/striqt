@@ -4,7 +4,7 @@ These are taken to define sensors. Extension classes can implement
 peripherals and expanded data fields elsewhere.
 """
 
-from .lib import calibration, peripherals, sources, specs
+from .lib import peripherals, sources, specs
 from .lib.sources import deepwave
 from .lib.bindings import SensorBinding, bind_sensor
 from .lib.calibration import bind_manual_yfactor_calibration
@@ -97,9 +97,7 @@ air7101b = bind_sensor(
 )
 
 
-air7101b_yfactor_calibration = bind_manual_yfactor_calibration(
-    'air7101b_yfactor_calibration', air7101b
-)
+air7101b_calibration = bind_manual_yfactor_calibration('_calibration', air7101b)
 
 air7201b = bind_sensor(
     'air7201b',
@@ -110,11 +108,7 @@ air7201b = bind_sensor(
     ),
 )
 
-b = SensorBinding(
-    source_spec=deepwave.Air7201BSourceSpec,
-    capture_spec=specs.SoapyCapture,
-    source=deepwave.Airstack1Source,
-)
+air7201b_calibration = bind_manual_yfactor_calibration('air7201b_calibration', air7201b)
 
 air8201b = bind_sensor(
     'air8201b',
@@ -125,5 +119,6 @@ air8201b = bind_sensor(
     ),
 )
 
+air8201b_calibration = bind_manual_yfactor_calibration('air7201b_calibration', air8201b)
 
 del sources, specs, deepwave

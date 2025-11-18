@@ -15,8 +15,6 @@ from . import util
 
 if typing.TYPE_CHECKING:
     import pandas as pd
-    from . import bindings
-
 else:
     # to resolve the 'pd.Timestamp' stub at runtime
     pd = util.lazy_import('pandas')
@@ -466,6 +464,9 @@ def _expand_loops(sweep: Sweep[_TS, _TP, _TC], nyquist_only=False) -> tuple[_TC,
             'is bound to a sensor with striqt.sensor.bind_sensor'
         )
     else:
+        from . import bindings
+
+        assert isinstance(sweep.__bindings__, bindings.SensorBinding)
         cls = sweep.__bindings__.capture_spec
         _check_fields(cls, loop_fields, True)
 
@@ -506,7 +507,7 @@ class Sweep(Generic[_TS, _TP, _TC], SpecBase, frozen=True, kw_only=True, **kws):
     peripherals: _TP | None = None
 
     info: typing.ClassVar[SweepInfo] = SweepInfo(reuse_iq=False)
-    __bindings__: typing.ClassVar['bindings.SensorBinding|None'] = None
+    __bindings__: typing.ClassVar[typing.Any] = None
 
     def loop_captures(self) -> tuple[_TC, ...]:
         """apply loops to self.captures"""
