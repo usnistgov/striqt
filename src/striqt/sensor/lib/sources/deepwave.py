@@ -4,9 +4,7 @@ import functools
 import typing
 
 from .. import specs, util
-
-# from labbench import paramattr as attr
-from . import base, soapy
+from . import soapy
 
 if typing.TYPE_CHECKING:
     import psutil
@@ -117,9 +115,3 @@ class Airstack1Source(soapy.SoapySourceBase):
         assert self._device is not None
 
         return {'transceiver': self._device.readSensorFloat('xcvr_temp')}
-
-
-# if __name__ == '__main__':
-#     airt = Airstack1Source(freq=2.44e9, fs=2 * 31.25e6)
-#     iq, *_ = airt.acquire(256 * 1024)
-#     airt.close()

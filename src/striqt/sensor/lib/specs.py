@@ -22,8 +22,8 @@ else:
 
 _TC = typing.TypeVar('_TC', bound='ResampledCapture')
 _TS = typing.TypeVar('_TS', bound='Source')
-_TP = typing.TypeVar('_TP', bound='Peripheral')
-_TPC = typing.TypeVar('_TPC', bound='Peripheral')
+_TP = typing.TypeVar('_TP', bound='Peripherals')
+_TPC = typing.TypeVar('_TPC', bound='Peripherals')
 
 
 def _dict_hash(d):
@@ -48,20 +48,17 @@ def _validate_multichannel(port, gain):
 
 
 @util.lru_cache()
-def _check_fields(cls: type[SpecBase], fields: tuple[str, ...], new_instance=False):
-    info = msgspec.inspect.type_info(cls)
-    available = set(fields)
-
-    if not isinstance(info, msgspec.inspect.StructType):
-        raise TypeError('pass a SpecBase subclass')
+def _check_fields(cls: type[SpecBase], names: tuple[str, ...], new_instance=False):
+    fields = msgspec.structs.fields(cls)
+    available = set(names)
 
     if new_instance:
-        required = {f.name for f in info.fields if f.required}
+        required = {f.name for f in fields if f.required}
         missing = required - available
         if len(missing) > 0:
             raise TypeError(f'missing required loop fields {missing!r}')
 
-    extra = available - {f.name for f in info.fields}
+    extra = available - {f.name for f in fields}
     if len(extra) > 0:
         raise TypeError(f'invalid capture fields {extra!r} specified in loops')
 
@@ -421,11 +418,11 @@ class Extension(SpecBase, frozen=True, kw_only=True, **kws):
     import_name: ModuleNameType = None
 
 
-class Peripheral(SpecBase, frozen=True, kw_only=True, **kws):
+class Peripherals(SpecBase, frozen=True, kw_only=True, **kws):
     pass
 
 
-class NoPeripheral(Peripheral, frozen=True, kw_only=True, **kws):
+class NoPeripherals(Peripherals, frozen=True, kw_only=True, **kws):
     pass
 
 
@@ -435,7 +432,7 @@ AmbientTemperatureType = Annotated[
 ]
 
 
-class ManualYFactorPeripheral(Peripheral, frozen=True, kw_only=True, **kws):
+class ManualYFactorPeripheral(Peripherals, frozen=True, kw_only=True, **kws):
     enr: ENRType
     ambient_temperature: AmbientTemperatureType
 
@@ -504,7 +501,7 @@ class Sweep(Generic[_TS, _TP, _TC], SpecBase, frozen=True, kw_only=True, **kws):
     description: Union[Description, str] = ''
     extensions: Extension = Extension()
     sink: Sink = Sink()
-    peripherals: _TP | None = None
+    peripherals: _TP = typing.cast(_TP, Peripherals())
 
     info: typing.ClassVar[SweepInfo] = SweepInfo(reuse_iq=False)
     __bindings__: typing.ClassVar[typing.Any] = None
@@ -553,7 +550,7 @@ class CalibrationSweep(
     to specify the change in expected capture structure."""
 
     info: typing.ClassVar[SweepInfo] = SweepInfo(reuse_iq=True)
-    calibration_peripherals: _TPC | None = None
+    calibration: _TPC | None = None
 
     def __post_init__(self):
         if len(self.captures) > 0:

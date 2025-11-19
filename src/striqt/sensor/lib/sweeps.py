@@ -63,7 +63,7 @@ def sweep_touches_gpu(sweep: specs.Sweep) -> bool:
 
 def design_warmup(
     sweep: specs.Sweep[_TS, _TP, _TC], skip: tuple[_TC, ...] = ()
-) -> specs.Sweep[specs.NullSource, specs.NoPeripheral, specs.ResampledCapture]:
+) -> specs.Sweep[specs.NullSource, specs.NoPeripherals, specs.ResampledCapture]:
     """returns a Sweep object for a NullRadio consisting of capture combinations from
     `sweep`.
 

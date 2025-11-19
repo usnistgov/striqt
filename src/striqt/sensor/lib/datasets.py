@@ -111,8 +111,8 @@ def coord_template(
 ) -> 'xr.Coordinates':
     """returns a cached xr.Coordinates object to use as a template for data results"""
 
-    capture_fields = msgspec.inspect.type_info(capture_cls).fields  # type: ignore
-    info_fields = msgspec.inspect.type_info(info_cls).fields  # type: ignore
+    capture_fields = msgspec.structs.fields(capture_cls)
+    info_fields = msgspec.structs.fields(info_cls)
     vars = {}
 
     for field in capture_fields + info_fields:

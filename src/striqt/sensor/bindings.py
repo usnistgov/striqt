@@ -9,23 +9,24 @@ from .lib.sources import deepwave
 from .lib.bindings import SensorBinding, bind_sensor
 from .lib.calibration import bind_manual_yfactor_calibration
 
-# %% Synthetic data sources for testing, warmup, and post-analysis
+# %% Synthetic data sources for testing/warmup/post-analysis
 warmup = bind_sensor(
     'warmup',
     SensorBinding(
         source_spec=specs.NullSource,
         capture_spec=specs.ResampledCapture,
+        peripherals_spec=specs.NoPeripherals,
         source=sources.WarmupSource,
         peripherals=peripherals.NoPeripherals,
     ),
 )
 
-# %% File sources
 file = bind_sensor(
     'file',
     SensorBinding(
         source_spec=sources.FileSourceSpec,
         capture_spec=specs.FileCapture,
+        peripherals_spec=specs.NoPeripherals,
         source=sources.FileSource,
     ),
 )
@@ -35,6 +36,7 @@ tdms_file = bind_sensor(
     SensorBinding(
         source_spec=sources.TDMSSourceSpec,
         capture_spec=specs.FileCapture,
+        peripherals_spec=specs.NoPeripherals,
         source=sources.TDMSFileSource,
     ),
 )
@@ -44,6 +46,7 @@ zarr_iq = bind_sensor(
     SensorBinding(
         source_spec=sources.ZarrFileSourceSpec,
         capture_spec=specs.FileCapture,
+        peripherals_spec=specs.NoPeripherals,
         source=sources.ZarrIQSource,
     ),
 )
@@ -54,6 +57,7 @@ noise = bind_sensor(
     SensorBinding(
         source_spec=sources.FunctionSourceSpec,
         capture_spec=sources.NoiseCaptureSpec,
+        peripherals_spec=specs.NoPeripherals,
         source=sources.NoiseSource,
     ),
 )
@@ -63,6 +67,7 @@ dirac_delta = bind_sensor(
     SensorBinding(
         source_spec=sources.FunctionSourceSpec,
         capture_spec=sources.DiracDeltaCaptureSpec,
+        peripherals_spec=specs.NoPeripherals,
         source=sources.DiracDeltaSource,
     ),
 )
@@ -72,6 +77,7 @@ single_tone = bind_sensor(
     SensorBinding(
         source_spec=sources.FunctionSourceSpec,
         capture_spec=sources.SingleToneCaptureSpec,
+        peripherals_spec=specs.NoPeripherals,
         source=sources.SingleToneSource,
     ),
 )
@@ -81,6 +87,7 @@ sawtooth = bind_sensor(
     SensorBinding(
         source_spec=sources.FunctionSourceSpec,
         capture_spec=sources.SawtoothCaptureSpec,
+        peripherals_spec=specs.NoPeripherals,
         source=sources.SawtoothSource,
     ),
 )
@@ -92,6 +99,7 @@ air7101b = bind_sensor(
     SensorBinding(
         source_spec=deepwave.Air7101BSourceSpec,
         capture_spec=specs.SoapyCapture,
+        peripherals_spec=specs.NoPeripherals,
         source=deepwave.Airstack1Source,
     ),
 )
@@ -104,6 +112,7 @@ air7201b = bind_sensor(
     SensorBinding(
         source_spec=deepwave.Air7201BSourceSpec,
         capture_spec=specs.SoapyCapture,
+        peripherals_spec=specs.NoPeripherals,
         source=deepwave.Airstack1Source,
     ),
 )
@@ -115,10 +124,12 @@ air8201b = bind_sensor(
     SensorBinding(
         source_spec=deepwave.Air8201BSourceSpec,
         capture_spec=specs.SoapyCapture,
+        peripherals_spec=specs.NoPeripherals,
         source=deepwave.Airstack1Source,
     ),
 )
 
 air8201b_calibration = bind_manual_yfactor_calibration('air7201b_calibration', air8201b)
 
-del sources, specs, deepwave
+
+del peripherals, sources, specs

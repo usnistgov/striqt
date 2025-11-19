@@ -233,7 +233,7 @@ def click_server(func):
             '--driver/',
             '-d',
             show_default=True,
-            default='NullRadio',
+            default='NoSource',
             type=str,
             help='name of the default driver to load',
         ),

@@ -6,7 +6,7 @@ from . import specs
 from .specs import _TS, _TPC
 
 _TC = typing.TypeVar('_TC', bound=specs.ResampledCapture, contravariant=True)
-_TP = typing.TypeVar('_TP', bound=specs.Peripheral)
+_TP = typing.TypeVar('_TP', bound=specs.Peripherals)
 
 
 class PeripheralsProtocol(typing.Protocol[_TC]):
@@ -23,16 +23,16 @@ class PeripheralsProtocol(typing.Protocol[_TC]):
     def acquire(self, capture: _TC) -> dict[str, typing.Any]: ...
 
 
-class PeripheralsBase(typing.Generic[_TS, _TP, _TC], PeripheralsProtocol[_TC]):
+class PeripheralsBase(typing.Generic[_TP, _TC], PeripheralsProtocol[_TC]):
     """base class defining the object protocol peripheral hardware support.
 
     This is implemented primarily through connection management and callback
     methods for arming and acquisition.
     """
 
-    spec: _TP | None
+    spec: _TP
 
-    def __init__(self, spec: specs.Sweep[_TS, _TP, _TC]):
+    def __init__(self, spec: specs.Sweep[typing.Any, _TP, _TC]):
         self.spec = spec.peripherals
         self.open()
 
@@ -44,8 +44,8 @@ class PeripheralsBase(typing.Generic[_TS, _TP, _TC], PeripheralsProtocol[_TC]):
 
 
 class CalibrationPeripheralsBase(
-    PeripheralsBase[_TS, _TP, _TC],
-    typing.Generic[_TS, _TP, _TC, _TPC],
+    PeripheralsBase[_TP, _TC],
+    typing.Generic[_TP, _TC, _TPC],
 ):
     """base class defining the object protocol peripheral hardware support.
 
@@ -55,12 +55,12 @@ class CalibrationPeripheralsBase(
 
     calibration_spec: _TPC | None
 
-    def __init__(self, spec: specs.CalibrationSweep[_TS, _TP, _TC, _TPC]):
-        self.calibration_spec = spec.calibration_peripherals
+    def __init__(self, spec: specs.CalibrationSweep[typing.Any, _TP, _TC, _TPC]):
+        self.calibration_spec = spec.calibration
         self.open()
 
 
-class NoPeripherals(PeripheralsBase[specs._TS, specs.NoPeripheral, _TC]):
+class NoPeripherals(PeripheralsBase[_TP, _TC]):
     def open(self):
         return
 

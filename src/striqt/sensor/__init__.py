@@ -1,4 +1,4 @@
-from .lib import calibration, io, peripherals, sinks, specs, util
+from .lib import calibration, io, peripherals, sinks, sources, specs, util
 from . import bindings
 
 from .lib.calibration import read_calibration

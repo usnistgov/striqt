@@ -9,7 +9,7 @@ from . import specs, sinks
 from .specs import _TC, _TS, _TP
 
 
-def _tagged_sweep_subclass(name: str, cls: type[specs.Sweep]) -> type[specs.Sweep]:
+def tagged_subclass(name: str, cls: type[specs.Sweep], tag_field: str) -> type[specs.Sweep]:
     """build a subclass of binding.sweep_spec for use in a tagged union"""
     kls = msgspec.defstruct(
         name,
@@ -18,7 +18,7 @@ def _tagged_sweep_subclass(name: str, cls: type[specs.Sweep]) -> type[specs.Swee
         frozen=True,
         forbid_unknown_fields=True,
         cache_hash=True,
-        tag_field='sensor_binding',
+        tag_field=tag_field,
         kw_only=True,
     )
 
@@ -29,9 +29,10 @@ def _tagged_sweep_subclass(name: str, cls: type[specs.Sweep]) -> type[specs.Swee
 class SensorBinding(typing.Generic[_TS, _TP, _TC]):
     source_spec: type[_TS]
     capture_spec: type[_TC]
+    peripherals_spec: type[_TP]
     source: type[SourceBase[_TS, _TC]]
-    peripherals: type[PeripheralsBase[_TS, _TP, _TC]] = NoPeripherals
-    sweep_spec: type[specs.Sweep[_TS, _TP, _TC]] = specs.Sweep
+    peripherals: type[PeripheralsBase[_TP, _TC]] = NoPeripherals
+    sweep_spec: type[specs.Sweep[_TS, _TP, _TC]] = specs.Sweep[_TS, _TP, _TC]
     sink: type[sinks.SinkBase[_TC]] | None = None
 
     def __post_init__(self):
@@ -44,7 +45,7 @@ class SensorBinding(typing.Generic[_TS, _TP, _TC]):
 
 
 registry: dict[str, SensorBinding[typing.Any, typing.Any, typing.Any]] = {}
-tagged_sweep_spec_type = _tagged_sweep_subclass('SweepSpec', specs.Sweep)
+tagged_sweep_spec_type = tagged_subclass('SweepSpec', specs.Sweep, 'sensor_binding')
 
 
 def bind_sensor(
@@ -70,7 +71,7 @@ def bind_sensor(
     registry[key] = sensor
 
     global tagged_sweep_spec_type
-    tagged_cls = _tagged_sweep_subclass(key, sensor.sweep_spec)
+    tagged_cls = tagged_subclass(key, sensor.sweep_spec, 'sensor_binding')
     tagged_sweep_spec_type = typing.Union[tagged_sweep_spec_type, tagged_cls]
 
     return sensor
@@ -91,6 +92,6 @@ def get_binding(key: str | specs.Sweep) -> SensorBinding:
         return registry[type(key).__name__]
 
 
-def get_tagged_sweep_spec() -> type:
+def get_tagged_sweep_spec() -> type[msgspec.Struct]:
     """return a tagged union type that msgspec can decode"""
     return tagged_sweep_spec_type

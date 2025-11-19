@@ -460,7 +460,7 @@ def _ensure_loop_at_position(sweep: specs.Sweep):
             raise TypeError('noise_diode_enabled must be the first specified loop')
 
 
-def bind_manual_yfactor(
+def bind_manual_yfactor_calibration(
     name: str,
     sensor: 'bindings.SensorBinding[specs._TS, specs._TP, specs._TC]',
 ) -> bindings.SensorBinding[specs._TS, typing.Any, typing.Any]:
@@ -474,7 +474,7 @@ def bind_manual_yfactor(
 
     sweep_base_cls = specs.CalibrationSweep[
         sensor.source_spec,
-        specs.Peripheral,
+        specs.Peripherals,
         YFactorCapture,
         specs.ManualYFactorPeripheral,
     ]
@@ -488,8 +488,7 @@ def bind_manual_yfactor(
             super().__post_init__()
 
     peripheral_base_cls = peripherals.CalibrationPeripheralsBase[
-        sensor.source_spec,
-        specs.Peripheral,
+        specs.Peripherals,
         YFactorCapture,
         specs.ManualYFactorPeripheral,
     ]
@@ -542,6 +541,7 @@ def bind_manual_yfactor(
             capture_spec=YFactorCapture,
             source=sensor.source,
             peripherals=YFactorCalibrationPeripherals,
+            peripherals_spec=specs.ManualYFactorPeripheral,
             sweep_spec=YFactorSweep,
             sink=YFactorSink,
         ),

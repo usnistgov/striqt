@@ -259,11 +259,9 @@ class Analysis(_SlowHashSpecBase, kw_only=True, frozen=True, **kws):
 @util.lru_cache()
 def get_capture_type_attrs(capture_cls: type[Capture]) -> dict[str, typing.Any]:
     """return attrs metadata for each field in `capture`"""
-    info = msgspec.inspect.type_info(capture_cls)
-
     attrs = {}
 
-    for field in info.fields:  # type: ignore
+    for field in msgspec.structs.fields(capture_cls):
         if isinstance(field.type, msgspec.inspect.UnionType):
             types = field.type.types
         else:

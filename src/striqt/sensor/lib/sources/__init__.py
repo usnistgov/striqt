@@ -29,3 +29,5 @@ from .function import (
     FunctionSourceSpec,
     SingleToneCaptureSpec,
 )
+
+from . import deepwave
