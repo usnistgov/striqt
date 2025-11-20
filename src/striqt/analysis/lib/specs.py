@@ -16,20 +16,14 @@ from . import util
 
 if typing.TYPE_CHECKING:
     import numpy as np
-    import pandas as pd
 
     _T = typing.TypeVar('_T')
 
 else:
-    pd = util.lazy_import('pandas')
     np = util.lazy_import('numpy')
 
 
-kws = dict(
-    forbid_unknown_fields=True,
-    cache_hash=True,
-)
-
+kws = dict(forbid_unknown_fields=True, cache_hash=True)
 
 WindowType = typing.Union[str, tuple[str, float]]
 
@@ -46,9 +40,7 @@ def _enc_hook(obj):
 def _dec_hook(type_, obj):
     origin_cls = typing.get_origin(type_) or type_
 
-    if issubclass(origin_cls, pd.Timestamp):
-        return pd.to_datetime(obj)
-    elif issubclass(origin_cls, fractions.Fraction):
+    if issubclass(origin_cls, fractions.Fraction):
         return fractions.Fraction(obj)
     elif issubclass(origin_cls, numbers.Number) and isinstance(obj, np.floating):
         return float(obj)
@@ -93,9 +85,7 @@ def _private_fields(capture_cls: type[SpecBase]) -> tuple[str, ...]:
 
 
 def convert_dict(obj: typing.Any, type: type[_T]) -> _T:
-    return msgspec.convert(
-        obj, type=type, strict=False, dec_hook=_dec_hook, builtin_types=(pd.Timestamp,)
-    )
+    return msgspec.convert(obj, type=type, strict=False, dec_hook=_dec_hook)
 
 
 class SpecBase(msgspec.Struct, kw_only=True, frozen=True, **kws):
@@ -116,9 +106,7 @@ class SpecBase(msgspec.Struct, kw_only=True, frozen=True, **kws):
 
     def todict(self, skip_private=False) -> dict:
         """return a dictinary representation of `self`"""
-        map = msgspec.to_builtins(
-            self, builtin_types=(pd.Timestamp,), enc_hook=_enc_hook
-        )
+        map = msgspec.to_builtins(self, enc_hook=_enc_hook)
 
         if skip_private:
             for name in _private_fields(type(self)):
@@ -136,12 +124,7 @@ class SpecBase(msgspec.Struct, kw_only=True, frozen=True, **kws):
     @classmethod
     def fromspec(cls: type[_T], other: SpecBase) -> _T:
         return msgspec.convert(
-            other,
-            type=cls,
-            strict=False,
-            from_attributes=True,
-            dec_hook=_dec_hook,
-            builtin_types=(pd.Timestamp,),
+            other, type=cls, strict=False, from_attributes=True, dec_hook=_dec_hook
         )
 
     @classmethod

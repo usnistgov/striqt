@@ -99,7 +99,7 @@ class NullSink(SinkBase):
         pass
 
 
-class ZarrSinkBase(SinkBase):
+class ZarrSinkBase(SinkBase[specs._TC]):
     def open(self):
         self.store = io.open_store(
             self._spec, alias_func=self._alias_func, force=self.force
@@ -124,12 +124,10 @@ class ZarrSinkBase(SinkBase):
             return self.store.root
 
 
-class ZarrCaptureSink(ZarrSinkBase):
+class ZarrCaptureSink(ZarrSinkBase[specs._TC]):
     """concatenates the data from each capture and dumps to a zarr data store"""
 
-    def append(
-        self, capture_data: 'xr.Dataset | None', capture: specs.ResampledCapture
-    ):
+    def append(self, capture_data: 'xr.Dataset | None', capture: specs._TC):
         super().append(capture_data, capture)
 
         if len(self._pending_data) == self._group_sizes[0]:

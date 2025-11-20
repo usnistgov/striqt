@@ -1,5 +1,6 @@
 from .lib import calibration, io, peripherals, sinks, sources, specs, util
 from . import bindings
+from . import lib as _lib
 
 from .lib.calibration import read_calibration
 from .lib.datasets import CAPTURE_DIM

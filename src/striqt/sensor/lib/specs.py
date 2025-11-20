@@ -20,12 +20,6 @@ else:
     pd = util.lazy_import('pandas')
 
 
-_TC = typing.TypeVar('_TC', bound='ResampledCapture')
-_TS = typing.TypeVar('_TS', bound='Source')
-_TP = typing.TypeVar('_TP', bound='Peripherals')
-_TPC = typing.TypeVar('_TPC', bound='Peripherals')
-
-
 def _dict_hash(d):
     key_hash = frozenset(d.keys())
     value_hash = tuple(
@@ -107,27 +101,6 @@ class _ResampledCaptureKeywords(analysis.specs._CaptureKeywords, total=False):
     backend_sample_rate: Optional[BackendSampleRateType]
 
 
-SourceIDType = Annotated[str, meta('Source UUID string')]
-StartTimeType = Annotated[
-    'pd.Timestamp', meta('Acquisition start time of the first capture')
-]
-SweepStartTimeType = Annotated['pd.Timestamp', meta('Capture acquisition start time')]
-
-
-class AcquisitionInfo(SpecBase, kw_only=True, frozen=True):
-    source_id: SourceIDType = ''
-
-
-class SoapyAcquisitionInfo(AcquisitionInfo, frozen=True, kw_only=True, **kws):
-    """extra coordinate information returned from an acquisition"""
-
-    delay: Optional[DelayType] = None
-    sweep_time: SweepStartTimeType | None
-    start_time: StartTimeType | None
-    backend_sample_rate: BackendSampleRateType
-    source_id: SourceIDType = ''
-
-
 class SoapyCapture(ResampledCapture, frozen=True, kw_only=True, **kws):
     delay: Optional[DelayType] = None
     center_frequency: CenterFrequencyType
@@ -180,40 +153,21 @@ TimeSourceType = Annotated[
 TimeSyncEveryCaptureType = Annotated[
     bool, meta('whether to sync to PPS before each capture in a sweep')
 ]
-
 GaplessRepeatType = Annotated[
     bool,
     meta('whether to raise an exception on overflows between identical captures'),
 ]
 WarmupSweepType = Annotated[
     bool,
-    meta(
-        'whether to run the GPU compute on empty buffers before sweeping for more even run time'
-    ),
+    meta('if True, run empty buffers through the GPU before sweeping'),
 ]
 ArrayBackendType = Annotated[
-    Union[Literal['numpy'], Literal['cupy']],
-    meta(
-        'array module to use, which sets the type of compute device (numpy = cpu, cupy = gpu)'
-    ),
-]
-FastLOType = Annotated[
-    bool,
-    meta(
-        'if False, permit the radio to use slower frequency changes/channel enables to improve LO spurs'
-    ),
+    Literal['numpy', 'cupy'],
+    meta('array module to use to set compute device: numpy = cpu, cupy = gpu'),
 ]
 SyncSourceType = Annotated[
     str,
-    meta(
-        'name of a registered waveform sync function for analysis-based IQ synchronization'
-    ),
-]
-SyncSourceType = Annotated[
-    str,
-    meta(
-        'name of a registered waveform sync function for analysis-based IQ synchronization'
-    ),
+    meta('name of a registered waveform alignment function'),
 ]
 
 
@@ -446,6 +400,14 @@ class SweepInfo(typing.NamedTuple):
     reuse_iq: bool
 
 
+# forward references break msgspec when used with bindings, so this
+# needs to be here after the bound classes have been defined
+_TC = typing.TypeVar('_TC', bound=ResampledCapture)
+_TP = typing.TypeVar('_TP', bound=Peripherals)
+_TPC = typing.TypeVar('_TPC', bound=Peripherals)
+_TS = typing.TypeVar('_TS', bound=Source)
+
+
 @util.lru_cache(4)
 def _expand_loops(sweep: Sweep[_TS, _TP, _TC], nyquist_only=False) -> tuple[_TC, ...]:
     """evaluate the loop specification, and flatten into one list of loops"""
@@ -464,7 +426,7 @@ def _expand_loops(sweep: Sweep[_TS, _TP, _TC], nyquist_only=False) -> tuple[_TC,
         from . import bindings
 
         assert isinstance(sweep.__bindings__, bindings.SensorBinding)
-        cls = sweep.__bindings__.capture_spec
+        cls = sweep.__bindings__.schema.capture
         _check_fields(cls, loop_fields, True)
 
     assert issubclass(cls, analysis.Capture)
@@ -493,7 +455,7 @@ def _expand_loops(sweep: Sweep[_TS, _TP, _TC], nyquist_only=False) -> tuple[_TC,
         return tuple(result)
 
 
-class Sweep(Generic[_TS, _TP, _TC], SpecBase, frozen=True, kw_only=True, **kws):
+class Sweep(SpecBase, Generic[_TS, _TP, _TC], frozen=True, kw_only=True, **kws):
     source: _TS
     captures: tuple[_TC, ...] = tuple()
     loops: tuple[LoopSpec, ...] = ()
@@ -511,9 +473,12 @@ class Sweep(Generic[_TS, _TP, _TC], SpecBase, frozen=True, kw_only=True, **kws):
         return _expand_loops(self)
 
     def __post_init__(self):
+        if len(self.loops) == 0:
+            return
+
         from collections import Counter
 
-        ((which, howmany),) = Counter(l.field for l in self.loops).most_common(1)
+        (which, howmany), *_ = Counter(l.field for l in self.loops).most_common(1)
         if howmany > 1:
             raise TypeError(f'more than one loop of capture field {which!r}')
 
@@ -563,4 +528,41 @@ class CalibrationSweep(
         super().__post_init__()
 
 
-del util
+SourceIDType = Annotated[str, meta('Source UUID string')]
+
+if typing.TYPE_CHECKING:
+    StartTimeType = Annotated[
+        'pd.Timestamp', meta('Acquisition start time of the first capture')
+    ]
+    SweepStartTimeType = Annotated[
+        'pd.Timestamp', meta('Capture acquisition start time')
+    ]
+else:
+    StartTimeType = Annotated[
+        typing.Any, meta('Acquisition start time of the first capture')
+    ]
+    SweepStartTimeType = Annotated[typing.Any, meta('Capture acquisition start time')]
+
+
+class AcquisitionInfo(SpecBase, kw_only=True, frozen=True):
+    source_id: SourceIDType = ''
+
+
+class SoapyAcquisitionInfo(AcquisitionInfo, frozen=True, kw_only=True, **kws):
+    """extra coordinate information returned from an acquisition"""
+
+    delay: typing.Optional[DelayType] = None
+    sweep_time: SweepStartTimeType | None
+    start_time: StartTimeType | None
+    backend_sample_rate: BackendSampleRateType
+    source_id: SourceIDType = ''
+
+    def __post_init__(self):
+        if self.sweep_time is not None:
+            msgspec.structs.force_setattr(
+                self, 'sweep_time', pd.Timestamp(self.sweep_time)
+            )
+        if self.start_time is not None:
+            msgspec.structs.force_setattr(
+                self, 'start_time', pd.Timestamp(self.start_time)
+            )

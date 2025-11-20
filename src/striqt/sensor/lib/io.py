@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sys
 import typing
 from pathlib import Path
 
@@ -45,6 +44,8 @@ def open_store(
 
 def read_yaml_sweep(
     path: str | Path,
+    *,
+    allow_includes: bool = True,
     output_path: typing.Optional[str] = None,
     store_backend: typing.Optional[str] = None,
 ) -> specs.Sweep:
@@ -61,19 +62,31 @@ def read_yaml_sweep(
 
     from .bindings import get_tagged_sweep_spec
 
-    # first pass is a simple dict
-    tree = decode_from_yaml_file(path)
+    if allow_includes:
+        # first pass is a simple dict
+        tree = decode_from_yaml_file(path)
+        if not isinstance(tree, dict):
+            raise TypeError('yaml file does not specify a dict structure')
+        spec = convert_dict(tree, type=get_tagged_sweep_spec())
+    else:
+        import msgspec
 
-    if not isinstance(tree, dict):
-        raise TypeError('yaml file does not specify a dict structure')
+        with open(path, 'rb') as fd:
+            buf = fd.read()
 
-    spec = convert_dict(tree, type=get_tagged_sweep_spec())
+        spec = msgspec.yaml.decode(
+            buf,
+            type=get_tagged_sweep_spec(),
+            strict=False,
+            dec_hook=analysis.specs._dec_hook,
+        )
+    spec = typing.cast(specs.Sweep, spec)
     sink = spec.sink
     if output_path is not None:
         sink = sink.replace(path=output_path)
     if store_backend is not None:
         sink = sink.replace(store=store_backend)
-    return spec.replace(output=sink)
+    return spec.replace(sink=sink)
 
 
 def read_tdms_iq(

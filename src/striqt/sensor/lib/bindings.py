@@ -8,8 +8,14 @@ from .sources import SourceBase
 from . import specs, sinks
 from .specs import _TC, _TS, _TP
 
+_TC2 = typing.TypeVar('_TC2', bound=specs.ResampledCapture)
+_TP2 = typing.TypeVar('_TP2', bound=specs.Peripherals)
+_TS2 = typing.TypeVar('_TS2', bound=specs.Source)
 
-def tagged_subclass(name: str, cls: type[specs.Sweep], tag_field: str) -> type[specs.Sweep]:
+
+def tagged_subclass(
+    name: str, cls: type[specs.Sweep], tag_field: str
+) -> type[specs.Sweep]:
     """build a subclass of binding.sweep_spec for use in a tagged union"""
     kls = msgspec.defstruct(
         name,
@@ -18,6 +24,7 @@ def tagged_subclass(name: str, cls: type[specs.Sweep], tag_field: str) -> type[s
         frozen=True,
         forbid_unknown_fields=True,
         cache_hash=True,
+        tag=str,
         tag_field=tag_field,
         kw_only=True,
     )
@@ -26,21 +33,44 @@ def tagged_subclass(name: str, cls: type[specs.Sweep], tag_field: str) -> type[s
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class SensorBinding(typing.Generic[_TS, _TP, _TC]):
-    source_spec: type[_TS]
-    capture_spec: type[_TC]
-    peripherals_spec: type[_TP]
+class Sensor(typing.Generic[_TS, _TP, _TC]):
     source: type[SourceBase[_TS, _TC]]
+    sweep_spec: type[specs.Sweep[_TS, _TP, _TC]] = specs.Sweep
     peripherals: type[PeripheralsBase[_TP, _TC]] = NoPeripherals
-    sweep_spec: type[specs.Sweep[_TS, _TP, _TC]] = specs.Sweep[_TS, _TP, _TC]
-    sink: type[sinks.SinkBase[_TC]] | None = None
+    sink: type[sinks.SinkBase[_TC]] = sinks.ZarrCaptureSink
 
     def __post_init__(self):
-        assert issubclass(self.source_spec, specs.Source)
-        assert issubclass(self.capture_spec, specs.ResampledCapture)
         assert issubclass(self.source, SourceBase)
         assert issubclass(self.sweep_spec, specs.Sweep)
         assert issubclass(self.peripherals, PeripheralsBase)
+        assert issubclass(self.sink, sinks.SinkBase)
+
+
+@dataclasses.dataclass(kw_only=True, frozen=True)
+class Schema(typing.Generic[_TS, _TP, _TC]):
+    source: type[_TS]
+    capture: type[_TC]
+    peripherals: type[_TP]
+
+    def __post_init__(self):
+        assert issubclass(self.source, specs.Source)
+        assert issubclass(self.capture, specs.ResampledCapture)
+        assert issubclass(self.peripherals, specs.Peripherals)
+
+
+@dataclasses.dataclass(kw_only=True, frozen=True)
+class SensorBinding(typing.Generic[_TS, _TP, _TC]):
+    source: type[SourceBase[_TS, _TC]]
+    sweep_spec: type[specs.Sweep[_TS, _TP, _TC]] = specs.Sweep[_TS, _TP, _TC]
+    peripherals: type[PeripheralsBase[_TP, _TC]] = NoPeripherals[_TP, _TC]
+    sink: type[sinks.SinkBase[_TC]] | None = None
+    schema: Schema[_TS, _TP, _TC]
+
+    def __post_init__(self):
+        assert issubclass(self.source, SourceBase)
+        assert issubclass(self.sweep_spec, specs.Sweep)
+        assert issubclass(self.peripherals, PeripheralsBase)
+        assert isinstance(self.schema, Schema)
         assert self.sink is None or issubclass(self.sink, sinks.SinkBase)
 
 
@@ -49,7 +79,7 @@ tagged_sweep_spec_type = tagged_subclass('SweepSpec', specs.Sweep, 'sensor_bindi
 
 
 def bind_sensor(
-    key: str, sensor: SensorBinding[_TS, _TP, _TC]
+    key: str, sensor: Sensor[_TS2, _TP2, _TC2], schema: Schema[_TS, _TP, _TC]
 ) -> SensorBinding[_TS, _TP, _TC]:
     """register a binding between specifications and controller classes.
 
@@ -57,24 +87,37 @@ def bind_sensor(
         key: the key used when instantiating from yaml/json
         sensor: the binding classes
     """
-    if not isinstance(sensor, SensorBinding):
-        raise TypeError('sensor argument must be a SensorBindings instance')
+    if not isinstance(sensor, Sensor):
+        raise TypeError('sensor argument must be a Sensor instance')
+
+    if not isinstance(sensor, Sensor):
+        raise TypeError('schema argument must be a Sensor instance')
+
+    if key in registry:
+        raise TypeError(f'a sensor binding named {key!r} was already registered')
+
+    binding = SensorBinding(**dataclasses.asdict(sensor), schema=schema)
 
     class BoundSweep(sensor.sweep_spec, frozen=True, kw_only=True, **specs.kws):
-        __bindings__ = sensor
+        __bindings__ = binding
 
-    BoundSweep.__qualname__ = sensor.sweep_spec.__qualname__
-    BoundSweep.__name__ = sensor.sweep_spec.__name__
-    BoundSweep.__module__ = sensor.sweep_spec.__module__
+        source: schema.source = msgspec.field(default_factory=schema.source)  # type: ignore
+        captures: tuple[schema.capture, ...] = ()  # type: ignore
+        peripherals: schema.peripherals = msgspec.field(
+            default_factory=schema.peripherals
+        )  # type: ignore
 
-    sensor = dataclasses.replace(sensor, sweep_spec=BoundSweep)
-    registry[key] = sensor
+    BoundSweep = tagged_subclass(key, BoundSweep, 'sensor_binding')  # type: ignore
+    # BoundSweep.__qualname__ = binding.sweep_spec.__qualname__
+    # BoundSweep.__name__ = binding.sweep_spec.__name__
+    # BoundSweep.__module__ = binding.sweep_spec.__module__
+    binding = dataclasses.replace(binding, sweep_spec=BoundSweep)
+    registry[key] = binding
 
     global tagged_sweep_spec_type
-    tagged_cls = tagged_subclass(key, sensor.sweep_spec, 'sensor_binding')
-    tagged_sweep_spec_type = typing.Union[tagged_sweep_spec_type, tagged_cls]
+    tagged_sweep_spec_type = typing.Union[tagged_sweep_spec_type, BoundSweep]
 
-    return sensor
+    return binding
 
 
 def get_registry() -> dict[str, SensorBinding]:
