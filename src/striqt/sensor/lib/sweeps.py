@@ -63,7 +63,7 @@ def sweep_touches_gpu(sweep: specs.Sweep) -> bool:
 
 def design_warmup(
     sweep: specs.Sweep[_TS, _TP, _TC], skip: tuple[_TC, ...] = ()
-) -> specs.Sweep[specs.NullSource, specs.NoPeripherals, specs.ResampledCapture]:
+) -> specs.Sweep[specs.NoSource, specs.NoPeripherals, specs.ResampledCapture]:
     """returns a Sweep object for a NullRadio consisting of capture combinations from
     `sweep`.
 
@@ -97,7 +97,7 @@ def design_warmup(
     # TODO: currently, the base_clock_rate is left as the null radio default.
     # this may cause problems in the future if its default disagrees with another
     # radio
-    source = specs.NullSource.fromspec(sweep.source).replace(
+    source = specs.NoSource.fromspec(sweep.source).replace(
         num_rx_ports=num_rx_ports, calibration=None
     )
 
@@ -124,7 +124,7 @@ def run_warmup(input_spec: specs.Sweep):
         sweep_spec=spec,
         source=bindings.warmup.source(spec.source, analysis=spec.analysis),
         peripherals=bindings.warmup.peripherals(spec),
-        sink=sinks.NullSink(spec),
+        sink=sinks.NoSink(spec),
         calibration=None,
     )
 
@@ -338,9 +338,7 @@ class SweepIterator:
     def _acquire(
         self, iq_prev: sources.AcquiredIQ, capture_prev, capture_this, capture_next
     ):
-        if self.spec.info.reuse_iq and not isinstance(
-            self.spec.source, specs.NullSource
-        ):
+        if self.spec.info.reuse_iq and not isinstance(self.spec.source, specs.NoSource):
             reuse_this = _iq_is_reusable(
                 capture_prev, capture_this, self.source.setup_spec.base_clock_rate
             )

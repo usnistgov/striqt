@@ -78,7 +78,7 @@ class SinkBase(typing.Generic[specs._TC]):
         self._future = None
 
 
-class NullSink(SinkBase):
+class NoSink(SinkBase):
     def open(self):
         pass
 

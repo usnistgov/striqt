@@ -5,11 +5,11 @@ import typing
 from .. import specs
 from . import base, null
 
-_TS = typing.TypeVar('_TS', bound=specs.NullSource)
+_TS = typing.TypeVar('_TS', bound=specs.NoSource)
 _TC = typing.TypeVar('_TC', bound=specs.ResampledCapture)
 
 
-class WarmupSource(base.SourceBase[_TS, _TC]):
+class NoSource(base.SourceBase[_TS, _TC]):
     """emulate a radio with fake data"""
 
     _samples_elapsed = 0

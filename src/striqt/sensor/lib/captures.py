@@ -223,7 +223,7 @@ class PathAliasFormatter:
 
 class _NoSweep(specs.Sweep, frozen=True):
     # a sweep with captures that express only the parameters that impact capture shape
-    source: specs.NullSource = specs.NullSource(base_clock_rate=0, num_rx_ports=1)
+    source: specs.NoSource = specs.NoSource(base_clock_rate=0, num_rx_ports=1)
     captures: tuple[specs.analysis.Capture, ...] = ()
 
 

@@ -18,8 +18,8 @@ else:
     np = util.lazy_import('numpy')
 
 
-class TDMSSourceSpec(
-    specs.NullSource,
+class TDMSFileSourceSpec(
+    specs.NoSource,
     forbid_unknown_fields=True,
     frozen=True,
     cache_hash=True,
@@ -28,8 +28,8 @@ class TDMSSourceSpec(
     path: specs.Annotated[Path, specs.meta('path to the tdms file')]
 
 
-class ZarrFileSourceSpec(
-    specs.NullSource,
+class ZarrIQSourceSpec(
+    specs.NoSource,
     forbid_unknown_fields=True,
     frozen=True,
     cache_hash=True,
@@ -51,7 +51,7 @@ class FileAcquisitionInfo(
     source_id: specs.SourceIDType = ''
 
 
-class TDMSFileSource(base.VirtualSourceBase[TDMSSourceSpec, specs.FileCapture]):
+class TDMSFileSource(base.VirtualSourceBase[TDMSFileSourceSpec, specs.FileCapture]):
     """a source of IQ waveforms from a TDMS file"""
 
     _file_info: FileAcquisitionInfo
@@ -112,7 +112,7 @@ FormatType = specs.Annotated[
 
 
 class FileSourceSpec(
-    specs.NullSource,
+    specs.NoSource,
     forbid_unknown_fields=True,
     frozen=True,
     cache_hash=True,
@@ -184,7 +184,7 @@ class FileSource(base.VirtualSourceBase[FileSourceSpec, specs.FileCapture]):
         )
 
 
-class ZarrIQSource(base.VirtualSourceBase[ZarrFileSourceSpec, specs.FileCapture]):
+class ZarrIQSource(base.VirtualSourceBase[ZarrIQSourceSpec, specs.FileCapture]):
     """a sources of IQ samples from iq_waveform variables in a zarr store"""
 
     _waveform: 'xr.DataArray'

@@ -19,6 +19,11 @@ else:
     xr = util.lazy_import('xarray')
 
 
+_TC = typing.TypeVar('_TC', bound=specs.SoapyCapture)
+_TP = typing.TypeVar('_TP', bound=specs.Peripherals)
+_TS = typing.TypeVar('_TS', bound=specs.SoapySource)
+
+
 @util.lru_cache()
 def read_calibration(path: str | Path) -> 'xr.Dataset':
     if path is None:
@@ -461,45 +466,28 @@ def _ensure_loop_at_position(sweep: specs.Sweep):
 
 
 def bind_manual_yfactor_calibration(
-    name: str,
-    sensor: 'bindings.SensorBinding[specs._TS, specs._TP, specs._TC]',
-) -> bindings.SensorBinding[specs._TS, typing.Any, typing.Any]:
-    """bind a y-factor calibration onto an existing binding"""
+    name: str, sensor: 'bindings.SensorBinding[_TS, _TP, _TC]'
+) -> bindings.SensorBinding[_TS, typing.Any, typing.Any]:
+    """extend an existing binding with a y-factor calibration"""
 
-    class YFactorCapture(sensor.capture_spec, frozen=True, kw_only=True, **specs.kws):
-        """Specialize fields to add to the RadioCapture type"""
-
-        # RadioCapture with added fields
+    class capture_spec_cls(
+        sensor.schema.capture, frozen=True, kw_only=True, **specs.kws
+    ):
         noise_diode_enabled: specs.NoiseDiodeEnabledType = False
 
-    sweep_base_cls = specs.CalibrationSweep[
-        sensor.source_spec,
-        specs.Peripherals,
-        YFactorCapture,
-        specs.ManualYFactorPeripheral,
-    ]
+    class sweep_spec_cls(
+        specs.CalibrationSweep, frozen=True, kw_only=True, **specs.kws
+    ):
+        calibration: specs.ManualYFactorPeripheral | None = None
 
-    class YFactorSweep(sweep_base_cls, frozen=True, kw_only=True, **specs.kws):
-        def loop_captures(self) -> tuple[YFactorCapture, ...]:
+        def loop_captures(self):
             return specs._expand_loops(self, nyquist_only=True)
 
         def __post_init__(self):
             _ensure_loop_at_position(self)
             super().__post_init__()
 
-    peripheral_base_cls = peripherals.CalibrationPeripheralsBase[
-        specs.Peripherals,
-        YFactorCapture,
-        specs.ManualYFactorPeripheral,
-    ]
-
-    class YFactorCalibrationPeripherals(peripheral_base_cls):
-        """A collection of peripheral devices (switches, thermometers, etc.) used in sensing.
-
-        For remote control, devices connections should be accessible to the client PC.
-        The `edge-sweep.py` script expects this object to have `setup` and `acquire` methods.
-        """
-
+    class peripherals_cls(peripherals.CalibrationPeripheralsBase):
         _last_state = (None, None)
 
         def open(self):
@@ -530,19 +518,17 @@ def bind_manual_yfactor_calibration(
         def setup(self):
             sensor.peripherals.setup(self)  # type: ignore
 
-    YFactorCalibrationPeripherals.__name__ = name
-    YFactorCalibrationPeripherals.__module__ = __file__
-    YFactorCalibrationPeripherals.__qualname__ = f'{__file__}.{name}'
-
     return bindings.bind_sensor(
         name,
-        bindings.SensorBinding(
-            source_spec=sensor.source_spec,
-            capture_spec=YFactorCapture,
+        bindings.Sensor(
             source=sensor.source,
-            peripherals=YFactorCalibrationPeripherals,
-            peripherals_spec=specs.ManualYFactorPeripheral,
-            sweep_spec=YFactorSweep,
+            peripherals=peripherals_cls,
+            sweep_spec=sweep_spec_cls,
             sink=YFactorSink,
+        ),
+        bindings.Schema(
+            source=sensor.schema.source,
+            capture=capture_spec_cls,
+            peripherals=sensor.schema.peripherals,
         ),
     )

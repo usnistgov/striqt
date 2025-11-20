@@ -261,7 +261,7 @@ class _SoapySourceKeywords(_SourceKeywords, total=False):
     time_sync_every_capture: TimeSyncEveryCaptureType
 
 
-class NullSource(Source, frozen=True, kw_only=True, **kws):
+class NoSource(Source, frozen=True, kw_only=True, **kws):
     # make these configurable, to support matching hardware for warmup sweeps
     num_rx_ports: int
     stream_all_rx_ports: bool = False

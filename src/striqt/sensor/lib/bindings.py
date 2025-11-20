@@ -59,19 +59,12 @@ class Schema(typing.Generic[_TS, _TP, _TC]):
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
-class SensorBinding(typing.Generic[_TS, _TP, _TC]):
-    source: type[SourceBase[_TS, _TC]]
-    sweep_spec: type[specs.Sweep[_TS, _TP, _TC]] = specs.Sweep[_TS, _TP, _TC]
-    peripherals: type[PeripheralsBase[_TP, _TC]] = NoPeripherals[_TP, _TC]
-    sink: type[sinks.SinkBase[_TC]] | None = None
+class SensorBinding(Sensor[_TS, _TP, _TC]):
     schema: Schema[_TS, _TP, _TC]
 
     def __post_init__(self):
-        assert issubclass(self.source, SourceBase)
-        assert issubclass(self.sweep_spec, specs.Sweep)
-        assert issubclass(self.peripherals, PeripheralsBase)
+        super().__post_init__()
         assert isinstance(self.schema, Schema)
-        assert self.sink is None or issubclass(self.sink, sinks.SinkBase)
 
 
 registry: dict[str, SensorBinding[typing.Any, typing.Any, typing.Any]] = {}
@@ -103,14 +96,11 @@ def bind_sensor(
 
         source: schema.source = msgspec.field(default_factory=schema.source)  # type: ignore
         captures: tuple[schema.capture, ...] = ()  # type: ignore
-        peripherals: schema.peripherals = msgspec.field(
+        peripherals: schema.peripherals = msgspec.field(  # type: ignore
             default_factory=schema.peripherals
-        )  # type: ignore
+        )
 
     BoundSweep = tagged_subclass(key, BoundSweep, 'sensor_binding')  # type: ignore
-    # BoundSweep.__qualname__ = binding.sweep_spec.__qualname__
-    # BoundSweep.__name__ = binding.sweep_spec.__name__
-    # BoundSweep.__module__ = binding.sweep_spec.__module__
     binding = dataclasses.replace(binding, sweep_spec=BoundSweep)
     registry[key] = binding
 

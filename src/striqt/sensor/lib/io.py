@@ -99,9 +99,9 @@ def read_tdms_iq(
     skip_samples=0,
     array_backend: specs.ArrayBackendType,
 ) -> tuple['np.ndarray', specs.FileCapture]:
-    from .sources.file import TDMSFileSource, TDMSSourceSpec
+    from .sources.file import TDMSFileSource, TDMSFileSourceSpec
 
-    source_spec = TDMSSourceSpec(
+    source_spec = TDMSFileSourceSpec(
         base_clock_rate=base_clock_rate, path=Path(path), num_rx_ports=num_rx_ports
     )
     source = TDMSFileSource(source_spec)

@@ -7,15 +7,15 @@ from .base import (
     get_channel_read_buffer_count,
 )
 
-from .null import WarmupSource
+from .null import NoSource
 
 from .file import (
     FileSource,
     TDMSFileSource,
-    ZarrFileSourceSpec,
+    ZarrIQSourceSpec,
     ZarrIQSource,
     FileSourceSpec,
-    TDMSSourceSpec,
+    TDMSFileSourceSpec,
 )
 
 from .function import (
