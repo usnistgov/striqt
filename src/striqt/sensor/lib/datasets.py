@@ -259,7 +259,7 @@ def build_capture_coords(
 
 @typing.overload
 def analyze_by_spec(
-    iq: sources.sources.AcquiredIQ,
+    iq: sources.AcquiredIQ,
     source: sources.SourceBase,
     capture: specs.ResampledCapture,
     options: EvaluationOptions[typing.Literal[True]],
