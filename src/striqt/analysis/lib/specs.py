@@ -23,8 +23,6 @@ else:
     np = util.lazy_import('numpy')
 
 
-kws = dict(forbid_unknown_fields=True, cache_hash=True)
-
 WindowType = typing.Union[str, tuple[str, float]]
 
 
@@ -88,7 +86,7 @@ def convert_dict(obj: typing.Any, type: type[_T]) -> _T:
     return msgspec.convert(obj, type=type, strict=False, dec_hook=_dec_hook)
 
 
-class SpecBase(msgspec.Struct, kw_only=True, frozen=True, **kws):
+class SpecBase(msgspec.Struct, kw_only=True, frozen=True, forbid_unknown_fields=True, cache_hash=True):
     """Base type for structures that support validated
     (de)serialization.
 
@@ -135,7 +133,7 @@ class SpecBase(msgspec.Struct, kw_only=True, frozen=True, **kws):
         return self.fromdict(self.todict())
 
 
-class _SlowHashSpecBase(SpecBase, kw_only=True, frozen=True, **kws):
+class _SlowHashSpecBase(SpecBase, kw_only=True, frozen=True):
     def __hash__(self):
         try:
             return msgspec.Struct.__hash__(self)
@@ -157,7 +155,7 @@ class _SlowHashSpecBase(SpecBase, kw_only=True, frozen=True, **kws):
         return h
 
 
-DurationType = Annotated[float, meta('duration of the capture', 's')]
+DurationType = Annotated[float, meta('Duration of the analysis waveform', 's')]
 SampleRateType = Annotated[float, meta('Analysis sample rate', 'S/s')]
 AnalysisBandwidthType = Annotated[float, meta('Analysis bandwidth', 'Hz')]
 
@@ -183,13 +181,13 @@ class _CaptureKeywords(typing.TypedDict, total=False):
     analysis_bandwidth: AnalysisBandwidthType
 
 
-class AnalysisFilter(SpecBase, kw_only=True, frozen=True, **kws):
+class AnalysisFilter(SpecBase, kw_only=True, frozen=True):
     nfft: int = 8192
     window: typing.Union[tuple[str, ...], str] = 'hamming'
     nfft_out: int | None = None
 
 
-class FilteredCapture(Capture, kw_only=True, frozen=True, **kws):
+class FilteredCapture(Capture, kw_only=True, frozen=True):
     # filtering and resampling
     analysis_filter: AnalysisFilter = msgspec.field(default_factory=AnalysisFilter)
     # analysis_filter: dict = msgspec.field(
@@ -201,7 +199,7 @@ class AnalysisKeywords(typing.TypedDict):
     as_xarray: typing.NotRequired[bool | typing.Literal['delayed']]
 
 
-class Measurement(_SlowHashSpecBase, kw_only=True, frozen=True, **kws):
+class Measurement(_SlowHashSpecBase, kw_only=True, frozen=True):
     """
     Returns:
         Analysis result of type `(xarray.DataArray if as_xarray else type(iq))`
@@ -233,7 +231,7 @@ class Measurement(_SlowHashSpecBase, kw_only=True, frozen=True, **kws):
         return h
 
 
-class Analysis(_SlowHashSpecBase, kw_only=True, frozen=True, **kws):
+class Analysis(_SlowHashSpecBase, kw_only=True, frozen=True):
     """base class for a set of Measurement specifications"""
 
     pass

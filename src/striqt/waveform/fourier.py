@@ -22,6 +22,7 @@ from .util import (
     pad_along_axis,
     sliding_window_view,
     to_blocks,
+    cp
 )
 from .windows import register_extra_windows
 
@@ -35,7 +36,7 @@ if typing.TYPE_CHECKING:
 else:
     np = lazy_import('numpy')
     scipy = lazy_import('scipy')
-    signal = lazy_import('signal', 'scipy')
+    signal = lazy_import('scipy.signal')
 
 CPU_COUNT = cpu_count() or 1
 OLA_MAX_FFT_SIZE = 128 * 1024
@@ -171,7 +172,7 @@ def _cupy_fftn_helper(
     overwrite_x=False,
     plan=None,
 ):
-    import cupy as cp  # pyright: ignore[reportMissingImports]
+    assert cp is not None, ImportError('cupy is not installed')
 
     kws = dict(overwrite_x=overwrite_x, plan=plan, order='C')
     args = (None,), (axis,), None, direction
@@ -197,7 +198,7 @@ def _cupy_fftn_helper(
 
 def fft(x, axis=-1, out=None, overwrite_x=False, plan=None, workers: int | None = None):
     if is_cupy_array(x):
-        import cupy as cp  # pyright: ignore[reportMissingImports]
+        assert cp is not None, ImportError('cupy is not installed')
 
         return _cupy_fftn_helper(
             x,
@@ -225,7 +226,7 @@ def ifft(
     workers=None,
 ):
     if is_cupy_array(x):
-        import cupy as cp  # pyright: ignore[reportMissingImports]
+        assert cp is not None, ImportError('cupy is not installed')
 
         return _cupy_fftn_helper(
             x,
@@ -751,6 +752,7 @@ def design_fir_lpf(
     desired = [1, 1, 1, 0, 0, 0]
 
     b = signal.firls(numtaps, bands=bands, desired=desired, fs=sample_rate)
+
 
     return xp.asarray(b.astype(dtype))
 

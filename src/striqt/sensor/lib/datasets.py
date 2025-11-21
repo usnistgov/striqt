@@ -171,7 +171,6 @@ def get_attrs(struct: type[specs.SpecBase], field: str) -> dict[str, str]:
 
 def build_dataset_attrs(sweep: specs.Sweep):
     FIELDS = [
-        'sensor_binding',
         'analysis',
         'extensions',
         'peripherals',
@@ -238,9 +237,9 @@ def build_capture_coords(
 
 @dataclasses.dataclass
 class AnalysisCaller:
-    """Inject radio device and capture metadata and coordinates into a channel analysis result"""
+    """Inject source and capture metadata and coordinates into a channel analysis result"""
 
-    radio: SourceBase
+    source: SourceBase
     sweep: specs.Sweep
     extra_attrs: dict[str, typing.Any] | None = None
     correction: bool = False
@@ -288,7 +287,7 @@ class AnalysisCaller:
                     'resample, filter, calibrate', logger_level=logging.DEBUG
                 ):
                     iq = iq_corrections.resampling_correction(
-                        iq, capture, self.radio, overwrite_x=self._overwrite_x
+                        iq, capture, self.source, overwrite_x=self._overwrite_x
                     )
 
             opts = typing.cast(

@@ -19,12 +19,12 @@ def run(yaml_path):
 
     util.show_messages(util.logging.WARNING)
 
-    init_sweep = sensor.read_yaml_sweep(yaml_path)
+    init_sweep = sensor.read_yaml_spec(yaml_path)
     print(f'Testing connect with driver {init_sweep.radio_setup.driver!r}...')
     controller = frontend.get_controller(None, init_sweep)
     radio_id = controller.radio_id(init_sweep.radio_setup.driver)
     print(f'Connected, radio_id is {radio_id!r}')
-    sweep = sensor.read_yaml_sweep(yaml_path, radio_id=radio_id)
+    sweep = sensor.read_yaml_spec(yaml_path, radio_id=radio_id)
 
     print('\nCalibration info')
     print(60 * '=')
@@ -46,7 +46,7 @@ def run(yaml_path):
             sweep.extensions.import_path,
             init_sweep.extensions.import_path,
         ),
-        'radio_setup.calibration': (
+        'source.calibration': (
             sweep.radio_setup.calibration,
             init_sweep.radio_setup.calibration,
         ),
@@ -60,7 +60,7 @@ def run(yaml_path):
             continue
         print('\tExists: ', 'yes' if Path(pe).exists() else 'no')
 
-    kws = {'sweep': sweep, 'radio_id': radio_id, 'yaml_path': yaml_path}
+    kws = {'sweep': sweep, 'source_id': radio_id, 'yaml_path': yaml_path}
     field_sets = {}
     splits = (captures.split_capture_ports(c) for c in sweep.captures)
     for c in itertools.chain(*splits):

@@ -16,6 +16,7 @@ from striqt.analysis.lib.util import pinned_array_as_cupy
 from striqt.waveform.fourier import ResamplerDesign
 
 from .. import specs, util
+from ..util import cp
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -25,20 +26,11 @@ if typing.TYPE_CHECKING:
     from striqt.waveform._typing import ArrayType
     from striqt.waveform.fourier import ResamplerDesign
 
-    try:
-        import cupy as cp  # pyright: ignore[reportMissingImports]
-    except ModuleNotFoundError:
-        cp = None
-
 else:
     iqwaveform = util.lazy_import('striqt.waveform')
     pd = util.lazy_import('pandas')
     np = util.lazy_import('numpy')
 
-    try:
-        cp = util.lazy_import('cupy')
-    except ImportError:
-        cp = None
 
 OnOverflowType = typing.Literal['ignore', 'except', 'log']
 
@@ -69,7 +61,7 @@ class _ReceiveBuffers:
     carryover_samples: 'np.ndarray | None'
     start_time_ns: int | None
     buffers: list = [None, None]
-    hold_buffer_swap = False
+    _hold_buffer_swap = False
 
     def __init__(self, source):
         self.radio = source
@@ -99,11 +91,14 @@ class _ReceiveBuffers:
 
     def get_next(self, capture) -> 'tuple[np.ndarray, list[np.ndarray]]':
         """swap the buffers, and reallocate if needed"""
-        if not self.hold_buffer_swap:
+        if not self._hold_buffer_swap:
             self.buffers = [self.buffers[1], self.buffers[0]]
         self.buffers[0], ret = alloc_empty_iq(self.radio, capture, self.buffers[0])
-        self.hold_buffer_swap = False
+        self._hold_buffer_swap = False
         return ret
+    
+    def skip_next_buffer_swap(self):
+        self._hold_buffer_swap = True
 
     def stash_carryover(
         self,
@@ -134,6 +129,7 @@ def _cast_iq(
     dtype_in = np.dtype(radio.__setup__.transport_dtype)
 
     if radio.__setup__.array_backend == 'cupy':
+        assert cp is not None, ImportError('cupy is not installed')
         xp = cp
         buffer = pinned_array_as_cupy(buffer)
     else:
@@ -244,7 +240,6 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
         open_event = self._is_open = Event()  # first, to serve other threads
         _map_source(setup, self)
 
-        setup = self.__setup__
         self._aligner: register.AlignmentCaller | None = None
 
         self.__setup__ = setup
@@ -292,7 +287,8 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
 
     def close(self):
         self._is_open = False
-        self._buffers.clear()
+        if hasattr(self, '_buffers'):
+            self._buffers.clear()
 
     def __del__(self):
         self.close()
@@ -439,24 +435,9 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
         if next_capture is not None and capture != next_capture:
             self.arm(next_capture)
 
-        if time_ns is None:
-            ts = None
-        else:
-            ts = pd.Timestamp(time_ns, unit='ns')
+        info = self._build_acquisition_info(time_ns)
 
-        if self._sweep_time is None:
-            self._sweep_time = ts
-
-        info = specs.SoapyAcquisitionInfo(
-            sweep_time=self._sweep_time,
-            start_time=ts,
-            backend_sample_rate=self.get_resampler()['fs_sdr'],
-            source_id=self.id,
-        )
-
-        iq = AcquiredIQ(
-            samples, aligned=None, capture=capture, info=info, extra_data={}
-        )
+        iq = AcquiredIQ(samples, None, capture, info=info, extra_data={})
 
         if not correction:
             return iq
@@ -467,6 +448,17 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
             return iq_corrections.resampling_correction(
                 iq, capture, self, overwrite_x=True
             )
+
+    def _build_acquisition_info(self, time_ns: int | None) -> specs.AcquisitionInfo:
+        if time_ns is None:
+            ts = None
+        else:
+            ts = pd.Timestamp(time_ns, unit='ns')
+
+        if self._sweep_time is None:
+            self._sweep_time = ts
+
+        return specs.AcquisitionInfo(source_id=self.id)
 
     def _read_stream(
         self,
@@ -495,12 +487,9 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
 
     def get_array_namespace(self: SourceBase) -> types.ModuleType:
         if self.__setup__.array_backend == 'cupy':
-            if cp is None:
-                raise ModuleNotFoundError('cupy array backend is not available')
-            dir(cp)
+            assert cp is not None, ImportError('cupy is not installed')
             return cp
         elif self.__setup__.array_backend == 'numpy':
-            dir(np)
             return np
         else:
             raise TypeError('invalid array_backend argument')
@@ -562,30 +551,19 @@ class VirtualSourceBase(SourceBase[_TS, _TC]):
         self._sync_time_ns = round(1_000_000_000 * self._samples_elapsed)
 
 
-def assert_open(radio: SourceBase):
-    if not radio.is_open():
-        raise RuntimeError('radio is not open')
-
-
-def assert_armed(radio: SourceBase):
-    assert_open(radio)
-    if radio._capture is None:
-        raise RuntimeError('radio is not armed')
-
-
 def find_trigger_holdoff(
-    radio: SourceBase, start_time_ns: int, dsp_pad_before: int = 0
+    source: SourceBase, start_time_ns: int, dsp_pad_before: int = 0
 ):
-    sample_rate = radio.get_resampler()['fs_sdr']
+    sample_rate = source.get_resampler()['fs_sdr']
     min_holdoff = dsp_pad_before
 
     # transient holdoff if we've rearmed as indicated by the presence of carryover samples
-    if radio._buffers.start_time_ns is None:
+    if source._buffers.start_time_ns is None:
         min_holdoff = min_holdoff + round(
-            radio.__setup__._transient_holdoff_time * sample_rate
+            source.setup_spec.transient_holdoff_time * sample_rate
         )
 
-    periodic_trigger = radio.__setup__.periodic_trigger
+    periodic_trigger = source.__setup__.periodic_trigger
     if periodic_trigger in (0, None):
         return min_holdoff
 

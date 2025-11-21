@@ -569,7 +569,6 @@ class AlignmentCaller:
         return step * len(lags)
 
 
-@util.lru_cache()
 def get_aligner(
     name: str, analysis: specs.Analysis, registry: MeasurementRegistry
 ) -> AlignmentCaller:

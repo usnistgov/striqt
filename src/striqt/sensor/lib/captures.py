@@ -221,10 +221,10 @@ class PathAliasFormatter:
         return str(path)
 
 
-class _NoSweep(specs.Sweep, frozen=True):
+class _NoSweep(specs.Sweep, frozen=True, forbid_unknown_fields=False):
     # a sweep with captures that express only the parameters that impact capture shape
-    source: specs.NoSource = specs.NoSource(base_clock_rate=0, num_rx_ports=1)
-    captures: tuple[specs.analysis.Capture, ...] = ()
+    source: specs.NoSource = specs.NoSource(base_clock_rate=1, num_rx_ports=1)
+    captures: tuple[specs.ResampledCapture, ...] = ()
 
 
 def concat_group_sizes(

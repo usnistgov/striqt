@@ -206,7 +206,7 @@ class SweepHUDApp(App):
     @textual.work(exclusive=True, thread=True)
     def do_startup(self):
         kws = self.cli_kws
-        spec = io.read_yaml_sweep(
+        spec = io.read_yaml_spec(
             kws['yaml_path'],
             output_path=kws['output_path'],
             store_backend=kws['store_backend'],

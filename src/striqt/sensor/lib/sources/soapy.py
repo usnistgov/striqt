@@ -10,8 +10,10 @@ from . import base
 
 if typing.TYPE_CHECKING:
     import SoapySDR
+    import pandas as pd
 else:
     SoapySDR = util.lazy_import('SoapySDR')
+    pd = util.lazy_import('pandas')
 
 
 _TS = typing.TypeVar('_TS', bound=specs.SoapySource)
@@ -108,7 +110,7 @@ class PortInfo(specs.SpecBase, kw_only=True, frozen=True, cache_hash=True):
     settings: dict[str, ArgInfo]
 
 
-class SoapyInfo(base.BaseSourceInfo, kw_only=True, frozen=True, cache_hash=True):
+class SoapySourceInfo(base.BaseSourceInfo, kw_only=True, frozen=True, cache_hash=True):
     """Top-level container for all device capabilities metadata."""
 
     driver: str
@@ -126,17 +128,6 @@ class SoapyInfo(base.BaseSourceInfo, kw_only=True, frozen=True, cache_hash=True)
     uarts: tuple[str, ...]
     rx_ports: tuple[PortInfo, ...]
     tx_ports: tuple[PortInfo, ...]
-
-    # def to_capture_cls(self, base_cls: type[_TC]=specs.SoapyCapture) -> type[_TC]:
-    #     PortType = specs.replace_meta(specs.PortType, ge=0, lt=self.num_rx_ports)
-
-    #     return base_cls
-
-    # def to_setup_cls(self, base_cls: type[_TS]=specs.SoapySetup) -> type[_TS]:
-    #     clock_rates = self.rx_ports[0].base_clock_rates
-    #     BaseClockRateType = specs.replace_type(specs.BaseClockRateType, typing.Union[*clock_rates])
-
-    #     return base_cls
 
 
 def _probe_channel(device: SoapySDR.Device, direction: int, port: int) -> PortInfo:
@@ -198,7 +189,7 @@ def _probe_channel(device: SoapySDR.Device, direction: int, port: int) -> PortIn
     )
 
 
-def probe_soapy_info(device: SoapySDR.Device) -> SoapyInfo:
+def probe_soapy_info(device: SoapySDR.Device) -> SoapySourceInfo:
     """
     Probes a SoapySDR device and returns its capabilities as a nested NamedTuple.
 
@@ -231,7 +222,7 @@ def probe_soapy_info(device: SoapySDR.Device) -> SoapyInfo:
         _probe_channel(device, SoapySDR.SOAPY_SDR_TX, i) for i in range(num_tx)
     )
 
-    return SoapyInfo(
+    return SoapySourceInfo(
         driver=device.getDriverKey(),
         hardware=device.getHardwareKey(),
         hardware_info=device.getHardwareInfo(),
@@ -254,24 +245,21 @@ def probe_soapy_info(device: SoapySDR.Device) -> SoapyInfo:
 def read_retries(radio: SoapySourceBase) -> typing.Generator[None]:
     """in this context, retry radio.read_iq on stream errors"""
 
-    if radio.__setup__.receive_retries == 0:
+    EXC_TYPES = (base.ReceiveStreamError, OverflowError)
+
+    max_count = radio.setup_spec.receive_retries
+
+    if max_count == 0:
         yield
         return
 
     def prepare_retry(*args, **kws):
-        assert radio._rx_stream is not None, 'soapy stream is not open'
-        assert radio._device is not None, 'soapy device is not open'
-
-        radio._rx_stream.enable(False)
-        radio._buffers.hold_buffer_swap = True
-        if not radio.__setup__.time_sync_every_capture:
+        radio._rx_stream.enable(radio._device, False)
+        radio._buffers.skip_next_buffer_swap()
+        if not radio.setup_spec.time_sync_every_capture:
             radio._sync_time_source(radio._device)
 
-    decorate = util.retry(
-        (base.ReceiveStreamError, OverflowError),
-        tries=radio.__setup__.receive_retries + 1,
-        exception_func=prepare_retry,
-    )
+    decorate = util.retry(EXC_TYPES, tries=max_count + 1, exception_func=prepare_retry)
 
     radio.read_iq, original = decorate(radio.read_iq), radio.read_iq
 
@@ -286,14 +274,12 @@ class RxStream:
 
     def __init__(
         self,
-        radio: SoapySourceBase[_TS, _TC],
+        setup: specs.SoapySource,
+        info: SoapySourceInfo,
         on_overflow: base.OnOverflowType = 'except',
     ):
-        self.device = radio._device
-        self.setup = radio.__setup__
-        self.info = radio.info
-
-        assert self.device is not None
+        self.setup = setup
+        self.info = info
 
         self.checked_timestamp = False
         self.stream = None
@@ -302,9 +288,7 @@ class RxStream:
         self._ports: specs.PortType = ()
 
     @util.stopwatch('stream initialization', 'source')
-    def open(self, ports: specs.PortType | None = None):
-        assert self.device is not None, 'soapy source is not Open'
-
+    def open(self, device: 'SoapySDR.Device', ports: specs.PortType | None = None):
         if self.stream is not None and self._ports is not None:
             return
 
@@ -326,40 +310,38 @@ class RxStream:
                 f'unsupported transport type {self.setup.transport_dtype!r}'
             )
 
-        with self._minimized_rx_gain():
-            self.stream = self.device.setupStream(SoapySDR.SOAPY_SDR_RX, stype, ports)
+        with self._minimized_rx_gain(device):
+            self.stream = device.setupStream(SoapySDR.SOAPY_SDR_RX, stype, ports)
 
     @contextlib.contextmanager
-    def _minimized_rx_gain(self):
+    def _minimized_rx_gain(self, device: 'SoapySDR.Device'):
         """minimize the gain setting while in the context"""
-        assert self.device is not None, 'soapy source is not Open'
-
         start_gains = {}
 
         for port, info in enumerate(self.info.rx_ports):
-            start_gains[port] = self.device.getGain(SoapySDR.SOAPY_SDR_RX, port)
+            start_gains[port] = device.getGain(SoapySDR.SOAPY_SDR_RX, port)
             min_gain = info.full_gain_range.minimum
-            self.device.setGain(SoapySDR.SOAPY_SDR_RX, port, min_gain)
+            device.setGain(SoapySDR.SOAPY_SDR_RX, port, min_gain)
 
         yield
 
         # restore the initial gains
         for port, gain in start_gains.items():
-            self.device.setGain(SoapySDR.SOAPY_SDR_RX, port, gain)
+            device.setGain(SoapySDR.SOAPY_SDR_RX, port, gain)
 
-    def close(self):
+    def close(self, device: 'SoapySDR.Device'):
         if getattr(self, '_rx_stream', None) is None:
             return
 
         try:
-            self.enable(False)
+            self.enable(device, False)
         except ValueError:
             # channel not yet set
             pass
 
         try:
-            if self.device is not None:
-                self.device.closeStream(self.stream)
+            if device is not None:
+                device.closeStream(self.stream)
         except ValueError as ex:
             if 'invalid parameter' in str(ex):
                 # already closed
@@ -370,32 +352,32 @@ class RxStream:
         self.stream = None
         self._ports = ()
 
-    def enable(self, enable: bool):
-        assert self.device is not None, 'soapy source is not open'
+    def enable(self, device: 'SoapySDR.Device', enable: bool):
         if enable == self._enabled:
             return
 
         if enable:
-            if self.device.hasHardwareTime():
+            if device.hasHardwareTime():
                 kws = {'flags': SoapySDR.SOAPY_SDR_HAS_TIME}
             else:
                 kws = {}
 
             if self.setup.rx_enable_delay is not None:
                 delay_ns = round(self.setup.rx_enable_delay * 1e9)
-                time_ns = self.device.getHardwareTime('now') + delay_ns
+                time_ns = device.getHardwareTime('now') + delay_ns
                 kws['timeNs'] = time_ns
 
             self.checked_timestamp = False
-            self.device.activateStream(self.stream, **kws)
+            device.activateStream(self.stream, **kws)
 
         elif self.stream is not None:
-            self.device.deactivateStream(self.stream)
+            device.deactivateStream(self.stream)
 
         self._enabled = enable
 
     def read(
         self,
+        device: 'SoapySDR.Device',
         buffers,
         offset,
         count,
@@ -404,18 +386,16 @@ class RxStream:
         last_sync_time: int | None,
         on_overflow: base.OnOverflowType | None = None,
     ) -> tuple[int, int]:
-        assert self.device is not None, 'soapy source is not open'
-
         total_timeout = self.setup.rx_enable_delay + timeout_sec + 0.5
 
-        rx_result = self.device.readStream(
+        rx_result = device.readStream(
             self.stream,
             [buf[offset * 2 :] for buf in buffers],
             count,
             timeoutUs=round(total_timeout * 1e6),
         )
 
-        if not self.checked_timestamp and self.device.hasHardwareTime():
+        if not self.checked_timestamp and device.hasHardwareTime():
             # require a valid timestamp only for the first read after channel enables.
             # subsequent reads are treated as contiguous unless TimeoutError is raised
             sync_time_ns = last_sync_time
@@ -470,7 +450,7 @@ class RxStream:
     def capture_changes_port(self, capture: specs.SoapyCapture) -> bool:
         return _tuplize_port(capture.port) == self._ports
 
-    def set_ports(self, ports: specs.PortType):
+    def set_ports(self, device: 'SoapySDR.Device', ports: specs.PortType):
         if self.setup.stream_all_rx_ports:
             # in this case, the stream is controlled only on open
             return
@@ -480,10 +460,10 @@ class RxStream:
                 # already set up
                 return
             else:
-                self.close()
+                self.close(device)
 
         # if we make it this far, we need to build and enable the RX stream
-        self.open(ports)
+        self.open(device, ports)
 
 
 class HardwareTimeSync:
@@ -559,8 +539,6 @@ def split_this_prev_captures(
 
 
 def set_gain(source: SoapySourceBase, capture: specs.SoapyCapture, ports_changed: bool):
-    assert source._device is not None, 'soapy source is not open'
-
     this_split, prev_split = split_this_prev_captures(
         capture, source._capture, ports_changed
     )
@@ -573,8 +551,6 @@ def set_gain(source: SoapySourceBase, capture: specs.SoapyCapture, ports_changed
 def set_center_frequency(
     source: SoapySourceBase, capture: specs.SoapyCapture, ports_changed: bool
 ):
-    assert source._device is not None, 'soapy source is not open'
-
     this_split, prev_split = split_this_prev_captures(
         capture, source._capture, ports_changed
     )
@@ -598,8 +574,6 @@ def set_center_frequency(
 def set_sample_rate(
     source: SoapySourceBase, capture: specs.SoapyCapture, ports_changed: bool
 ):
-    assert source._device is not None
-
     fs_base = source.__setup__.base_sample_rate
 
     this_fs = base.design_capture_resampler(fs_base, capture)['fs_sdr']
@@ -645,7 +619,7 @@ class SoapySourceBase(
 
         self._device.__del__ = lambda: None
         try:
-            self._rx_stream.close()
+            self._rx_stream.close(self._device)
         finally:
             self._device.close()
         util.get_logger('acquisition').info('closed soapy radio')
@@ -678,7 +652,7 @@ class SoapySourceBase(
             self._device.setTimeSource(spec.time_source)
             on_overflow = 'except'
 
-        self._rx_stream = RxStream(self, on_overflow=on_overflow)
+        self._rx_stream = RxStream(spec, self.info, on_overflow=on_overflow)
 
         self._device.setClockSource(spec.clock_source)
         self._device.setMasterClockRate(spec.base_clock_rate)
@@ -686,7 +660,7 @@ class SoapySourceBase(
         if not spec.time_sync_every_capture:
             self._sync_time_source(self._device)
 
-        self._rx_stream.open()
+        self._rx_stream.open(self._device)
 
     def _prepare_capture(self, capture: _TC) -> _TC | None:
         if (
@@ -697,12 +671,12 @@ class SoapySourceBase(
             # the one case where we leave it running
             return
 
-        self._rx_stream.enable(False)
+        self._rx_stream.enable(self._device, False)
 
         # manage changes to the ports
         ports_changed = self._rx_stream.capture_changes_port(capture)
         if self._capture is None or ports_changed:
-            self._rx_stream.set_ports(capture.port)
+            self._rx_stream.set_ports(self._device, capture.port)
 
         # gain before center frequency to accommodate attenuator settling time
         set_gain(self, capture, ports_changed)
@@ -719,12 +693,31 @@ class SoapySourceBase(
         on_overflow: base.OnOverflowType = 'except',
     ) -> tuple[int, int]:
         return self._rx_stream.read(
+            self._device,
             buffers,
             offset,
             count,
             timeout_sec,
             last_sync_time=self._sync_time_source.last_sync_time,
             on_overflow=on_overflow,
+        )
+
+    def _build_acquisition_info(
+        self, time_ns: int | None
+    ) -> specs.SoapyAcquisitionInfo:
+        if time_ns is None:
+            ts = None
+        else:
+            ts = pd.Timestamp(time_ns, unit='ns')
+
+        if self._sweep_time is None:
+            self._sweep_time = ts
+
+        return specs.SoapyAcquisitionInfo(
+            sweep_time=self._sweep_time,
+            start_time=ts,
+            backend_sample_rate=self.get_resampler()['fs_sdr'],
+            source_id=self.id,
         )
 
     def read_peripherals(self) -> dict[str, typing.Any]:
@@ -738,7 +731,7 @@ class SoapySourceBase(
         raise self._device.getHardwareKey()
 
     @functools.cached_property
-    def info(self) -> SoapyInfo:
+    def info(self) -> SoapySourceInfo:
         return probe_soapy_info(self._device)
 
     @util.stopwatch('read_iq', 'source')
@@ -747,11 +740,11 @@ class SoapySourceBase(
         assert self._device is not None, 'soapy device is not open'
 
         if self.__setup__.time_sync_every_capture:
-            self._rx_stream.enable(False)
+            self._rx_stream.enable(self._device, False)
             self._sync_time_source(self._device)
 
         if not self._rx_stream.is_enabled:
-            self._rx_stream.enable(True)
+            self._rx_stream.enable(self._device, True)
 
         return super().read_iq()
 

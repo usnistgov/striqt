@@ -470,14 +470,10 @@ def bind_manual_yfactor_calibration(
 ) -> bindings.SensorBinding[_TS, typing.Any, typing.Any]:
     """extend an existing binding with a y-factor calibration"""
 
-    class capture_spec_cls(
-        sensor.schema.capture, frozen=True, kw_only=True, **specs.kws
-    ):
+    class capture_spec_cls(sensor.schema.capture, frozen=True, kw_only=True):
         noise_diode_enabled: specs.NoiseDiodeEnabledType = False
 
-    class sweep_spec_cls(
-        specs.CalibrationSweep, frozen=True, kw_only=True, **specs.kws
-    ):
+    class sweep_spec_cls(specs.CalibrationSweep, frozen=True, kw_only=True):
         calibration: specs.ManualYFactorPeripheral | None = None
 
         def loop_captures(self):

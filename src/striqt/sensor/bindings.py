@@ -27,7 +27,7 @@ file = bind_sensor(
     'file',
     Sensor(source=sources.FileSource),
     Schema(
-        source=sources.FileSourceSpec,
+        source=specs.FileSourceSpec,
         capture=specs.FileCapture,
         peripherals=specs.NoPeripherals,
     ),
@@ -37,7 +37,7 @@ tdms_file = bind_sensor(
     'tdms_file',
     Sensor(source=sources.TDMSFileSource),
     Schema(
-        source=sources.TDMSFileSourceSpec,
+        source=specs.TDMSFileSourceSpec,
         capture=specs.FileCapture,
         peripherals=specs.NoPeripherals,
     ),
@@ -48,7 +48,7 @@ zarr_iq = bind_sensor(
     'zarr_iq',
     Sensor(source=sources.ZarrIQSource),
     Schema(
-        source=sources.ZarrIQSourceSpec,
+        source=specs.ZarrIQSourceSpec,
         capture=specs.FileCapture,
         peripherals=specs.NoPeripherals,
     ),
@@ -60,8 +60,8 @@ noise = bind_sensor(
     'noise',
     Sensor(source=sources.NoiseSource),
     Schema(
-        source=sources.FunctionSourceSpec,
-        capture=sources.NoiseCaptureSpec,
+        source=specs.FunctionSourceSpec,
+        capture=specs.NoiseCaptureSpec,
         peripherals=specs.NoPeripherals,
     ),
 )
@@ -70,8 +70,8 @@ dirac_delta = bind_sensor(
     'dirac_delta',
     Sensor(source=sources.DiracDeltaSource),
     Schema(
-        source=sources.FunctionSourceSpec,
-        capture=sources.DiracDeltaCaptureSpec,
+        source=specs.FunctionSourceSpec,
+        capture=specs.DiracDeltaCaptureSpec,
         peripherals=specs.NoPeripherals,
     ),
 )
@@ -80,8 +80,8 @@ single_tone = bind_sensor(
     'single_tone',
     Sensor(source=sources.SingleToneSource),
     Schema(
-        source=sources.FunctionSourceSpec,
-        capture=sources.SingleToneCaptureSpec,
+        source=specs.FunctionSourceSpec,
+        capture=specs.SingleToneCaptureSpec,
         peripherals=specs.NoPeripherals,
     ),
 )
@@ -90,8 +90,8 @@ sawtooth = bind_sensor(
     'sawtooth',
     Sensor(source=sources.SawtoothSource),
     Schema(
-        source=sources.FunctionSourceSpec,
-        capture=sources.SawtoothCaptureSpec,
+        source=specs.FunctionSourceSpec,
+        capture=specs.SawtoothCaptureSpec,
         peripherals=specs.NoPeripherals,
     ),
 )
@@ -135,4 +135,4 @@ air8201b = bind_sensor(
 air8201b_calibration = bind_manual_yfactor_calibration('air8201b_calibration', air8201b)
 
 
-del peripherals, sources, specs
+del peripherals, sinks, sources, specs

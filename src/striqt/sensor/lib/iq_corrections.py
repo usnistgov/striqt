@@ -44,16 +44,15 @@ def _get_voltage_scale(
 
     # to make the best use of the calibration lookup cache, remove extraneous
     # fields in case this is a specialized capture subclass
-    bare_capture = capture.replace(start_time=None)
 
     if force_calibration is None:
         cal_data = getattr(radio.__setup__, 'calibration', None)
     else:
         cal_data = force_calibration
 
-    if isinstance(bare_capture, specs.SoapyCapture):
+    if isinstance(capture, specs.SoapyCapture):
         power_scale = calibration.lookup_power_correction(
-            cal_data, bare_capture, radio.setup_spec.base_clock_rate, xp=xp
+            cal_data, capture, radio.setup_spec.base_clock_rate, xp=xp
         )
     else:
         power_scale = None

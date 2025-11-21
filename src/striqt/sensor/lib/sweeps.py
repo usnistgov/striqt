@@ -96,7 +96,6 @@ def design_warmup(
 
     # TODO: currently, the base_clock_rate is left as the null radio default.
     # this may cause problems in the future if its default disagrees with another
-    # radio
     source = specs.NoSource.fromspec(sweep.source).replace(
         num_rx_ports=num_rx_ports, calibration=None
     )
@@ -221,7 +220,7 @@ class SweepIterator:
         self.spec.validate()
 
         self._analyze = datasets.AnalysisCaller(
-            radio=self.source,
+            source=self.source,
             sweep=self.spec,
             extra_attrs=datasets.build_dataset_attrs(self.spec),
             correction=True,
@@ -298,8 +297,6 @@ class SweepIterator:
                     # this happens at the end during the last post-analysis and intakes
                     pass
                 else:
-                    assert iq is not None
-
                     calls['acquire'] = util.Call(
                         self._acquire, iq, canalyze, cacquire, cnext
                     )
@@ -316,12 +313,12 @@ class SweepIterator:
                         capture=csink,
                     )
 
-                ret = util.concurrently_with_fg(calls, flatten=False)
+                ret = util.concurrently_with_fg(calls)
 
                 result = ret.get('analyze', None)
 
                 if 'acquire' in ret:
-                    iq = ret['acquire']['radio']
+                    iq = ret['acquire']['source']
                     canalyze = iq.capture
                     prior_ext_data = this_ext_data
                     this_ext_data = ret['acquire'].get('peripherals', {}) or {}
@@ -336,7 +333,7 @@ class SweepIterator:
 
     @util.stopwatch('✓', 'source', logger_level=util.PERFORMANCE_INFO)
     def _acquire(
-        self, iq_prev: sources.AcquiredIQ, capture_prev, capture_this, capture_next
+        self, iq_prev: sources.AcquiredIQ|None, capture_prev, capture_this, capture_next
     ):
         if self.spec.info.reuse_iq and not isinstance(self.spec.source, specs.NoSource):
             reuse_this = _iq_is_reusable(
@@ -353,7 +350,7 @@ class SweepIterator:
 
         # acquire from the radio and any peripherals
         calls = {}
-        if reuse_this:
+        if reuse_this and iq_prev is not None:
             ret_iq = sources.AcquiredIQ(
                 raw=iq_prev.raw,
                 aligned=iq_prev.aligned,
@@ -361,9 +358,9 @@ class SweepIterator:
                 info=iq_prev.info.replace(start_time=None),
                 extra_data=iq_prev.extra_data,
             )
-            calls['radio'] = util.Call(lambda: ret_iq)
+            calls['source'] = util.Call(lambda: ret_iq)
         else:
-            calls['radio'] = util.Call(
+            calls['source'] = util.Call(
                 self.source.acquire,
                 capture_this,
                 correction=False,
@@ -372,7 +369,7 @@ class SweepIterator:
         if self._peripherals is not None:
             calls['peripherals'] = util.Call(self._peripherals_acquire, capture_next)
 
-        result = util.concurrently(**calls, flatten=False)
+        result = util.concurrently(calls)
 
         if capture_next is not None and not reuse_next:
             self._arm(capture_next)
@@ -382,11 +379,11 @@ class SweepIterator:
     def _arm(self, capture):
         calls = {}
 
-        calls['radio'] = util.Call(self.source.arm, capture)
+        calls['source'] = util.Call(self.source.arm, capture)
         if self._peripherals is not None:
             calls['peripherals'] = util.Call(self._peripherals.arm, capture)
 
-        return util.concurrently(**calls)
+        return util.concurrently(calls)
 
     def _peripherals_acquire(self, capture):
         if capture is None:
@@ -439,7 +436,7 @@ def iter_sweep(
     loop=False,
     **extra_resources: typing.Unpack[Resources],
 ) -> SweepIterator:
-    """iterate through sweep captures on the radio, yielding a dataset for each.
+    """iterate through sweep captures on the source, yielding a dataset for each.
 
     Normally, for performance reasons, the first iteration consists of
     `(capture 1) ➔ concurrent(capture 2, analysis 1) ➔ (yield analysis 1)`.
@@ -462,7 +459,7 @@ def iter_sweep(
 
 
 def iter_raw_iq(
-    radio: 'sources.SourceBase',
+    source: 'sources.SourceBase',
     sweep: specs.Sweep,
 ) -> typing.Generator[sources.AcquiredIQ]:
     """iterate through the sweep and yield the raw IQ vector for each.
@@ -474,7 +471,7 @@ def iter_raw_iq(
     Added checks are needed to handle `None` before recording data.
 
     Args:
-        radio: the device that runs the sweep
+        source: the device that runs the sweep
         sweep: the specification that configures the sweep
         quiet: if True, log at the debug level, and show 'info' level log messages or higher only to the screen
 
@@ -499,7 +496,7 @@ def iter_raw_iq(
 
         with util.stopwatch(desc, 'source', logger_level=util.PERFORMANCE_INFO):
             # extra iteration at the end for the last analysis
-            yield radio.acquire(
+            yield source.acquire(
                 capture_this,
                 next_capture=capture_next,
                 correction=False,

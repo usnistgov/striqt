@@ -42,10 +42,9 @@ def open_store(
     return store_backend
 
 
-def read_yaml_sweep(
+def read_yaml_spec(
     path: str | Path,
     *,
-    allow_includes: bool = True,
     output_path: typing.Optional[str] = None,
     store_backend: typing.Optional[str] = None,
 ) -> specs.Sweep:
@@ -60,27 +59,15 @@ def read_yaml_sweep(
         an instance of structs.SweepSpec (or subclass)
     """
 
-    from .bindings import get_tagged_sweep_spec
+    from .bindings import get_tagged_sweep_type
 
-    if allow_includes:
-        # first pass is a simple dict
-        tree = decode_from_yaml_file(path)
-        if not isinstance(tree, dict):
-            raise TypeError('yaml file does not specify a dict structure')
-        spec = convert_dict(tree, type=get_tagged_sweep_spec())
-    else:
-        import msgspec
+    tree = decode_from_yaml_file(path)
 
-        with open(path, 'rb') as fd:
-            buf = fd.read()
+    if not isinstance(tree, dict):
+        raise TypeError('yaml file does not specify a dict structure')
 
-        spec = msgspec.yaml.decode(
-            buf,
-            type=get_tagged_sweep_spec(),
-            strict=False,
-            dec_hook=analysis.specs._dec_hook,
-        )
-    spec = typing.cast(specs.Sweep, spec)
+    spec = convert_dict(tree, type=get_tagged_sweep_type())
+
     sink = spec.sink
     if output_path is not None:
         sink = sink.replace(path=output_path)
@@ -99,7 +86,8 @@ def read_tdms_iq(
     skip_samples=0,
     array_backend: specs.ArrayBackendType,
 ) -> tuple['np.ndarray', specs.FileCapture]:
-    from .sources.file import TDMSFileSource, TDMSFileSourceSpec
+    from .sources.file import TDMSFileSource
+    from .specs import TDMSFileSourceSpec
 
     source_spec = TDMSFileSourceSpec(
         base_clock_rate=base_clock_rate, path=Path(path), num_rx_ports=num_rx_ports

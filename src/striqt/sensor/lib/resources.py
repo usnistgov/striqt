@@ -32,7 +32,7 @@ class Resources(typing.TypedDict, typing.Generic[_TS, _TP, _TC]):
 
     source: SourceBase[_TS, _TC]
     sink: SinkBase
-    peripherals: PeripheralsBase[_TS, _TP, _TC]
+    peripherals: PeripheralsBase[_TP, _TC]
     except_context: typing.NotRequired[typing.ContextManager]
     sweep_spec: specs.Sweep[_TS, _TP, _TC]
     calibration: 'xr.Dataset|None'
@@ -43,7 +43,7 @@ class AnyResources(typing.TypedDict, typing.Generic[_TS, _TP, _TC], total=False)
 
     source: SourceBase[_TS, _TC]
     sink: SinkBase
-    peripherals: PeripheralsBase[_TS, _TP, _TC]
+    peripherals: PeripheralsBase[_TP, _TC]
     except_context: typing.NotRequired[typing.ContextManager]
     sweep_spec: specs.Sweep[_TS, _TP, _TC]
     calibration: 'xr.Dataset|None'
@@ -114,13 +114,25 @@ class ConnectionManager(
     _resources: AnyResources[_TS, _TP, _TC]
 
     def __init__(self, sweep_spec: specs.Sweep[_TS, _TP, _TC]):
+        super().__init__()
         self._resources = AnyResources(sweep_spec=sweep_spec)
 
     def open(
         self, name, func: typing.Callable[_P, _R], *args: _P.args, **kws: _P.kwargs
     ):
-        self._resources[name] = obj = func(*args, **kws)
-        self.enter_context(obj)  # type: ignore
+        with util.stopwatch(name, 'controller', 0.5, util.logging.INFO):
+            self._resources[name] = obj = func(*args, **kws)
+            self.enter_context(obj)  # type: ignore
+
+    def get(
+        self, name, func: typing.Callable[_P, _R], *args: _P.args, **kws: _P.kwargs
+    ):
+        with util.stopwatch(name, 'controller', 0.5, util.logging.INFO):
+            self._resources[name] = func(*args, **kws)
+
+    def enter(self, name, ctx):
+        with util.stopwatch(name, 'controller', 0.5, util.logging.INFO):
+            self._resources[name] = self.enter_context(ctx)
 
     @functools.cached_property
     def resources(self) -> Resources[_TS, _TP, _TC]:
@@ -128,8 +140,7 @@ class ConnectionManager(
         if len(missing) == 0:
             return typing.cast(Resources[_TS, _TP, _TC], self._resources)
         else:
-            raise TypeError('connections are incomplete')
-
+            raise TypeError(f'connections {missing!r} are incomplete')
 
 def open_sensor(
     spec: specs.Sweep[_TS, _TP, _TC],
@@ -167,6 +178,7 @@ def open_sensor(
 
     try:
         calls = {
+            'warmup': util.Call(run_warmup, spec),
             'source': util.Call(
                 conn.open,
                 'source',
@@ -175,21 +187,20 @@ def open_sensor(
                 analysis=spec.analysis,
             ),
             'sink': util.Call(conn.open, 'sink', sink_cls, spec, alias_func=formatter),
-            'warmup': util.Call(run_warmup, spec),
-            'load_calibration': util.Call(load_calibration, spec, formatter),
+            'calibration': util.Call(conn.get, 'calibration', load_calibration, spec, formatter),
             'peripherals': util.Call(conn.open, 'peripherals', bind.peripherals, spec),
         }
 
-        with util.stopwatch(f'open {", ".join(calls)}', threshold=1, **timer_kws):  # type: ignore
-            util.concurrently_with_fg(calls, False)
+        with util.stopwatch(f'open {", ".join(calls)}', **timer_kws):  # type: ignore
+            util.concurrently_with_fg(calls)
 
         with util.stopwatch(f'setup {", ".join(calls)}', **timer_kws):  # type: ignore
-            conn.resources['peripherals'].setup()
+            conn._resources['peripherals'].setup() # type: ignore
 
         if except_context is not None:
-            conn.enter_context(except_context)
+            conn.enter('except_context', except_context)
 
-        conn.resources['sweep_spec'] = spec
+        conn._resources['sweep_spec'] = spec
 
     except BaseException as ex:
         if except_context is not None:
@@ -211,7 +222,7 @@ def open_sensor_from_yaml(
     output_path: str | None = None,
     store_backend: str | None = None,
 ) -> ConnectionManager[typing.Any, typing.Any, typing.Any]:
-    spec = io.read_yaml_sweep(yaml_path)
+    spec = io.read_yaml_spec(yaml_path)
 
     sink = spec.sink
     if output_path is not None:

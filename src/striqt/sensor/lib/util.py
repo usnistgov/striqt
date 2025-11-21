@@ -20,6 +20,7 @@ from striqt.analysis.lib.util import (
     show_messages,
     stopwatch,
     configure_cupy,
+    cp
 )
 from striqt.waveform.util import lazy_import, lru_cache
 
@@ -35,7 +36,7 @@ _LOG_LEVEL_NAMES = {
 class ConcurrentException(Exception):
     """Raised on concurrency errors in `labbench.concurrently`"""
 
-    thread_exceptions = []
+    thread_exceptions: list[BaseException] = []
 
 
 class ThreadEndedByMaster(Exception):
@@ -52,11 +53,13 @@ else:
     _P = typing.TypeVar('_P')
     _R = typing.TypeVar('_R')
 
+
 _StriqtLogger('controller')
 _StriqtLogger('source')
 _StriqtLogger('sink')
 
 _concurrency_count = 0
+_handling_tracebacks = False
 
 stop_request_event = threading.Event()
 
@@ -140,10 +143,8 @@ def retry(
     return decorator
 
 
-def concurrently_with_fg(
-    calls: dict[str, typing.Callable] = {}, flatten: bool = True
-) -> dict[typing.Any, typing.Any]:
-    """runs foreground() in the current thread, and util.concurrently(**background) in another thread"""
+def concurrently_with_fg(calls: dict[str, Call] = {}) -> dict[typing.Any, typing.Any]:
+    """runs the first call in the current thread while the rest run in the background"""
     from concurrent.futures import ThreadPoolExecutor
 
     # split to foreground and backround
@@ -155,17 +156,15 @@ def concurrently_with_fg(
         fg = {}
         bg = {}
 
-    fg = typing.cast(dict[str, typing.Callable], fg)
-
     executor = ThreadPoolExecutor()
     exc_list = []
     result = {}
 
     with executor:
-        bg_future = executor.submit(concurrently, **bg, flatten=flatten)
+        bg_future = executor.submit(concurrently, bg)
 
         try:
-            result = sequentially(**fg, flatten=flatten)
+            result = sequentially(fg)
         except BaseException as ex:
             if isinstance(ex, ConcurrentException):
                 exc_list.extend(ex.thread_exceptions)
@@ -190,21 +189,6 @@ def concurrently_with_fg(
         raise ex
 
     return result
-
-
-@contextlib.contextmanager
-def concurrently_enter_with_fg(
-    contexts: dict[str, typing.ContextManager] = {}, flatten=True
-):
-    cm = contextlib.ExitStack()
-    calls = {name: Call(cm.enter_context, ctx) for name, ctx in contexts.items()}
-    with cm:
-        try:
-            concurrently_with_fg(calls)
-            yield cm
-        except:
-            cm.close()
-            raise
 
 
 def zip_offsets(
@@ -342,6 +326,20 @@ def log_to_file(log_path: str | Path, level_name: str):
     logger._striqt_handler = handler  # type: ignore
 
 
+def _immediate_print_multi_tracebacks(tracebacks):
+    if _handling_tracebacks:
+        return
+
+    import traceback
+
+    for tb in tracebacks:
+        try:
+            traceback.print_exception(*tb)
+        except BaseException:
+            sys.stderr.write('\nthread error (fixme to print message)')
+            sys.stderr.write('\n')
+
+
 class Call(typing.Generic[_P, _R]):
     """Wrap a function to apply arguments for threaded calls to `concurrently`.
     This can be passed in directly by a user in order to provide arguments;
@@ -352,45 +350,30 @@ class Call(typing.Generic[_P, _R]):
     args: list
     kws: dict
     func: typing.Callable
-    name: str
+    exc_info: tuple|None = None
 
     if typing.TYPE_CHECKING:
-
         def __init__(
             self, func: typing.Callable[_P, _R], *args: _P.args, **kws: _P.kwargs
         ): ...
     else:
-
         def __init__(self, func, *args, **kws):
-            if not callable(func):
+            if isinstance(func, Call):
+                self.func = func.func
+            elif not callable(func):
                 raise ValueError('`func` argument is not callable')
-            self.func = func
-            self.name = self.func.__name__
+            else:
+                self.func = func
             self.args = args
             self.kws = kws
             self.queue = None
 
-    def rename(self, name):
-        self.name = name
-        return self
-
-    def __repr__(self):
-        args = ','.join(
-            [repr(v) for v in self.args]
-            + [(k + '=' + repr(v)) for k, v in self.kws.items()]
-        )
-        if hasattr(self.func, '__qualname__'):
-            name = self.func.__module__ + '.' + self.func.__qualname__
-        else:
-            name = self.name
-        return f'Call({name},{args})'
-
     def __call__(self) -> _R | None:
         try:
             self.result = self.func(*self.args, **self.kws)
-        except BaseException:
+        except BaseException as ex:
             self.result = None
-            self.traceback = sys.exc_info()
+            self.exc_info = sys.exc_info()
         else:
             self.exc_info = None
 
@@ -403,323 +386,12 @@ class Call(typing.Generic[_P, _R]):
         """Set the queue object used to communicate between threads"""
         self.queue = queue
 
-    @classmethod
-    def wrap_list_to_dict(
-        cls, name_func_pairs: typing.Iterable[tuple[str, Call | typing.Callable]]
-    ) -> dict[str, Call]:
-        """adjusts naming and wraps callables with Call"""
-        ret = {}
-        # First, generate the list of callables
-        for name, func in name_func_pairs:
-            try:
-                if name is None:
-                    if isinstance(func, Call):
-                        name = func.name
-                    elif hasattr(func, '__name__'):
-                        name = func.__name__  # type: ignore
-                    else:
-                        raise TypeError(f'could not find name of {func}')
-
-                if not isinstance(func, Call):
-                    func = cls(func)  # type: ignore
-
-                func.name = name
-
-                if name in ret:
-                    msg = f'another callable is already named {name!r} - pass as a keyword argument to specify a different name'
-                    raise KeyError(msg)
-
-                ret[name] = func
-            except BaseException:
-                raise
-
-        return ret
-
-
-class MultipleContexts:
-    """Handle opening multiple contexts in a single `with` block. This is
-    a threadsafe implementation that accepts a handler function that may
-    implement any desired any desired type of concurrency in entering
-    each context.
-
-    The handler is responsible for sequencing the calls that enter each
-    context. In the event of an exception, `MultipleContexts` calls
-    the __exit__ condition of each context that has already
-    been entered.
-
-    In the current implementation, __exit__ calls are made sequentially
-    (not through call_handler), in the reversed order that each context
-    __enter__ was called.
-    """
-
-    def __init__(
-        self,
-        call_handler: typing.Callable,
-        params: dict,
-        objs: list,
-    ):
-        """
-            call_handler: one of `sequentially_call` or `concurrently_call`
-            params: a dictionary of operating parameters (see `concurrently`)
-            objs: a list of contexts to be entered and dict-like objects to return
-
-        Returns:
-
-            context object for use in a `with` statement
-
-        """
-
-        # enter = self.enter
-        # def wrapped_enter(name, context):
-        #     return enter(name, context)
-        # wrapped_enter.__name__ = 'MultipleContexts_enter_' + hex(id(self)+id(call_handler))
-
-        def name(o):
-            return
-
-        self.abort = False
-        self._entered = {}
-        self.__name__ = '__enter__'
-
-        # make up names for the __enter__ objects
-        self.objs = [(f'enter_{type(o).__name__}_{hex(id(o))}', o) for _, o in objs]
-
-        self.params = params
-        self.call_handler = call_handler
-        self.exc = {}
-
-    def enter(self, name: str, context: typing.ContextManager):
-        """
-        enter!
-        """
-        if not self.abort:
-            # proceed only if there have been no exceptions
-            try:
-                context.__enter__()  # start of a context entry thread
-            except BaseException:
-                self.abort = True
-                self.exc[name] = sys.exc_info()
-                raise
-            else:
-                self._entered[name] = context
-
-    def __enter__(self):
-        calls = [(name, Call(self.enter, name, obj)) for name, obj in self.objs]
-        name = self.params['name']
-
-        try:
-            with stopwatch(f'enter {name!r} context', 'controller', 0.5, logging.DEBUG):
-                self.call_handler(self.params, calls)
-        except BaseException as e:
-            try:
-                self.__exit__(None, None, None)  # exit any open contexts before raise
-            finally:
-                raise e
-
-    def __exit__(self, *exc):
-        logger = get_logger('controller')
-        name = self.params['name']
-        with stopwatch(f'exit {name} context', 'controller', 0.5, logging.DEBUG):
-            for name in tuple(self._entered.keys())[::-1]:
-                context = self._entered[name]
-
-                if name in self.exc:
-                    continue
-
-                try:
-                    context.__exit__(None, None, None)
-                except BaseException:
-                    import traceback
-
-                    exc = sys.exc_info()
-                    traceback.print_exc()
-
-                    # don't overwrite the original exception, if there was one
-                    self.exc.setdefault(name, exc)
-
-            contexts = dict(self.objs)
-            for name, exc in self.exc.items():
-                if name in contexts and name not in self._entered:
-                    try:
-                        contexts[name].__exit__(None, None, None)
-                    except BaseException as e:
-                        if e is not self.exc[name][1]:
-                            msg = f'{name}.__exit__ raised {e} in cleanup attempt after another exception in {name}.__enter__'
-
-                            logger.warning(msg)
-
-        if len(self.exc) == 1:
-            exc_info = list(self.exc.values())[0]
-            raise exc_info[1]
-        elif len(self.exc) > 1:
-            ex = ConcurrentException(
-                f'exceptions raised in {len(self.exc)} contexts are printed inline'
-            )
-            ex.thread_exceptions = list(self.exc)
-            raise ex
-
-        if exc[1] is not None:
-            # sys.exc_info() may have been
-            # changed by one of the exit methods
-            # so provide explicit exception info
-            for h in logger.logger.handlers:
-                h.flush()
-            raise exc[1]
-
-
-def isdictducktype(cls):
-    return hasattr(cls, 'keys') and hasattr(cls, 'pop')
-
-
-def _select_enter_or_call(
-    candidate_objs: typing.Sequence[
-        tuple[str | None, typing.ContextManager | typing.Callable]
-    ],
-) -> typing.Literal['context', 'callable'] | None:
-    """ensure candidates are either (1) all context managers
-    or (2) all callables. Decide what type of operation to proceed with.
-    """
-
-    if len(candidate_objs) == 0:
-        return None
-
-    which = 'both'
-
-    for k, obj in candidate_objs:
-        is_callable = callable(obj)  # and not hasattr(obj, '__enter__')
-        is_cm = hasattr(obj, '__enter__')
-
-        if not is_callable and not is_cm:
-            msg = 'each argument must be a callable and/or a context manager, '
-
-            if k is None:
-                msg += f'but given {obj!r}'
-            else:
-                msg += f'but given {k}={obj!r}'
-
-            raise TypeError(msg)
-
-        elif not is_callable:
-            if which == 'callable':
-                raise ValueError('received both callables and context managers')
-            else:
-                which = 'context'
-        elif not is_cm:
-            if which == 'context':
-                raise ValueError('received both callables and context managers')
-            else:
-                which = 'callable'
-
-    if which == 'both':
-        raise TypeError(
-            'all objects supported both calling and context management - not sure which to run'
-        )
-
-    # Enforce uniqueness in the (callable or context manager) object
-    check_objs = [c[1] for c in candidate_objs]
-    if len(set(check_objs)) != len(check_objs):
-        raise ValueError('each callable and context manager must be unique')
-
-    return which
-
-
-def enter_or_call(
-    flexible_caller: typing.Callable,
-    objs: typing.Iterable[typing.ContextManager | typing.Callable],
-    kws: dict[str, typing.Any],
-):
-    """Extract value traits from the keyword arguments flags, decide whether
-    `objs` and `kws` should be treated as context managers or callables,
-    and then either enter the contexts or call the callables.
-    """
-
-    objs = list(objs)
-
-    # Treat keyword arguments passed as callables should be left as callables;
-    # otherwise, override the parameter
-    params = dict(
-        catch=False,
-        nones=False,
-        traceback_delay=False,
-        flatten=True,
-        name=None,
-        which='auto',
-    )
-
-    def merge_inputs(dicts: list, candidates: list):
-        """merges nested returns and check for data key conflicts"""
-        ret = {}
-        for name, d in dicts:
-            common = set(ret.keys()).difference(d.keys())
-            if len(common) > 0:
-                which = ', '.join(common)
-                msg = f'attempting to merge results and dict arguments, but the key names ({which}) conflict in nested calls'
-                raise KeyError(msg)
-            ret.update(d)
-
-        conflicts = set(ret.keys()).intersection([n for (n, obj) in candidates])
-        if len(conflicts) > 0:
-            raise KeyError('keys of conflict in nested return dictionary keys with ')
-
-        return ret
-
-    def merge_results(inputs, result):
-        for k, v in dict(result).items():
-            if isdictducktype(v.__class__):
-                conflicts = set(v.keys()).intersection(start_keys)
-                if len(conflicts) > 0:
-                    conflicts = ','.join(conflicts)
-                    raise KeyError(
-                        f'conflicts in keys ({conflicts}) when merging return dictionaries'
-                    )
-                inputs.update(result.pop(k))
-
-    # Pull parameters from the passed keywords
-    for name in params.keys():
-        if name in kws and not callable(kws[name]):
-            params[name] = kws.pop(name)
-
-    if params['name'] is None:
-        raise ValueError(f'use Call to assign a name to {flexible_caller!r}')
-
-    # Combine the position and keyword arguments, and assign labels
-    allobjs = list(objs) + list(kws.values())
-    names = (len(objs) * [None]) + list(kws.keys())
-
-    candidates = list(zip(names, allobjs))
-    del allobjs, names
-
-    dicts = []
-    for i, (_, obj) in enumerate(candidates):
-        # pass through dictionary objects from nested calls
-        if isdictducktype(obj.__class__):
-            dicts.append(candidates.pop(i))
-
-    if params['which'] == 'auto':
-        which = _select_enter_or_call(candidates)
-    else:
-        which = params['which']
-
-    if which is None:
-        return {}
-    elif which == 'context':
-        if len(dicts) > 0:
-            raise ValueError(
-                f'unexpected return value dictionary argument for context management {dicts}'
-            )
-        return MultipleContexts(flexible_caller, params, candidates)
-    else:
-        ret = merge_inputs(dicts, candidates)
-        result = flexible_caller(params, candidates)
-
-        start_keys = set(ret.keys()).union(result.keys())
-        if params['flatten']:
-            merge_results(ret, result)
-        ret.update(result)
-        return ret
-
-
-def concurrently_call(params: dict, name_func_pairs: list) -> dict:
+def concurrently(
+    calls: dict[str, Call],
+    traceback_delay: bool =True,
+    keep_nones: bool = True
+) -> dict[str, typing.Any]:
+    """see labbench.util for docs"""
     global _concurrency_count
 
     logger = get_logger('controller')
@@ -737,82 +409,67 @@ def concurrently_call(params: dict, name_func_pairs: list) -> dict:
     stop_request_event.clear()
 
     results = {}
-
-    catch = params['catch']
-    traceback_delay = params['traceback_delay']
-
-    # Setup calls then funcs
-    # Set up mappings between wrappers, threads, and the function to call
-    wrappers = Call.wrap_list_to_dict(name_func_pairs)
-    threads = {
-        name: threading.Thread(target=w, name=name) for name, w in wrappers.items()
-    }
-
-    # Start threads with calls to each function
+    threads = {}
     finished = queue.Queue()
-    for name, thread in list(threads.items()):
-        wrappers[name].set_queue(finished)
-        thread.start()
+    t0 = time.perf_counter()
+
+    for name, call in calls.items():
+        call.set_queue(finished)
+        threads[name] = threading.Thread(target=call, name=name)
+        threads[name].start()
         _concurrency_count += 1
 
     # As each thread ends, collect the return value and any exceptions
     tracebacks = []
     parent_exception = None
     last_exception = None
-
-    t0 = time.perf_counter()
+    exceptions = []
+    name_lookup = dict(zip(calls.values(), calls.keys()))
 
     while len(threads) > 0:
         try:
             called = finished.get(timeout=0.25)
         except queue.Empty:
             if time.perf_counter() - t0 > 60 * 15:
-                names = ','.join(list(threads.keys()))
-                logger.debug(f'{names} threads are still running')
+                names = ','.join(threads.keys())
+                logger.debug(f'threads {names!r} are still running')
                 t0 = time.perf_counter()
             continue
         except BaseException as e:
             parent_exception = e
             stop_request_event.set()
-            called = None
-
-        if called is None:
             continue
+
+        name = name_lookup[called]
 
         # Below only happens when called is not none
         if parent_exception is not None:
-            names = ', '.join(list(threads.keys()))
+            names = tuple(threads.keys())
+            exc_name = parent_exception.__class__.__name__
             logger.error(
-                f'raising {parent_exception.__class__.__name__} in main thread after child threads {names} return'
+                f'raising {exc_name} in after child threads {names!r} return'
             )
 
         # if there was an exception that wasn't us ending the thread,
-        # show messages
+        # maybe show messages
         if called.exc_info is not None:
             tb = traceback_skip(called.exc_info, 1)
 
             if called.exc_info[0] is not ThreadEndedByMaster:
-                #                exception_count += 1
+                # exception_count += 1
                 tracebacks.append(tb)
+                exceptions.append(called.exc_info[1])
                 last_exception = called.exc_info[1]
 
             if not traceback_delay:
-                import traceback
+                _immediate_print_multi_tracebacks([tb])
 
-                try:
-                    traceback.print_exception(*tb)
-                except BaseException as e:
-                    sys.stderr.write(
-                        '\nthread exception, but failed to print exception'
-                    )
-                    sys.stderr.write(str(e))
-                    sys.stderr.write('\n')
         else:
-            if params['nones'] or called.result is not None:
-                results[called.name] = called.result
+            if keep_nones or called.result is not None:
+                results[name] = called.result
 
         # Remove this thread from the dictionary of running threads
-        del threads[called.name]
+        del threads[name]
         _concurrency_count -= 1
 
     # Clear the stop request, if there are no other threads that
@@ -826,103 +483,43 @@ def concurrently_call(params: dict, name_func_pairs: list) -> dict:
             h.flush()
 
         if len(tracebacks) > 1:
-            import traceback
-
-            for tb in tracebacks:
-                try:
-                    traceback.print_exception(*tb)
-                except BaseException:
-                    sys.stderr.write('\nthread error (fixme to print message)')
-                    sys.stderr.write('\n')
+            _immediate_print_multi_tracebacks(tracebacks)
 
         raise parent_exception
 
-    elif len(tracebacks) > 0 and not catch:
-        import traceback
-
+    elif len(tracebacks) > 0:
         # exception(s) raised
         for h in logger.logger.handlers:
             h.flush()
         if len(tracebacks) == 1:
-            assert last_exception is not None
-            raise last_exception
+            assert len(exceptions) == 1
+            _immediate_print_multi_tracebacks([tracebacks])
+            raise exceptions[0]
         else:
-            for tb in tracebacks:
-                try:
-                    traceback.print_exception(*tb)
-                except BaseException:
-                    sys.stderr.write('\nthread error (fixme to print message)')
-                    sys.stderr.write('\n')
-
+            _immediate_print_multi_tracebacks(tracebacks)
             ex = ConcurrentException(f'{len(tracebacks)} call(s) raised exceptions')
-            ex.thread_exceptions = tracebacks
+            ex.thread_exceptions = exceptions
             raise ex
 
     return results
 
 
-@typing.overload
-def concurrently(
-    *objs: typing.Callable, flatten: bool = False, **kws: typing.Callable
-) -> dict[str, typing.Any]: ...
-
-
-@typing.overload
-def concurrently(
-    *objs: typing.ContextManager, flatten: bool = False, **kws: typing.ContextManager
-) -> dict[str, typing.ContextManager]: ...
-
-
-def concurrently(
-    *objs: typing.ContextManager | typing.Callable,
-    flatten: bool = False,
-    **kws: typing.Callable | typing.ContextManager,
-) -> typing.Any:
-    """see labbench.util for docs"""
-
-    return enter_or_call(concurrently_call, objs, dict(kws, flatten=flatten))
-
-
-def sequentially_call(params: dict, name_func_pairs: list) -> dict:
+def sequentially(
+    calls: dict[str, Call],
+    keep_nones: bool = True
+) -> dict:
     """see labbench.util for docs"""
     results = {}
 
-    wrappers = Call.wrap_list_to_dict(name_func_pairs)
-
     # Run each callable
-    for name, wrapper in wrappers.items():
+    for name, wrapper in calls.items():
         ret = wrapper()
         if wrapper.exc_info is not None:
             raise wrapper.exc_info[1]
-        if ret is not None or params['nones']:
+        if ret is not None or keep_nones:
             results[name] = ret
 
     return results
-
-
-@typing.overload
-def sequentially(
-    *objs: typing.Callable, flatten: bool = False, **kws: typing.Callable
-) -> dict[str, typing.Any]: ...
-
-
-@typing.overload
-def sequentially(
-    *objs: typing.ContextManager, flatten: bool = False, **kws: typing.ContextManager
-) -> dict[str, typing.ContextManager]: ...
-
-
-def sequentially(
-    *objs: typing.ContextManager | typing.Callable,
-    flatten: bool = False,
-    **kws: typing.Callable | typing.ContextManager,
-) -> typing.Any:
-    """see labbench.sequentially for docs"""
-
-    if kws.get('catch', False):
-        raise ValueError('catch=True is not supported by sequentially')
-
-    return enter_or_call(sequentially_call, objs, dict(kws, flatten=flatten))
 
 
 class DebugOnException:
@@ -931,27 +528,45 @@ class DebugOnException:
         enable: bool = False,
     ):
         self.enable = enable
+        self.prev = None
+        self.lock = threading.RLock()
 
     def __enter__(self):
+        global _handling_tracebacks
+        _handling_tracebacks = True
         return self
 
     def __exit__(self, *args):
         self.run(*args)
+        global _handling_tracebacks
+        _handling_tracebacks = False        
 
     def run(self, etype, exc, tb):
-        if (etype, exc, tb) == (None, None, None):
-            return
+        print('****')
+        with self.lock:
+            if (etype, exc, tb) == (None, None, None):
+                return
+            elif self.prev == (etype, exc, tb):
+                return
 
-        if self.enable:
-            print(exc)
             from IPython.core import ultratb
 
             if not hasattr(sys, 'last_value'):
                 sys.last_value = exc
             if not hasattr(sys, 'last_traceback'):
                 sys.last_traceback = tb
-            debugger = ultratb.FormattedTB(mode='Plain', call_pdb=True)
-            debugger(etype, exc, tb)
+
+            handler = ultratb.FormattedTB(mode='Plain', call_pdb=self.enable)
+
+            if isinstance(exc, ConcurrentException):
+                handler.call_pdb = False
+                handler = ultratb.FormattedTB(mode='Plain', call_pdb=False)
+                for thread_exc in exc.thread_exceptions:
+                    handler(type(thread_exc), thread_exc, thread_exc.__traceback__)
+                handler.call_pdb=self.enable
+
+            handler(etype, exc, tb)
+            self.prev = (etype, exc, tb)
 
 
 def exit_context(ctx: typing.ContextManager | None, exc_info=None):
@@ -972,251 +587,252 @@ def log_verbosity(verbose: int = 0):
         show_messages(logging.DEBUG)
 
 
-def _extract_traceback(
-    exc_type: type[BaseException],
-    exc_value: BaseException,
-    traceback,
-    *,
-    show_locals: bool = False,
-    locals_hide_dunder: bool = True,
-    locals_hide_sunder: bool = False,
-    _visited_exceptions: typing.Optional[set[BaseException]] = None,
-):
-    """labbench implemented ConcurrentException as a container for
-    exceptions that occur in multiple threads.
+# def _extract_traceback(
+#     exc_type: type[BaseException],
+#     exc_value: BaseException,
+#     traceback,
+#     *,
+#     show_locals: bool = False,
+#     locals_hide_dunder: bool = True,
+#     locals_hide_sunder: bool = False,
+#     _visited_exceptions: typing.Optional[set[BaseException]] = None,
+# ):
+#     """labbench implemented ConcurrentException as a container for
+#     exceptions that occur in multiple threads.
 
-    A similar feature was added to python 3.11, ExceptionGroup.
-    rich.traceback supports displaying this, so we can
-    extract the exceptions in the same way here.
+#     A similar feature was added to python 3.11, ExceptionGroup.
+#     rich.traceback supports displaying this, so we can
+#     extract the exceptions in the same way here.
+#     """
 
-    """
+#     print('extract')
 
-    import inspect
-    import os
-    from itertools import islice
+#     import inspect
+#     import os
+#     from itertools import islice
 
-    from rich import pretty
-    from rich.traceback import (
-        LOCALS_MAX_LENGTH,
-        LOCALS_MAX_STRING,
-        Frame,
-        Stack,
-        Trace,
-        Traceback,
-        _SyntaxError,
-        walk_tb,  # type: ignore
-    )
+#     from rich import pretty
+#     from rich.traceback import (
+#         LOCALS_MAX_LENGTH,
+#         LOCALS_MAX_STRING,
+#         Frame,
+#         Stack,
+#         Trace,
+#         Traceback,
+#         _SyntaxError,
+#         walk_tb,  # type: ignore
+#     )
 
-    stacks: list[Stack] = []
-    is_cause = False
+#     stacks: list[Stack] = []
+#     is_cause = False
 
-    from rich import _IMPORT_CWD
+#     from rich import _IMPORT_CWD
 
-    notes: list[str] = getattr(exc_value, '__notes__', None) or []
+#     notes: list[str] = getattr(exc_value, '__notes__', None) or []
 
-    grouped_exceptions: set[BaseException] = (
-        set() if _visited_exceptions is None else _visited_exceptions
-    )
+#     grouped_exceptions: set[BaseException] = (
+#         set() if _visited_exceptions is None else _visited_exceptions
+#     )
 
-    def safe_str(_object: typing.Any) -> str:
-        """Don't allow exceptions from __str__ to propagate."""
-        try:
-            return str(_object)
-        except Exception:
-            return '<exception str() failed>'
+#     def safe_str(_object: typing.Any) -> str:
+#         """Don't allow exceptions from __str__ to propagate."""
+#         try:
+#             return str(_object)
+#         except Exception:
+#             return '<exception str() failed>'
 
-    while True:
-        stack = Stack(
-            exc_type=safe_str(exc_type.__name__),
-            exc_value=safe_str(exc_value),
-            is_cause=is_cause,
-            notes=notes,
-        )
+#     while True:
+#         stack = Stack(
+#             exc_type=safe_str(exc_type.__name__),
+#             exc_value=safe_str(exc_value),
+#             is_cause=is_cause,
+#             notes=notes,
+#         )
 
-        if sys.version_info >= (3, 11):
-            if isinstance(exc_value, (BaseExceptionGroup, ExceptionGroup)):
-                stack.is_group = True
-                for exception in exc_value.exceptions:
-                    if exception in grouped_exceptions:
-                        continue
-                    grouped_exceptions.add(exception)
-                    stack.exceptions.append(
-                        _extract_traceback(
-                            type(exception),
-                            exception,
-                            exception.__traceback__,
-                            show_locals=show_locals,
-                            locals_hide_dunder=locals_hide_dunder,
-                            locals_hide_sunder=locals_hide_sunder,
-                            _visited_exceptions=grouped_exceptions,
-                        )
-                    )
+#         if sys.version_info >= (3, 11):
+#             if isinstance(exc_value, (BaseExceptionGroup, ExceptionGroup)):
+#                 stack.is_group = True
+#                 for exception in exc_value.exceptions:
+#                     if exception in grouped_exceptions:
+#                         continue
+#                     grouped_exceptions.add(exception)
+#                     stack.exceptions.append(
+#                         _extract_traceback(
+#                             type(exception),
+#                             exception,
+#                             exception.__traceback__,
+#                             show_locals=show_locals,
+#                             locals_hide_dunder=locals_hide_dunder,
+#                             locals_hide_sunder=locals_hide_sunder,
+#                             _visited_exceptions=grouped_exceptions,
+#                         )
+#                     )
 
-        if isinstance(exc_value, ConcurrentException):
-            stack.is_group = True
-            for exception in exc_value.thread_exceptions:
-                if exception in grouped_exceptions:
-                    continue
-                grouped_exceptions.add(exception)
-                stack.exceptions.append(
-                    _extract_traceback(
-                        type(exception),
-                        exception,
-                        exception.__traceback__,
-                        show_locals=show_locals,
-                        locals_hide_dunder=locals_hide_dunder,
-                        locals_hide_sunder=locals_hide_sunder,
-                        _visited_exceptions=grouped_exceptions,
-                    )
-                )
+#         if isinstance(exc_value, ConcurrentException):
+#             stack.is_group = True
+#             for exception in exc_value.thread_exceptions:
+#                 if exception in grouped_exceptions:
+#                     continue
+#                 grouped_exceptions.add(exception)
+#                 stack.exceptions.append(
+#                     _extract_traceback(
+#                         type(exception),
+#                         exception,
+#                         exception.__traceback__,
+#                         show_locals=show_locals,
+#                         locals_hide_dunder=locals_hide_dunder,
+#                         locals_hide_sunder=locals_hide_sunder,
+#                         _visited_exceptions=grouped_exceptions,
+#                     )
+#                 )
 
-        if isinstance(exc_value, SyntaxError):
-            stack.syntax_error = _SyntaxError(
-                offset=exc_value.offset or 0,
-                filename=exc_value.filename or '?',
-                lineno=exc_value.lineno or 0,
-                line=exc_value.text or '',
-                msg=exc_value.msg,
-                notes=notes,
-            )
+#         if isinstance(exc_value, SyntaxError):
+#             stack.syntax_error = _SyntaxError(
+#                 offset=exc_value.offset or 0,
+#                 filename=exc_value.filename or '?',
+#                 lineno=exc_value.lineno or 0,
+#                 line=exc_value.text or '',
+#                 msg=exc_value.msg,
+#                 notes=notes,
+#             )
 
-        stacks.append(stack)
-        append = stack.frames.append
+#         stacks.append(stack)
+#         append = stack.frames.append
 
-        def get_locals(
-            iter_locals: typing.Iterable[tuple[str, object]],
-        ) -> typing.Iterable[tuple[str, object]]:
-            """Extract locals from an iterator of key pairs."""
-            if not (locals_hide_dunder or locals_hide_sunder):
-                yield from iter_locals
-                return
-            for key, value in iter_locals:
-                if locals_hide_dunder and key.startswith('__'):
-                    continue
-                if locals_hide_sunder and key.startswith('_'):
-                    continue
-                yield key, value
+#         def get_locals(
+#             iter_locals: typing.Iterable[tuple[str, object]],
+#         ) -> typing.Iterable[tuple[str, object]]:
+#             """Extract locals from an iterator of key pairs."""
+#             if not (locals_hide_dunder or locals_hide_sunder):
+#                 yield from iter_locals
+#                 return
+#             for key, value in iter_locals:
+#                 if locals_hide_dunder and key.startswith('__'):
+#                     continue
+#                 if locals_hide_sunder and key.startswith('_'):
+#                     continue
+#                 yield key, value
 
-        for frame_summary, line_no in walk_tb(traceback):
-            filename = frame_summary.f_code.co_filename
+#         for frame_summary, line_no in walk_tb(traceback):
+#             filename = frame_summary.f_code.co_filename
 
-            last_instruction: typing.Optional[tuple[tuple[int, int], tuple[int, int]]]
-            last_instruction = None
-            if sys.version_info >= (3, 11):
-                instruction_index = frame_summary.f_lasti // 2
-                instruction_position = next(
-                    islice(
-                        frame_summary.f_code.co_positions(),
-                        instruction_index,
-                        instruction_index + 1,
-                    )
-                )
-                (
-                    start_line,
-                    end_line,
-                    start_column,
-                    end_column,
-                ) = instruction_position
-                if (
-                    start_line is not None
-                    and end_line is not None
-                    and start_column is not None
-                    and end_column is not None
-                ):
-                    last_instruction = (
-                        (start_line, start_column),
-                        (end_line, end_column),
-                    )
+#             last_instruction: typing.Optional[tuple[tuple[int, int], tuple[int, int]]]
+#             last_instruction = None
+#             if sys.version_info >= (3, 11):
+#                 instruction_index = frame_summary.f_lasti // 2
+#                 instruction_position = next(
+#                     islice(
+#                         frame_summary.f_code.co_positions(),
+#                         instruction_index,
+#                         instruction_index + 1,
+#                     )
+#                 )
+#                 (
+#                     start_line,
+#                     end_line,
+#                     start_column,
+#                     end_column,
+#                 ) = instruction_position
+#                 if (
+#                     start_line is not None
+#                     and end_line is not None
+#                     and start_column is not None
+#                     and end_column is not None
+#                 ):
+#                     last_instruction = (
+#                         (start_line, start_column),
+#                         (end_line, end_column),
+#                     )
 
-            if filename and not filename.startswith('<'):
-                if not os.path.isabs(filename):
-                    filename = os.path.join(_IMPORT_CWD, filename)
-            if frame_summary.f_locals.get('_rich_traceback_omit', False):
-                continue
+#             if filename and not filename.startswith('<'):
+#                 if not os.path.isabs(filename):
+#                     filename = os.path.join(_IMPORT_CWD, filename)
+#             if frame_summary.f_locals.get('_rich_traceback_omit', False):
+#                 continue
 
-            frame = Frame(
-                filename=filename or '?',
-                lineno=line_no,
-                name=frame_summary.f_code.co_name,
-                locals=(
-                    {
-                        key: pretty.traverse(
-                            value,
-                            max_length=LOCALS_MAX_LENGTH,
-                            max_string=LOCALS_MAX_STRING,
-                        )
-                        for key, value in get_locals(frame_summary.f_locals.items())
-                        if not (inspect.isfunction(value) or inspect.isclass(value))
-                    }
-                    if show_locals
-                    else None
-                ),
-                last_instruction=last_instruction,
-            )
-            append(frame)
-            if frame_summary.f_locals.get('_rich_traceback_guard', False):
-                del stack.frames[:]
+#             frame = Frame(
+#                 filename=filename or '?',
+#                 lineno=line_no,
+#                 name=frame_summary.f_code.co_name,
+#                 locals=(
+#                     {
+#                         key: pretty.traverse(
+#                             value,
+#                             max_length=LOCALS_MAX_LENGTH,
+#                             max_string=LOCALS_MAX_STRING,
+#                         )
+#                         for key, value in get_locals(frame_summary.f_locals.items())
+#                         if not (inspect.isfunction(value) or inspect.isclass(value))
+#                     }
+#                     if show_locals
+#                     else None
+#                 ),
+#                 last_instruction=last_instruction,
+#             )
+#             append(frame)
+#             if frame_summary.f_locals.get('_rich_traceback_guard', False):
+#                 del stack.frames[:]
 
-        if not grouped_exceptions:
-            cause = getattr(exc_value, '__cause__', None)
-            if cause is not None and cause is not exc_value:
-                exc_type = cause.__class__
-                exc_value = cause
-                # __traceback__ can be None, e.g. for exceptions raised by the
-                # 'multiprocessing' module
-                traceback = cause.__traceback__
-                is_cause = True
-                continue
+#         if not grouped_exceptions:
+#             cause = getattr(exc_value, '__cause__', None)
+#             if cause is not None and cause is not exc_value:
+#                 exc_type = cause.__class__
+#                 exc_value = cause
+#                 # __traceback__ can be None, e.g. for exceptions raised by the
+#                 # 'multiprocessing' module
+#                 traceback = cause.__traceback__
+#                 is_cause = True
+#                 continue
 
-            cause = exc_value.__context__
-            if cause is not None and not getattr(
-                exc_value, '__suppress_context__', False
-            ):
-                exc_type = cause.__class__
-                exc_value = cause
-                traceback = cause.__traceback__
-                is_cause = False
-                continue
-        # No cover, code is reached but coverage doesn't recognize it.
-        break  # pragma: no cover
+#             cause = exc_value.__context__
+#             if cause is not None and not getattr(
+#                 exc_value, '__suppress_context__', False
+#             ):
+#                 exc_type = cause.__class__
+#                 exc_value = cause
+#                 traceback = cause.__traceback__
+#                 is_cause = False
+#                 continue
+#         # No cover, code is reached but coverage doesn't recognize it.
+#         break  # pragma: no cover
 
-    trace = Trace(stacks=stacks)
+#     trace = Trace(stacks=stacks)
 
-    return trace
+#     return trace
 
 
-def print_rich_exception():
-    from rich.console import Console
-    from rich.traceback import Traceback
+# def print_rich_exception():
+#     from rich.console import Console
+#     from rich.traceback import Traceback
 
-    console = Console()
+#     console = Console()
 
-    exc_type, exc_value, tb = sys.exc_info()
+#     exc_type, exc_value, tb = sys.exc_info()
 
-    if exc_type is None:
-        return
-    if exc_value is None:
-        return
+#     if exc_type is None:
+#         return
+#     if exc_value is None:
+#         return
 
-    trace = _extract_traceback(exc_type, exc_value, tb, show_locals=False)
+#     trace = _extract_traceback(exc_type, exc_value, tb, show_locals=False)
 
-    traceback = Traceback(
-        trace,
-        width=None,
-        show_locals=False,
-        word_wrap=True,
-        suppress=[
-            'concurrent',
-            'rich',
-            'textual',
-            'labbench',
-            'zarr',
-            'xarray',
-            'pandas',
-        ],
-    )
+#     traceback = Traceback(
+#         trace,
+#         width=None,
+#         show_locals=False,
+#         word_wrap=True,
+#         suppress=[
+#             'concurrent',
+#             'rich',
+#             'textual',
+#             'labbench',
+#             'zarr',
+#             'xarray',
+#             'pandas',
+#         ],
+#     )
 
-    console.print(traceback)
+#     console.print(traceback)
 
 
 @contextlib.contextmanager
@@ -1239,3 +855,5 @@ def log_capture_context(name_suffix, /, capture_index=0, capture_count=None):
     logger.extra = start_extra | extra
     yield
     logger.extra = start_extra
+
+show_messages(logging.INFO)

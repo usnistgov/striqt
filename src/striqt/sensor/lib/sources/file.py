@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import functools
 import typing
-from pathlib import Path
 
 from .. import specs, util
 from striqt.analysis.lib import io
@@ -18,43 +17,12 @@ else:
     np = util.lazy_import('numpy')
 
 
-class TDMSFileSourceSpec(
-    specs.NoSource,
-    forbid_unknown_fields=True,
-    frozen=True,
-    cache_hash=True,
-    kw_only=True,
+class TDMSFileSource(
+    base.VirtualSourceBase[specs.TDMSFileSourceSpec, specs.FileCapture]
 ):
-    path: specs.Annotated[Path, specs.meta('path to the tdms file')]
-
-
-class ZarrIQSourceSpec(
-    specs.NoSource,
-    forbid_unknown_fields=True,
-    frozen=True,
-    cache_hash=True,
-    kw_only=True,
-):
-    path: specs.Annotated[Path, specs.meta('path to the waveform data file')]
-    select: specs.Annotated[
-        dict, specs.meta('dictionary to select in the data as .sel(**select)')
-    ] = {}
-
-
-class FileAcquisitionInfo(
-    specs.AcquisitionInfo, frozen=True, kw_only=True, **specs.kws
-):
-    center_frequency: specs.CenterFrequencyType = float('nan')
-    backend_sample_rate: specs.BackendSampleRateType
-    port: specs.PortType = 0
-    gain: specs.GainType = float('nan')
-    source_id: specs.SourceIDType = ''
-
-
-class TDMSFileSource(base.VirtualSourceBase[TDMSFileSourceSpec, specs.FileCapture]):
     """a source of IQ waveforms from a TDMS file"""
 
-    _file_info: FileAcquisitionInfo
+    _file_info: specs.FileAcquisitionInfo
 
     def _connect(self, spec):
         from nptdms import TdmsFile
@@ -63,7 +31,7 @@ class TDMSFileSource(base.VirtualSourceBase[TDMSFileSourceSpec, specs.FileCaptur
         header_fd, iq_fd = fd.groups()
         self._handle = dict(header_fd=header_fd, iq_fd=iq_fd)
 
-        self._file_info = FileAcquisitionInfo(
+        self._file_info = specs.FileAcquisitionInfo(
             backend_sample_rate=header_fd['IQ_samples_per_second'][0],
             center_frequency=header_fd['carrier_frequency'][0],
         )
@@ -105,35 +73,10 @@ class TDMSFileSource(base.VirtualSourceBase[TDMSFileSourceSpec, specs.FileCaptur
         )
 
 
-FormatType = specs.Annotated[
-    typing.Literal['auto', 'mat', 'tdms'],
-    specs.meta('data format or auto to guess by extension'),
-]
-
-
-class FileSourceSpec(
-    specs.NoSource,
-    forbid_unknown_fields=True,
-    frozen=True,
-    cache_hash=True,
-    kw_only=True,
-):
-    path: specs.Annotated[Path, specs.meta('path to the waveform data file')] | None = (
-        None
-    )
-    file_format: FormatType = 'auto'
-    file_metadata: specs.Annotated[
-        dict, specs.meta('any capture fields not included in the file')
-    ] = {}
-    loop: specs.Annotated[
-        bool, specs.meta('whether to loop the file to create longer IQ waveforms')
-    ] = False
-
-
-class FileSource(base.VirtualSourceBase[FileSourceSpec, specs.FileCapture]):
+class FileSource(base.VirtualSourceBase[specs.FileSourceSpec, specs.FileCapture]):
     """returns IQ waveforms from a file"""
 
-    _file_info: FileAcquisitionInfo
+    _file_info: specs.FileAcquisitionInfo
     _file_stream: io._FileStreamBase
 
     def _connect(self, spec):
@@ -150,7 +93,7 @@ class FileSource(base.VirtualSourceBase[FileSourceSpec, specs.FileCapture]):
         )
 
         fields = self._file_stream.get_capture_fields()
-        self._file_info = FileAcquisitionInfo.fromdict(fields)
+        self._file_info = specs.FileAcquisitionInfo.fromdict(fields)
         self._file_stream.seek(0)
 
     def _prepare_capture(self, capture):
@@ -184,11 +127,11 @@ class FileSource(base.VirtualSourceBase[FileSourceSpec, specs.FileCapture]):
         )
 
 
-class ZarrIQSource(base.VirtualSourceBase[ZarrIQSourceSpec, specs.FileCapture]):
+class ZarrIQSource(base.VirtualSourceBase[specs.ZarrIQSourceSpec, specs.FileCapture]):
     """a sources of IQ samples from iq_waveform variables in a zarr store"""
 
     _waveform: 'xr.DataArray'
-    _capture_info: FileAcquisitionInfo
+    _capture_info: specs.FileAcquisitionInfo
 
     def _read_coord(self, name):
         assert self._waveform is not None
@@ -215,7 +158,7 @@ class ZarrIQSource(base.VirtualSourceBase[ZarrIQSourceSpec, specs.FileCapture]):
     def _prepare_capture(self, capture):
         super()._prepare_capture(capture)
 
-        self._capture_info = FileAcquisitionInfo(
+        self._capture_info = specs.FileAcquisitionInfo(
             center_frequency=self._read_coord('center_frequency'),
             gain=self._read_coord('gain'),
             port=self._read_coord('port'),

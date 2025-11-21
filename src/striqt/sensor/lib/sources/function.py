@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import typing
-from typing import Annotated as _Annotated
 
 from striqt.analysis import Capture, simulated_awgn
 
@@ -16,21 +15,8 @@ else:
     np = util.lazy_import('numpy')
 
 
-class FunctionSourceSpec(specs.Source, kw_only=True, frozen=True, **specs.kws):
-    # make these configurable, to support matching hardware for warmup sweeps
-    num_rx_ports: int
-    stream_all_rx_ports: bool = False
-
-
-_TS = typing.TypeVar('_TS', bound=FunctionSourceSpec)
+_TS = typing.TypeVar('_TS', bound=specs.FunctionSourceSpec)
 _TC = typing.TypeVar('_TC', bound=specs.ResampledCapture)
-
-FrequencyOffsetType = _Annotated[float, specs.meta('Baseband frequency offset', 'Hz')]
-SNRType = _Annotated[float, specs.meta('SNR with added noise ', 'dB')]
-PSDType = _Annotated[float, specs.meta('noise total channel power', 'mW/Hz', ge=0)]
-PowerType = _Annotated[float, specs.meta('peak power level', 'dB', gt=0)]
-TimeType = _Annotated[float, specs.meta('start time offset', 's')]
-PeriodType = _Annotated[float, specs.meta('waveform period', 's', ge=0)]
 
 
 def _lo_shift_tone(inds, radio: base.SourceBase, xp, lo_offset=None):
@@ -39,49 +25,6 @@ def _lo_shift_tone(inds, radio: base.SourceBase, xp, lo_offset=None):
         lo_offset = design['lo_offset']
     phase_scale = (2j * np.pi * lo_offset) / design['fs_sdr']
     return xp.exp(phase_scale * inds).astype('complex64')
-
-
-class SingleToneCaptureSpec(
-    specs.ResampledCapture,
-    forbid_unknown_fields=True,
-    frozen=True,
-    cache_hash=True,
-    kw_only=True,
-):
-    frequency_offset: FrequencyOffsetType = 0
-    snr: typing.Optional[SNRType] = None
-
-
-class DiracDeltaCaptureSpec(
-    specs.ResampledCapture,
-    forbid_unknown_fields=True,
-    frozen=True,
-    cache_hash=True,
-    kw_only=True,
-):
-    time: TimeType = 0
-    power: PowerType = 0
-
-
-class SawtoothCaptureSpec(
-    specs.ResampledCapture,
-    forbid_unknown_fields=True,
-    frozen=True,
-    cache_hash=True,
-    kw_only=True,
-):
-    period: PeriodType = 0.01
-    power: PowerType = 1
-
-
-class NoiseCaptureSpec(
-    specs.ResampledCapture,
-    forbid_unknown_fields=True,
-    frozen=True,
-    cache_hash=True,
-    kw_only=True,
-):
-    power_spectral_density: PSDType = 1e-17
 
 
 class TestSourceBase(base.VirtualSourceBase[_TS, _TC]):
@@ -123,7 +66,9 @@ class TestSourceBase(base.VirtualSourceBase[_TS, _TC]):
         self._sync_time_ns = round(1_000_000_000 * self._samples_elapsed)
 
 
-class SingleToneSource(TestSourceBase[FunctionSourceSpec, SingleToneCaptureSpec]):
+class SingleToneSource(
+    TestSourceBase[specs.FunctionSourceSpec, specs.SingleToneCaptureSpec]
+):
     def get_waveform(
         self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
     ):
@@ -152,7 +97,9 @@ class SingleToneSource(TestSourceBase[FunctionSourceSpec, SingleToneCaptureSpec]
         return ret
 
 
-class DiracDeltaSource(TestSourceBase[FunctionSourceSpec, DiracDeltaCaptureSpec]):
+class DiracDeltaSource(
+    TestSourceBase[specs.FunctionSourceSpec, specs.DiracDeltaCaptureSpec]
+):
     def get_waveform(
         self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
     ):
@@ -170,7 +117,9 @@ class DiracDeltaSource(TestSourceBase[FunctionSourceSpec, DiracDeltaCaptureSpec]
         return ret[np.newaxis,]
 
 
-class SawtoothSource(TestSourceBase[FunctionSourceSpec, SawtoothCaptureSpec]):
+class SawtoothSource(
+    TestSourceBase[specs.FunctionSourceSpec, specs.SawtoothCaptureSpec]
+):
     def get_waveform(
         self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
     ):
@@ -185,7 +134,7 @@ class SawtoothSource(TestSourceBase[FunctionSourceSpec, SawtoothCaptureSpec]):
         return ret
 
 
-class NoiseSource(TestSourceBase[FunctionSourceSpec, NoiseCaptureSpec]):
+class NoiseSource(TestSourceBase[specs.FunctionSourceSpec, specs.NoiseCaptureSpec]):
     def get_waveform(
         self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
     ):

@@ -8,7 +8,7 @@ if typing.TYPE_CHECKING:
     # bury this type checking in here to avoid lengthening the import time of iqwaveform
     # if cupy isn't installed
     try:
-        import cupy as cp
+        import cupy as cp # type: ignore
     except ModuleNotFoundError:
         import numpy as cp
     import numpy as np

@@ -2,22 +2,22 @@
 
 from __future__ import annotations
 
+import dataclasses
 import itertools
+from pathlib import Path
 import typing
 from typing import Annotated, Any, Generic, Literal, Optional, Union
 
 import msgspec
 
 from striqt import analysis
-from striqt.analysis.lib.specs import SpecBase, meta, kws
+from striqt.analysis.lib.specs import SpecBase, meta
 
 from . import util
 
 if typing.TYPE_CHECKING:
+    _T = typing.TypeVar('_T')
     import pandas as pd
-else:
-    # to resolve the 'pd.Timestamp' stub at runtime
-    pd = util.lazy_import('pandas')
 
 
 def _dict_hash(d):
@@ -79,7 +79,7 @@ PortType = Annotated[
 ]
 
 
-class ResampledCapture(analysis.Capture, frozen=True, kw_only=True, **kws):
+class ResampledCapture(analysis.Capture, frozen=True, kw_only=True):
     """Capture specification for a generic waveform with resampling support"""
 
     # acquisition
@@ -101,7 +101,7 @@ class _ResampledCaptureKeywords(analysis.specs._CaptureKeywords, total=False):
     backend_sample_rate: Optional[BackendSampleRateType]
 
 
-class SoapyCapture(ResampledCapture, frozen=True, kw_only=True, **kws):
+class SoapyCapture(ResampledCapture, frozen=True, kw_only=True):
     delay: Optional[DelayType] = None
     center_frequency: CenterFrequencyType
     gain: GainType
@@ -120,10 +120,49 @@ class _SoapyCaptureKeywords(_ResampledCaptureKeywords):
     gain: GainType
 
 
+FrequencyOffsetType = Annotated[float, meta('Baseband frequency offset', 'Hz')]
+SNRType = Annotated[float, meta('SNR with added noise ', 'dB')]
+PSDType = Annotated[float, meta('noise total channel power', 'mW/Hz', ge=0)]
+PowerType = Annotated[float, meta('peak power level', 'dB', gt=0)]
+TimeType = Annotated[float, meta('start time offset', 's')]
+PeriodType = Annotated[float, meta('waveform period', 's', ge=0)]
+
+
+class SingleToneCaptureSpec(ResampledCapture, frozen=True, kw_only=True):
+    frequency_offset: FrequencyOffsetType = 0
+    snr: typing.Optional[SNRType] = None
+
+
+class DiracDeltaCaptureSpec(ResampledCapture, frozen=True, kw_only=True):
+    time: TimeType = 0
+    power: PowerType = 0
+
+
+class SawtoothCaptureSpec(
+    ResampledCapture,
+    forbid_unknown_fields=True,
+    frozen=True,
+    cache_hash=True,
+    kw_only=True,
+):
+    period: PeriodType = 0.01
+    power: PowerType = 1
+
+
+class NoiseCaptureSpec(
+    ResampledCapture,
+    forbid_unknown_fields=True,
+    frozen=True,
+    cache_hash=True,
+    kw_only=True,
+):
+    power_spectral_density: PSDType = 1e-17
+
+
 NoiseDiodeEnabledType = Annotated[bool, meta(standard_name='Noise diode enabled')]
 
 
-class FileCapture(ResampledCapture, frozen=True, kw_only=True, **kws):
+class FileCapture(ResampledCapture, frozen=True, kw_only=True):
     """Capture specification read from a file, with support for None sentinels"""
 
     # RF and leveling
@@ -171,7 +210,7 @@ SyncSourceType = Annotated[
 ]
 
 
-class Source(SpecBase, frozen=True, kw_only=True, **kws):
+class Source(SpecBase, frozen=True, kw_only=True):
     """run-time characteristics of the radio that are left invariant during a sweep"""
 
     # acquisition
@@ -193,9 +232,9 @@ class Source(SpecBase, frozen=True, kw_only=True, **kws):
     # validation data
     uncalibrated_peak_detect: Union[bool, Literal['auto']] = 'auto'
 
-    transient_holdoff_time = None
-    stream_all_rx_ports = False
-    transport_dtype: Literal['int16', 'complex64'] = 'complex64'
+    transient_holdoff_time: typing.ClassVar[float] = 0
+    stream_all_rx_ports: typing.ClassVar[bool|None] = False
+    transport_dtype: typing.ClassVar[Literal['int16', 'complex64']] = 'complex64'
 
 
 class _SourceKeywords(typing.TypedDict, total=False):
@@ -220,7 +259,7 @@ class _SourceKeywords(typing.TypedDict, total=False):
     uncalibrated_peak_detect: Union[bool, Literal['auto']]
 
 
-class SoapySource(Source, frozen=True, kw_only=True, **kws):
+class SoapySource(Source, frozen=True, kw_only=True):
     device_kwargs: typing.ClassVar[dict[str, Any]] = {}
     time_source: TimeSourceType = 'host'
     time_sync_every_capture: TimeSyncEveryCaptureType = False
@@ -244,7 +283,6 @@ class SoapySource(Source, frozen=True, kw_only=True, **kws):
             raise ValueError(
                 'receive_retries must be 0 when gapless_repeats is enabled'
             )
-
         if self.channel_sync_source is None:
             pass
         elif self.channel_sync_source not in registry.channel_sync_source:
@@ -261,13 +299,54 @@ class _SoapySourceKeywords(_SourceKeywords, total=False):
     time_sync_every_capture: TimeSyncEveryCaptureType
 
 
-class NoSource(Source, frozen=True, kw_only=True, **kws):
+class FunctionSourceSpec(Source, kw_only=True, frozen=True):
     # make these configurable, to support matching hardware for warmup sweeps
     num_rx_ports: int
-    stream_all_rx_ports: bool = False
+    stream_all_rx_ports: typing.ClassVar[bool] = False
 
 
-class Description(SpecBase, frozen=True, kw_only=True, **kws):
+class NoSource(Source, frozen=True, kw_only=True):
+    # make these configurable, to support matching hardware for warmup sweeps
+    num_rx_ports: int
+    stream_all_rx_ports: typing.ClassVar[bool] = False
+
+
+FormatType = Annotated[
+    typing.Literal['auto', 'mat', 'tdms'],
+    meta('data format or auto to guess by extension'),
+]
+WaveformInputPath = Annotated[Path, meta('path to the waveform data file')]
+FileMetadataType = Annotated[dict, meta('any capture fields not included in the file')]
+FileLoopType = Annotated[
+    bool, meta('whether to loop the file to create longer IQ waveforms')
+]
+
+
+class FileSourceSpec(
+    NoSource,
+    forbid_unknown_fields=True,
+    frozen=True,
+    cache_hash=True,
+    kw_only=True,
+):
+    path: WaveformInputPath
+    file_format: FormatType = 'auto'
+    file_metadata: FileMetadataType = {}
+    loop: FileLoopType = False
+
+
+class TDMSFileSourceSpec(NoSource, frozen=True, kw_only=True):
+    path: WaveformInputPath
+
+
+class ZarrIQSourceSpec(NoSource, frozen=True, kw_only=True):
+    path: WaveformInputPath
+    select: Annotated[
+        dict, meta('dictionary to select in the data as .sel(**select)')
+    ] = {}
+
+
+class Description(SpecBase, frozen=True, kw_only=True):
     summary: Optional[str] = None
     location: Optional[tuple[float, float, float]] = None
     signal_chain: Optional[tuple[str, ...]] = tuple()
@@ -275,7 +354,7 @@ class Description(SpecBase, frozen=True, kw_only=True, **kws):
 
 
 class LoopBase(
-    SpecBase, tag=str.lower, tag_field='kind', frozen=True, kw_only=True, **kws
+    SpecBase, tag=str.lower, tag_field='kind', frozen=True, kw_only=True
 ):
     field: str
 
@@ -283,7 +362,7 @@ class LoopBase(
         raise NotImplementedError
 
 
-class Range(LoopBase, frozen=True, kw_only=True, **kws):
+class Range(LoopBase, frozen=True, kw_only=True):
     start: float
     stop: float
     step: float
@@ -298,7 +377,7 @@ class Range(LoopBase, frozen=True, kw_only=True, **kws):
         return list(a)
 
 
-class Repeat(LoopBase, frozen=True, kw_only=True, **kws):
+class Repeat(LoopBase, frozen=True, kw_only=True):
     field: str = '_sweep_index'
     count: int = 1
 
@@ -306,14 +385,14 @@ class Repeat(LoopBase, frozen=True, kw_only=True, **kws):
         return list(range(self.count))
 
 
-class List(LoopBase, frozen=True, kw_only=True, **kws):
+class List(LoopBase, frozen=True, kw_only=True):
     values: tuple[Any, ...]
 
     def get_points(self):
         return self.values
 
 
-class FrequencyBinRange(LoopBase, frozen=True, kw_only=True, **kws):
+class FrequencyBinRange(LoopBase, frozen=True, kw_only=True):
     start: float
     stop: float
     step: float
@@ -343,7 +422,7 @@ AliasMatchType = Annotated[
 ]
 
 
-class Sink(analysis.specs._SlowHashSpecBase, frozen=True, kw_only=True, **kws):
+class Sink(analysis.specs._SlowHashSpecBase, frozen=True, kw_only=True):
     path: str = '{yaml_name}-{start_time}'
     log_path: Optional[str] = None
     log_level: str = 'info'
@@ -366,17 +445,17 @@ ExtensionPathType = Annotated[
 ]
 
 
-class Extension(SpecBase, frozen=True, kw_only=True, **kws):
+class Extension(SpecBase, frozen=True, kw_only=True):
     sink: SinkClassType | None = None
     import_path: typing.Optional[ExtensionPathType] = None
     import_name: ModuleNameType = None
 
 
-class Peripherals(SpecBase, frozen=True, kw_only=True, **kws):
+class Peripherals(SpecBase, frozen=True, kw_only=True):
     pass
 
 
-class NoPeripherals(Peripherals, frozen=True, kw_only=True, **kws):
+class NoPeripherals(Peripherals, frozen=True, kw_only=True):
     pass
 
 
@@ -386,7 +465,7 @@ AmbientTemperatureType = Annotated[
 ]
 
 
-class ManualYFactorPeripheral(Peripherals, frozen=True, kw_only=True, **kws):
+class ManualYFactorPeripheral(Peripherals, frozen=True, kw_only=True):
     enr: ENRType
     ambient_temperature: AmbientTemperatureType
 
@@ -455,7 +534,7 @@ def _expand_loops(sweep: Sweep[_TS, _TP, _TC], nyquist_only=False) -> tuple[_TC,
         return tuple(result)
 
 
-class Sweep(SpecBase, Generic[_TS, _TP, _TC], frozen=True, kw_only=True, **kws):
+class Sweep(SpecBase, Generic[_TS, _TP, _TC], frozen=True, kw_only=True):
     source: _TS
     captures: tuple[_TC, ...] = tuple()
     loops: tuple[LoopSpec, ...] = ()
@@ -481,6 +560,7 @@ class Sweep(SpecBase, Generic[_TS, _TP, _TC], frozen=True, kw_only=True, **kws):
         (which, howmany), *_ = Counter(l.field for l in self.loops).most_common(1)
         if howmany > 1:
             raise TypeError(f'more than one loop of capture field {which!r}')
+
 
     # @classmethod
     # def _from_registry(
@@ -530,25 +610,39 @@ class CalibrationSweep(
 
 SourceIDType = Annotated[str, meta('Source UUID string')]
 
-if typing.TYPE_CHECKING:
-    StartTimeType = Annotated[
-        'pd.Timestamp', meta('Acquisition start time of the first capture')
-    ]
-    SweepStartTimeType = Annotated[
-        'pd.Timestamp', meta('Capture acquisition start time')
-    ]
-else:
-    StartTimeType = Annotated[
-        typing.Any, meta('Acquisition start time of the first capture')
-    ]
-    SweepStartTimeType = Annotated[typing.Any, meta('Capture acquisition start time')]
+StartTimeType = Annotated[
+    'pd.Timestamp', meta('Acquisition start time of the first capture')
+]
+SweepStartTimeType = Annotated['pd.Timestamp', meta('Capture acquisition start time')]
 
 
-class AcquisitionInfo(SpecBase, kw_only=True, frozen=True):
+@dataclasses.dataclass(kw_only=True, frozen=True)
+class AcquisitionInfo:
+    """information about an acquired acquisition"""
+
+    # duck-type methods and structure of SpecBase
+
     source_id: SourceIDType = ''
 
+    def replace(self, **attrs) -> typing.Self:
+        """returns a copy of self with changed attributes.
 
-class SoapyAcquisitionInfo(AcquisitionInfo, frozen=True, kw_only=True, **kws):
+        See also:
+            Python standard library `copy.replace`
+        """
+        return dataclasses.replace(self, **attrs)
+
+    def todict(self) -> dict:
+        """return a dictinary representation of `self`"""
+        return dataclasses.asdict(self)
+
+    @classmethod
+    def fromdict(cls: type[_T], d: dict) -> _T:
+        return cls(**d)
+
+
+@dataclasses.dataclass(kw_only=True, frozen=True)
+class SoapyAcquisitionInfo(AcquisitionInfo):
     """extra coordinate information returned from an acquisition"""
 
     delay: typing.Optional[DelayType] = None
@@ -557,12 +651,11 @@ class SoapyAcquisitionInfo(AcquisitionInfo, frozen=True, kw_only=True, **kws):
     backend_sample_rate: BackendSampleRateType
     source_id: SourceIDType = ''
 
-    def __post_init__(self):
-        if self.sweep_time is not None:
-            msgspec.structs.force_setattr(
-                self, 'sweep_time', pd.Timestamp(self.sweep_time)
-            )
-        if self.start_time is not None:
-            msgspec.structs.force_setattr(
-                self, 'start_time', pd.Timestamp(self.start_time)
-            )
+
+@dataclasses.dataclass(kw_only=True, frozen=True)
+class FileAcquisitionInfo(AcquisitionInfo):
+    center_frequency: CenterFrequencyType = float('nan')
+    backend_sample_rate: BackendSampleRateType
+    port: PortType = 0
+    gain: GainType = float('nan')
+    source_id: SourceIDType = ''

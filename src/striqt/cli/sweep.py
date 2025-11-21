@@ -4,15 +4,13 @@ from . import click_sensor_sweep
 import sys
 
 
-@click_sensor_sweep(
-    'Run an acquisition and analysis sweep with a software-defined radio'
-)
+@click_sensor_sweep('Run a swept acquisition and analysis from a yaml file')
 def run(**kws):
     # instantiate sweep objects
     from striqt import sensor
 
     do_tui = kws.pop('tui')
-    debugger = sensor.util.DebugOnException(enable=kws['debug'])
+    except_handler = sensor.util.DebugOnException(enable=kws['debug'])
 
     yaml_path = kws['yaml_path']
 
@@ -29,21 +27,24 @@ def run(**kws):
             sys.exit(1)
         else:
             # exception printing is handled by SweepHUDApp; force the context exit
-            sensor.util.exit_context(debugger, app._exc_info)
+            sensor.util.exit_context(except_handler, app._exc_info)
             sys.exit(1)
 
     else:
         sensor.util.log_verbosity(kws['verbose'])
-        spec = sensor.read_yaml_sweep(
+        spec = sensor.read_yaml_spec(
             yaml_path,
             output_path=kws['output_path'],
             store_backend=kws['store_backend'],
         )
-        with sensor.open_sensor(spec, yaml_path, debugger) as ctx:
-            sweep_iter = sensor.SweepIterator(ctx.resources, always_yield=True)
-            for _ in sweep_iter:
-                pass
 
+        try:
+            with sensor.open_sensor(spec, yaml_path, except_handler) as ctx:
+                sweep_iter = sensor.SweepIterator(ctx.resources, always_yield=True)
+                for _ in sweep_iter:
+                    pass
+        except BaseException as ex:
+            except_handler.run(type(ex), ex, ex.__traceback__)
 
 if __name__ == '__main__':
     run()

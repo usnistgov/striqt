@@ -43,15 +43,18 @@ def lazy_import(module_name: str, package=None):
 
 
 if typing.TYPE_CHECKING:
-    try:
-        import cupy as cp  # pyright: ignore[reportMissingImports]
-    except ModuleNotFoundError:
-        from array_api_compat import cupy as cp
-
-    import numpy as np
     import typing_extensions
 
+    try:
+        import cupy as cp  # pyright: ignore[reportMissingImports]
+        TypeIsCupy = typing_extensions.TypeIs[cp.ndarray]
+    except ModuleNotFoundError:
+        cp = None
+
+    import numpy as np
+
     from ._typing import ArrayLike, ArrayType
+    
 else:
     np = lazy_import('numpy')
     try:
@@ -143,7 +146,7 @@ def isroundmod(value: float | np.ndarray, div, atol=1e-6) -> bool:
         return np.abs(np.rint(ratio) - ratio) <= atol
 
 
-def is_cupy_array(x: object) -> typing_extensions.TypeIs['cp.ndarray']:
+def is_cupy_array(x: object) -> TypeIsCupy:
     return array_api_compat.is_cupy_array(x)
 
 
