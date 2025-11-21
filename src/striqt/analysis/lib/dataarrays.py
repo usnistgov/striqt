@@ -381,22 +381,30 @@ def select_parameter_kws(locals_: dict, omit=(PORT_DIM, 'out')) -> dict:
 
 @dataclasses.dataclass(kw_only=True)
 class EvaluationOptions(typing.Generic[_TA]):
-    spec: dict[str, specs.Measurement] | specs.Analysis
-    registry: register.MeasurementRegistry
     as_xarray: _TA
+    registry: register.MeasurementRegistry = dataclasses.field(
+        default_factory=lambda: register.registry
+    )
     block_each: bool = True
-    expand_dims: typing.Sequence[str] | None = None
+    expand_dims: typing.Sequence[str] = ()
+
+    def __post_init__(self):
+        if self.as_xarray not in (True, False, 'delayed'):
+            raise TypeError('as_xarray must be True, False, or "delayed"')
 
 
 def evaluate_by_spec(
-    iq: ArrayType | AcquiredIQ, capture: specs.Capture, options: EvaluationOptions
+    iq: ArrayType | AcquiredIQ,
+    spec: dict[str, specs.Measurement] | specs.Analysis,
+    capture: specs.Capture,
+    options: EvaluationOptions,
 ):
     """evaluate each analysis for the given IQ waveform"""
 
-    if isinstance(options.spec, specs.Analysis):
-        spec = options.spec.validate()
-    elif isinstance(options.spec, dict):
-        spec = options.registry.tospec().fromdict(options.spec)
+    if isinstance(spec, specs.Analysis):
+        spec = spec.validate()
+    elif isinstance(spec, dict):
+        spec = options.registry.tospec().fromdict(spec)
     else:
         raise TypeError('invalid analysis spec argument')
 
@@ -474,6 +482,7 @@ def package_analysis(
 @typing.overload
 def analyze_by_spec(
     iq: ArrayType | AcquiredIQ,
+    spec: dict[str, specs.Measurement] | specs.Analysis,
     capture: specs.Capture,
     options: EvaluationOptions[typing.Literal[True]],
 ) -> 'xr.Dataset': ...
@@ -482,6 +491,7 @@ def analyze_by_spec(
 @typing.overload
 def analyze_by_spec(
     iq: ArrayType | AcquiredIQ,
+    spec: dict[str, specs.Measurement] | specs.Analysis,
     capture: specs.Capture,
     options: EvaluationOptions[typing.Literal['delayed']],
 ) -> 'dict[str, DelayedDataArray]': ...
@@ -490,17 +500,21 @@ def analyze_by_spec(
 @typing.overload
 def analyze_by_spec(
     iq: ArrayType | AcquiredIQ,
+    spec: dict[str, specs.Measurement] | specs.Analysis,
     capture: specs.Capture,
     options: EvaluationOptions[typing.Literal[False]],
 ) -> 'dict[str, ArrayType]': ...
 
 
 def analyze_by_spec(
-    iq: ArrayType | AcquiredIQ, capture: specs.Capture, options: EvaluationOptions
+    iq: ArrayType | AcquiredIQ,
+    spec: dict[str, specs.Measurement] | specs.Analysis,
+    capture: specs.Capture,
+    options: EvaluationOptions,
 ) -> AnalysisResult:
     """evaluate a set of different channel analyses on the iq waveform as specified by spec"""
 
-    results = evaluate_by_spec(iq, capture, options)
+    results = evaluate_by_spec(iq, spec, capture, options)
 
     if not options.as_xarray or options.as_xarray == 'delayed':
         return results

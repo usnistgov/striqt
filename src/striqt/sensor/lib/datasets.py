@@ -1,4 +1,4 @@
-"""utility functions for building xarray datasets"""
+"""evaluate xarray datasets from sensor (meta)data and calibrations"""
 
 from __future__ import annotations
 
@@ -11,10 +11,8 @@ import msgspec
 from striqt.analysis import dataarrays
 from striqt.analysis.lib.dataarrays import CAPTURE_DIM, PORT_DIM  # noqa: F401
 from striqt.analysis.lib.util import is_cupy_array
-from striqt.analysis.measurements import registry
 
-from . import captures, specs, util
-from .sources import AcquiredIQ, SourceBase
+from . import captures, sources, specs, util
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -30,6 +28,27 @@ else:
 
 
 RADIO_ID_NAME = 'source_id'
+
+
+@dataclasses.dataclass(kw_only=True)
+class EvaluationOptions(dataarrays.EvaluationOptions[dataarrays._TA]):
+    sweep_spec: specs.Sweep
+    extra_attrs: dict[str, typing.Any] = dataclasses.field(default_factory=dict)
+    correction: bool = False
+    cache_callback: typing.Callable | None = None
+    expand_dims: typing.Sequence[str] = (dataarrays.CAPTURE_DIM,)
+
+    def __post_init__(self):
+        super().__post_init__()
+
+
+@dataclasses.dataclass()
+class DelayedDataset:
+    delayed: dict[str, dataarrays.DelayedDataArray]
+    capture: specs.ResampledCapture
+    extra_coords: specs.AcquisitionInfo
+    extra_data: dict[str, typing.Any]
+    config: EvaluationOptions
 
 
 def concat_time_dim(datasets: list['xr.Dataset'], time_dim: str) -> 'xr.Dataset':
@@ -101,16 +120,12 @@ def _msgspec_type_to_coord_info(type_: msgspec.inspect.Type) -> tuple[dict, typi
             raise TypeError(
                 f'cannot determine xarray type for union of msgspec types {names!r}'
             )
-    # elif getattr(type_, '__name__', None) == 'Annotated':
-    #     args = typing.get_args(type_)
-    #     if len(args) == 2:
-    #         return _msgspec_type_to_coord_info(mi.Metadata(type=args[0]))
     else:
         raise TypeError(f'unsupported msgspec field type {type_!r}')
 
 
 @util.lru_cache()
-def coord_template(
+def _coord_template(
     capture_cls: type[specs.ResampledCapture],
     info_cls: type[specs.AcquisitionInfo],
     port_count: int,
@@ -212,7 +227,7 @@ def build_capture_coords(
     else:
         port_count = 1
 
-    coords = coord_template(type(capture), type(info), port_count, **alias_dtypes)
+    coords = _coord_template(type(capture), type(info), port_count, **alias_dtypes)
     coords = coords.copy(deep=True)
 
     updates = {}
@@ -242,163 +257,147 @@ def build_capture_coords(
     return coords
 
 
-@dataclasses.dataclass
-class AnalysisCaller:
-    """Inject source and capture metadata and coordinates into a channel analysis result"""
+@typing.overload
+def analyze_by_spec(
+    iq: sources.sources.AcquiredIQ,
+    source: sources.SourceBase,
+    capture: specs.ResampledCapture,
+    options: EvaluationOptions[typing.Literal[True]],
+) -> 'xr.Dataset': ...
 
-    source: SourceBase
-    sweep: specs.Sweep
-    extra_attrs: dict[str, typing.Any] | None = None
-    correction: bool = False
-    cache_callback: typing.Callable | None = None
 
-    block_each: bool = False
-    delayed: bool = True
+@typing.overload
+def analyze_by_spec(
+    iq: sources.AcquiredIQ,
+    source: sources.SourceBase,
+    capture: specs.ResampledCapture,
+    options: EvaluationOptions[typing.Literal['delayed']],
+) -> DelayedDataset: ...
 
-    def __post_init__(self):
-        self._overwrite_x = not self.sweep.info.reuse_iq
-        if self.delayed:
-            self._eval_options = dataarrays.EvaluationOptions(
-                spec=self.sweep.analysis,
-                block_each=self.block_each,
-                as_xarray='delayed',
-                expand_dims=(CAPTURE_DIM,),
-                registry=registry,
-            )
-        else:
-            self._eval_options = dataarrays.EvaluationOptions(
-                spec=self.sweep.analysis,
-                block_each=self.block_each,
-                as_xarray=True,
-                expand_dims=(CAPTURE_DIM,),
-                registry=registry,
-            )
 
-        self.__name__ = 'analyze'
-        self.__qualname__ = 'analyze'
+@typing.overload
+def analyze_by_spec(
+    iq: sources.AcquiredIQ,
+    source: sources.SourceBase,
+    capture: specs.ResampledCapture,
+    options: EvaluationOptions[typing.Literal[False]],
+) -> 'dict[str, ArrayType]': ...
 
-    @util.stopwatch('', 'analysis', logger_level=util.PERFORMANCE_INFO)
-    def __call__(
-        self,
-        iq: AcquiredIQ,
-        capture: specs.ResampledCapture,
-    ) -> 'xr.Dataset | DelayedDataset':
-        """Inject radio device and capture info into a channel analysis result."""
 
-        # wait to import until here to avoid a circular import
-        from . import iq_corrections
+@util.stopwatch('', 'analysis', logger_level=util.PERFORMANCE_INFO)
+def analyze_by_spec(
+    iq: sources.AcquiredIQ,
+    source: sources.SourceBase,
+    capture: specs.ResampledCapture,
+    options: EvaluationOptions,
+) -> 'dict[str, ArrayType] | xr.Dataset | DelayedDataset':
+    """extends striqt.analysis.analyze_by_spec to calibrate results, and
+    increases the scope of saved data and metadata
+    """
 
-        with registry.cache_context(capture, self.cache_callback):
-            if self.correction:
-                with util.stopwatch(
-                    'resample, filter, calibrate', logger_level=logging.DEBUG
-                ):
-                    iq = iq_corrections.resampling_correction(
-                        iq, capture, self.source, overwrite_x=self._overwrite_x
+    # wait to import until here to avoid a circular import
+    from . import iq_corrections
+
+    overwrite_x = not options.sweep_spec.info.reuse_iq
+
+    with options.registry.cache_context(capture, options.cache_callback):
+        if options.correction:
+            with util.stopwatch(
+                'resample➤filter➤calibrate', logger_level=logging.DEBUG
+            ):
+                iq = iq_corrections.resampling_correction(
+                    iq, capture, source, overwrite_x=overwrite_x
+                )
+
+        c = dataclasses.replace(options, as_xarray='delayed')
+        c = typing.cast(dataarrays.EvaluationOptions[typing.Literal['delayed']], c)
+        da_delayed = dataarrays.analyze_by_spec(
+            iq, options.sweep_spec.analysis, capture, c
+        )
+
+    if 'unscaled_iq_peak' in iq.extra_data:
+        peak = iq.extra_data['unscaled_iq_peak']
+        if is_cupy_array(peak):
+            peak = peak.get()
+            iq.extra_data['unscaled_iq_peak'] = peak
+
+    if not options.as_xarray:
+        return da_delayed
+
+    ds_delayed = DelayedDataset(
+        delayed=da_delayed,
+        capture=capture,
+        config=options,
+        extra_coords=iq.info,
+        extra_data=iq.extra_data,
+    )
+
+    if options.as_xarray == 'delayed':
+        return ds_delayed
+    else:
+        return from_delayed(ds_delayed)
+
+
+def from_delayed(dd: DelayedDataset):
+    """complete any remaining calculations, transfer from the device, and build an output dataset"""
+
+    with util.stopwatch(
+        'package xarray',
+        'analysis',
+        threshold=10e-3,
+        logger_level=logging.DEBUG,
+    ):
+        analysis = dataarrays.package_analysis(
+            dd.capture, dd.delayed, expand_dims=(CAPTURE_DIM,)
+        )
+
+    with util.stopwatch(
+        'build coords',
+        'analysis',
+        threshold=10e-3,
+        logger_level=logging.DEBUG,
+    ):
+        coords = build_capture_coords(
+            dd.capture, dd.config.sweep_spec.sink, dd.extra_coords
+        )
+        analysis = analysis.assign_coords(coords)
+
+        # don't duplicate coords as attrs
+        for name in coords.keys():
+            analysis.attrs.pop(name, None)
+
+        analysis.attrs.update(dd.config.extra_attrs)
+
+    with util.stopwatch(
+        'add peripheral data',
+        'analysis',
+        threshold=10e-3,
+        logger_level=logging.DEBUG,
+    ):
+        if dd.extra_data is not None:
+            new_arrays = {}
+            allowed_capture_shapes = (0, 1, analysis.capture.size)
+
+            for k, v in dd.extra_data.items():
+                ndim = getattr(v, 'ndim', 0)
+
+                if not isinstance(v, xr.DataArray):
+                    if ndim > 0:
+                        dims = [CAPTURE_DIM] + [f'{k}_dim{n}' for n in range(1, ndim)]
+                    else:
+                        dims = []
+                    v = xr.DataArray(v, dims=dims)
+
+                if ndim == 0 or v.dims[0] != CAPTURE_DIM:
+                    v = v.expand_dims({CAPTURE_DIM: analysis.capture.size})
+
+                if v.sizes[CAPTURE_DIM] not in allowed_capture_shapes:
+                    raise ValueError(
+                        f'size of first axis of extra data "{k}" must be one of {allowed_capture_shapes}'
                     )
 
-            opts = typing.cast(
-                dataarrays.EvaluationOptions[typing.Literal['delayed']],
-                self._eval_options,
-            )
-            result = dataarrays.analyze_by_spec(iq, capture, opts)
+                new_arrays[k] = v
 
-        if 'unscaled_iq_peak' in iq.extra_data:
-            peak = iq.extra_data['unscaled_iq_peak']
-            if is_cupy_array(peak):
-                peak = peak.get()
-                iq.extra_data['unscaled_iq_peak'] = peak
+            analysis = analysis.assign(new_arrays)
 
-        if self.delayed:
-            result = DelayedDataset(
-                delayed=result,
-                capture=capture,
-                sweep=self.sweep,
-                attrs=self.extra_attrs,
-                coords=iq.info,
-                extra_data=iq.extra_data,
-            )
-
-        else:
-            assert isinstance(result, xr.Dataset)
-            result.update(extra_data)  # type: ignore
-
-        return result
-
-
-@dataclasses.dataclass()
-class DelayedDataset:
-    delayed: dict[str, dataarrays.DelayedDataArray]
-    capture: specs.ResampledCapture
-    sweep: specs.Sweep
-    coords: specs.AcquisitionInfo
-    extra_data: dict[str, typing.Any]
-    attrs: dict | None = None
-
-    def add_peripheral_data(self, extra_data: dict[str, typing.Any]) -> None:
-        self.extra_data = self.extra_data | extra_data
-
-    def to_xarray(self) -> 'xr.Dataset':
-        """complete any remaining calculations, transfer from the device, and build an output dataset"""
-
-        with util.stopwatch(
-            'package xarray',
-            'analysis',
-            threshold=10e-3,
-            logger_level=logging.DEBUG,
-        ):
-            analysis = dataarrays.package_analysis(
-                self.capture, self.delayed, expand_dims=(CAPTURE_DIM,)
-            )
-
-        with util.stopwatch(
-            'build coords',
-            'analysis',
-            threshold=10e-3,
-            logger_level=logging.DEBUG,
-        ):
-            coords = build_capture_coords(self.capture, self.sweep.sink, self.coords)
-            analysis = analysis.assign_coords(coords)
-
-            # these are coordinates - drop from attrs
-            for name in coords.keys():
-                analysis.attrs.pop(name, None)
-
-            if self.attrs is not None:
-                analysis.attrs.update(self.attrs)
-
-        with util.stopwatch(
-            'add peripheral data',
-            'analysis',
-            threshold=10e-3,
-            logger_level=logging.DEBUG,
-        ):
-            if self.extra_data is not None:
-                new_arrays = {}
-                allowed_capture_shapes = (0, 1, analysis.capture.size)
-
-                for k, v in self.extra_data.items():
-                    ndim = getattr(v, 'ndim', 0)
-
-                    if not isinstance(v, xr.DataArray):
-                        if ndim > 0:
-                            dims = [CAPTURE_DIM] + [
-                                f'{k}_dim{n}' for n in range(1, ndim)
-                            ]
-                        else:
-                            dims = []
-                        v = xr.DataArray(v, dims=dims)
-
-                    if ndim == 0 or v.dims[0] != CAPTURE_DIM:
-                        v = v.expand_dims({CAPTURE_DIM: analysis.capture.size})
-
-                    if v.sizes[CAPTURE_DIM] not in allowed_capture_shapes:
-                        raise ValueError(
-                            f'size of first axis of extra data "{k}" must be one of {allowed_capture_shapes}'
-                        )
-
-                    new_arrays[k] = v
-
-                analysis = analysis.assign(new_arrays)
-
-        return analysis
+    return analysis

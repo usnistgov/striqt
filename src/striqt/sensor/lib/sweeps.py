@@ -217,17 +217,24 @@ class SweepIterator:
         self._always_yield = always_yield
         self._loop = loop
 
-        self.spec.validate()
-
-        self._analyze = datasets.AnalysisCaller(
-            source=self.source,
-            sweep=self.spec,
+        self._analysis_opts = datasets.EvaluationOptions(
+            sweep_spec=self.spec,
             extra_attrs=datasets.build_dataset_attrs(self.spec),
             correction=True,
             cache_callback=self.show_cache_info,
-            delayed=True,
+            as_xarray='delayed',
             block_each=False,
         )
+
+        # self._analyze = datasets.AnalysisCaller(
+        #     source=self.source,
+        #     sweep=self.spec,
+        #     extra_attrs=datasets.build_dataset_attrs(self.spec),
+        #     correction=True,
+        #     cache_callback=self.show_cache_info,
+        #     delayed=True,
+        #     block_each=False,
+        # )
 
     def show_cache_info(self, cache, capture: specs.ResampledCapture, result, *_, **__):
         cal = self.spec.source.calibration
@@ -288,9 +295,11 @@ class SweepIterator:
                     assert canalyze is not None
 
                     calls['analyze'] = util.Call(
-                        self._analyze,
+                        datasets.analyze_by_spec,
                         iq,
-                        capture=canalyze,
+                        self.source,
+                        canalyze,
+                        self._analysis_opts,
                     )
 
                 if cacquire is None:
@@ -309,13 +318,15 @@ class SweepIterator:
                     result.extra_data.update(prior_ext_data)
                     calls['intake'] = util.Call(
                         self._intake,
-                        results=result.to_xarray(),
+                        results=result,
                         capture=csink,
                     )
 
                 ret = util.concurrently_with_fg(calls)
 
-                result = ret.get('analyze', None)
+                result = typing.cast(
+                    datasets.DelayedDataset | None, ret.get('analyze', None)
+                )
 
                 if 'acquire' in ret:
                     iq = ret['acquire']['source']
@@ -419,18 +430,20 @@ class SweepIterator:
     @util.stopwatch('', 'sink', threshold=10e-3, logger_level=util.PERFORMANCE_INFO)
     def _intake(
         self,
-        results: 'xr.Dataset',
+        results: datasets.DelayedDataset,
         capture: specs.ResampledCapture,
     ) -> 'xr.Dataset | None':
-        if not isinstance(results, xr.Dataset):
+        if not isinstance(results, datasets.DelayedDataset):
             raise ValueError(
                 f'expected DelayedAnalysisResult type for data, not {type(results)}'
             )
 
+        ds = datasets.from_delayed(results)
+
         if self._sink is None:
-            return results
+            return ds
         else:
-            self._sink.append(results, capture)
+            self._sink.append(ds, capture)
 
 
 def iter_sweep(

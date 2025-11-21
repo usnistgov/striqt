@@ -242,31 +242,31 @@ def probe_soapy_info(device: SoapySDR.Device) -> SoapySourceInfo:
 
 
 @contextlib.contextmanager
-def read_retries(radio: SoapySourceBase) -> typing.Generator[None]:
-    """in this context, retry radio.read_iq on stream errors"""
+def read_retries(source: SoapySourceBase) -> typing.Generator[None]:
+    """in this context, retry source.read_iq on stream errors"""
 
     EXC_TYPES = (base.ReceiveStreamError, OverflowError)
 
-    max_count = radio.setup_spec.receive_retries
+    max_count = source.setup_spec.receive_retries
 
     if max_count == 0:
         yield
         return
 
     def prepare_retry(*args, **kws):
-        radio._rx_stream.enable(radio._device, False)
-        radio._buffers.skip_next_buffer_swap()
-        if not radio.setup_spec.time_sync_every_capture:
-            radio._sync_time_source(radio._device)
+        source._rx_stream.enable(source._device, False)
+        source._buffers.skip_next_buffer_swap()
+        if not source.setup_spec.time_sync_every_capture:
+            source._sync_time_source(source._device)
 
     decorate = util.retry(EXC_TYPES, tries=max_count + 1, exception_func=prepare_retry)
 
-    radio.read_iq, original = decorate(radio.read_iq), radio.read_iq
+    source.read_iq, original = decorate(source.read_iq), source.read_iq
 
     try:
         yield
     finally:
-        radio.read_iq = original
+        source.read_iq = original
 
 
 class RxStream:

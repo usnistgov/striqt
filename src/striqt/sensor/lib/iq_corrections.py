@@ -30,7 +30,7 @@ USE_OARESAMPLE = False
 
 def _get_voltage_scale(
     capture: specs.ResampledCapture,
-    radio: SourceBase,
+    source: SourceBase,
     *,
     force_calibration: 'xr.Dataset|None' = None,
     xp=None,
@@ -46,18 +46,18 @@ def _get_voltage_scale(
     # fields in case this is a specialized capture subclass
 
     if force_calibration is None:
-        cal_data = getattr(radio.setup_spec, 'calibration', None)
+        cal_data = getattr(source.setup_spec, 'calibration', None)
     else:
         cal_data = force_calibration
 
     if isinstance(capture, specs.SoapyCapture):
         power_scale = calibration.lookup_power_correction(
-            cal_data, capture, radio.setup_spec.base_clock_rate, xp=xp
+            cal_data, capture, source.setup_spec.base_clock_rate, xp=xp
         )
     else:
         power_scale = None
 
-    transport_dtype = radio.setup_spec.transport_dtype
+    transport_dtype = source.setup_spec.transport_dtype
     if transport_dtype == 'int16':
         adc_scale = 1.0 / float(np.iinfo(transport_dtype).max)
     else:
@@ -77,7 +77,7 @@ def _get_voltage_scale(
 def resampling_correction(
     iq_in: AcquiredIQ,
     capture: specs.ResampledCapture,
-    radio: SourceBase,
+    source: SourceBase,
     force_calibration: typing.Optional['xr.Dataset'] = None,
     *,
     overwrite_x=False,
@@ -102,10 +102,10 @@ def resampling_correction(
     xp = iqwaveform.util.array_namespace(iq)
 
     vscale, prescale = _get_voltage_scale(
-        capture, radio, force_calibration=force_calibration, xp=xp
+        capture, source, force_calibration=force_calibration, xp=xp
     )
 
-    if radio.setup_spec.uncalibrated_peak_detect:
+    if source.setup_spec.uncalibrated_peak_detect:
         logger = util.get_logger('analysis')
         peak_counts = xp.abs(iq).max(axis=-1)
         unscaled_peak = 20 * xp.log10(peak_counts * prescale) - 3
@@ -115,7 +115,7 @@ def resampling_correction(
     else:
         extra_data = dict()
 
-    resampler = radio.get_resampler(capture)
+    resampler = source.get_resampler(capture)
     fs = resampler['fs_sdr']
 
     needs_resample = base.needs_resample(resampler, capture)
@@ -158,9 +158,9 @@ def resampling_correction(
             scale=1 if vscale is None else vscale,
         )
         scale = resampler['nfft_out'] / resampler['nfft']
-        oapad = base._get_oaresample_pad(radio.setup_spec.base_clock_rate, capture)
+        oapad = base._get_oaresample_pad(source.setup_spec.base_clock_rate, capture)
         lag_pad = base._get_aligner_pad_size(
-            radio.setup_spec.base_clock_rate, capture, radio._aligner
+            source.setup_spec.base_clock_rate, capture, source._aligner
         )
         size_out = round(capture.duration * capture.sample_rate) + round(
             (oapad[1] + lag_pad) * scale
@@ -184,8 +184,8 @@ def resampling_correction(
 
     size_out = round(capture.duration * capture.sample_rate)
 
-    if radio._aligner is not None:
-        align_start = radio._aligner(iq[:, :size_out], capture)
+    if source._aligner is not None:
+        align_start = source._aligner(iq[:, :size_out], capture)
         offset = round(align_start * capture.sample_rate)
         assert iq.shape[1] >= offset + size_out, ValueError(
             'waveform is too short to align'

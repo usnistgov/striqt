@@ -19,8 +19,8 @@ _TS = typing.TypeVar('_TS', bound=specs.FunctionSourceSpec)
 _TC = typing.TypeVar('_TC', bound=specs.ResampledCapture)
 
 
-def _lo_shift_tone(inds, radio: base.SourceBase, xp, lo_offset=None):
-    design = radio.get_resampler()
+def _lo_shift_tone(inds, source: base.SourceBase, xp, lo_offset=None):
+    design = source.get_resampler()
     if lo_offset is None:
         lo_offset = design['lo_offset']
     phase_scale = (2j * np.pi * lo_offset) / design['fs_sdr']

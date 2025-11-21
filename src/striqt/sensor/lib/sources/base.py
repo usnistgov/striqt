@@ -123,13 +123,13 @@ class _ReceiveBuffers:
 
 
 def _cast_iq(
-    radio: SourceBase, buffer: 'ArrayType', acquired_count: int
+    source: SourceBase, buffer: 'ArrayType', acquired_count: int
 ) -> 'ArrayType':
     """cast the buffer to floating point, if necessary"""
     # array_namespace will categorize cupy pinned memory as numpy
-    dtype_in = np.dtype(radio.__setup__.transport_dtype)
+    dtype_in = np.dtype(source.setup_spec.transport_dtype)
 
-    if radio.__setup__.array_backend == 'cupy':
+    if source.setup_spec.array_backend == 'cupy':
         assert cp is not None, ImportError('cupy is not installed')
         xp = cp
         buffer = pinned_array_as_cupy(buffer)
@@ -841,7 +841,7 @@ def get_channel_read_buffer_count(source: SourceBase, include_holdoff=False) -> 
     'allocate buffers', 'source', threshold=5e-3, logger_level=logging.DEBUG
 )
 def alloc_empty_iq(
-    radio: SourceBase,
+    source: SourceBase,
     capture: specs.ResampledCapture,
     prior: typing.Optional['np.ndarray'] = None,
 ) -> 'tuple[np.ndarray, tuple[np.ndarray, list[np.ndarray]]]':
@@ -850,9 +850,9 @@ def alloc_empty_iq(
     Returns:
         The buffer and the list of buffer references for streaming.
     """
-    count = get_channel_read_buffer_count(radio, include_holdoff=True)
+    count = get_channel_read_buffer_count(source, include_holdoff=True)
 
-    if radio.setup_spec.array_backend == 'cupy':
+    if source.setup_spec.array_backend == 'cupy':
         try:
             util.configure_cupy()
             from cupyx import empty_pinned as empty  # type: ignore
@@ -863,7 +863,7 @@ def alloc_empty_iq(
     else:
         empty = np.empty
 
-    buf_dtype = np.dtype(radio.setup_spec.transport_dtype)
+    buf_dtype = np.dtype(source.setup_spec.transport_dtype)
 
     # fast reinterpretation between dtypes requires the waveform to be in the last axis
     # ports = capture.port
@@ -880,10 +880,10 @@ def alloc_empty_iq(
 
     # build the list of channel buffers that will actuall be filled with data,
     # including references to the throwaway buffer of extras in case of
-    # radio._setup.stream_all_rx_ports
-    num_rx_ports = radio.info.infer_port_count(len(ports))
-    if radio.setup_spec.stream_all_rx_ports and len(ports) != num_rx_ports:
-        if radio.setup_spec.transport_dtype == 'complex64':
+    # source.setup_spec.stream_all_rx_ports
+    num_rx_ports = source.info.infer_port_count(len(ports))
+    if source.setup_spec.stream_all_rx_ports and len(ports) != num_rx_ports:
+        if source.setup_spec.transport_dtype == 'complex64':
             # a throwaway buffer for samples that won't be returned
             extra_count = count
         else:
@@ -901,7 +901,7 @@ def alloc_empty_iq(
         if channel in ports:
             buffers.append(typing.cast(np.ndarray, samples[i].view(buf_dtype)))
             i += 1
-        elif radio.setup_spec.stream_all_rx_ports:
+        elif source.setup_spec.stream_all_rx_ports:
             assert extra is not None
             buffers.append(extra)
 
