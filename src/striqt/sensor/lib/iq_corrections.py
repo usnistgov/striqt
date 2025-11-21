@@ -46,7 +46,7 @@ def _get_voltage_scale(
     # fields in case this is a specialized capture subclass
 
     if force_calibration is None:
-        cal_data = getattr(radio.__setup__, 'calibration', None)
+        cal_data = getattr(radio.setup_spec, 'calibration', None)
     else:
         cal_data = force_calibration
 
@@ -57,7 +57,7 @@ def _get_voltage_scale(
     else:
         power_scale = None
 
-    transport_dtype = radio.__setup__.transport_dtype
+    transport_dtype = radio.setup_spec.transport_dtype
     if transport_dtype == 'int16':
         adc_scale = 1.0 / float(np.iinfo(transport_dtype).max)
     else:
@@ -105,7 +105,7 @@ def resampling_correction(
         capture, radio, force_calibration=force_calibration, xp=xp
     )
 
-    if radio.__setup__.uncalibrated_peak_detect:
+    if radio.setup_spec.uncalibrated_peak_detect:
         logger = util.get_logger('analysis')
         peak_counts = xp.abs(iq).max(axis=-1)
         unscaled_peak = 20 * xp.log10(peak_counts * prescale) - 3

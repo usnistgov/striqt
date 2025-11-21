@@ -712,6 +712,10 @@ class SoapySourceBase(
 
         if self._sweep_time is None:
             self._sweep_time = ts
+            self._sweep_index = self.capture_spec._sweep_index
+        elif self._sweep_index != self.capture_spec._sweep_index:
+            self._sweep_time = ts
+            self._sweep_index = self.capture_spec._sweep_index
 
         return specs.SoapyAcquisitionInfo(
             sweep_time=self._sweep_time,

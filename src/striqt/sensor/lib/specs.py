@@ -89,7 +89,7 @@ class ResampledCapture(analysis.Capture, frozen=True, kw_only=True):
     backend_sample_rate: Optional[BackendSampleRateType] = None
 
     # a counter used to track the loop index for Repeat(None)
-    sweep_index: int = 0
+    _sweep_index: int = 0
 
 
 class _ResampledCaptureKeywords(analysis.specs._CaptureKeywords, total=False):
@@ -218,7 +218,7 @@ class Source(SpecBase, frozen=True, kw_only=True):
     cupy_max_fft_chunk_size: Optional[int] = None
 
     # validation data
-    uncalibrated_peak_detect: Union[bool, Literal['auto']] = 'auto'
+    uncalibrated_peak_detect: Union[bool, Literal['auto']] = False
 
     transient_holdoff_time: typing.ClassVar[float] = 0
     stream_all_rx_ports: typing.ClassVar[bool | None] = False
@@ -253,6 +253,8 @@ class SoapySource(Source, frozen=True, kw_only=True):
     time_sync_every_capture: TimeSyncEveryCaptureType = False
     clock_source: ClockSourceType = 'internal'
     receive_retries: ReceiveRetriesType = 0
+
+    uncalibrated_peak_detect: Union[bool, Literal['auto']] = True
 
     # True if the same clock drives acquisition on all RX ports
     shared_rx_sample_clock = True

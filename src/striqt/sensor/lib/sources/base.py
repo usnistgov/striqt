@@ -467,14 +467,6 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
             )
 
     def _build_acquisition_info(self, time_ns: int | None) -> specs.AcquisitionInfo:
-        if time_ns is None:
-            ts = None
-        else:
-            ts = pd.Timestamp(time_ns, unit='ns')
-
-        if self._sweep_time is None:
-            self._sweep_time = ts
-
         return specs.AcquisitionInfo(source_id=self.id)
 
     def _read_stream(
