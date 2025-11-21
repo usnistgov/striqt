@@ -331,7 +331,7 @@ class SweepIterator:
                 elif self._always_yield:
                     yield None
 
-    @util.stopwatch('✓', 'source', logger_level=util.PERFORMANCE_INFO)
+    @util.stopwatch('', 'source', logger_level=util.PERFORMANCE_INFO)
     def _acquire(
         self,
         iq_prev: sources.AcquiredIQ | None,
@@ -416,7 +416,7 @@ class SweepIterator:
 
         return dict(data, sensor_system_noise=system_noise)
 
-    @util.stopwatch('✓', 'sink', threshold=10e-3, logger_level=util.PERFORMANCE_INFO)
+    @util.stopwatch('', 'sink', threshold=10e-3, logger_level=util.PERFORMANCE_INFO)
     def _intake(
         self,
         results: 'xr.Dataset',

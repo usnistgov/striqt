@@ -277,7 +277,7 @@ class AnalysisCaller:
         self.__name__ = 'analyze'
         self.__qualname__ = 'analyze'
 
-    @util.stopwatch('✓', 'analysis', logger_level=util.PERFORMANCE_INFO)
+    @util.stopwatch('', 'analysis', logger_level=util.PERFORMANCE_INFO)
     def __call__(
         self,
         iq: AcquiredIQ,
