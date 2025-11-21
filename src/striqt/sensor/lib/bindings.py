@@ -32,8 +32,6 @@ def tagged_subclass(
         (),
         bases=(cls,),
         frozen=True,
-        forbid_unknown_fields=True,
-        cache_hash=True,
         tag=str,
         tag_field=tag_field,
         kw_only=True,
@@ -101,7 +99,7 @@ def bind_sensor(
     class BoundSweep(sensor.sweep_spec, frozen=True, kw_only=True):
         __bindings__ = binding
 
-        mock_sensor: typing.Optional[str] = None
+        mock_source: typing.Optional[str] = None
         source: schema.source = msgspec.field(default_factory=schema.source)  # type: ignore
         captures: tuple[schema.capture, ...] = ()  # type: ignore
         peripherals: schema.peripherals = msgspec.field(  # type: ignore
@@ -109,11 +107,11 @@ def bind_sensor(
         )
 
         def __post_init__(self):
-            if self.mock_sensor is None:
+            if self.mock_source is None:
                 pass
-            elif self.mock_sensor not in registry.keys():
+            elif self.mock_source not in registry.keys():
                 raise TypeError(
-                    f'mock_sensor {self.mock_sensor!r}: no sensor was bound with this name. '
+                    f'mock_sensor {self.mock_source!r}: no sensor was bound with this name. '
                     f'valid binding names are {tuple(registry)!r}'
                 )
             super().__post_init__()
@@ -132,24 +130,19 @@ def get_registry() -> dict[str, SensorBinding]:
     return dict(registry)
 
 
-def get_binding(key: str | specs.Sweep) -> SensorBinding:
-    if isinstance(key, str):
-        return registry[key]
+def get_binding(key: str|specs.Sweep, mock_source: str | None = None) -> SensorBinding:
+    if isinstance(key, specs.Sweep):
+        binding = registry[type(key).__name__]
+    elif isinstance(key, str):
+        binding = registry[key]
+    else:
+        raise TypeError('key must be a string')
 
-    spec = typing.cast('BoundSweep', key)
-    if not isinstance(spec, specs.Sweep):
-        raise TypeError('key must be a string or a SweepSpec')
+    if mock_source is not None:
+        mock_name = f'mock_{mock_source}_{key}'
 
-    # work through a mock substitution
-    binding = registry[type(spec).__name__]
-
-    if binding.sweep_spec.mock_sensor is None:
-        return binding
-    elif spec.__bindings__ is not None and spec.mock_sensor is not None:
-        mock_name = f'mock_{spec.mock_sensor}_{key}'
-
-        mock_binding = get_binding(spec.mock_sensor)
-        hybrid_binding = bind_sensor(
+        mock_binding = get_binding(mock_source)
+        binding = bind_sensor(
             mock_name,
             Sensor(
                 source=mock_binding.source,
@@ -163,8 +156,8 @@ def get_binding(key: str | specs.Sweep) -> SensorBinding:
                 peripherals=binding.schema.peripherals
             )
         )
-        print('return binding')
-        return hybrid_binding
+
+    return binding
 
 
 

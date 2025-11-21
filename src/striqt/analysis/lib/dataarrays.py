@@ -198,18 +198,17 @@ def dataarray_stub(
     dims: tuple[str, ...] | None,
     coord_factories: tuple[register.CallableCoordinateFactory, ...],
     dtype: str,
-    coord_registry: register.CoordinateRegistry,
     expand_dims: tuple[str, ...] | None = None,
 ) -> typing.Any:
     """return an empty array of type `cls`"""
 
     coord_stubs = {}
     for func in coord_factories:
-        info = coord_registry[func]
+        info = register.registry.coordinates[func]
         coord_stubs[info.name] = _empty_stub(info.dims, info.dtype, attrs=info.attrs)
 
     if dims is None or dims == ():
-        dims = _infer_coord_dims(coord_factories, coord_registry)
+        dims = _infer_coord_dims(coord_factories)
 
     data_stub = _empty_stub(dims, dtype)
     stub = xr.DataArray(data=data_stub, dims=dims, coords=coord_stubs)
@@ -238,7 +237,6 @@ def _reraise_coord_error(*, exc, coord, factory_info, data, name):
 def build_dataarray(
     delayed: DelayedDataArray,
     *,
-    coord_registry: register.CoordinateRegistry,
     expand_dims=None,
 ) -> 'xr.DataArray':
     """build an `xarray.DataArray` from an ndarray, capture information, and channel analysis keyword arguments"""
@@ -247,7 +245,6 @@ def build_dataarray(
         delayed.info.dims,
         delayed.info.coord_factories,
         delayed.info.dtype,
-        coord_registry=coord_registry,
         expand_dims=expand_dims,
     )
     data = np.asarray(delayed.result)
@@ -282,7 +279,7 @@ def build_dataarray(
         ) from ex
 
     for coord_factory in delayed.info.coord_factories:
-        factory_info = coord_registry[coord_factory]
+        factory_info = register.registry.coordinates[coord_factory]
         coord = da[factory_info.name]
 
         ret = coord_factory(delayed.capture, delayed.spec)
@@ -310,7 +307,6 @@ def build_dataarray(
 @util.lru_cache()
 def _infer_coord_dims(
     coord_factories: tuple[register.CallableCoordinateFactory, ...],
-    coord_registry: register.CoordinateRegistry,
 ) -> tuple[str, ...]:
     """guess dimensions of a dataarray based on its coordinates.
 
@@ -322,7 +318,7 @@ def _infer_coord_dims(
     # build an ordered list of unique coordinates
     coord_dims = {}
     for func in coord_factories:
-        coord = coord_registry[func]
+        coord = register.registry.coordinates[func]
         if coord is None:
             continue
         empty_coords = dict.fromkeys(coord.dims or {}, None)
@@ -332,9 +328,7 @@ def _infer_coord_dims(
 
 def _validate_delayed_ndim(delayed: DelayedDataArray) -> None:
     if delayed.info.dims is None:
-        expect_dims = _infer_coord_dims(
-            delayed.info.coord_factories, delayed.coord_registry
-        )
+        expect_dims = _infer_coord_dims(delayed.info.coord_factories)
     else:
         expect_dims = delayed.info.dims
 
@@ -363,7 +357,6 @@ class DelayedDataArray(collections.UserDict):
     result: AnalysisResult
     info: register.MeasurementInfo
     attrs: dict
-    coord_registry: register.CoordinateRegistry
 
     def compute(self) -> DelayedDataArray:
         return DelayedDataArray(
@@ -373,13 +366,10 @@ class DelayedDataArray(collections.UserDict):
             result=_results_as_arrays(self.result),
             info=self.info,
             attrs=self.attrs,
-            coord_registry=self.coord_registry,
         )
 
     def to_xarray(self, expand_dims=None) -> 'xr.DataArray':
-        return build_dataarray(
-            self, coord_registry=self.coord_registry, expand_dims=expand_dims
-        )
+        return build_dataarray(self, expand_dims=expand_dims)
 
 
 def select_parameter_kws(locals_: dict, omit=(PORT_DIM, 'out')) -> dict:

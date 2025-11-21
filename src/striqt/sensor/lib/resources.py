@@ -142,6 +142,12 @@ class ConnectionManager(
         else:
             raise TypeError(f'connections {missing!r} are incomplete')
 
+
+def _setup_logging(sink: specs.Sink, formatter):
+    log_path = formatter(sink.log_path)
+    util.log_to_file(log_path, sink.log_level)
+
+
 def open_sensor(
     spec: specs.Sweep[_TS, _TP, _TC],
     spec_path: str | Path | None = None,
@@ -163,8 +169,6 @@ def open_sensor(
 
     import_extensions(spec.extensions, formatter)
 
-    if spec.sink.log_path is not None:
-        util.log_to_file(spec.sink.log_path, spec.sink.log_level)
 
     bind = get_binding(spec)
     conn = ConnectionManager(sweep_spec=spec)
@@ -190,6 +194,9 @@ def open_sensor(
             'calibration': util.Call(conn.get, 'calibration', load_calibration, spec, formatter),
             'peripherals': util.Call(conn.open, 'peripherals', bind.peripherals, spec),
         }
+
+        if spec.sink.log_path is not None:
+            calls['log_to_file'] = util.Call(_setup_logging, spec.sink, formatter)
 
         with util.stopwatch(f'open {", ".join(calls)}', **timer_kws):  # type: ignore
             util.concurrently_with_fg(calls)

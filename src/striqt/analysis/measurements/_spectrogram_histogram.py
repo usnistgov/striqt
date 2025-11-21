@@ -16,11 +16,7 @@ else:
 
 
 class SpectrogramHistogramSpec(
-    shared.SpectrogramSpec,
-    forbid_unknown_fields=True,
-    cache_hash=True,
-    kw_only=True,
-    frozen=True,
+    shared.SpectrogramSpec,kw_only=True, frozen=True, dict=True,
 ):
     power_low: float
     power_high: float

@@ -422,7 +422,7 @@ def design_cola_resampler(
     Returns:
         (SDR sample rate, RF LO frequency offset in Hz, ola_filter_kws)
     """
-
+    
     if bw == INF and shift:
         raise ValueError(
             'frequency shifting may only be applied when an analysis bandwidth is specified'

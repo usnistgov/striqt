@@ -306,7 +306,7 @@ class SweepIterator:
                     pass
                 else:
                     assert csink is not None
-                    result.set_peripheral_data(prior_ext_data)
+                    result.extra_data.update(prior_ext_data)
                     calls['intake'] = util.Call(
                         self._intake,
                         results=result.to_xarray(),

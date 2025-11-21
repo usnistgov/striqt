@@ -3,6 +3,7 @@ from __future__ import annotations
 import dataclasses
 import functools
 import logging
+import time
 import types
 import typing
 from collections import defaultdict
@@ -156,13 +157,20 @@ def _cast_iq(
 
 
 class BaseSourceInfo(specs.SpecBase, kw_only=True, frozen=True, cache_hash=True):
-    num_rx_ports: int
+    num_rx_ports: int|None
 
     def to_capture_cls(self, base_cls: type[_TC] = specs.ResampledCapture) -> type[_TC]:
         return base_cls
 
     def to_setup_cls(self, base_cls: type[_TS] = specs.Source) -> type[_TS]:
         return base_cls
+
+    def infer_port_count(self, tuple_size: int):
+        if self.num_rx_ports is None:
+            return tuple_size
+        else:
+            return self.num_rx_ports
+
 
 
 _source_id_map: dict[specs.Source, SourceBase | Event] = defaultdict(Event)
@@ -177,11 +185,15 @@ def get_source_id(spec: specs.Source, timeout=0.2) -> str:
     obj = _source_id_map[spec]
 
     if isinstance(obj, Event):
-        obj.wait(timeout=timeout)
-        source = typing.cast(SourceBase, _source_id_map[spec])
+        if not obj.wait(timeout=timeout):
+            raise TimeoutError('timeout while waiting for a source ID')
+        source = _source_id_map[spec]
+        assert isinstance(source, SourceBase)
     else:
         source = obj
 
+    # this triggers a property access that may have its own
+    # blocking wait
     return source.id
 
 
@@ -246,9 +258,15 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
         self._capture = None
         self._buffers = _ReceiveBuffers(self)
 
-        self._connect(setup)
-        self._is_open = True
-        open_event.set()
+        try:
+            self._connect(setup)
+        except:
+            self._is_open = False
+            raise
+        else:
+            self._is_open = True
+        finally:
+            open_event.set()
 
         if setup.channel_sync_source is None:
             self._aligner = None
@@ -843,7 +861,7 @@ def alloc_empty_iq(
     """
     count = get_channel_read_buffer_count(radio, include_holdoff=True)
 
-    if radio.__setup__.array_backend == 'cupy':
+    if radio.setup_spec.array_backend == 'cupy':
         try:
             util.configure_cupy()
             from cupyx import empty_pinned as empty  # type: ignore
@@ -854,7 +872,7 @@ def alloc_empty_iq(
     else:
         empty = np.empty
 
-    buf_dtype = np.dtype(radio.__setup__.transport_dtype)
+    buf_dtype = np.dtype(radio.setup_spec.transport_dtype)
 
     # fast reinterpretation between dtypes requires the waveform to be in the last axis
     # ports = capture.port
@@ -872,8 +890,9 @@ def alloc_empty_iq(
     # build the list of channel buffers that will actuall be filled with data,
     # including references to the throwaway buffer of extras in case of
     # radio._setup.stream_all_rx_ports
-    if radio.__setup__.stream_all_rx_ports and len(ports) != radio.info.num_rx_ports:
-        if radio.__setup__.transport_dtype == 'complex64':
+    num_rx_ports = radio.info.infer_port_count(len(ports))
+    if radio.setup_spec.stream_all_rx_ports and len(ports) != num_rx_ports:
+        if radio.setup_spec.transport_dtype == 'complex64':
             # a throwaway buffer for samples that won't be returned
             extra_count = count
         else:
@@ -887,11 +906,11 @@ def alloc_empty_iq(
 
     buffers = []
     i = 0
-    for channel in range(radio.info.num_rx_ports):
+    for channel in range(num_rx_ports):
         if channel in ports:
             buffers.append(typing.cast(np.ndarray, samples[i].view(buf_dtype)))
             i += 1
-        elif radio.__setup__.stream_all_rx_ports:
+        elif radio.setup_spec.stream_all_rx_ports:
             assert extra is not None
             buffers.append(extra)
 

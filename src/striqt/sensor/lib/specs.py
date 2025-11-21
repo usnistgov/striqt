@@ -138,24 +138,12 @@ class DiracDeltaCaptureSpec(ResampledCapture, frozen=True, kw_only=True):
     power: PowerType = 0
 
 
-class SawtoothCaptureSpec(
-    ResampledCapture,
-    forbid_unknown_fields=True,
-    frozen=True,
-    cache_hash=True,
-    kw_only=True,
-):
+class SawtoothCaptureSpec(ResampledCapture,kw_only=True, frozen=True, dict=True):
     period: PeriodType = 0.01
     power: PowerType = 1
 
 
-class NoiseCaptureSpec(
-    ResampledCapture,
-    forbid_unknown_fields=True,
-    frozen=True,
-    cache_hash=True,
-    kw_only=True,
-):
+class NoiseCaptureSpec(ResampledCapture,kw_only=True, frozen=True, dict=True):
     power_spectral_density: PSDType = 1e-17
 
 
@@ -322,13 +310,7 @@ FileLoopType = Annotated[
 ]
 
 
-class FileSourceSpec(
-    NoSource,
-    forbid_unknown_fields=True,
-    frozen=True,
-    cache_hash=True,
-    kw_only=True,
-):
+class FileSourceSpec(NoSource, kw_only=True, frozen=True, dict=True):
     path: WaveformInputPath
     file_format: FormatType = 'auto'
     file_metadata: FileMetadataType = {}
@@ -589,7 +571,6 @@ class CalibrationSweep(
     typing.Generic[_TS, _TP, _TC, _TPC],
     frozen=True,
     kw_only=True,
-    **kws,
 ):
     """This specialized sweep is fed to the YAML file loader
     to specify the change in expected capture structure."""
@@ -659,3 +640,17 @@ class FileAcquisitionInfo(AcquisitionInfo):
     port: PortType = 0
     gain: GainType = float('nan')
     source_id: SourceIDType = ''
+
+
+@util.lru_cache()
+def dataclass_fields(cls: type[AcquisitionInfo]) -> tuple[msgspec.structs.FieldInfo, ...]:
+    import msgspec
+    hints = typing.get_type_hints(cls)
+    return tuple([
+        msgspec.structs.FieldInfo(
+            name=f.name,
+            encode_name=f.name,
+            type=hints[f.name],
+        )
+        for f in dataclasses.fields(cls)
+    ])

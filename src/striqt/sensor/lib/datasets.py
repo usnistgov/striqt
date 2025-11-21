@@ -72,6 +72,9 @@ def _msgspec_type_to_coord_info(type_: msgspec.inspect.Type) -> tuple[dict, typi
 
     BUILTINS = {mi.FloatType: 0.0, mi.BoolType: False, mi.IntType: 0, mi.StrType: ''}
 
+    if not isinstance(type_, mi.Type):
+        type_ = mi.type_info(type_)
+
     if isinstance(type_, tuple(BUILTINS.keys())):
         # dicey if subclasses show up
         return {}, BUILTINS[type(type_)]
@@ -98,8 +101,12 @@ def _msgspec_type_to_coord_info(type_: msgspec.inspect.Type) -> tuple[dict, typi
             raise TypeError(
                 f'cannot determine xarray type for union of msgspec types {names!r}'
             )
+    # elif getattr(type_, '__name__', None) == 'Annotated':
+    #     args = typing.get_args(type_)
+    #     if len(args) == 2:
+    #         return _msgspec_type_to_coord_info(mi.Metadata(type=args[0]))
     else:
-        raise TypeError(f'unsupported msgspec field type {type(type_).__qualname__}')
+        raise TypeError(f'unsupported msgspec field type {type_!r}')
 
 
 @util.lru_cache()
@@ -112,7 +119,7 @@ def coord_template(
     """returns a cached xr.Coordinates object to use as a template for data results"""
 
     capture_fields = msgspec.structs.fields(capture_cls)
-    info_fields = msgspec.structs.fields(info_cls)
+    info_fields = specs.dataclass_fields(info_cls)
     vars = {}
 
     for field in capture_fields + info_fields:

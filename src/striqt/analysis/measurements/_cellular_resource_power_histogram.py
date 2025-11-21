@@ -21,11 +21,7 @@ else:
 
 
 class CellularResourcePowerHistogramSpec(
-    specs.Measurement,
-    forbid_unknown_fields=True,
-    cache_hash=True,
-    kw_only=True,
-    frozen=True,
+    specs.Measurement,kw_only=True, frozen=True, dict=True,
 ):
     window: specs.WindowType
     subcarrier_spacing: float

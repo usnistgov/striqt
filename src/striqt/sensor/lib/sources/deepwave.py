@@ -12,37 +12,19 @@ else:
     psutil = util.lazy_import('psutil')
 
 
-class Air7101BSourceSpec(
-    specs.SoapySource,
-    forbid_unknown_fields=True,
-    frozen=True,
-    cache_hash=True,
-    kw_only=True,
-):
+class Air7101BSourceSpec(specs.SoapySource, kw_only=True, frozen=True):
     base_clock_rate: specs.BaseClockRateType = 125e6
     rx_enable_delay = 0.35
     transient_holdoff_time = 2e-3
 
 
-class Air7201BSourceSpec(
-    specs.SoapySource,
-    forbid_unknown_fields=True,
-    frozen=True,
-    cache_hash=True,
-    kw_only=True,
-):
+class Air7201BSourceSpec(specs.SoapySource,kw_only=True, frozen=True):
     base_clock_rate: specs.BaseClockRateType = 125e6
     rx_enable_delay = 0.35
     transient_holdoff_time = 2e-3
 
 
-class Air8201BSourceSpec(
-    specs.SoapySource,
-    forbid_unknown_fields=True,
-    frozen=True,
-    cache_hash=True,
-    kw_only=True,
-):
+class Air8201BSourceSpec(specs.SoapySource,kw_only=True, frozen=True):
     base_clock_rate: specs.BaseClockRateType = 125e6
     rx_enable_delay = 0.4
     transient_holdoff_time = 2e-3

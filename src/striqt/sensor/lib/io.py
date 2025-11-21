@@ -65,6 +65,13 @@ def read_yaml_spec(
 
     if not isinstance(tree, dict):
         raise TypeError('yaml file does not specify a dict structure')
+    
+    mock_source = tree.get('mock_source', None)
+    if mock_source is not None:
+        assert 'sensor_binding' in tree, TypeError('missing "sensor_binding"')
+        from .bindings import get_binding
+        mock_name = get_binding(tree['sensor_binding'], mock_source).sweep_spec.__name__
+        tree['sensor_binding'] = mock_name
 
     spec = convert_dict(tree, type=get_tagged_sweep_type())
 

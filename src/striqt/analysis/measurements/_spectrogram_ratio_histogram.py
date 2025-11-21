@@ -16,11 +16,7 @@ else:
 
 
 class SpectrogramHistogramRatioSpec(
-    _spectrogram_histogram.SpectrogramHistogramSpec,
-    forbid_unknown_fields=True,
-    cache_hash=True,
-    kw_only=True,
-    frozen=True,
+    _spectrogram_histogram.SpectrogramHistogramSpec,kw_only=True, frozen=True, dict=True,
 ):
     pass
 

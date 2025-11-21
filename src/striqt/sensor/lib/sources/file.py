@@ -85,7 +85,7 @@ class FileSource(base.VirtualSourceBase[specs.FileSourceSpec, specs.FileCapture]
         self._file_stream = io.open_bare_iq(
             spec.path,
             format=spec.file_format,
-            num_rx_ports=self.info.num_rx_ports,
+            num_rx_ports=self.info.num_rx_ports or 1,
             dtype='complex64',
             xp=self.get_array_namespace(),
             loop=spec.loop,

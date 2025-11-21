@@ -16,11 +16,7 @@ else:
 
 
 class PowerSpectralDensitySpec(
-    shared.FrequencyAnalysisSpecBase,
-    forbid_unknown_fields=True,
-    cache_hash=True,
-    kw_only=True,
-    frozen=True,
+    shared.FrequencyAnalysisSpecBase,kw_only=True, frozen=True, dict=True,
 ):
     time_statistic: tuple[typing.Union[str, float], ...] = (('mean',),)
 
@@ -70,7 +66,7 @@ def power_spectral_density(
     spec = PowerSpectralDensitySpec.fromdict(kwargs)
     spg_spec = shared.SpectrogramSpec.fromspec(spec)
 
-    from striqt.waveform.fourier import stat_ufunc_from_shorthand
+    from striqt.waveform.power_analysis import stat_ufunc_from_shorthand
     from striqt.waveform.util import array_namespace, axis_index
 
     working_dtype = 'float32'

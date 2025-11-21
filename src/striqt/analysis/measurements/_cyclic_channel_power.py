@@ -17,11 +17,7 @@ else:
 
 
 class CyclicChannelPowerSpec(
-    specs.Measurement,
-    forbid_unknown_fields=True,
-    cache_hash=True,
-    kw_only=True,
-    frozen=True,
+    specs.Measurement,kw_only=True, frozen=True, dict=True,
 ):
     cyclic_period: float
     detector_period: fractions.Fraction
@@ -81,4 +77,4 @@ def cyclic_channel_power(
     # move the capture axis to the front
     x = xp.moveaxis(x, -2, 0)
 
-    return striqt.waveform.powtodB(x).astype('float32')
+    return iqwaveform.powtodB(x).astype('float32')

@@ -8,7 +8,7 @@ if typing.TYPE_CHECKING:
     import numpy as np
     from scipy import signal
 else:
-    signal = lazy_import('signal', package='scipy')
+    signal = lazy_import('scipy.signal')
     np = lazy_import('numpy')
 
 

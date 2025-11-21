@@ -85,6 +85,11 @@ def _private_fields(capture_cls: type[SpecBase]) -> tuple[str, ...]:
 def convert_dict(obj: typing.Any, type: type[_T]) -> _T:
     return msgspec.convert(obj, type=type, strict=False, dec_hook=_dec_hook)
 
+def convert_spec(other: typing.Any, type: type[_T]) -> _T:
+    return msgspec.convert(
+        other, type=type, strict=False, from_attributes=True, dec_hook=_dec_hook
+    )
+
 
 class SpecBase(msgspec.Struct, kw_only=True, frozen=True, forbid_unknown_fields=True, cache_hash=True):
     """Base type for structures that support validated
@@ -121,9 +126,7 @@ class SpecBase(msgspec.Struct, kw_only=True, frozen=True, forbid_unknown_fields=
 
     @classmethod
     def fromspec(cls: type[_T], other: SpecBase) -> _T:
-        return msgspec.convert(
-            other, type=cls, strict=False, from_attributes=True, dec_hook=_dec_hook
-        )
+        return convert_spec(other, type=cls)
 
     @classmethod
     def fromjson(cls: type[_T], d: str | bytes) -> _T:
@@ -160,7 +163,7 @@ SampleRateType = Annotated[float, meta('Analysis sample rate', 'S/s')]
 AnalysisBandwidthType = Annotated[float, meta('Analysis bandwidth', 'Hz')]
 
 
-class Capture(SpecBase, kw_only=True, frozen=True, **kws):
+class Capture(SpecBase, kw_only=True, frozen=True):
     """bare minimum information about an IQ acquisition"""
 
     # acquisition

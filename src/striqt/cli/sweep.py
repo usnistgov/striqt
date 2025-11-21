@@ -10,7 +10,8 @@ def run(**kws):
     from striqt import sensor
 
     do_tui = kws.pop('tui')
-    except_handler = sensor.util.DebugOnException(enable=kws['debug'])
+    except_handler = sensor.util.DebugOnException(enable=kws['debug'], verbose=kws['verbose'])
+    sys.excepthook = except_handler.run
 
     yaml_path = kws['yaml_path']
 
@@ -38,13 +39,10 @@ def run(**kws):
             store_backend=kws['store_backend'],
         )
 
-        try:
-            with sensor.open_sensor(spec, yaml_path, except_handler) as ctx:
-                sweep_iter = sensor.SweepIterator(ctx.resources, always_yield=True)
-                for _ in sweep_iter:
-                    pass
-        except BaseException as ex:
-            except_handler.run(type(ex), ex, ex.__traceback__)
+        with sensor.open_sensor(spec, yaml_path, except_handler) as ctx:
+            sweep_iter = sensor.SweepIterator(ctx.resources, always_yield=True)
+            for _ in sweep_iter:
+                pass
 
 if __name__ == '__main__':
     run()

@@ -115,7 +115,7 @@ def resampling_correction(
     else:
         extra_data = dict()
 
-    resampler = radio.get_resampler()
+    resampler = radio.get_resampler(capture)
     fs = resampler['fs_sdr']
 
     needs_resample = base.needs_resample(resampler, capture)

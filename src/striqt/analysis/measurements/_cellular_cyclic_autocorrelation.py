@@ -18,11 +18,7 @@ else:
 
 
 class CellularCyclicAutocorrelationSpec(
-    specs.Measurement,
-    forbid_unknown_fields=True,
-    cache_hash=True,
-    kw_only=True,
-    frozen=True,
+    specs.Measurement,kw_only=True, frozen=True, dict=True,
 ):
     subcarrier_spacings: typing.Union[float, tuple[float, ...]] = (15e3, 30e3, 60e3)
     frame_range: typing.Union[int, tuple[int, typing.Optional[int]]] = (0, 1)
@@ -180,9 +176,9 @@ def _get_phy_mapping(
     sample_rate: float,
     subcarrier_spacings: tuple[float, ...],
     xp=np,
-) -> dict[str, striqt.waveform.ofdm.Phy3GPP]:
+) -> dict[str, iqwaveform.ofdm.Phy3GPP]:
     return {
-        scs: striqt.waveform.ofdm.Phy3GPP(
+        scs: iqwaveform.ofdm.Phy3GPP(
             channel_bandwidth, scs, sample_rate=sample_rate, xp=xp
         )
         for scs in subcarrier_spacings

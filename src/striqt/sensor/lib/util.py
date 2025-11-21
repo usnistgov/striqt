@@ -526,8 +526,10 @@ class DebugOnException:
     def __init__(
         self,
         enable: bool = False,
+        verbose: bool = False
     ):
         self.enable = enable
+        self.verbose = verbose
         self.prev = None
         self.lock = threading.RLock()
 
@@ -542,31 +544,32 @@ class DebugOnException:
         _handling_tracebacks = False        
 
     def run(self, etype, exc, tb):
-        print('****')
+        triplet = (etype, exc, tb)
+        from . import tracebacks
         with self.lock:
-            if (etype, exc, tb) == (None, None, None):
+            if triplet == (None, None, None):
                 return
-            elif self.prev == (etype, exc, tb):
+            elif self.prev == triplet:
                 return
-
-            from IPython.core import ultratb
 
             if not hasattr(sys, 'last_value'):
                 sys.last_value = exc
             if not hasattr(sys, 'last_traceback'):
                 sys.last_traceback = tb
 
-            handler = ultratb.FormattedTB(mode='Plain', call_pdb=self.enable)
+            if self.verbose:
+                handler = tracebacks.VerboseTB(call_pdb=self.enable, include_vars=True)
+            else:
+                handler = tracebacks.FormattedTB(call_pdb=self.enable)
 
             if isinstance(exc, ConcurrentException):
                 handler.call_pdb = False
-                handler = ultratb.FormattedTB(mode='Plain', call_pdb=False)
-                for thread_exc in exc.thread_exceptions:
-                    handler(type(thread_exc), thread_exc, thread_exc.__traceback__)
+                for th_exc in exc.thread_exceptions:
+                    handler(type(th_exc), th_exc, th_exc.__traceback__)
                 handler.call_pdb=self.enable
 
             handler(etype, exc, tb)
-            self.prev = (etype, exc, tb)
+            self.prev = triplet
 
 
 def exit_context(ctx: typing.ContextManager | None, exc_info=None):

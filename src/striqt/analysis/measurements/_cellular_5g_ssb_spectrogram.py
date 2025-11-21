@@ -18,12 +18,7 @@ else:
 
 # %% Cellular 5G NR synchronizatino
 class Cellular5GNRSSBSpectrogramSpec(
-    specs.Measurement,
-    forbid_unknown_fields=True,
-    cache_hash=True,
-    kw_only=True,
-    frozen=True,
-    dict=True,
+    specs.Measurement, kw_only=True, frozen=True, dict=True,
 ):
     """
     subcarrier_spacing (float): 3GPP channel subcarrier spacing (Hz)

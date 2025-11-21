@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import functools
 import numbers
+import string
 import typing
 from collections import Counter
 from datetime import datetime
@@ -11,7 +12,7 @@ from pathlib import Path
 
 from msgspec import UNSET, UnsetType
 
-from striqt.analysis import dataarrays
+from striqt.analysis.lib.specs import convert_spec
 
 from . import specs, util
 
@@ -189,11 +190,24 @@ def _get_path_fields(
     fields = capture_fields_with_aliases(source_id=id_, sink_spec=sweep.sink)
 
     fields['start_time'] = datetime.now().strftime('%Y%m%d-%Hh%Mm%S')
-    fields['sensor_bindings'] = type(sweep).__name__
+    fields['sensor_binding'] = type(sweep).__name__
     if spec_path is not None:
         fields['spec_name'] = Path(spec_path).stem
     fields['source_id'] = id_
 
+    return fields
+
+
+@util.lru_cache()
+def _get_format_fields(s: str):
+    """
+    Extracts and returns a list of formatting field names from a given format string.
+    """
+    formatter = string.Formatter()
+    fields = []
+    for _, field_name, *_ in formatter.parse(s):
+        if field_name is not None:
+            fields.append(field_name)
     return fields
 
 
@@ -203,6 +217,10 @@ class PathAliasFormatter:
         self.spec_path = spec_path
 
     def __call__(self, path: str | Path) -> str:
+        fields = _get_format_fields(str(path))
+        if len(fields) == 0:
+            return str(path)
+
         from .sources.base import get_source_id
 
         id_ = get_source_id(self.sweep_spec.source)
@@ -215,16 +233,10 @@ class PathAliasFormatter:
         try:
             path = Path(str(path).format(**fields))
         except KeyError as ex:
-            valid_fields = ', '.join(fields.keys())
+            valid_fields = tuple(fields.keys())
             raise ValueError(f'valid formatting fields are {valid_fields!r}') from ex
 
         return str(path)
-
-
-class _NoSweep(specs.Sweep, frozen=True, forbid_unknown_fields=False):
-    # a sweep with captures that express only the parameters that impact capture shape
-    source: specs.NoSource = specs.NoSource(base_clock_rate=1, num_rx_ports=1)
-    captures: tuple[specs.ResampledCapture, ...] = ()
 
 
 def concat_group_sizes(
@@ -239,7 +251,10 @@ def concat_group_sizes(
         The list l of sizes of each group such that sum(l) == len(captures)
     """
 
-    remaining = list(_NoSweep(captures=captures).validate().loop_captures())
+    class C(specs.ResampledCapture, frozen=True, forbid_unknown_fields=False):
+        """minimal capture fields that safely ignore fields from subclasses"""
+
+    remaining = convert_spec(captures, type=list[C])
     whole_set = set(remaining)
     counts = Counter(remaining)
 

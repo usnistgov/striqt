@@ -5,6 +5,7 @@ import fractions
 import typing
 
 from ..lib import dataarrays, register, specs, util
+from ..lib.register import registry
 
 if typing.TYPE_CHECKING:
     from types import ModuleType
@@ -22,17 +23,9 @@ else:
     array_api_compat = util.lazy_import('array_api_compat')
 
 
-registry: register.MeasurementRegistry = register.MeasurementRegistry()
-
-
 # %% Cellular 5G NR synchronizatino
 class Cellular5GNRSyncCorrelationSpec(
-    specs.Measurement,
-    forbid_unknown_fields=True,
-    cache_hash=True,
-    kw_only=True,
-    frozen=True,
-    dict=True,
+    specs.Measurement,kw_only=True, frozen=True, dict=True,
 ):
     """
     subcarrier_spacing (float): 3GPP channel subcarrier spacing (Hz)
@@ -293,11 +286,7 @@ def get_5g_ssb_iq(
 
 
 class FrequencyAnalysisSpecBase(
-    specs.Measurement,
-    forbid_unknown_fields=True,
-    cache_hash=True,
-    kw_only=True,
-    frozen=True,
+    specs.Measurement,kw_only=True, frozen=True, dict=True,
 ):
     """
     window (specs.WindowType): a window specification, following `scipy.signal.get_window`
@@ -331,11 +320,7 @@ class FrequencyAnalysisKeywords(specs.AnalysisKeywords):
 
 
 class SpectrogramSpec(
-    FrequencyAnalysisSpecBase,
-    forbid_unknown_fields=True,
-    cache_hash=True,
-    kw_only=True,
-    frozen=True,
+    FrequencyAnalysisSpecBase,kw_only=True, frozen=True, dict=True,
 ):
     """
     lo_bandstop (float):
@@ -516,7 +501,7 @@ def fftfreq(nfft: int, fs: float, dtype='float64', xp: ModuleType = np) -> Array
     when merging captures with different sample rates.
     """
 
-    if not array_api_compat.is_numpy_namespace(np):
+    if not array_api_compat.is_numpy_namespace(np): # type: ignore
         return xp.asarray(fftfreq(nfft, fs, dtype))
 
     # high resolution rational representation of frequency resolution

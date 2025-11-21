@@ -430,7 +430,6 @@ class MeasurementRegistry(
                     spec=spec,
                     attrs=more_attrs,
                     info=self[spec_type],
-                    coord_registry=self.coordinates,
                 )
 
                 if as_xarray == 'delayed':
@@ -533,10 +532,8 @@ def to_analysis_spec_type(
         typing.cast(list[tuple[str, type, typing.Any]], fields),
         bases=(base,),
         kw_only=True,
-        forbid_unknown_fields=True,
         omit_defaults=True,
         frozen=True,
-        cache_hash=True,
     )
 
     return typing.cast(type[specs.Analysis], cls)
@@ -606,3 +603,6 @@ def normalize_factory_return(ret, name: str):
         }
 
     return arr, attrs
+
+
+registry: MeasurementRegistry = MeasurementRegistry()
