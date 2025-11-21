@@ -21,7 +21,10 @@ else:
 
 
 class Cellular5GNRPSSCorrelationSpec(
-    shared.Cellular5GNRSyncCorrelationSpec, kw_only=True, frozen=True, dict=True,
+    shared.Cellular5GNRSyncCorrelationSpec,
+    kw_only=True,
+    frozen=True,
+    dict=True,
 ):
     pass
 

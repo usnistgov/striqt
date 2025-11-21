@@ -97,7 +97,7 @@ class _ReceiveBuffers:
         self.buffers[0], ret = alloc_empty_iq(self.radio, capture, self.buffers[0])
         self._hold_buffer_swap = False
         return ret
-    
+
     def skip_next_buffer_swap(self):
         self._hold_buffer_swap = True
 
@@ -157,7 +157,7 @@ def _cast_iq(
 
 
 class BaseSourceInfo(specs.SpecBase, kw_only=True, frozen=True, cache_hash=True):
-    num_rx_ports: int|None
+    num_rx_ports: int | None
 
     def to_capture_cls(self, base_cls: type[_TC] = specs.ResampledCapture) -> type[_TC]:
         return base_cls
@@ -170,7 +170,6 @@ class BaseSourceInfo(specs.SpecBase, kw_only=True, frozen=True, cache_hash=True)
             return tuple_size
         else:
             return self.num_rx_ports
-
 
 
 _source_id_map: dict[specs.Source, SourceBase | Event] = defaultdict(Event)

@@ -16,7 +16,10 @@ else:
 
 
 class ChannelPowerHistogramSpec(
-    _channel_power_time_series.ChannelPowerTimeSeriesSpec,kw_only=True, frozen=True, dict=True,
+    _channel_power_time_series.ChannelPowerTimeSeriesSpec,
+    kw_only=True,
+    frozen=True,
+    dict=True,
 ):
     power_low: float
     power_high: float

@@ -10,7 +10,9 @@ def run(**kws):
     from striqt import sensor
 
     do_tui = kws.pop('tui')
-    except_handler = sensor.util.DebugOnException(enable=kws['debug'], verbose=kws['verbose'])
+    except_handler = sensor.util.DebugOnException(
+        enable=kws['debug'], verbose=kws['verbose']
+    )
     sys.excepthook = except_handler.run
 
     yaml_path = kws['yaml_path']
@@ -43,6 +45,7 @@ def run(**kws):
             sweep_iter = sensor.SweepIterator(ctx.resources, always_yield=True)
             for _ in sweep_iter:
                 pass
+
 
 if __name__ == '__main__':
     run()

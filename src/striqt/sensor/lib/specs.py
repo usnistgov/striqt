@@ -138,12 +138,12 @@ class DiracDeltaCaptureSpec(ResampledCapture, frozen=True, kw_only=True):
     power: PowerType = 0
 
 
-class SawtoothCaptureSpec(ResampledCapture,kw_only=True, frozen=True, dict=True):
+class SawtoothCaptureSpec(ResampledCapture, kw_only=True, frozen=True, dict=True):
     period: PeriodType = 0.01
     power: PowerType = 1
 
 
-class NoiseCaptureSpec(ResampledCapture,kw_only=True, frozen=True, dict=True):
+class NoiseCaptureSpec(ResampledCapture, kw_only=True, frozen=True, dict=True):
     power_spectral_density: PSDType = 1e-17
 
 
@@ -221,7 +221,7 @@ class Source(SpecBase, frozen=True, kw_only=True):
     uncalibrated_peak_detect: Union[bool, Literal['auto']] = 'auto'
 
     transient_holdoff_time: typing.ClassVar[float] = 0
-    stream_all_rx_ports: typing.ClassVar[bool|None] = False
+    stream_all_rx_ports: typing.ClassVar[bool | None] = False
     transport_dtype: typing.ClassVar[Literal['int16', 'complex64']] = 'complex64'
 
 
@@ -335,9 +335,7 @@ class Description(SpecBase, frozen=True, kw_only=True):
     version: str = 'unversioned'
 
 
-class LoopBase(
-    SpecBase, tag=str.lower, tag_field='kind', frozen=True, kw_only=True
-):
+class LoopBase(SpecBase, tag=str.lower, tag_field='kind', frozen=True, kw_only=True):
     field: str
 
     def get_points(self):
@@ -543,7 +541,6 @@ class Sweep(SpecBase, Generic[_TS, _TP, _TC], frozen=True, kw_only=True):
         if howmany > 1:
             raise TypeError(f'more than one loop of capture field {which!r}')
 
-
     # @classmethod
     # def _from_registry(
     #     cls: type[Sweep], registry: analysis.MeasurementRegistry
@@ -643,14 +640,19 @@ class FileAcquisitionInfo(AcquisitionInfo):
 
 
 @util.lru_cache()
-def dataclass_fields(cls: type[AcquisitionInfo]) -> tuple[msgspec.structs.FieldInfo, ...]:
+def dataclass_fields(
+    cls: type[AcquisitionInfo],
+) -> tuple[msgspec.structs.FieldInfo, ...]:
     import msgspec
+
     hints = typing.get_type_hints(cls)
-    return tuple([
-        msgspec.structs.FieldInfo(
-            name=f.name,
-            encode_name=f.name,
-            type=hints[f.name],
-        )
-        for f in dataclasses.fields(cls)
-    ])
+    return tuple(
+        [
+            msgspec.structs.FieldInfo(
+                name=f.name,
+                encode_name=f.name,
+                type=hints[f.name],
+            )
+            for f in dataclasses.fields(cls)
+        ]
+    )

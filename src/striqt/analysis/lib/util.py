@@ -18,7 +18,7 @@ from striqt.waveform.util import (
     is_cupy_array,
     lru_cache,
     pinned_array_as_cupy,
-    cp
+    cp,
 )
 
 if typing.TYPE_CHECKING:

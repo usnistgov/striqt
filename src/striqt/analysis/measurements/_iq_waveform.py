@@ -18,7 +18,10 @@ else:
 
 
 class IQWaveformSpec(
-    specs.Measurement,kw_only=True, frozen=True, dict=True,
+    specs.Measurement,
+    kw_only=True,
+    frozen=True,
+    dict=True,
 ):
     start_time_sec: typing.Optional[float] = None
     stop_time_sec: typing.Optional[float] = None

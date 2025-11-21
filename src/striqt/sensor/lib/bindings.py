@@ -13,15 +13,19 @@ _TP2 = typing.TypeVar('_TP2', bound=specs.Peripherals)
 _TS2 = typing.TypeVar('_TS2', bound=specs.Source)
 
 MockSensorType = specs.Annotated[
-    typing.Optional[str], specs.meta('replace the bound sensor with one from this binding name')
+    typing.Optional[str],
+    specs.meta('replace the bound sensor with one from this binding name'),
 ]
 
 if typing.TYPE_CHECKING:
+
     class BoundSweep(specs.Sweep, frozen=True, kw_only=True):
         mock_sensor: MockSensorType = None
 
+
 registry: dict[str, 'SensorBinding[typing.Any, typing.Any, typing.Any]'] = {}
 tagged_sweeps: list[type[specs.Sweep]] = []
+
 
 def tagged_subclass(
     name: str, cls: type[specs.Sweep], tag_field: str
@@ -69,7 +73,7 @@ class Schema(typing.Generic[_TS, _TP, _TC]):
 @dataclasses.dataclass(kw_only=True, frozen=True)
 class SensorBinding(Sensor[_TS, _TP, _TC]):
     schema: Schema[_TS, _TP, _TC]
-    sweep_spec: type['BoundSweep[_TS, _TP, _TC]'] = specs.Sweep # type: ignore
+    sweep_spec: type['BoundSweep[_TS, _TP, _TC]'] = specs.Sweep  # type: ignore
 
     def __post_init__(self):
         super().__post_init__()
@@ -116,7 +120,6 @@ def bind_sensor(
                 )
             super().__post_init__()
 
-
     BoundSweep = tagged_subclass(key, BoundSweep, 'sensor_binding')  # type: ignore
     binding = dataclasses.replace(binding, sweep_spec=BoundSweep)
     registry[key] = binding
@@ -130,7 +133,9 @@ def get_registry() -> dict[str, SensorBinding]:
     return dict(registry)
 
 
-def get_binding(key: str|specs.Sweep, mock_source: str | None = None) -> SensorBinding:
+def get_binding(
+    key: str | specs.Sweep, mock_source: str | None = None
+) -> SensorBinding:
     if isinstance(key, specs.Sweep):
         binding = registry[type(key).__name__]
     elif isinstance(key, str):
@@ -148,21 +153,18 @@ def get_binding(key: str|specs.Sweep, mock_source: str | None = None) -> SensorB
                 source=mock_binding.source,
                 peripherals=mock_binding.peripherals,
                 sweep_spec=binding.sweep_spec,
-                sink=mock_binding.sink
+                sink=mock_binding.sink,
             ),
             Schema(
                 source=mock_binding.schema.source,
                 capture=binding.schema.capture,
-                peripherals=binding.schema.peripherals
-            )
+                peripherals=binding.schema.peripherals,
+            ),
         )
 
     return binding
 
 
-
-
-
 def get_tagged_sweep_type() -> type[specs.Sweep]:
     """return a tagged union type that msgspec can decode"""
-    return typing.Union[*tagged_sweeps] # type: ignore
+    return typing.Union[*tagged_sweeps]  # type: ignore

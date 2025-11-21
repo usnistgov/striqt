@@ -20,7 +20,7 @@ from striqt.analysis.lib.util import (
     show_messages,
     stopwatch,
     configure_cupy,
-    cp
+    cp,
 )
 from striqt.waveform.util import lazy_import, lru_cache
 
@@ -350,13 +350,15 @@ class Call(typing.Generic[_P, _R]):
     args: list
     kws: dict
     func: typing.Callable
-    exc_info: tuple|None = None
+    exc_info: tuple | None = None
 
     if typing.TYPE_CHECKING:
+
         def __init__(
             self, func: typing.Callable[_P, _R], *args: _P.args, **kws: _P.kwargs
         ): ...
     else:
+
         def __init__(self, func, *args, **kws):
             if isinstance(func, Call):
                 self.func = func.func
@@ -386,10 +388,9 @@ class Call(typing.Generic[_P, _R]):
         """Set the queue object used to communicate between threads"""
         self.queue = queue
 
+
 def concurrently(
-    calls: dict[str, Call],
-    traceback_delay: bool =True,
-    keep_nones: bool = True
+    calls: dict[str, Call], traceback_delay: bool = True, keep_nones: bool = True
 ) -> dict[str, typing.Any]:
     """see labbench.util for docs"""
     global _concurrency_count
@@ -446,9 +447,7 @@ def concurrently(
         if parent_exception is not None:
             names = tuple(threads.keys())
             exc_name = parent_exception.__class__.__name__
-            logger.error(
-                f'raising {exc_name} in after child threads {names!r} return'
-            )
+            logger.error(f'raising {exc_name} in after child threads {names!r} return')
 
         # if there was an exception that wasn't us ending the thread,
         # maybe show messages
@@ -504,10 +503,7 @@ def concurrently(
     return results
 
 
-def sequentially(
-    calls: dict[str, Call],
-    keep_nones: bool = True
-) -> dict:
+def sequentially(calls: dict[str, Call], keep_nones: bool = True) -> dict:
     """see labbench.util for docs"""
     results = {}
 
@@ -523,11 +519,7 @@ def sequentially(
 
 
 class DebugOnException:
-    def __init__(
-        self,
-        enable: bool = False,
-        verbose: bool = False
-    ):
+    def __init__(self, enable: bool = False, verbose: bool = False):
         self.enable = enable
         self.verbose = verbose
         self.prev = None
@@ -541,11 +533,12 @@ class DebugOnException:
     def __exit__(self, *args):
         self.run(*args)
         global _handling_tracebacks
-        _handling_tracebacks = False        
+        _handling_tracebacks = False
 
     def run(self, etype, exc, tb):
         triplet = (etype, exc, tb)
         from . import tracebacks
+
         with self.lock:
             if triplet == (None, None, None):
                 return
@@ -566,7 +559,7 @@ class DebugOnException:
                 handler.call_pdb = False
                 for th_exc in exc.thread_exceptions:
                     handler(type(th_exc), th_exc, th_exc.__traceback__)
-                handler.call_pdb=self.enable
+                handler.call_pdb = self.enable
 
             handler(etype, exc, tb)
             self.prev = triplet
@@ -858,5 +851,6 @@ def log_capture_context(name_suffix, /, capture_index=0, capture_count=None):
     logger.extra = start_extra | extra
     yield
     logger.extra = start_extra
+
 
 show_messages(logging.INFO)

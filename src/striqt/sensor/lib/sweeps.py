@@ -333,7 +333,11 @@ class SweepIterator:
 
     @util.stopwatch('✓', 'source', logger_level=util.PERFORMANCE_INFO)
     def _acquire(
-        self, iq_prev: sources.AcquiredIQ|None, capture_prev, capture_this, capture_next
+        self,
+        iq_prev: sources.AcquiredIQ | None,
+        capture_prev,
+        capture_this,
+        capture_next,
     ):
         if self.spec.info.reuse_iq and not isinstance(self.spec.source, specs.NoSource):
             reuse_this = _iq_is_reusable(

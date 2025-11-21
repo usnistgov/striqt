@@ -21,7 +21,10 @@ else:
 
 
 class CellularResourcePowerHistogramSpec(
-    specs.Measurement,kw_only=True, frozen=True, dict=True,
+    specs.Measurement,
+    kw_only=True,
+    frozen=True,
+    dict=True,
 ):
     window: specs.WindowType
     subcarrier_spacing: float

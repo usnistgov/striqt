@@ -47,6 +47,7 @@ if typing.TYPE_CHECKING:
 
     try:
         import cupy as cp  # pyright: ignore[reportMissingImports]
+
         TypeIsCupy = typing_extensions.TypeIs[cp.ndarray]
     except ModuleNotFoundError:
         cp = None
@@ -54,7 +55,7 @@ if typing.TYPE_CHECKING:
     import numpy as np
 
     from ._typing import ArrayLike, ArrayType
-    
+
 else:
     np = lazy_import('numpy')
     try:

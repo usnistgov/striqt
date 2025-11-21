@@ -18,7 +18,10 @@ else:
 
 
 class CellularCyclicAutocorrelationSpec(
-    specs.Measurement,kw_only=True, frozen=True, dict=True,
+    specs.Measurement,
+    kw_only=True,
+    frozen=True,
+    dict=True,
 ):
     subcarrier_spacings: typing.Union[float, tuple[float, ...]] = (15e3, 30e3, 60e3)
     frame_range: typing.Union[int, tuple[int, typing.Optional[int]]] = (0, 1)

@@ -16,7 +16,10 @@ else:
 
 
 class PowerSpectralDensitySpec(
-    shared.FrequencyAnalysisSpecBase,kw_only=True, frozen=True, dict=True,
+    shared.FrequencyAnalysisSpecBase,
+    kw_only=True,
+    frozen=True,
+    dict=True,
 ):
     time_statistic: tuple[typing.Union[str, float], ...] = (('mean',),)
 

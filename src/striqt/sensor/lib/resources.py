@@ -169,7 +169,6 @@ def open_sensor(
 
     import_extensions(spec.extensions, formatter)
 
-
     bind = get_binding(spec)
     conn = ConnectionManager(sweep_spec=spec)
 
@@ -191,7 +190,9 @@ def open_sensor(
                 analysis=spec.analysis,
             ),
             'sink': util.Call(conn.open, 'sink', sink_cls, spec, alias_func=formatter),
-            'calibration': util.Call(conn.get, 'calibration', load_calibration, spec, formatter),
+            'calibration': util.Call(
+                conn.get, 'calibration', load_calibration, spec, formatter
+            ),
             'peripherals': util.Call(conn.open, 'peripherals', bind.peripherals, spec),
         }
 
@@ -202,7 +203,7 @@ def open_sensor(
             util.concurrently_with_fg(calls)
 
         with util.stopwatch(f'setup {", ".join(calls)}', **timer_kws):  # type: ignore
-            conn._resources['peripherals'].setup() # type: ignore
+            conn._resources['peripherals'].setup()  # type: ignore
 
         if except_context is not None:
             conn.enter('except_context', except_context)

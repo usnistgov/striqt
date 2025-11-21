@@ -22,7 +22,7 @@ from .util import (
     pad_along_axis,
     sliding_window_view,
     to_blocks,
-    cp
+    cp,
 )
 from .windows import register_extra_windows
 
@@ -422,7 +422,7 @@ def design_cola_resampler(
     Returns:
         (SDR sample rate, RF LO frequency offset in Hz, ola_filter_kws)
     """
-    
+
     if bw == INF and shift:
         raise ValueError(
             'frequency shifting may only be applied when an analysis bandwidth is specified'
@@ -752,7 +752,6 @@ def design_fir_lpf(
     desired = [1, 1, 1, 0, 0, 0]
 
     b = signal.firls(numtaps, bands=bands, desired=desired, fs=sample_rate)
-
 
     return xp.asarray(b.astype(dtype))
 

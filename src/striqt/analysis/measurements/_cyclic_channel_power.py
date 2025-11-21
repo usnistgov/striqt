@@ -17,7 +17,10 @@ else:
 
 
 class CyclicChannelPowerSpec(
-    specs.Measurement,kw_only=True, frozen=True, dict=True,
+    specs.Measurement,
+    kw_only=True,
+    frozen=True,
+    dict=True,
 ):
     cyclic_period: float
     detector_period: fractions.Fraction

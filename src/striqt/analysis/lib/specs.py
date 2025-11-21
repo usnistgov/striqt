@@ -85,13 +85,20 @@ def _private_fields(capture_cls: type[SpecBase]) -> tuple[str, ...]:
 def convert_dict(obj: typing.Any, type: type[_T]) -> _T:
     return msgspec.convert(obj, type=type, strict=False, dec_hook=_dec_hook)
 
+
 def convert_spec(other: typing.Any, type: type[_T]) -> _T:
     return msgspec.convert(
         other, type=type, strict=False, from_attributes=True, dec_hook=_dec_hook
     )
 
 
-class SpecBase(msgspec.Struct, kw_only=True, frozen=True, forbid_unknown_fields=True, cache_hash=True):
+class SpecBase(
+    msgspec.Struct,
+    kw_only=True,
+    frozen=True,
+    forbid_unknown_fields=True,
+    cache_hash=True,
+):
     """Base type for structures that support validated
     (de)serialization.
 

@@ -18,7 +18,10 @@ else:
 
 
 class ChannelPowerTimeSeriesSpec(
-    specs.Measurement,kw_only=True, frozen=True, dict=True,
+    specs.Measurement,
+    kw_only=True,
+    frozen=True,
+    dict=True,
 ):
     detector_period: fractions.Fraction
     power_detectors: tuple[str, ...] = ('rms', 'peak')
