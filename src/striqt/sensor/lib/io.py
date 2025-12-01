@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 import typing
 from pathlib import Path
 
@@ -43,6 +44,44 @@ def open_store(
     return store_backend
 
 
+def _import_extensions_from_spec(
+    spec: specs.Extension, alias_func: captures.PathAliasFormatter | None = None
+) -> None:
+    """import an extension class from a dict representation of structs.Extensions
+
+    Arguments:
+        spec: specification structure for the extension imports
+        alias_func: formatter to fill aliases in the import path
+    """
+
+    import importlib
+    from .bindings import get_registry
+
+    if spec.import_path is None:
+        pass
+    else:
+        if alias_func is None:
+            p = spec.import_path
+        else:
+            p = alias_func(spec.import_path)
+
+        if p != sys.path[0]:
+            assert isinstance(p, (str, Path))
+            sys.path.insert(0, str(p))
+
+    if spec.import_name is None:
+        return
+
+    start_count = len(get_registry())
+    importlib.import_module(spec.import_name)
+    if len(get_registry()) - start_count == 0:
+        logger = util.get_logger('controller')
+        import_name = spec.import_name
+        logger.warning(
+            f'imported extension module {import_name!r}, but it did not bind a sensor'
+        )
+
+
 def read_yaml_spec(
     path: str | Path,
     *,
@@ -74,6 +113,10 @@ def read_yaml_spec(
 
         mock_name = get_binding(tree['sensor_binding'], mock_source).sweep_spec.__name__
         tree['sensor_binding'] = mock_name
+
+    if 'extensions' in tree:
+        ext = specs.Extension.fromdict(tree['extensions'])
+        _import_extensions_from_spec(ext)
 
     spec = convert_dict(tree, type=get_tagged_sweep_type())
 
