@@ -757,6 +757,7 @@ def _get_aligner_pad_size(
 
 def _get_next_fast_len(n):
     try:
+        import cupy
         from cupyx import scipy  # type: ignore
     except ModuleNotFoundError:
         import scipy
