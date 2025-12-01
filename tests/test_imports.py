@@ -6,5 +6,6 @@ def test_imports():
 
     # check for accidental reification
     import sys
-    for lazy_name in ('scipy', 'xarray', 'zarr', 'pandas'):
-        assert 'LazyModule' in repr(type(sys.modules[lazy_name]))
+    for lazy_name in ('scipy', 'xarray', 'pandas'):
+        # don't test zarr here, since some pytest plugins already reify it
+        assert 'LazyModule' in repr(type(sys.modules[lazy_name])), f"reified {lazy_name}"
