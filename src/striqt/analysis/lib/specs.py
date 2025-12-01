@@ -308,5 +308,7 @@ def maybe_lookup_with_capture_key(
             )
             return default
 
-    else:
+    elif typing.TYPE_CHECKING:
         return typing.cast(_T, value)
+    else:
+        return value
