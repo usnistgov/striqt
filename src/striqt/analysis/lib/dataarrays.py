@@ -385,13 +385,14 @@ import msgspec
 
 class EvaluationOptions(msgspec.Struct, typing.Generic[_TA]):
     as_xarray: _TA
-    registry: register.MeasurementRegistry|None = None
+    registry: register.MeasurementRegistry
     block_each: bool = True
     expand_dims: typing.Sequence[str] = ()
 
     def __post_init__(self):
         if self.as_xarray not in (True, False, 'delayed'):
             raise TypeError('as_xarray must be True, False, or "delayed"')
+        assert self.registry is not None
 
 
 def evaluate_by_spec(
@@ -402,15 +403,10 @@ def evaluate_by_spec(
 ):
     """evaluate each analysis for the given IQ waveform"""
 
-    if options.registry is None:
-        registry = register.registry
-    else:
-        registry = options.registry
-
     if isinstance(spec, specs.Analysis):
         spec = spec.validate()
     elif isinstance(spec, dict):
-        spec = registry.tospec().fromdict(spec)
+        spec = options.registry.tospec().fromdict(spec)
     else:
         raise TypeError('invalid analysis spec argument')
 
