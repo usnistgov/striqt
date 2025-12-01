@@ -7,12 +7,14 @@ import dataclasses
 import math
 import typing
 
+import msgspec
+
+
 from . import register, specs, util
 
 if typing.TYPE_CHECKING:
     import array_api_compat
     import numpy as np
-    import typing_extensions
     import xarray as xr
 
     from striqt.waveform._typing import ArrayType
@@ -378,9 +380,6 @@ def select_parameter_kws(locals_: dict, omit=(PORT_DIM, 'out')) -> dict:
 
     items = list(locals_.items())
     return {k: v for k, v in items[1:] if k not in omit}
-
-
-import msgspec
 
 
 class EvaluationOptions(msgspec.Struct, typing.Generic[_TA]):

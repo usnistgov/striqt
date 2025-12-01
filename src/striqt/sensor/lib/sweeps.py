@@ -327,7 +327,8 @@ class SweepIterator:
                 ret = util.concurrently_with_fg(calls)
 
                 result = typing.cast(
-                    typing.Union[datasets.DelayedDataset, None], ret.get('analyze', None)
+                    typing.Union[datasets.DelayedDataset, None],
+                    ret.get('analyze', None),
                 )
 
                 if 'acquire' in ret:

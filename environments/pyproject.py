@@ -18,9 +18,7 @@ CONDA_SKIP = {
     'pigz',
 }
 
-EXTRA_DEPS = {
-    'iqwaveform @ git+https://github.com/dgkuester/iqwaveform'
-}
+EXTRA_DEPS = {'iqwaveform @ git+https://github.com/dgkuester/iqwaveform'}
 
 DEV_DEPS = {'jupyter', 'ruff', 'toml', 'ruamel.yaml'}
 PYPI_RENAME = {'ruamel.yaml': 'ruamel_yaml', 'matplotlib-base': 'matplotlib'}
@@ -70,9 +68,8 @@ def pop_pip(dependency_list):
             break
     else:
         return []
-    
-    return [n for n in deps if keep(n)] + list(EXTRA_DEPS)
 
+    return [n for n in deps if keep(n)] + list(EXTRA_DEPS)
 
 
 def rename_pypi_deps(dep_map):

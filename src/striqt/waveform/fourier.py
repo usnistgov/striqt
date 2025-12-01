@@ -742,8 +742,8 @@ def design_fir_lpf(
 ):
     if xp is None:
         xp = np
-    
-    from scipy import signal        
+
+    from scipy import signal
 
     edges = [
         0,
@@ -1346,7 +1346,7 @@ def power_spectral_density(
 
 def upfirdn(h, x, up=1, down=1, axis=-1, mode='constant', cval=0, overwrite_x=False):
     from scipy import signal
-    
+
     kws = dict(locals())
     del kws['overwrite_x']
 

@@ -18,15 +18,16 @@ if typing.TYPE_CHECKING:
     import yaml
     import zarr
     import zarr.storage
+    from typing_extensions import TypeAlias
 
     from striqt.waveform._typing import ArrayType
 
     if hasattr(zarr.storage, 'Store'):
         # zarr 2.x
-        StoreType = typing.TypeVar('StoreType', bound=zarr.storage.Store)  # type: ignore
+        StoreType: TypeAlias = zarr.storage.Store  # type: ignore
     else:
         # zarr 3.x
-        StoreType = typing.TypeVar('StoreType', bound=zarr.abc.store.Store)  # type: ignore
+        StoreType: TypeAlias = zarr.abc.store.Store  # type: ignore
 
 else:
     numcodecs = util.lazy_import('numcodecs')

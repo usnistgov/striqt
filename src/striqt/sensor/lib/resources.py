@@ -38,7 +38,9 @@ if typing.TYPE_CHECKING:
         sweep_spec: specs.Sweep[_TS, _TP, _TC]
         calibration: 'xr.Dataset|None'
 
-    class AnyResources(typing_extensions.TypedDict, typing.Generic[_TS, _TP, _TC], total=False):
+    class AnyResources(
+        typing_extensions.TypedDict, typing.Generic[_TS, _TP, _TC], total=False
+    ):
         """Sensor resources needed to run a sweep"""
 
         source: SourceBase[_TS, _TC]
