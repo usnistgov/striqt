@@ -16,7 +16,7 @@ class PeripheralsProtocol(typing.Protocol[_TC]):
 
     def close(self): ...
 
-    def setup(self): ...
+    def setup(self, captures: typing.Sequence[_TC], loops: typing.Sequence[specs.LoopSpec]): ...
 
     def arm(self, capture: _TC): ...
 
@@ -67,7 +67,7 @@ class NoPeripherals(PeripheralsBase[_TP, _TC]):
     def close(self):
         return
 
-    def setup(self):
+    def setup(self, captures: typing.Iterable[_TC]):
         return
 
     def arm(self, capture):

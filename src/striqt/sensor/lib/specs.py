@@ -349,7 +349,7 @@ class Range(LoopBase, frozen=True, kw_only=True):
     stop: float
     step: float
 
-    def get_points(self):
+    def get_points(self) -> list:
         import numpy as np
 
         if self.start == self.stop:
@@ -363,15 +363,15 @@ class Repeat(LoopBase, frozen=True, kw_only=True):
     field: str = '_sweep_index'
     count: int = 1
 
-    def get_points(self):
+    def get_points(self) -> list[int]:
         return list(range(self.count))
 
 
 class List(LoopBase, frozen=True, kw_only=True):
     values: tuple[Any, ...]
 
-    def get_points(self):
-        return self.values
+    def get_points(self) -> list:
+        return list(self.values)
 
 
 class FrequencyBinRange(LoopBase, frozen=True, kw_only=True):
@@ -379,7 +379,7 @@ class FrequencyBinRange(LoopBase, frozen=True, kw_only=True):
     stop: float
     step: float
 
-    def get_points(self):
+    def get_points(self) -> list[float]:
         from math import ceil
 
         import numpy as np
