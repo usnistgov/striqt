@@ -2,3 +2,9 @@ def test_imports():
     import striqt.waveform
     import striqt.analysis
     import striqt.sensor
+    import importlib.util
+
+    # check for accidental reification
+    import sys
+    for lazy_name in ('scipy', 'xarray', 'zarr', 'pandas'):
+        assert 'LazyModule' in repr(type(sys.modules[lazy_name]))
