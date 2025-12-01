@@ -514,7 +514,9 @@ def bind_manual_yfactor_calibration(
             sensor_result = sensor.peripherals.acquire(self)  # type: ignore
             return sensor_result | self.calibration_spec.todict()
 
-        def setup(self, captures: typing.Sequence[_TC], loops: typing.Sequence[specs.LoopSpec]):
+        def setup(
+            self, captures: typing.Sequence[_TC], loops: typing.Sequence[specs.LoopSpec]
+        ):
             sensor.peripherals.setup(self, captures, loops)  # type: ignore
 
     return bindings.bind_sensor(
