@@ -295,7 +295,7 @@ def maybe_lookup_with_capture_key(
             capture_value = getattr(capture, capture_attr)
         except AttributeError:
             raise AttributeError(
-                f'can only look up {error_label} when an attribute {capture_attr!r} exists in the capture type'
+                f'can only look up {error_label!r} if the capture has {capture_attr!r} field'
             )
         try:
             return value[capture_value]

@@ -36,7 +36,7 @@ class Airstack1Source(soapy.SoapySourceBase):
         air_kwargs = dict(
             kwargs,
             driver='SoapyAIRT',
-            time_src=spec.time_source,
+            time_src=soapy.device_time_source(spec),
             clk_src=spec.clock_source,
         )
 

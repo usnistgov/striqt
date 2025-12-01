@@ -595,6 +595,13 @@ def set_sample_rate(
         source._device.setSampleRate(SoapySDR.SOAPY_SDR_RX, c.port, this_fs)
 
 
+def device_time_source(spec: specs.SoapySource):
+    if spec.time_source == 'host':
+        return 'internal'
+    else:
+        return spec.time_source
+
+
 class SoapySourceBase(
     base.SourceBase, base.HasSetupType[_TS], base.HasCaptureType[_TC]
 ):
