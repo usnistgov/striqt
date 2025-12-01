@@ -249,7 +249,6 @@ class _SourceKeywords(typing.TypedDict, total=False):
 
 
 class SoapySource(Source, frozen=True, kw_only=True):
-    device_kwargs: typing.ClassVar[dict[str, Any]] = {}
     time_source: TimeSourceType = 'host'
     time_sync_every_capture: TimeSyncEveryCaptureType = False
     clock_source: ClockSourceType = 'internal'

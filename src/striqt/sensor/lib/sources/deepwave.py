@@ -31,13 +31,15 @@ class Air8201BSourceSpec(specs.SoapySource, kw_only=True, frozen=True):
 
 
 class Airstack1Source(soapy.SoapySourceBase):
-    def _connect(self, spec: specs.SoapySource):
-        super()._connect(spec)
-        assert self._device is not None
+    def _connect(self, spec: specs.SoapySource, **kwargs):
+        air_kwargs = dict(
+            kwargs,
+            driver='SoapyAIRT',
+            time_src=spec.time_source,
+            clk_src=spec.clock_source,
+        )
 
-        driver = self._device.getDriverKey()
-        if driver != 'SoapyAIRT':
-            raise IOError(f'connected to {driver}, but expected SoapyAirT')
+        super()._connect(spec, **air_kwargs)
 
         self._set_jesd_sysref_delay(0)
 
