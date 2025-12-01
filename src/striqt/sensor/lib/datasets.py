@@ -133,7 +133,7 @@ def _coord_template(
     """returns a cached xr.Coordinates object to use as a template for data results"""
 
     capture_fields = msgspec.structs.fields(capture_cls)
-    info_fields = specs.dataclass_fields(info_cls)
+    info_fields = msgspec.structs.fields(info_cls)
     vars = {}
 
     for field in capture_fields + info_fields:
