@@ -8,7 +8,7 @@ import typing
 from collections import Counter
 
 import striqt.waveform as iqwaveform
-from striqt.analysis import measurements, describe_capture
+from striqt.analysis import measurements, describe_capture, registry
 
 from . import datasets, sinks, sources, specs, util
 from .resources import Resources, AnyResources
@@ -220,6 +220,7 @@ class SweepIterator:
 
         self._analysis_opts = datasets.EvaluationOptions(
             sweep_spec=self.spec,
+            registry=registry,
             extra_attrs=datasets.build_dataset_attrs(self.spec),
             correction=True,
             cache_callback=self.show_cache_info,
