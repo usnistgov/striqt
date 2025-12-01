@@ -32,6 +32,7 @@ class Air8201BSourceSpec(specs.SoapySource, kw_only=True, frozen=True):
 
 class Airstack1Source(soapy.SoapySourceBase):
     def _connect(self, spec: specs.SoapySource, **kwargs):
+        # trim script startup time by setting these here
         air_kwargs = dict(
             kwargs,
             driver='SoapyAIRT',
