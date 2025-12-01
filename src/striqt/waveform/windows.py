@@ -6,9 +6,7 @@ from .util import lazy_import
 
 if typing.TYPE_CHECKING:
     import numpy as np
-    from scipy import signal
 else:
-    signal = lazy_import('scipy.signal')
     np = lazy_import('numpy')
 
 
@@ -123,6 +121,8 @@ def register_extra_windows():
     """add 'acg', 'cosh', 'modified_bessel', 'knab', and 'taylor' windows to
     the window functions registered for access by `scipy.signal.get_window`.
     """
+    from scipy import signal
+
     registry = signal.windows._windows._win_equiv
     registry['acg'] = acg
     registry['cosh'] = cosh

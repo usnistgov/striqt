@@ -3,7 +3,7 @@ from __future__ import annotations
 import typing
 from pathlib import Path
 
-from . import bindings, captures, datasets, peripherals, sinks, sources, specs, util
+from . import captures, datasets, peripherals, sinks, sources, specs, util
 
 import msgspec
 
@@ -12,6 +12,7 @@ if typing.TYPE_CHECKING:
     import pandas as pd
     import scipy
     import xarray as xr
+    from . import bindings
 else:
     np = util.lazy_import('numpy')
     pd = util.lazy_import('pandas')
@@ -467,8 +468,10 @@ def _ensure_loop_at_position(sweep: specs.Sweep):
 
 def bind_manual_yfactor_calibration(
     name: str, sensor: 'bindings.SensorBinding[_TS, _TP, _TC]'
-) -> bindings.SensorBinding[_TS, typing.Any, typing.Any]:
+) -> 'bindings.SensorBinding[_TS, typing.Any, typing.Any]':
     """extend an existing binding with a y-factor calibration"""
+
+    from . import bindings
 
     class capture_spec_cls(sensor.schema.capture, frozen=True, kw_only=True):
         noise_diode_enabled: specs.NoiseDiodeEnabledType = False

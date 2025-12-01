@@ -29,14 +29,12 @@ from .windows import register_extra_windows
 if typing.TYPE_CHECKING:
     import numpy as np
     import scipy
-    from scipy import signal
 
     from ._typing import ArrayType
 
 else:
     np = lazy_import('numpy')
     scipy = lazy_import('scipy')
-    signal = lazy_import('scipy.signal')
 
 CPU_COUNT = cpu_count() or 1
 OLA_MAX_FFT_SIZE = 128 * 1024
@@ -85,6 +83,8 @@ def _get_window_uncached(
     See also:
         `scipy.signal.get_window`
     """
+
+    from scipy import signal
 
     register_extra_windows()
 
@@ -742,6 +742,9 @@ def design_fir_lpf(
 ):
     if xp is None:
         xp = np
+    
+    from scipy import signal        
+
     edges = [
         0,
         bandwidth / 2 - transition_bandwidth / 2,
@@ -781,6 +784,8 @@ def _fir_lowpass_fft(
 
     if xp is None:
         xp = np
+
+    from scipy import signal
 
     if cutoff == float('inf'):
         h = np.ones(size, dtype=dtype)
@@ -1340,6 +1345,8 @@ def power_spectral_density(
 
 
 def upfirdn(h, x, up=1, down=1, axis=-1, mode='constant', cval=0, overwrite_x=False):
+    from scipy import signal
+    
     kws = dict(locals())
     del kws['overwrite_x']
 
