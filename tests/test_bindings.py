@@ -1,5 +1,11 @@
 from striqt import sensor
 import msgspec
+from pathlib import Path
+
+
+def test_read():
+    sensor.read_yaml_spec(Path(__file__).parent/'spec.yaml')
+
 
 def test_sweep_union_args():
     union = sensor._lib.bindings.get_tagged_sweep_type()

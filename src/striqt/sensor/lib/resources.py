@@ -22,31 +22,34 @@ from .specs import _TC, _TP, _TS
 
 if typing.TYPE_CHECKING:
     import xarray as xr
+    import typing_extensions
 
-    _P = typing.ParamSpec('_P')
+    # typing workarounds for python < 3.10
+    _P = typing_extensions.ParamSpec('_P')
     _R = typing.TypeVar('_R')
 
+    class Resources(typing.TypedDict, typing.Generic[_TS, _TP, _TC]):
+        """Sensor resources needed to run a sweep"""
 
-class Resources(typing.TypedDict, typing.Generic[_TS, _TP, _TC]):
-    """Sensor resources needed to run a sweep"""
+        source: SourceBase[_TS, _TC]
+        sink: SinkBase
+        peripherals: PeripheralsBase[_TP, _TC]
+        except_context: typing_extensions.NotRequired[typing.ContextManager]
+        sweep_spec: specs.Sweep[_TS, _TP, _TC]
+        calibration: 'xr.Dataset|None'
 
-    source: SourceBase[_TS, _TC]
-    sink: SinkBase
-    peripherals: PeripheralsBase[_TP, _TC]
-    except_context: typing.NotRequired[typing.ContextManager]
-    sweep_spec: specs.Sweep[_TS, _TP, _TC]
-    calibration: 'xr.Dataset|None'
+    class AnyResources(typing.TypedDict, typing.Generic[_TS, _TP, _TC], total=False):
+        """Sensor resources needed to run a sweep"""
 
-
-class AnyResources(typing.TypedDict, typing.Generic[_TS, _TP, _TC], total=False):
-    """Sensor resources needed to run a sweep"""
-
-    source: SourceBase[_TS, _TC]
-    sink: SinkBase
-    peripherals: PeripheralsBase[_TP, _TC]
-    except_context: typing.NotRequired[typing.ContextManager]
-    sweep_spec: specs.Sweep[_TS, _TP, _TC]
-    calibration: 'xr.Dataset|None'
+        source: SourceBase[_TS, _TC]
+        sink: SinkBase
+        peripherals: PeripheralsBase[_TP, _TC]
+        except_context: typing_extensions.NotRequired[typing.ContextManager]
+        sweep_spec: specs.Sweep[_TS, _TP, _TC]
+        calibration: 'xr.Dataset|None'
+else:
+    Resources = dict
+    AnyResources = dict
 
 
 def import_sink_cls(

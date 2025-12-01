@@ -13,16 +13,12 @@ from ..waveform.power_analysis import (
     powtodB,
     sample_ccdf,
 )
-from ..waveform.util import lazy_import, lru_cache
+from ..waveform.util import lru_cache
 
-if typing.TYPE_CHECKING:
-    import matplotlib as mpl
-    import pandas as pd
-    from matplotlib import ticker
-    from scipy import stats
-else:
-    mpl = lazy_import('matplotlib')
-    pd = lazy_import('pandas')
+import matplotlib as mpl
+import pandas as pd
+from matplotlib import ticker
+from scipy import stats
 
 
 def _show_xarray_units_in_parentheses():

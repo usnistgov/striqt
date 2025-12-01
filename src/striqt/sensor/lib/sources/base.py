@@ -46,7 +46,7 @@ _TS = typing.TypeVar('_TS', bound=specs.Source)
 _TC = typing.TypeVar('_TC', bound=specs.ResampledCapture)
 
 
-@dataclasses.dataclass(kw_only=True)
+@dataclasses.dataclass
 class AcquiredIQ(dataarrays.AcquiredIQ):
     info: specs.AcquisitionInfo
     extra_data: dict[str, typing.Any]

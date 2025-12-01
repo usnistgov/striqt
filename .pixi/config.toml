@@ -1,0 +1,3 @@
+[mirrors]
+# redirect all requests for conda-forge to the prefix.dev mirror
+"https://conda.anaconda.org/conda-forge" = ["https://prefix.dev/conda-forge"]

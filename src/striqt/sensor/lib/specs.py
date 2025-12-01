@@ -18,6 +18,7 @@ from . import util
 if typing.TYPE_CHECKING:
     _T = typing.TypeVar('_T')
     import pandas as pd
+    from typing_extensions import Self
 
 
 def _dict_hash(d):
@@ -218,7 +219,7 @@ class Source(SpecBase, frozen=True, kw_only=True):
     cupy_max_fft_chunk_size: Optional[int] = None
 
     # validation data
-    uncalibrated_peak_detect: Union[bool, Literal['auto']] = False
+    uncalibrated_peak_detect: bool | Literal['auto'] = False
 
     transient_holdoff_time: typing.ClassVar[float] = 0
     stream_all_rx_ports: typing.ClassVar[bool | None] = False
@@ -244,7 +245,7 @@ class _SourceKeywords(typing.TypedDict, total=False):
 
     array_backend: ArrayBackendType
     cupy_max_fft_chunk_size: int
-    uncalibrated_peak_detect: Union[bool, Literal['auto']]
+    uncalibrated_peak_detect: bool | Literal['auto']
 
 
 class SoapySource(Source, frozen=True, kw_only=True):
@@ -254,7 +255,7 @@ class SoapySource(Source, frozen=True, kw_only=True):
     clock_source: ClockSourceType = 'internal'
     receive_retries: ReceiveRetriesType = 0
 
-    uncalibrated_peak_detect: Union[bool, Literal['auto']] = True
+    uncalibrated_peak_detect: bool | Literal['auto'] = True
 
     # True if the same clock drives acquisition on all RX ports
     shared_rx_sample_clock = True
@@ -521,7 +522,7 @@ class Sweep(SpecBase, Generic[_TS, _TP, _TC], frozen=True, kw_only=True):
     captures: tuple[_TC, ...] = tuple()
     loops: tuple[LoopSpec, ...] = ()
     analysis: BundledAnalysis = BundledAnalysis()  # type: ignore
-    description: Union[Description, str] = ''
+    description: Description | str = ''
     extensions: Extension = Extension()
     sink: Sink = Sink()
     peripherals: _TP = typing.cast(_TP, Peripherals())
@@ -596,15 +597,16 @@ StartTimeType = Annotated[
 SweepStartTimeType = Annotated['pd.Timestamp', meta('Capture acquisition start time')]
 
 
-@dataclasses.dataclass(kw_only=True, frozen=True)
-class AcquisitionInfo:
+# we really only need a dataclass for internal message-passing,
+# but using msgspec.Struct here to support kw_only=True for python < 3.10
+class AcquisitionInfo(msgspec.Struct, kw_only=True, frozen=True):
     """information about an acquired acquisition"""
 
     # duck-type methods and structure of SpecBase
 
     source_id: SourceIDType = ''
 
-    def replace(self, **attrs) -> typing.Self:
+    def replace(self, **attrs) -> 'Self':
         """returns a copy of self with changed attributes.
 
         See also:
@@ -621,8 +623,7 @@ class AcquisitionInfo:
         return cls(**d)
 
 
-@dataclasses.dataclass(kw_only=True, frozen=True)
-class SoapyAcquisitionInfo(AcquisitionInfo):
+class SoapyAcquisitionInfo(AcquisitionInfo, kw_only=True, frozen=True):
     """extra coordinate information returned from an acquisition"""
 
     delay: typing.Optional[DelayType] = None
@@ -632,8 +633,7 @@ class SoapyAcquisitionInfo(AcquisitionInfo):
     source_id: SourceIDType = ''
 
 
-@dataclasses.dataclass(kw_only=True, frozen=True)
-class FileAcquisitionInfo(AcquisitionInfo):
+class FileAcquisitionInfo(AcquisitionInfo, kw_only=True, frozen=True):
     center_frequency: CenterFrequencyType = float('nan')
     backend_sample_rate: BackendSampleRateType
     port: PortType = 0

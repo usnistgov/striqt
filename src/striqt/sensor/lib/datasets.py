@@ -30,8 +30,7 @@ else:
 RADIO_ID_NAME = 'source_id'
 
 
-@dataclasses.dataclass(kw_only=True)
-class EvaluationOptions(dataarrays.EvaluationOptions[dataarrays._TA]):
+class EvaluationOptions(dataarrays.EvaluationOptions[dataarrays._TA], kw_only=True):
     sweep_spec: specs.Sweep
     extra_attrs: dict[str, typing.Any] = dataclasses.field(default_factory=dict)
     correction: bool = False
@@ -42,7 +41,7 @@ class EvaluationOptions(dataarrays.EvaluationOptions[dataarrays._TA]):
         super().__post_init__()
 
 
-@dataclasses.dataclass()
+@dataclasses.dataclass
 class DelayedDataset:
     delayed: dict[str, dataarrays.DelayedDataArray]
     capture: specs.ResampledCapture

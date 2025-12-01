@@ -1,3 +1,4 @@
+from __future__ import annotations
 import typing
 import dataclasses
 
@@ -24,7 +25,7 @@ if typing.TYPE_CHECKING:
 
 
 registry: dict[str, 'SensorBinding[typing.Any, typing.Any, typing.Any]'] = {}
-tagged_sweeps: list[type[specs.Sweep]] = []
+tagged_sweeps: type[specs.Sweep] | None = None
 
 
 def tagged_subclass(
@@ -44,7 +45,7 @@ def tagged_subclass(
     return typing.cast(type[specs.Sweep], kls)
 
 
-@dataclasses.dataclass(kw_only=True, frozen=True)
+@dataclasses.dataclass(frozen=True)
 class Sensor(typing.Generic[_TS, _TP, _TC]):
     source: type[SourceBase[_TS, _TC]]
     sweep_spec: type[specs.Sweep[_TS, _TP, _TC]] = specs.Sweep
@@ -58,7 +59,7 @@ class Sensor(typing.Generic[_TS, _TP, _TC]):
         assert issubclass(self.sink, sinks.SinkBase)
 
 
-@dataclasses.dataclass(kw_only=True, frozen=True)
+@dataclasses.dataclass(frozen=True)
 class Schema(typing.Generic[_TS, _TP, _TC]):
     source: type[_TS]
     capture: type[_TC]
@@ -70,9 +71,9 @@ class Schema(typing.Generic[_TS, _TP, _TC]):
         assert issubclass(self.peripherals, specs.Peripherals)
 
 
-@dataclasses.dataclass(kw_only=True, frozen=True)
+@dataclasses.dataclass(frozen=True)
 class SensorBinding(Sensor[_TS, _TP, _TC]):
-    schema: Schema[_TS, _TP, _TC]
+    schema: Schema[_TS, _TP, _TC] = None  # type: ignore
     sweep_spec: type['BoundSweep[_TS, _TP, _TC]'] = specs.Sweep  # type: ignore
 
     def __post_init__(self):
@@ -104,10 +105,12 @@ def bind_sensor(
         __bindings__ = binding
 
         mock_source: typing.Optional[str] = None
-        source: schema.source = msgspec.field(default_factory=schema.source)  # type: ignore
-        captures: tuple[schema.capture, ...] = ()  # type: ignore
-        peripherals: schema.peripherals = msgspec.field(  # type: ignore
-            default_factory=schema.peripherals
+        source: __bindings__.schema.source = msgspec.field(
+            default_factory=__bindings__.schema.source
+        )  # type: ignore
+        captures: tuple[__bindings__.schema.capture, ...] = ()  # type: ignore
+        peripherals: __bindings__.schema.peripherals = msgspec.field(  # type: ignore
+            default_factory=__bindings__.schema.peripherals
         )
 
         def __post_init__(self):
@@ -124,7 +127,11 @@ def bind_sensor(
     binding = dataclasses.replace(binding, sweep_spec=BoundSweep)
     registry[key] = binding
 
-    tagged_sweeps.append(BoundSweep)
+    global tagged_sweeps
+    if tagged_sweeps is None:
+        tagged_sweeps = BoundSweep
+    else:
+        tagged_sweeps = typing.Union[tagged_sweeps, BoundSweep]
 
     return binding
 
@@ -167,4 +174,6 @@ def get_binding(
 
 def get_tagged_sweep_type() -> type[specs.Sweep]:
     """return a tagged union type that msgspec can decode"""
-    return typing.Union[*tagged_sweeps]  # type: ignore
+    if tagged_sweeps is None:
+        raise TypeError('no bindings have been defined')
+    return tagged_sweeps  # type: ignore

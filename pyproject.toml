@@ -18,6 +18,7 @@ dependencies = [
     "typing-extensions",
     "xarray>=2024.3",
     "zarr>=2.18,<4",
+    "eval_type_backport"
 ]
 
 [[project.authors]]
@@ -39,7 +40,7 @@ gpu = [
     "cupy >= 12.2",
     "cython",
 ]
-testing = [
+test = [
     "pytest",
     "nptdms",
 ]
@@ -52,7 +53,7 @@ edge-airstack-1 = [
     "numba~=0.56.0",
     "numpy>=1.21,<2",
     "pandas",
-    "pytools==2022.1.12",
+    "pytools>=2022.1.12",
     "scipy~=1.9",
     "ssmdevices",
     "zarr~=2.18.2",

@@ -12,13 +12,11 @@ from . import register, specs, util
 if typing.TYPE_CHECKING:
     import array_api_compat
     import numpy as np
+    import typing_extensions
     import xarray as xr
 
     from striqt.waveform._typing import ArrayType
 
-    AnalysisResult: typing.TypeAlias = (
-        'ArrayType | dict[str, ArrayType] | xr.Dataset | dict[str, DelayedDataArray]'
-    )
 
 else:
     np = util.lazy_import('numpy')
@@ -26,8 +24,9 @@ else:
     array_api_compat = util.lazy_import('array_api_compat')
 
 
-AnalysisReturnFlag: typing.TypeAlias = bool | typing.Literal['delayed']
+AnalysisReturnFlag = typing.Union[bool, typing.Literal['delayed']]
 _TA = typing.TypeVar('_TA', bound=AnalysisReturnFlag)
+
 
 CAPTURE_DIM = 'capture'
 PORT_DIM = 'port'
@@ -36,8 +35,8 @@ PORT_DIM = 'port'
 @dataclasses.dataclass
 class AcquiredIQ:
     raw: ArrayType
-    aligned: ArrayType | None = None
-    capture: specs.Capture | None = None
+    aligned: ArrayType | None
+    capture: specs.Capture | None
 
 
 _ENG_PREFIXES = {
@@ -173,7 +172,9 @@ def describe_value(value, attrs: dict, unit_prefix=None):
     return value_str
 
 
-def _results_as_arrays(obj: tuple | list | dict | ArrayType) -> AnalysisResult:
+def _results_as_arrays(
+    obj: tuple | list | dict | ArrayType,
+) -> ArrayType | dict[str, ArrayType] | xr.Dataset | dict[str, DelayedDataArray]:
     """convert an array, or a container of arrays, into a numpy array (or container of numpy arrays)"""
 
     if array_api_compat.is_torch_array(obj):
@@ -354,7 +355,7 @@ class DelayedDataArray(collections.UserDict):
 
     capture: specs.Capture
     spec: specs.Measurement
-    result: AnalysisResult
+    result: ArrayType | dict[str, ArrayType] | xr.Dataset | dict[str, DelayedDataArray]
     info: register.MeasurementInfo
     attrs: dict
 
@@ -379,8 +380,10 @@ def select_parameter_kws(locals_: dict, omit=(PORT_DIM, 'out')) -> dict:
     return {k: v for k, v in items[1:] if k not in omit}
 
 
-@dataclasses.dataclass(kw_only=True)
-class EvaluationOptions(typing.Generic[_TA]):
+import msgspec
+
+
+class EvaluationOptions(msgspec.Struct, typing.Generic[_TA]):
     as_xarray: _TA
     registry: register.MeasurementRegistry = dataclasses.field(
         default_factory=lambda: register.registry
@@ -409,9 +412,12 @@ def evaluate_by_spec(
         raise TypeError('invalid analysis spec argument')
 
     if not isinstance(iq, AcquiredIQ):
-        iq = AcquiredIQ(raw=iq)
+        iq = AcquiredIQ(raw=iq, aligned=None, capture=None)
 
-    spec_dict = spec.todict()
+    if isinstance(spec, dict):
+        spec_dict = spec
+    else:
+        spec_dict = spec.todict()
     results: dict[str, DelayedDataArray] | dict[str, ArrayType] = {}
     as_xarray = 'delayed' if options.as_xarray else False
 
@@ -511,7 +517,7 @@ def analyze_by_spec(
     spec: dict[str, specs.Measurement] | specs.Analysis,
     capture: specs.Capture,
     options: EvaluationOptions,
-) -> AnalysisResult:
+) -> ArrayType | dict[str, ArrayType] | xr.Dataset | dict[str, DelayedDataArray]:
     """evaluate a set of different channel analyses on the iq waveform as specified by spec"""
 
     results = evaluate_by_spec(iq, spec, capture, options)

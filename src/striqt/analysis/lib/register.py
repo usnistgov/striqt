@@ -159,7 +159,7 @@ class CoordinateInfo(typing.NamedTuple):
     name: str
     func: CallableCoordinateFactory
     dtype: str
-    dims: tuple[str, ...] | None = None
+    dims: tuple[str, ...] = ()
     attrs: dict = {}
 
 
