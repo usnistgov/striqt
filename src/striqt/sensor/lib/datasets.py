@@ -308,7 +308,7 @@ def analyze_capture(
                     iq, capture, source, overwrite_x=overwrite_x
                 )
 
-        c = dataclasses.replace(options, as_xarray='delayed')
+        c = msgspec.structs.replace(options, as_xarray='delayed')
         c = typing.cast(dataarrays.EvaluationOptions[typing.Literal['delayed']], c)
         da_delayed = dataarrays.analyze_by_spec(
             iq, options.sweep_spec.analysis, capture, c
