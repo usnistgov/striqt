@@ -3,7 +3,6 @@ from __future__ import annotations
 import dataclasses
 import functools
 import logging
-import time
 import types
 import typing
 from collections import defaultdict
@@ -22,6 +21,8 @@ from ..util import cp
 if typing.TYPE_CHECKING:
     import numpy as np
     import pandas as pd
+    import typing_extensions
+    from typing_extensions import Self, Unpack
 
     import striqt.waveform as iqwaveform
     from striqt.waveform._typing import ArrayType
@@ -222,7 +223,7 @@ class HasCaptureType(typing.Protocol[_TC]):
         capture: _TC,
         *,
         force_time_sync: bool = False,
-        **capture_kws: typing.Unpack[specs._ResampledCaptureKeywords],
+        **capture_kws: 'Unpack[specs._ResampledCaptureKeywords]',
     ) -> _TC: ...
 
     def acquire(
@@ -310,7 +311,7 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
     def __del__(self):
         self.close()
 
-    def __enter__(self) -> typing.Self:
+    def __enter__(self) -> 'typing_extensions.Self':
         return self
 
     def __exit__(self, *exc_info):

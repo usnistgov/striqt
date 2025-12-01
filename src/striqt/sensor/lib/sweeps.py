@@ -16,6 +16,7 @@ from .calibration import lookup_system_noise_power
 from .specs import _TC, _TP, _TS
 
 if typing.TYPE_CHECKING:
+    from typing_extensions import Unpack
     import xarray as xr
     from .. import bindings
 else:
@@ -205,7 +206,7 @@ class SweepIterator:
         *,
         always_yield=False,
         loop=False,
-        **extra_resources: typing.Unpack[AnyResources],
+        **extra_resources: 'Unpack[AnyResources]',
     ):
         resources = Resources(resources, **extra_resources)
 
@@ -451,7 +452,7 @@ def iter_sweep(
     *,
     always_yield=False,
     loop=False,
-    **extra_resources: typing.Unpack[Resources],
+    **extra_resources: 'Unpack[Resources]',
 ) -> SweepIterator:
     """iterate through sweep captures on the source, yielding a dataset for each.
 
