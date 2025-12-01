@@ -385,9 +385,7 @@ import msgspec
 
 class EvaluationOptions(msgspec.Struct, typing.Generic[_TA]):
     as_xarray: _TA
-    registry: register.MeasurementRegistry = dataclasses.field(
-        default_factory=lambda: register.registry
-    )
+    registry: register.MeasurementRegistry|None = None
     block_each: bool = True
     expand_dims: typing.Sequence[str] = ()
 
@@ -404,10 +402,15 @@ def evaluate_by_spec(
 ):
     """evaluate each analysis for the given IQ waveform"""
 
+    if options.registry is None:
+        registry = register.registry
+    else:
+        registry = options.registry
+
     if isinstance(spec, specs.Analysis):
         spec = spec.validate()
     elif isinstance(spec, dict):
-        spec = options.registry.tospec().fromdict(spec)
+        spec = registry.tospec().fromdict(spec)
     else:
         raise TypeError('invalid analysis spec argument')
 

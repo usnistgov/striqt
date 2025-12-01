@@ -296,7 +296,7 @@ class SweepIterator:
                     assert canalyze is not None
 
                     calls['analyze'] = util.Call(
-                        datasets.analyze_by_spec,
+                        datasets.analyze_capture,
                         iq,
                         self.source,
                         canalyze,

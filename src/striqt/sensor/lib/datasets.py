@@ -257,7 +257,7 @@ def build_capture_coords(
 
 
 @typing.overload
-def analyze_by_spec(
+def analyze_capture(
     iq: sources.AcquiredIQ,
     source: sources.SourceBase,
     capture: specs.ResampledCapture,
@@ -266,7 +266,7 @@ def analyze_by_spec(
 
 
 @typing.overload
-def analyze_by_spec(
+def analyze_capture(
     iq: sources.AcquiredIQ,
     source: sources.SourceBase,
     capture: specs.ResampledCapture,
@@ -275,7 +275,7 @@ def analyze_by_spec(
 
 
 @typing.overload
-def analyze_by_spec(
+def analyze_capture(
     iq: sources.AcquiredIQ,
     source: sources.SourceBase,
     capture: specs.ResampledCapture,
@@ -284,7 +284,7 @@ def analyze_by_spec(
 
 
 @util.stopwatch('', 'analysis', logger_level=util.PERFORMANCE_INFO)
-def analyze_by_spec(
+def analyze_capture(
     iq: sources.AcquiredIQ,
     source: sources.SourceBase,
     capture: specs.ResampledCapture,
