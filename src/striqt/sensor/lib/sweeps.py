@@ -349,7 +349,7 @@ class SweepIterator:
                 elif self._always_yield:
                     yield None
 
-    @util.stopwatch('', 'source', logger_level=util.PERFORMANCE_INFO)
+    @util.stopwatch('acquire', 'sweep', logger_level=util.PERFORMANCE_INFO)
     def _acquire(
         self,
         iq_prev: sources.AcquiredIQ | None,
@@ -398,6 +398,7 @@ class SweepIterator:
 
         return result
 
+    @util.stopwatch('arm', 'sweep', logger_level=util.PERFORMANCE_INFO)
     def _arm(self, capture):
         calls = {}
 
