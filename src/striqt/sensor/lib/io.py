@@ -115,6 +115,8 @@ def read_yaml_spec(
         tree['sensor_binding'] = mock_name
 
     if 'extensions' in tree:
+        # import now, so that sensor_binding keys can use definitions
+        # in extension modules
         ext = specs.Extension.fromdict(tree['extensions'])
         _import_extensions_from_spec(ext)
 

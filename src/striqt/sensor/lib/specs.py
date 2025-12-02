@@ -398,18 +398,23 @@ class FrequencyBinRange(LoopBase, frozen=True, kw_only=True):
 LoopSpec = Union[Repeat, List, Range, FrequencyBinRange]
 
 
-AliasMatchType = Annotated[
-    Union[dict[str, dict[str, Any]], tuple[dict[str, dict[str, Any]], ...]],
-    meta('one or more dictionaries of valid match sets to "or"'),
+AliasMatchCandidates = Annotated[
+    tuple[dict[str, Any], ...],
+    meta('one or more dictionaries of valid match sets to "or"')
 ]
 
+
+AliasMatchType = Annotated[
+    dict[str, AliasMatchCandidates],
+    meta('key: alias field value, value: a list of match conditions for that value'),
+]
 
 class Sink(analysis.specs._SlowHashSpecBase, frozen=True, kw_only=True):
     path: str = '{yaml_name}-{start_time}'
     log_path: Optional[str] = None
     log_level: str = 'info'
     store: Literal['zip', 'directory'] = 'directory'
-    coord_aliases: dict[str, dict[str, AliasMatchType]] = {}
+    coord_aliases: dict[str, AliasMatchType] = {}
     max_threads: Optional[int] = None
 
 
