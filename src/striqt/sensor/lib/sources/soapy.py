@@ -514,7 +514,7 @@ class HardwareTimeSync:
             full_secs += 1
         elif frac_secs > 0.2:
             # System time and PPS are off, warn caller
-            util.get_logger('acquisition').warning(
+            util.get_logger('source').warning(
                 f'system time and PPS out of sync by {frac_secs:0.3f}s, check NTP'
             )
         time_to_set_ns = int((full_secs + 1) * 1e9)
@@ -629,7 +629,7 @@ class SoapySourceBase(
             self._rx_stream.close(self._device)
         finally:
             self._device.close()
-        util.get_logger('acquisition').info('closed soapy radio')
+        util.get_logger('source').info('closed soapy radio')
         super().close()
 
     @util.stopwatch('connected to radio', 'source', util.PERFORMANCE_INFO)
@@ -655,7 +655,7 @@ class SoapySourceBase(
             on_overflow = 'log'
             periodic_trigger = getattr(spec, 'periodic_trigger', None)
             if periodic_trigger is not None:
-                util.get_logger('acquisition').warning(
+                util.get_logger('source').warning(
                     'periodic trigger with host time will suffer from inaccuracy on overflow'
                 )
         else:

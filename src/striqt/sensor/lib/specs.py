@@ -231,7 +231,6 @@ class _SourceKeywords(typing.TypedDict, total=False):
     # properly provide type hints for IDEs in the setup
     # call signature of source.Base objects
 
-    driver: str
     base_clock_rate: BaseClockRateType
 
     resource: dict

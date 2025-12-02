@@ -239,7 +239,7 @@ class PathAliasFormatter:
             missing = set(path_fields).intersection(possible - valid)
             if len(missing) > 0:
                 raise ValueError(
-                f'no alias name matches for fields {missing!r}'
+                f'aliases defined for fields {missing!r}, but no match'
             ) from ex
 
             invalid = set(path_fields) - set(valid)
