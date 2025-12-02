@@ -11,6 +11,7 @@ from . import base
 if typing.TYPE_CHECKING:
     import SoapySDR
     import pandas as pd
+    from typing_extensions import Self
 else:
     SoapySDR = util.lazy_import('SoapySDR')
     pd = util.lazy_import('pandas')
@@ -35,11 +36,11 @@ class Range(specs.SpecBase, kw_only=True, frozen=True, cache_hash=True):
     step: float
 
     @classmethod
-    def from_soapy(cls, r: 'SoapySDR.Range') -> typing.Self:
+    def from_soapy(cls, r: 'SoapySDR.Range') -> Self:
         return cls(minimum=r.minimum(), maximum=r.maximum(), step=r.step())
 
     @classmethod
-    def from_soapy_tuple(cls, seq: typing.Any) -> tuple[typing.Self, ...]:
+    def from_soapy_tuple(cls, seq: typing.Any) -> tuple[Self, ...]:
         return tuple([cls(minimum=seq[0], maximum=seq[1], step=seq[2]) for r in seq])
 
 
@@ -55,21 +56,21 @@ class ArgInfo(specs.SpecBase, kw_only=True, frozen=True, cache_hash=True):
     options: tuple[str, ...]
 
     @classmethod
-    def from_soapy(cls, arg: 'SoapySDR.ArgInfo') -> typing.Self:
+    def from_soapy(cls, arg: 'SoapySDR.ArgInfo') -> Self:
         return cls(
             name=arg.name,
             description=arg.description,
             units=arg.units,
             type=arg.type,
             value=arg.value,
-            range=Range.from_soapy_tuple(arg.range),
+            range=Range.from_soapy(arg.range),
             options=tuple(arg.options),
         )
 
     @classmethod
     def from_soapy_map(
         cls, soapy_args: list[SoapySDR.ArgInfo]
-    ) -> dict[str, typing.Self]:
+    ) -> dict[str, Self]:
         return {arg.key: cls.from_soapy(arg) for arg in soapy_args}
 
 
