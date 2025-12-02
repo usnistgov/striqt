@@ -246,13 +246,14 @@ class PathAliasFormatter:
             for matches in self.sweep_spec.sink.coord_aliases[key].values():
                 for m in matches:
                     afields.update(m)
-            msg = f'field {key!r} of path {p!r} is an unmatched alias for fields {afields!r}'
+            used = set(afields.keys())
+            msg = f'field {key!r} of path {p!r} is an unmatched alias for fields {used!r}'
             ideas = {k: valid_fields[k] for k in afields.keys() if k in valid_fields}
             if len(ideas) > 0:
-                msg = f'{msg}. valid matches in this context are {ideas!r}'
+                msg = f'{msg}. the match for these fields would have been {ideas!r}'
             invalid = {k for k in afields.keys() if k not in valid_fields}
             if len(invalid) > 0:
-                msg = f'{msg}. the defined aliased fields {invalid!r} do not exist in this context'
+                msg = f'{msg}. the defined alias fields {invalid!r} do not exist in this context'
 
             raise KeyError(msg) from exception
         else:
