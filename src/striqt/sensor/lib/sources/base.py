@@ -503,6 +503,12 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
             return np
         else:
             raise TypeError('invalid array_backend argument')
+        
+    def get_resampler(self, capture=None) -> ResamplerDesign:
+        if capture is None:
+            capture = self.capture_spec
+
+        return design_capture_resampler(self.setup_spec.base_clock_rate, capture)
 
 
 class VirtualSourceBase(SourceBase[_TS, _TC]):
