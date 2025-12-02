@@ -28,12 +28,12 @@ def _tuplize_port(obj: specs.PortType) -> tuple[int, ...]:
         return (int(obj),)
 
 
-class Range(specs.SpecBase, kw_only=True, frozen=True, cache_hash=True):
+class Range(specs.SpecBase, frozen=True, cache_hash=True):
     """Represents a range with a minimum, maximum, and step."""
 
     minimum: float
     maximum: float
-    step: float
+    step: float|None = None
 
     @classmethod
     def from_soapy(cls, r: 'SoapySDR.Range') -> Self:
@@ -41,7 +41,7 @@ class Range(specs.SpecBase, kw_only=True, frozen=True, cache_hash=True):
 
     @classmethod
     def from_soapy_tuple(cls, seq: typing.Any) -> tuple[Self, ...]:
-        return tuple([cls(minimum=seq[0], maximum=seq[1], step=seq[2]) for r in seq])
+        return tuple([cls(*seq) for r in seq])
 
 
 class ArgInfo(specs.SpecBase, kw_only=True, frozen=True, cache_hash=True):
