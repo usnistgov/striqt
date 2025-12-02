@@ -43,7 +43,7 @@ class _StriqtLogger(logging.LoggerAdapter):
     }
 
     def __init__(self, name_suffix, extra={}):
-        _logger = logging.getLogger('striqt').getChild(name_suffix)
+        _logger = logging.getLogger(name_suffix)
         super().__init__(_logger, self.EXTRA_DEFAULTS | extra)
         _logger_adapters[name_suffix] = self
 
