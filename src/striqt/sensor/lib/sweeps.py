@@ -257,7 +257,7 @@ class SweepIterator:
             cal,
             specs.SoapyCapture.fromspec(capture),
             base_clock_rate=capture.backend_sample_rate,
-            alias_func=self.resources['alias_func'],
+            alias_func=self.resources.get('alias_func', None),
             B=attrs['noise_bandwidth'],
             xp=xp,
         )
@@ -305,7 +305,7 @@ class SweepIterator:
                         self.source,
                         canalyze,
                         self._analysis_opts,
-                        alias_func=self.resources['alias_func']
+                        alias_func=self.resources.get('alias_func', None)
                     )
 
                 if cacquire is None:
@@ -412,7 +412,6 @@ class SweepIterator:
             return {}
 
         data = self._peripherals.acquire(capture)
-        fs_base = self.source.setup_spec.base_clock_rate
 
         if data is None:
             data = {}
@@ -424,17 +423,7 @@ class SweepIterator:
                     f'{self._peripherals.acquire!r} must return a dict or None, not {type(data)!r}'
                 )
 
-        if self.spec.source.calibration is None:
-            return data
-
-        system_noise = lookup_system_noise_power(
-            self.spec.source.calibration,
-            capture,
-            fs_base,
-            alias_func=self.resources['alias_func']
-        )
-
-        return dict(data, sensor_system_noise=system_noise)
+        return data
 
     @util.stopwatch('', 'sink', threshold=10e-3, logger_level=util.PERFORMANCE_INFO)
     def _intake(

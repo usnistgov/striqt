@@ -28,9 +28,10 @@ else:
 USE_OARESAMPLE = False
 
 
+@util.lru_cache()
 def _get_voltage_scale(
-    capture: specs.ResampledCapture,
-    source: SourceBase,
+    capture_spec: specs.ResampledCapture,
+    source_spec: specs.Source,
     *,
     alias_func: captures.PathAliasFormatter | None = None,
     xp=None,
@@ -42,19 +43,19 @@ def _get_voltage_scale(
     """
     xp = xp or np
 
-    if isinstance(source.setup_spec, specs.SoapySource):
-        assert isinstance(capture, specs.SoapyCapture)
+    if isinstance(source_spec, specs.SoapySource):
+        assert isinstance(capture_spec, specs.SoapyCapture)
         power_scale = calibration.lookup_power_correction(
-            source.setup_spec.calibration,
-            capture,
-            source.setup_spec.base_clock_rate,
+            source_spec.calibration,
+            capture_spec,
+            source_spec.base_clock_rate,
             alias_func=alias_func,
             xp=xp
         )
     else:
         power_scale = None
 
-    transport_dtype = source.setup_spec.transport_dtype
+    transport_dtype = source_spec.transport_dtype
     if transport_dtype == 'int16':
         adc_scale = 1.0 / float(np.iinfo(transport_dtype).max)
     else:
@@ -71,11 +72,32 @@ def _get_voltage_scale(
     return xp.sqrt(power_scale) * adc_scale, adc_scale
 
 
+def _get_peak_power(
+    iq: ArrayType,
+    capture_spec: specs.ResampledCapture,
+    source_spec: specs.Source,
+    *,
+    alias_func: captures.PathAliasFormatter | None = None,
+    xp=None,
+):
+    xp = iqwaveform.util.array_namespace(iq)
+
+    _, prescale = _get_voltage_scale(capture_spec, source_spec, alias_func=alias_func, xp=xp)
+
+    logger = util.get_logger('analysis')
+    peak_counts = xp.abs(iq).max(axis=-1)
+    unscaled_peak = 20 * xp.log10(peak_counts * prescale) - 3
+    descs = ','.join(f'{p:0.0f}' for p in unscaled_peak)
+    logger.info(f'({descs}) dBfs ADC peak')
+    return unscaled_peak
+
+
 def resampling_correction(
     iq_in: AcquiredIQ,
     capture: specs.ResampledCapture,
     source: SourceBase,
     alias_func: captures.PathAliasFormatter | None = None,
+
     *,
     overwrite_x=False,
     axis=1,
@@ -98,17 +120,20 @@ def resampling_correction(
     iq = iq_in.raw
     xp = iqwaveform.util.array_namespace(iq)
 
-    vscale, prescale = _get_voltage_scale(capture, source, alias_func=alias_func, xp=xp)
+    vscale, _ = _get_voltage_scale(capture, source.setup_spec, alias_func=alias_func, xp=xp)
+
+    extra_data = {}
 
     if source.setup_spec.uncalibrated_peak_detect:
-        logger = util.get_logger('analysis')
-        peak_counts = xp.abs(iq).max(axis=-1)
-        unscaled_peak = 20 * xp.log10(peak_counts * prescale) - 3
-        descs = ','.join(f'{p:0.0f}' for p in unscaled_peak)
-        logger.info(f'({descs}) dBfs ADC peak')
-        extra_data = dict(unscaled_iq_peak=unscaled_peak)
-    else:
-        extra_data = dict()
+        extra_data['unscaled_iq_peak'] = _get_peak_power(iq, capture, source.setup_spec, alias_func=alias_func)
+
+    if isinstance(source.setup_spec, specs.SoapySource) and source.setup_spec.calibration is not None:
+        extra_data['system_noise'] = calibration.lookup_system_noise_power(
+            source.setup_spec.calibration,
+            source.capture_spec,
+            source.setup_spec.base_clock_rate,
+            alias_func=alias_func
+        )
 
     resampler = source.get_resampler(capture)
     fs = resampler['fs_sdr']

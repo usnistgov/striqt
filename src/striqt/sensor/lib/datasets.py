@@ -336,7 +336,7 @@ def analyze_capture(
         config=options,
         extra_coords=iq.info,
         extra_data=iq.extra_data,
-    )
+    )    
 
     if options.as_xarray == 'delayed':
         return ds_delayed
