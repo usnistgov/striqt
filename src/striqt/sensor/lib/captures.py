@@ -217,8 +217,8 @@ class PathAliasFormatter:
         self.spec_path = spec_path
 
     def __call__(self, path: str | Path) -> str:
-        fields = _get_format_fields(str(path))
-        if len(fields) == 0:
+        path_fields = _get_format_fields(str(path))
+        if len(path_fields) == 0:
             return str(path)
 
         from .sources.base import get_source_id
@@ -233,9 +233,9 @@ class PathAliasFormatter:
         try:
             path = Path(str(path).format(**fields))
         except KeyError as ex:
-            raise
             valid_fields = tuple(fields.keys())
-            raise ValueError(f'valid formatting fields are {valid_fields!r}') from ex
+            invalid_fields = set(path_fields) - set(valid_fields)
+            raise ValueError(f'{invalid_fields!r} are not in the set of valid fields {valid_fields!r}') from ex
 
         return str(path)
 
