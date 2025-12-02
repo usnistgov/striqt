@@ -254,14 +254,14 @@ class PathAliasFormatter:
             if len(invalid) > 0:
                 msg = f'{msg}. the defined aliased fields {invalid!r} do not exist in this context'
 
-            raise KeyError(msg, key) from exception
+            raise KeyError(msg) from exception
         else:
             available = set(valid_fields.keys())
             msg = (
                 f'invalid field {key!r} in path {p!r}\n'
                 f'available fields: {available!r}'
             )
-            raise KeyError(msg, key) from exception
+            raise KeyError(msg) from exception
 
 
 def concat_group_sizes(
