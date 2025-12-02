@@ -60,11 +60,12 @@ class SinkBase(typing.Generic[specs._TC]):
         finally:
             self._executor.__exit__(*exc_info)
 
-    def append(self, capture_data: 'xr.Dataset | None', capture: specs._TC):
-        if capture_data is None:
+    def append(self, capture_result: datasets.DelayedDataset|None, capture: specs._TC):
+        if capture_result is None:
             return
 
-        self._pending_data.append(capture_data)
+        ds = datasets.from_delayed(capture_result)
+        self._pending_data.append(ds)
 
     def open(self):
         raise NotImplementedError
@@ -77,6 +78,10 @@ class SinkBase(typing.Generic[specs._TC]):
             return
         self._future.result()
         self._future = None
+
+    # descs = ','.join(f'{p:0.0f}' for p in unscaled_peak)
+    # logger = util.get_logger('analysis')
+    # logger.info(f'({descs}) dBfs ADC peak')
 
 
 class NoSink(SinkBase):
@@ -93,8 +98,10 @@ class NoSink(SinkBase):
         ):
             util.get_logger('sink').info(f'done')
 
-    def append(self, capture_data, capture):
+    def append(self, capture_result, capture):
         self.captures_elapsed += 1
+        if capture_result:
+            datasets.from_delayed(capture_result)
 
     def wait(self):
         pass
@@ -128,8 +135,8 @@ class ZarrSinkBase(SinkBase[specs._TC]):
 class ZarrCaptureSink(ZarrSinkBase[specs._TC]):
     """concatenates the data from each capture and dumps to a zarr data store"""
 
-    def append(self, capture_data: 'xr.Dataset | None', capture: specs._TC):
-        super().append(capture_data, capture)
+    def append(self, capture_result, capture: specs._TC):
+        super().append(capture_result, capture)
 
         if len(self._pending_data) == self._group_sizes[0]:
             self.flush()
@@ -186,9 +193,9 @@ class SpectrogramTimeAppender(ZarrSinkBase):
         super().__init__(sweep_spec, alias_func, force=force)
 
     def append(
-        self, capture_data: 'xr.Dataset | None', capture: specs.ResampledCapture
+        self, capture_result, capture: specs.ResampledCapture
     ):
-        super().append(capture_data, capture)
+        super().append(capture_result, capture)
 
         if len(self._pending_data) == self._group_sizes[0]:
             self.flush()

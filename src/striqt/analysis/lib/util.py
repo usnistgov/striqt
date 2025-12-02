@@ -37,7 +37,7 @@ PERFORMANCE_DETAIL = 12
 class _StriqtLogger(logging.LoggerAdapter):
     EXTRA_DEFAULTS = {
         'capture_index': 0,
-        'capture_progress': 'open',
+        'capture_progress': 'startup',
         'capture_count': 'unknown',
         'capture': None,
     }

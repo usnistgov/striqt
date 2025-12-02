@@ -86,12 +86,13 @@ def _get_peak_power(
         capture_spec, source_spec, alias_func=alias_func, xp=xp
     )
 
-    logger = util.get_logger('analysis')
     peak_counts = xp.abs(iq).max(axis=-1)
     unscaled_peak = 20 * xp.log10(peak_counts * prescale) - 3
-    descs = ','.join(f'{p:0.0f}' for p in unscaled_peak)
-    logger.info(f'({descs}) dBfs ADC peak')
-    return unscaled_peak
+
+    if iqwaveform.util.is_cupy_array(iq):
+        return unscaled_peak.get()
+    else:
+        return unscaled_peak
 
 
 def resampling_correction(

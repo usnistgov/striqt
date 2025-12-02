@@ -437,12 +437,10 @@ class SweepIterator:
                 f'expected DelayedAnalysisResult type for data, not {type(results)}'
             )
 
-        ds = datasets.from_delayed(results)
-
         if self._sink is None:
-            return ds
+            return datasets.from_delayed(results)
         else:
-            self._sink.append(ds, capture)
+            self._sink.append(results, capture)
 
 
 def iter_sweep(
