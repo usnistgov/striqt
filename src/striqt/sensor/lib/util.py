@@ -54,9 +54,10 @@ else:
     _R = typing.TypeVar('_R')
 
 
-_StriqtLogger('controller')
+_StriqtLogger('sweep')
 _StriqtLogger('source')
 _StriqtLogger('sink')
+_StriqtLogger('ext')
 
 _concurrency_count = 0
 _handling_tracebacks = False
@@ -395,7 +396,7 @@ def concurrently(
     """see labbench.util for docs"""
     global _concurrency_count
 
-    logger = get_logger('controller')
+    logger = get_logger('sweep')
 
     def traceback_skip(exc_tuple, count):
         """Skip the first `count` traceback entries in

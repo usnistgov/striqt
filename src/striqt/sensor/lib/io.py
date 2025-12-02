@@ -75,7 +75,7 @@ def _import_extensions_from_spec(
     start_count = len(get_registry())
     importlib.import_module(spec.import_name)
     if len(get_registry()) - start_count == 0:
-        logger = util.get_logger('controller')
+        logger = util.get_logger('sweep')
         import_name = spec.import_name
         logger.warning(
             f'imported extension module {import_name!r}, but it did not bind a sensor'

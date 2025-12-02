@@ -54,7 +54,7 @@ def any_are_running(workers: typing.Iterable[Worker]) -> bool:
 
     for worker in workers:
         if worker.is_running:
-            util.get_logger('controller').logger.error(f'still running: {str(worker)}')
+            util.get_logger('sweep').logger.error(f'still running: {str(worker)}')
             return True
     else:
         return False

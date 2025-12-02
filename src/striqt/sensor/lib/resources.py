@@ -109,18 +109,18 @@ class ConnectionManager(
     def open(
         self, name, func: typing.Callable[_P, _R], *args: _P.args, **kws: _P.kwargs
     ):
-        with util.stopwatch(name, 'controller', 0.5, util.logging.INFO):
+        with util.stopwatch(name, 'sweep', 0.5, util.logging.INFO):
             self._resources[name] = obj = func(*args, **kws)
             self.enter_context(obj)  # type: ignore
 
     def get(
         self, name, func: typing.Callable[_P, _R], *args: _P.args, **kws: _P.kwargs
     ):
-        with util.stopwatch(name, 'controller', 0.5, util.logging.INFO):
+        with util.stopwatch(name, 'sweep', 0.5, util.logging.INFO):
             self._resources[name] = func(*args, **kws)
 
     def enter(self, name, ctx):
-        with util.stopwatch(name, 'controller', 0.5, util.logging.INFO):
+        with util.stopwatch(name, 'sweep', 0.5, util.logging.INFO):
             self._resources[name] = self.enter_context(ctx)
 
     @functools.cached_property
@@ -150,7 +150,7 @@ def open_sensor(
 
     from .sweeps import run_warmup
 
-    timer_kws = dict(threshold=1, logger_suffix='controller', logger_level=logging.INFO)
+    timer_kws = dict(threshold=1, logger_suffix='sweep', logger_level=logging.INFO)
     formatter = captures.PathAliasFormatter(spec, spec_path=spec_path)
 
     if spec_path is not None:
