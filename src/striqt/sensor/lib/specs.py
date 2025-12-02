@@ -19,6 +19,8 @@ if typing.TYPE_CHECKING:
     _T = typing.TypeVar('_T')
     import pandas as pd
     from typing_extensions import Self
+else:
+    pd = util.lazy_import('pandas')
 
 
 def _dict_hash(d):
