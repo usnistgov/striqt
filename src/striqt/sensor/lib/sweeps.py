@@ -72,7 +72,7 @@ def design_warmup(
     in order to avoid analysis slowdowns during sweeps.
     """
 
-    from . import bindings
+    from .bindings import mock_binding
     from ..bindings import warmup
 
     # captures that have unique sampling parameters, which are those
@@ -96,7 +96,7 @@ def design_warmup(
     if len(captures) > 1:
         captures = captures[:1]
 
-    b = bindings.mock_binding(sweep.__bindings__, 'warmup')
+    b = mock_binding(sweep.__bindings__, 'warmup')
 
     source=warmup.schema.source(
         num_rx_ports=num_rx_ports,

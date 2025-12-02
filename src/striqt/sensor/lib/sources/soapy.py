@@ -554,7 +554,7 @@ def set_center_frequency(
     this_split, prev_split = split_this_prev_captures(
         capture, source._capture, ports_changed
     )
-    fs_base = source.__setup__.base_sample_rate
+    fs_base = source.setup_spec.base_clock_rate
 
     # set center frequency with lo_shift
     for prev, this in zip(prev_split, this_split):
