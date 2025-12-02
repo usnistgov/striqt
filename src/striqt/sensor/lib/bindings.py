@@ -142,7 +142,7 @@ def get_registry() -> dict[str, SensorBinding]:
 
 
 @functools.cache
-def mock_binding(origin: SensorBinding, target: str|SensorBinding) -> SensorBinding:
+def mock_binding(origin: SensorBinding, target: str | SensorBinding) -> SensorBinding:
     mock_name = f'mock_{target}_{origin.sweep_spec.__name__}'
 
     if isinstance(target, str):

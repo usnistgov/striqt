@@ -50,7 +50,7 @@ def _get_voltage_scale(
             capture_spec,
             source_spec.base_clock_rate,
             alias_func=alias_func,
-            xp=xp
+            xp=xp,
         )
     else:
         power_scale = None
@@ -82,7 +82,9 @@ def _get_peak_power(
 ):
     xp = iqwaveform.util.array_namespace(iq)
 
-    _, prescale = _get_voltage_scale(capture_spec, source_spec, alias_func=alias_func, xp=xp)
+    _, prescale = _get_voltage_scale(
+        capture_spec, source_spec, alias_func=alias_func, xp=xp
+    )
 
     logger = util.get_logger('analysis')
     peak_counts = xp.abs(iq).max(axis=-1)
@@ -97,7 +99,6 @@ def resampling_correction(
     capture: specs.ResampledCapture,
     source: SourceBase,
     alias_func: captures.PathAliasFormatter | None = None,
-
     *,
     overwrite_x=False,
     axis=1,
@@ -120,19 +121,26 @@ def resampling_correction(
     iq = iq_in.raw
     xp = iqwaveform.util.array_namespace(iq)
 
-    vscale, _ = _get_voltage_scale(capture, source.setup_spec, alias_func=alias_func, xp=xp)
+    vscale, _ = _get_voltage_scale(
+        capture, source.setup_spec, alias_func=alias_func, xp=xp
+    )
 
     extra_data = {}
 
     if source.setup_spec.uncalibrated_peak_detect:
-        extra_data['unscaled_iq_peak'] = _get_peak_power(iq, capture, source.setup_spec, alias_func=alias_func)
+        extra_data['unscaled_iq_peak'] = _get_peak_power(
+            iq, capture, source.setup_spec, alias_func=alias_func
+        )
 
-    if isinstance(source.setup_spec, specs.SoapySource) and source.setup_spec.calibration is not None:
+    if (
+        isinstance(source.setup_spec, specs.SoapySource)
+        and source.setup_spec.calibration is not None
+    ):
         extra_data['system_noise'] = calibration.lookup_system_noise_power(
             source.setup_spec.calibration,
             source.capture_spec,
             source.setup_spec.base_clock_rate,
-            alias_func=alias_func
+            alias_func=alias_func,
         )
 
     resampler = source.get_resampler(capture)

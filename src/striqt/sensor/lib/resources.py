@@ -37,7 +37,7 @@ if typing.TYPE_CHECKING:
         except_context: typing_extensions.NotRequired[typing.ContextManager]
         sweep_spec: specs.Sweep[_TS, _TP, _TC]
         calibration: 'xr.Dataset|None'
-        alias_func: captures.PathAliasFormatter|None
+        alias_func: captures.PathAliasFormatter | None
 
     class AnyResources(
         typing_extensions.TypedDict, typing.Generic[_TS, _TP, _TC], total=False
@@ -50,7 +50,7 @@ if typing.TYPE_CHECKING:
         except_context: typing_extensions.NotRequired[typing.ContextManager]
         sweep_spec: specs.Sweep[_TS, _TP, _TC]
         calibration: 'xr.Dataset|None'
-        alias_func: captures.PathAliasFormatter|None
+        alias_func: captures.PathAliasFormatter | None
 
 else:
     # workaround for python < 3.10
@@ -63,7 +63,7 @@ else:
         except_context: typing_extensions.NotRequired[typing.ContextManager]
         sweep_spec: specs.Sweep
         calibration: 'xr.Dataset|None'
-        alias_func: captures.PathAliasFormatter|None
+        alias_func: captures.PathAliasFormatter | None
 
     class AnyResources(typing.TypedDict, total=False):
         """Sensor resources needed to run a sweep"""
@@ -74,7 +74,7 @@ else:
         except_context: typing_extensions.NotRequired[typing.ContextManager]
         sweep_spec: specs.Sweep
         calibration: 'xr.Dataset|None'
-        alias_func: captures.PathAliasFormatter|None
+        alias_func: captures.PathAliasFormatter | None
 
 
 def import_sink_cls(
@@ -171,7 +171,11 @@ def open_sensor(
             ),
             'sink': util.Call(conn.open, 'sink', sink_cls, spec, alias_func=formatter),
             'calibration': util.Call(
-                conn.get, 'calibration', calibration.read_calibration, spec.source.calibration, formatter
+                conn.get,
+                'calibration',
+                calibration.read_calibration,
+                spec.source.calibration,
+                formatter,
             ),
             'peripherals': util.Call(conn.open, 'peripherals', bind.peripherals, spec),
         }

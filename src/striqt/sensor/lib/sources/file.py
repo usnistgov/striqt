@@ -57,8 +57,12 @@ class TDMSFileSource(
 
         return (iq * float_dtype(scale)).view(dtype).copy()  # type: ignore
 
-    def acquire(self, capture=None, next_capture=None, correction=True):
-        iq = super().acquire(capture, next_capture, correction)
+    def acquire(
+        self, capture=None, next_capture=None, *, correction=True, alias_func=None
+    ):
+        iq = super().acquire(
+            capture, next_capture, correction=correction, alias_func=alias_func
+        )
         iq.info = self._file_info
         return iq
 
@@ -112,8 +116,12 @@ class FileSource(base.VirtualSourceBase[specs.FileSourceSpec, specs.FileCapture]
         assert ret.shape[1] == count
         return ret.copy()
 
-    def acquire(self, capture=None, next_capture=None, correction=True):
-        iq = super().acquire(capture, next_capture, correction)
+    def acquire(
+        self, capture=None, next_capture=None, *, correction=True, alias_func=None
+    ):
+        iq = super().acquire(
+            capture, next_capture, correction=correction, alias_func=alias_func
+        )
         iq.info = self._file_info
         return iq
 
@@ -211,7 +219,11 @@ class ZarrIQSource(base.VirtualSourceBase[specs.ZarrIQSourceSpec, specs.FileCapt
         else:
             return iq.astype(dtype)
 
-    def acquire(self, capture=None, next_capture=None, correction=True):
-        iq = super().acquire(capture, next_capture, correction)
+    def acquire(
+        self, capture=None, next_capture=None, *, correction=True, alias_func=None
+    ):
+        iq = super().acquire(
+            capture, next_capture, correction=correction, alias_func=alias_func
+        )
         iq.info = self._capture_info
         return iq

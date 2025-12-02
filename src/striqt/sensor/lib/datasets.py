@@ -262,7 +262,7 @@ def analyze_capture(
     source: sources.SourceBase,
     capture: specs.ResampledCapture,
     options: EvaluationOptions[typing.Literal[True]],
-    alias_func: captures.PathAliasFormatter | None = None
+    alias_func: captures.PathAliasFormatter | None = None,
 ) -> 'xr.Dataset': ...
 
 
@@ -272,7 +272,7 @@ def analyze_capture(
     source: sources.SourceBase,
     capture: specs.ResampledCapture,
     options: EvaluationOptions[typing.Literal['delayed']],
-    alias_func: captures.PathAliasFormatter | None = None
+    alias_func: captures.PathAliasFormatter | None = None,
 ) -> DelayedDataset: ...
 
 
@@ -282,7 +282,7 @@ def analyze_capture(
     source: sources.SourceBase,
     capture: specs.ResampledCapture,
     options: EvaluationOptions[typing.Literal[False]],
-    alias_func: captures.PathAliasFormatter | None = None
+    alias_func: captures.PathAliasFormatter | None = None,
 ) -> 'dict[str, ArrayType]': ...
 
 
@@ -292,7 +292,7 @@ def analyze_capture(
     source: sources.SourceBase,
     capture: specs.ResampledCapture,
     options: EvaluationOptions,
-    alias_func: captures.PathAliasFormatter | None = None
+    alias_func: captures.PathAliasFormatter | None = None,
 ) -> 'dict[str, ArrayType] | xr.Dataset | DelayedDataset':
     """convenience function to analyze a waveform from a specification.
 
@@ -336,7 +336,7 @@ def analyze_capture(
         config=options,
         extra_coords=iq.info,
         extra_data=iq.extra_data,
-    )    
+    )
 
     if options.as_xarray == 'delayed':
         return ds_delayed

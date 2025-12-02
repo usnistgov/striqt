@@ -25,15 +25,22 @@ _TP = typing.TypeVar('_TP', bound=specs.Peripherals)
 _TS = typing.TypeVar('_TS', bound=specs.SoapySource)
 
 
+@typing.overload
+def read_calibration(
+    path: None, alias_func: captures.PathAliasFormatter | None = None
+) -> None: ...
+
 
 @typing.overload
-def read_calibration(path: None, alias_func: captures.PathAliasFormatter | None = None) -> None: ...
+def read_calibration(
+    path: str | Path, alias_func: captures.PathAliasFormatter | None = None
+) -> 'xr.Dataset': ...
 
-@typing.overload
-def read_calibration(path: str | Path, alias_func: captures.PathAliasFormatter | None = None) -> 'xr.Dataset': ...
 
 @util.lru_cache()
-def read_calibration(path: str | Path | None, alias_func: captures.PathAliasFormatter | None = None) -> 'xr.Dataset|None':
+def read_calibration(
+    path: str | Path | None, alias_func: captures.PathAliasFormatter | None = None
+) -> 'xr.Dataset|None':
     if path is None:
         return None
 

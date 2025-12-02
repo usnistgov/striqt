@@ -269,9 +269,7 @@ class SoapySource(Source, frozen=True, kw_only=True):
                 'time_sync_every_capture and gapless_rearm are mutually exclusive'
             )
         elif self.receive_retries > 0:
-            raise ValueError(
-                'receive_retries must be 0 when gapless_rearm is enabled'
-            )
+            raise ValueError('receive_retries must be 0 when gapless_rearm is enabled')
         if self.channel_sync_source is None:
             pass
         elif self.channel_sync_source not in registry.channel_sync_source:
@@ -399,7 +397,7 @@ LoopSpec = Union[Repeat, List, Range, FrequencyBinRange]
 
 AliasMatchCandidates = Annotated[
     tuple[dict[str, Any], ...],
-    meta('one or more dictionaries of valid match sets to "or"')
+    meta('one or more dictionaries of valid match sets to "or"'),
 ]
 
 
@@ -407,6 +405,7 @@ AliasMatchType = Annotated[
     dict[str, AliasMatchCandidates],
     meta('key: alias field value, value: a list of match conditions for that value'),
 ]
+
 
 class Sink(analysis.specs._SlowHashSpecBase, frozen=True, kw_only=True):
     path: str = '{yaml_name}-{start_time}'

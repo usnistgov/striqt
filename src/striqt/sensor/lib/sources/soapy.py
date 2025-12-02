@@ -33,7 +33,7 @@ class Range(specs.SpecBase, frozen=True, cache_hash=True):
 
     minimum: float
     maximum: float
-    step: float|None = None
+    step: float | None = None
 
     @classmethod
     def from_soapy(cls, r: 'SoapySDR.Range') -> Self:
@@ -68,9 +68,7 @@ class ArgInfo(specs.SpecBase, kw_only=True, frozen=True, cache_hash=True):
         )
 
     @classmethod
-    def from_soapy_map(
-        cls, soapy_args: list[SoapySDR.ArgInfo]
-    ) -> dict[str, Self]:
+    def from_soapy_map(cls, soapy_args: list[SoapySDR.ArgInfo]) -> dict[str, Self]:
         return {arg.key: cls.from_soapy(arg) for arg in soapy_args}
 
 
@@ -180,14 +178,17 @@ def _probe_channel(device: SoapySDR.Device, direction: int, port: int) -> PortIn
         gains=gains,
         full_gain_range=Range.from_soapy(device.getGainRange(*args)),
         frequencies=freqs,
-        full_freq_range=Range.from_soapy_tuple(device.getFrequencyRange(*args)), # type: ignore
+        full_freq_range=Range.from_soapy_tuple(device.getFrequencyRange(*args)),  # type: ignore
         tune_args=ArgInfo.from_soapy_map(device.getFrequencyArgsInfo(*args)),
-        backend_sample_rate_range=Range.from_soapy_tuple(device.getSampleRateRange(*args)), # type: ignore
+        backend_sample_rate_range=Range.from_soapy_tuple(
+            device.getSampleRateRange(*args)
+        ),  # type: ignore
         base_clock_rates=tuple(device.getMasterClockRates()),
         bandwidths=Range.from_soapy_tuple(device.getBandwidthRange(*args)),
         sensors=sensors,
         settings=ArgInfo.from_soapy_map(device.getSettingInfo(*args)),
     )
+
 
 def probe_soapy_info(device: SoapySDR.Device) -> SoapySourceInfo:
     """
@@ -586,7 +587,6 @@ def set_sample_rate(
     if this_fs == prev_fs:
         return
 
-
     capture_per_port = captures.split_capture_ports(capture)
     if source.setup_spec.shared_rx_sample_clock:
         capture_per_port = captures.split_capture_ports(capture)[:1]
@@ -762,8 +762,12 @@ class SoapySourceBase(
 
         return super().read_iq()
 
-    def acquire(self, capture=None, next_capture=None, correction=True):
+    def acquire(
+        self, capture=None, next_capture=None, *, correction=True, alias_func=None
+    ):
         with read_retries(self):
-            result = super().acquire(capture, next_capture, correction)
+            result = super().acquire(
+                capture, next_capture, correction=correction, alias_func=alias_func
+            )
             result.extra_data.update(self.read_peripherals())  # type: ignore
             return result

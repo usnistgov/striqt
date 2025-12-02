@@ -98,7 +98,7 @@ def design_warmup(
 
     b = mock_binding(sweep.__bindings__, 'warmup')
 
-    source=warmup.schema.source(
+    source = warmup.schema.source(
         num_rx_ports=num_rx_ports,
         base_clock_rate=sweep.source.base_clock_rate,
         calibration=None,
@@ -114,7 +114,7 @@ def design_warmup(
         captures=tuple(captures),
         loops=(),
         analysis=sweep.analysis,
-        sink=sweep.sink
+        sink=sweep.sink,
     )
 
 
@@ -305,7 +305,7 @@ class SweepIterator:
                         self.source,
                         canalyze,
                         self._analysis_opts,
-                        alias_func=self.resources.get('alias_func', None)
+                        alias_func=self.resources.get('alias_func', None),
                     )
 
                 if cacquire is None:

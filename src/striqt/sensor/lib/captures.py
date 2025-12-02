@@ -247,7 +247,9 @@ class PathAliasFormatter:
                 for m in matches:
                     afields.update(m)
             used = set(afields.keys())
-            msg = f'field {key!r} of path {p!r} is an unmatched alias for fields {used!r}'
+            msg = (
+                f'field {key!r} of path {p!r} is an unmatched alias for fields {used!r}'
+            )
             ideas = {k: valid_fields[k] for k in afields.keys() if k in valid_fields}
             if len(ideas) > 0:
                 msg = f'{msg}. the match for these fields would have been {ideas!r}'
@@ -259,8 +261,7 @@ class PathAliasFormatter:
         else:
             available = set(valid_fields.keys())
             msg = (
-                f'invalid field {key!r} in path {p!r}\n'
-                f'available fields: {available!r}'
+                f'invalid field {key!r} in path {p!r}\navailable fields: {available!r}'
             )
             raise KeyError(msg) from exception
 
