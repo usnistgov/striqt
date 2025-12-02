@@ -257,7 +257,7 @@ class SweepIterator:
         noise = lookup_system_noise_power(
             cal,
             specs.SoapyCapture.fromspec(capture),
-            base_clock_rate=capture.backend_sample_rate,
+            base_clock_rate=self.spec.source.base_clock_rate,
             alias_func=self.resources['alias_func'],
             B=attrs['noise_bandwidth'],
             xp=xp,
