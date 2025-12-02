@@ -426,7 +426,7 @@ class SweepIterator:
 
         return data
 
-    @util.stopwatch('', 'sink', threshold=10e-3, threshold=0.5)
+    @util.stopwatch('', 'sink', threshold=10e-3)
     def _intake(
         self,
         results: datasets.DelayedDataset,
