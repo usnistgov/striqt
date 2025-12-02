@@ -574,7 +574,7 @@ def set_center_frequency(
 def set_sample_rate(
     source: SoapySourceBase, capture: specs.SoapyCapture, ports_changed: bool
 ):
-    fs_base = source.__setup__.base_sample_rate
+    fs_base = source.setup_spec.base_clock_rate
 
     this_fs = base.design_capture_resampler(fs_base, capture)['fs_sdr']
 
@@ -586,7 +586,7 @@ def set_sample_rate(
     if this_fs == prev_fs:
         return
 
-    if source.__setup__.shared_rx_sample_clock:
+    if source.setup_spec.shared_rx_sample_clock:
         capture_per_port = [capture]
     else:
         capture_per_port = captures.split_capture_ports(capture)
