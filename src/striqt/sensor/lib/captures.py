@@ -247,7 +247,7 @@ class PathAliasFormatter:
             for matches in self.sweep_spec.sink.coord_aliases[key].values():
                 for m in matches:
                     afields.update(m)
-            ideas = {k: valid_fields[k] for k in afields.keys()}
+            ideas = {k: valid_fields[k] for k in afields.keys() if k in valid_fields}
             if len(afields) > 0:
                 msg = f'{msg}. values of fields used in valid matches: {ideas!r}'
 
