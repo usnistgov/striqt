@@ -180,15 +180,14 @@ def _probe_channel(device: SoapySDR.Device, direction: int, port: int) -> PortIn
         gains=gains,
         full_gain_range=Range.from_soapy(device.getGainRange(*args)),
         frequencies=freqs,
-        full_freq_range=Range.from_soapy(device.getFrequencyRange(*args)),
+        full_freq_range=Range.from_soapy_tuple(device.getFrequencyRange(*args)), # type: ignore
         tune_args=ArgInfo.from_soapy_map(device.getFrequencyArgsInfo(*args)),
-        backend_sample_rate_range=Range.from_soapy(device.getSampleRateRange(*args)),
+        backend_sample_rate_range=Range.from_soapy_tuple(device.getSampleRateRange(*args)), # type: ignore
         base_clock_rates=tuple(device.getMasterClockRates()),
         bandwidths=Range.from_soapy_tuple(device.getBandwidthRange(*args)),
         sensors=sensors,
         settings=ArgInfo.from_soapy_map(device.getSettingInfo(*args)),
     )
-
 
 def probe_soapy_info(device: SoapySDR.Device) -> SoapySourceInfo:
     """

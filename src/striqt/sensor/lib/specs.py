@@ -223,7 +223,7 @@ class Source(SpecBase, frozen=True, kw_only=True):
 
     transient_holdoff_time: typing.ClassVar[float] = 0
     stream_all_rx_ports: typing.ClassVar[bool | None] = False
-    transport_dtype: typing.ClassVar[Literal['int16', 'complex64']] = 'complex64'
+    transport_dtype: typing.ClassVar[Literal['int16', 'float32']] = 'float32'
 
 
 class _SourceKeywords(typing.TypedDict, total=False):
