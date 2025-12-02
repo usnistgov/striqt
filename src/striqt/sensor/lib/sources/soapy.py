@@ -40,9 +40,8 @@ class Range(specs.SpecBase, frozen=True, cache_hash=True):
         return cls(minimum=r.minimum(), maximum=r.maximum(), step=r.step())
 
     @classmethod
-    def from_soapy_tuple(cls, seq: typing.Any) -> tuple[Self, ...]:
-        print(seq)
-        return tuple([cls(*seq) for r in seq])
+    def from_soapy_tuple(cls, seq: tuple['SoapySDR.Range']) -> tuple[Self, ...]:
+        return tuple([cls.from_soapy(r) for r in seq])
 
 
 class ArgInfo(specs.SpecBase, kw_only=True, frozen=True, cache_hash=True):
