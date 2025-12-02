@@ -271,8 +271,8 @@ class SweepIterator:
 
         snr = iqwaveform.powtodB(peaks) - noise
 
-        if xp.isfinite(float(snr)):
-            snr_desc = ','.join(f'{p:+02.0f}' for p in snr)
+        snr_desc = ','.join(f'{p:+02.0f}' for p in snr)
+        if 'nan' not in snr_desc.lower():
             logger = util.get_logger('analysis')
             logger.info(f'({snr_desc}) dB SNR spectrogram peak')
 
