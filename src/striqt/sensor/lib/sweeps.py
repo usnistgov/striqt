@@ -412,6 +412,7 @@ class SweepIterator:
             return {}
 
         data = self._peripherals.acquire(capture)
+        fs_base = self.source.setup_spec.base_clock_rate
 
         if data is None:
             data = {}
@@ -426,11 +427,7 @@ class SweepIterator:
         if self.spec.source.calibration is None:
             return data
 
-        system_noise = lookup_system_noise_power(
-            self.cal,
-            capture,
-            self.source.setup_spec.base_clock_rate,
-        )
+        system_noise = lookup_system_noise_power(self.cal, capture, fs_base)
 
         return dict(data, sensor_system_noise=system_noise)
 
