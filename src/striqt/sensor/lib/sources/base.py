@@ -221,8 +221,6 @@ class HasCaptureType(typing.Protocol[_TC]):
     def arm(
         self,
         capture: _TC,
-        *,
-        force_time_sync: bool = False,
         **capture_kws: 'Unpack[specs._ResampledCaptureKeywords]',
     ) -> _TC: ...
 
@@ -323,7 +321,7 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
         return self.__setup__
 
     @util.stopwatch('arm', 'source', threshold=10e-3)
-    def arm(self, capture, *, force_time_sync: bool = False, **capture_kws):
+    def arm(self, capture, **capture_kws):
         """stop the stream, apply a capture configuration, and start it"""
         assert self._buffers is not None
 

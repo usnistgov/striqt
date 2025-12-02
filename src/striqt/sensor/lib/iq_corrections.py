@@ -24,7 +24,7 @@ else:
 
 
 # this is experimental, and currently leaves some residual
-# offset in some circumstances
+# time offset in some circumstances
 USE_OARESAMPLE = False
 
 
@@ -78,7 +78,7 @@ def resampling_correction(
     iq_in: AcquiredIQ,
     capture: specs.ResampledCapture,
     source: SourceBase,
-    force_calibration: typing.Optional['xr.Dataset'] = None,
+    calibration_data: typing.Optional['xr.Dataset'] = None,
     *,
     overwrite_x=False,
     axis=1,
@@ -102,7 +102,7 @@ def resampling_correction(
     xp = iqwaveform.util.array_namespace(iq)
 
     vscale, prescale = _get_voltage_scale(
-        capture, source, force_calibration=force_calibration, xp=xp
+        capture, source, force_calibration=calibration_data, xp=xp
     )
 
     if source.setup_spec.uncalibrated_peak_detect:

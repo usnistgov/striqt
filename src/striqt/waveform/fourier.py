@@ -1519,13 +1519,6 @@ def oaresample(
 ):
     """apply resampler implemented through STFT overlap-and-add.
 
-    Args:
-        iq: the input waveform, as a pinned array
-        capture: the capture filter specification structure
-        radio: the radio instance that performed the capture
-        force_calibration: if specified, this calibration dataset is used rather than loading from file
-        axis: the axis of `x` along which to compute the filter
-
     Returns:
         the filtered IQ capture
     """

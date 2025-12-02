@@ -262,6 +262,7 @@ def analyze_capture(
     source: sources.SourceBase,
     capture: specs.ResampledCapture,
     options: EvaluationOptions[typing.Literal[True]],
+    calibration_data: 'xr.Dataset|None' = None
 ) -> 'xr.Dataset': ...
 
 
@@ -271,6 +272,7 @@ def analyze_capture(
     source: sources.SourceBase,
     capture: specs.ResampledCapture,
     options: EvaluationOptions[typing.Literal['delayed']],
+    calibration_data: 'xr.Dataset|None' = None
 ) -> DelayedDataset: ...
 
 
@@ -280,6 +282,7 @@ def analyze_capture(
     source: sources.SourceBase,
     capture: specs.ResampledCapture,
     options: EvaluationOptions[typing.Literal[False]],
+    calibration_data: 'xr.Dataset|None' = None
 ) -> 'dict[str, ArrayType]': ...
 
 
@@ -289,9 +292,13 @@ def analyze_capture(
     source: sources.SourceBase,
     capture: specs.ResampledCapture,
     options: EvaluationOptions,
+    calibration_data: 'xr.Dataset|None' = None
 ) -> 'dict[str, ArrayType] | xr.Dataset | DelayedDataset':
-    """extends striqt.analysis.analyze_by_spec to calibrate results, and
-    increases the scope of saved data and metadata
+    """convenience function to analyze a waveform from a specification.
+    
+    The waveform may be transformed with resampling and calibration
+    corrections before evaluation. Acquisition data and metadata
+    are included in the returned results.
     """
 
     # wait to import until here to avoid a circular import
@@ -305,7 +312,7 @@ def analyze_capture(
                 'resample➤filter➤calibrate', logger_level=logging.DEBUG
             ):
                 iq = iq_corrections.resampling_correction(
-                    iq, capture, source, overwrite_x=overwrite_x
+                    iq, capture, source, overwrite_x=overwrite_x, calibration_data=calibration_data
                 )
 
         c = msgspec.structs.replace(options, as_xarray='delayed')

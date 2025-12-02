@@ -25,10 +25,20 @@ _TP = typing.TypeVar('_TP', bound=specs.Peripherals)
 _TS = typing.TypeVar('_TS', bound=specs.SoapySource)
 
 
+
+@typing.overload
+def read_calibration(path: None, alias_func: captures.PathAliasFormatter | None = None) -> None: ...
+
+@typing.overload
+def read_calibration(path: str | Path, alias_func: captures.PathAliasFormatter | None = None) -> 'xr.Dataset': ...
+
 @util.lru_cache()
-def read_calibration(path: str | Path) -> 'xr.Dataset':
+def read_calibration(path: str | Path | None, alias_func: captures.PathAliasFormatter | None = None) -> 'xr.Dataset|None':
     if path is None:
         return None
+
+    if alias_func is not None:
+        path = alias_func(path)
 
     return xr.open_dataset(path)
 
@@ -258,6 +268,7 @@ def lookup_power_correction(
     cal_data: 'str | Path | xr.Dataset | None',
     capture: specs.SoapyCapture,
     base_clock_rate: float | None,
+    path_formatter: captures.PathAliasFormatter | None = None,
     *,
     xp=None,
 ):
@@ -266,7 +277,7 @@ def lookup_power_correction(
     elif cal_data is None:
         return None
     elif isinstance(cal_data, (str, Path)):
-        corrections = read_calibration(cal_data)
+        corrections = read_calibration(cal_data, path_formatter)
     else:
         raise TypeError('invalid cal_data input type')
 
@@ -283,6 +294,7 @@ def lookup_system_noise_power(
     cal_data: 'Path | str | xr.Dataset | None',
     capture: specs.SoapyCapture,
     base_clock_rate: float | None,
+    path_formatter: captures.PathAliasFormatter | None = None,
     *,
     T=290.0,
     B=1.0,
@@ -297,7 +309,7 @@ def lookup_system_noise_power(
     elif cal_data is None:
         return None
     elif isinstance(cal_data, (str, Path)):
-        corrections = read_calibration(cal_data)
+        corrections = read_calibration(cal_data, path_formatter)
     else:
         raise TypeError('invalid cal_data input type')
 

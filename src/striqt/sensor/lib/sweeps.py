@@ -226,6 +226,7 @@ class SweepIterator:
         self._peripherals = resources['peripherals']
         self._sink = resources['sink']
         self.spec = resources['sweep_spec']
+        self.cal = resources['calibration']
 
         self._always_yield = always_yield
         self._loop = loop
@@ -239,16 +240,6 @@ class SweepIterator:
             as_xarray='delayed',
             block_each=False,
         )
-
-        # self._analyze = datasets.AnalysisCaller(
-        #     source=self.source,
-        #     sweep=self.spec,
-        #     extra_attrs=datasets.build_dataset_attrs(self.spec),
-        #     correction=True,
-        #     cache_callback=self.show_cache_info,
-        #     delayed=True,
-        #     block_each=False,
-        # )
 
     def show_cache_info(self, cache, capture: specs.ResampledCapture, result, *_, **__):
         cal = self.spec.source.calibration
@@ -314,6 +305,7 @@ class SweepIterator:
                         self.source,
                         canalyze,
                         self._analysis_opts,
+                        calibration_data=self.cal
                     )
 
                 if cacquire is None:

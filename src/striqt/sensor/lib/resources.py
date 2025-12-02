@@ -37,6 +37,7 @@ if typing.TYPE_CHECKING:
         except_context: typing_extensions.NotRequired[typing.ContextManager]
         sweep_spec: specs.Sweep[_TS, _TP, _TC]
         calibration: 'xr.Dataset|None'
+        path_formatter: captures.PathAliasFormatter
 
     class AnyResources(
         typing_extensions.TypedDict, typing.Generic[_TS, _TP, _TC], total=False
@@ -49,6 +50,7 @@ if typing.TYPE_CHECKING:
         except_context: typing_extensions.NotRequired[typing.ContextManager]
         sweep_spec: specs.Sweep[_TS, _TP, _TC]
         calibration: 'xr.Dataset|None'
+        path_formatter: captures.PathAliasFormatter
 
 else:
     # workaround for python < 3.10
@@ -61,6 +63,7 @@ else:
         except_context: typing_extensions.NotRequired[typing.ContextManager]
         sweep_spec: specs.Sweep
         calibration: 'xr.Dataset|None'
+        path_formatter: captures.PathAliasFormatter
 
     class AnyResources(typing.TypedDict, total=False):
         """Sensor resources needed to run a sweep"""
@@ -71,6 +74,7 @@ else:
         except_context: typing_extensions.NotRequired[typing.ContextManager]
         sweep_spec: specs.Sweep
         calibration: 'xr.Dataset|None'
+        path_formatter: captures.PathAliasFormatter
 
 
 def import_sink_cls(
@@ -83,17 +87,6 @@ def import_sink_cls(
     for name in sub_names:
         mod = getattr(mod, name)
     return getattr(mod, obj_name)
-
-
-def load_calibration(spec: specs.Sweep, alias_func: captures.PathAliasFormatter | None):
-    p = spec.source.calibration
-    if p is None:
-        return
-
-    if alias_func is not None:
-        p = alias_func(spec.source.calibration)
-
-    calibration.read_calibration(p)
 
 
 class ConnectionManager(
@@ -178,7 +171,7 @@ def open_sensor(
             ),
             'sink': util.Call(conn.open, 'sink', sink_cls, spec, alias_func=formatter),
             'calibration': util.Call(
-                conn.get, 'calibration', load_calibration, spec, formatter
+                conn.get, 'calibration', calibration.read_calibration, spec.source.calibration, formatter
             ),
             'peripherals': util.Call(conn.open, 'peripherals', bind.peripherals, spec),
         }
@@ -196,6 +189,7 @@ def open_sensor(
             conn.enter('except_context', except_context)
 
         conn._resources['sweep_spec'] = spec
+        conn._resources['path_formatter'] = formatter
 
     except BaseException as ex:
         if except_context is not None:

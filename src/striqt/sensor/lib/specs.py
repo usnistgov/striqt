@@ -352,7 +352,7 @@ class Range(LoopBase, frozen=True, kw_only=True):
         import numpy as np
 
         if self.start == self.stop:
-            return np.array([self.start])
+            return [self.start]
 
         a = np.arange(self.start, self.stop + self.step / 2, self.step)
         return list(a)
