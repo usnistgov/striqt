@@ -116,6 +116,12 @@ class ConnectionManager(
         with util.stopwatch(name, 'sweep', 0.5, util.logging.INFO):
             self._resources[name] = self.enter_context(ctx)
 
+    def log_call(
+        self, name, func: typing.Callable[_P, _R], *args: _P.args, **kws: _P.kwargs
+    ):
+        with util.stopwatch(name, 'sweep', 0.5, util.logging.INFO):
+            func(*args, **kws)
+
     @functools.cached_property
     def resources(self) -> Resources[_TS, _TP, _TC]:
         missing = Resources.__required_keys__ - set(self._resources.keys())
@@ -161,7 +167,7 @@ def open_sensor(
 
     try:
         calls = {
-            'warmup': util.Call(run_warmup, spec),
+            'warmup': util.Call(conn.log_call, 'warmup', run_warmup, spec),
             'source': util.Call(
                 conn.open,
                 'source',

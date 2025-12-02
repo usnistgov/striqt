@@ -138,6 +138,7 @@ def run_warmup(input_spec: specs.Sweep):
         peripherals=bindings.warmup.peripherals(spec),
         sink=sinks.NoSink(spec),
         calibration=None,
+        alias_func=None
     )
 
     with resources['source']:
@@ -257,7 +258,7 @@ class SweepIterator:
             cal,
             specs.SoapyCapture.fromspec(capture),
             base_clock_rate=capture.backend_sample_rate,
-            alias_func=self.resources.get('alias_func', None),
+            alias_func=self.resources['alias_func'],
             B=attrs['noise_bandwidth'],
             xp=xp,
         )
@@ -305,7 +306,7 @@ class SweepIterator:
                         self.source,
                         canalyze,
                         self._analysis_opts,
-                        alias_func=self.resources.get('alias_func', None),
+                        alias_func=self.resources['alias_func'],
                     )
 
                 if cacquire is None:
