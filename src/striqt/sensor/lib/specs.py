@@ -208,7 +208,7 @@ class Source(SpecBase, frozen=True, kw_only=True):
 
     # sequencing
     warmup_sweep: WarmupSweepType = True
-    gapless_retrigger: GaplessRepeatType = False
+    gapless_rearm: GaplessRepeatType = False
 
     # synchronization and triggering
     periodic_trigger: Optional[float] = None
@@ -236,7 +236,7 @@ class _SourceKeywords(typing.TypedDict, total=False):
     resource: dict
     calibration: str
 
-    gapless_repeats: GaplessRepeatType
+    gapless_rearm: GaplessRepeatType
     warmup_sweep: WarmupSweepType
 
     periodic_trigger: float
@@ -262,15 +262,15 @@ class SoapySource(Source, frozen=True, kw_only=True):
     def __post_init__(self):
         from striqt.analysis import registry
 
-        if not self.gapless_retrigger:
+        if not self.gapless_rearm:
             pass
         elif self.time_sync_every_capture:
             raise ValueError(
-                'time_sync_every_capture and gapless_repeats are mutually exclusive'
+                'time_sync_every_capture and gapless_rearm are mutually exclusive'
             )
         elif self.receive_retries > 0:
             raise ValueError(
-                'receive_retries must be 0 when gapless_repeats is enabled'
+                'receive_retries must be 0 when gapless_rearm is enabled'
             )
         if self.channel_sync_source is None:
             pass

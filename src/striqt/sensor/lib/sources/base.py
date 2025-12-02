@@ -332,7 +332,7 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
 
         capture = capture.replace(**capture_kws)
 
-        if not self.__setup__.gapless_retrigger or capture != self._capture:
+        if not self.__setup__.gapless_rearm or capture != self._capture:
             self._buffers.clear()
 
         self._capture = self._prepare_capture(capture) or capture
@@ -372,7 +372,7 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
         chunk_count = remaining = output_count - carryover_count
 
         while remaining > 0:
-            if received_count > 0 or self.__setup__.gapless_retrigger:
+            if received_count > 0 or self.__setup__.gapless_rearm:
                 on_overflow = 'except'
             else:
                 on_overflow = 'ignore'

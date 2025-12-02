@@ -675,7 +675,7 @@ class SoapySourceBase(
     def _prepare_capture(self, capture: _TC) -> _TC | None:
         if (
             capture == self._capture
-            and self.__setup__.gapless_repeats
+            and self.setup_spec.gapless_rearm
             or self._rx_stream is None
         ):
             # the one case where we leave it running
