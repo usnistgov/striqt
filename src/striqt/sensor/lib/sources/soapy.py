@@ -40,7 +40,7 @@ class Range(specs.SpecBase, kw_only=True, frozen=True, cache_hash=True):
 
     @classmethod
     def from_soapy_tuple(cls, seq: typing.Any) -> tuple[typing.Self, ...]:
-        return tuple([cls.from_soapy(r) for r in seq])
+        return tuple([cls(minimum=seq[0], maximum=seq[1], step=seq[2]) for r in seq])
 
 
 class ArgInfo(specs.SpecBase, kw_only=True, frozen=True, cache_hash=True):
