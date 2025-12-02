@@ -233,6 +233,7 @@ class PathAliasFormatter:
         try:
             path = Path(str(path).format(**fields))
         except KeyError as ex:
+            raise
             valid_fields = tuple(fields.keys())
             raise ValueError(f'valid formatting fields are {valid_fields!r}') from ex
 
