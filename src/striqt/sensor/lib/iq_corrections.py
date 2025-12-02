@@ -88,7 +88,11 @@ def _get_peak_power(
 
     peak_counts = xp.abs(iq).max(axis=-1)
     unscaled_peak = 20 * xp.log10(peak_counts * prescale) - 3
-    return unscaled_peak
+
+    if iqwaveform.util.is_cupy_array(iq):
+        return unscaled_peak.get()
+    else:
+        return unscaled_peak
 
 
 def resampling_correction(
