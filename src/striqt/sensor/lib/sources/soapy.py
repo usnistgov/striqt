@@ -41,6 +41,7 @@ class Range(specs.SpecBase, frozen=True, cache_hash=True):
 
     @classmethod
     def from_soapy_tuple(cls, seq: typing.Any) -> tuple[Self, ...]:
+        print(seq)
         return tuple([cls(*seq) for r in seq])
 
 
