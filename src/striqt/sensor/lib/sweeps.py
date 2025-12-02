@@ -124,8 +124,14 @@ def run_warmup(input_spec: specs.Sweep):
 
     from .. import bindings
 
+    # trigger expensive imports
     if input_spec.source.array_backend == 'cupy':
+        import cupy
         iqwaveform.set_max_cupy_fft_chunk(input_spec.source.cupy_max_fft_chunk_size)
+
+    import xarray
+    import scipy.signal
+    import numba
 
     spec = design_warmup(input_spec)
 
@@ -264,8 +270,11 @@ class SweepIterator:
         )
 
         snr = iqwaveform.powtodB(peaks) - noise
-        snr_desc = ','.join(f'{p:+02.0f}' for p in snr)
-        util.get_logger('analysis').info(f'({snr_desc}) dB SNR spectrogram peak')
+
+        if xp.isfinite(snr):
+            snr_desc = ','.join(f'{p:+02.0f}' for p in snr)
+            logger = util.get_logger('analysis')
+            logger.info(f'({snr_desc}) dB SNR spectrogram peak')
 
     def __iter__(self) -> typing.Generator['xr.Dataset | bytes | None']:
         iq = None
