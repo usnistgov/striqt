@@ -286,7 +286,7 @@ def analyze_capture(
 ) -> 'dict[str, ArrayType]': ...
 
 
-@util.stopwatch('', 'analysis', logger_level=util.PERFORMANCE_INFO)
+@util.stopwatch('', 'analysis')
 def analyze_capture(
     iq: sources.AcquiredIQ,
     source: sources.SourceBase,

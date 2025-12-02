@@ -349,7 +349,7 @@ class SweepIterator:
                 elif self._always_yield:
                     yield None
 
-    @util.stopwatch('acquire', 'sweep', logger_level=util.PERFORMANCE_INFO)
+    @util.stopwatch('acquire', 'sweep', threshold=0.25)
     def _acquire(
         self,
         iq_prev: sources.AcquiredIQ | None,
@@ -398,7 +398,7 @@ class SweepIterator:
 
         return result
 
-    @util.stopwatch('arm', 'sweep', logger_level=util.PERFORMANCE_INFO)
+    @util.stopwatch('arm', 'sweep', threshold=0.5)
     def _arm(self, capture):
         calls = {}
 
@@ -426,7 +426,7 @@ class SweepIterator:
 
         return data
 
-    @util.stopwatch('', 'sink', threshold=10e-3, logger_level=util.PERFORMANCE_INFO)
+    @util.stopwatch('', 'sink', threshold=10e-3, threshold=0.5)
     def _intake(
         self,
         results: datasets.DelayedDataset,
@@ -508,7 +508,7 @@ def iter_raw_iq(
             capture_this, capture_prev, index=i, count=len(captures)
         )
 
-        with util.stopwatch(desc, 'source', logger_level=util.PERFORMANCE_INFO):
+        with util.stopwatch(desc, 'source', threshold=0.5):
             # extra iteration at the end for the last analysis
             yield source.acquire(
                 capture_this,

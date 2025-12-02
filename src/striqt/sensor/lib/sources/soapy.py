@@ -632,7 +632,7 @@ class SoapySourceBase(
         util.get_logger('source').info('closed soapy radio')
         super().close()
 
-    @util.stopwatch('connected to radio', 'source', util.PERFORMANCE_INFO)
+    @util.stopwatch('open radio', 'source', threshold=1)
     def _connect(self, spec: _TS, **device_kwargs):
         # passing in a tuple works around an insantiation bug on some platforms
         # https://github.com/pothosware/SoapySDR/issues/472
@@ -643,7 +643,7 @@ class SoapySourceBase(
         else:
             raise RuntimeError('SoapySDR instantiated an unexpected type')
 
-    @util.stopwatch('configured radio stream', 'source', util.PERFORMANCE_INFO)
+    @util.stopwatch('setup radio', 'source', threshold=1)
     def _apply_setup(self, spec: _TS):
         for p in range(self.info.num_rx_ports):
             self._device.setGainMode(SoapySDR.SOAPY_SDR_RX, p, False)
