@@ -357,6 +357,12 @@ def from_delayed(dd: DelayedDataset):
             dd.capture, dd.delayed, expand_dims=(CAPTURE_DIM,)
         )
 
+    unscaled_peak = dd.extra_data.get('unscaled_iq_peak', None)
+    if unscaled_peak is not None:
+        descs = ','.join(f'{p:0.0f}' for p in unscaled_peak)
+        logger = util.get_logger('analysis')
+        logger.info(f'({descs}) dBfs ADC peak')
+
     with util.stopwatch(
         'build coords',
         'analysis',

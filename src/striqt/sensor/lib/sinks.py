@@ -79,10 +79,6 @@ class SinkBase(typing.Generic[specs._TC]):
         self._future.result()
         self._future = None
 
-    # descs = ','.join(f'{p:0.0f}' for p in unscaled_peak)
-    # logger = util.get_logger('analysis')
-    # logger.info(f'({descs}) dBfs ADC peak')
-
 
 class NoSink(SinkBase):
     def open(self):
