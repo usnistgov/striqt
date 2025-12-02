@@ -51,7 +51,7 @@ class ArgInfo(specs.SpecBase, kw_only=True, frozen=True, cache_hash=True):
     units: str
     type: int
     value: str
-    range: Range
+    range: tuple
     options: tuple[str, ...]
 
     @classmethod
@@ -62,7 +62,7 @@ class ArgInfo(specs.SpecBase, kw_only=True, frozen=True, cache_hash=True):
             units=arg.units,
             type=arg.type,
             value=arg.value,
-            range=Range.from_soapy(arg.range),
+            range=Range.from_soapy_tuple(arg.range),
             options=tuple(arg.options),
         )
 
