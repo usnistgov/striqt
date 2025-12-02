@@ -577,14 +577,15 @@ def exit_context(ctx: typing.ContextManager | None, exc_info=None):
 
 
 def log_verbosity(verbose: int = 0):
+    names = ('sweep', 'source', 'analysis', 'sink', 'ext')
     if verbose == 0:
-        show_messages(logging.INFO)
+        show_messages(logging.INFO, logger_names=names)
     elif verbose == 1:
-        show_messages(PERFORMANCE_INFO)
+        show_messages(PERFORMANCE_INFO, logger_names=names)
     elif verbose == 2:
-        show_messages(PERFORMANCE_DETAIL)
+        show_messages(PERFORMANCE_DETAIL, logger_names=names)
     else:
-        show_messages(logging.DEBUG)
+        show_messages(logging.DEBUG, logger_names=names)
 
 
 # def _extract_traceback(
