@@ -96,17 +96,26 @@ def design_warmup(
     if len(captures) > 1:
         captures = captures[:1]
 
-    b = bindings.mock_binding(warmup, sweep.__bindings__)
+    b = bindings.mock_binding(sweep.__bindings__, 'warmup')
 
-    # TODO: currently, the base_clock_rate is left as the null radio default.
-    # this may cause problems in the future if its default disagrees with another
-    source = (
-        b.schema.source.fromspec(sweep.source)
-        .replace(calibration=None)
+    source=warmup.schema.source(
+        num_rx_ports=num_rx_ports,
+        base_clock_rate=sweep.source.base_clock_rate,
+        calibration=None,
+        warmup_sweep=False,
+        gapless_retrigger=sweep.source.gapless_retrigger,
+        periodic_trigger=None,
+        channel_sync_source=sweep.source.channel_sync_source,
+        uncalibrated_peak_detect=sweep.source.uncalibrated_peak_detect,
     )
 
-    warmup_spec = b.sweep_spec.fromspec(sweep)
-    return warmup_spec.replace(captures=tuple(captures), source=source, loops=())
+    return b.sweep_spec(
+        source=source,
+        captures=tuple(captures),
+        loops=(),
+        analysis=sweep.analysis,
+        sink=sweep.sink
+    )
 
 
 def run_warmup(input_spec: specs.Sweep):
