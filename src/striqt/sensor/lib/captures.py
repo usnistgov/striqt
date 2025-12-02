@@ -249,7 +249,10 @@ class PathAliasFormatter:
             msg = f'field {key!r} of path {p!r} is an unmatched alias for fields {afields!r}'
             ideas = {k: valid_fields[k] for k in afields.keys() if k in valid_fields}
             if len(ideas) > 0:
-                msg = f'{msg}. matches in this context: {ideas!r}'
+                msg = f'{msg}. valid matches in this context are {ideas!r}'
+            invalid = {k for k in afields.keys() if k not in valid_fields}
+            if len(invalid) > 0:
+                msg = f'{msg}. the defined aliased fields {invalid!r} do not exist in this context'
 
             raise KeyError(msg, key) from exception
         else:
