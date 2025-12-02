@@ -142,7 +142,7 @@ def stopwatch(
     desc: str = '',
     logger_suffix: str = 'analysis',
     threshold: float = 0,
-    logger_level: int = PERFORMANCE_DETAIL,
+    logger_level: int = PERFORMANCE_INFO,
 ):
     """Time a block of code using a with statement like this:
 
