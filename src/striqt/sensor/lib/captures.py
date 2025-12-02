@@ -236,7 +236,7 @@ class PathAliasFormatter:
             valid = set(fields.keys())
             
             possible = set(self.sweep_spec.sink.coord_aliases.keys())
-            missing = possible - valid
+            missing = set(path_fields).intersection(possible - valid)
             if len(missing) > 0:
                 raise ValueError(
                 f'no alias name matches for fields {missing!r}'
