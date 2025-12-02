@@ -188,6 +188,7 @@ def _get_path_fields(
         id_ = source_id
 
     fields = capture_fields_with_aliases(source_id=id_, sink_spec=sweep.sink)
+    print(id_, fields)
 
     fields['start_time'] = datetime.now().strftime('%Y%m%d-%Hh%Mm%S')
     fields['sensor_binding'] = type(sweep).__name__
@@ -233,9 +234,11 @@ class PathAliasFormatter:
         try:
             path = Path(str(path).format(**fields))
         except KeyError as ex:
-            valid_fields = tuple(fields.keys())
-            invalid_fields = set(path_fields) - set(valid_fields)
-            raise ValueError(f'{invalid_fields!r} are not in the set of valid fields {valid_fields!r}') from ex
+            valid = tuple(fields.keys())
+            invalid = set(path_fields) - set(valid)
+            raise ValueError(
+                f'{invalid!r} are not among valid fields {valid!r}'
+            ) from ex
 
         return str(path)
 
