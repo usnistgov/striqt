@@ -242,14 +242,14 @@ class PathAliasFormatter:
         p = str(path)
 
         if key in self.sweep_spec.sink.coord_aliases:
-            msg = f'field {key!r} in path {p!r} is an alias with no matches'
             afields = {}
             for matches in self.sweep_spec.sink.coord_aliases[key].values():
                 for m in matches:
                     afields.update(m)
+            msg = f'field {key!r} of path {p!r} is an alias for fields {afields!r}.'
             ideas = {k: valid_fields[k] for k in afields.keys() if k in valid_fields}
             if len(afields) > 0:
-                msg = f'{msg}. values of fields used in valid matches: {ideas!r}'
+                msg = f'{msg}. matched field values in this context: {ideas!r}'
 
             raise KeyError(msg, key) from exception
         else:
