@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typing
 
-from . import calibration, specs, util
+from . import calibration, captures, specs, util
 from .sources import (
     AcquiredIQ,
     SourceBase,
@@ -32,7 +32,7 @@ def _get_voltage_scale(
     capture: specs.ResampledCapture,
     source: SourceBase,
     *,
-    force_calibration: 'xr.Dataset|None' = None,
+    alias_func: captures.PathAliasFormatter | None = None,
     xp=None,
 ) -> tuple['ArrayLike', 'ArrayLike']:
     """compute the scaling factor needed to scale each of N ports of an IQ waveform
@@ -42,17 +42,14 @@ def _get_voltage_scale(
     """
     xp = xp or np
 
-    # to make the best use of the calibration lookup cache, remove extraneous
-    # fields in case this is a specialized capture subclass
-
-    if force_calibration is None:
-        cal_data = getattr(source.setup_spec, 'calibration', None)
-    else:
-        cal_data = force_calibration
-
-    if isinstance(capture, specs.SoapyCapture):
+    if isinstance(source.setup_spec, specs.SoapySource):
+        assert isinstance(capture, specs.SoapyCapture)
         power_scale = calibration.lookup_power_correction(
-            cal_data, capture, source.setup_spec.base_clock_rate, xp=xp
+            source.setup_spec.calibration,
+            capture,
+            source.setup_spec.base_clock_rate,
+            alias_func=alias_func,
+            xp=xp
         )
     else:
         power_scale = None
@@ -78,7 +75,7 @@ def resampling_correction(
     iq_in: AcquiredIQ,
     capture: specs.ResampledCapture,
     source: SourceBase,
-    calibration_data: typing.Optional['xr.Dataset'] = None,
+    alias_func: captures.PathAliasFormatter | None = None,
     *,
     overwrite_x=False,
     axis=1,
@@ -101,9 +98,7 @@ def resampling_correction(
     iq = iq_in.raw
     xp = iqwaveform.util.array_namespace(iq)
 
-    vscale, prescale = _get_voltage_scale(
-        capture, source, force_calibration=calibration_data, xp=xp
-    )
+    vscale, prescale = _get_voltage_scale(capture, source, alias_func=alias_func, xp=xp)
 
     if source.setup_spec.uncalibrated_peak_detect:
         logger = util.get_logger('analysis')

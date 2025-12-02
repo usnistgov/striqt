@@ -220,13 +220,12 @@ class SweepIterator:
         loop=False,
         **extra_resources: 'Unpack[AnyResources]',
     ):
-        resources = Resources(resources, **extra_resources)
+        self.resources = Resources(resources, **extra_resources)
 
-        self.source = resources['source']
-        self._peripherals = resources['peripherals']
-        self._sink = resources['sink']
-        self.spec = resources['sweep_spec']
-        self.cal = resources['calibration']
+        self.source = self.resources['source']
+        self._peripherals = self.resources['peripherals']
+        self._sink = self.resources['sink']
+        self.spec = self.resources['sweep_spec']
 
         self._always_yield = always_yield
         self._loop = loop
@@ -258,6 +257,7 @@ class SweepIterator:
             cal,
             specs.SoapyCapture.fromspec(capture),
             base_clock_rate=capture.backend_sample_rate,
+            alias_func=self.resources['alias_func'],
             B=attrs['noise_bandwidth'],
             xp=xp,
         )
@@ -427,7 +427,12 @@ class SweepIterator:
         if self.spec.source.calibration is None:
             return data
 
-        system_noise = lookup_system_noise_power(self.cal, capture, fs_base)
+        system_noise = lookup_system_noise_power(
+            self.spec.source.calibration,
+            capture,
+            fs_base,
+            alias_func=self.resources['alias_func']
+        )
 
         return dict(data, sensor_system_noise=system_noise)
 

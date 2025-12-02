@@ -265,19 +265,17 @@ def _lookup_calibration_var(
 
 @util.lru_cache()
 def lookup_power_correction(
-    cal_data: 'str | Path | xr.Dataset | None',
+    cal_data: 'str | Path | None',
     capture: specs.SoapyCapture,
     base_clock_rate: float | None,
-    path_formatter: captures.PathAliasFormatter | None = None,
+    alias_func: captures.PathAliasFormatter | None = None,
     *,
     xp=None,
 ):
-    if isinstance(cal_data, xr.Dataset):
-        corrections = cal_data
-    elif cal_data is None:
+    if cal_data is None:
         return None
     elif isinstance(cal_data, (str, Path)):
-        corrections = read_calibration(cal_data, path_formatter)
+        corrections = read_calibration(cal_data, alias_func)
     else:
         raise TypeError('invalid cal_data input type')
 
@@ -291,10 +289,10 @@ def lookup_power_correction(
 
 @util.lru_cache()
 def lookup_system_noise_power(
-    cal_data: 'Path | str | xr.Dataset | None',
+    cal_data: 'Path | str | None',
     capture: specs.SoapyCapture,
     base_clock_rate: float | None,
-    path_formatter: captures.PathAliasFormatter | None = None,
+    alias_func: captures.PathAliasFormatter | None = None,
     *,
     T=290.0,
     B=1.0,
@@ -304,12 +302,10 @@ def lookup_system_noise_power(
     if xp is None:
         xp = np
 
-    if isinstance(cal_data, xr.Dataset):
-        corrections = cal_data
-    elif cal_data is None:
+    if cal_data is None:
         return None
     elif isinstance(cal_data, (str, Path)):
-        corrections = read_calibration(cal_data, path_formatter)
+        corrections = read_calibration(cal_data, alias_func)
     else:
         raise TypeError('invalid cal_data input type')
 

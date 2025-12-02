@@ -15,7 +15,7 @@ from striqt.analysis.lib.specs import Analysis
 from striqt.analysis.lib.util import pinned_array_as_cupy
 from striqt.waveform.fourier import ResamplerDesign
 
-from .. import specs, util
+from .. import captures, specs, util
 from ..util import cp
 
 if typing.TYPE_CHECKING:
@@ -228,7 +228,9 @@ class HasCaptureType(typing.Protocol[_TC]):
         self,
         capture: _TC | None = None,
         next_capture: typing.Union[_TC, None] = None,
+        *,
         correction: bool = True,
+        alias_func: captures.PathAliasFormatter | None = None
     ) -> AcquiredIQ: ...
 
     @property
@@ -434,7 +436,7 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
         return samples[:, sample_span], start_ns
 
     @util.stopwatch('acquire', 'source')
-    def acquire(self, capture=None, next_capture=None, correction=True):
+    def acquire(self, capture=None, next_capture=None, *, correction=True, alias_func: captures.PathAliasFormatter | None = None):
         """arm a capture and enable the channel (if necessary), read the resulting IQ waveform.
 
         Optionally, calibration corrections can be applied, and the radio can be left ready for the next capture.
@@ -462,7 +464,7 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
             'resample and calibrate', 'analysis', threshold=capture.duration / 2
         ):
             return iq_corrections.resampling_correction(
-                iq, capture, self, overwrite_x=True
+                iq, capture, self, overwrite_x=True, alias_func=alias_func
             )
 
     def _build_acquisition_info(self, time_ns: int | None) -> specs.AcquisitionInfo:

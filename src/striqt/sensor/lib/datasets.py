@@ -262,7 +262,7 @@ def analyze_capture(
     source: sources.SourceBase,
     capture: specs.ResampledCapture,
     options: EvaluationOptions[typing.Literal[True]],
-    calibration_data: 'xr.Dataset|None' = None
+    alias_func: captures.PathAliasFormatter | None = None
 ) -> 'xr.Dataset': ...
 
 
@@ -272,7 +272,7 @@ def analyze_capture(
     source: sources.SourceBase,
     capture: specs.ResampledCapture,
     options: EvaluationOptions[typing.Literal['delayed']],
-    calibration_data: 'xr.Dataset|None' = None
+    alias_func: captures.PathAliasFormatter | None = None
 ) -> DelayedDataset: ...
 
 
@@ -282,7 +282,7 @@ def analyze_capture(
     source: sources.SourceBase,
     capture: specs.ResampledCapture,
     options: EvaluationOptions[typing.Literal[False]],
-    calibration_data: 'xr.Dataset|None' = None
+    alias_func: captures.PathAliasFormatter | None = None
 ) -> 'dict[str, ArrayType]': ...
 
 
@@ -292,10 +292,10 @@ def analyze_capture(
     source: sources.SourceBase,
     capture: specs.ResampledCapture,
     options: EvaluationOptions,
-    calibration_data: 'xr.Dataset|None' = None
+    alias_func: captures.PathAliasFormatter | None = None
 ) -> 'dict[str, ArrayType] | xr.Dataset | DelayedDataset':
     """convenience function to analyze a waveform from a specification.
-    
+
     The waveform may be transformed with resampling and calibration
     corrections before evaluation. Acquisition data and metadata
     are included in the returned results.
@@ -312,7 +312,7 @@ def analyze_capture(
                 'resample➤filter➤calibrate', logger_level=logging.DEBUG
             ):
                 iq = iq_corrections.resampling_correction(
-                    iq, capture, source, overwrite_x=overwrite_x, calibration_data=calibration_data
+                    iq, capture, source, overwrite_x=overwrite_x, alias_func=alias_func
                 )
 
         c = msgspec.structs.replace(options, as_xarray='delayed')
