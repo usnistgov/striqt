@@ -305,7 +305,7 @@ class SweepIterator:
                         self.source,
                         canalyze,
                         self._analysis_opts,
-                        calibration_data=self.cal
+                        alias_func=self.resources['alias_func']
                     )
 
                 if cacquire is None:
