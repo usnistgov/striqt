@@ -37,7 +37,7 @@ PERFORMANCE_DETAIL = 12
 class _StriqtLogger(logging.LoggerAdapter):
     EXTRA_DEFAULTS = {
         'capture_index': 0,
-        'capture_progress': 'initializing',
+        'capture_progress': 'open',
         'capture_count': 'unknown',
         'capture': None,
     }
@@ -99,7 +99,7 @@ def show_messages(
         logger._screen_handler.setLevel(level)
 
         if colors or (colors is None and sys.stderr.isatty()):
-            log_fmt = '\x1b[32m{asctime}\x1b[0m \x1b[1;30m{name:>8s}\x1b[0m \x1b[34mcapture {capture_progress} \x1b[0m {message}'
+            log_fmt = '\x1b[32m{asctime}\x1b[0m \x1b[1;30m{name:>8s}\x1b[0m \x1b[34m{capture_progress} \x1b[0m {message}'
         else:
             log_fmt = '{levelname:^7s} {asctime} • {capture_progress}: {message}'
         formatter = logging.Formatter(log_fmt, style='{', datefmt='%X')
