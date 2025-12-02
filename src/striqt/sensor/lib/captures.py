@@ -233,21 +233,31 @@ class PathAliasFormatter:
         try:
             path = Path(str(path).format(**fields))
         except KeyError as ex:
-            valid = set(fields.keys())
-            
-            possible = set(self.sweep_spec.sink.coord_aliases.keys())
-            missing = set(path_fields).intersection(possible - valid)
-            if len(missing) > 0:
-                raise ValueError(
-                f'aliases defined for fields {missing!r}, but no match'
-            ) from ex
-
-            invalid = set(path_fields) - set(valid)
-            raise ValueError(
-                f'{invalid!r} are not among valid fields {valid!r}'
-            ) from ex
+            self._raise_field_miss(ex, path, fields)
 
         return str(path)
+
+    def _raise_field_miss(self, exception: KeyError, path, valid_fields):
+        key, *_ = exception.args
+        p = str(path)
+
+        if key in self.sweep_spec.sink.coord_aliases:
+            msg = f'field {key!r} in path {p!r} is an alias with no matches'
+            afields = {}
+            for matches in self.sweep_spec.sink.coord_aliases[key].values():
+                for m in matches:
+                    afields.update(m)
+            if len(afields) > 0:
+                msg = f'{msg}.\nfields to consider for a new alias match: {afields!r}'
+
+            raise KeyError(msg, key) from exception
+        else:
+            available = set(valid_fields.keys())
+            msg = (
+                f'invalid field {key!r} in path {p!r}\n'
+                f'available fields: {available!r}'
+            )
+            raise KeyError(msg, key) from exception
 
 
 def concat_group_sizes(
