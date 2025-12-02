@@ -73,6 +73,7 @@ def design_warmup(
     """
 
     from . import bindings
+    from ..bindings import warmup
 
     # captures that have unique sampling parameters, which are those
     # specified in structs.WaveformCapture
@@ -81,21 +82,21 @@ def design_warmup(
     skip_wcaptures = {specs.ResampledCapture.fromspec(c) for c in skip}
     captures = [unique_map[c] for c in unique_map.keys() if c not in skip_wcaptures]
 
-    # num_rx_ports = 0
-    # for c in captures:
-    #     if c.port is None:
-    #         continue
-    #     if isinstance(c.port, tuple):
-    #         n = max(c.port)
-    #     else:
-    #         n = c.port
-    #     if n > num_rx_ports:
-    #         num_rx_ports = n
+    num_rx_ports = 0
+    for c in captures:
+        if c.port is None:
+            continue
+        if isinstance(c.port, tuple):
+            n = max(c.port)
+        else:
+            n = c.port
+        if n > num_rx_ports:
+            num_rx_ports = n
 
     if len(captures) > 1:
         captures = captures[:1]
 
-    b = bindings.mock_binding(sweep.__bindings__, 'warmup')
+    b = bindings.mock_binding(warmup, sweep.__bindings__)
 
     # TODO: currently, the base_clock_rate is left as the null radio default.
     # this may cause problems in the future if its default disagrees with another
