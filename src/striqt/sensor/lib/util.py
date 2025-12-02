@@ -538,13 +538,16 @@ class DebugOnException:
 
     def run(self, etype, exc, tb):
         triplet = (etype, exc, tb)
-        from . import tracebacks
 
         with self.lock:
             if triplet == (None, None, None):
                 return
             elif self.prev == triplet:
                 return
+            elif isinstance(exc, KeyboardInterrupt):
+                return
+            
+            from . import tracebacks
 
             if not hasattr(sys, 'last_value'):
                 sys.last_value = exc

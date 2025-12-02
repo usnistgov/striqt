@@ -264,7 +264,6 @@ class SweepIterator:
         )
 
         snr = iqwaveform.powtodB(peaks) - noise
-
         snr_desc = ','.join(f'{p:+02.0f}' for p in snr)
         util.get_logger('analysis').info(f'({snr_desc}) dB SNR spectrogram peak')
 
