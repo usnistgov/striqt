@@ -586,10 +586,10 @@ def set_sample_rate(
     if this_fs == prev_fs:
         return
 
+
+    capture_per_port = captures.split_capture_ports(capture)
     if source.setup_spec.shared_rx_sample_clock:
-        capture_per_port = [capture]
-    else:
-        capture_per_port = captures.split_capture_ports(capture)
+        capture_per_port = captures.split_capture_ports(capture)[:1]
 
     for c in capture_per_port:
         source._device.setSampleRate(SoapySDR.SOAPY_SDR_RX, c.port, this_fs)
