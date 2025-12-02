@@ -1,4 +1,5 @@
 from __future__ import annotations
+import functools
 import typing
 import dataclasses
 
@@ -140,6 +141,28 @@ def get_registry() -> dict[str, SensorBinding]:
     return dict(registry)
 
 
+@functools.cache
+def mock_binding(binding: SensorBinding, mock_source: str) -> SensorBinding:
+    mock_name = f'mock_{mock_source}_{binding.sweep_spec.__name__}'
+
+    mock_binding = get_binding(mock_source)
+
+    return bind_sensor(
+        mock_name,
+        Sensor(
+            source=mock_binding.source,
+            peripherals=mock_binding.peripherals,
+            sweep_spec=binding.sweep_spec,
+            sink=mock_binding.sink,
+        ),
+        Schema(
+            source=mock_binding.schema.source,
+            capture=binding.schema.capture,
+            peripherals=binding.schema.peripherals,
+        ),
+    )
+
+
 def get_binding(
     key: str | specs.Sweep, mock_source: str | None = None
 ) -> SensorBinding:
@@ -151,25 +174,9 @@ def get_binding(
         raise TypeError('key must be a string')
 
     if mock_source is not None:
-        mock_name = f'mock_{mock_source}_{key}'
-
-        mock_binding = get_binding(mock_source)
-        binding = bind_sensor(
-            mock_name,
-            Sensor(
-                source=mock_binding.source,
-                peripherals=mock_binding.peripherals,
-                sweep_spec=binding.sweep_spec,
-                sink=mock_binding.sink,
-            ),
-            Schema(
-                source=mock_binding.schema.source,
-                capture=binding.schema.capture,
-                peripherals=binding.schema.peripherals,
-            ),
-        )
-
-    return binding
+        return mock_binding(binding, mock_source)
+    else:
+        return binding
 
 
 def get_tagged_sweep_type() -> type[specs.Sweep]:

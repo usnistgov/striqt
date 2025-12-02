@@ -72,7 +72,7 @@ def design_warmup(
     in order to avoid analysis slowdowns during sweeps.
     """
 
-    from .. import bindings
+    from . import bindings
 
     # captures that have unique sampling parameters, which are those
     # specified in structs.WaveformCapture
@@ -81,29 +81,31 @@ def design_warmup(
     skip_wcaptures = {specs.ResampledCapture.fromspec(c) for c in skip}
     captures = [unique_map[c] for c in unique_map.keys() if c not in skip_wcaptures]
 
-    num_rx_ports = 0
-    for c in captures:
-        if c.port is None:
-            continue
-        if isinstance(c.port, tuple):
-            n = max(c.port)
-        else:
-            n = c.port
-        if n > num_rx_ports:
-            num_rx_ports = n
+    # num_rx_ports = 0
+    # for c in captures:
+    #     if c.port is None:
+    #         continue
+    #     if isinstance(c.port, tuple):
+    #         n = max(c.port)
+    #     else:
+    #         n = c.port
+    #     if n > num_rx_ports:
+    #         num_rx_ports = n
 
     if len(captures) > 1:
         captures = captures[:1]
 
+    b = bindings.mock_binding(sweep.__bindings__, 'warmup')
+
     # TODO: currently, the base_clock_rate is left as the null radio default.
     # this may cause problems in the future if its default disagrees with another
-    source = specs.NoSource.fromspec(sweep.source).replace(
-        num_rx_ports=num_rx_ports, calibration=None
+    source = (
+        b.schema.source.fromspec(sweep.source)
+        .replace(calibration=None)
     )
 
-    warmup = bindings.warmup.sweep_spec.fromspec(sweep)
-
-    return warmup.replace(captures=tuple(captures), source=source, loops=())
+    warmup_spec = b.sweep_spec.fromspec(sweep)
+    return warmup_spec.replace(captures=tuple(captures), source=source, loops=())
 
 
 def run_warmup(input_spec: specs.Sweep):
