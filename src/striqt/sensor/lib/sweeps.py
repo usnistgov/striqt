@@ -427,7 +427,7 @@ class SweepIterator:
             return data
 
         system_noise = lookup_system_noise_power(
-            self.spec.source.calibration,
+            self.cal,
             capture,
             self.source.setup_spec.base_clock_rate,
         )
