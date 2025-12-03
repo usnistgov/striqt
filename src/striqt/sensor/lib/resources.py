@@ -92,17 +92,21 @@ def import_sink_cls(
 class Call(util.Call[util._P, util._R]):
     _dest = None
 
+    def __init__(self, func, *args, **kws):
+        def wrapper(*a, **k):
+            name = threading.current_thread().name
+            with util.stopwatch(name, 'sweep', 0.5, util.logging.INFO):
+                result = func(*a, **k)
+                if self._dest is not None:
+                    self._dest[name] = result
+                return result
+
+        super().__init__(func, *args, **kws)
+        
+
     def return_into(self, d) -> typing_extensions.Self:
         self._dest = d
         return self
-
-    def __call__(self) -> _R | None:
-        name = threading.current_thread().name
-        with util.stopwatch(name, 'sweep', 0.5, util.logging.INFO):
-            result = super().__call__()
-            if self._dest is not None:
-                self._dest[name] = result
-            return result
 
 
 class ConnectionManager(
