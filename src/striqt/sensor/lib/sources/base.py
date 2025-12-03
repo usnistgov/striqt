@@ -283,7 +283,7 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
 
         if setup.array_backend == 'cupy':
             util.safe_import('cupy')
-            util.safe_import('cupyx')
+            # util.safe_import('cupyx')
             util.configure_cupy()
 
         self._apply_setup(setup)
