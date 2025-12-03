@@ -228,18 +228,20 @@ def open_sensor(
         sink_cls = bind.sink
     else:
         raise TypeError('no sink class in sensor binding or extensions.sink spec')
-    
+
     is_cupy = spec.source.array_backend == 'cupy'
-    # if is_cupy:
-    #     import cupy
+    if is_cupy:
+        cupy = ('cupy', 'cupyx', 'cupyx.scipy')
+    else:
+        cupy = ()
 
     try:
         calls = {
-            'imports': conn.log_call(expensive_imports, is_cupy),
-            'compute': conn.log_call(prepare_compute, spec).depends('cupy', 'numba', 'xarray'),
+            # 'imports': conn.log_call(expensive_imports, is_cupy),
+            'compute': conn.log_call(prepare_compute, spec).depends('numba', 'xarray', *cupy),
             'sink': conn.open(sink_cls, spec, alias_func=formatter).depends('xarray',),
             'calibration': conn.get(calibration.read_calibration, spec.source.calibration, formatter).depends('xarray'),
-            'devices': conn.log_call(_open_devices, conn, bind, spec)
+            'devices': conn.log_call(_open_devices, conn, bind, spec).depends(*cupy)
         }
 
         if spec.sink.log_path is not None:
