@@ -258,6 +258,9 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
         self._capture = None
         self._buffers = _ReceiveBuffers(self)
 
+        if setup.array_backend == 'cupy':
+            util.configure_cupy()
+
         try:
             self._connect(setup)
         except:
@@ -868,7 +871,6 @@ def alloc_empty_iq(
 
     if source.setup_spec.array_backend == 'cupy':
         try:
-            util.configure_cupy()
             from cupyx import empty_pinned as empty  # type: ignore
         except ModuleNotFoundError as ex:
             raise RuntimeError(

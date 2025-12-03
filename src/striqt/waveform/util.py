@@ -21,24 +21,28 @@ _input_domain = []
 
 
 class _LazyLoader(importlib.util.LazyLoader):
-    lock = threading.RLock()
+    lock = threading.Lock()
+
+    def __init__(self, loader):
+        super().__init__(loader)
 
     @classmethod
-    def factory(cls, loader) -> typing.Callable[..., _LazyLoader]:
+    def factory(cls, loader):
         with cls.lock:
-            return super().factory(loader) # type: ignore
-        
-    def exec_module(self, module: ModuleType) -> None:
+            return super().factory(loader)
+
+    def exec_module(self, module):
         with self.lock:
             return super().exec_module(module)
 
-    def create_module(self, spec: ModuleSpec) -> ModuleType | None:
+    def create_module(self, spec):
         with self.lock:
             return super().create_module(spec)
-        
+
     def load_module(self, fullname: str) -> ModuleType:
         with self.lock:
             return super().load_module(fullname)
+
 
 def lazy_import(module_name: str, package=None):
     """postponed import of the module with the specified name.

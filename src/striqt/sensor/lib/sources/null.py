@@ -57,12 +57,11 @@ class NoSource(base.SourceBase[_TS, _TC]):
 
     def read_iq(self) -> tuple[ArrayType, int | None]:
         if self.setup_spec.array_backend == 'cupy':
-            assert util.cp is not None, ImportError('cupy is not installed')
             xp = util.cp
         else:
             xp = np
 
-        count = round(self.get_resampler()['fs_sdr'] * self.capture_spec.duration)
+        count = base.get_channel_read_buffer_count(self, include_holdoff=False)
         shape = (count, self.setup_spec.num_rx_ports)
         buf = xp.empty(shape, dtype='complex64') # type: ignore
         return buf, None
