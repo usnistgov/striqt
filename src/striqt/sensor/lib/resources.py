@@ -94,7 +94,10 @@ class Call(util.Call[util._P, util._R]):
 
     def __init__(self, func, *args, **kws):
         def wrapper(*a, **k):
-            name = threading.current_thread().name
+            if threading.current_thread() == threading.main_thread():
+                name = 'compute'
+            else:
+                name = threading.current_thread().name
             with util.stopwatch(name, 'sweep', 0.5, util.logging.INFO):
                 result = func(*a, **k)
                 if self._dest is not None:
