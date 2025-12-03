@@ -162,7 +162,9 @@ def _open_devices(conn: ConnectionManager, binding: bindings.SensorBinding, spec
 
     util.concurrently(calls)
 
-    print(conn.resources.keys())
+    if 'peripherals' not in conn.resources:
+        # an exception happened, and we're in teardown
+        return
 
     # run peripherals setup after the source is fully initialized, in case
     # it could produce spurious inputs during source initialization

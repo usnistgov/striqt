@@ -1,8 +1,8 @@
 import math
 
+import numba.cuda
 import cupy
 import numba as nb
-import numba.cuda
 
 
 @numba.cuda.jit(cache=True)
