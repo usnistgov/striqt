@@ -107,8 +107,6 @@ class NoSink(SinkBase):
 
 class ZarrSinkBase(SinkBase[specs._TC]):
     def open(self):
-        util.blocking_imports(xarray=True)
-
         self.store = io.open_store(
             self._spec, alias_func=self._alias_func, force=self.force
         )
