@@ -4,15 +4,12 @@ import functools
 import time
 import typing
 
-from numpy import ndarray
-
-from striqt.waveform._typing import ArrayType
-
 from .. import specs, util
 from . import base
 
 if typing.TYPE_CHECKING:
     import numpy as np
+    from striqt.waveform._typing import ArrayType
 else:
     np = util.lazy_import('numpy')
 
