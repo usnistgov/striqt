@@ -62,7 +62,7 @@ class NoSource(base.SourceBase[_TS, _TC]):
         else:
             xp = np
 
-        count = self.get_resampler()['fs_sdr'] * self.capture_spec.duration
+        count = round(self.get_resampler()['fs_sdr'] * self.capture_spec.duration)
         shape = (count, self.setup_spec.num_rx_ports)
         buf = xp.empty(shape, dtype='complex64') # type: ignore
         return buf, None
