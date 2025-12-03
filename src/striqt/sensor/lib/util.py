@@ -418,8 +418,7 @@ class Call(typing.Generic[_P, _R]):
 
         if self.queue is not None:
             self.queue.put(self)
-        else:
-            return self.result
+        return self.result
 
     def set_queue(self, queue):
         """Set the queue object used to communicate between threads"""
