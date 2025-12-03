@@ -45,7 +45,7 @@ def read_calibration(
         return None
 
     util.safe_import('xarray')
-    
+
     if alias_func is not None:
         path = alias_func(path)
 

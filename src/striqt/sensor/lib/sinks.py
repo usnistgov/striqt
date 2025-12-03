@@ -162,6 +162,7 @@ class ZarrCaptureSink(ZarrSinkBase[specs._TC]):
         with (
             util.log_capture_context('sink', capture_index=count - 1),
             util.stopwatch(f'sync to {path}', 'sink'),
+            util.delay_keyboard_interrupts(),
         ):
             analysis.dump(self.store, dataset, max_threads=self._spec.max_threads)
 
@@ -212,6 +213,7 @@ class SpectrogramTimeAppender(ZarrSinkBase):
         with (
             util.log_capture_context('sink', capture_index=count - 1),
             util.stopwatch(f'sync {path}', 'sink', threshold=0.5),
+            util.delay_keyboard_interrupts(),
         ):
             analysis.dump(
                 self.store,

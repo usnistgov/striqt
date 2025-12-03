@@ -358,7 +358,9 @@ def from_delayed(dd: DelayedDataset):
         )
 
     unscaled_peak = dd.extra_data.get('unscaled_iq_peak', None)
-    if unscaled_peak is not None and not isinstance(dd.config.sweep_spec.source, specs.NoSource):
+    if unscaled_peak is not None and not isinstance(
+        dd.config.sweep_spec.source, specs.NoSource
+    ):
         descs = ','.join(f'{p:0.0f}' for p in unscaled_peak)
         logger = util.get_logger('analysis')
         logger.info(f'({descs}) dBfs ADC peak')

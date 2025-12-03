@@ -105,7 +105,6 @@ class Call(util.Call[util._P, util._R]):
                 return result
 
         super().__init__(wrapper, *args, **kws)
-        
 
     def return_into(self, d) -> typing_extensions.Self:
         self._dest = d
@@ -160,7 +159,9 @@ def _setup_logging(sink: specs.Sink, formatter):
     util.log_to_file(log_path, sink.log_level)
 
 
-def _open_devices(conn: ConnectionManager, binding: bindings.SensorBinding, spec: specs.Sweep):
+def _open_devices(
+    conn: ConnectionManager, binding: bindings.SensorBinding, spec: specs.Sweep
+):
     """the source and any peripherals"""
 
     calls = {
@@ -179,7 +180,7 @@ def _open_devices(conn: ConnectionManager, binding: bindings.SensorBinding, spec
     conn._resources['peripherals'].setup(spec.captures, spec.loops)  # type: ignore
 
 
-@util.stopwatch("open resources", "sweep", 1.0, util.PERFORMANCE_INFO)
+@util.stopwatch('open resources', 'sweep', 1.0, util.PERFORMANCE_INFO)
 def open_sensor(
     spec: specs.Sweep[_TS, _TP, _TC],
     spec_path: str | Path | None = None,
@@ -212,8 +213,10 @@ def open_sensor(
         calls = {
             'compute': conn.log_call(prepare_compute, spec),
             'sink': conn.open(sink_cls, spec, alias_func=formatter),
-            'calibration': conn.get(calibration.read_calibration, spec.source.calibration, formatter),
-            'devices': util.Call(_open_devices, conn, bind, spec)
+            'calibration': conn.get(
+                calibration.read_calibration, spec.source.calibration, formatter
+            ),
+            'devices': util.Call(_open_devices, conn, bind, spec),
         }
 
         if spec.sink.log_path is not None:

@@ -8,6 +8,7 @@ import importlib
 import itertools
 import logging
 import queue
+import signal
 import sys
 import threading
 import time
@@ -185,6 +186,7 @@ def _flatten_exceptions(exception: BaseException) -> list[BaseException]:
         result = [exception]
 
     return result
+
 
 def concurrently_with_fg(calls: dict[str, Call] = {}) -> dict[typing.Any, typing.Any]:
     """runs the first call in the current thread while the rest run in the background"""
@@ -600,6 +602,7 @@ class DebugOnException:
                         handler(type(th_exc), th_exc, th_exc.__traceback__)
                     except:
                         import traceback
+
                         traceback.print_exception(etype, exc, tb)
                 handler.call_pdb = self.enable
 
@@ -607,6 +610,7 @@ class DebugOnException:
                 handler(etype, exc, tb)
             except:
                 import traceback
+
                 traceback.print_exception(etype, exc, tb)
             self.prev = triplet
 
@@ -898,6 +902,23 @@ def log_capture_context(name_suffix, /, capture_index=0, capture_count=None):
     logger.extra = start_extra | extra
     yield
     logger.extra = start_extra
+
+
+class delay_keyboard_interrupts:
+    def __enter__(self):
+        self.received = False
+        self.old_handler = signal.signal(signal.SIGINT, self.handler)
+
+    def handler(self, sig, frame):
+        self.received = (sig, frame)
+        logging.debug('SIGINT received. Delaying exit.')
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        # Restore the original SIGINT handler
+        signal.signal(signal.SIGINT, self.old_handler)
+        # If a SIGINT was received while in the context manager, re-raise it now
+        if self.received:
+            self.old_handler(*self.received)
 
 
 show_messages(logging.INFO)

@@ -271,9 +271,7 @@ def fftfreq(n, d, *, xp=None, dtype='float64') -> ArrayType:
         return xp.linspace(-fnyq + fnyq / n, fnyq - fnyq / n, n, dtype=dtype)
 
 
-def _enbw(
-    window: str | tuple[str, float], N, fftbins=True, cached=True, xp=None
-):
+def _enbw(window: str | tuple[str, float], N, fftbins=True, cached=True, xp=None):
     """return the equivalent noise bandwidth (ENBW) of a window, in bins"""
     if xp is None:
         xp = np

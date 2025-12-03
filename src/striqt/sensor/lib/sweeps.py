@@ -126,7 +126,7 @@ def design_warmup(
 
 
 def prepare_compute(input_spec: specs.Sweep):
-    util.expensive_imports(cupy=input_spec.source.array_backend=='cupy')
+    util.expensive_imports(cupy=input_spec.source.array_backend == 'cupy')
 
     if not input_spec.source.warmup_sweep:
         return
@@ -447,7 +447,6 @@ class SweepIterator:
             )
 
         if self._sink is None:
-            print('sad face')
             return datasets.from_delayed(results)
         else:
             self._sink.append(results, capture)
