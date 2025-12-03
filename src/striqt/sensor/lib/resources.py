@@ -167,7 +167,6 @@ def _open_devices(conn: ConnectionManager, binding: bindings.SensorBinding, spec
     else:
         modules = ('numpy', 'scipy')
 
-    binding.source
     calls = {
         'source': Call(conn.open, binding.source, spec.source, analysis=spec.analysis).depends(modules),
         'peripherals': Call(conn.open, binding.peripherals, spec),
@@ -236,20 +235,11 @@ def open_sensor(
 
     try:
         calls = {
-            'imports': util.Call(expensive_imports, is_cupy),            
-            'compute': util.Call(
-                conn.log_call, 'compute', ('cupy', 'numba', 'xarray'), prepare_compute, spec,
-            ),
-            'sink': util.Call(conn.open, 'sink', ('xarray',), sink_cls, spec, alias_func=formatter),
-            'calibration': util.Call(
-                conn.get,
-                'calibration',
-                ('xarray',)
-                calibration.read_calibration,
-                spec.source.calibration,
-                formatter,
-            ),
-            'devices': util.Call(_open_devices, conn, bind, spec)
+            'imports': conn.log_call(expensive_imports, is_cupy),
+            'compute': conn.log_call(prepare_compute, spec).depends('cupy', 'numba', 'xarray'),
+            'sink': conn.open(sink_cls, spec, alias_func=formatter).depends('xarray',),
+            'calibration': conn.get(calibration.read_calibration, spec.source.calibration, formatter).depends('xarray'),
+            'devices': conn.log_call(_open_devices, conn, bind, spec)
         }
 
         if spec.sink.log_path is not None:
