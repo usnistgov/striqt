@@ -44,27 +44,27 @@ class NoSource(base.SourceBase[_TS, _TC]):
     def _prepare_capture(self, capture) -> _TC | None:
         self.reset_sample_counter()
 
-    # def _read_stream(
-    #     self, buffers, offset, count, timeout_sec=None, *, on_overflow='except'
-    # ) -> tuple[int, int]:
-    #     fs = float(self.get_resampler()['fs_sdr'])
-    #     sample_period_ns = 1_000_000_000 / fs
-    #     timestamp_ns = self._sync_time_ns + self._samples_elapsed * sample_period_ns
+    def _read_stream(
+        self, buffers, offset, count, timeout_sec=None, *, on_overflow='except'
+    ) -> tuple[int, int]:
+        fs = float(self.get_resampler()['fs_sdr'])
+        sample_period_ns = 1_000_000_000 / fs
+        timestamp_ns = self._sync_time_ns + self._samples_elapsed * sample_period_ns
 
-    #     self._samples_elapsed += count
+        self._samples_elapsed += count
 
-    #     return count, round(timestamp_ns)
+        return count, round(timestamp_ns)
 
-    def read_iq(self) -> tuple[ArrayType, int | None]:
-        if self.setup_spec.array_backend == 'cupy':
-            xp = util.cp
-        else:
-            xp = np
+    # def read_iq(self) -> tuple[ArrayType, int | None]:
+    #     if self.setup_spec.array_backend == 'cupy':
+    #         xp = util.cp
+    #     else:
+    #         xp = np
 
-        count = base.get_channel_read_buffer_count(self, include_holdoff=True)
-        shape = (count, self.setup_spec.num_rx_ports)
-        buf = xp.empty(shape, dtype='complex64') # type: ignore
-        return buf, None
+    #     count = base.get_channel_read_buffer_count(self, include_holdoff=True)
+    #     shape = (count, self.setup_spec.num_rx_ports)
+    #     buf = xp.empty(shape, dtype='complex64') # type: ignore
+    #     return buf, None
 
     def get_resampler(self, capture: _TC | None = None) -> base.ResamplerDesign:
         if capture is None:
