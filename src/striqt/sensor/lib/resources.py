@@ -167,7 +167,7 @@ def open_sensor(
 
     try:
         calls = {
-            'warmup': util.Call(conn.log_call, 'warmup', prepare_compute, spec),
+            'warmup': util.Call(conn.log_call, 'prepare_compute', prepare_compute, spec),
             'source': util.Call(
                 conn.open,
                 'source',
