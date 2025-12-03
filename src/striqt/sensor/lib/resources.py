@@ -101,7 +101,7 @@ class Call(util.Call[util._P, util._R]):
                     self._dest[name] = result
                 return result
 
-        super().__init__(func, *args, **kws)
+        super().__init__(wrapper, *args, **kws)
         
 
     def return_into(self, d) -> typing_extensions.Self:
