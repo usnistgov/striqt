@@ -257,10 +257,6 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
         self._capture = None
         self._buffers = _ReceiveBuffers(self)
 
-        if setup.array_backend == 'cupy':
-            util.safe_import('cupy')
-            util.safe_import('cupyx')
-
         try:
             self._connect(setup)
         except:
@@ -284,6 +280,11 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
             self._aligner = register.get_aligner(
                 setup.channel_sync_source, analysis=analysis, registry=registry
             )
+
+        if setup.array_backend == 'cupy':
+            util.safe_import('cupy')
+            util.safe_import('cupyx')
+            util.configure_cupy()
 
         self._apply_setup(setup)
 
