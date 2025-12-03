@@ -25,7 +25,7 @@ def open_store(
     alias_func: captures.PathAliasFormatter | None = None,
     force=False,
 ) -> StoreType:
-    # util.blocking_imports(xarray=True)
+    util.safe_import('xarray')
 
     spec_path = spec.path
 

@@ -47,8 +47,7 @@ def read_calibration(
     if alias_func is not None:
         path = alias_func(path)
 
-    # util.blocking_imports(xarray=True)
-    import xarray
+    util.safe_import('xarray')
 
     return xr.open_dataset(path)
 

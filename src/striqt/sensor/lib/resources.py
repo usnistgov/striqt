@@ -90,12 +90,7 @@ def import_sink_cls(
 
 
 class Call(util.Call[util._P, util._R]):
-    modules = ()
     _dest = None
-
-    def depends(self, *modules) -> typing_extensions.Self:
-        self.modules = modules
-        return self
 
     def returns(self, d) -> typing_extensions.Self:
         self._dest = d
@@ -104,8 +99,6 @@ class Call(util.Call[util._P, util._R]):
     def __call__(self) -> _R | None:
         name = threading.current_thread().name
         with util.stopwatch(name, 'sweep', 0.5, util.logging.INFO):
-            for name in self.modules:
-                imports_ready[name].wait()
             result = super().__call__()
             if self._dest is not None:
                 self._dest[name] = result
@@ -158,17 +151,12 @@ def _setup_logging(sink: specs.Sink, formatter):
     log_path = formatter(sink.log_path)
     util.log_to_file(log_path, sink.log_level)
 
+
 def _open_devices(conn: ConnectionManager, binding: bindings.SensorBinding, spec: specs.Sweep):
     """the source and any peripherals"""
 
-    is_cupy = spec.source.array_backend == 'cupy'
-    if is_cupy:
-        modules = ('numpy', 'cupy', 'cupyx', 'cupyx.scipy')
-    else:
-        modules = ('numpy', 'scipy')
-
     calls = {
-        'source': Call(conn.open, binding.source, spec.source, analysis=spec.analysis).depends(modules),
+        'source': Call(conn.open, binding.source, spec.source, analysis=spec.analysis),
         'peripherals': Call(conn.open, binding.peripherals, spec),
     }
 
@@ -177,27 +165,6 @@ def _open_devices(conn: ConnectionManager, binding: bindings.SensorBinding, spec
     # run peripherals setup after the source is fully initialized, in case
     # it could produce spurious inputs during source initialization
     conn._resources['peripherals'].setup(spec.captures, spec.loops)  # type: ignore
-
-
-imports_ready = collections.defaultdict(threading.Event)
-
-def expensive_imports(cupy=False):
-    def notify_import(name):
-        importlib.import_module(name)
-        imports_ready[name].set()
-
-    if cupy:
-        # this order is important!
-        # https://github.com/numba/numba/issues/6131
-        notify_import('numba.cuda')
-        notify_import('cupy')
-
-    notify_import('scipy')
-    notify_import('numpy')
-    notify_import('xarray')
-
-    # these are only needed for analysis
-    notify_import('numba')
 
 
 @util.stopwatch("open resources", "sweep", 1.0, util.PERFORMANCE_INFO)
@@ -230,18 +197,14 @@ def open_sensor(
         raise TypeError('no sink class in sensor binding or extensions.sink spec')
 
     is_cupy = spec.source.array_backend == 'cupy'
-    if is_cupy:
-        cupy = ('cupy', 'cupyx', 'cupyx.scipy')
-    else:
-        cupy = ()
 
     try:
         calls = {
-            'imports': conn.log_call(expensive_imports, is_cupy),
-            'compute': conn.log_call(prepare_compute, spec).depends('numba', 'xarray', *cupy),
-            'sink': conn.open(sink_cls, spec, alias_func=formatter).depends('xarray',),
-            'calibration': conn.get(calibration.read_calibration, spec.source.calibration, formatter).depends('xarray'),
-            'devices': conn.log_call(_open_devices, conn, bind, spec).depends(*cupy)
+            'imports': conn.log_call(util.expensive_imports, is_cupy),
+            'compute': conn.log_call(prepare_compute, spec),
+            'sink': conn.open(sink_cls, spec, alias_func=formatter),
+            'calibration': conn.get(calibration.read_calibration, spec.source.calibration, formatter),
+            'devices': conn.log_call(_open_devices, conn, bind, spec)
         }
 
         if spec.sink.log_path is not None:

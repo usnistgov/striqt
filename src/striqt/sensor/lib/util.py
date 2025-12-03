@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import collections
 import contextlib
 import datetime
 import functools
+import importlib
 import itertools
 import logging
 import queue
@@ -66,6 +68,36 @@ stop_request_event = threading.Event()
 
 
 _Tfunc = typing.Callable[..., typing.Any]
+
+
+_imports_ready = collections.defaultdict(threading.Event)
+
+
+def safe_import(name):
+    if threading.current_thread() == threading.main_thread():
+        mod = importlib.import_module(name)
+        _imports_ready[name].set()
+    else:
+        _imports_ready[name].wait()
+        mod = importlib.import_module(name)
+    return mod
+
+
+def expensive_imports(cupy=False):
+    if cupy:
+        # this order is important!
+        # https://github.com/numba/numba/issues/6131
+        safe_import('numba.cuda')
+        safe_import('cupy')
+        configure_cupy()
+        safe_import('cupyx')
+        safe_import('cupyx.scipy')
+
+    safe_import('scipy')
+    safe_import('numpy')
+    safe_import('xarray')
+
+    safe_import('numba')
 
 
 def retry(
