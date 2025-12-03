@@ -21,7 +21,7 @@ _input_domain = []
 
 
 class _LazyLoader(importlib.util.LazyLoader):
-    lock = threading.Lock()
+    lock = threading.RLock()
 
     @classmethod
     def factory(cls, loader) -> typing.Callable[..., _LazyLoader]:
