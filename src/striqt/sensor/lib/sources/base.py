@@ -258,8 +258,8 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
         self._buffers = _ReceiveBuffers(self)
 
         if setup.array_backend == 'cupy':
-            assert util.cp is not None, 'could not import cupy'
-            util.configure_cupy()
+            util.safe_import('cupy')
+            util.safe_import('cupyx')
 
         try:
             self._connect(setup)
