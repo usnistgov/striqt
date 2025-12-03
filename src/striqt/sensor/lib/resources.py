@@ -124,7 +124,7 @@ class ConnectionManager(
 
     def open(
         self, func: typing.Callable[_P, _R], *args: _P.args, **kws: _P.kwargs
-    ):
+    ) -> Call:
         def wrapper():
             result = func(*args, **kws)
             self.enter_context(obj)  # type: ignore
@@ -134,15 +134,15 @@ class ConnectionManager(
 
     def get(
         self, func: typing.Callable[_P, _R], *args: _P.args, **kws: _P.kwargs
-    ):
+    ) -> Call:
         return Call(func, *args, **kws).returns(self._resources)
 
-    def enter(self, ctx):
-        return Call(self.enter_context, ctx).returns(self._resources)
+    def enter(self, ctx, name):
+        self._resources[name] = self.enter_context(ctx)
 
     def log_call(
         self, func: typing.Callable[_P, _R], *args: _P.args, **kws: _P.kwargs
-    ):
+    ) -> Call:
         return Call(func, *args, **kws)
 
     @functools.cached_property
@@ -243,12 +243,12 @@ def open_sensor(
         }
 
         if spec.sink.log_path is not None:
-            calls['log_to_file'] = util.Call(_setup_logging, spec.sink, formatter)
+            calls['log_to_file'] = Call(_setup_logging, spec.sink, formatter)
 
         util.concurrently_with_fg(calls)
 
         if except_context is not None:
-            conn.enter('except_context', except_context)
+            conn.enter(except_context, 'except_context')
 
         conn._resources['sweep_spec'] = spec
         conn._resources['alias_func'] = formatter
