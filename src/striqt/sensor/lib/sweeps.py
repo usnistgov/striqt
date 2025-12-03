@@ -126,13 +126,14 @@ def design_warmup(
 
 
 def prepare_compute(input_spec: specs.Sweep):
+    import numpy
+    import pandas
+    import xarray
+
     if not input_spec.source.warmup_sweep:
         return
 
     from .. import bindings
-
-    import pandas
-    import xarray
 
     spec = design_warmup(input_spec)
 
