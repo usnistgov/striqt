@@ -237,7 +237,7 @@ def open_sensor(
 
     try:
         calls = {
-            # 'imports': conn.log_call(expensive_imports, is_cupy),
+            'imports': conn.log_call(expensive_imports, is_cupy),
             'compute': conn.log_call(prepare_compute, spec).depends('numba', 'xarray', *cupy),
             'sink': conn.open(sink_cls, spec, alias_func=formatter).depends('xarray',),
             'calibration': conn.get(calibration.read_calibration, spec.source.calibration, formatter).depends('xarray'),
