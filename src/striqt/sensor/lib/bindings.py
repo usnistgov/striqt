@@ -83,7 +83,7 @@ class SensorBinding(Sensor[_TS, _TP, _TC]):
 
 
 def bind_sensor(
-    key: str, sensor: Sensor[_TS2, _TP2, _TC2], schema: Schema[_TS, _TP, _TC]
+    key: str, sensor: Sensor[_TS2, _TP2, _TC2], schema: Schema[_TS, _TP, _TC], register=True
 ) -> SensorBinding[_TS, _TP, _TC]:
     """register a binding between specifications and controller classes.
 
@@ -97,7 +97,7 @@ def bind_sensor(
     if not isinstance(sensor, Sensor):
         raise TypeError('schema argument must be a Sensor instance')
 
-    if key in registry:
+    if register and key in registry:
         raise TypeError(f'a sensor binding named {key!r} was already registered')
 
     binding = SensorBinding(**dataclasses.asdict(sensor), schema=schema)
@@ -126,7 +126,9 @@ def bind_sensor(
 
     BoundSweep = tagged_subclass(key, BoundSweep, 'sensor_binding')  # type: ignore
     binding = dataclasses.replace(binding, sweep_spec=BoundSweep)
-    registry[key] = binding
+
+    if register:
+        registry[key] = binding
 
     global tagged_sweeps
     if tagged_sweeps is None:
