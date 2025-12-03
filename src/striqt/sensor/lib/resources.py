@@ -187,6 +187,9 @@ def open_sensor(
         sink_cls = bind.sink
     else:
         raise TypeError('no sink class in sensor binding or extensions.sink spec')
+    
+    if spec.source.array_backend == 'cupy':
+        import cupy
 
     try:
         calls = {

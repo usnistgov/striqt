@@ -70,32 +70,34 @@ stop_request_event = threading.Event()
 _Tfunc = typing.Callable[..., typing.Any]
 
 
-import_locks = collections.defaultdict(threading.Lock)
-cupy_ready = threading.Event()
+# import_locks = collections.defaultdict(threading.Lock)
+# cupy_ready = threading.Event()
 
+# def _blocking_import(name):
+#     with import_locks[name]:
+#         return importlib.import_module(name)
 
-def _blocking_import(name):
-    with import_locks[name]:
-        return importlib.import_module(name)
+# def blocking_imports(xarray=False, analysis=False, cupy=False):
+#     if cupy:
+#         _blocking_import('cupy')
+#         _blocking_import('cupyx')
+#         _blocking_import('cupyx.scipy')
+#         if analysis:
+#             _blocking_import('numba.cuda')
 
-def blocking_imports(xarray=False, analysis=False, cupy=False):
-    if cupy:
-        _blocking_import('cupy')
-        _blocking_import('cupyx')
-        _blocking_import('cupyx.scipy')
-        cupy_ready.set()
+#         cupy_ready.set()
 
-    _blocking_import('scipy')
-    _blocking_import('numpy')
+#     _blocking_import('scipy')
+#     _blocking_import('numpy')
 
-    if xarray:
-        _blocking_import('xarray')
+#     if xarray:
+#         _blocking_import('xarray')
 
-    if analysis:
-        _blocking_import('numba')
+#     if analysis:
+#         _blocking_import('numba')
 
-    if cupy and analysis:
-        _blocking_import('numba.cuda')
+#     if cupy and analysis:
+#         _blocking_import('numba.cuda')
 
 
 def retry(
