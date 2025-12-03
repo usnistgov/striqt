@@ -129,6 +129,12 @@ def prepare_compute(input_spec: specs.Sweep):
     import numpy
     import pandas
     import xarray
+    import scipy
+
+    if input_spec.source.array_backend == 'cupy':
+        import cupy
+        import cupyx
+        import cupyx.scipy
 
     if not input_spec.source.warmup_sweep:
         return

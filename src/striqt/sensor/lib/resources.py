@@ -149,7 +149,6 @@ def open_sensor(
 
     from .sweeps import prepare_compute
 
-    timer_kws = dict(threshold=1, logger_suffix='sweep', logger_level=logging.INFO)
     formatter = captures.PathAliasFormatter(spec, spec_path=spec_path)
 
     if spec_path is not None:
