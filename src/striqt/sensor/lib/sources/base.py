@@ -16,7 +16,6 @@ from striqt.analysis.lib.util import pinned_array_as_cupy
 from striqt.waveform.fourier import ResamplerDesign
 
 from .. import captures, specs, util
-from ..util import cp
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -131,8 +130,8 @@ def _cast_iq(
     dtype_in = np.dtype(source.setup_spec.transport_dtype)
 
     if source.setup_spec.array_backend == 'cupy':
-        assert cp is not None, ImportError('cupy is not installed')
-        xp = cp
+        xp = util.cp
+        assert xp is not None, ImportError('cupy is not installed')
         buffer = pinned_array_as_cupy(buffer)
     else:
         xp = np
@@ -259,6 +258,7 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
         self._buffers = _ReceiveBuffers(self)
 
         if setup.array_backend == 'cupy':
+            assert util.cp is not None, "could not import cupy"
             util.configure_cupy()
 
         try:
@@ -506,8 +506,7 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
 
     def get_array_namespace(self: SourceBase) -> types.ModuleType:
         if self.__setup__.array_backend == 'cupy':
-            assert cp is not None, ImportError('cupy is not installed')
-            return cp
+            return util.cp
         elif self.__setup__.array_backend == 'numpy':
             return np
         else:
@@ -772,7 +771,7 @@ def _get_aligner_pad_size(
 
 def _get_next_fast_len(n):
     try:
-        import cupy
+        from ..util import cp
         from cupyx import scipy  # type: ignore
     except ModuleNotFoundError:
         import scipy
