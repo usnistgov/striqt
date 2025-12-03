@@ -119,9 +119,9 @@ class ConnectionManager(
         self, func: typing.Callable[_P, _R], *args: _P.args, **kws: _P.kwargs
     ) -> Call:
         def wrapper():
-            result = func(*args, **kws)
+            obj = func(*args, **kws)
             self.enter_context(obj)  # type: ignore
-            return result
+            return obj
 
         return Call(wrapper).returns(self._resources)
 

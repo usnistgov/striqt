@@ -212,7 +212,7 @@ def _get_format_fields(s: str):
 
 
 class PathAliasFormatter:
-    def __init__(self, sweep: specs.Sweep, spec_path: Path | str | None = None, alias_timeout: float=2):
+    def __init__(self, sweep: specs.Sweep, spec_path: Path | str | None = None, alias_timeout: float=1):
         self.sweep_spec = sweep
         self.spec_path = spec_path
         self.alias_timeout = alias_timeout
