@@ -89,7 +89,7 @@ def import_sink_cls(
     return getattr(mod, obj_name)
 
 
-class Call(util.Call[_P, _R]):
+class Call(util.Call[util._P, util._R]):
     modules = ()
     _dest = None
 
