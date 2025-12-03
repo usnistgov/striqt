@@ -69,7 +69,7 @@ class NoPeripherals(PeripheralsBase[_TP, _TC]):
     def close(self):
         return
 
-    def setup(self, captures: typing.Iterable[_TC]):
+    def setup(self, captures: typing.Iterable[_TC], loops: typing.Iterable[specs.LoopBase]):
         return
 
     def arm(self, capture):
