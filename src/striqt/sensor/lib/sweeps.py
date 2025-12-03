@@ -447,6 +447,7 @@ class SweepIterator:
             )
 
         if self._sink is None:
+            print('sad face')
             return datasets.from_delayed(results)
         else:
             self._sink.append(results, capture)

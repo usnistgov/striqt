@@ -98,8 +98,6 @@ class NoSink(SinkBase):
 
     def append(self, capture_result, capture):
         self.captures_elapsed += 1
-        if capture_result:
-            datasets.from_delayed(capture_result)
 
     def wait(self):
         pass
@@ -107,6 +105,7 @@ class NoSink(SinkBase):
 
 class ZarrSinkBase(SinkBase[specs._TC]):
     def open(self):
+        util.safe_import('xarray')
         self.store = io.open_store(
             self._spec, alias_func=self._alias_func, force=self.force
         )
