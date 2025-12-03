@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import functools
+from importlib.machinery import ModuleSpec
 import importlib.util
 import itertools
 import math
 import sys
+import threading
 import typing
 from contextlib import contextmanager
 from enum import Enum
@@ -17,6 +19,26 @@ _TC = typing.TypeVar('_TC', bound=typing.Callable)
 
 _input_domain = []
 
+
+class _LazyLoader(importlib.util.LazyLoader):
+    lock = threading.Lock()
+
+    @classmethod
+    def factory(cls, loader) -> typing.Callable[..., _LazyLoader]:
+        with cls.lock:
+            return super().factory(loader) # type: ignore
+        
+    def exec_module(self, module: ModuleType) -> None:
+        with self.lock:
+            return super().exec_module(module)
+
+    def create_module(self, spec: ModuleSpec) -> ModuleType | None:
+        with self.lock:
+            return super().create_module(spec)
+        
+    def load_module(self, fullname: str) -> ModuleType:
+        with self.lock:
+            return super().load_module(fullname)
 
 def lazy_import(module_name: str, package=None):
     """postponed import of the module with the specified name.
@@ -35,8 +57,9 @@ def lazy_import(module_name: str, package=None):
     spec = importlib.util.find_spec(module_name, package=package)
     if spec is None or spec.loader is None:
         raise ImportError(f'no module found named "{module_name}"')
-    spec.loader = importlib.util.LazyLoader(spec.loader)
-    module = importlib.util.module_from_spec(spec)
+    spec.loader = _LazyLoader(spec.loader)
+    with _LazyLoader.lock:
+        module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
     spec.loader.exec_module(module)
     return module
