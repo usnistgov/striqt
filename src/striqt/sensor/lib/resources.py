@@ -187,9 +187,10 @@ def expensive_imports(cupy=False):
         imports_ready[name].set()
 
     if cupy:
+        # this order is important!
+        # https://github.com/numba/numba/issues/6131
+        notify_import('numba.cuda')
         notify_import('cupy')
-        notify_import('cupyx')
-        notify_import('cupyx.scipy')
 
     notify_import('scipy')
     notify_import('numpy')
@@ -197,8 +198,7 @@ def expensive_imports(cupy=False):
 
     # these are only needed for analysis
     notify_import('numba')
-    if cupy:
-        notify_import('numba.cuda')
+
 
 @util.stopwatch("open resources", "sweep", 1.0, util.PERFORMANCE_INFO)
 def open_sensor(
