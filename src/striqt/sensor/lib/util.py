@@ -77,7 +77,6 @@ def _blocking_import(name):
     with import_locks[name]:
         return importlib.import_module(name)
 
-
 def blocking_imports(xarray=False, analysis=False, cupy=False):
     _blocking_import('scipy')
     _blocking_import('numpy')
@@ -173,6 +172,16 @@ def retry(
     return decorator
 
 
+def _deembed_exceptions(exception: BaseException) -> list[BaseException]:
+    result = []
+    if isinstance(exception, ConcurrentException):
+        for ex in exception.thread_exceptions:
+            result += _deembed_exceptions(ex)
+    else:
+        result = [exception]
+
+    return result
+
 def concurrently_with_fg(calls: dict[str, Call] = {}) -> dict[typing.Any, typing.Any]:
     """runs the first call in the current thread while the rest run in the background"""
     from concurrent.futures import ThreadPoolExecutor
@@ -196,18 +205,12 @@ def concurrently_with_fg(calls: dict[str, Call] = {}) -> dict[typing.Any, typing
         try:
             result = sequentially(fg)
         except BaseException as ex:
-            if isinstance(ex, ConcurrentException):
-                exc_list.extend(ex.thread_exceptions)
-            else:
-                exc_list.append(ex)
+            exc_list.extend(_deembed_exceptions(ex))
 
         try:
             result.update(bg_future.result())
         except BaseException as ex:
-            if isinstance(ex, ConcurrentException):
-                exc_list.extend(ex.thread_exceptions)
-            else:
-                exc_list.append(ex)
+            exc_list.extend(_deembed_exceptions(ex))
 
     if len(exc_list) == 0:
         pass
@@ -453,7 +456,6 @@ def concurrently(
     # As each thread ends, collect the return value and any exceptions
     tracebacks = []
     parent_exception = None
-    last_exception = None
     exceptions = []
     name_lookup = dict(zip(calls.values(), calls.keys()))
 
@@ -487,8 +489,7 @@ def concurrently(
             if called.exc_info[0] is not ThreadEndedByMaster:
                 # exception_count += 1
                 tracebacks.append(tb)
-                exceptions.append(called.exc_info[1])
-                last_exception = called.exc_info[1]
+                exceptions.extend(_deembed_exceptions(called.exc_info[1]))
 
             if not traceback_delay:
                 _immediate_print_multi_tracebacks([tb])
