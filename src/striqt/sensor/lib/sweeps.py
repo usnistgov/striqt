@@ -113,7 +113,7 @@ def design_warmup(
         gapless_rearm=sweep.source.gapless_rearm,
         periodic_trigger=None,
         channel_sync_source=sweep.source.channel_sync_source,
-        uncalibrated_peak_detect=sweep.source.uncalibrated_peak_detect,
+        uncalibrated_peak_detect=False,
     )
 
     return b.sweep_spec(
