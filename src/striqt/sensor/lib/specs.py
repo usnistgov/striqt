@@ -324,6 +324,7 @@ class TDMSFileSourceSpec(NoSource, frozen=True, kw_only=True):
 
 class ZarrIQSourceSpec(NoSource, frozen=True, kw_only=True):
     path: WaveformInputPath
+    center_frequency: CenterFrequencyType
     select: Annotated[
         dict, meta('dictionary to select in the data as .sel(**select)')
     ] = {}

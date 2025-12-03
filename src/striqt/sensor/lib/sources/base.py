@@ -338,7 +338,7 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
         self._capture = self._prepare_capture(capture) or capture
         return self._capture
 
-    def read_iq(self) -> 'tuple[np.ndarray, int|None]':
+    def read_iq(self) -> 'tuple[ArrayType, int|None]':
         """read IQ for the armed capture"""
         assert self._capture is not None, 'soapy source must be armed to read IQ'
 

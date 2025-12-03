@@ -192,7 +192,7 @@ def open_sensor(
         with util.stopwatch(f'open {", ".join(calls)}', **timer_kws):  # type: ignore
             util.concurrently_with_fg(calls)
 
-        with util.stopwatch(f'setup {", ".join(calls)}', **timer_kws):  # type: ignore
+        with util.stopwatch(f'setup peripherals', **timer_kws):  # type: ignore
             conn._resources['peripherals'].setup(spec.captures, spec.loops)  # type: ignore
 
         if except_context is not None:
