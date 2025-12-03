@@ -68,8 +68,7 @@ def _get_voltage_scale(
 
 def _get_peak_power(iq: AcquiredIQ, xp=None):
     xp = iqwaveform.util.array_namespace(iq.raw)
-
-    iq.capture = typing.cast(specs.ResampledCapture, iq)
+    assert isinstance(iq.capture, specs.ResampledCapture)
 
     _, prescale = _get_voltage_scale(
         iq.capture, iq.source_spec, alias_func=iq.alias_func, xp=xp
