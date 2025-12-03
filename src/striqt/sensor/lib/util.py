@@ -906,7 +906,7 @@ def log_capture_context(name_suffix, /, capture_index=0, capture_count=None):
 
 class delay_keyboard_interrupts:
     def __enter__(self):
-        self.received = False
+        self.received = None
         self.old_handler = signal.signal(signal.SIGINT, self.handler)
 
     def handler(self, sig, frame):
@@ -917,7 +917,7 @@ class delay_keyboard_interrupts:
         # Restore the original SIGINT handler
         signal.signal(signal.SIGINT, self.old_handler)
         # If a SIGINT was received while in the context manager, re-raise it now
-        if self.received:
+        if self.received is not None:
             self.old_handler(*self.received)
 
 

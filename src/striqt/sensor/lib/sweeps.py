@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 import itertools
 import typing
 from collections import Counter
@@ -154,7 +155,7 @@ def prepare_compute(input_spec: specs.Sweep):
             pass
 
 
-def _iq_is_reusable(
+def is_reusable_capture(
     c1: specs.ResampledCapture | None, c2: specs.ResampledCapture, base_clock_rate
 ):
     """return True if c2 is compatible with the raw and uncalibrated IQ acquired for c1"""
@@ -367,10 +368,10 @@ class SweepIterator:
         capture_next,
     ):
         if self.spec.info.reuse_iq and not isinstance(self.spec.source, specs.NoSource):
-            reuse_this = _iq_is_reusable(
+            reuse_this = is_reusable_capture(
                 capture_prev, capture_this, self.source.setup_spec.base_clock_rate
             )
-            reuse_next = _iq_is_reusable(
+            reuse_next = is_reusable_capture(
                 capture_this, capture_next, self.source.setup_spec.base_clock_rate
             )
         else:
@@ -382,12 +383,10 @@ class SweepIterator:
         # acquire from the radio and any peripherals
         calls = {}
         if reuse_this and iq_prev is not None:
-            ret_iq = sources.AcquiredIQ(
-                raw=iq_prev.raw,
-                aligned=iq_prev.aligned,
+            ret_iq = dataclasses.replace(
+                iq_prev,
                 capture=capture_this,
                 info=iq_prev.info.replace(start_time=None),
-                extra_data=iq_prev.extra_data,
             )
             calls['source'] = util.Call(lambda: ret_iq)
         else:

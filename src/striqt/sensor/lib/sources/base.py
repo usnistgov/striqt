@@ -48,8 +48,13 @@ _TC = typing.TypeVar('_TC', bound=specs.ResampledCapture)
 
 @dataclasses.dataclass
 class AcquiredIQ(dataarrays.AcquiredIQ):
+    """extra metadata needed for downstream analysis"""
     info: specs.AcquisitionInfo
     extra_data: dict[str, typing.Any]
+    alias_func: captures.PathAliasFormatter|None
+    source_spec: specs.Source
+    resampler: ResamplerDesign
+    aligner: register.AlignmentCaller|None
 
 
 class ReceiveStreamError(IOError):
@@ -465,17 +470,23 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
 
         info = self._build_acquisition_info(time_ns)
 
-        iq = AcquiredIQ(samples, None, capture, info=info, extra_data={})
+        iq = AcquiredIQ(
+            raw=samples,
+            aligned=None,
+            capture=capture,
+            info=info,
+            extra_data={},
+            alias_func=alias_func,
+            source_spec=self.setup_spec,
+            resampler=self.get_resampler(),
+            aligner=self._aligner
+        )
 
         if not correction:
             return iq
 
-        with util.stopwatch(
-            'resample and calibrate', 'analysis', threshold=capture.duration / 2
-        ):
-            return iq_corrections.resampling_correction(
-                iq, capture, self, overwrite_x=True, alias_func=alias_func
-            )
+        with util.stopwatch('resampling filter', threshold=capture.duration / 2):
+            return iq_corrections.resampling_correction(iq, overwrite_x=True)
 
     def _build_acquisition_info(self, time_ns: int | None) -> specs.AcquisitionInfo:
         return specs.AcquisitionInfo(source_id=self.id)

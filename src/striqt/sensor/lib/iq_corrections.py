@@ -1,26 +1,20 @@
 from __future__ import annotations
 
+import dataclasses
 import typing
 
 from . import calibration, captures, specs, util
-from .sources import (
-    AcquiredIQ,
-    SourceBase,
-    base,
-)
+from .sources import AcquiredIQ, base
 
 if typing.TYPE_CHECKING:
     import numpy as np
-    import xarray as xr
-
     import striqt.waveform as iqwaveform
-    from striqt.waveform._typing import ArrayLike, ArrayType
+    from striqt.waveform._typing import ArrayLike
 
 else:
     array_api_compat = util.lazy_import('array_api_compat')
     iqwaveform = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
-    xr = util.lazy_import('xarray')
 
 
 # this is experimental, and currently leaves some residual
@@ -72,18 +66,13 @@ def _get_voltage_scale(
     return xp.sqrt(power_scale) * adc_scale, adc_scale
 
 
-def _get_peak_power(
-    iq: ArrayType,
-    capture_spec: specs.ResampledCapture,
-    source_spec: specs.Source,
-    *,
-    alias_func: captures.PathAliasFormatter | None = None,
-    xp=None,
-):
+def _get_peak_power(iq: AcquiredIQ, xp=None):
     xp = iqwaveform.util.array_namespace(iq)
 
+    iq.capture = typing.cast(specs.ResampledCapture, iq)
+
     _, prescale = _get_voltage_scale(
-        capture_spec, source_spec, alias_func=alias_func, xp=xp
+        iq.capture, iq.source_spec, alias_func=iq.alias_func, xp=xp
     )
 
     peak_counts = xp.abs(iq).max(axis=-1)
@@ -92,22 +81,12 @@ def _get_peak_power(
 
 
 def resampling_correction(
-    iq_in: AcquiredIQ,
-    capture: specs.ResampledCapture,
-    source: SourceBase,
-    alias_func: captures.PathAliasFormatter | None = None,
-    *,
-    overwrite_x=False,
-    axis=1,
+    iq_in: AcquiredIQ, overwrite_x=False, axis=1
 ) -> AcquiredIQ:
-    """apply a bandpass filter implemented through STFT overlap-and-add.
+    """resample, filter, and correct according to specification in iq_in.
 
     Args:
-        iq: the input waveform, as a pinned array
-        capture: the capture filter specification structure
-        radio: the radio instance that performed the capture
-        force_calibration: if specified, this calibration dataset is used rather than loading from file
-        adc_peak: if specified, returns the ADC peak level for overload detection
+        iq: IQ dataclass output by a source
         axis: the axis of `x` along which to compute the filter
         overwrite_x: if True, modify the contents of IQ in-place; otherwise, a copy will be returned
 
@@ -116,34 +95,39 @@ def resampling_correction(
     """
 
     iq = iq_in.raw
+    source_spec = iq_in.source_spec
     xp = iqwaveform.util.array_namespace(iq)
 
+    if not isinstance(iq_in.capture, specs.ResampledCapture):
+        raise TypeError('iq.capture must be a capture specification')
+    else:
+        capture = iq_in.capture
+
     vscale, _ = _get_voltage_scale(
-        capture, source.setup_spec, alias_func=alias_func, xp=xp
+        capture, source_spec, alias_func=iq_in.alias_func, xp=xp
     )
 
     extra_data = {}
 
-    if source.setup_spec.uncalibrated_peak_detect:
-        extra_data['unscaled_iq_peak'] = _get_peak_power(
-            iq, capture, source.setup_spec, alias_func=alias_func
-        )
+    if source_spec.uncalibrated_peak_detect:
+        extra_data['unscaled_iq_peak'] = _get_peak_power(iq_in)
 
     if (
-        isinstance(source.setup_spec, specs.SoapySource)
-        and source.setup_spec.calibration is not None
+        isinstance(source_spec, specs.SoapySource)
+        and source_spec.calibration is not None
     ):
+        assert isinstance(capture, specs.SoapyCapture)
+
         extra_data['system_noise'] = calibration.lookup_system_noise_power(
-            source.setup_spec.calibration,
-            source.capture_spec,
-            source.setup_spec.base_clock_rate,
-            alias_func=alias_func,
+            source_spec.calibration,
+            capture,
+            source_spec.base_clock_rate,
+            alias_func=iq_in.alias_func,
         )
 
-    resampler = source.get_resampler(capture)
-    fs = resampler['fs_sdr']
+    fs = iq_in.resampler['fs_sdr']
 
-    needs_resample = base.needs_resample(resampler, capture)
+    needs_resample = base.needs_resample(iq_in.resampler, capture)
 
     # apply the filter here and ensure we're working with a copy if needed
     if not USE_OARESAMPLE and np.isfinite(capture.analysis_bandwidth):
@@ -171,26 +155,26 @@ def resampling_correction(
         # this is broken. don't use it yet.
         iq = iqwaveform.fourier.oaresample(
             iq,
-            up=resampler['nfft_out'],
-            down=resampler['nfft'],
+            up=iq_in.resampler['nfft_out'],
+            down=iq_in.resampler['nfft'],
             fs=fs,
-            window=resampler['window'],
+            window=iq_in.resampler['window'],
             overwrite_x=overwrite_x,
             axis=axis,
-            frequency_shift=resampler['lo_offset'],
+            frequency_shift=iq_in.resampler['lo_offset'],
             filter_bandwidth=capture.analysis_bandwidth,
             transition_bandwidth=250e3,
             scale=1 if vscale is None else vscale,
         )
-        scale = resampler['nfft_out'] / resampler['nfft']
-        oapad = base._get_oaresample_pad(source.setup_spec.base_clock_rate, capture)
+        scale = iq_in.resampler['nfft_out'] / iq_in.resampler['nfft']
+        oapad = base._get_oaresample_pad(source_spec.base_clock_rate, capture)
         lag_pad = base._get_aligner_pad_size(
-            source.setup_spec.base_clock_rate, capture, source._aligner
+            source_spec.base_clock_rate, capture, iq_in.aligner
         )
         size_out = round(capture.duration * capture.sample_rate) + round(
             (oapad[1] + lag_pad) * scale
         )
-        offset = resampler['nfft_out']
+        offset = iq_in.resampler['nfft_out']
 
         assert size_out + offset <= iq.shape[axis]
         iq = iqwaveform.util.axis_slice(iq, offset, offset + size_out, axis=axis)
@@ -209,12 +193,12 @@ def resampling_correction(
 
     size_out = round(capture.duration * capture.sample_rate)
 
-    if source._aligner is not None:
-        align_start = source._aligner(iq[:, :size_out], capture)
+    if iq_in.aligner is not None:
+        align_start = iq_in.aligner(iq[:, :size_out], capture)
         offset = round(align_start * capture.sample_rate)
-        assert iq.shape[1] >= offset + size_out, ValueError(
-            'waveform is too short to align'
-        )
+
+        if iq.shape[1] < offset + size_out:
+            raise ValueError('waveform is too short to align')
 
         iq_aligned = iq[:, offset : offset + size_out]
         iq_unaligned = iq[:, :size_out]
@@ -228,10 +212,10 @@ def resampling_correction(
     assert iq_unaligned.shape[axis] == size_out
     assert iq_aligned is None or iq_aligned.shape[axis] == size_out
 
-    return AcquiredIQ(
+    return dataclasses.replace(
+        iq_in,
         aligned=iq_aligned,
         raw=iq_unaligned,
         capture=capture,
-        info=iq_in.info,
-        extra_data=iq_in.extra_data | extra_data,
+        extra_data=iq_in.extra_data | extra_data
     )

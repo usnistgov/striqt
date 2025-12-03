@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import collections
 import contextlib
 import functools
 import importlib
@@ -123,7 +122,7 @@ class ConnectionManager(
 
     def open(
         self, func: typing.Callable[_P, _R], *args: _P.args, **kws: _P.kwargs
-    ) -> Call:
+    ) -> Call[[],_R]:
         def wrapper():
             obj = func(*args, **kws)
             self.enter_context(obj)  # type: ignore
@@ -133,7 +132,7 @@ class ConnectionManager(
 
     def get(
         self, func: typing.Callable[_P, _R], *args: _P.args, **kws: _P.kwargs
-    ) -> Call:
+    ) -> Call[_P,_R]:
         return Call(func, *args, **kws).return_into(self._resources)
 
     def enter(self, ctx, name):
@@ -141,7 +140,7 @@ class ConnectionManager(
 
     def log_call(
         self, func: typing.Callable[_P, _R], *args: _P.args, **kws: _P.kwargs
-    ) -> Call:
+    ) -> Call[_P,_R]:
         return Call(func, *args, **kws)
 
     @functools.cached_property
@@ -213,11 +212,13 @@ def open_sensor(
         calls = {
             'compute': conn.log_call(prepare_compute, spec),
             'sink': conn.open(sink_cls, spec, alias_func=formatter),
-            'calibration': conn.get(
-                calibration.read_calibration, spec.source.calibration, formatter
-            ),
             'devices': util.Call(_open_devices, conn, bind, spec),
         }
+
+        if spec.source.calibration is not None:
+            calls['calibration'] = conn.get(
+                calibration.read_calibration, spec.source.calibration, formatter
+            )
 
         if spec.sink.log_path is not None:
             calls['log_to_file'] = Call(_setup_logging, spec.sink, formatter)

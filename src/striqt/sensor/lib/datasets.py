@@ -308,12 +308,8 @@ def analyze_capture(
 
     with options.registry.cache_context(capture, options.cache_callback):
         if options.correction:
-            with util.stopwatch(
-                'resample➤filter➤calibrate', logger_level=logging.DEBUG
-            ):
-                iq = iq_corrections.resampling_correction(
-                    iq, capture, source, overwrite_x=overwrite_x, alias_func=alias_func
-                )
+            with util.stopwatch('resampling filter', logger_level=logging.DEBUG):
+                iq = iq_corrections.resampling_correction(iq, overwrite_x=overwrite_x)
 
         c = msgspec.structs.replace(options, as_xarray='delayed')
         c = typing.cast(dataarrays.EvaluationOptions[typing.Literal['delayed']], c)
