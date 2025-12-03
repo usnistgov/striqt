@@ -61,7 +61,7 @@ class NoSource(base.SourceBase[_TS, _TC]):
         else:
             xp = np
 
-        count = base.get_channel_read_buffer_count(self, include_holdoff=False)
+        count = base.get_channel_read_buffer_count(self, include_holdoff=True)
         shape = (count, self.setup_spec.num_rx_ports)
         buf = xp.empty(shape, dtype='complex64') # type: ignore
         return buf, None
