@@ -212,9 +212,10 @@ def _get_format_fields(s: str):
 
 
 class PathAliasFormatter:
-    def __init__(self, sweep: specs.Sweep, spec_path: Path | str | None = None):
+    def __init__(self, sweep: specs.Sweep, spec_path: Path | str | None = None, alias_timeout: float=2):
         self.sweep_spec = sweep
         self.spec_path = spec_path
+        self.alias_timeout = alias_timeout
 
     def __call__(self, path: str | Path) -> str:
         path_fields = _get_format_fields(str(path))
@@ -223,7 +224,7 @@ class PathAliasFormatter:
 
         from .sources.base import get_source_id
 
-        id_ = get_source_id(self.sweep_spec.source)
+        id_ = get_source_id(self.sweep_spec.source, timeout=self.alias_timeout)
         path = Path(path).expanduser()
 
         fields = _get_path_fields(
