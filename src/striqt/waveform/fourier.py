@@ -271,7 +271,7 @@ def fftfreq(n, d, *, xp=None, dtype='float64') -> ArrayType:
         return xp.linspace(-fnyq + fnyq / n, fnyq - fnyq / n, n, dtype=dtype)
 
 
-def _enbw_uncached(
+def _enbw(
     window: str | tuple[str, float], N, fftbins=True, cached=True, xp=None
 ):
     """return the equivalent noise bandwidth (ENBW) of a window, in bins"""
@@ -286,9 +286,7 @@ def _enbw_uncached(
 
 
 # allow access to the uncached version for find_window_param_from_enbw
-equivalent_noise_bandwidth = functools.wraps(_enbw_uncached)(
-    functools.lru_cache()(_enbw_uncached)
-)
+equivalent_noise_bandwidth = functools.wraps(_enbw)(lru_cache()(_enbw))
 
 
 @lru_cache()
@@ -320,7 +318,7 @@ def find_window_param_from_enbw(
         raise ValueError('enbw must be greater than 1')
 
     def err(x):
-        return _enbw_uncached((window_name, x), nfft, cached=False, xp=xp or np) - enbw
+        return _enbw((window_name, x), nfft, cached=False, xp=xp or np) - enbw
 
     if window_name == 'kaiser':
         a = np.pi * 1e-2

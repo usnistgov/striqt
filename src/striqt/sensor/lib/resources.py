@@ -205,14 +205,12 @@ def open_sensor(
     else:
         raise TypeError('no sink class in sensor binding or extensions.sink spec')
 
-    is_cupy = spec.source.array_backend == 'cupy'
-
     try:
         calls = {
             'compute': conn.log_call(prepare_compute, spec),
             'sink': conn.open(sink_cls, spec, alias_func=formatter),
             'calibration': conn.get(calibration.read_calibration, spec.source.calibration, formatter),
-            'devices': conn.log_call(_open_devices, conn, bind, spec)
+            'devices': util.Call(_open_devices, conn, bind, spec)
         }
 
         if spec.sink.log_path is not None:
