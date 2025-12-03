@@ -1353,15 +1353,7 @@ def upfirdn(h, x, up=1, down=1, axis=-1, mode='constant', cval=0, overwrite_x=Fa
     xp = array_namespace(x)
 
     if is_cupy_array(x):
-        from . import cuda
-
-        del kws['x'], kws['axis']
-        if overwrite_x and 2 * up > down > up:
-            # skip new allocation if possible and not "too" wasteful
-            kws['out'] = x
-
-        func = lambda array: cuda.upfirdn(x=array, **kws)  # noqa: E731
-        y = xp.apply_along_axis(func, axis, x)
+        raise NotImplementedError
     else:
         y = signal.upfirdn(**kws)
 

@@ -120,8 +120,7 @@ class ConnectionManager(
     ) -> Call:
         def wrapper():
             obj = func(*args, **kws)
-            self.enter_context(obj)  # type: ignore
-            return obj
+            return self.enter_context(obj)  # type: ignore
 
         return Call(wrapper).returns(self._resources)
 
@@ -157,15 +156,17 @@ def _open_devices(conn: ConnectionManager, binding: bindings.SensorBinding, spec
     """the source and any peripherals"""
 
     calls = {
-        'source': Call(conn.open, binding.source, spec.source, analysis=spec.analysis),
-        'peripherals': Call(conn.open, binding.peripherals, spec),
+        'source': conn.open(binding.source, spec.source, analysis=spec.analysis),
+        'peripherals': conn.open(binding.peripherals, spec),
     }
 
     util.concurrently(calls)
 
+    print(conn.resources.keys())
+
     # run peripherals setup after the source is fully initialized, in case
     # it could produce spurious inputs during source initialization
-    conn._resources['peripherals'].setup(spec.captures, spec.loops)  # type: ignore
+    conn.resources['peripherals'].setup(spec.captures, spec.loops)  # type: ignore
 
 
 @util.stopwatch("open resources", "sweep", 1.0, util.PERFORMANCE_INFO)

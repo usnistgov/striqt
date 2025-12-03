@@ -89,7 +89,7 @@ def expensive_imports(cupy=False):
         # this order is important!
         # https://github.com/numba/numba/issues/6131
         safe_import('numba.cuda')
-        safe_import('cupy')
+        striqt.waveform.util.cp = safe_import('cupy')
         configure_cupy()
         safe_import('cupyx')
         safe_import('cupyx.scipy')
