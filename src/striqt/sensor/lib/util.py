@@ -73,9 +73,28 @@ _Tfunc = typing.Callable[..., typing.Any]
 import_locks = collections.defaultdict(threading.Lock)
 
 
-def blocking_import(name):
+def _blocking_import(name):
     with import_locks[name]:
         return importlib.import_module(name)
+
+
+def blocking_imports(xarray=False, analysis=False, cupy=False):
+    _blocking_import('scipy')
+    _blocking_import('numpy')
+
+    if xarray:
+        _blocking_import('xarray')
+
+    if analysis:
+        _blocking_import('numba')
+
+    if cupy:
+        _blocking_import('cupy')
+        _blocking_import('cupyx')
+        _blocking_import('cupyx.scipy')
+
+    if cupy and analysis:
+        _blocking_import('numba.cuda')
 
 
 def retry(

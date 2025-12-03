@@ -127,14 +127,14 @@ def design_warmup(
 
 def prepare_compute(input_spec: specs.Sweep):
     util.blocking_import('xarray')
-    util.blocking_import('pandas')
     util.blocking_import('scipy')
-    util.blocking_import('numpy')
+    util.blocking_import('numba')
 
     if input_spec.source.array_backend == 'cupy':
         util.blocking_import('cupy')
         util.blocking_import('cupyx')
         util.blocking_import('cupyx.scipy')
+        util.blocking_import('numba')
 
     if not input_spec.source.warmup_sweep:
         return

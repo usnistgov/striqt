@@ -136,6 +136,8 @@ def _setup_logging(sink: specs.Sink, formatter):
 
 def _open_devices(conn: ConnectionManager, binding: bindings.SensorBinding, spec: specs.Sweep):
     """the source and any peripherals"""
+    util.blocking_imports(cupy=spec.source.array_backend == 'cupy')
+
     calls = {
         'source': util.Call(
             conn.open,
