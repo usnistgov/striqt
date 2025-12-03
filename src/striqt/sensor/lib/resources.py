@@ -200,7 +200,6 @@ def open_sensor(
 
     try:
         calls = {
-            'imports': conn.log_call(util.expensive_imports, is_cupy),
             'compute': conn.log_call(prepare_compute, spec),
             'sink': conn.open(sink_cls, spec, alias_func=formatter),
             'calibration': conn.get(calibration.read_calibration, spec.source.calibration, formatter),
