@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import contextlib
 import functools
-import logging
 import importlib
 import os
 import sys
+import threading
 import typing
 from pathlib import Path
 
@@ -154,7 +154,7 @@ def _open_devices(conn: ConnectionManager, binding: bindings.SensorBinding, spec
     conn._resources['peripherals'].setup(spec.captures, spec.loops)  # type: ignore
 
 
-@util.stopwatch("prepare resources", "sweep", threshold=1, logger_level=util.PERFORMANCE_INFO)
+@util.stopwatch("open resources", "sweep", 1.0, util.PERFORMANCE_INFO)
 def open_sensor(
     spec: specs.Sweep[_TS, _TP, _TC],
     spec_path: str | Path | None = None,

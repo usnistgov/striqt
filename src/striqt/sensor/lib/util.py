@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import collections
 import contextlib
 import datetime
 import functools
+import importlib
 import itertools
 import logging
 import queue
@@ -66,6 +68,14 @@ stop_request_event = threading.Event()
 
 
 _Tfunc = typing.Callable[..., typing.Any]
+
+
+import_locks = collections.defaultdict(threading.Lock)
+
+
+def blocking_import(name):
+    with import_locks[name]:
+        return importlib.import_module(name)
 
 
 def retry(
