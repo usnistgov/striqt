@@ -162,7 +162,7 @@ def _open_devices(conn: ConnectionManager, binding: bindings.SensorBinding, spec
 
     util.concurrently(calls)
 
-    if 'peripherals' not in conn._resources:
+    if conn._resources.get('peripherals', None) is None:
         # an exception happened, and we're in teardown
         return
 
