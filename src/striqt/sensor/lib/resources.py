@@ -147,7 +147,7 @@ def open_sensor(
     have been opened and set up as needed to run the specified sweep.
     """
 
-    from .sweeps import run_warmup
+    from .sweeps import prepare_compute
 
     timer_kws = dict(threshold=1, logger_suffix='sweep', logger_level=logging.INFO)
     formatter = captures.PathAliasFormatter(spec, spec_path=spec_path)
@@ -167,7 +167,7 @@ def open_sensor(
 
     try:
         calls = {
-            'warmup': util.Call(conn.log_call, 'warmup', run_warmup, spec),
+            'warmup': util.Call(conn.log_call, 'warmup', prepare_compute, spec),
             'source': util.Call(
                 conn.open,
                 'source',

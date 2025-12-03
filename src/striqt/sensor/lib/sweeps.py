@@ -118,20 +118,11 @@ def design_warmup(
     )
 
 
-def run_warmup(input_spec: specs.Sweep):
+def prepare_compute(input_spec: specs.Sweep):
     if not input_spec.source.warmup_sweep:
         return
 
     from .. import bindings
-
-    # trigger expensive imports
-    if input_spec.source.array_backend == 'cupy':
-        import cupy
-        iqwaveform.set_max_cupy_fft_chunk(input_spec.source.cupy_max_fft_chunk_size)
-
-    import xarray
-    import scipy.signal
-    import numba
 
     spec = design_warmup(input_spec)
 
