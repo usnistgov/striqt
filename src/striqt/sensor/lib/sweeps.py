@@ -75,26 +75,33 @@ def design_warmup(
     from .bindings import mock_binding
     from ..bindings import warmup
 
-    # captures that have unique sampling parameters, which are those
-    # specified in structs.WaveformCapture
-    wcaptures = [specs.ResampledCapture.fromspec(c) for c in sweep.loop_captures()]
-    unique_map = dict(zip(wcaptures, sweep.loop_captures()))
-    skip_wcaptures = {specs.ResampledCapture.fromspec(c) for c in skip}
-    captures = [unique_map[c] for c in unique_map.keys() if c not in skip_wcaptures]
+    # check loops to select an easy case for warmup
+    updates = {}
+    ports = []
+    for loop in sweep.loops:
+        if loop.field in ('duration', 'sample_rate', 'backend_sample_rate'):
+            updates[loop.field] = min(loop.get_points())
+        if loop.field == 'host_resample':
+            updates[loop.field] = any(loop.get_points())
+        if loop.field == 'port':
+            ports.extend(loop.get_points())
+
+    captures = [c.replace(**updates) for c in sweep.captures]
+    by_size = {round(c.sample_rate*c.duration): c for c in captures}
 
     num_rx_ports = 0
-    for c in captures:
-        if c.port is None:
+    for port in ports + [c.port for c in captures]:
+        if port is None:
             continue
-        if isinstance(c.port, tuple):
-            n = max(c.port)
+        if isinstance(port, tuple):
+            n = max(port)
         else:
-            n = c.port
+            n = port
         if n > num_rx_ports:
             num_rx_ports = n
 
     if len(captures) > 1:
-        captures = captures[:1]
+        captures = [by_size[min(by_size.keys())]]
 
     b = mock_binding(sweep.__bindings__, 'warmup')
 
@@ -123,6 +130,9 @@ def prepare_compute(input_spec: specs.Sweep):
         return
 
     from .. import bindings
+
+    import pandas
+    import xarray
 
     spec = design_warmup(input_spec)
 
