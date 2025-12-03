@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import collections
 import contextlib
 import functools
 import importlib
@@ -88,6 +89,29 @@ def import_sink_cls(
     return getattr(mod, obj_name)
 
 
+class Call(util.Call[_P, _R]):
+    modules = ()
+    _dest = None
+
+    def depends(self, *modules) -> typing_extensions.Self:
+        self.modules = modules
+        return self
+    
+    def returns(self, d) -> typing_extensions.Self:
+        self._dest = d
+        return self
+
+    def __call__(self) -> _R | None:
+        name = threading.current_thread().name
+        with util.stopwatch(name, 'sweep', 0.5, util.logging.INFO):
+            for name in self.modules:
+                imports_ready[name].wait()
+            result = super().__call__()
+            if self._dest is not None:
+                self._dest[name] = result
+            return result
+
+
 class ConnectionManager(
     contextlib.ExitStack,
     typing.Generic[_TS, _TP, _TC],
@@ -99,27 +123,27 @@ class ConnectionManager(
         self._resources = AnyResources(sweep_spec=sweep_spec)
 
     def open(
-        self, name, func: typing.Callable[_P, _R], *args: _P.args, **kws: _P.kwargs
+        self, func: typing.Callable[_P, _R], *args: _P.args, **kws: _P.kwargs
     ):
-        with util.stopwatch(name, 'sweep', 0.5, util.logging.INFO):
-            self._resources[name] = obj = func(*args, **kws)
+        def wrapper():
+            result = func(*args, **kws)
             self.enter_context(obj)  # type: ignore
+            return result
+
+        return Call(wrapper).returns(self._resources)
 
     def get(
-        self, name, func: typing.Callable[_P, _R], *args: _P.args, **kws: _P.kwargs
+        self, func: typing.Callable[_P, _R], *args: _P.args, **kws: _P.kwargs
     ):
-        with util.stopwatch(name, 'sweep', 0.5, util.logging.INFO):
-            self._resources[name] = func(*args, **kws)
+        return Call(func, *args, **kws).returns(self._resources)
 
-    def enter(self, name, ctx):
-        with util.stopwatch(name, 'sweep', 0.5, util.logging.INFO):
-            self._resources[name] = self.enter_context(ctx)
+    def enter(self, ctx):
+        return Call(self.enter_context, ctx).returns(self._resources)
 
     def log_call(
-        self, name, func: typing.Callable[_P, _R], *args: _P.args, **kws: _P.kwargs
+        self, func: typing.Callable[_P, _R], *args: _P.args, **kws: _P.kwargs
     ):
-        with util.stopwatch(name, 'sweep', 0.5, util.logging.INFO):
-            func(*args, **kws)
+        return Call(func, *args, **kws)
 
     @functools.cached_property
     def resources(self) -> Resources[_TS, _TP, _TC]:
@@ -137,19 +161,16 @@ def _setup_logging(sink: specs.Sink, formatter):
 def _open_devices(conn: ConnectionManager, binding: bindings.SensorBinding, spec: specs.Sweep):
     """the source and any peripherals"""
 
-    if spec.source.array_backend == 'cupy':
-        # cupy must only be imported in the main thread; just wait for it here
-        util.cupy_ready.wait(10)
+    is_cupy = spec.source.array_backend == 'cupy'
+    if is_cupy:
+        modules = ('numpy', 'cupy', 'cupyx', 'cupyx.scipy')
+    else:
+        modules = ('numpy', 'scipy')
 
+    binding.source
     calls = {
-        'source': util.Call(
-            conn.open,
-            'source',
-            binding.source,
-            spec.source,
-            analysis=spec.analysis,
-        ),
-        'peripherals': util.Call(conn.open, 'peripherals', binding.peripherals, spec),
+        'source': Call(conn.open, binding.source, spec.source, analysis=spec.analysis).depends(modules),
+        'peripherals': Call(conn.open, binding.peripherals, spec),
     }
 
     util.concurrently(calls)
@@ -158,6 +179,27 @@ def _open_devices(conn: ConnectionManager, binding: bindings.SensorBinding, spec
     # it could produce spurious inputs during source initialization
     conn._resources['peripherals'].setup(spec.captures, spec.loops)  # type: ignore
 
+
+imports_ready = collections.defaultdict(threading.Event)
+
+def expensive_imports(cupy=False):
+    def notify_import(name):
+        importlib.import_module(name)
+        imports_ready[name].set()
+
+    if cupy:
+        notify_import('cupy')
+        notify_import('cupyx')
+        notify_import('cupyx.scipy')
+
+    notify_import('scipy')
+    notify_import('numpy')
+    notify_import('xarray')
+
+    # these are only needed for analysis
+    notify_import('numba')
+    if cupy:
+        notify_import('numba.cuda')
 
 @util.stopwatch("open resources", "sweep", 1.0, util.PERFORMANCE_INFO)
 def open_sensor(
@@ -188,16 +230,21 @@ def open_sensor(
     else:
         raise TypeError('no sink class in sensor binding or extensions.sink spec')
     
-    if spec.source.array_backend == 'cupy':
+    is_cupy = spec.source.array_backend == 'cupy'
+    if is_cupy:
         import cupy
 
     try:
         calls = {
-            'compute': util.Call(conn.log_call, 'compute', prepare_compute, spec),
-            'sink': util.Call(conn.open, 'sink', sink_cls, spec, alias_func=formatter),
+            'imports': util.Call(expensive_imports, is_cupy),            
+            'compute': util.Call(
+                conn.log_call, 'compute', ('cupy', 'numba', 'xarray'), prepare_compute, spec,
+            ),
+            'sink': util.Call(conn.open, 'sink', ('xarray',), sink_cls, spec, alias_func=formatter),
             'calibration': util.Call(
                 conn.get,
                 'calibration',
+                ('xarray',)
                 calibration.read_calibration,
                 spec.source.calibration,
                 formatter,
