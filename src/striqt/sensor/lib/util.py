@@ -564,10 +564,18 @@ class DebugOnException:
             if isinstance(exc, ConcurrentException):
                 handler.call_pdb = False
                 for th_exc in exc.thread_exceptions:
-                    handler(type(th_exc), th_exc, th_exc.__traceback__)
+                    try:
+                        handler(type(th_exc), th_exc, th_exc.__traceback__)
+                    except:
+                        import traceback
+                        traceback.print_exception(etype, exc, tb)
                 handler.call_pdb = self.enable
 
-            handler(etype, exc, tb)
+            try:
+                handler(etype, exc, tb)
+            except:
+                import traceback
+                traceback.print_exception(etype, exc, tb)
             self.prev = triplet
 
 

@@ -96,7 +96,7 @@ class Call(util.Call[util._P, util._R]):
     def depends(self, *modules) -> typing_extensions.Self:
         self.modules = modules
         return self
-    
+
     def returns(self, d) -> typing_extensions.Self:
         self._dest = d
         return self
@@ -230,8 +230,8 @@ def open_sensor(
         raise TypeError('no sink class in sensor binding or extensions.sink spec')
     
     is_cupy = spec.source.array_backend == 'cupy'
-    if is_cupy:
-        import cupy
+    # if is_cupy:
+    #     import cupy
 
     try:
         calls = {
