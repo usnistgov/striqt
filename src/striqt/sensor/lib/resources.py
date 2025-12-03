@@ -11,8 +11,7 @@ import sys
 import typing
 from pathlib import Path
 
-from .bindings import get_binding
-from . import calibration, captures, io, specs, util
+from . import bindings, calibration, captures, io, specs, util
 
 from .peripherals import PeripheralsBase
 from .sinks import SinkBase
@@ -135,6 +134,24 @@ def _setup_logging(sink: specs.Sink, formatter):
     log_path = formatter(sink.log_path)
     util.log_to_file(log_path, sink.log_level)
 
+def _open_devices(conn: ConnectionManager, binding: bindings.SensorBinding, spec: specs.Sweep):
+    """the source and any peripherals"""
+    calls = {
+        'source': util.Call(
+            conn.open,
+            'source',
+            binding.source,
+            spec.source,
+            analysis=spec.analysis,
+        ),
+        'peripherals': util.Call(conn.open, 'peripherals', binding.peripherals, spec),
+    }
+
+    util.concurrently(calls)
+
+    # run peripherals setup after the source is fully initialized, in case
+    # it could produce spurious inputs during source initialization
+    conn._resources['peripherals'].setup(spec.captures, spec.loops)  # type: ignore
 
 def open_sensor(
     spec: specs.Sweep[_TS, _TP, _TC],
@@ -154,7 +171,7 @@ def open_sensor(
     if spec_path is not None:
         os.chdir(str(Path(spec_path).parent))
 
-    bind = get_binding(spec)
+    bind = bindings.get_binding(spec)
     conn = ConnectionManager(sweep_spec=spec)
 
     if spec.extensions.sink is not None:
@@ -166,16 +183,7 @@ def open_sensor(
 
     try:
         calls = {
-            'prepare_compute': util.Call(
-                conn.log_call, 'prepare_compute', prepare_compute, spec
-            ),
-            'source': util.Call(
-                conn.open,
-                'source',
-                bind.source,
-                spec.source,
-                analysis=spec.analysis,
-            ),
+            'compute': util.Call(conn.log_call, 'compute', prepare_compute, spec),
             'sink': util.Call(conn.open, 'sink', sink_cls, spec, alias_func=formatter),
             'calibration': util.Call(
                 conn.get,
@@ -184,15 +192,13 @@ def open_sensor(
                 spec.source.calibration,
                 formatter,
             ),
-            'peripherals': util.Call(conn.open, 'peripherals', bind.peripherals, spec),
+            'devices': util.Call(_open_devices, conn, bind, spec)
         }
 
         if spec.sink.log_path is not None:
             calls['log_to_file'] = util.Call(_setup_logging, spec.sink, formatter)
 
         util.concurrently_with_fg(calls)
-
-        conn._resources['peripherals'].setup(spec.captures, spec.loops)  # type: ignore
 
         if except_context is not None:
             conn.enter('except_context', except_context)

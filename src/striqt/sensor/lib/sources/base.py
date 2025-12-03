@@ -769,14 +769,16 @@ def _get_aligner_pad_size(
     return lag_pad
 
 
-def _get_next_fast_len(n):
+def _get_next_fast_len(n) -> int:
     try:
         from ..util import cp
         import cupyx.scipy.fft as fft  # type: ignore
     except ModuleNotFoundError:
         import scipy.fft as fft
 
-    return fft.next_fast_len(n)
+    size = fft.next_fast_len(n)
+    assert size is not None, ValueError('failed to determine fft size')
+    return size
 
 
 def _get_oaresample_pad(base_clock_rate: float | None, capture: specs.ResampledCapture):
