@@ -83,7 +83,7 @@ class SensorBinding(Sensor[_TS, _TP, _TC]):
 
 
 def bind_sensor(
-    key: str, sensor: Sensor[_TS2, _TP2, _TC2], schema: Schema[_TS, _TP, _TC], register=True
+    key: str, sensor: Sensor[_TS2, _TP2, _TC2], schema: Schema[_TS, _TP, _TC], register: bool=True
 ) -> SensorBinding[_TS, _TP, _TC]:
     """register a binding between specifications and controller classes.
 
@@ -144,7 +144,7 @@ def get_registry() -> dict[str, SensorBinding]:
 
 
 @functools.cache
-def mock_binding(origin: SensorBinding, target: str | SensorBinding) -> SensorBinding:
+def mock_binding(origin: SensorBinding, target: str | SensorBinding, register: bool=True) -> SensorBinding:
     mock_name = f'mock_{target}_{origin.sweep_spec.__name__}'
 
     if isinstance(target, str):
@@ -165,6 +165,7 @@ def mock_binding(origin: SensorBinding, target: str | SensorBinding) -> SensorBi
             capture=origin.schema.capture,
             peripherals=origin.schema.peripherals,
         ),
+        register=register
     )
 
 

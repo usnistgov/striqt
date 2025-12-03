@@ -103,7 +103,7 @@ def design_warmup(
     if len(captures) > 1:
         captures = [by_size[min(by_size.keys())]]
 
-    b = mock_binding(sweep.__bindings__, 'prepare_compute')
+    b = mock_binding(sweep.__bindings__, 'warmup', register=False)
 
     source = warmup.schema.source(
         num_rx_ports=num_rx_ports,
