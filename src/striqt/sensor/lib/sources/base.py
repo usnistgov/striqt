@@ -257,6 +257,8 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
         self._capture = None
         self._buffers = _ReceiveBuffers(self)
 
+        util.blocking_imports(cupy=setup.array_backend == 'cupy')
+
         if setup.array_backend == 'cupy':
             assert util.cp is not None, 'could not import cupy'
             util.configure_cupy()
