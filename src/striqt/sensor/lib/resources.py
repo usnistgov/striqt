@@ -137,6 +137,10 @@ def _setup_logging(sink: specs.Sink, formatter):
 def _open_devices(conn: ConnectionManager, binding: bindings.SensorBinding, spec: specs.Sweep):
     """the source and any peripherals"""
 
+    if spec.source.array_backend == 'cupy':
+        # cupy must only be imported in the main thread; just wait for it here
+        util.cupy_ready.wait()
+
     calls = {
         'source': util.Call(
             conn.open,

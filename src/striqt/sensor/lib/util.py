@@ -71,6 +71,7 @@ _Tfunc = typing.Callable[..., typing.Any]
 
 
 import_locks = collections.defaultdict(threading.Lock)
+cupy_ready = threading.Event()
 
 
 def _blocking_import(name):
@@ -78,6 +79,12 @@ def _blocking_import(name):
         return importlib.import_module(name)
 
 def blocking_imports(xarray=False, analysis=False, cupy=False):
+    if cupy:
+        _blocking_import('cupy')
+        _blocking_import('cupyx')
+        _blocking_import('cupyx.scipy')
+        cupy_ready.set()
+
     _blocking_import('scipy')
     _blocking_import('numpy')
 
@@ -86,11 +93,6 @@ def blocking_imports(xarray=False, analysis=False, cupy=False):
 
     if analysis:
         _blocking_import('numba')
-
-    if cupy:
-        _blocking_import('cupy')
-        _blocking_import('cupyx')
-        _blocking_import('cupyx.scipy')
 
     if cupy and analysis:
         _blocking_import('numba.cuda')
@@ -172,11 +174,11 @@ def retry(
     return decorator
 
 
-def _deembed_exceptions(exception: BaseException) -> list[BaseException]:
+def _flatten_exceptions(exception: BaseException) -> list[BaseException]:
     result = []
     if isinstance(exception, ConcurrentException):
         for ex in exception.thread_exceptions:
-            result += _deembed_exceptions(ex)
+            result += _flatten_exceptions(ex)
     else:
         result = [exception]
 
@@ -205,12 +207,12 @@ def concurrently_with_fg(calls: dict[str, Call] = {}) -> dict[typing.Any, typing
         try:
             result = sequentially(fg)
         except BaseException as ex:
-            exc_list.extend(_deembed_exceptions(ex))
+            exc_list.extend(_flatten_exceptions(ex))
 
         try:
             result.update(bg_future.result())
         except BaseException as ex:
-            exc_list.extend(_deembed_exceptions(ex))
+            exc_list.extend(_flatten_exceptions(ex))
 
     if len(exc_list) == 0:
         pass
@@ -489,7 +491,7 @@ def concurrently(
             if called.exc_info[0] is not ThreadEndedByMaster:
                 # exception_count += 1
                 tracebacks.append(tb)
-                exceptions.extend(_deembed_exceptions(called.exc_info[1]))
+                exceptions.extend(_flatten_exceptions(called.exc_info[1]))
 
             if not traceback_delay:
                 _immediate_print_multi_tracebacks([tb])
