@@ -92,7 +92,7 @@ def import_sink_cls(
 class Call(util.Call[util._P, util._R]):
     _dest = None
 
-    def returns(self, d) -> typing_extensions.Self:
+    def return_into(self, d) -> typing_extensions.Self:
         self._dest = d
         return self
 
@@ -120,14 +120,15 @@ class ConnectionManager(
     ) -> Call:
         def wrapper():
             obj = func(*args, **kws)
-            return self.enter_context(obj)  # type: ignore
+            self.enter_context(obj)  # type: ignore
+            return obj
 
-        return Call(wrapper).returns(self._resources)
+        return Call(wrapper).return_into(self._resources)
 
     def get(
         self, func: typing.Callable[_P, _R], *args: _P.args, **kws: _P.kwargs
     ) -> Call:
-        return Call(func, *args, **kws).returns(self._resources)
+        return Call(func, *args, **kws).return_into(self._resources)
 
     def enter(self, ctx, name):
         self._resources[name] = self.enter_context(ctx)
