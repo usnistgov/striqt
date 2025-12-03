@@ -139,7 +139,7 @@ def _open_devices(conn: ConnectionManager, binding: bindings.SensorBinding, spec
 
     if spec.source.array_backend == 'cupy':
         # cupy must only be imported in the main thread; just wait for it here
-        util.cupy_ready.wait()
+        util.cupy_ready.wait(10)
 
     calls = {
         'source': util.Call(
