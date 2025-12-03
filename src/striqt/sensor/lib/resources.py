@@ -153,6 +153,8 @@ def _open_devices(conn: ConnectionManager, binding: bindings.SensorBinding, spec
     # it could produce spurious inputs during source initialization
     conn._resources['peripherals'].setup(spec.captures, spec.loops)  # type: ignore
 
+
+@util.stopwatch("prepare resources", "sweep", threshold=1, logger_level=util.PERFORMANCE_INFO)
 def open_sensor(
     spec: specs.Sweep[_TS, _TP, _TC],
     spec_path: str | Path | None = None,
