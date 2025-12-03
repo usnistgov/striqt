@@ -44,10 +44,10 @@ def read_calibration(
     if path is None:
         return None
 
+    util.safe_import('xarray')
+    
     if alias_func is not None:
         path = alias_func(path)
-
-    util.safe_import('xarray')
 
     return xr.open_dataset(path)
 

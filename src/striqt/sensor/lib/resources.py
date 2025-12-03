@@ -148,6 +148,7 @@ class ConnectionManager(
 
 
 def _setup_logging(sink: specs.Sink, formatter):
+    util.safe_import('xarray')
     log_path = formatter(sink.log_path)
     util.log_to_file(log_path, sink.log_level)
 
