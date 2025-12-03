@@ -60,7 +60,9 @@ class SinkBase(typing.Generic[specs._TC]):
         finally:
             self._executor.__exit__(*exc_info)
 
-    def append(self, capture_result: datasets.DelayedDataset|None, capture: specs._TC):
+    def append(
+        self, capture_result: datasets.DelayedDataset | None, capture: specs._TC
+    ):
         if capture_result is None:
             return
 
@@ -184,9 +186,7 @@ class SpectrogramTimeAppender(ZarrSinkBase):
 
         super().__init__(sweep_spec, alias_func, force=force)
 
-    def append(
-        self, capture_result, capture: specs.ResampledCapture
-    ):
+    def append(self, capture_result, capture: specs.ResampledCapture):
         super().append(capture_result, capture)
 
         if len(self._pending_data) == self._group_sizes[0]:

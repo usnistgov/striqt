@@ -87,7 +87,7 @@ def design_warmup(
             ports.extend(loop.get_points())
 
     captures = [c.replace(**updates) for c in sweep.captures]
-    by_size = {round(c.sample_rate*c.duration): c for c in captures}
+    by_size = {round(c.sample_rate * c.duration): c for c in captures}
 
     num_rx_ports = 0
     for port in ports + [c.port for c in captures]:
@@ -103,7 +103,7 @@ def design_warmup(
     if len(captures) > 1:
         captures = [by_size[min(by_size.keys())]]
 
-    b = mock_binding(sweep.__bindings__, 'warmup')
+    b = mock_binding(sweep.__bindings__, 'prepare_compute')
 
     source = warmup.schema.source(
         num_rx_ports=num_rx_ports,
@@ -146,7 +146,7 @@ def prepare_compute(input_spec: specs.Sweep):
         peripherals=bindings.warmup.peripherals(spec),
         sink=sinks.NoSink(spec),
         calibration=None,
-        alias_func=None
+        alias_func=None,
     )
 
     with resources['source']:

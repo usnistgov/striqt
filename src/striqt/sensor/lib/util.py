@@ -546,7 +546,7 @@ class DebugOnException:
                 return
             elif isinstance(exc, KeyboardInterrupt):
                 return
-            
+
             from . import tracebacks
 
             if not hasattr(sys, 'last_value'):
