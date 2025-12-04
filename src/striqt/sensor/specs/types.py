@@ -1,3 +1,5 @@
+from __future__ import annotations as __
+
 from pathlib import Path
 from typing import TYPE_CHECKING as _TYPE_CHECKING
 from typing import Annotated, Any, Literal, Optional, Union
