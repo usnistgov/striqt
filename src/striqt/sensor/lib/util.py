@@ -76,6 +76,8 @@ _imports_ready = collections.defaultdict(threading.Event)
 
 
 def safe_import(name):
+    """wait in child threads until called by the parent with the same name"""
+
     if threading.current_thread() == threading.main_thread():
         mod = importlib.import_module(name)
         _imports_ready[name].set()
@@ -597,13 +599,6 @@ class DebugOnException:
 
                 traceback.print_exception(etype, exc, tb)
             self.prev = triplet
-
-
-def exit_context(ctx: typing.ContextManager | None, exc_info=None):
-    if ctx is not None:
-        if exc_info is None:
-            exc_info = sys.exc_info()
-        ctx.__exit__(*exc_info)  # type: ignore
 
 
 def log_verbosity(verbose: int = 0):
