@@ -212,7 +212,7 @@ class SweepHUDApp(App):
             output_path=kws['output_path'],
             store_backend=kws['store_backend'],
         )
-        self.conns = resources.open_sensor(spec, kws['yaml_path'])
+        self.conns = resources.open_resources(spec, kws['yaml_path'])
         spec = self.conns.resources['sweep_spec']
         self.display_fields = varied_capture_fields(spec.captures, spec.loops)
         self.call_from_thread(self._show_ready)

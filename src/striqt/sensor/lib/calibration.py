@@ -3,7 +3,7 @@ from __future__ import annotations
 import typing
 from pathlib import Path
 
-from . import captures, datasets, peripherals, sinks, sources, specs, util
+from . import captures, compute, io, peripherals, sinks, sources, specs, util
 
 import msgspec
 
@@ -23,38 +23,6 @@ else:
 _TC = typing.TypeVar('_TC', bound=specs.SoapyCapture)
 _TP = typing.TypeVar('_TP', bound=specs.Peripherals)
 _TS = typing.TypeVar('_TS', bound=specs.SoapySource)
-
-
-@typing.overload
-def read_calibration(
-    path: None, alias_func: captures.PathAliasFormatter | None = None
-) -> None: ...
-
-
-@typing.overload
-def read_calibration(
-    path: str | Path, alias_func: captures.PathAliasFormatter | None = None
-) -> 'xr.Dataset': ...
-
-
-@util.lru_cache()
-def read_calibration(
-    path: str | Path | None, alias_func: captures.PathAliasFormatter | None = None
-) -> 'xr.Dataset|None':
-    if path is None:
-        return None
-
-    util.safe_import('xarray')
-
-    if alias_func is not None:
-        path = alias_func(path)
-
-    return xr.open_dataset(path)
-
-
-def save_calibration(path, corrections: 'xr.Dataset'):
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    corrections.to_netcdf(path)
 
 
 def _y_factor_temperature(
@@ -235,8 +203,8 @@ def _lookup_calibration_var(
         else:
             exc = None
 
-        if datasets.PORT_DIM in sel.coords:
-            sel = sel.dropna(datasets.PORT_DIM).squeeze()
+        if compute.PORT_DIM in sel.coords:
+            sel = sel.dropna(compute.PORT_DIM).squeeze()
 
         if exc is not None:
             raise exc
@@ -284,7 +252,7 @@ def lookup_power_correction(
     if cal_data is None:
         return None
     elif isinstance(cal_data, (str, Path)):
-        corrections = read_calibration(cal_data, alias_func)
+        corrections = io.read_calibration(cal_data, alias_func)
     else:
         raise TypeError('invalid cal_data input type')
 
@@ -314,7 +282,7 @@ def lookup_system_noise_power(
     if cal_data is None:
         return None
     elif isinstance(cal_data, (str, Path)):
-        corrections = read_calibration(cal_data, alias_func)
+        corrections = io.read_calibration(cal_data, alias_func)
     else:
         raise TypeError('invalid cal_data input type')
 
@@ -330,7 +298,7 @@ def lookup_system_noise_power(
 
     return xr.DataArray(
         data=10 * xp.log10(noise_psd),
-        dims=datasets.CAPTURE_DIM,
+        dims=compute.CAPTURE_DIM,
         attrs={'name': 'Sensor system noise PSD', 'units': 'dBm/Hz'},
     )
 
@@ -342,9 +310,9 @@ def _get_port_variable(ds: 'xr.DataArray|xr.Dataset') -> str:
     instead of 'port' nomenclature.
     """
     if ds is None:
-        return datasets.PORT_DIM
-    if datasets.PORT_DIM in ds.coords:
-        return datasets.PORT_DIM
+        return compute.PORT_DIM
+    if compute.PORT_DIM in ds.coords:
+        return compute.PORT_DIM
     else:
         # compatibility
         return 'channel'
@@ -378,7 +346,7 @@ class YFactorSink(sinks.SinkBase):
 
         if path is not None and not self.force and Path(path).exists():
             print('reading results from previous file')
-            self.prev_corrections = read_calibration(path)
+            self.prev_corrections = io.read_calibration(path)
         else:
             self.prev_corrections = None
 
@@ -422,14 +390,14 @@ class YFactorSink(sinks.SinkBase):
             'calibration_fields': fields,
         }
         capture_data = (
-            xr.concat(data, datasets.CAPTURE_DIM)
+            xr.concat(data, compute.CAPTURE_DIM)
             .assign_attrs(attrs)
             .drop_vars(self._DROP_FIELDS)
             .set_xindex(fields)
         )
 
         # break out each remaining capture coordinate into its own dimension
-        by_field = capture_data.unstack(datasets.CAPTURE_DIM)
+        by_field = capture_data.unstack(compute.CAPTURE_DIM)
         by_field['noise_diode_enabled'] = by_field.noise_diode_enabled.astype('bool')
 
         # compute and merge corrections
@@ -449,7 +417,7 @@ class YFactorSink(sinks.SinkBase):
                 )
 
             corrections = xr.concat(
-                [corrections, self.prev_corrections], dim=datasets.PORT_DIM
+                [corrections, self.prev_corrections], dim=compute.PORT_DIM
             )
 
         print(f'calibration results on port {port} (shown for max gain)')
@@ -457,7 +425,7 @@ class YFactorSink(sinks.SinkBase):
         with pd.option_context('display.max_rows', None):
             print(summary.sort_index(axis=1).sort_index(axis=0))
 
-        save_calibration(path, corrections)
+        io.save_calibration(path, corrections)
         print(f'saved to {str(path)!r}')
 
 

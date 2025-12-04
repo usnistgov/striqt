@@ -11,7 +11,7 @@ import threading
 import typing
 from pathlib import Path
 
-from . import bindings, calibration, captures, io, specs, util
+from . import bindings, captures, io, specs, util
 
 from .peripherals import PeripheralsBase
 from .sinks import SinkBase
@@ -120,6 +120,9 @@ class ConnectionManager(
         super().__init__()
         self._resources = AnyResources(sweep_spec=sweep_spec)
 
+    def __enter__(self):  # type: ignore
+        return self.resources
+
     def open(
         self, func: typing.Callable[_P, _R], *args: _P.args, **kws: _P.kwargs
     ) -> Call[[], _R]:
@@ -185,7 +188,7 @@ def _open_devices(
 
 
 @util.stopwatch('open resources', 'sweep', 1.0, util.PERFORMANCE_INFO)
-def open_sensor(
+def open_resources(
     spec: specs.Sweep[_TS, _TP, _TC],
     spec_path: str | Path | None = None,
     except_context: typing.ContextManager | None = None,
@@ -196,7 +199,7 @@ def open_sensor(
     have been opened and set up as needed to run the specified sweep.
     """
 
-    from .execute import _prepare_compute
+    from .compute import prepare_compute
 
     formatter = captures.PathAliasFormatter(spec, spec_path=spec_path)
 
@@ -215,14 +218,14 @@ def open_sensor(
 
     try:
         calls = {
-            'compute': conn.log_call(_prepare_compute, spec),
+            'compute': conn.log_call(prepare_compute, spec),
             'sink': conn.open(sink_cls, spec, alias_func=formatter),
             'devices': util.Call(_open_devices, conn, bind, spec),
         }
 
         if spec.source.calibration is not None:
             calls['calibration'] = conn.get(
-                calibration.read_calibration, spec.source.calibration, formatter
+                io.read_calibration, spec.source.calibration, formatter
             )
 
         if spec.sink.log_path is not None:
@@ -265,4 +268,4 @@ def open_sensor_from_yaml(
         sink = sink.replace(store=store_backend)
     spec = spec.replace(output=sink)
 
-    return open_sensor(spec, yaml_path, except_context)
+    return open_resources(spec, yaml_path, except_context)

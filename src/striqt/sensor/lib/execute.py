@@ -1,0 +1,284 @@
+"""implement sensor anlysis sweeps as parallel (acquisition, analysis, sink)"""
+
+from __future__ import annotations
+
+import contextlib
+import dataclasses
+import itertools
+import typing
+from typing import Any
+
+import striqt.waveform as iqwaveform
+from striqt.analysis import registry
+
+from . import compute, peripherals, sources, specs, util
+from .resources import Resources, AnyResources
+from .calibration import lookup_system_noise_power
+from .specs import _TC, _TP, _TS
+
+if typing.TYPE_CHECKING:
+    from typing_extensions import Unpack
+    import xarray as xr
+else:
+    xr = util.lazy_import('xarray')
+
+
+@contextlib.contextmanager
+def _log_progress_contexts(index, count):
+    """set the log context information for reporting progress"""
+
+    contexts = (
+        util.log_capture_context('source', capture_index=index, capture_count=count),
+        util.log_capture_context(
+            'analysis',
+            capture_index=index - 1,
+            capture_count=count,
+        ),
+        util.log_capture_context(
+            'sink',
+            capture_index=index - 2,
+            capture_count=count,
+        ),
+    )
+
+    cm = contextlib.ExitStack()
+
+    with cm:
+        try:
+            for ctx in contexts:
+                cm.enter_context(ctx)
+            yield cm
+        except:
+            cm.close()
+            raise
+
+
+@util.stopwatch('acquire', 'sweep', threshold=0.25)
+def _acquire_both(
+    res: Resources[typing.Any, typing.Any, _TC], this: _TC, next_: _TC | None
+) -> sources.AcquiredIQ:
+    """arm and acquire from the source and peripherals.
+
+    Any acquired data returned from the peripherals is merged
+    into the `extra_data` of the returned acquisition struct.
+    """
+
+    assert this is not None
+
+    s = res['source']
+    p = res['peripherals']
+
+    try:
+        s.capture_spec
+    except AttributeError:
+        # this is the first capture
+        util.concurrently(
+            {'source': util.Call(s.arm, this), 'peripherals': util.Call(p.arm, this)}
+        )
+
+    results = util.concurrently(
+        {
+            'source': util.Call(
+                s.acquire, this, next_, correction=False, alias_func=res['alias_func']
+            ),
+            'peripherals': util.Call(peripherals.acquire_arm, p, this, next_),
+        }
+    )
+
+    iq, ext_data = results.values()
+    assert isinstance(iq, sources.AcquiredIQ)
+
+    return dataclasses.replace(iq, extra_data=iq.extra_data | ext_data)
+
+
+def _log_cache_info(
+    resources: Resources[_TS, _TP, _TC], cache, capture: _TC, result, *_, **__
+):
+    cal = resources['sweep_spec'].source.calibration
+    if cal is None or 'spectrogram' not in cache.name:
+        return
+
+    spg, attrs = result
+
+    xp = iqwaveform.util.array_namespace(spg)
+
+    # conversion to dB is left for after this function, but display
+    # log messages in dB
+    peaks = spg.max(axis=tuple(range(1, spg.ndim)))
+
+    noise = lookup_system_noise_power(
+        cal,
+        specs.SoapyCapture.fromspec(capture),
+        base_clock_rate=resources['sweep_spec'].source.base_clock_rate,
+        alias_func=resources['alias_func'],
+        B=attrs['noise_bandwidth'],
+        xp=xp,
+    )
+
+    snr = iqwaveform.powtodB(peaks) - noise
+
+    snr_desc = ','.join(f'{p:+02.0f}' for p in snr)
+    if 'nan' not in snr_desc.lower():
+        logger = util.get_logger('analysis')
+        logger.info(f'({snr_desc}) dB SNR spectrogram peak')
+
+
+@typing.overload
+def iterate_sweep(
+    resources: Resources[_TS, _TP, _TC],
+    *,
+    always_yield: Any,
+    yield_values: typing.Literal[False],
+    loop: bool,
+    **replace: 'Unpack[AnyResources[_TS, _TP, _TC]]',
+) -> typing.Generator[None]: ...
+
+
+@typing.overload
+def iterate_sweep(
+    resources: Resources[_TS, _TP, _TC],
+    *,
+    always_yield: typing.Literal[True],
+    yield_values: typing.Literal[True],
+    loop: bool,
+    **replace: 'Unpack[AnyResources[_TS, _TP, _TC]]',
+) -> typing.Generator['xr.Dataset|compute.DelayedDataset|None']: ...
+
+
+@typing.overload
+def iterate_sweep(
+    resources: Resources[_TS, _TP, _TC],
+    *,
+    always_yield: typing.Literal[False],
+    yield_values: typing.Literal[True],
+    loop: bool,
+    **replace: 'Unpack[AnyResources[_TS, _TP, _TC]]',
+) -> typing.Generator['xr.Dataset|compute.DelayedDataset']: ...
+
+
+def iterate_sweep(
+    resources: Resources[_TS, _TP, _TC],
+    *,
+    always_yield: bool = False,
+    yield_values: bool = True,
+    loop: bool = False,
+    **replace: 'Unpack[AnyResources[_TS, _TP, _TC]]',
+) -> typing.Generator['xr.Dataset|compute.DelayedDataset|None']:
+    """an iterator that steps through the execution of a sensor sweep.
+
+    Data acquisition, analysis, and sink operations each run in parallel in
+    separate threads. Normally, the iterator yields a result for each
+    of the N captures after it is handled by the sink:
+
+    ```
+    0. `(Acquire 0)`
+    1. `Concurrent (Acquire 1, Analyze 0)`.
+    2. `Concurrent (Acquire 2, Analyze 1, Sink 0)` ➔ yield (`Result 0)`.
+    (...)
+    N. `Concurrent (Analyze N-1, Sink N-2)` ➔ yield `(Result N-2)`.
+    N+1. `(Sink N-2)` ➔ yield `(Result N-1)`.
+    ```
+
+    With the `always_yield` argument, the iterator yields `None` to support
+    status information in the 2 steps that do not yield anlaysis results:
+
+    ```
+    0. `(Acquire 0)` ➔ yield `None`
+    1. `Concurrent (Acquire 1, Analyze 0)` ➔ yield `(Analysis 0)`.
+    2. `Concurrent (Acquire 2, Analyze 1, Sink 0)` ➔ yield `(Analysis 1)`.
+    (...)
+    N. `Concurrent (Analyze N-1, Sink N-2)` ➔ yield `(Analysis N-1)`.
+    N+1. `(Sink N-2)` ➔ yield `None`
+    ```
+
+    The type of each yielded result depends on the return value of `sink.append`.
+    To to minimize memory usage, the yield values can also be explicitly set to
+    `None` with `yield_values`.
+
+    Args:
+        resources: dictionary of open resources returned by open_resources
+        always_yield: if True, yield `None` on steps that produce no analysis
+        always_values: if False, yield will return `None` instead of the sink result
+        loop: if True, the sweep will repeat at the beginning after last capture
+
+    Returns:
+        An iterator of analyzed data or None
+    """
+
+    resources = Resources(resources, **replace)
+
+    def log(*args, **kws):
+        return _log_cache_info(resources, *args, **kws)
+
+    spec = resources['sweep_spec']
+
+    compute_opts = compute.EvaluationOptions(
+        sweep_spec=spec,
+        registry=registry,
+        extra_attrs=compute.build_dataset_attrs(spec),
+        correction=True,
+        cache_callback=log,
+        as_xarray='delayed',
+        block_each=False,
+    )
+
+    iq = None
+    result = None
+    captures = spec.loop_captures()
+
+    if loop:
+        capture_iter = itertools.cycle(captures)
+        count = float('inf')
+    else:
+        capture_iter = captures
+        count = len(captures)
+
+    if count == 0:
+        return
+
+    # iterate across (previous-1, previous, current, next) captures to support concurrency
+    offset_captures = util.zip_offsets(capture_iter, (-2, -1, 0, 1), fill=None)
+
+    for i, (_, _, this, next_) in enumerate(offset_captures):
+        calls = {}
+
+        with _log_progress_contexts(i, count):
+            if iq is None:
+                pass  # first and last iterations
+            else:
+                # insert first so that concurrently_with_fg will run it in the foreground
+                # (cupy/cuda seems to prefer this)
+                calls['analyze'] = util.Call(compute.analyze, iq, compute_opts)
+
+            if this is None:
+                pass  # last 2 iterations
+            else:
+                calls['acquire'] = util.Call(_acquire_both, resources, this, next_)
+
+            if result is None:
+                pass  # first 2 iterations
+            else:
+                calls['sink'] = util.Call(resources['sink'].append, result)
+
+            ret = util.concurrently_with_fg(calls)
+
+            if 'analyze' in ret:
+                result = ret['analyze']
+                assert isinstance(result, compute.DelayedDataset)
+
+            if 'acquire' in ret:
+                iq = ret['acquire']
+                assert isinstance(iq, sources.AcquiredIQ)
+            else:
+                iq = None
+
+            if 'sink' in ret:
+                if yield_values:
+                    yield ret['sink']
+                else:
+                    yield None
+
+            elif always_yield:
+                yield None
+
+            del ret

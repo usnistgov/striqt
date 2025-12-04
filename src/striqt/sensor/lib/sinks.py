@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from striqt import analysis
 
-from . import captures, datasets, io, specs, util
+from . import captures, compute, io, specs, util
 
 if typing.TYPE_CHECKING:
     import xarray as xr
@@ -61,12 +61,12 @@ class SinkBase(typing.Generic[specs._TC]):
             self._executor.__exit__(*exc_info)
 
     def append(
-        self, capture_result: datasets.DelayedDataset
-    ) -> 'xr.Dataset|datasets.DelayedDataset':
+        self, capture_result: compute.DelayedDataset
+    ) -> 'xr.Dataset|compute.DelayedDataset':
         if capture_result is None:
             return
 
-        ds = datasets.from_delayed(capture_result)
+        ds = compute.from_delayed(capture_result)
         self._pending_data.append(ds)
         return ds
 
@@ -97,7 +97,7 @@ class NoSink(SinkBase):
         ):
             util.get_logger('sink').info(f'done')
 
-    def append(self, capture_result) -> datasets.DelayedDataset:
+    def append(self, capture_result) -> compute.DelayedDataset:
         self.captures_elapsed += 1
         return capture_result
 
@@ -134,7 +134,7 @@ class ZarrSinkBase(SinkBase[specs._TC]):
 class ZarrCaptureSink(ZarrSinkBase[specs._TC]):
     """concatenates the data from each capture and dumps to a zarr data store"""
 
-    def append(self, capture_result: datasets.DelayedDataset):
+    def append(self, capture_result: compute.DelayedDataset):
         ret = super().append(capture_result)
 
         if len(self._pending_data) == self._group_sizes[0]:
@@ -157,7 +157,7 @@ class ZarrCaptureSink(ZarrSinkBase[specs._TC]):
 
     def _flush_thread(self, data_list):
         with util.stopwatch('merge dataset', 'sink', threshold=0.25):
-            dataset = xr.concat(data_list, datasets.CAPTURE_DIM)
+            dataset = xr.concat(data_list, compute.CAPTURE_DIM)
 
         path = self.get_root_path()
         count = self.captures_elapsed
@@ -209,7 +209,7 @@ class SpectrogramTimeAppender(ZarrSinkBase):
 
     def _flush_thread(self, data_list):
         with util.stopwatch('build dataset', 'sink', threshold=0.5):
-            by_spectrogram = datasets.concat_time_dim(data_list, 'spectrogram_time')
+            by_spectrogram = compute.concat_time_dim(data_list, 'spectrogram_time')
 
         path = self.get_root_path()
         count = self.captures_elapsed

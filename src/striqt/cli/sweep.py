@@ -41,8 +41,8 @@ def run(**kws):
             store_backend=kws['store_backend'],
         )
 
-        with sensor.open_sensor(spec, yaml_path, except_handler) as ctx:
-            sweep_iter = sensor.iterate_sweep(ctx.resources, always_yield=True)
+        with sensor.open_resources(spec, yaml_path, except_handler) as resources:
+            sweep_iter = sensor.iterate_sweep(resources, always_yield=True)
             for _ in sweep_iter:
                 pass
 

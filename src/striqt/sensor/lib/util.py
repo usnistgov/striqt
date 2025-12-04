@@ -85,22 +85,6 @@ def safe_import(name):
     return mod
 
 
-def expensive_imports(cupy=False):
-    if cupy:
-        # this order is important!
-        # https://github.com/numba/numba/issues/6131
-        safe_import('numba.cuda')
-        striqt.waveform.util.cp = safe_import('cupy')
-        configure_cupy()
-        # safe_import('cupyx')
-        # safe_import('cupyx.scipy')
-
-    safe_import('scipy')
-    safe_import('numpy')
-    safe_import('xarray')
-    safe_import('numba')
-
-
 def retry(
     excs: type[BaseException] | typing.Iterable[type[BaseException]],
     tries: int,

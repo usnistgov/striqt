@@ -17,7 +17,9 @@ from striqt.analysis.lib.specs import convert_spec
 from . import specs, util
 
 
-def varied_capture_fields(captures: tuple[specs.ResampledCapture, ...], loops: tuple[specs.LoopSpec, ...]) -> list[str]:
+def varied_capture_fields(
+    captures: tuple[specs.ResampledCapture, ...], loops: tuple[specs.LoopSpec, ...]
+) -> list[str]:
     """generate a list of capture fields with at least 2 values in the specified sweep"""
 
     inner_values = (c.todict().values() for c in captures)

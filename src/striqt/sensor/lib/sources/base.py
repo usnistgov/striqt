@@ -171,7 +171,7 @@ class BaseSourceInfo(specs.SpecBase, kw_only=True, frozen=True, cache_hash=True)
     def to_setup_cls(self, base_cls: type[_TS] = specs.Source) -> type[_TS]:
         return base_cls
 
-    def infer_port_count(self, tuple_size: int):
+    def min_port_count(self, tuple_size: int):
         if self.num_rx_ports is None:
             return tuple_size
         else:
@@ -930,7 +930,7 @@ def alloc_empty_iq(
     # build the list of channel buffers that will actuall be filled with data,
     # including references to the throwaway buffer of extras in case of
     # source.setup_spec.stream_all_rx_ports
-    num_rx_ports = source.info.infer_port_count(len(ports))
+    num_rx_ports = source.info.min_port_count(len(ports))
     if source.setup_spec.stream_all_rx_ports and len(ports) != num_rx_ports:
         if source.setup_spec.transport_dtype == 'complex64':
             # a throwaway buffer for samples that won't be returned

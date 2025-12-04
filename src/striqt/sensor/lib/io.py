@@ -14,9 +14,11 @@ from . import captures, specs, util
 
 if typing.TYPE_CHECKING:
     import numpy as np
+    import xarray as xr
     from striqt.analysis.lib.io import StoreType
 else:
     np = util.lazy_import('numpy')
+    xr = util.lazy_import('xarray')
 
 
 def open_store(
@@ -156,3 +158,35 @@ def read_tdms_iq(
     iq, _ = source.read_iq()
 
     return iq, capture
+
+
+@typing.overload
+def read_calibration(
+    path: None, alias_func: captures.PathAliasFormatter | None = None
+) -> None: ...
+
+
+@typing.overload
+def read_calibration(
+    path: str | Path, alias_func: captures.PathAliasFormatter | None = None
+) -> 'xr.Dataset': ...
+
+
+@util.lru_cache()
+def read_calibration(
+    path: str | Path | None, alias_func: captures.PathAliasFormatter | None = None
+) -> 'xr.Dataset|None':
+    if path is None:
+        return None
+
+    util.safe_import('xarray')
+
+    if alias_func is not None:
+        path = alias_func(path)
+
+    return xr.open_dataset(path)
+
+
+def save_calibration(path, corrections: 'xr.Dataset'):
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    corrections.to_netcdf(path)
