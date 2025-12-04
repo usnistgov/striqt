@@ -54,7 +54,7 @@ class _ResampledCaptureKeywords(_CaptureKeywords, total=False):
 
 
 class SoapyCapture(ResampledCapture, frozen=True, kw_only=True):
-    delay: types.Delay = None
+    delay: typing.Optional[types.StartDelay] = None
     center_frequency: types.CenterFrequency
     gain: types.Gain
 
@@ -67,7 +67,7 @@ class _SoapyCaptureKeywords(_ResampledCaptureKeywords):
     # this needs to be kept in sync with WaveformCapture in order to
     # properly provide type hints for IDEs in the arm and acquire
     # call signatures of source.Base objects
-    delay: types.Delay
+    delay: typing.Optional[types.StartDelay]
     center_frequency: types.CenterFrequency
     gain: types.Gain
 
@@ -409,7 +409,7 @@ class AcquisitionInfo(msgspec.Struct, kw_only=True, frozen=True):
 class SoapyAcquisitionInfo(AcquisitionInfo, kw_only=True, frozen=True):
     """extra coordinate information returned from an acquisition"""
 
-    delay: typing.Optional[types.Delay] = None
+    delay: typing.Optional[types.StartDelay] = None
     sweep_start_time: types.SweepStartTime | None
     start_time: types.StartTime | None
     backend_sample_rate: typing.Optional[types.BackendSampleRate]

@@ -41,7 +41,7 @@ ContinuousTrigger = Annotated[
     bool,
     Meta('Whether to trigger immediately after each call to acquire() when armed'),
 ]
-Delay = Annotated[Optional[float], Meta('Delay in acquisition start time', 's', gt=0)]
+StartDelay = Annotated[float, Meta('Delay in acquisition start time', 's', gt=0)]
 ENR = Annotated[float, Meta(standard_name='Excess noise ratio', units='dB')]
 ExtensionPath = Annotated[
     str,
