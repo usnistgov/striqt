@@ -171,7 +171,6 @@ class ZarrCaptureSink(ZarrSinkBase[_specs._TC]):
         with (
             _util.log_capture_context('sink', capture_index=count - 1),
             _util.stopwatch(f'sync to {path}', 'sink'),
-            _util.delay_keyboard_interrupts(),
         ):
             _io.dump_data(self.store, dataset, max_threads=self._spec.max_threads)
 
@@ -223,7 +222,6 @@ class ZarrTimeAppendSink(ZarrSinkBase):
         with (
             _util.log_capture_context('sink', capture_index=count - 1),
             _util.stopwatch(f'sync {path}', 'sink', threshold=0.5),
-            _util.delay_keyboard_interrupts(),
         ):
             _io.dump_data(
                 self.store,
