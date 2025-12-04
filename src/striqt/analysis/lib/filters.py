@@ -1,6 +1,6 @@
 """wrap lower-level striqt.waveform DSP calls to accept physical inputs and return xarray.DataArray"""
 
-from __future__ import annotations
+from __future__ import annotations as __
 
 import typing
 

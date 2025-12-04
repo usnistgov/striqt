@@ -1,11 +1,11 @@
-from __future__ import annotations
+from __future__ import annotations as __
 
 import functools
 import typing
 
 from ... import specs
 from .. import util
-from . import soapy
+from . import _soapy
 
 if typing.TYPE_CHECKING:
     import psutil
@@ -31,13 +31,13 @@ class Air8201BSourceSpec(specs.SoapySource, kw_only=True, frozen=True):
     transient_holdoff_time = 2e-3
 
 
-class Airstack1Source(soapy.SoapySourceBase):
+class Airstack1Source(_soapy.SoapySourceBase):
     def _connect(self, spec: specs.SoapySource, **kwargs):
         # trim script startup time by setting these here
         air_kwargs = dict(
             kwargs,
             driver='SoapyAIRT',
-            time_src=soapy.device_time_source(spec),
+            time_src=_soapy.device_time_source(spec),
             clk_src=spec.clock_source,
         )
 

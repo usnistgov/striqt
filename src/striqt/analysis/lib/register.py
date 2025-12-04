@@ -2,7 +2,7 @@
 into xarray DataArray objects with labeled dimensions and coordinates.
 """
 
-from __future__ import annotations
+from __future__ import annotations as __
 
 import collections
 import contextlib

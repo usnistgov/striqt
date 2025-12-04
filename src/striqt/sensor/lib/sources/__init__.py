@@ -1,12 +1,6 @@
-from . import base, deepwave
+from . import _base, deepwave
 
-from .base import (
-    AcquiredIQ,
-    SourceBase,
-    design_capture_resampler,
-    get_channel_read_buffer_count,
-)
-
-from .null import NoSource
-from .file import FileSource, TDMSFileSource, ZarrIQSource
-from .function import DiracDeltaSource, NoiseSource, SawtoothSource, SingleToneSource
+from ._base import AcquiredIQ, SourceBase
+from ._null import NoSource
+from ._file import FileSource, TDMSFileSource, ZarrIQSource
+from ._function import DiracDeltaSource, NoiseSource, SawtoothSource, SingleToneSource

@@ -1,4 +1,4 @@
-from __future__ import annotations
+from __future__ import annotations as __
 
 import dataclasses
 import typing
@@ -6,7 +6,7 @@ import typing
 from .. import specs
 
 from . import calibration, util
-from .sources import AcquiredIQ, base
+from .sources import AcquiredIQ, _base
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -115,7 +115,7 @@ def resampling_correction(iq_in: AcquiredIQ, overwrite_x=False, axis=1) -> Acqui
 
     fs = iq_in.resampler['fs_sdr']
 
-    needs_resample = base.needs_resample(iq_in.resampler, capture)
+    needs_resample = _base.needs_resample(iq_in.resampler, capture)
 
     # apply the filter here and ensure we're working with a copy if needed
     if not USE_OARESAMPLE and np.isfinite(capture.analysis_bandwidth):
@@ -123,10 +123,10 @@ def resampling_correction(iq_in: AcquiredIQ, overwrite_x=False, axis=1) -> Acqui
             bandwidth=capture.analysis_bandwidth,
             sample_rate=fs,
             transition_bandwidth=250e3,
-            numtaps=base.FILTER_SIZE,
+            numtaps=_base.FILTER_SIZE,
             xp=xp,
         )
-        pad = base._get_filter_pad(capture)
+        pad = _base._get_filter_pad(capture)
         iq = iqwaveform.oaconvolve(iq, h[xp.newaxis, :], 'same', axes=axis)
         iq = iqwaveform.util.axis_slice(iq, pad, iq.shape[axis], axis=axis)
 
@@ -155,8 +155,8 @@ def resampling_correction(iq_in: AcquiredIQ, overwrite_x=False, axis=1) -> Acqui
             scale=1 if vscale is None else vscale,
         )
         scale = iq_in.resampler['nfft_out'] / iq_in.resampler['nfft']
-        oapad = base._get_oaresample_pad(source_spec.base_clock_rate, capture)
-        lag_pad = base._get_aligner_pad_size(
+        oapad = _base._get_oaresample_pad(source_spec.base_clock_rate, capture)
+        lag_pad = _base._get_aligner_pad_size(
             source_spec.base_clock_rate, capture, iq_in.aligner
         )
         size_out = round(capture.duration * capture.sample_rate) + round(

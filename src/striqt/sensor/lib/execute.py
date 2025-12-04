@@ -1,6 +1,6 @@
 """implement sensor anlysis sweeps as parallel (acquisition, analysis, sink)"""
 
-from __future__ import annotations
+from __future__ import annotations as __
 
 import contextlib
 import dataclasses

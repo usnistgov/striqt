@@ -1,4 +1,4 @@
-from __future__ import annotations
+from __future__ import annotations as __
 
 import typing
 from pathlib import Path
@@ -16,7 +16,7 @@ if typing.TYPE_CHECKING:
     import numpy as _np
     import pandas as _pd
     import xarray as _xr
-    from . import bindings
+    from . import bindings as _bindings
 else:
     _np = _util.lazy_import('numpy')
     _pd = _util.lazy_import('pandas')
@@ -168,7 +168,7 @@ def _lookup_calibration_var(
     results = []
 
     for capture_chan in _specs.helpers.split_capture_ports(capture):
-        fs = _sources.design_capture_resampler(base_clock_rate, capture_chan)['fs_sdr']
+        fs = _sources._base.design_capture_resampler(base_clock_rate, capture_chan)['fs_sdr']
         port_key = _get_port_variable(cal_var)
 
         # these capture fields must match the calibration conditions exactly
@@ -462,8 +462,8 @@ class YFactorSink(_sinks.SinkBase):
 
 
 def bind_manual_yfactor_calibration(
-    name: str, sensor: 'bindings.SensorBinding[_TS, _TP, _TC]'
-) -> 'bindings.SensorBinding[_TS, typing.Any, typing.Any]':
+    name: str, sensor: '_bindings.SensorBinding[_TS, _TP, _TC]'
+) -> '_bindings.SensorBinding[_TS, typing.Any, typing.Any]':
     """extend an existing binding with a y-factor calibration"""
 
     from . import bindings

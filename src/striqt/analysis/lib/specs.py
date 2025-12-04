@@ -1,6 +1,6 @@
 """data structures that specify waveform characteristics"""
 
-from __future__ import annotations
+from __future__ import annotations as __
 
 import fractions
 import functools

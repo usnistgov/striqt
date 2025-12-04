@@ -1,6 +1,6 @@
 """just a stub for now in case we change this in the future"""
 
-from __future__ import annotations
+from __future__ import annotations as __
 
 import sys
 import typing

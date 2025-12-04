@@ -1,6 +1,6 @@
 """Transformations and statistical tools for power time series"""
 
-from __future__ import annotations
+from __future__ import annotations as __
 
 import re
 import typing

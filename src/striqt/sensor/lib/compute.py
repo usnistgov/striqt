@@ -1,6 +1,6 @@
 """evaluate xarray datasets from sensor (meta)data and calibrations"""
 
-from __future__ import annotations
+from __future__ import annotations as __
 
 import dataclasses
 import logging

@@ -1,27 +1,32 @@
-from __future__ import annotations
+from __future__ import annotations as __
 
-import typing
-from concurrent.futures import ThreadPoolExecutor
+__all__ = ['SinkBase', 'NoSink', 'ZarrSinkBase', 'ZarrCaptureSink', 'ZarrTimeAppendSink']
 
-from . import compute, io, util
-from .. import specs
+import typing as _typing
 
-if typing.TYPE_CHECKING:
-    import xarray as xr
+from . import compute as _compute
+from . import io as _io
+from . import util as _util
+from .. import specs as _specs
+
+if _typing.TYPE_CHECKING:
+    import xarray as _xr
 else:
-    xr = util.lazy_import('xarray')
+    _xr = _util.lazy_import('xarray')
 
 
-class SinkBase(typing.Generic[specs._TC]):
+class SinkBase(_typing.Generic[_specs._TC]):
     """intake acquisitions one at a time, and parcel data store"""
 
     def __init__(
         self,
-        sweep_spec: specs.Sweep[specs._TS, specs._TP, specs._TC],
-        alias_func: specs.helpers.PathAliasFormatter | None = None,
+        sweep_spec: _specs.Sweep[_specs._TS, _specs._TP, _specs._TC],
+        alias_func: _specs.helpers.PathAliasFormatter | None = None,
         *,
         force: bool = False,
     ):
+        from concurrent.futures import ThreadPoolExecutor
+
         self._spec = sweep_spec.sink
         self.captures_elapsed = 0
         self._alias_func = alias_func
@@ -29,14 +34,14 @@ class SinkBase(typing.Generic[specs._TC]):
         self.store = None
         self.force = force
         self._future = None
-        self._pending_data: list['xr.Dataset'] = []
+        self._pending_data: list['_xr.Dataset'] = []
         self._executor = ThreadPoolExecutor(1)
-        captures = specs.helpers.loop_captures(sweep_spec)
-        self._group_sizes = specs.helpers.concat_group_sizes(
+        captures = _specs.helpers.loop_captures(sweep_spec)
+        self._group_sizes = _specs.helpers.concat_group_sizes(
             captures, min_size=2
         )
 
-    def pop(self) -> list['xr.Dataset']:
+    def pop(self) -> list['_xr.Dataset']:
         result = self._pending_data
         self._pending_data = []
         self.captures_elapsed += len(result)
@@ -61,12 +66,12 @@ class SinkBase(typing.Generic[specs._TC]):
             self._executor.__exit__(*exc_info)
 
     def append(
-        self, capture_result: compute.DelayedDataset
-    ) -> 'xr.Dataset|compute.DelayedDataset':
+        self, capture_result: _compute.DelayedDataset
+    ) -> '_xr.Dataset|_compute.DelayedDataset':
         if capture_result is None:
             return
 
-        ds = compute.from_delayed(capture_result)
+        ds = _compute.from_delayed(capture_result)
         self._pending_data.append(ds)
         return ds
 
@@ -92,12 +97,12 @@ class NoSink(SinkBase):
 
     def flush(self):
         count = self.captures_elapsed
-        with util.log_capture_context(
+        with _util.log_capture_context(
             'sink', capture_index=count - 1, capture_count=count
         ):
-            util.get_logger('sink').info(f'done')
+            _util.get_logger('sink').info(f'done')
 
-    def append(self, capture_result) -> compute.DelayedDataset:
+    def append(self, capture_result) -> _compute.DelayedDataset:
         self.captures_elapsed += 1
         return capture_result
 
@@ -105,10 +110,10 @@ class NoSink(SinkBase):
         pass
 
 
-class ZarrSinkBase(SinkBase[specs._TC]):
+class ZarrSinkBase(SinkBase[_specs._TC]):
     def open(self):
-        util.safe_import('xarray')
-        self.store = io.open_store(
+        _util.safe_import('xarray')
+        self.store = _io.open_store(
             self._spec, alias_func=self._alias_func, force=self.force
         )
 
@@ -121,8 +126,8 @@ class ZarrSinkBase(SinkBase[specs._TC]):
         path = self.get_root_path()
         count = self.captures_elapsed
 
-        with util.log_capture_context('sink', capture_index=count - 1):
-            util.get_logger('sink').info(f'closed "{str(path)}"')
+        with _util.log_capture_context('sink', capture_index=count - 1):
+            _util.get_logger('sink').info(f'closed "{str(path)}"')
 
     def get_root_path(self):
         if hasattr(self.store, 'path'):
@@ -131,17 +136,17 @@ class ZarrSinkBase(SinkBase[specs._TC]):
             return self.store.root
 
 
-class ZarrCaptureSink(ZarrSinkBase[specs._TC]):
+class ZarrCaptureSink(ZarrSinkBase[_specs._TC]):
     """concatenates the data from each capture and dumps to a zarr data store"""
 
-    def append(self, capture_result: compute.DelayedDataset):
+    def append(self, capture_result: _compute.DelayedDataset):
         ret = super().append(capture_result)
 
         if len(self._pending_data) == self._group_sizes[0]:
             self.flush()
             self._group_sizes.pop(0)
         else:
-            util.get_logger('sink').debug('queued')
+            _util.get_logger('sink').debug('queued')
 
         return ret
 
@@ -156,30 +161,30 @@ class ZarrCaptureSink(ZarrSinkBase[specs._TC]):
         self.submit(self._flush_thread, data_list)
 
     def _flush_thread(self, data_list):
-        with util.stopwatch('merge dataset', 'sink', threshold=0.25):
-            dataset = xr.concat(data_list, compute.CAPTURE_DIM)
+        with _util.stopwatch('merge dataset', 'sink', threshold=0.25):
+            dataset = _xr.concat(data_list, _compute.CAPTURE_DIM)
 
         path = self.get_root_path()
         count = self.captures_elapsed
-        logger = util.get_logger('sink')
+        logger = _util.get_logger('sink')
 
         with (
-            util.log_capture_context('sink', capture_index=count - 1),
-            util.stopwatch(f'sync to {path}', 'sink'),
-            util.delay_keyboard_interrupts(),
+            _util.log_capture_context('sink', capture_index=count - 1),
+            _util.stopwatch(f'sync to {path}', 'sink'),
+            _util.delay_keyboard_interrupts(),
         ):
-            io.dump_data(self.store, dataset, max_threads=self._spec.max_threads)
+            _io.dump_data(self.store, dataset, max_threads=self._spec.max_threads)
 
             for i in range(count - len(data_list), count):
-                with util.log_capture_context('sink', capture_index=i):
+                with _util.log_capture_context('sink', capture_index=i):
                     logger.info('💾')
 
 
-class SpectrogramTimeAppender(ZarrSinkBase):
+class ZarrTimeAppendSink(ZarrSinkBase):
     def __init__(
         self,
-        sweep_spec: specs.Sweep,
-        alias_func: specs.helpers.PathAliasFormatter | None = None,
+        sweep_spec: _specs.Sweep,
+        alias_func: _specs.helpers.PathAliasFormatter | None = None,
         *,
         force: bool = False,
     ):
@@ -208,19 +213,19 @@ class SpectrogramTimeAppender(ZarrSinkBase):
         self.submit(self._flush_thread, data_list)
 
     def _flush_thread(self, data_list):
-        with util.stopwatch('build dataset', 'sink', threshold=0.5):
-            by_spectrogram = compute.concat_time_dim(data_list, 'spectrogram_time')
+        with _util.stopwatch('build dataset', 'sink', threshold=0.5):
+            by_spectrogram = _compute.concat_time_dim(data_list, 'spectrogram_time')
 
         path = self.get_root_path()
         count = self.captures_elapsed
-        logger = util.get_logger('sink')
+        logger = _util.get_logger('sink')
 
         with (
-            util.log_capture_context('sink', capture_index=count - 1),
-            util.stopwatch(f'sync {path}', 'sink', threshold=0.5),
-            util.delay_keyboard_interrupts(),
+            _util.log_capture_context('sink', capture_index=count - 1),
+            _util.stopwatch(f'sync {path}', 'sink', threshold=0.5),
+            _util.delay_keyboard_interrupts(),
         ):
-            io.dump_data(
+            _io.dump_data(
                 self.store,
                 by_spectrogram,
                 compression=False,
@@ -228,5 +233,5 @@ class SpectrogramTimeAppender(ZarrSinkBase):
             )
 
             for i in range(count - len(data_list), count):
-                with util.log_capture_context('sink', capture_index=i):
+                with _util.log_capture_context('sink', capture_index=i):
                     logger.info('💾')

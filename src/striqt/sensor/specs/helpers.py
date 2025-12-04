@@ -1,6 +1,6 @@
 """helper functions for specification data structures and their aliases"""
 
-from __future__ import annotations
+from __future__ import annotations as __
 
 from collections import Counter
 import functools

@@ -1,6 +1,6 @@
 """mangle dynamic imports and context management of multiple resources"""
 
-from __future__ import annotations
+from __future__ import annotations as __
 
 import contextlib
 import functools

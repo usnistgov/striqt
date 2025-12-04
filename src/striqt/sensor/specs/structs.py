@@ -1,6 +1,6 @@
 """schema for the specification of calibration and sweeps"""
 
-from __future__ import annotations
+from __future__ import annotations as __
 
 import typing
 

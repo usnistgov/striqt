@@ -1,4 +1,4 @@
-from __future__ import annotations
+from __future__ import annotations as __
 
 import typing
 from fractions import Fraction
