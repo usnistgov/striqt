@@ -125,7 +125,7 @@ def resampling_correction(iq_in: AcquiredIQ, overwrite_x=False, axis=1) -> Acqui
     if not USE_OARESAMPLE and np.isfinite(capture.analysis_bandwidth):
         h = iqwaveform.design_fir_lpf(
             bandwidth=capture.analysis_bandwidth,
-            sample_rate=fs,
+            sample_rate=source_spec.base_clock_rate,
             transition_bandwidth=250e3,
             numtaps=_base.FILTER_SIZE,
             xp=xp,
