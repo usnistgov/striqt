@@ -20,7 +20,7 @@ if typing.TYPE_CHECKING:
     # pd imports need to be here for msgspec to resolve timestamp types
     import pandas as pd
 else:
-    pd = _util.lazy_import('pandas')
+    pd = util.lazy_import('pandas')
 
 
 @util.lru_cache()
