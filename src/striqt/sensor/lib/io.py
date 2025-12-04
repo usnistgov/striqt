@@ -150,7 +150,7 @@ def read_tdms_iq(
     skip_samples=0,
     array_backend: specs.types.ArrayBackend,
 ) -> tuple['np.ndarray', specs.FileCapture]:
-    from .sources.file import TDMSFileSource
+    from .sources._file import TDMSFileSource
     from ..specs import TDMSFileSourceSpec
 
     source_spec = TDMSFileSourceSpec(

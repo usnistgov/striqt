@@ -8,7 +8,7 @@ import typing
 from ... import specs
 
 from .. import util
-from . import base
+from . import _base
 
 if typing.TYPE_CHECKING:
     import SoapySDR
@@ -111,7 +111,7 @@ class PortInfo(specs.SpecBase, kw_only=True, frozen=True, cache_hash=True):
     settings: dict[str, ArgInfo]
 
 
-class SoapySourceInfo(base.BaseSourceInfo, kw_only=True, frozen=True, cache_hash=True):
+class SoapySourceInfo(_base.BaseSourceInfo, kw_only=True, frozen=True, cache_hash=True):
     """Top-level container for all device capabilities metadata."""
 
     driver: str
@@ -248,7 +248,7 @@ def probe_soapy_info(device: SoapySDR.Device) -> SoapySourceInfo:
 def read_retries(source: SoapySourceBase) -> typing.Generator[None]:
     """in this context, retry source.read_iq on stream errors"""
 
-    EXC_TYPES = (base.ReceiveStreamError, OverflowError)
+    EXC_TYPES = (_base.ReceiveStreamError, OverflowError)
 
     max_count = source.setup_spec.receive_retries
 
@@ -279,7 +279,7 @@ class RxStream:
         self,
         setup: specs.SoapySource,
         info: SoapySourceInfo,
-        on_overflow: base.OnOverflowType = 'except',
+        on_overflow: _base.OnOverflowType = 'except',
     ):
         self.setup = setup
         self.info = info
@@ -287,7 +287,7 @@ class RxStream:
         self.checked_timestamp = False
         self.stream = None
         self._enabled: bool = False
-        self._on_overflow: base.OnOverflowType = on_overflow
+        self._on_overflow: _base.OnOverflowType = on_overflow
         self._ports: specs.types.Port = ()
 
     @util.stopwatch('stream initialization', 'source')
@@ -387,7 +387,7 @@ class RxStream:
         timeout_sec,
         *,
         last_sync_time: int | None,
-        on_overflow: base.OnOverflowType | None = None,
+        on_overflow: _base.OnOverflowType | None = None,
     ) -> tuple[int, int]:
         total_timeout = self.setup.rx_enable_delay + timeout_sec + 0.5
 
@@ -415,7 +415,7 @@ class RxStream:
     @staticmethod
     def validate_stream_read(
         sr: SoapySDR.StreamResult,
-        on_overflow: base.OnOverflowType,
+        on_overflow: _base.OnOverflowType,
         sync_time_ns: int | None = None,
     ) -> tuple[int, int]:
         """track the number of samples received and remaining in a read stream.
@@ -439,10 +439,10 @@ class RxStream:
             result = 0, sr.timeNs
         else:
             err_str = SoapySDR.errToStr(sr.ret)
-            raise base.ReceiveStreamError(f'{err_str} (error code {sr.ret})')
+            raise _base.ReceiveStreamError(f'{err_str} (error code {sr.ret})')
 
         if sync_time_ns is not None and sync_time_ns > sr.timeNs:
-            raise base.ReceiveStreamError(f'invalid timestamp from before last sync')
+            raise _base.ReceiveStreamError(f'invalid timestamp from before last sync')
 
         return result
 
@@ -561,12 +561,12 @@ def set_center_frequency(
 
     # set center frequency with lo_shift
     for prev, this in zip(prev_split, this_split):
-        this_resamp = base.design_capture_resampler(fs_base, this)
+        this_resamp = _base.design_capture_resampler(fs_base, this)
 
         if prev is None:
             prev_backend_fc = None
         else:
-            prev_resamp = base.design_capture_resampler(fs_base, prev)
+            prev_resamp = _base.design_capture_resampler(fs_base, prev)
             prev_backend_fc = prev.center_frequency - prev_resamp['lo_offset']
         backend_fc = this.center_frequency - this_resamp['lo_offset']
 
@@ -579,12 +579,12 @@ def set_sample_rate(
 ):
     fs_base = source.setup_spec.base_clock_rate
 
-    this_fs = base.design_capture_resampler(fs_base, capture)['fs_sdr']
+    this_fs = _base.design_capture_resampler(fs_base, capture)['fs_sdr']
 
     if source._capture is None:
         prev_fs = None
     else:
-        prev_fs = base.design_capture_resampler(fs_base, source._capture)['fs_sdr']
+        prev_fs = _base.design_capture_resampler(fs_base, source._capture)['fs_sdr']
 
     if this_fs == prev_fs:
         return
@@ -605,7 +605,7 @@ def device_time_source(spec: specs.SoapySource):
 
 
 class SoapySourceBase(
-    base.SourceBase, base.HasSetupType[_TS], base.HasCaptureType[_TC]
+    _base.SourceBase, _base.HasSetupType[_TS], _base.HasCaptureType[_TC]
 ):
     """Applies SoapySDR for device control and acquisition"""
 
@@ -702,7 +702,7 @@ class SoapySourceBase(
         count,
         timeout_sec,
         *,
-        on_overflow: base.OnOverflowType = 'except',
+        on_overflow: _base.OnOverflowType = 'except',
     ) -> tuple[int, int]:
         return self._rx_stream.read(
             self._device,

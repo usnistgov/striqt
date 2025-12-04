@@ -7,7 +7,7 @@ import typing
 from striqt.analysis import Capture, simulated_awgn
 from ... import specs
 from .. import util
-from . import base
+from . import _base
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -19,7 +19,7 @@ _TS = typing.TypeVar('_TS', bound=specs.FunctionSourceSpec)
 _TC = typing.TypeVar('_TC', bound=specs.ResampledCapture)
 
 
-def _lo_shift_tone(inds, source: base.SourceBase, xp, lo_offset=None):
+def _lo_shift_tone(inds, source: _base.SourceBase, xp, lo_offset=None):
     design = source.get_resampler()
     if lo_offset is None:
         lo_offset = design['lo_offset']
@@ -27,7 +27,7 @@ def _lo_shift_tone(inds, source: base.SourceBase, xp, lo_offset=None):
     return xp.exp(phase_scale * inds).astype('complex64')
 
 
-class TestSourceBase(base.VirtualSourceBase[_TS, _TC]):
+class TestSourceBase(_base.VirtualSourceBase[_TS, _TC]):
     def _read_stream(
         self,
         buffers,
@@ -35,7 +35,7 @@ class TestSourceBase(base.VirtualSourceBase[_TS, _TC]):
         count,
         timeout_sec=None,
         *,
-        on_overflow: base.OnOverflowType = 'except',
+        on_overflow: _base.OnOverflowType = 'except',
     ):
         assert self._capture is not None
 

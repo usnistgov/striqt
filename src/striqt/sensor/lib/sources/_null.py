@@ -6,7 +6,7 @@ import typing
 
 from ... import specs
 from .. import util
-from . import base
+from . import _base
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -18,14 +18,14 @@ _TS = typing.TypeVar('_TS', bound=specs.NoSource)
 _TC = typing.TypeVar('_TC', bound=specs.ResampledCapture)
 
 
-class NoSource(base.SourceBase[_TS, _TC]):
+class NoSource(_base.SourceBase[_TS, _TC]):
     """fast paths to acquire empty buffers"""
 
     _samples_elapsed = 0
 
     @functools.cached_property
     def info(self):
-        return base.BaseSourceInfo(num_rx_ports=self.setup_spec.num_rx_ports)
+        return _base.BaseSourceInfo(num_rx_ports=self.setup_spec.num_rx_ports)
 
     @functools.cached_property
     def id(self) -> str:
@@ -56,8 +56,8 @@ class NoSource(base.SourceBase[_TS, _TC]):
 
         return count, round(timestamp_ns)
 
-    def get_resampler(self, capture: _TC | None = None) -> base.ResamplerDesign:
+    def get_resampler(self, capture: _TC | None = None) -> _base.ResamplerDesign:
         if capture is None:
             capture = self.capture_spec
 
-        return base.design_capture_resampler(self.setup_spec.base_clock_rate, capture)
+        return _base.design_capture_resampler(self.setup_spec.base_clock_rate, capture)

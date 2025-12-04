@@ -9,7 +9,7 @@ from ... import specs
 from .. import util
 from striqt.analysis.lib import io
 
-from . import base
+from . import _base
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -19,7 +19,7 @@ else:
 
 
 class TDMSFileSource(
-    base.VirtualSourceBase[specs.TDMSFileSourceSpec, specs.FileCapture]
+    _base.VirtualSourceBase[specs.TDMSFileSourceSpec, specs.FileCapture]
 ):
     """a source of IQ waveforms from a TDMS file"""
 
@@ -69,16 +69,16 @@ class TDMSFileSource(
 
     def get_resampler(
         self, capture: specs.FileCapture | None = None
-    ) -> base.ResamplerDesign:
+    ) -> _base.ResamplerDesign:
         if capture is None:
             capture = self.capture_spec
 
-        return base.design_capture_resampler(
+        return _base.design_capture_resampler(
             self._file_info.backend_sample_rate, capture
         )
 
 
-class FileSource(base.VirtualSourceBase[specs.FileSourceSpec, specs.FileCapture]):
+class FileSource(_base.VirtualSourceBase[specs.FileSourceSpec, specs.FileCapture]):
     """returns IQ waveforms from a file"""
 
     _file_info: specs.FileAcquisitionInfo
@@ -128,15 +128,15 @@ class FileSource(base.VirtualSourceBase[specs.FileSourceSpec, specs.FileCapture]
 
     def get_resampler(
         self, capture: specs.FileCapture | None = None
-    ) -> base.ResamplerDesign:
+    ) -> _base.ResamplerDesign:
         if capture is None:
             capture = self.capture_spec
-        return base.design_capture_resampler(
+        return _base.design_capture_resampler(
             self._file_info.backend_sample_rate, capture
         )
 
 
-class ZarrIQSource(base.VirtualSourceBase[specs.ZarrIQSourceSpec, specs.FileCapture]):
+class ZarrIQSource(_base.VirtualSourceBase[specs.ZarrIQSourceSpec, specs.FileCapture]):
     """a sources of IQ samples from iq_waveform variables in a zarr store"""
 
     _waveform: 'xr.DataArray'
@@ -162,7 +162,7 @@ class ZarrIQSource(base.VirtualSourceBase[specs.ZarrIQSourceSpec, specs.FileCapt
 
     @functools.cached_property
     def info(self):
-        return base.BaseSourceInfo(num_rx_ports=self._waveform.shape[0])
+        return _base.BaseSourceInfo(num_rx_ports=self._waveform.shape[0])
 
     def _prepare_capture(self, capture):
         super()._prepare_capture(capture)
@@ -174,11 +174,11 @@ class ZarrIQSource(base.VirtualSourceBase[specs.ZarrIQSourceSpec, specs.FileCapt
             backend_sample_rate=self._read_coord('sample_rate'),
         )
 
-    def get_resampler(self, capture=None) -> base.ResamplerDesign:
+    def get_resampler(self, capture=None) -> _base.ResamplerDesign:
         if capture is None:
             capture = self.capture_spec
 
-        return base.design_capture_resampler(self._read_coord('sample_rate'), capture)
+        return _base.design_capture_resampler(self._read_coord('sample_rate'), capture)
 
     def _read_stream(
         self, buffers, offset, count, timeout_sec=None, *, on_overflow='except'

@@ -309,7 +309,7 @@ class PathAliasFormatter:
         if len(path_fields) == 0:
             return str(path)
 
-        from ..lib.sources.base import get_source_id
+        from ..lib.sources._base import get_source_id
 
         id_ = get_source_id(self.sweep_spec.source, timeout=self.alias_timeout)
         path = Path(path).expanduser()
