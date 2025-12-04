@@ -57,14 +57,13 @@ edge-airstack-1 = [
     "scipy~=1.9",
     "ssmdevices",
     "zarr~=2.18.2",
+    "eval_type_backport"
 ]
 
 [project.scripts]
-calibrate-sensor = "striqt.cli.calibrate:run"
 check-sweep = "striqt.cli.check:run"
 sensor-sweep = "striqt.cli.sweep:run"
 plot-sensor-captures = "striqt.cli.plot:run"
-serve-sensor = "striqt.cli.server:run"
 
 [tool.ruff]
 target-version = "py39"

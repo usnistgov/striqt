@@ -73,7 +73,7 @@ def _get_peak_power(iq: AcquiredIQ, xp=None):
 
 
 def resampling_correction(iq_in: AcquiredIQ, overwrite_x=False, axis=1) -> AcquiredIQ:
-    """resample, filter, and correct according to specification in iq_in.
+    """resample, filter, and apply calibration corrections.
 
     Args:
         iq: IQ dataclass output by a source
