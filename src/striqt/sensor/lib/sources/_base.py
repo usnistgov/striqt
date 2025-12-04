@@ -496,9 +496,8 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
                 info=self._prev_iq.info.replace(start_time=None),
             )
 
-        if not self._reuse_iq and _reusable_acquisition(
-            capture, next, self.setup_spec.base_clock_rate
-        ):
+        mcr = self.setup_spec.base_clock_rate
+        if self._reuse_iq and _is_reusable(capture, next, mcr):
             self._prev_iq = iq
         else:
             self._prev_iq = None
@@ -958,7 +957,7 @@ def alloc_empty_iq(
     return all_samples, (samples, buffers)
 
 
-def _reusable_acquisition(
+def _is_reusable(
     c1: specs.ResampledCapture | None,
     c2: specs.ResampledCapture | None,
     base_clock_rate,
