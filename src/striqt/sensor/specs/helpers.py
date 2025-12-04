@@ -36,6 +36,23 @@ def _check_fields(cls: type[specs.SpecBase], names: tuple[str, ...], new_instanc
         raise TypeError(f'invalid capture fields {extra!r} specified in loops')
 
 
+@functools.lru_cache
+def pairwise_by_port(
+    c1: _TC, c2: _TC | None, is_new: bool
+) -> list[tuple[_TC, _TC| None]]:
+    # a list with 1 capture per port
+    c1_split = split_capture_ports(c1)
+
+    # any changes to the port index
+    if c2 is None or is_new:
+        c2_split = len(c1_split) * [None]
+    else:
+        c2_split = split_capture_ports(c2)
+
+    pairwise = zip(*(c1_split, c2_split))
+    return list(pairwise)
+
+
 @util.lru_cache()
 def loop_captures(sweep: specs.Sweep[_TS, _TP, _TC]) -> tuple[_TC, ...]:
     """evaluate the loop specification, and flatten into one list of loops"""

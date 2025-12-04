@@ -518,83 +518,54 @@ class HardwareTimeSync:
         elif frac_secs > 0.2:
             # System time and PPS are off, warn caller
             util.get_logger('source').warning(
-                f'system time and PPS out of sync by {frac_secs:0.3f}s, check NTP'
+                f'system time and PPS out of sync by {frac_secs:0.2f}s'
             )
         time_to_set_ns = int((full_secs + 1) * 1e9)
         device.setHardwareTime(time_to_set_ns, 'pps')
         return time_to_set_ns
 
 
-@functools.lru_cache
-def split_this_prev_captures(
-    c1: _TC, c2: _TC | None, is_new: bool
-) -> tuple[list[_TC], list[_TC] | list[None]]:
-    # a list with 1 capture per port
-    c1_split = specs.helpers.split_capture_ports(c1)
-
-    # any changes to the port index
-    if c2 is None or is_new:
-        c2_split = len(c1_split) * [None]
-    else:
-        c2_split = specs.helpers.split_capture_ports(c2)
-
-    return c1_split, c2_split
-
-
 def set_gain(source: SoapySourceBase, capture: specs.SoapyCapture, ports_changed: bool):
-    this_split, prev_split = split_this_prev_captures(
-        capture, source._capture, ports_changed
-    )
+    splits = specs.helpers.pairwise_by_port(capture, source._capture, ports_changed)
 
-    for prev, this in zip(prev_split, this_split):
-        if prev is None or this.gain != this.gain:
-            source._device.setGain(SoapySDR.SOAPY_SDR_RX, this.port, this.gain)
+    for new, old in splits:
+        if old is None or new.gain != old.gain:
+            source._device.setGain(SoapySDR.SOAPY_SDR_RX, new.port, new.gain)
 
 
 def set_center_frequency(
     source: SoapySourceBase, capture: specs.SoapyCapture, ports_changed: bool
 ):
-    this_split, prev_split = split_this_prev_captures(
-        capture, source._capture, ports_changed
-    )
-    fs_base = source.setup_spec.base_clock_rate
+    def backend_fc(c: specs.SoapyCapture|None) -> float|None:
+        if c is None:
+            return None
+        return c.center_frequency - source.get_resampler(c)['lo_offset']
 
-    # set center frequency with lo_shift
-    for prev, this in zip(prev_split, this_split):
-        this_resamp = _base.design_capture_resampler(fs_base, this)
+    splits = specs.helpers.pairwise_by_port(capture, source._capture, ports_changed)
 
-        if prev is None:
-            prev_backend_fc = None
-        else:
-            prev_resamp = _base.design_capture_resampler(fs_base, prev)
-            prev_backend_fc = prev.center_frequency - prev_resamp['lo_offset']
-        backend_fc = this.center_frequency - this_resamp['lo_offset']
-
-        if backend_fc != prev_backend_fc:
-            source._device.setFrequency(SoapySDR.SOAPY_SDR_RX, this.port, backend_fc)
+    for new, old in splits:
+        new_fc = backend_fc(new)
+        if new_fc != backend_fc(old):
+            source._device.setFrequency(SoapySDR.SOAPY_SDR_RX, new.port, new_fc)
 
 
-def set_sample_rate(
-    source: SoapySourceBase, capture: specs.SoapyCapture, ports_changed: bool
-):
-    fs_base = source.setup_spec.base_clock_rate
-
-    this_fs = _base.design_capture_resampler(fs_base, capture)['fs_sdr']
+def set_sample_rate(source: SoapySourceBase, capture: specs.SoapyCapture):
+    new_fs = source.get_resampler(capture)['fs_sdr']
 
     if source._capture is None:
-        prev_fs = None
+        old_fs = None
     else:
-        prev_fs = _base.design_capture_resampler(fs_base, source._capture)['fs_sdr']
+        old_fs = source.get_resampler()['fs_sdr']
 
-    if this_fs == prev_fs:
+    if new_fs == old_fs:
         return
 
     capture_per_port = specs.helpers.split_capture_ports(capture)
     if source.setup_spec.shared_rx_sample_clock:
-        capture_per_port = specs.helpers.split_capture_ports(capture)[:1]
+        capture_per_port = capture_per_port[:1]
 
     for c in capture_per_port:
-        source._device.setSampleRate(SoapySDR.SOAPY_SDR_RX, c.port, this_fs)
+        source._device.setSampleRate(SoapySDR.SOAPY_SDR_RX, c.port, new_fs)
 
 
 def device_time_source(spec: specs.SoapySource):
@@ -693,7 +664,7 @@ class SoapySourceBase(
         # gain before center frequency to accommodate attenuator settling time
         set_gain(self, capture, ports_changed)
         set_center_frequency(self, capture, ports_changed)
-        set_sample_rate(self, capture, ports_changed)
+        set_sample_rate(self, capture)
 
     def _read_stream(
         self,
