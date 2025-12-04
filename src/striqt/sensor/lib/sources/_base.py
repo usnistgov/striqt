@@ -473,9 +473,6 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
         if self._prev_iq is None:
             samples, time_ns = self.read_iq()
 
-            if next is not None and capture != next:
-                self.arm(next)
-
             info = self._build_acquisition_info(time_ns)
 
             iq = AcquiredIQ(
@@ -489,12 +486,16 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
                 resampler=self.get_resampler(),
                 aligner=self._aligner,
             )
+
         else:
             iq = dataclasses.replace(
                 self._prev_iq,
                 capture=capture,
                 info=self._prev_iq.info.replace(start_time=None),
             )
+
+        if next is not None and capture != next:
+            self.arm(next)
 
         mcr = self.setup_spec.base_clock_rate
         if self._reuse_iq and _is_reusable(capture, next, mcr):
