@@ -4,10 +4,10 @@ from typing import Annotated, Any, Literal, Optional, Union
 from striqt.analysis.lib.specs import Meta
 
 if _TYPE_CHECKING:
-    import pandas as _pd
+    import pandas as pd
 else:
     from ..lib import util as _util
-    _pd = _util.lazy_import('pandas')
+    pd = _util.lazy_import('pandas')
 
 
 AliasCandidateMatches = Annotated[

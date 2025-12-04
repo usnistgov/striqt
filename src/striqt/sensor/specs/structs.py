@@ -17,6 +17,11 @@ if typing.TYPE_CHECKING:
     _T = typing.TypeVar('_T')
     from typing_extensions import Self as _Self
 
+    # pd imports need to be here for msgspec to resolve timestamp types
+    import pandas as pd
+else:
+    pd = _util.lazy_import('pandas')
+
 
 @util.lru_cache()
 def _validate_multichannel(port, gain):
