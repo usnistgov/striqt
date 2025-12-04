@@ -976,7 +976,6 @@ def _is_reusable(
 
     downstream_kws = {
         'host_resample': False,
-        'start_time': None,
         'backend_sample_rate': None,
     }
 
