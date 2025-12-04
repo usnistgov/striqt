@@ -28,7 +28,7 @@ ArrayBackend = Annotated[
     Literal['numpy', 'cupy'],
     Meta('array module to use to set compute device: numpy = cpu, cupy = gpu'),
 ]
-BackendSampleRate = Annotated[Optional[float], Meta('Source sample rate', 'Hz', gt=0)]
+BackendSampleRate = Annotated[float, Meta('Source sample rate', 'Hz', gt=0)]
 BaseClockRate = Annotated[
     float, Meta('Base sample rate used inside the source', 'Hz', gt=0)
 ]

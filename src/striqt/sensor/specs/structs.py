@@ -38,7 +38,7 @@ class ResampledCapture(Capture, frozen=True, kw_only=True):
     port: types.Port
     lo_shift: types.LOShift = 'none'
     host_resample: bool = True
-    backend_sample_rate: types.BackendSampleRate = None
+    backend_sample_rate: typing.Optional[types.BackendSampleRate] = None
 
     # a counter used to track the loop index for Repeat(None)
     _sweep_index: int = 0
@@ -50,7 +50,7 @@ class _ResampledCaptureKeywords(_CaptureKeywords, total=False):
     port: types.Port
     lo_shift: types.LOShift
     host_resample: bool
-    backend_sample_rate: types.BackendSampleRate
+    backend_sample_rate: typing.Optional[types.BackendSampleRate]
 
 
 class SoapyCapture(ResampledCapture, frozen=True, kw_only=True):
@@ -95,7 +95,7 @@ class FileCapture(ResampledCapture, frozen=True, kw_only=True):
     """Capture specification read from a file, with support for None sentinels"""
 
     # RF and leveling
-    backend_sample_rate: types.BackendSampleRate | None = None
+    backend_sample_rate: typing.Optional[types.BackendSampleRate] = None
 
     def __post_init__(self):
         if self.backend_sample_rate is not None:
@@ -412,13 +412,13 @@ class SoapyAcquisitionInfo(AcquisitionInfo, kw_only=True, frozen=True):
     delay: typing.Optional[types.Delay] = None
     sweep_start_time: types.SweepStartTime | None
     start_time: types.StartTime | None
-    backend_sample_rate: types.BackendSampleRate
+    backend_sample_rate: typing.Optional[types.BackendSampleRate]
     source_id: types.SourceID = ''
 
 
 class FileAcquisitionInfo(AcquisitionInfo, kw_only=True, frozen=True):
     center_frequency: types.CenterFrequency = float('nan')
-    backend_sample_rate: types.BackendSampleRate
+    backend_sample_rate: typing.Optional[types.BackendSampleRate]
     port: types.Port = 0
     gain: types.Gain = float('nan')
     source_id: types.SourceID = ''
