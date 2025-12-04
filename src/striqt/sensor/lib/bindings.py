@@ -7,7 +7,7 @@ import msgspec
 
 from .peripherals import NoPeripherals, PeripheralsBase
 from .sources import SourceBase
-from . import specs, sinks
+from . import sinks, specs
 from .specs import _TC, _TS, _TP
 
 _TC2 = typing.TypeVar('_TC2', bound=specs.ResampledCapture)

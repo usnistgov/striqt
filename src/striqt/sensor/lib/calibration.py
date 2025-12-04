@@ -3,7 +3,7 @@ from __future__ import annotations
 import typing
 from pathlib import Path
 
-from . import captures, compute, io, peripherals, sinks, sources, specs, util
+from . import _sources, captures, compute, io, peripherals, sinks, specs, util
 
 import msgspec
 
@@ -504,7 +504,9 @@ def bind_manual_yfactor_calibration(
             return sensor_result | self.calibration_spec.todict()
 
         def setup(
-            self, captures: typing.Sequence[_TC], loops: typing.Sequence[specs.LoopSpec]
+            self,
+            captures: typing.Sequence[_TC],
+            loops: typing.Sequence[specs.LoopSpec],
         ):
             sensor.peripherals.setup(self, captures, loops)  # type: ignore
 

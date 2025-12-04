@@ -2,13 +2,15 @@
 
 import click
 
+from striqt.sensor.lib import calibration, captures, resources
+
 
 @click.command('runtime information about running a sweep')
 @click.argument('yaml_path', type=click.Path(exists=True, dir_okay=False))
 def run(yaml_path):
     print('Initializing...')
     # instantiate sweep objects
-    from striqt.sensor.lib import captures, frontend, calibration, resources, util
+    from striqt.sensor.lib import frontend, util
     from striqt import sensor
     from pprint import pprint
     from striqt.sensor.lib.io import _get_capture_format_fields

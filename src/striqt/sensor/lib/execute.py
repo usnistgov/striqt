@@ -11,7 +11,7 @@ from typing import Any
 import striqt.waveform as iqwaveform
 from striqt.analysis import registry
 
-from . import compute, peripherals, sources, specs, util
+from . import _sources, compute, peripherals, specs, util
 from .resources import Resources, AnyResources
 from .calibration import lookup_system_noise_power
 from .specs import _TC, _TP, _TS
@@ -121,39 +121,6 @@ def _log_cache_info(
     if 'nan' not in snr_desc.lower():
         logger = util.get_logger('analysis')
         logger.info(f'({snr_desc}) dB SNR spectrogram peak')
-
-
-@typing.overload
-def iterate_sweep(
-    resources: Resources[_TS, _TP, _TC],
-    *,
-    always_yield: Any,
-    yield_values: typing.Literal[False],
-    loop: bool,
-    **replace: 'Unpack[AnyResources[_TS, _TP, _TC]]',
-) -> typing.Generator[None]: ...
-
-
-@typing.overload
-def iterate_sweep(
-    resources: Resources[_TS, _TP, _TC],
-    *,
-    always_yield: typing.Literal[True],
-    yield_values: typing.Literal[True],
-    loop: bool,
-    **replace: 'Unpack[AnyResources[_TS, _TP, _TC]]',
-) -> typing.Generator['xr.Dataset|compute.DelayedDataset|None']: ...
-
-
-@typing.overload
-def iterate_sweep(
-    resources: Resources[_TS, _TP, _TC],
-    *,
-    always_yield: typing.Literal[False],
-    yield_values: typing.Literal[True],
-    loop: bool,
-    **replace: 'Unpack[AnyResources[_TS, _TP, _TC]]',
-) -> typing.Generator['xr.Dataset|compute.DelayedDataset']: ...
 
 
 def iterate_sweep(

@@ -4,7 +4,7 @@ These are taken to define sensors. Extension classes can implement
 peripherals and expanded data fields elsewhere.
 """
 
-from .lib import peripherals, sinks, sources, specs
+from .lib import sources, peripherals, sinks, specs
 from .lib.sources import deepwave
 from .lib.bindings import Sensor, Schema, bind_sensor
 from .lib.calibration import bind_manual_yfactor_calibration
