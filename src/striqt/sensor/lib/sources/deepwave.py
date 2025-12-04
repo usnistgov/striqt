@@ -3,7 +3,8 @@ from __future__ import annotations
 import functools
 import typing
 
-from .. import specs, util
+from ... import specs
+from .. import util
 from . import soapy
 
 if typing.TYPE_CHECKING:
@@ -13,19 +14,19 @@ else:
 
 
 class Air7101BSourceSpec(specs.SoapySource, kw_only=True, frozen=True):
-    base_clock_rate: specs.BaseClockRateType = 125e6
+    base_clock_rate: specs.types.BaseClockRate = 125e6
     rx_enable_delay = 0.35
     transient_holdoff_time = 2e-3
 
 
 class Air7201BSourceSpec(specs.SoapySource, kw_only=True, frozen=True):
-    base_clock_rate: specs.BaseClockRateType = 125e6
+    base_clock_rate: specs.types.BaseClockRate = 125e6
     rx_enable_delay = 0.35
     transient_holdoff_time = 2e-3
 
 
 class Air8201BSourceSpec(specs.SoapySource, kw_only=True, frozen=True):
-    base_clock_rate: specs.BaseClockRateType = 125e6
+    base_clock_rate: specs.types.BaseClockRate = 125e6
     rx_enable_delay = 0.4
     transient_holdoff_time = 2e-3
 

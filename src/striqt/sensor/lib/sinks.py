@@ -3,9 +3,8 @@ from __future__ import annotations
 import typing
 from concurrent.futures import ThreadPoolExecutor
 
-from striqt import analysis
-
-from . import captures, compute, io, specs, util
+from . import compute, io, util
+from .. import specs
 
 if typing.TYPE_CHECKING:
     import xarray as xr
@@ -19,7 +18,7 @@ class SinkBase(typing.Generic[specs._TC]):
     def __init__(
         self,
         sweep_spec: specs.Sweep[specs._TS, specs._TP, specs._TC],
-        alias_func: captures.PathAliasFormatter | None = None,
+        alias_func: specs.helpers.PathAliasFormatter | None = None,
         *,
         force: bool = False,
     ):
@@ -32,8 +31,9 @@ class SinkBase(typing.Generic[specs._TC]):
         self._future = None
         self._pending_data: list['xr.Dataset'] = []
         self._executor = ThreadPoolExecutor(1)
-        self._group_sizes = captures.concat_group_sizes(
-            sweep_spec.loop_captures(), min_size=2
+        captures = specs.helpers.loop_captures(sweep_spec)
+        self._group_sizes = specs.helpers.concat_group_sizes(
+            captures, min_size=2
         )
 
     def pop(self) -> list['xr.Dataset']:
@@ -168,7 +168,7 @@ class ZarrCaptureSink(ZarrSinkBase[specs._TC]):
             util.stopwatch(f'sync to {path}', 'sink'),
             util.delay_keyboard_interrupts(),
         ):
-            analysis.dump(self.store, dataset, max_threads=self._spec.max_threads)
+            io.dump_data(self.store, dataset, max_threads=self._spec.max_threads)
 
             for i in range(count - len(data_list), count):
                 with util.log_capture_context('sink', capture_index=i):
@@ -179,7 +179,7 @@ class SpectrogramTimeAppender(ZarrSinkBase):
     def __init__(
         self,
         sweep_spec: specs.Sweep,
-        alias_func: captures.PathAliasFormatter | None = None,
+        alias_func: specs.helpers.PathAliasFormatter | None = None,
         *,
         force: bool = False,
     ):
@@ -220,7 +220,7 @@ class SpectrogramTimeAppender(ZarrSinkBase):
             util.stopwatch(f'sync {path}', 'sink', threshold=0.5),
             util.delay_keyboard_interrupts(),
         ):
-            analysis.dump(
+            io.dump_data(
                 self.store,
                 by_spectrogram,
                 compression=False,

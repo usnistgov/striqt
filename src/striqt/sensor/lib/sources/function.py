@@ -5,8 +5,8 @@ from __future__ import annotations
 import typing
 
 from striqt.analysis import Capture, simulated_awgn
-
-from .. import specs, util
+from ... import specs
+from .. import util
 from . import base
 
 if typing.TYPE_CHECKING:

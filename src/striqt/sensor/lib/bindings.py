@@ -7,22 +7,19 @@ import msgspec
 
 from .peripherals import NoPeripherals, PeripheralsBase
 from .sources import SourceBase
-from . import sinks, specs
-from .specs import _TC, _TS, _TP
+from . import sinks
+from .. import specs
+from ..specs import _TC, _TS, _TP
 
 _TC2 = typing.TypeVar('_TC2', bound=specs.ResampledCapture)
 _TP2 = typing.TypeVar('_TP2', bound=specs.Peripherals)
 _TS2 = typing.TypeVar('_TS2', bound=specs.Source)
 
-MockSensorType = specs.Annotated[
-    typing.Optional[str],
-    specs.meta('replace the bound sensor with one from this binding name'),
-]
 
 if typing.TYPE_CHECKING:
 
     class BoundSweep(specs.Sweep, frozen=True, kw_only=True):
-        mock_sensor: MockSensorType = None
+        mock_sensor: specs.types.MockSensor = None
 
 
 registry: dict[str, 'SensorBinding[typing.Any, typing.Any, typing.Any]'] = {}

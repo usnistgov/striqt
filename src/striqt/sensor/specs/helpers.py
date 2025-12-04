@@ -1,20 +1,86 @@
-"""utility functions for structs.CaptureBase data structures and their aliases"""
+"""helper functions for specification data structures and their aliases"""
 
 from __future__ import annotations
 
 from collections import Counter
 import functools
+import itertools
 import numbers
 import string
 import typing
 from datetime import datetime
 from pathlib import Path
 
+import msgspec
 from msgspec import UNSET, UnsetType
 
 from striqt.analysis.lib.specs import convert_spec
 
-from . import specs, util
+from . import structs as specs
+from .structs import _TS, _TC, _TP
+from ..lib import util
+
+@util.lru_cache()
+def _check_fields(cls: type[specs.SpecBase], names: tuple[str, ...], new_instance=False):
+    fields = msgspec.structs.fields(cls)
+    available = set(names)
+
+    if new_instance:
+        required = {f.name for f in fields if f.required}
+        missing = required - available
+        if len(missing) > 0:
+            raise TypeError(f'missing required loop fields {missing!r}')
+
+    extra = available - {f.name for f in fields}
+    if len(extra) > 0:
+        raise TypeError(f'invalid capture fields {extra!r} specified in loops')
+
+
+@util.lru_cache()
+def loop_captures(sweep: specs.Sweep[_TS, _TP, _TC]) -> tuple[_TC, ...]:
+    """evaluate the loop specification, and flatten into one list of loops"""
+
+    loop_fields = tuple([loop.field for loop in sweep.loops])
+
+    if len(sweep.captures) > 0:
+        cls = type(sweep.captures[0])
+        _check_fields(cls, loop_fields, False)
+    elif sweep.__bindings__ is None:
+        raise TypeError(
+            'loops may apply only to explicit capture lists unless the sweep '
+            'is bound to a sensor with striqt.sensor.bind_sensor'
+        )
+    else:
+        from ..lib import bindings
+
+        assert isinstance(sweep.__bindings__, bindings.SensorBinding)
+        cls = sweep.__bindings__.schema.capture
+        _check_fields(cls, loop_fields, True)
+
+    assert issubclass(cls, specs.Capture)
+
+    loop_points = [loop.get_points() for loop in sweep.loops]
+    combinations = itertools.product(*loop_points)
+
+    result = []
+    for values in combinations:
+        updates = dict(zip(loop_fields, values))
+        if len(sweep.captures) > 0:
+            # iterate specified captures if avialable
+            new = (c.replace(**updates) for c in sweep.captures)
+        else:
+            # otherwise, instances are new captures
+            new = (cls.fromdict(updates) for _ in range(1))
+
+        if sweep.info.loop_only_nyquist:
+            new = (c for c in new if c.sample_rate >= c.analysis_bandwidth)
+
+        result += list(new)
+
+    if len(result) == 0:
+        return sweep.captures
+    else:
+        return tuple(result)
 
 
 def varied_capture_fields(
@@ -243,7 +309,7 @@ class PathAliasFormatter:
         if len(path_fields) == 0:
             return str(path)
 
-        from .sources.base import get_source_id
+        from ..lib.sources.base import get_source_id
 
         id_ = get_source_id(self.sweep_spec.source, timeout=self.alias_timeout)
         path = Path(path).expanduser()

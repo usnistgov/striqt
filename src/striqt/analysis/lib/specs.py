@@ -67,7 +67,7 @@ def _deep_hash(obj: typing.Mapping | typing.Sequence) -> int:
     return hash(keys) ^ hash(deep_values)
 
 
-def meta(standard_name: str, units: str | None = None, **kws) -> msgspec.Meta:
+def Meta(standard_name: str, units: str | None = None, **kws) -> msgspec.Meta:
     """annotation that is used to generate 'standard_name' and 'units' fields of xarray attrs objects"""
     extra = {'standard_name': standard_name}
     if units is not None:
@@ -165,9 +165,9 @@ class _SlowHashSpecBase(SpecBase, kw_only=True, frozen=True):
         return h
 
 
-DurationType = Annotated[float, meta('Duration of the analysis waveform', 's')]
-SampleRateType = Annotated[float, meta('Analysis sample rate', 'S/s')]
-AnalysisBandwidthType = Annotated[float, meta('Analysis bandwidth', 'Hz')]
+DurationType = Annotated[float, Meta('Duration of the analysis waveform', 's')]
+SampleRateType = Annotated[float, Meta('Analysis sample rate', 'S/s')]
+AnalysisBandwidthType = Annotated[float, Meta('Analysis bandwidth', 'Hz')]
 
 
 class Capture(SpecBase, kw_only=True, frozen=True):

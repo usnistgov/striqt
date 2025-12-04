@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import typing
 
-from . import specs
-from .specs import _TS, _TPC
+from .. import specs
 
 _TC = typing.TypeVar('_TC', bound=specs.ResampledCapture, contravariant=True)
 _TP = typing.TypeVar('_TP', bound=specs.Peripherals)
@@ -64,7 +63,7 @@ class PeripheralsBase(typing.Generic[_TP, _TC], PeripheralsProtocol[_TC]):
 
 class CalibrationPeripheralsBase(
     PeripheralsBase[_TP, _TC],
-    typing.Generic[_TP, _TC, _TPC],
+    typing.Generic[_TP, _TC, specs._TPC],
 ):
     """base class defining the object protocol peripheral hardware support.
 
@@ -72,9 +71,9 @@ class CalibrationPeripheralsBase(
     methods for arming and acquisition.
     """
 
-    calibration_spec: _TPC | None
+    calibration_spec: specs._TPC | None
 
-    def __init__(self, spec: specs.CalibrationSweep[typing.Any, _TP, _TC, _TPC]):
+    def __init__(self, spec: specs.CalibrationSweep[typing.Any, _TP, _TC, specs._TPC]):
         self.calibration_spec = spec.calibration
         self.open()
 

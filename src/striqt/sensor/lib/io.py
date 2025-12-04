@@ -11,8 +11,9 @@ from striqt.analysis.lib.io import decode_from_yaml_file
 from striqt.analysis.lib.io import dump as dump_data  # noqa: F401
 from striqt.analysis.lib.io import load as load_data  # noqa: F401
 from striqt.analysis.lib.specs import convert_dict
+from .. import specs
 
-from . import captures, specs, util
+from . import util
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -22,11 +23,14 @@ else:
     np = util.lazy_import('numpy')
     xr = util.lazy_import('xarray')
 
+__all__ = [
+    'decode_from_yaml_file', 'open_store', 'read_yaml_spec', 'dump_data', 'load_data', 'read_calibration', 'save_calibration'
+]
 
 def open_store(
     spec: specs.Sink,
     *,
-    alias_func: captures.PathAliasFormatter | None = None,
+    alias_func: specs.helpers.PathAliasFormatter | None = None,
     force=False,
 ) -> StoreType:
     util.safe_import('xarray')
@@ -51,7 +55,7 @@ def open_store(
 
 
 def _import_extensions_from_spec(
-    spec: specs.Extension, alias_func: captures.PathAliasFormatter | None = None
+    spec: specs.Extension, alias_func: specs.helpers.PathAliasFormatter | None = None
 ) -> None:
     """import an extension class from a dict representation of structs.Extensions
 
@@ -144,10 +148,10 @@ def read_tdms_iq(
     num_rx_ports=1,
     dtype='complex64',
     skip_samples=0,
-    array_backend: specs.ArrayBackendType,
+    array_backend: specs.types.ArrayBackend,
 ) -> tuple['np.ndarray', specs.FileCapture]:
     from .sources.file import TDMSFileSource
-    from .specs import TDMSFileSourceSpec
+    from ..specs import TDMSFileSourceSpec
 
     source_spec = TDMSFileSourceSpec(
         base_clock_rate=base_clock_rate, path=Path(path), num_rx_ports=num_rx_ports
@@ -164,19 +168,19 @@ def read_tdms_iq(
 
 @typing.overload
 def read_calibration(
-    path: None, alias_func: captures.PathAliasFormatter | None = None
+    path: None, alias_func: specs.helpers.PathAliasFormatter | None = None
 ) -> None: ...
 
 
 @typing.overload
 def read_calibration(
-    path: str | Path, alias_func: captures.PathAliasFormatter | None = None
+    path: str | Path, alias_func: specs.helpers.PathAliasFormatter | None = None
 ) -> 'xr.Dataset': ...
 
 
 @util.lru_cache()
 def read_calibration(
-    path: str | Path | None, alias_func: captures.PathAliasFormatter | None = None
+    path: str | Path | None, alias_func: specs.helpers.PathAliasFormatter | None = None
 ) -> 'xr.Dataset|None':
     if path is None:
         return None

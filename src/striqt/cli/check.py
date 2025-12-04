@@ -2,7 +2,8 @@
 
 import click
 
-from striqt.sensor.lib import calibration, captures, resources
+from striqt.sensor.lib import calibration, resources
+from striqt.sensor.lib.specs import helpers
 
 
 @click.command('runtime information about running a sweep')
@@ -64,7 +65,7 @@ def run(yaml_path):
 
     kws = {'sweep': sweep, 'source_id': radio_id, 'yaml_path': yaml_path}
     field_sets = {}
-    splits = (captures.split_capture_ports(c) for c in sweep.captures)
+    splits = (helpers.split_capture_ports(c) for c in sweep.captures)
     for c in itertools.chain(*splits):
         fields = _get_capture_format_fields(c, **kws)
         for k, v in fields.items():

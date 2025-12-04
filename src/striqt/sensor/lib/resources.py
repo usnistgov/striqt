@@ -11,12 +11,12 @@ import threading
 import typing
 from pathlib import Path
 
-from . import bindings, captures, io, specs, util
-
+from . import bindings, io, util
 from .peripherals import PeripheralsBase
 from .sinks import SinkBase
 from .sources import SourceBase
-from .specs import _TC, _TP, _TS
+from .. import specs
+from ..specs import _TC, _TP, _TS
 
 
 if typing.TYPE_CHECKING:
@@ -36,7 +36,7 @@ if typing.TYPE_CHECKING:
         except_context: typing_extensions.NotRequired[typing.ContextManager]
         sweep_spec: specs.Sweep[_TS, _TP, _TC]
         calibration: 'xr.Dataset|None'
-        alias_func: captures.PathAliasFormatter | None
+        alias_func: specs.helpers.PathAliasFormatter | None
 
     class AnyResources(
         typing_extensions.TypedDict, typing.Generic[_TS, _TP, _TC], total=False
@@ -49,7 +49,7 @@ if typing.TYPE_CHECKING:
         except_context: typing_extensions.NotRequired[typing.ContextManager]
         sweep_spec: specs.Sweep[_TS, _TP, _TC]
         calibration: 'xr.Dataset|None'
-        alias_func: captures.PathAliasFormatter | None
+        alias_func: specs.helpers.PathAliasFormatter | None
 
 else:
     # workaround for python < 3.10
@@ -62,7 +62,7 @@ else:
         except_context: typing_extensions.NotRequired[typing.ContextManager]
         sweep_spec: specs.Sweep
         calibration: 'xr.Dataset|None'
-        alias_func: captures.PathAliasFormatter | None
+        alias_func: specs.helpers.PathAliasFormatter | None
 
     class AnyResources(typing.TypedDict, total=False):
         """Sensor resources needed to run a sweep"""
@@ -73,7 +73,7 @@ else:
         except_context: typing_extensions.NotRequired[typing.ContextManager]
         sweep_spec: specs.Sweep
         calibration: 'xr.Dataset|None'
-        alias_func: captures.PathAliasFormatter | None
+        alias_func: specs.helpers.PathAliasFormatter | None
 
 
 def import_sink_cls(
@@ -201,7 +201,7 @@ def open_resources(
 
     from .compute import prepare_compute
 
-    formatter = captures.PathAliasFormatter(spec, spec_path=spec_path)
+    formatter = specs.helpers.PathAliasFormatter(spec, spec_path=spec_path)
 
     if spec_path is not None:
         os.chdir(str(Path(spec_path).parent))

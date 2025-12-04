@@ -5,7 +5,9 @@ import functools
 import time
 import typing
 
-from .. import captures, specs, util
+from ... import specs
+
+from .. import util
 from . import base
 
 if typing.TYPE_CHECKING:
@@ -21,7 +23,7 @@ _TS = typing.TypeVar('_TS', bound=specs.SoapySource)
 _TC = typing.TypeVar('_TC', bound=specs.SoapyCapture)
 
 
-def _tuplize_port(obj: specs.PortType) -> tuple[int, ...]:
+def _tuplize_port(obj: specs.types.Port) -> tuple[int, ...]:
     if isinstance(obj, (tuple, list)):
         return obj
     else:
@@ -286,10 +288,10 @@ class RxStream:
         self.stream = None
         self._enabled: bool = False
         self._on_overflow: base.OnOverflowType = on_overflow
-        self._ports: specs.PortType = ()
+        self._ports: specs.types.Port = ()
 
     @util.stopwatch('stream initialization', 'source')
-    def open(self, device: 'SoapySDR.Device', ports: specs.PortType | None = None):
+    def open(self, device: 'SoapySDR.Device', ports: specs.types.Port | None = None):
         if self.stream is not None and self._ports is not None:
             return
 
@@ -451,7 +453,7 @@ class RxStream:
     def capture_changes_port(self, capture: specs.SoapyCapture) -> bool:
         return _tuplize_port(capture.port) == self._ports
 
-    def set_ports(self, device: 'SoapySDR.Device', ports: specs.PortType):
+    def set_ports(self, device: 'SoapySDR.Device', ports: specs.types.Port):
         if self.setup.stream_all_rx_ports:
             # in this case, the stream is controlled only on open
             return
@@ -468,7 +470,7 @@ class RxStream:
 
 
 class HardwareTimeSync:
-    def __init__(self, time_source: specs.TimeSourceType):
+    def __init__(self, time_source: specs.types.TimeSource):
         self.last_sync_time: int | None = None
         self.time_source = time_source
 
@@ -528,13 +530,13 @@ def split_this_prev_captures(
     c1: _TC, c2: _TC | None, is_new: bool
 ) -> tuple[list[_TC], list[_TC] | list[None]]:
     # a list with 1 capture per port
-    c1_split = captures.split_capture_ports(c1)
+    c1_split = specs.helpers.split_capture_ports(c1)
 
     # any changes to the port index
     if c2 is None or is_new:
         c2_split = len(c1_split) * [None]
     else:
-        c2_split = captures.split_capture_ports(c2)
+        c2_split = specs.helpers.split_capture_ports(c2)
 
     return c1_split, c2_split
 
@@ -587,9 +589,9 @@ def set_sample_rate(
     if this_fs == prev_fs:
         return
 
-    capture_per_port = captures.split_capture_ports(capture)
+    capture_per_port = specs.helpers.split_capture_ports(capture)
     if source.setup_spec.shared_rx_sample_clock:
-        capture_per_port = captures.split_capture_ports(capture)[:1]
+        capture_per_port = specs.helpers.split_capture_ports(capture)[:1]
 
     for c in capture_per_port:
         source._device.setSampleRate(SoapySDR.SOAPY_SDR_RX, c.port, this_fs)
@@ -763,11 +765,11 @@ class SoapySourceBase(
         return super().read_iq()
 
     def acquire(
-        self, capture=None, next_capture=None, *, correction=True, alias_func=None
+        self, capture=None, next=None, *, correction=True, alias_func=None
     ):
         with read_retries(self):
             result = super().acquire(
-                capture, next_capture, correction=correction, alias_func=alias_func
+                capture, next, correction=correction, alias_func=alias_func
             )
             result.extra_data.update(self.read_peripherals())  # type: ignore
             return result

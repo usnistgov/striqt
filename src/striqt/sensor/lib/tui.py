@@ -23,7 +23,7 @@ from textual.widgets import Button, DataTable, Footer, Label, ProgressBar, Stati
 from textual.worker import Worker
 
 from . import execute, io, resources, util
-from .captures import varied_capture_fields
+from ..specs.helpers import varied_capture_fields
 
 if typing.TYPE_CHECKING:
     import psutil

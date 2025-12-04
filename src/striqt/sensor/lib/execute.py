@@ -6,15 +6,15 @@ import contextlib
 import dataclasses
 import itertools
 import typing
-from typing import Any
 
 import striqt.waveform as iqwaveform
 from striqt.analysis import registry
 
-from . import _sources, compute, peripherals, specs, util
+from . import compute, sources, peripherals, util
+from .. import specs
 from .resources import Resources, AnyResources
 from .calibration import lookup_system_noise_power
-from .specs import _TC, _TP, _TS
+from ..specs import _TC, _TP, _TS
 
 if typing.TYPE_CHECKING:
     from typing_extensions import Unpack
@@ -191,7 +191,7 @@ def iterate_sweep(
 
     iq = None
     result = None
-    captures = spec.loop_captures()
+    captures = specs.helpers.loop_captures(spec)
 
     if loop:
         capture_iter = itertools.cycle(captures)

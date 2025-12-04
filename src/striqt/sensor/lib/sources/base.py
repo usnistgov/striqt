@@ -15,7 +15,8 @@ from striqt.analysis.lib.specs import Analysis
 from striqt.analysis.lib.util import pinned_array_as_cupy
 from striqt.waveform.fourier import ResamplerDesign
 
-from .. import captures, specs, util
+from ... import specs
+from .. import util
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -52,7 +53,7 @@ class AcquiredIQ(dataarrays.AcquiredIQ):
 
     info: specs.AcquisitionInfo
     extra_data: dict[str, typing.Any]
-    alias_func: captures.PathAliasFormatter | None
+    alias_func: specs.helpers.PathAliasFormatter | None
     source_spec: specs.Source
     resampler: ResamplerDesign
     aligner: register.AlignmentCaller | None
@@ -235,7 +236,7 @@ class HasCaptureType(typing.Protocol[_TC]):
         next: typing.Union[_TC, None] = None,
         *,
         correction: bool = True,
-        alias_func: captures.PathAliasFormatter | None = None,
+        alias_func: specs.helpers.PathAliasFormatter | None = None,
     ) -> AcquiredIQ: ...
 
     @property
@@ -456,13 +457,13 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
         next=None,
         *,
         correction=True,
-        alias_func: captures.PathAliasFormatter | None = None,
+        alias_func: specs.helpers.PathAliasFormatter | None = None,
     ):
         """arm a capture and enable the channel (if necessary), read the resulting IQ waveform.
 
         Optionally, calibration corrections can be applied, and the radio can be left ready for the next capture.
         """
-        from .. import iq_corrections
+        from .. import resampling
 
         if capture is None:
             capture = self.capture_spec
@@ -506,7 +507,7 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
             return iq
 
         with util.stopwatch('resampling filter', threshold=capture.duration / 2):
-            return iq_corrections.resampling_correction(iq, overwrite_x=True)
+            return resampling.resampling_correction(iq, overwrite_x=True)
 
     def _build_acquisition_info(self, time_ns: int | None) -> specs.AcquisitionInfo:
         return specs.AcquisitionInfo(source_id=self.id)
@@ -715,9 +716,9 @@ def design_capture_resampler(
     fixed_capture = specs.ResampledCapture.fromspec(capture)
     kws.setdefault('window', RESAMPLE_COLA_WINDOW)
 
-    from .. import iq_corrections
+    from .. import resampling
 
-    if iq_corrections.USE_OARESAMPLE:
+    if resampling.USE_OARESAMPLE:
         min_fft_size = MIN_OARESAMPLE_FFT_SIZE
     else:
         # this could probably be set to 1?
@@ -756,11 +757,11 @@ def _get_dsp_pad_size(
 ) -> tuple[int, int]:
     """returns the padding before and after a waveform to achieve an integral number of FFT windows"""
 
-    from .. import iq_corrections
+    from .. import resampling
 
     min_lag_pad = _get_aligner_pad_size(setup.base_clock_rate, capture, aligner)
 
-    if iq_corrections.USE_OARESAMPLE:
+    if resampling.USE_OARESAMPLE:
         oa_pad_low, oa_pad_high = _get_oaresample_pad(setup.base_clock_rate, capture)
         return (oa_pad_low, oa_pad_high + min_lag_pad)
     else:

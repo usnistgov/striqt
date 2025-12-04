@@ -4,7 +4,8 @@ import functools
 import time
 import typing
 
-from .. import specs, util
+from ... import specs
+from .. import util
 from . import base
 
 if typing.TYPE_CHECKING:

@@ -5,7 +5,8 @@ from __future__ import annotations
 import functools
 import typing
 
-from .. import specs, util
+from ... import specs
+from .. import util
 from striqt.analysis.lib import io
 
 from . import base
@@ -58,10 +59,10 @@ class TDMSFileSource(
         return (iq * float_dtype(scale)).view(dtype).copy()  # type: ignore
 
     def acquire(
-        self, capture=None, next_capture=None, *, correction=True, alias_func=None
+        self, capture=None, next=None, *, correction=True, alias_func=None
     ):
         iq = super().acquire(
-            capture, next_capture, correction=correction, alias_func=alias_func
+            capture, next, correction=correction, alias_func=alias_func
         )
         iq.info = self._file_info
         return iq
@@ -117,10 +118,10 @@ class FileSource(base.VirtualSourceBase[specs.FileSourceSpec, specs.FileCapture]
         return ret.copy()
 
     def acquire(
-        self, capture=None, next_capture=None, *, correction=True, alias_func=None
+        self, capture=None, next=None, *, correction=True, alias_func=None
     ):
         iq = super().acquire(
-            capture, next_capture, correction=correction, alias_func=alias_func
+            capture, next, correction=correction, alias_func=alias_func
         )
         iq.info = self._file_info
         return iq
@@ -220,10 +221,10 @@ class ZarrIQSource(base.VirtualSourceBase[specs.ZarrIQSourceSpec, specs.FileCapt
             return iq.astype(dtype)
 
     def acquire(
-        self, capture=None, next_capture=None, *, correction=True, alias_func=None
+        self, capture=None, next=None, *, correction=True, alias_func=None
     ):
         iq = super().acquire(
-            capture, next_capture, correction=correction, alias_func=alias_func
+            capture, next, correction=correction, alias_func=alias_func
         )
         iq.info = self._capture_info
         return iq
