@@ -42,7 +42,7 @@ def run(**kws):
         )
 
         with sensor.open_sensor(spec, yaml_path, except_handler) as ctx:
-            sweep_iter = sensor.SweepIterator(ctx.resources, always_yield=True)
+            sweep_iter = sensor.iterate_sweep(ctx.resources, always_yield=True)
             for _ in sweep_iter:
                 pass
 

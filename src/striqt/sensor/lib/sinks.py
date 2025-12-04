@@ -60,7 +60,9 @@ class SinkBase(typing.Generic[specs._TC]):
         finally:
             self._executor.__exit__(*exc_info)
 
-    def append(self, capture_result: datasets.DelayedDataset) -> 'xr.Dataset|datasets.DelayedDataset':
+    def append(
+        self, capture_result: datasets.DelayedDataset
+    ) -> 'xr.Dataset|datasets.DelayedDataset':
         if capture_result is None:
             return
 

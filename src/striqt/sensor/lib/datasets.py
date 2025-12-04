@@ -303,7 +303,9 @@ def analyze(
                 assert iq.capture is not None
 
         opts = msgspec.structs.replace(options, as_xarray='delayed')
-        opts = typing.cast(dataarrays.EvaluationOptions[typing.Literal['delayed']], opts)
+        opts = typing.cast(
+            dataarrays.EvaluationOptions[typing.Literal['delayed']], opts
+        )
         da_delayed = dataarrays.analyze_by_spec(
             iq, options.sweep_spec.analysis, iq.capture, opts
         )
@@ -316,7 +318,7 @@ def analyze(
 
     if not options.as_xarray:
         return da_delayed
-    
+
     assert isinstance(iq.capture, specs.ResampledCapture)
 
     ds_delayed = DelayedDataset(

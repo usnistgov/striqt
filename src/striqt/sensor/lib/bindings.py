@@ -75,7 +75,7 @@ class Schema(typing.Generic[_TS, _TP, _TC]):
 @dataclasses.dataclass(frozen=True)
 class SensorBinding(Sensor[_TS, _TP, _TC]):
     schema: Schema[_TS, _TP, _TC] = None  # type: ignore
-    sweep_spec: type['BoundSweep[_TS, _TP, _TC]'] = specs.Sweep  # type: ignore
+    sweep_spec: type[BoundSweep[_TS, _TP, _TC]] = specs.Sweep  # type: ignore
 
     def __post_init__(self):
         super().__post_init__()

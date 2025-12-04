@@ -122,7 +122,7 @@ class ConnectionManager(
 
     def open(
         self, func: typing.Callable[_P, _R], *args: _P.args, **kws: _P.kwargs
-    ) -> Call[[],_R]:
+    ) -> Call[[], _R]:
         def wrapper():
             obj = func(*args, **kws)
             self.enter_context(obj)  # type: ignore
@@ -132,7 +132,7 @@ class ConnectionManager(
 
     def get(
         self, func: typing.Callable[_P, _R], *args: _P.args, **kws: _P.kwargs
-    ) -> Call[_P,_R]:
+    ) -> Call[_P, _R]:
         return Call(func, *args, **kws).return_into(self._resources)
 
     def enter(self, ctx, name):
@@ -140,7 +140,7 @@ class ConnectionManager(
 
     def log_call(
         self, func: typing.Callable[_P, _R], *args: _P.args, **kws: _P.kwargs
-    ) -> Call[_P,_R]:
+    ) -> Call[_P, _R]:
         return Call(func, *args, **kws)
 
     @functools.cached_property
@@ -164,7 +164,12 @@ def _open_devices(
     """the source and any peripherals"""
 
     calls = {
-        'source': conn.open(binding.source, spec.source, analysis=spec.analysis, reuse_iq=spec.info.reuse_iq),
+        'source': conn.open(
+            binding.source,
+            spec.source,
+            analysis=spec.analysis,
+            reuse_iq=spec.info.reuse_iq,
+        ),
         'peripherals': conn.open(binding.peripherals, spec),
     }
 
@@ -191,7 +196,7 @@ def open_sensor(
     have been opened and set up as needed to run the specified sweep.
     """
 
-    from .sweeps import prepare_compute
+    from .execute import _prepare_compute
 
     formatter = captures.PathAliasFormatter(spec, spec_path=spec_path)
 
@@ -210,7 +215,7 @@ def open_sensor(
 
     try:
         calls = {
-            'compute': conn.log_call(prepare_compute, spec),
+            'compute': conn.log_call(_prepare_compute, spec),
             'sink': conn.open(sink_cls, spec, alias_func=formatter),
             'devices': util.Call(_open_devices, conn, bind, spec),
         }

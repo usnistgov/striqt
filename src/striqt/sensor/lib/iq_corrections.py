@@ -70,9 +70,7 @@ def _get_peak_power(iq: AcquiredIQ, xp=None):
     return unscaled_peak
 
 
-def resampling_correction(
-    iq_in: AcquiredIQ, overwrite_x=False, axis=1
-) -> AcquiredIQ:
+def resampling_correction(iq_in: AcquiredIQ, overwrite_x=False, axis=1) -> AcquiredIQ:
     """resample, filter, and correct according to specification in iq_in.
 
     Args:
@@ -205,5 +203,5 @@ def resampling_correction(
         aligned=iq_aligned,
         raw=iq_unaligned,
         capture=capture,
-        extra_data=iq_in.extra_data | extra_data
+        extra_data=iq_in.extra_data | extra_data,
     )

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+from collections import Counter
 import functools
 import numbers
 import string
 import typing
-from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
@@ -15,6 +15,20 @@ from msgspec import UNSET, UnsetType
 from striqt.analysis.lib.specs import convert_spec
 
 from . import specs, util
+
+
+def varied_capture_fields(captures: tuple[specs.ResampledCapture, ...], loops: tuple[specs.LoopSpec, ...]) -> list[str]:
+    """generate a list of capture fields with at least 2 values in the specified sweep"""
+
+    inner_values = (c.todict().values() for c in captures)
+    inner_counts = [len(Counter(v)) for v in zip(*inner_values)]
+    fields = captures[0].todict().keys()
+    inner_counts = dict(zip(fields, inner_counts))
+    outer_counts = {loop.field: len(loop.get_points()) for loop in loops}
+    totals = {
+        field: max(inner_counts[field], outer_counts.get(field, 0)) for field in fields
+    }
+    return [f for f, c in totals.items() if c > 1]
 
 
 @functools.lru_cache

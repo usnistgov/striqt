@@ -49,12 +49,13 @@ _TC = typing.TypeVar('_TC', bound=specs.ResampledCapture)
 @dataclasses.dataclass
 class AcquiredIQ(dataarrays.AcquiredIQ):
     """extra metadata needed for downstream analysis"""
+
     info: specs.AcquisitionInfo
     extra_data: dict[str, typing.Any]
-    alias_func: captures.PathAliasFormatter|None
+    alias_func: captures.PathAliasFormatter | None
     source_spec: specs.Source
     resampler: ResamplerDesign
-    aligner: register.AlignmentCaller|None
+    aligner: register.AlignmentCaller | None
 
 
 class ReceiveStreamError(IOError):
@@ -261,7 +262,7 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
         self.__setup__ = setup
         self._capture = None
         self._buffers = _ReceiveBuffers(self)
-        self._prev_iq: AcquiredIQ|None = None
+        self._prev_iq: AcquiredIQ | None = None
         self._reuse_iq = reuse_iq
 
         try:
@@ -485,7 +486,7 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
                 alias_func=alias_func,
                 source_spec=self.setup_spec,
                 resampler=self.get_resampler(),
-                aligner=self._aligner
+                aligner=self._aligner,
             )
         else:
             iq = dataclasses.replace(
@@ -494,7 +495,9 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
                 info=self._prev_iq.info.replace(start_time=None),
             )
 
-        if not self._reuse_iq and _reusable_acquisition(capture, next, self.setup_spec.base_clock_rate):
+        if not self._reuse_iq and _reusable_acquisition(
+            capture, next, self.setup_spec.base_clock_rate
+        ):
             self._prev_iq = iq
         else:
             self._prev_iq = None
@@ -955,7 +958,9 @@ def alloc_empty_iq(
 
 
 def _reusable_acquisition(
-    c1: specs.ResampledCapture | None, c2: specs.ResampledCapture | None, base_clock_rate
+    c1: specs.ResampledCapture | None,
+    c2: specs.ResampledCapture | None,
+    base_clock_rate,
 ):
     """return True if c2 is compatible with the raw and uncalibrated IQ acquired for c1"""
 

@@ -22,7 +22,8 @@ from textual.screen import Screen
 from textual.widgets import Button, DataTable, Footer, Label, ProgressBar, Static
 from textual.worker import Worker
 
-from . import io, resources, sweeps, util
+from . import execute, io, resources, util
+from .captures import varied_capture_fields
 
 if typing.TYPE_CHECKING:
     import psutil
@@ -197,7 +198,7 @@ class SweepHUDApp(App):
     def do_sweep(self):
         assert self.conns is not None
 
-        sweep_iter = sweeps.SweepIterator(self.conns.resources, always_yield=True)
+        sweep_iter = execute.iterate_sweep(self.conns.resources, always_yield=True)
         for _ in sweep_iter:
             self.refresh()
 
@@ -212,9 +213,8 @@ class SweepHUDApp(App):
             store_backend=kws['store_backend'],
         )
         self.conns = resources.open_sensor(spec, kws['yaml_path'])
-        self.display_fields = sweeps.varied_capture_fields(
-            self.conns.resources['sweep_spec']
-        )
+        spec = self.conns.resources['sweep_spec']
+        self.display_fields = varied_capture_fields(spec.captures, spec.loops)
         self.call_from_thread(self._show_ready)
         self.call_from_thread(self.do_sweep)
 
