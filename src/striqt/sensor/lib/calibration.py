@@ -18,9 +18,9 @@ if typing.TYPE_CHECKING:
     import xarray as _xr
     from . import bindings
 else:
-    _np = util.lazy_import('numpy')
-    _pd = util.lazy_import('pandas')
-    _xr = util.lazy_import('xarray')
+    _np = _util.lazy_import('numpy')
+    _pd = _util.lazy_import('pandas')
+    _xr = _util.lazy_import('xarray')
 
 
 _TC = typing.TypeVar('_TC', bound=_specs.SoapyCapture)
