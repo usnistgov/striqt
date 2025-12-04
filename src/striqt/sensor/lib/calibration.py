@@ -389,14 +389,17 @@ class YFactorSink(sinks.SinkBase):
         # dataset
         pass
 
-    def append(self, capture_data, capture):
-        if capture_data is None:
-            return
+    def append(self, capture_result):
+        ret = super().append(capture_result)
 
-        super().append(capture_data, capture)
+        assert isinstance(capture_result.extra_coords, specs.SoapyAcquisitionInfo)
 
-        if self.sweep_start_time is None:
-            self.sweep_start_time = float(capture_data.sweep_start_time[0])
+        sweep_start_time = capture_result.extra_coords.sweep_start_time
+
+        if self.sweep_start_time is None and sweep_start_time is not None:
+            self.sweep_start_time = float(sweep_start_time)
+
+        return ret
 
     def flush(self):
         data = self.pop()
@@ -495,6 +498,7 @@ def bind_manual_yfactor_calibration(
 
     class sweep_spec_cls(specs.CalibrationSweep, frozen=True, kw_only=True):
         calibration: specs.ManualYFactorPeripheral | None = None
+        info = specs.SweepInfo(reuse_iq=True)
 
         def loop_captures(self):
             return specs._expand_loops(self, nyquist_only=True)

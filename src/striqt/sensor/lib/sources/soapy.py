@@ -728,7 +728,7 @@ class SoapySourceBase(
             self._sweep_index = self.capture_spec._sweep_index
 
         return specs.SoapyAcquisitionInfo(
-            sweep_time=self._sweep_time,
+            sweep_start_time=self._sweep_time,
             start_time=ts,
             backend_sample_rate=self.get_resampler()['fs_sdr'],
             source_id=self.id,

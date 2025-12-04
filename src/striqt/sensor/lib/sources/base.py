@@ -231,7 +231,7 @@ class HasCaptureType(typing.Protocol[_TC]):
     def acquire(
         self,
         capture: _TC | None = None,
-        next_capture: typing.Union[_TC, None] = None,
+        next: typing.Union[_TC, None] = None,
         *,
         correction: bool = True,
         alias_func: captures.PathAliasFormatter | None = None,
@@ -252,7 +252,7 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
     _timeout: float = 10
     _sweep_time: 'pd.Timestamp | None' = None
 
-    def __init__(self, setup: _TS, *, analysis=None):
+    def __init__(self, setup: _TS, *, analysis=None, reuse_iq: bool = False):
         open_event = self._is_open = Event()  # first, to serve other threads
         _map_source(setup, self)
 
@@ -261,6 +261,8 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
         self.__setup__ = setup
         self._capture = None
         self._buffers = _ReceiveBuffers(self)
+        self._prev_iq: AcquiredIQ|None = None
+        self._reuse_iq = reuse_iq
 
         try:
             self._connect(setup)
@@ -341,7 +343,10 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
 
         capture = capture.replace(**capture_kws)
 
-        if not self.__setup__.gapless_rearm or capture != self._capture:
+        if capture == self._capture and self._capture is not None:
+            return self._capture
+
+        if not self.setup_spec.gapless_rearm or capture != self._capture:
             self._buffers.clear()
 
         self._capture = self._prepare_capture(capture) or capture
@@ -447,7 +452,7 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
     def acquire(
         self,
         capture=None,
-        next_capture=None,
+        next=None,
         *,
         correction=True,
         alias_func: captures.PathAliasFormatter | None = None,
@@ -463,24 +468,36 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
         else:
             capture = self.arm(capture)
 
-        samples, time_ns = self.read_iq()
+        if self._prev_iq is None:
+            samples, time_ns = self.read_iq()
 
-        if next_capture is not None and capture != next_capture:
-            self.arm(next_capture)
+            if next is not None and capture != next:
+                self.arm(next)
 
-        info = self._build_acquisition_info(time_ns)
+            info = self._build_acquisition_info(time_ns)
 
-        iq = AcquiredIQ(
-            raw=samples,
-            aligned=None,
-            capture=capture,
-            info=info,
-            extra_data={},
-            alias_func=alias_func,
-            source_spec=self.setup_spec,
-            resampler=self.get_resampler(),
-            aligner=self._aligner
-        )
+            iq = AcquiredIQ(
+                raw=samples,
+                aligned=None,
+                capture=capture,
+                info=info,
+                extra_data={},
+                alias_func=alias_func,
+                source_spec=self.setup_spec,
+                resampler=self.get_resampler(),
+                aligner=self._aligner
+            )
+        else:
+            iq = dataclasses.replace(
+                self._prev_iq,
+                capture=capture,
+                info=self._prev_iq.info.replace(start_time=None),
+            )
+
+        if not self._reuse_iq and _reusable_acquisition(capture, next, self.setup_spec.base_clock_rate):
+            self._prev_iq = iq
+        else:
+            self._prev_iq = None
 
         if not correction:
             return iq
@@ -512,7 +529,7 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
         """
 
         if self._capture is None:
-            raise RuntimeError('arm first to get capture spec')
+            raise AttributeError('arm to set the capture spec')
 
         return self._capture
 
@@ -935,3 +952,35 @@ def alloc_empty_iq(
             buffers.append(extra)
 
     return all_samples, (samples, buffers)
+
+
+def _reusable_acquisition(
+    c1: specs.ResampledCapture | None, c2: specs.ResampledCapture | None, base_clock_rate
+):
+    """return True if c2 is compatible with the raw and uncalibrated IQ acquired for c1"""
+
+    if c1 is None or c2 is None:
+        return False
+
+    fsb1 = design_capture_resampler(base_clock_rate, c1)['fs_sdr']
+    fsb2 = design_capture_resampler(base_clock_rate, c2)['fs_sdr']
+
+    if fsb1 != fsb2:
+        # the realized backend sample rates need to be the same
+        return False
+
+    downstream_kws = {
+        'host_resample': False,
+        'start_time': None,
+        'backend_sample_rate': None,
+    }
+
+    c1_compare = c1.replace(**downstream_kws)
+    c2_compare = c2.replace(
+        # ignore parameters that only affect downstream processing
+        analysis_bandwidth=c1.analysis_bandwidth,
+        sample_rate=c1.sample_rate,
+        **downstream_kws,
+    )
+
+    return c1_compare == c2_compare

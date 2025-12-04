@@ -22,14 +22,7 @@ else:
 USE_OARESAMPLE = False
 
 
-@util.lru_cache()
-def _get_voltage_scale(
-    capture_spec: specs.ResampledCapture,
-    source_spec: specs.Source,
-    *,
-    alias_func: captures.PathAliasFormatter | None = None,
-    xp=None,
-) -> tuple['ArrayLike', 'ArrayLike']:
+def _get_voltage_scale(iq: AcquiredIQ, xp=None) -> tuple['ArrayLike', 'ArrayLike']:
     """compute the scaling factor needed to scale each of N ports of an IQ waveform
 
     Returns:
@@ -37,19 +30,19 @@ def _get_voltage_scale(
     """
     xp = xp or np
 
-    if isinstance(source_spec, specs.SoapySource):
-        assert isinstance(capture_spec, specs.SoapyCapture)
+    if isinstance(iq.source_spec, specs.SoapySource):
+        assert isinstance(iq.capture, specs.SoapyCapture)
         power_scale = calibration.lookup_power_correction(
-            source_spec.calibration,
-            capture_spec,
-            source_spec.base_clock_rate,
-            alias_func=alias_func,
+            iq.source_spec.calibration,
+            iq.capture,
+            iq.source_spec.base_clock_rate,
+            alias_func=iq.alias_func,
             xp=xp,
         )
     else:
         power_scale = None
 
-    transport_dtype = source_spec.transport_dtype
+    transport_dtype = iq.source_spec.transport_dtype
     if transport_dtype == 'int16':
         adc_scale = 1.0 / float(np.iinfo(transport_dtype).max)
     else:
@@ -70,9 +63,7 @@ def _get_peak_power(iq: AcquiredIQ, xp=None):
     xp = iqwaveform.util.array_namespace(iq.raw)
     assert isinstance(iq.capture, specs.ResampledCapture)
 
-    _, prescale = _get_voltage_scale(
-        iq.capture, iq.source_spec, alias_func=iq.alias_func, xp=xp
-    )
+    _, prescale = _get_voltage_scale(iq, xp=xp)
 
     peak_counts = xp.abs(iq.raw).max(axis=-1)
     unscaled_peak = 20 * xp.log10(peak_counts * prescale) - 3
@@ -102,9 +93,7 @@ def resampling_correction(
     else:
         capture = iq_in.capture
 
-    vscale, _ = _get_voltage_scale(
-        capture, source_spec, alias_func=iq_in.alias_func, xp=xp
-    )
+    vscale, _ = _get_voltage_scale(iq_in, xp=xp)
 
     extra_data = {}
 

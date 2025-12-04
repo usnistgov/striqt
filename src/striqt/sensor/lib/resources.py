@@ -164,7 +164,7 @@ def _open_devices(
     """the source and any peripherals"""
 
     calls = {
-        'source': conn.open(binding.source, spec.source, analysis=spec.analysis),
+        'source': conn.open(binding.source, spec.source, analysis=spec.analysis, reuse_iq=spec.info.reuse_iq),
         'peripherals': conn.open(binding.peripherals, spec),
     }
 

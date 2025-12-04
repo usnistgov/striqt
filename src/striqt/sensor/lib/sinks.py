@@ -60,14 +60,13 @@ class SinkBase(typing.Generic[specs._TC]):
         finally:
             self._executor.__exit__(*exc_info)
 
-    def append(
-        self, capture_result: datasets.DelayedDataset | None, capture: specs._TC
-    ):
+    def append(self, capture_result: datasets.DelayedDataset) -> 'xr.Dataset|datasets.DelayedDataset':
         if capture_result is None:
             return
 
         ds = datasets.from_delayed(capture_result)
         self._pending_data.append(ds)
+        return ds
 
     def open(self):
         raise NotImplementedError
@@ -96,8 +95,9 @@ class NoSink(SinkBase):
         ):
             util.get_logger('sink').info(f'done')
 
-    def append(self, capture_result, capture):
+    def append(self, capture_result) -> datasets.DelayedDataset:
         self.captures_elapsed += 1
+        return capture_result
 
     def wait(self):
         pass
@@ -132,14 +132,16 @@ class ZarrSinkBase(SinkBase[specs._TC]):
 class ZarrCaptureSink(ZarrSinkBase[specs._TC]):
     """concatenates the data from each capture and dumps to a zarr data store"""
 
-    def append(self, capture_result, capture: specs._TC):
-        super().append(capture_result, capture)
+    def append(self, capture_result: datasets.DelayedDataset):
+        ret = super().append(capture_result)
 
         if len(self._pending_data) == self._group_sizes[0]:
             self.flush()
             self._group_sizes.pop(0)
         else:
             util.get_logger('sink').debug('queued')
+
+        return ret
 
     def flush(self):
         super().flush()
@@ -186,12 +188,13 @@ class SpectrogramTimeAppender(ZarrSinkBase):
 
         super().__init__(sweep_spec, alias_func, force=force)
 
-    def append(self, capture_result, capture: specs.ResampledCapture):
-        super().append(capture_result, capture)
+    def append(self, capture_result):
+        ret = super().append(capture_result)
 
         if len(self._pending_data) == self._group_sizes[0]:
             self.flush()
             self._group_sizes.pop(0)
+        return ret
 
     def flush(self):
         self.wait()

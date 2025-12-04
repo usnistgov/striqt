@@ -632,7 +632,7 @@ class SoapyAcquisitionInfo(AcquisitionInfo, kw_only=True, frozen=True):
     """extra coordinate information returned from an acquisition"""
 
     delay: typing.Optional[DelayType] = None
-    sweep_time: SweepStartTimeType | None
+    sweep_start_time: SweepStartTimeType | None
     start_time: StartTimeType | None
     backend_sample_rate: BackendSampleRateType
     source_id: SourceIDType = ''

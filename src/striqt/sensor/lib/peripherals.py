@@ -9,6 +9,19 @@ _TC = typing.TypeVar('_TC', bound=specs.ResampledCapture, contravariant=True)
 _TP = typing.TypeVar('_TP', bound=specs.Peripherals)
 
 
+def acquire_arm(peripherals: PeripheralsBase, this: specs.ResampledCapture|None, next_: specs.ResampledCapture|None) -> dict[str, typing.Any]:
+    """acquire and then arm for a sweep, presuming that the peripheral was already armed"""
+    result = peripherals.acquire(this)
+    if next_ is not None:
+        peripherals.arm(next_)
+    if result is None:
+        return {}
+    elif not isinstance(result, dict):
+        raise TypeError(f'peripheral acquire() returned {type(result)!r}, not dict')
+    else:
+        return result
+
+
 class PeripheralsProtocol(typing.Protocol[_TC]):
     """a peripherals extension class must implement these"""
 

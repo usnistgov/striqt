@@ -8,7 +8,7 @@ import typing
 
 import msgspec
 
-from striqt.analysis import dataarrays
+from striqt.analysis import dataarrays, Capture
 from striqt.analysis.lib.dataarrays import CAPTURE_DIM, PORT_DIM  # noqa: F401
 from striqt.analysis.lib.util import is_cupy_array
 
@@ -257,42 +257,30 @@ def build_capture_coords(
 
 
 @typing.overload
-def analyze_capture(
+def analyze(
     iq: sources.AcquiredIQ,
-    source: sources.SourceBase,
-    capture: specs.ResampledCapture,
     options: EvaluationOptions[typing.Literal[True]],
-    alias_func: captures.PathAliasFormatter | None = None,
 ) -> 'xr.Dataset': ...
 
 
 @typing.overload
-def analyze_capture(
+def analyze(
     iq: sources.AcquiredIQ,
-    source: sources.SourceBase,
-    capture: specs.ResampledCapture,
     options: EvaluationOptions[typing.Literal['delayed']],
-    alias_func: captures.PathAliasFormatter | None = None,
 ) -> DelayedDataset: ...
 
 
 @typing.overload
-def analyze_capture(
+def analyze(
     iq: sources.AcquiredIQ,
-    source: sources.SourceBase,
-    capture: specs.ResampledCapture,
     options: EvaluationOptions[typing.Literal[False]],
-    alias_func: captures.PathAliasFormatter | None = None,
 ) -> 'dict[str, ArrayType]': ...
 
 
 @util.stopwatch('', 'analysis')
-def analyze_capture(
+def analyze(
     iq: sources.AcquiredIQ,
-    source: sources.SourceBase,
-    capture: specs.ResampledCapture,
     options: EvaluationOptions,
-    alias_func: captures.PathAliasFormatter | None = None,
 ) -> 'dict[str, ArrayType] | xr.Dataset | DelayedDataset':
     """convenience function to analyze a waveform from a specification.
 
@@ -306,15 +294,18 @@ def analyze_capture(
 
     overwrite_x = not options.sweep_spec.info.reuse_iq
 
-    with options.registry.cache_context(capture, options.cache_callback):
+    assert iq.capture is not None
+
+    with options.registry.cache_context(iq.capture, options.cache_callback):
         if options.correction:
             with util.stopwatch('resampling filter', logger_level=logging.DEBUG):
                 iq = iq_corrections.resampling_correction(iq, overwrite_x=overwrite_x)
+                assert iq.capture is not None
 
-        c = msgspec.structs.replace(options, as_xarray='delayed')
-        c = typing.cast(dataarrays.EvaluationOptions[typing.Literal['delayed']], c)
+        opts = msgspec.structs.replace(options, as_xarray='delayed')
+        opts = typing.cast(dataarrays.EvaluationOptions[typing.Literal['delayed']], opts)
         da_delayed = dataarrays.analyze_by_spec(
-            iq, options.sweep_spec.analysis, capture, c
+            iq, options.sweep_spec.analysis, iq.capture, opts
         )
 
     if 'unscaled_iq_peak' in iq.extra_data:
@@ -325,10 +316,12 @@ def analyze_capture(
 
     if not options.as_xarray:
         return da_delayed
+    
+    assert isinstance(iq.capture, specs.ResampledCapture)
 
     ds_delayed = DelayedDataset(
         delayed=da_delayed,
-        capture=capture,
+        capture=iq.capture,
         config=options,
         extra_coords=iq.info,
         extra_data=iq.extra_data,
