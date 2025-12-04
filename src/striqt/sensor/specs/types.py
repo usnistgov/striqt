@@ -94,12 +94,12 @@ SinkClass = Annotated[
 SNR = Annotated[float, Meta('SNR with added noise ', 'dB')]
 SourceID = Annotated[str, Meta('Source UUID string')]
 StartTime = Annotated[
-    '_pd.Timestamp', Meta('Acquisition start time of the first capture')
+    'pd.Timestamp', Meta('Acquisition start time of the first capture')
 ]
 StoreFormat = Annotated[
     Literal['zip', 'directory'], Meta('serialization output format of the sink')
 ]
-SweepStartTime = Annotated['_pd.Timestamp', Meta('Capture acquisition start time')]
+SweepStartTime = Annotated['pd.Timestamp', Meta('Capture acquisition start time')]
 SyncSource = Annotated[
     str, Meta('name of a registered waveform alignment function'),
 ]
