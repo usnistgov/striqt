@@ -85,7 +85,8 @@ def _acquire_both(
         }
     )
 
-    iq, ext_data = results.values()
+    iq = results['source']
+    ext_data = results['peripherals']
     assert isinstance(iq, sources.AcquiredIQ)
 
     return dataclasses.replace(iq, extra_data=iq.extra_data | ext_data)
