@@ -525,47 +525,47 @@ class HardwareTimeSync:
         return time_to_set_ns
 
 
-def set_gain(source: SoapySourceBase, capture: specs.SoapyCapture, ports_changed: bool):
-    splits = specs.helpers.pairwise_by_port(capture, source._capture, ports_changed)
+# def set_gain(source: SoapySourceBase, capture: specs.SoapyCapture, ports_changed: bool):
+#     splits = specs.helpers.pairwise_by_port(capture, source._capture, ports_changed)
 
-    for new, old in splits:
-        if old is None or new.gain != old.gain:
-            source._device.setGain(SoapySDR.SOAPY_SDR_RX, new.port, new.gain)
-
-
-def set_center_frequency(
-    source: SoapySourceBase, capture: specs.SoapyCapture, ports_changed: bool
-):
-    def backend_fc(c: specs.SoapyCapture|None) -> float|None:
-        if c is None:
-            return None
-        return c.center_frequency - source.get_resampler(c)['lo_offset']
-
-    splits = specs.helpers.pairwise_by_port(capture, source._capture, ports_changed)
-
-    for new, old in splits:
-        new_fc = backend_fc(new)
-        if new_fc != backend_fc(old):
-            source._device.setFrequency(SoapySDR.SOAPY_SDR_RX, new.port, new_fc)
+#     for new, old in splits:
+#         if old is None or new.gain != old.gain:
+#             source._device.setGain(SoapySDR.SOAPY_SDR_RX, new.port, new.gain)
 
 
-def set_sample_rate(source: SoapySourceBase, capture: specs.SoapyCapture):
-    new_fs = source.get_resampler(capture)['fs_sdr']
+# def set_center_frequency(
+#     source: SoapySourceBase, capture: specs.SoapyCapture, ports_changed: bool
+# ):
+#     def backend_fc(c: specs.SoapyCapture|None) -> float|None:
+#         if c is None:
+#             return None
+#         return c.center_frequency - source.get_resampler(c)['lo_offset']
 
-    if source._capture is None:
-        old_fs = None
-    else:
-        old_fs = source.get_resampler()['fs_sdr']
+#     splits = specs.helpers.pairwise_by_port(capture, source._capture, ports_changed)
 
-    if new_fs == old_fs:
-        return
+#     for new, old in splits:
+#         new_fc = backend_fc(new)
+#         if new_fc != backend_fc(old):
+#             source._device.setFrequency(SoapySDR.SOAPY_SDR_RX, new.port, new_fc)
 
-    capture_per_port = specs.helpers.split_capture_ports(capture)
-    if source.setup_spec.shared_rx_sample_clock:
-        capture_per_port = capture_per_port[:1]
 
-    for c in capture_per_port:
-        source._device.setSampleRate(SoapySDR.SOAPY_SDR_RX, c.port, new_fs)
+# def set_sample_rate(source: SoapySourceBase, capture: specs.SoapyCapture):
+#     new_fs = source.get_resampler(capture)['fs_sdr']
+
+#     if source._capture is None:
+#         old_fs = None
+#     else:
+#         old_fs = source.get_resampler()['fs_sdr']
+
+#     if new_fs == old_fs:
+#         return
+
+#     capture_per_port = specs.helpers.split_capture_ports(capture)
+#     if source.setup_spec.shared_rx_sample_clock:
+#         capture_per_port = capture_per_port[:1]
+
+#     for c in capture_per_port:
+#         source._device.setSampleRate(SoapySDR.SOAPY_SDR_RX, c.port, new_fs)
 
 
 def device_time_source(spec: specs.SoapySource):
@@ -661,10 +661,14 @@ class SoapySourceBase(
         if self._capture is None or ports_changed:
             self._rx_stream.set_ports(self._device, capture.port)
 
+        rs = self.get_resampler(capture)
+
         # gain before center frequency to accommodate attenuator settling time
-        set_gain(self, capture, ports_changed)
-        set_center_frequency(self, capture, ports_changed)
-        set_sample_rate(self, capture)
+        for c in specs.helpers.split_capture_ports(capture):
+            freq = c.center_frequency - rs['lo_offset']
+            self._device.setGain(SoapySDR.SOAPY_SDR_RX, c.port, c.gain)
+            self._device.setFrequency(SoapySDR.SOAPY_SDR_RX, c.port, freq)
+            self._device.setSampleRate(SoapySDR.SOAPY_SDR_RX, c.port, rs['fs_sdr'])
 
     def _read_stream(
         self,
