@@ -67,7 +67,7 @@ def _get_voltage_scale(iq: AcquiredIQ, xp=None) -> tuple['ArrayLike', 'ArrayLike
 
 def _get_peak_power(iq: AcquiredIQ, xp=None):
     xp = iqwaveform.util.array_namespace(iq.raw)
-    assert isinstance(iq.capture, specs.ResampledCapture)
+    assert isinstance(iq.capture, specs.CaptureResampled)
 
     _, prescale = _get_voltage_scale(iq, xp=xp)
 
@@ -92,7 +92,7 @@ def resampling_correction(iq_in: AcquiredIQ, overwrite_x=False, axis=1) -> Acqui
     source_spec = iq_in.source_spec
     xp = iqwaveform.util.array_namespace(iq)
 
-    if not isinstance(iq_in.capture, specs.ResampledCapture):
+    if not isinstance(iq_in.capture, specs.CaptureResampled):
         raise TypeError('iq.capture must be a capture specification')
     else:
         capture = iq_in.capture

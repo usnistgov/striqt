@@ -11,7 +11,7 @@ from . import sinks
 from .. import specs
 from ..specs import _TC, _TS, _TP
 
-_TC2 = typing.TypeVar('_TC2', bound=specs.ResampledCapture)
+_TC2 = typing.TypeVar('_TC2', bound=specs.CaptureResampled)
 _TP2 = typing.TypeVar('_TP2', bound=specs.Peripherals)
 _TS2 = typing.TypeVar('_TS2', bound=specs.Source)
 
@@ -65,7 +65,7 @@ class Schema(typing.Generic[_TS, _TP, _TC]):
 
     def __post_init__(self):
         assert issubclass(self.source, specs.Source)
-        assert issubclass(self.capture, specs.ResampledCapture)
+        assert issubclass(self.capture, specs.CaptureResampled)
         assert issubclass(self.peripherals, specs.Peripherals)
 
 

@@ -36,7 +36,7 @@ def _check_fields(cls: type[specs.SpecBase], names: tuple[str, ...], new_instanc
         raise TypeError(f'invalid capture fields {extra!r} specified in loops')
 
 
-@functools.lru_cache
+@util.lru_cache()
 def pairwise_by_port(
     c1: _TC, c2: _TC | None, is_new: bool
 ) -> list[tuple[_TC, _TC| None]]:
@@ -116,7 +116,7 @@ def varied_capture_fields(
     return [f for f, c in totals.items() if c > 1]
 
 
-@functools.lru_cache
+@util.lru_cache()
 def get_capture_type(sweep_cls: type[specs.Sweep]) -> type[specs.ResampledCapture]:
     captures_type = typing.get_type_hints(sweep_cls)['captures']
     return typing.get_args(captures_type)[0]

@@ -61,7 +61,7 @@ else:
 _StriqtLogger('sweep')
 _StriqtLogger('source')
 _StriqtLogger('sink')
-_StriqtLogger('ext')
+_StriqtLogger('periph')
 
 _concurrency_count = 0
 _handling_tracebacks = False
@@ -602,7 +602,7 @@ class DebugOnException:
 
 
 def log_verbosity(verbose: int = 0):
-    names = ('sweep', 'source', 'analysis', 'sink', 'ext')
+    names = ('sweep', 'source', 'analysis', 'sink', 'periph')
     if verbose == 0:
         show_messages(logging.INFO, logger_names=names)
     elif verbose == 1:

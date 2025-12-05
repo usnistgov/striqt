@@ -602,7 +602,7 @@ class SoapySourceBase(
             self._rx_stream.close(self._device)
         finally:
             self._device.close()
-        util.get_logger('source').info('closed soapy radio')
+        util.get_logger('source').info('closed')
         super().close()
 
     @util.stopwatch('open radio', 'source', threshold=1)

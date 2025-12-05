@@ -15,7 +15,7 @@ else:
     np = util.lazy_import('numpy')
 
 _TS = typing.TypeVar('_TS', bound=specs.NoSource)
-_TC = typing.TypeVar('_TC', bound=specs.ResampledCapture)
+_TC = typing.TypeVar('_TC', bound=specs.CaptureResampled)
 
 
 class NoSource(_base.SourceBase[_TS, _TC]):

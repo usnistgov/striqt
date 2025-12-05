@@ -44,7 +44,7 @@ FILTER_DOMAIN = 'time'
 
 
 _TS = typing.TypeVar('_TS', bound=specs.Source)
-_TC = typing.TypeVar('_TC', bound=specs.ResampledCapture)
+_TC = typing.TypeVar('_TC', bound=specs.CaptureResampled)
 
 
 @dataclasses.dataclass
@@ -113,7 +113,7 @@ class _ReceiveBuffers:
         samples: 'np.ndarray',
         sample_start_ns,
         unused_sample_count: int,
-        capture: specs.ResampledCapture,
+        capture: specs.CaptureResampled,
     ):
         """stash data needed to carry over extra samples into the next capture"""
         carryover_count = unused_sample_count
@@ -166,7 +166,7 @@ def _cast_iq(
 class BaseSourceInfo(specs.SpecBase, kw_only=True, frozen=True, cache_hash=True):
     num_rx_ports: int | None
 
-    def to_capture_cls(self, base_cls: type[_TC] = specs.ResampledCapture) -> type[_TC]:
+    def to_capture_cls(self, base_cls: type[_TC] = specs.CaptureResampled) -> type[_TC]:
         return base_cls
 
     def to_setup_cls(self, base_cls: type[_TS] = specs.Source) -> type[_TS]:
@@ -227,7 +227,7 @@ class HasCaptureType(typing.Protocol[_TC]):
     def arm(
         self,
         capture: _TC,
-        **capture_kws: 'Unpack[specs._ResampledCaptureKeywords]',
+        **capture_kws: 'Unpack[specs._CaptureResampledKeywords]',
     ) -> _TC: ...
 
     def acquire(
@@ -643,7 +643,7 @@ def find_trigger_holdoff(
 @util.lru_cache(30000)
 def _design_capture_resampler(
     base_clock_rate: float | None,
-    capture: specs.ResampledCapture,
+    capture: specs.CaptureResampled,
     bw_lo=0.25e6,
     min_oversampling=1.1,
     window=RESAMPLE_COLA_WINDOW,
@@ -710,10 +710,10 @@ def _design_capture_resampler(
 
 @functools.wraps(_design_capture_resampler)
 def design_capture_resampler(
-    base_clock_rate: float | None, capture: specs.ResampledCapture, *args, **kws
+    base_clock_rate: float | None, capture: specs.CaptureResampled, *args, **kws
 ) -> ResamplerDesign:
     # cast the struct in case it's a subclass
-    fixed_capture = specs.ResampledCapture.fromspec(capture)
+    fixed_capture = specs.CaptureResampled.fromspec(capture)
     kws.setdefault('window', RESAMPLE_COLA_WINDOW)
 
     from .. import resampling
@@ -734,7 +734,7 @@ def design_capture_resampler(
 
 
 def needs_resample(
-    analysis_filter: ResamplerDesign, capture: specs.ResampledCapture
+    analysis_filter: ResamplerDesign, capture: specs.CaptureResampled
 ) -> bool:
     """determine whether an STFT will be needed to filter or resample"""
 
@@ -742,7 +742,7 @@ def needs_resample(
     return is_resample and capture.host_resample
 
 
-def _get_filter_pad(capture: specs.ResampledCapture):
+def _get_filter_pad(capture: specs.CaptureResampled):
     if np.isfinite(capture.analysis_bandwidth):
         return FILTER_SIZE // 2 + 1
     else:
@@ -752,7 +752,7 @@ def _get_filter_pad(capture: specs.ResampledCapture):
 @util.lru_cache(30000)
 def _get_dsp_pad_size(
     setup: specs.Source,
-    capture: specs.ResampledCapture,
+    capture: specs.CaptureResampled,
     aligner: register.AlignmentCaller | None = None,
 ) -> tuple[int, int]:
     """returns the padding before and after a waveform to achieve an integral number of FFT windows"""
@@ -789,7 +789,7 @@ def _get_dsp_pad_size(
 
 def _get_aligner_pad_size(
     base_clock_rate: float | None,
-    capture: specs.ResampledCapture,
+    capture: specs.CaptureResampled,
     aligner: register.AlignmentCaller | None = None,
 ) -> int:
     if aligner is None:
@@ -814,7 +814,7 @@ def _get_next_fast_len(n) -> int:
     return size
 
 
-def _get_oaresample_pad(base_clock_rate: float | None, capture: specs.ResampledCapture):
+def _get_oaresample_pad(base_clock_rate: float | None, capture: specs.CaptureResampled):
     resampler_design = design_capture_resampler(base_clock_rate, capture)
 
     nfft = resampler_design['nfft']
@@ -842,7 +842,7 @@ def _get_oaresample_pad(base_clock_rate: float | None, capture: specs.ResampledC
 @util.lru_cache(30000)
 def _cached_channel_read_buffer_count(
     setup: specs.Source,
-    capture: specs.ResampledCapture,
+    capture: specs.CaptureResampled,
     *,
     include_holdoff: bool = False,
     aligner: register.AlignmentCaller | None = None,
@@ -893,7 +893,7 @@ def get_channel_read_buffer_count(source: SourceBase, include_holdoff=False) -> 
 )
 def alloc_empty_iq(
     source: SourceBase,
-    capture: specs.ResampledCapture,
+    capture: specs.CaptureResampled,
     prior: typing.Optional['np.ndarray'] = None,
 ) -> 'tuple[np.ndarray, tuple[np.ndarray, list[np.ndarray]]]':
     """allocate a buffer of IQ return values.
@@ -959,8 +959,8 @@ def alloc_empty_iq(
 
 
 def _is_reusable(
-    c1: specs.ResampledCapture | None,
-    c2: specs.ResampledCapture | None,
+    c1: specs.CaptureResampled | None,
+    c2: specs.CaptureResampled | None,
     base_clock_rate,
 ):
     """return True if c2 is compatible with the raw and uncalibrated IQ acquired for c1"""
