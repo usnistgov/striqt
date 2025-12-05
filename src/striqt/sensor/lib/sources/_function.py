@@ -16,7 +16,7 @@ else:
 
 
 _TS = typing.TypeVar('_TS', bound=specs.FunctionSourceSpec)
-_TC = typing.TypeVar('_TC', bound=specs.CaptureResampled)
+_TC = typing.TypeVar('_TC', bound=specs.ResampledCapture)
 
 
 def _lo_shift_tone(inds, source: _base.SourceBase, xp, lo_offset=None):
