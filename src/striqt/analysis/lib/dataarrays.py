@@ -26,7 +26,7 @@ else:
     array_api_compat = util.lazy_import('array_api_compat')
 
 
-AnalysisReturnFlag = typing.Union[bool, typing.Literal['delayed']]
+AnalysisReturnFlag = typing.Literal[True, False, 'delayed']
 _TA = typing.TypeVar('_TA', bound=AnalysisReturnFlag)
 
 

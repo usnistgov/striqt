@@ -76,6 +76,7 @@ ModuleName = Annotated[
     Meta('name of the extension module that calls bind_sensor'),
 ]
 NoiseDiodeEnabled = Annotated[bool, Meta(standard_name='Noise diode enabled')]
+OnOverflowType = Literal['ignore', 'except', 'log']
 PortScalar = Annotated[int, Meta('Input port index', ge=0)]
 Port = Annotated[
     Union[PortScalar, tuple[PortScalar, ...]],

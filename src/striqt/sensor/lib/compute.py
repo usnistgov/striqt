@@ -205,7 +205,7 @@ def build_dataset_attrs(sweep: specs.Sweep):
         'source',
     ]
 
-    attrs = {}
+    attrs: dict[str, typing.Any] = {}
 
     if isinstance(sweep.description, str):
         attrs['description'] = sweep.description

@@ -351,8 +351,6 @@ def lookup_system_noise_power(
 
 
 class YFactorSink(_sinks.SinkBase):
-    sweep_spec: _specs.CalibrationSweep
-
     _DROP_FIELDS = (
         'sweep_start_time',
         'start_time',
@@ -373,7 +371,7 @@ class YFactorSink(_sinks.SinkBase):
         else:
             return None
 
-    def open(self):
+    def open(self) -> None:
         path = self._get_path()
 
         if path is not None and not self.force and Path(path).exists():

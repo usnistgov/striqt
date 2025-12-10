@@ -166,12 +166,6 @@ def _cast_iq(
 class BaseSourceInfo(specs.SpecBase, kw_only=True, frozen=True, cache_hash=True):
     num_rx_ports: int | None
 
-    def to_capture_cls(self, base_cls: type[_TC] = specs.ResampledCapture) -> type[_TC]:
-        return base_cls
-
-    def to_setup_cls(self, base_cls: type[_TS] = specs.Source) -> type[_TS]:
-        return base_cls
-
     def min_port_count(self, tuple_size: int):
         if self.num_rx_ports is None:
             return tuple_size
@@ -519,7 +513,7 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
         count,
         timeout_sec,
         *,
-        on_overflow: OnOverflowType = 'except',
+        on_overflow: specs.types.OnOverflowType = 'except',
     ) -> tuple[int, int]:
         """to be implemented in subclasses"""
         raise NotImplementedError
@@ -601,7 +595,7 @@ class VirtualSourceBase(SourceBase[_TS, _TC]):
 
     def get_waveform(
         self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
-    ):
+    ) -> ArrayType:
         raise NotImplementedError
 
     def _sync_time_source(self):
@@ -640,14 +634,18 @@ def find_trigger_holdoff(
     return holdoff
 
 
+class _ResamplerKws(typing.TypedDict, total=False):
+    bw_lo: float
+    min_oversampling: float
+    window: str
+    min_fft_size: int
+
+
 @util.lru_cache(30000)
 def _design_capture_resampler(
     base_clock_rate: float | None,
     capture: specs.ResampledCapture,
-    bw_lo=0.25e6,
-    min_oversampling=1.1,
-    window=RESAMPLE_COLA_WINDOW,
-    min_fft_size=MIN_OARESAMPLE_FFT_SIZE,
+    **kwargs: Unpack[_ResamplerKws],
 ) -> ResamplerDesign:
     """design a filter specified by the capture for a radio with the specified MCR.
 
@@ -682,15 +680,12 @@ def _design_capture_resampler(
             fs_base=mcr,
             fs_target=capture.sample_rate,
             bw=capture.analysis_bandwidth,
-            bw_lo=bw_lo,
             shift=lo_shift,
-            min_fft_size=min_fft_size,
-            min_oversampling=min_oversampling,
-            window=window,
             fs_sdr=capture.backend_sample_rate,
+            **kwargs
         )
 
-        design['window'] = window
+        design['window'] = kwargs['window']
 
         return design
 
@@ -710,25 +705,28 @@ def _design_capture_resampler(
 
 @functools.wraps(_design_capture_resampler)
 def design_capture_resampler(
-    base_clock_rate: float | None, capture: specs.ResampledCapture, *args, **kws
+    base_clock_rate: float | None, capture: specs.ResampledCapture, **kws: Unpack[_ResamplerKws]
 ) -> ResamplerDesign:
     # cast the struct in case it's a subclass
     fixed_capture = specs.ResampledCapture.fromspec(capture)
-    kws.setdefault('window', RESAMPLE_COLA_WINDOW)
+    kws = _ResamplerKws(
+        bw_lo=0.25e6,
+        min_oversampling=1.1,
+        window=RESAMPLE_COLA_WINDOW,
+        min_fft_size=MIN_OARESAMPLE_FFT_SIZE,
+    )
 
     from .. import resampling
 
     if resampling.USE_OARESAMPLE:
-        min_fft_size = MIN_OARESAMPLE_FFT_SIZE
+        kws['min_fft_size'] = MIN_OARESAMPLE_FFT_SIZE
     else:
         # this could probably be set to 1?
-        min_fft_size = 256
+        kws['min_fft_size'] = 256
 
     return _design_capture_resampler(
         base_clock_rate,
         fixed_capture,
-        min_fft_size=min_fft_size,
-        *args,
         **kws,
     )
 

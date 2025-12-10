@@ -54,7 +54,7 @@ def pairwise_by_port(
 
 
 @util.lru_cache()
-def loop_captures(sweep: specs.Sweep[_TS, _TP, _TC]) -> tuple[_TC, ...]:
+def loop_captures(sweep: specs.Sweep[typing.Any, typing.Any, _TC]) -> tuple[_TC, ...]:
     """evaluate the loop specification, and flatten into one list of loops"""
 
     loop_fields = tuple([loop.field for loop in sweep.loops])

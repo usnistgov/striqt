@@ -20,7 +20,7 @@ class SinkBase(_typing.Generic[_specs._TC]):
 
     def __init__(
         self,
-        sweep_spec: _specs.Sweep[_specs._TS, _specs._TP, _specs._TC],
+        sweep_spec: _specs.Sweep[_typing.Any, _typing.Any, _specs._TC],
         alias_func: _specs.helpers.PathAliasFormatter | None = None,
         *,
         force: bool = False,
@@ -75,7 +75,7 @@ class SinkBase(_typing.Generic[_specs._TC]):
         self._pending_data.append(ds)
         return ds
 
-    def open(self):
+    def open(self) -> None:
         raise NotImplementedError
 
     def flush(self):
@@ -110,7 +110,7 @@ class NoSink(SinkBase):
         pass
 
 
-class ZarrSinkBase(SinkBase[_specs._TC]):
+class ZarrSinkBase(SinkBase):
     def open(self):
         _util.safe_import('xarray')
         self.store = _io.open_store(
@@ -136,7 +136,7 @@ class ZarrSinkBase(SinkBase[_specs._TC]):
             return self.store.root
 
 
-class ZarrCaptureSink(ZarrSinkBase[_specs._TC]):
+class ZarrCaptureSink(ZarrSinkBase):
     """concatenates the data from each capture and dumps to a zarr data store"""
 
     def append(self, capture_result: _compute.DelayedDataset):

@@ -57,11 +57,6 @@ class TestSourceBase(_base.VirtualSourceBase[_TS, _TC]):
             buffers, offset, count, timeout_sec=timeout_sec, on_overflow=on_overflow
         )
 
-    def get_waveform(
-        self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
-    ):
-        raise NotImplementedError
-
     def _sync_time_source(self):
         self._sync_time_ns = round(1_000_000_000 * self._samples_elapsed)
 

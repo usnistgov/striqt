@@ -106,7 +106,7 @@ class FileSource(_base.VirtualSourceBase[specs.FileSourceSpec, specs.FileCapture
             self._file_stream.seek(0)
 
     def close(self):
-        if self.is_open:
+        if self.is_open():
             self._file_stream.close()
 
     def get_waveform(
@@ -181,7 +181,7 @@ class ZarrIQSource(_base.VirtualSourceBase[specs.ZarrIQSourceSpec, specs.FileCap
         return _base.design_capture_resampler(self._read_coord('sample_rate'), capture)
 
     def _read_stream(
-        self, buffers, offset, count, timeout_sec=None, *, on_overflow='except'
+        self, buffers, offset, count, timeout_sec=None, *, on_overflow: specs.types.OnOverflowType='except'
     ) -> tuple[int, int]:
         assert self._waveform is not None
         iq, _ = super()._read_stream(

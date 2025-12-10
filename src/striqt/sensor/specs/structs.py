@@ -232,7 +232,7 @@ class Description(SpecBase, frozen=True, kw_only=True):
 class LoopBase(SpecBase, tag=str.lower, tag_field='kind', frozen=True, kw_only=True):
     field: str
 
-    def get_points(self):
+    def get_points(self) -> list:
         raise NotImplementedError
 
 
