@@ -53,8 +53,8 @@ sss_correlation_cache = register.KeywordArgumentCache(['capture', 'spec'])
 @sss_correlation_cache.apply
 def correlate_5g_sss(
     iq: 'striqt.waveform._typing.ArrayType',
-    *,
     capture: specs.Capture,
+    *,
     spec: Cellular5GNRSSSCorrelationSpec,
 ) -> 'striqt.waveform._typing.ArrayType':
     xp = iqwaveform.util.array_namespace(iq)

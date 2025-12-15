@@ -394,7 +394,7 @@ class MATNewFileStream(_FileStreamBase):
     def __init__(
         self,
         path,
-        sample_rate: float,
+        backend_sample_rate: float,
         num_rx_ports=1,
         skip_samples=0,
         dtype='complex64',
@@ -404,7 +404,7 @@ class MATNewFileStream(_FileStreamBase):
         **meta,
     ):
         kws = {
-            'sample_rate': sample_rate,
+            'backend_sample_rate': backend_sample_rate,
             'num_rx_ports': num_rx_ports,
             'skip_samples': skip_samples,
             'dtype': dtype,
@@ -485,7 +485,7 @@ class MATLegacyFileStream(_FileStreamBase):
     def __init__(
         self,
         path,
-        sample_rate: float,
+        backend_sample_rate: float,
         key: str = 'waveform',
         num_rx_ports=1,
         skip_samples=0,
@@ -513,7 +513,7 @@ class MATLegacyFileStream(_FileStreamBase):
             skip_samples=skip_samples,
             dtype=dtype,
             xp=xp,
-            sample_rate=sample_rate,
+            backend_sample_rate=backend_sample_rate,
             **meta,
         )
 
@@ -589,7 +589,7 @@ class NPYFileStream(_FileStreamBase):
     def __init__(
         self,
         path,
-        sample_rate: float,
+        backend_sample_rate: float,
         num_rx_ports=1,
         skip_samples=0,
         dtype='complex64',
@@ -613,7 +613,7 @@ class NPYFileStream(_FileStreamBase):
             skip_samples=skip_samples,
             dtype=dtype,
             xp=xp,
-            sample_rate=sample_rate,
+            backend_sample_rate=backend_sample_rate,
             **meta,
         )
 
@@ -731,7 +731,7 @@ class TDMSFileStream(_FileStreamBase):
         fc = self._header_fd['carrier_frequency'][0]
         duration = self._header_fd['header_fd']['total_samples'][0] * fs
 
-        return dict(self.meta, sample_rate=fs, center_frequency=fc, duration=duration)
+        return dict(self.meta, backend_sample_rate=fs, center_frequency=fc, duration=duration)
 
 
 def open_bare_iq(

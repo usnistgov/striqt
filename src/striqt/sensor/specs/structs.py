@@ -107,7 +107,7 @@ class FileCapture(ResampledCapture, frozen=True, kw_only=True):
             raise TypeError('backend_sample_rate is fixed by the file source')
 
 
-class Source(SpecBase, frozen=True, kw_only=True):
+class Source(_SlowHashSpecBase, frozen=True, kw_only=True):
     """run-time characteristics of the radio that are left invariant during a sweep"""
 
     # acquisition

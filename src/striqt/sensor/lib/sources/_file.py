@@ -90,10 +90,11 @@ class FileSource(_base.VirtualSourceBase[specs.FileSourceSpec, specs.FileCapture
         self._file_stream = io.open_bare_iq(
             spec.path,
             format=spec.file_format,
-            num_rx_ports=self.info.num_rx_ports or 1,
+            num_rx_ports=self.setup_spec.num_rx_ports or 1,
             dtype='complex64',
             xp=self.get_array_namespace(),
             loop=spec.loop,
+            backend_sample_rate=spec.base_clock_rate,
             **meta,
         )
 
@@ -135,6 +136,13 @@ class FileSource(_base.VirtualSourceBase[specs.FileSourceSpec, specs.FileCapture
             self._file_info.backend_sample_rate, capture
         )
 
+    @functools.cached_property
+    def info(self):
+        return _base.BaseSourceInfo(num_rx_ports=self.setup_spec.num_rx_ports)
+
+    @functools.cached_property
+    def id(self):
+        return str(self.setup_spec.path)
 
 class ZarrIQSource(_base.VirtualSourceBase[specs.ZarrIQSourceSpec, specs.FileCapture]):
     """a sources of IQ samples from iq_waveform variables in a zarr store"""
