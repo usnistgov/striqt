@@ -1,9 +1,9 @@
 from __future__ import annotations as __
 
-import typing
+from fractions import Fraction
 from math import ceil
 from numbers import Number
-
+import typing
 import methodtools
 
 from . import fourier
@@ -487,33 +487,26 @@ class PhyOFDM:
 
         self.cp_sizes = cp_sizes
 
-        if cp_sizes is None:
+        if contiguous_size is not None:
             self.contiguous_size = contiguous_size
-            self.cp_start_idx = None
-            self.cp_idx = None
-            self.symbol_idx = None
-
         else:
-            if contiguous_size is not None:
-                self.contiguous_size = contiguous_size
-            else:
-                # if not specified, assume no padding is needed to complete a contiguos block of symbols
-                self.contiguous_size = np.sum(cp_sizes) + len(cp_sizes) * nfft
+            # if not specified, assume no padding is needed to complete a contiguos block of symbols
+            self.contiguous_size = np.sum(cp_sizes) + len(cp_sizes) * nfft
 
-            # build a (start_idx, size) pair for each CP
-            pair_sizes = xp.concatenate((xp.array((0,)), self.cp_sizes + self.nfft))
-            self.cp_start_idx = (pair_sizes.cumsum()).astype(int)[:-1]
-            start_and_size = zip(self.cp_start_idx, self.cp_sizes)
+        # build a (start_idx, size) pair for each CP
+        pair_sizes = xp.concatenate((xp.array((0,)), self.cp_sizes + self.nfft))
+        self.cp_start_idx = (pair_sizes.cumsum()).astype(int)[:-1]
+        start_and_size = zip(self.cp_start_idx, self.cp_sizes)
 
-            idx_range = xp.arange(self.contiguous_size).astype(int)
+        idx_range = xp.arange(self.contiguous_size).astype(int)
 
-            # indices in the contiguous range that are CP
-            self.cp_idx = xp.concatenate(
-                [idx_range[start : start + size] for start, size in start_and_size]
-            )
+        # indices in the contiguous range that are CP
+        self.cp_idx = xp.concatenate(
+            [idx_range[start : start + size] for start, size in start_and_size]
+        )
 
-            # indices in the contiguous range that are not CP
-            self.symbol_idx = np.setdiff1d(idx_range, self.cp_idx)
+        # indices in the contiguous range that are not CP
+        self.symbol_idx = np.setdiff1d(idx_range, self.cp_idx)
 
     def index_cyclic_prefix(self) -> ArrayType:
         raise NotImplementedError
@@ -563,7 +556,7 @@ class Phy3GPP(PhyOFDM):
     # 3GPP TS 38.211, Section 5.3.1. Below are the sizes of all CPs (in samples)
     # in 1 slot for FFT size 128 at 15 kHz SCS. CP size then scales proportionally
     # to FFT size. 1 slot is the minimum number of contiguous symbols in a sequence.
-    MIN_CP_SIZES = (10, 9, 9, 9, 9, 9, 9, 10, 9, 9, 9, 9, 9, 9)
+    LTE_MIN_CP_SIZES = (10, 9, 9, 9, 9, 9, 9, 10, 9, 9, 9, 9, 9, 9)
 
     SCS_TO_SLOTS_PER_FRAME = {15e3: 10, 30e3: 20, 60e3: 40}
 
@@ -571,7 +564,7 @@ class Phy3GPP(PhyOFDM):
     SUBCARRIER_SPACINGS = {15e3, 30e3, 60e3}
 
     def __init__(
-        self, channel_bandwidth, subcarrier_spacing=15e3, sample_rate=None, xp=None
+        self, channel_bandwidth, subcarrier_spacing=15e3, generation: typing.Literal['4G','5G']='4G', sample_rate=None, xp=None
     ):
         if xp is None:
             xp = np
@@ -594,7 +587,25 @@ class Phy3GPP(PhyOFDM):
         if nfft in self.FFT_SIZE_TO_SUBCARRIERS:
             self.subcarriers = self.FFT_SIZE_TO_SUBCARRIERS[nfft]
 
-        cp_sizes = nfft * xp.array(self.MIN_CP_SIZES, dtype=int) // 128
+        if generation.upper() == '4G':
+            # assert subcarrier_spacing == 15e3, '4G LTE only supports 15 kHz subcarrier spacing'
+            cp_sizes = nfft * xp.array(self.LTE_MIN_CP_SIZES, dtype=int) // 128
+        elif generation.upper() == '5G':
+            Tc = Fraction(1,4096*480)*1000 # microsec
+            kappa = 64
+            fs_MHz = Fraction(round(sample_rate), 1_000_000)
+
+            scs_norm = Fraction(round(subcarrier_spacing),15000)
+            Tcp_us = [kappa*Tc*(144/scs_norm) + 16*kappa*Tc] + 13*[kappa*Tc*(144/scs_norm)]
+            cp_fractions = [T * fs_MHz for T in Tcp_us]
+            if any(cp.denominator != 1 for cp in cp_fractions):
+                raise ValueError(
+                    'this {sample rate, subcarrier spacing} produces '
+                    'non-integer cyclic prefixes'
+                )
+            cp_sizes = xp.array([cp.numerator for cp in cp_fractions], dtype=int)
+        else:
+            raise ValueError('generation must be "4G" or "5G"')
 
         super().__init__(
             channel_bandwidth=channel_bandwidth,

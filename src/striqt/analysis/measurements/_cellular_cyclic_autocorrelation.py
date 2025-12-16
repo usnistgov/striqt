@@ -27,6 +27,7 @@ class CellularCyclicAutocorrelationSpec(
     frame_range: typing.Union[int, tuple[int, typing.Optional[int]]] = (0, 1)
     frame_slots: typing.Union[str, dict[float, str], None] = None
     symbol_range: typing.Union[int, tuple[int, typing.Optional[int]]] = (0, None)
+    generation: typing.Literal['4G','5G'] = '5G'
 
 
 class CellularCyclicAutocorrelationKeywords(specs.AnalysisKeywords, total=False):
@@ -34,6 +35,7 @@ class CellularCyclicAutocorrelationKeywords(specs.AnalysisKeywords, total=False)
     frame_range: typing.Union[int, tuple[int, typing.Optional[int]]]
     frame_slots: typing.Optional[str]
     symbol_range: typing.Union[int, tuple[int, typing.Optional[int]]]
+    generation: typing.Literal['4G','5G']
 
 
 class NormalizedTDDSlotConfig(typing.NamedTuple):
@@ -178,22 +180,24 @@ def _get_phy_mapping(
     channel_bandwidth: float,
     sample_rate: float,
     subcarrier_spacings: tuple[float, ...],
+    generation: typing.Literal['4G','5G']='4G',
     xp=np,
-) -> dict[str, iqwaveform.ofdm.Phy3GPP]:
+) -> dict[float, iqwaveform.ofdm.Phy3GPP]:
+    kws = dict(
+        channel_bandwidth=channel_bandwidth, generation=generation, sample_rate=sample_rate
+    )
     return {
-        scs: iqwaveform.ofdm.Phy3GPP(
-            channel_bandwidth, scs, sample_rate=sample_rate, xp=xp
-        )
+        scs: iqwaveform.ofdm.Phy3GPP(subcarrier_spacing=scs, xp=xp, **kws)
         for scs in subcarrier_spacings
     }
 
 
 @util.lru_cache()
 def _get_max_corr_size(
-    capture: specs.Capture, *, subcarrier_spacings: tuple[float, ...]
+    capture: specs.Capture, *, subcarrier_spacings: tuple[float, ...], generation: typing.Literal['4G','5G']='4G'
 ):
     phy_scs = _get_phy_mapping(
-        capture.analysis_bandwidth, capture.sample_rate, subcarrier_spacings
+        capture.analysis_bandwidth, capture.sample_rate, subcarrier_spacings, generation=generation
     )
     return max([np.diff(phy.cp_start_idx).min() for phy in phy_scs.values()])
 
@@ -236,20 +240,19 @@ def cellular_cyclic_autocorrelation(
     RANGE_MAP = {'frames': spec.frame_range, 'symbols': spec.symbol_range}
 
     xp = iqwaveform.util.array_namespace(iq)
-    subcarrier_spacings = tuple(spec.subcarrier_spacings)
+    if isinstance(spec.subcarrier_spacings, tuple):
+        scs = spec.subcarrier_spacings
+    else:
+        scs = (spec.subcarrier_spacings,)
+
     phy_scs = _get_phy_mapping(
-        capture.analysis_bandwidth, capture.sample_rate, subcarrier_spacings, xp=xp
+        capture.analysis_bandwidth, capture.sample_rate, scs, generation=spec.generation, xp=xp
     )
     metadata = {}
 
     frame_slots = specs.maybe_lookup_with_capture_key(
         capture, spec.frame_slots, 'center_frequency', 'frame_slots', default='d'
     )
-
-    if isinstance(subcarrier_spacings, numbers.Number):
-        subcarrier_spacings = tuple(
-            subcarrier_spacings,
-        )
 
     # transform the indexing arguments into the form expected by phy.index_cyclic_prefix
     idx_kws = {}
@@ -265,10 +268,10 @@ def cellular_cyclic_autocorrelation(
         else:
             idx_kws[name] = tuple(range(*field_range))
 
-    max_len = _get_max_corr_size(capture, subcarrier_spacings=subcarrier_spacings)
+    max_len = _get_max_corr_size(capture, subcarrier_spacings=scs, generation=spec.generation)
 
     result = xp.full(
-        (iq.shape[0], 2, len(subcarrier_spacings), max_len), np.nan, dtype=np.float32
+        (iq.shape[0], 2, len(scs), max_len), np.nan, dtype=np.float32
     )
     for chan in range(iq.shape[0]):
         for iscs, phy in enumerate(phy_scs.values()):
