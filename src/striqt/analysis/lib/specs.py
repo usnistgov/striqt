@@ -79,7 +79,7 @@ def Meta(standard_name: str, units: str | None = None, **kws) -> msgspec.Meta:
 
 @util.lru_cache()
 def _private_fields(capture_cls: type[SpecBase]) -> tuple[str, ...]:
-    return tuple([n for n in capture_cls.__struct_fields__ if not n.startswith('_')])
+    return tuple([n for n in capture_cls.__struct_fields__ if n.startswith('_')])
 
 
 def convert_dict(obj: typing.Any, type: type[_T]) -> _T:

@@ -205,11 +205,13 @@ class NoSource(Source, frozen=True, kw_only=True):
     num_rx_ports: int
     stream_all_rx_ports: typing.ClassVar[bool] = False
 
+
 class FileSourceSpec(NoSource, kw_only=True, frozen=True, dict=True):
     path: types.WaveformInputPath
     file_format: types.Format = 'auto'
     file_metadata: types.FileMetadata = {}
     loop: types.FileLoop = False
+    transport_dtype: typing.ClassVar[types.TransportDType] = 'complex64'
 
 
 class TDMSFileSourceSpec(NoSource, frozen=True, kw_only=True):

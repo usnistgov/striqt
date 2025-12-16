@@ -113,7 +113,7 @@ TimeSyncEveryCapture = Annotated[
     bool, Meta('whether to sync to PPS before each capture in a sweep')
 ]
 TransportDType = Annotated[
-    Literal['int16', 'float32'], Meta('data transfer type to use inside the source')
+    Literal['int16', 'float32', 'complex64'], Meta('data transfer type to use inside the source')
 ]
 OverloadDetectFlag = Annotated[
     Union[bool, Literal['auto']], Meta('whether to detect overload')
