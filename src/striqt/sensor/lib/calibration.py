@@ -161,7 +161,7 @@ def _describe_missing_data(cal_data: '_xr.DataArray', exact_matches: dict):
 def _lookup_calibration_var(
     cal_var: '_xr.DataArray',
     capture: _specs.SoapyCapture,
-    base_clock_rate: float | None,
+    base_clock_rate: float,
     *,
     xp,
 ):
@@ -289,7 +289,7 @@ def _ensure_loop_at_position(sweep: _specs.Sweep):
 def lookup_power_correction(
     cal_data: 'str | Path | None',
     capture: _specs.SoapyCapture,
-    base_clock_rate: float | None,
+    base_clock_rate: float,
     alias_func: _specs.helpers.PathAliasFormatter | None = None,
     *,
     xp=None,
@@ -313,7 +313,7 @@ def lookup_power_correction(
 def lookup_system_noise_power(
     cal_data: 'Path | str | None',
     capture: _specs.SoapyCapture,
-    base_clock_rate: float | None,
+    base_clock_rate: float,
     alias_func: _specs.helpers.PathAliasFormatter | None = None,
     *,
     T=290.0,

@@ -643,8 +643,9 @@ class _ResamplerKws(typing.TypedDict, total=False):
 
 @util.lru_cache(30000)
 def _design_capture_resampler(
-    base_clock_rate: float | None,
+    base_clock_rate: float,
     capture: specs.ResampledCapture,
+    backend_sample_rate: float | None = None,
     **kwargs: Unpack[_ResamplerKws],
 ) -> ResamplerDesign:
     """design a filter specified by the capture for a radio with the specified MCR.
@@ -673,6 +674,11 @@ def _design_capture_resampler(
             'must specify source.base_clock_rate or capture.backend_sample_rate'
         )
 
+    if capture.backend_sample_rate is None:
+        fs_sdr = backend_sample_rate
+    else:
+        fs_sdr = capture.backend_sample_rate
+
     if capture.host_resample:
         # use GPU DSP to resample from integer divisor of the MCR
         # fs_sdr, lo_offset, kws  = iqwaveform.fourier.design_cola_resampler(
@@ -681,11 +687,12 @@ def _design_capture_resampler(
             fs_target=capture.sample_rate,
             bw=capture.analysis_bandwidth,
             shift=lo_shift,
-            fs_sdr=capture.backend_sample_rate,
+            fs_sdr=fs_sdr,
             **kwargs
         )
 
-        design['window'] = kwargs['window']
+        if 'window' in kwargs:
+            design['window'] = kwargs['window']
 
         return design
 
@@ -705,7 +712,7 @@ def _design_capture_resampler(
 
 @functools.wraps(_design_capture_resampler)
 def design_capture_resampler(
-    base_clock_rate: float | None, capture: specs.ResampledCapture, **kws: Unpack[_ResamplerKws]
+    base_clock_rate: float, capture: specs.ResampledCapture, backend_sample_rate: float | None = None, **kws: Unpack[_ResamplerKws]
 ) -> ResamplerDesign:
     # cast the struct in case it's a subclass
     fixed_capture = specs.ResampledCapture.fromspec(capture)
@@ -727,6 +734,7 @@ def design_capture_resampler(
     return _design_capture_resampler(
         base_clock_rate,
         fixed_capture,
+        backend_sample_rate=backend_sample_rate,
         **kws,
     )
 
@@ -786,14 +794,14 @@ def _get_dsp_pad_size(
 
 
 def _get_aligner_pad_size(
-    base_clock_rate: float | None,
+    base_clock_rate: float,
     capture: specs.ResampledCapture,
     aligner: register.AlignmentCaller | None = None,
 ) -> int:
     if aligner is None:
         return 0
 
-    mcr = base_clock_rate or capture.backend_sample_rate
+    mcr = base_clock_rate
     max_lag = aligner.max_lag(capture)
     lag_pad = ceil(mcr * max_lag)
 
@@ -812,7 +820,7 @@ def _get_next_fast_len(n) -> int:
     return size
 
 
-def _get_oaresample_pad(base_clock_rate: float | None, capture: specs.ResampledCapture):
+def _get_oaresample_pad(base_clock_rate: float, capture: specs.ResampledCapture):
     resampler_design = design_capture_resampler(base_clock_rate, capture)
 
     nfft = resampler_design['nfft']

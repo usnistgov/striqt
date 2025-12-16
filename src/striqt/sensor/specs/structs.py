@@ -423,7 +423,7 @@ class SoapyAcquisitionInfo(AcquisitionInfo, kw_only=True, frozen=True):
 
 class FileAcquisitionInfo(AcquisitionInfo, kw_only=True, frozen=True):
     center_frequency: types.CenterFrequency = float('nan')
-    backend_sample_rate: typing.Optional[types.BackendSampleRate]
+    backend_sample_rate: types.BackendSampleRate
     port: types.Port = 0
     gain: types.Gain = float('nan')
     source_id: types.SourceID = ''

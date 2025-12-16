@@ -73,8 +73,9 @@ class TDMSFileSource(
         if capture is None:
             capture = self.capture_spec
 
+        mcr = self.setup_spec.base_clock_rate
         return _base.design_capture_resampler(
-            self._file_info.backend_sample_rate, capture
+            mcr, capture, backend_sample_rate=self._file_info.backend_sample_rate
         )
 
 
@@ -132,8 +133,10 @@ class FileSource(_base.VirtualSourceBase[specs.FileSourceSpec, specs.FileCapture
     ) -> _base.ResamplerDesign:
         if capture is None:
             capture = self.capture_spec
+        mcr = self._file_info.backend_sample_rate
+        fs_sdr = self._file_info.backend_sample_rate
         return _base.design_capture_resampler(
-            self._file_info.backend_sample_rate, capture
+            mcr, capture, backend_sample_rate=fs_sdr
         )
 
     @functools.cached_property
@@ -185,8 +188,8 @@ class ZarrIQSource(_base.VirtualSourceBase[specs.ZarrIQSourceSpec, specs.FileCap
     def get_resampler(self, capture=None) -> _base.ResamplerDesign:
         if capture is None:
             capture = self.capture_spec
-
-        return _base.design_capture_resampler(self._read_coord('sample_rate'), capture)
+        fs = self._read_coord('sample_rate')
+        return _base.design_capture_resampler(fs, capture, fs)
 
     def _read_stream(
         self, buffers, offset, count, timeout_sec=None, *, on_overflow: specs.types.OnOverflowType='except'
