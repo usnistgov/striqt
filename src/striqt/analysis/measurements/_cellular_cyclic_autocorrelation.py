@@ -27,7 +27,7 @@ class CellularCyclicAutocorrelationSpec(
     frame_range: typing.Union[int, tuple[int, typing.Optional[int]]] = (0, 1)
     frame_slots: typing.Union[str, dict[float, str], None] = None
     symbol_range: typing.Union[int, tuple[int, typing.Optional[int]]] = (0, None)
-    generation: typing.Literal['4G','5G'] = '5G'
+    generation: typing.Literal['4G', '5G'] = '5G'
 
 
 class CellularCyclicAutocorrelationKeywords(specs.AnalysisKeywords, total=False):
@@ -35,7 +35,7 @@ class CellularCyclicAutocorrelationKeywords(specs.AnalysisKeywords, total=False)
     frame_range: typing.Union[int, tuple[int, typing.Optional[int]]]
     frame_slots: typing.Optional[str]
     symbol_range: typing.Union[int, tuple[int, typing.Optional[int]]]
-    generation: typing.Literal['4G','5G']
+    generation: typing.Literal['4G', '5G']
 
 
 class NormalizedTDDSlotConfig(typing.NamedTuple):
@@ -180,11 +180,13 @@ def _get_phy_mapping(
     channel_bandwidth: float,
     sample_rate: float,
     subcarrier_spacings: tuple[float, ...],
-    generation: typing.Literal['4G','5G']='4G',
+    generation: typing.Literal['4G', '5G'] = '4G',
     xp=np,
 ) -> dict[float, iqwaveform.ofdm.Phy3GPP]:
     kws = dict(
-        channel_bandwidth=channel_bandwidth, generation=generation, sample_rate=sample_rate
+        channel_bandwidth=channel_bandwidth,
+        generation=generation,
+        sample_rate=sample_rate,
     )
     return {
         scs: iqwaveform.ofdm.Phy3GPP(subcarrier_spacing=scs, xp=xp, **kws)
@@ -194,10 +196,16 @@ def _get_phy_mapping(
 
 @util.lru_cache()
 def _get_max_corr_size(
-    capture: specs.Capture, *, subcarrier_spacings: tuple[float, ...], generation: typing.Literal['4G','5G']='4G'
+    capture: specs.Capture,
+    *,
+    subcarrier_spacings: tuple[float, ...],
+    generation: typing.Literal['4G', '5G'] = '4G',
 ):
     phy_scs = _get_phy_mapping(
-        capture.analysis_bandwidth, capture.sample_rate, subcarrier_spacings, generation=generation
+        capture.analysis_bandwidth,
+        capture.sample_rate,
+        subcarrier_spacings,
+        generation=generation,
     )
     return max([np.diff(phy.cp_start_idx).min() for phy in phy_scs.values()])
 
@@ -246,7 +254,11 @@ def cellular_cyclic_autocorrelation(
         scs = (spec.subcarrier_spacings,)
 
     phy_scs = _get_phy_mapping(
-        capture.analysis_bandwidth, capture.sample_rate, scs, generation=spec.generation, xp=xp
+        capture.analysis_bandwidth,
+        capture.sample_rate,
+        scs,
+        generation=spec.generation,
+        xp=xp,
     )
     metadata = {}
 
@@ -268,11 +280,11 @@ def cellular_cyclic_autocorrelation(
         else:
             idx_kws[name] = tuple(range(*field_range))
 
-    max_len = _get_max_corr_size(capture, subcarrier_spacings=scs, generation=spec.generation)
-
-    result = xp.full(
-        (iq.shape[0], 2, len(scs), max_len), np.nan, dtype=np.float32
+    max_len = _get_max_corr_size(
+        capture, subcarrier_spacings=scs, generation=spec.generation
     )
+
+    result = xp.full((iq.shape[0], 2, len(scs), max_len), np.nan, dtype=np.float32)
     for chan in range(iq.shape[0]):
         for iscs, phy in enumerate(phy_scs.values()):
             tdd_config = tdd_config_from_str(
@@ -283,11 +295,7 @@ def cellular_cyclic_autocorrelation(
                 **idx_kws, slots=tdd_config.downlink_slot_indexes
             )
 
-            # shift index to the symbol boundary rather than the CP
-            cyclic_shift = -phy.cp_sizes[0] * 2 // cp_inds.shape[1]
-
             R = iqwaveform.ofdm.corr_at_indices(cp_inds, iq[chan], phy.nfft, norm=False)
-            R = xp.roll(R, cyclic_shift)
             result[chan][0][iscs][: R.size] = xp.abs(R)
 
             if len(tdd_config.uplink_slot_indexes) > 0:
@@ -297,7 +305,6 @@ def cellular_cyclic_autocorrelation(
                 R = iqwaveform.ofdm.corr_at_indices(
                     cp_inds, iq[chan], phy.nfft, norm=False
                 )
-                R = xp.roll(R, cyclic_shift)
                 result[chan][1][iscs][: R.size] = xp.abs(R)
 
     return result, metadata

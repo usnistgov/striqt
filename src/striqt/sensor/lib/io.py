@@ -24,8 +24,15 @@ else:
     xr = util.lazy_import('xarray')
 
 __all__ = [
-    'decode_from_yaml_file', 'open_store', 'read_yaml_spec', 'dump_data', 'load_data', 'read_calibration', 'save_calibration'
+    'decode_from_yaml_file',
+    'open_store',
+    'read_yaml_spec',
+    'dump_data',
+    'load_data',
+    'read_calibration',
+    'save_calibration',
 ]
+
 
 def open_store(
     spec: specs.Sink,
@@ -150,13 +157,13 @@ def read_tdms_iq(
     skip_samples=0,
     array_backend: specs.types.ArrayBackend,
 ) -> tuple['np.ndarray', specs.FileCapture]:
-    from .sources._file import TDMSFileSource
-    from ..specs import TDMSFileSourceSpec
+    from .sources._file import TDMSSource
+    from ..specs import TDMSSource
 
-    source_spec = TDMSFileSourceSpec(
+    source_spec = TDMSSource(
         base_clock_rate=base_clock_rate, path=Path(path), num_rx_ports=num_rx_ports
     )
-    source = TDMSFileSource(source_spec)
+    source = TDMSSource(source_spec)
 
     capture = source.capture_spec
 

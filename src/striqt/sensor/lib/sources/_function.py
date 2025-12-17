@@ -15,7 +15,7 @@ else:
     np = util.lazy_import('numpy')
 
 
-_TS = typing.TypeVar('_TS', bound=specs.FunctionSourceSpec)
+_TS = typing.TypeVar('_TS', bound=specs.FunctionSource)
 _TC = typing.TypeVar('_TC', bound=specs.ResampledCapture)
 
 
@@ -62,8 +62,25 @@ class TestSourceBase(_base.VirtualSourceBase[_TS, _TC]):
 
 
 class SingleToneSource(
-    TestSourceBase[specs.FunctionSourceSpec, specs.SingleToneCaptureSpec]
+    TestSourceBase[specs.FunctionSource, specs.SingleToneCaptureSpec]
 ):
+    if typing.TYPE_CHECKING:
+        # for type hinting only
+        def __init__(
+            self,
+            _setup=None,
+            /,
+            *,
+            reuse_iq=False,
+            **kwargs: typing.Unpack[specs._FunctionSourceKeywords],
+        ): ...
+        def arm(
+            self,
+            _capture=None,
+            /,
+            **capture_kws: typing.Unpack[specs._SingleToneCaptureKeywords],
+        ) -> specs.SingleToneCaptureSpec: ...
+
     def get_waveform(
         self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
     ):
@@ -93,8 +110,25 @@ class SingleToneSource(
 
 
 class DiracDeltaSource(
-    TestSourceBase[specs.FunctionSourceSpec, specs.DiracDeltaCaptureSpec]
+    TestSourceBase[specs.FunctionSource, specs.DiracDeltaCaptureSpec]
 ):
+    if typing.TYPE_CHECKING:
+        # for type hinting only
+        def __init__(
+            self,
+            _setup=None,
+            /,
+            *,
+            reuse_iq=False,
+            **kwargs: typing.Unpack[specs._FunctionSourceKeywords],
+        ): ...
+        def arm(
+            self,
+            _capture=None,
+            /,
+            **capture_kws: typing.Unpack[specs._DiracDeltaCaptureKeywords],
+        ) -> specs.DiracDeltaCaptureSpec: ...
+
     def get_waveform(
         self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
     ):
@@ -112,9 +146,24 @@ class DiracDeltaSource(
         return ret[np.newaxis,]
 
 
-class SawtoothSource(
-    TestSourceBase[specs.FunctionSourceSpec, specs.SawtoothCaptureSpec]
-):
+class SawtoothSource(TestSourceBase[specs.FunctionSource, specs.SawtoothCaptureSpec]):
+    if typing.TYPE_CHECKING:
+        # for type hinting only
+        def __init__(
+            self,
+            _setup=None,
+            /,
+            *,
+            reuse_iq=False,
+            **kwargs: typing.Unpack[specs._FunctionSourceKeywords],
+        ): ...
+        def arm(
+            self,
+            _capture=None,
+            /,
+            **capture_kws: typing.Unpack[specs._SawtoothCaptureKeywords],
+        ) -> specs.SawtoothCaptureSpec: ...
+
     def get_waveform(
         self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
     ):
@@ -129,7 +178,24 @@ class SawtoothSource(
         return ret
 
 
-class NoiseSource(TestSourceBase[specs.FunctionSourceSpec, specs.NoiseCaptureSpec]):
+class NoiseSource(TestSourceBase[specs.FunctionSource, specs.NoiseCaptureSpec]):
+    if typing.TYPE_CHECKING:
+        # for type hinting only
+        def __init__(
+            self,
+            _setup=None,
+            /,
+            *,
+            reuse_iq=False,
+            **kwargs: typing.Unpack[specs._FunctionSourceKeywords],
+        ): ...
+        def arm(
+            self,
+            _capture=None,
+            /,
+            **capture_kws: typing.Unpack[specs._NoiseCaptureKeywords],
+        ) -> specs.NoiseCaptureSpec: ...
+
     def get_waveform(
         self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
     ):

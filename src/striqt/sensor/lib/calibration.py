@@ -168,7 +168,9 @@ def _lookup_calibration_var(
     results = []
 
     for capture_chan in _specs.helpers.split_capture_ports(capture):
-        fs = _sources._base.design_capture_resampler(base_clock_rate, capture_chan)['fs_sdr']
+        fs = _sources._base.design_capture_resampler(base_clock_rate, capture_chan)[
+            'fs_sdr'
+        ]
         port_key = _get_port_variable(cal_var)
 
         # these capture fields must match the calibration conditions exactly
@@ -243,7 +245,7 @@ def _get_port_variable(ds: '_xr.DataArray|_xr.Dataset') -> str:
     else:
         # compatibility
         return 'channel'
-    
+
 
 def compute_y_factor_corrections(dataset: '_xr.Dataset', Tref=290.0) -> '_xr.Dataset':
     ret = _y_factor_power_corrections(dataset, Tref=Tref)

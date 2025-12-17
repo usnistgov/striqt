@@ -24,21 +24,22 @@ warmup = bind_sensor(
     ),
 )
 
-file = bind_sensor(
-    'file',
-    Sensor(source=sources.FileSource),
+mat_file = bind_sensor(
+    'mat_file',
+    Sensor(source=sources.MATSource),
     Schema(
-        source=specs.FileSourceSpec,
+        source=specs.MATSource,
         capture=specs.FileCapture,
         peripherals=specs.NoPeripherals,
     ),
 )
 
+
 tdms_file = bind_sensor(
     'tdms_file',
-    Sensor(source=sources.TDMSFileSource),
+    Sensor(source=sources.TDMSSource),
     Schema(
-        source=specs.TDMSFileSourceSpec,
+        source=specs.TDMSSource,
         capture=specs.FileCapture,
         peripherals=specs.NoPeripherals,
     ),
@@ -49,7 +50,7 @@ zarr_iq = bind_sensor(
     'zarr_iq',
     Sensor(source=sources.ZarrIQSource),
     Schema(
-        source=specs.ZarrIQSourceSpec,
+        source=specs.ZarrIQSource,
         capture=specs.FileCapture,
         peripherals=specs.NoPeripherals,
     ),
@@ -61,7 +62,7 @@ noise = bind_sensor(
     'noise',
     Sensor(source=sources.NoiseSource),
     Schema(
-        source=specs.FunctionSourceSpec,
+        source=specs.FunctionSource,
         capture=specs.NoiseCaptureSpec,
         peripherals=specs.NoPeripherals,
     ),
@@ -71,7 +72,7 @@ dirac_delta = bind_sensor(
     'dirac_delta',
     Sensor(source=sources.DiracDeltaSource),
     Schema(
-        source=specs.FunctionSourceSpec,
+        source=specs.FunctionSource,
         capture=specs.DiracDeltaCaptureSpec,
         peripherals=specs.NoPeripherals,
     ),
@@ -81,7 +82,7 @@ single_tone = bind_sensor(
     'single_tone',
     Sensor(source=sources.SingleToneSource),
     Schema(
-        source=specs.FunctionSourceSpec,
+        source=specs.FunctionSource,
         capture=specs.SingleToneCaptureSpec,
         peripherals=specs.NoPeripherals,
     ),
@@ -91,7 +92,7 @@ sawtooth = bind_sensor(
     'sawtooth',
     Sensor(source=sources.SawtoothSource),
     Schema(
-        source=specs.FunctionSourceSpec,
+        source=specs.FunctionSource,
         capture=specs.SawtoothCaptureSpec,
         peripherals=specs.NoPeripherals,
     ),

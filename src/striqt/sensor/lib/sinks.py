@@ -1,6 +1,12 @@
 from __future__ import annotations as __
 
-__all__ = ['SinkBase', 'NoSink', 'ZarrSinkBase', 'ZarrCaptureSink', 'ZarrTimeAppendSink']
+__all__ = [
+    'SinkBase',
+    'NoSink',
+    'ZarrSinkBase',
+    'ZarrCaptureSink',
+    'ZarrTimeAppendSink',
+]
 
 import typing as _typing
 
@@ -37,9 +43,7 @@ class SinkBase(_typing.Generic[_specs._TC]):
         self._pending_data: list['_xr.Dataset'] = []
         self._executor = ThreadPoolExecutor(1)
         captures = _specs.helpers.loop_captures(sweep_spec)
-        self._group_sizes = _specs.helpers.concat_group_sizes(
-            captures, min_size=2
-        )
+        self._group_sizes = _specs.helpers.concat_group_sizes(captures, min_size=2)
 
     def pop(self) -> list['_xr.Dataset']:
         result = self._pending_data

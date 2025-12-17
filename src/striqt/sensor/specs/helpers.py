@@ -20,8 +20,11 @@ from . import structs as specs
 from .structs import _TS, _TC, _TP
 from ..lib import util
 
+
 @util.lru_cache()
-def _check_fields(cls: type[specs.SpecBase], names: tuple[str, ...], new_instance=False):
+def _check_fields(
+    cls: type[specs.SpecBase], names: tuple[str, ...], new_instance=False
+):
     fields = msgspec.structs.fields(cls)
     available = set(names)
 
@@ -39,7 +42,7 @@ def _check_fields(cls: type[specs.SpecBase], names: tuple[str, ...], new_instanc
 @util.lru_cache()
 def pairwise_by_port(
     c1: _TC, c2: _TC | None, is_new: bool
-) -> list[tuple[_TC, _TC| None]]:
+) -> list[tuple[_TC, _TC | None]]:
     # a list with 1 capture per port
     c1_split = split_capture_ports(c1)
 

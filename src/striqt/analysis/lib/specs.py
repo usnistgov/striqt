@@ -112,6 +112,8 @@ class SpecBase(
         See also:
             Python standard library `copy.replace`
         """
+        if len(attrs) == 0:
+            return self
         return msgspec.structs.replace(self, **attrs).validate()
 
     def todict(self, skip_private=False) -> dict:

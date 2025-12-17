@@ -68,28 +68,34 @@ def _acquire_both(
     s = res['source']
     p = res['peripherals']
 
+    def arm_both(c: _TC | None):
+        if c is None:
+            return
+        util.concurrently({'s': util.Call(s.arm, c), 'p': util.Call(p.arm, c)})
+
     try:
         s.capture_spec
     except AttributeError:
-        # this is the first capture
-        util.concurrently(
-            {'source': util.Call(s.arm, this), 'peripherals': util.Call(p.arm, this)}
-        )
+        arm_both(this)
 
     results = util.concurrently(
         {
-            'source': util.Call(
-                s.acquire, this, next_, correction=False, alias_func=res['alias_func']
-            ),
-            'peripherals': util.Call(peripherals.acquire_arm, p, this, next_),
+            'iq': util.Call(s.acquire, correction=False, alias_func=res['alias_func']),
+            'ext_data': util.Call(p.acquire, this),
         }
     )
+    iq = results['iq']
+    ext_data = results['ext_data']
+    if not isinstance(ext_data, dict):
+        raise TypeError(f'peripheral acquire() returned {type(ext_data)!r}, not dict')
+    elif not isinstance(iq, sources.AcquiredIQ):
+        raise TypeError(f'source acquire() returned {type(iq)!r}, not AcquiredIQ')
+    else:
+        iq = dataclasses.replace(iq, extra_data=iq.extra_data | ext_data)
 
-    iq = results['source']
-    ext_data = results['peripherals']
-    assert isinstance(iq, sources.AcquiredIQ)
+    arm_both(next_)
 
-    return dataclasses.replace(iq, extra_data=iq.extra_data | ext_data)
+    return iq
 
 
 def _log_cache_info(

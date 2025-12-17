@@ -18,10 +18,26 @@ else:
     np = util.lazy_import('numpy')
 
 
-class TDMSFileSource(
-    _base.VirtualSourceBase[specs.TDMSFileSourceSpec, specs.FileCapture]
-):
+@_base.bind_schema_types(specs.TDMSSource, specs.FileCapture)
+class TDMSSource(_base.VirtualSourceBase[specs.TDMSSource, specs.FileCapture]):
     """a source of IQ waveforms from a TDMS file"""
+
+    if typing.TYPE_CHECKING:
+        # for type hinting only
+        def __init__(
+            self,
+            _setup=None,
+            /,
+            *,
+            reuse_iq=False,
+            **kwargs: typing.Unpack[specs._TDMSSourceKeywords],
+        ): ...
+        def arm(
+            self,
+            _capture=None,
+            /,
+            **capture_kws: typing.Unpack[specs._FileCaptureKeywords],
+        ) -> specs.FileCapture: ...
 
     _file_info: specs.FileAcquisitionInfo
 
@@ -58,11 +74,9 @@ class TDMSFileSource(
 
         return (iq * float_dtype(scale)).view(dtype).copy()  # type: ignore
 
-    def acquire(
-        self, capture=None, next=None, *, correction=True, alias_func=None
-    ):
+    def acquire(self, *, analysis=None, correction=True, alias_func=None):
         iq = super().acquire(
-            capture, next, correction=correction, alias_func=alias_func
+            analysis=analysis, correction=correction, alias_func=alias_func
         )
         iq.info = self._file_info
         return iq
@@ -79,8 +93,26 @@ class TDMSFileSource(
         )
 
 
-class FileSource(_base.VirtualSourceBase[specs.FileSourceSpec, specs.FileCapture]):
-    """returns IQ waveforms from a file"""
+@_base.bind_schema_types(specs.MATSource, specs.FileCapture)
+class MATSource(_base.VirtualSourceBase[specs.MATSource, specs.FileCapture]):
+    """returns IQ waveforms from a .mat file"""
+
+    if typing.TYPE_CHECKING:
+        # for type hinting only
+        def __init__(
+            self,
+            _setup=None,
+            /,
+            *,
+            reuse_iq=False,
+            **kwargs: typing.Unpack[specs._MATSourceKeywords],
+        ): ...
+        def arm(
+            self,
+            _capture=None,
+            /,
+            **capture_kws: typing.Unpack[specs._FileCaptureKeywords],
+        ) -> specs.FileCapture: ...
 
     _file_info: specs.FileAcquisitionInfo
     _file_stream: io._FileStreamBase
@@ -119,11 +151,9 @@ class FileSource(_base.VirtualSourceBase[specs.FileSourceSpec, specs.FileCapture
         assert ret.shape[1] == count
         return ret.copy()
 
-    def acquire(
-        self, capture=None, next=None, *, correction=True, alias_func=None
-    ):
+    def acquire(self, *, analysis=None, correction=True, alias_func=None):
         iq = super().acquire(
-            capture, next, correction=correction, alias_func=alias_func
+            analysis=analysis, correction=correction, alias_func=alias_func
         )
         iq.info = self._file_info
         return iq
@@ -135,9 +165,7 @@ class FileSource(_base.VirtualSourceBase[specs.FileSourceSpec, specs.FileCapture
             capture = self.capture_spec
         mcr = self._file_info.backend_sample_rate
         fs_sdr = self._file_info.backend_sample_rate
-        return _base.design_capture_resampler(
-            mcr, capture, backend_sample_rate=fs_sdr
-        )
+        return _base.design_capture_resampler(mcr, capture, backend_sample_rate=fs_sdr)
 
     @functools.cached_property
     def info(self):
@@ -147,8 +175,27 @@ class FileSource(_base.VirtualSourceBase[specs.FileSourceSpec, specs.FileCapture
     def id(self):
         return str(self.setup_spec.path)
 
-class ZarrIQSource(_base.VirtualSourceBase[specs.ZarrIQSourceSpec, specs.FileCapture]):
+
+@_base.bind_schema_types(specs.ZarrIQSource, specs.FileCapture)
+class ZarrIQSource(_base.VirtualSourceBase[specs.ZarrIQSource, specs.FileCapture]):
     """a sources of IQ samples from iq_waveform variables in a zarr store"""
+
+    if typing.TYPE_CHECKING:
+        # for type hinting only
+        def __init__(
+            self,
+            _setup=None,
+            /,
+            *,
+            reuse_iq=False,
+            **kwargs: typing.Unpack[specs._ZarrIQSourceKeywords],
+        ): ...
+        def arm(
+            self,
+            _capture=None,
+            /,
+            **capture_kws: typing.Unpack[specs._FileCaptureKeywords],
+        ) -> specs.FileCapture: ...
 
     _waveform: 'xr.DataArray'
     _capture_info: specs.FileAcquisitionInfo
@@ -192,7 +239,13 @@ class ZarrIQSource(_base.VirtualSourceBase[specs.ZarrIQSourceSpec, specs.FileCap
         return _base.design_capture_resampler(fs, capture, fs)
 
     def _read_stream(
-        self, buffers, offset, count, timeout_sec=None, *, on_overflow: specs.types.OnOverflowType='except'
+        self,
+        buffers,
+        offset,
+        count,
+        timeout_sec=None,
+        *,
+        on_overflow: specs.types.OnOverflowType = 'except',
     ) -> tuple[int, int]:
         assert self._waveform is not None
         iq, _ = super()._read_stream(
@@ -231,11 +284,9 @@ class ZarrIQSource(_base.VirtualSourceBase[specs.ZarrIQSourceSpec, specs.FileCap
         else:
             return iq.astype(dtype)
 
-    def acquire(
-        self, capture=None, next=None, *, correction=True, alias_func=None
-    ):
+    def acquire(self, *, analysis=None, correction=True, alias_func=None):
         iq = super().acquire(
-            capture, next, correction=correction, alias_func=alias_func
+            analysis=analysis, correction=correction, alias_func=alias_func
         )
         iq.info = self._capture_info
         return iq

@@ -121,10 +121,10 @@ def cellular_ssb_lag(capture: specs.Capture, spec: Cellular5GNRSyncCorrelationSp
         shared_spectrum=spec.shared_spectrum,
     )
 
-    max_len = 2 * round(spec.sample_rate / spec.subcarrier_spacing + params.cp_samples)
+    max_len = 2 * round(spec.sample_rate / spec.subcarrier_spacing + params.min_cp_size)
 
     if spec.trim_cp:
-        max_len = max_len - round(0.5 * params.cp_samples)
+        max_len = max_len - params.min_cp_size
 
     name = cellular_ssb_lag.__name__
     return pd.RangeIndex(0, max_len, name=name) / spec.sample_rate
@@ -175,8 +175,11 @@ def correlate_sync_sequence(
     # pad_size = template_bcast.shape[-1]
     # template_bcast  = iqwaveform.util.pad_along_axis(template_bcast, [[0,pad_size]], axis=3)
 
-    cp_samples = round(9 / 128 * spec.sample_rate / spec.subcarrier_spacing)
-    offs = round(spec.sample_rate / spec.subcarrier_spacing + 2 * cp_samples)
+    # TODO: this would need to support multiple different prefixes for 4G LTE
+    offs = round(spec.sample_rate / spec.subcarrier_spacing) + 2 * params.min_cp_size
+
+    # cp_samples = round(9 / 128 * spec.sample_rate / spec.subcarrier_spacing)
+    # offs = round(spec.sample_rate / spec.subcarrier_spacing + 2 * cp_samples)
 
     R_shape = list(max(a, b) for a, b in zip(iq_bcast.shape, template_bcast.shape))
     R_shape[-1] = iq_bcast.shape[-1] + template_bcast.shape[-1] - 1
@@ -188,10 +191,13 @@ def correlate_sync_sequence(
             iq_bcast[:, 0], template_bcast[:, cell_id], axes=2, mode='full'
         )
     R = xp.roll(R, -offs, axis=-1)[..., :corr_size]
+    R = R[..., :corr_size]
 
     # add slot index dimension: -> (port index, cell Nid, sync block index, slot index, IQ sample index)
-    excess_cp = round(1 / 128 * spec.sample_rate / spec.subcarrier_spacing)
-    R = R.reshape(R.shape[:-1] + (slot_count, -1))[..., 2 * excess_cp :]
+    excess_cp = [params.cp_offsets[i % 14] for i in params.symbol_indexes]
+    if len(set(excess_cp)) != 1:
+        raise ValueError('expect all 5G sync symbols to have the same excess CP')
+    R = R.reshape(R.shape[:-1] + (slot_count, -1))[..., excess_cp[0] :]
 
     # dims -> (port index, cell Nid, sync block index, symbol pair index, IQ sample index)
     paired_symbol_shape = R.shape[:-2] + (7 * slot_count, -1)
@@ -199,7 +205,7 @@ def correlate_sync_sequence(
     R = R.reshape(paired_symbol_shape)[..., paired_symbol_indexes, :]
 
     if spec.trim_cp:
-        R = R[..., : -cp_samples // 2]
+        R = R[..., : -params.min_cp_size]
 
     return R
 

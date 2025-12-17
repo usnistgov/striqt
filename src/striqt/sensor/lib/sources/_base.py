@@ -45,6 +45,7 @@ FILTER_DOMAIN = 'time'
 
 _TS = typing.TypeVar('_TS', bound=specs.Source)
 _TC = typing.TypeVar('_TC', bound=specs.ResampledCapture)
+_T = typing.TypeVar('_T', bound='SourceBase')
 
 
 @dataclasses.dataclass
@@ -208,7 +209,14 @@ def _map_source(spec: specs.Source, source: SourceBase):
 class HasSetupType(typing.Protocol[_TS]):
     __setup__: _TS
 
-    def __init__(self, setup: _TS, analysis: Analysis | None = None): ...
+    def __init__(
+        self,
+        _setup: _TS | None = None,
+        /,
+        *,
+        reuse_iq=False,
+        **kwargs: typing.Unpack[specs._SourceKeywords],
+    ): ...
 
     def _connect(self, spec: _TS) -> None: ...
 
@@ -218,17 +226,12 @@ class HasSetupType(typing.Protocol[_TS]):
 class HasCaptureType(typing.Protocol[_TC]):
     _capture: typing.Optional[_TC]
 
-    def arm(
-        self,
-        capture: _TC,
-        **capture_kws: 'Unpack[specs._ResampledCaptureKeywords]',
-    ) -> _TC: ...
+    def arm(self, _capture: _TC | None, /, **capture_kws) -> _TC: ...
 
     def acquire(
         self,
-        capture: _TC | None = None,
-        next: typing.Union[_TC, None] = None,
         *,
+        analysis: Analysis | None = None,
         correction: bool = True,
         alias_func: specs.helpers.PathAliasFormatter | None = None,
     ) -> AcquiredIQ: ...
@@ -241,27 +244,90 @@ class HasCaptureType(typing.Protocol[_TC]):
     def get_resampler(self, capture: _TC | None = None) -> ResamplerDesign: ...
 
 
+@typing.overload
+def get_aligner(setup: specs.Source, analysis: None = None) -> None: ...
+
+
+@typing.overload
+def get_aligner(
+    setup: specs.Source, analysis: Analysis
+) -> register.AlignmentCaller: ...
+
+
+@util.lru_cache()
+def get_aligner(
+    setup: specs.Source, analysis: Analysis | None = None
+) -> register.AlignmentCaller | None:
+    if setup.channel_sync_source is None:
+        return None
+    elif analysis is None:
+        name = register.get_channel_sync_source_measurement_name(
+            setup.channel_sync_source, registry
+        )
+        raise ValueError(
+            f'channel_sync_source {name!r} requires an analysis specification for {setup.channel_sync_source!r}'
+        )
+    else:
+        return register.get_aligner(
+            setup.channel_sync_source, analysis=analysis, registry=registry
+        )
+
+
+@dataclasses.dataclass(frozen=True)
+class Schema(typing.Generic[_TS, _TC]):
+    source: type[_TS]
+    capture: type[_TC]
+
+
+def bind_schema_types(
+    source: type[_TS], capture: type[_TC]
+) -> typing.Callable[[type[_T]], type[_T]]:
+    """set the default to a SourceBase subclass"""
+
+    def decorator(cls: type[_T]) -> type[_T]:
+        cls.__bindings__ = Schema(source=source, capture=capture)
+        return cls
+
+    return decorator
+
+
 class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
+    __bindings__: typing.ClassVar[Schema | None] = None
+
     _buffers: _ReceiveBuffers
-    _aligner: register.AlignmentCaller | None
     _is_open: bool | Event = False
     _timeout: float = 10
     _sweep_time: 'pd.Timestamp | None' = None
 
-    def __init__(self, setup: _TS, *, analysis=None, reuse_iq: bool = False):
+    def __init__(
+        self,
+        _setup: _TS | None = None,
+        /,
+        *,
+        reuse_iq=False,
+        **kwargs: typing.Unpack[specs._SourceKeywords],
+    ):
         open_event = self._is_open = Event()  # first, to serve other threads
-        _map_source(setup, self)
 
-        self._aligner: register.AlignmentCaller | None = None
+        if isinstance(_setup, specs.Source):
+            _setup = _setup.replace(**kwargs)
+        elif _setup is not None:
+            raise TypeError('setup must be a specs.Source or None')
+        elif self.__bindings__ is None:
+            raise TypeError('unbound source requires an explicit specs.Source argument')
+        else:
+            _setup = typing.cast(_TS, self.__bindings__.source(**kwargs))
 
-        self.__setup__ = setup
+        _map_source(_setup, self)
+
+        self.__setup__ = _setup
         self._capture = None
         self._buffers = _ReceiveBuffers(self)
         self._prev_iq: AcquiredIQ | None = None
         self._reuse_iq = reuse_iq
 
         try:
-            self._connect(setup)
+            self._connect(_setup)
         except:
             self._is_open = False
             raise
@@ -270,26 +336,12 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
         finally:
             open_event.set()
 
-        if setup.channel_sync_source is None:
-            self._aligner = None
-        elif analysis is None:
-            name = register.get_channel_sync_source_measurement_name(
-                setup.channel_sync_source, registry
-            )
-            raise ValueError(
-                f'channel_sync_source {name!r} requires an analysis specification for {setup.channel_sync_source!r}'
-            )
-        else:
-            self._aligner = register.get_aligner(
-                setup.channel_sync_source, analysis=analysis, registry=registry
-            )
-
-        if setup.array_backend == 'cupy':
+        if _setup.array_backend == 'cupy':
             util.safe_import('cupy')
             # util.safe_import('cupyx')
             util.configure_cupy()
 
-        self._apply_setup(setup)
+        self._apply_setup(_setup)
 
     @functools.cached_property
     def info(self) -> BaseSourceInfo:
@@ -330,14 +382,37 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
         return self.__setup__
 
     @util.stopwatch('arm', 'source', threshold=10e-3)
-    def arm(self, capture, **capture_kws):
+    def arm(self, _capture=None, /, **capture_kws) -> _TC:
         """stop the stream, apply a capture configuration, and start it"""
         assert self._buffers is not None
 
+        if self.__bindings__ is None:
+            capture_cls = None
+        else:
+            capture_cls = self.__bindings__.capture
+
         if not self.is_open():
             raise RuntimeError('open the radio before arming')
+        elif isinstance(_capture, specs.Capture):
+            if capture_cls is not None:
+                _capture = typing.cast(_TC, capture_cls.fromspec(_capture))
+            capture = _capture.replace(**capture_kws)
+        elif _capture is not None:
+            raise TypeError('setup must be a specs.Source or None')
+        elif capture_cls is None:
+            raise TypeError('an explicit argument of type specs.Capture is required')
+        else:
+            capture = capture_cls(**capture_kws)
 
-        capture = capture.replace(**capture_kws)
+        capture = typing.cast(_TC, capture)
+
+        if self._capture is not None:
+            mcr = self.setup_spec.base_clock_rate
+            if self._reuse_iq and _is_reusable(self.capture_spec, capture, mcr):
+                pass
+                # self._prev_iq = iq
+            else:
+                self._prev_iq = None
 
         if capture == self._capture and self._capture is not None:
             return self._capture
@@ -348,7 +423,7 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
         self._capture = self._prepare_capture(capture) or capture
         return self._capture
 
-    def read_iq(self) -> 'tuple[ArrayType, int|None]':
+    def read_iq(self, analysis: Analysis | None = None) -> 'tuple[ArrayType, int|None]':
         """read IQ for the armed capture"""
         assert self._capture is not None, 'soapy source must be armed to read IQ'
 
@@ -356,9 +431,7 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
         samples, stream_bufs = self._buffers.get_next(self._capture)
 
         # holdoff parameters, valid when we already have a clock reading
-        dsp_pad_before, _ = _get_dsp_pad_size(
-            self.__setup__, self._capture, self._aligner
-        )
+        dsp_pad_before, _ = _get_dsp_pad_size(self.setup_spec, self._capture, analysis)
 
         # carryover from the previous acquisition
         missing_start_time = True
@@ -381,7 +454,7 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
         chunk_count = remaining = output_count - carryover_count
 
         while remaining > 0:
-            if received_count > 0 or self.__setup__.gapless_rearm:
+            if received_count > 0 or self.setup_spec.gapless_rearm:
                 on_overflow = 'except'
             else:
                 on_overflow = 'ignore'
@@ -445,62 +518,59 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
         return samples[:, sample_span], start_ns
 
     @util.stopwatch('acquire', 'source')
-    def acquire(
-        self,
-        capture=None,
-        next=None,
-        *,
-        correction=True,
-        alias_func: specs.helpers.PathAliasFormatter | None = None,
-    ):
+    def acquire(self, *, analysis=None, correction=True, alias_func=None):
         """arm a capture and enable the channel (if necessary), read the resulting IQ waveform.
 
         Optionally, calibration corrections can be applied, and the radio can be left ready for the next capture.
         """
         from .. import resampling
 
-        if capture is None:
-            capture = self.capture_spec
-        else:
-            capture = self.arm(capture)
+        self.capture_spec  # ensure we are armed
+
+        if (
+            correction
+            and self.setup_spec.channel_sync_source is not None
+            and analysis is None
+        ):
+            raise ValueError(
+                'correction with channel_sync_source requires an analysis specification'
+            )
+
+        aligner = get_aligner(self.setup_spec, analysis)
 
         if self._prev_iq is None:
-            samples, time_ns = self.read_iq()
-
+            samples, time_ns = self.read_iq(analysis)
             info = self._build_acquisition_info(time_ns)
 
             iq = AcquiredIQ(
                 raw=samples,
                 aligned=None,
-                capture=capture,
+                capture=self.capture_spec,
                 info=info,
                 extra_data={},
                 alias_func=alias_func,
                 source_spec=self.setup_spec,
                 resampler=self.get_resampler(),
-                aligner=self._aligner,
+                aligner=aligner,
             )
 
         else:
             iq = dataclasses.replace(
                 self._prev_iq,
-                capture=capture,
+                capture=self.capture_spec,
                 info=self._prev_iq.info.replace(start_time=None),
+                aligner=aligner,
             )
 
-        if next is not None and capture != next:
-            self.arm(next)
-
-        mcr = self.setup_spec.base_clock_rate
-        if self._reuse_iq and _is_reusable(capture, next, mcr):
+        if self._reuse_iq:
             self._prev_iq = iq
-        else:
-            self._prev_iq = None
 
         if not correction:
             return iq
 
-        with util.stopwatch('resampling filter', threshold=capture.duration / 2):
+        with util.stopwatch(
+            'resampling filter', threshold=self.capture_spec.duration / 2
+        ):
             return resampling.resampling_correction(iq, overwrite_x=True)
 
     def _build_acquisition_info(self, time_ns: int | None) -> specs.AcquisitionInfo:
@@ -532,9 +602,9 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
         return self._capture
 
     def get_array_namespace(self: SourceBase) -> types.ModuleType:
-        if self.__setup__.array_backend == 'cupy':
+        if self.setup_spec.array_backend == 'cupy':
             return util.cp
-        elif self.__setup__.array_backend == 'numpy':
+        elif self.setup_spec.array_backend == 'numpy':
             return np
         else:
             raise TypeError('invalid array_backend argument')
@@ -614,7 +684,7 @@ def find_trigger_holdoff(
             source.setup_spec.transient_holdoff_time * sample_rate
         )
 
-    periodic_trigger = source.__setup__.periodic_trigger
+    periodic_trigger = source.setup_spec.periodic_trigger
     if periodic_trigger in (0, None):
         return min_holdoff
 
@@ -688,7 +758,7 @@ def _design_capture_resampler(
             bw=capture.analysis_bandwidth,
             shift=lo_shift,
             fs_sdr=fs_sdr,
-            **kwargs
+            **kwargs,
         )
 
         if 'window' in kwargs:
@@ -712,7 +782,10 @@ def _design_capture_resampler(
 
 @functools.wraps(_design_capture_resampler)
 def design_capture_resampler(
-    base_clock_rate: float, capture: specs.ResampledCapture, backend_sample_rate: float | None = None, **kws: Unpack[_ResamplerKws]
+    base_clock_rate: float,
+    capture: specs.ResampledCapture,
+    backend_sample_rate: float | None = None,
+    **kws: Unpack[_ResamplerKws],
 ) -> ResamplerDesign:
     # cast the struct in case it's a subclass
     fixed_capture = specs.ResampledCapture.fromspec(capture)
@@ -759,13 +832,13 @@ def _get_filter_pad(capture: specs.ResampledCapture):
 def _get_dsp_pad_size(
     setup: specs.Source,
     capture: specs.ResampledCapture,
-    aligner: register.AlignmentCaller | None = None,
+    analysis: Analysis | None = None,
 ) -> tuple[int, int]:
     """returns the padding before and after a waveform to achieve an integral number of FFT windows"""
 
     from .. import resampling
 
-    min_lag_pad = _get_aligner_pad_size(setup.base_clock_rate, capture, aligner)
+    min_lag_pad = _get_aligner_pad_size(setup, capture, analysis)
 
     if resampling.USE_OARESAMPLE:
         oa_pad_low, oa_pad_high = _get_oaresample_pad(setup.base_clock_rate, capture)
@@ -794,14 +867,15 @@ def _get_dsp_pad_size(
 
 
 def _get_aligner_pad_size(
-    base_clock_rate: float,
+    setup: specs.Source,
     capture: specs.ResampledCapture,
-    aligner: register.AlignmentCaller | None = None,
+    analysis: Analysis | None = None,
 ) -> int:
-    if aligner is None:
+    if analysis is None:
         return 0
 
-    mcr = base_clock_rate
+    aligner = get_aligner(setup, analysis)
+    mcr = setup.base_clock_rate
     max_lag = aligner.max_lag(capture)
     lag_pad = ceil(mcr * max_lag)
 
@@ -851,7 +925,7 @@ def _cached_channel_read_buffer_count(
     capture: specs.ResampledCapture,
     *,
     include_holdoff: bool = False,
-    aligner: register.AlignmentCaller | None = None,
+    analysis: Analysis | None = None,
 ) -> int:
     if iqwaveform.isroundmod(capture.duration * capture.sample_rate, 1):
         samples_out = round(capture.duration * capture.sample_rate)
@@ -865,7 +939,7 @@ def _cached_channel_read_buffer_count(
     else:
         sample_rate = capture.sample_rate
 
-    pad_size = sum(_get_dsp_pad_size(setup, capture, aligner))
+    pad_size = sum(_get_dsp_pad_size(setup, capture, analysis))
     if needs_resample(resampler_design, capture):
         nfft = resampler_design['nfft']
         min_samples_in = ceil(samples_out * nfft / resampler_design['nfft_out'])
@@ -883,14 +957,16 @@ def _cached_channel_read_buffer_count(
     return samples_in
 
 
-def get_channel_read_buffer_count(source: SourceBase, include_holdoff=False) -> int:
+def get_channel_read_buffer_count(
+    source: SourceBase, analysis: Analysis | None = None, include_holdoff=False
+) -> int:
     assert source._capture is not None
 
     return _cached_channel_read_buffer_count(
-        setup=source.__setup__,
+        setup=source.setup_spec,
         capture=source._capture,
         include_holdoff=include_holdoff,
-        aligner=source._aligner,
+        analysis=analysis,
     )
 
 

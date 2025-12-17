@@ -1363,9 +1363,7 @@ def oaconvolve(x1, x2, mode='full', axes=-1):
         `scipy.signal.oaconvolve`
     """
     if is_cupy_array(x1):
-        from cupyx.scipy.signal import (
-            oaconvolve as func,  # pyright: ignore[reportMissingImports]
-        )
+        from cupyx.scipy.signal import oaconvolve as func  # type: ignore
     else:
         from scipy.signal import oaconvolve as func
 

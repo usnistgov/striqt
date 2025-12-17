@@ -7,9 +7,10 @@ import msgspec
 
 from .peripherals import NoPeripherals, PeripheralsBase
 from .sources import SourceBase
-from . import sinks
+from . import sinks, sources
 from .. import specs
-from ..specs import _TC, _TS, _TP
+from ..specs import _TS, _TC, _TP
+
 
 _TC2 = typing.TypeVar('_TC2', bound=specs.ResampledCapture)
 _TP2 = typing.TypeVar('_TP2', bound=specs.Peripherals)
@@ -58,9 +59,7 @@ class Sensor(typing.Generic[_TS, _TP, _TC]):
 
 
 @dataclasses.dataclass(frozen=True)
-class Schema(typing.Generic[_TS, _TP, _TC]):
-    source: type[_TS]
-    capture: type[_TC]
+class Schema(typing.Generic[_TS, _TP, _TC], sources._base.Schema[_TS, _TC]):
     peripherals: type[_TP]
 
     def __post_init__(self):
@@ -100,6 +99,12 @@ def bind_sensor(
     if register and key in registry:
         raise TypeError(f'a sensor binding named {key!r} was already registered')
 
+    # bind the schema to the source
+    class BoundSource(sensor.source):
+        __bindings__ = schema
+
+    BoundSource.__name__ = sensor.source.__name__
+    sensor = dataclasses.replace(sensor, source=BoundSource)
     binding = SensorBinding(**dataclasses.asdict(sensor), schema=schema)
 
     class BoundSweep(sensor.sweep_spec, frozen=True, kw_only=True):
@@ -108,9 +113,9 @@ def bind_sensor(
         mock_source: typing.Optional[str] = None
         source: __bindings__.schema.source = msgspec.field(
             default_factory=__bindings__.schema.source
-        )  # type: ignore
-        captures: tuple[__bindings__.schema.capture, ...] = ()  # type: ignore
-        peripherals: __bindings__.schema.peripherals = msgspec.field(  # type: ignore
+        )
+        captures: tuple[__bindings__.schema.capture, ...] = ()
+        peripherals: __bindings__.schema.peripherals = msgspec.field(
             default_factory=__bindings__.schema.peripherals
         )
 
@@ -134,7 +139,7 @@ def bind_sensor(
     if tagged_sweeps is None:
         tagged_sweeps = BoundSweep
     else:
-        tagged_sweeps = typing.Union[tagged_sweeps, BoundSweep]
+        tagged_sweeps = typing.Union[tagged_sweeps, BoundSweep]  # type: ignore
 
     return binding
 

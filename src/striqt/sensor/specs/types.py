@@ -9,6 +9,7 @@ if _TYPE_CHECKING:
     import pandas as pd
 else:
     from ..lib import util as _util
+
     pd = _util.lazy_import('pandas')
 
 
@@ -54,7 +55,8 @@ FileLoop = Annotated[
     bool, Meta('whether to loop the file to create longer IQ waveforms')
 ]
 Format = Annotated[
-    Literal['auto', 'mat', 'tdms'], Meta('data format or auto to guess by extension'),
+    Literal['auto', 'mat', 'tdms'],
+    Meta('data format or auto to guess by extension'),
 ]
 FrequencyOffset = Annotated[float, Meta('Baseband frequency offset', 'Hz')]
 GainScalar = Annotated[float, Meta('Gain setting', 'dB')]
@@ -102,7 +104,8 @@ StoreFormat = Annotated[
 ]
 SweepStartTime = Annotated['pd.Timestamp', Meta('Capture acquisition start time')]
 SyncSource = Annotated[
-    str, Meta('name of a registered waveform alignment function'),
+    str,
+    Meta('name of a registered waveform alignment function'),
 ]
 TimeOffset = Annotated[float, Meta('start time offset', 's')]
 TimeSource = Annotated[
@@ -113,15 +116,15 @@ TimeSyncEveryCapture = Annotated[
     bool, Meta('whether to sync to PPS before each capture in a sweep')
 ]
 TransportDType = Annotated[
-    Literal['int16', 'float32', 'complex64'], Meta('data transfer type to use inside the source')
+    Literal['int16', 'float32', 'complex64'],
+    Meta('data transfer type to use inside the source'),
 ]
 OverloadDetectFlag = Annotated[
     Union[bool, Literal['auto']], Meta('whether to detect overload')
 ]
 WarmupSweep = Annotated[
-    bool, Meta('if True, run empty buffers through the GPU before sweeping'),
+    bool,
+    Meta('if True, run empty buffers through the GPU before sweeping'),
 ]
-WaveformInputPath = Annotated[str|Path, Meta('path to the waveform data file')]
-ZarrSelect = Annotated[
-    dict, Meta('dictionary to select in the data as .sel(**select)')
-]
+WaveformInputPath = Annotated[str | Path, Meta('path to the waveform data file')]
+ZarrSelect = Annotated[dict, Meta('dictionary to select in the data as .sel(**select)')]

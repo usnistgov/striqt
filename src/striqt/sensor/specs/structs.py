@@ -7,7 +7,12 @@ import typing
 import msgspec
 
 from striqt import analysis as _analysis
-from striqt.analysis.lib.specs import SpecBase, Capture, _CaptureKeywords, _SlowHashSpecBase
+from striqt.analysis.lib.specs import (
+    SpecBase,
+    Capture,
+    _CaptureKeywords,
+    _SlowHashSpecBase,
+)
 
 from ..lib import util
 from . import types
@@ -82,9 +87,19 @@ class SingleToneCaptureSpec(ResampledCapture, frozen=True, kw_only=True):
     snr: typing.Optional[types.SNR] = None
 
 
+class _SingleToneCaptureKeywords(_ResampledCaptureKeywords):
+    frequency_offset: types.FrequencyOffset
+    snr: typing.Optional[types.SNR]
+
+
 class DiracDeltaCaptureSpec(ResampledCapture, frozen=True, kw_only=True):
     time: types.TimeOffset = 0
     power: types.Power = 0
+
+
+class _DiracDeltaCaptureKeywords(_ResampledCaptureKeywords):
+    time: types.TimeOffset
+    power: types.Power
 
 
 class SawtoothCaptureSpec(ResampledCapture, kw_only=True, frozen=True, dict=True):
@@ -92,19 +107,29 @@ class SawtoothCaptureSpec(ResampledCapture, kw_only=True, frozen=True, dict=True
     power: types.Power = 1
 
 
+class _SawtoothCaptureKeywords(_ResampledCaptureKeywords):
+    period: types.Period
+    power: types.Power
+
+
 class NoiseCaptureSpec(ResampledCapture, kw_only=True, frozen=True, dict=True):
     power_spectral_density: types.PSD = 1e-17
+
+
+class _NoiseCaptureKeywords(_ResampledCaptureKeywords):
+    power_spectral_density: types.PSD
 
 
 class FileCapture(ResampledCapture, frozen=True, kw_only=True):
     """Capture specification read from a file, with support for None sentinels"""
 
-    # RF and leveling
-    backend_sample_rate: typing.Optional[types.BackendSampleRate] = None
-
     def __post_init__(self):
         if self.backend_sample_rate is not None:
             raise TypeError('backend_sample_rate is fixed by the file source')
+
+
+class _FileCaptureKeywords(_ResampledCaptureKeywords):
+    pass
 
 
 class Source(_SlowHashSpecBase, frozen=True, kw_only=True):
@@ -194,10 +219,15 @@ class _SoapySourceKeywords(_SourceKeywords, total=False):
     time_sync_every_capture: types.TimeSyncEveryCapture
 
 
-class FunctionSourceSpec(Source, kw_only=True, frozen=True):
+class FunctionSource(Source, kw_only=True, frozen=True):
     # make these configurable, to support matching hardware for warmup sweeps
     num_rx_ports: int
     stream_all_rx_ports: typing.ClassVar[bool] = False
+
+
+class _FunctionSourceKeywords(_SourceKeywords, total=False):
+    # make these configurable, to support matching hardware for warmup sweeps
+    num_rx_ports: int
 
 
 class NoSource(Source, frozen=True, kw_only=True):
@@ -206,22 +236,41 @@ class NoSource(Source, frozen=True, kw_only=True):
     stream_all_rx_ports: typing.ClassVar[bool] = False
 
 
-class FileSourceSpec(NoSource, kw_only=True, frozen=True, dict=True):
+class MATSource(NoSource, kw_only=True, frozen=True, dict=True):
     path: types.WaveformInputPath
+    num_rx_ports: int = 1
     file_format: types.Format = 'auto'
     file_metadata: types.FileMetadata = {}
     loop: types.FileLoop = False
     transport_dtype: typing.ClassVar[types.TransportDType] = 'complex64'
 
 
-class TDMSFileSourceSpec(NoSource, frozen=True, kw_only=True):
+class _MATSourceKeywords(_SourceKeywords, total=False):
+    path: types.WaveformInputPath
+    num_rx_ports: int
+    file_format: types.Format
+    file_metadata: types.FileMetadata
+    loop: types.FileLoop
+
+
+class TDMSSource(NoSource, frozen=True, kw_only=True):
     path: types.WaveformInputPath
 
 
-class ZarrIQSourceSpec(NoSource, frozen=True, kw_only=True):
+class _TDMSSourceKeywords(_SourceKeywords):
+    path: types.WaveformInputPath
+
+
+class ZarrIQSource(NoSource, frozen=True, kw_only=True):
     path: types.WaveformInputPath
     center_frequency: types.CenterFrequency
     select: types.ZarrSelect = {}
+
+
+class _ZarrIQSourceKeywords(_SourceKeywords):
+    path: types.WaveformInputPath
+    center_frequency: types.CenterFrequency
+    select: types.ZarrSelect
 
 
 class Description(SpecBase, frozen=True, kw_only=True):
@@ -347,7 +396,9 @@ class Sweep(SpecBase, typing.Generic[_TS, _TP, _TC], frozen=True, kw_only=True):
     sink: Sink = Sink()
     peripherals: _TP = typing.cast(_TP, Peripherals())
 
-    info: typing.ClassVar[SweepInfo] = SweepInfo(reuse_iq=False, loop_only_nyquist=False)
+    info: typing.ClassVar[SweepInfo] = SweepInfo(
+        reuse_iq=False, loop_only_nyquist=False
+    )
     __bindings__: typing.ClassVar[typing.Any] = None
 
     def __post_init__(self):

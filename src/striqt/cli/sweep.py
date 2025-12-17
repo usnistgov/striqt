@@ -53,12 +53,10 @@ def run(*, yaml_path, debug, verbose, port, **kws):
         spec = adjust_port(spec, port)
 
     with sensor.open_resources(spec, yaml_path, except_handler) as resources:
-        sweep = sensor.iterate_sweep(
-            resources, yield_values=False, always_yield=True
-        )
+        sweep = sensor.iterate_sweep(resources, yield_values=False, always_yield=True)
         for _ in sweep:
             pass
 
 
 if __name__ == '__main__':
-    run() # type: ignore
+    run()  # type: ignore

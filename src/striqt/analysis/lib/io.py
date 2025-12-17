@@ -731,7 +731,9 @@ class TDMSFileStream(_FileStreamBase):
         fc = self._header_fd['carrier_frequency'][0]
         duration = self._header_fd['header_fd']['total_samples'][0] * fs
 
-        return dict(self.meta, backend_sample_rate=fs, center_frequency=fc, duration=duration)
+        return dict(
+            self.meta, backend_sample_rate=fs, center_frequency=fc, duration=duration
+        )
 
 
 def open_bare_iq(

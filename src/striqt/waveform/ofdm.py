@@ -1,5 +1,6 @@
 from __future__ import annotations as __
 
+import dataclasses
 from fractions import Fraction
 from math import ceil
 from numbers import Number
@@ -129,8 +130,10 @@ def corr_at_indices(inds, x, nfft, norm=True, out=None):
     return out
 
 
-class SyncParams(typing.NamedTuple):
-    cp_samples: int
+@dataclasses.dataclass
+class SyncParams:
+    min_cp_size: int
+    cp_offsets: list[int]
     frame_size: int
     slot_count: int
     corr_size: int
@@ -203,11 +206,14 @@ def _generate_5g_nr_sync_sequence(
     sample_rate: float,
     subcarrier_spacing: float,
     center_frequency=0,
-    pad_cp=True,
     *,
     xp=None,
     dtype='complex64',
 ):
+    """returns the time-domain PSS sequence.
+
+    The shortest cyclic prefix is prepended.
+    """
     if xp is None:
         xp = np
 
@@ -250,24 +256,24 @@ def _generate_5g_nr_sync_sequence(
 
     norm = xp.sqrt(xp.float32(SC_COUNT))
     m_seqs = xp.array([seq_func(i) for i in range(max_id + 1)], dtype=dtype)
-    m_seqs *= fourier.get_window(('dpss', 0.9), m_seqs.shape[1], xp=xp)[xp.newaxis]
     norm *= xp.sqrt(xp.mean(xp.abs(m_seqs) ** 2))
 
     seq_freq = pad_along_axis(m_seqs / norm, [(pad_lo, pad_hi)], axis=1)
 
     seq_freq = xp.fft.fftshift(seq_freq, axes=1)
-    seq_time = fourier.ifft(seq_freq, axis=1, out=seq_freq)
+    x = fourier.ifft(seq_freq, axis=1, out=seq_freq)
+    print(x.shape)
 
-    # prepend the cyclic prefix
-    if pad_cp:
-        cp_size = round(9 * sample_rate / subcarrier_spacing / 128)
-        # seq_time = xp.concatenate([seq_time[:, -cp_size:], seq_time], axis=1)
-        # seq_time = iqwaveform.util.pad_along_axis(seq_time, [[cp_size, 0]], axis=1)
-        seq_time = xp.concatenate(
-            [xp.zeros_like(seq_time[:, -cp_size:]), seq_time], axis=1
-        )
-
-    return xp.array(seq_time)
+    # prepend the shortest cyclic prefix
+    phy = Phy3GPP(
+        1,
+        subcarrier_spacing=subcarrier_spacing,
+        sample_rate=sample_rate,
+        generation='5G',
+        xp=xp,
+    )
+    cp_size = min(phy.cp_sizes)
+    return xp.concatenate([xp.zeros_like(x[:, -cp_size:]), x], axis=1)
 
 
 @lru_cache()
@@ -275,7 +281,6 @@ def pss_5g_nr(
     sample_rate: float,
     subcarrier_spacing: float,
     center_frequency=0,
-    pad_cp=True,
     *,
     xp=None,
     dtype='complex64',
@@ -294,14 +299,15 @@ def pss_5g_nr(
         xp.ndarray with dimensions (N_id2 index, PSS sample index)
     """
 
+    xp = xp or np
+
     return _generate_5g_nr_sync_sequence(
         seq_func=_pss_m_sequence,
         max_id=2,
         sample_rate=sample_rate,
         subcarrier_spacing=subcarrier_spacing,
         center_frequency=center_frequency,
-        pad_cp=pad_cp,
-        xp=xp or np,
+        xp=xp,
         dtype=dtype,
     )
 
@@ -311,7 +317,6 @@ def sss_5g_nr(
     sample_rate: float,
     subcarrier_spacing: float,
     center_frequency=0,
-    pad_cp=True,
     *,
     xp=None,
     dtype='complex64',
@@ -336,7 +341,6 @@ def sss_5g_nr(
         sample_rate=sample_rate,
         subcarrier_spacing=subcarrier_spacing,
         center_frequency=center_frequency,
-        pad_cp=pad_cp,
         xp=xp or np,
         dtype=dtype,
     )
@@ -417,10 +421,18 @@ def pss_params(
     else:
         raise ValueError('discovery_periodicity must be a multiple of 10e-3')
 
-    cp_samples = round(9 / 128 * sample_rate / subcarrier_spacing)
+    phy = Phy3GPP(
+        1,
+        subcarrier_spacing=subcarrier_spacing,
+        sample_rate=sample_rate,
+        generation='5G',
+    )
+    min_cp_size = min(phy.cp_sizes)
+    cp_offsets = list(np.cumsum([n - min_cp_size for n in phy.cp_sizes]))
 
     return SyncParams(
-        cp_samples=cp_samples,
+        min_cp_size=min_cp_size,
+        cp_offsets=cp_offsets,
         frame_size=frame_size,
         slot_count=slot_count,
         corr_size=corr_size,
@@ -450,7 +462,8 @@ def sss_params(
     indexes = [i + 2 for i in template.symbol_indexes]
 
     return SyncParams(
-        cp_samples=template.cp_samples,
+        min_cp_size=template.min_cp_size,
+        cp_offsets=template.cp_offsets,
         frame_size=template.frame_size,
         slot_count=template.slot_count,
         corr_size=template.corr_size,
@@ -564,7 +577,12 @@ class Phy3GPP(PhyOFDM):
     SUBCARRIER_SPACINGS = {15e3, 30e3, 60e3}
 
     def __init__(
-        self, channel_bandwidth, subcarrier_spacing=15e3, generation: typing.Literal['4G','5G']='4G', sample_rate=None, xp=None
+        self,
+        channel_bandwidth,
+        subcarrier_spacing=15e3,
+        generation: typing.Literal['4G', '5G'] = '4G',
+        sample_rate=None,
+        xp=None,
     ):
         if xp is None:
             xp = np
@@ -591,12 +609,14 @@ class Phy3GPP(PhyOFDM):
             # assert subcarrier_spacing == 15e3, '4G LTE only supports 15 kHz subcarrier spacing'
             cp_sizes = nfft * xp.array(self.LTE_MIN_CP_SIZES, dtype=int) // 128
         elif generation.upper() == '5G':
-            Tc = Fraction(1,4096*480)*1000 # microsec
+            Tc = Fraction(1, 4096 * 480) * 1000  # microsec
             kappa = 64
             fs_MHz = Fraction(round(sample_rate), 1_000_000)
 
-            scs_norm = Fraction(round(subcarrier_spacing),15000)
-            Tcp_us = [kappa*Tc*(144/scs_norm) + 16*kappa*Tc] + 13*[kappa*Tc*(144/scs_norm)]
+            scs_norm = Fraction(round(subcarrier_spacing), 15000)
+            Tcp_us = [kappa * Tc * (144 / scs_norm) + 16 * kappa * Tc] + 13 * [
+                kappa * Tc * (144 / scs_norm)
+            ]
             cp_fractions = [T * fs_MHz for T in Tcp_us]
             if any(cp.denominator != 1 for cp in cp_fractions):
                 raise ValueError(

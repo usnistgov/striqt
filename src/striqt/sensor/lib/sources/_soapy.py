@@ -575,10 +575,28 @@ def device_time_source(spec: specs.SoapySource):
         return spec.time_source
 
 
+@_base.bind_schema_types(specs.SoapySource, specs.SoapyCapture)
 class SoapySourceBase(
     _base.SourceBase, _base.HasSetupType[_TS], _base.HasCaptureType[_TC]
 ):
     """Applies SoapySDR for device control and acquisition"""
+
+    if typing.TYPE_CHECKING:
+        # for type hinting only
+        def __init__(
+            self,
+            _setup=None,
+            /,
+            *,
+            reuse_iq=False,
+            **kwargs: typing.Unpack[specs._SoapySourceKeywords],
+        ): ...
+        def arm(
+            self,
+            _capture=None,
+            /,
+            **capture_kws: typing.Unpack[specs._SoapyCaptureKeywords],
+        ) -> specs.SoapyCapture: ...
 
     _device: 'SoapySDR.Device'
     _rx_stream: RxStream
@@ -726,7 +744,7 @@ class SoapySourceBase(
         return probe_soapy_info(self._device)
 
     @util.stopwatch('read_iq', 'source')
-    def read_iq(self):
+    def read_iq(self, analysis=None):
         assert self._rx_stream is not None, 'soapy device is not open'
         assert self._device is not None, 'soapy device is not open'
 
@@ -737,14 +755,12 @@ class SoapySourceBase(
         if not self._rx_stream.is_enabled:
             self._rx_stream.enable(self._device, True)
 
-        return super().read_iq()
+        return super().read_iq(analysis)
 
-    def acquire(
-        self, capture=None, next=None, *, correction=True, alias_func=None
-    ):
+    def acquire(self, *, analysis=None, correction=True, alias_func=None):
         with read_retries(self):
             result = super().acquire(
-                capture, next, correction=correction, alias_func=alias_func
+                analysis=analysis, correction=correction, alias_func=alias_func
             )
-            result.extra_data.update(self.read_peripherals())  # type: ignore
+            result.extra_data.update(self.read_peripherals())
             return result
