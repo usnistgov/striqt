@@ -262,7 +262,6 @@ def _generate_5g_nr_sync_sequence(
 
     seq_freq = xp.fft.fftshift(seq_freq, axes=1)
     x = fourier.ifft(seq_freq, axis=1, out=seq_freq)
-    print(x.shape)
 
     # prepend the shortest cyclic prefix
     phy = Phy3GPP(

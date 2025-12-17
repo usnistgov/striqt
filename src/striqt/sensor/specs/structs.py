@@ -148,7 +148,7 @@ class Source(_SlowHashSpecBase, frozen=True, kw_only=True):
     channel_sync_source: typing.Optional[str] = None
 
     # in the future, these should probably move to an analysis config
-    array_backend: types.ArrayBackend = 'cupy'
+    array_backend: types.ArrayBackend = 'numpy'
     cupy_max_fft_chunk_size: typing.Optional[int] = None
 
     # validation data

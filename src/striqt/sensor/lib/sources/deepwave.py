@@ -17,18 +17,21 @@ class Air7101BSourceSpec(specs.SoapySource, kw_only=True, frozen=True):
     base_clock_rate: specs.types.BaseClockRate = 125e6
     rx_enable_delay = 0.35
     transient_holdoff_time = 2e-3
+    array_backend: specs.types.ArrayBackend = 'cupy'
 
 
 class Air7201BSourceSpec(specs.SoapySource, kw_only=True, frozen=True):
     base_clock_rate: specs.types.BaseClockRate = 125e6
     rx_enable_delay = 0.35
     transient_holdoff_time = 2e-3
+    array_backend: specs.types.ArrayBackend = 'cupy'
 
 
 class Air8201BSourceSpec(specs.SoapySource, kw_only=True, frozen=True):
     base_clock_rate: specs.types.BaseClockRate = 125e6
     rx_enable_delay = 0.4
     transient_holdoff_time = 2e-3
+    array_backend: specs.types.ArrayBackend = 'cupy'
 
 
 class Airstack1Source(_soapy.SoapySourceBase):
