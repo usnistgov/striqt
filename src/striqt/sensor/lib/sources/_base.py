@@ -45,6 +45,9 @@ FILTER_DOMAIN = 'time'
 
 _TS = typing.TypeVar('_TS', bound=specs.Source)
 _TC = typing.TypeVar('_TC', bound=specs.ResampledCapture)
+_PS = typing.ParamSpec('_PS')
+_PC = typing.ParamSpec('_PC')
+_TB = typing.TypeVar('_TB', bound='specs.SpecBase')
 _T = typing.TypeVar('_T', bound='SourceBase')
 
 
@@ -206,27 +209,32 @@ def _map_source(spec: specs.Source, source: SourceBase):
         maybe_event.set()
 
 
-class HasSetupType(typing.Protocol[_TS]):
+class HasSetupType(typing.Protocol[_TS, _PS]):
     __setup__: _TS
 
     def __init__(
         self,
         _setup: _TS | None = None,
         /,
-        *,
         reuse_iq=False,
-        **kwargs: typing.Unpack[specs.keywords.Source],
+        *args: _PS.args,
+        **kwargs: _PS.kwargs
     ): ...
+
+    @classmethod
+    def from_spec(cls, spec: _TS, reuse_iq: bool=False) -> typing.Self: ...
 
     def _connect(self, spec: _TS) -> None: ...
 
     def _apply_setup(self, spec: _TS) -> None: ...
 
 
-class HasCaptureType(typing.Protocol[_TC]):
+class HasCaptureType(typing.Protocol[_TC, _PC]):
     _capture: typing.Optional[_TC]
 
-    def arm(self, _capture: _TC | None, /, **capture_kws) -> _TC: ...
+    def arm(self, *args: _PC.args, **kwargs: _PC.kwargs): ...
+
+    def arm_spec(self, spec: _TC): ...
 
     def acquire(
         self,
@@ -291,7 +299,22 @@ def bind_schema_types(
     return decorator
 
 
-class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
+def get_bound_spec(spec: specs.SpecBase|None, capture_cls: type[_TB]|None, **kws) -> _TB:
+    if isinstance(spec, specs.SpecBase):
+        if capture_cls is not None:
+            spec = typing.cast(_TB, capture_cls.from_spec(spec))
+        capture = spec.replace(**kws)
+    elif spec is not None:
+        raise TypeError('setup must be a specs.Source or None')
+    elif capture_cls is None:
+        raise TypeError('an explicit argument of type specs.Capture is required')
+    else:
+        capture = capture_cls(**kws)
+
+    return typing.cast(_TB, capture)
+
+
+class SourceBase(typing.Generic[_TS, _TC, _PS, _PC], HasSetupType[_TS, _PS], HasCaptureType[_TC, _PC]):
     __bindings__: typing.ClassVar[Schema | None] = None
 
     _buffers: _ReceiveBuffers
@@ -301,33 +324,34 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
 
     def __init__(
         self,
-        _setup: _TS | None = None,
-        /,
-        *,
         reuse_iq=False,
-        **kwargs: typing.Unpack[specs.keywords.Source],
+        *args: _PS.args, **kwargs: _PS.kwargs
     ):
         open_event = self._is_open = Event()  # first, to serve other threads
 
-        if isinstance(_setup, specs.Source):
-            _setup = _setup.replace(**kwargs)
-        elif _setup is not None:
-            raise TypeError('setup must be a specs.Source or None')
-        elif self.__bindings__ is None:
-            raise TypeError('unbound source requires an explicit specs.Source argument')
+        # back door from .from_spec
+        _spec = kwargs.get('__setup', None)
+
+        if _spec is not None:
+            _spec = typing.cast(_TS, _spec)
+
+        if self.__bindings__ is None:
+            spec_cls = None
         else:
-            _setup = typing.cast(_TS, self.__bindings__.source(**kwargs))
+            spec_cls = typing.cast(type[_TS], self.__bindings__.source)
 
-        _map_source(_setup, self)
+        _spec = get_bound_spec(_spec, spec_cls, **kwargs)
 
-        self.__setup__ = _setup
+        _map_source(_spec, self)
+
+        self.__setup__ = _spec
         self._capture = None
         self._buffers = _ReceiveBuffers(self)
         self._prev_iq: AcquiredIQ | None = None
         self._reuse_iq = reuse_iq
 
         try:
-            self._connect(_setup)
+            self._connect(_spec)
         except:
             self._is_open = False
             raise
@@ -336,12 +360,18 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
         finally:
             open_event.set()
 
-        if _setup.array_backend == 'cupy':
+        if _spec.array_backend == 'cupy':
             util.safe_import('cupy')
             # util.safe_import('cupyx')
             util.configure_cupy()
 
-        self._apply_setup(_setup)
+        self._apply_setup(_spec)
+
+    @classmethod
+    def from_spec(cls, spec: _TS, reuse_iq: bool =False) -> typing.Self:
+        kwargs = spec.to_dict()
+        kwargs['__setup'] = type(spec)
+        return cls(reuse_iq=reuse_iq, **kwargs) # type: ignore
 
     @functools.cached_property
     def info(self) -> BaseSourceInfo:
@@ -382,46 +412,40 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
         return self.__setup__
 
     @util.stopwatch('arm', 'source', threshold=10e-3)
-    def arm(self, _capture=None, /, **capture_kws) -> _TC:
+    def arm(self, *args, **kwargs):
         """stop the stream, apply a capture configuration, and start it"""
         assert self._buffers is not None
 
-        if self.__bindings__ is None:
-            capture_cls = None
-        else:
+        if self.__bindings__ is not None:
             capture_cls = self.__bindings__.capture
-
-        if not self.is_open():
-            raise RuntimeError('open the radio before arming')
-        elif isinstance(_capture, specs.Capture):
-            if capture_cls is not None:
-                _capture = typing.cast(_TC, capture_cls.fromspec(_capture))
-            capture = _capture.replace(**capture_kws)
-        elif _capture is not None:
-            raise TypeError('setup must be a specs.Source or None')
-        elif capture_cls is None:
-            raise TypeError('an explicit argument of type specs.Capture is required')
+        elif self._capture is not None:
+            capture_cls = type(self._capture)
         else:
-            capture = capture_cls(**capture_kws)
+            raise TypeError('no capture bindings were supplied')
 
-        capture = typing.cast(_TC, capture)
+        capture = get_bound_spec(None, capture_cls, **kwargs)
+
+        return self.arm_spec(capture)
+
+    def arm_spec(self, spec: _TC):
+        if not self.is_open():
+            raise RuntimeError('open the radio before arming')        
 
         if self._capture is not None:
             mcr = self.setup_spec.base_clock_rate
-            if self._reuse_iq and _is_reusable(self.capture_spec, capture, mcr):
+            if self._reuse_iq and _is_reusable(self.capture_spec, spec, mcr):
                 pass
-                # self._prev_iq = iq
             else:
                 self._prev_iq = None
 
-        if capture == self._capture and self._capture is not None:
-            return self._capture
+        if spec == self._capture and self._capture is not None:
+            return
 
-        if not self.setup_spec.gapless_rearm or capture != self._capture:
+        if not self.setup_spec.gapless_rearm or spec != self._capture:
             self._buffers.clear()
 
-        self._capture = self._prepare_capture(capture) or capture
-        return self._capture
+        self._capture = self._prepare_capture(spec) or spec
+
 
     def read_iq(self, analysis: Analysis | None = None) -> 'tuple[ArrayType, int|None]':
         """read IQ for the armed capture"""
@@ -571,7 +595,7 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
         with util.stopwatch(
             'resampling filter', threshold=self.capture_spec.duration / 2
         ):
-            return resampling.resampling_correction(iq, overwrite_x=True)
+            return resampling.resampling_correction(iq, analysis, overwrite_x=True)
 
     def _build_acquisition_info(self, time_ns: int | None) -> specs.AcquisitionInfo:
         return specs.AcquisitionInfo(source_id=self.id)
@@ -616,7 +640,7 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
         return design_capture_resampler(self.setup_spec.base_clock_rate, capture)
 
 
-class VirtualSourceBase(SourceBase[_TS, _TC]):
+class VirtualSourceBase(SourceBase[_TS, _TC, _PS, _PC]):
     _samples_elapsed = 0
 
     def reset_sample_counter(self, value=0):
@@ -788,7 +812,7 @@ def design_capture_resampler(
     **kws: Unpack[_ResamplerKws],
 ) -> ResamplerDesign:
     # cast the struct in case it's a subclass
-    fixed_capture = specs.ResampledCapture.fromspec(capture)
+    fixed_capture = specs.ResampledCapture.from_spec(capture)
     kws = _ResamplerKws(
         bw_lo=0.25e6,
         min_oversampling=1.1,

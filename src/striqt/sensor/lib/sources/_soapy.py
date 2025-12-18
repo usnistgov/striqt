@@ -576,27 +576,8 @@ def device_time_source(spec: specs.SoapySource):
 
 
 @_base.bind_schema_types(specs.SoapySource, specs.SoapyCapture)
-class SoapySourceBase(
-    _base.SourceBase, _base.HasSetupType[_TS], _base.HasCaptureType[_TC]
-):
+class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
     """Applies SoapySDR for device control and acquisition"""
-
-    if typing.TYPE_CHECKING:
-        # for type hinting only
-        def __init__(
-            self,
-            _setup=None,
-            /,
-            *,
-            reuse_iq=False,
-            **kwargs: typing.Unpack[specs.keywords.SoapySource],
-        ): ...
-        def arm(
-            self,
-            _capture=None,
-            /,
-            **capture_kws: typing.Unpack[specs.keywords.SoapyCapture],
-        ) -> specs.SoapyCapture: ...
 
     _device: 'SoapySDR.Device'
     _rx_stream: RxStream

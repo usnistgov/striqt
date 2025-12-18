@@ -74,8 +74,8 @@ def spectrogram_histogram(
     capture: specs.Capture,
     **kwargs: typing.Unpack[SpectrogramHistogramKeywords],
 ):
-    spec = SpectrogramHistogramSpec.fromdict(kwargs)
-    spg_spec = shared.SpectrogramSpec.fromspec(spec)
+    spec = SpectrogramHistogramSpec.from_dict(kwargs)
+    spg_spec = shared.SpectrogramSpec.from_spec(spec)
 
     spg, metadata = shared.evaluate_spectrogram(
         iq,

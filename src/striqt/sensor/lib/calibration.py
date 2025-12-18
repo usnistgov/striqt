@@ -26,6 +26,8 @@ else:
 _TC = typing.TypeVar('_TC', bound=_specs.SoapyCapture)
 _TP = typing.TypeVar('_TP', bound=_specs.Peripherals)
 _TS = typing.TypeVar('_TS', bound=_specs.SoapySource)
+_PS = typing.ParamSpec('_PS')
+_PC = typing.ParamSpec('_PC')
 
 
 def _y_factor_temperature(
@@ -462,8 +464,8 @@ class YFactorSink(_sinks.SinkBase):
 
 
 def bind_manual_yfactor_calibration(
-    name: str, sensor: '_bindings.SensorBinding[_TS, _TP, _TC]'
-) -> '_bindings.SensorBinding[_TS, typing.Any, typing.Any]':
+    name: str, sensor: '_bindings.SensorBinding[_TS, _TP, _TC, _PS, _PC]'
+) -> '_bindings.SensorBinding[_TS, typing.Any, typing.Any, _PS, typing.Any]':
     """extend an existing binding with a y-factor calibration"""
 
     from . import bindings
@@ -505,7 +507,7 @@ def bind_manual_yfactor_calibration(
             assert self.calibration_spec is not None
 
             sensor_result = sensor.peripherals.acquire(self)  # type: ignore
-            return sensor_result | self.calibration_spec.todict()
+            return sensor_result | self.calibration_spec.to_dict()
 
         def setup(
             self,
@@ -526,5 +528,7 @@ def bind_manual_yfactor_calibration(
             source=sensor.schema.source,
             capture=capture_spec_cls,
             peripherals=sensor.schema.peripherals,
+            init_like=sensor.schema.init_like,
+            arm_like=sensor.schema.arm_like
         ),
     )

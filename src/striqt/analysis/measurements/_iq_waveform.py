@@ -79,9 +79,9 @@ def iq_waveform(
 ) -> 'iqwaveform.util.Array':
     """package a clipping of the IQ waveform"""
 
-    spec = IQWaveformSpec.fromdict(kwargs)
+    spec = IQWaveformSpec.from_dict(kwargs)
 
-    metadata = spec.todict()
+    metadata = spec.to_dict()
 
     if spec.start_time_sec is None:
         start = None

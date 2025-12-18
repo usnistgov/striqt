@@ -180,8 +180,8 @@ def cellular_5g_pss_sync(
     due to "ISI" begin to increase quickly.
     """
 
-    weighted_spec = Cellular5GNRWeightedCorrelationSpec.fromdict(kwargs).validate()
-    spec = Cellular5GNRPSSCorrelationSpec.fromspec(weighted_spec).validate()
+    weighted_spec = Cellular5GNRWeightedCorrelationSpec.from_dict(kwargs).validate()
+    spec = Cellular5GNRPSSCorrelationSpec.from_spec(weighted_spec).validate()
 
     est = pss_local_weighted_correlator(
         iq,
@@ -253,7 +253,7 @@ def cellular_5g_pss_correlation(
         3GPP TS 138 213: Section 4.1
     """
 
-    spec = Cellular5GNRPSSCorrelationSpec.fromdict(kwargs).validate()
+    spec = Cellular5GNRPSSCorrelationSpec.from_dict(kwargs).validate()
 
     R = correlate_5g_pss(iq, capture=capture, spec=spec)
 

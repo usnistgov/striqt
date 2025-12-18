@@ -272,7 +272,7 @@ def cellular_resource_power_histogram(
     Returns:
         `xarray.DataArray` or `(array, dict)` based on `as_xarray`
     """
-    spec = CellularResourcePowerHistogramSpec.fromdict(kwargs)
+    spec = CellularResourcePowerHistogramSpec.from_dict(kwargs)
     spec_defaults = _struct_defaults(CellularResourcePowerHistogramSpec)
 
     xp = iqwaveform.util.array_namespace(iq)

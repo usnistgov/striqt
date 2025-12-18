@@ -90,7 +90,7 @@ def loop_captures(sweep: specs.Sweep[typing.Any, typing.Any, _TC]) -> tuple[_TC,
             new = (c.replace(**updates) for c in sweep.captures)
         else:
             # otherwise, instances are new captures
-            new = (cls.fromdict(updates) for _ in range(1))
+            new = (cls.from_dict(updates) for _ in range(1))
 
         if sweep.info.loop_only_nyquist:
             new = (c for c in new if c.sample_rate >= c.analysis_bandwidth)
@@ -108,9 +108,9 @@ def varied_capture_fields(
 ) -> list[str]:
     """generate a list of capture fields with at least 2 values in the specified sweep"""
 
-    inner_values = (c.todict().values() for c in captures)
+    inner_values = (c.to_dict().values() for c in captures)
     inner_counts = [len(Counter(v)) for v in zip(*inner_values)]
-    fields = captures[0].todict().keys()
+    fields = captures[0].to_dict().keys()
     inner_counts = dict(zip(fields, inner_counts))
     outer_counts = {loop.field: len(loop.get_points()) for loop in loops}
     totals = {
@@ -145,7 +145,7 @@ def _single_match(
 
         # type conversion for any search fields that are in 'capture'
         valid_fields = {k: v for k, v in fields.items() if k in all_fields}
-        converted_fields = fields | capture.replace(**valid_fields).todict()
+        converted_fields = fields | capture.replace(**valid_fields).to_dict()
 
     for name, value in converted_fields.items():
         hits = (
@@ -245,7 +245,7 @@ def capture_fields_with_aliases(
         attrs = {}
         c = None
     else:
-        attrs = capture.todict(skip_private=True)
+        attrs = capture.to_dict(skip_private=True)
         c = split_capture_ports(capture)[0]
     aliases = evaluate_aliases(c, source_id=source_id, output=sink_spec)
 

@@ -210,13 +210,13 @@ def build_dataset_attrs(sweep: specs.Sweep):
     if isinstance(sweep.description, str):
         attrs['description'] = sweep.description
     else:
-        attrs['description'] = sweep.description.todict()
+        attrs['description'] = sweep.description.to_dict()
 
     attrs['loops'] = {l.field: l.get_points() for l in sweep.loops}
 
     for field in FIELDS:
         obj = getattr(sweep, field)
-        new_attrs = obj.todict()
+        new_attrs = obj.to_dict()
         attrs.update(new_attrs)
 
     return attrs
@@ -305,7 +305,7 @@ def analyze(
     with options.registry.cache_context(iq.capture, options.cache_callback):
         if options.correction:
             with util.stopwatch('resampling filter', logger_level=logging.DEBUG):
-                iq = resampling.resampling_correction(iq, overwrite_x=overwrite_x)
+                iq = resampling.resampling_correction(iq, analysis=options.sweep_spec.analysis, overwrite_x=overwrite_x)
                 assert iq.capture is not None
 
         opts = msgspec.structs.replace(options, as_xarray='delayed')
@@ -420,7 +420,7 @@ def sweep_touches_gpu(sweep: specs.Sweep) -> bool:
     if sweep.source.calibration is not None:
         return True
 
-    analysis_dict = sweep.analysis.todict()
+    analysis_dict = sweep.analysis.to_dict()
     if tuple(analysis_dict.keys()) != (measurements.iq_waveform.__name__,):
         # everything except iq_clipping requires a warmup
         return True
@@ -542,7 +542,7 @@ def prepare_compute(input_spec: specs.Sweep):
 
     res = resources.Resources(
         sweep_spec=spec,
-        source=bindings.warmup.source(spec.source, analysis=spec.analysis),
+        source=bindings.warmup.source.from_spec(spec.source),
         peripherals=bindings.warmup.peripherals(spec),
         sink=sinks.NoSink(spec),
         calibration=None,

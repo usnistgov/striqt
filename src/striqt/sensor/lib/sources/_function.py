@@ -27,7 +27,7 @@ def _lo_shift_tone(inds, source: _base.SourceBase, xp, lo_offset=None):
     return xp.exp(phase_scale * inds).astype('complex64')
 
 
-class TestSourceBase(_base.VirtualSourceBase[_TS, _TC]):
+class TestSourceBase(_base.VirtualSourceBase[_TS, _TC, _base._PS, _base._PC]):
     def _read_stream(
         self,
         buffers,
@@ -62,24 +62,8 @@ class TestSourceBase(_base.VirtualSourceBase[_TS, _TC]):
 
 
 class SingleToneSource(
-    TestSourceBase[specs.FunctionSource, specs.SingleToneCaptureSpec]
+    TestSourceBase[specs.FunctionSource, specs.SingleToneCaptureSpec, _base._PS, _base._PC]
 ):
-    if typing.TYPE_CHECKING:
-        # for type hinting only
-        def __init__(
-            self,
-            _setup=None,
-            /,
-            *,
-            reuse_iq=False,
-            **kwargs: typing.Unpack[specs.keywords.FunctionSource],
-        ): ...
-        def arm(
-            self,
-            _capture=None,
-            /,
-            **capture_kws: typing.Unpack[specs.keywords.SingleToneCapture],
-        ) -> specs.SingleToneCaptureSpec: ...
 
     def get_waveform(
         self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
@@ -110,24 +94,8 @@ class SingleToneSource(
 
 
 class DiracDeltaSource(
-    TestSourceBase[specs.FunctionSource, specs.DiracDeltaCaptureSpec]
+    TestSourceBase[specs.FunctionSource, specs.DiracDeltaCaptureSpec, _base._PS, _base._PC]
 ):
-    if typing.TYPE_CHECKING:
-        # for type hinting only
-        def __init__(
-            self,
-            _setup=None,
-            /,
-            *,
-            reuse_iq=False,
-            **kwargs: typing.Unpack[specs.keywords.FunctionSource],
-        ): ...
-        def arm(
-            self,
-            _capture=None,
-            /,
-            **capture_kws: typing.Unpack[specs.keywords.DiracDeltaCapture],
-        ) -> specs.DiracDeltaCaptureSpec: ...
 
     def get_waveform(
         self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
@@ -146,24 +114,7 @@ class DiracDeltaSource(
         return ret[np.newaxis,]
 
 
-class SawtoothSource(TestSourceBase[specs.FunctionSource, specs.SawtoothCaptureSpec]):
-    if typing.TYPE_CHECKING:
-        # for type hinting only
-        def __init__(
-            self,
-            _setup=None,
-            /,
-            *,
-            reuse_iq=False,
-            **kwargs: typing.Unpack[specs.keywords.FunctionSource],
-        ): ...
-        def arm(
-            self,
-            _capture=None,
-            /,
-            **capture_kws: typing.Unpack[specs.keywords.SawtoothCapture],
-        ) -> specs.SawtoothCaptureSpec: ...
-
+class SawtoothSource(TestSourceBase[specs.FunctionSource, specs.SawtoothCaptureSpec, _base._PS, _base._PC]):
     def get_waveform(
         self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
     ):
@@ -178,24 +129,7 @@ class SawtoothSource(TestSourceBase[specs.FunctionSource, specs.SawtoothCaptureS
         return ret
 
 
-class NoiseSource(TestSourceBase[specs.FunctionSource, specs.NoiseCaptureSpec]):
-    if typing.TYPE_CHECKING:
-        # for type hinting only
-        def __init__(
-            self,
-            _setup=None,
-            /,
-            *,
-            reuse_iq=False,
-            **kwargs: typing.Unpack[specs.keywords.FunctionSource],
-        ): ...
-        def arm(
-            self,
-            _capture=None,
-            /,
-            **capture_kws: typing.Unpack[specs.keywords.NoiseCapture],
-        ) -> specs.NoiseCaptureSpec: ...
-
+class NoiseSource(TestSourceBase[specs.FunctionSource, specs.NoiseCaptureSpec, _base._PS, _base._PC]):
     def get_waveform(
         self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
     ):

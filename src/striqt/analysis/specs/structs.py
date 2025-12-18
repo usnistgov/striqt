@@ -101,7 +101,7 @@ class SpecBase(
             return self
         return msgspec.structs.replace(self, **attrs).validate()
 
-    def todict(self, skip_private=False) -> dict:
+    def to_dict(self, skip_private=False) -> dict:
         """return a dictinary representation of `self`"""
         map = msgspec.to_builtins(self, enc_hook=_enc_hook)
 
@@ -111,23 +111,23 @@ class SpecBase(
 
         return map
 
-    def tojson(self) -> bytes:
+    def to_json(self) -> bytes:
         return msgspec.json.encode(self, enc_hook=_enc_hook)
 
     @classmethod
-    def fromdict(cls: type[_T], d: dict) -> _T:
+    def from_dict(cls: type[_T], d: dict) -> _T:
         return convert_dict(d, type=cls)
 
     @classmethod
-    def fromspec(cls: type[_T], other: SpecBase) -> _T:
+    def from_spec(cls: type[_T], other: SpecBase) -> _T:
         return convert_spec(other, type=cls)
 
     @classmethod
-    def fromjson(cls: type[_T], d: str | bytes) -> _T:
+    def from_json(cls: type[_T], d: str | bytes) -> _T:
         return msgspec.json.decode(d, type=cls, strict=False, dec_hook=_dec_hook)
 
     def validate(self) -> typing.Self:
-        return self.fromdict(self.todict())
+        return self.from_dict(self.to_dict())
 
 
 class _SlowHashSpecBase(SpecBase, kw_only=True, frozen=True):
@@ -162,6 +162,7 @@ class Capture(SpecBase, kw_only=True, frozen=True):
 
     def __post_init__(self):
         from ..lib import util
+
         if not util.isroundmod(self.duration * self.sample_rate, 1):
             raise ValueError(
                 f'duration {self.duration!r} is not an integer multiple of sample period'

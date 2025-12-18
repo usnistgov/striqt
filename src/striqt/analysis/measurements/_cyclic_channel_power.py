@@ -62,7 +62,7 @@ def cyclic_lag(capture: specs.Capture, spec: CyclicChannelPowerSpec):
 def cyclic_channel_power(
     iq, capture: specs.Capture, **kwargs: typing.Unpack[CyclicChannelPowerSpec]
 ):
-    spec = CyclicChannelPowerSpec.fromdict(kwargs)
+    spec = CyclicChannelPowerSpec.from_dict(kwargs)
 
     xp = iqwaveform.util.array_namespace(iq)
 

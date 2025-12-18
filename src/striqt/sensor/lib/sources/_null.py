@@ -18,7 +18,7 @@ _TS = typing.TypeVar('_TS', bound=specs.NoSource)
 _TC = typing.TypeVar('_TC', bound=specs.ResampledCapture)
 
 
-class NoSource(_base.SourceBase[_TS, _TC]):
+class NoSource(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
     """fast paths to acquire empty buffers"""
 
     _samples_elapsed = 0

@@ -418,8 +418,8 @@ class MeasurementRegistry(
                         'xarray argument must be one of (True, False, "delayed")'
                     )
 
-                spec = spec_type.fromdict(kwargs)
-                ret = func(iq, capture, *args, **spec.todict())
+                spec = spec_type.from_dict(kwargs)
+                ret = func(iq, capture, *args, **spec.to_dict())
 
                 data, more_attrs = normalize_factory_return(ret, name=func.__name__)
 
@@ -555,7 +555,7 @@ class AlignmentCaller:
                 f'channel_sync_source {name!r} requires an analysis specification for {self.meas_info.name!r}'
             )
 
-        self.meas_kws = self.meas_spec.todict()
+        self.meas_kws = self.meas_spec.to_dict()
 
     def __call__(self, iq: ArrayType, capture: specs.Capture) -> float:
         ret = self.info.func(iq, capture, **self.meas_kws)

@@ -19,17 +19,22 @@ warmup = bind_sensor(
     ),
     Schema(
         source=specs.NoSource,
+        init_like=specs.NoSource,
         capture=specs.ResampledCapture,
+        arm_like=specs.ResampledCapture,        
         peripherals=specs.NoPeripherals,
     ),
 )
+
 
 mat_file = bind_sensor(
     'mat_file',
     Sensor(source=sources.MATSource),
     Schema(
         source=specs.MATSource,
+        init_like=specs.MATSource,
         capture=specs.FileCapture,
+        arm_like=specs.FileCapture,
         peripherals=specs.NoPeripherals,
     ),
 )
@@ -40,7 +45,9 @@ tdms_file = bind_sensor(
     Sensor(source=sources.TDMSSource),
     Schema(
         source=specs.TDMSSource,
+        init_like=specs.TDMSSource,
         capture=specs.FileCapture,
+        arm_like=specs.FileCapture,
         peripherals=specs.NoPeripherals,
     ),
 )
@@ -51,7 +58,9 @@ zarr_iq = bind_sensor(
     Sensor(source=sources.ZarrIQSource),
     Schema(
         source=specs.ZarrIQSource,
+        init_like=specs.ZarrIQSource,
         capture=specs.FileCapture,
+        arm_like=specs.FileCapture,
         peripherals=specs.NoPeripherals,
     ),
 )
@@ -63,7 +72,9 @@ noise = bind_sensor(
     Sensor(source=sources.NoiseSource),
     Schema(
         source=specs.FunctionSource,
+        init_like=specs.FunctionSource,
         capture=specs.NoiseCaptureSpec,
+        arm_like=specs.NoiseCaptureSpec,
         peripherals=specs.NoPeripherals,
     ),
 )
@@ -73,7 +84,9 @@ dirac_delta = bind_sensor(
     Sensor(source=sources.DiracDeltaSource),
     Schema(
         source=specs.FunctionSource,
+        init_like=specs.FunctionSource,
         capture=specs.DiracDeltaCaptureSpec,
+        arm_like=specs.DiracDeltaCaptureSpec,
         peripherals=specs.NoPeripherals,
     ),
 )
@@ -83,7 +96,9 @@ single_tone = bind_sensor(
     Sensor(source=sources.SingleToneSource),
     Schema(
         source=specs.FunctionSource,
+        init_like=specs.FunctionSource,
         capture=specs.SingleToneCaptureSpec,
+        arm_like=specs.SingleToneCaptureSpec,
         peripherals=specs.NoPeripherals,
     ),
 )
@@ -93,7 +108,9 @@ sawtooth = bind_sensor(
     Sensor(source=sources.SawtoothSource),
     Schema(
         source=specs.FunctionSource,
+        init_like=specs.FunctionSource,
         capture=specs.SawtoothCaptureSpec,
+        arm_like=specs.SawtoothCaptureSpec,
         peripherals=specs.NoPeripherals,
     ),
 )
@@ -105,7 +122,9 @@ air7101b = bind_sensor(
     Sensor(source=deepwave.Airstack1Source),
     Schema(
         source=deepwave.Air7101BSourceSpec,
+        init_like=deepwave.Air7101BSourceSpec,
         capture=specs.SoapyCapture,
+        arm_like=specs.SoapyCapture,
         peripherals=specs.NoPeripherals,
     ),
 )
@@ -117,7 +136,9 @@ air7201b = bind_sensor(
     Sensor(source=deepwave.Airstack1Source),
     Schema(
         source=deepwave.Air7201BSourceSpec,
+        init_like=deepwave.Air7101BSourceSpec,
         capture=specs.SoapyCapture,
+        arm_like=specs.SoapyCapture,
         peripherals=specs.NoPeripherals,
     ),
 )
@@ -129,10 +150,14 @@ air8201b = bind_sensor(
     Sensor(source=deepwave.Airstack1Source),
     Schema(
         source=deepwave.Air8201BSourceSpec,
+        init_like=deepwave.Air8201BSourceSpec,
         capture=specs.SoapyCapture,
+        arm_like=specs.SoapyCapture,
         peripherals=specs.NoPeripherals,
     ),
 )
+
+air8201b.source.arm
 
 air8201b_calibration = bind_manual_yfactor_calibration('air8201b_calibration', air8201b)
 

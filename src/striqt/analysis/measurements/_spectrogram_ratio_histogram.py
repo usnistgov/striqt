@@ -42,7 +42,7 @@ def spectrogram_ratio_power_bin(
 ) -> dict[str, np.ndarray]:
     """returns a dictionary of coordinate values, keyed by axis dimension name"""
 
-    abs_spec = _spectrogram_histogram.SpectrogramHistogramSpec.fromspec(spec)
+    abs_spec = _spectrogram_histogram.SpectrogramHistogramSpec.from_spec(spec)
     bins, attrs = _spectrogram_histogram.spectrogram_power_bin(capture, abs_spec)
     attrs['units'] = attrs['units'].replace('dBm', 'dB')
     return bins, attrs
@@ -60,8 +60,8 @@ def spectrogram_ratio_histogram(
     capture: specs.Capture,
     **kwargs: typing.Unpack[SpectrogramHistogramRatioKeywords],
 ):
-    spec = SpectrogramHistogramRatioSpec.fromdict(kwargs)
-    spg_spec = shared.SpectrogramSpec.fromspec(spec)
+    spec = SpectrogramHistogramRatioSpec.from_dict(kwargs)
+    spg_spec = shared.SpectrogramSpec.from_spec(spec)
 
     spg, metadata = shared.evaluate_spectrogram(
         iq,

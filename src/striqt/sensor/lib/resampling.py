@@ -11,6 +11,7 @@ from .. import specs
 
 from . import calibration, util, sources
 from .sources import AcquiredIQ, _base
+from striqt.analysis.specs import Analysis
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -76,7 +77,7 @@ def _get_peak_power(iq: AcquiredIQ, xp=None):
     return unscaled_peak
 
 
-def resampling_correction(iq_in: AcquiredIQ, overwrite_x=False, axis=1) -> AcquiredIQ:
+def resampling_correction(iq_in: AcquiredIQ, analysis: Analysis|None = None, overwrite_x=False, axis=1) -> AcquiredIQ:
     """resample, filter, and apply calibration corrections.
 
     Args:
@@ -160,9 +161,7 @@ def resampling_correction(iq_in: AcquiredIQ, overwrite_x=False, axis=1) -> Acqui
         )
         scale = iq_in.resampler['nfft_out'] / iq_in.resampler['nfft']
         oapad = _base._get_oaresample_pad(source_spec.base_clock_rate, capture)
-        lag_pad = _base._get_aligner_pad_size(
-            source_spec.base_clock_rate, capture, iq_in.aligner
-        )
+        lag_pad = _base._get_aligner_pad_size(source_spec, capture, analysis)
         size_out = round(capture.duration * capture.sample_rate) + round(
             (oapad[1] + lag_pad) * scale
         )

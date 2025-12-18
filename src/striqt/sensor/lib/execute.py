@@ -115,7 +115,7 @@ def _log_cache_info(
 
     noise = lookup_system_noise_power(
         cal,
-        specs.SoapyCapture.fromspec(capture),
+        specs.SoapyCapture.from_spec(capture),
         base_clock_rate=resources['sweep_spec'].source.base_clock_rate,
         alias_func=resources['alias_func'],
         B=attrs['noise_bandwidth'],

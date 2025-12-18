@@ -245,7 +245,7 @@ def cellular_cyclic_autocorrelation(
         an float32-valued array with matching the array type of `iq`
     """
 
-    spec = CellularCyclicAutocorrelationSpec.fromdict(kwargs)
+    spec = CellularCyclicAutocorrelationSpec.from_dict(kwargs)
 
     RANGE_MAP = {'frames': spec.frame_range, 'symbols': spec.symbol_range}
 

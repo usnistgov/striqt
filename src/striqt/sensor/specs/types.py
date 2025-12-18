@@ -126,5 +126,5 @@ WarmupSweep = Annotated[
     bool,
     Meta('if True, run empty buffers through the GPU before sweeping'),
 ]
-WaveformInputPath = Annotated[str | Path, Meta('path to the waveform data file')]
+WaveformInputPath = Annotated[str, Meta('path to the waveform data file')]
 ZarrSelect = Annotated[dict, Meta('dictionary to select in the data as .sel(**select)')]

@@ -351,7 +351,7 @@ def decode_from_yaml_file(path: str | Path, *, type=typing.Any):
     if type is typing.Any:
         return obj
     elif issubclass(type, specs.SpecBase):
-        return type.fromdict(obj)
+        return type.from_dict(obj)
     else:
         raise TypeError(f'unsupported type {repr(type)}')
 

@@ -305,7 +305,7 @@ def build_dataarray(
 
         da[factory_info.name] = coord.assign_attrs(metadata)
 
-    spec_attrs = delayed.spec.todict(skip_private=True)
+    spec_attrs = delayed.spec.to_dict(skip_private=True)
     return da.assign_attrs(delayed.info.attrs | spec_attrs | delayed.attrs)
 
 
@@ -407,7 +407,7 @@ def evaluate_by_spec(
     if isinstance(spec, specs.Analysis):
         spec = spec.validate()
     elif isinstance(spec, dict):
-        spec = options.registry.tospec().fromdict(spec)
+        spec = options.registry.tospec().from_dict(spec)
     else:
         raise TypeError('invalid analysis spec argument')
 
@@ -417,7 +417,7 @@ def evaluate_by_spec(
     if isinstance(spec, dict):
         spec_dict = spec
     else:
-        spec_dict = spec.todict()
+        spec_dict = spec.to_dict()
     results: dict[str, DelayedDataArray] | dict[str, ArrayType] = {}
     as_xarray = 'delayed' if options.as_xarray else False
 
@@ -477,9 +477,9 @@ def package_analysis(
         for name, res in results.items():
             xarrays[name] = res.compute().to_xarray(expand_dims)
 
-        attrs = capture.todict(skip_private=True)
+        attrs = capture.to_dict(skip_private=True)
         if isinstance(capture, specs.FilteredCapture):
-            attrs['analysis_filter'] = capture.analysis_filter.todict()
+            attrs['analysis_filter'] = capture.analysis_filter.to_dict()
         ret = xr.Dataset(xarrays, attrs=attrs)
 
     return ret

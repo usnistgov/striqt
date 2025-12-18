@@ -152,7 +152,7 @@ def cellular_5g_ssb_spectrogram(
         3GPP TS 138 213: Section 4.1
     """
 
-    spec = Cellular5GNRSSBSpectrogramSpec.fromdict(kwargs).validate()
+    spec = Cellular5GNRSSBSpectrogramSpec.from_dict(kwargs).validate()
 
     spg_spec = shared.SpectrogramSpec(
         frequency_resolution=spec.subcarrier_spacing / 2,

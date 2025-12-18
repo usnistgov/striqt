@@ -134,7 +134,7 @@ def read_yaml_spec(
     if 'extensions' in tree:
         # import now, so that sensor_binding keys can use definitions
         # in extension modules
-        ext = specs.Extension.fromdict(tree['extensions'])
+        ext = specs.Extension.from_dict(tree['extensions'])
         _import_extensions_from_spec(ext)
 
     spec = convert_dict(tree, type=get_tagged_sweep_type())
@@ -158,12 +158,11 @@ def read_tdms_iq(
     array_backend: specs.types.ArrayBackend,
 ) -> tuple['np.ndarray', specs.FileCapture]:
     from .sources._file import TDMSSource
-    from ..specs import TDMSSource
 
-    source_spec = TDMSSource(
-        base_clock_rate=base_clock_rate, path=Path(path), num_rx_ports=num_rx_ports
+    source_spec = specs.TDMSSource(
+        base_clock_rate=base_clock_rate, path=str(path), num_rx_ports=num_rx_ports
     )
-    source = TDMSSource(source_spec)
+    source = TDMSSource.from_spec(source_spec)
 
     capture = source.capture_spec
 

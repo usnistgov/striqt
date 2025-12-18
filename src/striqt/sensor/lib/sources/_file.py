@@ -19,25 +19,8 @@ else:
 
 
 @_base.bind_schema_types(specs.TDMSSource, specs.FileCapture)
-class TDMSSource(_base.VirtualSourceBase[specs.TDMSSource, specs.FileCapture]):
+class TDMSSource(_base.VirtualSourceBase[specs.TDMSSource, specs.FileCapture, _base._PS, _base._PC]):
     """a source of IQ waveforms from a TDMS file"""
-
-    if typing.TYPE_CHECKING:
-        # for type hinting only
-        def __init__(
-            self,
-            _setup=None,
-            /,
-            *,
-            reuse_iq=False,
-            **kwargs: typing.Unpack[specs.keywords.TDMSSource],
-        ): ...
-        def arm(
-            self,
-            _capture=None,
-            /,
-            **capture_kws: typing.Unpack[specs.keywords.FileCapture],
-        ) -> specs.FileCapture: ...
 
     _file_info: specs.FileAcquisitionInfo
 
@@ -94,25 +77,8 @@ class TDMSSource(_base.VirtualSourceBase[specs.TDMSSource, specs.FileCapture]):
 
 
 @_base.bind_schema_types(specs.MATSource, specs.FileCapture)
-class MATSource(_base.VirtualSourceBase[specs.MATSource, specs.FileCapture]):
+class MATSource(_base.VirtualSourceBase[specs.MATSource, specs.FileCapture, _base._PS, _base._PC]):
     """returns IQ waveforms from a .mat file"""
-
-    if typing.TYPE_CHECKING:
-        # for type hinting only
-        def __init__(
-            self,
-            _setup=None,
-            /,
-            *,
-            reuse_iq=False,
-            **kwargs: typing.Unpack[specs.keywords.MATSource],
-        ): ...
-        def arm(
-            self,
-            _capture=None,
-            /,
-            **capture_kws: typing.Unpack[specs.keywords.FileCapture],
-        ) -> specs.FileCapture: ...
 
     _file_info: specs.FileAcquisitionInfo
     _file_stream: io._FileStreamBase
@@ -132,7 +98,7 @@ class MATSource(_base.VirtualSourceBase[specs.MATSource, specs.FileCapture]):
         )
 
         fields = self._file_stream.get_capture_fields()
-        self._file_info = specs.FileAcquisitionInfo.fromdict(fields)
+        self._file_info = specs.FileAcquisitionInfo.from_dict(fields)
         self._file_stream.seek(0)
 
     def _prepare_capture(self, capture):
@@ -177,25 +143,8 @@ class MATSource(_base.VirtualSourceBase[specs.MATSource, specs.FileCapture]):
 
 
 @_base.bind_schema_types(specs.ZarrIQSource, specs.FileCapture)
-class ZarrIQSource(_base.VirtualSourceBase[specs.ZarrIQSource, specs.FileCapture]):
+class ZarrIQSource(_base.VirtualSourceBase[specs.ZarrIQSource, specs.FileCapture, _base._PS, _base._PC]):
     """a sources of IQ samples from iq_waveform variables in a zarr store"""
-
-    if typing.TYPE_CHECKING:
-        # for type hinting only
-        def __init__(
-            self,
-            _setup=None,
-            /,
-            *,
-            reuse_iq=False,
-            **kwargs: typing.Unpack[specs.keywords.ZarrIQSource],
-        ): ...
-        def arm(
-            self,
-            _capture=None,
-            /,
-            **capture_kws: typing.Unpack[specs.keywords.FileCapture],
-        ) -> specs.FileCapture: ...
 
     _waveform: 'xr.DataArray'
     _capture_info: specs.FileAcquisitionInfo

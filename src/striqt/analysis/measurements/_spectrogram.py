@@ -79,7 +79,7 @@ def spectrogram(
         `striqt.waveform.spectrogram`
         `scipy.signal.spectrogram`
     """
-    spec = shared.SpectrogramSpec.fromdict(kwargs).validate()
+    spec = shared.SpectrogramSpec.from_dict(kwargs).validate()
     spg, attrs = shared.evaluate_spectrogram(
         iq, capture, spec, dB=True, limit_digits=2, dtype='float16'
     )

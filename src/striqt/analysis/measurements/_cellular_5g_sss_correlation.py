@@ -107,7 +107,7 @@ def cellular_5g_sss_sync(
 
     from scipy import ndimage
 
-    spec = Cellular5GNRSSSCorrelationSpec.fromdict(kwargs).validate()
+    spec = Cellular5GNRSSSCorrelationSpec.from_dict(kwargs).validate()
 
     xp = iqwaveform.util.array_namespace(iq)
 
@@ -176,7 +176,7 @@ def cellular_5g_sss_correlation(
         3GPP TS 138 213: Section 4.1
     """
 
-    spec = Cellular5GNRSSSCorrelationSpec.fromdict(kwargs).validate()
+    spec = Cellular5GNRSSSCorrelationSpec.from_dict(kwargs).validate()
 
     R = correlate_5g_sss(iq, capture=capture, spec=spec)
 

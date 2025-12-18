@@ -86,8 +86,8 @@ def channel_power_time_series(
     capture: specs.Capture,
     **kwargs: typing.Unpack[ChannelPowerTimeSeriesKeywords],
 ):
-    spec = ChannelPowerTimeSeriesSpec.fromdict(kwargs)
+    spec = ChannelPowerTimeSeriesSpec.from_dict(kwargs)
 
     results = evaluate_channel_power_time_series(iq, capture=capture, spec=spec)
 
-    return results, spec.todict()
+    return results, spec.to_dict()

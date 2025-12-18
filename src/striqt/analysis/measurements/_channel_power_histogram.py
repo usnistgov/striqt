@@ -98,7 +98,7 @@ def channel_power_histogram(
     The outputs correspond to bin centers.
     """
 
-    spec = ChannelPowerHistogramSpec.fromdict(kwargs)
+    spec = ChannelPowerHistogramSpec.from_dict(kwargs)
 
     if typing.TYPE_CHECKING:
         import array_api_compat.numpy as xp
@@ -112,7 +112,7 @@ def channel_power_histogram(
         xp=xp,
     )
 
-    pvt_spec = _channel_power_time_series.ChannelPowerTimeSeriesSpec.fromspec(spec)
+    pvt_spec = _channel_power_time_series.ChannelPowerTimeSeriesSpec.from_spec(spec)
     power_dB = _channel_power_time_series.evaluate_channel_power_time_series(
         iq,
         capture=capture,

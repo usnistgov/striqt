@@ -103,7 +103,6 @@ class Source(_SlowHashSpecBase, frozen=True, kw_only=True):
 
     # in the future, these should probably move to an analysis config
     array_backend: types.ArrayBackend = 'numpy'
-    cupy_max_fft_chunk_size: typing.Optional[int] = None
 
     # validation data
     uncalibrated_peak_detect: types.OverloadDetectFlag = False
@@ -358,12 +357,12 @@ class AcquisitionInfo(msgspec.Struct, kw_only=True, frozen=True):
         """
         return msgspec.structs.replace(self, **attrs)
 
-    def todict(self) -> dict:
+    def to_dict(self) -> dict:
         """return a dictinary representation of `self`"""
         return msgspec.structs.asdict(self)
 
     @classmethod
-    def fromdict(cls: type[_T], d: dict) -> _T:
+    def from_dict(cls: type[_T], d: dict) -> _T:
         return cls(**d)
 
 

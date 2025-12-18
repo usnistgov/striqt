@@ -46,7 +46,7 @@ def time_statistic(
 def baseband_frequency(
     capture: specs.Capture, spec: PowerSpectralDensitySpec
 ) -> dict[str, np.ndarray]:
-    spg_spec = shared.SpectrogramSpec.fromspec(spec)
+    spg_spec = shared.SpectrogramSpec.from_spec(spec)
     return shared.spectrogram_baseband_frequency(capture, spg_spec)
 
 
@@ -68,8 +68,8 @@ def power_spectral_density(
     including 'mean' as applied in the original method.
     """
 
-    spec = PowerSpectralDensitySpec.fromdict(kwargs)
-    spg_spec = shared.SpectrogramSpec.fromspec(spec)
+    spec = PowerSpectralDensitySpec.from_dict(kwargs)
+    spg_spec = shared.SpectrogramSpec.from_spec(spec)
 
     from striqt.waveform.power_analysis import stat_ufunc_from_shorthand
     from striqt.waveform.util import array_namespace, axis_index

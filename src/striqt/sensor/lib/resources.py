@@ -14,7 +14,7 @@ from pathlib import Path
 from . import bindings, io, util
 from .peripherals import PeripheralsBase
 from .sinks import SinkBase
-from .sources import SourceBase
+from .sources import SourceBase, _PS, _PC
 from .. import specs
 from ..specs import _TC, _TP, _TS
 
@@ -27,10 +27,10 @@ if typing.TYPE_CHECKING:
     _P = typing_extensions.ParamSpec('_P')
     _R = typing.TypeVar('_R')
 
-    class Resources(typing_extensions.TypedDict, typing.Generic[_TS, _TP, _TC]):
+    class Resources(typing_extensions.TypedDict, typing.Generic[_TS, _TP, _TC, _PS, _PC]):
         """Sensor resources needed to run a sweep"""
 
-        source: SourceBase[_TS, _TC]
+        source: SourceBase[_TS, _TC, _PS, _PC]
         sink: SinkBase
         peripherals: PeripheralsBase[_TP, _TC]
         except_context: typing_extensions.NotRequired[typing.ContextManager]
@@ -39,11 +39,11 @@ if typing.TYPE_CHECKING:
         alias_func: specs.helpers.PathAliasFormatter | None
 
     class AnyResources(
-        typing_extensions.TypedDict, typing.Generic[_TS, _TP, _TC], total=False
+        typing_extensions.TypedDict, typing.Generic[_TS, _TP, _TC, _PS, _PC], total=False
     ):
         """Sensor resources needed to run a sweep"""
 
-        source: SourceBase[_TS, _TC]
+        source: SourceBase[_TS, _TC, _PS, _PC]
         sink: SinkBase
         peripherals: PeripheralsBase[_TP, _TC]
         except_context: typing_extensions.NotRequired[typing.ContextManager]
@@ -112,9 +112,9 @@ class Call(util.Call[util._P, util._R]):
 
 class ConnectionManager(
     contextlib.ExitStack,
-    typing.Generic[_TS, _TP, _TC],
+    typing.Generic[_TS, _TP, _TC, _PS, _PC],
 ):
-    _resources: AnyResources[_TS, _TP, _TC]
+    _resources: AnyResources[_TS, _TP, _TC, _PS, _PC]
 
     def __init__(self, sweep_spec: specs.Sweep[_TS, _TP, _TC]):
         super().__init__()
@@ -147,10 +147,10 @@ class ConnectionManager(
         return Call(func, *args, **kws)
 
     @functools.cached_property
-    def resources(self) -> Resources[_TS, _TP, _TC]:
+    def resources(self) -> Resources[_TS, _TP, _TC, _PS, _PC]:
         missing = Resources.__required_keys__ - set(self._resources.keys())
         if len(missing) == 0:
-            return typing.cast(Resources[_TS, _TP, _TC], self._resources)
+            return typing.cast(Resources[_TS, _TP, _TC, _PS, _PC], self._resources)
         else:
             raise TypeError(f'connections {missing!r} are incomplete')
 
@@ -168,9 +168,8 @@ def _open_devices(
 
     calls = {
         'source': conn.open(
-            binding.source,
+            binding.source.from_spec,
             spec.source,
-            analysis=spec.analysis,
             reuse_iq=spec.info.reuse_iq,
         ),
         'peripherals': conn.open(binding.peripherals, spec),
@@ -192,7 +191,7 @@ def open_resources(
     spec: specs.Sweep[_TS, _TP, _TC],
     spec_path: str | Path | None = None,
     except_context: typing.ContextManager | None = None,
-) -> ConnectionManager[_TS, _TP, _TC]:
+) -> ConnectionManager[_TS, _TP, _TC, _PS, _PC]:
     """open the sensor hardware and software contexts needed to run the given sweep.
 
     The returned Connections object contains the resulting context. All of its resources
@@ -258,7 +257,7 @@ def open_sensor_from_yaml(
     except_context: typing.ContextManager | None = None,
     output_path: str | None = None,
     store_backend: str | None = None,
-) -> ConnectionManager[typing.Any, typing.Any, typing.Any]:
+) -> ConnectionManager[typing.Any, typing.Any, typing.Any, typing.Any, typing.Any]:
     spec = io.read_yaml_spec(yaml_path)
 
     sink = spec.sink

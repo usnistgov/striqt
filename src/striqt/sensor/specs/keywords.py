@@ -8,11 +8,13 @@ from . import types
 from typing import TypedDict, Union, Optional, List, Any
 import enum as Enum
 
+
 class AcquisitionInfo(TypedDict, total=False):
     source_id: types.SourceID
 
-class SpecBase(TypedDict, total=False):
-    ...
+
+class SpecBase(TypedDict, total=False): ...
+
 
 class FileAcquisitionInfo(AcquisitionInfo, total=False):
     center_frequency: types.CenterFrequency
@@ -21,6 +23,7 @@ class FileAcquisitionInfo(AcquisitionInfo, total=False):
     gain: types.Gain
     source_id: types.SourceID
 
+
 class SoapyAcquisitionInfo(AcquisitionInfo, total=False):
     delay: typing.Optional[types.StartDelay]
     sweep_start_time: types.SweepStartTime | None
@@ -28,10 +31,12 @@ class SoapyAcquisitionInfo(AcquisitionInfo, total=False):
     backend_sample_rate: typing.Optional[types.BackendSampleRate]
     source_id: types.SourceID
 
+
 class Capture(TypedDict, total=False):
     duration: types.DurationType
     sample_rate: types.SampleRateType
     analysis_bandwidth: types.AnalysisBandwidthType
+
 
 class Description(TypedDict, total=False):
     summary: typing.Optional[str]
@@ -39,19 +44,22 @@ class Description(TypedDict, total=False):
     signal_chain: typing.Optional[tuple[str, ...]]
     version: str
 
+
 class Extension(TypedDict, total=False):
     sink: types.SinkClass | None
     import_path: typing.Optional[types.ExtensionPath]
     import_name: types.ModuleName
 
+
 class LoopBase(TypedDict, total=False):
     field: str
 
-class Peripherals(TypedDict, total=False):
-    ...
 
-class _SlowHashSpecBase(TypedDict, total=False):
-    ...
+class Peripherals(TypedDict, total=False): ...
+
+
+class _SlowHashSpecBase(TypedDict, total=False): ...
+
 
 class ResampledCapture(Capture, total=False):
     port: types.Port
@@ -60,29 +68,35 @@ class ResampledCapture(Capture, total=False):
     backend_sample_rate: typing.Optional[types.BackendSampleRate]
     _sweep_index: int
 
+
 class FrequencyBinRange(LoopBase, total=False):
     start: float
     stop: float
     step: float
 
+
 class List(LoopBase, total=False):
     values: tuple[typing.Any, ...]
+
 
 class Range(LoopBase, total=False):
     start: float
     stop: float
     step: float
 
+
 class Repeat(LoopBase, total=False):
     field: str
     count: int
+
 
 class ManualYFactorPeripheral(TypedDict, total=False):
     enr: types.ENR
     ambient_temperature: types.AmbientTemperature
 
-class NoPeripherals(TypedDict, total=False):
-    ...
+
+class NoPeripherals(TypedDict, total=False): ...
+
 
 class Sink(TypedDict, total=False):
     path: str
@@ -92,6 +106,7 @@ class Sink(TypedDict, total=False):
     coord_aliases: dict[str, types.AliasMatch]
     max_threads: typing.Optional[int]
 
+
 class Source(TypedDict, total=False):
     base_clock_rate: types.BaseClockRate
     calibration: typing.Optional[str]
@@ -100,37 +115,44 @@ class Source(TypedDict, total=False):
     periodic_trigger: typing.Optional[float]
     channel_sync_source: typing.Optional[str]
     array_backend: types.ArrayBackend
-    cupy_max_fft_chunk_size: typing.Optional[int]
     uncalibrated_peak_detect: types.OverloadDetectFlag
+
 
 class DiracDeltaCaptureSpec(ResampledCapture, total=False):
     time: types.TimeOffset
     power: types.Power
 
-class FileCapture(ResampledCapture, total=False):
-    ...
+
+class FileCapture(ResampledCapture, total=False): ...
+
 
 class NoiseCaptureSpec(ResampledCapture, total=False):
     power_spectral_density: types.PSD
+
 
 class SawtoothCaptureSpec(ResampledCapture, total=False):
     period: types.Period
     power: types.Power
 
+
 class SingleToneCaptureSpec(ResampledCapture, total=False):
     frequency_offset: types.FrequencyOffset
     snr: typing.Optional[types.SNR]
+
 
 class SoapyCapture(ResampledCapture, total=False):
     delay: typing.Optional[types.StartDelay]
     center_frequency: types.CenterFrequency
     gain: types.Gain
 
+
 class FunctionSource(Source, total=False):
     num_rx_ports: int
 
+
 class NoSource(Source, total=False):
     num_rx_ports: int
+
 
 class SoapySource(Source, total=False):
     time_source: types.TimeSource
@@ -139,6 +161,7 @@ class SoapySource(Source, total=False):
     receive_retries: types.ReceiveRetries
     uncalibrated_peak_detect: types.OverloadDetectFlag
 
+
 class MATSource(NoSource, total=False):
     path: types.WaveformInputPath
     num_rx_ports: int
@@ -146,8 +169,10 @@ class MATSource(NoSource, total=False):
     file_metadata: types.FileMetadata
     loop: types.FileLoop
 
+
 class TDMSSource(NoSource, total=False):
     path: types.WaveformInputPath
+
 
 class ZarrIQSource(NoSource, total=False):
     path: types.WaveformInputPath
