@@ -218,11 +218,11 @@ class HasSetupType(typing.Protocol[_TS, _PS]):
         /,
         reuse_iq=False,
         *args: _PS.args,
-        **kwargs: _PS.kwargs
+        **kwargs: _PS.kwargs,
     ): ...
 
     @classmethod
-    def from_spec(cls, spec: _TS, reuse_iq: bool=False) -> typing.Self: ...
+    def from_spec(cls, spec: _TS, reuse_iq: bool = False) -> typing.Self: ...
 
     def _connect(self, spec: _TS) -> None: ...
 
@@ -299,7 +299,9 @@ def bind_schema_types(
     return decorator
 
 
-def get_bound_spec(spec: specs.SpecBase|None, capture_cls: type[_TB]|None, **kws) -> _TB:
+def get_bound_spec(
+    spec: specs.SpecBase | None, capture_cls: type[_TB] | None, **kws
+) -> _TB:
     if isinstance(spec, specs.SpecBase):
         if capture_cls is not None:
             spec = typing.cast(_TB, capture_cls.from_spec(spec))
@@ -314,7 +316,9 @@ def get_bound_spec(spec: specs.SpecBase|None, capture_cls: type[_TB]|None, **kws
     return typing.cast(_TB, capture)
 
 
-class SourceBase(typing.Generic[_TS, _TC, _PS, _PC], HasSetupType[_TS, _PS], HasCaptureType[_TC, _PC]):
+class SourceBase(
+    typing.Generic[_TS, _TC, _PS, _PC], HasSetupType[_TS, _PS], HasCaptureType[_TC, _PC]
+):
     __bindings__: typing.ClassVar[Schema | None] = None
 
     _buffers: _ReceiveBuffers
@@ -322,11 +326,7 @@ class SourceBase(typing.Generic[_TS, _TC, _PS, _PC], HasSetupType[_TS, _PS], Has
     _timeout: float = 10
     _sweep_time: 'pd.Timestamp | None' = None
 
-    def __init__(
-        self,
-        reuse_iq=False,
-        *args: _PS.args, **kwargs: _PS.kwargs
-    ):
+    def __init__(self, reuse_iq=False, *args: _PS.args, **kwargs: _PS.kwargs):
         open_event = self._is_open = Event()  # first, to serve other threads
 
         # back door from .from_spec
@@ -368,10 +368,10 @@ class SourceBase(typing.Generic[_TS, _TC, _PS, _PC], HasSetupType[_TS, _PS], Has
         self._apply_setup(_spec)
 
     @classmethod
-    def from_spec(cls, spec: _TS, reuse_iq: bool =False) -> typing.Self:
+    def from_spec(cls, spec: _TS, reuse_iq: bool = False) -> typing.Self:
         kwargs = spec.to_dict()
         kwargs['__setup'] = type(spec)
-        return cls(reuse_iq=reuse_iq, **kwargs) # type: ignore
+        return cls(reuse_iq=reuse_iq, **kwargs)  # type: ignore
 
     @functools.cached_property
     def info(self) -> BaseSourceInfo:
@@ -429,7 +429,7 @@ class SourceBase(typing.Generic[_TS, _TC, _PS, _PC], HasSetupType[_TS, _PS], Has
 
     def arm_spec(self, spec: _TC):
         if not self.is_open():
-            raise RuntimeError('open the radio before arming')        
+            raise RuntimeError('open the radio before arming')
 
         if self._capture is not None:
             mcr = self.setup_spec.base_clock_rate
@@ -445,7 +445,6 @@ class SourceBase(typing.Generic[_TS, _TC, _PS, _PC], HasSetupType[_TS, _PS], Has
             self._buffers.clear()
 
         self._capture = self._prepare_capture(spec) or spec
-
 
     def read_iq(self, analysis: Analysis | None = None) -> 'tuple[ArrayType, int|None]':
         """read IQ for the armed capture"""

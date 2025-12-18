@@ -6,7 +6,7 @@ from .. import specs
 
 from ..lib import util
 from . import _spectrogram, shared
-from .shared import registry
+from .shared import registry, hint_keywords
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -17,23 +17,10 @@ else:
     np = util.lazy_import('numpy')
 
 
-class PowerSpectralDensitySpec(
-    shared.FrequencyAnalysisSpecBase,
-    kw_only=True,
-    frozen=True,
-    dict=True,
-):
-    time_statistic: tuple[typing.Union[str, float], ...] = (('mean',),)
-
-
-class PowerSpectralDensityKeywords(shared.FrequencyAnalysisKeywords, total=False):
-    time_statistic: tuple[typing.Union[str, float], ...]
-
-
 @registry.coordinates(dtype='str', attrs={'standard_name': 'Time statistic'})
 @util.lru_cache()
 def time_statistic(
-    capture: specs.Capture, spec: PowerSpectralDensitySpec
+    capture: specs.Capture, spec: specs.PowerSpectralDensity
 ) -> np.ndarray:
     time_statistic = [str(s) for s in spec.time_statistic]
     return np.asarray(time_statistic, dtype=object)
@@ -44,32 +31,29 @@ def time_statistic(
 )
 @util.lru_cache()
 def baseband_frequency(
-    capture: specs.Capture, spec: PowerSpectralDensitySpec
+    capture: specs.Capture, spec: specs.PowerSpectralDensity
 ) -> dict[str, np.ndarray]:
-    spg_spec = shared.SpectrogramSpec.from_spec(spec)
+    spg_spec = specs.Spectrogram.from_spec(spec)
     return shared.spectrogram_baseband_frequency(capture, spg_spec)
 
 
+@hint_keywords(specs.PowerSpectralDensity)
 @registry.measurement(
     depends=_spectrogram.spectrogram,
     coord_factories=[time_statistic, baseband_frequency],
-    spec_type=PowerSpectralDensitySpec,
+    spec_type=specs.PowerSpectralDensity,
     dtype='float32',
     attrs={'standard_name': 'Power spectral density'},
 )
-def power_spectral_density(
-    iq: 'iqwaveform.util.Array',
-    capture: specs.Capture,
-    **kwargs: typing.Unpack[PowerSpectralDensityKeywords],
-):
+def power_spectral_density(iq, capture, **kwargs):
     """estimate power spectral density using the Welch method.
 
     A list of statistics can be supplied to evaluate across the frequency axis,
     including 'mean' as applied in the original method.
     """
 
-    spec = PowerSpectralDensitySpec.from_dict(kwargs)
-    spg_spec = shared.SpectrogramSpec.from_spec(spec)
+    spec = specs.PowerSpectralDensity.from_dict(kwargs)
+    spg_spec = specs.Spectrogram.from_spec(spec)
 
     from striqt.waveform.power_analysis import stat_ufunc_from_shorthand
     from striqt.waveform.util import array_namespace, axis_index

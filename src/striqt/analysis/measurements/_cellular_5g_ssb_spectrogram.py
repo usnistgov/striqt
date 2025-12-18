@@ -7,7 +7,7 @@ from .. import specs
 
 from ..lib import util
 from . import shared
-from .shared import registry
+from .shared import registry, hint_keywords
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -18,55 +18,9 @@ else:
     iqwaveform = util.lazy_import('striqt.waveform')
 
 
-# %% Cellular 5G NR synchronizatino
-class Cellular5GNRSSBSpectrogramSpec(
-    specs.Measurement,
-    kw_only=True,
-    frozen=True,
-    dict=True,
-):
-    """
-    subcarrier_spacing (float): 3GPP channel subcarrier spacing (Hz)
-    sample_rate (float): output sample rate for the resampled synchronization waveform (samples/s)
-    discovery_periodicity (float): time period between synchronization blocks (s)
-    frequency_offset (float or dict[float, float]):
-        center frequency offset (see notes)
-    shared_spectrum:
-        whether to follow the 3GPP "shared spectrum" synchronizatio block layout
-    max_block_count: number of synchronization blocks to evaluate
-    trim_cp: whether to trim the cyclic prefix duration from the output
-    """
-
-    subcarrier_spacing: float
-
-    # ssb parameters
-    sample_rate: float = 15.36e6 / 2
-    discovery_periodicity: float = 20e-3
-    frequency_offset: typing.Union[float, dict[float, float]] = 0
-    max_block_count: typing.Optional[int] = None
-
-    # spectrogram info
-    window: specs.WindowType = ('kaiser_by_enbw', 2)
-    lo_bandstop: typing.Optional[float] = None
-
-    # hard-coded for re-use of PSS/SSS functions
-    shared_spectrum = False
-    trim_cp = False
-
-
-class Cellular5GNRSSBSpectrogramKeywords(specs.AnalysisKeywords, total=False):
-    subcarrier_spacing: float
-    sample_rate: float
-    discovery_periodicity: float
-    frequency_offset: typing.Union[float, dict[float, float]]
-    max_block_count: typing.Optional[int]
-    window: typing.Optional[specs.WindowType]
-    lo_bandstop: typing.Optional[float]
-
-
 @registry.coordinates(dtype='uint16', attrs={'standard_name': 'Symbols elapsed'})
 @util.lru_cache()
-def cellular_ssb_symbol_index(_: specs.Capture, spec: Cellular5GNRSSBSpectrogramSpec):
+def cellular_ssb_symbol_index(_: specs.Capture, spec: specs.Cellular5GNRSSBSpectrogram):
     symbol_count = round(14 * spec.subcarrier_spacing / 15e3)
     return np.arange(symbol_count, dtype='uint16')
 
@@ -76,7 +30,7 @@ def cellular_ssb_symbol_index(_: specs.Capture, spec: Cellular5GNRSSBSpectrogram
 )
 @util.lru_cache()
 def cellular_ssb_baseband_frequency(
-    capture: specs.Capture, spec: Cellular5GNRSSBSpectrogramSpec, xp=np
+    capture: specs.Capture, spec: specs.Cellular5GNRSSBSpectrogram, xp=np
 ) -> np.ndarray:
     nfft = round(2 * capture.sample_rate / spec.subcarrier_spacing)
     freqs = shared.fftfreq(nfft, capture.sample_rate)
@@ -95,7 +49,7 @@ def cellular_ssb_baseband_frequency(
 
 @registry.coordinates(dtype='uint16', attrs={'standard_name': 'Capture SSB index'})
 @util.lru_cache()
-def cellular_ssb_index(capture: specs.Capture, spec: Cellular5GNRSSBSpectrogramSpec):
+def cellular_ssb_index(capture: specs.Capture, spec: specs.Cellular5GNRSSBSpectrogram):
     # pss_params and sss_params return the same number of symbol indexes
     # params  = iqwaveform.ofdm.pss_params(
     #     sample_rate=spec.sample_rate,
@@ -119,19 +73,16 @@ _coord_factories = [
 ]
 
 
+@hint_keywords(specs.Cellular5GNRSSBSpectrogram)
 @registry.measurement(
-    Cellular5GNRSSBSpectrogramSpec,
+    specs.Cellular5GNRSSBSpectrogram,
     coord_factories=_coord_factories,
     dtype='float16',
     caches=(shared.spectrogram_cache,),
     prefer_unaligned_input=False,
     attrs={'standard_name': 'SSB Spectrogram'},
 )
-def cellular_5g_ssb_spectrogram(
-    iq,
-    capture: specs.Capture,
-    **kwargs: typing.Unpack[Cellular5GNRSSBSpectrogramKeywords],
-):
+def cellular_5g_ssb_spectrogram(iq, capture: specs.Capture, **kwargs):
     """correlate each channel of the IQ against the cellular primary synchronization signal (PSS) waveform.
 
     Returns a DataArray containing the time-lag for each combination of NID2, symbol, and SSB start time.
@@ -152,9 +103,9 @@ def cellular_5g_ssb_spectrogram(
         3GPP TS 138 213: Section 4.1
     """
 
-    spec = Cellular5GNRSSBSpectrogramSpec.from_dict(kwargs).validate()
+    spec = specs.Cellular5GNRSSBSpectrogram.from_dict(kwargs).validate()
 
-    spg_spec = shared.SpectrogramSpec(
+    spg_spec = specs.Spectrogram(
         frequency_resolution=spec.subcarrier_spacing / 2,
         fractional_overlap=Fraction(13, 28),
         window_fill=Fraction(15, 28),

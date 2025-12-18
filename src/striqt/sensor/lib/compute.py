@@ -305,7 +305,9 @@ def analyze(
     with options.registry.cache_context(iq.capture, options.cache_callback):
         if options.correction:
             with util.stopwatch('resampling filter', logger_level=logging.DEBUG):
-                iq = resampling.resampling_correction(iq, analysis=options.sweep_spec.analysis, overwrite_x=overwrite_x)
+                iq = resampling.resampling_correction(
+                    iq, analysis=options.sweep_spec.analysis, overwrite_x=overwrite_x
+                )
                 assert iq.capture is not None
 
         opts = msgspec.structs.replace(options, as_xarray='delayed')

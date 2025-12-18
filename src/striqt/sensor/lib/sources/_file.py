@@ -19,7 +19,9 @@ else:
 
 
 @_base.bind_schema_types(specs.TDMSSource, specs.FileCapture)
-class TDMSSource(_base.VirtualSourceBase[specs.TDMSSource, specs.FileCapture, _base._PS, _base._PC]):
+class TDMSSource(
+    _base.VirtualSourceBase[specs.TDMSSource, specs.FileCapture, _base._PS, _base._PC]
+):
     """a source of IQ waveforms from a TDMS file"""
 
     _file_info: specs.FileAcquisitionInfo
@@ -77,7 +79,9 @@ class TDMSSource(_base.VirtualSourceBase[specs.TDMSSource, specs.FileCapture, _b
 
 
 @_base.bind_schema_types(specs.MATSource, specs.FileCapture)
-class MATSource(_base.VirtualSourceBase[specs.MATSource, specs.FileCapture, _base._PS, _base._PC]):
+class MATSource(
+    _base.VirtualSourceBase[specs.MATSource, specs.FileCapture, _base._PS, _base._PC]
+):
     """returns IQ waveforms from a .mat file"""
 
     _file_info: specs.FileAcquisitionInfo
@@ -143,7 +147,9 @@ class MATSource(_base.VirtualSourceBase[specs.MATSource, specs.FileCapture, _bas
 
 
 @_base.bind_schema_types(specs.ZarrIQSource, specs.FileCapture)
-class ZarrIQSource(_base.VirtualSourceBase[specs.ZarrIQSource, specs.FileCapture, _base._PS, _base._PC]):
+class ZarrIQSource(
+    _base.VirtualSourceBase[specs.ZarrIQSource, specs.FileCapture, _base._PS, _base._PC]
+):
     """a sources of IQ samples from iq_waveform variables in a zarr store"""
 
     _waveform: 'xr.DataArray'

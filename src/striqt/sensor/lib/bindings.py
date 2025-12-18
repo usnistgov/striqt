@@ -26,7 +26,9 @@ if typing.TYPE_CHECKING:
         mock_sensor: specs.types.MockSensor = None
 
 
-registry: dict[str, 'SensorBinding[typing.Any, typing.Any, typing.Any, typing.Any, typing.Any]'] = {}
+registry: dict[
+    str, 'SensorBinding[typing.Any, typing.Any, typing.Any, typing.Any, typing.Any]'
+] = {}
 tagged_sweeps: type[specs.Sweep] | None = None
 
 
@@ -66,8 +68,8 @@ class Schema(typing.Generic[_TS, _TP, _TC, _PS, _PC], sources._base.Schema[_TS, 
     peripherals: type[_TP]
 
     # these aren't actually used; they just set up the type hinting properly
-    init_like: typing.Callable[_PS,typing.Any]
-    arm_like: typing.Callable[_PC,typing.Any]
+    init_like: typing.Callable[_PS, typing.Any]
+    arm_like: typing.Callable[_PC, typing.Any]
 
     def __post_init__(self):
         assert issubclass(self.source, specs.Source)
@@ -179,7 +181,7 @@ def mock_binding(
             capture=origin.schema.capture,
             peripherals=origin.schema.peripherals,
             arm_like=origin.schema.arm_like,
-            init_like=mock_binding.schema.init_like
+            init_like=mock_binding.schema.init_like,
         ),
         register=register,
     )

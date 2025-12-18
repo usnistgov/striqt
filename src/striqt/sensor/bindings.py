@@ -21,7 +21,7 @@ warmup = bind_sensor(
         source=specs.NoSource,
         init_like=specs.NoSource,
         capture=specs.ResampledCapture,
-        arm_like=specs.ResampledCapture,        
+        arm_like=specs.ResampledCapture,
         peripherals=specs.NoPeripherals,
     ),
 )
@@ -157,7 +157,6 @@ air8201b = bind_sensor(
     ),
 )
 
-air8201b.source.arm
 
 air8201b_calibration = bind_manual_yfactor_calibration('air8201b_calibration', air8201b)
 

@@ -6,38 +6,18 @@ import typing
 from .. import specs
 
 from ..lib import util
-from .shared import registry
+from .shared import registry, hint_keywords
 
 if typing.TYPE_CHECKING:
     import numpy as np
     import pandas as pd
 
     import striqt.waveform as iqwaveform
+
 else:
     iqwaveform = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
     pd = util.lazy_import('pandas')
-
-
-class CellularCyclicAutocorrelationSpec(
-    specs.Measurement,
-    kw_only=True,
-    frozen=True,
-    dict=True,
-):
-    subcarrier_spacings: typing.Union[float, tuple[float, ...]] = (15e3, 30e3, 60e3)
-    frame_range: typing.Union[int, tuple[int, typing.Optional[int]]] = (0, 1)
-    frame_slots: typing.Union[str, dict[float, str], None] = None
-    symbol_range: typing.Union[int, tuple[int, typing.Optional[int]]] = (0, None)
-    generation: typing.Literal['4G', '5G'] = '5G'
-
-
-class CellularCyclicAutocorrelationKeywords(specs.AnalysisKeywords, total=False):
-    subcarrier_spacings: typing.Union[float, tuple[float, ...]]
-    frame_range: typing.Union[int, tuple[int, typing.Optional[int]]]
-    frame_slots: typing.Optional[str]
-    symbol_range: typing.Union[int, tuple[int, typing.Optional[int]]]
-    generation: typing.Literal['4G', '5G']
 
 
 class NormalizedTDDSlotConfig(typing.NamedTuple):
@@ -151,7 +131,7 @@ def tdd_config_from_str(
 )
 @util.lru_cache()
 def cyclic_sample_lag(
-    capture: specs.Capture, spec: CellularCyclicAutocorrelationSpec
+    capture: specs.Capture, spec: specs.CellularCyclicAutocorrelation
 ) -> dict[str, np.ndarray]:
     max_len = _get_max_corr_size(capture, subcarrier_spacings=spec.subcarrier_spacings)
     name = cyclic_sample_lag.__name__
@@ -166,13 +146,15 @@ SubcarrierSpacingAxis = typing.Literal['subcarrier_spacing']
     dtype='float32', attrs={'standard_name': 'Subcarrier spacing', 'units': 'Hz'}
 )
 @util.lru_cache()
-def subcarrier_spacing(capture: specs.Capture, spec: CellularCyclicAutocorrelationSpec):
+def subcarrier_spacing(
+    capture: specs.Capture, spec: specs.CellularCyclicAutocorrelation
+):
     return list(spec.subcarrier_spacings)
 
 
 @registry.coordinates(dtype='str', attrs={'standard_name': 'Link direction'})
 @util.lru_cache()
-def link_direction(capture: specs.Capture, spec: CellularCyclicAutocorrelationSpec):
+def link_direction(capture: specs.Capture, spec: specs.CellularCyclicAutocorrelation):
     values = np.array(['downlink', 'uplink'], dtype='U8')
     return values, {}
 
@@ -212,18 +194,19 @@ def _get_max_corr_size(
     return max([np.diff(phy.cp_start_idx).min() for phy in phy_scs.values()])
 
 
+@hint_keywords(specs.CellularCyclicAutocorrelation)
 @registry.measurement(
     coord_factories=[link_direction, subcarrier_spacing, cyclic_sample_lag],
     dtype='float32',
     prefer_unaligned_input=True,
-    spec_type=CellularCyclicAutocorrelationSpec,
+    spec_type=specs.CellularCyclicAutocorrelation,
     attrs={'units': 'mW', 'standard_name': 'Cyclic Autocovariance'},
 )
 def cellular_cyclic_autocorrelation(
-    iq: 'iqwaveform.util.Array',
+    iq: 'iqwaveform.util.ArrayType',
     capture: specs.Capture,
-    **kwargs: typing.Unpack[CellularCyclicAutocorrelationKeywords],
-) -> 'iqwaveform.util.Array':
+    **kwargs,
+):
     """evaluate the cyclic autocorrelation of the IQ sequence based on 4G or 5G cellular
     cyclic prefix sample lag offsets.
 
@@ -245,7 +228,7 @@ def cellular_cyclic_autocorrelation(
         an float32-valued array with matching the array type of `iq`
     """
 
-    spec = CellularCyclicAutocorrelationSpec.from_dict(kwargs)
+    spec = specs.CellularCyclicAutocorrelation.from_dict(kwargs)
 
     RANGE_MAP = {'frames': spec.frame_range, 'symbols': spec.symbol_range}
 
@@ -264,7 +247,7 @@ def cellular_cyclic_autocorrelation(
     )
     metadata = {}
 
-    frame_slots = specs.maybe_lookup_with_capture_key(
+    frame_slots = specs.helpers.maybe_lookup_with_capture_key(
         capture, spec.frame_slots, 'center_frequency', 'frame_slots', default='d'
     )
 

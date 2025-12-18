@@ -14,7 +14,7 @@ from pathlib import Path
 import msgspec
 from msgspec import UNSET, UnsetType
 
-from striqt.analysis.specs import convert_spec
+from striqt.analysis.specs.helpers import convert_spec, convert_dict
 
 from . import structs as specs
 from .structs import _TS, _TC, _TP

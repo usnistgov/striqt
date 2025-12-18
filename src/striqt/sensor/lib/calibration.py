@@ -529,6 +529,6 @@ def bind_manual_yfactor_calibration(
             capture=capture_spec_cls,
             peripherals=sensor.schema.peripherals,
             init_like=sensor.schema.init_like,
-            arm_like=sensor.schema.arm_like
+            arm_like=sensor.schema.arm_like,
         ),
     )

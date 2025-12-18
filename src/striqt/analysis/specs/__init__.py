@@ -1,4 +1,4 @@
 from .structs import *
-from .structs import _CaptureKeywords, AnalysisKeywords, _SlowHashSpecBase
-from . import types, keywords
+from .structs import AnalysisKeywords, _SlowHashSpecBase
+from . import types
 from .types import Meta

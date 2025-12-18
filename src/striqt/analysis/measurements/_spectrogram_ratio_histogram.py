@@ -6,7 +6,7 @@ from .. import specs
 
 from ..lib import util
 from . import _channel_power_histogram, _spectrogram, _spectrogram_histogram, shared
-from .shared import registry
+from .shared import registry, hint_keywords
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -17,51 +17,37 @@ else:
     np = util.lazy_import('numpy')
 
 
-class SpectrogramHistogramRatioSpec(
-    _spectrogram_histogram.SpectrogramHistogramSpec,
-    kw_only=True,
-    frozen=True,
-    dict=True,
-):
-    pass
-
-
-class SpectrogramHistogramRatioKeywords(
-    _spectrogram_histogram.SpectrogramHistogramKeywords
-):
-    pass
-
-
 @registry.coordinates(
     dtype='float32',
     attrs={'standard_name': 'Spectrogram cross-channel power ratio', 'units': 'dB'},
 )
 @util.lru_cache()
 def spectrogram_ratio_power_bin(
-    capture: specs.Capture, spec: SpectrogramHistogramRatioSpec
+    capture: specs.Capture, spec: specs.SpectrogramHistogramRatio
 ) -> dict[str, np.ndarray]:
     """returns a dictionary of coordinate values, keyed by axis dimension name"""
 
-    abs_spec = _spectrogram_histogram.SpectrogramHistogramSpec.from_spec(spec)
+    abs_spec = specs.SpectrogramHistogram.from_spec(spec)
     bins, attrs = _spectrogram_histogram.spectrogram_power_bin(capture, abs_spec)
     attrs['units'] = attrs['units'].replace('dBm', 'dB')
     return bins, attrs
 
 
+@hint_keywords(specs.SpectrogramHistogramRatio)
 @registry.measurement(
     depends=_spectrogram.spectrogram,
     coord_factories=[spectrogram_ratio_power_bin],
-    spec_type=SpectrogramHistogramRatioSpec,
+    spec_type=specs.SpectrogramHistogramRatio,
     dtype='float32',
     attrs={'standard_name': 'Fraction of counts'},
 )
 def spectrogram_ratio_histogram(
-    iq: 'iqwaveform.util.Array',
+    iq: 'iqwaveform.util.ArrayType',
     capture: specs.Capture,
-    **kwargs: typing.Unpack[SpectrogramHistogramRatioKeywords],
+    **kwargs,
 ):
-    spec = SpectrogramHistogramRatioSpec.from_dict(kwargs)
-    spg_spec = shared.SpectrogramSpec.from_spec(spec)
+    spec = specs.SpectrogramHistogramRatio.from_dict(kwargs)
+    spg_spec = specs.Spectrogram.from_spec(spec)
 
     spg, metadata = shared.evaluate_spectrogram(
         iq,

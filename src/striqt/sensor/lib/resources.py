@@ -27,7 +27,9 @@ if typing.TYPE_CHECKING:
     _P = typing_extensions.ParamSpec('_P')
     _R = typing.TypeVar('_R')
 
-    class Resources(typing_extensions.TypedDict, typing.Generic[_TS, _TP, _TC, _PS, _PC]):
+    class Resources(
+        typing_extensions.TypedDict, typing.Generic[_TS, _TP, _TC, _PS, _PC]
+    ):
         """Sensor resources needed to run a sweep"""
 
         source: SourceBase[_TS, _TC, _PS, _PC]
@@ -39,7 +41,9 @@ if typing.TYPE_CHECKING:
         alias_func: specs.helpers.PathAliasFormatter | None
 
     class AnyResources(
-        typing_extensions.TypedDict, typing.Generic[_TS, _TP, _TC, _PS, _PC], total=False
+        typing_extensions.TypedDict,
+        typing.Generic[_TS, _TP, _TC, _PS, _PC],
+        total=False,
     ):
         """Sensor resources needed to run a sweep"""
 

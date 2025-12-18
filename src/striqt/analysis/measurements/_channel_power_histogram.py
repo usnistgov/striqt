@@ -6,7 +6,7 @@ from .. import specs
 
 from ..lib import util
 from . import _channel_power_time_series
-from .shared import registry
+from .shared import registry, hint_keywords
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -15,25 +15,6 @@ if typing.TYPE_CHECKING:
 else:
     iqwaveform = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
-
-
-class ChannelPowerHistogramSpec(
-    _channel_power_time_series.ChannelPowerTimeSeriesSpec,
-    kw_only=True,
-    frozen=True,
-    dict=True,
-):
-    power_low: float
-    power_high: float
-    power_resolution: float
-
-
-class ChannelPowerHistogramKeywords(
-    _channel_power_time_series.ChannelPowerTimeSeriesKeywords
-):
-    power_low: float
-    power_high: float
-    power_resolution: float
 
 
 @util.lru_cache()
@@ -75,30 +56,27 @@ def make_power_histogram_bin_edges(power_low, power_high, power_resolution, xp=n
 )
 @util.lru_cache()
 def channel_power_bin(
-    capture: specs.Capture, spec: ChannelPowerHistogramSpec
+    capture: specs.Capture, spec: specs.ChannelPowerHistogram
 ) -> dict[str, np.ndarray]:
     """returns a dictionary of coordinate values, keyed by axis dimension name"""
     return make_power_bins(spec.power_low, spec.power_high, spec.power_resolution)
 
 
+@hint_keywords(specs.ChannelPowerHistogram)
 @registry.measurement(
     coord_factories=[_channel_power_time_series.power_detector, channel_power_bin],
     depends=[_channel_power_time_series.channel_power_time_series],
-    spec_type=ChannelPowerHistogramSpec,
+    spec_type=specs.ChannelPowerHistogram,
     dtype='float32',
     attrs={'standard_name': 'Fraction of channel power readings'},
 )
-def channel_power_histogram(
-    iq,
-    capture: specs.Capture,
-    **kwargs: typing.Unpack[ChannelPowerHistogramKeywords],
-):
+def channel_power_histogram(iq, capture: specs.Capture, **kwargs):
     """evaluate the fraction of channel power readings binned on a uniform grid spacing.
 
     The outputs correspond to bin centers.
     """
 
-    spec = ChannelPowerHistogramSpec.from_dict(kwargs)
+    spec = specs.ChannelPowerHistogram.from_dict(kwargs)
 
     if typing.TYPE_CHECKING:
         import array_api_compat.numpy as xp
@@ -112,7 +90,7 @@ def channel_power_histogram(
         xp=xp,
     )
 
-    pvt_spec = _channel_power_time_series.ChannelPowerTimeSeriesSpec.from_spec(spec)
+    pvt_spec = specs.ChannelPowerTimeSeries.from_spec(spec)
     power_dB = _channel_power_time_series.evaluate_channel_power_time_series(
         iq,
         capture=capture,
@@ -132,8 +110,6 @@ def channel_power_histogram(
 
     data = xp.asarray(data, dtype=count_dtype)
 
-    metadata = {
-        'detector_period': spec.detector_period,
-    }
+    metadata = {'detector_period': spec.detector_period}
 
     return data, metadata

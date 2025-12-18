@@ -6,7 +6,7 @@ from .. import specs
 
 from ..lib import util
 from . import _channel_power_histogram, _spectrogram, shared
-from .shared import registry
+from .shared import registry, hint_keywords
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -17,29 +17,12 @@ else:
     np = util.lazy_import('numpy')
 
 
-class SpectrogramHistogramSpec(
-    shared.SpectrogramSpec,
-    kw_only=True,
-    frozen=True,
-    dict=True,
-):
-    power_low: float
-    power_high: float
-    power_resolution: float
-
-
-class SpectrogramHistogramKeywords(shared.SpectrogramKeywords):
-    power_low: float
-    power_high: float
-    power_resolution: float
-
-
 @registry.coordinates(
     dtype='float32', attrs={'standard_name': 'Spectrogram bin power', 'units': 'dBm'}
 )
 @util.lru_cache()
 def spectrogram_power_bin(
-    capture: specs.Capture, spec: SpectrogramHistogramSpec
+    capture: specs.Capture, spec: specs.SpectrogramHistogram
 ) -> dict[str, np.ndarray]:
     """returns a dictionary of coordinate values, keyed by axis dimension name"""
     bins = _channel_power_histogram.make_power_bins(
@@ -62,20 +45,19 @@ def spectrogram_power_bin(
     return bins, {'units': f'dBm/{enbw / 1e3:0.0f} kHz'}
 
 
+@hint_keywords(specs.SpectrogramHistogram)
 @registry.measurement(
     depends=_spectrogram.spectrogram,
     coord_factories=[spectrogram_power_bin],
-    spec_type=SpectrogramHistogramSpec,
+    spec_type=specs.SpectrogramHistogram,
     dtype='float32',
     attrs={'standard_name': 'Fraction of counts'},
 )
 def spectrogram_histogram(
-    iq: 'iqwaveform.util.Array',
-    capture: specs.Capture,
-    **kwargs: typing.Unpack[SpectrogramHistogramKeywords],
+    iq: 'iqwaveform.util.ArrayType', capture: specs.Capture, **kwargs
 ):
-    spec = SpectrogramHistogramSpec.from_dict(kwargs)
-    spg_spec = shared.SpectrogramSpec.from_spec(spec)
+    spec = specs.SpectrogramHistogram.from_dict(kwargs)
+    spg_spec = specs.Spectrogram.from_spec(spec)
 
     spg, metadata = shared.evaluate_spectrogram(
         iq,

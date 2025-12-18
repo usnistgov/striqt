@@ -25,42 +25,26 @@ else:
     array_api_compat = util.lazy_import('array_api_compat')
 
 
-# %% Cellular 5G NR synchronizatino
-class Cellular5GNRSyncCorrelationSpec(
-    specs.Measurement,
-    kw_only=True,
-    frozen=True,
-    dict=True,
-):
-    """
-    subcarrier_spacing (float): 3GPP channel subcarrier spacing (Hz)
-    sample_rate (float): output sample rate for the resampled synchronization waveform (samples/s)
-    discovery_periodicity (float): time period between synchronization blocks (s)
-    frequency_offset (float or dict[float, float]):
-        center frequency offset (see notes)
-    shared_spectrum:
-        whether to follow the 3GPP "shared spectrum" synchronizatio block layout
-    max_block_count: number of synchronization blocks to evaluate
-    trim_cp: whether to trim the cyclic prefix duration from the output
-    """
-
-    subcarrier_spacing: float
-    sample_rate: float = 15.36e6 / 2
-    discovery_periodicity: float = 20e-3
-    frequency_offset: typing.Union[float, dict[float, float]] = 0
-    shared_spectrum: bool = False
-    max_block_count: typing.Optional[int] = 1
-    trim_cp: bool = True
+_P = typing.ParamSpec('_P')
+_R = typing.TypeVar('_R', infer_variance=True)
 
 
-class Cellular5GNRSyncCorrelationKeywords(specs.AnalysisKeywords, total=False):
-    subcarrier_spacing: float
-    sample_rate: float
-    discovery_periodicity: float
-    frequency_offset: typing.Union[float, dict[float, float]]
-    shared_spectrum: bool
-    max_block_count: typing.Optional[int]
-    trim_cp: bool
+class _MeasurementProtocol(typing.Protocol[_P, _R]):
+    def __call__(
+        self,
+        iq: 'iqwaveform.util.ArrayType',
+        capture: specs.Capture,
+        as_xarray: specs.types.AsXArray = True,
+        *args: _P.args,
+        **kwargs: _P.kwargs,
+    ) -> _R: ...
+
+
+def hint_keywords(
+    func: typing.Callable[_P, typing.Any],
+) -> typing.Callable[[typing.Callable[..., _R]], _MeasurementProtocol[_P, _R]]:
+    """fill in type hints for the analysis parameters"""
+    return lambda f: f  # type: ignore
 
 
 @registry.coordinates(
@@ -75,7 +59,7 @@ def cellular_cell_id2(capture: specs.Capture, spec: typing.Any):
 @registry.coordinates(dtype='uint16', attrs={'standard_name': 'SSB beam index'})
 @util.lru_cache()
 def cellular_ssb_beam_index(
-    capture: specs.Capture, spec: Cellular5GNRSyncCorrelationSpec
+    capture: specs.Capture, spec: specs.Cellular5GNRSyncCorrelationSpec
 ):
     # pss_params and sss_params return the same number of symbol indexes
     params = iqwaveform.ofdm.sss_params(
@@ -93,7 +77,7 @@ def cellular_ssb_beam_index(
 )
 @util.lru_cache()
 def cellular_ssb_start_time(
-    capture: specs.Capture, spec: Cellular5GNRSyncCorrelationSpec
+    capture: specs.Capture, spec: specs.Cellular5GNRSyncCorrelationSpec
 ):
     # pss_params and sss_params return the same number of symbol indexes
     params = iqwaveform.ofdm.pss_params(
@@ -115,7 +99,9 @@ def cellular_ssb_start_time(
     dtype='float32', attrs={'standard_name': 'Symbol lag', 'units': 's'}
 )
 @util.lru_cache()
-def cellular_ssb_lag(capture: specs.Capture, spec: Cellular5GNRSyncCorrelationSpec):
+def cellular_ssb_lag(
+    capture: specs.Capture, spec: specs.Cellular5GNRSyncCorrelationSpec
+):
     params = iqwaveform.ofdm.sss_params(
         sample_rate=spec.sample_rate,
         subcarrier_spacing=spec.subcarrier_spacing,
@@ -136,7 +122,7 @@ def empty_5g_sync_measurement(
     iq,
     *,
     capture: specs.Capture,
-    spec: Cellular5GNRSyncCorrelationSpec,
+    spec: specs.Cellular5GNRSyncCorrelationSpec,
     coord_factories: list[typing.Callable],
     dtype='complex64',
 ):
@@ -150,7 +136,7 @@ def correlate_sync_sequence(
     ssb_iq,
     sync_seq,
     *,
-    spec: Cellular5GNRSyncCorrelationSpec,
+    spec: specs.Cellular5GNRSyncCorrelationSpec,
     params: iqwaveform.ofdm.SyncParams,
     cell_id_split: int | None = None,
 ):
@@ -219,7 +205,7 @@ ssb_iq_cache = register.KeywordArgumentCache([dataarrays.CAPTURE_DIM, 'spec'])
 def get_5g_ssb_iq(
     iq: ArrayType,
     capture: specs.Capture,
-    spec: Cellular5GNRSyncCorrelationSpec,
+    spec: specs.Cellular5GNRSyncCorrelationSpec,
     oaresample=False,
 ) -> ArrayType:
     """return a sync block waveform, which returns IQ that is recentered
@@ -227,7 +213,7 @@ def get_5g_ssb_iq(
 
     xp = iqwaveform.util.array_namespace(iq)
 
-    frequency_offset = specs.maybe_lookup_with_capture_key(
+    frequency_offset = specs.helpers.maybe_lookup_with_capture_key(
         capture,
         spec.frequency_offset,
         capture_attr='center_frequency',
@@ -293,74 +279,10 @@ def get_5g_ssb_iq(
     return out
 
 
-# %% Spectral analysis
-
-
-class FrequencyAnalysisSpecBase(
-    specs.Measurement,
-    kw_only=True,
-    frozen=True,
-    dict=True,
-):
-    """
-    window (specs.WindowType): a window specification, following `scipy.signal.get_window`
-    frequency_resolution (float): the STFT resolution (in Hz)
-    fractional_overlap (float):
-        fraction of each FFT window that overlaps with its neighbor
-    window_fill (float):
-        fraction of each FFT window that is filled with the window function
-        (leaving the rest zeroed)
-    integration_bandwidth (float): bin bandwidth for RMS averaging in the frequency domain
-    trim_stopband (bool):
-        whether to trim the frequency axis to capture.analysis_bandwidth
-    """
-
-    window: specs.WindowType
-    frequency_resolution: float
-    fractional_overlap: fractions.Fraction = fractions.Fraction(0)
-    window_fill: fractions.Fraction = fractions.Fraction(1)
-    integration_bandwidth: typing.Optional[float] = None
-    trim_stopband: bool = True
-    lo_bandstop: typing.Optional[float] = None
-
-
-class FrequencyAnalysisKeywords(specs.AnalysisKeywords):
-    window: typing.NotRequired[specs.WindowType]
-    frequency_resolution: typing.NotRequired[float]
-    fractional_overlap: typing.NotRequired[float]
-    window_fill: typing.NotRequired[float]
-    integration_bandwidth: typing.NotRequired[typing.Optional[float]]
-    lo_bandstop: typing.NotRequired[typing.Optional[float]]
-
-
-class SpectrogramSpec(
-    FrequencyAnalysisSpecBase,
-    kw_only=True,
-    frozen=True,
-    dict=True,
-):
-    """
-    lo_bandstop (float):
-        if specified, invalidate LO leakage by setting spectrogram bins to
-        NaN across this bandwidth at DC in the baseband
-    time_aperture (float):
-        if specified, binned RMS averaging is applied along time axis in the
-        spectrogram to yield this coarser resolution (s)
-    dB (bool): if True, returned power is transformed into dB units
-    """
-
-    time_aperture: typing.Optional[float] = None
-    dB = True
-
-
-class SpectrogramKeywords(FrequencyAnalysisKeywords):
-    time_aperture: typing.NotRequired[typing.Optional[float]]
-
-
 def evaluate_spectrogram(
     iq: ArrayType,
     capture: specs.Capture,
-    spec: SpectrogramSpec,
+    spec: specs.Spectrogram,
     *,
     dtype: typing.Union[
         typing.Literal['float16'], typing.Literal['float32']
@@ -420,7 +342,7 @@ def null_lo(x, nfft, fs, bandwidth, *, offset=0, axis=0):
 def _cached_spectrogram(
     iq: ArrayType,
     capture: specs.Capture,
-    spec: SpectrogramSpec,
+    spec: specs.Spectrogram,
 ):
     spec = spec.validate()
 
@@ -536,7 +458,7 @@ def fftfreq(nfft: int, fs: float, dtype='float64', xp: ModuleType = np) -> Array
 )
 @util.lru_cache()
 def spectrogram_baseband_frequency(
-    capture: specs.Capture, spec: SpectrogramSpec, xp=np
+    capture: specs.Capture, spec: specs.Spectrogram, xp=np
 ) -> np.ndarray:
     if xp is not np:
         return xp.array(spectrogram_baseband_frequency(capture, spec))

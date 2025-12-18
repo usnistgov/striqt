@@ -22,15 +22,6 @@ else:
     array_api_compat = util.lazy_import('array_api_compat')
 
 
-class Cellular5GNRPSSCorrelationSpec(
-    shared.Cellular5GNRSyncCorrelationSpec,
-    kw_only=True,
-    frozen=True,
-    dict=True,
-):
-    pass
-
-
 _coord_factories = [
     shared.cellular_cell_id2,
     shared.cellular_ssb_start_time,
@@ -47,7 +38,7 @@ pss_correlator_cache = register.KeywordArgumentCache([CAPTURE_DIM, 'spec'])
 def correlate_5g_pss(
     iq: ArrayType,
     capture: specs.Capture,
-    spec: Cellular5GNRPSSCorrelationSpec,
+    spec: specs.Cellular5GNRPSSCorrelationSpec,
 ) -> ArrayType:
     xp = iqwaveform.util.array_namespace(iq)
 
@@ -133,24 +124,12 @@ def weight_correlation_locally(R, window_fill=0.5, snr_window_fill=0.08):
     return ndimage.correlate1d(Ragg, weights, mode='wrap')
 
 
-class Cellular5GNRWeightedCorrelationSpec(Cellular5GNRPSSCorrelationSpec):
-    window_fill: float = 0.5
-    snr_window_fill: float = 0.08
-
-
-class Cellular5GNRWeightedCorrelationKeywords(
-    shared.Cellular5GNRSyncCorrelationKeywords
-):
-    window_fill: typing.NotRequired[float]
-    snr_window_fill: typing.NotRequired[float]
-
-
 @pss_local_weighted_correlator_cache.apply
 def pss_local_weighted_correlator(
     iq: ArrayType,
     capture: specs.Capture,
     *,
-    spec: Cellular5GNRPSSCorrelationSpec,
+    spec: specs.Cellular5GNRPSSCorrelationSpec,
     window_fill=0.5,
     snr_window_fill=0.08,
 ):
@@ -162,14 +141,11 @@ def pss_local_weighted_correlator(
     )
 
 
+@shared.hint_keywords(specs.Cellular5GNRPSSCorrelationSpec)
 @registry.channel_sync_source(
-    Cellular5GNRPSSCorrelationSpec, lag_coord_func=shared.cellular_ssb_lag
+    specs.Cellular5GNRPSSCorrelationSpec, lag_coord_func=shared.cellular_ssb_lag
 )
-def cellular_5g_pss_sync(
-    iq,
-    capture: specs.Capture,
-    **kwargs: typing.Unpack[Cellular5GNRWeightedCorrelationKeywords],
-):
+def cellular_5g_pss_sync(iq, capture: specs.Capture, **kwargs):
     """compute sync index offsets based on correlate_5g_pss.
 
     This approach is meant to account for a weighted average of nearby peaks
@@ -180,8 +156,8 @@ def cellular_5g_pss_sync(
     due to "ISI" begin to increase quickly.
     """
 
-    weighted_spec = Cellular5GNRWeightedCorrelationSpec.from_dict(kwargs).validate()
-    spec = Cellular5GNRPSSCorrelationSpec.from_spec(weighted_spec).validate()
+    weighted_spec = specs.Cellular5GNRWeightedCorrelation.from_dict(kwargs).validate()
+    spec = specs.Cellular5GNRPSSCorrelationSpec.from_spec(weighted_spec).validate()
 
     est = pss_local_weighted_correlator(
         iq,
@@ -196,8 +172,9 @@ def cellular_5g_pss_sync(
     return shared.cellular_ssb_lag(capture, spec)[i]
 
 
+@shared.hint_keywords(specs.Cellular5GNRWeightedCorrelation)
 @registry.measurement(
-    Cellular5GNRWeightedCorrelationSpec,
+    specs.Cellular5GNRWeightedCorrelation,
     coord_factories=[],
     dtype='float32',
     caches=(
@@ -209,16 +186,13 @@ def cellular_5g_pss_sync(
     store_compressed=False,
     attrs={'standard_name': 'PSS Synchronization Delay', 'units': 's'},
 )
-def cellular_5g_pss_sync_offset(
-    iq,
-    capture: specs.Capture,
-    **kwargs: typing.Unpack[Cellular5GNRWeightedCorrelationKeywords],
-):
+def cellular_5g_pss_sync_offset(iq, capture: specs.Capture, **kwargs):
     return cellular_5g_pss_sync(iq, capture, **kwargs)
 
 
+@shared.hint_keywords(specs.Cellular5GNRPSSCorrelationSpec)
 @registry.measurement(
-    Cellular5GNRPSSCorrelationSpec,
+    specs.Cellular5GNRPSSCorrelationSpec,
     coord_factories=_coord_factories,
     dtype=dtype,
     caches=(pss_correlator_cache, shared.ssb_iq_cache),
@@ -226,11 +200,7 @@ def cellular_5g_pss_sync_offset(
     store_compressed=False,
     attrs={'standard_name': 'PSS Cross-Covariance'},
 )
-def cellular_5g_pss_correlation(
-    iq,
-    capture: specs.Capture,
-    **kwargs: typing.Unpack[shared.Cellular5GNRSyncCorrelationKeywords],
-):
+def cellular_5g_pss_correlation(iq, capture: specs.Capture, **kwargs):
     """correlate each channel of the IQ against the cellular primary synchronization signal (PSS) waveform.
 
     Returns a DataArray containing the time-lag for each combination of NID2, symbol, and SSB start time.
@@ -253,7 +223,7 @@ def cellular_5g_pss_correlation(
         3GPP TS 138 213: Section 4.1
     """
 
-    spec = Cellular5GNRPSSCorrelationSpec.from_dict(kwargs).validate()
+    spec = specs.Cellular5GNRPSSCorrelationSpec.from_dict(kwargs).validate()
 
     R = correlate_5g_pss(iq, capture=capture, spec=spec)
 

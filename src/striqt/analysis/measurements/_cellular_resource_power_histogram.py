@@ -10,7 +10,7 @@ from .. import specs
 from ..lib import util
 from . import _channel_power_histogram, _spectrogram, shared
 from ._cellular_cyclic_autocorrelation import link_direction, tdd_config_from_str
-from .shared import registry
+from .shared import registry, hint_keywords
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -22,54 +22,10 @@ else:
     np = util.lazy_import('numpy')
 
 
-class CellularResourcePowerHistogramSpec(
-    specs.Measurement,
-    kw_only=True,
-    frozen=True,
-    dict=True,
-):
-    window: specs.WindowType
-    subcarrier_spacing: float
-    power_low: float
-    power_high: float
-    power_resolution: float
-    average_rbs: typing.Union[bool, typing.Literal['half']] = False
-    average_slots: bool = False
-    guard_bandwidths: typing.Union[
-        tuple[float, float], dict[float, tuple[float, float]]
-    ] = (0, 0)
-    frame_slots: typing.Union[str, dict[float, str], None] = None
-    special_symbols: typing.Union[str, dict[float, str], None] = None
-
-    cyclic_prefix: typing.Union[
-        typing.Literal['normal'], typing.Literal['extended']
-    ] = 'normal'
-
-    lo_bandstop: typing.Optional[float] = None
-
-
-class _CellularResourcePowerHistogramKeywords(typing.TypedDict, total=False):
-    # for IDE type hinting of the measurement function
-    window: specs.WindowType
-    subcarrier_spacing: float
-    power_low: float
-    power_high: float
-    power_resolution: float
-    average_rbs: typing.Union[bool, typing.Literal['half']]
-    average_slots: bool
-    guard_bandwidths: typing.Union[
-        tuple[float, float], dict[float, tuple[float, float]]
-    ]
-    frame_slots: typing.Union[str, dict[float, str], None]
-    special_symbols: typing.Union[str, dict[float, str], None]
-    cyclic_prefix: typing.Union[typing.Literal['normal'], typing.Literal['extended']]
-    lo_bandstop: float
-
-
 @dataclasses.dataclass
 class LinkPair:
-    downlink: any
-    uplink: any
+    downlink: typing.Any
+    uplink: typing.Any
 
 
 @registry.coordinates(
@@ -78,7 +34,7 @@ class LinkPair:
 )
 @util.lru_cache()
 def cellular_resource_power_bin(
-    capture: specs.Capture, spec: CellularResourcePowerHistogramSpec
+    capture: specs.Capture, spec: specs.CellularResourcePowerHistogram
 ) -> dict[str, np.ndarray]:
     """returns a dictionary of coordinate values, keyed by axis dimension name"""
 
@@ -216,7 +172,7 @@ def build_tdd_link_symbol_masks(
 
 
 def _get_integration_bandwidth(
-    spec: CellularResourcePowerHistogramSpec,
+    spec: specs.CellularResourcePowerHistogram,
 ) -> float | None:
     if spec.average_rbs == 'half':
         return 6 * spec.subcarrier_spacing
@@ -234,17 +190,18 @@ def _struct_defaults(spec_type: type[specs.SpecBase]) -> dict[str, typing.Any]:
     return dict(zip(fields[-len(defaults) :], defaults))
 
 
+@hint_keywords(specs.CellularResourcePowerHistogram)
 @registry.measurement(
     coord_factories=[link_direction, cellular_resource_power_bin],
     dtype='float32',
     depends=_spectrogram.spectrogram,
-    spec_type=CellularResourcePowerHistogramSpec,
+    spec_type=specs.CellularResourcePowerHistogram,
     attrs={'standard_name': 'Fraction of resource grid'},
 )
 def cellular_resource_power_histogram(
-    iq: 'striqt.waveform._typing.ArrayLike',
+    iq: 'iqwaveform.util.ArrayLike',
     capture: specs.Capture,
-    **kwargs: typing.Unpack[_CellularResourcePowerHistogramKeywords],
+    **kwargs,
 ):
     """
 
@@ -272,8 +229,8 @@ def cellular_resource_power_histogram(
     Returns:
         `xarray.DataArray` or `(array, dict)` based on `as_xarray`
     """
-    spec = CellularResourcePowerHistogramSpec.from_dict(kwargs)
-    spec_defaults = _struct_defaults(CellularResourcePowerHistogramSpec)
+    spec = specs.CellularResourcePowerHistogram.from_dict(kwargs)
+    spec_defaults = _struct_defaults(specs.CellularResourcePowerHistogram)
 
     xp = iqwaveform.util.array_namespace(iq)
 
@@ -287,7 +244,7 @@ def cellular_resource_power_histogram(
         time_aperture = None
 
     slot_count = round(10 * spec.subcarrier_spacing / 15e3)
-    frame_slots = specs.maybe_lookup_with_capture_key(
+    frame_slots = specs.helpers.maybe_lookup_with_capture_key(
         capture,
         spec.frame_slots,
         'center_frequency',
@@ -301,7 +258,7 @@ def cellular_resource_power_histogram(
             f'expected a string with {slot_count} characters, but received {len(frame_slots)}'
         )
 
-    special_symbols = specs.maybe_lookup_with_capture_key(
+    special_symbols = specs.helpers.maybe_lookup_with_capture_key(
         capture,
         spec.special_symbols,
         'center_frequency',
@@ -313,7 +270,7 @@ def cellular_resource_power_histogram(
             'specify special_symbols that implement the requested "s" special slot'
         )
 
-    guard_bandwidths = specs.maybe_lookup_with_capture_key(
+    guard_bandwidths = specs.helpers.maybe_lookup_with_capture_key(
         capture,
         spec.guard_bandwidths,
         'center_frequency',
@@ -331,7 +288,7 @@ def cellular_resource_power_histogram(
     else:
         raise ValueError('cp_guard_period must be "normal" or "extended"')
 
-    spg_spec = shared.SpectrogramSpec(
+    spg_spec = specs.Spectrogram(
         window=spec.window,
         frequency_resolution=spec.subcarrier_spacing / 2,
         fractional_overlap=fractional_overlap,

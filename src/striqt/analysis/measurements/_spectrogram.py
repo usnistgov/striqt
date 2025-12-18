@@ -7,7 +7,7 @@ from .. import specs
 
 from ..lib import util
 from . import shared
-from .shared import registry
+from .shared import registry, hint_keywords
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -27,7 +27,7 @@ warnings.filterwarnings(
 )
 @util.lru_cache()
 def spectrogram_time(
-    capture: specs.Capture, spec: shared.SpectrogramSpec
+    capture: specs.Capture, spec: specs.Spectrogram
 ) -> dict[str, np.ndarray]:
     import pandas as pd
 
@@ -52,19 +52,16 @@ def spectrogram_time(
     return pd.RangeIndex(size) * hop_period
 
 
+@hint_keywords(specs.Spectrogram)
 @registry.measurement(
     coord_factories=[spectrogram_time, shared.spectrogram_baseband_frequency],
-    spec_type=shared.SpectrogramSpec,
+    spec_type=specs.Spectrogram,
     dtype='float16',
     caches=shared.spectrogram_cache,
     # typed_kwargs=shared.SpectrogramKeywords,
     attrs={'standard_name': 'PSD', 'long_name': 'Power Spectral Density'},
 )
-def spectrogram(
-    iq: 'striqt.waveform.type_stubs.ArrayType',
-    capture: specs.Capture,
-    **kwargs: typing.Unpack[shared.SpectrogramKeywords],
-):
+def spectrogram(iq: 'iqwaveform.util.ArrayType', capture: specs.Capture, **kwargs):
     """Evaluate a spectrogram based on an STFT.
 
     The analysis parameters are in physical time and frequency units
@@ -79,7 +76,7 @@ def spectrogram(
         `striqt.waveform.spectrogram`
         `scipy.signal.spectrogram`
     """
-    spec = shared.SpectrogramSpec.from_dict(kwargs).validate()
+    spec = specs.Spectrogram.from_dict(kwargs).validate()
     spg, attrs = shared.evaluate_spectrogram(
         iq, capture, spec, dB=True, limit_digits=2, dtype='float16'
     )
