@@ -11,7 +11,7 @@ from threading import Event
 
 from striqt.analysis import dataarrays, registry
 from striqt.analysis.lib import register
-from striqt.analysis.lib.specs import Analysis
+from striqt.analysis.specs import Analysis
 from striqt.analysis.lib.util import pinned_array_as_cupy
 from striqt.waveform.fourier import ResamplerDesign
 
@@ -215,7 +215,7 @@ class HasSetupType(typing.Protocol[_TS]):
         /,
         *,
         reuse_iq=False,
-        **kwargs: typing.Unpack[specs._SourceKeywords],
+        **kwargs: typing.Unpack[specs.keywords.Source],
     ): ...
 
     def _connect(self, spec: _TS) -> None: ...
@@ -305,7 +305,7 @@ class SourceBase(HasSetupType[_TS], HasCaptureType[_TC]):
         /,
         *,
         reuse_iq=False,
-        **kwargs: typing.Unpack[specs._SourceKeywords],
+        **kwargs: typing.Unpack[specs.keywords.Source],
     ):
         open_event = self._is_open = Event()  # first, to serve other threads
 

@@ -7,7 +7,12 @@ import typing
 import msgspec
 
 from striqt import analysis as _analysis
-from striqt.analysis.specs import SpecBase, _SlowHashSpecBase, Capture
+from striqt.analysis.specs import (
+    SpecBase,
+    Capture,
+    _CaptureKeywords,
+    _SlowHashSpecBase,
+)
 
 from ..lib import util
 from . import types
@@ -49,6 +54,15 @@ class ResampledCapture(Capture, frozen=True, kw_only=True):
     _sweep_index: int = 0
 
 
+class _ResampledCaptureKeywords(_CaptureKeywords, total=False):
+    # this needs to be kept in sync with CaptureSpec in order to
+    # properly provide type hints for IDEs for .replace()-ish methods
+    port: types.Port
+    lo_shift: types.LOShift
+    host_resample: bool
+    backend_sample_rate: typing.Optional[types.BackendSampleRate]
+
+
 class SoapyCapture(ResampledCapture, frozen=True, kw_only=True):
     delay: typing.Optional[types.StartDelay] = None
     center_frequency: types.CenterFrequency
@@ -59,9 +73,23 @@ class SoapyCapture(ResampledCapture, frozen=True, kw_only=True):
         _validate_multichannel(self.port, self.gain)
 
 
+class _SoapyCaptureKeywords(_ResampledCaptureKeywords):
+    # this needs to be kept in sync with WaveformCapture in order to
+    # properly provide type hints for IDEs in the arm and acquire
+    # call signatures of source.Base objects
+    delay: typing.Optional[types.StartDelay]
+    center_frequency: types.CenterFrequency
+    gain: types.Gain
+
+
 class SingleToneCaptureSpec(ResampledCapture, frozen=True, kw_only=True):
     frequency_offset: types.FrequencyOffset = 0
     snr: typing.Optional[types.SNR] = None
+
+
+class _SingleToneCaptureKeywords(_ResampledCaptureKeywords):
+    frequency_offset: types.FrequencyOffset
+    snr: typing.Optional[types.SNR]
 
 
 class DiracDeltaCaptureSpec(ResampledCapture, frozen=True, kw_only=True):
@@ -69,13 +97,27 @@ class DiracDeltaCaptureSpec(ResampledCapture, frozen=True, kw_only=True):
     power: types.Power = 0
 
 
+class _DiracDeltaCaptureKeywords(_ResampledCaptureKeywords):
+    time: types.TimeOffset
+    power: types.Power
+
+
 class SawtoothCaptureSpec(ResampledCapture, kw_only=True, frozen=True, dict=True):
     period: types.Period = 0.01
     power: types.Power = 1
 
 
+class _SawtoothCaptureKeywords(_ResampledCaptureKeywords):
+    period: types.Period
+    power: types.Power
+
+
 class NoiseCaptureSpec(ResampledCapture, kw_only=True, frozen=True, dict=True):
     power_spectral_density: types.PSD = 1e-17
+
+
+class _NoiseCaptureKeywords(_ResampledCaptureKeywords):
+    power_spectral_density: types.PSD
 
 
 class FileCapture(ResampledCapture, frozen=True, kw_only=True):
@@ -84,6 +126,10 @@ class FileCapture(ResampledCapture, frozen=True, kw_only=True):
     def __post_init__(self):
         if self.backend_sample_rate is not None:
             raise TypeError('backend_sample_rate is fixed by the file source')
+
+
+class _FileCaptureKeywords(_ResampledCaptureKeywords):
+    pass
 
 
 class Source(_SlowHashSpecBase, frozen=True, kw_only=True):
@@ -101,9 +147,8 @@ class Source(_SlowHashSpecBase, frozen=True, kw_only=True):
     periodic_trigger: typing.Optional[float] = None
     channel_sync_source: typing.Optional[str] = None
 
-    # in the future, these should probably move to an analysis config
+    # output data device
     array_backend: types.ArrayBackend = 'numpy'
-    cupy_max_fft_chunk_size: typing.Optional[int] = None
 
     # validation data
     uncalibrated_peak_detect: types.OverloadDetectFlag = False
@@ -111,6 +156,25 @@ class Source(_SlowHashSpecBase, frozen=True, kw_only=True):
     transient_holdoff_time: typing.ClassVar[float] = 0
     stream_all_rx_ports: typing.ClassVar[bool | None] = False
     transport_dtype: typing.ClassVar[types.TransportDType] = 'float32'
+
+
+class _SourceKeywords(typing.TypedDict, total=False):
+    # this needs to be kept in sync with WaveformCapture in order to
+    # properly provide type hints for IDEs in the setup
+    # call signature of source.Base objects
+
+    base_clock_rate: types.BaseClockRate
+
+    calibration: str
+
+    gapless_rearm: types.GaplessRepeat
+    warmup_sweep: types.WarmupSweep
+
+    periodic_trigger: float
+    channel_sync_source: str
+
+    array_backend: types.ArrayBackend
+    uncalibrated_peak_detect: types.OverloadDetectFlag
 
 
 class SoapySource(Source, frozen=True, kw_only=True):
@@ -145,10 +209,22 @@ class SoapySource(Source, frozen=True, kw_only=True):
             )
 
 
+class _SoapySourceKeywords(_SourceKeywords, total=False):
+    receive_retries: types.ReceiveRetries
+    time_source: types.TimeSource
+    clock_source: types.ClockSource
+    time_sync_every_capture: types.TimeSyncEveryCapture
+
+
 class FunctionSource(Source, kw_only=True, frozen=True):
     # make these configurable, to support matching hardware for warmup sweeps
     num_rx_ports: int
     stream_all_rx_ports: typing.ClassVar[bool] = False
+
+
+class _FunctionSourceKeywords(_SourceKeywords, total=False):
+    # make these configurable, to support matching hardware for warmup sweeps
+    num_rx_ports: int
 
 
 class NoSource(Source, frozen=True, kw_only=True):
@@ -166,7 +242,19 @@ class MATSource(NoSource, kw_only=True, frozen=True, dict=True):
     transport_dtype: typing.ClassVar[types.TransportDType] = 'complex64'
 
 
+class _MATSourceKeywords(_SourceKeywords, total=False):
+    path: types.WaveformInputPath
+    num_rx_ports: int
+    file_format: types.Format
+    file_metadata: types.FileMetadata
+    loop: types.FileLoop
+
+
 class TDMSSource(NoSource, frozen=True, kw_only=True):
+    path: types.WaveformInputPath
+
+
+class _TDMSSourceKeywords(_SourceKeywords):
     path: types.WaveformInputPath
 
 
@@ -174,6 +262,12 @@ class ZarrIQSource(NoSource, frozen=True, kw_only=True):
     path: types.WaveformInputPath
     center_frequency: types.CenterFrequency
     select: types.ZarrSelect = {}
+
+
+class _ZarrIQSourceKeywords(_SourceKeywords):
+    path: types.WaveformInputPath
+    center_frequency: types.CenterFrequency
+    select: types.ZarrSelect
 
 
 class Description(SpecBase, frozen=True, kw_only=True):

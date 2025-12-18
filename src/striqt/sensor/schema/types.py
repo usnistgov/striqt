@@ -3,7 +3,7 @@ from __future__ import annotations as __
 from pathlib import Path
 from typing import TYPE_CHECKING as _TYPE_CHECKING
 from typing import Annotated, Any, Literal, Optional, Union
-from striqt.analysis.specs.types import *
+from striqt.analysis.specs import Meta
 
 if _TYPE_CHECKING:
     import pandas as pd

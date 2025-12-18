@@ -8,25 +8,18 @@ from math import inf
 import numbers
 import typing
 import warnings
-from typing import Annotated
 
 import msgspec
 
-from . import util
+from . import types
 
 if typing.TYPE_CHECKING:
-    import numpy as np
-
     _T = typing.TypeVar('_T')
-
-else:
-    np = util.lazy_import('numpy')
-
-
-WindowType = typing.Union[str, tuple[str, float]]
 
 
 def _enc_hook(obj):
+    import numpy as np
+
     if isinstance(obj, np.floating):
         return float(obj)
     elif isinstance(obj, fractions.Fraction):
@@ -36,6 +29,8 @@ def _enc_hook(obj):
 
 
 def _dec_hook(type_, obj):
+    import numpy as np
+
     origin_cls = typing.get_origin(type_) or type_
 
     if issubclass(origin_cls, fractions.Fraction):
@@ -67,17 +62,7 @@ def _deep_hash(obj: typing.Mapping | typing.Sequence) -> int:
     return hash(keys) ^ hash(deep_values)
 
 
-def Meta(standard_name: str, units: str | None = None, **kws) -> msgspec.Meta:
-    """annotation that is used to generate 'standard_name' and 'units' fields of xarray attrs objects"""
-    extra = {'standard_name': standard_name}
-    if units is not None:
-        # xarray objects with units == None cannot be saved to netcdf;
-        # in this case, omit
-        extra['units'] = units
-    return msgspec.Meta(description=standard_name, extra=extra, **kws)
-
-
-@util.lru_cache()
+@functools.lru_cache()
 def _private_fields(capture_cls: type[SpecBase]) -> tuple[str, ...]:
     return tuple([n for n in capture_cls.__struct_fields__ if n.startswith('_')])
 
@@ -167,20 +152,16 @@ class _SlowHashSpecBase(SpecBase, kw_only=True, frozen=True):
         return h
 
 
-DurationType = Annotated[float, Meta('Duration of the analysis waveform', 's')]
-SampleRateType = Annotated[float, Meta('Analysis sample rate', 'S/s')]
-AnalysisBandwidthType = Annotated[float, Meta('Analysis bandwidth', 'Hz')]
-
-
 class Capture(SpecBase, kw_only=True, frozen=True):
     """bare minimum information about an IQ acquisition"""
 
     # acquisition
-    duration: DurationType = 0.1
-    sample_rate: SampleRateType = 15.36e6
-    analysis_bandwidth: AnalysisBandwidthType = inf
+    duration: types.DurationType = 0.1
+    sample_rate: types.SampleRateType = 15.36e6
+    analysis_bandwidth: types.AnalysisBandwidthType = inf
 
     def __post_init__(self):
+        from ..lib import util
         if not util.isroundmod(self.duration * self.sample_rate, 1):
             raise ValueError(
                 f'duration {self.duration!r} is not an integer multiple of sample period'
@@ -188,9 +169,9 @@ class Capture(SpecBase, kw_only=True, frozen=True):
 
 
 class _CaptureKeywords(typing.TypedDict, total=False):
-    duration: DurationType
-    sample_rate: SampleRateType
-    analysis_bandwidth: AnalysisBandwidthType
+    duration: types.DurationType
+    sample_rate: types.SampleRateType
+    analysis_bandwidth: types.AnalysisBandwidthType
 
 
 class AnalysisFilter(SpecBase, kw_only=True, frozen=True):
@@ -249,7 +230,7 @@ class Analysis(_SlowHashSpecBase, kw_only=True, frozen=True):
     pass
 
 
-@util.lru_cache()
+@functools.lru_cache()
 def get_capture_type_attrs(capture_cls: type[Capture]) -> dict[str, typing.Any]:
     """return attrs metadata for each field in `capture`"""
     attrs = {}

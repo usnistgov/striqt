@@ -17,7 +17,7 @@ from matplotlib import ticker
 import striqt.waveform as iqwaveform
 
 from ..analysis.lib import dataarrays
-from ..analysis.lib.specs import Capture
+from ..analysis.specs import Capture
 
 _FORCE_UNIT_PREFIXES = {'center_frequency': 'M'}
 

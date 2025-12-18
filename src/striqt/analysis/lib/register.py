@@ -13,7 +13,9 @@ from fractions import Fraction
 
 import msgspec
 
-from . import specs, util
+from .. import specs
+
+from . import util
 
 if typing.TYPE_CHECKING:
     import inspect

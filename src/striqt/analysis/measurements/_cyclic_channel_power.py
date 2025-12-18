@@ -3,7 +3,9 @@ from __future__ import annotations as __
 import fractions
 import typing
 
-from ..lib import specs, util
+from .. import specs
+
+from ..lib import util
 from ._channel_power_time_series import power_detector
 from .shared import registry
 

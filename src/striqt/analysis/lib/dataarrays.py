@@ -9,8 +9,10 @@ import typing
 
 import msgspec
 
+from .. import specs
 
-from . import register, specs, util
+
+from . import register, util
 
 if typing.TYPE_CHECKING:
     import array_api_compat

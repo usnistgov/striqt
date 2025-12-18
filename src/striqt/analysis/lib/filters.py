@@ -4,7 +4,9 @@ from __future__ import annotations as __
 
 import typing
 
-from . import dataarrays, specs, util
+from .. import specs
+
+from . import dataarrays, util
 
 if typing.TYPE_CHECKING:
     import array_api_compat

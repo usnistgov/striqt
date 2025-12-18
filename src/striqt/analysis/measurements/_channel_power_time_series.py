@@ -3,7 +3,9 @@ from __future__ import annotations as __
 import fractions
 import typing
 
-from ..lib import dataarrays, register, specs, util
+from .. import specs
+
+from ..lib import dataarrays, register, util
 from .shared import registry
 
 if typing.TYPE_CHECKING:

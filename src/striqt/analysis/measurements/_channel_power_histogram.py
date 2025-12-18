@@ -2,7 +2,9 @@ from __future__ import annotations as __
 
 import typing
 
-from ..lib import specs, util
+from .. import specs
+
+from ..lib import util
 from . import _channel_power_time_series
 from .shared import registry
 

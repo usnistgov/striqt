@@ -2,7 +2,9 @@ from __future__ import annotations as __
 
 import typing
 
-from ..lib import register, specs, util
+from .. import specs
+
+from ..lib import register, util
 from ..lib.dataarrays import CAPTURE_DIM
 from . import shared
 from .shared import registry

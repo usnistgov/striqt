@@ -2,7 +2,9 @@ from __future__ import annotations as __
 
 import typing
 
-from ..lib import specs, util
+from .. import specs
+
+from ..lib import util
 from . import _channel_power_histogram, _spectrogram, _spectrogram_histogram, shared
 from .shared import registry
 

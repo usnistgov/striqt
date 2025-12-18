@@ -5,7 +5,9 @@ import typing
 from fractions import Fraction
 from math import ceil
 
-from ..lib import specs, util
+from .. import specs
+
+from ..lib import util
 from . import _channel_power_histogram, _spectrogram, shared
 from ._cellular_cyclic_autocorrelation import link_direction, tdd_config_from_str
 from .shared import registry

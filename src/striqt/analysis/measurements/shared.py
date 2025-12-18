@@ -4,7 +4,9 @@ import decimal
 import fractions
 import typing
 
-from ..lib import dataarrays, register, specs, util
+from .. import specs
+
+from ..lib import dataarrays, register, util
 from ..lib.register import registry
 
 if typing.TYPE_CHECKING:

@@ -30,13 +30,13 @@ class TDMSSource(_base.VirtualSourceBase[specs.TDMSSource, specs.FileCapture]):
             /,
             *,
             reuse_iq=False,
-            **kwargs: typing.Unpack[specs._TDMSSourceKeywords],
+            **kwargs: typing.Unpack[specs.keywords.TDMSSource],
         ): ...
         def arm(
             self,
             _capture=None,
             /,
-            **capture_kws: typing.Unpack[specs._FileCaptureKeywords],
+            **capture_kws: typing.Unpack[specs.keywords.FileCapture],
         ) -> specs.FileCapture: ...
 
     _file_info: specs.FileAcquisitionInfo
@@ -105,13 +105,13 @@ class MATSource(_base.VirtualSourceBase[specs.MATSource, specs.FileCapture]):
             /,
             *,
             reuse_iq=False,
-            **kwargs: typing.Unpack[specs._MATSourceKeywords],
+            **kwargs: typing.Unpack[specs.keywords.MATSource],
         ): ...
         def arm(
             self,
             _capture=None,
             /,
-            **capture_kws: typing.Unpack[specs._FileCaptureKeywords],
+            **capture_kws: typing.Unpack[specs.keywords.FileCapture],
         ) -> specs.FileCapture: ...
 
     _file_info: specs.FileAcquisitionInfo
@@ -188,13 +188,13 @@ class ZarrIQSource(_base.VirtualSourceBase[specs.ZarrIQSource, specs.FileCapture
             /,
             *,
             reuse_iq=False,
-            **kwargs: typing.Unpack[specs._ZarrIQSourceKeywords],
+            **kwargs: typing.Unpack[specs.keywords.ZarrIQSource],
         ): ...
         def arm(
             self,
             _capture=None,
             /,
-            **capture_kws: typing.Unpack[specs._FileCaptureKeywords],
+            **capture_kws: typing.Unpack[specs.keywords.FileCapture],
         ) -> specs.FileCapture: ...
 
     _waveform: 'xr.DataArray'

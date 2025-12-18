@@ -589,13 +589,13 @@ class SoapySourceBase(
             /,
             *,
             reuse_iq=False,
-            **kwargs: typing.Unpack[specs._SoapySourceKeywords],
+            **kwargs: typing.Unpack[specs.keywords.SoapySource],
         ): ...
         def arm(
             self,
             _capture=None,
             /,
-            **capture_kws: typing.Unpack[specs._SoapyCaptureKeywords],
+            **capture_kws: typing.Unpack[specs.keywords.SoapyCapture],
         ) -> specs.SoapyCapture: ...
 
     _device: 'SoapySDR.Device'

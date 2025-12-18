@@ -8,7 +8,9 @@ import warnings
 from collections import defaultdict
 from pathlib import Path
 
-from . import dataarrays, register, specs, util
+from .. import specs
+
+from . import dataarrays, register, util
 
 if typing.TYPE_CHECKING:
     import numcodecs

@@ -72,13 +72,13 @@ class SingleToneSource(
             /,
             *,
             reuse_iq=False,
-            **kwargs: typing.Unpack[specs._FunctionSourceKeywords],
+            **kwargs: typing.Unpack[specs.keywords.FunctionSource],
         ): ...
         def arm(
             self,
             _capture=None,
             /,
-            **capture_kws: typing.Unpack[specs._SingleToneCaptureKeywords],
+            **capture_kws: typing.Unpack[specs.keywords.SingleToneCapture],
         ) -> specs.SingleToneCaptureSpec: ...
 
     def get_waveform(
@@ -120,13 +120,13 @@ class DiracDeltaSource(
             /,
             *,
             reuse_iq=False,
-            **kwargs: typing.Unpack[specs._FunctionSourceKeywords],
+            **kwargs: typing.Unpack[specs.keywords.FunctionSource],
         ): ...
         def arm(
             self,
             _capture=None,
             /,
-            **capture_kws: typing.Unpack[specs._DiracDeltaCaptureKeywords],
+            **capture_kws: typing.Unpack[specs.keywords.DiracDeltaCapture],
         ) -> specs.DiracDeltaCaptureSpec: ...
 
     def get_waveform(
@@ -155,13 +155,13 @@ class SawtoothSource(TestSourceBase[specs.FunctionSource, specs.SawtoothCaptureS
             /,
             *,
             reuse_iq=False,
-            **kwargs: typing.Unpack[specs._FunctionSourceKeywords],
+            **kwargs: typing.Unpack[specs.keywords.FunctionSource],
         ): ...
         def arm(
             self,
             _capture=None,
             /,
-            **capture_kws: typing.Unpack[specs._SawtoothCaptureKeywords],
+            **capture_kws: typing.Unpack[specs.keywords.SawtoothCapture],
         ) -> specs.SawtoothCaptureSpec: ...
 
     def get_waveform(
@@ -187,13 +187,13 @@ class NoiseSource(TestSourceBase[specs.FunctionSource, specs.NoiseCaptureSpec]):
             /,
             *,
             reuse_iq=False,
-            **kwargs: typing.Unpack[specs._FunctionSourceKeywords],
+            **kwargs: typing.Unpack[specs.keywords.FunctionSource],
         ): ...
         def arm(
             self,
             _capture=None,
             /,
-            **capture_kws: typing.Unpack[specs._NoiseCaptureKeywords],
+            **capture_kws: typing.Unpack[specs.keywords.NoiseCapture],
         ) -> specs.NoiseCaptureSpec: ...
 
     def get_waveform(

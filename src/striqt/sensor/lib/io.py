@@ -10,7 +10,7 @@ from striqt import analysis
 from striqt.analysis.lib.io import decode_from_yaml_file
 from striqt.analysis.lib.io import dump as dump_data  # noqa: F401
 from striqt.analysis.lib.io import load as load_data  # noqa: F401
-from striqt.analysis.lib.specs import convert_dict
+from striqt.analysis.specs import convert_dict
 from .. import specs
 
 from . import util

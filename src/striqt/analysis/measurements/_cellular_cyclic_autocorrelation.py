@@ -3,7 +3,9 @@ from __future__ import annotations as __
 import numbers
 import typing
 
-from ..lib import specs, util
+from .. import specs
+
+from ..lib import util
 from .shared import registry
 
 if typing.TYPE_CHECKING:

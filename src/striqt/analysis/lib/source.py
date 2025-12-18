@@ -2,7 +2,9 @@ from __future__ import annotations as __
 
 import typing
 
-from . import specs, util
+from .. import specs
+
+from . import util
 
 if typing.TYPE_CHECKING:
     import numpy as np
