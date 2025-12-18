@@ -10,8 +10,7 @@ import msgspec
 
 from . import helpers, types
 
-if typing.TYPE_CHECKING:
-    _T = typing.TypeVar('_T')
+_T = typing.TypeVar('_T')
 
 
 class SpecBase(

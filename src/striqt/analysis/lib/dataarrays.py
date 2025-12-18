@@ -152,7 +152,7 @@ def format_units(value, unit='', places=None, force_prefix=None, sep=' ') -> str
 
 
 def describe_field(capture: specs.Capture, name: str):
-    meta = specs.get_capture_type_attrs(type(capture))
+    meta = specs.helpers.get_capture_type_attrs(type(capture))
     attrs = meta[name]
     value = getattr(capture, name)
     value_str = describe_value(value, attrs)
