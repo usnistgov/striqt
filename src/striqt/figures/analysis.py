@@ -136,6 +136,14 @@ def _maybe_skip_missing(func):
     return wrapped
 
 
+def _count_facets(facet_col, data) -> int:
+    if facet_col is None:
+        return 1
+    else:
+        return data[facet_col].shape[0]
+
+
+
 class CapturePlotter:
     def __init__(
         self,
@@ -143,7 +151,7 @@ class CapturePlotter:
         interactive: bool = True,
         output_dir: str | Path = None,
         subplot_by_channel: bool = True,
-        col_wrap=2,
+        col_wrap:int=2,
         title_fmt='Channel {port}',
         suptitle_fmt='{center_frequency}',
         filename_fmt='{name} {center_frequency}.svg',
@@ -181,11 +189,14 @@ class CapturePlotter:
             plt.style.use(self._style)
 
         if self.facet_col is None:
-            fig, axs = plt.subplots()
             facet_count = 1
         else:
-            fig, axs = None, []
             facet_count = data[self.facet_col].shape[0]
+
+        if facet_count == 1:
+            fig, axs = plt.subplots()
+        else:
+            fig, axs = None, []
 
         warning_ctx = warnings.catch_warnings()
         warning_ctx.__enter__()
@@ -200,6 +211,7 @@ class CapturePlotter:
             axs = fig.get_axes()
         else:
             fig.tight_layout()
+        fig.set_size_inches(mpl.rcParams['figure.figsize'])
 
         if not isinstance(axs, (list, tuple)):
             axs = [axs]
@@ -226,7 +238,7 @@ class CapturePlotter:
         if y is not None:
             label_axis('y', data[y], ax=axs[0], tick_units=False)
 
-        if hue is not None:
+        if hue is not None and fig.legends:
             fig.legends[0].remove()
             label_legend(data, coord_name=hue, ax=axs[0])
 
@@ -270,12 +282,14 @@ class CapturePlotter:
         if self.facet_col is not None:
             # treat the sequence of multiple captures in one plot
             seq = [data]
-            kws.update(col=self.facet_col, sharey=sharey, col_wrap=self._col_wrap)
+            col_wrap = min(_count_facets(self.facet_col, data), self._col_wrap)
+            kws.update(col=self.facet_col, sharey=sharey, col_wrap=col_wrap)
         else:
             seq = data
 
         for sub in seq:
             with self._plot_context(sub, **ctx_kws):
+                kws['figsize'] = mpl.rcParams['figure.figsize']
                 data.sel(sel).plot.line(**kws)
 
     def _heatmap(
@@ -296,7 +310,8 @@ class CapturePlotter:
         if self.facet_col is not None:
             # treat the sequence of multiple captures in one plot
             seq = [data]
-            kws.update(col=self.facet_col, sharey=sharey, col_wrap=self._col_wrap)
+            col_wrap = min(_count_facets(self.facet_col, data), self._col_wrap)
+            kws.update(col=self.facet_col, sharey=sharey, col_wrap=col_wrap)
         else:
             seq = data
 
@@ -305,6 +320,7 @@ class CapturePlotter:
                 spg = data.sel(sel)
                 if transpose:
                     spg = spg.T
+                kws['figsize'] = mpl.rcParams['figure.figsize']
                 spg.plot.pcolormesh(**kws)
 
     def cellular_cyclic_autocorrelation(
@@ -363,7 +379,7 @@ class CapturePlotter:
     @_maybe_skip_missing
     def spectrogram(self, data: xr.Dataset, **sel):
         key = self.spectrogram.__name__
-        self._heatmap(
+        return self._heatmap(
             data[key].sel(sel).dropna('spectrogram_baseband_frequency'),
             name=key,
             x='spectrogram_time',

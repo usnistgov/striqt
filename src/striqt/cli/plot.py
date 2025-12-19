@@ -13,15 +13,9 @@ def _submit_if_available(executor, func: callable, data, *args, **kws) -> list:
 @click_capture_plotter()
 def run(dataset, output_path: str, interactive: bool):
     """generic plots"""
-    from striqt.analysis import figures
+    from striqt import figures
     from concurrent import futures
-    import iqwaveform  # needed for plt.style.use()
     from matplotlib import pyplot as plt
-    import labbench as lb
-
-    lb.util.force_full_traceback(True)
-
-    plt.style.use('iqwaveform.ieee_double_column')
 
     plotter = figures.CapturePlotter(
         interactive=interactive,
@@ -32,6 +26,7 @@ def run(dataset, output_path: str, interactive: bool):
         suptitle_fmt='{center_frequency}',
         filename_fmt='{name} {center_frequency}.svg',
         ignore_missing=True,
+        style='striqt.figures.presentation_half_width'
     )
 
     executor = futures.ProcessPoolExecutor(max_workers=6)
@@ -40,7 +35,11 @@ def run(dataset, output_path: str, interactive: bool):
 
     with executor:
         pending = []
-        for start_time, data in dataset.groupby('start_time'):
+        if 'start_time' in dataset.coords:
+            groups = dataset.groupby('start_time')
+        else:
+            groups = [(None, dataset)]
+        for _, data in groups:
             # 1 start time per (maybe multi-channel) capture
 
             # channel power representations
