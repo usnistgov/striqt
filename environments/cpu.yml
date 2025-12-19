@@ -40,4 +40,4 @@ dependencies:
 - mscorefonts
 
 - pip:
-  - striqt @ git+https://github.com/usnistgov/striqt
+  - striqt @ git+https://github.com/usnistgov/striqt@channel-enable-fix
