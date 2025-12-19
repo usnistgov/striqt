@@ -166,14 +166,14 @@ def _get_phy_mapping(
     subcarrier_spacings: tuple[float, ...],
     generation: typing.Literal['4G', '5G'] = '4G',
     xp=np,
-) -> dict[float, iqwaveform.ofdm.Phy3GPP]:
+) -> dict[float, iqwaveform.ofdm.get_3gpp_phy]:
     kws = dict(
         channel_bandwidth=channel_bandwidth,
         generation=generation,
         sample_rate=sample_rate,
     )
     return {
-        scs: iqwaveform.ofdm.Phy3GPP(subcarrier_spacing=scs, xp=xp, **kws)
+        scs: iqwaveform.ofdm.get_3gpp_phy(subcarrier_spacing=scs, xp=xp, **kws)
         for scs in subcarrier_spacings
     }
 
@@ -251,7 +251,8 @@ def cellular_cyclic_autocorrelation(
         capture, spec.frame_slots, 'center_frequency', 'frame_slots', default='d'
     )
 
-    # transform the indexing arguments into the form expected by phy.index_cyclic_prefix
+    # transform the indexing arguments into the form expected by
+    # iqwaveform.ofdm.get_3gpp_cyclic_prefix_inds
     idx_kws = {}
     for name, field_range in RANGE_MAP.items():
         if isinstance(field_range, numbers.Number):
@@ -276,16 +277,16 @@ def cellular_cyclic_autocorrelation(
                 subcarrier_spacing=phy.subcarrier_spacing, frame_slots=frame_slots
             )
 
-            cp_inds = phy.index_cyclic_prefix(
-                **idx_kws, slots=tdd_config.downlink_slot_indexes
+            cp_inds = iqwaveform.ofdm.get_3gpp_cyclic_prefix_inds(
+                phy, **idx_kws, slots=tdd_config.downlink_slot_indexes
             )
 
             R = iqwaveform.ofdm.corr_at_indices(cp_inds, iq[chan], phy.nfft, norm=False)
             result[chan][0][iscs][: R.size] = xp.abs(R)
 
             if len(tdd_config.uplink_slot_indexes) > 0:
-                cp_inds = phy.index_cyclic_prefix(
-                    **idx_kws, slots=tdd_config.uplink_slot_indexes
+                cp_inds = iqwaveform.ofdm.get_3gpp_cyclic_prefix_inds(
+                    phy, **idx_kws, slots=tdd_config.uplink_slot_indexes
                 )
                 R = iqwaveform.ofdm.corr_at_indices(
                     cp_inds, iq[chan], phy.nfft, norm=False
