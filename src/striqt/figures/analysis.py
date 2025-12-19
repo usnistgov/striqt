@@ -143,6 +143,17 @@ def _count_facets(facet_col, data) -> int:
         return data[facet_col].shape[0]
 
 
+def _fix_axes(data, grid, x, y=None, xticklabelunits=True):
+    axs = list(np.array(grid.axes).flatten())
+
+    for ax in axs:
+        label_axis('x', data[x], ax=ax, tick_units=xticklabelunits)
+
+        if y is None:
+            label_axis('y', data, ax=ax, tick_units=False)
+        else:
+            label_axis('y', data[y], ax=ax, tick_units=False)
+
 class CapturePlotter:
     def __init__(
         self,
@@ -150,7 +161,7 @@ class CapturePlotter:
         interactive: bool = True,
         output_dir: str | Path = None,
         subplot_by_channel: bool = True,
-        col_wrap: int = 2,
+        col_wrap:int=2,
         title_fmt='Channel {port}',
         suptitle_fmt='{center_frequency}',
         filename_fmt='{name} {center_frequency}.svg',
@@ -235,7 +246,7 @@ class CapturePlotter:
                 label_axis('x', data[x], ax=ax, tick_units=xticklabelunits)
 
         if y is not None:
-            label_axis('y', data[y], ax=axs[0], tick_units=False)
+            label_axis('y', data[y], fig=fig, tick_units=False)
 
         if hue is not None and fig.legends:
             fig.legends[0].remove()
@@ -289,7 +300,8 @@ class CapturePlotter:
         for sub in seq:
             with self._plot_context(sub, **ctx_kws):
                 kws['figsize'] = mpl.rcParams['figure.figsize']
-                data.sel(sel).plot.line(**kws)
+                grid = data.sel(sel).plot.line(**kws)
+                _fix_axes(data=data, grid=grid, x=x, xticklabelunits=xticklabelunits)
 
     def _heatmap(
         self,
@@ -320,7 +332,8 @@ class CapturePlotter:
                 if transpose:
                     spg = spg.T
                 kws['figsize'] = mpl.rcParams['figure.figsize']
-                spg.plot.pcolormesh(**kws)
+                grid = spg.plot.pcolormesh(**kws)
+                _fix_axes(data=data, grid=grid, x=x, y=y)
 
     def cellular_cyclic_autocorrelation(
         self, data: xr.Dataset, hue='link_direction', **sel
@@ -331,6 +344,32 @@ class CapturePlotter:
             name=key,
             x='cyclic_sample_lag',
             hue=hue,
+        )
+
+    @_maybe_skip_missing
+    def cellular_5g_pss_correlation(self, data: xr.Dataset, hue='cellular_ssb_beam_index', dB=True, **sel):
+        key = self.cellular_5g_pss_correlation.__name__
+
+        Rpss = data[key].sel(sel).isel(cellular_ssb_start_time=0)
+
+        power = iqwaveform.envtopow(Rpss)
+
+        if hue == 'cellular_cell_id2':
+            power = power.mean('cellular_ssb_beam_index', keep_attrs=True)
+        elif hue == 'cellular_ssb_beam_index':
+            power = power.mean('cellular_cell_id2', keep_attrs=True)
+        else:
+            raise KeyError('invalid hue')
+
+        if dB:
+            power = iqwaveform.powtodB(power)
+
+        return self._line(
+            power,
+            name=key,
+            x='cellular_ssb_lag',
+            hue=hue,
+            rasterized=False
         )
 
     def channel_power_histogram(self, data: xr.Dataset, hue='power_detector', **sel):
@@ -353,6 +392,28 @@ class CapturePlotter:
             hue=hue,
         )
 
+    @_maybe_skip_missing
+    def power_spectral_density(self, data: xr.Dataset, hue='time_statistic', **sel):
+        key = self.power_spectral_density.__name__
+
+        if (
+            key not in data.data_vars
+            and 'persistence_spectrum' in data.data_vars
+            and 'persistence_statistics' in data
+            and hue == 'time_statistic'
+        ):
+            # legacy
+
+            hue = 'persistence_statistics'
+            key = 'persistence_spectrum'
+
+        return self._line(
+            data[key].sel(sel),
+            name=key,
+            x='baseband_frequency',
+            hue=hue,
+        )
+    
     @_maybe_skip_missing
     def power_spectral_density(self, data: xr.Dataset, hue='time_statistic', **sel):
         key = self.power_spectral_density.__name__
