@@ -163,14 +163,14 @@ def _describe_missing_data(cal_data: '_xr.DataArray', exact_matches: dict):
 def _lookup_calibration_var(
     cal_var: '_xr.DataArray',
     capture: _specs.SoapyCapture,
-    base_clock_rate: float,
+    master_clock_rate: float,
     *,
     xp,
 ):
     results = []
 
     for capture_chan in _specs.helpers.split_capture_ports(capture):
-        fs = _sources._base.design_capture_resampler(base_clock_rate, capture_chan)[
+        fs = _sources._base.design_capture_resampler(master_clock_rate, capture_chan)[
             'fs_sdr'
         ]
         port_key = _get_port_variable(cal_var)
@@ -293,7 +293,7 @@ def _ensure_loop_at_position(sweep: _specs.Sweep):
 def lookup_power_correction(
     cal_data: 'str | Path | None',
     capture: _specs.SoapyCapture,
-    base_clock_rate: float,
+    master_clock_rate: float,
     alias_func: _specs.helpers.PathAliasFormatter | None = None,
     *,
     xp=None,
@@ -308,7 +308,7 @@ def lookup_power_correction(
     return _lookup_calibration_var(
         corrections.power_correction,
         capture=capture,
-        base_clock_rate=base_clock_rate,
+        master_clock_rate=master_clock_rate,
         xp=xp or _np,
     )
 
@@ -317,7 +317,7 @@ def lookup_power_correction(
 def lookup_system_noise_power(
     cal_data: 'Path | str | None',
     capture: _specs.SoapyCapture,
-    base_clock_rate: float,
+    master_clock_rate: float,
     alias_func: _specs.helpers.PathAliasFormatter | None = None,
     *,
     T=290.0,
@@ -340,7 +340,7 @@ def lookup_system_noise_power(
     noise_figure = _lookup_calibration_var(
         corrections.noise_figure,
         capture=capture,
-        base_clock_rate=base_clock_rate,
+        master_clock_rate=master_clock_rate,
         xp=xp,
     )
 
@@ -475,7 +475,7 @@ def bind_manual_yfactor_calibration(
 
     class sweep_spec_cls(_specs.CalibrationSweep, frozen=True, kw_only=True):
         calibration: _specs.ManualYFactorPeripheral | None = None
-        info = _specs.SweepInfo(reuse_iq=True, loop_only_nyquist=True)
+        options = _specs.SweepOptions(reuse_iq=True, loop_only_nyquist=True)
 
         def __post_init__(self):
             _ensure_loop_at_position(self)

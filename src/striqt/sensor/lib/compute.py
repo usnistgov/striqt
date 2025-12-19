@@ -298,7 +298,7 @@ def analyze(
     # wait to import until here to avoid a circular import
     from . import resampling
 
-    overwrite_x = not options.sweep_spec.info.reuse_iq
+    overwrite_x = not options.sweep_spec.options.reuse_iq
 
     assert iq.capture is not None
 
@@ -488,13 +488,11 @@ def build_warmup_sweep(sweep: specs.Sweep[_TS, _TP, _TC]) -> WarmupSweep:
 
     source = warmup.schema.source(
         num_rx_ports=num_rx_ports,
-        base_clock_rate=sweep.source.base_clock_rate,
+        master_clock_rate=sweep.source.master_clock_rate,
         calibration=None,
         warmup_sweep=False,
-        gapless_rearm=sweep.source.gapless_rearm,
-        periodic_trigger=None,
-        channel_sync_source=sweep.source.channel_sync_source,
-        uncalibrated_peak_detect=sweep.source.uncalibrated_peak_detect,
+        trigger_strobe=None,
+        trigger_source=sweep.source.trigger_source,
     )
 
     return b.sweep_spec(
@@ -531,7 +529,7 @@ def import_compute_modules(cupy=False):
 def prepare_compute(input_spec: specs.Sweep):
     import_compute_modules(cupy=input_spec.source.array_backend == 'cupy')
 
-    if not input_spec.source.warmup_sweep:
+    if not input_spec.options.warmup_sweep:
         return
 
     from .. import bindings

@@ -1,6 +1,6 @@
 from ._cellular_5g_pss_correlation import (
     cellular_5g_pss_correlation,
-    cellular_5g_pss_sync_offset,
+    cellular_5g_pss_sync,
     weight_correlation_locally,
 )
 from ._cellular_5g_ssb_spectrogram import cellular_5g_ssb_spectrogram

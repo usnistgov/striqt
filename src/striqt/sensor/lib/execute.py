@@ -14,6 +14,7 @@ from . import compute, sources, peripherals, util
 from .. import specs
 from .resources import Resources, AnyResources
 from .calibration import lookup_system_noise_power
+from .sources import _PS, _PC
 from ..specs import _TC, _TP, _TS
 
 if typing.TYPE_CHECKING:
@@ -55,7 +56,7 @@ def _log_progress_contexts(index, count):
 
 @util.stopwatch('acquire', 'sweep', threshold=0.25)
 def _acquire_both(
-    res: Resources[typing.Any, typing.Any, _TC], this: _TC, next_: _TC | None
+    res: Resources[typing.Any, typing.Any, _TC, _PS, _PC], this: _TC, next_: _TC | None
 ) -> sources.AcquiredIQ:
     """arm and acquire from the source and peripherals.
 
@@ -71,7 +72,7 @@ def _acquire_both(
     def arm_both(c: _TC | None):
         if c is None:
             return
-        util.concurrently({'s': util.Call(s.arm, c), 'p': util.Call(p.arm, c)})
+        util.concurrently({'s': util.Call(s.arm_spec, c), 'p': util.Call(p.arm, c)})
 
     try:
         s.capture_spec
@@ -99,7 +100,7 @@ def _acquire_both(
 
 
 def _log_cache_info(
-    resources: Resources[_TS, _TP, _TC], cache, capture: _TC, result, *_, **__
+    resources: Resources[_TS, _TP, _TC, _PS, _PC], cache, capture: _TC, result, *_, **__
 ):
     cal = resources['sweep_spec'].source.calibration
     if cal is None or 'spectrogram' not in cache.name:
@@ -116,7 +117,7 @@ def _log_cache_info(
     noise = lookup_system_noise_power(
         cal,
         specs.SoapyCapture.from_spec(capture),
-        base_clock_rate=resources['sweep_spec'].source.base_clock_rate,
+        master_clock_rate=resources['sweep_spec'].source.master_clock_rate,
         alias_func=resources['alias_func'],
         B=attrs['noise_bandwidth'],
         xp=xp,
@@ -131,12 +132,12 @@ def _log_cache_info(
 
 
 def iterate_sweep(
-    resources: Resources[_TS, _TP, _TC],
+    resources: Resources[_TS, _TP, _TC, _PS, _PC],
     *,
     always_yield: bool = False,
     yield_values: bool = True,
     loop: bool = False,
-    **replace: 'Unpack[AnyResources[_TS, _TP, _TC]]',
+    **replace: 'Unpack[AnyResources[_TS, _TP, _TC, _PS, _PC]]',
 ) -> typing.Generator['xr.Dataset|compute.DelayedDataset|None']:
     """an iterator that steps through the execution of a sensor sweep.
 

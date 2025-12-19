@@ -9,9 +9,9 @@ from collections import defaultdict
 from math import ceil
 from threading import Event
 
-from striqt.analysis import dataarrays, registry
+from striqt.analysis import dataarrays, registry, Trigger
 from striqt.analysis.lib import register
-from striqt.analysis.specs import Analysis
+from striqt.analysis.specs import Analysis, Measurement
 from striqt.analysis.lib.util import pinned_array_as_cupy
 from striqt.waveform.fourier import ResamplerDesign
 
@@ -60,7 +60,7 @@ class AcquiredIQ(dataarrays.AcquiredIQ):
     alias_func: specs.helpers.PathAliasFormatter | None
     source_spec: specs.Source
     resampler: ResamplerDesign
-    aligner: register.AlignmentCaller | None
+    trigger: register.Trigger | None
 
 
 class ReceiveStreamError(IOError):
@@ -239,7 +239,6 @@ class HasCaptureType(typing.Protocol[_TC, _PC]):
     def acquire(
         self,
         *,
-        analysis: Analysis | None = None,
         correction: bool = True,
         alias_func: specs.helpers.PathAliasFormatter | None = None,
     ) -> AcquiredIQ: ...
@@ -253,32 +252,35 @@ class HasCaptureType(typing.Protocol[_TC, _PC]):
 
 
 @typing.overload
-def get_aligner(setup: specs.Source, analysis: None = None) -> None: ...
+def get_trigger_from_spec(setup: specs.Source, analysis: None = None) -> None: ...
 
 
 @typing.overload
-def get_aligner(
+def get_trigger_from_spec(
     setup: specs.Source, analysis: Analysis
-) -> register.AlignmentCaller: ...
+) -> register.Trigger: ...
 
 
 @util.lru_cache()
-def get_aligner(
+def get_trigger_from_spec(
     setup: specs.Source, analysis: Analysis | None = None
-) -> register.AlignmentCaller | None:
-    if setup.channel_sync_source is None:
+) -> register.Trigger | None:
+    name = get_trigger_source_name(setup)
+    if name is None:
         return None
-    elif analysis is None:
-        name = register.get_channel_sync_source_measurement_name(
-            setup.channel_sync_source, registry
-        )
+
+    if analysis is None and isinstance(setup.trigger_source, Analysis):
+        analysis = setup.trigger_source
+
+    if analysis is None:
+        meas_name = register.get_trigger_source_measurement_name(name, registry)
         raise ValueError(
-            f'channel_sync_source {name!r} requires an analysis specification for {setup.channel_sync_source!r}'
+            f'trigger_source {meas_name!r} requires an analysis specification for {setup.trigger_source!r}'
         )
-    else:
-        return register.get_aligner(
-            setup.channel_sync_source, analysis=analysis, registry=registry
-        )
+    elif isinstance(analysis, Analysis):
+        return register.Trigger.from_spec(name, analysis, registry=registry)
+    elif isinstance(analysis, Measurement):
+        return register.Trigger(setup.trigger_source, analysis, registry=registry)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -432,7 +434,7 @@ class SourceBase(
             raise RuntimeError('open the radio before arming')
 
         if self._capture is not None:
-            mcr = self.setup_spec.base_clock_rate
+            mcr = self.setup_spec.master_clock_rate
             if self._reuse_iq and _is_reusable(self.capture_spec, spec, mcr):
                 pass
             else:
@@ -441,7 +443,7 @@ class SourceBase(
         if spec == self._capture and self._capture is not None:
             return
 
-        if not self.setup_spec.gapless_rearm or spec != self._capture:
+        if not self.setup_spec.gapless or spec != self._capture:
             self._buffers.clear()
 
         self._capture = self._prepare_capture(spec) or spec
@@ -477,7 +479,7 @@ class SourceBase(
         chunk_count = remaining = output_count - carryover_count
 
         while remaining > 0:
-            if received_count > 0 or self.setup_spec.gapless_rearm:
+            if received_count > 0 or self.setup_spec.gapless:
                 on_overflow = 'except'
             else:
                 on_overflow = 'ignore'
@@ -550,16 +552,9 @@ class SourceBase(
 
         self.capture_spec  # ensure we are armed
 
-        if (
-            correction
-            and self.setup_spec.channel_sync_source is not None
-            and analysis is None
-        ):
-            raise ValueError(
-                'correction with channel_sync_source requires an analysis specification'
-            )
-
-        aligner = get_aligner(self.setup_spec, analysis)
+        if correction:
+            trigger = get_trigger_from_spec(self.setup_spec, analysis)
+            assert trigger is not None
 
         if self._prev_iq is None:
             samples, time_ns = self.read_iq(analysis)
@@ -574,7 +569,7 @@ class SourceBase(
                 alias_func=alias_func,
                 source_spec=self.setup_spec,
                 resampler=self.get_resampler(),
-                aligner=aligner,
+                trigger=trigger,
             )
 
         else:
@@ -582,7 +577,7 @@ class SourceBase(
                 self._prev_iq,
                 capture=self.capture_spec,
                 info=self._prev_iq.info.replace(start_time=None),
-                aligner=aligner,
+                trigger=trigger,
             )
 
         if self._reuse_iq:
@@ -594,7 +589,7 @@ class SourceBase(
         with util.stopwatch(
             'resampling filter', threshold=self.capture_spec.duration / 2
         ):
-            return resampling.resampling_correction(iq, analysis, overwrite_x=True)
+            return resampling.resampling_correction(iq, overwrite_x=True)
 
     def _build_acquisition_info(self, time_ns: int | None) -> specs.AcquisitionInfo:
         return specs.AcquisitionInfo(source_id=self.id)
@@ -636,7 +631,7 @@ class SourceBase(
         if capture is None:
             capture = self.capture_spec
 
-        return design_capture_resampler(self.setup_spec.base_clock_rate, capture)
+        return design_capture_resampler(self.setup_spec.master_clock_rate, capture)
 
 
 class VirtualSourceBase(SourceBase[_TS, _TC, _PS, _PC]):
@@ -707,21 +702,21 @@ def find_trigger_holdoff(
             source.setup_spec.transient_holdoff_time * sample_rate
         )
 
-    periodic_trigger = source.setup_spec.periodic_trigger
-    if periodic_trigger in (0, None):
+    trigger_strobe = source.setup_spec.trigger_strobe
+    if trigger_strobe in (0, None):
         return min_holdoff
 
-    periodic_trigger_ns = round(periodic_trigger * 1e9)
+    trigger_strobe_ns = round(trigger_strobe * 1e9)
 
     # float rounding errors cause problems here; evaluate based on the 1-ns resolution
-    excess_time_ns = start_time_ns % periodic_trigger_ns
-    holdoff_ns = (periodic_trigger_ns - excess_time_ns) % periodic_trigger_ns
+    excess_time_ns = start_time_ns % trigger_strobe_ns
+    holdoff_ns = (trigger_strobe_ns - excess_time_ns) % trigger_strobe_ns
     holdoff = round(holdoff_ns / 1e9 * sample_rate)
 
     if holdoff < min_holdoff:
-        periodic_trigger_samples = round(periodic_trigger * sample_rate)
+        trigger_strobe_samples = round(trigger_strobe * sample_rate)
         holdoff += (
-            ceil(min_holdoff / periodic_trigger_samples) * periodic_trigger_samples
+            ceil(min_holdoff / trigger_strobe_samples) * trigger_strobe_samples
         )
 
     return holdoff
@@ -736,7 +731,7 @@ class _ResamplerKws(typing.TypedDict, total=False):
 
 @util.lru_cache(30000)
 def _design_capture_resampler(
-    base_clock_rate: float,
+    master_clock_rate: float,
     capture: specs.ResampledCapture,
     backend_sample_rate: float | None = None,
     **kwargs: Unpack[_ResamplerKws],
@@ -758,13 +753,13 @@ def _design_capture_resampler(
             f'analysis bandwidth must be smaller than sample rate in {capture}'
         )
 
-    if base_clock_rate is not None:
-        mcr = base_clock_rate
+    if master_clock_rate is not None:
+        mcr = master_clock_rate
     elif capture.backend_sample_rate is not None:
         mcr = capture.backend_sample_rate
     else:
         raise TypeError(
-            'must specify source.base_clock_rate or capture.backend_sample_rate'
+            'must specify source.master_clock_rate or capture.backend_sample_rate'
         )
 
     if capture.backend_sample_rate is None:
@@ -805,7 +800,7 @@ def _design_capture_resampler(
 
 @functools.wraps(_design_capture_resampler)
 def design_capture_resampler(
-    base_clock_rate: float,
+    master_clock_rate: float,
     capture: specs.ResampledCapture,
     backend_sample_rate: float | None = None,
     **kws: Unpack[_ResamplerKws],
@@ -828,7 +823,7 @@ def design_capture_resampler(
         kws['min_fft_size'] = 256
 
     return _design_capture_resampler(
-        base_clock_rate,
+        master_clock_rate,
         fixed_capture,
         backend_sample_rate=backend_sample_rate,
         **kws,
@@ -861,17 +856,17 @@ def _get_dsp_pad_size(
 
     from .. import resampling
 
-    min_lag_pad = _get_aligner_pad_size(setup, capture, analysis)
+    min_lag_pad = _get_trigger_pad_size(setup, capture, analysis)
 
     if resampling.USE_OARESAMPLE:
-        oa_pad_low, oa_pad_high = _get_oaresample_pad(setup.base_clock_rate, capture)
+        oa_pad_low, oa_pad_high = _get_oaresample_pad(setup.master_clock_rate, capture)
         return (oa_pad_low, oa_pad_high + min_lag_pad)
     else:
         # this is removed before the FFT, so no need to micromanage its size
         filter_pad = _get_filter_pad(capture)
 
         # accommodate the large fft by padding to a fast size that includes at least lag_pad
-        design = design_capture_resampler(setup.base_clock_rate, capture)
+        design = design_capture_resampler(setup.master_clock_rate, capture)
         analysis_size = round(capture.duration * design['fs_sdr'])
 
         # treat the block size as the minimum number of samples needed for the resampler
@@ -889,17 +884,34 @@ def _get_dsp_pad_size(
         return (filter_pad, pad_end)
 
 
-def _get_aligner_pad_size(
+@util.lru_cache()
+def get_trigger_source_name(setup: specs.Source) -> str|None:
+    if isinstance(setup.trigger_source, Analysis):
+        analysis = setup.trigger_source
+        meas = {name: meas for name, meas in analysis.to_dict().items() if meas is not None}
+        if len(meas) != 1:
+            raise ValueError('specify exactly one trigger for an explicit trigger_source')
+        return list(meas.keys())[0]
+    elif isinstance(setup.trigger_source, str):
+        return setup.trigger_source
+    else:
+        return None
+        
+
+def _get_trigger_pad_size(
     setup: specs.Source,
     capture: specs.ResampledCapture,
-    analysis: Analysis | None = None,
+    trigger_info: Trigger | Analysis | None = None,
 ) -> int:
-    if analysis is None:
+    if isinstance(trigger_info, Analysis):
+        trigger = get_trigger_from_spec(setup, trigger_info)
+    elif isinstance(trigger_info, Trigger):
+        trigger = trigger_info
+    else:
         return 0
 
-    aligner = get_aligner(setup, analysis)
-    mcr = setup.base_clock_rate
-    max_lag = aligner.max_lag(capture)
+    mcr = setup.master_clock_rate
+    max_lag = trigger.max_lag(capture)
     lag_pad = ceil(mcr * max_lag)
 
     return lag_pad
@@ -917,8 +929,8 @@ def _get_next_fast_len(n) -> int:
     return size
 
 
-def _get_oaresample_pad(base_clock_rate: float, capture: specs.ResampledCapture):
-    resampler_design = design_capture_resampler(base_clock_rate, capture)
+def _get_oaresample_pad(master_clock_rate: float, capture: specs.ResampledCapture):
+    resampler_design = design_capture_resampler(master_clock_rate, capture)
 
     nfft = resampler_design['nfft']
     nfft_out = resampler_design.get('nfft_out', nfft)
@@ -956,7 +968,7 @@ def _cached_channel_read_buffer_count(
         msg = f'duration must be an integer multiple of the sample period (1/{capture.sample_rate} s)'
         raise ValueError(msg)
 
-    resampler_design = design_capture_resampler(setup.base_clock_rate, capture)
+    resampler_design = design_capture_resampler(setup.master_clock_rate, capture)
     if capture.host_resample:
         sample_rate = resampler_design['fs']
     else:
@@ -973,7 +985,7 @@ def _cached_channel_read_buffer_count(
     if include_holdoff:
         # pad the buffer for triggering and transient holdoff
         extra_time = (setup.transient_holdoff_time or 0) + 2 * (
-            setup.periodic_trigger or 0
+            setup.trigger_strobe or 0
         )
         samples_in += ceil(sample_rate * extra_time)
 
@@ -1066,15 +1078,15 @@ def alloc_empty_iq(
 def _is_reusable(
     c1: specs.ResampledCapture | None,
     c2: specs.ResampledCapture | None,
-    base_clock_rate,
+    master_clock_rate,
 ):
     """return True if c2 is compatible with the raw and uncalibrated IQ acquired for c1"""
 
     if c1 is None or c2 is None:
         return False
 
-    fsb1 = design_capture_resampler(base_clock_rate, c1)['fs_sdr']
-    fsb2 = design_capture_resampler(base_clock_rate, c2)['fs_sdr']
+    fsb1 = design_capture_resampler(master_clock_rate, c1)['fs_sdr']
+    fsb2 = design_capture_resampler(master_clock_rate, c2)['fs_sdr']
 
     if fsb1 != fsb2:
         # the realized backend sample rates need to be the same

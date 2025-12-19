@@ -193,7 +193,7 @@ class FrequencyAnalysisSpecBase(
 
 
 # %% Cellular 5G NR synchronizatino
-class Cellular5GNRSyncCorrelationSpec(
+class _Cellular5GNRSyncCorrelator(
     Measurement, kw_only=True, frozen=True, dict=True
 ):
     """
@@ -237,12 +237,7 @@ class Spectrogram(
     dB = True
 
 
-class Cellular5GNRSSBSpectrogram(
-    Measurement,
-    kw_only=True,
-    frozen=True,
-    dict=True,
-):
+class Cellular5GNRSSBSpectrogram(Measurement, kw_only=True, frozen=True):
     """
     subcarrier_spacing (float): 3GPP channel subcarrier spacing (Hz)
     sample_rate (float): output sample rate for the resampled synchronization waveform (samples/s)
@@ -272,26 +267,26 @@ class Cellular5GNRSSBSpectrogram(
     trim_cp = False
 
 
-class Cellular5GNRPSSCorrelationSpec(
-    Cellular5GNRSyncCorrelationSpec, kw_only=True, frozen=True
+class Cellular5GNRPSSCorrelator(
+    _Cellular5GNRSyncCorrelator, kw_only=True, frozen=True
 ):
     pass
 
 
-class Cellular5GNRWeightedCorrelation(
-    Cellular5GNRPSSCorrelationSpec, frozen=True, kw_only=True
+class Cellular5GNRWeightedCorrelator(
+    Cellular5GNRPSSCorrelator, frozen=True, kw_only=True
 ):
     window_fill: float = 0.5
     snr_window_fill: float = 0.08
 
 
-class Cellular5GNRSSSCorrelationSpec(
-    Cellular5GNRSyncCorrelationSpec, kw_only=True, frozen=True, dict=True
+class Cellular5GNRSSSCorrelator(
+    _Cellular5GNRSyncCorrelator, kw_only=True, frozen=True, dict=True
 ):
     pass
 
 
-class CellularCyclicAutocorrelation(
+class CellularCyclicAutocorrelator(
     Measurement,
     kw_only=True,
     frozen=True,

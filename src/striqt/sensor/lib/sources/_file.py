@@ -72,7 +72,7 @@ class TDMSSource(
         if capture is None:
             capture = self.capture_spec
 
-        mcr = self.setup_spec.base_clock_rate
+        mcr = self.setup_spec.master_clock_rate
         return _base.design_capture_resampler(
             mcr, capture, backend_sample_rate=self._file_info.backend_sample_rate
         )
@@ -93,11 +93,10 @@ class MATSource(
         self._file_stream = io.open_bare_iq(
             spec.path,
             format=spec.file_format,
-            num_rx_ports=self.setup_spec.num_rx_ports or 1,
             dtype='complex64',
             xp=self.get_array_namespace(),
             loop=spec.loop,
-            backend_sample_rate=spec.base_clock_rate,
+            backend_sample_rate=spec.master_clock_rate,
             **meta,
         )
 
@@ -139,7 +138,7 @@ class MATSource(
 
     @functools.cached_property
     def info(self):
-        return _base.BaseSourceInfo(num_rx_ports=self.setup_spec.num_rx_ports)
+        return _base.BaseSourceInfo(num_rx_ports=None)
 
     @functools.cached_property
     def id(self):

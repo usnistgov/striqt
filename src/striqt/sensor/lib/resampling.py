@@ -9,9 +9,9 @@ import typing
 
 from .. import specs
 
-from . import calibration, util, sources
+from . import calibration, util
 from .sources import AcquiredIQ, _base
-from striqt.analysis.specs import Analysis
+from striqt.analysis.specs import Analysis, Measurement
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -42,7 +42,7 @@ def _get_voltage_scale(iq: AcquiredIQ, xp=None) -> tuple['ArrayLike', 'ArrayLike
         power_scale = calibration.lookup_power_correction(
             iq.source_spec.calibration,
             iq.capture,
-            iq.source_spec.base_clock_rate,
+            iq.source_spec.master_clock_rate,
             alias_func=iq.alias_func,
             xp=xp,
         )
@@ -78,7 +78,7 @@ def _get_peak_power(iq: AcquiredIQ, xp=None):
 
 
 def resampling_correction(
-    iq_in: AcquiredIQ, analysis: Analysis | None = None, overwrite_x=False, axis=1
+    iq_in: AcquiredIQ, overwrite_x=False, axis=1
 ) -> AcquiredIQ:
     """resample, filter, and apply calibration corrections.
 
@@ -104,7 +104,7 @@ def resampling_correction(
 
     extra_data = {}
 
-    if source_spec.uncalibrated_peak_detect:
+    if source_spec.overload_detect:
         extra_data['unscaled_iq_peak'] = _get_peak_power(iq_in)
 
     if (
@@ -116,7 +116,7 @@ def resampling_correction(
         extra_data['system_noise'] = calibration.lookup_system_noise_power(
             source_spec.calibration,
             capture,
-            source_spec.base_clock_rate,
+            source_spec.master_clock_rate,
             alias_func=iq_in.alias_func,
         )
 
@@ -162,8 +162,8 @@ def resampling_correction(
             scale=1 if vscale is None else vscale,
         )
         scale = iq_in.resampler['nfft_out'] / iq_in.resampler['nfft']
-        oapad = _base._get_oaresample_pad(source_spec.base_clock_rate, capture)
-        lag_pad = _base._get_aligner_pad_size(source_spec, capture, analysis)
+        oapad = _base._get_oaresample_pad(source_spec.master_clock_rate, capture)
+        lag_pad = _base._get_trigger_pad_size(source_spec, capture, iq_in.trigger)
         size_out = round(capture.duration * capture.sample_rate) + round(
             (oapad[1] + lag_pad) * scale
         )
@@ -186,9 +186,9 @@ def resampling_correction(
 
     size_out = round(capture.duration * capture.sample_rate)
 
-    if iq_in.aligner is not None:
-        align_start = iq_in.aligner(iq[:, :size_out], capture)
-        offset = round(align_start * capture.sample_rate)
+    if iq_in.trigger is not None:
+        align_start = iq_in.trigger(iq[:, :size_out], capture)
+        offset = round(float(align_start) * capture.sample_rate)
 
         if iq.shape[1] < offset + size_out:
             raise ValueError('waveform is too short to align')

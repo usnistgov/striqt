@@ -228,7 +228,7 @@ class SyncInfo(typing.NamedTuple):
     meas_spec_type: type[specs.Measurement]
 
 
-class AlignmentSourceRegistry(collections.UserDict[str, SyncInfo]):
+class AlignmentSourceRegistry(collections.UserDict[str|typing.Callable, SyncInfo]):
     def __call__(
         self,
         meas_spec_type: type[specs.Measurement],
@@ -256,10 +256,10 @@ class AlignmentSourceRegistry(collections.UserDict[str, SyncInfo]):
 
             if info_kws['name'] in self:
                 raise TypeError(
-                    f'a channel_sync_source named {info_kws["name"]} was already registered'
+                    f'a trigger_source named {info_kws["name"]} was already registered'
                 )
 
-            self[info_kws['name']] = SyncInfo(func=func, **info_kws)
+            self[func] = self[info_kws['name']] = SyncInfo(func=func, **info_kws)
 
             return func
 
@@ -332,7 +332,7 @@ class MeasurementRegistry(
         self.caches = {}
         self.use_unaligned_input: set[typing.Callable] = set()
         self.coordinates = CoordinateRegistry()
-        self.channel_sync_source = AlignmentSourceRegistry()
+        self.trigger_source = AlignmentSourceRegistry()
 
     def __or__(self, other):
         result = super().__or__(other)
@@ -344,8 +344,8 @@ class MeasurementRegistry(
             self.use_unaligned_input | other.use_unaligned_input
         )
         result.coordinates = self.coordinates | other.coordinates
-        result.channel_sync_source = (
-            self.channel_sync_source | other.channel_sync_source
+        result.trigger_source = (
+            self.trigger_source | other.trigger_source
         )
         return result
 
@@ -541,43 +541,54 @@ def to_analysis_spec_type(
     return typing.cast(type[specs.Analysis], cls)
 
 
-class AlignmentCaller:
+class Trigger:
     def __init__(
-        self, name: str, analysis: specs.Analysis, registry: MeasurementRegistry
+        self, name_or_func: str|typing.Callable, spec: specs.Measurement, registry: MeasurementRegistry
     ):
-        self.info: SyncInfo = registry.channel_sync_source[name]
+        self.info: SyncInfo = registry.trigger_source[name_or_func]
         self.meas_info = registry[self.info.meas_spec_type]
 
-        meas_attr = getattr(analysis, self.meas_info.name, None)
-        self.meas_spec = typing.cast(specs.Measurement, meas_attr)
-        if self.meas_spec is None:
+        if isinstance(spec, self.info.meas_spec_type):
+            self.meas_spec = spec
+        else:
+            expect_type = self.info.meas_spec_type.__qualname__
+            raise TypeError(f'spec must be an instance of {expect_type}')
+
+    @classmethod
+    def from_spec(cls, name: str, analysis: specs.Analysis, registry: MeasurementRegistry) -> typing.Self:
+        info: SyncInfo = registry.trigger_source[name]
+        meas_info = registry[info.meas_spec_type]
+
+        meas_attr = getattr(analysis, meas_info.name, None)
+        meas_spec = typing.cast(specs.Measurement, meas_attr)
+        if meas_spec is None:
             raise ValueError(
-                f'channel_sync_source {name!r} requires an analysis specification for {self.meas_info.name!r}'
+                f'trigger_source {name!r} requires an analysis specification for {meas_info.name!r}'
             )
 
-        self.meas_kws = self.meas_spec.to_dict()
+        return cls(name, meas_spec, registry)
 
     def __call__(self, iq: ArrayType, capture: specs.Capture) -> float:
-        ret = self.info.func(iq, capture, **self.meas_kws)
-
+        meas_kws = self.meas_spec.to_dict()
+        ret = self.info.func(iq, capture, **meas_kws)
         return ret
 
-    def max_lag(self, capture):
+    def max_lag(self, capture: specs.Capture) -> int:
         lags = self.info.lag_coord_func(capture, self.meas_spec)
         step = lags[1] - lags[0]
         return step * len(lags)
 
 
-def get_aligner(
+def get_trigger(
     name: str, analysis: specs.Analysis, registry: MeasurementRegistry
-) -> AlignmentCaller:
-    return AlignmentCaller(name, analysis, registry)
+) -> Trigger:
+    return Trigger.from_spec(name, analysis, registry)
 
 
-def get_channel_sync_source_measurement_name(
+def get_trigger_source_measurement_name(
     name: str, registry: MeasurementRegistry
 ) -> str:
-    info: SyncInfo = registry.channel_sync_source[name]
+    info: SyncInfo = registry.trigger_source[name]
     meas_info = registry[info.meas_spec_type]
     return meas_info.name
 

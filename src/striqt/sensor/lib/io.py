@@ -151,7 +151,7 @@ def read_tdms_iq(
     path: Path | str,
     duration: float | None = None,
     *,
-    base_clock_rate,
+    master_clock_rate,
     num_rx_ports=1,
     dtype='complex64',
     skip_samples=0,
@@ -160,7 +160,7 @@ def read_tdms_iq(
     from .sources._file import TDMSSource
 
     source_spec = specs.TDMSSource(
-        base_clock_rate=base_clock_rate, path=str(path), num_rx_ports=num_rx_ports
+        master_clock_rate=master_clock_rate, path=str(path), num_rx_ports=num_rx_ports
     )
     source = TDMSSource.from_spec(source_spec)
 

@@ -32,7 +32,7 @@ ArrayBackend = Annotated[
     Meta('array module to use to set compute device: numpy = cpu, cupy = gpu'),
 ]
 BackendSampleRate = Annotated[float, Meta('Source sample rate', 'Hz', gt=0)]
-BaseClockRate = Annotated[
+MasterClockRate = Annotated[
     float, Meta('Base sample rate used inside the source', 'Hz', gt=0)
 ]
 CenterFrequency = Annotated[float, Meta('RF center frequency', 'Hz', gt=0)]
@@ -112,8 +112,9 @@ TimeSource = Annotated[
     Literal['host', 'internal', 'external', 'gps'],
     Meta('Hardware source for timestamps'),
 ]
-TimeSyncEveryCapture = Annotated[
-    bool, Meta('whether to sync to PPS before each capture in a sweep')
+TimeSyncOn = Annotated[
+    Literal['open', 'acquire'],
+    Meta('when to sync the hardware clock: on connection, or before each capture')
 ]
 TransportDType = Annotated[
     Literal['int16', 'float32', 'complex64'],

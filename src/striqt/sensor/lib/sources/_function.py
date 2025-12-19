@@ -4,7 +4,7 @@ from __future__ import annotations as __
 
 import typing
 
-from striqt.analysis import Capture, simulated_awgn
+from striqt.analysis import Capture, source
 from ... import specs
 from .. import util
 from . import _base
@@ -63,7 +63,7 @@ class TestSourceBase(_base.VirtualSourceBase[_TS, _TC, _base._PS, _base._PC]):
 
 class SingleToneSource(
     TestSourceBase[
-        specs.FunctionSource, specs.SingleToneCaptureSpec, _base._PS, _base._PC
+        specs.FunctionSource, specs.SingleToneCapture, _base._PS, _base._PC
     ]
 ):
     def get_waveform(
@@ -82,7 +82,7 @@ class SingleToneSource(
 
         if capture.snr is not None:
             power = 10 ** (-capture.snr / 10)
-            noise = simulated_awgn(
+            noise = source.simulated_awgn(
                 capture.replace(sample_rate=fs),
                 xp=xp,
                 seed=0,
@@ -96,7 +96,7 @@ class SingleToneSource(
 
 class DiracDeltaSource(
     TestSourceBase[
-        specs.FunctionSource, specs.DiracDeltaCaptureSpec, _base._PS, _base._PC
+        specs.FunctionSource, specs.DiracDeltaCapture, _base._PS, _base._PC
     ]
 ):
     def get_waveform(
@@ -118,7 +118,7 @@ class DiracDeltaSource(
 
 class SawtoothSource(
     TestSourceBase[
-        specs.FunctionSource, specs.SawtoothCaptureSpec, _base._PS, _base._PC
+        specs.FunctionSource, specs.SawtoothCapture, _base._PS, _base._PC
     ]
 ):
     def get_waveform(
@@ -136,7 +136,7 @@ class SawtoothSource(
 
 
 class NoiseSource(
-    TestSourceBase[specs.FunctionSource, specs.NoiseCaptureSpec, _base._PS, _base._PC]
+    TestSourceBase[specs.FunctionSource, specs.NoiseCapture, _base._PS, _base._PC]
 ):
     def get_waveform(
         self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'

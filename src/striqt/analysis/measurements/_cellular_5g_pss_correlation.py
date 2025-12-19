@@ -31,14 +31,14 @@ _coord_factories = [
 dtype = 'complex64'
 
 
-pss_correlator_cache = register.KeywordArgumentCache([CAPTURE_DIM, 'spec'])
+pss_cache = register.KeywordArgumentCache([CAPTURE_DIM, 'spec'])
 
 
-@pss_correlator_cache.apply
+@pss_cache.apply
 def correlate_5g_pss(
     iq: ArrayType,
     capture: specs.Capture,
-    spec: specs.Cellular5GNRPSSCorrelationSpec,
+    spec: specs.Cellular5GNRPSSCorrelator,
 ) -> ArrayType:
     xp = iqwaveform.util.array_namespace(iq)
 
@@ -65,7 +65,7 @@ def correlate_5g_pss(
     )
 
 
-pss_local_weighted_correlator_cache = register.KeywordArgumentCache(
+pss_weighted_cache = register.KeywordArgumentCache(
     [CAPTURE_DIM, 'spec', 'window_fill', 'snr_window_fill']
 )
 
@@ -124,12 +124,12 @@ def weight_correlation_locally(R, window_fill=0.5, snr_window_fill=0.08):
     return ndimage.correlate1d(Ragg, weights, mode='wrap')
 
 
-@pss_local_weighted_correlator_cache.apply
+@pss_weighted_cache.apply
 def pss_local_weighted_correlator(
     iq: ArrayType,
     capture: specs.Capture,
     *,
-    spec: specs.Cellular5GNRPSSCorrelationSpec,
+    spec: specs.Cellular5GNRPSSCorrelator,
     window_fill=0.5,
     snr_window_fill=0.08,
 ):
@@ -141,9 +141,18 @@ def pss_local_weighted_correlator(
     )
 
 
-@shared.hint_keywords(specs.Cellular5GNRPSSCorrelationSpec)
-@registry.channel_sync_source(
-    specs.Cellular5GNRPSSCorrelationSpec, lag_coord_func=shared.cellular_ssb_lag
+@shared.hint_keywords(specs.Cellular5GNRWeightedCorrelator)
+@registry.trigger_source(
+    specs.Cellular5GNRWeightedCorrelator, lag_coord_func=shared.cellular_ssb_lag
+)
+@registry.measurement(
+    specs.Cellular5GNRWeightedCorrelator,
+    coord_factories=[],
+    dtype='float32',
+    caches=(pss_cache, shared.ssb_iq_cache, pss_weighted_cache),
+    prefer_unaligned_input=True,
+    store_compressed=False,
+    attrs={'standard_name': 'PSS Synchronization Delay', 'units': 's'},
 )
 def cellular_5g_pss_sync(iq, capture: specs.Capture, **kwargs):
     """compute sync index offsets based on correlate_5g_pss.
@@ -156,8 +165,8 @@ def cellular_5g_pss_sync(iq, capture: specs.Capture, **kwargs):
     due to "ISI" begin to increase quickly.
     """
 
-    weighted_spec = specs.Cellular5GNRWeightedCorrelation.from_dict(kwargs).validate()
-    spec = specs.Cellular5GNRPSSCorrelationSpec.from_spec(weighted_spec).validate()
+    weighted_spec = specs.Cellular5GNRWeightedCorrelator.from_dict(kwargs).validate()
+    spec = specs.Cellular5GNRPSSCorrelator.from_spec(weighted_spec).validate()
 
     est = pss_local_weighted_correlator(
         iq,
@@ -172,30 +181,12 @@ def cellular_5g_pss_sync(iq, capture: specs.Capture, **kwargs):
     return shared.cellular_ssb_lag(capture, spec)[i]
 
 
-@shared.hint_keywords(specs.Cellular5GNRWeightedCorrelation)
+@shared.hint_keywords(specs.Cellular5GNRPSSCorrelator)
 @registry.measurement(
-    specs.Cellular5GNRWeightedCorrelation,
-    coord_factories=[],
-    dtype='float32',
-    caches=(
-        pss_correlator_cache,
-        shared.ssb_iq_cache,
-        pss_local_weighted_correlator_cache,
-    ),
-    prefer_unaligned_input=True,
-    store_compressed=False,
-    attrs={'standard_name': 'PSS Synchronization Delay', 'units': 's'},
-)
-def cellular_5g_pss_sync_offset(iq, capture: specs.Capture, **kwargs):
-    return cellular_5g_pss_sync(iq, capture, **kwargs)
-
-
-@shared.hint_keywords(specs.Cellular5GNRPSSCorrelationSpec)
-@registry.measurement(
-    specs.Cellular5GNRPSSCorrelationSpec,
+    specs.Cellular5GNRPSSCorrelator,
     coord_factories=_coord_factories,
     dtype=dtype,
-    caches=(pss_correlator_cache, shared.ssb_iq_cache),
+    caches=(pss_cache, shared.ssb_iq_cache),
     prefer_unaligned_input=True,
     store_compressed=False,
     attrs={'standard_name': 'PSS Cross-Covariance'},
@@ -223,7 +214,7 @@ def cellular_5g_pss_correlation(iq, capture: specs.Capture, **kwargs):
         3GPP TS 138 213: Section 4.1
     """
 
-    spec = specs.Cellular5GNRPSSCorrelationSpec.from_dict(kwargs).validate()
+    spec = specs.Cellular5GNRPSSCorrelator.from_dict(kwargs).validate()
 
     R = correlate_5g_pss(iq, capture=capture, spec=spec)
 

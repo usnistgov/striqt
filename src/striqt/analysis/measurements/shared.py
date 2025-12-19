@@ -39,6 +39,8 @@ class _MeasurementProtocol(typing.Protocol[_P, _R]):
         **kwargs: _P.kwargs,
     ) -> _R: ...
 
+    __name__: str
+
 
 def hint_keywords(
     func: typing.Callable[_P, typing.Any],

@@ -105,7 +105,7 @@ class PortInfo(specs.SpecBase, kw_only=True, frozen=True, cache_hash=True):
     full_freq_range: Range
     tune_args: dict[str, ArgInfo]
     backend_sample_rate_range: Range
-    base_clock_rates: tuple[float, ...]
+    master_clock_rates: tuple[float, ...]
     bandwidths: tuple[Range, ...]
     sensors: dict[str, SensorReading]
     settings: dict[str, ArgInfo]
@@ -185,7 +185,7 @@ def _probe_channel(device: SoapySDR.Device, direction: int, port: int) -> PortIn
         backend_sample_rate_range=Range.from_soapy_tuple(
             device.getSampleRateRange(*args)
         ),  # type: ignore
-        base_clock_rates=tuple(device.getMasterClockRates()),
+        master_clock_rates=tuple(device.getMasterClockRates()),
         bandwidths=Range.from_soapy_tuple(device.getBandwidthRange(*args)),
         sensors=sensors,
         settings=ArgInfo.from_soapy_map(device.getSettingInfo(*args)),
@@ -259,8 +259,6 @@ def read_retries(source: SoapySourceBase) -> typing.Generator[None]:
     def prepare_retry(*args, **kws):
         source._rx_stream.enable(source._device, False)
         source._buffers.skip_next_buffer_swap()
-        if not source.setup_spec.time_sync_every_capture:
-            source._sync_time_source(source._device)
 
     decorate = util.retry(EXC_TYPES, tries=max_count + 1, exception_func=prepare_retry)
 
@@ -625,8 +623,8 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
         if spec.time_source == 'host':
             self._device.setTimeSource('internal')
             on_overflow = 'log'
-            periodic_trigger = getattr(spec, 'periodic_trigger', None)
-            if periodic_trigger is not None:
+            trigger_strobe = getattr(spec, 'trigger_strobe', None)
+            if trigger_strobe is not None:
                 util.get_logger('source').warning(
                     'periodic trigger with host time will suffer from inaccuracy on overflow'
                 )
@@ -637,9 +635,9 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
         self._rx_stream = RxStream(spec, self.info, on_overflow=on_overflow)
 
         self._device.setClockSource(spec.clock_source)
-        self._device.setMasterClockRate(spec.base_clock_rate)
+        self._device.setMasterClockRate(spec.master_clock_rate)
 
-        if not spec.time_sync_every_capture:
+        if spec.time_sync_on == 'open':
             self._sync_time_source(self._device)
 
         self._rx_stream.open(self._device)
@@ -647,7 +645,7 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
     def _prepare_capture(self, capture: _TC) -> _TC | None:
         if (
             capture == self._capture
-            and self.setup_spec.gapless_rearm
+            and self.setup_spec.gapless
             or self._rx_stream is None
         ):
             # the one case where we leave it running
@@ -729,7 +727,7 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
         assert self._rx_stream is not None, 'soapy device is not open'
         assert self._device is not None, 'soapy device is not open'
 
-        if self.__setup__.time_sync_every_capture:
+        if self.setup_spec.time_sync_on == 'acquire':
             self._rx_stream.enable(self._device, False)
             self._sync_time_source(self._device)
 

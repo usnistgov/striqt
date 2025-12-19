@@ -59,22 +59,22 @@ class SoapyCapture(ResampledCapture, frozen=True, kw_only=True):
         _validate_multichannel(self.port, self.gain)
 
 
-class SingleToneCaptureSpec(ResampledCapture, frozen=True, kw_only=True):
+class SingleToneCapture(ResampledCapture, frozen=True, kw_only=True):
     frequency_offset: types.FrequencyOffset = 0
     snr: typing.Optional[types.SNR] = None
 
 
-class DiracDeltaCaptureSpec(ResampledCapture, frozen=True, kw_only=True):
+class DiracDeltaCapture(ResampledCapture, frozen=True, kw_only=True):
     time: types.TimeOffset = 0
     power: types.Power = 0
 
 
-class SawtoothCaptureSpec(ResampledCapture, kw_only=True, frozen=True, dict=True):
+class SawtoothCapture(ResampledCapture, kw_only=True, frozen=True, dict=True):
     period: types.Period = 0.01
     power: types.Power = 1
 
 
-class NoiseCaptureSpec(ResampledCapture, kw_only=True, frozen=True, dict=True):
+class NoiseCapture(ResampledCapture, kw_only=True, frozen=True, dict=True):
     power_spectral_density: types.PSD = 1e-17
 
 
@@ -90,57 +90,56 @@ class Source(_SlowHashSpecBase, frozen=True, kw_only=True):
     """run-time characteristics of the radio that are left invariant during a sweep"""
 
     # acquisition
-    base_clock_rate: types.BaseClockRate
-    calibration: typing.Optional[str] = None
-
-    # sequencing
-    warmup_sweep: types.WarmupSweep = True
-    gapless_rearm: types.GaplessRepeat = False
+    master_clock_rate: types.MasterClockRate
 
     # synchronization and triggering
-    periodic_trigger: typing.Optional[float] = None
-    channel_sync_source: typing.Optional[str] = None
+    trigger_strobe: typing.Optional[float] = None
+    trigger_source: typing.Optional[str|BundledTriggers|None] = None # type: ignore
 
     # in the future, these should probably move to an analysis config
     array_backend: types.ArrayBackend = 'numpy'
 
-    # validation data
-    uncalibrated_peak_detect: types.OverloadDetectFlag = False
+    # no hint yet. source implementation expects these to exist, but
+    # this leaves room for subclasses to add schema fields
+    gapless = False 
+    calibration = None
 
+    # validation data
+    overload_detect: typing.ClassVar[types.OverloadDetectFlag] = False
     transient_holdoff_time: typing.ClassVar[float] = 0
     stream_all_rx_ports: typing.ClassVar[bool | None] = False
     transport_dtype: typing.ClassVar[types.TransportDType] = 'float32'
 
 
 class SoapySource(Source, frozen=True, kw_only=True):
+    calibration: typing.Optional[str] = None
     time_source: types.TimeSource = 'host'
-    time_sync_every_capture: types.TimeSyncEveryCapture = False
+    time_sync_on: types.TimeSyncOn = 'acquire'
     clock_source: types.ClockSource = 'internal'
     receive_retries: types.ReceiveRetries = 0
-
-    uncalibrated_peak_detect: types.OverloadDetectFlag = True
 
     # True if the same clock drives acquisition on all RX ports
     shared_rx_sample_clock = True
     rx_enable_delay = 0.0
+    gapless: types.GaplessRepeat = False
+
+    overload_detect: typing.ClassVar[types.OverloadDetectFlag] = True
 
     def __post_init__(self):
         from striqt.analysis import registry
 
-        if not self.gapless_rearm:
+        if not self.gapless:
             pass
-        elif self.time_sync_every_capture:
-            raise ValueError(
-                'time_sync_every_capture and gapless_rearm are mutually exclusive'
-            )
+        elif self.time_sync_on == 'acquire':
+            raise ValueError('time_sync_on must be "open" when gapless')
         elif self.receive_retries > 0:
-            raise ValueError('receive_retries must be 0 when gapless_rearm is enabled')
-        if self.channel_sync_source is None:
+            raise ValueError('receive_retries must be 0 when gapless is enabled')
+        if self.trigger_source is None:
             pass
-        elif self.channel_sync_source not in registry.channel_sync_source:
-            registered = set(registry.channel_sync_source)
+        elif self.trigger_source not in registry.trigger_source:
+            registered = set(registry.trigger_source)
             raise ValueError(
-                f'channel_sync_source "{self.channel_sync_source!r}" is not one of the registered functions {registered!r}'
+                f'trigger_source "{self.trigger_source!r}" is not one of the registered functions {registered!r}'
             )
 
 
@@ -156,20 +155,19 @@ class NoSource(Source, frozen=True, kw_only=True):
     stream_all_rx_ports: typing.ClassVar[bool] = False
 
 
-class MATSource(NoSource, kw_only=True, frozen=True, dict=True):
+class MATSource(Source, kw_only=True, frozen=True, dict=True):
     path: types.WaveformInputPath
-    num_rx_ports: int = 1
     file_format: types.Format = 'auto'
     file_metadata: types.FileMetadata = {}
     loop: types.FileLoop = False
     transport_dtype: typing.ClassVar[types.TransportDType] = 'complex64'
 
 
-class TDMSSource(NoSource, frozen=True, kw_only=True):
+class TDMSSource(Source, frozen=True, kw_only=True):
     path: types.WaveformInputPath
 
 
-class ZarrIQSource(NoSource, frozen=True, kw_only=True):
+class ZarrIQSource(Source, frozen=True, kw_only=True):
     path: types.WaveformInputPath
     center_frequency: types.CenterFrequency
     select: types.ZarrSelect = {}
@@ -272,12 +270,13 @@ class ManualYFactorPeripheral(Peripherals, frozen=True, kw_only=True):
 
 
 BundledAnalysis = _analysis.registry.tospec()
-BundledAlignmentAnalysis = _analysis.registry.channel_sync_source.to_spec()
+BundledTriggers = _analysis.registry.trigger_source.to_spec()
 
 
-class SweepInfo(typing.NamedTuple):
+class SweepOptions(SpecBase, frozen=True, kw_only=True):
     reuse_iq: bool
-    loop_only_nyquist: bool
+    loop_only_nyquist: bool = False
+    warmup_sweep: types.WarmupSweep = True
 
 
 # forward references break msgspec when used with bindings, so this
@@ -298,9 +297,7 @@ class Sweep(SpecBase, typing.Generic[_TS, _TP, _TC], frozen=True, kw_only=True):
     sink: Sink = Sink()
     peripherals: _TP = typing.cast(_TP, Peripherals())
 
-    info: typing.ClassVar[SweepInfo] = SweepInfo(
-        reuse_iq=False, loop_only_nyquist=False
-    )
+    options: SweepOptions = SweepOptions(reuse_iq=False, loop_only_nyquist=False)
     __bindings__: typing.ClassVar[typing.Any] = None
 
     def __post_init__(self):
@@ -323,7 +320,7 @@ class CalibrationSweep(
     """This specialized sweep is fed to the YAML file loader
     to specify the change in expected capture structure."""
 
-    info: typing.ClassVar[SweepInfo] = SweepInfo(reuse_iq=True, loop_only_nyquist=True)
+    options: SweepOptions = SweepOptions(warmup_sweep=True, reuse_iq=True, loop_only_nyquist=True)
     calibration: _TPC | None = None
 
     def __post_init__(self):

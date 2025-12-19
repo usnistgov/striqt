@@ -73,8 +73,8 @@ noise = bind_sensor(
     Schema(
         source=specs.FunctionSource,
         init_like=specs.FunctionSource,
-        capture=specs.NoiseCaptureSpec,
-        arm_like=specs.NoiseCaptureSpec,
+        capture=specs.NoiseCapture,
+        arm_like=specs.NoiseCapture,
         peripherals=specs.NoPeripherals,
     ),
 )
@@ -85,8 +85,8 @@ dirac_delta = bind_sensor(
     Schema(
         source=specs.FunctionSource,
         init_like=specs.FunctionSource,
-        capture=specs.DiracDeltaCaptureSpec,
-        arm_like=specs.DiracDeltaCaptureSpec,
+        capture=specs.DiracDeltaCapture,
+        arm_like=specs.DiracDeltaCapture,
         peripherals=specs.NoPeripherals,
     ),
 )
@@ -97,8 +97,8 @@ single_tone = bind_sensor(
     Schema(
         source=specs.FunctionSource,
         init_like=specs.FunctionSource,
-        capture=specs.SingleToneCaptureSpec,
-        arm_like=specs.SingleToneCaptureSpec,
+        capture=specs.SingleToneCapture,
+        arm_like=specs.SingleToneCapture,
         peripherals=specs.NoPeripherals,
     ),
 )
@@ -109,8 +109,8 @@ sawtooth = bind_sensor(
     Schema(
         source=specs.FunctionSource,
         init_like=specs.FunctionSource,
-        capture=specs.SawtoothCaptureSpec,
-        arm_like=specs.SawtoothCaptureSpec,
+        capture=specs.SawtoothCapture,
+        arm_like=specs.SawtoothCapture,
         peripherals=specs.NoPeripherals,
     ),
 )

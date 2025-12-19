@@ -174,7 +174,7 @@ def _open_devices(
         'source': conn.open(
             binding.source.from_spec,
             spec.source,
-            reuse_iq=spec.info.reuse_iq,
+            reuse_iq=spec.options.reuse_iq,
         ),
         'peripherals': conn.open(binding.peripherals, spec),
     }

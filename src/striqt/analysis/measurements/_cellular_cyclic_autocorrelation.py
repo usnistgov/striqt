@@ -131,7 +131,7 @@ def tdd_config_from_str(
 )
 @util.lru_cache()
 def cyclic_sample_lag(
-    capture: specs.Capture, spec: specs.CellularCyclicAutocorrelation
+    capture: specs.Capture, spec: specs.CellularCyclicAutocorrelator
 ) -> dict[str, np.ndarray]:
     max_len = _get_max_corr_size(capture, subcarrier_spacings=spec.subcarrier_spacings)
     name = cyclic_sample_lag.__name__
@@ -147,14 +147,14 @@ SubcarrierSpacingAxis = typing.Literal['subcarrier_spacing']
 )
 @util.lru_cache()
 def subcarrier_spacing(
-    capture: specs.Capture, spec: specs.CellularCyclicAutocorrelation
+    capture: specs.Capture, spec: specs.CellularCyclicAutocorrelator
 ):
     return list(spec.subcarrier_spacings)
 
 
 @registry.coordinates(dtype='str', attrs={'standard_name': 'Link direction'})
 @util.lru_cache()
-def link_direction(capture: specs.Capture, spec: specs.CellularCyclicAutocorrelation):
+def link_direction(capture: specs.Capture, spec: specs.CellularCyclicAutocorrelator):
     values = np.array(['downlink', 'uplink'], dtype='U8')
     return values, {}
 
@@ -194,12 +194,12 @@ def _get_max_corr_size(
     return max([np.diff(phy.cp_start_idx).min() for phy in phy_scs.values()])
 
 
-@hint_keywords(specs.CellularCyclicAutocorrelation)
+@hint_keywords(specs.CellularCyclicAutocorrelator)
 @registry.measurement(
     coord_factories=[link_direction, subcarrier_spacing, cyclic_sample_lag],
     dtype='float32',
     prefer_unaligned_input=True,
-    spec_type=specs.CellularCyclicAutocorrelation,
+    spec_type=specs.CellularCyclicAutocorrelator,
     attrs={'units': 'mW', 'standard_name': 'Cyclic Autocovariance'},
 )
 def cellular_cyclic_autocorrelation(
@@ -228,7 +228,7 @@ def cellular_cyclic_autocorrelation(
         an float32-valued array with matching the array type of `iq`
     """
 
-    spec = specs.CellularCyclicAutocorrelation.from_dict(kwargs)
+    spec = specs.CellularCyclicAutocorrelator.from_dict(kwargs)
 
     RANGE_MAP = {'frames': spec.frame_range, 'symbols': spec.symbol_range}
 

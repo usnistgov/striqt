@@ -92,7 +92,7 @@ def loop_captures(sweep: specs.Sweep[typing.Any, typing.Any, _TC]) -> tuple[_TC,
             # otherwise, instances are new captures
             new = (cls.from_dict(updates) for _ in range(1))
 
-        if sweep.info.loop_only_nyquist:
+        if sweep.options.loop_only_nyquist:
             new = (c for c in new if c.sample_rate >= c.analysis_bandwidth)
 
         result += list(new)

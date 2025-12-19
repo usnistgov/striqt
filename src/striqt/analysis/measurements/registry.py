@@ -6,4 +6,4 @@ from ..lib.register import (
 
 measurements = MeasurementRegistry()
 coordinates = measurements.coordinates
-channel_sync_source = measurements.channel_sync_source
+trigger_source = measurements.trigger_source
