@@ -330,7 +330,7 @@ class PathAliasFormatter:
             return str(path)
 
         from ..lib.sources._base import get_source_id
-
+        print(self.sweep_spec.source)
         id_ = get_source_id(self.sweep_spec.source, timeout=self.alias_timeout)
         path = Path(path).expanduser()
 

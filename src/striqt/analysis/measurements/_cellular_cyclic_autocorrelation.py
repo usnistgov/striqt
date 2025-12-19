@@ -149,8 +149,10 @@ SubcarrierSpacingAxis = typing.Literal['subcarrier_spacing']
 def subcarrier_spacing(
     capture: specs.Capture, spec: specs.CellularCyclicAutocorrelator
 ):
-    return list(spec.subcarrier_spacings)
-
+    if isinstance(spec.subcarrier_spacings, tuple):
+        return list(spec.subcarrier_spacings)
+    else:
+        return [spec.subcarrier_spacings]
 
 @registry.coordinates(dtype='str', attrs={'standard_name': 'Link direction'})
 @util.lru_cache()
@@ -172,9 +174,10 @@ def _get_phy_mapping(
         generation=generation,
         sample_rate=sample_rate,
     )
+    seq = subcarrier_spacings if isinstance(subcarrier_spacings, tuple) else [subcarrier_spacings]
     return {
         scs: iqwaveform.ofdm.Phy3GPP(subcarrier_spacing=scs, xp=xp, **kws)
-        for scs in subcarrier_spacings
+        for scs in seq
     }
 
 

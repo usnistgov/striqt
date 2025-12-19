@@ -7,7 +7,7 @@ import typing
 import msgspec
 
 from striqt import analysis as _analysis
-from striqt.analysis.specs import SpecBase, _SlowHashSpecBase, Capture
+from striqt.analysis.specs import Analysis, SpecBase, _SlowHashSpecBase, Capture
 
 from ..lib import util
 from . import types
@@ -94,7 +94,7 @@ class Source(_SlowHashSpecBase, frozen=True, kw_only=True):
 
     # synchronization and triggering
     trigger_strobe: typing.Optional[float] = None
-    trigger_source: typing.Optional[str|BundledTriggers|None] = None # type: ignore
+    trigger_source: typing.Optional[str|Analysis] = None # type: ignore
 
     # in the future, these should probably move to an analysis config
     array_backend: types.ArrayBackend = 'numpy'

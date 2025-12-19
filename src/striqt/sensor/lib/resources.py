@@ -230,6 +230,8 @@ def open_resources(
             calls['calibration'] = conn.get(
                 io.read_calibration, spec.source.calibration, formatter
             )
+        else:
+            conn._resources['calibration'] = None
 
         if spec.sink.log_path is not None:
             calls['log_to_file'] = Call(_setup_logging, spec.sink, formatter)

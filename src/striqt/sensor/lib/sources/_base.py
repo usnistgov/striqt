@@ -302,18 +302,18 @@ def bind_schema_types(
 
 
 def get_bound_spec(
-    spec: specs.SpecBase | None, capture_cls: type[_TB] | None, **kws
+    spec: specs.SpecBase | None, cls: type[_TB] | None, **kws
 ) -> _TB:
     if isinstance(spec, specs.SpecBase):
-        if capture_cls is not None:
-            spec = typing.cast(_TB, capture_cls.from_spec(spec))
+        if cls is not None:
+            spec = typing.cast(_TB, cls.from_spec(spec))
         capture = spec.replace(**kws)
     elif spec is not None:
-        raise TypeError('setup must be a specs.Source or None')
-    elif capture_cls is None:
+        raise TypeError(f'spec must be an instance of {cls.__qualname__!r} or None')
+    elif cls is None:
         raise TypeError('an explicit argument of type specs.Capture is required')
     else:
-        capture = capture_cls(**kws)
+        capture = cls(**kws)
 
     return typing.cast(_TB, capture)
 
@@ -332,7 +332,7 @@ class SourceBase(
         open_event = self._is_open = Event()  # first, to serve other threads
 
         # back door from .from_spec
-        _spec = kwargs.get('__setup', None)
+        _spec = kwargs.pop('__setup', None)
 
         if _spec is not None:
             _spec = typing.cast(_TS, _spec)
@@ -372,7 +372,7 @@ class SourceBase(
     @classmethod
     def from_spec(cls, spec: _TS, reuse_iq: bool = False) -> typing.Self:
         kwargs = spec.to_dict()
-        kwargs['__setup'] = type(spec)
+        kwargs['__setup'] = spec
         return cls(reuse_iq=reuse_iq, **kwargs)  # type: ignore
 
     @functools.cached_property
@@ -555,6 +555,8 @@ class SourceBase(
         if correction:
             trigger = get_trigger_from_spec(self.setup_spec, analysis)
             assert trigger is not None
+        else:
+            trigger = None
 
         if self._prev_iq is None:
             samples, time_ns = self.read_iq(analysis)
