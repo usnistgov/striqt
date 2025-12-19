@@ -62,9 +62,7 @@ class TestSourceBase(_base.VirtualSourceBase[_TS, _TC, _base._PS, _base._PC]):
 
 
 class SingleToneSource(
-    TestSourceBase[
-        specs.FunctionSource, specs.SingleToneCapture, _base._PS, _base._PC
-    ]
+    TestSourceBase[specs.FunctionSource, specs.SingleToneCapture, _base._PS, _base._PC]
 ):
     def get_waveform(
         self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
@@ -95,9 +93,7 @@ class SingleToneSource(
 
 
 class DiracDeltaSource(
-    TestSourceBase[
-        specs.FunctionSource, specs.DiracDeltaCapture, _base._PS, _base._PC
-    ]
+    TestSourceBase[specs.FunctionSource, specs.DiracDeltaCapture, _base._PS, _base._PC]
 ):
     def get_waveform(
         self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
@@ -117,9 +113,7 @@ class DiracDeltaSource(
 
 
 class SawtoothSource(
-    TestSourceBase[
-        specs.FunctionSource, specs.SawtoothCapture, _base._PS, _base._PC
-    ]
+    TestSourceBase[specs.FunctionSource, specs.SawtoothCapture, _base._PS, _base._PC]
 ):
     def get_waveform(
         self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'

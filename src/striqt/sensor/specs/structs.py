@@ -94,14 +94,14 @@ class Source(_SlowHashSpecBase, frozen=True, kw_only=True):
 
     # synchronization and triggering
     trigger_strobe: typing.Optional[float] = None
-    trigger_source: typing.Optional[str|Analysis] = None # type: ignore
+    trigger_source: typing.Optional[str | Analysis] = None  # type: ignore
 
     # in the future, these should probably move to an analysis config
     array_backend: types.ArrayBackend = 'numpy'
 
     # no hint yet. source implementation expects these to exist, but
     # this leaves room for subclasses to add schema fields
-    gapless = False 
+    gapless = False
     calibration = None
 
     # validation data
@@ -320,7 +320,9 @@ class CalibrationSweep(
     """This specialized sweep is fed to the YAML file loader
     to specify the change in expected capture structure."""
 
-    options: SweepOptions = SweepOptions(warmup_sweep=True, reuse_iq=True, loop_only_nyquist=True)
+    options: SweepOptions = SweepOptions(
+        warmup_sweep=True, reuse_iq=True, loop_only_nyquist=True
+    )
     calibration: _TPC | None = None
 
     def __post_init__(self):

@@ -26,7 +26,7 @@ def run(dataset, output_path: str, interactive: bool):
         suptitle_fmt='{center_frequency}',
         filename_fmt='{name} {center_frequency}.svg',
         ignore_missing=True,
-        style='striqt.figures.presentation_half_width'
+        style='striqt.figures.presentation_half_width',
     )
 
     executor = futures.ProcessPoolExecutor(max_workers=6)

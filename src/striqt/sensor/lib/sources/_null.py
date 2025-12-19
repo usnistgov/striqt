@@ -60,4 +60,6 @@ class NoSource(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
         if capture is None:
             capture = self.capture_spec
 
-        return _base.design_capture_resampler(self.setup_spec.master_clock_rate, capture)
+        return _base.design_capture_resampler(
+            self.setup_spec.master_clock_rate, capture
+        )

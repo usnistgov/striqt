@@ -193,9 +193,7 @@ class FrequencyAnalysisSpecBase(
 
 
 # %% Cellular 5G NR synchronizatino
-class _Cellular5GNRSyncCorrelator(
-    Measurement, kw_only=True, frozen=True, dict=True
-):
+class _Cellular5GNRSyncCorrelator(Measurement, kw_only=True, frozen=True, dict=True):
     """
     subcarrier_spacing (float): 3GPP channel subcarrier spacing (Hz)
     sample_rate (float): output sample rate for the resampled synchronization waveform (samples/s)
@@ -267,9 +265,7 @@ class Cellular5GNRSSBSpectrogram(Measurement, kw_only=True, frozen=True):
     trim_cp = False
 
 
-class Cellular5GNRPSSCorrelator(
-    _Cellular5GNRSyncCorrelator, kw_only=True, frozen=True
-):
+class Cellular5GNRPSSCorrelator(_Cellular5GNRSyncCorrelator, kw_only=True, frozen=True):
     pass
 
 

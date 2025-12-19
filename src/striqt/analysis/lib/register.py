@@ -228,7 +228,7 @@ class SyncInfo(typing.NamedTuple):
     meas_spec_type: type[specs.Measurement]
 
 
-class AlignmentSourceRegistry(collections.UserDict[str|typing.Callable, SyncInfo]):
+class AlignmentSourceRegistry(collections.UserDict[str | typing.Callable, SyncInfo]):
     def __call__(
         self,
         meas_spec_type: type[specs.Measurement],
@@ -344,9 +344,7 @@ class MeasurementRegistry(
             self.use_unaligned_input | other.use_unaligned_input
         )
         result.coordinates = self.coordinates | other.coordinates
-        result.trigger_source = (
-            self.trigger_source | other.trigger_source
-        )
+        result.trigger_source = self.trigger_source | other.trigger_source
         return result
 
     def measurement(
@@ -543,7 +541,10 @@ def to_analysis_spec_type(
 
 class Trigger:
     def __init__(
-        self, name_or_func: str|typing.Callable, spec: specs.Measurement, registry: MeasurementRegistry
+        self,
+        name_or_func: str | typing.Callable,
+        spec: specs.Measurement,
+        registry: MeasurementRegistry,
     ):
         self.info: SyncInfo = registry.trigger_source[name_or_func]
         self.meas_info = registry[self.info.meas_spec_type]
@@ -555,7 +556,9 @@ class Trigger:
             raise TypeError(f'spec must be an instance of {expect_type}')
 
     @classmethod
-    def from_spec(cls, name: str, analysis: specs.Analysis, registry: MeasurementRegistry) -> typing.Self:
+    def from_spec(
+        cls, name: str, analysis: specs.Analysis, registry: MeasurementRegistry
+    ) -> typing.Self:
         info: SyncInfo = registry.trigger_source[name]
         meas_info = registry[info.meas_spec_type]
 

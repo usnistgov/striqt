@@ -301,9 +301,7 @@ def bind_schema_types(
     return decorator
 
 
-def get_bound_spec(
-    spec: specs.SpecBase | None, cls: type[_TB] | None, **kws
-) -> _TB:
+def get_bound_spec(spec: specs.SpecBase | None, cls: type[_TB] | None, **kws) -> _TB:
     if isinstance(spec, specs.SpecBase):
         if cls is not None:
             spec = typing.cast(_TB, cls.from_spec(spec))
@@ -717,9 +715,7 @@ def find_trigger_holdoff(
 
     if holdoff < min_holdoff:
         trigger_strobe_samples = round(trigger_strobe * sample_rate)
-        holdoff += (
-            ceil(min_holdoff / trigger_strobe_samples) * trigger_strobe_samples
-        )
+        holdoff += ceil(min_holdoff / trigger_strobe_samples) * trigger_strobe_samples
 
     return holdoff
 
@@ -887,18 +883,22 @@ def _get_dsp_pad_size(
 
 
 @util.lru_cache()
-def get_trigger_source_name(setup: specs.Source) -> str|None:
+def get_trigger_source_name(setup: specs.Source) -> str | None:
     if isinstance(setup.trigger_source, Analysis):
         analysis = setup.trigger_source
-        meas = {name: meas for name, meas in analysis.to_dict().items() if meas is not None}
+        meas = {
+            name: meas for name, meas in analysis.to_dict().items() if meas is not None
+        }
         if len(meas) != 1:
-            raise ValueError('specify exactly one trigger for an explicit trigger_source')
+            raise ValueError(
+                'specify exactly one trigger for an explicit trigger_source'
+            )
         return list(meas.keys())[0]
     elif isinstance(setup.trigger_source, str):
         return setup.trigger_source
     else:
         return None
-        
+
 
 def _get_trigger_pad_size(
     setup: specs.Source,

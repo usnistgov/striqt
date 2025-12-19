@@ -143,7 +143,6 @@ def _count_facets(facet_col, data) -> int:
         return data[facet_col].shape[0]
 
 
-
 class CapturePlotter:
     def __init__(
         self,
@@ -151,7 +150,7 @@ class CapturePlotter:
         interactive: bool = True,
         output_dir: str | Path = None,
         subplot_by_channel: bool = True,
-        col_wrap:int=2,
+        col_wrap: int = 2,
         title_fmt='Channel {port}',
         suptitle_fmt='{center_frequency}',
         filename_fmt='{name} {center_frequency}.svg',

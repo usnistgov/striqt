@@ -114,7 +114,7 @@ TimeSource = Annotated[
 ]
 TimeSyncOn = Annotated[
     Literal['open', 'acquire'],
-    Meta('when to sync the hardware clock: on connection, or before each capture')
+    Meta('when to sync the hardware clock: on connection, or before each capture'),
 ]
 TransportDType = Annotated[
     Literal['int16', 'float32', 'complex64'],
