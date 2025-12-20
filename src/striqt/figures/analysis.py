@@ -336,11 +336,23 @@ class CapturePlotter:
                 _fix_axes(data=data, grid=grid, x=x, y=y)
 
     def cellular_cyclic_autocorrelation(
-        self, data: xr.Dataset, hue='link_direction', **sel
+        self, data: xr.Dataset, hue='link_direction', dB: bool = False, **sel
     ):
         key = self.cellular_cyclic_autocorrelation.__name__
+        sub = data[key].sel(sel)
+
+        if hue == 'link_direction':
+            scs_peaks = sub.max(['capture', 'link_direction', 'cyclic_sample_lag'])
+            iscs = int(scs_peaks.argmax()) # type: ignore
+            sub = sub.isel(subcarrier_spacing=iscs) 
+        else:
+            sub = sub.sel(link_direction='downlink')
+        
+        if dB:
+            sub = iqwaveform.powtodB(sub)
+
         return self._line(
-            data[key].sel(sel),
+            sub,
             name=key,
             x='cyclic_sample_lag',
             hue=hue,
