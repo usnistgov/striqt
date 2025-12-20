@@ -194,6 +194,7 @@ class CapturePlotter:
         y: str = None,
         hue: str = None,
         xticklabelunits=True,
+        meta: dict = {}
     ):
         if self._style is not None:
             plt.style.use(self._style)
@@ -228,12 +229,12 @@ class CapturePlotter:
 
         if self._suptitle_fmt is not None:
             suptitle = label_by_coord(
-                data, self._suptitle_fmt, title_case=True, name=name
+                data, self._suptitle_fmt, title_case=True, name=name, **meta
             )[0]
             fig.suptitle(suptitle)
 
         if self._title_fmt is not None:
-            titles = label_by_coord(data, self._title_fmt, title_case=True, name=name)
+            titles = label_by_coord(data, self._title_fmt, title_case=True, name=name, **meta)
             if len(titles) > len(axs):
                 raise ValueError(
                     f'data has {len(titles)} captures but plotted {len(axs)} plots'
@@ -262,7 +263,7 @@ class CapturePlotter:
 
         if self.output_dir is not None:
             filename = set(
-                label_by_coord(data, self._filename_fmt, name=name, title_case=True)
+                label_by_coord(data, self._filename_fmt, name=name, title_case=True, **meta)
             )
             # if len(filename) > 1:
             #     raise ValueError(
@@ -285,9 +286,10 @@ class CapturePlotter:
         rasterized: bool = True,
         sharey: bool = True,
         xticklabelunits: bool = True,
+        meta: dict = {}
     ):
         kws = dict(x=x, hue=hue, rasterized=rasterized)
-        ctx_kws = dict(name=name, x=x, hue=hue, xticklabelunits=xticklabelunits)
+        ctx_kws = dict(meta=meta, name=name, x=x, hue=hue, xticklabelunits=xticklabelunits)
 
         if self.facet_col is not None:
             # treat the sequence of multiple captures in one plot
@@ -314,6 +316,7 @@ class CapturePlotter:
         rasterized: bool = True,
         sharey: bool = True,
         transpose: bool = True,
+        meta: dict = {},
         **kws,
     ):
         kws.update(x=x, y=y, rasterized=rasterized)
@@ -327,7 +330,7 @@ class CapturePlotter:
             seq = data
 
         for sub in seq:
-            with self._plot_context(sub, name=name, x=x, y=y):
+            with self._plot_context(sub, name=name, x=x, y=y, meta=meta):
                 spg = data.sel(sel)
                 if transpose:
                     spg = spg.T
@@ -356,6 +359,7 @@ class CapturePlotter:
             name=key,
             x='cyclic_sample_lag',
             hue=hue,
+            meta=data.attrs
         )
 
     @_maybe_skip_missing
@@ -381,7 +385,8 @@ class CapturePlotter:
             name=key,
             x='cellular_ssb_lag',
             hue=hue,
-            rasterized=False
+            rasterized=False,
+            meta=data.attrs
         )
 
     def channel_power_histogram(self, data: xr.Dataset, hue='power_detector', **sel):
@@ -392,6 +397,7 @@ class CapturePlotter:
             x='channel_power_bin',
             hue=hue,
             xticklabelunits=False,
+            meta=data.attrs
         )
 
     @_maybe_skip_missing
@@ -402,6 +408,7 @@ class CapturePlotter:
             name=key,
             x='time_elapsed',
             hue=hue,
+            meta=data.attrs
         )
 
     @_maybe_skip_missing
@@ -424,6 +431,7 @@ class CapturePlotter:
             name=key,
             x='baseband_frequency',
             hue=hue,
+            meta=data.attrs
         )
     
     @_maybe_skip_missing
@@ -446,6 +454,7 @@ class CapturePlotter:
             name=key,
             x='baseband_frequency',
             hue=hue,
+            meta=data.attrs
         )
 
     @_maybe_skip_missing
@@ -456,6 +465,7 @@ class CapturePlotter:
             name=key,
             x='spectrogram_time',
             y='spectrogram_baseband_frequency',
+            meta=data.attrs
         )
 
     @_maybe_skip_missing
@@ -466,6 +476,7 @@ class CapturePlotter:
             name=key,
             x='spectrogram_power_bin',
             xticklabelunits=False,
+            meta=data.attrs
             # hue=hue,
         )
 
@@ -477,6 +488,7 @@ class CapturePlotter:
             name=key,
             x='cellular_resource_power_bin',
             xticklabelunits=False,
+            meta=data.attrs
             # hue=hue,
         )
 
@@ -488,13 +500,14 @@ class CapturePlotter:
             name=key,
             x='spectrogram_ratio_power_bin',
             xticklabelunits=False,
+            meta=data.attrs
             # hue=hue,
         )
 
     @_maybe_skip_missing
     def cyclic_channel_power(self, data: xr.Dataset, **sel):
         data_across_facets = data.cyclic_channel_power.sel(**sel)
-        with self._plot_context(data, name='cyclic_channel_power', x='cyclic_lag'):
+        with self._plot_context(data, name='cyclic_channel_power', x='cyclic_lag', meta=data.attrs):
             if self.facet_col is not None:
                 facets = data[self.facet_col]
                 fig, (axs,) = plt.subplots(1, len(facets), squeeze=False, sharey=True)
