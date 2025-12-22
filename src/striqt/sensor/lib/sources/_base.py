@@ -265,22 +265,22 @@ def get_trigger_from_spec(
 def get_trigger_from_spec(
     setup: specs.Source, analysis: Analysis | None = None
 ) -> register.Trigger | None:
-    name = get_trigger_source_name(setup)
+    name = get_signal_trigger_name(setup)
     if name is None:
         return None
 
-    if analysis is None and isinstance(setup.trigger_source, Analysis):
-        analysis = setup.trigger_source
+    if analysis is None and isinstance(setup.signal_trigger, Analysis):
+        analysis = setup.signal_trigger
 
     if analysis is None:
-        meas_name = register.get_trigger_source_measurement_name(name, registry)
+        meas_name = register.get_signal_trigger_measurement_name(name, registry)
         raise ValueError(
-            f'trigger_source {meas_name!r} requires an analysis specification for {setup.trigger_source!r}'
+            f'signal_trigger {meas_name!r} requires an analysis specification for {setup.signal_trigger!r}'
         )
     elif isinstance(analysis, Analysis):
         return register.Trigger.from_spec(name, analysis, registry=registry)
     elif isinstance(analysis, Measurement):
-        return register.Trigger(setup.trigger_source, analysis, registry=registry)
+        return register.Trigger(setup.signal_trigger, analysis, registry=registry)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -883,19 +883,19 @@ def _get_dsp_pad_size(
 
 
 @util.lru_cache()
-def get_trigger_source_name(setup: specs.Source) -> str | None:
-    if isinstance(setup.trigger_source, Analysis):
-        analysis = setup.trigger_source
+def get_signal_trigger_name(setup: specs.Source) -> str | None:
+    if isinstance(setup.signal_trigger, Analysis):
+        analysis = setup.signal_trigger
         meas = {
             name: meas for name, meas in analysis.to_dict().items() if meas is not None
         }
         if len(meas) != 1:
             raise ValueError(
-                'specify exactly one trigger for an explicit trigger_source'
+                'specify exactly one trigger for an explicit signal_trigger'
             )
         return list(meas.keys())[0]
-    elif isinstance(setup.trigger_source, str):
-        return setup.trigger_source
+    elif isinstance(setup.signal_trigger, str):
+        return setup.signal_trigger
     else:
         return None
 

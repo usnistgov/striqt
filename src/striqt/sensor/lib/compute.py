@@ -488,7 +488,7 @@ def build_warmup_sweep(sweep: specs.Sweep[_TS, _TP, _TC]) -> WarmupSweep:
         num_rx_ports=num_rx_ports,
         master_clock_rate=sweep.source.master_clock_rate,
         trigger_strobe=None,
-        trigger_source=sweep.source.trigger_source,
+        signal_trigger=sweep.source.signal_trigger,
     )
 
     return b.sweep_spec(

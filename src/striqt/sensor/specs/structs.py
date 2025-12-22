@@ -94,7 +94,7 @@ class Source(_SlowHashSpecBase, frozen=True, kw_only=True):
 
     # synchronization and triggering
     trigger_strobe: typing.Optional[float] = None
-    trigger_source: typing.Optional[str | Analysis] = None  # type: ignore
+    signal_trigger: typing.Optional[str | Analysis] = None  # type: ignore
 
     # in the future, these should probably move to an analysis config
     array_backend: types.ArrayBackend = 'numpy'
@@ -134,12 +134,12 @@ class SoapySource(Source, frozen=True, kw_only=True):
             raise ValueError('time_sync_on must be "open" when gapless')
         elif self.receive_retries > 0:
             raise ValueError('receive_retries must be 0 when gapless is enabled')
-        if self.trigger_source is None:
+        if self.signal_trigger is None:
             pass
-        elif self.trigger_source not in registry.trigger_source:
-            registered = set(registry.trigger_source)
+        elif self.signal_trigger not in registry.signal_trigger:
+            registered = set(registry.signal_trigger)
             raise ValueError(
-                f'trigger_source "{self.trigger_source!r}" is not one of the registered functions {registered!r}'
+                f'signal_trigger "{self.signal_trigger!r}" is not one of the registered functions {registered!r}'
             )
 
 
@@ -270,7 +270,7 @@ class ManualYFactorPeripheral(Peripherals, frozen=True, kw_only=True):
 
 
 BundledAnalysis = _analysis.registry.tospec()
-BundledTriggers = _analysis.registry.trigger_source.to_spec()
+BundledTriggers = _analysis.registry.signal_trigger.to_spec()
 
 
 class SweepOptions(SpecBase, frozen=True, kw_only=True):

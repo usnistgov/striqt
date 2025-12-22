@@ -15,7 +15,16 @@ def run(dataset, output_path: str, interactive: bool):
     """generic plots"""
     from striqt import figures
     from concurrent import futures
-    from matplotlib import pyplot as plt
+    import numpy as np
+
+    if 'center_frequency' in dataset.coords and np.isfinite(
+        dataset.center_frequency.values[0]
+    ):
+        suptitle_fmt = '{center_frequency}'
+        filename_fmt = '{name} {center_frequency}.svg'
+    else:
+        suptitle_fmt = '{path}'
+        filename_fmt = '{name} {path}.svg'
 
     plotter = figures.CapturePlotter(
         interactive=interactive,
@@ -23,8 +32,8 @@ def run(dataset, output_path: str, interactive: bool):
         subplot_by_channel=True,
         col_wrap=2,
         title_fmt='Port {port}',
-        suptitle_fmt='{center_frequency}',
-        filename_fmt='{name} {center_frequency}.svg',
+        suptitle_fmt=suptitle_fmt,
+        filename_fmt=filename_fmt,
         ignore_missing=True,
         style='striqt.figures.presentation_half_width',
     )
@@ -44,10 +53,17 @@ def run(dataset, output_path: str, interactive: bool):
 
             # channel power representations
             pending += _submit_if_available(
-                executor, plotter.channel_power_time_series, data
+                executor, plotter.spectrogram, data, spectrogram_time=slice(0, 20e-3)
+            )
+
+            pending += _submit_if_available(
+                executor, plotter.cellular_5g_pss_correlation, data, dB=True
             )
             pending += _submit_if_available(
-                executor, plotter.cyclic_channel_power, data
+                executor, plotter.cellular_cyclic_autocorrelation, data, dB=True
+            )
+            pending += _submit_if_available(
+                executor, plotter.channel_power_time_series, data
             )
             pending += _submit_if_available(
                 executor,
@@ -55,11 +71,14 @@ def run(dataset, output_path: str, interactive: bool):
                 data,
                 channel_power_bin=slice(-95, -15),
             )
-
             pending += _submit_if_available(
-                executor, plotter.spectrogram, data, spectrogram_time=slice(0, 20e-3)
+                executor, plotter.cyclic_channel_power, data
             )
-
+            pending += _submit_if_available(
+                executor,
+                plotter.power_spectral_density,
+                data,
+            )
             pending += _submit_if_available(
                 executor,
                 plotter.spectrogram_histogram,
@@ -70,12 +89,6 @@ def run(dataset, output_path: str, interactive: bool):
             pending += _submit_if_available(
                 executor, plotter.spectrogram_ratio_histogram, data
             )
-            pending += _submit_if_available(
-                executor,
-                plotter.power_spectral_density,
-                data,
-            )
-
         for future in futures.as_completed(pending):
             try:
                 future.result()

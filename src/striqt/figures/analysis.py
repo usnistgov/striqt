@@ -154,6 +154,7 @@ def _fix_axes(data, grid, x, y=None, xticklabelunits=True):
         else:
             label_axis('y', data[y], ax=ax, tick_units=False)
 
+
 class CapturePlotter:
     def __init__(
         self,
@@ -161,7 +162,7 @@ class CapturePlotter:
         interactive: bool = True,
         output_dir: str | Path = None,
         subplot_by_channel: bool = True,
-        col_wrap:int=2,
+        col_wrap: int = 2,
         title_fmt='Channel {port}',
         suptitle_fmt='{center_frequency}',
         filename_fmt='{name} {center_frequency}.svg',
@@ -194,7 +195,7 @@ class CapturePlotter:
         y: str = None,
         hue: str = None,
         xticklabelunits=True,
-        meta: dict = {}
+        meta: dict = {},
     ):
         if self._style is not None:
             plt.style.use(self._style)
@@ -234,7 +235,9 @@ class CapturePlotter:
             fig.suptitle(suptitle)
 
         if self._title_fmt is not None:
-            titles = label_by_coord(data, self._title_fmt, title_case=True, name=name, **meta)
+            titles = label_by_coord(
+                data, self._title_fmt, title_case=True, name=name, **meta
+            )
             if len(titles) > len(axs):
                 raise ValueError(
                     f'data has {len(titles)} captures but plotted {len(axs)} plots'
@@ -263,7 +266,9 @@ class CapturePlotter:
 
         if self.output_dir is not None:
             filename = set(
-                label_by_coord(data, self._filename_fmt, name=name, title_case=True, **meta)
+                label_by_coord(
+                    data, self._filename_fmt, name=name, title_case=True, **meta
+                )
             )
             # if len(filename) > 1:
             #     raise ValueError(
@@ -286,10 +291,12 @@ class CapturePlotter:
         rasterized: bool = True,
         sharey: bool = True,
         xticklabelunits: bool = True,
-        meta: dict = {}
+        meta: dict = {},
     ):
         kws = dict(x=x, hue=hue, rasterized=rasterized)
-        ctx_kws = dict(meta=meta, name=name, x=x, hue=hue, xticklabelunits=xticklabelunits)
+        ctx_kws = dict(
+            meta=meta, name=name, x=x, hue=hue, xticklabelunits=xticklabelunits
+        )
 
         if self.facet_col is not None:
             # treat the sequence of multiple captures in one plot
@@ -346,24 +353,22 @@ class CapturePlotter:
 
         if hue == 'link_direction':
             scs_peaks = sub.max(['capture', 'link_direction', 'cyclic_sample_lag'])
-            iscs = int(scs_peaks.argmax()) # type: ignore
-            sub = sub.isel(subcarrier_spacing=iscs) 
+            iscs = int(scs_peaks.argmax())  # type: ignore
+            sub = sub.isel(subcarrier_spacing=iscs)
         else:
             sub = sub.sel(link_direction='downlink')
-        
+
         if dB:
             sub = iqwaveform.powtodB(sub)
 
         return self._line(
-            sub,
-            name=key,
-            x='cyclic_sample_lag',
-            hue=hue,
-            meta=data.attrs
+            sub, name=key, x='cyclic_sample_lag', hue=hue, meta=data.attrs
         )
 
     @_maybe_skip_missing
-    def cellular_5g_pss_correlation(self, data: xr.Dataset, hue='cellular_ssb_beam_index', dB=True, **sel):
+    def cellular_5g_pss_correlation(
+        self, data: xr.Dataset, hue='cellular_ssb_beam_index', dB=True, **sel
+    ):
         key = self.cellular_5g_pss_correlation.__name__
 
         Rpss = data[key].sel(sel).isel(cellular_ssb_start_time=0)
@@ -386,7 +391,7 @@ class CapturePlotter:
             x='cellular_ssb_lag',
             hue=hue,
             rasterized=False,
-            meta=data.attrs
+            meta=data.attrs,
         )
 
     def channel_power_histogram(self, data: xr.Dataset, hue='power_detector', **sel):
@@ -397,18 +402,14 @@ class CapturePlotter:
             x='channel_power_bin',
             hue=hue,
             xticklabelunits=False,
-            meta=data.attrs
+            meta=data.attrs,
         )
 
     @_maybe_skip_missing
     def channel_power_time_series(self, data: xr.Dataset, hue='power_detector', **sel):
         key = self.channel_power_time_series.__name__
         return self._line(
-            data[key].sel(sel),
-            name=key,
-            x='time_elapsed',
-            hue=hue,
-            meta=data.attrs
+            data[key].sel(sel), name=key, x='time_elapsed', hue=hue, meta=data.attrs
         )
 
     @_maybe_skip_missing
@@ -431,9 +432,9 @@ class CapturePlotter:
             name=key,
             x='baseband_frequency',
             hue=hue,
-            meta=data.attrs
+            meta=data.attrs,
         )
-    
+
     @_maybe_skip_missing
     def power_spectral_density(self, data: xr.Dataset, hue='time_statistic', **sel):
         key = self.power_spectral_density.__name__
@@ -454,7 +455,7 @@ class CapturePlotter:
             name=key,
             x='baseband_frequency',
             hue=hue,
-            meta=data.attrs
+            meta=data.attrs,
         )
 
     @_maybe_skip_missing
@@ -465,7 +466,7 @@ class CapturePlotter:
             name=key,
             x='spectrogram_time',
             y='spectrogram_baseband_frequency',
-            meta=data.attrs
+            meta=data.attrs,
         )
 
     @_maybe_skip_missing
@@ -476,7 +477,7 @@ class CapturePlotter:
             name=key,
             x='spectrogram_power_bin',
             xticklabelunits=False,
-            meta=data.attrs
+            meta=data.attrs,
             # hue=hue,
         )
 
@@ -488,7 +489,7 @@ class CapturePlotter:
             name=key,
             x='cellular_resource_power_bin',
             xticklabelunits=False,
-            meta=data.attrs
+            meta=data.attrs,
             # hue=hue,
         )
 
@@ -500,14 +501,16 @@ class CapturePlotter:
             name=key,
             x='spectrogram_ratio_power_bin',
             xticklabelunits=False,
-            meta=data.attrs
+            meta=data.attrs,
             # hue=hue,
         )
 
     @_maybe_skip_missing
     def cyclic_channel_power(self, data: xr.Dataset, **sel):
         data_across_facets = data.cyclic_channel_power.sel(**sel)
-        with self._plot_context(data, name='cyclic_channel_power', x='cyclic_lag', meta=data.attrs):
+        with self._plot_context(
+            data, name='cyclic_channel_power', x='cyclic_lag', meta=data.attrs
+        ):
             if self.facet_col is not None:
                 facets = data[self.facet_col]
                 fig, (axs,) = plt.subplots(1, len(facets), squeeze=False, sharey=True)
