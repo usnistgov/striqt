@@ -26,7 +26,7 @@ else:
 
 
 _P = typing.ParamSpec('_P')
-_R = typing.TypeVar('_R', infer_variance=True)
+_R = typing.TypeVar('_R', covariant=True)
 
 
 class _AnalysisProtocol(typing.Protocol[_P, _R]):
