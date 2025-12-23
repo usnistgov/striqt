@@ -237,7 +237,7 @@ class Spectrogram(FrequencyAnalysisSpecBase, kw_only=True, frozen=True):
 
 
 # %% Cellular 5G NR synchronizatino
-class Cellular5GNRSSBCorrelator(Analysis, kw_only=True, frozen=True, dict=True):
+class _Cellular5GNRSSBCorrelator(Analysis, kw_only=True, frozen=True):
     """
     subcarrier_spacing (float): 3GPP channel subcarrier spacing (Hz)
     sample_rate (float): output sample rate for the resampled synchronization waveform (samples/s)
@@ -259,9 +259,27 @@ class Cellular5GNRSSBCorrelator(Analysis, kw_only=True, frozen=True, dict=True):
     trim_cp: bool = True
 
 
-class Cellular5GNRSSBSync(Cellular5GNRSSBCorrelator, frozen=True, kw_only=True):
+class Cellular5GNRPSSCorrelator(_Cellular5GNRSSBCorrelator, kw_only=True, frozen=True):
+    # same as SSS, but the registry requires unique spec types
+    pass
+
+
+class Cellular5GNRSSSCorrelator(_Cellular5GNRSSBCorrelator, kw_only=True, frozen=True):
+    pass
+
+
+class _Cellular5GNRSSBSync(_Cellular5GNRSSBCorrelator, frozen=True, kw_only=True):
     window_fill: float = 0.5
     snr_window_fill: float = 0.08
+
+
+class Cellular5GNPSSSync(_Cellular5GNRSSBSync, kw_only=True, frozen=True):
+    # same as SSS, but the registry requires unique spec types
+    pass
+
+
+class Cellular5GNSSSSync(_Cellular5GNRSSBSync, kw_only=True, frozen=True):
+    pass
 
 
 class CellularCyclicAutocorrelator(

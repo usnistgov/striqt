@@ -15,7 +15,11 @@ if typing.TYPE_CHECKING:
     import pandas as pd
     from typing_extensions import Self
 else:
-    SoapySDR = util.lazy_import('SoapySDR')
+    try:
+        SoapySDR = util.lazy_import('SoapySDR')
+    except ImportError:
+        SoapySDR = None
+
     pd = util.lazy_import('pandas')
 
 
@@ -604,6 +608,9 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
 
     @util.stopwatch('open radio', 'source', threshold=1)
     def _connect(self, spec: _TS, **device_kwargs):
+        if SoapySDR is None:
+            raise ImportError('could not import SoapySDR')
+
         # passing in a tuple works around an insantiation bug on some platforms
         # https://github.com/pothosware/SoapySDR/issues/472
         devices = SoapySDR.Device((device_kwargs,))

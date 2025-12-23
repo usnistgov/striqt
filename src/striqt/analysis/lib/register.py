@@ -395,6 +395,10 @@ class AnalysisRegistry(
         else:
             info_kws['depends'] = depends
 
+        if spec_type in self:
+            name = spec_type.__qualname__
+            raise ValueError(f'another measurement registered the spec {name!r}')
+
         def wrapper(
             func: CallableAnalysis[_P, _RM],
         ) -> CallableAnalysisWrapper[_P, _RM]:

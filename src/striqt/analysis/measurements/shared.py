@@ -12,6 +12,8 @@ from ..lib.register import registry
 if typing.TYPE_CHECKING:
     from types import ModuleType
     from typing_extensions import ParamSpec
+    
+    from ..specs.structs import _Cellular5GNRSSBSync, _Cellular5GNRSSBCorrelator
 
     import array_api_compat
     import numpy as np
@@ -61,9 +63,7 @@ def cellular_cell_id2(capture: specs.Capture, spec: typing.Any):
 
 @registry.coordinates(dtype='uint16', attrs={'standard_name': 'SSB beam index'})
 @util.lru_cache()
-def cellular_ssb_beam_index(
-    capture: specs.Capture, spec: specs.Cellular5GNRSSBSync
-):
+def cellular_ssb_beam_index(capture: specs.Capture, spec: _Cellular5GNRSSBSync):
     # pss_params and sss_params return the same number of symbol indexes
     params = iqwaveform.ofdm.sss_params(
         sample_rate=spec.sample_rate,
@@ -79,9 +79,7 @@ def cellular_ssb_beam_index(
     dtype='float32', attrs={'standard_name': 'Time Elapsed', 'units': 's'}
 )
 @util.lru_cache()
-def cellular_ssb_start_time(
-    capture: specs.Capture, spec: specs.Cellular5GNRSSBSync
-):
+def cellular_ssb_start_time(capture: specs.Capture, spec: _Cellular5GNRSSBSync):
     # pss_params and sss_params return the same number of symbol indexes
     params = iqwaveform.ofdm.pss_params(
         sample_rate=spec.sample_rate,
@@ -103,7 +101,7 @@ def cellular_ssb_start_time(
 )
 @util.lru_cache()
 def cellular_ssb_lag(
-    capture: specs.Capture, spec: specs.Cellular5GNRSSBCorrelator
+    capture: specs.Capture, spec: _Cellular5GNRSSBCorrelator
 ):
     params = iqwaveform.ofdm.sss_params(
         sample_rate=spec.sample_rate,
@@ -125,7 +123,7 @@ def empty_5g_ssb_correlation(
     iq,
     *,
     capture: specs.Capture,
-    spec: specs.Cellular5GNRSSBCorrelator,
+    spec: _Cellular5GNRSSBCorrelator,
     coord_factories: list[typing.Callable],
     dtype='complex64',
 ):
@@ -139,7 +137,7 @@ def correlate_sync_sequence(
     ssb_iq,
     sync_seq,
     *,
-    spec: specs.Cellular5GNRSSBCorrelator,
+    spec: _Cellular5GNRSSBCorrelator,
     params: iqwaveform.ofdm.SyncParams,
     cell_id_split: int | None = None,
 ):
@@ -208,7 +206,7 @@ ssb_iq_cache = register.KeywordArgumentCache([dataarrays.CAPTURE_DIM, 'spec'])
 def get_5g_ssb_iq(
     iq: ArrayType,
     capture: specs.Capture,
-    spec: specs.Cellular5GNRSSBCorrelator,
+    spec: _Cellular5GNRSSBCorrelator,
     oaresample=False,
 ) -> ArrayType:
     """return a sync block waveform, which returns IQ that is recentered

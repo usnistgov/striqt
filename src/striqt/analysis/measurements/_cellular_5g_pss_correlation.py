@@ -38,7 +38,7 @@ pss_cache = register.KeywordArgumentCache([CAPTURE_DIM, 'spec'])
 def correlate_5g_pss(
     iq: ArrayType,
     capture: specs.Capture,
-    spec: specs.Cellular5GNRSSBCorrelator,
+    spec: specs.Cellular5GNRPSSCorrelator,
 ) -> ArrayType:
     xp = iqwaveform.util.array_namespace(iq)
 
@@ -80,7 +80,7 @@ def weight_correlation_locally(R, window_fill=0.5, snr_window_fill=0.08):
     R = R.mean(axis=-3)
 
     if util.is_cupy_array(R):
-        from cupyx.scipy import ndimage
+        from cupyx.scipy import ndimage # type: ignore
     else:
         from scipy import ndimage
 
@@ -129,7 +129,7 @@ def pss_local_weighted_correlator(
     iq: ArrayType,
     capture: specs.Capture,
     *,
-    spec: specs.Cellular5GNRSSBCorrelator,
+    spec: specs.Cellular5GNRPSSCorrelator,
     window_fill=0.5,
     snr_window_fill=0.08,
 ) -> ArrayType:
@@ -141,12 +141,12 @@ def pss_local_weighted_correlator(
     )
 
 
-@shared.hint_keywords(specs.Cellular5GNRSSBSync)
+@shared.hint_keywords(specs.Cellular5GNPSSSync)
 @registry.signal_trigger(
-    specs.Cellular5GNRSSBSync, lag_coord_func=shared.cellular_ssb_lag
+    specs.Cellular5GNPSSSync, lag_coord_func=shared.cellular_ssb_lag
 )
 @registry.measurement(
-    specs.Cellular5GNRSSBSync,
+    specs.Cellular5GNPSSSync,
     coord_factories=[],
     dtype='float32',
     caches=(pss_cache, shared.ssb_iq_cache, pss_weighted_cache),
@@ -165,8 +165,8 @@ def cellular_5g_pss_sync(iq, capture: specs.Capture, **kwargs):
     due to "ISI" begin to increase quickly.
     """
 
-    weighted_spec = specs.Cellular5GNRSSBSync.from_dict(kwargs).validate()
-    spec = specs.Cellular5GNRSSBCorrelator.from_spec(weighted_spec).validate()
+    weighted_spec = specs.Cellular5GNPSSSync.from_dict(kwargs).validate()
+    spec = specs.Cellular5GNRPSSCorrelator.from_spec(weighted_spec).validate()
 
     est = pss_local_weighted_correlator(
         iq,
@@ -181,9 +181,9 @@ def cellular_5g_pss_sync(iq, capture: specs.Capture, **kwargs):
     return shared.cellular_ssb_lag(capture, spec)[i]
 
 
-@shared.hint_keywords(specs.Cellular5GNRSSBCorrelator)
+@shared.hint_keywords(specs.Cellular5GNRPSSCorrelator)
 @registry.measurement(
-    specs.Cellular5GNRSSBCorrelator,
+    specs.Cellular5GNRPSSCorrelator,
     coord_factories=_coord_factories,
     dtype=dtype,
     caches=(pss_cache, shared.ssb_iq_cache),
@@ -214,7 +214,7 @@ def cellular_5g_pss_correlation(iq, capture: specs.Capture, **kwargs):
         3GPP TS 138 213: Section 4.1
     """
 
-    spec = specs.Cellular5GNRSSBCorrelator.from_dict(kwargs).validate()
+    spec = specs.Cellular5GNRPSSCorrelator.from_dict(kwargs).validate()
 
     R = correlate_5g_pss(iq, capture=capture, spec=spec)
 
