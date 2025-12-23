@@ -11,6 +11,7 @@ from . import peripherals as _peripherals
 from . import sinks as _sinks
 from . import util as _util
 import msgspec as _msgspec
+from typing_extensions import ParamSpec
 
 if typing.TYPE_CHECKING:
     import numpy as _np
@@ -26,8 +27,8 @@ else:
 _TC = typing.TypeVar('_TC', bound=_specs.SoapyCapture)
 _TP = typing.TypeVar('_TP', bound=_specs.Peripherals)
 _TS = typing.TypeVar('_TS', bound=_specs.SoapySource)
-_PS = typing.ParamSpec('_PS')
-_PC = typing.ParamSpec('_PC')
+_PS = ParamSpec('_PS')
+_PC = ParamSpec('_PC')
 
 
 def _y_factor_temperature(
