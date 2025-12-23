@@ -11,6 +11,7 @@ from ..lib.register import registry
 
 if typing.TYPE_CHECKING:
     from types import ModuleType
+    from typing_extensions import ParamSpec
 
     import array_api_compat
     import numpy as np
@@ -18,15 +19,15 @@ if typing.TYPE_CHECKING:
 
     import striqt.waveform as iqwaveform
     from striqt.waveform._typing import ArrayType
+
+    _P = ParamSpec('_P')
+    _R = typing.TypeVar('_R', covariant=True)
+
 else:
     iqwaveform = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
     pd = util.lazy_import('pandas')
     array_api_compat = util.lazy_import('array_api_compat')
-
-
-_P = typing.ParamSpec('_P')
-_R = typing.TypeVar('_R', covariant=True)
 
 
 class _AnalysisProtocol(typing.Protocol[_P, _R]):
