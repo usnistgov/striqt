@@ -116,7 +116,7 @@ def _choose_chunk_sizes(
 
 
 def _build_encodings_zarr_v3(
-    data, registry: register.MeasurementRegistry, compression=True
+    data, registry: register.AnalysisRegistry, compression=True
 ):
     if isinstance(compression, zarr.core.codec_pipeline.Codec):
         compressors = [compression]
@@ -142,7 +142,7 @@ def _build_encodings_zarr_v3(
 
 
 def _build_encodings_zarr_v2(
-    data, registry: register.MeasurementRegistry, compression=True
+    data, registry: register.AnalysisRegistry, compression=True
 ):
     if isinstance(compression, numcodecs.abc.Codec):  # type: ignore
         compressor = compression
@@ -287,7 +287,20 @@ def load(
         return result.unify_chunks()
 
 
-class _YAMLIncludeConstructor:
+def _deep_update(dict1, dict2):
+    """nested merge of two dictionaries"""
+    for key, value in dict2.items():
+        if key not in dict1:
+            continue
+        if isinstance(dict1[key], dict) and isinstance(value, dict):
+            # If both values are dicts, merge them recursively
+            _deep_update(dict1[key], value)
+        else:
+            # Otherwise, the value from dict2 overwrites the one from dict1
+            dict1[key] = value
+
+
+class _YAMLIncludeConstructor(yaml.Loader):
     _lock = threading.RLock()
 
     def __init__(self, path):
@@ -313,13 +326,43 @@ class _YAMLIncludeConstructor:
     def pop_include_path(self):
         self.nested_paths.pop()
 
-    def __call__(self, _, node):
-        path = self.get_include_path(node.value)
-        with open(path, 'rb') as stream:
-            content = yaml.load(stream, yaml.CSafeLoader)
+    def __call__(self, loader: yaml.Loader, node: yaml.Node):
+        if not node.tag.startswith('!include'):
+            raise ValueError(f'unknown tag {node.tag!r}')
 
-        self.pop_include_path()
-        return content
+        if isinstance(node.value, str):
+            values = [node.value]
+        elif isinstance(node.value, list):
+            values = [v.value for v in node.value]
+        else:
+            raise TypeError('unknown tag value')
+
+        content = []
+        for v in values:
+            path = self.get_include_path(v)
+            with open(path, 'rb') as stream:
+                content.append(yaml.safe_load(stream))
+            self.pop_include_path()
+
+        if len(content) == 1:
+            return content[0]
+
+        if isinstance(content[0], dict):
+            result = dict(content[0])
+            for d in content[1:]:
+                assert isinstance(d, dict)
+                _deep_update(result, d)
+
+        elif isinstance(content[0], list):
+            result = list(content[0])
+            for l in content[1:]:
+                assert isinstance(l, list)
+                result.extend(l)
+        else:
+            name = type(content[0]).__qualname__
+            raise TypeError(f'merge is not supported for !include tag type {name!r}')
+
+        return result
 
 
 def decode_from_yaml_file(path: str | Path, *, type=typing.Any):

@@ -1,4 +1,4 @@
-"""mangle dynamic imports and context management of multiple resources"""
+"""dynamic imports and context management of multiple resources"""
 
 from __future__ import annotations as __
 
@@ -80,13 +80,14 @@ else:
         alias_func: specs.helpers.PathAliasFormatter | None
 
 
-def import_sink_cls(
-    spec: specs.Extension,
-) -> type[SinkBase]:
+def import_sink_cls(spec: specs.Extension, lazy: bool = False) -> type[SinkBase]:
     if spec.sink is None:
         raise TypeError('extension sink was not specified')
     mod_name, *sub_names, obj_name = spec.sink.rsplit('.')
-    mod = importlib.import_module(mod_name)
+    if lazy:
+        mod = util.lazy_import(mod_name)
+    else:
+        mod = importlib.import_module(mod_name)
     for name in sub_names:
         mod = getattr(mod, name)
     return getattr(mod, obj_name)
@@ -213,7 +214,7 @@ def open_resources(
     conn = ConnectionManager(sweep_spec=spec)
 
     if spec.extensions.sink is not None:
-        sink_cls = import_sink_cls(spec.extensions)
+        sink_cls = import_sink_cls(spec.extensions, lazy=True)
     elif bind.sink is not None:
         sink_cls = bind.sink
     else:

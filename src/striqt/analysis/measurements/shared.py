@@ -29,7 +29,7 @@ _P = typing.ParamSpec('_P')
 _R = typing.TypeVar('_R', infer_variance=True)
 
 
-class _MeasurementProtocol(typing.Protocol[_P, _R]):
+class _AnalysisProtocol(typing.Protocol[_P, _R]):
     def __call__(
         self,
         iq: 'iqwaveform.util.ArrayType',
@@ -44,7 +44,7 @@ class _MeasurementProtocol(typing.Protocol[_P, _R]):
 
 def hint_keywords(
     func: typing.Callable[_P, typing.Any],
-) -> typing.Callable[[typing.Callable[..., _R]], _MeasurementProtocol[_P, _R]]:
+) -> typing.Callable[[typing.Callable[..., _R]], _AnalysisProtocol[_P, _R]]:
     """fill in type hints for the analysis parameters"""
     return lambda f: f  # type: ignore
 
@@ -61,7 +61,7 @@ def cellular_cell_id2(capture: specs.Capture, spec: typing.Any):
 @registry.coordinates(dtype='uint16', attrs={'standard_name': 'SSB beam index'})
 @util.lru_cache()
 def cellular_ssb_beam_index(
-    capture: specs.Capture, spec: specs.Cellular5GNRSyncCorrelationSpec
+    capture: specs.Capture, spec: specs.Cellular5GNRSSBSync
 ):
     # pss_params and sss_params return the same number of symbol indexes
     params = iqwaveform.ofdm.sss_params(
@@ -79,7 +79,7 @@ def cellular_ssb_beam_index(
 )
 @util.lru_cache()
 def cellular_ssb_start_time(
-    capture: specs.Capture, spec: specs.Cellular5GNRSyncCorrelationSpec
+    capture: specs.Capture, spec: specs.Cellular5GNRSSBSync
 ):
     # pss_params and sss_params return the same number of symbol indexes
     params = iqwaveform.ofdm.pss_params(
@@ -102,7 +102,7 @@ def cellular_ssb_start_time(
 )
 @util.lru_cache()
 def cellular_ssb_lag(
-    capture: specs.Capture, spec: specs.Cellular5GNRSyncCorrelationSpec
+    capture: specs.Capture, spec: specs.Cellular5GNRSSBCorrelator
 ):
     params = iqwaveform.ofdm.sss_params(
         sample_rate=spec.sample_rate,
@@ -120,11 +120,11 @@ def cellular_ssb_lag(
     return pd.RangeIndex(0, max_len, name=name) / spec.sample_rate
 
 
-def empty_5g_sync_measurement(
+def empty_5g_ssb_correlation(
     iq,
     *,
     capture: specs.Capture,
-    spec: specs.Cellular5GNRSyncCorrelationSpec,
+    spec: specs.Cellular5GNRSSBCorrelator,
     coord_factories: list[typing.Callable],
     dtype='complex64',
 ):
@@ -138,7 +138,7 @@ def correlate_sync_sequence(
     ssb_iq,
     sync_seq,
     *,
-    spec: specs.Cellular5GNRSyncCorrelationSpec,
+    spec: specs.Cellular5GNRSSBCorrelator,
     params: iqwaveform.ofdm.SyncParams,
     cell_id_split: int | None = None,
 ):
@@ -207,7 +207,7 @@ ssb_iq_cache = register.KeywordArgumentCache([dataarrays.CAPTURE_DIM, 'spec'])
 def get_5g_ssb_iq(
     iq: ArrayType,
     capture: specs.Capture,
-    spec: specs.Cellular5GNRSyncCorrelationSpec,
+    spec: specs.Cellular5GNRSSBCorrelator,
     oaresample=False,
 ) -> ArrayType:
     """return a sync block waveform, which returns IQ that is recentered

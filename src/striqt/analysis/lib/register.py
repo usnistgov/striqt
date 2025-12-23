@@ -25,10 +25,10 @@ if typing.TYPE_CHECKING:
     from striqt.waveform._typing import ArrayType
 
     _P = typing_extensions.ParamSpec('_P')
-    _R = typing.TypeVar('_R', covariant=True)
+    _R = typing.TypeVar('_R', infer_variance=True)
 
-    _TC = typing.TypeVar('_TC', bound='specs.Capture', contravariant=True)
-    _TM = typing.TypeVar('_TM', bound='specs.Measurement', contravariant=True)
+    _TC = typing.TypeVar('_TC', bound=specs.Capture, infer_variance=True)
+    _TM = typing.TypeVar('_TM', bound=specs.Analysis, infer_variance=True)
 
     _RM = typing.Union[
         'ArrayType',
@@ -37,7 +37,7 @@ if typing.TYPE_CHECKING:
 
     _TCoord = typing.TypeVar('_TCoord', bound='CallableCoordinateFactory')
 
-    class CallableMeasurement(typing.Protocol[_P, _R]):
+    class CallableAnalysis(typing.Protocol[_P, _R]):
         __name__: str
 
         def __call__(
@@ -48,7 +48,7 @@ if typing.TYPE_CHECKING:
             **kwargs: _P.kwargs,
         ) -> _R: ...
 
-    class CallableMeasurementWrapper(typing.Protocol[_P, _R]):
+    class CallableAnalysisWrapper(typing.Protocol[_P, _R]):
         __name__: str
 
         def __call__(
@@ -115,7 +115,7 @@ class KeywordArgumentCache:
         self._key = self.kw_key(kws)
         self._value = value
 
-    def apply(self, func: CallableMeasurement[_P, _RM]) -> CallableMeasurement[_P, _RM]:
+    def apply(self, func: CallableAnalysis[_P, _RM]) -> CallableAnalysis[_P, _RM]:
         @functools.wraps(func)
         def wrapped(
             iq: ArrayType,
@@ -225,17 +225,17 @@ class SyncInfo(typing.NamedTuple):
     name: str
     func: typing.Callable
     lag_coord_func: CallableCoordinateFactory
-    meas_spec_type: type[specs.Measurement]
+    meas_spec_type: type[specs.Analysis]
 
 
 class AlignmentSourceRegistry(collections.UserDict[str | typing.Callable, SyncInfo]):
     def __call__(
         self,
-        meas_spec_type: type[specs.Measurement],
+        meas_spec_type: type[specs.Analysis],
         *,
         lag_coord_func: CallableCoordinateFactory,
         name=None,
-    ) -> typing.Callable[[CallableMeasurement[_P, _RM]], CallableMeasurement[_P, _RM]]:
+    ) -> typing.Callable[[CallableAnalysis[_P, _RM]], CallableAnalysis[_P, _RM]]:
         """register a coordinate factory function.
 
         The proper dimension to evaluate in the data is determined from
@@ -250,13 +250,13 @@ class AlignmentSourceRegistry(collections.UserDict[str | typing.Callable, SyncIn
             'meas_spec_type': meas_spec_type,
         }
 
-        def wrapper(func: CallableMeasurement[_P, _RM]) -> CallableMeasurement[_P, _RM]:
+        def wrapper(func: CallableAnalysis[_P, _RM]) -> CallableAnalysis[_P, _RM]:
             if info_kws['name'] is None:
                 info_kws['name'] = func.__name__
 
             if info_kws['name'] in self:
                 raise TypeError(
-                    f'a trigger_source named {info_kws["name"]} was already registered'
+                    f'a signal_trigger named {info_kws["name"]} was already registered'
                 )
 
             self[func] = self[info_kws['name']] = SyncInfo(func=func, **info_kws)
@@ -266,20 +266,20 @@ class AlignmentSourceRegistry(collections.UserDict[str | typing.Callable, SyncIn
         return wrapper
 
     def to_spec(
-        self, base: type[specs.Analysis] = specs.Analysis
-    ) -> type[specs.Analysis]:
+        self, base: type[specs.AnalysisGroup] = specs.AnalysisGroup
+    ) -> type[specs.AnalysisGroup]:
         return to_analysis_spec_type(self, base)
 
 
-class MeasurementInfo(typing.NamedTuple):
+class AnalysisInfo(typing.NamedTuple):
     name: str
-    func: CallableMeasurement
+    func: CallableAnalysis
     coord_factories: tuple[CallableCoordinateFactory, ...]
     prefer_unaligned_input: bool
     cache: KeywordArgumentCache | None
     dtype: str
     attrs: dict
-    depends: typing.Iterable[CallableMeasurement]
+    depends: typing.Iterable[CallableAnalysis]
     store_compressed: bool
     dims: tuple[str, ...] | None = None
 
@@ -287,7 +287,7 @@ class MeasurementInfo(typing.NamedTuple):
 @util.lru_cache()
 def _make_measurement_signature(spec_cls):
     """
-    Generates an inspect.Signature object from a specs.Measurement subclass.
+    Generates an inspect.Signature object from a specs.Analysis subclass.
     """
     kw_parameters = inspect.signature(spec_cls).parameters
 
@@ -306,24 +306,24 @@ def _make_measurement_signature(spec_cls):
 
 
 def _make_measurement_docstring(spec_cls):
-    assert specs.Measurement.__doc__ is not None
+    assert specs.Analysis.__doc__ is not None
 
-    skip = len(specs.Measurement.__mro__) + 1
+    skip = len(specs.Analysis.__mro__) + 1
     docs = [
         cls.__doc__.strip()
         for cls in spec_cls.__mro__[-skip::-1]
         if cls.__doc__ is not None
     ]
     args = textwrap.indent('\n'.join(docs), 4 * ' ')
-    return f'{specs.Measurement.__doc__.rstrip()}\n{args}'
+    return f'{specs.Analysis.__doc__.rstrip()}\n{args}'
 
 
-class MeasurementRegistry(
-    collections.UserDict[type[specs.Measurement], MeasurementInfo]
+class AnalysisRegistry(
+    collections.UserDict[type[specs.Analysis], AnalysisInfo]
 ):
     """a registry of keyword-only arguments for decorated functions"""
 
-    caches: dict[CallableMeasurement, list[KeywordArgumentCache]]
+    caches: dict[CallableAnalysis, list[KeywordArgumentCache]]
 
     def __init__(self):
         super().__init__()
@@ -332,11 +332,11 @@ class MeasurementRegistry(
         self.caches = {}
         self.use_unaligned_input: set[typing.Callable] = set()
         self.coordinates = CoordinateRegistry()
-        self.trigger_source = AlignmentSourceRegistry()
+        self.signal_trigger = AlignmentSourceRegistry()
 
     def __or__(self, other):
         result = super().__or__(other)
-        assert isinstance(result, MeasurementRegistry)
+        assert isinstance(result, AnalysisRegistry)
         result.depends_on = self.depends_on | other.depends_on
         result.names = self.names | other.names
         result.caches = self.caches | other.caches
@@ -344,12 +344,12 @@ class MeasurementRegistry(
             self.use_unaligned_input | other.use_unaligned_input
         )
         result.coordinates = self.coordinates | other.coordinates
-        result.trigger_source = self.trigger_source | other.trigger_source
+        result.signal_trigger = self.signal_trigger | other.signal_trigger
         return result
 
     def measurement(
         self,
-        spec_type: type[specs.Measurement],
+        spec_type: type[specs.Analysis],
         *,
         dtype: str,
         name: str | None = None,
@@ -363,7 +363,7 @@ class MeasurementRegistry(
         store_compressed=True,
         attrs={},
     ) -> typing.Callable[
-        [CallableMeasurement[_P, _RM]], CallableMeasurementWrapper[_P, _RM]
+        [CallableAnalysis[_P, _RM]], CallableAnalysisWrapper[_P, _RM]
     ]:
         """add decorated `func` and its keyword arguments in the self.tostruct() schema"""
 
@@ -396,8 +396,8 @@ class MeasurementRegistry(
             info_kws['depends'] = depends
 
         def wrapper(
-            func: CallableMeasurement[_P, _RM],
-        ) -> CallableMeasurementWrapper[_P, _RM]:
+            func: CallableAnalysis[_P, _RM],
+        ) -> CallableAnalysisWrapper[_P, _RM]:
             @functools.wraps(func)
             def wrapped(
                 iq: ArrayType,
@@ -465,7 +465,7 @@ class MeasurementRegistry(
                     'cache argument must be an tuple or list of KeywordArgumentCache'
                 )
 
-            self[spec_type] = MeasurementInfo(func=wrapped, **info_kws)
+            self[spec_type] = AnalysisInfo(func=wrapped, **info_kws)
 
             setattr(wrapped, '__signature__', _make_measurement_signature(spec_type))
             setattr(
@@ -481,8 +481,8 @@ class MeasurementRegistry(
     __call__ = measurement
 
     def tospec(
-        self, base: type[specs.Analysis] = specs.Analysis
-    ) -> type[specs.Analysis]:
+        self, base: type[specs.AnalysisGroup] = specs.AnalysisGroup
+    ) -> type[specs.AnalysisGroup]:
         return to_analysis_spec_type(self, base)
 
     def cache_context(
@@ -493,7 +493,7 @@ class MeasurementRegistry(
 
 @contextlib.contextmanager
 def cached_registry_context(
-    registry: MeasurementRegistry,
+    registry: AnalysisRegistry,
     capture: specs.Capture,
     callback: typing.Callable | None = None,
 ):
@@ -517,9 +517,9 @@ def cached_registry_context(
 
 
 def to_analysis_spec_type(
-    registry: AlignmentSourceRegistry | MeasurementRegistry,
-    base: type[specs.Analysis] = specs.Analysis,
-) -> type[specs.Analysis]:
+    registry: AlignmentSourceRegistry | AnalysisRegistry,
+    base: type[specs.AnalysisGroup] = specs.AnalysisGroup,
+) -> type[specs.AnalysisGroup]:
     """return a Struct subclass type representing a specification for calls to all registered functions"""
 
     fields = [
@@ -536,17 +536,17 @@ def to_analysis_spec_type(
         frozen=True,
     )
 
-    return typing.cast(type[specs.Analysis], cls)
+    return typing.cast(type[specs.AnalysisGroup], cls)
 
 
 class Trigger:
     def __init__(
         self,
         name_or_func: str | typing.Callable,
-        spec: specs.Measurement,
-        registry: MeasurementRegistry,
+        spec: specs.Analysis,
+        registry: AnalysisRegistry,
     ):
-        self.info: SyncInfo = registry.trigger_source[name_or_func]
+        self.info: SyncInfo = registry.signal_trigger[name_or_func]
         self.meas_info = registry[self.info.meas_spec_type]
 
         if isinstance(spec, self.info.meas_spec_type):
@@ -557,16 +557,16 @@ class Trigger:
 
     @classmethod
     def from_spec(
-        cls, name: str, analysis: specs.Analysis, registry: MeasurementRegistry
+        cls, name: str, analysis: specs.AnalysisGroup, registry: AnalysisRegistry
     ) -> typing.Self:
-        info: SyncInfo = registry.trigger_source[name]
+        info: SyncInfo = registry.signal_trigger[name]
         meas_info = registry[info.meas_spec_type]
 
         meas_attr = getattr(analysis, meas_info.name, None)
-        meas_spec = typing.cast(specs.Measurement, meas_attr)
+        meas_spec = typing.cast(specs.Analysis, meas_attr)
         if meas_spec is None:
             raise ValueError(
-                f'trigger_source {name!r} requires an analysis specification for {meas_info.name!r}'
+                f'signal_trigger {name!r} requires an analysis specification for {meas_info.name!r}'
             )
 
         return cls(name, meas_spec, registry)
@@ -583,15 +583,15 @@ class Trigger:
 
 
 def get_trigger(
-    name: str, analysis: specs.Analysis, registry: MeasurementRegistry
+    name: str, analysis: specs.AnalysisGroup, registry: AnalysisRegistry
 ) -> Trigger:
     return Trigger.from_spec(name, analysis, registry)
 
 
-def get_trigger_source_measurement_name(
-    name: str, registry: MeasurementRegistry
+def get_signal_trigger_measurement_name(
+    name: str, registry: AnalysisRegistry
 ) -> str:
-    info: SyncInfo = registry.trigger_source[name]
+    info: SyncInfo = registry.signal_trigger[name]
     meas_info = registry[info.meas_spec_type]
     return meas_info.name
 
@@ -621,4 +621,4 @@ def normalize_factory_return(ret, name: str):
     return arr, attrs
 
 
-registry: MeasurementRegistry = MeasurementRegistry()
+registry: AnalysisRegistry = AnalysisRegistry()

@@ -525,7 +525,7 @@ def import_compute_modules(cupy=False):
 def prepare_compute(input_spec: specs.Sweep):
     import_compute_modules(cupy=input_spec.source.array_backend == 'cupy')
 
-    if not input_spec.options.warmup_sweep:
+    if input_spec.options.skip_warmup:
         return
 
     from .. import bindings

@@ -358,9 +358,9 @@ class DelayedDataArray(collections.UserDict):
     """
 
     capture: specs.Capture
-    spec: specs.Measurement
+    spec: specs.Analysis
     result: ArrayType | dict[str, ArrayType] | xr.Dataset | dict[str, DelayedDataArray]
-    info: register.MeasurementInfo
+    info: register.AnalysisInfo
     attrs: dict
 
     def compute(self) -> DelayedDataArray:
@@ -386,7 +386,7 @@ def select_parameter_kws(locals_: dict, omit=(PORT_DIM, 'out')) -> dict:
 
 class EvaluationOptions(msgspec.Struct, typing.Generic[_TA]):
     as_xarray: _TA
-    registry: register.MeasurementRegistry
+    registry: register.AnalysisRegistry
     block_each: bool = True
     expand_dims: typing.Sequence[str] = ()
 
@@ -398,13 +398,13 @@ class EvaluationOptions(msgspec.Struct, typing.Generic[_TA]):
 
 def evaluate_by_spec(
     iq: ArrayType | AcquiredIQ,
-    spec: dict[str, specs.Measurement] | specs.Analysis,
+    spec: dict[str, specs.Analysis] | specs.AnalysisGroup,
     capture: specs.Capture,
     options: EvaluationOptions,
 ):
     """evaluate each analysis for the given IQ waveform"""
 
-    if isinstance(spec, specs.Analysis):
+    if isinstance(spec, specs.AnalysisGroup):
         spec = spec.validate()
     elif isinstance(spec, dict):
         spec = options.registry.tospec().from_dict(spec)
@@ -488,7 +488,7 @@ def package_analysis(
 @typing.overload
 def analyze_by_spec(
     iq: ArrayType | AcquiredIQ,
-    spec: dict[str, specs.Measurement] | specs.Analysis,
+    spec: dict[str, specs.Analysis] | specs.AnalysisGroup,
     capture: specs.Capture,
     options: EvaluationOptions[typing.Literal[True]],
 ) -> 'xr.Dataset': ...
@@ -497,7 +497,7 @@ def analyze_by_spec(
 @typing.overload
 def analyze_by_spec(
     iq: ArrayType | AcquiredIQ,
-    spec: dict[str, specs.Measurement] | specs.Analysis,
+    spec: dict[str, specs.Analysis] | specs.AnalysisGroup,
     capture: specs.Capture,
     options: EvaluationOptions[typing.Literal['delayed']],
 ) -> 'dict[str, DelayedDataArray]': ...
@@ -506,7 +506,7 @@ def analyze_by_spec(
 @typing.overload
 def analyze_by_spec(
     iq: ArrayType | AcquiredIQ,
-    spec: dict[str, specs.Measurement] | specs.Analysis,
+    spec: dict[str, specs.Analysis] | specs.AnalysisGroup,
     capture: specs.Capture,
     options: EvaluationOptions[typing.Literal[False]],
 ) -> 'dict[str, ArrayType]': ...
@@ -514,7 +514,7 @@ def analyze_by_spec(
 
 def analyze_by_spec(
     iq: ArrayType | AcquiredIQ,
-    spec: dict[str, specs.Measurement] | specs.Analysis,
+    spec: dict[str, specs.Analysis] | specs.AnalysisGroup,
     capture: specs.Capture,
     options: EvaluationOptions,
 ) -> ArrayType | dict[str, ArrayType] | xr.Dataset | dict[str, DelayedDataArray]:

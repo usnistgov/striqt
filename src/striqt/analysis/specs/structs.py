@@ -125,7 +125,7 @@ class AnalysisKeywords(typing.TypedDict):
     as_xarray: typing.NotRequired[bool | typing.Literal['delayed']]
 
 
-class Measurement(_SlowHashSpecBase, kw_only=True, frozen=True):
+class Analysis(_SlowHashSpecBase, kw_only=True, frozen=True):
     """
     Returns:
         Analysis result of type `(xarray.DataArray if as_xarray else type(iq))`
@@ -157,15 +157,15 @@ class Measurement(_SlowHashSpecBase, kw_only=True, frozen=True):
         return h
 
 
-class Analysis(_SlowHashSpecBase, kw_only=True, frozen=True):
-    """base class for a set of Measurement specifications"""
+class AnalysisGroup(_SlowHashSpecBase, kw_only=True, frozen=True):
+    """base class for a defining set of Analysis specs"""
 
     pass
 
 
 # %% Spectral analysis
 class FrequencyAnalysisSpecBase(
-    Measurement,
+    Analysis,
     kw_only=True,
     frozen=True,
     dict=True,
@@ -192,50 +192,9 @@ class FrequencyAnalysisSpecBase(
     lo_bandstop: typing.Optional[float] = None
 
 
-# %% Cellular 5G NR synchronizatino
-class _Cellular5GNRSyncCorrelator(Measurement, kw_only=True, frozen=True, dict=True):
-    """
-    subcarrier_spacing (float): 3GPP channel subcarrier spacing (Hz)
-    sample_rate (float): output sample rate for the resampled synchronization waveform (samples/s)
-    discovery_periodicity (float): time period between synchronization blocks (s)
-    frequency_offset (float or dict[float, float]):
-        center frequency offset (see notes)
-    shared_spectrum:
-        whether to follow the 3GPP "shared spectrum" synchronizatio block layout
-    max_block_count: number of synchronization blocks to evaluate
-    trim_cp: whether to trim the cyclic prefix duration from the output
-    """
-
-    subcarrier_spacing: float
-    sample_rate: float = 15.36e6 / 2
-    discovery_periodicity: float = 20e-3
-    frequency_offset: typing.Union[float, dict[float, float]] = 0
-    shared_spectrum: bool = False
-    max_block_count: typing.Optional[int] = 1
-    trim_cp: bool = True
 
 
-class Spectrogram(
-    FrequencyAnalysisSpecBase,
-    kw_only=True,
-    frozen=True,
-    dict=True,
-):
-    """
-    lo_bandstop (float):
-        if specified, invalidate LO leakage by setting spectrogram bins to
-        NaN across this bandwidth at DC in the baseband
-    time_aperture (float):
-        if specified, binned RMS averaging is applied along time axis in the
-        spectrogram to yield this coarser resolution (s)
-    dB (bool): if True, returned power is transformed into dB units
-    """
-
-    time_aperture: typing.Optional[float] = None
-    dB = True
-
-
-class Cellular5GNRSSBSpectrogram(Measurement, kw_only=True, frozen=True):
+class Cellular5GNRSSBSpectrogram(Analysis, kw_only=True, frozen=True):
     """
     subcarrier_spacing (float): 3GPP channel subcarrier spacing (Hz)
     sample_rate (float): output sample rate for the resampled synchronization waveform (samples/s)
@@ -260,30 +219,53 @@ class Cellular5GNRSSBSpectrogram(Measurement, kw_only=True, frozen=True):
     window: types.WindowType = ('kaiser_by_enbw', 2)
     lo_bandstop: typing.Optional[float] = None
 
-    # hard-coded for re-use of PSS/SSS functions
+    # hard-coded for re-use by PSS/SSS functions
     shared_spectrum = False
     trim_cp = False
 
 
-class Cellular5GNRPSSCorrelator(_Cellular5GNRSyncCorrelator, kw_only=True, frozen=True):
-    pass
+class Spectrogram(FrequencyAnalysisSpecBase, kw_only=True, frozen=True):
+    """
+    time_aperture (float):
+        if specified, binned RMS averaging is applied along time axis in the
+        spectrogram to yield this coarser resolution (s)
+    dB (bool): if True, returned power is transformed into dB units
+    """
+
+    time_aperture: typing.Optional[float] = None
+    dB = True
 
 
-class Cellular5GNRWeightedCorrelator(
-    Cellular5GNRPSSCorrelator, frozen=True, kw_only=True
-):
+# %% Cellular 5G NR synchronizatino
+class Cellular5GNRSSBCorrelator(Analysis, kw_only=True, frozen=True, dict=True):
+    """
+    subcarrier_spacing (float): 3GPP channel subcarrier spacing (Hz)
+    sample_rate (float): output sample rate for the resampled synchronization waveform (samples/s)
+    discovery_periodicity (float): time period between synchronization blocks (s)
+    frequency_offset (float or dict[float, float]):
+        center frequency offset (see notes)
+    shared_spectrum:
+        whether to follow the 3GPP "shared spectrum" synchronizatio block layout
+    max_block_count: number of synchronization blocks to evaluate
+    trim_cp: whether to trim the cyclic prefix duration from the output
+    """
+
+    subcarrier_spacing: float
+    sample_rate: float = 15.36e6 / 2
+    discovery_periodicity: float = 20e-3
+    frequency_offset: typing.Union[float, dict[float, float]] = 0
+    shared_spectrum: bool = False
+    max_block_count: typing.Optional[int] = 1
+    trim_cp: bool = True
+
+
+class Cellular5GNRSSBSync(Cellular5GNRSSBCorrelator, frozen=True, kw_only=True):
     window_fill: float = 0.5
     snr_window_fill: float = 0.08
 
 
-class Cellular5GNRSSSCorrelator(
-    _Cellular5GNRSyncCorrelator, kw_only=True, frozen=True, dict=True
-):
-    pass
-
-
 class CellularCyclicAutocorrelator(
-    Measurement,
+    Analysis,
     kw_only=True,
     frozen=True,
     dict=True,
@@ -296,7 +278,7 @@ class CellularCyclicAutocorrelator(
 
 
 class CellularResourcePowerHistogram(
-    Measurement,
+    Analysis,
     kw_only=True,
     frozen=True,
     dict=True,
@@ -322,10 +304,9 @@ class CellularResourcePowerHistogram(
 
 
 class ChannelPowerTimeSeries(
-    Measurement,
+    Analysis,
     kw_only=True,
     frozen=True,
-    dict=True,
 ):
     detector_period: fractions.Fraction
     power_detectors: tuple[str, ...] = ('rms', 'peak')
@@ -335,14 +316,13 @@ class ChannelPowerHistogram(
     ChannelPowerTimeSeries,
     kw_only=True,
     frozen=True,
-    dict=True,
 ):
     power_low: float
     power_high: float
     power_resolution: float
 
 
-class CyclicChannelPower(Measurement, kw_only=True, frozen=True):
+class CyclicChannelPower(Analysis, kw_only=True, frozen=True):
     cyclic_period: float
     detector_period: fractions.Fraction
     power_detectors: tuple[str, ...] = ('rms', 'peak')
@@ -350,7 +330,7 @@ class CyclicChannelPower(Measurement, kw_only=True, frozen=True):
 
 
 class IQWaveform(
-    Measurement,
+    Analysis,
     kw_only=True,
     frozen=True,
 ):

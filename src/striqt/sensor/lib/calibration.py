@@ -475,7 +475,9 @@ def bind_manual_yfactor_calibration(
 
     class sweep_spec_cls(_specs.CalibrationSweep, frozen=True, kw_only=True):
         calibration: _specs.ManualYFactorPeripheral | None = None
-        options = _specs.SweepOptions(reuse_iq=True, loop_only_nyquist=True)
+        options = _specs.SweepOptions(
+            reuse_iq=True, loop_only_nyquist=True, skip_warmup=True
+        )
 
         def __post_init__(self):
             _ensure_loop_at_position(self)

@@ -123,9 +123,9 @@ TransportDType = Annotated[
 OverloadDetectFlag = Annotated[
     Union[bool, Literal['auto']], Meta('whether to detect overload')
 ]
-WarmupSweep = Annotated[
+SkipWarmup = Annotated[
     bool,
-    Meta('if True, run empty buffers through the GPU before sweeping'),
+    Meta('if True, suppress empty buffer runs for GPU backends'),
 ]
 WaveformInputPath = Annotated[str, Meta('path to the waveform data file')]
 ZarrSelect = Annotated[dict, Meta('dictionary to select in the data as .sel(**select)')]

@@ -11,7 +11,7 @@ from threading import Event
 
 from striqt.analysis import dataarrays, registry, Trigger
 from striqt.analysis.lib import register
-from striqt.analysis.specs import Analysis, Measurement
+from striqt.analysis.specs import AnalysisGroup, Analysis
 from striqt.analysis.lib.util import pinned_array_as_cupy
 from striqt.waveform.fourier import ResamplerDesign
 
@@ -257,19 +257,19 @@ def get_trigger_from_spec(setup: specs.Source, analysis: None = None) -> None: .
 
 @typing.overload
 def get_trigger_from_spec(
-    setup: specs.Source, analysis: Analysis
+    setup: specs.Source, analysis: AnalysisGroup
 ) -> register.Trigger: ...
 
 
 @util.lru_cache()
 def get_trigger_from_spec(
-    setup: specs.Source, analysis: Analysis | None = None
+    setup: specs.Source, analysis: AnalysisGroup | None = None
 ) -> register.Trigger | None:
     name = get_signal_trigger_name(setup)
     if name is None:
         return None
 
-    if analysis is None and isinstance(setup.signal_trigger, Analysis):
+    if analysis is None and isinstance(setup.signal_trigger, AnalysisGroup):
         analysis = setup.signal_trigger
 
     if analysis is None:
@@ -277,9 +277,9 @@ def get_trigger_from_spec(
         raise ValueError(
             f'signal_trigger {meas_name!r} requires an analysis specification for {setup.signal_trigger!r}'
         )
-    elif isinstance(analysis, Analysis):
+    elif isinstance(analysis, AnalysisGroup):
         return register.Trigger.from_spec(name, analysis, registry=registry)
-    elif isinstance(analysis, Measurement):
+    elif isinstance(analysis, Analysis):
         return register.Trigger(setup.signal_trigger, analysis, registry=registry)
 
 
@@ -446,7 +446,7 @@ class SourceBase(
 
         self._capture = self._prepare_capture(spec) or spec
 
-    def read_iq(self, analysis: Analysis | None = None) -> 'tuple[ArrayType, int|None]':
+    def read_iq(self, analysis: AnalysisGroup | None = None) -> 'tuple[ArrayType, int|None]':
         """read IQ for the armed capture"""
         assert self._capture is not None, 'soapy source must be armed to read IQ'
 
@@ -848,7 +848,7 @@ def _get_filter_pad(capture: specs.ResampledCapture):
 def _get_dsp_pad_size(
     setup: specs.Source,
     capture: specs.ResampledCapture,
-    analysis: Analysis | None = None,
+    analysis: AnalysisGroup | None = None,
 ) -> tuple[int, int]:
     """returns the padding before and after a waveform to achieve an integral number of FFT windows"""
 
@@ -884,7 +884,7 @@ def _get_dsp_pad_size(
 
 @util.lru_cache()
 def get_signal_trigger_name(setup: specs.Source) -> str | None:
-    if isinstance(setup.signal_trigger, Analysis):
+    if isinstance(setup.signal_trigger, AnalysisGroup):
         analysis = setup.signal_trigger
         meas = {
             name: meas for name, meas in analysis.to_dict().items() if meas is not None
@@ -903,9 +903,9 @@ def get_signal_trigger_name(setup: specs.Source) -> str | None:
 def _get_trigger_pad_size(
     setup: specs.Source,
     capture: specs.ResampledCapture,
-    trigger_info: Trigger | Analysis | None = None,
+    trigger_info: Trigger | AnalysisGroup | None = None,
 ) -> int:
-    if isinstance(trigger_info, Analysis):
+    if isinstance(trigger_info, AnalysisGroup):
         trigger = get_trigger_from_spec(setup, trigger_info)
     elif isinstance(trigger_info, Trigger):
         trigger = trigger_info
@@ -962,7 +962,7 @@ def _cached_channel_read_buffer_count(
     capture: specs.ResampledCapture,
     *,
     include_holdoff: bool = False,
-    analysis: Analysis | None = None,
+    analysis: AnalysisGroup | None = None,
 ) -> int:
     if iqwaveform.isroundmod(capture.duration * capture.sample_rate, 1):
         samples_out = round(capture.duration * capture.sample_rate)
@@ -995,7 +995,7 @@ def _cached_channel_read_buffer_count(
 
 
 def get_channel_read_buffer_count(
-    source: SourceBase, analysis: Analysis | None = None, include_holdoff=False
+    source: SourceBase, analysis: AnalysisGroup | None = None, include_holdoff=False
 ) -> int:
     assert source._capture is not None
 

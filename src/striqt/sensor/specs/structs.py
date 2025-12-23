@@ -7,7 +7,7 @@ import typing
 import msgspec
 
 from striqt import analysis as _analysis
-from striqt.analysis.specs import Analysis, SpecBase, _SlowHashSpecBase, Capture
+from striqt.analysis.specs import AnalysisGroup, SpecBase, _SlowHashSpecBase, Capture
 
 from ..lib import util
 from . import types
@@ -94,7 +94,7 @@ class Source(_SlowHashSpecBase, frozen=True, kw_only=True):
 
     # synchronization and triggering
     trigger_strobe: typing.Optional[float] = None
-    signal_trigger: typing.Optional[str | Analysis] = None  # type: ignore
+    signal_trigger: typing.Optional[str | AnalysisGroup] = None  # type: ignore
 
     # in the future, these should probably move to an analysis config
     array_backend: types.ArrayBackend = 'numpy'
@@ -276,7 +276,7 @@ BundledTriggers = _analysis.registry.signal_trigger.to_spec()
 class SweepOptions(SpecBase, frozen=True, kw_only=True):
     reuse_iq: bool
     loop_only_nyquist: bool = False
-    warmup_sweep: types.WarmupSweep = True
+    skip_warmup: types.SkipWarmup = False
 
 
 # forward references break msgspec when used with bindings, so this
@@ -321,7 +321,7 @@ class CalibrationSweep(
     to specify the change in expected capture structure."""
 
     options: SweepOptions = SweepOptions(
-        warmup_sweep=True, reuse_iq=True, loop_only_nyquist=True
+        skip_warmup=True, reuse_iq=True, loop_only_nyquist=True
     )
     calibration: _TPC | None = None
 

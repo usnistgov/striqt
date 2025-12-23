@@ -1,9 +1,9 @@
 from ..lib.register import (
     AlignmentSourceRegistry,
-    MeasurementRegistry,
+    AnalysisRegistry,
     to_analysis_spec_type,
 )
 
-measurements = MeasurementRegistry()
+measurements = AnalysisRegistry()
 coordinates = measurements.coordinates
-trigger_source = measurements.trigger_source
+signal_trigger = measurements.signal_trigger

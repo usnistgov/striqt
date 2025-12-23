@@ -11,7 +11,7 @@ from .. import specs
 
 from . import calibration, util
 from .sources import AcquiredIQ, _base
-from striqt.analysis.specs import Analysis, Measurement
+from striqt.analysis.specs import AnalysisGroup, Analysis
 
 if typing.TYPE_CHECKING:
     import numpy as np

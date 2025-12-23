@@ -51,13 +51,13 @@ def correlate_5g_sss(
     iq: 'striqt.waveform._typing.ArrayType',
     capture: specs.Capture,
     *,
-    spec: specs.Cellular5GNRSSSCorrelator,
+    spec: specs.Cellular5GNRSSBCorrelator,
 ) -> 'striqt.waveform._typing.ArrayType':
     xp = iqwaveform.util.array_namespace(iq)
 
     ssb_iq = shared.get_5g_ssb_iq(iq, capture=capture, spec=spec)
     if ssb_iq is None:
-        return shared.empty_5g_sync_measurement(
+        return shared.empty_5g_ssb_correlation(
             iq, capture=capture, spec=spec, coord_factories=_coord_factories
         )
 
@@ -80,9 +80,9 @@ def correlate_5g_sss(
     return iqwaveform.util.to_blocks(meas, 3, axis=-4)
 
 
-@shared.hint_keywords(specs.Cellular5GNRSSSCorrelator)
-@registry.trigger_source(
-    specs.Cellular5GNRSSSCorrelator, lag_coord_func=shared.cellular_ssb_lag
+@shared.hint_keywords(specs.Cellular5GNRSSBCorrelator)
+@registry.signal_trigger(
+    specs.Cellular5GNRSSBCorrelator, lag_coord_func=shared.cellular_ssb_lag
 )
 def cellular_5g_sss_sync(iq, capture: specs.Capture, window_fill=0.5, **kwargs):
     """compute sync index offsets based on correlate_5g_sss.
@@ -97,7 +97,7 @@ def cellular_5g_sss_sync(iq, capture: specs.Capture, window_fill=0.5, **kwargs):
 
     from scipy import ndimage
 
-    spec = specs.Cellular5GNRSSSCorrelator.from_dict(kwargs).validate()
+    spec = specs.Cellular5GNRSSBCorrelator.from_dict(kwargs).validate()
 
     xp = iqwaveform.util.array_namespace(iq)
 
@@ -130,9 +130,9 @@ def cellular_5g_sss_sync(iq, capture: specs.Capture, window_fill=0.5, **kwargs):
     return shared.cellular_ssb_lag(capture, spec)[i]
 
 
-@shared.hint_keywords(specs.Cellular5GNRSSSCorrelator)
+@shared.hint_keywords(specs.Cellular5GNRSSBCorrelator)
 @registry.measurement(
-    specs.Cellular5GNRSSSCorrelator,
+    specs.Cellular5GNRSSBCorrelator,
     coord_factories=_coord_factories,
     dtype=dtype,
     caches=(sss_correlation_cache, shared.ssb_iq_cache),
@@ -163,7 +163,7 @@ def cellular_5g_sss_correlation(iq, capture: specs.Capture, **kwargs):
         3GPP TS 138 213: Section 4.1
     """
 
-    spec = specs.Cellular5GNRSSSCorrelator.from_dict(kwargs).validate()
+    spec = specs.Cellular5GNRSSBCorrelator.from_dict(kwargs).validate()
 
     R = correlate_5g_sss(iq, capture=capture, spec=spec)
 
