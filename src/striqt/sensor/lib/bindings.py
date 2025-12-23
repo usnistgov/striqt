@@ -2,7 +2,7 @@ from __future__ import annotations as __
 import functools
 import typing
 import dataclasses
-
+from typing_extensions import ParamSpec
 import msgspec
 
 from .peripherals import NoPeripherals, PeripheralsBase
@@ -16,8 +16,8 @@ from .sources._base import _PS, _PC
 _TC2 = typing.TypeVar('_TC2', bound=specs.ResampledCapture)
 _TP2 = typing.TypeVar('_TP2', bound=specs.Peripherals)
 _TS2 = typing.TypeVar('_TS2', bound=specs.Source)
-_PS2 = typing.ParamSpec('_PS2')
-_PC2 = typing.ParamSpec('_PC2')
+_PS2 = ParamSpec('_PS2')
+_PC2 = ParamSpec('_PC2')
 
 
 if typing.TYPE_CHECKING:
