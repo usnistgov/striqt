@@ -295,7 +295,7 @@ def _get_path_fields(
     fields['sensor_binding'] = type(sweep).__name__
     if spec_path is not None:
         fields['spec_name'] = Path(spec_path).stem
-        fields['parent_name'] = Path(spec_path).parent
+        fields['parent_name'] = Path(spec_path).parent.absolute().name
     fields['source_id'] = id_
 
     return fields
