@@ -23,6 +23,19 @@ if typing.TYPE_CHECKING:
     _P = ParamSpec('_P')
     _R = typing.TypeVar('_R', covariant=True)
 
+    class _AnalysisProtocol(typing.Protocol[_P, _R]):
+        def __call__(
+            self,
+            iq: 'iqwaveform.util.ArrayType',
+            capture: specs.Capture,
+            as_xarray: specs.types.AsXArray = True,
+            *args: _P.args,
+            **kwargs: _P.kwargs,
+        ) -> _R: ...
+
+        __name__: str
+
+
 else:
     iqwaveform = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
@@ -30,22 +43,9 @@ else:
     array_api_compat = util.lazy_import('array_api_compat')
 
 
-class _AnalysisProtocol(typing.Protocol[_P, _R]):
-    def __call__(
-        self,
-        iq: 'iqwaveform.util.ArrayType',
-        capture: specs.Capture,
-        as_xarray: specs.types.AsXArray = True,
-        *args: _P.args,
-        **kwargs: _P.kwargs,
-    ) -> _R: ...
-
-    __name__: str
-
-
 def hint_keywords(
     func: typing.Callable[_P, typing.Any],
-) -> typing.Callable[[typing.Callable[..., _R]], _AnalysisProtocol[_P, _R]]:
+) -> typing.Callable[[typing.Callable[..., _R]], '_AnalysisProtocol[_P, _R]']:
     """fill in type hints for the analysis parameters"""
     return lambda f: f  # type: ignore
 
