@@ -228,7 +228,7 @@ class SyncInfo(typing.NamedTuple):
     meas_spec_type: type[specs.Analysis]
 
 
-class AlignmentSourceRegistry(collections.UserDict[str | typing.Callable, SyncInfo]):
+class AlignmentSourceRegistry(collections.UserDict[typing.Union[str, typing.Callable], SyncInfo]):
     def __call__(
         self,
         meas_spec_type: type[specs.Analysis],
