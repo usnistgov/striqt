@@ -8,6 +8,7 @@ import typing
 from collections import defaultdict
 from math import ceil
 from threading import Event
+from typing_extensions import Self, Unpack, ParamSpec
 
 from striqt.analysis import dataarrays, registry, Trigger
 from striqt.analysis.lib import register
@@ -22,7 +23,6 @@ if typing.TYPE_CHECKING:
     import numpy as np
     import pandas as pd
     import typing_extensions
-    from typing_extensions import Self, Unpack
 
     import striqt.waveform as iqwaveform
     from striqt.waveform._typing import ArrayType
@@ -45,8 +45,8 @@ FILTER_DOMAIN = 'time'
 
 _TS = typing.TypeVar('_TS', bound=specs.Source)
 _TC = typing.TypeVar('_TC', bound=specs.ResampledCapture)
-_PS = typing.ParamSpec('_PS')
-_PC = typing.ParamSpec('_PC')
+_PS = ParamSpec('_PS')
+_PC = ParamSpec('_PC')
 _TB = typing.TypeVar('_TB', bound='specs.SpecBase')
 _T = typing.TypeVar('_T', bound='SourceBase')
 
