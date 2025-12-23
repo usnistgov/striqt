@@ -599,7 +599,7 @@ class MATLegacyFileStream(_FileStreamBase):
             array_list.append(x)
             tally += x.shape[1]
 
-        iq = xp.concat(array_list, axis=1)
+        iq = xp.concatenate(array_list, axis=1)
         self._capture_dict[dataarrays.PORT_DIM] = list(range(iq.shape[0]))
 
         if count is None:

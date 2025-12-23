@@ -15,21 +15,17 @@ dependencies:
 - toml
 - ruamel.yaml
 
-  # hard-coded on behalf of pip for iqwaveform
+# hard-coded on behalf of pip for iqwaveform
 - pandas
 - scipy>=1.13,<2
 - numpy>=1.21,<3
-- matplotlib-base~=3.7
-- numexpr~=2.8
+- matplotlib-base
+- numexpr>=2.8
 - array-api-compat
 - methodtools
 - numba
 
-  # for device wrappers and remote control
-- labbench>=0.42.0,<1
-- rpyc~=5.3
-
-  # data management (including zarr and data chunking in xarray)
+# data management (including zarr and data chunking in xarray)
 - xarray>=2024.3
 - zarr>=2.18,<4
 - dask
