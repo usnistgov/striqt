@@ -183,13 +183,13 @@ def evaluate_aliases(
     capture: specs.ResampledCapture | None,
     *,
     source_id: str | UnsetType | None = UNSET,
-    output: specs.Sink,
+    desc: specs.Description,
 ) -> dict[str, typing.Any]:
     """evaluate the field values"""
 
     ret = {}
 
-    for coord_name, coord_spec in output.coord_aliases.items():
+    for coord_name, coord_spec in desc.coord_aliases.items():
         for alias_value, field_spec in coord_spec.items():
             if isinstance(field_spec, dict):
                 # "or" across the list of field specs
@@ -239,7 +239,7 @@ def capture_fields_with_aliases(
     capture: specs.ResampledCapture | None = None,
     *,
     source_id: str | None = None,
-    sink_spec: specs.Sink,
+    desc: specs.Description,
 ) -> dict:
     if capture is None:
         attrs = {}
@@ -247,7 +247,7 @@ def capture_fields_with_aliases(
     else:
         attrs = capture.to_dict(skip_private=True)
         c = split_capture_ports(capture)[0]
-    aliases = evaluate_aliases(c, source_id=source_id, output=sink_spec)
+    aliases = evaluate_aliases(c, source_id=source_id, desc=desc)
 
     return dict(attrs, **aliases)
 
@@ -289,7 +289,7 @@ def _get_path_fields(
     else:
         id_ = source_id
 
-    fields = capture_fields_with_aliases(source_id=id_, sink_spec=sweep.sink)
+    fields = capture_fields_with_aliases(source_id=id_, desc=sweep.description)
 
     fields['start_time'] = datetime.now().strftime('%Y%m%d-%Hh%Mm%S')
     fields['sensor_binding'] = type(sweep).__name__
@@ -349,9 +349,9 @@ class PathAliasFormatter:
         key, *_ = exception.args
         p = str(path)
 
-        if key in self.sweep_spec.sink.coord_aliases:
+        if key in self.sweep_spec.description.coord_aliases:
             afields = {}
-            for matches in self.sweep_spec.sink.coord_aliases[key].values():
+            for matches in self.sweep_spec.description.coord_aliases[key].values():
                 for m in matches:
                     afields.update(m)
             used = set(afields.keys())

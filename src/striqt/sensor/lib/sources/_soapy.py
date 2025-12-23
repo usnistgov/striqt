@@ -637,7 +637,7 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
         self._device.setClockSource(spec.clock_source)
         self._device.setMasterClockRate(spec.master_clock_rate)
 
-        if spec.time_sync_on == 'open':
+        if spec.time_sync_at == 'open':
             self._sync_time_source(self._device)
 
         self._rx_stream.open(self._device)
@@ -727,7 +727,7 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
         assert self._rx_stream is not None, 'soapy device is not open'
         assert self._device is not None, 'soapy device is not open'
 
-        if self.setup_spec.time_sync_on == 'acquire':
+        if self.setup_spec.time_sync_at == 'acquire':
             self._rx_stream.enable(self._device, False)
             self._sync_time_source(self._device)
 

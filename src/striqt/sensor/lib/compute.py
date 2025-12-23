@@ -166,8 +166,8 @@ def _coord_template(
 
 
 @util.lru_cache()
-def _get_alias_dtypes(output: specs.Sink) -> dict[str, typing.Any]:
-    aliases = output.coord_aliases
+def _get_alias_dtypes(desc: specs.Description) -> dict[str, typing.Any]:
+    aliases = desc.coord_aliases
 
     alias_dtypes = {}
     for field, entries in aliases.items():
@@ -223,9 +223,9 @@ def build_dataset_attrs(sweep: specs.Sweep):
 
 
 def build_capture_coords(
-    capture: specs.ResampledCapture, output: specs.Sink, info: specs.AcquisitionInfo
+    capture: specs.ResampledCapture, desc: specs.Description, info: specs.AcquisitionInfo
 ):
-    alias_dtypes = _get_alias_dtypes(output)
+    alias_dtypes = _get_alias_dtypes(desc)
 
     if isinstance(capture.port, tuple):
         port_count = len(capture.port)
@@ -239,7 +239,7 @@ def build_capture_coords(
 
     for c in helpers.split_capture_ports(capture):
         alias_hits = helpers.evaluate_aliases(
-            c, source_id=info.source_id, output=output
+            c, source_id=info.source_id, desc=desc
         )
 
         for field in coords.keys():
@@ -369,7 +369,7 @@ def from_delayed(dd: DelayedDataset):
         logger_level=logging.DEBUG,
     ):
         coords = build_capture_coords(
-            dd.capture, dd.config.sweep_spec.sink, dd.extra_coords
+            dd.capture, dd.config.sweep_spec.description, dd.extra_coords
         )
         analysis = analysis.assign_coords(coords)
 

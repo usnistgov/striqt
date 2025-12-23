@@ -114,7 +114,7 @@ class Source(_SlowHashSpecBase, frozen=True, kw_only=True):
 class SoapySource(Source, frozen=True, kw_only=True):
     calibration: typing.Optional[str] = None
     time_source: types.TimeSource = 'host'
-    time_sync_on: types.TimeSyncOn = 'acquire'
+    time_sync_at: types.TimeSyncOn = 'acquire'
     clock_source: types.ClockSource = 'internal'
     receive_retries: types.ReceiveRetries = 0
 
@@ -130,8 +130,8 @@ class SoapySource(Source, frozen=True, kw_only=True):
 
         if not self.gapless:
             pass
-        elif self.time_sync_on == 'acquire':
-            raise ValueError('time_sync_on must be "open" when gapless')
+        elif self.time_sync_at == 'acquire':
+            raise ValueError('time_sync_at must be "open" when gapless')
         elif self.receive_retries > 0:
             raise ValueError('receive_retries must be 0 when gapless is enabled')
         if self.signal_trigger is None:
@@ -158,7 +158,7 @@ class NoSource(Source, frozen=True, kw_only=True):
 class MATSource(Source, kw_only=True, frozen=True, dict=True):
     path: types.WaveformInputPath
     file_format: types.Format = 'auto'
-    file_metadata: types.FileMetadata = {}
+    file_metadata: types.FileMetadata = msgspec.field(default_factory=dict)
     loop: types.FileLoop = False
     transport_dtype: typing.ClassVar[types.TransportDType] = 'complex64'
 
@@ -170,14 +170,13 @@ class TDMSSource(Source, frozen=True, kw_only=True):
 class ZarrIQSource(Source, frozen=True, kw_only=True):
     path: types.WaveformInputPath
     center_frequency: types.CenterFrequency
-    select: types.ZarrSelect = {}
+    select: types.ZarrSelect = msgspec.field(default_factory=dict)
 
 
-class Description(SpecBase, frozen=True, kw_only=True):
+class Description(_SlowHashSpecBase, frozen=True, kw_only=True):
     summary: typing.Optional[str] = None
-    location: typing.Optional[tuple[float, float, float]] = None
-    signal_chain: typing.Optional[tuple[str, ...]] = tuple()
     version: str = 'unversioned'
+    coord_aliases: dict[str, types.AliasMatch] = msgspec.field(default_factory=dict)
 
 
 class LoopBase(SpecBase, tag=str.lower, tag_field='kind', frozen=True, kw_only=True):
@@ -241,12 +240,11 @@ class FrequencyBinRange(LoopBase, frozen=True, kw_only=True):
 LoopSpec = typing.Union[Repeat, List, Range, FrequencyBinRange]
 
 
-class Sink(_SlowHashSpecBase, frozen=True, kw_only=True):
+class Sink(SpecBase, frozen=True, kw_only=True):
     path: str = '{yaml_name}-{start_time}'
     log_path: typing.Optional[str] = None
     log_level: str = 'info'
     store: types.StoreFormat = 'directory'
-    coord_aliases: dict[str, types.AliasMatch] = {}
     max_threads: typing.Optional[int] = None
 
 
@@ -292,7 +290,7 @@ class Sweep(SpecBase, typing.Generic[_TS, _TP, _TC], frozen=True, kw_only=True):
     captures: tuple[_TC, ...] = tuple()
     loops: tuple[LoopSpec, ...] = ()
     analysis: BundledAnalysis = BundledAnalysis()  # type: ignore
-    description: Description | str = ''
+    description: Description = Description()
     extensions: Extension = Extension()
     sink: Sink = Sink()
     peripherals: _TP = typing.cast(_TP, Peripherals())
