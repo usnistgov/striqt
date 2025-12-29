@@ -87,7 +87,8 @@ def _run_click_plotter(
     """handle keyword arguments passed in from click, and call plot_func()"""
 
     from matplotlib import pyplot as plt
-    from striqt import analysis, figures
+    from striqt import analysis
+    import striqt.figures
     from striqt.analysis.lib.dataarrays import PORT_DIM
     from pathlib import Path
     import numpy as np
@@ -97,7 +98,7 @@ def _run_click_plotter(
     else:
         plt.ioff()
 
-    plt.style.use('figures.ieee_double_column')
+    plt.style.use('striqt.figures.ieee_double_column')
 
     # index on the following fields in order, matching the input options
     dataset = analysis.load(zarr_path).set_xindex(

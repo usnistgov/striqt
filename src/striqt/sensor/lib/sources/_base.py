@@ -222,11 +222,11 @@ class HasSetupType(typing.Protocol[_TS, _PS]):
     ): ...
 
     @classmethod
-    def from_spec(cls, spec: _TS, reuse_iq: bool = False) -> typing.Self: ...
+    def from_spec(cls, spec: _TS, captures: tuple[_TC, ...]=(), loops: tuple[specs.LoopSpec, ...] = (), *, reuse_iq: bool = False) -> typing.Self: ...
 
     def _connect(self, spec: _TS) -> None: ...
 
-    def _apply_setup(self, spec: _TS) -> None: ...
+    def _apply_setup(self, spec: _TS, *, captures: tuple[_TC, ...]|None = None, loops: tuple[specs.LoopSpec, ...]|None = None) -> None: ...
 
 
 class HasCaptureType(typing.Protocol[_TC, _PC]):
@@ -330,7 +330,8 @@ class SourceBase(
         open_event = self._is_open = Event()  # first, to serve other threads
 
         # back door from .from_spec
-        _spec = kwargs.pop('__setup', None)
+        _extra_specs = typing.cast(dict, kwargs.pop('__specs', {}))
+        _spec = _extra_specs.pop('source', None)
 
         if _spec is not None:
             _spec = typing.cast(_TS, _spec)
@@ -365,12 +366,12 @@ class SourceBase(
             # util.safe_import('cupyx')
             util.configure_cupy()
 
-        self._apply_setup(_spec)
+        self._apply_setup(_spec, **_extra_specs)
 
     @classmethod
-    def from_spec(cls, spec: _TS, reuse_iq: bool = False) -> typing.Self:
+    def from_spec(cls, spec: _TS, captures: tuple[_TC, ...]=(), loops: tuple[specs.LoopSpec, ...] = (), *, reuse_iq: bool = False) -> typing.Self:
         kwargs = spec.to_dict()
-        kwargs['__setup'] = spec
+        kwargs['__specs'] = {'source': spec, 'captures': captures, 'loops': loops}
         return cls(reuse_iq=reuse_iq, **kwargs)  # type: ignore
 
     @functools.cached_property
@@ -642,7 +643,7 @@ class VirtualSourceBase(SourceBase[_TS, _TC, _PS, _PC]):
         self._samples_elapsed = value
         self._sample_start_index = value
 
-    def _apply_setup(self, spec):
+    def _apply_setup(self, spec, *, captures = None, loops = None):
         self.reset_sample_counter()
 
     def _prepare_capture(self, capture):

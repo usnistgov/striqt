@@ -34,6 +34,15 @@ def _tuplize_port(obj: specs.types.Port) -> tuple[int, ...]:
         return (int(obj),)
 
 
+@util.lru_cache()
+def _tuplize_all_ports(captures: tuple[_TC, ...], loops: tuple[specs.LoopSpec, ...]|None = None
+) -> tuple[int, ...]:
+    looped = specs.helpers.loop_captures_from_fields(captures, loops or (), only_fields=('port',))
+
+    all_ports = set().union(*(_tuplize_port(c.port) for c in looped))
+    return tuple(sorted(all_ports))
+
+
 class Range(specs.SpecBase, frozen=True, cache_hash=True):
     """Represents a range with a minimum, maximum, and step."""
 
@@ -277,10 +286,14 @@ def read_retries(source: SoapySourceBase) -> typing.Generator[None]:
 class RxStream:
     """manage the state of the RX stream"""
 
+    ports: specs.types.Port
+
     def __init__(
         self,
         setup: specs.SoapySource,
         info: SoapySourceInfo,
+        *,
+        ports: tuple[int, ...] = (),
         on_overflow: _base.OnOverflowType = 'except',
     ):
         self.setup = setup
@@ -290,11 +303,11 @@ class RxStream:
         self.stream = None
         self._enabled: bool = False
         self._on_overflow: _base.OnOverflowType = on_overflow
-        self._ports: specs.types.Port = ()
+        self.ports = ports
 
     @util.stopwatch('stream initialization', 'source')
     def open(self, device: 'SoapySDR.Device', ports: specs.types.Port | None = None):
-        if self.stream is not None and self._ports is not None:
+        if self.stream is not None and self.ports is not None:
             return
 
         if ports is not None:
@@ -302,9 +315,11 @@ class RxStream:
         elif self.setup.stream_all_rx_ports:
             ports = tuple(range(self.info.num_rx_ports))
         else:
-            ports = self._ports
+            ports = self.ports
 
-        self._ports = ports
+        assert ports not in (None, ()), 'failed to resolve port list for stream'
+
+        self.ports = ports
 
         if self.setup.transport_dtype == 'int16':
             stype = SoapySDR.SOAPY_SDR_CS16
@@ -314,6 +329,8 @@ class RxStream:
             raise ValueError(
                 f'unsupported transport type {self.setup.transport_dtype!r}'
             )
+
+        print('open: ', stype, ports, self.info.num_rx_ports)
 
         with self._minimized_rx_gain(device):
             self.stream = device.setupStream(SoapySDR.SOAPY_SDR_RX, stype, ports)
@@ -355,7 +372,7 @@ class RxStream:
                 raise
 
         self.stream = None
-        self._ports = ()
+        self.ports = ()
 
     def enable(self, device: 'SoapySDR.Device', enable: bool):
         if enable == self._enabled:
@@ -393,11 +410,9 @@ class RxStream:
     ) -> tuple[int, int]:
         total_timeout = self.setup.rx_enable_delay + timeout_sec + 0.5
 
+        offset_bufs = [buf[offset * 2 :] for buf in buffers]
         rx_result = device.readStream(
-            self.stream,
-            [buf[offset * 2 :] for buf in buffers],
-            count,
-            timeoutUs=round(total_timeout * 1e6),
+            self.stream, offset_bufs, count, timeoutUs=round(total_timeout * 1e6),
         )
 
         if not self.checked_timestamp and device.hasHardwareTime():
@@ -453,15 +468,18 @@ class RxStream:
         return self._enabled
 
     def capture_changes_port(self, capture: specs.SoapyCapture) -> bool:
-        return _tuplize_port(capture.port) == self._ports
+        return _tuplize_port(capture.port) == self.ports
 
     def set_ports(self, device: 'SoapySDR.Device', ports: specs.types.Port):
         if self.setup.stream_all_rx_ports:
-            # in this case, the stream is controlled only on open
+            assert self.stream is not None, \
+                'expected open stream since stream_all_rx_ports=True'
+
+            # the stream is controlled on self.open(...)
             return
 
         elif getattr(self, 'stream', None) is not None:
-            if self._ports == ports:
+            if self.ports == ports:
                 # already set up
                 return
             else:
@@ -621,7 +639,7 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
             raise RuntimeError('SoapySDR instantiated an unexpected type')
 
     @util.stopwatch('setup radio', 'source', threshold=1)
-    def _apply_setup(self, spec: _TS):
+    def _apply_setup(self, spec, *, captures = None, loops = None):
         for p in range(self.info.num_rx_ports):
             self._device.setGainMode(SoapySDR.SOAPY_SDR_RX, p, False)
 
@@ -639,7 +657,12 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
             self._device.setTimeSource(spec.time_source)
             on_overflow = 'except'
 
-        self._rx_stream = RxStream(spec, self.info, on_overflow=on_overflow)
+        if captures is not None:
+            ports = _tuplize_all_ports(captures, loops)
+        else:
+            ports = ()
+
+        self._rx_stream = RxStream(spec, self.info, ports=ports, on_overflow=on_overflow)
 
         self._device.setClockSource(spec.clock_source)
         self._device.setMasterClockRate(spec.master_clock_rate)
@@ -647,7 +670,9 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
         if spec.time_sync_at == 'open':
             self._sync_time_source(self._device)
 
-        self._rx_stream.open(self._device)
+        print('ports: ', ports)
+        if len(ports) > 0:
+            self._rx_stream.open(self._device)
 
     def _prepare_capture(self, capture: _TC) -> _TC | None:
         if (

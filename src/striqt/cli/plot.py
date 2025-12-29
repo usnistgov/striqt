@@ -29,7 +29,7 @@ def run(dataset, output_path: str, interactive: bool):
     plotter = figures.CapturePlotter(
         interactive=interactive,
         output_dir=output_path,
-        subplot_by_channel=True,
+        subplot_by_port=True,
         col_wrap=2,
         title_fmt='Port {port}',
         suptitle_fmt=suptitle_fmt,

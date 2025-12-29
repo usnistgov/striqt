@@ -175,6 +175,8 @@ def _open_devices(
         'source': conn.open(
             binding.source.from_spec,
             spec.source,
+            captures=spec.captures,
+            loops=spec.loops,
             reuse_iq=spec.options.reuse_iq,
         ),
         'peripherals': conn.open(binding.peripherals, spec),

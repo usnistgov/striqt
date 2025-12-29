@@ -161,15 +161,15 @@ class CapturePlotter:
         style=None,
         interactive: bool = True,
         output_dir: str | Path = None,
-        subplot_by_channel: bool = True,
+        subplot_by_port: bool = True,
         col_wrap: int = 2,
-        title_fmt='Channel {port}',
+        title_fmt='Port {port}',
         suptitle_fmt='{center_frequency}',
         filename_fmt='{name} {center_frequency}.svg',
         ignore_missing=False,
     ):
         self.interactive: bool = interactive
-        if subplot_by_channel:
+        if subplot_by_port:
             self.facet_col = dataarrays.CAPTURE_DIM
         else:
             self.facet_col = None
@@ -288,7 +288,7 @@ class CapturePlotter:
         *,
         x: str,
         hue: str | None = None,
-        rasterized: bool = True,
+        rasterized: bool = False,
         sharey: bool = True,
         xticklabelunits: bool = True,
         meta: dict = {},
@@ -305,6 +305,10 @@ class CapturePlotter:
             kws.update(col=self.facet_col, sharey=sharey, col_wrap=col_wrap)
         else:
             seq = data
+
+        if 'spectral' in name:
+            print(name, kws)
+            print(data.sel(time_statistic='mean').max('baseband_frequency').values)
 
         for sub in seq:
             with self._plot_context(sub, **ctx_kws):
@@ -410,29 +414,6 @@ class CapturePlotter:
         key = self.channel_power_time_series.__name__
         return self._line(
             data[key].sel(sel), name=key, x='time_elapsed', hue=hue, meta=data.attrs
-        )
-
-    @_maybe_skip_missing
-    def power_spectral_density(self, data: xr.Dataset, hue='time_statistic', **sel):
-        key = self.power_spectral_density.__name__
-
-        if (
-            key not in data.data_vars
-            and 'persistence_spectrum' in data.data_vars
-            and 'persistence_statistics' in data
-            and hue == 'time_statistic'
-        ):
-            # legacy
-
-            hue = 'persistence_statistics'
-            key = 'persistence_spectrum'
-
-        return self._line(
-            data[key].sel(sel),
-            name=key,
-            x='baseband_frequency',
-            hue=hue,
-            meta=data.attrs,
         )
 
     @_maybe_skip_missing

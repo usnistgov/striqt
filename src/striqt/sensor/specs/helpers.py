@@ -57,14 +57,51 @@ def pairwise_by_port(
 
 
 @util.lru_cache()
-def loop_captures(sweep: specs.Sweep[typing.Any, typing.Any, _TC]) -> tuple[_TC, ...]:
+def loop_captures_from_fields(captures: tuple[_TC, ...], loops: tuple[specs.LoopSpec, ...], *, cls: type[_TC]|None = None, only_fields: tuple[str, ...]|None=None, loop_only_nyquist: bool=False) -> tuple[_TC, ...]:
     """evaluate the loop specification, and flatten into one list of loops"""
 
-    loop_fields = tuple([loop.field for loop in sweep.loops])
+    if only_fields is not None:
+        loops = tuple(l for l in loops if l.field in only_fields)
+
+    loop_fields = tuple([loop.field for loop in loops])
+
+    if len(captures) == 0:
+        return ()
+    if cls is None:
+        cls = type(captures[0])
+    _check_fields(cls, loop_fields, False)
+    assert issubclass(cls, specs.Capture)
+
+    loop_points = [loop.get_points() for loop in loops]
+    combinations = itertools.product(*loop_points)
+
+    result = []
+    for values in combinations:
+        updates = dict(zip(loop_fields, values))
+        if len(captures) > 0:
+            # iterate specified captures if avialable
+            new = (c.replace(**updates) for c in captures)
+        else:
+            # otherwise, instances are new captures
+            new = (cls.from_dict(updates) for _ in range(1))
+
+        if loop_only_nyquist:
+            new = (c for c in new if c.sample_rate >= c.analysis_bandwidth)
+
+        result += list(new)
+
+    if len(result) == 0:
+        # there were no loops
+        return captures
+    else:
+        return tuple(result)
+
+
+def loop_captures(sweep: specs.Sweep[typing.Any, typing.Any, _TC], *, only_fields: tuple[str, ...]|None=None) -> tuple[_TC, ...]:
+    """evaluate the loop specification, and flatten into one list of loops"""
 
     if len(sweep.captures) > 0:
-        cls = type(sweep.captures[0])
-        _check_fields(cls, loop_fields, False)
+        cls = None
     elif sweep.__bindings__ is None:
         raise TypeError(
             'loops may apply only to explicit capture lists unless the sweep '
@@ -75,32 +112,8 @@ def loop_captures(sweep: specs.Sweep[typing.Any, typing.Any, _TC]) -> tuple[_TC,
 
         assert isinstance(sweep.__bindings__, bindings.SensorBinding)
         cls = sweep.__bindings__.schema.capture
-        _check_fields(cls, loop_fields, True)
 
-    assert issubclass(cls, specs.Capture)
-
-    loop_points = [loop.get_points() for loop in sweep.loops]
-    combinations = itertools.product(*loop_points)
-
-    result = []
-    for values in combinations:
-        updates = dict(zip(loop_fields, values))
-        if len(sweep.captures) > 0:
-            # iterate specified captures if avialable
-            new = (c.replace(**updates) for c in sweep.captures)
-        else:
-            # otherwise, instances are new captures
-            new = (cls.from_dict(updates) for _ in range(1))
-
-        if sweep.options.loop_only_nyquist:
-            new = (c for c in new if c.sample_rate >= c.analysis_bandwidth)
-
-        result += list(new)
-
-    if len(result) == 0:
-        return sweep.captures
-    else:
-        return tuple(result)
+    return loop_captures_from_fields(sweep.captures, sweep.loops, cls=cls, loop_only_nyquist=sweep.options.loop_only_nyquist, only_fields=only_fields)
 
 
 def varied_capture_fields(
