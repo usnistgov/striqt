@@ -222,7 +222,7 @@ class HasSetupType(typing.Protocol[_TS, _PS]):
     ): ...
 
     @classmethod
-    def from_spec(cls, spec: _TS, captures: tuple[_TC, ...]=(), loops: tuple[specs.LoopSpec, ...] = (), *, reuse_iq: bool = False) -> typing.Self: ...
+    def from_spec(cls, spec: _TS, *, captures: tuple[_TC, ...]=(), loops: tuple[specs.LoopSpec, ...] = (), reuse_iq: bool = False) -> typing.Self: ...
 
     def _connect(self, spec: _TS) -> None: ...
 
@@ -369,7 +369,7 @@ class SourceBase(
         self._apply_setup(_spec, **_extra_specs)
 
     @classmethod
-    def from_spec(cls, spec: _TS, captures: tuple[_TC, ...]=(), loops: tuple[specs.LoopSpec, ...] = (), *, reuse_iq: bool = False) -> typing.Self:
+    def from_spec(cls, spec: _TS, *, captures=(), loops = (), reuse_iq: bool = False) -> typing.Self:
         kwargs = spec.to_dict()
         kwargs['__specs'] = {'source': spec, 'captures': captures, 'loops': loops}
         return cls(reuse_iq=reuse_iq, **kwargs)  # type: ignore
