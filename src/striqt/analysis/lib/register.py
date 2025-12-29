@@ -228,7 +228,9 @@ class SyncInfo(typing.NamedTuple):
     meas_spec_type: type[specs.Analysis]
 
 
-class AlignmentSourceRegistry(collections.UserDict[typing.Union[str, typing.Callable], SyncInfo]):
+class AlignmentSourceRegistry(
+    collections.UserDict[typing.Union[str, typing.Callable], SyncInfo]
+):
     def __call__(
         self,
         meas_spec_type: type[specs.Analysis],
@@ -318,9 +320,7 @@ def _make_measurement_docstring(spec_cls):
     return f'{specs.Analysis.__doc__.rstrip()}\n{args}'
 
 
-class AnalysisRegistry(
-    collections.UserDict[type[specs.Analysis], AnalysisInfo]
-):
+class AnalysisRegistry(collections.UserDict[type[specs.Analysis], AnalysisInfo]):
     """a registry of keyword-only arguments for decorated functions"""
 
     caches: dict[CallableAnalysis, list[KeywordArgumentCache]]
@@ -362,9 +362,7 @@ class AnalysisRegistry(
         prefer_unaligned_input=False,
         store_compressed=True,
         attrs={},
-    ) -> typing.Callable[
-        [CallableAnalysis[_P, _RM]], CallableAnalysisWrapper[_P, _RM]
-    ]:
+    ) -> typing.Callable[[CallableAnalysis[_P, _RM]], CallableAnalysisWrapper[_P, _RM]]:
         """add decorated `func` and its keyword arguments in the self.tostruct() schema"""
 
         if isinstance(dims, str):
@@ -592,9 +590,7 @@ def get_trigger(
     return Trigger.from_spec(name, analysis, registry)
 
 
-def get_signal_trigger_measurement_name(
-    name: str, registry: AnalysisRegistry
-) -> str:
+def get_signal_trigger_measurement_name(name: str, registry: AnalysisRegistry) -> str:
     info: SyncInfo = registry.signal_trigger[name]
     meas_info = registry[info.meas_spec_type]
     return meas_info.name

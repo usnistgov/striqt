@@ -12,7 +12,7 @@ from ..lib.register import registry
 if typing.TYPE_CHECKING:
     from types import ModuleType
     from typing_extensions import ParamSpec
-    
+
     from ..specs.structs import _Cellular5GNRSSBSync, _Cellular5GNRSSBCorrelator
 
     import array_api_compat
@@ -100,9 +100,7 @@ def cellular_ssb_start_time(capture: specs.Capture, spec: _Cellular5GNRSSBSync):
     dtype='float32', attrs={'standard_name': 'Symbol lag', 'units': 's'}
 )
 @util.lru_cache()
-def cellular_ssb_lag(
-    capture: specs.Capture, spec: _Cellular5GNRSSBCorrelator
-):
+def cellular_ssb_lag(capture: specs.Capture, spec: _Cellular5GNRSSBCorrelator):
     params = iqwaveform.ofdm.sss_params(
         sample_rate=spec.sample_rate,
         subcarrier_spacing=spec.subcarrier_spacing,

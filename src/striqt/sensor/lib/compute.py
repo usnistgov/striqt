@@ -223,7 +223,9 @@ def build_dataset_attrs(sweep: specs.Sweep):
 
 
 def build_capture_coords(
-    capture: specs.ResampledCapture, desc: specs.Description, info: specs.AcquisitionInfo
+    capture: specs.ResampledCapture,
+    desc: specs.Description,
+    info: specs.AcquisitionInfo,
 ):
     alias_dtypes = _get_alias_dtypes(desc)
 
@@ -238,9 +240,7 @@ def build_capture_coords(
     updates = {}
 
     for c in helpers.split_capture_ports(capture):
-        alias_hits = helpers.evaluate_aliases(
-            c, source_id=info.source_id, desc=desc
-        )
+        alias_hits = helpers.evaluate_aliases(c, source_id=info.source_id, desc=desc)
 
         for field in coords.keys():
             if field == RADIO_ID_NAME:

@@ -161,9 +161,7 @@ def read_tdms_iq(
 ) -> tuple['np.ndarray', specs.FileCapture]:
     from .sources._file import TDMSSource
 
-    source_spec = specs.TDMSSource(
-        master_clock_rate=master_clock_rate, path=str(path)
-    )
+    source_spec = specs.TDMSSource(master_clock_rate=master_clock_rate, path=str(path))
     source = TDMSSource.from_spec(source_spec)
 
     capture = source.capture_spec

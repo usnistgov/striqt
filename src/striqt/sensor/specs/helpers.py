@@ -57,7 +57,14 @@ def pairwise_by_port(
 
 
 @util.lru_cache()
-def loop_captures_from_fields(captures: tuple[_TC, ...], loops: tuple[specs.LoopSpec, ...], *, cls: type[_TC]|None = None, only_fields: tuple[str, ...]|None=None, loop_only_nyquist: bool=False) -> tuple[_TC, ...]:
+def loop_captures_from_fields(
+    captures: tuple[_TC, ...],
+    loops: tuple[specs.LoopSpec, ...],
+    *,
+    cls: type[_TC] | None = None,
+    only_fields: tuple[str, ...] | None = None,
+    loop_only_nyquist: bool = False,
+) -> tuple[_TC, ...]:
     """evaluate the loop specification, and flatten into one list of loops"""
 
     if only_fields is not None:
@@ -97,7 +104,11 @@ def loop_captures_from_fields(captures: tuple[_TC, ...], loops: tuple[specs.Loop
         return tuple(result)
 
 
-def loop_captures(sweep: specs.Sweep[typing.Any, typing.Any, _TC], *, only_fields: tuple[str, ...]|None=None) -> tuple[_TC, ...]:
+def loop_captures(
+    sweep: specs.Sweep[typing.Any, typing.Any, _TC],
+    *,
+    only_fields: tuple[str, ...] | None = None,
+) -> tuple[_TC, ...]:
     """evaluate the loop specification, and flatten into one list of loops"""
 
     if len(sweep.captures) > 0:
@@ -113,7 +124,13 @@ def loop_captures(sweep: specs.Sweep[typing.Any, typing.Any, _TC], *, only_field
         assert isinstance(sweep.__bindings__, bindings.SensorBinding)
         cls = sweep.__bindings__.schema.capture
 
-    return loop_captures_from_fields(sweep.captures, sweep.loops, cls=cls, loop_only_nyquist=sweep.options.loop_only_nyquist, only_fields=only_fields)
+    return loop_captures_from_fields(
+        sweep.captures,
+        sweep.loops,
+        cls=cls,
+        loop_only_nyquist=sweep.options.loop_only_nyquist,
+        only_fields=only_fields,
+    )
 
 
 def varied_capture_fields(

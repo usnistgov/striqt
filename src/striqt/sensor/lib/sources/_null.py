@@ -39,7 +39,7 @@ class NoSource(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
     def _sync_time_source(self):
         self._sync_time_ns = time.time_ns()
 
-    def _apply_setup(self, spec, *, captures = None, loops = None):
+    def _apply_setup(self, spec, *, captures=None, loops=None):
         self.reset_sample_counter()
 
     def _prepare_capture(self, capture) -> _TC | None:
@@ -60,6 +60,5 @@ class NoSource(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
         if capture is None:
             capture = self.capture_spec
 
-        return _base.design_capture_resampler(
-            self.setup_spec.master_clock_rate, capture
-        )
+        mcr = self.setup_spec.master_clock_rate
+        return _base.design_capture_resampler(mcr, capture)

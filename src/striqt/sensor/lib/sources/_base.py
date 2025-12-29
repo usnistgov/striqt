@@ -222,11 +222,24 @@ class HasSetupType(typing.Protocol[_TS, _PS]):
     ): ...
 
     @classmethod
-    def from_spec(cls, spec: _TS, *, captures: tuple[_TC, ...]=(), loops: tuple[specs.LoopSpec, ...] = (), reuse_iq: bool = False) -> typing.Self: ...
+    def from_spec(
+        cls,
+        spec: _TS,
+        *,
+        captures: tuple[_TC, ...] = (),
+        loops: tuple[specs.LoopSpec, ...] = (),
+        reuse_iq: bool = False,
+    ) -> typing.Self: ...
 
     def _connect(self, spec: _TS) -> None: ...
 
-    def _apply_setup(self, spec: _TS, *, captures: tuple[_TC, ...]|None = None, loops: tuple[specs.LoopSpec, ...]|None = None) -> None: ...
+    def _apply_setup(
+        self,
+        spec: _TS,
+        *,
+        captures: tuple[_TC, ...] | None = None,
+        loops: tuple[specs.LoopSpec, ...] | None = None,
+    ) -> None: ...
 
 
 class HasCaptureType(typing.Protocol[_TC, _PC]):
@@ -369,7 +382,9 @@ class SourceBase(
         self._apply_setup(_spec, **_extra_specs)
 
     @classmethod
-    def from_spec(cls, spec: _TS, *, captures=(), loops = (), reuse_iq: bool = False) -> typing.Self:
+    def from_spec(
+        cls, spec: _TS, *, captures=(), loops=(), reuse_iq: bool = False
+    ) -> typing.Self:
         kwargs = spec.to_dict()
         kwargs['__specs'] = {'source': spec, 'captures': captures, 'loops': loops}
         return cls(reuse_iq=reuse_iq, **kwargs)  # type: ignore
@@ -447,7 +462,9 @@ class SourceBase(
 
         self._capture = self._prepare_capture(spec) or spec
 
-    def read_iq(self, analysis: AnalysisGroup | None = None) -> 'tuple[ArrayType, int|None]':
+    def read_iq(
+        self, analysis: AnalysisGroup | None = None
+    ) -> 'tuple[ArrayType, int|None]':
         """read IQ for the armed capture"""
         assert self._capture is not None, 'soapy source must be armed to read IQ'
 
@@ -643,7 +660,7 @@ class VirtualSourceBase(SourceBase[_TS, _TC, _PS, _PC]):
         self._samples_elapsed = value
         self._sample_start_index = value
 
-    def _apply_setup(self, spec, *, captures = None, loops = None):
+    def _apply_setup(self, spec, *, captures=None, loops=None):
         self.reset_sample_counter()
 
     def _prepare_capture(self, capture):

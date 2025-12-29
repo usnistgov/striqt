@@ -11,7 +11,7 @@ from .. import util
 from . import _base
 
 if typing.TYPE_CHECKING:
-    import SoapySDR # type: ignore
+    import SoapySDR  # type: ignore
     import pandas as pd
     from typing_extensions import Self
 else:
@@ -35,9 +35,12 @@ def _tuplize_port(obj: specs.types.Port) -> tuple[int, ...]:
 
 
 @util.lru_cache()
-def _tuplize_all_ports(captures: tuple[_TC, ...], loops: tuple[specs.LoopSpec, ...]|None = None
+def _tuplize_all_ports(
+    captures: tuple[_TC, ...], loops: tuple[specs.LoopSpec, ...] | None = None
 ) -> tuple[int, ...]:
-    looped = specs.helpers.loop_captures_from_fields(captures, loops or (), only_fields=('port',))
+    looped = specs.helpers.loop_captures_from_fields(
+        captures, loops or (), only_fields=('port',)
+    )
 
     all_ports = set().union(*(_tuplize_port(c.port) for c in looped))
     return tuple(sorted(all_ports))
@@ -410,7 +413,10 @@ class RxStream:
 
         offset_bufs = [buf[offset * 2 :] for buf in buffers]
         rx_result = device.readStream(
-            self.stream, offset_bufs, count, timeoutUs=round(total_timeout * 1e6),
+            self.stream,
+            offset_bufs,
+            count,
+            timeoutUs=round(total_timeout * 1e6),
         )
 
         if not self.checked_timestamp and device.hasHardwareTime():
@@ -470,8 +476,9 @@ class RxStream:
 
     def set_ports(self, device: 'SoapySDR.Device', ports: specs.types.Port):
         if self.setup.stream_all_rx_ports:
-            assert self.stream is not None, \
+            assert self.stream is not None, (
                 'expected open stream since stream_all_rx_ports=True'
+            )
 
             # the stream is controlled on self.open(...)
             return
@@ -637,7 +644,7 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
             raise RuntimeError('SoapySDR instantiated an unexpected type')
 
     @util.stopwatch('setup radio', 'source', threshold=1)
-    def _apply_setup(self, spec, *, captures = None, loops = None):
+    def _apply_setup(self, spec, *, captures=None, loops=None):
         for p in range(self.info.num_rx_ports):
             self._device.setGainMode(SoapySDR.SOAPY_SDR_RX, p, False)
 
@@ -660,7 +667,9 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
         else:
             ports = ()
 
-        self._rx_stream = RxStream(spec, self.info, ports=ports, on_overflow=on_overflow)
+        self._rx_stream = RxStream(
+            spec, self.info, ports=ports, on_overflow=on_overflow
+        )
 
         self._device.setClockSource(spec.clock_source)
         self._device.setMasterClockRate(spec.master_clock_rate)

@@ -192,8 +192,6 @@ class FrequencyAnalysisSpecBase(
     lo_bandstop: typing.Optional[float] = None
 
 
-
-
 class Cellular5GNRSSBSpectrogram(Analysis, kw_only=True, frozen=True):
     """
     subcarrier_spacing (float): 3GPP channel subcarrier spacing (Hz)

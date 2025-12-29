@@ -80,7 +80,7 @@ def weight_correlation_locally(R, window_fill=0.5, snr_window_fill=0.08):
     R = R.mean(axis=-3)
 
     if util.is_cupy_array(R):
-        from cupyx.scipy import ndimage # type: ignore
+        from cupyx.scipy import ndimage  # type: ignore
     else:
         from scipy import ndimage
 
@@ -117,7 +117,7 @@ def weight_correlation_locally(R, window_fill=0.5, snr_window_fill=0.08):
     weights = xp.roll(weights, weight_shift)
 
     if util.is_cupy_array(Ragg):
-        from cupyx.scipy import ndimage # type: ignore
+        from cupyx.scipy import ndimage  # type: ignore
     else:
         from scipy import ndimage
 
