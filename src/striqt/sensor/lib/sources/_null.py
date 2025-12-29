@@ -5,14 +5,8 @@ import time
 import typing
 
 from ... import specs
-from .. import util
 from . import _base
 
-if typing.TYPE_CHECKING:
-    import numpy as np
-    from striqt.waveform._typing import ArrayType
-else:
-    np = util.lazy_import('numpy')
 
 _TS = typing.TypeVar('_TS', bound=specs.NoSource)
 _TC = typing.TypeVar('_TC', bound=specs.ResampledCapture)
