@@ -11,7 +11,7 @@ from .. import util
 from . import _base
 
 if typing.TYPE_CHECKING:
-    import SoapySDR
+    import SoapySDR # type: ignore
     import pandas as pd
     from typing_extensions import Self
 else:
@@ -329,8 +329,6 @@ class RxStream:
             raise ValueError(
                 f'unsupported transport type {self.setup.transport_dtype!r}'
             )
-
-        print('open: ', stype, ports, self.info.num_rx_ports)
 
         with self._minimized_rx_gain(device):
             self.stream = device.setupStream(SoapySDR.SOAPY_SDR_RX, stype, ports)
@@ -670,7 +668,6 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
         if spec.time_sync_at == 'open':
             self._sync_time_source(self._device)
 
-        print('ports: ', ports)
         if len(ports) > 0:
             self._rx_stream.open(self._device)
 
