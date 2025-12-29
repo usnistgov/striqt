@@ -231,7 +231,7 @@ class ZarrIQSource(
 
         start = offset - self._sample_start_index
 
-        iq = self._waveform.values[[port], start : count + start]
+        iq = self._waveform.data[[port], start : count + start]
 
         if dtype is None or self._waveform.dtype == dtype:
             return iq.copy()

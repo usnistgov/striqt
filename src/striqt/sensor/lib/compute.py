@@ -77,9 +77,9 @@ def concat_time_dim(datasets: list['xr.Dataset'], time_dim: str) -> 'xr.Dataset'
             axis = var.dims[1:].index(time_dim)
 
         values = np.concatenate(
-            [sub[data_name].isel(capture=0).values for sub in datasets], axis=axis
+            [sub[data_name].isel(capture=0).data for sub in datasets], axis=axis
         )
-        var.values[:] = values
+        var.data[:] = values
 
     for coord_name, coord in ds.coords.items():
         if time_dim not in coord.dims:
@@ -257,7 +257,7 @@ def build_capture_coords(
             updates.setdefault(field, []).append(value)
 
     for field, values in updates.items():
-        coords[field].values[:] = np.array(values)
+        coords[field].data[:] = np.array(values)
 
     return coords
 

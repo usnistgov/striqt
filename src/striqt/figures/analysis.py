@@ -308,7 +308,7 @@ class CapturePlotter:
 
         if 'spectral' in name:
             print(name, kws)
-            print(data.sel(time_statistic='mean').max('baseband_frequency').values)
+            print(data.sel(time_statistic='mean').max('baseband_frequency').data)
 
         for sub in seq:
             with self._plot_context(sub, **ctx_kws):
@@ -583,7 +583,7 @@ def plot_cyclic_channel_power(
     if dataarrays.CAPTURE_DIM in cyclic_channel_power.dims:
         cyclic_channel_power = cyclic_channel_power.squeeze(dataarrays.CAPTURE_DIM)
 
-    for i, detector in enumerate(cyclic_channel_power.power_detector.values):
+    for i, detector in enumerate(cyclic_channel_power.power_detector.data):
         a = cyclic_channel_power.sel(power_detector=detector)
 
         if not dB:
@@ -596,7 +596,7 @@ def plot_cyclic_channel_power(
             **plot_kws,
         )
 
-    for i, detector in enumerate(cyclic_channel_power.power_detector.values):
+    for i, detector in enumerate(cyclic_channel_power.power_detector.data):
         a = cyclic_channel_power.sel(power_detector=detector)
 
         if not dB:
@@ -685,7 +685,7 @@ def label_axis(
 
         for target in target_axs:
             target.set_major_formatter(formatter)
-        ax_finite_data = ax_data.values[np.isfinite(ax_data.values)]
+        ax_finite_data = ax_data.data[np.isfinite(ax_data.data)]
 
         if len(ax_finite_data) > 0:
             unit_suffix = formatter.get_axis_unit_suffix(
@@ -728,7 +728,7 @@ def label_legend(
         obj = data[coord_name]
     standard_name = obj.attrs.get('standard_name', None)
     units = obj.attrs.get('units', None)
-    values = obj.values
+    data = obj.data
 
     if standard_name is not None:
         if units is not None and not tick_units:
@@ -736,9 +736,9 @@ def label_legend(
     if units is not None:
         # TODO: implement tick_units
         formatter = mpl.ticker.EngFormatter(unit=units)
-        values = [formatter(v) for v in values]
+        data = [formatter(v) for v in data]
 
-    ax.legend(values, title=standard_name)
+    ax.legend(data, title=standard_name)
 
 
 def label_selection(
@@ -752,13 +752,13 @@ def label_selection(
     for name, coord in sel.coords.items():
         if name == dataarrays.CAPTURE_DIM:
             continue
-        elif name in sel.indexes or coord.values.size == 0:
+        elif name in sel.indexes or coord.data.size == 0:
             continue
 
         units = coord.attrs.get('units', None)
 
         label = coord.attrs.get('standard_name', coord.attrs.get('name', name))
-        values = np.atleast_1d(coord.values)
+        values = np.atleast_1d(coord.data)
         if units is not None:
             formatter = FixedEngFormatter(unit=units)
             coord_names[label] = ', '.join([formatter(v) for v in values])

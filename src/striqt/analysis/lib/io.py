@@ -60,7 +60,9 @@ def _xarray_version() -> tuple[int, ...]:
     return tuple(int(n) for n in xr.__version__.split('.'))
 
 
-def _get_store_info(store, zarr_format='auto') -> tuple[bool, dict]:
+def _get_store_info(
+    store, zarr_format: str | typing.Literal[2, 3] = 'auto'
+) -> tuple[bool, dict]:
     path = store.path if hasattr(store, 'path') else store.root
 
     if isinstance(zarr_format, str):
@@ -87,7 +89,7 @@ def _get_store_info(store, zarr_format='auto') -> tuple[bool, dict]:
 
 
 def _choose_chunk_sizes(
-    ds: 'xr.Dataset|xr.DataArray', data_bytes=100_000_000, dim='capture'
+    ds: 'xr.Dataset|xr.DataArray', data_bytes=100_000_000, dim: str = 'capture'
 ) -> dict[str, int]:
     """pick chunk and chunk sizing for each data variable in data"""
     chunks = {dim: ds.sizes[dim]}
@@ -95,15 +97,13 @@ def _choose_chunk_sizes(
     if data_bytes is None:
         return chunks
 
-    for name, reduce_dim in ds.data_vars.items():
-        da = ds[name]
-
+    for da in ds.data_vars.values():
         if da.nbytes < data_bytes:
             continue
         else:
             reduction = math.ceil(da.nbytes / data_bytes)
 
-        reduce_dim = da.dims[-1]
+        reduce_dim = str(da.dims[-1])
         if reduce_dim == dim:
             continue
 
@@ -118,11 +118,13 @@ def _choose_chunk_sizes(
 def _build_encodings_zarr_v3(
     data, registry: register.AnalysisRegistry, compression=True
 ):
-    if isinstance(compression, zarr.core.codec_pipeline.Codec):
+    if isinstance(compression, zarr.core.codec_pipeline.Codec):  # type: ignore
         compressors = [compression]
     elif compression:
-        shuffle = zarr.codecs.BloscShuffle.shuffle
-        compressors = [zarr.codecs.BloscCodec(cname='zstd', clevel=1, shuffle=shuffle)]
+        from zarr import codecs  # type: ignore
+
+        shuffle = codecs.BloscShuffle.shuffle
+        compressors = [codecs.BloscCodec(cname='zstd', clevel=1, shuffle=shuffle)]
     else:
         compressors = None
 
@@ -164,9 +166,7 @@ def _build_encodings_zarr_v2(
     return encodings
 
 
-def open_store(
-    path: str | Path, *, mode: str
-) -> 'zarr.storage.Store|zarr.abc.store.Store':
+def open_store(path: str | Path, *, mode: str) -> StoreType:
     import zarr.storage
 
     if _zarr_version() < (3, 0, 0):
@@ -217,10 +217,10 @@ def dump(
         if data[name].size == 0:
             continue
 
-        if isinstance(data[name].values[0], pd.Timestamp):
+        if isinstance(data[name].data[0], pd.Timestamp):
             # ensure nanosecond resolution
             target_dtype = 'datetime64[ns]'
-        elif _xarray_version() < (2025, 7, 1) and isinstance(data[name].values[0], str):
+        elif _xarray_version() < (2025, 7, 1) and isinstance(data[name].data[0], str):
             # avoid potential truncation bug due to fixed-length strings
             target_dtype = string_dtype
         else:
@@ -308,7 +308,7 @@ class _YAMLIncludeConstructor(yaml.Loader):
 
     def __enter__(self):
         self._lock.acquire()
-        yaml.add_constructor('!include', self, Loader=yaml.CSafeLoader)
+        yaml.add_constructor('!include', self, Loader=yaml.CSafeLoader)  # type: ignore
 
     def __exit__(self, *args):
         self._lock.release()
@@ -365,7 +365,9 @@ class _YAMLIncludeConstructor(yaml.Loader):
         return result
 
 
-def decode_from_yaml_file(path: str | Path, *, type=typing.Any):
+def decode_from_yaml_file(
+    path: str | Path, *, type: type[specs.SpecBase] | type[dict] = dict
+):
     """Deserialize an object from YAML.
 
     Parameters
@@ -391,7 +393,7 @@ def decode_from_yaml_file(path: str | Path, *, type=typing.Any):
     with open(path) as f, _YAMLIncludeConstructor(path):
         obj = yaml.load(f, yaml.CSafeLoader)
 
-    if type is typing.Any:
+    if issubclass(type, dict):
         return obj
     elif issubclass(type, specs.SpecBase):
         return type.from_dict(obj)
@@ -712,7 +714,7 @@ class TDMSFileStream(_FileStreamBase):
         xp=np,
         **meta,
     ):
-        from nptdms import TdmsFile  # noqa
+        from nptdms import TdmsFile  # type: ignore
 
         self._fd = TdmsFile.read(path)
         self._header_fd, self._iq_fd = self._fd.groups()
@@ -760,7 +762,10 @@ class TDMSFileStream(_FileStreamBase):
         duration = self._header_fd['header_fd']['total_samples'][0] * fs
 
         return dict(
-            self.meta, backend_sample_rate=fs, center_frequency=fc, duration=duration
+            self._capture_dict,
+            backend_sample_rate=fs,
+            center_frequency=fc,
+            duration=duration,
         )
 
 

@@ -18,7 +18,7 @@ def run(dataset, output_path: str, interactive: bool):
     import numpy as np
 
     if 'center_frequency' in dataset.coords and np.isfinite(
-        dataset.center_frequency.values[0]
+        dataset.center_frequency.data[0]
     ):
         suptitle_fmt = '{center_frequency}'
         filename_fmt = '{name} {center_frequency}.svg'

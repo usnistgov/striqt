@@ -275,9 +275,9 @@ def build_dataarray(
 
     try:
         if da.values.ndim == 0:
-            da.values = data
+            da.data = data
         else:
-            da.values[:] = data
+            da.data[:] = data
     except ValueError as ex:
         raise ValueError(
             f'{delayed.info.name} measurement data has unexpected shape {data.shape}'
@@ -292,7 +292,7 @@ def build_dataarray(
         arr, metadata = register.normalize_factory_return(ret, qualname)
 
         try:
-            coord.indexes[factory_info.dims[0]].values[:] = arr
+            coord.indexes[factory_info.dims[0]].data[:] = arr
         except ValueError as ex:
             exc = ex
         else:
