@@ -32,7 +32,7 @@ dependencies:
 - xarray>=2024.3
 - dask
 
-  # for documentation and plotting
+# for documentation and plotting
 - mscorefonts
 - matplotlib-base>=3.7
 

@@ -173,6 +173,7 @@ def _cupy_fftn_helper(
     plan=None,
 ):
     assert cp is not None, ImportError('cupy is not installed')
+    from cupy.fft import _fft
 
     kws = dict(overwrite_x=overwrite_x, plan=plan, order='C')
     args = (None,), (axis,), None, direction
@@ -180,18 +181,18 @@ def _cupy_fftn_helper(
     # TODO: see about upstream question on this
     if out is None:
         args = (None,), (axis,), None, direction
-        return cp.fft._fft._fftn(x, out=out, *args, **kws)
+        return _fft._fftn(x, out=out, *args, **kws)
     else:
         out = out.reshape(x.shape)
 
     if MAX_CUPY_FFT_SAMPLES is None:
-        return cp.fft._fft._fftn(x, out=out, *args, **kws)
+        return _fft._fftn(x, out=out, *args, **kws)
 
     x_views = grouped_views_along_axis(x, MAX_CUPY_FFT_SAMPLES, axis=axis)
     out_views = grouped_views_along_axis(out, MAX_CUPY_FFT_SAMPLES, axis=axis)
 
     for x_view, out_view in zip(x_views, out_views):
-        out_view[:] = cp.fft._fft._fftn(x_view, out=out_view, *args, **kws)
+        out_view[:] = _fft._fftn(x_view, out=out_view, *args, **kws)
 
     return out
 

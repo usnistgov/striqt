@@ -661,8 +661,9 @@ def sync_if_cupy(x: ArrayType):
 @functools.cache
 def configure_cupy():
     if cp is not None:
+        import cupy.fft as fft
         # the FFT plan sets up large caches that don't help us
-        cp.fft.config.get_plan_cache().set_size(0)  # type: ignore
+        fft.config.get_plan_cache().set_size(0)  # type: ignore
         cp.cuda.set_pinned_memory_allocator(None)  # type: ignore
 
 
