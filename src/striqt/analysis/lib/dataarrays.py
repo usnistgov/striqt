@@ -292,7 +292,7 @@ def build_dataarray(
         arr, metadata = register.normalize_factory_return(ret, qualname)
 
         try:
-            coord.indexes[factory_info.dims[0]].data[:] = arr
+            coord.indexes[factory_info.dims[0]].values[:] = arr
         except ValueError as ex:
             exc = ex
         else:

@@ -269,7 +269,7 @@ def _generate_5g_nr_sync_sequence(
     x = fourier.ifft(seq_freq, axis=1, out=seq_freq)
 
     # prepend the shortest cyclic prefix
-    phy = _Phy3GPP(
+    phy = get_3gpp_phy(
         1,
         subcarrier_spacing=subcarrier_spacing,
         sample_rate=sample_rate,
@@ -425,7 +425,7 @@ def pss_params(
     else:
         raise ValueError('discovery_periodicity must be a multiple of 10e-3')
 
-    phy = _Phy3GPP(
+    phy = get_3gpp_phy(
         1,
         subcarrier_spacing=subcarrier_spacing,
         sample_rate=sample_rate,
@@ -709,7 +709,7 @@ class _Phy3GPP(_PhyOFDM):
         slots: tuple[int, ...]|typing.Literal['all']='all',
     ):
         """build an indexing tensor for performing cyclic prefix correlation across various axes"""
-        return _get_3gpp_index_cyclic_prefix(**locals())
+        return _get_3gpp_index_cyclic_prefix(self, frames=frames, symbols=symbols, slots=slots)
 
 
 @lru_cache(4)

@@ -126,15 +126,10 @@ def _arraylike_with_buffer(
         xp = array_namespace(x)
         values = x
     except TypeError:
-        if hasattr(x, 'array'):
-            x = typing.cast('pd.DataFrame | pd.Series', x)
-            xp = array_namespace(x.array)
-            values = x.array
-        # xarray.DataArray
-        elif hasattr(x, 'data'):
-            x = typing.cast('xr.DataArray', x)
-            xp = array_namespace(x.data)
-            values = x.data
+        if hasattr(x, 'values'):
+            x = typing.cast('pd.DataFrame | pd.Series | xr.DataArray', x)
+            xp = array_namespace(x.values)
+            values = x.values
         elif isinstance(x, Number):
             xp = np
             values = x
@@ -148,12 +143,9 @@ def _arraylike_with_buffer(
     elif isinstance(x, Number):
         # for a scalar, skip buffer allocation entirely
         out = None
-    elif hasattr(out, 'array'):
-        out = typing.cast('pd.DataFrame | pd.Series', out)
-        out = out.array
-    elif hasattr(out, 'data'):
-        out = typing.cast('xr.DataArray', out)
-        out = out.data
+    elif hasattr(out, 'values'):
+        out = typing.cast('pd.DataFrame | pd.Series | xr.DataArray', out)
+        out = out.values
 
     return values, out, xp
 

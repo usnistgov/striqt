@@ -12,26 +12,29 @@ dependencies:
 - pip
 - jupyter
 - ruff
-- toml
 
 # low-level analysis
 - pandas
 - scipy>=1.13
 - numpy>=1.21
-- matplotlib-base>=3.7
 - numexpr>=2.8
 - array-api-compat
 - numba
 
+# data formats
+- yaml
+- pyyaml
+- msgspec~=0.18
+- zarr>=2.18,<4
+- netCDF4
+
 # higher-level data analysis
 - xarray>=2024.3
-- zarr>=2.18,<4
 - dask
-- msgspec~=0.18
-- netCDF4
 
   # for documentation and plotting
 - mscorefonts
+- matplotlib-base>=3.7
 
 - pip:
   - striqt @ git+https://github.com/usnistgov/striqt@channel-enable-fix

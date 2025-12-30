@@ -308,7 +308,7 @@ class _YAMLIncludeConstructor(yaml.Loader):
 
     def __enter__(self):
         self._lock.acquire()
-        yaml.add_constructor('!include', self, Loader=yaml.CSafeLoader)  # type: ignore
+        yaml.add_constructor('!include', self, Loader=yaml.SafeLoader)  # type: ignore
 
     def __exit__(self, *args):
         self._lock.release()
@@ -391,7 +391,7 @@ def decode_from_yaml_file(
     """
 
     with open(path) as f, _YAMLIncludeConstructor(path):
-        obj = yaml.load(f, yaml.CSafeLoader)
+        obj = yaml.load(f, yaml.SafeLoader)
 
     if issubclass(type, dict):
         return obj
