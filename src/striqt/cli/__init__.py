@@ -101,9 +101,12 @@ def _run_click_plotter(
     plt.style.use('striqt.figures.ieee_double_column')
 
     # index on the following fields in order, matching the input options
-    dataset = analysis.load(zarr_path).set_xindex(
-        [PORT_DIM, 'center_frequency', 'start_time', 'sweep_start_time']
-    )
+    dataset = analysis.load(zarr_path)
+    if 'start_time' in dataset.dims:
+        index_dims = [PORT_DIM, 'center_frequency', 'start_time', 'sweep_start_time']
+    else:
+        index_dims = [PORT_DIM, 'center_frequency']
+    dataset = dataset.set_xindex(index_dims)
 
     valid_freqs = tuple(dataset.indexes['center_frequency'].levels[1])
     if center_frequency is None:
@@ -129,8 +132,11 @@ def _run_click_plotter(
             f'data variables {invalid} are not in data set - must be one of {valid_vars}'
         )
 
-    sweep_start_time = np.atleast_1d(dataset.sweep_start_time)[sweep_index]
-    dataset = dataset.sel(sweep_start_time=sweep_start_time).load()
+    if 'sweep_start_time' in dataset:
+        sweep_start_time = np.atleast_1d(dataset.sweep_start_time)[sweep_index]
+        dataset = dataset.sel(sweep_start_time=sweep_start_time).load()
+    else:
+        dataset = dataset.load()
 
     if no_save:
         output_path = None
