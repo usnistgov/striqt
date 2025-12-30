@@ -60,7 +60,7 @@ platforms = ["linux-aarch64", "linux-64", "win-64"]
 cupy = ">=12.2"
 
 [environments]
-default = ["py313"]
+default = ["py39"]
 cupy = ["cupy"]
 test = ["test"]
 py39 = ["py39"]

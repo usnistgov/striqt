@@ -67,7 +67,7 @@ def _y_factor_power_corrections(dataset: '_xr.Dataset', Tref=290.0) -> '_xr.Data
     from scipy.constants import Boltzmann
 
     k = Boltzmann * 1000  # W/K -> mW/K
-    enr_dB = dataset.enr_dB.sel(noise_diode_enabled=True, drop=True)
+    enr_dB = dataset.enr.sel(noise_diode_enabled=True, drop=True)
     enr = 10 ** (enr_dB / 10.0)
 
     power = (
@@ -399,8 +399,9 @@ class YFactorSink(_sinks.SinkBase):
 
         sweep_start_time = capture_result.extra_coords.sweep_start_time
 
-        if self.sweep_start_time is None and sweep_start_time is not None:
-            self.sweep_start_time = float(sweep_start_time)
+        if len(self._pending_data) == self._group_sizes[0]:
+            self.flush()
+            self._group_sizes.pop(0)
 
         return ret
 
@@ -504,12 +505,12 @@ def bind_manual_yfactor_calibration(
 
             self._last_state = state
 
-            sensor.peripherals.arm(capture)  # type: ignore
+            sensor.peripherals.arm(self, capture)  # type: ignore
 
         def acquire(self, capture):
             assert self.calibration_spec is not None
 
-            sensor_result = sensor.peripherals.acquire(self)  # type: ignore
+            sensor_result = sensor.peripherals.acquire(self, capture)  # type: ignore
             return sensor_result | self.calibration_spec.to_dict()
 
         def setup(

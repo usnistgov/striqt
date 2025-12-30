@@ -226,10 +226,10 @@ class HasSetupType(typing.Protocol[_TS, _PS]):
         cls,
         spec: _TS,
         *,
-        captures: tuple[_TC, ...] = (),
-        loops: tuple[specs.LoopSpec, ...] = (),
+        captures: tuple[_TC, ...] | None = None,
+        loops: tuple[specs.LoopSpec, ...] | None = None,
         reuse_iq: bool = False,
-    ) -> typing.Self: ...
+    ) -> Self: ...
 
     def _connect(self, spec: _TS) -> None: ...
 
@@ -376,17 +376,18 @@ class SourceBase(
 
         if _spec.array_backend == 'cupy':
             util.safe_import('cupy')
-            # util.safe_import('cupyx')
             util.configure_cupy()
 
         self._apply_setup(_spec, **_extra_specs)
 
     @classmethod
-    def from_spec(
-        cls, spec: _TS, *, captures=(), loops=(), reuse_iq: bool = False
-    ) -> typing.Self:
+    def from_spec(cls, spec: _TS, *, captures=None, loops=None, reuse_iq = False) -> Self:
         kwargs = spec.to_dict()
         kwargs['__specs'] = {'source': spec, 'captures': captures, 'loops': loops}
+        
+        if captures is not None and len(captures) > 0 and cls.__bindings__ is None:
+            raise TypeError('can only hint captures for source class bindings')
+        
         return cls(reuse_iq=reuse_iq, **kwargs)  # type: ignore
 
     @functools.cached_property
@@ -416,7 +417,7 @@ class SourceBase(
     def __del__(self):
         self.close()
 
-    def __enter__(self) -> 'typing_extensions.Self':
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *exc_info):

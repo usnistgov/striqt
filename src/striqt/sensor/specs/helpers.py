@@ -67,12 +67,13 @@ def loop_captures_from_fields(
 ) -> tuple[_TC, ...]:
     """evaluate the loop specification, and flatten into one list of loops"""
 
+    defaults = {l.field: l.get_points()[0] for l in loops if len(l.get_points()) > 0}
     if only_fields is not None:
         loops = tuple(l for l in loops if l.field in only_fields)
 
     loop_fields = tuple([loop.field for loop in loops])
 
-    if len(captures) == 0:
+    if len(captures) == 0 and len(loops) == 0:
         return ()
     if cls is None:
         cls = type(captures[0])
@@ -84,7 +85,7 @@ def loop_captures_from_fields(
 
     result = []
     for values in combinations:
-        updates = dict(zip(loop_fields, values))
+        updates = defaults | dict(zip(loop_fields, values))
         if len(captures) > 0:
             # iterate specified captures if avialable
             new = (c.replace(**updates) for c in captures)
@@ -112,7 +113,7 @@ def loop_captures(
     """evaluate the loop specification, and flatten into one list of loops"""
 
     if len(sweep.captures) > 0:
-        cls = None
+        cls = type(sweep.captures[0])
     elif sweep.__bindings__ is None:
         raise TypeError(
             'loops may apply only to explicit capture lists unless the sweep '
@@ -294,9 +295,16 @@ def get_field_value(
 
     if hasattr(capture, name):
         value = getattr(capture, name)
-        if isinstance(value, tuple):
-            value = value[0]
-    elif hasattr(info, name):
+        if value is None:
+            # now try to work through defaults below
+            pass
+        elif isinstance(value, tuple):
+            return value[0]
+        else:
+            return value
+
+    # after this, work through defaults from 
+    if hasattr(info, name):
         value = getattr(info, name)
     elif name in alias_hits:
         value = alias_hits[name]
