@@ -207,7 +207,7 @@ class ZarrIQSource(
         )
 
         if offset == 0:
-            time_ns = int(self._waveform.start_time[0].values)
+            time_ns = int(self._waveform.start_time[0].data)
         else:
             time_ns = 0
 

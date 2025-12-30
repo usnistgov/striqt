@@ -1,13 +1,12 @@
 [project]
 name = "striqt"
-version = "0.0.4"
+version = "0.0.5"
 description = "tooling to support precision gpu-accelerated radio signal analysis and software radio automation"
 requires-python = ">=3.9"
 dependencies = [
     "array-api-compat>=1.6",
     "dask",
     "matplotlib~=3.7",
-    "methodtools",
     "msgspec~=0.19",
     "netCDF4",
     "numba",
@@ -32,9 +31,7 @@ build-backend = "hatchling.build"
 [project.optional-dependencies]
 dev = [
     "jupyter",
-    "ruamel_yaml",
     "ruff",
-    "toml",
 ]
 gpu = [
     "cupy >= 12.2",

@@ -5,7 +5,6 @@ from fractions import Fraction
 from math import ceil
 from numbers import Number
 import typing
-import methodtools
 
 from . import fourier
 from .util import array_namespace, isroundmod, lazy_import, lru_cache, pad_along_axis
@@ -18,6 +17,12 @@ if typing.TYPE_CHECKING:
 else:
     np = lazy_import('numpy')
     array_api_compat = lazy_import('array_api_compat')
+
+
+def _isclosetoint(v, atol=1e-6):
+    xp = array_namespace(v)
+    return xp.isclose(v % 1, (0, 1), atol=atol).any()
+
 
 
 def correlate_along_axis(a, b, axis=0):
@@ -83,7 +88,7 @@ def to_blocks(y, size, truncate=False):
     return y[..., :new_size].reshape(new_shape)
 
 
-def _index_or_all(x, name, size, xp=None):
+def _index_or_all(x: tuple[int, ...]|typing.Literal['all'], name, size, xp=None):
     if xp is None:
         xp = np
 
@@ -92,7 +97,7 @@ def _index_or_all(x, name, size, xp=None):
             raise ValueError('must set max to allow "all" value')
         x = xp.arange(size)
     elif xp.ndim(x) in (0, 1):
-        x = xp.array(x)
+        x = xp.array(x) # type: ignore
     else:
         raise ValueError(f'{name} argument must be a flat array of indices or "all"')
 
@@ -264,7 +269,7 @@ def _generate_5g_nr_sync_sequence(
     x = fourier.ifft(seq_freq, axis=1, out=seq_freq)
 
     # prepend the shortest cyclic prefix
-    phy = Phy3GPP(
+    phy = _Phy3GPP(
         1,
         subcarrier_spacing=subcarrier_spacing,
         sample_rate=sample_rate,
@@ -420,7 +425,7 @@ def pss_params(
     else:
         raise ValueError('discovery_periodicity must be a multiple of 10e-3')
 
-    phy = Phy3GPP(
+    phy = _Phy3GPP(
         1,
         subcarrier_spacing=subcarrier_spacing,
         sample_rate=sample_rate,
@@ -472,7 +477,7 @@ def sss_params(
     )
 
 
-class PhyOFDM:
+class _PhyOFDM:
     def __init__(
         self,
         *,
@@ -524,7 +529,69 @@ class PhyOFDM:
         raise NotImplementedError
 
 
-class Phy3GPP(PhyOFDM):
+@lru_cache(4)
+def get_3gpp_phy(
+    channel_bandwidth: float,
+    subcarrier_spacing=15e3,
+    generation: typing.Literal['4G', '5G'] = '4G',
+    sample_rate=None,
+    xp=None,
+) -> _Phy3GPP:
+    return _Phy3GPP(**locals())
+
+
+@lru_cache(4)
+def _get_3gpp_index_cyclic_prefix(
+    phy: _Phy3GPP,
+    *,
+    frames: tuple[int, ...]=(0,),
+    symbols: tuple[int, ...]|typing.Literal['all']='all',
+    slots: tuple[int, ...]|typing.Literal['all']='all',
+):
+    """build an indexing tensor for performing cyclic prefix correlation across various axes"""
+    xp = array_namespace(phy.cp_sizes)
+
+    frames = xp.array(frames)
+    frame_size = round(phy.sample_rate * 10e-3)
+
+    slots = _index_or_all(
+        slots,
+        '"slots" argument',
+        size=phy.SCS_TO_SLOTS_PER_FRAME[phy.subcarrier_spacing],
+        xp=xp,
+    )
+    symbols = _index_or_all(
+        symbols, '"symbols" argument', size=phy.FFT_PER_SLOT, xp=xp
+    )
+
+    # first build each grid axis separately
+    grid = []
+
+    # axis 0: symbol number within each slot
+    grid.append(phy.cp_start_idx[symbols])
+
+    # axis 1: slot number
+    grid.append(phy.contiguous_size * slots)
+
+    # axis 2: frame number
+    grid.append(frames * frame_size)
+
+    # axis 3: cp index
+    grid.append(xp.ogrid[0 : phy.cp_sizes[1]])
+
+    grid = [x.squeeze() for x in grid if x.size > 1]
+    # pad the axis dimensions so they can be broadcast together
+    inds, *offsets = xp.meshgrid(*grid, indexing='ij', copy=False)
+
+    # sum all of the index offsets
+    inds = inds.copy()
+    for offset in offsets:
+        inds += offset
+
+    return inds
+
+
+class _Phy3GPP(_PhyOFDM):
     """Sampling and index parameters and lookup tables for 3GPP 5G-NR.
 
     These are equivalent to LTE if subcarrier_spacing is fixed to 15 kHz
@@ -577,7 +644,7 @@ class Phy3GPP(PhyOFDM):
 
     def __init__(
         self,
-        channel_bandwidth,
+        channel_bandwidth: float,
         subcarrier_spacing=15e3,
         generation: typing.Literal['4G', '5G'] = '4G',
         sample_rate=None,
@@ -634,63 +701,31 @@ class Phy3GPP(PhyOFDM):
             cp_sizes=cp_sizes,
         )
 
-    @methodtools.lru_cache(4)
     def index_cyclic_prefix(
         self,
         *,
-        frames=(0,),
-        symbols='all',
-        slots='all',
+        frames: tuple[int, ...]=(0,),
+        symbols: tuple[int, ...]|typing.Literal['all']='all',
+        slots: tuple[int, ...]|typing.Literal['all']='all',
     ):
         """build an indexing tensor for performing cyclic prefix correlation across various axes"""
-        xp = array_namespace(self.cp_sizes)
-
-        frames = xp.array(frames)
-        frame_size = round(self.sample_rate * 10e-3)
-
-        slots = _index_or_all(
-            slots,
-            '"slots" argument',
-            size=self.SCS_TO_SLOTS_PER_FRAME[self.subcarrier_spacing],
-            xp=xp,
-        )
-        symbols = _index_or_all(
-            symbols, '"symbols" argument', size=self.FFT_PER_SLOT, xp=xp
-        )
-
-        # first build each grid axis separately
-        grid = []
-
-        # axis 0: symbol number within each slot
-        grid.append(self.cp_start_idx[symbols])
-
-        # axis 1: slot number
-        grid.append(self.contiguous_size * slots)
-
-        # axis 2: frame number
-        grid.append(frames * frame_size)
-
-        # axis 3: cp index
-        grid.append(xp.ogrid[0 : self.cp_sizes[1]])
-
-        grid = [x.squeeze() for x in grid if x.size > 1]
-        # pad the axis dimensions so they can be broadcast together
-        inds, *offsets = xp.meshgrid(*grid, indexing='ij', copy=False)
-
-        # sum all of the index offsets
-        inds = inds.copy()
-        for offset in offsets:
-            inds += offset
-
-        return inds
+        return _get_3gpp_index_cyclic_prefix(**locals())
 
 
-def isclosetoint(v, atol=1e-6):
-    xp = array_namespace(v)
-    return xp.isclose(v % 1, (0, 1), atol=atol).any()
+@lru_cache(4)
+def get_802_16_phy(
+    channel_bandwidth: float,
+    *,
+    alt_sample_rate: float|None = None,
+    frame_duration: float = 5e-3,
+    nfft: float = 2048,
+    cp_ratio: float = 1 / 8,
+    xp=None,
+) -> _Phy802_16:
+    return _Phy802_16(**locals())
 
 
-class Phy802_16(PhyOFDM):
+class _Phy802_16(_PhyOFDM):
     """Sampling and index parameters and lookup tables for IEEE 802.16-2017 OFDMA"""
 
     VALID_CP_RATIOS = {1 / 32, 1 / 16, 1 / 8, 1 / 4}
@@ -721,7 +756,7 @@ class Phy802_16(PhyOFDM):
         self,
         channel_bandwidth: float,
         *,
-        alt_sample_rate: float = None,
+        alt_sample_rate: float|None = None,
         frame_duration: float = 5e-3,
         nfft: float = 2048,
         cp_ratio: float = 1 / 8,
@@ -782,11 +817,11 @@ class Phy802_16(PhyOFDM):
         else:
             scale = alt_sample_rate / std_sample_rate
 
-            if not (isclosetoint(scale) or isclosetoint(1 / scale)):
+            if not (_isclosetoint(scale) or _isclosetoint(1 / scale)):
                 raise ValueError(
                     'alt_sample_rate must be integer multiple or divisor of ofdm sample_rate'
                 )
-            if not isclosetoint(cp_size * scale):
+            if not _isclosetoint(cp_size * scale):
                 raise ValueError(
                     'alt_sample_rate is too small to capture any cyclic prefixes'
                 )
@@ -804,7 +839,6 @@ class Phy802_16(PhyOFDM):
             contiguous_size=round(frame_duration * sample_rate),
         )
 
-    @methodtools.lru_cache(4)
     def index_cyclic_prefix(
         self,
         *,
@@ -813,31 +847,43 @@ class Phy802_16(PhyOFDM):
     ) -> ArrayType:
         """build an indexing tensor for performing cyclic prefix correlation across various axes"""
 
-        xp = array_namespace(self.cp_sizes)
-        frames = xp.array(frames)
+        return _802_16_index_cyclic_prefix(self, frames=frames, symbols=symbols)
 
-        symbols = _index_or_all(
-            symbols, '"symbols" argument', size=self.symbols_per_frame, xp=xp
-        )
 
-        # first build each grid axis separately
-        grid = []
+@lru_cache(4)
+def _802_16_index_cyclic_prefix(
+    phy: _Phy802_16,
+    *,
+    frames=(0,),
+    symbols='all',
+) -> ArrayType:
+    """build an indexing tensor for performing cyclic prefix correlation across various axes"""
 
-        # axis 0: symbol number in each frame
-        grid.append(self.cp_start_idx[symbols])
+    xp = array_namespace(phy.cp_sizes)
+    frames = xp.array(frames)
 
-        # axis 1: frame number
-        grid.append(frames * self.frame_size)
+    symbols = _index_or_all(
+        symbols, '"symbols" argument', size=phy.symbols_per_frame, xp=xp
+    )
 
-        # axis 2: cp index
-        grid.append(xp.ogrid[0 : self.cp_sizes[1]])
+    # first build each grid axis separately
+    grid = []
 
-        # pad the axis dimensions so they can be broadcast together
-        a = xp.meshgrid(*grid, indexing='ij', copy=False)
+    # axis 0: symbol number in each frame
+    grid.append(phy.cp_start_idx[symbols])
 
-        # sum all of the index offsets
-        inds = a[0].copy()
-        for sub in a[1:]:
-            inds += sub
+    # axis 1: frame number
+    grid.append(frames * phy.frame_size)
 
-        return inds
+    # axis 2: cp index
+    grid.append(xp.ogrid[0 : phy.cp_sizes[1]])
+
+    # pad the axis dimensions so they can be broadcast together
+    a = xp.meshgrid(*grid, indexing='ij', copy=False)
+
+    # sum all of the index offsets
+    inds = a[0].copy()
+    for sub in a[1:]:
+        inds += sub
+
+    return inds

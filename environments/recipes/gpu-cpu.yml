@@ -1,6 +1,0 @@
-# the CPU computation requirements plus CUDA (GPU compute)
-
-
-inherit:
-  - layers/base.yml
-  - layers/add-conda-forge-cuda.yml

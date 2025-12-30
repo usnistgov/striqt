@@ -169,7 +169,7 @@ def _get_phy_mapping(
     subcarrier_spacings: tuple[float, ...],
     generation: typing.Literal['4G', '5G'] = '4G',
     xp=np,
-) -> dict[float, iqwaveform.ofdm.Phy3GPP]:
+) -> dict[float, iqwaveform.ofdm._Phy3GPP]:
     kws = dict(
         channel_bandwidth=channel_bandwidth,
         generation=generation,
@@ -181,7 +181,7 @@ def _get_phy_mapping(
         else [subcarrier_spacings]
     )
     return {
-        scs: iqwaveform.ofdm.Phy3GPP(subcarrier_spacing=scs, xp=xp, **kws)
+        scs: iqwaveform.ofdm.get_3gpp_phy(subcarrier_spacing=scs, xp=xp, **kws)
         for scs in seq
     }
 

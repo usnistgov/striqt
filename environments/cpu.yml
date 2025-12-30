@@ -13,19 +13,17 @@ dependencies:
 - jupyter
 - ruff
 - toml
-- ruamel.yaml
 
-# hard-coded on behalf of pip for iqwaveform
+# low-level analysis
 - pandas
-- scipy>=1.13,<2
-- numpy>=1.21,<3
-- matplotlib-base
+- scipy>=1.13
+- numpy>=1.21
+- matplotlib-base>=3.7
 - numexpr>=2.8
 - array-api-compat
-- methodtools
 - numba
 
-# data management (including zarr and data chunking in xarray)
+# higher-level data analysis
 - xarray>=2024.3
 - zarr>=2.18,<4
 - dask
