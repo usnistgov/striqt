@@ -193,10 +193,7 @@ def compute_lock(array=None):
         _compute_lock.release()
 
 
-_input_lock = threading.RLock()
-
-
-@contextmanager
+@contextlib.contextmanager
 def hold_logger_outputs(level=logging.DEBUG):
     """
     A context manager that captures log outputs and releases them upon exit.
@@ -231,6 +228,9 @@ def hold_logger_outputs(level=logging.DEBUG):
                 print(handlers[name].format(record), file=sys.stderr)
 
             handlers[name].close()
+
+
+_input_lock = threading.RLock()
 
 
 def blocking_input(prompt: str, /) -> str:
