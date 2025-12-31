@@ -231,15 +231,9 @@ def blocking_input(prompt: str | None = None, /) -> str:
     try:
         with (
             _input_lock,
-<<<<<<< HEAD
-            hold_logger_outputs(),
-            contextlib.redirect_stderr(stderr),
-            contextlib.redirect_stdout(stdout),
-=======
             contextlib.redirect_stderr(stderr),
             contextlib.redirect_stdout(stdout),
             hold_logger_outputs(),
->>>>>>> faa5e2e66138a8dcd80494d9918c60c71e3c5a0f
         ):
             sys.__stdout__.write(prompt)
             sys.__stdout__.flush()
