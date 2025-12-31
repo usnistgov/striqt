@@ -194,39 +194,24 @@ def compute_lock(array=None):
 
 
 @contextlib.contextmanager
-def hold_logger_outputs(level=logging.DEBUG):
-    """
-    A context manager that captures log outputs and releases them upon exit.
-
-    Args:
-        target_logger: The logger instance to capture logs from.
-        level: The minimum log level to capture.
+def hold_logger_outputs():
+    """apply redirected streams to log outputs, and restore on exit.
+    
+    This is needed because the loggers hold their own references to the original
+    stderr/stdout, so they are not updated on use of contextlib.redirect_ functions.
     """
 
-    import logging.handlers
-
-    handlers = {}
-    start_levels = {}
+    streams = {}
 
     for name, adapter in _logger_adapters.items():
-        handlers[name] = logging.handlers.MemoryHandler(capacity=1000)
-        handlers[name].setLevel(level)
-
-        adapter.logger.addHandler(handlers[name])
-        start_levels[name] = adapter.logger.level
-        adapter.setLevel(level) # Ensure the logger captures messages at the specified level
+        streams[name] = adapter._screen_handler.stream
+        adapter._screen_handler.stream = sys.stderr
 
     try:
         yield
     finally:
         for name, adapter in _logger_adapters.items():
-            adapter.logger.removeHandler(handlers[name])
-            adapter.setLevel(start_levels[name])
-
-            for record in handlers[name].buffer:
-                print(handlers[name].format(record), file=sys.stderr)
-
-            handlers[name].close()
+            adapter._screen_handler.stream = streams[name]
 
 
 _input_lock = threading.RLock()
@@ -239,7 +224,7 @@ def blocking_input(prompt: str, /) -> str:
 
     # 2. Use redirect_stderr to point sys.stderr to our buffer
     try:
-        with _input_lock, hold_logger_outputs(), contextlib.redirect_stderr(stderr), contextlib.redirect_stdout(stdout):
+        with _input_lock, contextlib.redirect_stderr(stderr), contextlib.redirect_stdout(stdout), hold_logger_outputs():
             sys.__stdout__.write(prompt)
             sys.__stdout__.flush()
             response = input()
