@@ -9,7 +9,7 @@ from striqt.sensor.lib import calibration, resources
 @click.argument('yaml_path', type=click.Path(exists=True, dir_okay=False))
 def run(yaml_path):
     # instantiate sweep objects
-    from striqt.sensor.lib import util, bindings, specs
+    from striqt.sensor import util, specs
     from striqt import sensor
     from pprint import pprint
     from striqt.sensor.specs.helpers import get_path_fields
@@ -21,11 +21,11 @@ def run(yaml_path):
 
     spec = sensor.read_yaml_spec(yaml_path)
     print(f'Opened a bound specification for bindings {type(spec).__name__!r}')
-    manager = sensor.open_resources(spec, spec_path=yaml_path, skip_warmup=True)
+    manager = sensor.open_resources(spec, spec_path=yaml_path, skip_warmup=True, skip_peripherals=True)
 
     print(f'Opening sensor resources...')
     with manager as res:
-        assert isinstance(spec.__bindings__, bindings.SensorBinding)
+        assert isinstance(spec.__bindings__, sensor.lib.bindings.SensorBinding)
         schema = spec.__bindings__.schema
 
         print(f'source_id: {res["source"].id!r}')
@@ -64,7 +64,7 @@ def run(yaml_path):
         field_sets = {}
         splits = (helpers.split_capture_ports(c) for c in spec.captures)
         for c in itertools.chain(*splits):
-            fields = get_path_fields(c, **kws)
+            fields = specs.helpers.get_path_fields(c, **kws)
             for k, v in fields.items():
                 if k in schema.capture.__struct_fields__ and k != 'start_time':
                     continue
