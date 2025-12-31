@@ -303,7 +303,7 @@ def get_field_value(
         else:
             return value
 
-    # after this, work through defaults from 
+    # after this, work through defaults from
     if hasattr(info, name):
         value = getattr(info, name)
     elif name in alias_hits:

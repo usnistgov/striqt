@@ -292,7 +292,7 @@ class Sweep(SpecBase, typing.Generic[_TS, _TP, _TC], frozen=True, kw_only=True):
     # sweep bindings also accept the following tag field in input files, which
     # msgspec uses to determine the Sweep subclass to instantiate from e.g.
     # yaml files.
-    # 
+    #
     # See: ./bindings.py
     #
     # sensor_binding: str

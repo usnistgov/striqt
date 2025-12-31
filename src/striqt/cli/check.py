@@ -29,7 +29,7 @@ def run(yaml_path):
         assert isinstance(spec.__bindings__, bindings.SensorBinding)
         schema = spec.__bindings__.schema
 
-        print(f"source_id: {res['source'].id!r}")
+        print(f'source_id: {res["source"].id!r}')
 
         print('\nCalibration info')
         print(60 * '=')
@@ -45,7 +45,7 @@ def run(yaml_path):
         alias_func = res['alias_func']
         expanded_paths = {
             'sink.path': spec.sink.path,
-            'extensions.import_path': spec.extensions.import_path
+            'extensions.import_path': spec.extensions.import_path,
         }
         if isinstance(spec.source, specs.SoapySource):
             expanded_paths['source.calibration'] = spec.source.calibration
@@ -80,7 +80,9 @@ def run(yaml_path):
         print('\n\nUnique capture field coordinates in output:')
         print(60 * '=')
         omit = {'start_time', 'delay'}
-        pprint({k: field_sets[k] for k in (cfields - omit) if k in field_sets}, width=40)
+        pprint(
+            {k: field_sets[k] for k in (cfields - omit) if k in field_sets}, width=40
+        )
 
 
 if __name__ == '__main__':

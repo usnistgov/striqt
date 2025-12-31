@@ -36,7 +36,9 @@ def _tuplize_port(obj: specs.types.Port) -> tuple[int, ...]:
 
 @util.lru_cache()
 def _tuplize_all_ports(
-    captures: tuple[_TC, ...], loops: tuple[specs.LoopSpec, ...] | None = None, capture_cls: type[_TC]|None = None
+    captures: tuple[_TC, ...],
+    loops: tuple[specs.LoopSpec, ...] | None = None,
+    capture_cls: type[_TC] | None = None,
 ) -> tuple[int, ...]:
     looped = specs.helpers.loop_captures_from_fields(
         captures, loops or (), only_fields=('port',), cls=capture_cls

@@ -214,7 +214,9 @@ def hold_logger_outputs(level=logging.DEBUG):
 
         adapter.logger.addHandler(handlers[name])
         start_levels[name] = adapter.logger.level
-        adapter.setLevel(level) # Ensure the logger captures messages at the specified level
+        adapter.setLevel(
+            level
+        )  # Ensure the logger captures messages at the specified level
 
     try:
         yield
@@ -239,7 +241,12 @@ def blocking_input(prompt: str, /) -> str:
 
     # 2. Use redirect_stderr to point sys.stderr to our buffer
     try:
-        with _input_lock, hold_logger_outputs(), contextlib.redirect_stderr(stderr), contextlib.redirect_stdout(stdout):
+        with (
+            _input_lock,
+            hold_logger_outputs(),
+            contextlib.redirect_stderr(stderr),
+            contextlib.redirect_stdout(stdout),
+        ):
             sys.__stdout__.write(prompt)
             sys.__stdout__.flush()
             response = input()
