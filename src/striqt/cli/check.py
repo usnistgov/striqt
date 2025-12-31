@@ -3,7 +3,6 @@
 import click
 
 from striqt.sensor.lib import calibration, resources
-from striqt.sensor.lib.specs import helpers
 
 
 @click.command('runtime information about running a sweep')
