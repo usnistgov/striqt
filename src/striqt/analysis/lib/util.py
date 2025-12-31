@@ -212,8 +212,7 @@ def hold_logger_outputs(level=logging.DEBUG):
         handlers[name] = logging.handlers.MemoryHandler(capacity=1000)
         handlers[name].setLevel(level)
 
-        # Temporarily add the handler to the logger
-        adapter.addHandler(handlers[name])
+        adapter.logger.addHandler(handlers[name])
         start_levels[name] = adapter.level
         adapter.setLevel(level) # Ensure the logger captures messages at the specified level
 
@@ -221,7 +220,7 @@ def hold_logger_outputs(level=logging.DEBUG):
         yield
     finally:
         for name, adapter in _logger_adapters.items():
-            adapter.removeHandler(handlers[name])
+            adapter.logger.removeHandler(handlers[name])
             adapter.setLevel(start_levels[name])
 
             for record in handlers[name].buffer:
