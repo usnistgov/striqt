@@ -206,15 +206,18 @@ def hold_logger_outputs(level=logging.DEBUG):
         level: The minimum log level to capture.
     """
 
+    import logging.handlers
+
     handlers = {}
+    start_levels = {}
 
     for name, adapter in _logger_adapters.items():
-        handlers[name] = MemoryHandler(capacity=1000)
+        handlers[name] = logging.handlers.MemoryHandler(capacity=1000)
         handlers[name].setLevel(level)
 
         # Temporarily add the handler to the logger
         adapter.addHandler(handlers[name])
-        original_level = adapter.level
+        start_levels[name] = adapter.level
         adapter.setLevel(level) # Ensure the logger captures messages at the specified level
 
     try:
@@ -222,12 +225,12 @@ def hold_logger_outputs(level=logging.DEBUG):
     finally:
         for name, adapter in _logger_adapters.items():
             adapter.removeHandler(handlers[name])
-            adapter.setLevel(original_level)
+            adapter.setLevel(start_levels[name])
 
             for record in handlers[name].buffer:
                 print(handlers[name].format(record), file=sys.stderr)
 
-         handlers[name].close()
+            handlers[name].close()
 
 
 def blocking_input(prompt: str, /) -> str:

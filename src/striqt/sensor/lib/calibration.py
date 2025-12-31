@@ -567,7 +567,7 @@ def _calibration_peripherals_cls(
 
 def bind_manual_yfactor_calibration(
     name: str, sensor: '_bindings.SensorBinding[_TS, _TP, _TC, _PS, _PC]'
-) -> '_bindings.SensorBinding[_TS, typing.Any, typing.Any, _PS, typing.Any]':
+) -> '_bindings.SensorBinding[_TS, _TP, _TC, _PS, _PC]':
     """extend an existing binding with a y-factor calibration"""
 
     from . import bindings
