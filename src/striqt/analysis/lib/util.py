@@ -236,7 +236,8 @@ def blocking_input(prompt: str | None = None, /) -> str:
             hold_logger_outputs(),
         ):
             assert isinstance(sys.__stdout__, io.TextIOWrapper)
-            sys.__stdout__.write(prompt)
+            if prompt is not None:
+                sys.__stdout__.write(prompt)
             sys.__stdout__.flush()
             response = input()
     finally:
