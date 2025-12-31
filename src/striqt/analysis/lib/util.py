@@ -213,7 +213,7 @@ def hold_logger_outputs(level=logging.DEBUG):
         handlers[name].setLevel(level)
 
         adapter.logger.addHandler(handlers[name])
-        start_levels[name] = adapter.level
+        start_levels[name] = adapter.logger.level
         adapter.setLevel(level) # Ensure the logger captures messages at the specified level
 
     try:
