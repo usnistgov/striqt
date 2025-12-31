@@ -194,58 +194,52 @@ def compute_lock(array=None):
 
 
 @contextlib.contextmanager
-def hold_logger_outputs(level=logging.DEBUG):
-    """
-    A context manager that captures log outputs and releases them upon exit.
+def hold_logger_outputs():
+    """apply redirected streams to log outputs, and restore on exit.
 
-    Args:
-        target_logger: The logger instance to capture logs from.
-        level: The minimum log level to capture.
+    This is needed because the loggers hold their own references to the original
+    stderr/stdout, so they are not updated on use of contextlib.redirect_ functions.
     """
 
-    import logging.handlers
-
-    handlers = {}
-    start_levels = {}
+    streams = {}
 
     for name, adapter in _logger_adapters.items():
-        handlers[name] = logging.handlers.MemoryHandler(capacity=1000)
-        handlers[name].setLevel(level)
-
-        adapter.logger.addHandler(handlers[name])
-        start_levels[name] = adapter.logger.level
-        adapter.setLevel(
-            level
-        )  # Ensure the logger captures messages at the specified level
+        streams[name] = adapter._screen_handler.stream
+        adapter._screen_handler.stream = sys.stderr
 
     try:
         yield
     finally:
         for name, adapter in _logger_adapters.items():
-            adapter.logger.removeHandler(handlers[name])
-            adapter.setLevel(start_levels[name])
-
-            for record in handlers[name].buffer:
-                print(handlers[name].format(record), file=sys.stderr)
-
-            handlers[name].close()
+            adapter._screen_handler.stream = streams[name]
 
 
 _input_lock = threading.RLock()
 
 
-def blocking_input(prompt: str, /) -> str:
-    # 1. Create a string buffer to hold the output
+def blocking_input(prompt: str | None = None, /) -> str:
+    """wraps a call to builtin input() to avoid threading issues.
+
+    Specifically:
+    - A lock protects access to sys.stdin in case of calls from multiple threads
+    - Log outputs, sys.stderr, and sys.stdout are buffered until entry is complete
+    """
+
     stderr = io.StringIO()
     stdout = io.StringIO()
 
-    # 2. Use redirect_stderr to point sys.stderr to our buffer
     try:
         with (
             _input_lock,
+<<<<<<< HEAD
             hold_logger_outputs(),
             contextlib.redirect_stderr(stderr),
             contextlib.redirect_stdout(stdout),
+=======
+            contextlib.redirect_stderr(stderr),
+            contextlib.redirect_stdout(stdout),
+            hold_logger_outputs(),
+>>>>>>> faa5e2e66138a8dcd80494d9918c60c71e3c5a0f
         ):
             sys.__stdout__.write(prompt)
             sys.__stdout__.flush()
