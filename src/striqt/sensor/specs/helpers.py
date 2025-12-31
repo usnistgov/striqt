@@ -314,7 +314,7 @@ def get_field_value(
 
 
 @util.lru_cache()
-def _get_path_fields(
+def get_path_fields(
     sweep: specs.Sweep,
     *,
     source_id: str | typing.Callable[[], str],
@@ -340,7 +340,7 @@ def _get_path_fields(
 
 
 @util.lru_cache()
-def _get_format_fields(s: str):
+def get_format_fields(s: str):
     """
     Extracts and returns a list of formatting field names from a given format string.
     """
@@ -364,7 +364,7 @@ class PathAliasFormatter:
         self.alias_timeout = alias_timeout
 
     def __call__(self, path: str | Path) -> str:
-        path_fields = _get_format_fields(str(path))
+        path_fields = get_format_fields(str(path))
         if len(path_fields) == 0:
             return str(path)
 
@@ -373,7 +373,7 @@ class PathAliasFormatter:
         id_ = get_source_id(self.sweep_spec.source, timeout=self.alias_timeout)
         path = Path(path).expanduser()
 
-        fields = _get_path_fields(
+        fields = get_path_fields(
             self.sweep_spec, source_id=id_, spec_path=self.spec_path
         )
 

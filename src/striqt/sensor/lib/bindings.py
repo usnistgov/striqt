@@ -138,7 +138,7 @@ def bind_sensor(
                 )
             super().__post_init__()
 
-    BoundSweep = tagged_subclass(key, BoundSweep, 'sensor_binding')  # type: ignore
+    BoundSweep = tagged_subclass(key, BoundSweep, specs.SWEEP_TAG_FIELD)  # type: ignore
     binding = dataclasses.replace(binding, sweep_spec=BoundSweep)
 
     if register:

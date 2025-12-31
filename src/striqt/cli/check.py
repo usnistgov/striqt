@@ -9,80 +9,78 @@ from striqt.sensor.lib.specs import helpers
 @click.command('runtime information about running a sweep')
 @click.argument('yaml_path', type=click.Path(exists=True, dir_okay=False))
 def run(yaml_path):
-    print('Initializing...')
     # instantiate sweep objects
-    from striqt.sensor.lib import frontend, util
+    from striqt.sensor.lib import util, bindings, specs
     from striqt import sensor
     from pprint import pprint
-    from striqt.sensor.lib.io import _get_capture_format_fields
-    import labbench as lb
+    from striqt.sensor.specs.helpers import get_path_fields
     from pathlib import Path
     import pandas as pd
     import itertools
 
     util.show_messages(util.logging.WARNING)
 
-    init_sweep = sensor.read_yaml_spec(yaml_path)
-    print(f'Testing connect with driver {init_sweep.radio_setup.driver!r}...')
-    controller = frontend.get_controller(None, init_sweep)
-    radio_id = controller.radio_id(init_sweep.radio_setup.driver)
-    print(f'Connected, radio_id is {radio_id!r}')
-    sweep = sensor.read_yaml_spec(yaml_path, radio_id=radio_id)
+    spec = sensor.read_yaml_spec(yaml_path)
+    print(f'Opened a bound specification for bindings {type(spec).__name__!r}')
+    manager = sensor.open_resources(spec, spec_path=yaml_path, skip_warmup=True)
 
-    print('\nCalibration info')
-    print(60 * '=')
-    if sweep.radio_setup.calibration is None:
-        print('Configured for uncalibrated operation')
-    elif not Path(sweep.radio_setup.calibration).exists():
-        print('No file at configured path!')
-    else:
-        cal = calibration.read_calibration(sweep.radio_setup.calibration)
-        summary = calibration.summarize_calibration(cal)
-        with pd.option_context('display.max_rows', None):
-            print(summary.sort_index(axis=1).sort_index(axis=0))
+    print(f'Opening sensor resources...')
+    with manager as res:
+        assert isinstance(spec.__bindings__, bindings.SensorBinding)
+        schema = spec.__bindings__.schema
 
-    print('\nPaths')
-    print(60 * '=')
-    expanded_paths = {
-        'output.path': (sweep.output.path, init_sweep.output.path),
-        'extensions.import_path': (
-            sweep.extensions.import_path,
-            init_sweep.extensions.import_path,
-        ),
-        'source.calibration': (
-            sweep.radio_setup.calibration,
-            init_sweep.radio_setup.calibration,
-        ),
-    }
+        print(f"source_id: {res['source'].id!r}")
 
-    for name, (pe, pu) in expanded_paths.items():
-        print(f'{name}:')
-        print(f'\tRaw input: {pu!r}')
-        print(f'\tEvaluated: {pe!r}')
-        if pe is None:
-            continue
-        print('\tExists: ', 'yes' if Path(pe).exists() else 'no')
+        print('\nCalibration info')
+        print(60 * '=')
+        if res['calibration'] is None:
+            print('Configured for uncalibrated operation')
+        else:
+            summary = calibration.summarize_calibration(res['calibration'])
+            with pd.option_context('display.max_rows', None):
+                print(summary.sort_index(axis=1).sort_index(axis=0))
 
-    kws = {'sweep': sweep, 'source_id': radio_id, 'yaml_path': yaml_path}
-    field_sets = {}
-    splits = (helpers.split_capture_ports(c) for c in sweep.captures)
-    for c in itertools.chain(*splits):
-        fields = _get_capture_format_fields(c, **kws)
-        for k, v in fields.items():
-            if k in sweep.defaults.__struct_fields__ and k != 'start_time':
+        print('\nPaths')
+        print(60 * '=')
+        alias_func = res['alias_func']
+        expanded_paths = {
+            'sink.path': spec.sink.path,
+            'extensions.import_path': spec.extensions.import_path
+        }
+        if isinstance(spec.source, specs.SoapySource):
+            expanded_paths['source.calibration'] = spec.source.calibration
+        for name, p in expanded_paths.items():
+            print(f'{name}:')
+            print(f'\tRaw spec: ', repr(p))
+            if p is None:
                 continue
-            field_sets.setdefault(k, set()).add(v)
+            if alias_func is not None:
+                pf = alias_func(p)
+                print(f'\tFormatted: ', repr(pf))
+            else:
+                pf = p
+            print('\tExists: ', 'yes' if Path(pf).exists() else 'no')
 
-    print('\n\nUnique alias field coordinates in output:')
-    print(60 * '=')
-    cfields = set(sweep.defaults.__struct_fields__)
-    afields = set(field_sets.keys()) - cfields
-    pprint({k: field_sets[k] for k in afields}, width=40)
+        kws = {'sweep': spec, 'source_id': res['source'].id, 'spec_path': yaml_path}
+        field_sets = {}
+        splits = (helpers.split_capture_ports(c) for c in spec.captures)
+        for c in itertools.chain(*splits):
+            fields = get_path_fields(c, **kws)
+            for k, v in fields.items():
+                if k in schema.capture.__struct_fields__ and k != 'start_time':
+                    continue
+                field_sets.setdefault(k, set()).add(v)
 
-    print('\n\nUnique capture field coordinates in output:')
-    print(60 * '=')
-    omit = {'start_time', 'delay'}
-    pprint({k: field_sets[k] for k in (cfields - omit) if k in field_sets}, width=40)
+        print('\n\nUnique alias field coordinates in output:')
+        print(60 * '=')
+        cfields = set(schema.capture.__struct_fields__)
+        afields = set(field_sets.keys()) - cfields
+        pprint({k: field_sets[k] for k in afields}, width=40)
+
+        print('\n\nUnique capture field coordinates in output:')
+        print(60 * '=')
+        omit = {'start_time', 'delay'}
+        pprint({k: field_sets[k] for k in (cfields - omit) if k in field_sets}, width=40)
 
 
 if __name__ == '__main__':

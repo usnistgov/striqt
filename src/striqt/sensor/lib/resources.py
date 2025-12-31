@@ -198,6 +198,7 @@ def open_resources(
     spec: specs.Sweep[_TS, _TP, _TC],
     spec_path: str | Path | None = None,
     except_context: typing.ContextManager | None = None,
+    skip_warmup: bool = False
 ) -> ConnectionManager[_TS, _TP, _TC, _PS, _PC]:
     """open the sensor hardware and software contexts needed to run the given sweep.
 
@@ -227,10 +228,12 @@ def open_resources(
 
     try:
         calls = {
-            'compute': conn.log_call(prepare_compute, spec),
             'sink': conn.open(sink_cls, spec, alias_func=formatter),
             'devices': util.Call(_open_devices, conn, bind, spec),
         }
+
+        if not skip_warmup:
+            calls['compute'] = conn.log_call(prepare_compute, spec)
 
         if spec.source.calibration is not None:
             calls['calibration'] = conn.get(

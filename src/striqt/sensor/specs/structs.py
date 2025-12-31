@@ -285,7 +285,18 @@ _TPC = typing.TypeVar('_TPC', bound=Peripherals)
 _TS = typing.TypeVar('_TS', bound=Source)
 
 
+SWEEP_TAG_FIELD = 'sensor_binding'
+
+
 class Sweep(SpecBase, typing.Generic[_TS, _TP, _TC], frozen=True, kw_only=True):
+    # sweep bindings also accept the following tag field in input files, which
+    # msgspec uses to determine the Sweep subclass to instantiate from e.g.
+    # yaml files.
+    # 
+    # See: ./bindings.py
+    #
+    # sensor_binding: str
+
     source: _TS
     captures: tuple[_TC, ...] = tuple()
     loops: tuple[LoopSpec, ...] = ()
