@@ -147,7 +147,7 @@ def _run_click_plotter(
     plot_func(dataset, output_path, interactive, **plot_func_kws)
 
     if interactive:
-        input('press enter to quit')
+        analysis.util.blocking_input('press enter to quit')
 
 
 def click_capture_plotter(description: typing.Optional[str] = None):

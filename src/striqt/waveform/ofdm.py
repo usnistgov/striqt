@@ -24,7 +24,6 @@ def _isclosetoint(v, atol=1e-6):
     return xp.isclose(v % 1, (0, 1), atol=atol).any()
 
 
-
 def correlate_along_axis(a, b, axis=0):
     """cross-correlate `a` and `b` along the specified axis.
     this implementation is optimized for small sequences to replace for
@@ -88,7 +87,7 @@ def to_blocks(y, size, truncate=False):
     return y[..., :new_size].reshape(new_shape)
 
 
-def _index_or_all(x: tuple[int, ...]|typing.Literal['all'], name, size, xp=None):
+def _index_or_all(x: tuple[int, ...] | typing.Literal['all'], name, size, xp=None):
     if xp is None:
         xp = np
 
@@ -97,7 +96,7 @@ def _index_or_all(x: tuple[int, ...]|typing.Literal['all'], name, size, xp=None)
             raise ValueError('must set max to allow "all" value')
         x = xp.arange(size)
     elif xp.ndim(x) in (0, 1):
-        x = xp.array(x) # type: ignore
+        x = xp.array(x)  # type: ignore
     else:
         raise ValueError(f'{name} argument must be a flat array of indices or "all"')
 
@@ -544,9 +543,9 @@ def get_3gpp_phy(
 def _get_3gpp_index_cyclic_prefix(
     phy: _Phy3GPP,
     *,
-    frames: tuple[int, ...]=(0,),
-    symbols: tuple[int, ...]|typing.Literal['all']='all',
-    slots: tuple[int, ...]|typing.Literal['all']='all',
+    frames: tuple[int, ...] = (0,),
+    symbols: tuple[int, ...] | typing.Literal['all'] = 'all',
+    slots: tuple[int, ...] | typing.Literal['all'] = 'all',
 ):
     """build an indexing tensor for performing cyclic prefix correlation across various axes"""
     xp = array_namespace(phy.cp_sizes)
@@ -560,9 +559,7 @@ def _get_3gpp_index_cyclic_prefix(
         size=phy.SCS_TO_SLOTS_PER_FRAME[phy.subcarrier_spacing],
         xp=xp,
     )
-    symbols = _index_or_all(
-        symbols, '"symbols" argument', size=phy.FFT_PER_SLOT, xp=xp
-    )
+    symbols = _index_or_all(symbols, '"symbols" argument', size=phy.FFT_PER_SLOT, xp=xp)
 
     # first build each grid axis separately
     grid = []
@@ -704,19 +701,21 @@ class _Phy3GPP(_PhyOFDM):
     def index_cyclic_prefix(
         self,
         *,
-        frames: tuple[int, ...]=(0,),
-        symbols: tuple[int, ...]|typing.Literal['all']='all',
-        slots: tuple[int, ...]|typing.Literal['all']='all',
+        frames: tuple[int, ...] = (0,),
+        symbols: tuple[int, ...] | typing.Literal['all'] = 'all',
+        slots: tuple[int, ...] | typing.Literal['all'] = 'all',
     ):
         """build an indexing tensor for performing cyclic prefix correlation across various axes"""
-        return _get_3gpp_index_cyclic_prefix(self, frames=frames, symbols=symbols, slots=slots)
+        return _get_3gpp_index_cyclic_prefix(
+            self, frames=frames, symbols=symbols, slots=slots
+        )
 
 
 @lru_cache(4)
 def get_802_16_phy(
     channel_bandwidth: float,
     *,
-    alt_sample_rate: float|None = None,
+    alt_sample_rate: float | None = None,
     frame_duration: float = 5e-3,
     nfft: float = 2048,
     cp_ratio: float = 1 / 8,
@@ -756,7 +755,7 @@ class _Phy802_16(_PhyOFDM):
         self,
         channel_bandwidth: float,
         *,
-        alt_sample_rate: float|None = None,
+        alt_sample_rate: float | None = None,
         frame_duration: float = 5e-3,
         nfft: float = 2048,
         cp_ratio: float = 1 / 8,

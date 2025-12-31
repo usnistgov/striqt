@@ -170,7 +170,6 @@ def _get_phy_mapping(
     generation: typing.Literal['4G', '5G'] = '4G',
     xp=np,
 ) -> dict[float, iqwaveform.ofdm._Phy3GPP]:
-
     kws = dict(
         channel_bandwidth=channel_bandwidth,
         generation=generation,

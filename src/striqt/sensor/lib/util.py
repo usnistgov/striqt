@@ -8,7 +8,6 @@ import importlib
 import itertools
 import logging
 import queue
-import signal
 import sys
 import threading
 import time
@@ -19,6 +18,7 @@ from striqt.analysis.lib.util import (
     PERFORMANCE_DETAIL,
     PERFORMANCE_INFO,
     _StriqtLogger,
+    blocking_input,
     get_logger,
     show_messages,
     stopwatch,
@@ -26,7 +26,6 @@ from striqt.analysis.lib.util import (
     cp,
 )
 from striqt.waveform.util import lazy_import, lru_cache
-import striqt.waveform
 
 _LOG_LEVEL_NAMES = {
     'debug': logging.DEBUG,
@@ -633,23 +632,6 @@ def log_capture_context(name_suffix, /, capture_index=0, capture_count=None):
     logger.extra = start_extra | extra
     yield
     logger.extra = start_extra
-
-
-class delay_keyboard_interrupts:
-    def __enter__(self):
-        self.received = None
-        self.old_handler = signal.signal(signal.SIGINT, self.handler)
-
-    def handler(self, sig, frame):
-        self.received = (sig, frame)
-        logging.debug('SIGINT received. Delaying exit.')
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        # Restore the original SIGINT handler
-        signal.signal(signal.SIGINT, self.old_handler)
-        # If a SIGINT was received while in the context manager, re-raise it now
-        if self.received is not None:
-            self.old_handler(*self.received)
 
 
 show_messages(logging.INFO)

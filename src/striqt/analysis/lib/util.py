@@ -1,9 +1,9 @@
 from __future__ import annotations as __
 
 import contextlib
-import functools
 import importlib
 import importlib.util
+import io
 import logging
 import math
 import sys
@@ -191,3 +191,23 @@ def compute_lock(array=None):
     yield
     if get_lock:
         _compute_lock.release()
+
+
+_input_lock = threading.RLock()
+
+
+def blocking_input(prompt: str, /) -> str:
+    # 1. Create a string buffer to hold the output
+    buffer = io.StringIO()
+
+    # 2. Use redirect_stderr to point sys.stderr to our buffer
+    try:
+        with _input_lock, contextlib.redirect_stderr(buffer):
+            response = input(prompt)
+    finally:
+        output = buffer.getvalue()
+        if output:
+            sys.stderr.write(output)
+            sys.stderr.flush()
+
+    return response

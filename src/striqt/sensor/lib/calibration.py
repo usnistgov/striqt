@@ -464,6 +464,106 @@ class YFactorSink(_sinks.SinkBase):
         print(f'saved to {str(path)!r}')
 
 
+class ManualYFactorPeripheral(
+    _peripherals.CalibrationPeripheralsBase[
+        typing.Any, typing.Any, _specs.ManualYFactorPeripheral
+    ]
+):
+    _last_state = (None, None)
+
+    def open(self):
+        assert self.calibration_spec is not None
+
+        enr = self.calibration_spec.enr
+        prompt = f'Confirm that the noise diode ENR is {enr} dB (y/n): '
+        while True:
+            response = _util.blocking_input(prompt)
+            if response.lower() == 'y':
+                break
+            elif response.lower() == 'n':
+                raise RuntimeError('Set the proper noise diode ENR and run again')
+
+    def close(self):
+        pass
+
+    def arm(self, capture):
+        state = (capture.port, capture.noise_diode_enabled)
+
+        if state != self._last_state:
+            what = f'noise diode at port {capture.port}'
+            if capture.noise_diode_enabled:
+                _util.blocking_input(f'enable {what} and press enter: ')
+            else:
+                _util.blocking_input(f'disable {what} and press enter: ')
+
+        self._last_state = state
+
+    def acquire(self, capture):
+        assert self.calibration_spec is not None
+        return self.calibration_spec.to_dict()
+
+    def setup(
+        self,
+        captures: typing.Sequence[_TC],
+        loops: typing.Sequence[_specs.LoopSpec],
+    ):
+        pass
+
+
+def _calibration_peripherals_cls(
+    ext: type[_peripherals.PeripheralsBase[_TP, _TC]],
+    cal: type[
+        _peripherals.CalibrationPeripheralsBase[typing.Any, typing.Any, _specs._TPC]
+    ],
+) -> type[_peripherals.CalibrationPeripheralsBase[_TP, _TC, _specs._TPC]]:
+    """return a peripheral type for external hardware and calibration"""
+
+    class cls(_peripherals.CalibrationPeripheralsBase):
+        _last_state = (None, None)
+
+        def __init__(self, spec):
+            self.ext = ext(spec)
+            self.cal = cal(spec)
+
+        def open(self):
+            _util.concurrently(
+                dict(ext=_util.Call(self.ext.open), cal=_util.Call(self.cal.open))
+            )
+
+        def setup(
+            self,
+            captures: typing.Sequence[_TC],
+            loops: typing.Sequence[_specs.LoopSpec],
+        ):
+            self.ext.setup(captures, loops)
+            self.cal.setup(captures, loops)
+
+        def close(self):
+            try:
+                self.ext.close()
+            finally:
+                self.cal.close()
+
+        def arm(self, capture):
+            _util.concurrently(
+                dict(
+                    ext=_util.Call(self.ext.arm, capture),
+                    cal=_util.Call(self.cal.arm, capture),
+                )
+            )
+
+        def acquire(self, capture):
+            returns = _util.concurrently(
+                dict(
+                    ext=_util.Call(self.ext.acquire, capture),
+                    cal=_util.Call(self.cal.acquire, capture),
+                )
+            )
+            return returns['ext'] | returns['cal']
+
+    return cls
+
+
 def bind_manual_yfactor_calibration(
     name: str, sensor: '_bindings.SensorBinding[_TS, _TP, _TC, _PS, _PC]'
 ) -> '_bindings.SensorBinding[_TS, typing.Any, typing.Any, _PS, typing.Any]':
@@ -484,40 +584,9 @@ def bind_manual_yfactor_calibration(
             _ensure_loop_at_position(self)
             super().__post_init__()
 
-    class peripherals_cls(_peripherals.CalibrationPeripheralsBase):
-        _last_state = (None, None)
-
-        def open(self):
-            sensor.peripherals.open(self)  # type: ignore
-
-        def close(self):
-            sensor.peripherals.close(self)  # type: ignore
-
-        def arm(self, capture):
-            state = (capture.port, capture.noise_diode_enabled)
-
-            if state != self._last_state:
-                if capture.noise_diode_enabled:
-                    input(f'enable noise diode at port {capture.port} and press enter')
-                else:
-                    input(f'disable noise diode at port {capture.port} and press enter')
-
-            self._last_state = state
-
-            sensor.peripherals.arm(capture)  # type: ignore
-
-        def acquire(self, capture):
-            assert self.calibration_spec is not None
-
-            sensor_result = sensor.peripherals.acquire(self)  # type: ignore
-            return sensor_result | self.calibration_spec.to_dict()
-
-        def setup(
-            self,
-            captures: typing.Sequence[_TC],
-            loops: typing.Sequence[_specs.LoopSpec],
-        ):
-            sensor.peripherals.setup(self, captures, loops)  # type: ignore
+    peripherals_cls = _calibration_peripherals_cls(
+        sensor.peripherals, ManualYFactorPeripheral
+    )
 
     return bindings.bind_sensor(
         name,

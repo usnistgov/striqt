@@ -1,12 +1,10 @@
 from __future__ import annotations as __
 
 import functools
-from importlib.machinery import ModuleSpec
 import importlib.util
 import itertools
 import math
 import sys
-import threading
 import typing
 from contextlib import contextmanager
 from enum import Enum
@@ -662,6 +660,7 @@ def sync_if_cupy(x: ArrayType):
 def configure_cupy():
     if cp is not None:
         import cupy.fft as fft
+
         # the FFT plan sets up large caches that don't help us
         fft.config.get_plan_cache().set_size(0)  # type: ignore
         cp.cuda.set_pinned_memory_allocator(None)  # type: ignore
