@@ -381,13 +381,13 @@ class SourceBase(
         self._apply_setup(_spec, **_extra_specs)
 
     @classmethod
-    def from_spec(cls, spec: _TS, *, captures=None, loops=None, reuse_iq = False) -> Self:
+    def from_spec(cls, spec: _TS, *, captures=None, loops=None, reuse_iq=False) -> Self:
         kwargs = spec.to_dict()
         kwargs['__specs'] = {'source': spec, 'captures': captures, 'loops': loops}
-        
+
         if captures is not None and len(captures) > 0 and cls.__bindings__ is None:
             raise TypeError('can only hint captures for source class bindings')
-        
+
         return cls(reuse_iq=reuse_iq, **kwargs)  # type: ignore
 
     @functools.cached_property

@@ -196,7 +196,7 @@ def compute_lock(array=None):
 @contextlib.contextmanager
 def hold_logger_outputs():
     """apply redirected streams to log outputs, and restore on exit.
-    
+
     This is needed because the loggers hold their own references to the original
     stderr/stdout, so they are not updated on use of contextlib.redirect_ functions.
     """
@@ -217,14 +217,24 @@ def hold_logger_outputs():
 _input_lock = threading.RLock()
 
 
-def blocking_input(prompt: str, /) -> str:
-    # 1. Create a string buffer to hold the output
+def blocking_input(prompt: str | None = None, /) -> str:
+    """wraps a call to builtin input() to avoid threading issues.
+
+    Specifically:
+    - A lock protects access to sys.stdin in case of calls from multiple threads
+    - Log outputs, sys.stderr, and sys.stdout are buffered until entry is complete
+    """
+
     stderr = io.StringIO()
     stdout = io.StringIO()
 
-    # 2. Use redirect_stderr to point sys.stderr to our buffer
     try:
-        with _input_lock, contextlib.redirect_stderr(stderr), contextlib.redirect_stdout(stdout), hold_logger_outputs():
+        with (
+            _input_lock,
+            contextlib.redirect_stderr(stderr),
+            contextlib.redirect_stdout(stdout),
+            hold_logger_outputs(),
+        ):
             sys.__stdout__.write(prompt)
             sys.__stdout__.flush()
             response = input()
