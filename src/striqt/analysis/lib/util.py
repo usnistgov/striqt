@@ -196,18 +196,60 @@ def compute_lock(array=None):
 _input_lock = threading.RLock()
 
 
+@contextmanager
+def hold_logger_outputs(level=logging.DEBUG):
+    """
+    A context manager that captures log outputs and releases them upon exit.
+
+    Args:
+        target_logger: The logger instance to capture logs from.
+        level: The minimum log level to capture.
+    """
+
+    handlers = {}
+
+    for name, adapter in _logger_adapters.items():
+        handlers[name] = MemoryHandler(capacity=1000)
+        handlers[name].setLevel(level)
+
+        # Temporarily add the handler to the logger
+        adapter.addHandler(handlers[name])
+        original_level = adapter.level
+        adapter.setLevel(level) # Ensure the logger captures messages at the specified level
+
+    try:
+        yield
+    finally:
+        for name, adapter in _logger_adapters.items():
+            adapter.removeHandler(handlers[name])
+            adapter.setLevel(original_level)
+
+            for record in handlers[name].buffer:
+                print(handlers[name].format(record), file=sys.stderr)
+
+         handlers[name].close()
+
+
 def blocking_input(prompt: str, /) -> str:
     # 1. Create a string buffer to hold the output
-    buffer = io.StringIO()
+    stderr = io.StringIO()
+    stdout = io.StringIO()
 
     # 2. Use redirect_stderr to point sys.stderr to our buffer
     try:
-        with _input_lock, contextlib.redirect_stderr(buffer):
-            response = input(prompt)
+        with _input_lock, hold_logger_outputs(), contextlib.redirect_stderr(stderr), contextlib.redirect_stdout(stdout):
+            sys.__stdout__.write(prompt)
+            sys.__stdout__.flush()
+            response = input()
     finally:
-        output = buffer.getvalue()
+        output = stderr.getvalue()
         if output:
             sys.stderr.write(output)
             sys.stderr.flush()
+
+        output = stdout.getvalue()
+        if output:
+            sys.stdout.write(output)
+            sys.stdout.flush()
 
     return response
