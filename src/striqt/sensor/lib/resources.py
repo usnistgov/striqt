@@ -211,6 +211,9 @@ def open_resources(
 
     if spec_path is not None:
         os.chdir(str(Path(spec_path).parent))
+    
+    # print(spec.loops)
+    # print(specs.helpers.loop_captures(spec))
 
     bind = bindings.get_binding(spec)
     conn = ConnectionManager(sweep_spec=spec)

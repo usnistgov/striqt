@@ -36,10 +36,10 @@ def _tuplize_port(obj: specs.types.Port) -> tuple[int, ...]:
 
 @util.lru_cache()
 def _tuplize_all_ports(
-    captures: tuple[_TC, ...], loops: tuple[specs.LoopSpec, ...] | None = None
+    captures: tuple[_TC, ...], loops: tuple[specs.LoopSpec, ...] | None = None, capture_cls: type[_TC]|None = None
 ) -> tuple[int, ...]:
     looped = specs.helpers.loop_captures_from_fields(
-        captures, loops or (), only_fields=('port',)
+        captures, loops or (), only_fields=('port',), cls=capture_cls
     )
 
     all_ports = set().union(*(_tuplize_port(c.port) for c in looped))
@@ -663,7 +663,12 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
             on_overflow = 'except'
 
         if captures is not None:
-            ports = _tuplize_all_ports(captures, loops)
+            if self.__bindings__ is None:
+                capture_cls = None
+            else:
+                capture_cls = self.__bindings__.capture
+
+            ports = _tuplize_all_ports(captures, loops, capture_cls)
         else:
             ports = ()
 

@@ -87,6 +87,7 @@ def _acquire_both(
     )
     iq = results['iq']
     ext_data = results['ext_data']
+
     if not isinstance(ext_data, dict):
         raise TypeError(f'peripheral acquire() returned {type(ext_data)!r}, not dict')
     elif not isinstance(iq, sources.AcquiredIQ):

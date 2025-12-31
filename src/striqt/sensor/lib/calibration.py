@@ -67,7 +67,7 @@ def _y_factor_power_corrections(dataset: '_xr.Dataset', Tref=290.0) -> '_xr.Data
     from scipy.constants import Boltzmann
 
     k = Boltzmann * 1000  # W/K -> mW/K
-    enr_dB = dataset.enr_dB.sel(noise_diode_enabled=True, drop=True)
+    enr_dB = dataset.enr.sel(noise_diode_enabled=True, drop=True)
     enr = 10 ** (enr_dB / 10.0)
 
     power = (
@@ -399,8 +399,9 @@ class YFactorSink(_sinks.SinkBase):
 
         sweep_start_time = capture_result.extra_coords.sweep_start_time
 
-        if self.sweep_start_time is None and sweep_start_time is not None:
-            self.sweep_start_time = float(sweep_start_time)
+        if len(self._pending_data) == self._group_sizes[0]:
+            self.flush()
+            self._group_sizes.pop(0)
 
         return ret
 
