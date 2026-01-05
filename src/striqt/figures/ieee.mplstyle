@@ -1,7 +1,7 @@
 # Match all text to the Times New Roman (size 8) used in document captions
 font.size: 8
 font.family: "serif"
-font.serif: ["Times New Roman", "Stix Two"]
+font.serif: Times New Roman, Stix Two Text, DejaVu Serif, Computer Modern Roman, serif
 axes.formatter.use_mathtext: True
 axes.labelsize: 8
 axes.titlesize: 8
