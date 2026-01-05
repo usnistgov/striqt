@@ -522,10 +522,10 @@ def import_compute_modules(cupy=False):
     util.safe_import('numba')
 
 
-def prepare_compute(input_spec: specs.Sweep):
+def prepare_compute(input_spec: specs.Sweep, skip_warmup: bool = False):
     import_compute_modules(cupy=input_spec.source.array_backend == 'cupy')
 
-    if input_spec.options.skip_warmup:
+    if skip_warmup or input_spec.options.skip_warmup:
         return
 
     from .. import bindings

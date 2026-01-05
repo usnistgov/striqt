@@ -631,7 +631,7 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
         util.get_logger('source').info('closed')
         super().close()
 
-    @util.stopwatch('open radio', 'source', threshold=1)
+    @util.stopwatch('open soapy radio', 'source', threshold=1)
     def _connect(self, spec: _TS, **device_kwargs):
         if SoapySDR is None:
             raise ImportError('could not import SoapySDR')

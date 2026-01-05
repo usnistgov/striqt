@@ -335,7 +335,7 @@ class CalibrationSweep(
     calibration: _TPC | None = None
 
     def __post_init__(self):
-        if len(self.captures) > 0:
+        if len(self.captures) > 1:
             raise TypeError(
                 'calibration sweeps may specify loops but not captures, only loops'
             )

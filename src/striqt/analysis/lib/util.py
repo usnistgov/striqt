@@ -68,7 +68,7 @@ _StriqtLogger('analysis')
 def show_messages(
     level: int | None,
     colors: bool | None = None,
-    logger_names: tuple[str, ...] = ('analysis',),
+    logger_names: tuple[str, ...]|'all' = 'all',
 ):
     """filters logging messages displayed to the console by importance
 
@@ -79,6 +79,9 @@ def show_messages(
     Returns:
         None
     """
+
+    if logger_names == 'all':
+        logger_names = _logger_adapters.keys()
 
     for name in logger_names:
         logger = _logger_adapters[name]
