@@ -1,7 +1,7 @@
 # Match all text to the Times New Roman (size 8) used in document captions
 font.size: 8
 font.family: "serif"
-font.serif: "Times New Roman"
+font.serif: Times New Roman, Stix Two Text, DejaVu Serif, Computer Modern Roman, serif
 axes.formatter.use_mathtext: True
 axes.labelsize: 8
 axes.titlesize: 8
@@ -12,7 +12,7 @@ legend.title_fontsize: 8
 lines.markersize : 8
 xtick.labelsize: 8
 ytick.labelsize: 8
-mathtext.fontset: "custom"
+mathtext.fontset: custom
 mathtext.it: "serif:italic"
 mathtext.rm: "serif:normal"
 mathtext.bf: "serif:bold"
