@@ -19,6 +19,7 @@ class Air7101BSourceSpec(specs.SoapySource, kw_only=True, frozen=True):
     transient_holdoff_time = 2e-3
     array_backend: specs.types.ArrayBackend = 'cupy'
     stream_all_rx_ports = True
+    receive_retries: specs.types.ReceiveRetries = 3
 
 
 class Air7201BSourceSpec(specs.SoapySource, kw_only=True, frozen=True):
@@ -27,6 +28,7 @@ class Air7201BSourceSpec(specs.SoapySource, kw_only=True, frozen=True):
     transient_holdoff_time = 2e-3
     array_backend: specs.types.ArrayBackend = 'cupy'
     stream_all_rx_ports = True
+    receive_retries: specs.types.ReceiveRetries = 3
 
 
 class Air8201BSourceSpec(specs.SoapySource, kw_only=True, frozen=True):
@@ -35,6 +37,7 @@ class Air8201BSourceSpec(specs.SoapySource, kw_only=True, frozen=True):
     transient_holdoff_time = 2e-3
     array_backend: specs.types.ArrayBackend = 'cupy'
     stream_all_rx_ports = True
+    receive_retries: specs.types.ReceiveRetries = 3
 
 
 class Airstack1Source(_soapy.SoapySourceBase):

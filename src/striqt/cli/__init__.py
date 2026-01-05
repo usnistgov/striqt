@@ -104,7 +104,7 @@ def _run_click_plotter(
     dataset = analysis.load(zarr_path)
     if 'channel' in dataset.coords:
         dataset = dataset.rename_vars({'channel': 'port'})
-        
+
     if 'start_time' in dataset.dims:
         index_dims = [PORT_DIM, 'center_frequency', 'start_time', 'sweep_start_time']
     else:

@@ -464,7 +464,9 @@ class RxStream:
             err_str = SoapySDR.errToStr(sr.ret)
             raise _base.ReceiveStreamError(f'{err_str} (error code {sr.ret})')
 
-        if sync_time_ns is not None and sync_time_ns > sr.timeNs:
+        if sync_time_ns is None or sr.timeNs == 0:
+            pass
+        elif sync_time_ns > sr.timeNs:
             raise _base.ReceiveStreamError(f'invalid timestamp from before last sync')
 
         return result

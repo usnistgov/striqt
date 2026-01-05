@@ -167,7 +167,10 @@ def _setup_logging(sink: specs.Sink, formatter):
 
 
 def _open_devices(
-    conn: ConnectionManager, binding: bindings.SensorBinding, spec: specs.Sweep, skip_peripherals: bool =False
+    conn: ConnectionManager,
+    binding: bindings.SensorBinding,
+    spec: specs.Sweep,
+    skip_peripherals: bool = False,
 ):
     """the source and any peripherals"""
 
@@ -232,7 +235,9 @@ def open_resources(
             # otherwise, any cuda-dependent imports will hang.
             'compute': conn.log_call(prepare_compute, spec, skip_warmup=test_only),
             'sink': conn.open(sink_cls, spec, alias_func=formatter),
-            'devices': util.Call(_open_devices, conn, bind, spec, skip_peripherals=test_only),
+            'devices': util.Call(
+                _open_devices, conn, bind, spec, skip_peripherals=test_only
+            ),
         }
 
         if spec.source.calibration is not None:
@@ -251,7 +256,7 @@ def open_resources(
             conn._resources['except_context'] = None
         else:
             conn.enter(except_context, 'except_context')
-        
+
         if test_only:
             conn._resources['peripherals'] = None
 

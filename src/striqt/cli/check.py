@@ -24,6 +24,7 @@ def run(yaml_path):
 
     print(f'Opening sensor resources...')
     import sys
+
     sys.stdout.flush()
     manager = sensor.open_resources(spec, spec_path=yaml_path, test_only=True)
 
@@ -63,9 +64,16 @@ def run(yaml_path):
                 pf = p
             print('\tExists: ', 'yes' if Path(pf).exists() else 'no')
 
-        kws = {'sweep': spec, 'source_id': res['source'].id, 'spec_name': Path(yaml_path).stem}
+        kws = {
+            'sweep': spec,
+            'source_id': res['source'].id,
+            'spec_name': Path(yaml_path).stem,
+        }
         field_sets = {}
-        splits = (specs.helpers.split_capture_ports(c) for c in specs.helpers.loop_captures(spec))
+        splits = (
+            specs.helpers.split_capture_ports(c)
+            for c in specs.helpers.loop_captures(spec)
+        )
         for c in itertools.chain(*splits):
             items = kws | c.to_dict()
             for k, v in items.items():
@@ -74,7 +82,11 @@ def run(yaml_path):
         print('\n\nUnique alias field coordinates in output:')
         print(60 * '=')
         cfields = set(schema.capture.__struct_fields__)
-        afields = set(specs.helpers.get_path_fields(spec, source_id=res['source'].id, spec_path=yaml_path))
+        afields = set(
+            specs.helpers.get_path_fields(
+                spec, source_id=res['source'].id, spec_path=yaml_path
+            )
+        )
         pprint({k: field_sets.get(k, None) for k in afields}, width=40)
 
         print('\n\nUnique capture field coordinates in output:')
