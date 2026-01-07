@@ -322,6 +322,8 @@ def get_path_fields(
 ) -> dict[str, str]:
     """return a mapping for string `'{field_name}'.format()` style mapping values"""
 
+    assert isinstance(sweep, specs.Sweep)
+
     if callable(source_id):
         id_ = source_id()
     else:

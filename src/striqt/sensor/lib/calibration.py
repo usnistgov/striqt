@@ -380,7 +380,7 @@ class YFactorSink(_sinks.SinkBase):
         path = self._get_path()
 
         if path is not None and not self.force and Path(path).exists():
-            print('reading results from previous file')
+            print(f'Reading existing calibration data from {str(path)!r}')
             self.prev_corrections = _io.read_calibration(path)
         else:
             self.prev_corrections = None
@@ -456,10 +456,11 @@ class YFactorSink(_sinks.SinkBase):
                 [corrections, self.prev_corrections], dim=_compute.PORT_DIM
             )
 
-        print(f'calibration results on port {port} (shown for max gain)')
-        summary = summarize_calibration(corrections, port=port)
-        with _pd.option_context('display.max_rows', None):
-            print(summary.sort_index(axis=1).sort_index(axis=0))
+        for port, _ in corrections.groupby('port'):
+            print(f'calibration results on port {port} (shown for max gain)')
+            summary = summarize_calibration(corrections, port=port)
+            with _pd.option_context('display.max_rows', None):
+                print(summary.sort_index(axis=1).sort_index(axis=0))
 
         _io.save_calibration(path, corrections)
         print(f'saved to {str(path)!r}')
@@ -489,7 +490,7 @@ class ManualYFactorPeripheral(
 
     def arm(self, capture):
         state = (capture.port, capture.noise_diode_enabled)
-
+        print(capture)
         if state != self._last_state:
             what = f'noise diode at port {capture.port}'
             if capture.noise_diode_enabled:

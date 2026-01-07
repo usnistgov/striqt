@@ -167,7 +167,10 @@ def _setup_logging(sink: specs.Sink, formatter):
 
 
 def _open_devices(
-    conn: ConnectionManager, binding: bindings.SensorBinding, spec: specs.Sweep
+    conn: ConnectionManager,
+    binding: bindings.SensorBinding,
+    spec: specs.Sweep,
+    skip_peripherals: bool = False,
 ):
     """the source and any peripherals"""
 
@@ -178,9 +181,11 @@ def _open_devices(
             captures=spec.captures,
             loops=spec.loops,
             reuse_iq=spec.options.reuse_iq,
-        ),
-        'peripherals': conn.open(binding.peripherals, spec),
+        )
     }
+
+    if not skip_peripherals:
+        calls['peripherals'] = conn.open(binding.peripherals, spec)
 
     util.concurrently(calls)
 
@@ -198,7 +203,8 @@ def open_resources(
     spec: specs.Sweep[_TS, _TP, _TC],
     spec_path: str | Path | None = None,
     except_context: typing.ContextManager | None = None,
-    skip_warmup: bool = False,
+    *,
+    test_only: bool = False,
 ) -> ConnectionManager[_TS, _TP, _TC, _PS, _PC]:
     """open the sensor hardware and software contexts needed to run the given sweep.
 
@@ -213,9 +219,6 @@ def open_resources(
     if spec_path is not None:
         os.chdir(str(Path(spec_path).parent))
 
-    # print(spec.loops)
-    # print(specs.helpers.loop_captures(spec))
-
     bind = bindings.get_binding(spec)
     conn = ConnectionManager(sweep_spec=spec)
 
@@ -228,12 +231,14 @@ def open_resources(
 
     try:
         calls = {
+            # 'compute' MUST be first to run in the foreground.
+            # otherwise, any cuda-dependent imports will hang.
+            'compute': conn.log_call(prepare_compute, spec, skip_warmup=test_only),
             'sink': conn.open(sink_cls, spec, alias_func=formatter),
-            'devices': util.Call(_open_devices, conn, bind, spec),
+            'devices': util.Call(
+                _open_devices, conn, bind, spec, skip_peripherals=test_only
+            ),
         }
-
-        if not skip_warmup:
-            calls['compute'] = conn.log_call(prepare_compute, spec)
 
         if spec.source.calibration is not None:
             calls['calibration'] = conn.get(
@@ -247,8 +252,13 @@ def open_resources(
 
         util.concurrently_with_fg(calls)
 
-        if except_context is not None:
+        if except_context is None:
+            conn._resources['except_context'] = None
+        else:
             conn.enter(except_context, 'except_context')
+
+        if test_only:
+            conn._resources['peripherals'] = None
 
         conn._resources['sweep_spec'] = spec
         conn._resources['alias_func'] = formatter

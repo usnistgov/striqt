@@ -464,7 +464,9 @@ class RxStream:
             err_str = SoapySDR.errToStr(sr.ret)
             raise _base.ReceiveStreamError(f'{err_str} (error code {sr.ret})')
 
-        if sync_time_ns is not None and sync_time_ns > sr.timeNs:
+        if sync_time_ns is None or sr.timeNs == 0:
+            pass
+        elif sync_time_ns > sr.timeNs:
             raise _base.ReceiveStreamError(f'invalid timestamp from before last sync')
 
         return result
@@ -631,7 +633,7 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
         util.get_logger('source').info('closed')
         super().close()
 
-    @util.stopwatch('open radio', 'source', threshold=1)
+    @util.stopwatch('open soapy radio', 'source', threshold=1)
     def _connect(self, spec: _TS, **device_kwargs):
         if SoapySDR is None:
             raise ImportError('could not import SoapySDR')

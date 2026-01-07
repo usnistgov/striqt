@@ -68,7 +68,7 @@ _StriqtLogger('analysis')
 def show_messages(
     level: int | None,
     colors: bool | None = None,
-    logger_names: tuple[str, ...] = ('analysis',),
+    logger_names: tuple[str, ...] | 'all' = 'all',
 ):
     """filters logging messages displayed to the console by importance
 
@@ -79,6 +79,9 @@ def show_messages(
     Returns:
         None
     """
+
+    if logger_names == 'all':
+        logger_names = _logger_adapters.keys()
 
     for name in logger_names:
         logger = _logger_adapters[name]
@@ -204,14 +207,16 @@ def hold_logger_outputs():
     streams = {}
 
     for name, adapter in _logger_adapters.items():
+        if not hasattr(adapter, '_screen_handler'):
+            continue
         streams[name] = adapter._screen_handler.stream
         adapter._screen_handler.stream = sys.stderr
 
     try:
         yield
     finally:
-        for name, adapter in _logger_adapters.items():
-            adapter._screen_handler.stream = streams[name]
+        for name in streams.keys():
+            _logger_adapters[name]._screen_handler.stream = streams[name]
 
 
 _input_lock = threading.RLock()
@@ -238,7 +243,7 @@ def blocking_input(prompt: str | None = None, /) -> str:
             assert isinstance(sys.__stdout__, io.TextIOWrapper)
             if prompt is not None:
                 sys.__stdout__.write(prompt)
-            sys.__stdout__.flush()
+                sys.__stdout__.flush()
             response = input()
     finally:
         output = stderr.getvalue()
