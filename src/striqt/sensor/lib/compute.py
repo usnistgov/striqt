@@ -518,6 +518,7 @@ def import_compute_modules(cupy=False):
 
     util.safe_import('scipy')
     util.safe_import('numpy')
+    util.safe_import('pandas')
     util.safe_import('xarray')
     util.safe_import('numba')
 

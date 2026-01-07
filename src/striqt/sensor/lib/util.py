@@ -82,7 +82,7 @@ def safe_import(name):
         _imports_ready[name].set()
     else:
         _imports_ready[name].wait()
-        mod = importlib.import_module(name)
+        mod = sys.modules[name]
     return mod
 
 

@@ -85,7 +85,6 @@ def run(dataset, output_path: str, interactive: bool):
                 data,
                 spectrogram_power_bin=slice(-130, -50),
             )
-
             pending += _submit_if_available(
                 executor, plotter.spectrogram_ratio_histogram, data
             )

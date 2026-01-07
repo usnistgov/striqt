@@ -716,7 +716,7 @@ def label_legend(
     coord_name: str = None,
     tick_units=True,
     ax: typing.Optional['mpl.axes._axes.Axes'] = None,
-):
+) -> 'mpl.legends':
     """apply legend labeling based on label and unit metadata in the specified dimension of `a`"""
 
     if ax is None:
@@ -737,8 +737,8 @@ def label_legend(
         # TODO: implement tick_units
         formatter = mpl.ticker.EngFormatter(unit=units)
         data = [formatter(v) for v in data]
-
-    ax.legend(data, title=standard_name)
+    
+    return ax.legend(data, title=standard_name)
 
 
 def label_selection(
