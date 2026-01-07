@@ -77,6 +77,7 @@ class _ReceiveBuffers:
 
     def __init__(self, source):
         self.radio = source
+        self.buffers = [None, None]
         self.clear()
 
     def apply(self, samples: 'np.ndarray') -> tuple[int | None, int]:
@@ -103,6 +104,7 @@ class _ReceiveBuffers:
 
     def get_next(self, capture) -> 'tuple[np.ndarray, list[np.ndarray]]':
         """swap the buffers, and reallocate if needed"""
+
         if not self._hold_buffer_swap:
             self.buffers = [self.buffers[1], self.buffers[0]]
         self.buffers[0], ret = alloc_empty_iq(self.radio, capture, self.buffers[0])
@@ -127,10 +129,10 @@ class _ReceiveBuffers:
     def clear(self):
         self.carryover_samples = None
         self.start_time_ns = None
-        self.buffers = [None, None]
 
     def __del__(self):
         self.clear()
+        self.buffers = [None, None]
 
 
 def _cast_iq(
