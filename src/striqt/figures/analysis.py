@@ -737,7 +737,7 @@ def label_legend(
         # TODO: implement tick_units
         formatter = mpl.ticker.EngFormatter(unit=units)
         data = [formatter(v) for v in data]
-    
+
     return ax.legend(data, title=standard_name)
 
 

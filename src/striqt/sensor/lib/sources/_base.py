@@ -42,7 +42,6 @@ MIN_OARESAMPLE_FFT_SIZE = 4 * 4096 - 1
 RESAMPLE_COLA_WINDOW = 'hamming'
 FILTER_DOMAIN = 'time'
 
-
 _TS = typing.TypeVar('_TS', bound=specs.Source)
 _TC = typing.TypeVar('_TC', bound=specs.ResampledCapture)
 _PS = ParamSpec('_PS')
@@ -61,6 +60,7 @@ class AcquiredIQ(dataarrays.AcquiredIQ):
     source_spec: specs.Source
     resampler: ResamplerDesign
     trigger: register.Trigger | None
+    analysis: specs.AnalysisGroup | None = None
 
 
 class ReceiveStreamError(IOError):
@@ -331,6 +331,15 @@ def get_bound_spec(spec: specs.SpecBase | None, cls: type[_TB] | None, **kws) ->
     return typing.cast(_TB, capture)
 
 
+def get_array_namespace(array_backend: specs.types.ArrayBackend) -> types.ModuleType:
+    if array_backend == 'cupy':
+        return util.cp
+    elif array_backend == 'numpy':
+        return np
+    else:
+        raise TypeError('invalid array_backend argument')
+
+
 class SourceBase(
     typing.Generic[_TS, _TC, _PS, _PC], HasSetupType[_TS, _PS], HasCaptureType[_TC, _PC]
 ):
@@ -475,7 +484,9 @@ class SourceBase(
         samples, stream_bufs = self._buffers.get_next(self._capture)
 
         # holdoff parameters, valid when we already have a clock reading
-        dsp_pad_before, _ = _get_dsp_pad_size(self.setup_spec, self._capture, analysis)
+        dsp_pad_before, _ = get_dsp_pad_size(
+            self.setup_spec, self._capture, analysis=analysis
+        )
 
         # carryover from the previous acquisition
         missing_start_time = True
@@ -591,6 +602,7 @@ class SourceBase(
                 source_spec=self.setup_spec,
                 resampler=self.get_resampler(),
                 trigger=trigger,
+                analysis=analysis,
             )
 
         else:
@@ -599,6 +611,7 @@ class SourceBase(
                 capture=self.capture_spec,
                 info=self._prev_iq.info.replace(start_time=None),
                 trigger=trigger,
+                analysis=analysis,
             )
 
         if self._reuse_iq:
@@ -639,14 +652,6 @@ class SourceBase(
             raise AttributeError('arm to set the capture spec')
 
         return self._capture
-
-    def get_array_namespace(self: SourceBase) -> types.ModuleType:
-        if self.setup_spec.array_backend == 'cupy':
-            return util.cp
-        elif self.setup_spec.array_backend == 'numpy':
-            return np
-        else:
-            raise TypeError('invalid array_backend argument')
 
     def get_resampler(self, capture=None) -> ResamplerDesign:
         if capture is None:
@@ -866,6 +871,48 @@ def _get_filter_pad(capture: specs.ResampledCapture):
 
 
 @util.lru_cache(30000)
+def _get_fft_resample_pad(
+    setup: specs.Source,
+    capture: specs.ResampledCapture,
+    analysis: AnalysisGroup | None = None,
+) -> tuple[int, int]:
+    # accommodate the large fft by padding to a fast size that includes at least lag_pad
+    min_lag_pad = _get_trigger_pad_size(setup, capture, analysis)
+    design = design_capture_resampler(setup.master_clock_rate, capture)
+    analysis_size = round(capture.duration * design['fs_sdr'])
+
+    # treat the block size as the minimum number of samples needed for the resampler
+    # output to have an integral number of samples
+    if np.isfinite(capture.analysis_bandwidth):
+        filter_pad = _get_filter_pad(capture)
+        min_filter_blocks = iqwaveform.util.ceildiv(design['nfft'], filter_pad)
+        block_size = design['nfft'] * min_filter_blocks
+    else:
+        block_size = design['nfft']
+    block_count = analysis_size // block_size
+    min_blocks = block_count + iqwaveform.util.ceildiv(min_lag_pad, block_size)
+
+    # since design_capture_resampler gives us a nice fft size
+    # for block_size, then if we make sure pad_blocks is also a nice fft size,
+    # then the product (pad_blocks * block_size) will also be a product of small
+    # primes
+    pad_blocks = _get_next_fast_len(min_blocks + 1, array_backend=setup.array_backend)
+    pad_end = pad_blocks * block_size - analysis_size
+    assert pad_end % 2 == 0
+
+    return (pad_end // 2, pad_end // 2)
+
+
+def get_fft_resample_pad(
+    setup: specs.Source,
+    capture: specs.ResampledCapture,
+    analysis: AnalysisGroup | None = None,
+) -> tuple[int, int]:
+    capture = specs.ResampledCapture.from_spec(capture)
+    return _get_fft_resample_pad(setup, capture, analysis)
+
+
+@util.lru_cache(30000)
 def _get_dsp_pad_size(
     setup: specs.Source,
     capture: specs.ResampledCapture,
@@ -875,32 +922,27 @@ def _get_dsp_pad_size(
 
     from .. import resampling
 
-    min_lag_pad = _get_trigger_pad_size(setup, capture, analysis)
-
     if resampling.USE_OARESAMPLE:
+        min_lag_pad = _get_trigger_pad_size(setup, capture, analysis)
         oa_pad_low, oa_pad_high = _get_oaresample_pad(setup.master_clock_rate, capture)
         return (oa_pad_low, oa_pad_high + min_lag_pad)
     else:
         # this is removed before the FFT, so no need to micromanage its size
+        fft_pad = _get_fft_resample_pad(setup, capture, analysis)
+
         filter_pad = _get_filter_pad(capture)
+        assert fft_pad[0] > 2 * filter_pad
 
-        # accommodate the large fft by padding to a fast size that includes at least lag_pad
-        design = design_capture_resampler(setup.master_clock_rate, capture)
-        analysis_size = round(capture.duration * design['fs_sdr'])
+        return (fft_pad[0], fft_pad[1])
 
-        # treat the block size as the minimum number of samples needed for the resampler
-        # output to have an integral number of samples
-        block_size = design['nfft']
-        block_count = analysis_size // block_size
-        min_blocks = block_count + iqwaveform.util.ceildiv(min_lag_pad, block_size)
 
-        # since design_capture_resampler gives us a nice fft size
-        # for block_size, then if we make sure pad_blocks is also a nice fft size,
-        # then the product (pad_blocks * block_size) will also be a product of small
-        # primes
-        pad_blocks = _get_next_fast_len(min_blocks)
-        pad_end = pad_blocks * block_size - analysis_size
-        return (filter_pad, pad_end)
+def get_dsp_pad_size(
+    setup: specs.Source,
+    capture: specs.ResampledCapture,
+    analysis: AnalysisGroup | None = None,
+) -> tuple[int, int]:
+    capture = specs.ResampledCapture.from_spec(capture)
+    return _get_dsp_pad_size(setup, capture, analysis)
 
 
 @util.lru_cache()
@@ -940,18 +982,21 @@ def _get_trigger_pad_size(
     return lag_pad
 
 
-def _get_next_fast_len(n) -> int:
-    try:
+def _get_next_fast_len(n, array_backend: specs.types.ArrayBackend) -> int:
+    if array_backend == 'cupy':
         from ..util import cp
         import cupyx.scipy.fft as fft  # type: ignore
-    except ModuleNotFoundError:
+    elif array_backend == 'numpy':
         import scipy.fft as fft
+    else:
+        raise TypeError(f'invalid array_backend {array_backend}')
 
     size = fft.next_fast_len(n)
     assert size is not None, ValueError('failed to determine fft size')
     return size
 
 
+@util.lru_cache()
 def _get_oaresample_pad(master_clock_rate: float, capture: specs.ResampledCapture):
     resampler_design = design_capture_resampler(master_clock_rate, capture)
 
@@ -977,7 +1022,7 @@ def _get_oaresample_pad(master_clock_rate: float, capture: specs.ResampledCaptur
     return (samples_in - min_samples_in) + noverlap + nfft // 2, noverlap
 
 
-@util.lru_cache(30000)
+@util.lru_cache()
 def _cached_channel_read_buffer_count(
     setup: specs.Source,
     capture: specs.ResampledCapture,
@@ -1020,9 +1065,11 @@ def get_channel_read_buffer_count(
 ) -> int:
     assert source._capture is not None
 
+    capture = specs.ResampledCapture.from_spec(source._capture)
+
     return _cached_channel_read_buffer_count(
         setup=source.setup_spec,
-        capture=source._capture,
+        capture=capture,
         include_holdoff=include_holdoff,
         analysis=analysis,
     )

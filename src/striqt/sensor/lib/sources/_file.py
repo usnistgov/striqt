@@ -94,7 +94,7 @@ class MATSource(
             spec.path,
             format=spec.file_format,
             dtype='complex64',
-            xp=self.get_array_namespace(),
+            xp=_base.get_array_namespace(self.setup_spec.array_backend),
             loop=spec.loop,
             backend_sample_rate=spec.master_clock_rate,
             **meta,
