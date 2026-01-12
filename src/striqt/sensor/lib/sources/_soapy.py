@@ -6,6 +6,12 @@ import time
 import typing
 
 from ... import specs
+from ...specs.structs import (
+    _SoapyRange,
+    _SoapyPortInfo,
+    _SoapyArgInfo,
+    _SoapySensorReading,
+)
 
 from .. import util
 from . import _base
@@ -13,7 +19,6 @@ from . import _base
 if typing.TYPE_CHECKING:
     import SoapySDR  # type: ignore
     import pandas as pd
-    from typing_extensions import Self
 else:
     try:
         SoapySDR = util.lazy_import('SoapySDR')
@@ -48,108 +53,9 @@ def _tuplize_all_ports(
     return tuple(sorted(all_ports))
 
 
-class Range(specs.SpecBase, frozen=True, cache_hash=True):
-    """Represents a range with a minimum, maximum, and step."""
-
-    minimum: float
-    maximum: float
-    step: float | None = None
-
-    @classmethod
-    def from_soapy(cls, r: 'SoapySDR.Range') -> Self:
-        return cls(minimum=r.minimum(), maximum=r.maximum(), step=r.step())
-
-    @classmethod
-    def from_soapy_tuple(cls, seq: tuple['SoapySDR.Range']) -> tuple[Self, ...]:
-        return tuple([cls.from_soapy(r) for r in seq])
-
-
-class ArgInfo(specs.SpecBase, kw_only=True, frozen=True, cache_hash=True):
-    """Represents information about a configurable device argument."""
-
-    name: str
-    description: str
-    units: str
-    type: int
-    value: str
-    range: tuple
-    options: tuple[str, ...]
-
-    @classmethod
-    def from_soapy(cls, arg: 'SoapySDR.ArgInfo') -> Self:
-        return cls(
-            name=arg.name,
-            description=arg.description,
-            units=arg.units,
-            type=arg.type,
-            value=arg.value,
-            range=(Range.from_soapy(arg.range),),
-            options=tuple(arg.options),
-        )
-
-    @classmethod
-    def from_soapy_map(cls, soapy_args: list[SoapySDR.ArgInfo]) -> dict[str, Self]:
-        return {arg.key: cls.from_soapy(arg) for arg in soapy_args}
-
-
-class SensorReading(specs.SpecBase, kw_only=True, frozen=True, cache_hash=True):
-    """Represents a sensor and its current reading."""
-
-    name: str
-    info: ArgInfo
-    reading: str
-
-
-# class NativeFormat(NamedTuple):
-#     """Represents the native stream format and its full-scale value."""
-#     format: str
-#     full_scale: float
-
-
-class PortInfo(specs.SpecBase, kw_only=True, frozen=True, cache_hash=True):
-    """Holds all capability metadata for a single RX or TX channel."""
-
-    port_info: dict[str, str]
-    full_duplex: bool
-    agc: bool
-    stream_formats: tuple[str, ...]
-    # native_format: NativeFormat
-    stream_args: dict[str, ArgInfo]
-    antennas: tuple[str, ...]
-    corrections: tuple[str, ...]
-    gains: dict[str, Range]
-    full_gain_range: Range
-    frequencies: dict[str, tuple[Range, ...]]
-    full_freq_range: Range
-    tune_args: dict[str, ArgInfo]
-    backend_sample_rate_range: Range
-    master_clock_rates: tuple[float, ...]
-    bandwidths: tuple[Range, ...]
-    sensors: dict[str, SensorReading]
-    settings: dict[str, ArgInfo]
-
-
-class SoapySourceInfo(_base.BaseSourceInfo, kw_only=True, frozen=True, cache_hash=True):
-    """Top-level container for all device capabilities metadata."""
-
-    driver: str
-    hardware: str
-    hardware_info: dict[str, str]
-    num_rx_ports: int
-    num_tx_ports: int
-    has_timestamps: bool
-    clock_sources: tuple[str, ...]
-    time_sources: tuple[str, ...]
-    global_sensors: dict[str, SensorReading]
-    registers: tuple[str, ...]
-    settings: dict[str, ArgInfo]
-    gpios: tuple[str, ...]
-    uarts: tuple[str, ...]
-    rx_ports: tuple[PortInfo, ...]
-    tx_ports: tuple[PortInfo, ...]
-
-
-def _probe_channel(device: SoapySDR.Device, direction: int, port: int) -> PortInfo:
+def _probe_channel(
+    device: SoapySDR.Device, direction: int, port: int
+) -> _SoapyPortInfo:
     """Probes a single channel and returns its capabilities."""
 
     args = (direction, port)
@@ -165,7 +71,7 @@ def _probe_channel(device: SoapySDR.Device, direction: int, port: int) -> PortIn
     gains = {}
     for name in device.listGains(*args):
         soapy_gain_range = device.getGainRange(*args, name)
-        gain_range = Range(
+        gain_range = _SoapyRange(
             minimum=soapy_gain_range.minimum(),
             maximum=soapy_gain_range.maximum(),
             step=soapy_gain_range.step(),
@@ -173,44 +79,44 @@ def _probe_channel(device: SoapySDR.Device, direction: int, port: int) -> PortIn
         gains[name] = gain_range
 
     freqs = {
-        name: Range.from_soapy_tuple(device.getFrequencyRange(*args, name))
+        name: _SoapyRange.from_soapy_tuple(device.getFrequencyRange(*args, name))
         for name in device.listFrequencies(*args)
     }
 
     sensors = {
-        key: SensorReading(
+        key: _SoapySensorReading(
             name=device.getSensorInfo(*args, key).name,
-            info=ArgInfo.from_soapy(device.getSensorInfo(*args, key)[0]),
+            info=_SoapyArgInfo.from_soapy(device.getSensorInfo(*args, key)[0]),
             reading=device.readSensor(*args, key),
         )
         for key in device.listSensors(*args)
     }
 
-    return PortInfo(
+    return _SoapyPortInfo(
         port_info=dict(device.getChannelInfo(*args)),
         full_duplex=device.getFullDuplex(*args),
         agc=device.hasGainMode(*args),
         stream_formats=tuple(device.getStreamFormats(*args)),
         # native_format=NativeFormat(format=native_fmt, full_scale=full_scale),
-        stream_args=ArgInfo.from_soapy_map(device.getStreamArgsInfo(*args)),
+        stream_args=_SoapyArgInfo.from_soapy_map(device.getStreamArgsInfo(*args)),
         antennas=tuple(device.listAntennas(*args)),
         corrections=tuple(corrections_list),
         gains=gains,
-        full_gain_range=Range.from_soapy(device.getGainRange(*args)),
+        full_gain_range=_SoapyRange.from_soapy(device.getGainRange(*args)),
         frequencies=freqs,
-        full_freq_range=Range.from_soapy_tuple(device.getFrequencyRange(*args)),  # type: ignore
-        tune_args=ArgInfo.from_soapy_map(device.getFrequencyArgsInfo(*args)),
-        backend_sample_rate_range=Range.from_soapy_tuple(
+        full_freq_range=_SoapyRange.from_soapy_tuple(device.getFrequencyRange(*args)),  # type: ignore
+        tune_args=_SoapyArgInfo.from_soapy_map(device.getFrequencyArgsInfo(*args)),
+        backend_sample_rate_range=_SoapyRange.from_soapy_tuple(
             device.getSampleRateRange(*args)
         ),  # type: ignore
         master_clock_rates=tuple(device.getMasterClockRates()),
-        bandwidths=Range.from_soapy_tuple(device.getBandwidthRange(*args)),
+        bandwidths=_SoapyRange.from_soapy_tuple(device.getBandwidthRange(*args)),
         sensors=sensors,
-        settings=ArgInfo.from_soapy_map(device.getSettingInfo(*args)),
+        settings=_SoapyArgInfo.from_soapy_map(device.getSettingInfo(*args)),
     )
 
 
-def probe_soapy_info(device: SoapySDR.Device) -> SoapySourceInfo:
+def probe_soapy_info(device: SoapySDR.Device) -> specs.SoapySourceInfo:
     """
     Probes a SoapySDR device and returns its capabilities as a nested NamedTuple.
 
@@ -225,9 +131,9 @@ def probe_soapy_info(device: SoapySDR.Device) -> SoapySourceInfo:
         A RadioInfo named tuple containing capability metadata for the device.
     """
     global_sensors = {
-        key: SensorReading(
+        key: _SoapySensorReading(
             name=device.getSensorInfo(key).name,
-            info=ArgInfo.from_soapy(device.getSensorInfo(key)),
+            info=_SoapyArgInfo.from_soapy(device.getSensorInfo(key)),
             reading=device.readSensor(key),
         )
         for key in device.listSensors()
@@ -243,7 +149,7 @@ def probe_soapy_info(device: SoapySDR.Device) -> SoapySourceInfo:
         _probe_channel(device, SoapySDR.SOAPY_SDR_TX, i) for i in range(num_tx)
     )
 
-    return SoapySourceInfo(
+    return specs.SoapySourceInfo(
         driver=device.getDriverKey(),
         hardware=device.getHardwareKey(),
         hardware_info=device.getHardwareInfo(),
@@ -254,7 +160,7 @@ def probe_soapy_info(device: SoapySDR.Device) -> SoapySourceInfo:
         time_sources=tuple(device.listTimeSources()),
         global_sensors=global_sensors,
         registers=tuple(device.listRegisterInterfaces()),
-        settings=ArgInfo.from_soapy_map(device.getSettingInfo()),
+        settings=_SoapyArgInfo.from_soapy_map(device.getSettingInfo()),
         gpios=tuple(device.listGPIOBanks()),
         uarts=tuple(device.listUARTs()),
         rx_ports=rx_channels,
@@ -296,7 +202,7 @@ class RxStream:
     def __init__(
         self,
         setup: specs.SoapySource,
-        info: SoapySourceInfo,
+        info: specs.SoapySourceInfo,
         *,
         ports: tuple[int, ...] = (),
         on_overflow: _base.OnOverflowType = 'except',
@@ -525,7 +431,7 @@ class HardwareTimeSync:
 
     def to_external_pps(self, device: 'SoapySDR.Device') -> int | None:
         if not device.hasHardwareTime():
-            raise IOError('device does not expose hardware time')
+            raise IOError('this soapy device does not expose hardware time')
 
         # let a PPS transition pass to avoid race conditions involving
         # applying the time of the next PPS
@@ -554,49 +460,6 @@ class HardwareTimeSync:
         return time_to_set_ns
 
 
-# def set_gain(source: SoapySourceBase, capture: specs.SoapyCapture, ports_changed: bool):
-#     splits = specs.helpers.pairwise_by_port(capture, source._capture, ports_changed)
-
-#     for new, old in splits:
-#         if old is None or new.gain != old.gain:
-#             source._device.setGain(SoapySDR.SOAPY_SDR_RX, new.port, new.gain)
-
-
-# def set_center_frequency(
-#     source: SoapySourceBase, capture: specs.SoapyCapture, ports_changed: bool
-# ):
-#     def backend_fc(c: specs.SoapyCapture|None) -> float|None:
-#         if c is None:
-#             return None
-#         return c.center_frequency - source.get_resampler(c)['lo_offset']
-
-#     splits = specs.helpers.pairwise_by_port(capture, source._capture, ports_changed)
-
-#     for new, old in splits:
-#         new_fc = backend_fc(new)
-#         if new_fc != backend_fc(old):
-#             source._device.setFrequency(SoapySDR.SOAPY_SDR_RX, new.port, new_fc)
-
-
-# def set_sample_rate(source: SoapySourceBase, capture: specs.SoapyCapture):
-#     new_fs = source.get_resampler(capture)['fs_sdr']
-
-#     if source._capture is None:
-#         old_fs = None
-#     else:
-#         old_fs = source.get_resampler()['fs_sdr']
-
-#     if new_fs == old_fs:
-#         return
-
-#     capture_per_port = specs.helpers.split_capture_ports(capture)
-#     if source.setup_spec.shared_rx_sample_clock:
-#         capture_per_port = capture_per_port[:1]
-
-#     for c in capture_per_port:
-#         source._device.setSampleRate(SoapySDR.SOAPY_SDR_RX, c.port, new_fs)
-
-
 def device_time_source(spec: specs.SoapySource):
     if spec.time_source == 'host':
         return 'internal'
@@ -621,8 +484,8 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
             or SoapySDR._SoapySDR.Device_deactivateStream is None
             or SoapySDR.Device is None
         ):
-            # soapy's underlying libraries have been deconstructed
-            # too far to proceed
+            # handle partially-deconstructed soapy module observed after
+            # exceptions
             return
 
         self._device.__del__ = lambda: None
@@ -766,7 +629,7 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
         raise self._device.getHardwareKey()
 
     @functools.cached_property
-    def info(self) -> SoapySourceInfo:
+    def info(self) -> specs.SoapySourceInfo:
         return probe_soapy_info(self._device)
 
     @util.stopwatch('read_iq', 'source')

@@ -16,7 +16,7 @@ from striqt.analysis.specs import AnalysisGroup, Analysis
 if typing.TYPE_CHECKING:
     import numpy as np
     import striqt.waveform as iqwaveform
-    from striqt.waveform._typing import ArrayLike
+    from striqt.waveform._typing import ArrayType
 
 else:
     array_api_compat = util.lazy_import('array_api_compat')
@@ -29,7 +29,7 @@ else:
 USE_OARESAMPLE = False
 
 
-def _get_voltage_scale(iq: AcquiredIQ, xp=None) -> tuple['ArrayLike', 'ArrayLike']:
+def _get_voltage_scale(iq: AcquiredIQ, xp=None) -> tuple[ArrayType, ArrayType]:
     """compute the scaling factor needed to scale each of N ports of an IQ waveform
 
     Returns:

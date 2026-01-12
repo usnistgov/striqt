@@ -19,6 +19,7 @@ if typing.TYPE_CHECKING:
 
     # pd imports need to be here for msgspec to resolve timestamp types
     import pandas as pd
+    import SoapySDR  # type: ignore
 else:
     pd = util.lazy_import('pandas')
 
@@ -390,3 +391,114 @@ class FileAcquisitionInfo(AcquisitionInfo, kw_only=True, frozen=True):
     port: types.Port = 0
     gain: types.Gain = float('nan')
     source_id: types.SourceID = ''
+
+
+class _SoapyRange(SpecBase, frozen=True, cache_hash=True):
+    """Represents a range with a minimum, maximum, and step."""
+
+    minimum: float
+    maximum: float
+    step: float | None = None
+
+    @classmethod
+    def from_soapy(cls, r: 'SoapySDR.Range') -> _Self:
+        return cls(minimum=r.minimum(), maximum=r.maximum(), step=r.step())
+
+    @classmethod
+    def from_soapy_tuple(cls, seq: tuple['SoapySDR.Range']) -> tuple[_Self, ...]:
+        return tuple([cls.from_soapy(r) for r in seq])
+
+
+class _SoapyArgInfo(SpecBase, kw_only=True, frozen=True, cache_hash=True):
+    """Represents information about a configurable device argument."""
+
+    name: str
+    description: str
+    units: str
+    type: int
+    value: str
+    range: tuple
+    options: tuple[str, ...]
+
+    @classmethod
+    def from_soapy(cls, arg: 'SoapySDR.ArgInfo') -> _Self:
+        return cls(
+            name=arg.name,
+            description=arg.description,
+            units=arg.units,
+            type=arg.type,
+            value=arg.value,
+            range=(_SoapyRange.from_soapy(arg.range),),
+            options=tuple(arg.options),
+        )
+
+    @classmethod
+    def from_soapy_map(cls, soapy_args: list[SoapySDR.ArgInfo]) -> dict[str, _Self]:
+        return {arg.key: cls.from_soapy(arg) for arg in soapy_args}
+
+
+class BaseSourceInfo(SpecBase, kw_only=True, frozen=True, cache_hash=True):
+    num_rx_ports: int | None
+
+    def min_port_count(self, tuple_size: int):
+        if self.num_rx_ports is None:
+            return tuple_size
+        else:
+            return self.num_rx_ports
+
+
+class _SoapySensorReading(SpecBase, kw_only=True, frozen=True, cache_hash=True):
+    """Represents a sensor and its current reading."""
+
+    name: str
+    info: _SoapyArgInfo
+    reading: str
+
+
+# class NativeFormat(NamedTuple):
+#     """Represents the native stream format and its full-scale value."""
+#     format: str
+#     full_scale: float
+
+
+class _SoapyPortInfo(SpecBase, kw_only=True, frozen=True, cache_hash=True):
+    """Holds all capability metadata for a single RX or TX channel."""
+
+    port_info: dict[str, str]
+    full_duplex: bool
+    agc: bool
+    stream_formats: tuple[str, ...]
+    # native_format: NativeFormat
+    stream_args: dict[str, _SoapyArgInfo]
+    antennas: tuple[str, ...]
+    corrections: tuple[str, ...]
+    gains: dict[str, _SoapyRange]
+    full_gain_range: _SoapyRange
+    frequencies: dict[str, tuple[_SoapyRange, ...]]
+    full_freq_range: _SoapyRange
+    tune_args: dict[str, _SoapyArgInfo]
+    backend_sample_rate_range: _SoapyRange
+    master_clock_rates: tuple[float, ...]
+    bandwidths: tuple[_SoapyRange, ...]
+    sensors: dict[str, _SoapySensorReading]
+    settings: dict[str, _SoapyArgInfo]
+
+
+class SoapySourceInfo(BaseSourceInfo, kw_only=True, frozen=True, cache_hash=True):
+    """Top-level container for all device capabilities metadata."""
+
+    driver: str
+    hardware: str
+    hardware_info: dict[str, str]
+    num_rx_ports: int
+    num_tx_ports: int
+    has_timestamps: bool
+    clock_sources: tuple[str, ...]
+    time_sources: tuple[str, ...]
+    global_sensors: dict[str, _SoapySensorReading]
+    registers: tuple[str, ...]
+    settings: dict[str, _SoapyArgInfo]
+    gpios: tuple[str, ...]
+    uarts: tuple[str, ...]
+    rx_ports: tuple[_SoapyPortInfo, ...]
+    tx_ports: tuple[_SoapyPortInfo, ...]

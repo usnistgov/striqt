@@ -169,16 +169,6 @@ def _cast_iq(
     return buffer_out
 
 
-class BaseSourceInfo(specs.SpecBase, kw_only=True, frozen=True, cache_hash=True):
-    num_rx_ports: int | None
-
-    def min_port_count(self, tuple_size: int):
-        if self.num_rx_ports is None:
-            return tuple_size
-        else:
-            return self.num_rx_ports
-
-
 _source_id_map: dict[specs.Source, SourceBase | Event] = defaultdict(Event)
 
 
@@ -393,7 +383,7 @@ class SourceBase(
         return cls(reuse_iq=reuse_iq, **kwargs)  # type: ignore
 
     @functools.cached_property
-    def info(self) -> BaseSourceInfo:
+    def info(self) -> specs.BaseSourceInfo:
         raise NotImplementedError
 
     @functools.cached_property
