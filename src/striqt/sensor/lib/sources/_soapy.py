@@ -642,7 +642,7 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
 
         if not self._rx_stream.is_enabled:
             self._rx_stream.enable(self._device, True)
-            for c in specs.helpers.split_capture_ports(self._capture):
+            for c in specs.helpers.split_capture_ports(self.capture_spec):
                 self._device.setGain(SoapySDR.SOAPY_SDR_RX, c.port, c.gain)
 
         return super().read_iq(analysis)
