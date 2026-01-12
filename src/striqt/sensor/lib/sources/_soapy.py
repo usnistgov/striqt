@@ -182,6 +182,7 @@ def read_retries(source: SoapySourceBase) -> typing.Generator[None]:
 
     def prepare_retry(*args, **kws):
         source._rx_stream.enable(source._device, False)
+        source._buffers.clear()
         source._buffers.skip_next_buffer_swap()
 
     decorate = util.retry(EXC_TYPES, tries=max_count + 1, exception_func=prepare_retry)
@@ -554,10 +555,8 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
 
     def _prepare_capture(self, capture: _TC) -> _TC | None:
         if (
-            capture == self._capture
-            and self.setup_spec.gapless
-            or self._rx_stream is None
-        ):
+            capture == self._capture and self.setup_spec.gapless
+        ) or self._rx_stream is None:
             # the one case where we leave it running
             return
 
@@ -573,7 +572,7 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
         # gain before center frequency to accommodate attenuator settling time
         for c in specs.helpers.split_capture_ports(capture):
             freq = c.center_frequency - rs['lo_offset']
-            self._device.setGain(SoapySDR.SOAPY_SDR_RX, c.port, c.gain)
+            self._device.setGain(SoapySDR.SOAPY_SDR_RX, c.port, -30)
             self._device.setFrequency(SoapySDR.SOAPY_SDR_RX, c.port, freq)
             self._device.setSampleRate(SoapySDR.SOAPY_SDR_RX, c.port, rs['fs_sdr'])
 
@@ -643,6 +642,8 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
 
         if not self._rx_stream.is_enabled:
             self._rx_stream.enable(self._device, True)
+            for c in specs.helpers.split_capture_ports(self._capture):
+                self._device.setGain(SoapySDR.SOAPY_SDR_RX, c.port, c.gain)
 
         return super().read_iq(analysis)
 

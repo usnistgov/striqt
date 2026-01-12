@@ -122,22 +122,6 @@ def resampling_correction(iq_in: AcquiredIQ, overwrite_x=False, axis=1) -> Acqui
 
     needs_resample = _base.needs_resample(iq_in.resampler, capture)
 
-    # apply the filter here and ensure we're working with a copy if needed
-    if not USE_OARESAMPLE and np.isfinite(capture.analysis_bandwidth):
-        h = iqwaveform.design_fir_lpf(
-            bandwidth=capture.analysis_bandwidth,
-            sample_rate=fs,
-            transition_bandwidth=250e3,
-            numtaps=_base.FILTER_SIZE,
-            xp=xp,
-        )
-        pad = _base._get_filter_pad(capture)
-        iq = iqwaveform.oaconvolve(iq, h[xp.newaxis, :], 'same', axes=axis)
-        iq = iqwaveform.util.axis_slice(iq, pad, iq.shape[axis], axis=axis)
-
-        # iq is now a copy, so it can be safely overridden
-        overwrite_x = True
-
     if not needs_resample:
         if vscale is not None:
             if vscale.ndim == 1:
@@ -174,6 +158,9 @@ def resampling_correction(iq_in: AcquiredIQ, overwrite_x=False, axis=1) -> Acqui
     else:
         assert iqwaveform.util.isroundmod(iq.shape[1] * capture.sample_rate, fs)
         resample_size_out = round(iq.shape[1] * capture.sample_rate / fs)
+        offset_in = _base.get_fft_resample_pad(source_spec, capture, iq_in.analysis)[0]
+        offset_out = round(offset_in * capture.sample_rate / fs)
+
         iq = iqwaveform.fourier.resample(
             iq,
             resample_size_out,
@@ -181,6 +168,26 @@ def resampling_correction(iq_in: AcquiredIQ, overwrite_x=False, axis=1) -> Acqui
             axis=axis,
             scale=1 if vscale is None else vscale,
         )
+
+        # apply the filter here and ensure we're working with a copy if needed
+        if np.isfinite(capture.analysis_bandwidth):
+            h = iqwaveform.design_fir_lpf(
+                bandwidth=capture.analysis_bandwidth,
+                sample_rate=capture.sample_rate,
+                transition_bandwidth=250e3,
+                numtaps=_base.FILTER_SIZE,
+                xp=xp,
+            )
+            pad = _base._get_filter_pad(capture)
+            iq = iqwaveform.oaconvolve(iq, h[xp.newaxis, :], 'same', axes=axis)
+
+            offset_out = offset_out + pad
+            # iq = iqwaveform.util.axis_slice(iq, pad, iq.shape[axis], axis=axis)
+
+            # the freshly allocated iq can be safely overridden
+            overwrite_x = True
+
+        iq = iqwaveform.util.axis_slice(iq, offset_out, iq.shape[axis], axis=axis)
 
     size_out = round(capture.duration * capture.sample_rate)
 
