@@ -19,7 +19,7 @@ class NoSource(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
 
     @functools.cached_property
     def info(self):
-        return _base.BaseSourceInfo(num_rx_ports=self.setup_spec.num_rx_ports)
+        return specs.structs.BaseSourceInfo(num_rx_ports=self.setup_spec.num_rx_ports)
 
     @functools.cached_property
     def id(self) -> str:

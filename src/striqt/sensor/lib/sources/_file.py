@@ -138,7 +138,7 @@ class MATSource(
 
     @functools.cached_property
     def info(self):
-        return _base.BaseSourceInfo(num_rx_ports=None)
+        return specs.structs.BaseSourceInfo(num_rx_ports=None)
 
     @functools.cached_property
     def id(self):
@@ -174,7 +174,7 @@ class ZarrIQSource(
 
     @functools.cached_property
     def info(self):
-        return _base.BaseSourceInfo(num_rx_ports=self._waveform.shape[0])
+        return specs.structs.BaseSourceInfo(num_rx_ports=self._waveform.shape[0])
 
     def _prepare_capture(self, capture):
         super()._prepare_capture(capture)
