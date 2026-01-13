@@ -91,10 +91,12 @@ ReceiveRetries = Annotated[
     int, Meta('number of acquisition retry attempts on stream error', ge=0)
 ]
 SinkClass = Annotated[
-    Union[str, Literal['striqt.sensor.writers.CaptureAppender']],
-    Meta('data sink class to import and use'),
+    Union[str, Literal['striqt.sensor.sinks.CaptureAppender']],
+    Meta('Data sink class that implements data storage'),
 ]
-SNR = Annotated[float, Meta('SNR with added noise ', 'dB')]
+SNR = Annotated[
+    float, Meta('Add circular white gaussian noise to achieve this SNR', 'dB')
+]
 SourceID = Annotated[str, Meta('Source UUID string')]
 StartTime = Annotated[
     'pd.Timestamp', Meta('Acquisition start time of the first capture')
