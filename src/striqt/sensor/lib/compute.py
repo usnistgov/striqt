@@ -316,11 +316,10 @@ def analyze(
             iq, options.sweep_spec.analysis, iq.capture, opts
         )
 
-    if 'adc_overload' in iq.extra_data:
-        peak = iq.extra_data['adc_overload']
-        if is_cupy_array(peak):
-            peak = peak.get()
-            iq.extra_data['adc_overload'] = peak
+    if iq.source_spec.array_backend == 'cupy':
+        for name, value in list(iq.extra_data.items()):
+            if is_cupy_array(value):
+                iq.extra_data[name] = value.get()
 
     if not options.as_xarray:
         return da_delayed
