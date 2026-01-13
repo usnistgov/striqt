@@ -36,7 +36,7 @@ _TS = typing.TypeVar('_TS', bound=specs.SoapySource)
 _TC = typing.TypeVar('_TC', bound=specs.SoapyCapture)
 
 
-def _get_adc_peak(x: ArrayType, capture: specs.SoapyCapture, source: specs.SoapySource):
+def _get_adc_peak(x: 'ArrayType', capture: specs.SoapyCapture, source: specs.SoapySource):
     xp = array_namespace(x)
 
     adc_scale = _base._get_dtype_scale(source.transport_dtype)
@@ -701,4 +701,6 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
 
     def acquire(self, *, analysis=None, correction=True, alias_func=None):
         with read_retries(self):
-            return super().acquire(**locals())
+            return super().acquire(
+                analysis=analysis, correction=correction, alias_func=alias_func
+            )
