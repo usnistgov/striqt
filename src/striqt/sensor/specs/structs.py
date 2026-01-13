@@ -106,8 +106,6 @@ class Source(_SlowHashSpecBase, frozen=True, kw_only=True):
     calibration = None
 
     # validation data
-    adc_overload_limit: typing.ClassVar[types.ADCOverloadLimit] = None
-    if_overload_limit: typing.ClassVar[types.ADCOverloadLimit] = None
     transient_holdoff_time: typing.ClassVar[float] = 0
     stream_all_rx_ports: typing.ClassVar[bool | None] = False
     transport_dtype: typing.ClassVar[types.TransportDType] = 'float32'
@@ -119,7 +117,8 @@ class SoapySource(Source, frozen=True, kw_only=True):
     time_sync_at: types.TimeSyncOn = 'acquire'
     clock_source: types.ClockSource = 'internal'
     receive_retries: types.ReceiveRetries = 0
-    adc_overload_limit: typing.ClassVar[types.ADCOverloadLimit] = -1
+    adc_overload_limit: types.ADCOverloadLimit = -1
+    if_overload_limit: types.IFOverloadLimit = None
 
     # set this True if the same clock drives acquisition on all RX ports
     shared_rx_sample_clock = True
