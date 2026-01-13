@@ -700,6 +700,4 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
 
     def acquire(self, *, analysis=None, correction=True, alias_func=None):
         with read_retries(self):
-            return super().acquire(
-                analysis=analysis, correction=correction, alias_func=alias_func
-            )
+            return super().acquire(**locals())
