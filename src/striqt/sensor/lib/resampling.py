@@ -5,6 +5,7 @@ __all__ = ['resampling_correction']
 
 
 import dataclasses
+from numbers import Number
 import typing
 
 from .. import specs
@@ -29,54 +30,6 @@ else:
 USE_OARESAMPLE = False
 
 
-def _get_voltage_scale(iq: AcquiredIQ, xp=None) -> tuple[ArrayType, ArrayType]:
-    """compute the scaling factor needed to scale each of N ports of an IQ waveform
-
-    Returns:
-        an array of type `xp.ndarray` with shape (N,)
-    """
-    xp = xp or np
-
-    if isinstance(iq.source_spec, specs.SoapySource):
-        assert isinstance(iq.capture, specs.SoapyCapture)
-        power_scale = calibration.lookup_power_correction(
-            iq.source_spec.calibration,
-            iq.capture,
-            iq.source_spec.master_clock_rate,
-            alias_func=iq.alias_func,
-            xp=xp,
-        )
-    else:
-        power_scale = None
-
-    transport_dtype = iq.source_spec.transport_dtype
-    if transport_dtype == 'int16':
-        adc_scale = 1.0 / float(np.iinfo(transport_dtype).max)
-    else:
-        adc_scale = None
-
-    if power_scale is None and adc_scale is None:
-        return None, 1
-
-    if adc_scale is None:
-        adc_scale = 1
-    if power_scale is None:
-        power_scale = 1
-
-    return xp.sqrt(power_scale) * adc_scale, adc_scale
-
-
-def _get_peak_power(iq: AcquiredIQ, xp=None):
-    xp = iqwaveform.util.array_namespace(iq.raw)
-    assert isinstance(iq.capture, specs.ResampledCapture)
-
-    _, prescale = _get_voltage_scale(iq, xp=xp)
-
-    peak_counts = xp.abs(iq.raw).max(axis=-1)
-    unscaled_peak = 20 * xp.log10(peak_counts * prescale) - 3
-    return unscaled_peak
-
-
 def resampling_correction(iq_in: AcquiredIQ, overwrite_x=False, axis=1) -> AcquiredIQ:
     """resample, filter, and apply calibration corrections.
 
@@ -98,35 +51,19 @@ def resampling_correction(iq_in: AcquiredIQ, overwrite_x=False, axis=1) -> Acqui
     else:
         capture = iq_in.capture
 
-    vscale, _ = _get_voltage_scale(iq_in, xp=xp)
-
-    extra_data = {}
-
-    if source_spec.adc_overload_limit is not None:
-        adc_peak = _get_peak_power(iq_in)
-        extra_data['adc_overload'] = adc_peak >= source_spec.adc_overload_limit
-
-    if (
-        isinstance(source_spec, specs.SoapySource)
-        and source_spec.calibration is not None
-    ):
-        assert isinstance(capture, specs.SoapyCapture)
-
-        extra_data['system_noise'] = calibration.lookup_system_noise_power(
-            source_spec.calibration,
-            capture,
-            source_spec.master_clock_rate,
-            alias_func=iq_in.alias_func,
-        )
-
     fs = iq_in.resampler['fs_sdr']
 
     needs_resample = _base.needs_resample(iq_in.resampler, capture)
 
+    vscale = iq_in.voltage_scale
     if not needs_resample:
-        if vscale is not None:
+        if not isinstance(vscale, (int, float)):
             if vscale.ndim == 1:
                 vscale = vscale[:, None]
+        elif vscale == 1:
+            vscale = None
+
+        if vscale is not None:
             iq = xp.multiply(iq, vscale, out=iq if overwrite_x else None)
 
     elif USE_OARESAMPLE:
@@ -179,10 +116,10 @@ def resampling_correction(iq_in: AcquiredIQ, overwrite_x=False, axis=1) -> Acqui
                 numtaps=_base.FILTER_SIZE,
                 xp=xp,
             )
-            pad = _base._get_filter_pad(capture)
+            # pad = _base._get_filter_pad(capture)
             iq = iqwaveform.oaconvolve(iq, h[xp.newaxis, :], 'same', axes=axis)
 
-            offset_out = offset_out + pad
+            # offset_out = offset_out + pad
             # iq = iqwaveform.util.axis_slice(iq, pad, iq.shape[axis], axis=axis)
 
             # the freshly allocated iq can be safely overridden
@@ -216,5 +153,5 @@ def resampling_correction(iq_in: AcquiredIQ, overwrite_x=False, axis=1) -> Acqui
         aligned=iq_aligned,
         raw=iq_unaligned,
         capture=capture,
-        extra_data=iq_in.extra_data | extra_data,
+        extra_data=iq_in.extra_data,
     )

@@ -61,6 +61,7 @@ class AcquiredIQ(dataarrays.AcquiredIQ):
     resampler: ResamplerDesign
     trigger: register.Trigger | None
     analysis: specs.AnalysisGroup | None = None
+    voltage_scale: ArrayType | float = 1
 
 
 class ReceiveStreamError(IOError):
@@ -133,6 +134,20 @@ class _ReceiveBuffers:
     def __del__(self):
         self.clear()
         self.buffers = [None, None]
+
+
+def _get_dtype_scale(transport_dtype: specs.types.TransportDType) -> float:
+    """compute the scaling factor needed to scale each of N ports of an IQ waveform
+
+    Returns:
+        an array of type `xp.ndarray` with shape (N,)
+    """
+
+    transport_dtype = transport_dtype
+    if transport_dtype == 'int16':
+        return 1.0 / float(np.iinfo(transport_dtype).max)
+    else:
+        return 1.0
 
 
 def _cast_iq(
@@ -593,6 +608,7 @@ class SourceBase(
                 resampler=self.get_resampler(),
                 trigger=trigger,
                 analysis=analysis,
+                voltage_scale=_get_dtype_scale(self.setup_spec.transport_dtype)
             )
 
         else:

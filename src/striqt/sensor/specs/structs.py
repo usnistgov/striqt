@@ -107,6 +107,7 @@ class Source(_SlowHashSpecBase, frozen=True, kw_only=True):
 
     # validation data
     adc_overload_limit: typing.ClassVar[types.ADCOverloadLimit] = None
+    if_overload_limit: typing.ClassVar[types.ADCOverloadLimit] = None
     transient_holdoff_time: typing.ClassVar[float] = 0
     stream_all_rx_ports: typing.ClassVar[bool | None] = False
     transport_dtype: typing.ClassVar[types.TransportDType] = 'float32'
@@ -382,7 +383,6 @@ class SoapyAcquisitionInfo(AcquisitionInfo, kw_only=True, frozen=True):
     start_time: types.StartTime | None
     backend_sample_rate: typing.Optional[types.BackendSampleRate]
     source_id: types.SourceID = ''
-
 
 class FileAcquisitionInfo(AcquisitionInfo, kw_only=True, frozen=True):
     center_frequency: types.CenterFrequency = float('nan')

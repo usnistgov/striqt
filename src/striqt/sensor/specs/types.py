@@ -132,6 +132,15 @@ ADCOverloadLimit = Optional[
         ),
     ]
 ]
+IFOverloadLimit = Optional[
+    Annotated[
+        float,
+        Meta(
+            'dataset adc_overload=True when the peak (ADC level+gain) exceeds this threshold',
+            'dBfs',
+        ),
+    ]
+]
 SkipWarmup = Annotated[
     bool,
     Meta('if True, suppress empty buffer runs for GPU backends'),
