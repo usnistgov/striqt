@@ -1,6 +1,7 @@
 from __future__ import annotations as __
 
 import contextlib
+import dataclasses
 import functools
 import math
 import time
@@ -14,9 +15,9 @@ from ...specs.structs import (
     _SoapySensorReading,
 )
 
-from .. import util
+from .. import calibration, util
 from . import _base
-from striqt.waveform.util import array_namespace
+from striqt.waveform.util import array_namespace, ArrayType
 
 if typing.TYPE_CHECKING:
     import SoapySDR  # type: ignore
@@ -34,13 +35,12 @@ _TS = typing.TypeVar('_TS', bound=specs.SoapySource)
 _TC = typing.TypeVar('_TC', bound=specs.SoapyCapture)
 
 
-def _get_adc_peak(iq: _base.AcquiredIQ, xp=None):
-    xp = array_namespace(iq.raw)
-    assert isinstance(iq.capture, specs.ResampledCapture)
+def _get_adc_peak(x: ArrayType, capture: specs.SoapyCapture, source: specs.SoapySource):
+    xp = array_namespace(x)
 
-    adc_scale = _base._get_dtype_scale(iq.source_spec.transport_dtype)
+    adc_scale = _base._get_dtype_scale(source.transport_dtype)
 
-    peak_counts = xp.abs(iq.raw).max(axis=-1)
+    peak_counts = xp.abs(x).max(axis=-1)
     unscaled_peak = 20 * xp.log10(peak_counts * adc_scale) - 3
     return unscaled_peak
 
@@ -608,9 +608,12 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
             on_overflow=on_overflow,
         )
 
-    def _build_acquisition_info(
-        self, time_ns: int | None
-    ) -> specs.SoapyAcquisitionInfo:
+    def _package_acquisition(self, samples: ArrayType, time_ns: int | None, *, analysis=None, correction=True, alias_func: specs.helpers.PathAliasFormatter | None = None) -> _base.AcquiredIQ:
+        iq = super()._package_acquisition(**locals())
+
+        capture = self.capture_spec
+
+        # timestamps
         if time_ns is None:
             ts = None
         else:
@@ -623,12 +626,49 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
             self._sweep_time = ts
             self._sweep_index = self.capture_spec._sweep_index
 
-        return specs.SoapyAcquisitionInfo(
+        iq.info = specs.SoapyAcquisitionCoordinates(
             sweep_start_time=self._sweep_time,
             start_time=ts,
             backend_sample_rate=self.get_resampler()['fs_sdr'],
             source_id=self.id,
+            **dataclasses.asdict(iq.info)
         )
+
+        # overloads
+        adc_limit = self.setup_spec.adc_overload_limit
+        if_limit = self.setup_spec.if_overload_limit
+        if not (adc_limit is None and if_limit is None):
+            peak = _get_adc_peak(samples, self.capture_spec, self.setup_spec)
+            if adc_limit is not None:
+                iq.extra_data['adc_overload'] = peak >= adc_limit
+            if if_limit is not None:
+                xp = array_namespace(samples)
+                gains = [c.gain for c in specs.helpers.split_capture_ports(capture)]
+                peak_im3 = peak + (2/3)*xp.array(gains) # 2/3 arises from intermod
+                iq.extra_data['if_overload'] = peak_im3 >= if_limit
+
+        # built-in peripherals
+        iq.extra_data.update(self.read_peripherals())
+
+        # calibration data
+        power_scale = calibration.lookup_power_correction(
+            self.setup_spec.calibration,
+            self.capture_spec,
+            self.setup_spec.master_clock_rate,
+            alias_func=alias_func,
+            xp=array_namespace(samples),
+        )
+        if power_scale is not None:
+            iq.voltage_scale = iq.voltage_scale * (power_scale ** 0.5)
+
+            iq.extra_data['system_noise'] = calibration.lookup_system_noise_power(
+                self.setup_spec.calibration,
+                self.capture_spec,
+                self.setup_spec.master_clock_rate,
+                alias_func=alias_func,
+            )
+
+        return iq
 
     def read_peripherals(self) -> dict[str, typing.Any]:
         return {}
@@ -659,43 +699,7 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
         return super().read_iq(analysis)
 
     def acquire(self, *, analysis=None, correction=True, alias_func=None):
-        from .. import calibration
-
         with read_retries(self):
-            iq = super().acquire(
+            return super().acquire(
                 analysis=analysis, correction=correction, alias_func=alias_func
             )
-            iq.extra_data.update(self.read_peripherals())
-
-        adc_limit = self.setup_spec.adc_overload_limit
-        if_limit = self.setup_spec.if_overload_limit
-        if adc_limit is None and if_limit is None:
-            return iq
-
-        # evaluate overloads
-        adc_peak = _get_adc_peak(iq)
-        if adc_limit is not None:
-            iq.extra_data['adc_overload'] = adc_peak >= adc_limit
-        if if_limit is not None:
-            iq.extra_data['if_overload'] = (adc_peak + self.capture_spec.gain) >= if_limit
-
-        # attach calibration scaling data
-        power_scale = calibration.lookup_power_correction(
-            iq.source_spec.calibration,
-            self.capture_spec,
-            iq.source_spec.master_clock_rate,
-            alias_func=iq.alias_func,
-            xp=array_namespace(iq.raw),
-        )
-
-        if power_scale is not None:
-            iq.voltage_scale = iq.voltage_scale * (power_scale ** 0.5)
-
-            iq.extra_data['system_noise'] = calibration.lookup_system_noise_power(
-                self.setup_spec.calibration,
-                self.capture_spec,
-                self.setup_spec.master_clock_rate,
-                alias_func=iq.alias_func,
-            )
-
-        return iq

@@ -76,6 +76,7 @@ def loop_captures_from_fields(
     if len(captures) == 0 and len(loops) == 0:
         return ()
     if cls is None:
+        assert len(captures) > 0
         cls = type(captures[0])
     _check_fields(cls, loop_fields, False)
     assert issubclass(cls, specs.Capture)
@@ -286,7 +287,7 @@ def capture_fields_with_aliases(
 def get_field_value(
     name: str,
     capture: specs.ResampledCapture,
-    info: specs.AcquisitionInfo,
+    info: specs.SourceCoordinates,
     alias_hits: dict,
 ):
     """get the value of a field in `capture`, injecting values for aliases"""

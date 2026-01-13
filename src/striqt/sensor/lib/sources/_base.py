@@ -54,7 +54,7 @@ _T = typing.TypeVar('_T', bound='SourceBase')
 class AcquiredIQ(dataarrays.AcquiredIQ):
     """extra metadata needed for downstream analysis"""
 
-    info: specs.AcquisitionInfo
+    info: specs.SourceCoordinates
     extra_data: dict[str, typing.Any]
     alias_func: specs.helpers.PathAliasFormatter | None
     source_spec: specs.Source
@@ -595,20 +595,12 @@ class SourceBase(
 
         if self._prev_iq is None:
             samples, time_ns = self.read_iq(analysis)
-            info = self._build_acquisition_info(time_ns)
-
-            iq = AcquiredIQ(
-                raw=samples,
-                aligned=None,
-                capture=self.capture_spec,
-                info=info,
-                extra_data={},
-                alias_func=alias_func,
-                source_spec=self.setup_spec,
-                resampler=self.get_resampler(),
-                trigger=trigger,
+            iq = self._package_acquisition(
+                samples,
+                time_ns,
                 analysis=analysis,
-                voltage_scale=_get_dtype_scale(self.setup_spec.transport_dtype)
+                correction=correction,
+                alias_func=alias_func
             )
 
         else:
@@ -625,14 +617,35 @@ class SourceBase(
 
         if not correction:
             return iq
+        else:
+            tmin = self.capture_spec.duration / 2
+            with util.stopwatch('resampling filter', threshold=tmin):
+                return resampling.resampling_correction(iq, overwrite_x=True)
 
-        with util.stopwatch(
-            'resampling filter', threshold=self.capture_spec.duration / 2
-        ):
-            return resampling.resampling_correction(iq, overwrite_x=True)
 
-    def _build_acquisition_info(self, time_ns: int | None) -> specs.AcquisitionInfo:
-        return specs.AcquisitionInfo(source_id=self.id)
+    def _package_acquisition(self, samples: ArrayType, time_ns: int | None, *, analysis=None, correction=True, alias_func: specs.helpers.PathAliasFormatter | None = None) -> AcquiredIQ:
+        info = specs.SourceCoordinates(source_id=self.id)
+
+        if correction:
+            trigger = get_trigger_from_spec(self.setup_spec, analysis)
+            assert trigger is not None
+        else:
+            trigger = None
+
+        return AcquiredIQ(
+            raw=samples,
+            aligned=None,
+            capture=self.capture_spec,
+            info=info,
+            extra_data={},
+            alias_func=alias_func,
+            source_spec=self.setup_spec,
+            resampler=self.get_resampler(),
+            trigger=trigger,
+            analysis=analysis,
+            voltage_scale=_get_dtype_scale(self.setup_spec.transport_dtype)
+        )
+
 
     def _read_stream(
         self,

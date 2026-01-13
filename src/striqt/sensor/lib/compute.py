@@ -51,7 +51,7 @@ class EvaluationOptions(dataarrays.EvaluationOptions[dataarrays._TA], kw_only=Tr
 class DelayedDataset:
     delayed: dict[str, dataarrays.DelayedDataArray]
     capture: specs.ResampledCapture
-    extra_coords: specs.AcquisitionInfo
+    extra_coords: specs.SourceCoordinates
     extra_data: dict[str, typing.Any]
     config: EvaluationOptions
 
@@ -132,7 +132,7 @@ def _msgspec_type_to_coord_info(type_: msgspec.inspect.Type) -> tuple[dict, typi
 @util.lru_cache()
 def _coord_template(
     capture_cls: type[specs.ResampledCapture],
-    info_cls: type[specs.AcquisitionInfo],
+    info_cls: type[specs.SourceCoordinates],
     port_count: int,
     **alias_dtypes: 'np.dtype',
 ) -> 'xr.Coordinates':
@@ -225,7 +225,7 @@ def build_dataset_attrs(sweep: specs.Sweep):
 def build_capture_coords(
     capture: specs.ResampledCapture,
     desc: specs.Description,
-    info: specs.AcquisitionInfo,
+    info: specs.SourceCoordinates,
 ):
     alias_dtypes = _get_alias_dtypes(desc)
 

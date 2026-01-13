@@ -350,7 +350,7 @@ class CalibrationSweep(
 #
 # this does not perform validation, which is left to type-checking for this
 # internal message passing
-class AcquisitionInfo(msgspec.Struct, kw_only=True, frozen=True):
+class SourceCoordinates(msgspec.Struct, kw_only=True, frozen=True):
     """information about an acquired acquisition"""
 
     # duck-type methods and structure of SpecBase
@@ -374,7 +374,7 @@ class AcquisitionInfo(msgspec.Struct, kw_only=True, frozen=True):
         return cls(**d)
 
 
-class SoapyAcquisitionInfo(AcquisitionInfo, kw_only=True, frozen=True):
+class SoapyAcquisitionCoordinates(SourceCoordinates, kw_only=True, frozen=True):
     """extra coordinate information returned from an acquisition"""
 
     delay: typing.Optional[types.StartDelay] = None
@@ -383,7 +383,8 @@ class SoapyAcquisitionInfo(AcquisitionInfo, kw_only=True, frozen=True):
     backend_sample_rate: typing.Optional[types.BackendSampleRate]
     source_id: types.SourceID = ''
 
-class FileAcquisitionInfo(AcquisitionInfo, kw_only=True, frozen=True):
+
+class FileAcquisitionInfo(SourceCoordinates, kw_only=True, frozen=True):
     center_frequency: types.CenterFrequency = float('nan')
     backend_sample_rate: types.BackendSampleRate
     port: types.Port = 0
