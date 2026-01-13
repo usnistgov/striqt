@@ -316,11 +316,11 @@ def analyze(
             iq, options.sweep_spec.analysis, iq.capture, opts
         )
 
-    if 'unscaled_iq_peak' in iq.extra_data:
-        peak = iq.extra_data['unscaled_iq_peak']
+    if 'adc_overload' in iq.extra_data:
+        peak = iq.extra_data['adc_overload']
         if is_cupy_array(peak):
             peak = peak.get()
-            iq.extra_data['unscaled_iq_peak'] = peak
+            iq.extra_data['adc_overload'] = peak
 
     if not options.as_xarray:
         return da_delayed
@@ -354,13 +354,15 @@ def from_delayed(dd: DelayedDataset):
             dd.capture, dd.delayed, expand_dims=(CAPTURE_DIM,)
         )
 
-    unscaled_peak = dd.extra_data.get('unscaled_iq_peak', None)
-    if unscaled_peak is not None and not isinstance(
-        dd.config.sweep_spec.source, specs.NoSource
-    ):
-        descs = ','.join(f'{p:0.0f}' for p in unscaled_peak)
+    if isinstance(dd.config.sweep_spec.source, specs.NoSource):
+        pass
+    elif 'adc_overload' not in dd.extra_data:
+        pass
+    elif any(dd.extra_data['adc_overload']):
+        overloads = dd.extra_data['adc_overload']
+        overload_ports = [i for i, flag in enumerate(overloads) if flag]
         logger = util.get_logger('analysis')
-        logger.info(f'({descs}) dBfs ADC peak')
+        logger.warning(f'ADC overload on port {overload_ports}')
 
     with util.stopwatch(
         'build coords',

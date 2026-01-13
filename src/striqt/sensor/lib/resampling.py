@@ -102,8 +102,9 @@ def resampling_correction(iq_in: AcquiredIQ, overwrite_x=False, axis=1) -> Acqui
 
     extra_data = {}
 
-    if source_spec.overload_detect:
-        extra_data['unscaled_iq_peak'] = _get_peak_power(iq_in)
+    if source_spec.adc_overload_limit is not None:
+        adc_peak = _get_peak_power(iq_in)
+        extra_data['adc_overload'] = adc_peak >= source_spec.adc_overload_limit
 
     if (
         isinstance(source_spec, specs.SoapySource)

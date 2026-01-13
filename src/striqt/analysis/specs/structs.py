@@ -222,18 +222,6 @@ class Cellular5GNRSSBSpectrogram(Analysis, kw_only=True, frozen=True):
     trim_cp = False
 
 
-class Spectrogram(FrequencyAnalysisSpecBase, kw_only=True, frozen=True):
-    """
-    time_aperture (float):
-        if specified, binned RMS averaging is applied along time axis in the
-        spectrogram to yield this coarser resolution (s)
-    dB (bool): if True, returned power is transformed into dB units
-    """
-
-    time_aperture: typing.Optional[float] = None
-    dB = True
-
-
 # %% Cellular 5G NR synchronizatino
 class _Cellular5GNRSSBCorrelator(Analysis, kw_only=True, frozen=True):
     """
@@ -278,6 +266,18 @@ class Cellular5GNPSSSync(_Cellular5GNRSSBSync, kw_only=True, frozen=True):
 
 class Cellular5GNSSSSync(_Cellular5GNRSSBSync, kw_only=True, frozen=True):
     pass
+
+
+class Spectrogram(FrequencyAnalysisSpecBase, kw_only=True, frozen=True):
+    """
+    time_aperture (float):
+        if specified, binned RMS averaging is applied along time axis in the
+        spectrogram to yield this coarser resolution (s)
+    dB (bool): if True, returned power is transformed into dB units
+    """
+
+    time_aperture: typing.Optional[float] = None
+    dB = True
 
 
 class CellularCyclicAutocorrelator(

@@ -120,8 +120,15 @@ TransportDType = Annotated[
     Literal['int16', 'float32', 'complex64'],
     Meta('data transfer type to use inside the source'),
 ]
-OverloadDetectFlag = Annotated[
-    Union[bool, Literal['auto']], Meta('whether to detect overload')
+ADCOverloadLimit = Optional[
+    Annotated[
+        float,
+        Meta(
+            'dataset adc_overload=True when the peak ADC level exceeds this threshold',
+            'dBfs',
+            le=0,
+        ),
+    ]
 ]
 SkipWarmup = Annotated[
     bool,
