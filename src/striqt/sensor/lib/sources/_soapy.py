@@ -17,11 +17,12 @@ from ...specs.structs import (
 
 from .. import calibration, util
 from . import _base
-from striqt.waveform.util import array_namespace, ArrayType
+from striqt.waveform.util import array_namespace
 
 if typing.TYPE_CHECKING:
     import SoapySDR  # type: ignore
     import pandas as pd
+    from striqt.waveform.util import ArrayType
 else:
     try:
         SoapySDR = util.lazy_import('SoapySDR')
