@@ -36,7 +36,9 @@ _TS = typing.TypeVar('_TS', bound=specs.SoapySource)
 _TC = typing.TypeVar('_TC', bound=specs.SoapyCapture)
 
 
-def _get_adc_peak(x: 'ArrayType', capture: specs.SoapyCapture, source: specs.SoapySource):
+def _get_adc_peak(
+    x: 'ArrayType', capture: specs.SoapyCapture, source: specs.SoapySource
+):
     xp = array_namespace(x)
 
     adc_scale = _base._get_dtype_scale(source.transport_dtype)
@@ -609,8 +611,22 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
             on_overflow=on_overflow,
         )
 
-    def _package_acquisition(self, samples: ArrayType, time_ns: int | None, *, analysis=None, correction=True, alias_func: specs.helpers.PathAliasFormatter | None = None) -> _base.AcquiredIQ:
-        iq = super()._package_acquisition(**locals())
+    def _package_acquisition(
+        self,
+        samples: ArrayType,
+        time_ns: int | None,
+        *,
+        analysis=None,
+        correction=True,
+        alias_func: specs.helpers.PathAliasFormatter | None = None,
+    ) -> _base.AcquiredIQ:
+        iq = super()._package_acquisition(
+            samples,
+            time_ns,
+            analysis=analysis,
+            correction=correction,
+            alias_func=alias_func,
+        )
 
         capture = self.capture_spec
 
@@ -632,7 +648,7 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
             start_time=ts,
             backend_sample_rate=self.get_resampler()['fs_sdr'],
             source_id=self.id,
-            **dataclasses.asdict(iq.info)
+            **dataclasses.asdict(iq.info),
         )
 
         # overloads
@@ -645,7 +661,7 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
             if if_limit is not None:
                 xp = array_namespace(samples)
                 gains = [c.gain for c in specs.helpers.split_capture_ports(capture)]
-                peak_im3 = peak + (2/3)*xp.array(gains) # 2/3 arises from intermod
+                peak_im3 = peak + (2 / 3) * xp.array(gains)  # 2/3 arises from intermod
                 iq.extra_data['if_overload'] = peak_im3 >= if_limit
 
         # built-in peripherals
@@ -660,7 +676,7 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
             xp=array_namespace(samples),
         )
         if power_scale is not None:
-            iq.voltage_scale = iq.voltage_scale * (power_scale ** 0.5)
+            iq.voltage_scale = iq.voltage_scale * (power_scale**0.5)
 
             iq.extra_data['system_noise'] = calibration.lookup_system_noise_power(
                 self.setup_spec.calibration,

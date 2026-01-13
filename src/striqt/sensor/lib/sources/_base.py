@@ -600,7 +600,7 @@ class SourceBase(
                 time_ns,
                 analysis=analysis,
                 correction=correction,
-                alias_func=alias_func
+                alias_func=alias_func,
             )
 
         else:
@@ -622,8 +622,15 @@ class SourceBase(
             with util.stopwatch('resampling filter', threshold=tmin):
                 return resampling.resampling_correction(iq, overwrite_x=True)
 
-
-    def _package_acquisition(self, samples: ArrayType, time_ns: int | None, *, analysis=None, correction=True, alias_func: specs.helpers.PathAliasFormatter | None = None) -> AcquiredIQ:
+    def _package_acquisition(
+        self,
+        samples: ArrayType,
+        time_ns: int | None,
+        *,
+        analysis=None,
+        correction=True,
+        alias_func: specs.helpers.PathAliasFormatter | None = None,
+    ) -> AcquiredIQ:
         info = specs.SourceCoordinates(source_id=self.id)
 
         if correction:
@@ -643,9 +650,8 @@ class SourceBase(
             resampler=self.get_resampler(),
             trigger=trigger,
             analysis=analysis,
-            voltage_scale=_get_dtype_scale(self.setup_spec.transport_dtype)
+            voltage_scale=_get_dtype_scale(self.setup_spec.transport_dtype),
         )
-
 
     def _read_stream(
         self,

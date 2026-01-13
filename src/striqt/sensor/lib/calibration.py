@@ -395,7 +395,9 @@ class YFactorSink(_sinks.SinkBase):
     def append(self, capture_result):
         ret = super().append(capture_result)
 
-        assert isinstance(capture_result.extra_coords, _specs.SoapyAcquisitionCoordinates)
+        assert isinstance(
+            capture_result.extra_coords, _specs.SoapyAcquisitionCoordinates
+        )
 
         sweep_start_time = capture_result.extra_coords.sweep_start_time
 
