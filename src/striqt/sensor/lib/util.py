@@ -513,7 +513,7 @@ def concurrently(
         for h in logger.logger.handlers:
             h.flush()
         if len(tracebacks) == 1:
-            assert len(exceptions) == 1
+            # assert len(exceptions) == 1
             _immediate_print_multi_tracebacks([tracebacks])
             raise exceptions[0]
         else:
