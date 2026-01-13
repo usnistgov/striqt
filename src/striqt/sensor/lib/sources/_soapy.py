@@ -647,7 +647,6 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
             sweep_start_time=self._sweep_time,
             start_time=ts,
             backend_sample_rate=self.get_resampler()['fs_sdr'],
-            source_id=self.id,
             **iq.info.to_dict(),
         )
 
