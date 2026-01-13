@@ -356,13 +356,19 @@ def from_delayed(dd: DelayedDataset):
 
     if isinstance(dd.config.sweep_spec.source, specs.NoSource):
         pass
-    elif 'adc_overload' not in dd.extra_data:
-        pass
-    elif any(dd.extra_data['adc_overload']):
-        overloads = dd.extra_data['adc_overload']
-        overload_ports = [i for i, flag in enumerate(overloads) if flag]
-        logger = util.get_logger('analysis')
-        logger.warning(f'ADC overload on port {overload_ports}')
+
+    overload_msgs = []
+
+    for ol_type in ('adc_overload', 'if_overload'):
+        if ol_type not in dd.extra_data:
+            continue
+        if any(dd.extra_data[ol_type]):
+            overloads = dd.extra_data[ol_type]
+            overload_ports = [i for i, flag in enumerate(overloads) if flag]
+            overload_msgs.append(f'{ol_type} on ports {overload_ports}')
+
+    if len(overload_msgs) > 0:
+        util.get_logger('analysis').warning(', '.join(overload_msgs))
 
     with util.stopwatch(
         'build coords',
