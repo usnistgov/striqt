@@ -658,13 +658,13 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
             xp = array_namespace(peak)
 
             if adc_limit is not None:
-                adc_headroom = xp.floor(peak - adc_limit).astype('int8')
+                adc_headroom = xp.floor(adc_limit - peak).astype('int8')
                 iq.extra_data['adc_headroom'] = adc_headroom
             if if_limit is not None:
                 xp = array_namespace(samples)
                 gains = [c.gain for c in specs.helpers.split_capture_ports(capture)]
                 peak_im3 = peak + (2 / 3) * xp.array(gains)  # 2/3 arises from intermod
-                if_headroom = xp.floor(peak_im3 - if_limit).astype('int8')
+                if_headroom = xp.floor(if_limit - peak_im3).astype('int8')
                 iq.extra_data['if_headroom'] = if_headroom
 
         # built-in peripherals
