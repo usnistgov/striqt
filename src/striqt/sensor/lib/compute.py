@@ -358,12 +358,13 @@ def from_delayed(dd: DelayedDataset):
 
     overload_msgs = []
 
-    for ol_type in ('adc_overload', 'if_overload'):
+    for ol_type in ('adc_headroom', 'if_headroom'):
         if ol_type not in dd.extra_data:
             continue
         if any(dd.extra_data[ol_type]):
             overloads = dd.extra_data[ol_type]
-            overload_ports = [i for i, flag in enumerate(overloads) if flag]
+            captures = specs.helpers.split_capture_ports(dd.capture)
+            overload_ports = [c.port for c, flag in zip(captures, overloads) if flag]
             overload_msgs.append(f'{ol_type} on ports {overload_ports}')
 
     if len(overload_msgs) > 0:

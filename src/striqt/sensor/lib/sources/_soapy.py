@@ -655,13 +655,17 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
         if_limit = self.setup_spec.if_overload_limit
         if not (adc_limit is None and if_limit is None):
             peak = _get_adc_peak(samples, self.capture_spec, self.setup_spec)
+            xp = array_namespace(peak)
+
             if adc_limit is not None:
-                iq.extra_data['adc_overload'] = peak >= adc_limit
+                adc_headroom = xp.floor(peak - adc_limit).astype('int8')
+                iq.extra_data['adc_headroom'] = adc_headroom
             if if_limit is not None:
                 xp = array_namespace(samples)
                 gains = [c.gain for c in specs.helpers.split_capture_ports(capture)]
                 peak_im3 = peak + (2 / 3) * xp.array(gains)  # 2/3 arises from intermod
-                iq.extra_data['if_overload'] = peak_im3 >= if_limit
+                if_headroom = xp.floor(peak_im3 - if_limit).astype('int8')
+                iq.extra_data['if_headroom'] = if_headroom
 
         # built-in peripherals
         iq.extra_data.update(self.read_peripherals())
