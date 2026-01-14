@@ -359,9 +359,11 @@ def from_delayed(dd: DelayedDataset):
     overload_msgs = []
 
     for ol_type in ('adc', 'if'):
-        if ol_type not in dd.extra_data:
+        field_name = ol_type + '_headroom'
+        if field_name not in dd.extra_data:
             continue
-        headroom = dd.extra_data[ol_type + '_headroom']
+        else:
+            headroom = dd.extra_data[field_name]
         caps = specs.helpers.split_capture_ports(dd.capture)          
         overload_ports = [c.port for c, hr in zip(caps, headroom) if hr<=0]
         if len(overload_ports) > 0:
