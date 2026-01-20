@@ -84,7 +84,6 @@ def weight_correlation_locally(R, spec: specs.Cellular5GNPSSSync):
     else:
         from scipy import ndimage
 
-    global Rpow, Rsnr, ipeak, Rpow_corr
     Rpow = waveform.envtopow(R)
 
     # estimate an SNR
