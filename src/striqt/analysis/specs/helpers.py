@@ -55,7 +55,7 @@ def _warn_on_capture_lookup_miss(capture_value, capture_attr, error_label, defau
 
 def maybe_lookup_with_capture_key(
     capture: msgspec.Struct,
-    value: _T | typing.Mapping[str, _T],
+    value: _T | typing.Mapping[typing.Any, _T],
     capture_attr: str,
     error_label: str,
     default: _T | None = None,

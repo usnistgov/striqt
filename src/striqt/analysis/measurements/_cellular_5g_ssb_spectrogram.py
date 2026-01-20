@@ -20,7 +20,7 @@ else:
 
 @registry.coordinates(dtype='uint16', attrs={'standard_name': 'Symbols elapsed'})
 @util.lru_cache()
-def cellular_ssb_symbol_index(_: specs.Capture, spec: specs.Cellular5GNRSSBSpectrogram):
+def cellular_ssb_symbol_index(capture: specs.Capture, spec: specs.Cellular5GNRSSBSpectrogram):
     symbol_count = round(14 * spec.subcarrier_spacing / 15e3)
     return np.arange(symbol_count, dtype='uint16')
 
@@ -34,12 +34,24 @@ def cellular_ssb_baseband_frequency(
 ) -> np.ndarray:
     nfft = round(2 * capture.sample_rate / spec.subcarrier_spacing)
     freqs = shared.fftfreq(nfft, capture.sample_rate)
+
+    frequency_offset = specs.helpers.maybe_lookup_with_capture_key(
+        capture,
+        spec.frequency_offset,
+        capture_attr='center_frequency',
+        error_label='frequency_offset',
+        default=None,
+    )
+
+    if frequency_offset is None:
+        raise KeyError('center_frequency did not match any keys given for frequency_offset')
+
     freqs = shared.truncate_spectrogram_bandwidth(
         freqs,
         nfft,
         capture.sample_rate,
         spec.sample_rate,
-        offset=spec.frequency_offset,
+        offset=frequency_offset,
         axis=0,
     )
 

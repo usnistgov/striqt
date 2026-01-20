@@ -288,7 +288,7 @@ def evaluate_spectrogram(
     ] = 'float32',
     limit_digits: typing.Optional[int] = None,
     dB=True,
-):
+) -> tuple[ArrayType, dict]:
     spg, attrs = _cached_spectrogram(iq=iq, capture=capture, spec=spec)
     xp = waveform.util.array_namespace(iq)
 
@@ -312,7 +312,7 @@ def evaluate_spectrogram(
 spectrogram_cache = register.KeywordArgumentCache([dataarrays.CAPTURE_DIM, 'spec'])
 
 
-def truncate_spectrogram_bandwidth(x, nfft, fs, bandwidth, *, offset=0, axis=0):
+def truncate_spectrogram_bandwidth(x, nfft: int, fs: float, bandwidth: float, *, offset: float=0.0, axis: int=0):
     """trim an array outside of the specified bandwidth on a frequency axis"""
     edges = waveform.fourier._freq_band_edges(
         nfft,
@@ -342,7 +342,7 @@ def _cached_spectrogram(
     iq: ArrayType,
     capture: specs.Capture,
     spec: specs.Spectrogram,
-):
+) -> tuple[ArrayType, dict]:
     spec = spec.validate()
 
     if waveform.isroundmod(capture.sample_rate, spec.frequency_resolution):

@@ -30,10 +30,11 @@ if typing.TYPE_CHECKING:
     _TC = typing.TypeVar('_TC', bound=specs.Capture, infer_variance=True)
     _TM = typing.TypeVar('_TM', bound=specs.Analysis, infer_variance=True)
 
-    _RM = typing.Union[
+    _MeasurementReturn = typing.Union[
         'ArrayType',
         tuple['ArrayType', dict[str, typing.Any]],
     ]
+    _RM = typing.TypeVar('_RM', bound=_MeasurementReturn)
 
     _TCoord = typing.TypeVar('_TCoord', bound='CallableCoordinateFactory')
 
@@ -64,6 +65,10 @@ if typing.TYPE_CHECKING:
         __name__: typing.Optional[str]
 
         def __call__(self, capture: _TC, spec: _TM) -> _R: ...
+
+    
+    _TCallableAnalysis = typing.TypeVar('_TCallableAnalysis', bound=CallableAnalysis)
+
 
 
 else:
@@ -362,7 +367,7 @@ class AnalysisRegistry(collections.UserDict[type[specs.Analysis], AnalysisInfo])
         prefer_unaligned_input=False,
         store_compressed=True,
         attrs={},
-    ) -> typing.Callable[[CallableAnalysis[_P, _RM]], CallableAnalysisWrapper[_P, _RM]]:
+    ) -> typing.Callable[[CallableAnalysis[_P, _MeasurementReturn]], CallableAnalysisWrapper[_P, _MeasurementReturn]]:
         """add decorated `func` and its keyword arguments in the self.tostruct() schema"""
 
         if isinstance(dims, str):
@@ -398,8 +403,8 @@ class AnalysisRegistry(collections.UserDict[type[specs.Analysis], AnalysisInfo])
             raise ValueError(f'another measurement registered the spec {name!r}')
 
         def wrapper(
-            func: CallableAnalysis[_P, _RM],
-        ) -> CallableAnalysisWrapper[_P, _RM]:
+            func: CallableAnalysis[_P, _MeasurementReturn],
+        ) -> CallableAnalysisWrapper[_P, _MeasurementReturn]:
             @functools.wraps(func)
             def wrapped(
                 iq: ArrayType,
@@ -407,7 +412,7 @@ class AnalysisRegistry(collections.UserDict[type[specs.Analysis], AnalysisInfo])
                 as_xarray: bool = True,
                 *args: _P.args,
                 **kwargs: _P.kwargs,
-            ) -> _RM:
+            ) -> _MeasurementReturn:
                 from .dataarrays import DelayedDataArray
 
                 # handle the additional argument 'as_xarray' that allows
@@ -596,7 +601,7 @@ def get_signal_trigger_measurement_name(name: str, registry: AnalysisRegistry) -
     return meas_info.name
 
 
-def normalize_factory_return(ret, name: str):
+def normalize_factory_return(ret, name: str) -> tuple['ArrayType', dict[str, typing.Any]]:
     """normalize the coordinate and data factory returns into (data, metadata)"""
 
     if not isinstance(ret, tuple):

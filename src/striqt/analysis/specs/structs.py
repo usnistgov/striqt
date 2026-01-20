@@ -257,6 +257,7 @@ class Cellular5GNRSSSCorrelator(_Cellular5GNRSSBCorrelator, kw_only=True, frozen
 class _Cellular5GNRSSBSync(_Cellular5GNRSSBCorrelator, frozen=True, kw_only=True):
     window_fill: float = 0.5
     snr_window_fill: float = 0.08
+    per_port: bool = False
 
 
 class Cellular5GNPSSSync(_Cellular5GNRSSBSync, kw_only=True, frozen=True):
