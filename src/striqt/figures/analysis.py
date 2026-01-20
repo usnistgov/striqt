@@ -108,7 +108,7 @@ class FixedEngFormatter(ticker.EngFormatter):
             return f'${mant:{fmt}}${suffix}'
         else:
             return f'{mant:{fmt}}{suffix}'
-
+        
     def get_axis_unit_suffix(self, vmin, vmax):
         if self.unitInTick:
             return ''
@@ -661,9 +661,11 @@ def label_axis(
         axs = [ax]
 
     if which_axis == 'x':
-        target_axs = [a.xaxis for a in axs]
-    elif which_axis in ('y', 'colorbar'):
-        target_axs = [a.yaxis for a in axs]
+        target_axs = [a.xaxis for a in axs if not hasattr(a, '_colorbar')]
+    elif which_axis == 'y':
+        target_axs = [a.yaxis for a in axs if not hasattr(a, '_colorbar')]
+    elif which_axis == 'colorbar':
+        target_axs = [a.yaxis for a in axs if hasattr(a, '_colorbar')]
 
     if coord_name is None:
         # label = a.attrs.get('standard_name', None)
@@ -680,19 +682,21 @@ def label_axis(
     else:
         desc_text = long_name
 
+    
     if units is not None:
         formatter = FixedEngFormatter(unit=units, unitInTick=tick_units)
 
         for target in target_axs:
             target.set_major_formatter(formatter)
-        ax_finite_data = ax_data.data[np.isfinite(ax_data.data)]
 
+        ax_finite_data = ax_data.data[np.isfinite(ax_data.data)]
         if len(ax_finite_data) > 0:
             unit_suffix = formatter.get_axis_unit_suffix(
                 ax_finite_data.min(), ax_finite_data.max()
             )
             label_str = f'{desc_text}{unit_suffix}'
         else:
+            
             label_str = None
     else:
         label_str = desc_text
