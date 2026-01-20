@@ -442,7 +442,7 @@ class AnalysisRegistry(collections.UserDict[type[specs.Analysis], AnalysisInfo])
                 if as_xarray == 'delayed':
                     return data
                 else:
-                    return data.to_xarray()
+                    return data.to_xarray(expand_dims=('port',))
 
             if info_kws['name'] is None:
                 info_kws['name'] = func.__name__
@@ -578,10 +578,10 @@ class Trigger:
 
         return cls(name, meas_spec, registry)
 
-    def __call__(self, iq: ArrayType, capture: specs.Capture) -> float:
+    def __call__(self, iq: ArrayType, capture: specs.Capture) -> ArrayType:
         meas_kws = self.meas_spec.to_dict()
-        ret = self.info.func(iq, capture, **meas_kws)
-        return ret
+        ret = self.info.func(iq, capture, as_xarray=False, **meas_kws)
+        return ret[0]
 
     def max_lag(self, capture: specs.Capture) -> int:
         lags = self.info.lag_coord_func(capture, self.meas_spec)

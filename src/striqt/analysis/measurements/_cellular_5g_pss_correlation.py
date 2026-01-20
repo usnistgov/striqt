@@ -70,7 +70,7 @@ pss_weighted_cache = register.KeywordArgumentCache(
 )
 
 
-def weight_correlation_locally(R, window_fill=0.5, snr_window_fill=0.08):
+def weight_correlation_locally(R, spec: specs.Cellular5GNPSSSync):
     xp = waveform.util.array_namespace(R)
 
     if R.ndim == 4:
@@ -88,13 +88,13 @@ def weight_correlation_locally(R, window_fill=0.5, snr_window_fill=0.08):
     Rpow = waveform.envtopow(R)
 
     # estimate an SNR
-    window_size = round(snr_window_fill * R.shape[-1])
+    window_size = round(spec.snr_window_fill * R.shape[-1])
     Rpow_median = ndimage.median_filter(
         Rpow, size=(Rpow.ndim - 1) * (1,) + (window_size,)
     )
     Rsnr = Rpow / Rpow_median
 
-    # scale by the
+    # scale by the 
     ipeak = xp.argmax(Rsnr, axis=-1, keepdims=True)
 
     Rpow_corr = Rsnr * (
@@ -103,17 +103,22 @@ def weight_correlation_locally(R, window_fill=0.5, snr_window_fill=0.08):
     )
 
     # Ragg.shape: (IQ sample index,)
-    Ragg = Rpow_corr.mean(axis=-4).max(axis=(-3, -2))
-    assert Ragg.ndim == 1
+    if not spec.per_port:
+        Rpow_corr = Rpow_corr.mean(axis=-4, keepdims=True)
+    Ragg = Rpow_corr.max(axis=(-3, -2))
+    assert Ragg.ndim == 2
+
+    fill_count = round(spec.window_fill * Ragg.shape[1])
 
     weights = waveform.get_window(
         'triang',
-        nwindow=round(window_fill * Ragg.size),
-        nzero=round((1 - window_fill) * Ragg.size),
+        nwindow=fill_count,
+        nzero=Ragg.shape[1] - fill_count,
         norm=False,
         xp=xp,
     )
-    weight_shift = Ragg.size // 2 - round((1 - window_fill) * Ragg.size / 2)
+
+    weight_shift = Ragg.shape[1] // 2 - round((Ragg.shape[1] - fill_count) / 2)
     weights = xp.roll(weights, weight_shift)
 
     if util.is_cupy_array(Ragg):
@@ -121,7 +126,8 @@ def weight_correlation_locally(R, window_fill=0.5, snr_window_fill=0.08):
     else:
         from scipy import ndimage
 
-    return ndimage.correlate1d(Ragg, weights, mode='wrap')
+    offs = ndimage.correlate1d(Ragg, weights, mode='wrap', axis=1)
+    return offs
 
 
 @pss_weighted_cache.apply
@@ -129,16 +135,15 @@ def pss_local_weighted_correlator(
     iq: ArrayType,
     capture: specs.Capture,
     *,
-    spec: specs.Cellular5GNRPSSCorrelator,
-    window_fill=0.5,
-    snr_window_fill=0.08,
+    spec: specs.Cellular5GNPSSSync,
 ) -> ArrayType:
     # R.shape -> (..., port index, cell Nid2, SSB index, symbol start index, IQ sample index)
-    R = correlate_5g_pss(iq, capture=capture, spec=spec)
 
-    return weight_correlation_locally(
-        R, window_fill=window_fill, snr_window_fill=snr_window_fill
-    )
+    corr_spec = specs.Cellular5GNRPSSCorrelator.from_spec(spec).validate()
+
+    R = correlate_5g_pss(iq, capture=capture, spec=corr_spec)
+
+    return weight_correlation_locally(R, spec)
 
 
 @shared.hint_keywords(specs.Cellular5GNPSSSync)
@@ -165,20 +170,17 @@ def cellular_5g_pss_sync(iq, capture: specs.Capture, **kwargs):
     due to "ISI" begin to increase quickly.
     """
 
-    weighted_spec = specs.Cellular5GNPSSSync.from_dict(kwargs).validate()
-    spec = specs.Cellular5GNRPSSCorrelator.from_spec(weighted_spec).validate()
+    spec = specs.Cellular5GNPSSSync.from_dict(kwargs).validate()
 
     est = pss_local_weighted_correlator(
         iq,
         capture=capture,
         spec=spec,
-        window_fill=weighted_spec.window_fill,
-        snr_window_fill=weighted_spec.snr_window_fill,
     )
 
-    i = int(est.argmax())
+    i = est.argmax(axis=1)
 
-    return shared.cellular_ssb_lag(capture, spec)[i]
+    return i/spec.sample_rate#shared.cellular_ssb_lag(capture, spec)[i]
 
 
 @shared.hint_keywords(specs.Cellular5GNRPSSCorrelator)

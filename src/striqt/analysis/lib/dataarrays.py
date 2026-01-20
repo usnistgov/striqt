@@ -252,6 +252,7 @@ def build_dataarray(
         delayed.info.dtype,
         expand_dims=expand_dims,
     )
+
     data = np.asarray(delayed.result)
     delayed.spec.validate()
 
@@ -279,9 +280,15 @@ def build_dataarray(
         else:
             da.data[:] = data
     except ValueError as ex:
-        raise ValueError(
-            f'{delayed.info.name} measurement data has unexpected shape {data.shape}'
-        ) from ex
+        exc = ValueError(
+            f'{delayed.info.name} measurement data has unexpected '
+            f'shape {data.shape} -- expected {da.data.shape}'
+        )
+    else:
+        exc = None
+
+    if exc is not None:
+        raise exc
 
     for coord_factory in delayed.info.coord_factories:
         factory_info = register.registry.coordinates[coord_factory]

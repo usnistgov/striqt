@@ -13,6 +13,7 @@ from .. import specs
 from . import calibration, util
 from .sources import AcquiredIQ, _base
 from striqt.analysis.specs import AnalysisGroup, Analysis
+from striqt.analysis.lib import register
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -28,6 +29,22 @@ else:
 # this is experimental, and currently leaves some residual
 # time offset in some circumstances
 USE_OARESAMPLE = False
+
+
+def _apply_analysis_shifts(x: ArrayType, shifts: ArrayType, size_out: int) -> ArrayType:    
+    if x.shape[1] < shifts.max() + size_out:
+        raise ValueError('waveform is too short to align')
+
+    if shifts.shape[0] == 1 or len(set(shifts)) == 1:
+        # fast path: a simple view, if there is only one offset
+        return x[:, shifts[0] : shifts[0] + size_out]
+
+    else:
+        xp = waveform.util.array_namespace(x)
+        out = xp.empty((x.shape[0], size_out), dtype=x.dtype)
+        for i in range(x.shape[0]):
+            out[i, :] = x[i, shifts[i]:shifts[i] + size_out]
+        return out
 
 
 def resampling_correction(iq_in: AcquiredIQ, overwrite_x=False, axis=1) -> AcquiredIQ:
@@ -129,19 +146,13 @@ def resampling_correction(iq_in: AcquiredIQ, overwrite_x=False, axis=1) -> Acqui
 
     size_out = round(capture.duration * capture.sample_rate)
 
+    iq_unaligned = iq[:, :size_out]
     if iq_in.trigger is not None:
-        align_start = iq_in.trigger(iq[:, :size_out], capture)
-        offset = round(float(align_start) * capture.sample_rate)
-
-        if iq.shape[1] < offset + size_out:
-            raise ValueError('waveform is too short to align')
-
-        iq_aligned = iq[:, offset : offset + size_out]
-        iq_unaligned = iq[:, :size_out]
-
+        lags = iq_in.trigger(iq[:, :size_out], capture)
+        shifts = xp.rint(lags * capture.sample_rate).astype('int')
+        iq_aligned = _apply_analysis_shifts(iq, shifts, size_out)
     else:
         iq_aligned = None
-        iq_unaligned = iq[:, :size_out]
 
     del iq
 

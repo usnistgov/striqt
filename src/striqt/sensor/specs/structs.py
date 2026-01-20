@@ -171,6 +171,7 @@ class ZarrIQSource(Source, frozen=True, kw_only=True):
     path: types.WaveformInputPath
     center_frequency: types.CenterFrequency
     select: types.ZarrSelect = msgspec.field(default_factory=dict)
+    transport_dtype: typing.ClassVar[types.TransportDType] = 'complex64'
 
 
 class Description(_SlowHashSpecBase, frozen=True, kw_only=True):
