@@ -15,10 +15,10 @@ from .shared import registry, hint_keywords
 if typing.TYPE_CHECKING:
     import numpy as np
 
-    import striqt.waveform as iqwaveform
+    import striqt.waveform as waveform
     import striqt.waveform._typing
 else:
-    iqwaveform = util.lazy_import('striqt.waveform')
+    waveform = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
 
 
@@ -46,7 +46,7 @@ def cellular_resource_power_bin(
 
     fres = spec.subcarrier_spacing / 2
 
-    if iqwaveform.isroundmod(capture.sample_rate, fres):
+    if waveform.isroundmod(capture.sample_rate, fres):
         # need capture.sample_rate/resolution to give us a counting number
         nfft = round(capture.sample_rate / fres)
     else:
@@ -100,8 +100,8 @@ def apply_mask(
     eps = 1e-6
     ilo = xp.searchsorted(freqs, xp.asarray(-channel_bandwidth / 2 + guard_left + eps))
     ihi = xp.searchsorted(freqs, xp.asarray(channel_bandwidth / 2 - guard_right - eps))
-    spg_left = iqwaveform.util.axis_slice(spectrogram, 0, ilo, axis=-1)
-    spg_right = iqwaveform.util.axis_slice(spectrogram, ihi, None, axis=-1)
+    spg_left = waveform.util.axis_slice(spectrogram, 0, ilo, axis=-1)
+    spg_right = waveform.util.axis_slice(spectrogram, ihi, None, axis=-1)
     xp.copyto(spg_left, float('nan'))
     xp.copyto(spg_right, float('nan'))
 
@@ -199,7 +199,7 @@ def _struct_defaults(spec_type: type[specs.SpecBase]) -> dict[str, typing.Any]:
     attrs={'standard_name': 'Fraction of resource grid'},
 )
 def cellular_resource_power_histogram(
-    iq: 'iqwaveform.util.ArrayLike',
+    iq: 'waveform.util.ArrayLike',
     capture: specs.Capture,
     **kwargs,
 ):
@@ -232,7 +232,7 @@ def cellular_resource_power_histogram(
     spec = specs.CellularResourcePowerHistogram.from_dict(kwargs)
     spec_defaults = _struct_defaults(specs.CellularResourcePowerHistogram)
 
-    xp = iqwaveform.util.array_namespace(iq)
+    xp = waveform.util.array_namespace(iq)
 
     link_direction = 'downlink', 'uplink'
 
@@ -306,7 +306,7 @@ def cellular_resource_power_histogram(
         hop_period = hop_size / capture.sample_rate
         time_bin_averaging = round(time_aperture / hop_period)
 
-        assert iqwaveform.isroundmod(time_aperture / hop_period, 1)
+        assert waveform.isroundmod(time_aperture / hop_period, 1)
 
     spg, metadata = shared.evaluate_spectrogram(
         iq, capture, spg_spec, dtype='float32', dB=False
@@ -331,11 +331,11 @@ def cellular_resource_power_histogram(
     # apply the time binning only now, to allow for averaging
     # across mask boundaries
     if time_bin_averaging is not None:
-        masked_spgs = iqwaveform.util.binned_mean(
+        masked_spgs = waveform.util.binned_mean(
             masked_spgs, time_bin_averaging, axis=2, fft=False
         )
 
-    masked_spgs = iqwaveform.powtodB(masked_spgs, out=masked_spgs)
+    masked_spgs = waveform.powtodB(masked_spgs, out=masked_spgs)
     bin_edges = _channel_power_histogram.make_power_histogram_bin_edges(
         power_low=spec.power_low,
         power_high=spec.power_high,
@@ -344,7 +344,7 @@ def cellular_resource_power_histogram(
     )
 
     flat_shape = masked_spgs.shape[:2] + (-1,)
-    counts, _ = iqwaveform.histogram_last_axis(
+    counts, _ = waveform.histogram_last_axis(
         masked_spgs.reshape(flat_shape), bin_edges
     )
 

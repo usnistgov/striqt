@@ -27,7 +27,7 @@ class TDMSSource(
     _file_info: specs.FileAcquisitionInfo
 
     def _connect(self, spec):
-        from nptdms import TdmsFile
+        from nptdms import TdmsFile # type: ignore
 
         fd = TdmsFile.read(spec.path)
         header_fd, iq_fd = fd.groups()
@@ -179,10 +179,16 @@ class ZarrIQSource(
     def _prepare_capture(self, capture):
         super()._prepare_capture(capture)
 
+        try:
+            port=self._read_coord('port')
+        except KeyError:
+            # legacy files
+            port=self._read_coord('channel')
+
         self._capture_info = specs.FileAcquisitionInfo(
             center_frequency=self._read_coord('center_frequency'),
             gain=self._read_coord('gain'),
-            port=self._read_coord('port'),
+            port=port,
             backend_sample_rate=self._read_coord('sample_rate'),
         )
 
@@ -244,3 +250,7 @@ class ZarrIQSource(
         )
         iq.info = self._capture_info
         return iq
+
+    @functools.cached_property
+    def id(self):
+        return str(self.setup_spec.path)

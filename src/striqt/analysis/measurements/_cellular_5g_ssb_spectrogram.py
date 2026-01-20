@@ -12,10 +12,10 @@ from .shared import registry, hint_keywords
 if typing.TYPE_CHECKING:
     import numpy as np
 
-    import striqt.waveform as iqwaveform
+    import striqt.waveform as waveform
 else:
     np = util.lazy_import('numpy')
-    iqwaveform = util.lazy_import('striqt.waveform')
+    waveform = util.lazy_import('striqt.waveform')
 
 
 @registry.coordinates(dtype='uint16', attrs={'standard_name': 'Symbols elapsed'})
@@ -44,7 +44,7 @@ def cellular_ssb_baseband_frequency(
     )
 
     # due to integration_bandwidth=2*subcarrier_spacing
-    return iqwaveform.util.binned_mean(freqs, count=2, axis=0, fft=True)
+    return waveform.util.binned_mean(freqs, count=2, axis=0, fft=True)
 
 
 @registry.coordinates(dtype='uint16', attrs={'standard_name': 'Capture SSB index'})

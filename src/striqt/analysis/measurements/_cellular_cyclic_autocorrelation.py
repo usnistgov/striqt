@@ -12,10 +12,10 @@ if typing.TYPE_CHECKING:
     import numpy as np
     import pandas as pd
 
-    import striqt.waveform as iqwaveform
+    import striqt.waveform as waveform
 
 else:
-    iqwaveform = util.lazy_import('striqt.waveform')
+    waveform = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
     pd = util.lazy_import('pandas')
 
@@ -169,7 +169,7 @@ def _get_phy_mapping(
     subcarrier_spacings: tuple[float, ...],
     generation: typing.Literal['4G', '5G'] = '4G',
     xp=np,
-) -> dict[float, iqwaveform.ofdm._Phy3GPP]:
+) -> dict[float, waveform.ofdm._Phy3GPP]:
     kws = dict(
         channel_bandwidth=channel_bandwidth,
         generation=generation,
@@ -181,7 +181,7 @@ def _get_phy_mapping(
         else [subcarrier_spacings]
     )
     return {
-        scs: iqwaveform.ofdm.get_3gpp_phy(subcarrier_spacing=scs, xp=xp, **kws)
+        scs: waveform.ofdm.get_3gpp_phy(subcarrier_spacing=scs, xp=xp, **kws)
         for scs in seq
     }
 
@@ -211,7 +211,7 @@ def _get_max_corr_size(
     attrs={'units': 'mW', 'standard_name': 'Cyclic Autocovariance'},
 )
 def cellular_cyclic_autocorrelation(
-    iq: 'iqwaveform.util.ArrayType',
+    iq: 'waveform.util.ArrayType',
     capture: specs.Capture,
     **kwargs,
 ):
@@ -240,7 +240,7 @@ def cellular_cyclic_autocorrelation(
 
     RANGE_MAP = {'frames': spec.frame_range, 'symbols': spec.symbol_range}
 
-    xp = iqwaveform.util.array_namespace(iq)
+    xp = waveform.util.array_namespace(iq)
     if isinstance(spec.subcarrier_spacings, tuple):
         scs = spec.subcarrier_spacings
     else:
@@ -288,14 +288,14 @@ def cellular_cyclic_autocorrelation(
                 **idx_kws, slots=tdd_config.downlink_slot_indexes
             )
 
-            R = iqwaveform.ofdm.corr_at_indices(cp_inds, iq[chan], phy.nfft, norm=False)
+            R = waveform.ofdm.corr_at_indices(cp_inds, iq[chan], phy.nfft, norm=False)
             result[chan][0][iscs][: R.size] = xp.abs(R)
 
             if len(tdd_config.uplink_slot_indexes) > 0:
                 cp_inds = phy.index_cyclic_prefix(
                     **idx_kws, slots=tdd_config.uplink_slot_indexes
                 )
-                R = iqwaveform.ofdm.corr_at_indices(
+                R = waveform.ofdm.corr_at_indices(
                     cp_inds, iq[chan], phy.nfft, norm=False
                 )
                 result[chan][1][iscs][: R.size] = xp.abs(R)

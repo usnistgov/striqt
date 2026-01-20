@@ -13,13 +13,13 @@ if typing.TYPE_CHECKING:
     import numpy as np
     import scipy
 
-    import striqt.waveform as iqwaveform
+    import striqt.waveform as waveform
     from striqt.waveform._typing import ArrayType
 else:
     np = util.lazy_import('numpy')
     scipy = util.lazy_import('scipy')
     array_api_compat = util.lazy_import('array_api_compat')
-    iqwaveform = util.lazy_import('striqt.waveform')
+    waveform = util.lazy_import('striqt.waveform')
 
 
 def select_parameter_kws(locals_: dict, omit=(dataarrays.CAPTURE_DIM, 'out')) -> dict:
@@ -88,7 +88,7 @@ def iir_filter(
     filter_kws = select_parameter_kws(locals())
     sos = _generate_iir_lpf(capture, **filter_kws)
 
-    xp = iqwaveform.util.array_namespace(iq)
+    xp = waveform.util.array_namespace(iq)
 
     if util.is_cupy_array(iq):
         from . import cuda_kernels
@@ -111,7 +111,7 @@ def ola_filter(
 ):
     kwargs = select_parameter_kws(locals())
 
-    return iqwaveform.fourier.ola_filter(
+    return waveform.fourier.ola_filter(
         iq,
         fs=capture.sample_rate,
         passband=(-capture.analysis_bandwidth / 2, capture.analysis_bandwidth / 2),

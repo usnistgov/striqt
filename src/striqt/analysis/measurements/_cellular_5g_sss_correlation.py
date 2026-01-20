@@ -12,10 +12,10 @@ if typing.TYPE_CHECKING:
     import array_api_compat
     import numpy as np
 
-    import striqt.waveform as iqwaveform
+    import striqt.waveform as waveform
     import striqt.waveform._typing
 else:
-    iqwaveform = util.lazy_import('striqt.waveform')
+    waveform = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
     array_api_compat = util.lazy_import('array_api_compat')
 
@@ -53,7 +53,7 @@ def correlate_5g_sss(
     *,
     spec: specs.Cellular5GNRSSSCorrelator,
 ) -> 'striqt.waveform._typing.ArrayType':
-    xp = iqwaveform.util.array_namespace(iq)
+    xp = waveform.util.array_namespace(iq)
 
     ssb_iq = shared.get_5g_ssb_iq(iq, capture=capture, spec=spec)
     if ssb_iq is None:
@@ -61,14 +61,14 @@ def correlate_5g_sss(
             iq, capture=capture, spec=spec, coord_factories=_coord_factories
         )
 
-    params = iqwaveform.ofdm.sss_params(
+    params = waveform.ofdm.sss_params(
         sample_rate=spec.sample_rate,
         subcarrier_spacing=spec.subcarrier_spacing,
         discovery_periodicity=spec.discovery_periodicity,
         shared_spectrum=spec.shared_spectrum,
     )
 
-    sss_seq = iqwaveform.ofdm.sss_5g_nr(
+    sss_seq = waveform.ofdm.sss_5g_nr(
         spec.sample_rate, spec.subcarrier_spacing, xp=xp
     )
 
@@ -77,7 +77,7 @@ def correlate_5g_sss(
     )
 
     # split Nid into (Nid1, Nid2)
-    return iqwaveform.util.to_blocks(meas, 3, axis=-4)
+    return waveform.util.to_blocks(meas, 3, axis=-4)
 
 
 @shared.hint_keywords(specs.Cellular5GNSSSSync)
@@ -99,21 +99,21 @@ def cellular_5g_sss_sync(iq, capture: specs.Capture, window_fill=0.5, **kwargs):
 
     spec = specs.Cellular5GNSSSSync.from_dict(kwargs).validate()
 
-    xp = iqwaveform.util.array_namespace(iq)
+    xp = waveform.util.array_namespace(iq)
 
     kwargs['as_xarray'] = False
 
     R, _ = cellular_5g_sss_correlation(iq, capture, **kwargs)
 
     # start dimensions: (..., port index, cell Nid2, sync block index, symbol pair index, IQ sample index)
-    Ragg = iqwaveform.envtopow(R.sum(axis=(-4, -2)))
+    Ragg = waveform.envtopow(R.sum(axis=(-4, -2)))
 
     # reduce port index, etc in power space
     Ragg = Ragg.mean(axis=tuple(range(Ragg.ndim - 1)))
     Ragg = Ragg - xp.median(Ragg)
     assert Ragg.ndim == 1
 
-    weights = iqwaveform.get_window(
+    weights = waveform.get_window(
         'triang',
         nwindow=round(window_fill * Ragg.size),
         nzero=round((1 - window_fill) * Ragg.size),

@@ -24,12 +24,12 @@ if typing.TYPE_CHECKING:
     import pandas as pd
     import typing_extensions
 
-    import striqt.waveform as iqwaveform
+    import striqt.waveform as waveform
     from striqt.waveform._typing import ArrayType
     from striqt.waveform.fourier import ResamplerDesign
 
 else:
-    iqwaveform = util.lazy_import('striqt.waveform')
+    waveform = util.lazy_import('striqt.waveform')
     pd = util.lazy_import('pandas')
     np = util.lazy_import('numpy')
 
@@ -578,7 +578,7 @@ class SourceBase(
         return samples[:, sample_span], start_ns
 
     @util.stopwatch('acquire', 'source')
-    def acquire(self, *, analysis=None, correction=True, alias_func=None):
+    def acquire(self, *, analysis=None, correction=True, alias_func=None) -> AcquiredIQ:
         """arm a capture and enable the channel (if necessary), read the resulting IQ waveform.
 
         Optionally, calibration corrections can be applied, and the radio can be left ready for the next capture.
@@ -819,7 +819,7 @@ def _design_capture_resampler(
     if capture.host_resample:
         # use GPU DSP to resample from integer divisor of the MCR
         # fs_sdr, lo_offset, kws  = iqwaveform.fourier.design_cola_resampler(
-        design = iqwaveform.fourier.design_cola_resampler(
+        design = waveform.fourier.design_cola_resampler(
             fs_base=mcr,
             fs_target=capture.sample_rate,
             bw=capture.analysis_bandwidth,
@@ -839,7 +839,7 @@ def _design_capture_resampler(
         raise ValueError('upsampling requires host_resample=True')
     else:
         # use the SDR firmware to implement the desired sample rate
-        return iqwaveform.fourier.design_cola_resampler(
+        return waveform.fourier.design_cola_resampler(
             fs_base=capture.sample_rate,
             fs_target=capture.sample_rate,
             bw=capture.analysis_bandwidth,
@@ -910,12 +910,12 @@ def _get_fft_resample_pad(
     # output to have an integral number of samples
     if np.isfinite(capture.analysis_bandwidth):
         filter_pad = _get_filter_pad(capture)
-        min_filter_blocks = iqwaveform.util.ceildiv(design['nfft'], filter_pad)
+        min_filter_blocks = waveform.util.ceildiv(design['nfft'], filter_pad)
         block_size = design['nfft'] * min_filter_blocks
     else:
         block_size = design['nfft']
     block_count = analysis_size // block_size
-    min_blocks = block_count + iqwaveform.util.ceildiv(min_lag_pad, block_size)
+    min_blocks = block_count + waveform.util.ceildiv(min_lag_pad, block_size)
 
     # since design_capture_resampler gives us a nice fft size
     # for block_size, then if we make sure pad_blocks is also a nice fft size,
@@ -1034,7 +1034,7 @@ def _get_oaresample_pad(master_clock_rate: float, capture: specs.ResampledCaptur
     # round up to an integral number of FFT windows
     samples_in = ceil(min_samples_in / nfft) * nfft + nfft
 
-    noverlap_out = iqwaveform.fourier._ola_filter_parameters(
+    noverlap_out = waveform.fourier._ola_filter_parameters(
         samples_in,
         window=resampler_design['window'],
         nfft_out=nfft_out,
@@ -1055,7 +1055,7 @@ def _cached_channel_read_buffer_count(
     include_holdoff: bool = False,
     analysis: AnalysisGroup | None = None,
 ) -> int:
-    if iqwaveform.isroundmod(capture.duration * capture.sample_rate, 1):
+    if waveform.isroundmod(capture.duration * capture.sample_rate, 1):
         samples_out = round(capture.duration * capture.sample_rate)
     else:
         msg = f'duration must be an integer multiple of the sample period (1/{capture.sample_rate} s)'

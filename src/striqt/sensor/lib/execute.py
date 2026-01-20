@@ -7,7 +7,7 @@ import dataclasses
 import itertools
 import typing
 
-import striqt.waveform as iqwaveform
+import striqt.waveform as waveform
 from striqt.analysis import registry
 
 from . import compute, sources, peripherals, util
@@ -109,7 +109,7 @@ def _log_cache_info(
 
     spg, attrs = result
 
-    xp = iqwaveform.util.array_namespace(spg)
+    xp = waveform.util.array_namespace(spg)
 
     # conversion to dB is left for after this function, but display
     # log messages in dB
@@ -124,7 +124,7 @@ def _log_cache_info(
         xp=xp,
     )
 
-    snr = iqwaveform.powtodB(peaks) - noise
+    snr = waveform.powtodB(peaks) - noise
 
     snr_desc = ','.join(f'{p:+02.0f}' for p in snr)
     if 'nan' not in snr_desc.lower():

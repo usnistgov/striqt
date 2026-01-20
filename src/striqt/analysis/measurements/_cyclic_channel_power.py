@@ -12,9 +12,9 @@ from .shared import registry, hint_keywords
 if typing.TYPE_CHECKING:
     import numpy as np
 
-    import striqt.waveform as iqwaveform
+    import striqt.waveform as waveform
 else:
-    iqwaveform = util.lazy_import('striqt.waveform')
+    waveform = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
 
 
@@ -44,9 +44,9 @@ def cyclic_lag(capture: specs.Capture, spec: specs.CyclicChannelPower):
 def cyclic_channel_power(iq, capture: specs.Capture, **kwargs):
     spec = specs.CyclicChannelPower.from_dict(kwargs)
 
-    xp = iqwaveform.util.array_namespace(iq)
+    xp = waveform.util.array_namespace(iq)
 
-    nested_ret = iqwaveform.iq_to_cyclic_power(
+    nested_ret = waveform.iq_to_cyclic_power(
         iq,
         1 / capture.sample_rate,
         cyclic_period=spec.cyclic_period,
@@ -62,4 +62,4 @@ def cyclic_channel_power(iq, capture: specs.Capture, **kwargs):
     # move the capture axis to the front
     x = xp.moveaxis(x, -2, 0)
 
-    return iqwaveform.powtodB(x).astype('float32')
+    return waveform.powtodB(x).astype('float32')

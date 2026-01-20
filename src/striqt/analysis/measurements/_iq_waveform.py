@@ -11,10 +11,10 @@ if typing.TYPE_CHECKING:
     import numpy as np
     import pandas as pd
 
-    import striqt.waveform as iqwaveform
+    import striqt.waveform as waveform
 
 else:
-    iqwaveform = util.lazy_import('striqt.waveform')
+    waveform = util.lazy_import('striqt.waveform')
     pd = util.lazy_import('pandas')
     np = util.lazy_import('numpy')
 
