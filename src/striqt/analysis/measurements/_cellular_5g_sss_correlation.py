@@ -68,9 +68,7 @@ def correlate_5g_sss(
         shared_spectrum=spec.shared_spectrum,
     )
 
-    sss_seq = waveform.ofdm.sss_5g_nr(
-        spec.sample_rate, spec.subcarrier_spacing, xp=xp
-    )
+    sss_seq = waveform.ofdm.sss_5g_nr(spec.sample_rate, spec.subcarrier_spacing, xp=xp)
 
     meas = shared.correlate_sync_sequence(
         ssb_iq, sss_seq, spec=spec, params=params, cell_id_split=None

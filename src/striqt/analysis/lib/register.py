@@ -66,9 +66,7 @@ if typing.TYPE_CHECKING:
 
         def __call__(self, capture: _TC, spec: _TM) -> _R: ...
 
-    
     _TCallableAnalysis = typing.TypeVar('_TCallableAnalysis', bound=CallableAnalysis)
-
 
 
 else:
@@ -367,7 +365,10 @@ class AnalysisRegistry(collections.UserDict[type[specs.Analysis], AnalysisInfo])
         prefer_unaligned_input=False,
         store_compressed=True,
         attrs={},
-    ) -> typing.Callable[[CallableAnalysis[_P, _MeasurementReturn]], CallableAnalysisWrapper[_P, _MeasurementReturn]]:
+    ) -> typing.Callable[
+        [CallableAnalysis[_P, _MeasurementReturn]],
+        CallableAnalysisWrapper[_P, _MeasurementReturn],
+    ]:
         """add decorated `func` and its keyword arguments in the self.tostruct() schema"""
 
         if isinstance(dims, str):
@@ -601,7 +602,9 @@ def get_signal_trigger_measurement_name(name: str, registry: AnalysisRegistry) -
     return meas_info.name
 
 
-def normalize_factory_return(ret, name: str) -> tuple['ArrayType', dict[str, typing.Any]]:
+def normalize_factory_return(
+    ret, name: str
+) -> tuple['ArrayType', dict[str, typing.Any]]:
     """normalize the coordinate and data factory returns into (data, metadata)"""
 
     if not isinstance(ret, tuple):

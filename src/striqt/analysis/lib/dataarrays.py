@@ -267,7 +267,7 @@ def build_dataarray(
         target_shape = data.shape
     else:
         # broadcast on the capture dimension
-        data = np.atleast_1d(delayed.result)
+        data = np.atleast_1d(data)
         target_shape = (len(delayed.capture.port), *data.shape[1:])
 
     # to bypass initialization overhead, grow from the empty template
@@ -344,7 +344,10 @@ def _validate_delayed_ndim(delayed: DelayedDataArray) -> None:
     else:
         expect_dims = delayed.info.dims
 
-    ndim = delayed.result.ndim
+    if isinstance(delayed.result, dict):
+        raise TypeError('could not evaluate number of dimensions for dict return type')
+    else:
+        ndim = delayed.result.ndim
 
     if len(expect_dims) == ndim == 0:
         # allow scalar values
@@ -408,7 +411,7 @@ def evaluate_by_spec(
     spec: dict[str, specs.Analysis] | specs.AnalysisGroup,
     capture: specs.Capture,
     options: EvaluationOptions,
-):
+) -> dict[str, DelayedDataArray] | dict[str, ArrayType]:
     """evaluate each analysis for the given IQ waveform"""
 
     if isinstance(spec, specs.AnalysisGroup):
@@ -456,10 +459,11 @@ def evaluate_by_spec(
         return results
 
     for name in list(results.keys()):
-        if options.block_each:
-            res = results[name]
-        else:
-            res = results[name].compute()
+        res = results[name]
+
+        if not options.block_each:
+            assert isinstance(res, DelayedDataArray)
+            res = res.compute()
 
         if as_xarray == 'delayed':
             results[name] = res
@@ -475,13 +479,14 @@ def evaluate_by_spec(
 
 def package_analysis(
     capture: specs.Capture,
-    results: dict[str, DelayedDataArray],
+    results: dict[str, DelayedDataArray] | dict[str, ArrayType],
     expand_dims=None,
 ) -> 'xr.Dataset':
     # materialize as xarrays
     with util.stopwatch('package analyses into xarray'):
         xarrays = {}
         for name, res in results.items():
+            assert isinstance(res, DelayedDataArray)
             xarrays[name] = res.compute().to_xarray(expand_dims)
 
         attrs = capture.to_dict(skip_private=True)

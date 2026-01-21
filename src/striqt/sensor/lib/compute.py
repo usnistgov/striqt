@@ -364,8 +364,8 @@ def from_delayed(dd: DelayedDataset):
             continue
         else:
             headroom = dd.extra_data[field_name]
-        caps = specs.helpers.split_capture_ports(dd.capture)          
-        overload_ports = [c.port for c, hr in zip(caps, headroom) if hr<=0]
+        caps = specs.helpers.split_capture_ports(dd.capture)
+        overload_ports = [c.port for c, hr in zip(caps, headroom) if hr <= 0]
         if len(overload_ports) > 0:
             overload_msgs.append(f'{ol_type} overload on ports {overload_ports}')
 

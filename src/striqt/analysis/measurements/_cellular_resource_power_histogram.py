@@ -344,9 +344,7 @@ def cellular_resource_power_histogram(
     )
 
     flat_shape = masked_spgs.shape[:2] + (-1,)
-    counts, _ = waveform.histogram_last_axis(
-        masked_spgs.reshape(flat_shape), bin_edges
-    )
+    counts, _ = waveform.histogram_last_axis(masked_spgs.reshape(flat_shape), bin_edges)
 
     norm = xp.sum(counts, axis=(1, 2), keepdims=True)
     norm[norm == 0] = 1

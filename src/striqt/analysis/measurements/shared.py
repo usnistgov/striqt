@@ -312,7 +312,9 @@ def evaluate_spectrogram(
 spectrogram_cache = register.KeywordArgumentCache([dataarrays.CAPTURE_DIM, 'spec'])
 
 
-def truncate_spectrogram_bandwidth(x, nfft: int, fs: float, bandwidth: float, *, offset: float=0.0, axis: int=0):
+def truncate_spectrogram_bandwidth(
+    x, nfft: int, fs: float, bandwidth: float, *, offset: float = 0.0, axis: int = 0
+):
     """trim an array outside of the specified bandwidth on a frequency axis"""
     edges = waveform.fourier._freq_band_edges(
         nfft,
@@ -407,9 +409,7 @@ def _cached_spectrogram(
         )
 
     if frequency_bin_averaging is not None:
-        spg = waveform.util.binned_mean(
-            spg, frequency_bin_averaging, axis=2, fft=True
-        )
+        spg = waveform.util.binned_mean(spg, frequency_bin_averaging, axis=2, fft=True)
 
         # mean -> sum
         spg *= frequency_bin_averaging

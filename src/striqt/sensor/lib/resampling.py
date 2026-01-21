@@ -31,7 +31,7 @@ else:
 USE_OARESAMPLE = False
 
 
-def _apply_analysis_shifts(x: ArrayType, shifts: ArrayType, size_out: int) -> ArrayType:    
+def _apply_analysis_shifts(x: ArrayType, shifts: ArrayType, size_out: int) -> ArrayType:
     if x.shape[1] < shifts.max() + size_out:
         raise ValueError('waveform is too short to align')
 
@@ -43,7 +43,7 @@ def _apply_analysis_shifts(x: ArrayType, shifts: ArrayType, size_out: int) -> Ar
         xp = waveform.util.array_namespace(x)
         out = xp.empty((x.shape[0], size_out), dtype=x.dtype)
         for i in range(x.shape[0]):
-            out[i, :] = x[i, shifts[i]:shifts[i] + size_out]
+            out[i, :] = x[i, shifts[i] : shifts[i] + size_out]
         return out
 
 

@@ -108,7 +108,7 @@ class FixedEngFormatter(ticker.EngFormatter):
             return f'${mant:{fmt}}${suffix}'
         else:
             return f'{mant:{fmt}}{suffix}'
-        
+
     def get_axis_unit_suffix(self, vmin, vmax):
         if self.unitInTick:
             return ''
@@ -682,7 +682,6 @@ def label_axis(
     else:
         desc_text = long_name
 
-    
     if units is not None:
         formatter = FixedEngFormatter(unit=units, unitInTick=tick_units)
 
@@ -696,7 +695,6 @@ def label_axis(
             )
             label_str = f'{desc_text}{unit_suffix}'
         else:
-            
             label_str = None
     else:
         label_str = desc_text

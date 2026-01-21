@@ -20,7 +20,9 @@ else:
 
 @registry.coordinates(dtype='uint16', attrs={'standard_name': 'Symbols elapsed'})
 @util.lru_cache()
-def cellular_ssb_symbol_index(capture: specs.Capture, spec: specs.Cellular5GNRSSBSpectrogram):
+def cellular_ssb_symbol_index(
+    capture: specs.Capture, spec: specs.Cellular5GNRSSBSpectrogram
+):
     symbol_count = round(14 * spec.subcarrier_spacing / 15e3)
     return np.arange(symbol_count, dtype='uint16')
 
@@ -44,7 +46,9 @@ def cellular_ssb_baseband_frequency(
     )
 
     if frequency_offset is None:
-        raise KeyError('center_frequency did not match any keys given for frequency_offset')
+        raise KeyError(
+            'center_frequency did not match any keys given for frequency_offset'
+        )
 
     freqs = shared.truncate_spectrogram_bandwidth(
         freqs,
@@ -117,6 +121,19 @@ def cellular_5g_ssb_spectrogram(iq, capture: specs.Capture, **kwargs):
 
     spec = specs.Cellular5GNRSSBSpectrogram.from_dict(kwargs).validate()
 
+    frequency_offset = specs.helpers.maybe_lookup_with_capture_key(
+        capture,
+        spec.frequency_offset,
+        capture_attr='center_frequency',
+        error_label='frequency_offset',
+        default=None,
+    )
+
+    if frequency_offset is None:
+        raise TypeError(
+            'no key found for center_frequency in frequency_offset lookup dictionary'
+        )
+
     spg_spec = specs.Spectrogram(
         frequency_resolution=spec.subcarrier_spacing / 2,
         fractional_overlap=Fraction(13, 28),
@@ -124,23 +141,32 @@ def cellular_5g_ssb_spectrogram(iq, capture: specs.Capture, **kwargs):
         window=spec.window,
         lo_bandstop=spec.lo_bandstop,
         integration_bandwidth=spec.subcarrier_spacing,
-        trim_stopband=True,
+        trim_stopband=False,
     )
 
-    spg_capture = capture.replace(analysis_bandwidth=spec.sample_rate)
-
     spg, attrs = shared.evaluate_spectrogram(
-        iq, capture=spg_capture, spec=spg_spec, limit_digits=3, dtype='float16'
+        iq, capture=capture, spec=spg_spec, limit_digits=3, dtype='float16'
     )
 
     slot_period = 1e-3 * (15e3 / spec.subcarrier_spacing)
-    symbol_period = slot_period / 14
+    symbol_period = slot_period / 14  # TODO: this is normal CP; support extended CP?
     discovery_symbols = round(spec.discovery_periodicity / symbol_period)
 
     # keep only the first two slots in the frame
     symbol_index = np.arange(spg.shape[1])
     mask_time = (symbol_index % discovery_symbols) < 28
     spg = spg[:, mask_time]
+
+    # select frequency
+    nfft = round(capture.sample_rate / spec.subcarrier_spacing)
+    spg = shared.truncate_spectrogram_bandwidth(
+        spg,
+        nfft,
+        capture.sample_rate,
+        spec.sample_rate,
+        offset=frequency_offset,
+        axis=2,
+    )
 
     # split by synchronization block
     spg = spg.reshape((spg.shape[0], -1, 28, spg.shape[2]))

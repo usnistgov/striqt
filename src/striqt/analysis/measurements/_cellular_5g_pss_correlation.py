@@ -56,9 +56,7 @@ def correlate_5g_pss(
         shared_spectrum=spec.shared_spectrum,
     )
 
-    pss_seq = waveform.ofdm.pss_5g_nr(
-        spec.sample_rate, spec.subcarrier_spacing, xp=xp
-    )
+    pss_seq = waveform.ofdm.pss_5g_nr(spec.sample_rate, spec.subcarrier_spacing, xp=xp)
 
     return shared.correlate_sync_sequence(
         ssb_iq, pss_seq, spec=spec, params=params, cell_id_split=1
@@ -93,7 +91,7 @@ def weight_correlation_locally(R, spec: specs.Cellular5GNPSSSync):
     )
     Rsnr = Rpow / Rpow_median
 
-    # scale by the 
+    # scale by the
     ipeak = xp.argmax(Rsnr, axis=-1, keepdims=True)
 
     Rpow_corr = Rsnr * (
@@ -179,7 +177,7 @@ def cellular_5g_pss_sync(iq, capture: specs.Capture, **kwargs):
 
     i = est.argmax(axis=1)
 
-    return i/spec.sample_rate#shared.cellular_ssb_lag(capture, spec)[i]
+    return i / spec.sample_rate  # shared.cellular_ssb_lag(capture, spec)[i]
 
 
 @shared.hint_keywords(specs.Cellular5GNRPSSCorrelator)

@@ -27,7 +27,7 @@ class TDMSSource(
     _file_info: specs.FileAcquisitionInfo
 
     def _connect(self, spec):
-        from nptdms import TdmsFile # type: ignore
+        from nptdms import TdmsFile  # type: ignore
 
         fd = TdmsFile.read(spec.path)
         header_fd, iq_fd = fd.groups()
@@ -159,9 +159,11 @@ class ZarrIQSource(
         pass
 
     @typing.overload
-    def _read_coord(self, name: str, single: typing.Literal[False] = False) -> tuple[typing.Any, ...]:
+    def _read_coord(
+        self, name: str, single: typing.Literal[False] = False
+    ) -> tuple[typing.Any, ...]:
         pass
-    
+
     def _read_coord(self, name: str, single: bool = True):
         assert self._waveform is not None
         result = np.atleast_1d(self._waveform[name])
@@ -192,10 +194,10 @@ class ZarrIQSource(
         super()._prepare_capture(capture)
 
         try:
-            port=self._read_coord('port', single=False)
+            port = self._read_coord('port', single=False)
         except KeyError:
             # legacy files
-            port=self._read_coord('channel', single=False)
+            port = self._read_coord('channel', single=False)
 
         self._capture_info = specs.FileAcquisitionInfo(
             center_frequency=self._read_coord('center_frequency'),
