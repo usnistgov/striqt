@@ -50,8 +50,8 @@ def cellular_ssb_baseband_frequency(
             'center_frequency did not match any keys given for frequency_offset'
         )
 
-    nfft = round(capture.sample_rate / spec.subcarrier_spacing)
-    freqs = shared.truncate_spectrogram_bandwidth(
+    freqs = waveform.util.binned_mean(freqs, count=2, axis=0, fft=True)
+    return shared.truncate_spectrogram_bandwidth(
         freqs,
         nfft,
         capture.sample_rate,
