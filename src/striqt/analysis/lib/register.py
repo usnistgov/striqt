@@ -95,7 +95,7 @@ class KeywordArgumentCache:
         if kws is None:
             return None
 
-        kws = {k: kws[k] for k in self._fields}
+        kws = {k: kws[k] for k in self._fields if k in kws}
 
         return frozenset(kws.items())
 
