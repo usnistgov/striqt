@@ -62,4 +62,4 @@ savefig.facecolor: "none"
 savefig.dpi: 300
 savefig.bbox: "tight"
 
-image.cmap: 'cubehelix'
+image.cmap: "cubehelix"
