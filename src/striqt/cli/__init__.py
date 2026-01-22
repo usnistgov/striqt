@@ -178,15 +178,15 @@ def click_capture_plotter(description: typing.Optional[str] = None):
             help='if specified, plot for only this frequency',
         ),
         click.option(
-            '--sweep-index/',
-            '-s',
+            '--index/',
+            '-n',
             type=int,
             show_default=True,
             default=-1,
             help='sweep index to plot (-1 for last)',
         ),
         click.option(
-            '--data-variable',
+            '--data-variable/',
             '-d',
             type=str,
             multiple=True,
@@ -194,8 +194,14 @@ def click_capture_plotter(description: typing.Optional[str] = None):
             help='plot only the specified variable if specified',
         ),
         click.option(
-            '--no-save/',
-            '-n',
+            '--style',
+            '-s',
+            type=str,
+            default='striqt.figures.presentation_half_width',
+            help="matplotlib style sheet to use"
+        )
+        click.option(
+            '--no-save',
             is_flag=True,
             show_default=True,
             default=False,

@@ -11,7 +11,7 @@ def _submit_if_available(executor, func: callable, data, *args, **kws) -> list:
 
 
 @click_capture_plotter()
-def run(dataset, output_path: str, interactive: bool):
+def run(dataset, output_path: str, interactive: bool, style: str):
     """generic plots"""
     from striqt import figures
     from concurrent import futures
@@ -35,7 +35,7 @@ def run(dataset, output_path: str, interactive: bool):
         suptitle_fmt=suptitle_fmt,
         filename_fmt=filename_fmt,
         ignore_missing=True,
-        style='striqt.figures.presentation_half_width',
+        style=style,
     )
 
     executor = futures.ProcessPoolExecutor(max_workers=6)
