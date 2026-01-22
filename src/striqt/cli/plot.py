@@ -35,7 +35,7 @@ def run(dataset, output_path: str, interactive: bool, style: str):
         suptitle_fmt=suptitle_fmt,
         filename_fmt=filename_fmt,
         ignore_missing=True,
-        style=style,
+        style=f'striqt.figures.{style}',
     )
 
     executor = futures.ProcessPoolExecutor(max_workers=6)
