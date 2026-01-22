@@ -53,7 +53,7 @@ def cellular_ssb_baseband_frequency(
     freqs = waveform.util.binned_mean(freqs, count=2, axis=0, fft=True)
     return shared.truncate_spectrogram_bandwidth(
         freqs,
-        nfft//2,
+        nfft // 2,
         capture.sample_rate,
         spec.sample_rate,
         offset=frequency_offset,

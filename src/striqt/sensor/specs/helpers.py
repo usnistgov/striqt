@@ -17,6 +17,7 @@ from msgspec import UNSET, UnsetType
 from striqt.analysis.specs.helpers import convert_spec, convert_dict
 
 from . import structs as specs
+from . import types
 from .structs import _TS, _TC, _TP
 from ..lib import util
 
@@ -265,6 +266,30 @@ def split_capture_ports(capture: Capture) -> list[Capture]:
             remap[field] = value
 
     return [capture.replace(**remap) for remap in remaps]
+
+
+@util.lru_cache()
+def max_by_frequency(
+    field: str,
+    captures: tuple[specs.SoapyCapture, ...],
+    loops: tuple[specs.LoopSpec, ...] = (),
+) -> dict[types.Port, dict[types.CenterFrequency, typing.Any]]:
+    """get the maximum value of a field across looped captures by center frequency"""
+
+    map = {}
+    looped_captures = loop_captures_from_fields(
+        captures, loops, only_fields=(field, 'center_frequency')
+    )
+
+    for c in looped_captures:
+        for pc in split_capture_ports(c):
+            current = map.setdefault(pc.port, {}).setdefault(pc.center_frequency, None)
+            v = getattr(pc, field)
+
+            if current is None or v > current:
+                map[pc.port][pc.center_frequency] = v
+
+    return map
 
 
 def capture_fields_with_aliases(

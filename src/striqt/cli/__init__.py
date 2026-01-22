@@ -188,9 +188,16 @@ def click_capture_plotter(description: typing.Optional[str] = None):
         click.option(
             '--style',
             '-s',
-            type=click.Choice(['presentation_half_width', 'presentation_full_width', 'ieee', 'ieee_double_column']),
+            type=click.Choice(
+                [
+                    'presentation_half_width',
+                    'presentation_full_width',
+                    'ieee',
+                    'ieee_double_column',
+                ]
+            ),
             default='presentation_half_width',
-            help="matplotlib style sheet to use"
+            help='matplotlib style sheet to use',
         ),
         click.option(
             '--no-save',

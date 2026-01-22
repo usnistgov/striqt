@@ -340,6 +340,46 @@ def analyze(
         return from_delayed(ds_delayed)
 
 
+def _if_overload_info(
+    if_headroom: typing.Sequence[float],
+    capture: _TC,
+    sweep_spec: specs.Sweep[_TS, _TP, _TC],
+) -> str | None:
+    if not isinstance(capture, specs.SoapyCapture):
+        return None
+    else:
+        captures = typing.cast(tuple[specs.SoapyCapture, ...], sweep_spec.captures)
+
+    gains = specs.helpers.max_by_frequency('gain', captures, sweep_spec.loops)
+    caps = specs.helpers.split_capture_ports(capture)
+
+    ol_cases = {}
+    for c, hr in zip(caps, if_headroom):
+        # estimate IM3 levels in other channels
+        ol_cases.setdefault(c.port, set())
+
+        for fc, gain in gains[c.port].items():
+            im3_headroom = hr + (2 / 3 * (c.gain - gain))
+
+            if im3_headroom > 0:
+                continue
+
+            ol_cases[c.port].add(fc)
+
+    ol_labels = []
+    for port, freqs in ol_cases.items():
+        if len(freqs) > 0:
+            freqs_MHz = ', '.join([f'{f / 1e6}:0.0f' for f in sorted(freqs)])
+            ol_labels.append(
+                f'if overload on port {port} for center frequencies ({freqs_MHz}) MHz'
+            )
+
+    if len(ol_labels) > 0:
+        return '; '.join(ol_labels)
+    else:
+        return None
+
+
 def from_delayed(dd: DelayedDataset):
     """complete any remaining calculations, transfer from the device, and build an output dataset"""
 
@@ -356,18 +396,22 @@ def from_delayed(dd: DelayedDataset):
     if isinstance(dd.config.sweep_spec.source, specs.NoSource):
         pass
 
+    # log overload messages
     overload_msgs = []
-
-    for ol_type in ('adc', 'if'):
-        field_name = ol_type + '_headroom'
-        if field_name not in dd.extra_data:
-            continue
-        else:
-            headroom = dd.extra_data[field_name]
+    if 'adc_headroom' in dd.extra_data:
+        headroom = dd.extra_data['adc_headroom']
         caps = specs.helpers.split_capture_ports(dd.capture)
+
         overload_ports = [c.port for c, hr in zip(caps, headroom) if hr <= 0]
         if len(overload_ports) > 0:
-            overload_msgs.append(f'{ol_type} overload on ports {overload_ports}')
+            overload_msgs.append(f'adc overload on ports {overload_ports}')
+
+    if 'if_headroom' in dd.extra_data:
+        if_ol_info = _if_overload_info(
+            dd.extra_data['adc_headroom'], dd.capture, dd.config.sweep_spec
+        )
+        if if_ol_info is not None:
+            overload_msgs.append(if_ol_info)
 
     if len(overload_msgs) > 0:
         util.get_logger('analysis').warning(', '.join(overload_msgs))

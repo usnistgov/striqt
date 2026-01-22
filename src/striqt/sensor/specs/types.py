@@ -136,7 +136,7 @@ IFOverloadLimit = Optional[
     Annotated[
         float,
         Meta(
-            'dataset adc_overload=True when the peak (ADC level+gain) exceeds this threshold',
+            'the maximum level at maximum gain before IF/baseband overload',
             'dBfs',
         ),
     ]
