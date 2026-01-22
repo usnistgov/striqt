@@ -369,9 +369,9 @@ def _if_overload_info(
     ol_labels = []
     for port, freqs in ol_cases.items():
         if len(freqs) > 0:
-            freqs_MHz = ', '.join([f'{f / 1e6}:0.0f' for f in sorted(freqs)])
+            freqs_MHz = ', '.join([f'{f / 1e6:0.0f}' for f in sorted(freqs)])
             ol_labels.append(
-                f'if overload on port {port} for center frequencies ({freqs_MHz}) MHz'
+                f'if overload at port {port} (onto {freqs_MHz} MHz)'
             )
 
     if len(ol_labels) > 0:
