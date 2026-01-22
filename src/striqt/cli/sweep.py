@@ -46,7 +46,6 @@ def run(*, yaml_path, debug, verbose, port, **kws):
     spec = sensor.read_yaml_spec(
         yaml_path,
         output_path=kws['output_path'],
-        store_backend=kws['store_backend'],
     )
 
     if port is not None:
