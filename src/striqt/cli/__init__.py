@@ -36,13 +36,6 @@ def click_sensor_sweep(description: typing.Optional[str] = None):
             help='run on the specified remote host (at host or host:port)',
         ),
         click.option(
-            '--store-backend/',
-            '-s',
-            type=click.Choice(['zip', 'directory', 'db'], case_sensitive=True),
-            default=None,
-            help='override yaml file data store setting: "zip" for single acquisition, "directory" to support appending acquisitions',
-        ),
-        click.option(
             '--force/',
             '-f',
             is_flag=True,
