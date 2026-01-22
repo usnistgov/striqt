@@ -398,13 +398,18 @@ def from_delayed(dd: DelayedDataset):
 
     # log overload messages
     overload_msgs = []
-    if 'adc_headroom' in dd.extra_data:
+    if 'adc_headroom' in dd.extra_data and isinstance(dd.capture, specs.SoapyCapture):
         headroom = dd.extra_data['adc_headroom']
         caps = specs.helpers.split_capture_ports(dd.capture)
 
-        overload_ports = [c.port for c, hr in zip(caps, headroom) if hr <= 0]
+        overload_ports = [
+            f'port {c.port} ({c.center_frequency/1e6:0.0f} MHz)'
+            for c, hr in zip(caps, headroom)
+            if hr <= 0
+        ]
+
         if len(overload_ports) > 0:
-            overload_msgs.append(f'adc overload on ports {overload_ports}')
+            overload_msgs.append('adc overload on ' + ", ".join(overload_ports))
 
     if 'if_headroom' in dd.extra_data:
         if_ol_info = _if_overload_info(
