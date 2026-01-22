@@ -61,3 +61,5 @@ savefig.pad_inches: 0.005
 savefig.facecolor: "none"
 savefig.dpi: 300
 savefig.bbox: "tight"
+
+image.cmap: 'cubehelix'
