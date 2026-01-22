@@ -74,7 +74,8 @@ def _run_click_plotter(
     interactive=False,
     no_save=False,
     data_variable=[],
-    sweep_index=-1,
+    index=-1,
+    style='presentation_half_width',
     **plot_func_kws,
 ):
     """handle keyword arguments passed in from click, and call plot_func()"""
@@ -90,8 +91,6 @@ def _run_click_plotter(
         plt.ion()
     else:
         plt.ioff()
-
-    plt.style.use('striqt.figures.ieee_double_column')
 
     # index on the following fields in order, matching the input options
     dataset = analysis.load(zarr_path)
@@ -129,7 +128,7 @@ def _run_click_plotter(
         )
 
     if 'sweep_start_time' in index_dims:
-        sweep_start_time = np.atleast_1d(dataset.sweep_start_time)[sweep_index]
+        sweep_start_time = np.atleast_1d(dataset.sweep_start_time)[index]
         dataset = dataset.sel(sweep_start_time=sweep_start_time).load()
     else:
         dataset = dataset.load()
@@ -140,7 +139,7 @@ def _run_click_plotter(
         output_path = Path(zarr_path).parent / Path(zarr_path).name.split('.', 1)[0]
         output_path.mkdir(exist_ok=True)
 
-    plot_func(dataset, output_path, interactive, **plot_func_kws)
+    plot_func(dataset, output_path, interactive, style=style, **plot_func_kws)
 
     if interactive:
         analysis.util.blocking_input('press enter to quit')
