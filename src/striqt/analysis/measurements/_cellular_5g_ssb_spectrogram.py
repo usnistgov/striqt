@@ -35,7 +35,7 @@ def cellular_ssb_baseband_frequency(
     capture: specs.Capture, spec: specs.Cellular5GNRSSBSpectrogram, xp=np
 ) -> np.ndarray:
     nfft = round(2 * capture.sample_rate / spec.subcarrier_spacing)
-    freqs = shared.fftfreq(nfft, capture.sample_rate)
+    bb_freqs = shared.fftfreq(nfft, capture.sample_rate)
 
     frequency_offset = specs.helpers.maybe_lookup_with_capture_key(
         capture,
@@ -50,9 +50,9 @@ def cellular_ssb_baseband_frequency(
             'center_frequency did not match any keys given for frequency_offset'
         )
 
-    freqs = waveform.util.binned_mean(freqs, count=2, axis=0, fft=True)
-    return shared.truncate_spectrogram_bandwidth(
-        freqs,
+    bb_freqs = waveform.util.binned_mean(bb_freqs, count=2, axis=0, fft=True)
+    bb_freqs = shared.truncate_spectrogram_bandwidth(
+        bb_freqs,
         nfft // 2,
         capture.sample_rate,
         spec.sample_rate,
@@ -60,8 +60,7 @@ def cellular_ssb_baseband_frequency(
         axis=0,
     )
 
-    # due to integration_bandwidth=2*subcarrier_spacing
-    return waveform.util.binned_mean(freqs, count=2, axis=0, fft=True)
+    return bb_freqs - frequency_offset
 
 
 @registry.coordinates(dtype='uint16', attrs={'standard_name': 'Capture SSB index'})

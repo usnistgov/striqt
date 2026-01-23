@@ -48,7 +48,7 @@ class FixedEngFormatter(ticker.EngFormatter):
         if unit is None or (len(unit) == 1 and not unit.isalnum()):
             sep = ''
         else:
-            sep = ' '
+            sep = ' '
 
         super().__init__(
             unit,
@@ -146,13 +146,12 @@ def _count_facets(facet_col, data) -> int:
 def _fix_axes(data, grid, x, y=None, xticklabelunits=True):
     axs = list(np.array(grid.axes).flatten())
 
-    for ax in axs:
-        label_axis('x', data[x], ax=ax, tick_units=xticklabelunits)
+    label_axis('x', data[x], fig=grid.fig, tick_units=xticklabelunits)
 
-        if y is None:
-            label_axis('y', data, ax=ax, tick_units=False)
-        else:
-            label_axis('y', data[y], ax=ax, tick_units=False)
+    if y is None:
+        label_axis('y', data, fig=grid.fig, tick_units=False)
+    else:
+        label_axis('y', data[y], fig=grid.fig, tick_units=False)
 
 
 class CapturePlotter:
@@ -306,10 +305,6 @@ class CapturePlotter:
         else:
             seq = data
 
-        if 'spectral' in name:
-            print(name, kws)
-            print(data.sel(time_statistic='mean').max('baseband_frequency').data)
-
         for sub in seq:
             with self._plot_context(sub, **ctx_kws):
                 kws['figsize'] = mpl.rcParams['figure.figsize']
@@ -328,6 +323,7 @@ class CapturePlotter:
         sharey: bool = True,
         transpose: bool = True,
         meta: dict = {},
+        facet_as_row=False,
         **kws,
     ):
         kws.update(x=x, y=y, rasterized=rasterized)
@@ -336,7 +332,11 @@ class CapturePlotter:
             # treat the sequence of multiple captures in one plot
             seq = [data]
             col_wrap = min(_count_facets(self.facet_col, data), self._col_wrap)
-            kws.update(col=self.facet_col, sharey=sharey, col_wrap=col_wrap)
+
+            if facet_as_row:
+                kws.update(row=self.facet_col, sharey=sharey, col_wrap=col_wrap)
+            else:
+                kws.update(col=self.facet_col, sharey=sharey, col_wrap=col_wrap)
         else:
             seq = data
 
@@ -395,6 +395,18 @@ class CapturePlotter:
             x='cellular_ssb_lag',
             hue=hue,
             rasterized=False,
+            meta=data.attrs,
+        )
+
+
+    @_maybe_skip_missing
+    def cellular_5g_ssb_spectrogram(self, data: xr.Dataset, **sel):
+        key = self.cellular_5g_ssb_spectrogram.__name__
+        return self._heatmap(
+            data[key].sel(sel).isel(cellular_ssb_index=0).dropna('cellular_ssb_baseband_frequency'),
+            name=key,
+            x='cellular_ssb_symbol_index',
+            y='cellular_ssb_baseband_frequency',
             meta=data.attrs,
         )
 

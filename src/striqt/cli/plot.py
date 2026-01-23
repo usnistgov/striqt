@@ -60,6 +60,9 @@ def run(dataset, output_path: str, interactive: bool, style: str):
                 executor, plotter.cellular_5g_pss_correlation, data, dB=True
             )
             pending += _submit_if_available(
+                executor, plotter.cellular_5g_ssb_spectrogram, data
+            )
+            pending += _submit_if_available(
                 executor, plotter.cellular_cyclic_autocorrelation, data, dB=True
             )
             pending += _submit_if_available(
