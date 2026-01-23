@@ -23,7 +23,7 @@ else:
 def cellular_ssb_symbol_index(
     capture: specs.Capture, spec: specs.Cellular5GNRSSBSpectrogram
 ):
-    symbol_count = round(14 * spec.subcarrier_spacing / 15e3)
+    symbol_count = round(28 * spec.subcarrier_spacing / 15e3)
     return np.arange(symbol_count, dtype='uint16')
 
 
@@ -121,6 +121,9 @@ def cellular_5g_ssb_spectrogram(iq, capture: specs.Capture, **kwargs):
 
     spec = specs.Cellular5GNRSSBSpectrogram.from_dict(kwargs).validate()
 
+    # TODO: compute this with the striqt.waveform.ofdm
+    symbol_count = round(28 * spec.subcarrier_spacing / 15e3) # per burst set
+
     frequency_offset = specs.helpers.maybe_lookup_with_capture_key(
         capture,
         spec.frequency_offset,
@@ -147,8 +150,6 @@ def cellular_5g_ssb_spectrogram(iq, capture: specs.Capture, **kwargs):
     spg, attrs = shared.evaluate_spectrogram(
         iq, capture=capture, spec=spg_spec, limit_digits=3, dtype='float16'
     )
-
-    symbol_count = 56 # total (per SS burst set)
 
     slot_period = 1e-3 * (15e3 / spec.subcarrier_spacing)
     symbol_period = slot_period / 14  # TODO: this is normal CP; support extended CP?
