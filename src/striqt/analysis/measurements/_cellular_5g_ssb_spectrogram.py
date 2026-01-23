@@ -148,13 +148,15 @@ def cellular_5g_ssb_spectrogram(iq, capture: specs.Capture, **kwargs):
         iq, capture=capture, spec=spg_spec, limit_digits=3, dtype='float16'
     )
 
+    symbol_count = 56 # total (per SS burst set)
+
     slot_period = 1e-3 * (15e3 / spec.subcarrier_spacing)
     symbol_period = slot_period / 14  # TODO: this is normal CP; support extended CP?
     discovery_symbols = round(spec.discovery_periodicity / symbol_period)
 
     # keep only the first two slots in the frame
     symbol_index = np.arange(spg.shape[1])
-    mask_time = (symbol_index % discovery_symbols) < 56
+    mask_time = (symbol_index % discovery_symbols) < symbol_count
     spg = spg[:, mask_time]
 
     # select frequency
@@ -169,6 +171,6 @@ def cellular_5g_ssb_spectrogram(iq, capture: specs.Capture, **kwargs):
     )
 
     # split by synchronization block
-    spg = spg.reshape((spg.shape[0], -1, 28, spg.shape[2]))
+    spg = spg.reshape((spg.shape[0], -1, symbol_count, spg.shape[2]))
 
     return spg, attrs
