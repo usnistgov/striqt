@@ -154,7 +154,7 @@ def cellular_5g_ssb_spectrogram(iq, capture: specs.Capture, **kwargs):
 
     # keep only the first two slots in the frame
     symbol_index = np.arange(spg.shape[1])
-    mask_time = (symbol_index % discovery_symbols) < 28
+    mask_time = (symbol_index % discovery_symbols) < 56
     spg = spg[:, mask_time]
 
     # select frequency
