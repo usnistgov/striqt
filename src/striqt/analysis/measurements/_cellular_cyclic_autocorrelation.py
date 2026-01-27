@@ -20,11 +20,17 @@ else:
     pd = util.lazy_import('pandas')
 
 
+class SlotBySymbol(typing.TypedDict):
+    d: str
+    u: str
+    s: str | None
+
+
 class NormalizedTDDSlotConfig(typing.NamedTuple):
     frame_slots: str
-    special_symbols: str
-    code_maps: dict[str, float]
-    slot_by_symbol: dict[str, float]
+    special_symbols: str | None
+    code_maps: dict[str, dict[str, float]]
+    slot_by_symbol: SlotBySymbol
     downlink_slot_indexes: tuple[int, ...]
     uplink_slot_indexes: tuple[int, ...]
     frame_by_symbol: str | None
@@ -89,23 +95,23 @@ def tdd_config_from_str(
         symbols_per_slot = 12
 
     downlink_code_to_value = {
-        'd': 1,
+        'd': 1.0,
         'u': float('nan'),
-        'f': 1 if flex_as == 'd' else float('nan'),
+        'f': 1.0 if flex_as == 'd' else float('nan'),
     }
     uplink_code_to_value = {
         'd': float('nan'),
-        'u': 1,
-        'f': 1 if flex_as == 'u' else float('nan'),
+        'u': 1.0,
+        'f': 1.0 if flex_as == 'u' else float('nan'),
     }
 
     code_mapping = {'downlink': downlink_code_to_value, 'uplink': uplink_code_to_value}
 
-    slot_by_symbol = {
-        'd': symbols_per_slot * 'd',
-        'u': symbols_per_slot * 'u',
-        's': special_symbols,
-    }
+    slot_by_symbol = SlotBySymbol(
+        d=symbols_per_slot * 'd',
+        u=symbols_per_slot * 'u',
+        s=special_symbols,
+    )
 
     downlink_slots = [i for i, s in enumerate(frame_slots) if s == 'd']
     uplink_slots = [i for i, s in enumerate(frame_slots) if s == 'u']
@@ -132,7 +138,7 @@ def tdd_config_from_str(
 @util.lru_cache()
 def cyclic_sample_lag(
     capture: specs.Capture, spec: specs.CellularCyclicAutocorrelator
-) -> dict[str, np.ndarray]:
+) -> 'pd.Index':
     max_len = _get_max_corr_size(capture, subcarrier_spacings=spec.subcarrier_spacings)
     name = cyclic_sample_lag.__name__
     return pd.RangeIndex(0, max_len, name=name) / capture.sample_rate
@@ -166,31 +172,35 @@ def link_direction(capture: specs.Capture, spec: specs.CellularCyclicAutocorrela
 def _get_phy_mapping(
     channel_bandwidth: float,
     sample_rate: float,
-    subcarrier_spacings: tuple[float, ...],
+    subcarrier_spacings: float | tuple[float, ...],
     generation: typing.Literal['4G', '5G'] = '4G',
     xp=np,
 ) -> dict[float, waveform.ofdm._Phy3GPP]:
-    kws = dict(
-        channel_bandwidth=channel_bandwidth,
-        generation=generation,
-        sample_rate=sample_rate,
-    )
     seq = (
         subcarrier_spacings
         if isinstance(subcarrier_spacings, tuple)
         else [subcarrier_spacings]
     )
-    return {
-        scs: waveform.ofdm.get_3gpp_phy(subcarrier_spacing=scs, xp=xp, **kws)
-        for scs in seq
-    }
+
+    phy = {}
+
+    for scs in seq:
+        phy[scs] = waveform.ofdm.get_3gpp_phy(
+            subcarrier_spacing=scs,
+            channel_bandwidth=channel_bandwidth,
+            generation=generation,
+            sample_rate=sample_rate,
+            xp=xp,
+        )
+
+    return phy
 
 
 @util.lru_cache()
 def _get_max_corr_size(
     capture: specs.Capture,
     *,
-    subcarrier_spacings: tuple[float, ...],
+    subcarrier_spacings: float | tuple[float, ...],
     generation: typing.Literal['4G', '5G'] = '4G',
 ):
     phy_scs = _get_phy_mapping(
@@ -199,7 +209,39 @@ def _get_max_corr_size(
         subcarrier_spacings,
         generation=generation,
     )
-    return max([np.diff(phy.cp_start_idx).min() for phy in phy_scs.values()])
+    sizes = [np.diff(phy.cp_start_idx).min() for phy in phy_scs.values()]
+    return max(sizes)
+
+
+@typing.overload
+def _get_spec_range(field_range: tuple[int, None], name) -> typing.Literal['all']:
+    pass
+
+
+@typing.overload
+def _get_spec_range(
+    field_range: typing.Union[int, tuple[int, int]], name
+) -> tuple[int, ...]:
+    pass
+
+
+def _get_spec_range(
+    field_range: typing.Union[int, tuple[int, None], tuple[int, int]], name
+) -> tuple[int, ...] | typing.Literal['all']:
+    if field_range in ((0,), (None, None), (0, None)):
+        return 'all'
+
+    elif not isinstance(field_range, tuple):
+        return (field_range,)
+
+    start, stop = field_range
+
+    if stop is None:
+        raise TypeError(
+            f'{name!r} field [start, stop] indices must have two integers unless start is 0'
+        )
+
+    return tuple(range(start, stop))
 
 
 @hint_keywords(specs.CellularCyclicAutocorrelator)
@@ -238,8 +280,6 @@ def cellular_cyclic_autocorrelation(
 
     spec = specs.CellularCyclicAutocorrelator.from_dict(kwargs)
 
-    RANGE_MAP = {'frames': spec.frame_range, 'symbols': spec.symbol_range}
-
     xp = waveform.util.array_namespace(iq)
     if isinstance(spec.subcarrier_spacings, tuple):
         scs = spec.subcarrier_spacings
@@ -259,19 +299,16 @@ def cellular_cyclic_autocorrelation(
         capture, spec.frame_slots, 'center_frequency', 'frame_slots', default='d'
     )
 
-    # transform the indexing arguments into the form expected by phy.index_cyclic_prefix
-    idx_kws = {}
-    for name, field_range in RANGE_MAP.items():
-        if isinstance(field_range, numbers.Number):
-            field_range = (field_range,)
-        else:
-            field_range = tuple(field_range)
-        metadata[name] = field_range
+    metadata['frames'] = spec.frame_range
+    metadata['symbols'] = spec.symbol_range
 
-        if field_range in ((0,), (None, None), (0, None)):
-            idx_kws[name] = 'all'
-        else:
-            idx_kws[name] = tuple(range(*field_range))
+    frame_range = _get_spec_range(spec.frame_range, 'frame_range')
+    symbol_range = _get_spec_range(spec.symbol_range, 'symbol_range')
+
+    def index_cp_for_slot(slots):
+        return phy.index_cyclic_prefix(
+            frames=frame_range, symbols=symbol_range, slots=slots
+        )
 
     max_len = _get_max_corr_size(
         capture, subcarrier_spacings=scs, generation=spec.generation
@@ -284,20 +321,15 @@ def cellular_cyclic_autocorrelation(
                 subcarrier_spacing=phy.subcarrier_spacing, frame_slots=frame_slots
             )
 
-            cp_inds = phy.index_cyclic_prefix(
-                **idx_kws, slots=tdd_config.downlink_slot_indexes
-            )
-
+            cp_inds = index_cp_for_slot(tdd_config.downlink_slot_indexes)
             R = waveform.ofdm.corr_at_indices(cp_inds, iq[chan], phy.nfft, norm=False)
             result[chan][0][iscs][: R.size] = xp.abs(R)
 
-            if len(tdd_config.uplink_slot_indexes) > 0:
-                cp_inds = phy.index_cyclic_prefix(
-                    **idx_kws, slots=tdd_config.uplink_slot_indexes
-                )
-                R = waveform.ofdm.corr_at_indices(
-                    cp_inds, iq[chan], phy.nfft, norm=False
-                )
-                result[chan][1][iscs][: R.size] = xp.abs(R)
+            if len(tdd_config.uplink_slot_indexes) == 0:
+                continue
+
+            cp_inds = index_cp_for_slot(tdd_config.uplink_slot_indexes)
+            R = waveform.ofdm.corr_at_indices(cp_inds, iq[chan], phy.nfft, norm=False)
+            result[chan][1][iscs][: R.size] = xp.abs(R)
 
     return result, metadata

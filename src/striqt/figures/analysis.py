@@ -215,7 +215,7 @@ class CapturePlotter:
             'ignore', category=UserWarning, message=r'.*figure layout has changed.*'
         )
 
-        yield
+        yield fig
 
         if fig is None:
             fig = plt.gcf()
@@ -228,10 +228,14 @@ class CapturePlotter:
             axs = [axs]
 
         if self._suptitle_fmt is not None:
+            left = fig.subplotpars.left
+            right = fig.subplotpars.right
+            center_x = (left + right) / 2.0
+
             suptitle = label_by_coord(
                 data, self._suptitle_fmt, title_case=True, name=name, **meta
             )[0]
-            fig.suptitle(suptitle)
+            fig.suptitle(suptitle, x=center_x, ha='center', va='bottom')
 
         if self._title_fmt is not None:
             titles = label_by_coord(
@@ -291,6 +295,7 @@ class CapturePlotter:
         sharey: bool = True,
         xticklabelunits: bool = True,
         meta: dict = {},
+        plot_kws: dict[str, typing.Any] = {},
     ):
         kws = dict(x=x, hue=hue, rasterized=rasterized)
         ctx_kws = dict(
@@ -305,11 +310,15 @@ class CapturePlotter:
         else:
             seq = data
 
+        fig = None
         for sub in seq:
             with self._plot_context(sub, **ctx_kws):
                 kws['figsize'] = mpl.rcParams['figure.figsize']
-                grid = data.sel(sel).plot.line(**kws)
+                grid = data.sel(sel).plot.line(**kws, **plot_kws)
                 _fix_axes(data=data, grid=grid, x=x, xticklabelunits=xticklabelunits)
+                fig = grid.fig
+
+        return fig
 
     def _heatmap(
         self,
@@ -389,21 +398,27 @@ class CapturePlotter:
         if dB:
             power = waveform.powtodB(power)
 
-        return self._line(
+        fig = self._line(
             power,
             name=key,
             x='cellular_ssb_lag',
             hue=hue,
             rasterized=False,
             meta=data.attrs,
+            plot_kws={'lw': 1, 'add_legend': False},
         )
 
+        if fig is not None:
+            fig.legend(ncol=4)
 
     @_maybe_skip_missing
     def cellular_5g_ssb_spectrogram(self, data: xr.Dataset, **sel):
         key = self.cellular_5g_ssb_spectrogram.__name__
         return self._heatmap(
-            data[key].sel(sel).isel(cellular_ssb_index=0).dropna('cellular_ssb_baseband_frequency'),
+            data[key]
+            .sel(sel)
+            .isel(cellular_ssb_index=0)
+            .dropna('cellular_ssb_baseband_frequency'),
             name=key,
             x='cellular_ssb_symbol_index',
             y='cellular_ssb_baseband_frequency',
@@ -713,9 +728,18 @@ def label_axis(
 
     if do_suplabel:
         if which_axis == 'x':
-            fig.supxlabel(label_str)
+            assert fig is not None
+            left = fig.subplotpars.left
+            right = fig.subplotpars.right
+            center_x = (left + right) / 2.0
+            fig.supxlabel(label_str, x=center_x)
         elif which_axis == 'y':
-            fig.supylabel(label_str)
+            assert fig is not None
+            top = fig.subplotpars.top
+            bot = fig.subplotpars.bottom
+            center_y = (top + bot) / 2
+
+            fig.supylabel(label_str, y=center_y)
 
         for target in target_axs:
             target.label.set_visible(False)

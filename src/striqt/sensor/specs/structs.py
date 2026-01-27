@@ -4,10 +4,11 @@ from __future__ import annotations as __
 
 import typing
 
+
 import msgspec
 
 from striqt import analysis as _analysis
-from striqt.analysis.specs import AnalysisGroup, SpecBase, _SlowHashSpecBase, Capture
+from striqt.analysis.specs import AnalysisGroup, SpecBase, Capture
 
 from ..lib import util
 from . import types
@@ -22,6 +23,12 @@ if typing.TYPE_CHECKING:
     import SoapySDR  # type: ignore
 else:
     pd = util.lazy_import('pandas')
+
+
+def _immutable_dict():
+    from immutabledict import immutabledict
+
+    return immutabledict()
 
 
 @util.lru_cache()
@@ -83,11 +90,12 @@ class FileCapture(ResampledCapture, frozen=True, kw_only=True):
     """Capture specification read from a file, with support for None sentinels"""
 
     def __post_init__(self):
+        super().__post_init__()
         if self.backend_sample_rate is not None:
             raise TypeError('backend_sample_rate is fixed by the file source')
 
 
-class Source(_SlowHashSpecBase, frozen=True, kw_only=True):
+class Source(SpecBase, frozen=True, kw_only=True):
     """run-time characteristics of the radio that are left invariant during a sweep"""
 
     # acquisition
@@ -128,6 +136,8 @@ class SoapySource(Source, frozen=True, kw_only=True):
     def __post_init__(self):
         from striqt.analysis import registry
 
+        super().__post_init__()
+
         if not self.gapless:
             pass
         elif self.time_sync_at == 'acquire':
@@ -158,7 +168,7 @@ class NoSource(Source, frozen=True, kw_only=True):
 class MATSource(Source, kw_only=True, frozen=True, dict=True):
     path: types.WaveformInputPath
     file_format: types.Format = 'auto'
-    file_metadata: types.FileMetadata = msgspec.field(default_factory=dict)
+    file_metadata: types.FileMetadata = msgspec.field(default_factory=_immutable_dict)
     loop: types.FileLoop = False
     transport_dtype: typing.ClassVar[types.TransportDType] = 'complex64'
 
@@ -170,14 +180,14 @@ class TDMSSource(Source, frozen=True, kw_only=True):
 class ZarrIQSource(Source, frozen=True, kw_only=True):
     path: types.WaveformInputPath
     center_frequency: types.CenterFrequency
-    select: types.ZarrSelect = msgspec.field(default_factory=dict)
+    select: types.ZarrSelect = dict()
     transport_dtype: typing.ClassVar[types.TransportDType] = 'complex64'
 
 
-class Description(_SlowHashSpecBase, frozen=True, kw_only=True):
+class Description(SpecBase, frozen=True, kw_only=True):
     summary: typing.Optional[str] = None
     version: str = 'unversioned'
-    coord_aliases: dict[str, types.AliasMatch] = msgspec.field(default_factory=dict)
+    # coord_aliases: dict[str, types.AliasMatch] = immutabledict()
 
 
 class LoopBase(SpecBase, tag=str.lower, tag_field='kind', frozen=True, kw_only=True):
@@ -289,6 +299,14 @@ _TS = typing.TypeVar('_TS', bound=Source)
 SWEEP_TAG_FIELD = 'sensor_binding'
 
 
+class MetadataLookup(SpecBase, frozen=True, kw_only=True):
+    key: str | tuple[str, ...]
+    lookup: dict[tuple[typing.Any, ...] | typing.Any, str]
+
+
+_MetadataEntryType = dict[str, typing.Union[str, MetadataLookup]]
+
+
 class Sweep(SpecBase, typing.Generic[_TS, _TP, _TC], frozen=True, kw_only=True):
     # sweep bindings also accept the following tag field in input files, which
     # msgspec uses to determine the Sweep subclass to instantiate from e.g.
@@ -303,6 +321,7 @@ class Sweep(SpecBase, typing.Generic[_TS, _TP, _TC], frozen=True, kw_only=True):
     loops: tuple[LoopSpec, ...] = ()
     analysis: BundledAnalysis = BundledAnalysis()  # type: ignore
     description: Description = Description()
+    metadata: dict[types.SourceID | typing.Literal['globals'], _MetadataEntryType]
     extensions: Extension = Extension()
     sink: Sink = Sink()
     peripherals: _TP = typing.cast(_TP, Peripherals())
@@ -311,6 +330,8 @@ class Sweep(SpecBase, typing.Generic[_TS, _TP, _TC], frozen=True, kw_only=True):
     __bindings__: typing.ClassVar[typing.Any] = None
 
     def __post_init__(self):
+        super().__post_init__()
+
         if len(self.loops) == 0:
             return
 
@@ -336,14 +357,14 @@ class CalibrationSweep(
     calibration: _TPC | None = None
 
     def __post_init__(self):
+        super().__post_init__()
+
         if len(self.captures) > 1:
             raise TypeError(
                 'calibration sweeps may specify loops but not captures, only loops'
             )
         if self.source.calibration is not None:
             raise ValueError('source.calibration must be None for a calibration sweep')
-
-        super().__post_init__()
 
 
 # we really only need a dataclass for internal message-passing,

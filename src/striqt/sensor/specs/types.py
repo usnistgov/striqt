@@ -2,7 +2,7 @@ from __future__ import annotations as __
 
 from pathlib import Path
 from typing import TYPE_CHECKING as _TYPE_CHECKING
-from typing import Annotated, Any, Literal, Optional, Union
+from typing import Annotated, Any, Literal, Mapping, Optional, Union
 from striqt.analysis.specs.types import *
 
 if _TYPE_CHECKING:
@@ -14,11 +14,11 @@ else:
 
 
 AliasCandidateMatches = Annotated[
-    tuple[dict[str, Any], ...],
+    tuple[Mapping[str, Any], ...],
     Meta('one or more dictionaries of valid match sets to "or"'),
 ]
 AliasMatch = Annotated[
-    dict[str, AliasCandidateMatches],
+    Mapping[str, AliasCandidateMatches],
     Meta('key: alias field value, value: a list of match conditions for that value'),
 ]
 AmbientTemperature = Annotated[
@@ -50,7 +50,7 @@ ExtensionPath = Annotated[
     str,
     Meta('path to append to sys.path before extension imports'),
 ]
-FileMetadata = Annotated[dict, Meta('any capture fields not included in the file')]
+FileMetadata = Annotated[Mapping, Meta('any capture fields not included in the file')]
 FileLoop = Annotated[
     bool, Meta('whether to loop the file to create longer IQ waveforms')
 ]

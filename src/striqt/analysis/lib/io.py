@@ -8,6 +8,8 @@ import warnings
 from collections import defaultdict
 from pathlib import Path
 
+from yaml import SequenceNode
+
 from .. import specs
 
 from . import dataarrays, register, util
@@ -300,6 +302,19 @@ def _deep_update(dict1, dict2):
             dict1[key] = value
 
 
+class _YAMLFrozenLoader(yaml.SafeLoader):
+    def construct_sequence(
+        self, node: SequenceNode, deep: bool = False
+    ) -> tuple[Any, ...]:  # type: ignore
+        return tuple(super().construct_sequence(node, deep))
+
+
+_YAMLFrozenLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_SEQUENCE_TAG,
+    _YAMLFrozenLoader.construct_sequence,
+)
+
+
 class _YAMLIncludeConstructor(yaml.Loader):
     _lock = threading.RLock()
 
@@ -308,7 +323,7 @@ class _YAMLIncludeConstructor(yaml.Loader):
 
     def __enter__(self):
         self._lock.acquire()
-        yaml.add_constructor('!include', self, Loader=yaml.SafeLoader)  # type: ignore
+        yaml.add_constructor('!include', self, Loader=_YAMLFrozenLoader)  # type: ignore
 
     def __exit__(self, *args):
         self._lock.release()
@@ -391,7 +406,7 @@ def decode_from_yaml_file(
     """
 
     with open(path) as f, _YAMLIncludeConstructor(path):
-        obj = yaml.load(f, yaml.SafeLoader)
+        obj = yaml.load(f, _YAMLFrozenLoader)
 
     if issubclass(type, dict):
         return obj

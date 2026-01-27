@@ -173,7 +173,7 @@ def build_tdd_link_symbol_masks(
 
 def _get_integration_bandwidth(
     spec: specs.CellularResourcePowerHistogram,
-) -> float | None:
+) -> float:
     if spec.average_rbs == 'half':
         return 6 * spec.subcarrier_spacing
     elif spec.average_rbs:

@@ -87,25 +87,28 @@ def to_blocks(y, size, truncate=False):
     return y[..., :new_size].reshape(new_shape)
 
 
-def _index_or_all(x: tuple[int, ...] | typing.Literal['all'], name, size, xp=None):
+def _index_or_all(inds: tuple[int, ...] | typing.Literal['all'], name, size, xp=None):
     if xp is None:
         xp = np
 
-    if isinstance(x, str) and x == 'all':
+    if isinstance(inds, (tuple, list)):
+        x = xp.array(inds)
+    elif isinstance(inds, str) and inds == 'all':
         if size is None:
             raise ValueError('must set max to allow "all" value')
         x = xp.arange(size)
-    elif xp.ndim(x) in (0, 1):
-        x = xp.array(x)  # type: ignore
     else:
-        raise ValueError(f'{name} argument must be a flat array of indices or "all"')
+        raise ValueError(f'{name} argument must be an array of indices or "all"')
 
-    if xp.max(x) > size:
-        raise ValueError(f'{name} value {x} exceeds the maximum {size}')
-    if xp.max(-x) > size:
-        raise ValueError(f'{name} value {x} is below the minimum {-size}')
+    if x.ndim not in (0, 1):
+        raise ValueError(f'{name} argument must be a sequence of indices')
 
-    return x
+    if x.max() > size:
+        raise ValueError(f'{name} value {inds} exceeds the maximum {size}')
+    if (-x).max() > size:
+        raise ValueError(f'{name} value {inds} is below the minimum {-size}')
+
+    return inds
 
 
 def corr_at_indices(inds, x, nfft, norm=True, out=None):
@@ -120,16 +123,16 @@ def corr_at_indices(inds, x, nfft, norm=True, out=None):
         out = xp.empty(nfft + ncp, dtype=x.dtype)
 
     if array_api_compat.is_numpy_array(x):
-        from ._jit.cpu import _corr_at_indices
+        from ._jit.cpu import _corr_at_indices as func
     else:
         from ._jit.cuda import _corr_at_indices
 
         tpb = 32
         bpg = max((x.size + (tpb - 1)) // tpb, 1)
 
-        _corr_at_indices = _corr_at_indices[bpg, tpb]
+        func = _corr_at_indices[bpg, tpb]  # type: ignore
 
-    _corr_at_indices(flat_inds, x, int(nfft), int(ncp), bool(norm), out)
+    func(flat_inds, x, int(nfft), int(ncp), bool(norm), out)
 
     return out
 
@@ -485,7 +488,7 @@ class _PhyOFDM:
         nfft: float,
         cp_sizes: ArrayType,
         frame_duration: float | None = None,
-        contiguous_size: float | None = None,
+        contiguous_size: int | None = None,
     ):
         xp = array_namespace(cp_sizes)
 
@@ -507,7 +510,7 @@ class _PhyOFDM:
             self.contiguous_size = contiguous_size
         else:
             # if not specified, assume no padding is needed to complete a contiguos block of symbols
-            self.contiguous_size = np.sum(cp_sizes) + len(cp_sizes) * nfft
+            self.contiguous_size = int(np.sum(cp_sizes) + len(cp_sizes) * nfft)
 
         # build a (start_idx, size) pair for each CP
         pair_sizes = xp.concatenate((xp.array((0,)), self.cp_sizes + self.nfft))

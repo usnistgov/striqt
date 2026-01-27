@@ -122,7 +122,7 @@ def cellular_5g_ssb_spectrogram(iq, capture: specs.Capture, **kwargs):
     spec = specs.Cellular5GNRSSBSpectrogram.from_dict(kwargs).validate()
 
     # TODO: compute this with the striqt.waveform.ofdm
-    symbol_count = round(28 * spec.subcarrier_spacing / 15e3) # per burst set
+    symbol_count = round(28 * spec.subcarrier_spacing / 15e3)  # per burst set
 
     frequency_offset = specs.helpers.maybe_lookup_with_capture_key(
         capture,

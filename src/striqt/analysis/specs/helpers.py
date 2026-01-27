@@ -4,14 +4,17 @@ from __future__ import annotations as __
 
 import functools
 import fractions
-import numbers
 import typing
 import warnings
 
+if typing.TYPE_CHECKING:
+    from immutabledict import immutabledict
 import msgspec
 
 
 _T = typing.TypeVar('_T')
+_K = typing.TypeVar('_K')
+_V = typing.TypeVar('_V')
 
 
 def Meta(standard_name: str, units: str | None = None, **kws) -> msgspec.Meta:
@@ -105,35 +108,44 @@ def _enc_hook(obj):
 def _dec_hook(type_, obj):
     import numpy as np
 
-    origin_cls = typing.get_origin(type_) or type_
+    schema_cls = typing.get_origin(type_) or type_
 
-    if issubclass(origin_cls, fractions.Fraction):
-        return fractions.Fraction(obj)
-    elif issubclass(origin_cls, numbers.Number) and isinstance(obj, np.floating):
+    if issubclass(schema_cls, (int, float)) and isinstance(obj, np.floating):
         return float(obj)
+    elif issubclass(schema_cls, fractions.Fraction):
+        return fractions.Fraction(obj)
     else:
         return obj
 
 
-def _deep_hash(obj: typing.Mapping | typing.Sequence) -> int:
-    """compute the hash of a dict or other mapping based on its key, value pairs.
+@typing.overload
+def _deep_freeze(obj: dict[_K, _V]) -> 'immutabledict[_K, _V]':
+    pass
 
-    The hash is evaluated recursively for nested structures.
-    """
-    if isinstance(obj, (tuple, list)):
-        keys = ()
-        values = obj
-    elif isinstance(obj, dict):
-        keys = frozenset(obj.keys())
-        values = obj.values()
+
+@typing.overload
+def _deep_freeze(obj: tuple[_V, ...] | list[_V]) -> tuple[_V, ...]:
+    pass
+
+
+@typing.overload
+def _deep_freeze(obj: _T) -> _T:
+    pass
+
+
+def _deep_freeze(
+    obj: typing.Mapping[_K, _V] | tuple[_V, ...] | list[_V] | _T,
+) -> 'immutabledict[_K, _V]|tuple[_V, ...]|_T':
+    """Recursively transform dict into immutabledict"""
+    if isinstance(obj, (list, tuple)):
+        return tuple(_deep_freeze(v) for v in obj)
+    if isinstance(obj, dict):
+        from immutabledict import immutabledict
+
+        mapping = {k: _deep_freeze(v) for k, v in obj.items()}
+        return immutabledict(mapping)
     else:
-        return hash(obj)
-
-    deep_values = tuple(
-        _deep_hash(v) if isinstance(v, (tuple, list, dict)) else v for v in values
-    )
-
-    return hash(keys) ^ hash(deep_values)
+        return obj  # type: ignore
 
 
 @functools.lru_cache()

@@ -67,27 +67,11 @@ class SpecBase(
     def validate(self) -> typing.Self:
         return self.from_dict(self.to_dict())
 
-
-class _SlowHashSpecBase(SpecBase, kw_only=True, frozen=True):
-    def __hash__(self):
-        try:
-            return msgspec.Struct.__hash__(self)
-        except TypeError:
-            # presume a dict or tuple from here on
-            pass
-
-        # attr names come with the type, so get them for free here
-        h = hash(type(self))
-
-        # work through the values
+    def __post_init__(self):
         for name in self.__struct_fields__:
-            value = getattr(self, name)
-            if isinstance(value, (tuple, dict)):
-                h ^= helpers._deep_hash(value)
-            else:
-                h ^= hash(value)
-
-        return h
+            v = getattr(self, name)
+            if isinstance(v, (tuple, dict, list)):
+                msgspec.structs.force_setattr(self, name, helpers._deep_freeze(v))
 
 
 class Capture(SpecBase, kw_only=True, frozen=True):
@@ -100,6 +84,8 @@ class Capture(SpecBase, kw_only=True, frozen=True):
 
     def __post_init__(self):
         from ..lib import util
+
+        super().__post_init__()
 
         if not util.isroundmod(self.duration * self.sample_rate, 1):
             raise ValueError(
@@ -125,7 +111,7 @@ class AnalysisKeywords(typing.TypedDict):
     as_xarray: typing.NotRequired[bool | typing.Literal['delayed']]
 
 
-class Analysis(_SlowHashSpecBase, kw_only=True, frozen=True):
+class Analysis(SpecBase, kw_only=True, frozen=True):
     """
     Returns:
         Analysis result of type `(xarray.DataArray if as_xarray else type(iq))`
@@ -136,28 +122,8 @@ class Analysis(_SlowHashSpecBase, kw_only=True, frozen=True):
         as_xarray (bool): True to return xarray.DataArray or False to match type(iq)
     """
 
-    def __hash__(self):
-        try:
-            return msgspec.Struct.__hash__(self)
-        except TypeError:
-            # presume a dict or tuple from here on
-            pass
 
-        # attr names come with the type, so get them for free here
-        h = hash(type(self))
-
-        # work through the values
-        for name in self.__struct_fields__:
-            value = getattr(self, name)
-            if isinstance(value, (tuple, dict)):
-                h ^= helpers._deep_hash(value)
-            else:
-                h ^= hash(value)
-
-        return h
-
-
-class AnalysisGroup(_SlowHashSpecBase, kw_only=True, frozen=True):
+class AnalysisGroup(SpecBase, kw_only=True, frozen=True):
     """base class for a defining set of Analysis specs"""
 
     pass
@@ -288,10 +254,20 @@ class CellularCyclicAutocorrelator(
     dict=True,
 ):
     subcarrier_spacings: typing.Union[float, tuple[float, ...]] = (15e3, 30e3, 60e3)
-    frame_range: typing.Union[int, tuple[int, typing.Optional[int]]] = (0, 1)
+    frame_range: typing.Union[int, tuple[int, int]] = (0, 1)
     frame_slots: typing.Union[str, dict[float, str], None] = None
     symbol_range: typing.Union[int, tuple[int, typing.Optional[int]]] = (0, None)
     generation: typing.Literal['4G', '5G'] = '5G'
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        if isinstance(self.frame_range, tuple) and self.frame_range[0] > 0:
+            assert self.frame_range[1] is not None
+            assert self.frame_range[1] >= self.frame_range[0]
+        if isinstance(self.symbol_range, tuple) and self.symbol_range[0] > 0:
+            assert self.symbol_range[1] is not None
+            assert self.symbol_range[1] >= self.symbol_range[0]
 
 
 class CellularResourcePowerHistogram(

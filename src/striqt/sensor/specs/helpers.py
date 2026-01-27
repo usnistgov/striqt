@@ -220,11 +220,13 @@ def evaluate_aliases(
 ) -> dict[str, typing.Any]:
     """evaluate the field values"""
 
+    from immutabledict import immutabledict
+
     ret = {}
 
     for coord_name, coord_spec in desc.coord_aliases.items():
         for alias_value, field_spec in coord_spec.items():
-            if isinstance(field_spec, dict):
+            if isinstance(field_spec, (dict, immutabledict)):
                 # "or" across the list of field specs
                 field_spec = [field_spec]
 

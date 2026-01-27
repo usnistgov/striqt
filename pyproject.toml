@@ -6,6 +6,8 @@ requires-python = ">=3.9"
 dependencies = [
     "array-api-compat>=1.6",
     "dask",
+    "eval_type_backport",
+    "immutabledict",
     "matplotlib~=3.7",
     "msgspec~=0.19",
     "netCDF4",
@@ -17,7 +19,6 @@ dependencies = [
     "typing-extensions",
     "xarray>=2024.3",
     "zarr>=2.18,<4",
-    "eval_type_backport"
 ]
 
 [[project.authors]]
