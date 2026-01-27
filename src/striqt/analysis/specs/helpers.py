@@ -96,11 +96,14 @@ def maybe_lookup_with_capture_key(
 
 def _enc_hook(obj):
     import numpy as np
+    from immutabledict import immutabledict
 
-    if isinstance(obj, np.floating):
-        return float(obj)
-    elif isinstance(obj, fractions.Fraction):
+    if isinstance(obj, immutabledict):
+        return dict(obj)
+    if isinstance(obj, fractions.Fraction):
         return str(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
     else:
         return obj
 

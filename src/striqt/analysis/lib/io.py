@@ -303,15 +303,15 @@ def _deep_update(dict1, dict2):
 
 
 class _YAMLFrozenLoader(yaml.SafeLoader):
-    def construct_sequence(
+    def _construct_sequence(
         self, node: SequenceNode, deep: bool = False
-    ) -> tuple[Any, ...]:  # type: ignore
+    ) -> tuple[typing.Any, ...]:
         return tuple(super().construct_sequence(node, deep))
 
 
 _YAMLFrozenLoader.add_constructor(
     yaml.resolver.BaseResolver.DEFAULT_SEQUENCE_TAG,
-    _YAMLFrozenLoader.construct_sequence,
+    _YAMLFrozenLoader._construct_sequence,
 )
 
 
