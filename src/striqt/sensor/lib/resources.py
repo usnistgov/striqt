@@ -171,6 +171,7 @@ def _open_devices(
     binding: bindings.SensorBinding,
     spec: specs.Sweep,
     skip_peripherals: bool = False,
+    source_callback: typing.Callable|None = None
 ):
     """the source and any peripherals"""
 
@@ -195,11 +196,22 @@ def _open_devices(
 
     assert 'source' in conn._resources
     if conn._resources['source'] is not None:
-        specs.helpers.verify_labels(spec, source_id=conn._resources['source'].id)
+        specs.helpers.list_all_labels(spec, source_id=conn._resources['source'].id)
 
-    # run peripherals setup after the source is fully initialized, in case
-    # it could produce spurious inputs during source initialization
-    conn._resources['peripherals'].setup(spec.captures, spec.loops)  # type: ignore
+    calls = {}
+    if not skip_peripherals:
+        assert 'peripherals' in conn._resources
+        calls['peripherals'] = util.Call(
+            conn._resources['peripherals'].setup,
+            spec.captures,
+            spec.loops
+        )
+
+    if source_callback is not None:
+        calls['callback'] = util.Call(source_callback, spec, conn._resources['source'].id)
+
+    if len(calls) > 0:
+        util.concurrently(calls)
 
 
 @util.stopwatch('open resources', 'sweep', 1.0, util.PERFORMANCE_INFO)
@@ -209,6 +221,7 @@ def open_resources(
     except_context: typing.ContextManager | None = None,
     *,
     test_only: bool = False,
+    source_callback: typing.Callable|None = None
 ) -> ConnectionManager[_TS, _TP, _TC, _PS, _PC]:
     """open the sensor hardware and software contexts needed to run the given sweep.
 
@@ -240,7 +253,7 @@ def open_resources(
             'compute': conn.log_call(prepare_compute, spec, skip_warmup=test_only),
             'sink': conn.open(sink_cls, spec, alias_func=formatter),
             'devices': util.Call(
-                _open_devices, conn, bind, spec, skip_peripherals=test_only
+                _open_devices, conn, bind, spec, skip_peripherals=test_only, source_callback=source_callback
             ),
         }
 

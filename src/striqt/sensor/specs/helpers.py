@@ -242,7 +242,7 @@ def _list_label_capture_fields(
     for field, lookup_spec in fields.items():
         if isinstance(lookup_spec, str):
             continue
-        
+
         if isinstance(lookup_spec.key, tuple):
             names = lookup_spec.key
         else:
@@ -435,11 +435,20 @@ def _convert_label_lookup_keys(sweep: specs.Sweep) -> specs.LabelDictType:
     return _deep_freeze(fixed)  # type: ignore
 
 
-def verify_labels(sweep: specs.Sweep, source_id: str):
+@util.lru_cache()
+def list_all_labels(sweep: specs.Sweep, source_id: str) -> dict[str, tuple[str, ...]]:
     lookup_fields = _list_label_capture_fields(sweep.labels, source_id=source_id)
     captures = loop_captures(sweep, only_fields=lookup_fields)
+
+    result = {}
+
     for c in captures:
-        get_labels(c, sweep.labels, source_id=source_id)
+        labels = get_labels(c, sweep.labels, source_id=source_id)
+        for fields in labels:
+            for name, value in fields.items():
+                result.setdefault(name, {})[value] = None
+
+    return {name: tuple(v.keys()) for name, v in result.items()}
 
 
 class PathAliasFormatter:
