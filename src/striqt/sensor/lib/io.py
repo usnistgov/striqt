@@ -62,7 +62,9 @@ def open_store(
 
 
 def _import_extensions_from_spec(
-    spec: specs.Extension, alias_func: specs.helpers.PathAliasFormatter | None = None, root_dir: str='.'
+    spec: specs.Extension,
+    alias_func: specs.helpers.PathAliasFormatter | None = None,
+    root_dir: str = '.',
 ) -> None:
     """import an extension class from a dict representation of structs.Extensions
 
@@ -88,7 +90,7 @@ def _import_extensions_from_spec(
                 raise FileNotFoundError(f'root_path {root_dir!r} does not exist')
             elif not root.is_dir():
                 raise IOError(f'root_path {root_dir!r} is not a directory')
-            p = root/p
+            p = root / p
 
         if p != sys.path[0]:
             assert isinstance(p, (str, Path))

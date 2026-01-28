@@ -134,7 +134,7 @@ def _coord_template(
     capture_cls: type[specs.ResampledCapture],
     info_cls: type[specs.SourceCoordinates],
     port_count: int,
-    label_names: tuple[str, ...]
+    label_names: tuple[str, ...],
 ) -> 'xr.Coordinates':
     """returns a cached xr.Coordinates object to use as a template for data results"""
 
@@ -216,14 +216,15 @@ def build_capture_coords(
     label_spec: specs.LabelDictType,
     info: specs.SourceCoordinates,
 ) -> 'xr.Coordinates|None':
-
     captures = helpers.split_capture_ports(capture)
     labels = helpers.get_labels(capture, label_spec, source_id=info.source_id)
 
     if len(captures) == 0:
         return None
 
-    coords = _coord_template(type(captures[0]), type(info), len(captures), tuple(labels[0]))
+    coords = _coord_template(
+        type(captures[0]), type(info), len(captures), tuple(labels[0])
+    )
     coords = coords.copy(deep=True)
     updates = dict.fromkeys(coords.keys(), [])
 

@@ -307,6 +307,7 @@ class LabelLookup(SpecBase, frozen=True, kw_only=True):
 _SourceLabelMap = dict[str, typing.Union[str, LabelLookup]]
 LabelDictType = dict[types.SourceID | typing.Literal['defaults'], _SourceLabelMap]
 
+
 class Sweep(SpecBase, typing.Generic[_TS, _TP, _TC], frozen=True, kw_only=True):
     # sweep bindings also accept the following tag field in input files, which
     # msgspec uses to determine the Sweep subclass to instantiate from e.g.

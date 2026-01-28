@@ -266,10 +266,7 @@ def _get_label(
 
 @typing.overload
 def get_labels(
-    capture: None,
-    spec: specs.LabelDictType,
-    *,
-    source_id: str | None = None
+    capture: None, spec: specs.LabelDictType, *, source_id: str | None = None
 ) -> immutabledict[str, str]:
     pass
 
@@ -283,13 +280,14 @@ def get_labels(
 ) -> tuple[immutabledict[str, str], ...]:
     pass
 
+
 @util.lru_cache()
 def get_labels(
     capture: specs.ResampledCapture | None,
     spec: specs.LabelDictType,
     *,
     source_id: str | None = None,
-) -> tuple[immutabledict[str, str], ...] | immutabledict[str, str]:   
+) -> tuple[immutabledict[str, str], ...] | immutabledict[str, str]:
     if capture is None:
         labels = _get_label(None, spec, source_id)
         return _deep_freeze(labels)
@@ -356,13 +354,17 @@ def _convert_label_lookup_keys(sweep: specs.Sweep) -> specs.LabelDictType:
             try:
                 bytes.fromhex(source_id)
             except ValueError:
-                raise msgspec.ValidationError(f'label source key {source_id!r} is not "global" or a hex string')
+                raise msgspec.ValidationError(
+                    f'label source key {source_id!r} is not "global" or a hex string'
+                )
 
         result[source_id] = {}
         lookup_types = dict(field_types)
         for field, v in lookup_map.items():
             if field in field_types:
-                raise msgspec.ValidationError(f'lookup field name {field!r} conflicts with a capture field')
+                raise msgspec.ValidationError(
+                    f'lookup field name {field!r} conflicts with a capture field'
+                )
             elif not isinstance(v, specs.LabelLookup):
                 # defines a fixed value
                 result[source_id][field] = v
@@ -371,7 +373,9 @@ def _convert_label_lookup_keys(sweep: specs.Sweep) -> specs.LabelDictType:
             elif not isinstance(v.key, tuple):
                 # defines lookup on a single field
                 if v.key not in lookup_types:
-                    raise msgspec.ValidationError(f'no metadata capture lookup with key {v.key!r} in source {source_id!r}')
+                    raise msgspec.ValidationError(
+                        f'no metadata capture lookup with key {v.key!r} in source {source_id!r}'
+                    )
                 key_type = lookup_types[v.key]
             elif all(kc in lookup_types for kc in v.key):
                 # defines lookup across multiple capture fields
@@ -382,7 +386,10 @@ def _convert_label_lookup_keys(sweep: specs.Sweep) -> specs.LabelDictType:
                     f'no such capture fields {invalid!r} for metadata field {field!r}'
                 )
             try:
-                lookup = {msgspec.convert(k, key_type, strict=False): v for k,v in v.lookup.items()}
+                lookup = {
+                    msgspec.convert(k, key_type, strict=False): v
+                    for k, v in v.lookup.items()
+                }
             except msgspec.ValidationError as ex:
                 raise msgspec.ValidationError(
                     f'keys must match type of {v.key!r} field(s) in lookup '
@@ -393,7 +400,7 @@ def _convert_label_lookup_keys(sweep: specs.Sweep) -> specs.LabelDictType:
             lookup_types[field] = str
 
     fixed = msgspec.convert(result, specs.LabelDictType, strict=False)
-    return _deep_freeze(fixed) # type: ignore
+    return _deep_freeze(fixed)  # type: ignore
 
 
 class PathAliasFormatter:
