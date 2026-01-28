@@ -157,6 +157,7 @@ class FunctionSource(Source, kw_only=True, frozen=True):
     # make these configurable, to support matching hardware for warmup sweeps
     num_rx_ports: int
     stream_all_rx_ports: typing.ClassVar[bool] = False
+    transport_dtype: typing.ClassVar[types.TransportDType] = 'complex64'
 
 
 class NoSource(Source, frozen=True, kw_only=True):

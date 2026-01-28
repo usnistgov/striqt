@@ -2,6 +2,7 @@
 
 from __future__ import annotations as __
 
+from collections import defaultdict
 import dataclasses
 import logging
 import typing
@@ -142,10 +143,13 @@ def _coord_template(
     info_fields = msgspec.structs.fields(info_cls)
     vars = {}
 
-    for name in capture_fields + info_fields:
-        attrs, default = _msgspec_type_to_coord_info(name.type)
+    for field in capture_fields + info_fields:
+        if field.name.startswith('_'):
+            continue
 
-        vars[name.name] = xr.Variable(
+        attrs, default = _msgspec_type_to_coord_info(field.type)
+
+        vars[field.name] = xr.Variable(
             (CAPTURE_DIM,),
             data=port_count * [default],
             fastpath=True,
@@ -153,10 +157,10 @@ def _coord_template(
         )
 
         if isinstance(default, str):
-            vars[name.name] = vars[name.name].astype(object)
+            vars[field.name] = vars[field.name].astype(object)
 
-    for name in label_names:
-        vars[name] = xr.Variable(
+    for field in label_names:
+        vars[field] = xr.Variable(
             (CAPTURE_DIM,),
             data=port_count * ('',),
             fastpath=True,
@@ -186,15 +190,9 @@ def get_attrs(struct: type[specs.SpecBase], field: str) -> dict[str, str]:
 
 
 def build_dataset_attrs(sweep: specs.Sweep):
-    FIELDS = [
-        'analysis',
-        'extensions',
-        'peripherals',
-        'sink',
-        'source',
-    ]
-
     attrs: dict[str, typing.Any] = {}
+
+    attrs['sensor_bindings'] = type(sweep).__name__
 
     if isinstance(sweep.description, str):
         attrs['description'] = sweep.description
@@ -202,11 +200,18 @@ def build_dataset_attrs(sweep: specs.Sweep):
         attrs['description'] = sweep.description.to_dict()
 
     attrs['loops'] = {l.field: l.get_points() for l in sweep.loops}
+    attrs['captures'] = [c.to_dict(True) for c in sweep.captures]
 
-    for field in FIELDS:
+    for field in sweep.__struct_fields__:
+        if field in attrs:
+            continue
         obj = getattr(sweep, field)
-        new_attrs = obj.to_dict()
-        attrs.update(new_attrs)
+        if isinstance(obj, specs.SpecBase):
+            entry = obj.to_dict(skip_private=True)
+        else:
+            entry = obj
+        if obj:
+            attrs.setdefault(field, {}).update(entry)
 
     return attrs
 
@@ -226,7 +231,7 @@ def build_capture_coords(
         type(captures[0]), type(info), len(captures), tuple(labels[0])
     )
     coords = coords.copy(deep=True)
-    updates = dict.fromkeys(coords.keys(), [])
+    updates = defaultdict(list)
 
     info_dict = info.to_dict()
 
@@ -234,7 +239,7 @@ def build_capture_coords(
         for field, value in info_dict.items():
             updates[field].append(value)
 
-        for field, value in c.to_dict().items():
+        for field, value in c.to_dict(skip_private=True).items():
             updates[field].append(value)
 
         for field, value in labels.items():

@@ -2,6 +2,7 @@
 
 from __future__ import annotations as __
 
+import functools
 import typing
 
 from striqt.analysis import Capture, source
@@ -59,6 +60,14 @@ class TestSourceBase(_base.VirtualSourceBase[_TS, _TC, _base._PS, _base._PC]):
 
     def _sync_time_source(self):
         self._sync_time_ns = round(1_000_000_000 * self._samples_elapsed)
+
+    @functools.cached_property
+    def id(self):
+        return '00'
+
+    @functools.cached_property
+    def info(self) -> specs.BaseSourceInfo:
+        return specs.BaseSourceInfo(num_rx_ports=self.setup_spec.num_rx_ports)
 
 
 class SingleToneSource(
@@ -144,7 +153,7 @@ class NoiseSource(
             analysis_bandwidth=capture.analysis_bandwidth,
         )
 
-        x = simulated_awgn(
+        x = source.simulated_awgn(
             backend_capture,
             xp=xp,
             seed=0,
