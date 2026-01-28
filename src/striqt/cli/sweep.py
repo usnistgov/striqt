@@ -6,14 +6,15 @@ import click
 from . import click_sensor_sweep
 import sys
 
+label_check_failed = False
 
 def adjust_port(spec, port):
-    from striqt import sensor
+    from striqt import sensor as ss
 
     loops = []
     for i, loop in enumerate(spec.loops):
         if loop.field == 'port':
-            new_loop = sensor.specs.List(field='port', values=(port,))
+            new_loop = ss.specs.List(field='port', values=(port,))
             loops.append(new_loop)
             loops.extend(spec.loops[i + 1 :])
             return spec.replace(loops=loops)
@@ -23,6 +24,34 @@ def adjust_port(spec, port):
     # no loop - replace the captures instead
     captures = [c.replace(port=port) for c in spec.captures]
     return spec.replace(captures=captures)
+
+
+def check_labels(spec, source_id):
+    from striqt import sensor as ss
+    from pprint import pformat
+
+    global label_check_failed
+
+    labels = ss.specs.helpers.list_all_labels(spec, source_id)
+
+    if len(labels) == 0:
+        return
+    
+    while True:
+        response = ss.util.blocking_input(f'''
+            the sweep will produce these different label coordinates. 
+            
+            {pformat(labels)}
+
+            are they correct? (y/n)
+            '''
+        )
+
+        if response.lower() == 'y':
+            break
+        elif response.lower() == 'n':
+            label_check_failed = True
+            break
 
 
 @click_sensor_sweep('Run a swept acquisition and analysis from a yaml file')
@@ -52,6 +81,9 @@ def run(*, yaml_path, debug, verbose, port, **kws):
         spec = adjust_port(spec, port)
 
     with sensor.open_resources(spec, yaml_path, except_handler) as resources:
+        if label_check_failed:
+            raise KeyboardInterrupt
+
         sweep = sensor.iterate_sweep(resources, yield_values=False, always_yield=True)
         for _ in sweep:
             pass
