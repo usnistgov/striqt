@@ -356,7 +356,7 @@ class _YAMLIncludeConstructor(yaml.Loader):
         for v in values:
             path = self.get_include_path(v)
             with open(path, 'rb') as stream:
-                content.append(yaml.safe_load(stream))
+                content.append(yaml.load(stream, _YAMLFrozenLoader))
             self.pop_include_path()
 
         if len(content) == 1:

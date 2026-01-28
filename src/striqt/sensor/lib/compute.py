@@ -33,7 +33,7 @@ else:
     xr = util.lazy_import('xarray')
 
 
-RADIO_ID_NAME = 'source_id'
+SOURCE_ID_NAME = 'source_id'
 
 
 class EvaluationOptions(dataarrays.EvaluationOptions[dataarrays._TA], kw_only=True):
@@ -134,7 +134,7 @@ def _coord_template(
     capture_cls: type[specs.ResampledCapture],
     info_cls: type[specs.SourceCoordinates],
     port_count: int,
-    **alias_dtypes: 'np.dtype',
+    label_names: tuple[str, ...]
 ) -> 'xr.Coordinates':
     """returns a cached xr.Coordinates object to use as a template for data results"""
 
@@ -142,10 +142,10 @@ def _coord_template(
     info_fields = msgspec.structs.fields(info_cls)
     vars = {}
 
-    for field in capture_fields + info_fields:
-        attrs, default = _msgspec_type_to_coord_info(field.type)
+    for name in capture_fields + info_fields:
+        attrs, default = _msgspec_type_to_coord_info(name.type)
 
-        vars[field.name] = xr.Variable(
+        vars[name.name] = xr.Variable(
             (CAPTURE_DIM,),
             data=port_count * [default],
             fastpath=True,
@@ -153,27 +153,16 @@ def _coord_template(
         )
 
         if isinstance(default, str):
-            vars[field.name] = vars[field.name].astype(object)
+            vars[name.name] = vars[name.name].astype(object)
 
-    for field, dtype in alias_dtypes.items():
-        vars[field] = xr.Variable(
+    for name in label_names:
+        vars[name] = xr.Variable(
             (CAPTURE_DIM,),
-            data=port_count * [dtype.type()],
+            data=port_count * ('',),
             fastpath=True,
-        ).astype(dtype)
+        ).astype('str')
 
     return xr.Coordinates(vars)
-
-
-@util.lru_cache()
-def _get_alias_dtypes(desc: specs.Description) -> dict[str, typing.Any]:
-    aliases = desc.coord_aliases
-
-    alias_dtypes = {}
-    for field, entries in aliases.items():
-        alias_dtypes[field] = np.array(list(entries.keys())).dtype
-
-    return alias_dtypes
 
 
 @util.lru_cache()
@@ -224,37 +213,31 @@ def build_dataset_attrs(sweep: specs.Sweep):
 
 def build_capture_coords(
     capture: specs.ResampledCapture,
-    desc: specs.Description,
+    label_spec: specs.LabelDictType,
     info: specs.SourceCoordinates,
-):
-    alias_dtypes = _get_alias_dtypes(desc)
+) -> 'xr.Coordinates|None':
 
-    if isinstance(capture.port, tuple):
-        port_count = len(capture.port)
-    else:
-        port_count = 1
+    captures = helpers.split_capture_ports(capture)
+    labels = helpers.get_labels(capture, label_spec, source_id=info.source_id)
 
-    coords = _coord_template(type(capture), type(info), port_count, **alias_dtypes)
+    if len(captures) == 0:
+        return None
+
+    coords = _coord_template(type(captures[0]), type(info), len(captures), tuple(labels[0]))
     coords = coords.copy(deep=True)
+    updates = dict.fromkeys(coords.keys(), [])
 
-    updates = {}
+    info_dict = info.to_dict()
 
-    for c in helpers.split_capture_ports(capture):
-        alias_hits = helpers.evaluate_aliases(c, source_id=info.source_id, desc=desc)
+    for c, labels in zip(captures, labels):
+        for field, value in info_dict.items():
+            updates[field].append(value)
 
-        for field in coords.keys():
-            if field == RADIO_ID_NAME:
-                updates.setdefault(field, []).append(info.source_id)
-                continue
+        for field, value in c.to_dict().items():
+            updates[field].append(value)
 
-            assert isinstance(field, str)
-
-            try:
-                value = helpers.get_field_value(field, c, info, alias_hits)
-            except KeyError:
-                continue
-
-            updates.setdefault(field, []).append(value)
+        for field, value in labels.items():
+            updates[field].append(value)
 
     for field, values in updates.items():
         coords[field].data[:] = np.array(values)
@@ -438,15 +421,16 @@ def from_delayed(dd: DelayedDataset):
         logger_level=logging.DEBUG,
     ):
         coords = build_capture_coords(
-            dd.capture, dd.config.sweep_spec.description, dd.extra_coords
+            dd.capture, dd.config.sweep_spec.labels, dd.extra_coords
         )
         analysis = analysis.assign_coords(coords)
 
-        # don't duplicate coords as attrs
+    # don't duplicate coords as attrs
+    if coords is not None:
         for name in coords.keys():
             analysis.attrs.pop(name, None)
 
-        analysis.attrs.update(dd.config.extra_attrs)
+    analysis.attrs.update(dd.config.extra_attrs)
 
     with util.stopwatch(
         'add peripheral data',

@@ -299,13 +299,13 @@ _TS = typing.TypeVar('_TS', bound=Source)
 SWEEP_TAG_FIELD = 'sensor_binding'
 
 
-class MetadataLookup(SpecBase, frozen=True, kw_only=True):
+class LabelLookup(SpecBase, frozen=True, kw_only=True):
     key: str | tuple[str, ...]
     lookup: dict[tuple[typing.Any, ...] | typing.Any, str]
 
 
-_MetadataEntryType = dict[str, typing.Union[str, MetadataLookup]]
-
+_SourceLabelMap = dict[str, typing.Union[str, LabelLookup]]
+LabelDictType = dict[types.SourceID | typing.Literal['defaults'], _SourceLabelMap]
 
 class Sweep(SpecBase, typing.Generic[_TS, _TP, _TC], frozen=True, kw_only=True):
     # sweep bindings also accept the following tag field in input files, which
@@ -321,7 +321,7 @@ class Sweep(SpecBase, typing.Generic[_TS, _TP, _TC], frozen=True, kw_only=True):
     loops: tuple[LoopSpec, ...] = ()
     analysis: BundledAnalysis = BundledAnalysis()  # type: ignore
     description: Description = Description()
-    metadata: dict[types.SourceID | typing.Literal['globals'], _MetadataEntryType]
+    labels: LabelDictType = msgspec.field(default_factory=dict)
     extensions: Extension = Extension()
     sink: Sink = Sink()
     peripherals: _TP = typing.cast(_TP, Peripherals())
@@ -330,12 +330,17 @@ class Sweep(SpecBase, typing.Generic[_TS, _TP, _TC], frozen=True, kw_only=True):
     __bindings__: typing.ClassVar[typing.Any] = None
 
     def __post_init__(self):
+        from collections import Counter
+        from . import helpers
+
         super().__post_init__()
+
+        # do this first, so that it can then also be frozen
+        fixed_labels = helpers._convert_label_lookup_keys(self)
+        msgspec.structs.force_setattr(self, 'labels', fixed_labels)
 
         if len(self.loops) == 0:
             return
-
-        from collections import Counter
 
         (which, howmany), *_ = Counter(l.field for l in self.loops).most_common(1)
         if howmany > 1:
@@ -368,7 +373,7 @@ class CalibrationSweep(
 
 
 # we really only need a dataclass for internal message-passing,
-# but using msgspec.Struct here to support kw_only=True for python < 3.10.
+# but use msgspec.Struct to support kw_only=True for python < 3.10.
 #
 # this does not perform validation, which is left to type-checking for this
 # internal message passing

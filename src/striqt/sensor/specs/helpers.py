@@ -3,7 +3,6 @@
 from __future__ import annotations as __
 
 from collections import Counter
-import functools
 import itertools
 import numbers
 import string
@@ -14,12 +13,16 @@ from pathlib import Path
 import msgspec
 from msgspec import UNSET, UnsetType
 
-from striqt.analysis.specs.helpers import convert_spec, convert_dict
+from striqt.analysis.specs.helpers import convert_spec, convert_dict, _deep_freeze
 
 from . import structs as specs
 from . import types
 from .structs import _TS, _TC, _TP
 from ..lib import util
+
+
+if typing.TYPE_CHECKING:
+    from immutabledict import immutabledict
 
 
 @util.lru_cache()
@@ -158,89 +161,6 @@ def get_capture_type(sweep_cls: type[specs.Sweep]) -> type[specs.ResampledCaptur
     return typing.get_args(captures_type)[0]
 
 
-def _single_match(
-    fields: dict[str, typing.Any],
-    capture: specs.ResampledCapture | None,
-    **extras: typing.Any,
-) -> bool:
-    """return True if all fields match in the specified fields.
-
-    For each `{key: value}` in `fields`, a match requires that
-    either `extras[key] == value` or `getattr(capture, key) == value`.
-    """
-
-    if capture is None:
-        converted_fields = fields
-    elif isinstance(capture.port, tuple):
-        raise ValueError('split the capture to evaluate alias matches')
-    else:
-        all_fields = frozenset(capture.__struct_fields__)
-
-        # type conversion for any search fields that are in 'capture'
-        valid_fields = {k: v for k, v in fields.items() if k in all_fields}
-        converted_fields = fields | capture.replace(**valid_fields).to_dict()
-
-    for name, value in converted_fields.items():
-        hits = (
-            getattr(capture, name, UNSET),
-            extras.get(name, UNSET),
-        )
-
-        if value in hits:
-            continue
-        elif isinstance(hits[0], tuple) and hits[0][0] == value:
-            # is this special case still necessary?
-            continue
-        else:
-            return False
-
-    return True
-
-
-def _match_fields(
-    multi_fields: typing.Iterable[dict[str, typing.Any]],
-    capture: specs.ResampledCapture | None,
-    **extras: typing.Any,
-) -> bool:
-    """return True if all fields match in the specified fields.
-
-    For each `{key: value}` in `fields`, a match requires that
-    either `extras[key] == value` or `getattr(capture, key) == value`.
-    """
-
-    return any(_single_match(f, capture=capture, **extras) for f in multi_fields)
-
-
-@util.lru_cache()
-def evaluate_aliases(
-    capture: specs.ResampledCapture | None,
-    *,
-    source_id: str | UnsetType | None = UNSET,
-    desc: specs.Description,
-) -> dict[str, typing.Any]:
-    """evaluate the field values"""
-
-    from immutabledict import immutabledict
-
-    ret = {}
-
-    for coord_name, coord_spec in desc.coord_aliases.items():
-        for alias_value, field_spec in coord_spec.items():
-            if isinstance(field_spec, (dict, immutabledict)):
-                # "or" across the list of field specs
-                field_spec = [field_spec]
-
-            if not isinstance(field_spec, (list, tuple)):
-                raise TypeError(
-                    'match specification for field {alias_value!r} must be list or dict'
-                )
-
-            if _match_fields(field_spec, capture=capture, source_id=source_id, **ret):
-                ret[coord_name] = alias_value
-                break
-    return ret
-
-
 Capture = typing.TypeVar('Capture', bound=specs.ResampledCapture)
 
 
@@ -294,51 +214,90 @@ def max_by_frequency(
     return map
 
 
-def capture_fields_with_aliases(
-    capture: specs.ResampledCapture | None = None,
+def _get_label(
+    capture: specs.ResampledCapture | None,
+    label_spec: specs.LabelDictType,
+    source_id: str | UnsetType | None = UNSET,
+) -> dict[str, typing.Any]:
+    """evaluate the field values"""
+
+    ret = {}
+
+    fields = {}
+    if isinstance(source_id, str):
+        source_fields = label_spec.get(source_id, {})
+        fields.update(source_fields)
+
+    # the globals spec may use the source-specific spec
+    for name, value in label_spec.get('defaults', {}).items():
+        if name not in fields:
+            fields[name] = value
+
+    def get_key(capture, name: str, field: str):
+        if hasattr(capture, name):
+            return getattr(capture, name)
+        elif name in ret:
+            return ret[name]
+        else:
+            raise KeyError(f'no such key {name!r} for field {field!r}')
+
+    for field, lookup_spec in fields.items():
+        if isinstance(lookup_spec, str):
+            ret[field] = lookup_spec
+            continue
+        elif capture is None:
+            continue
+
+        if isinstance(lookup_spec.key, tuple):
+            key = tuple(get_key(capture, k, field) for k in lookup_spec.key)
+        else:
+            key = get_key(capture, lookup_spec.key, field)
+
+        try:
+            ret[field] = lookup_spec.lookup[key]
+        except KeyError:
+            raise KeyError(
+                f'label {field!r} is missing a lookup with key {key!r} '
+                f'for source {source_id!r}'
+            )
+
+    return ret
+
+
+@typing.overload
+def get_labels(
+    capture: None,
+    spec: specs.LabelDictType,
+    *,
+    source_id: str | None = None
+) -> immutabledict[str, str]:
+    pass
+
+
+@typing.overload
+def get_labels(
+    capture: specs.ResampledCapture,
+    spec: specs.LabelDictType,
     *,
     source_id: str | None = None,
-    desc: specs.Description,
-) -> dict:
+) -> tuple[immutabledict[str, str], ...]:
+    pass
+
+@util.lru_cache()
+def get_labels(
+    capture: specs.ResampledCapture | None,
+    spec: specs.LabelDictType,
+    *,
+    source_id: str | None = None,
+) -> tuple[immutabledict[str, str], ...] | immutabledict[str, str]:   
     if capture is None:
-        attrs = {}
-        c = None
-    else:
-        attrs = capture.to_dict(skip_private=True)
-        c = split_capture_ports(capture)[0]
-    aliases = evaluate_aliases(c, source_id=source_id, desc=desc)
+        labels = _get_label(None, spec, source_id)
+        return _deep_freeze(labels)
 
-    return dict(attrs, **aliases)
-
-
-def get_field_value(
-    name: str,
-    capture: specs.ResampledCapture,
-    info: specs.SourceCoordinates,
-    alias_hits: dict,
-):
-    """get the value of a field in `capture`, injecting values for aliases"""
-    if isinstance(capture.port, tuple):
-        raise ValueError('split the capture before the call to get_capture_field')
-
-    if hasattr(capture, name):
-        value = getattr(capture, name)
-        if value is None:
-            # now try to work through defaults below
-            pass
-        elif isinstance(value, tuple):
-            return value[0]
-        else:
-            return value
-
-    # after this, work through defaults from
-    if hasattr(info, name):
-        value = getattr(info, name)
-    elif name in alias_hits:
-        value = alias_hits[name]
-    else:
-        raise KeyError
-    return value
+    labels = []
+    for c in split_capture_ports(capture):
+        labels.append(_get_label(c, spec, source_id))
+    return _deep_freeze(labels)
 
 
 @util.lru_cache()
@@ -357,8 +316,7 @@ def get_path_fields(
     else:
         id_ = source_id
 
-    fields = capture_fields_with_aliases(source_id=id_, desc=sweep.description)
-
+    fields = {}
     fields['start_time'] = datetime.now().strftime('%Y%m%d-%Hh%Mm%S')
     fields['sensor_binding'] = type(sweep).__name__
     if spec_path is not None:
@@ -366,11 +324,14 @@ def get_path_fields(
         fields['parent_name'] = Path(spec_path).parent.absolute().name
     fields['source_id'] = id_
 
+    labels = get_labels(None, source_id=id_, spec=sweep.labels)
+    fields.update(labels)
+
     return fields
 
 
 @util.lru_cache()
-def get_format_fields(s: str):
+def _get_format_fields(s: str):
     """
     Extracts and returns a list of formatting field names from a given format string.
     """
@@ -380,6 +341,59 @@ def get_format_fields(s: str):
         if field_name is not None:
             fields.append(field_name)
     return fields
+
+
+def _convert_label_lookup_keys(sweep: specs.Sweep) -> specs.LabelDictType:
+    """convert label lookup keys types to match corresponding capture fields"""
+
+    result = {}
+    capture_cls = get_capture_type(type(sweep))
+
+    field_types = {f.name: f.type for f in msgspec.structs.fields(capture_cls)}
+
+    for source_id, lookup_map in sweep.labels.items():
+        if source_id != 'defaults':
+            try:
+                bytes.fromhex(source_id)
+            except ValueError:
+                raise msgspec.ValidationError(f'label source key {source_id!r} is not "global" or a hex string')
+
+        result[source_id] = {}
+        lookup_types = dict(field_types)
+        for field, v in lookup_map.items():
+            if field in field_types:
+                raise msgspec.ValidationError(f'lookup field name {field!r} conflicts with a capture field')
+            elif not isinstance(v, specs.LabelLookup):
+                # defines a fixed value
+                result[source_id][field] = v
+                lookup_types[field] = str
+                continue
+            elif not isinstance(v.key, tuple):
+                # defines lookup on a single field
+                if v.key not in lookup_types:
+                    raise msgspec.ValidationError(f'no metadata capture lookup with key {v.key!r} in source {source_id!r}')
+                key_type = lookup_types[v.key]
+            elif all(kc in lookup_types for kc in v.key):
+                # defines lookup across multiple capture fields
+                key_type = tuple[*tuple(lookup_types[kc] for kc in v.key)]
+            else:
+                invalid = set(v.key) - set(lookup_types) - set(field_types)
+                raise msgspec.ValidationError(
+                    f'no such capture fields {invalid!r} for metadata field {field!r}'
+                )
+            try:
+                lookup = {msgspec.convert(k, key_type, strict=False): v for k,v in v.lookup.items()}
+            except msgspec.ValidationError as ex:
+                raise msgspec.ValidationError(
+                    f'keys must match type of {v.key!r} field(s) in lookup '
+                    f'for {field!r} in label for {source_id!r} source'
+                ) from ex
+
+            result[source_id][field] = specs.LabelLookup(key=v.key, lookup=lookup)
+            lookup_types[field] = str
+
+    fixed = msgspec.convert(result, specs.LabelDictType, strict=False)
+    return _deep_freeze(fixed) # type: ignore
 
 
 class PathAliasFormatter:
@@ -394,7 +408,7 @@ class PathAliasFormatter:
         self.alias_timeout = alias_timeout
 
     def __call__(self, path: str | Path) -> str:
-        path_fields = get_format_fields(str(path))
+        path_fields = _get_format_fields(str(path))
         if len(path_fields) == 0:
             return str(path)
 
@@ -410,37 +424,14 @@ class PathAliasFormatter:
         try:
             path = Path(str(path).format(**fields))
         except KeyError as ex:
-            self._raise_field_miss(ex, path, fields)
+            key = ex.args[0]
+            available = tuple(fields.keys())
+            raise KeyError(
+                f'invalid format field {key!r} in path {path!r}\n'
+                f'available fields: {available!r}'
+            ) from ex
 
         return str(path)
-
-    def _raise_field_miss(self, exception: KeyError, path, valid_fields):
-        key, *_ = exception.args
-        p = str(path)
-
-        if key in self.sweep_spec.description.coord_aliases:
-            afields = {}
-            for matches in self.sweep_spec.description.coord_aliases[key].values():
-                for m in matches:
-                    afields.update(m)
-            used = set(afields.keys())
-            msg = (
-                f'field {key!r} of path {p!r} is an unmatched alias for fields {used!r}'
-            )
-            ideas = {k: valid_fields[k] for k in afields.keys() if k in valid_fields}
-            if len(ideas) > 0:
-                msg = f'{msg}. the match for these fields would have been {ideas!r}'
-            invalid = {k for k in afields.keys() if k not in valid_fields}
-            if len(invalid) > 0:
-                msg = f'{msg}. the defined alias fields {invalid!r} do not exist in this context'
-
-            raise KeyError(msg) from exception
-        else:
-            available = set(valid_fields.keys())
-            msg = (
-                f'invalid field {key!r} in path {p!r}\navailable fields: {available!r}'
-            )
-            raise KeyError(msg) from exception
 
 
 def concat_group_sizes(

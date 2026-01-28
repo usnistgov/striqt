@@ -62,7 +62,7 @@ def open_store(
 
 
 def _import_extensions_from_spec(
-    spec: specs.Extension, alias_func: specs.helpers.PathAliasFormatter | None = None
+    spec: specs.Extension, alias_func: specs.helpers.PathAliasFormatter | None = None, root_dir: str='.'
 ) -> None:
     """import an extension class from a dict representation of structs.Extensions
 
@@ -78,9 +78,17 @@ def _import_extensions_from_spec(
         pass
     else:
         if alias_func is None:
-            p = spec.import_path
+            p = Path(spec.import_path)
         else:
-            p = alias_func(spec.import_path)
+            p = Path(alias_func(spec.import_path))
+
+        if not p.is_absolute():
+            root = Path(root_dir)
+            if not root.exists():
+                raise FileNotFoundError(f'root_path {root_dir!r} does not exist')
+            elif not root.is_dir():
+                raise IOError(f'root_path {root_dir!r} is not a directory')
+            p = root/p
 
         if p != sys.path[0]:
             assert isinstance(p, (str, Path))
@@ -138,7 +146,7 @@ def read_yaml_spec(
         # import now, so that sensor_binding keys can use definitions
         # in extension modules
         ext = specs.Extension.from_dict(tree['extensions'])
-        _import_extensions_from_spec(ext)
+        _import_extensions_from_spec(ext, root_dir=Path(path).parent)
 
     spec = convert_dict(tree, type=get_tagged_sweep_type())
 
