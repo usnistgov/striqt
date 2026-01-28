@@ -199,7 +199,7 @@ def build_dataset_attrs(sweep: specs.Sweep):
     else:
         attrs['description'] = sweep.description.to_dict()
 
-    attrs['loops'] = {l.field: l.get_points() for l in sweep.loops}
+    attrs['loops'] = [l.to_dict(True) for l in sweep.loops]
     attrs['captures'] = [c.to_dict(True) for c in sweep.captures]
 
     for field in sweep.__struct_fields__:
