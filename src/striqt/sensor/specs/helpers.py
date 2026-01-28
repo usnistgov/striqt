@@ -214,15 +214,11 @@ def max_by_frequency(
     return map
 
 
-def _get_label(
-    capture: specs.ResampledCapture | None,
+@util.lru_cache()
+def _get_label_fields(
     label_spec: specs.LabelDictType,
     source_id: str | UnsetType | None = UNSET,
-) -> dict[str, typing.Any]:
-    """evaluate the field values"""
-
-    ret = {}
-
+) -> dict[str, str|specs.LabelLookup]:
     fields = {}
     if isinstance(source_id, str):
         source_fields = label_spec.get(source_id, {})
@@ -232,6 +228,42 @@ def _get_label(
     for name, value in label_spec.get('defaults', {}).items():
         if name not in fields:
             fields[name] = value
+
+    return fields
+
+
+@util.lru_cache()
+def _list_label_capture_fields(
+    label_spec: specs.LabelDictType,
+    source_id: str | UnsetType | None = UNSET,
+) -> tuple[str, ...]:
+    ret = set()
+    fields = _get_label_fields(label_spec, source_id)
+    for field, lookup_spec in fields.items():
+        if isinstance(lookup_spec, str):
+            continue
+        
+        if isinstance(lookup_spec.key, tuple):
+            names = lookup_spec.key
+        else:
+            names = (lookup_spec.key,)
+
+        for name in names:
+            if name not in fields:
+                ret.add(name)
+
+    return tuple(ret)
+
+
+def _get_label(
+    capture: specs.ResampledCapture | None,
+    label_spec: specs.LabelDictType,
+    source_id: str | UnsetType | None = UNSET,
+) -> dict[str, typing.Any]:
+    """evaluate the field values"""
+
+    ret = {}
+    fields = _get_label_fields(label_spec, source_id)
 
     def get_key(capture, name: str, field: str):
         if hasattr(capture, name):
@@ -401,6 +433,13 @@ def _convert_label_lookup_keys(sweep: specs.Sweep) -> specs.LabelDictType:
 
     fixed = msgspec.convert(result, specs.LabelDictType, strict=False)
     return _deep_freeze(fixed)  # type: ignore
+
+
+def verify_labels(sweep: specs.Sweep, source_id: str):
+    lookup_fields = _list_label_capture_fields(sweep.labels, source_id=source_id)
+    captures = loop_captures(sweep, only_fields=lookup_fields)
+    for c in captures:
+        get_labels(c, sweep.labels, source_id=source_id)
 
 
 class PathAliasFormatter:

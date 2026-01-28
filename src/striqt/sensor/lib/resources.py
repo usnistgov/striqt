@@ -174,7 +174,7 @@ def _open_devices(
 ):
     """the source and any peripherals"""
 
-    calls = {
+    calls: dict[str, typing.Any] = {
         'source': conn.open(
             binding.source.from_spec,
             spec.source,
@@ -192,6 +192,10 @@ def _open_devices(
     if conn._resources.get('peripherals', None) is None:
         # an exception happened, and we're in teardown
         return
+
+    assert 'source' in conn._resources
+    if conn._resources['source'] is not None:
+        specs.helpers.verify_labels(spec, source_id=conn._resources['source'].id)
 
     # run peripherals setup after the source is fully initialized, in case
     # it could produce spurious inputs during source initialization
