@@ -156,8 +156,11 @@ def varied_capture_fields(
 
 @util.lru_cache()
 def get_capture_type(sweep_cls: type[specs.Sweep]) -> type[specs.ResampledCapture]:
-    captures_type = typing.get_type_hints(sweep_cls)['captures']
-    return typing.get_args(captures_type)[0]
+    if sweep_cls.__bindings__ is not None:
+        return sweep_cls.__bindings__.schema.capture
+    else:
+        captures_type = typing.get_type_hints(sweep_cls)['captures']
+        return typing.get_args(captures_type)[0]
 
 
 Capture = typing.TypeVar('Capture', bound=specs.ResampledCapture)
