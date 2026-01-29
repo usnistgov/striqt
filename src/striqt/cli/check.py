@@ -35,7 +35,7 @@ def run(yaml_path):
         print(f'source_id: {res["source"].id!r}')
 
         print('\nCalibration info')
-        print(60 * '▀')
+        print(80 * '▀')
         if res['calibration'] is None:
             print('Configured for uncalibrated operation')
         else:
@@ -44,7 +44,7 @@ def run(yaml_path):
                 print(summary.sort_index(axis=1).sort_index(axis=0))
 
         print('\nPaths')
-        print(60 * '▀')
+        print(80 * '▀')
         alias_func = res['alias_func']
         expanded_paths = {
             'sink.path': spec.sink.path,
@@ -80,14 +80,11 @@ def run(yaml_path):
                 field_sets.setdefault(k, set()).add(v)
 
         print('\n\nFormat fields available for use in paths:')
-        print(60 * '▀')
-        cfields = set(schema.capture.__struct_fields__)
-        afields = set(
-            specs.helpers.get_path_fields(
-                spec, source_id=res['source'].id, spec_path=yaml_path
-            )
+        print(80 * '▀')
+        afields = specs.helpers.get_path_fields(
+            spec, source_id=res['source'].id, spec_path=yaml_path
         )
-        pprint({k: field_sets.get(k, None) for k in afields}, width=40)
+        pprint(afields)
 
         print('\n\nUnique capture field coordinates in output:')
         labels = ss.specs.helpers.list_all_labels(spec, res['source'].id)
@@ -96,7 +93,7 @@ def run(yaml_path):
             return
 
         labels_repr = pformat(labels, indent=2, sort_dicts=False)
-        print(60 * '▀')
+        print(80 * '▀')
         print(f' {labels_repr[1:-1] }')
 
 
