@@ -10,7 +10,7 @@ from striqt.sensor.lib import calibration, resources
 def run(yaml_path):
     # instantiate sweep objects
     from striqt.sensor import util, specs
-    from striqt import sensor
+    from striqt import sensor as ss
     from pprint import pprint, pformat
     from striqt.sensor.specs.helpers import get_path_fields
     from pathlib import Path
@@ -19,17 +19,17 @@ def run(yaml_path):
 
     util.show_messages(util.logging.WARNING)
 
-    spec = sensor.read_yaml_spec(yaml_path)
+    spec = ss.read_yaml_spec(yaml_path)
     print(f'Opened a bound specification for {type(spec).__name__!r} bindings')
 
     print(f'Opening sensor resources...')
     import sys
 
     sys.stdout.flush()
-    manager = sensor.open_resources(spec, spec_path=yaml_path, test_only=True)
+    manager = ss.open_resources(spec, spec_path=yaml_path, test_only=True)
 
     with manager as res:
-        assert isinstance(spec.__bindings__, sensor.lib.bindings.SensorBinding)
+        assert isinstance(spec.__bindings__, ss.lib.bindings.SensorBinding)
         schema = spec.__bindings__.schema
 
         print(f'source_id: {res["source"].id!r}')
@@ -90,7 +90,7 @@ def run(yaml_path):
         pprint({k: field_sets.get(k, None) for k in afields}, width=40)
 
         print('\n\nUnique capture field coordinates in output:')
-        labels = ss.specs.helpers.list_all_labels(spec, source_id)
+        labels = ss.specs.helpers.list_all_labels(spec, res['source'].id)
 
         if len(labels) == 0:
             return
