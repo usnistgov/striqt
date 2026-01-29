@@ -193,8 +193,6 @@ def build_dataset_attrs(sweep: specs.Sweep):
     attrs: dict[str, typing.Any] = {}
     as_dict = sweep.to_dict(skip_private=True, unfreeze=True)
 
-    attrs['sensor_bindings'] = type(sweep).__name__
-
     if isinstance(sweep.description, str):
         attrs['description'] = sweep.description
     else:
@@ -204,7 +202,8 @@ def build_dataset_attrs(sweep: specs.Sweep):
     attrs['captures'] = [c.to_dict(True) for c in sweep.captures]
 
     for field, entry in as_dict.items():
-        if field in attrs:
+        if field in attrs or field == 'labels':
+            # label specs with tuple keys are not supported by zarr (at least in 2.x)
             continue
         else:
             attrs[field] = entry
