@@ -274,7 +274,7 @@ def open_resources(
                 conn.enter(except_context, 'except_context')
 
             if test_only:
-                del conn._resources['peripherals']
+                conn._resources.pop('peripherals', None)
 
             conn._resources['sweep_spec'] = spec
             conn._resources['alias_func'] = formatter
