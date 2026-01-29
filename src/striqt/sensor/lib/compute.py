@@ -191,6 +191,7 @@ def get_attrs(struct: type[specs.SpecBase], field: str) -> dict[str, str]:
 
 def build_dataset_attrs(sweep: specs.Sweep):
     attrs: dict[str, typing.Any] = {}
+    as_dict = sweep.to_dict(skip_private=True, unfreeze=True)
 
     attrs['sensor_bindings'] = type(sweep).__name__
 
@@ -202,15 +203,10 @@ def build_dataset_attrs(sweep: specs.Sweep):
     attrs['loops'] = [l.to_dict(True) for l in sweep.loops]
     attrs['captures'] = [c.to_dict(True) for c in sweep.captures]
 
-    for field in sweep.__struct_fields__:
+    for field, entry in as_dict.items():
         if field in attrs:
             continue
-        obj = getattr(sweep, field)
-        if isinstance(obj, specs.SpecBase):
-            entry = obj.to_dict(skip_private=True, unfreeze=True)
         else:
-            entry = obj
-        if obj:
             attrs.setdefault(field, {}).update(entry)
 
     return attrs
