@@ -164,7 +164,7 @@ def _coord_template(
             (CAPTURE_DIM,),
             data=port_count * [''],
             fastpath=True,
-        ).astype('str')
+        ).astype(object)
 
     return xr.Coordinates(vars)
 
