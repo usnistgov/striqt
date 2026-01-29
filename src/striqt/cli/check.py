@@ -54,15 +54,15 @@ def run(yaml_path):
             expanded_paths['source.calibration'] = spec.source.calibration
         for name, p in expanded_paths.items():
             print(f'{name}:')
-            print(f'Input: ', repr(p))
+            print(f' Input: ', repr(p))
             if p is None:
                 continue
             if alias_func is not None:
                 pf = alias_func(p)
-                print(f'\tFormatted: ', repr(pf))
+                print(f'  Formatted: ', repr(pf))
             else:
                 pf = p
-            print('\tExists: ', 'yes' if Path(pf).exists() else 'no')
+            print('  Exists: ', 'yes' if Path(pf).exists() else 'no')
 
         kws = {
             'sweep': spec,
