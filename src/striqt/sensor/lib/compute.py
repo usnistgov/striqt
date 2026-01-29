@@ -231,21 +231,17 @@ def build_capture_coords(
         type(captures[0]), type(info), len(captures), tuple(labels[0])
     )
     coords = coords.copy(deep=True)
-    updates = defaultdict(list)
+    changes = defaultdict(list)
 
     info_dict = info.to_dict()
 
     for c, labels in zip(captures, labels):
-        for field, value in info_dict.items():
-            updates[field].append(value)
+        capture_entries = info_dict | c.to_dict(skip_private=True) | labels
 
-        for field, value in c.to_dict(skip_private=True).items():
-            updates[field].append(value)
+        for field, value in capture_entries.items():
+            changes[field].append(value)
 
-        for field, value in labels.items():
-            updates[field].append(value)
-
-    for field, values in updates.items():
+    for field, values in changes.items():
         coords[field].data[:] = np.array(values)
 
     return coords
