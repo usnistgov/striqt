@@ -207,7 +207,7 @@ def build_dataset_attrs(sweep: specs.Sweep):
             continue
         obj = getattr(sweep, field)
         if isinstance(obj, specs.SpecBase):
-            entry = obj.to_dict(skip_private=True)
+            entry = obj.to_dict(skip_private=True, unfreeze=True)
         else:
             entry = obj
         if obj:

@@ -37,7 +37,7 @@ class SpecBase(
             return self
         return msgspec.structs.replace(self, **attrs).validate()
 
-    def to_dict(self, skip_private=False) -> dict:
+    def to_dict(self, skip_private=False, unfreeze=False) -> dict:
         """return a dictinary representation of `self`"""
         map = msgspec.to_builtins(self, enc_hook=helpers._enc_hook)
 
@@ -45,7 +45,10 @@ class SpecBase(
             for name in helpers._private_fields(type(self)):
                 del map[name]
 
-        return map
+        if unfreeze:
+            return helpers._unfreeze(map)
+        else:
+            return map
 
     def to_json(self) -> bytes:
         return msgspec.json.encode(self, enc_hook=helpers._enc_hook)

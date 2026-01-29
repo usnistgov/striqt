@@ -150,6 +150,34 @@ def _deep_freeze(
     else:
         return obj  # type: ignore
 
+@typing.overload
+def _unfreeze(obj: typing.Mapping[_K, _V]) -> 'dict[_K, _V]':
+    pass
+
+
+@typing.overload
+def _unfreeze(obj: tuple[_V, ...] | list[_V]) -> list[_V]:
+    pass
+
+
+@typing.overload
+def _unfreeze(obj: _T) -> _T:
+    pass
+
+def _unfreeze(
+    obj: typing.Mapping[_K, _V] | tuple[_V, ...] | list[_V] | _T,
+) -> 'dict[_K, _V]|list[_V]|_T':
+    """Recursively transform dict into immutabledict"""
+    from immutabledict import immutabledict
+    
+    if isinstance(obj, (list, tuple)):
+        return [_unfreeze(v) for v in obj]
+    if isinstance(obj, (dict, immutabledict)):
+        mapping = {k: _unfreeze(v) for k, v in obj.items()}
+        return dict(mapping)
+    else:
+        return obj  # type: ignore
+
 
 @functools.lru_cache()
 def _private_fields(cls: type[msgspec.Struct]) -> tuple[str, ...]:
