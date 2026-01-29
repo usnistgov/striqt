@@ -241,52 +241,53 @@ def open_resources(
     else:
         raise TypeError('no sink class in sensor binding or extensions.sink spec')
 
-    try:
-        calls = {
-            # 'compute' MUST be first to run in the foreground.
-            # otherwise, any cuda-dependent imports will hang.
-            'compute': conn.log_call(prepare_compute, spec, skip_warmup=test_only),
-            'sink': conn.open(sink_cls, spec, alias_func=formatter),
-            'devices': util.Call(
-                _open_devices,
-                conn,
-                bind,
-                spec,
-                skip_peripherals=test_only,
-                on_source_opened=on_source_opened,
-            ),
-        }
+    with util.share_thread_interrupts():
+        try:
+            calls = {
+                # 'compute' MUST be first to run in the foreground.
+                # otherwise, any cuda-dependent imports will hang.
+                'compute': conn.log_call(prepare_compute, spec, skip_warmup=test_only),
+                'sink': conn.open(sink_cls, spec, alias_func=formatter),
+                'devices': util.Call(
+                    _open_devices,
+                    conn,
+                    bind,
+                    spec,
+                    skip_peripherals=test_only,
+                    on_source_opened=on_source_opened,
+                ),
+            }
 
-        if spec.source.calibration is not None:
-            calls['calibration'] = conn.get(
-                io.read_calibration, spec.source.calibration, formatter
-            )
-        else:
-            conn._resources['calibration'] = None
+            if spec.source.calibration is not None:
+                calls['calibration'] = conn.get(
+                    io.read_calibration, spec.source.calibration, formatter
+                )
+            else:
+                conn._resources['calibration'] = None
 
-        if spec.sink.log_path is not None:
-            calls['log_to_file'] = Call(_setup_logging, spec.sink, formatter)
+            if spec.sink.log_path is not None:
+                calls['log_to_file'] = Call(_setup_logging, spec.sink, formatter)
 
-        util.concurrently_with_fg(calls)
+            util.concurrently_with_fg(calls)
 
-        if except_context is not None:
-            conn.enter(except_context, 'except_context')
+            if except_context is not None:
+                conn.enter(except_context, 'except_context')
 
-        if test_only:
-            del conn._resources['peripherals']
+            if test_only:
+                del conn._resources['peripherals']
 
-        conn._resources['sweep_spec'] = spec
-        conn._resources['alias_func'] = formatter
+            conn._resources['sweep_spec'] = spec
+            conn._resources['alias_func'] = formatter
 
-    except BaseException as ex:
-        if except_context is not None:
-            print(ex)
-            except_context.__exit__(*sys.exc_info())
-        else:
+        except BaseException as ex:
+            if except_context is not None:
+                print(ex)
+                except_context.__exit__(*sys.exc_info())
+            else:
+                raise
+
+            conn.__exit__(*sys.exc_info())
             raise
-
-        conn.__exit__(*sys.exc_info())
-        raise
 
     return conn
 

@@ -71,17 +71,54 @@ stop_request_event = threading.Event()
 _Tfunc = typing.Callable[..., typing.Any]
 
 
+_cancel_threads = threading.Event()
 _imports_ready = collections.defaultdict(threading.Event)
+
+
+class ThreadInterrupt(KeyboardInterrupt):
+    pass
+
+
+@contextlib.contextmanager
+def share_thread_interrupts():
+    try:
+        yield
+    finally:
+        print('reset thread cancelation', file=sys.stderr)
+        _cancel_threads.clear()
+
+
+def cancel_threads():
+    print('request thread cancel', file=sys.stderr)
+    _cancel_threads.set()
+
+
+def interrupt_on_thread_cancel():
+    if threading.current_thread() == threading.main_thread():
+        return
+
+    if _cancel_threads.is_set():
+        print('raising on thread exception', file=sys.stderr)
+        raise ThreadInterrupt()
 
 
 def safe_import(name):
     """wait in child threads until called by the parent with the same name"""
 
     if threading.current_thread() == threading.main_thread():
-        mod = importlib.import_module(name)
-        _imports_ready[name].set()
+        try:
+            mod = importlib.import_module(name)
+            _imports_ready[name].set()
+        except:
+            cancel_threads()
+            raise
     else:
-        _imports_ready[name].wait()
+        interrupt_on_thread_cancel()
+        while True:
+            if _imports_ready[name].wait(0.5):
+                break
+            else:
+                interrupt_on_thread_cancel()
         mod = sys.modules[name]
     return mod
 
