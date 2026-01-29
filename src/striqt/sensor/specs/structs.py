@@ -4,7 +4,6 @@ from __future__ import annotations as __
 
 import typing
 
-
 import msgspec
 
 from striqt import analysis as _analysis
@@ -306,7 +305,7 @@ class LabelLookup(SpecBase, frozen=True, kw_only=True):
 
 
 _SourceLabelMap = dict[str, typing.Union[str, LabelLookup]]
-LabelDictType = dict[types.SourceID | typing.Literal['defaults'], _SourceLabelMap]
+LabelDictType = dict[typing.Union[types.SourceID, typing.Literal['defaults']], _SourceLabelMap]
 
 
 class Sweep(SpecBase, typing.Generic[_TS, _TP, _TC], frozen=True, kw_only=True):
