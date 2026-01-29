@@ -15,29 +15,32 @@ else:
 
 class Air7101BSourceSpec(specs.SoapySource, kw_only=True, frozen=True):
     master_clock_rate: specs.types.MasterClockRate = 125e6
+    array_backend: specs.types.ArrayBackend = 'cupy'
+    receive_retries: specs.types.ReceiveRetries = 3
+
     rx_enable_delay = 0.35
     transient_holdoff_time = 2e-3
-    array_backend: specs.types.ArrayBackend = 'cupy'
     stream_all_rx_ports = True
-    receive_retries: specs.types.ReceiveRetries = 3
 
 
 class Air7201BSourceSpec(specs.SoapySource, kw_only=True, frozen=True):
     master_clock_rate: specs.types.MasterClockRate = 125e6
+    array_backend: specs.types.ArrayBackend = 'cupy'
+    receive_retries: specs.types.ReceiveRetries = 3
+
     rx_enable_delay = 0.35
     transient_holdoff_time = 2e-3
-    array_backend: specs.types.ArrayBackend = 'cupy'
     stream_all_rx_ports = True
-    receive_retries: specs.types.ReceiveRetries = 3
 
 
 class Air8201BSourceSpec(specs.SoapySource, kw_only=True, frozen=True):
     master_clock_rate: specs.types.MasterClockRate = 125e6
+    array_backend: specs.types.ArrayBackend = 'cupy'
+    receive_retries: specs.types.ReceiveRetries = 3
+
     rx_enable_delay = 0.4
     transient_holdoff_time = 2e-3
-    array_backend: specs.types.ArrayBackend = 'cupy'
     stream_all_rx_ports = True
-    receive_retries: specs.types.ReceiveRetries = 3
 
 
 class Airstack1Source(_soapy.SoapySourceBase):
