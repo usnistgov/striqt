@@ -258,3 +258,5 @@ def iterate_sweep(
                 yield None
 
             del ret
+
+            util.check_thread_interrupts()

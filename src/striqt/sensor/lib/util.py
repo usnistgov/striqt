@@ -75,7 +75,7 @@ _cancel_threads = threading.Event()
 _imports_ready = collections.defaultdict(threading.Event)
 
 
-class ThreadInterrupt(KeyboardInterrupt):
+class ThreadInterrupt(RuntimeError):
     pass
 
 
@@ -93,7 +93,7 @@ def cancel_threads():
     _cancel_threads.set()
 
 
-def interrupt_on_thread_cancel():
+def check_thread_interrupts():
     if threading.current_thread() == threading.main_thread():
         return
 
@@ -109,16 +109,16 @@ def safe_import(name):
         try:
             mod = importlib.import_module(name)
             _imports_ready[name].set()
-        except:
+        except BaseException:
             cancel_threads()
             raise
     else:
-        interrupt_on_thread_cancel()
+        check_thread_interrupts()
         while True:
             if _imports_ready[name].wait(0.5):
                 break
             else:
-                interrupt_on_thread_cancel()
+                check_thread_interrupts()
         mod = sys.modules[name]
     return mod
 
