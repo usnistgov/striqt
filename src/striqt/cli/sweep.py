@@ -47,7 +47,7 @@ def run(*, yaml_path, debug, verbose, port, **kws):
         if len(labels) == 0:
             return
 
-        dict_repr = pformat(labels, indent=2, sort_dicts=False, underscore_numbers=True)
+        dict_repr = pformat(labels, indent=2, sort_dicts=False)
         info = (
             "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀\n"
             "the sweep labels evaluated as follows:\n"
