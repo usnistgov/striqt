@@ -11,7 +11,7 @@ def run(yaml_path):
     # instantiate sweep objects
     from striqt.sensor import util, specs
     from striqt import sensor
-    from pprint import pprint
+    from pprint import pprint, pformat
     from striqt.sensor.specs.helpers import get_path_fields
     from pathlib import Path
     import pandas as pd
@@ -35,7 +35,7 @@ def run(yaml_path):
         print(f'source_id: {res["source"].id!r}')
 
         print('\nCalibration info')
-        print(60 * '=')
+        print(60 * '▀')
         if res['calibration'] is None:
             print('Configured for uncalibrated operation')
         else:
@@ -44,7 +44,7 @@ def run(yaml_path):
                 print(summary.sort_index(axis=1).sort_index(axis=0))
 
         print('\nPaths')
-        print(60 * '=')
+        print(60 * '▀')
         alias_func = res['alias_func']
         expanded_paths = {
             'sink.path': spec.sink.path,
@@ -54,7 +54,7 @@ def run(yaml_path):
             expanded_paths['source.calibration'] = spec.source.calibration
         for name, p in expanded_paths.items():
             print(f'{name}:')
-            print(f'\Input: ', repr(p))
+            print(f'Input: ', repr(p))
             if p is None:
                 continue
             if alias_func is not None:
@@ -79,8 +79,8 @@ def run(yaml_path):
             for k, v in items.items():
                 field_sets.setdefault(k, set()).add(v)
 
-        print('\n\nUnique alias field coordinates in output:')
-        print(60 * '=')
+        print('\n\nFormat fields available for use in paths:')
+        print(60 * '▀')
         cfields = set(schema.capture.__struct_fields__)
         afields = set(
             specs.helpers.get_path_fields(
@@ -90,11 +90,14 @@ def run(yaml_path):
         pprint({k: field_sets.get(k, None) for k in afields}, width=40)
 
         print('\n\nUnique capture field coordinates in output:')
-        print(60 * '=')
-        omit = {'start_time', 'delay'}
-        pprint(
-            {k: field_sets[k] for k in (cfields - omit) if k in field_sets}, width=40
-        )
+        labels = ss.specs.helpers.list_all_labels(spec, source_id)
+
+        if len(labels) == 0:
+            return
+
+        labels_repr = pformat(labels, indent=2, sort_dicts=False)
+        print(60 * '▀')
+        print(f' {labels_repr[1:-1] }')
 
 
 if __name__ == '__main__':

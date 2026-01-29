@@ -407,6 +407,8 @@ def _convert_label_lookup_keys(sweep: specs.Sweep) -> specs.LabelDictType:
             elif not isinstance(v.key, tuple):
                 # defines lookup on a single field
                 if v.key not in lookup_types:
+                    # prune refs with invalid lookups
+                    continue
                     raise msgspec.ValidationError(
                         f'no metadata capture lookup with key {v.key!r} in source {source_id!r}'
                     )
@@ -415,6 +417,8 @@ def _convert_label_lookup_keys(sweep: specs.Sweep) -> specs.LabelDictType:
                 # defines lookup across multiple capture fields
                 key_type = typing.Tuple[tuple(lookup_types[kc] for kc in v.key)]
             else:
+                # prune refs with invalid lookups
+                continue
                 invalid = set(v.key) - set(lookup_types) - set(field_types)
                 raise msgspec.ValidationError(
                     f'no such capture fields {invalid!r} for metadata field {field!r}'
