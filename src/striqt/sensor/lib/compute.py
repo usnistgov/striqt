@@ -207,7 +207,7 @@ def build_dataset_attrs(sweep: specs.Sweep):
         if field in attrs:
             continue
         else:
-            attrs.setdefault(field, {}).update(entry)
+            attrs[field] = entry
 
     return attrs
 
