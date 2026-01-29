@@ -42,7 +42,7 @@ class ConcurrentException(Exception):
     thread_exceptions: list[BaseException] = []
 
 
-class ThreadEndedByMaster(Exception):
+class ThreadInterruptRequest(Exception):
     """Raised in a thread to indicate the owning thread requested termination"""
 
 
@@ -80,12 +80,10 @@ def share_thread_interrupts():
     try:
         yield
     finally:
-        print('reset thread cancelation', file=sys.stderr)
         _cancel_threads.clear()
 
 
 def cancel_threads():
-    print('request thread cancel', file=sys.stderr)
     _cancel_threads.set()
 
 
@@ -94,8 +92,7 @@ def check_thread_interrupts():
         return
 
     if _cancel_threads.is_set():
-        print('raising on thread exception', file=sys.stderr)
-        raise ThreadEndedByMaster()
+        raise ThreadInterruptRequest()
 
 
 def safe_import(name):
@@ -228,14 +225,14 @@ def concurrently_with_fg(calls: dict[str, Call] = {}) -> dict[typing.Any, typing
 
         try:
             result = sequentially(fg)
-        except ThreadEndedByMaster:
+        except ThreadInterruptRequest:
             pass
         except BaseException as ex:
             exc_list.extend(_flatten_exceptions(ex))
 
         try:
             result.update(bg_future.result())
-        except ThreadEndedByMaster:
+        except ThreadInterruptRequest:
             pass
         except BaseException as ex:
             exc_list.extend(_flatten_exceptions(ex))
@@ -514,7 +511,7 @@ def concurrently(
         if called.exc_info is not None:
             tb = traceback_skip(called.exc_info, 1)
 
-            if called.exc_info[0] is not ThreadEndedByMaster:
+            if called.exc_info[0] is not ThreadInterruptRequest:
                 # exception_count += 1
                 tracebacks.append(tb)
                 exceptions.extend(_flatten_exceptions(called.exc_info[1]))
