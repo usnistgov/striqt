@@ -47,14 +47,16 @@ def run(*, yaml_path, debug, verbose, port, **kws):
         if len(labels) == 0:
             return
 
-        while True:
-            response = ss.util.blocking_input(f"""
-                the sweep will produce these different label coordinates. 
-                
-                {pformat(labels)}
+        dict_repr = pformat(labels, indent=2, sort_dicts=False, underscore_numbers=True)
+        info = (
+            "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀\n"
+            "the sweep labels evaluated as follows:\n"
+            f" {dict_repr[1:-1]} \n"
+            "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀\n"
+        )
 
-                are they correct? (y/n)
-                """)
+        while True:
+            response = ss.util.blocking_input(f"{info}\nconfirm: are these correct? (y/n) ")
 
             if response.lower() == 'y':
                 break
