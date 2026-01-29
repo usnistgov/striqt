@@ -108,7 +108,7 @@ def _index_or_all(inds: tuple[int, ...] | typing.Literal['all'], name, size, xp=
     if (-x).max() > size:
         raise ValueError(f'{name} value {inds} is below the minimum {-size}')
 
-    return inds
+    return x
 
 
 def corr_at_indices(inds, x, nfft, norm=True, out=None):
