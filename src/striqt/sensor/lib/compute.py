@@ -162,7 +162,7 @@ def _coord_template(
     for field in label_names:
         vars[field] = xr.Variable(
             (CAPTURE_DIM,),
-            data=port_count * ('',),
+            data=port_count * [''],
             fastpath=True,
         ).astype('str')
 
