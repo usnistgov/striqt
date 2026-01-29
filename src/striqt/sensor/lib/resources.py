@@ -14,7 +14,7 @@ from pathlib import Path
 from . import bindings, io, util
 from .peripherals import PeripheralsBase
 from .sinks import SinkBase
-from .sources import SourceBase, _PS, _PC
+from .sources import get_source_id, SourceBase, _PS, _PC
 from .. import specs
 from ..specs import _TC, _TP, _TS
 
@@ -166,14 +166,27 @@ def _setup_logging(sink: specs.Sink, formatter):
     util.log_to_file(log_path, sink.log_level)
 
 
+class _SourceOpenCallback(typing.Protocol):
+    def __call__(self, sweep: specs.Sweep, source_id: str) -> None:
+        ...
+
+
 def _open_devices(
     conn: ConnectionManager,
     binding: bindings.SensorBinding,
     spec: specs.Sweep,
     skip_peripherals: bool = False,
-    source_callback: typing.Callable|None = None
+    on_source_opened: _SourceOpenCallback|None = None
 ):
     """the source and any peripherals"""
+
+    def _post_source_open():
+        source_id = get_source_id(spec.source)
+        specs.helpers.list_all_labels(spec, source_id=source_id)
+
+        if on_source_opened is not None:
+            on_source_opened(spec, source_id)
+
 
     calls: dict[str, typing.Any] = {
         'source': conn.open(
@@ -182,7 +195,8 @@ def _open_devices(
             captures=spec.captures,
             loops=spec.loops,
             reuse_iq=spec.options.reuse_iq,
-        )
+        ),
+        'source_opened': util.Call(_post_source_open)
     }
 
     if not skip_peripherals:
@@ -201,17 +215,10 @@ def _open_devices(
     calls = {}
     if not skip_peripherals:
         assert 'peripherals' in conn._resources
-        calls['peripherals'] = util.Call(
-            conn._resources['peripherals'].setup,
+        conn._resources['peripherals'].setup(
             spec.captures,
             spec.loops
         )
-
-    if source_callback is not None:
-        calls['callback'] = util.Call(source_callback, spec, conn._resources['source'].id)
-
-    if len(calls) > 0:
-        util.concurrently(calls)
 
 
 @util.stopwatch('open resources', 'sweep', 1.0, util.PERFORMANCE_INFO)

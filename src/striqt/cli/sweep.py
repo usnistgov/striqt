@@ -6,7 +6,6 @@ import click
 from . import click_sensor_sweep
 import sys
 
-label_check_failed = False
 
 def adjust_port(spec, port):
     from striqt import sensor as ss
@@ -30,8 +29,6 @@ def check_labels(spec, source_id):
     from striqt import sensor as ss
     from pprint import pformat
 
-    global label_check_failed
-
     labels = ss.specs.helpers.list_all_labels(spec, source_id)
 
     if len(labels) == 0:
@@ -50,9 +47,7 @@ def check_labels(spec, source_id):
         if response.lower() == 'y':
             break
         elif response.lower() == 'n':
-            label_check_failed = True
-            break
-
+            raise KeyboardInterrupt
 
 @click_sensor_sweep('Run a swept acquisition and analysis from a yaml file')
 @click.option(
@@ -80,10 +75,7 @@ def run(*, yaml_path, debug, verbose, port, **kws):
     if port is not None:
         spec = adjust_port(spec, port)
 
-    with sensor.open_resources(spec, yaml_path, except_handler) as resources:
-        if label_check_failed:
-            raise KeyboardInterrupt
-
+    with sensor.open_resources(spec, yaml_path, except_handler, source_callback=check_labels) as resources:
         sweep = sensor.iterate_sweep(resources, yield_values=False, always_yield=True)
         for _ in sweep:
             pass
