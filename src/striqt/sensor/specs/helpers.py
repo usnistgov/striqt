@@ -22,8 +22,10 @@ from ..lib import util
 
 
 if typing.TYPE_CHECKING:
+    import typing_extensions
     from immutabledict import immutabledict
-
+else:
+    typing_extensions = util.lazy_import('typing_extensions')
 
 @util.lru_cache()
 def _check_fields(
@@ -411,7 +413,7 @@ def _convert_label_lookup_keys(sweep: specs.Sweep) -> specs.LabelDictType:
                 key_type = lookup_types[v.key]
             elif all(kc in lookup_types for kc in v.key):
                 # defines lookup across multiple capture fields
-                key_type = tuple[*tuple(lookup_types[kc] for kc in v.key)]
+                key_type = typing.Tuple[tuple(lookup_types[kc] for kc in v.key)]
             else:
                 invalid = set(v.key) - set(lookup_types) - set(field_types)
                 raise msgspec.ValidationError(

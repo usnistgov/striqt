@@ -1,6 +1,6 @@
 [project]
 name = "striqt"
-version = "0.0.5"
+version = "0.0.6"
 description = "tooling to support precision gpu-accelerated radio signal analysis and software radio automation"
 requires-python = ">=3.9"
 dependencies = [
