@@ -22,10 +22,7 @@ from ..lib import util
 
 
 if typing.TYPE_CHECKING:
-    import typing_extensions
     from immutabledict import immutabledict
-else:
-    typing_extensions = util.lazy_import('typing_extensions')
 
 @util.lru_cache()
 def _check_fields(
