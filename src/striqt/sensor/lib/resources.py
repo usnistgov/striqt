@@ -18,10 +18,11 @@ from .sources import get_source_id, SourceBase, _PS, _PC
 from .. import specs
 from ..specs import _TC, _TP, _TS
 
+import typing_extensions
+
 
 if typing.TYPE_CHECKING:
     import xarray as xr
-    import typing_extensions
 
     # typing workarounds for python < 3.10
     _P = typing_extensions.ParamSpec('_P')
