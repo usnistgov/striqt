@@ -57,23 +57,23 @@ if typing.TYPE_CHECKING:
 
 else:
     # workaround for python < 3.10
-    class Resources(typing.TypedDict):
+    class Resources(typing_extensions.TypedDict):
         """Sensor resources needed to run a sweep"""
 
         source: SourceBase
         sink: SinkBase
-        peripherals: PeripheralsBase
+        peripherals: typing_extensions.NotRequired[PeripheralsBase]
         except_context: typing_extensions.NotRequired[typing.ContextManager]
         sweep_spec: specs.Sweep
         calibration: 'xr.Dataset|None'
         alias_func: specs.helpers.PathAliasFormatter | None
 
-    class AnyResources(typing.TypedDict, total=False):
+    class AnyResources(typing_extensions.TypedDict, total=False):
         """Sensor resources needed to run a sweep"""
 
         source: SourceBase
         sink: SinkBase
-        peripherals: PeripheralsBase
+        peripherals: typing_extensions.NotRequired[PeripheralsBase]
         except_context: typing_extensions.NotRequired[typing.ContextManager]
         sweep_spec: specs.Sweep
         calibration: 'xr.Dataset|None'
@@ -154,6 +154,9 @@ class ConnectionManager(
     @functools.cached_property
     def resources(self) -> Resources[_TS, _TP, _TC, _PS, _PC]:
         missing = Resources.__required_keys__ - set(self._resources.keys())
+
+        # TODO: troubleshoot why runtime __required_keys__ includes NotRequired fields
+        missing = missing - {'peripherals', 'except_context'}
         if len(missing) == 0:
             return typing.cast(Resources[_TS, _TP, _TC, _PS, _PC], self._resources)
         else:
