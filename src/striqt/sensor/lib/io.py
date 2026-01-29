@@ -64,7 +64,7 @@ def open_store(
 def _import_extensions_from_spec(
     spec: specs.Extension,
     alias_func: specs.helpers.PathAliasFormatter | None = None,
-    root_dir: str = '.',
+    root_dir: Path | str = '.',
 ) -> None:
     """import an extension class from a dict representation of structs.Extensions
 

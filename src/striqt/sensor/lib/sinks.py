@@ -166,6 +166,7 @@ class ZarrCaptureSink(ZarrSinkBase):
     def _flush_thread(self, data_list):
         with _util.stopwatch('merge dataset', 'sink', threshold=0.25):
             dataset = _xr.concat(data_list, _compute.CAPTURE_DIM, join='outer')
+            assert not isinstance(dataset, _xr.DataTree)
 
         path = self.get_root_path()
         count = self.captures_elapsed

@@ -167,8 +167,7 @@ def _setup_logging(sink: specs.Sink, formatter):
 
 
 class _SourceOpenCallback(typing.Protocol):
-    def __call__(self, sweep: specs.Sweep, source_id: str) -> None:
-        ...
+    def __call__(self, sweep: specs.Sweep, source_id: str) -> None: ...
 
 
 def _open_devices(
@@ -176,7 +175,7 @@ def _open_devices(
     binding: bindings.SensorBinding,
     spec: specs.Sweep,
     skip_peripherals: bool = False,
-    on_source_opened: _SourceOpenCallback|None = None
+    on_source_opened: _SourceOpenCallback | None = None,
 ):
     """the source and any peripherals"""
 
@@ -187,7 +186,6 @@ def _open_devices(
         if on_source_opened is not None:
             on_source_opened(spec, source_id)
 
-
     calls: dict[str, typing.Any] = {
         'source': conn.open(
             binding.source.from_spec,
@@ -196,7 +194,7 @@ def _open_devices(
             loops=spec.loops,
             reuse_iq=spec.options.reuse_iq,
         ),
-        'source_opened': util.Call(_post_source_open)
+        'source_opened': util.Call(_post_source_open),
     }
 
     if not skip_peripherals:
@@ -204,21 +202,11 @@ def _open_devices(
 
     util.concurrently(calls)
 
-    if conn._resources.get('peripherals', None) is None:
-        # an exception happened, and we're in teardown
-        return
-
-    assert 'source' in conn._resources
-    if conn._resources['source'] is not None:
-        specs.helpers.list_all_labels(spec, source_id=conn._resources['source'].id)
-
-    calls = {}
-    if not skip_peripherals:
-        assert 'peripherals' in conn._resources
-        conn._resources['peripherals'].setup(
-            spec.captures,
-            spec.loops
-        )
+    peripherals = conn._resources.get('peripherals', None)
+    if skip_peripherals or peripherals is None:
+        pass
+    else:
+        peripherals.setup(spec.captures, spec.loops)
 
 
 @util.stopwatch('open resources', 'sweep', 1.0, util.PERFORMANCE_INFO)
@@ -228,7 +216,7 @@ def open_resources(
     except_context: typing.ContextManager | None = None,
     *,
     test_only: bool = False,
-    source_callback: typing.Callable|None = None
+    on_source_opened: _SourceOpenCallback | None = None,
 ) -> ConnectionManager[_TS, _TP, _TC, _PS, _PC]:
     """open the sensor hardware and software contexts needed to run the given sweep.
 
@@ -260,7 +248,12 @@ def open_resources(
             'compute': conn.log_call(prepare_compute, spec, skip_warmup=test_only),
             'sink': conn.open(sink_cls, spec, alias_func=formatter),
             'devices': util.Call(
-                _open_devices, conn, bind, spec, skip_peripherals=test_only, source_callback=source_callback
+                _open_devices,
+                conn,
+                bind,
+                spec,
+                skip_peripherals=test_only,
+                on_source_opened=on_source_opened,
             ),
         }
 
@@ -276,13 +269,11 @@ def open_resources(
 
         util.concurrently_with_fg(calls)
 
-        if except_context is None:
-            conn._resources['except_context'] = None
-        else:
+        if except_context is not None:
             conn.enter(except_context, 'except_context')
 
         if test_only:
-            conn._resources['peripherals'] = None
+            del conn._resources['peripherals']
 
         conn._resources['sweep_spec'] = spec
         conn._resources['alias_func'] = formatter

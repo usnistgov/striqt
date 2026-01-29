@@ -218,7 +218,7 @@ def max_by_frequency(
 def _get_label_fields(
     label_spec: specs.LabelDictType,
     source_id: str | UnsetType | None = UNSET,
-) -> dict[str, str|specs.LabelLookup]:
+) -> dict[str, str | specs.LabelLookup]:
     fields = {}
     if isinstance(source_id, str):
         source_fields = label_spec.get(source_id, {})

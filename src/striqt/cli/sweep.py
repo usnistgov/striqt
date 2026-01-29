@@ -25,30 +25,6 @@ def adjust_port(spec, port):
     return spec.replace(captures=captures)
 
 
-def check_labels(spec, source_id):
-    from striqt import sensor as ss
-    from pprint import pformat
-
-    labels = ss.specs.helpers.list_all_labels(spec, source_id)
-
-    if len(labels) == 0:
-        return
-    
-    while True:
-        response = ss.util.blocking_input(f'''
-            the sweep will produce these different label coordinates. 
-            
-            {pformat(labels)}
-
-            are they correct? (y/n)
-            '''
-        )
-
-        if response.lower() == 'y':
-            break
-        elif response.lower() == 'n':
-            raise KeyboardInterrupt
-
 @click_sensor_sweep('Run a swept acquisition and analysis from a yaml file')
 @click.option(
     '--port/',
@@ -60,23 +36,44 @@ def check_labels(spec, source_id):
     help='limit the acquisition the specified input port index',
 )
 def run(*, yaml_path, debug, verbose, port, **kws):
-    # instantiate sweep objects
-    from striqt import sensor
+    from striqt import sensor as ss
 
-    except_handler = sensor.util.DebugOnException(enable=debug, verbose=verbose)
+    def confirm_labels(sweep: ss.specs.Sweep, source_id: str):
+        from striqt import sensor as ss
+        from pprint import pformat
+
+        labels = ss.specs.helpers.list_all_labels(spec, source_id)
+
+        if len(labels) == 0:
+            return
+
+        while True:
+            response = ss.util.blocking_input(f"""
+                the sweep will produce these different label coordinates. 
+                
+                {pformat(labels)}
+
+                are they correct? (y/n)
+                """)
+
+            if response.lower() == 'y':
+                break
+            elif response.lower() == 'n':
+                raise KeyboardInterrupt
+
+    except_handler = ss.util.DebugOnException(enable=debug, verbose=verbose)
     sys.excepthook = except_handler.run
 
-    sensor.util.log_verbosity(verbose)
-    spec = sensor.read_yaml_spec(
-        yaml_path,
-        output_path=kws['output_path'],
-    )
+    ss.util.log_verbosity(verbose)
+    spec = ss.read_yaml_spec(yaml_path, output_path=kws['output_path'])
 
     if port is not None:
         spec = adjust_port(spec, port)
 
-    with sensor.open_resources(spec, yaml_path, except_handler, source_callback=check_labels) as resources:
-        sweep = sensor.iterate_sweep(resources, yield_values=False, always_yield=True)
+    with ss.open_resources(
+        spec, yaml_path, except_handler, on_source_opened=confirm_labels
+    ) as resources:
+        sweep = ss.iterate_sweep(resources, yield_values=False, always_yield=True)
         for _ in sweep:
             pass
 
