@@ -75,10 +75,6 @@ _cancel_threads = threading.Event()
 _imports_ready = collections.defaultdict(threading.Event)
 
 
-class ThreadInterrupt(RuntimeError):
-    pass
-
-
 @contextlib.contextmanager
 def share_thread_interrupts():
     try:
@@ -99,7 +95,7 @@ def check_thread_interrupts():
 
     if _cancel_threads.is_set():
         print('raising on thread exception', file=sys.stderr)
-        raise ThreadInterrupt()
+        raise ThreadEndedByMaster()
 
 
 def safe_import(name):
@@ -232,11 +228,15 @@ def concurrently_with_fg(calls: dict[str, Call] = {}) -> dict[typing.Any, typing
 
         try:
             result = sequentially(fg)
+        except ThreadEndedByMaster:
+            pass
         except BaseException as ex:
             exc_list.extend(_flatten_exceptions(ex))
 
         try:
             result.update(bg_future.result())
+        except ThreadEndedByMaster:
+            pass
         except BaseException as ex:
             exc_list.extend(_flatten_exceptions(ex))
 
