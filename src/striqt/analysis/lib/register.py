@@ -360,7 +360,7 @@ class AnalysisRegistry(collections.UserDict[type[specs.Analysis], AnalysisInfo])
         coord_factories: typing.Iterable[CallableCoordinateFactory]
         | CallableCoordinateFactory
         | None = None,
-        depends: typing.Iterable[typing.Callable]|typing.Callable = [],
+        depends: typing.Iterable[typing.Callable] | typing.Callable = [],
         caches: typing.Iterable[KeywordArgumentCache] | None = None,
         prefer_unaligned_input=False,
         store_compressed=True,

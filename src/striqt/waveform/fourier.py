@@ -1614,7 +1614,7 @@ def oaresample(
 
 
 @lru_cache()
-def fftfreq(nfft: int, fs: float, dtype='float64', xp = np) -> ArrayType:
+def fftfreq(nfft: int, fs: float, dtype='float64', xp=np) -> ArrayType:
     """compute fftfreq for a specified sample rate.
 
     This is meant to produce high-precision results for

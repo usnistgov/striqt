@@ -214,9 +214,7 @@ def build_capture_coords(
     if len(captures) == 0:
         return None
 
-    coords = _coord_template(
-        type(captures[0]), type(info), len(captures)
-    )
+    coords = _coord_template(type(captures[0]), type(info), len(captures))
     coords = coords.copy(deep=True)
     changes = defaultdict(list)
 

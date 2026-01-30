@@ -49,14 +49,16 @@ def run(*, yaml_path, debug, verbose, port, **kws):
 
         dict_repr = pformat(labels, indent=2, sort_dicts=False)
         info = (
-            "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀\n"
-            "across the swept captures, labels evaluate to the following unique values:\n"
-            f" {dict_repr[1:-1]} \n"
-            "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀\n"
+            '▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀\n'
+            'across the swept captures, labels evaluate to the following unique values:\n'
+            f' {dict_repr[1:-1]} \n'
+            '▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀\n'
         )
 
         while True:
-            response = ss.util.blocking_input(f"{info}\nconfirm: are these correct? (y/n) ")
+            response = ss.util.blocking_input(
+                f'{info}\nconfirm: are these correct? (y/n) '
+            )
 
             if response.lower() == 'y':
                 break

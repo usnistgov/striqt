@@ -306,7 +306,9 @@ class CaptureRemap(SpecBase, frozen=True, kw_only=True):
 
 
 _AdjustSourceCapturesMap = dict[str, typing.Union[CaptureRemap, float, int, str]]
-AdjustCapturesType = dict[typing.Union[types.SourceID, typing.Literal['defaults']], _AdjustSourceCapturesMap]
+AdjustCapturesType = dict[
+    typing.Union[types.SourceID, typing.Literal['defaults']], _AdjustSourceCapturesMap
+]
 
 
 class Sweep(SpecBase, typing.Generic[_TS, _TP, _TC], frozen=True, kw_only=True):

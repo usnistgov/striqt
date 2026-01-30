@@ -22,7 +22,9 @@ from ..lib import util
 
 if typing.TYPE_CHECKING:
     from immutabledict import immutabledict
+
     _T = typing.TypeVar('_T')
+
 
 @util.lru_cache()
 def _check_fields(
@@ -63,9 +65,9 @@ def pairwise_by_port(
 def _expand_capture_loops(
     captures: tuple[_TC, ...],
     loops: tuple[specs.LoopSpec, ...],
-    adjust: specs.AdjustCapturesType|None = None,
+    adjust: specs.AdjustCapturesType | None = None,
     *,
-    source_id: types.SourceID|None = None,
+    source_id: types.SourceID | None = None,
     cls: type[_TC] | None = None,
     only_fields: tuple[str, ...] | None = None,
     loop_only_nyquist: bool = False,
@@ -116,7 +118,7 @@ def _expand_capture_loops(
 
 def loop_captures(
     sweep: specs.Sweep[typing.Any, typing.Any, _TC],
-    source_id: types.SourceID|None= None,
+    source_id: types.SourceID | None = None,
     *,
     only_fields: tuple[str, ...] | None = None,
 ) -> tuple[_TC, ...]:
@@ -147,7 +149,10 @@ def loop_captures(
 
 
 @util.lru_cache()
-def adjust_analysis(analyses: specs.AnalysisGroup, adjust_analysis: immutabledict[str, typing.Any]|None) -> specs.AnalysisGroup:
+def adjust_analysis(
+    analyses: specs.AnalysisGroup,
+    adjust_analysis: immutabledict[str, typing.Any] | None,
+) -> specs.AnalysisGroup:
     if adjust_analysis is None or len(adjust_analysis) == 0:
         return analyses
 
@@ -165,7 +170,9 @@ def adjust_analysis(analyses: specs.AnalysisGroup, adjust_analysis: immutabledic
 
     if len(unused_names) > 0:
         logger = util.get_logger('sweep')
-        logger.warning(f'no analysis parameters match analysis_adjust keys {unused_names}')
+        logger.warning(
+            f'no analysis parameters match analysis_adjust keys {unused_names}'
+        )
 
     return _deep_freeze(specs.BundledAnalysis.from_dict(result))
 
@@ -292,7 +299,7 @@ def _list_capture_adjustments(
 def adjust_captures(
     capture: _TC,
     adjust_spec: specs.AdjustCapturesType,
-    source_id: types.SourceID|None,
+    source_id: types.SourceID | None,
 ) -> _TC:
     """evaluate the field values"""
 
@@ -344,7 +351,8 @@ def adjust_captures(
 
 
 def _get_source_capture_adjustments(
-    spec: specs.AdjustCapturesType, source_id: str | None,
+    spec: specs.AdjustCapturesType,
+    source_id: str | None,
 ) -> dict[str, typing.Any]:
     """get a map of capture adjustments that do not require lookups"""
 
@@ -368,7 +376,7 @@ def _get_source_capture_adjustments(
 #     remap_by_port = defaultdict(list)
 #     splits = split_capture_ports(capture)
 
-#     for c in splits: 
+#     for c in splits:
 #         map = _adjust_captures_single_port(c, spec, source_id)
 #         for k, v in map.items():
 #             remap_by_port[k].append(v)
@@ -380,7 +388,7 @@ def _get_source_capture_adjustments(
 #         if counts > 1:
 #             remap[field] = tuple(values)
 #             continue
-        
+
 #         capture_value = getattr(capture, field)
 #         if isinstance(capture_value, tuple):
 #             input_len = len(capture_value)
@@ -427,7 +435,7 @@ def get_path_fields(
     return fields
 
 
-def ensure_tuple(obj: _T|tuple[_T,...]) -> tuple[_T, ...]:
+def ensure_tuple(obj: _T | tuple[_T, ...]) -> tuple[_T, ...]:
     if isinstance(obj, tuple):
         return obj
     else:
@@ -451,7 +459,7 @@ def get_unique_ports(
 
     for c in captures:
         ports |= set(ensure_tuple(c.port))
-    
+
     return sorted(ports)
 
 
@@ -542,8 +550,12 @@ def _convert_label_lookup_keys(sweep: specs.Sweep) -> specs.AdjustCapturesType:
 
 
 @util.lru_cache()
-def list_capture_adjustments(sweep: specs.Sweep, source_id: str) -> dict[str, tuple[str, ...]]:
-    lookup_fields = _list_capture_adjustments(sweep.adjust_captures, source_id=source_id)
+def list_capture_adjustments(
+    sweep: specs.Sweep, source_id: str
+) -> dict[str, tuple[str, ...]]:
+    lookup_fields = _list_capture_adjustments(
+        sweep.adjust_captures, source_id=source_id
+    )
     captures = loop_captures(sweep, only_fields=lookup_fields, source_id=source_id)
 
     result = {}

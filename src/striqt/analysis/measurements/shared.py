@@ -358,7 +358,9 @@ def _cached_spectrogram(
     )
 
     if spec.lo_bandstop is not None:
-        waveform.fourier.null_lo(spg, nfft, capture.sample_rate, spec.lo_bandstop, axis=2)
+        waveform.fourier.null_lo(
+            spg, nfft, capture.sample_rate, spec.lo_bandstop, axis=2
+        )
 
     # truncate to the analysis bandwidth
     if spec.trim_stopband and np.isfinite(capture.analysis_bandwidth):

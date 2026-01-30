@@ -83,9 +83,9 @@ def run(yaml_path):
         afields = specs.helpers.get_path_fields(
             spec, source_id=res['source'].id, spec_path=yaml_path
         )
-        afields = {f'{{{k}}}': v for k,v in afields.items()}
+        afields = {f'{{{k}}}': v for k, v in afields.items()}
         afields_repr = pformat(afields, indent=2, sort_dicts=False)
-        print(f' {afields_repr[1:-1] }')
+        print(f' {afields_repr[1:-1]}')
 
         print('\n\nUnique capture field coordinates in output:')
         labels = ss.specs.helpers.list_capture_adjustments(spec, res['source'].id)
@@ -95,7 +95,7 @@ def run(yaml_path):
 
         labels_repr = pformat(labels, indent=2, sort_dicts=False)
         print(80 * '▀')
-        print(f' {labels_repr[1:-1] }')
+        print(f' {labels_repr[1:-1]}')
 
 
 if __name__ == '__main__':
