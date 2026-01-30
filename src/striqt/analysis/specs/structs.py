@@ -179,7 +179,7 @@ class Cellular5GNRSSBSpectrogram(Analysis, kw_only=True, frozen=True):
     # ssb parameters
     sample_rate: float = 15.36e6 / 2
     discovery_periodicity: float = 20e-3
-    frequency_offset: typing.Union[float, dict[float, float]] = 0
+    frequency_offset: float = 0
     max_block_count: typing.Optional[int] = None
 
     # spectrogram info
@@ -208,7 +208,7 @@ class _Cellular5GNRSSBCorrelator(Analysis, kw_only=True, frozen=True):
     subcarrier_spacing: float
     sample_rate: float = 15.36e6 / 2
     discovery_periodicity: float = 20e-3
-    frequency_offset: typing.Union[float, dict[float, float]] = 0
+    frequency_offset: float = 0
     shared_spectrum: bool = False
     max_block_count: typing.Optional[int] = 1
     trim_cp: bool = True
@@ -258,7 +258,7 @@ class CellularCyclicAutocorrelator(
 ):
     subcarrier_spacings: typing.Union[float, tuple[float, ...]] = (15e3, 30e3, 60e3)
     frame_range: typing.Union[int, tuple[int, int]] = (0, 1)
-    frame_slots: typing.Union[str, dict[float, str], None] = None
+    frame_slots: typing.Union[str, None] = None
     symbol_range: typing.Union[int, tuple[int, typing.Optional[int]]] = (0, None)
     generation: typing.Literal['4G', '5G'] = '5G'
 
@@ -286,11 +286,9 @@ class CellularResourcePowerHistogram(
     power_resolution: float
     average_rbs: typing.Union[bool, typing.Literal['half']] = False
     average_slots: bool = False
-    guard_bandwidths: typing.Union[
-        tuple[float, float], dict[float, tuple[float, float]]
-    ] = (0, 0)
-    frame_slots: typing.Union[str, dict[float, str], None] = None
-    special_symbols: typing.Union[str, dict[float, str], None] = None
+    guard_bandwidths: tuple[float, float] = (0, 0)
+    frame_slots: typing.Union[str, None] = None
+    special_symbols: typing.Union[str, None] = None
 
     cyclic_prefix: typing.Union[
         typing.Literal['normal'], typing.Literal['extended']

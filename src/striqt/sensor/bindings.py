@@ -20,8 +20,8 @@ warmup = bind_sensor(
     Schema(
         source=specs.NoSource,
         init_like=specs.NoSource,
-        capture=specs.ResampledCapture,
-        arm_like=specs.ResampledCapture,
+        capture=specs.SensorCapture,
+        arm_like=specs.SensorCapture,
         peripherals=specs.NoPeripherals,
     ),
 )

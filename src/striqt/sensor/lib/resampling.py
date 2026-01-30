@@ -63,7 +63,7 @@ def resampling_correction(iq_in: AcquiredIQ, overwrite_x=False, axis=1) -> Acqui
     source_spec = iq_in.source_spec
     xp = waveform.util.array_namespace(iq)
 
-    if not isinstance(iq_in.capture, specs.ResampledCapture):
+    if not isinstance(iq_in.capture, specs.SensorCapture):
         raise TypeError('iq.capture must be a capture specification')
     else:
         capture = iq_in.capture

@@ -13,6 +13,7 @@ import typing as _typing
 from . import compute as _compute
 from . import io as _io
 from . import util as _util
+from . import sources as _sources
 from .. import specs as _specs
 
 if _typing.TYPE_CHECKING:
@@ -42,8 +43,12 @@ class SinkBase(_typing.Generic[_specs._TC]):
         self._future = None
         self._pending_data: list['_xr.Dataset'] = []
         self._executor = ThreadPoolExecutor(1)
-        captures = _specs.helpers.loop_captures(sweep_spec)
-        self._group_sizes = _specs.helpers.concat_group_sizes(captures, min_size=2)
+
+        # decide group sizes
+        source_id = _sources.get_source_id(sweep_spec.source)
+        captures = _specs.helpers.loop_captures(sweep_spec, source_id)
+        min_size = len(sweep_spec.captures) # number of unlooped captures
+        self._group_sizes = _specs.helpers.concat_group_sizes(captures, min_size=min_size)
 
     def pop(self) -> list['_xr.Dataset']:
         result = self._pending_data
@@ -165,7 +170,7 @@ class ZarrCaptureSink(ZarrSinkBase):
 
     def _flush_thread(self, data_list):
         with _util.stopwatch('merge dataset', 'sink', threshold=0.25):
-            dataset = _xr.concat(data_list, _compute.CAPTURE_DIM, join='outer')
+            dataset = _xr.concat(data_list, _compute.CAPTURE_DIM, join='outer', combine_attrs='drop_conflicts')
             dataset = _typing.cast(_xr.Dataset, dataset)
 
         path = self.get_root_path()

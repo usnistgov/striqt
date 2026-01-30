@@ -42,7 +42,7 @@ def run(*, yaml_path, debug, verbose, port, **kws):
         from striqt import sensor as ss
         from pprint import pformat
 
-        labels = ss.specs.helpers.list_all_labels(spec, source_id)
+        labels = ss.specs.helpers.list_capture_adjustments(spec, source_id)
 
         if len(labels) == 0:
             return

@@ -185,7 +185,7 @@ def _open_devices(
 
     def _post_source_open():
         source_id = get_source_id(spec.source)
-        specs.helpers.list_all_labels(spec, source_id=source_id)
+        specs.helpers.list_capture_adjustments(spec, source_id=source_id)
 
         if on_source_opened is not None:
             on_source_opened(spec, source_id)

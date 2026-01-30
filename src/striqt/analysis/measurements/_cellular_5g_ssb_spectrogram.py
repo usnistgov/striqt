@@ -35,32 +35,18 @@ def cellular_ssb_baseband_frequency(
     capture: specs.Capture, spec: specs.Cellular5GNRSSBSpectrogram, xp=np
 ) -> np.ndarray:
     nfft = round(2 * capture.sample_rate / spec.subcarrier_spacing)
-    bb_freqs = shared.fftfreq(nfft, capture.sample_rate)
-
-    frequency_offset = specs.helpers.maybe_lookup_with_capture_key(
-        capture,
-        spec.frequency_offset,
-        capture_attr='center_frequency',
-        error_label='frequency_offset',
-        default=None,
-    )
-
-    if frequency_offset is None:
-        raise KeyError(
-            'center_frequency did not match any keys given for frequency_offset'
-        )
-
+    bb_freqs = waveform.fourier.fftfreq(nfft, capture.sample_rate)
     bb_freqs = waveform.util.binned_mean(bb_freqs, count=2, axis=0, fft=True)
-    bb_freqs = shared.truncate_spectrogram_bandwidth(
+    bb_freqs = waveform.fourier.truncate_spectrogram_bandwidth(
         bb_freqs,
         nfft // 2,
         capture.sample_rate,
         spec.sample_rate,
-        offset=frequency_offset,
+        offset=spec.frequency_offset,
         axis=0,
     )
 
-    return bb_freqs - frequency_offset
+    return bb_freqs - spec.frequency_offset
 
 
 @registry.coordinates(dtype='uint16', attrs={'standard_name': 'Capture SSB index'})
@@ -124,19 +110,6 @@ def cellular_5g_ssb_spectrogram(iq, capture: specs.Capture, **kwargs):
     # TODO: compute this with the striqt.waveform.ofdm
     symbol_count = round(28 * spec.subcarrier_spacing / 15e3)  # per burst set
 
-    frequency_offset = specs.helpers.maybe_lookup_with_capture_key(
-        capture,
-        spec.frequency_offset,
-        capture_attr='center_frequency',
-        error_label='frequency_offset',
-        default=None,
-    )
-
-    if frequency_offset is None:
-        raise TypeError(
-            'no key found for center_frequency in frequency_offset lookup dictionary'
-        )
-
     spg_spec = specs.Spectrogram(
         frequency_resolution=spec.subcarrier_spacing / 2,
         fractional_overlap=Fraction(13, 28),
@@ -162,12 +135,12 @@ def cellular_5g_ssb_spectrogram(iq, capture: specs.Capture, **kwargs):
 
     # select frequency
     nfft = round(capture.sample_rate / spec.subcarrier_spacing)
-    spg = shared.truncate_spectrogram_bandwidth(
+    spg = waveform.fourier.truncate_spectrogram_bandwidth(
         spg,
         nfft,
         capture.sample_rate,
         spec.sample_rate,
-        offset=frequency_offset,
+        offset=spec.frequency_offset,
         axis=2,
     )
 

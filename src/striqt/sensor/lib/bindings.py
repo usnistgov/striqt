@@ -13,7 +13,7 @@ from ..specs import _TS, _TC, _TP
 from .sources._base import _PS, _PC
 
 
-_TC2 = typing.TypeVar('_TC2', bound=specs.ResampledCapture)
+_TC2 = typing.TypeVar('_TC2', bound=specs.SensorCapture)
 _TP2 = typing.TypeVar('_TP2', bound=specs.Peripherals)
 _TS2 = typing.TypeVar('_TS2', bound=specs.Source)
 _PS2 = ParamSpec('_PS2')
@@ -73,7 +73,7 @@ class Schema(typing.Generic[_TS, _TP, _TC, _PS, _PC], sources._base.Schema[_TS, 
 
     def __post_init__(self):
         assert issubclass(self.source, specs.Source)
-        assert issubclass(self.capture, specs.ResampledCapture)
+        assert issubclass(self.capture, specs.SensorCapture)
         assert issubclass(self.peripherals, specs.Peripherals)
 
 

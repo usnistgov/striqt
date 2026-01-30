@@ -1,7 +1,6 @@
 from __future__ import annotations as __
 
 import decimal
-import fractions
 import typing
 
 from .. import specs
@@ -212,19 +211,6 @@ def get_5g_ssb_iq(
 
     xp = waveform.util.array_namespace(iq)
 
-    frequency_offset = specs.helpers.maybe_lookup_with_capture_key(
-        capture,
-        spec.frequency_offset,
-        capture_attr='center_frequency',
-        error_label='frequency_offset',
-        default=None,
-    )
-
-    assert isinstance(frequency_offset, float)
-
-    if frequency_offset is None:
-        return None
-
     if oaresample:
         down = round(capture.sample_rate / spec.subcarrier_spacing / 8)
         up = round(down * (spec.sample_rate / capture.sample_rate))
@@ -254,7 +240,7 @@ def get_5g_ssb_iq(
                 down=down,
                 axis=0,
                 window='blackman',
-                frequency_shift=frequency_offset,
+                frequency_shift=spec.frequency_offset,
             )
 
     else:
@@ -268,7 +254,7 @@ def get_5g_ssb_iq(
 
         size_out = round(size_in * spec.sample_rate / capture.sample_rate)
         out = xp.empty((iq.shape[0], size_out), dtype=iq.dtype)
-        shift = round(iq.shape[1] * frequency_offset / capture.sample_rate)
+        shift = round(iq.shape[1] * spec.frequency_offset / capture.sample_rate)
 
         for i in range(out.shape[0]):
             out[i] = waveform.fourier.resample(
@@ -310,33 +296,6 @@ def evaluate_spectrogram(
 
 
 spectrogram_cache = register.KeywordArgumentCache([dataarrays.CAPTURE_DIM, 'spec'])
-
-
-def truncate_spectrogram_bandwidth(
-    x, nfft: int, fs: float, bandwidth: float, *, offset: float = 0.0, axis: int = 0
-):
-    """trim an array outside of the specified bandwidth on a frequency axis"""
-    edges = waveform.fourier._freq_band_edges(
-        nfft,
-        1.0 / fs,
-        cutoff_low=offset - bandwidth / 2,
-        cutoff_hi=offset + bandwidth / 2,
-    )
-    return waveform.util.axis_slice(x, *edges, axis=axis)
-
-
-def null_lo(x, nfft, fs, bandwidth, *, offset=0, axis=0):
-    """sets samples to nan within the specified bandwidth on a frequency axis"""
-    # to make the top bound inclusive
-    pad_hi = fs / nfft / 2
-    edges = waveform.fourier._freq_band_edges(
-        nfft,
-        1.0 / fs,
-        cutoff_low=offset - bandwidth / 2,
-        cutoff_hi=offset + bandwidth / 2 + pad_hi,
-    )
-    view = waveform.util.axis_slice(x, *edges, axis=axis)
-    view[:] = float('nan')
 
 
 @spectrogram_cache.apply
@@ -399,12 +358,12 @@ def _cached_spectrogram(
     )
 
     if spec.lo_bandstop is not None:
-        null_lo(spg, nfft, capture.sample_rate, spec.lo_bandstop, axis=2)
+        waveform.fourier.null_lo(spg, nfft, capture.sample_rate, spec.lo_bandstop, axis=2)
 
     # truncate to the analysis bandwidth
     if spec.trim_stopband and np.isfinite(capture.analysis_bandwidth):
         # stick with python arithmetic to ensure consistency with axis bounds calculations
-        spg = truncate_spectrogram_bandwidth(
+        spg = waveform.fourier.truncate_spectrogram_bandwidth(
             spg, nfft, capture.sample_rate, bandwidth=capture.analysis_bandwidth, axis=2
         )
 
@@ -481,11 +440,11 @@ def spectrogram_baseband_frequency(
     # use the striqt.waveform.fourier fftfreq for higher precision, which avoids
     # headaches when merging spectra with different sampling parameters due
     # to rounding errors.
-    freqs = fftfreq(nfft, capture.sample_rate)
+    freqs = waveform.fourier.fftfreq(nfft, capture.sample_rate)
 
     if spec.trim_stopband and np.isfinite(capture.analysis_bandwidth):
         # stick with python arithmetic here for numpy/cupy consistency
-        freqs = truncate_spectrogram_bandwidth(
+        freqs = waveform.fourier.truncate_spectrogram_bandwidth(
             freqs, nfft, capture.sample_rate, capture.analysis_bandwidth, axis=0
         )
 

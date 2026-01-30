@@ -35,7 +35,7 @@ class LinkPair:
 @util.lru_cache()
 def cellular_resource_power_bin(
     capture: specs.Capture, spec: specs.CellularResourcePowerHistogram
-) -> dict[str, np.ndarray]:
+) -> tuple[np.ndarray, dict[str, typing.Any]]:
     """returns a dictionary of coordinate values, keyed by axis dimension name"""
 
     bins = _channel_power_histogram.make_power_bins(
@@ -127,7 +127,7 @@ def build_tdd_link_symbol_masks(
     frame_slots: str,
     special_symbols: typing.Optional[str] = None,
     *,
-    link_direction: tuple[str] = ('downlink', 'uplink'),
+    link_direction: tuple[str, ...] = ('downlink', 'uplink'),
     count: int | None = None,
     normal_cp=True,
     flex_as=None,
@@ -244,13 +244,7 @@ def cellular_resource_power_histogram(
         time_aperture = None
 
     slot_count = round(10 * spec.subcarrier_spacing / 15e3)
-    frame_slots = specs.helpers.maybe_lookup_with_capture_key(
-        capture,
-        spec.frame_slots,
-        'center_frequency',
-        'frame_slots',
-        default=spec_defaults['frame_slots'],
-    )
+    frame_slots = spec.frame_slots
     if frame_slots is None:
         frame_slots = slot_count * 'd'
     elif len(frame_slots) != slot_count:
@@ -258,25 +252,10 @@ def cellular_resource_power_histogram(
             f'expected a string with {slot_count} characters, but received {len(frame_slots)}'
         )
 
-    special_symbols = specs.helpers.maybe_lookup_with_capture_key(
-        capture,
-        spec.special_symbols,
-        'center_frequency',
-        'special_symbols',
-        default=spec_defaults['special_symbols'],
-    )
-    if 's' in frame_slots and special_symbols is None:
+    if 's' in frame_slots and spec.special_symbols is None:
         raise ValueError(
             'specify special_symbols that implement the requested "s" special slot'
         )
-
-    guard_bandwidths = specs.helpers.maybe_lookup_with_capture_key(
-        capture,
-        spec.guard_bandwidths,
-        'center_frequency',
-        'guard_bandwidths',
-        default=spec_defaults['guard_bandwidths'],
-    )
 
     # set STFT overlap and the fractional fill in the window
     if spec.cyclic_prefix == 'normal':
@@ -322,9 +301,9 @@ def cellular_resource_power_histogram(
         link_direction=link_direction,
         channel_bandwidth=capture.analysis_bandwidth,
         frame_slots=frame_slots,
-        special_symbols=special_symbols,
-        guard_left=guard_bandwidths[0],
-        guard_right=guard_bandwidths[1],
+        special_symbols=spec.special_symbols,
+        guard_left=spec.guard_bandwidths[0],
+        guard_right=spec.guard_bandwidths[1],
         xp=xp,
     )
 

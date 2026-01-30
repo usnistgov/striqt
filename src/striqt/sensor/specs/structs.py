@@ -43,7 +43,7 @@ def _validate_multichannel(port, gain):
             raise ValueError('gain, when specified as a tuple, must match port count')
 
 
-class ResampledCapture(Capture, frozen=True, kw_only=True):
+class SensorCapture(Capture, frozen=True, kw_only=True):
     """Capture specification for a generic waveform with resampling support"""
 
     # acquisition
@@ -55,9 +55,10 @@ class ResampledCapture(Capture, frozen=True, kw_only=True):
     # a counter used to track the loop index for Repeat(None)
     _sweep_index: int = 0
 
+    adjust_analysis: types.AnalysisAdjustments = msgspec.field(default_factory=dict)
 
-class SoapyCapture(ResampledCapture, frozen=True, kw_only=True):
-    delay: typing.Optional[types.StartDelay] = None
+
+class SoapyCapture(SensorCapture, frozen=True, kw_only=True):
     center_frequency: types.CenterFrequency
     gain: types.Gain
 
@@ -66,26 +67,26 @@ class SoapyCapture(ResampledCapture, frozen=True, kw_only=True):
         _validate_multichannel(self.port, self.gain)
 
 
-class SingleToneCapture(ResampledCapture, frozen=True, kw_only=True):
+class SingleToneCapture(SensorCapture, frozen=True, kw_only=True):
     frequency_offset: types.FrequencyOffset = 0
     snr: typing.Optional[types.SNR] = None
 
 
-class DiracDeltaCapture(ResampledCapture, frozen=True, kw_only=True):
+class DiracDeltaCapture(SensorCapture, frozen=True, kw_only=True):
     time: types.TimeOffset = 0
     power: types.Power = 0
 
 
-class SawtoothCapture(ResampledCapture, kw_only=True, frozen=True, dict=True):
+class SawtoothCapture(SensorCapture, kw_only=True, frozen=True, dict=True):
     period: types.Period = 0.01
     power: types.Power = 1
 
 
-class NoiseCapture(ResampledCapture, kw_only=True, frozen=True, dict=True):
+class NoiseCapture(SensorCapture, kw_only=True, frozen=True, dict=True):
     power_spectral_density: types.PSD = 1e-17
 
 
-class FileCapture(ResampledCapture, frozen=True, kw_only=True):
+class FileCapture(SensorCapture, frozen=True, kw_only=True):
     """Capture specification read from a file, with support for None sentinels"""
 
     def __post_init__(self):
@@ -290,7 +291,7 @@ class SweepOptions(SpecBase, frozen=True, kw_only=True):
 
 # forward references break msgspec when used with bindings, so this
 # needs to be here after the bound classes have been defined
-_TC = typing.TypeVar('_TC', bound=ResampledCapture)
+_TC = typing.TypeVar('_TC', bound=SensorCapture)
 _TP = typing.TypeVar('_TP', bound=Peripherals)
 _TPC = typing.TypeVar('_TPC', bound=Peripherals)
 _TS = typing.TypeVar('_TS', bound=Source)
@@ -299,13 +300,13 @@ _TS = typing.TypeVar('_TS', bound=Source)
 SWEEP_TAG_FIELD = 'sensor_binding'
 
 
-class LabelLookup(SpecBase, frozen=True, kw_only=True):
+class CaptureRemap(SpecBase, frozen=True, kw_only=True):
     key: str | tuple[str, ...]
-    lookup: dict[tuple[typing.Any, ...] | typing.Any, str]
+    lookup: dict[tuple[typing.Any, ...] | typing.Any, typing.Any]
 
 
-_SourceLabelMap = dict[str, typing.Union[str, LabelLookup]]
-LabelDictType = dict[typing.Union[types.SourceID, typing.Literal['defaults']], _SourceLabelMap]
+_AdjustSourceCapturesMap = dict[str, typing.Union[CaptureRemap, float, int, str]]
+AdjustCapturesType = dict[typing.Union[types.SourceID, typing.Literal['defaults']], _AdjustSourceCapturesMap]
 
 
 class Sweep(SpecBase, typing.Generic[_TS, _TP, _TC], frozen=True, kw_only=True):
@@ -322,7 +323,7 @@ class Sweep(SpecBase, typing.Generic[_TS, _TP, _TC], frozen=True, kw_only=True):
     loops: tuple[LoopSpec, ...] = ()
     analysis: BundledAnalysis = BundledAnalysis()  # type: ignore
     description: Description = Description()
-    labels: LabelDictType = msgspec.field(default_factory=dict)
+    adjust_captures: AdjustCapturesType = msgspec.field(default_factory=dict)
     extensions: Extension = Extension()
     sink: Sink = Sink()
     peripherals: _TP = typing.cast(_TP, Peripherals())
@@ -338,7 +339,7 @@ class Sweep(SpecBase, typing.Generic[_TS, _TP, _TC], frozen=True, kw_only=True):
 
         # do this first, so that it can then also be frozen
         fixed_labels = helpers._convert_label_lookup_keys(self)
-        msgspec.structs.force_setattr(self, 'labels', fixed_labels)
+        msgspec.structs.force_setattr(self, 'adjust_captures', fixed_labels)
 
         if len(self.loops) == 0:
             return
@@ -405,7 +406,6 @@ class SourceCoordinates(msgspec.Struct, kw_only=True, frozen=True):
 class SoapyAcquisitionCoordinates(SourceCoordinates, kw_only=True, frozen=True):
     """extra coordinate information returned from an acquisition"""
 
-    delay: typing.Optional[types.StartDelay] = None
     sweep_start_time: types.SweepStartTime | None
     start_time: types.StartTime | None
     backend_sample_rate: typing.Optional[types.BackendSampleRate]

@@ -295,10 +295,6 @@ def cellular_cyclic_autocorrelation(
     )
     metadata = {}
 
-    frame_slots = specs.helpers.maybe_lookup_with_capture_key(
-        capture, spec.frame_slots, 'center_frequency', 'frame_slots', default='d'
-    )
-
     metadata['frames'] = spec.frame_range
     metadata['symbols'] = spec.symbol_range
 
@@ -318,7 +314,7 @@ def cellular_cyclic_autocorrelation(
     for chan in range(iq.shape[0]):
         for iscs, phy in enumerate(phy_scs.values()):
             tdd_config = tdd_config_from_str(
-                subcarrier_spacing=phy.subcarrier_spacing, frame_slots=frame_slots
+                subcarrier_spacing=phy.subcarrier_spacing, frame_slots=spec.frame_slots
             )
 
             cp_inds = index_cp_for_slot(tdd_config.downlink_slot_indexes)

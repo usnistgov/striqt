@@ -1,5 +1,6 @@
 from __future__ import annotations as __
 
+import decimal
 import functools
 import typing
 from math import ceil
@@ -25,6 +26,8 @@ from .util import (
     cp,
 )
 from .windows import register_extra_windows
+
+import array_api_compat
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -1220,6 +1223,33 @@ def _freq_band_edges(n, d, cutoff_low, cutoff_hi, *, xp=None):
     return ilo, ihi
 
 
+def truncate_spectrogram_bandwidth(
+    x, nfft: int, fs: float, bandwidth: float, *, offset: float = 0.0, axis: int = 0
+):
+    """trim an array outside of the specified bandwidth on a frequency axis"""
+    edges = _freq_band_edges(
+        nfft,
+        1.0 / fs,
+        cutoff_low=offset - bandwidth / 2,
+        cutoff_hi=offset + bandwidth / 2,
+    )
+    return axis_slice(x, *edges, axis=axis)
+
+
+def null_lo(x, nfft, fs, bandwidth, *, offset=0, axis=0):
+    """sets samples within the specified bandwidth on a frequency axis to nan in-place"""
+    # to make the top bound inclusive
+    pad_hi = fs / nfft / 2
+    edges = _freq_band_edges(
+        nfft,
+        1.0 / fs,
+        cutoff_low=offset - bandwidth / 2,
+        cutoff_hi=offset + bandwidth / 2 + pad_hi,
+    )
+    view = axis_slice(x, *edges, axis=axis)
+    view[:] = float('nan')
+
+
 def spectrogram(
     x: ArrayType,
     *,
@@ -1581,3 +1611,25 @@ def oaresample(
     x *= x.size / size_in * scale
 
     return x
+
+
+@lru_cache()
+def fftfreq(nfft: int, fs: float, dtype='float64', xp = np) -> ArrayType:
+    """compute fftfreq for a specified sample rate.
+
+    This is meant to produce high-precision results for
+    rational sample rates in order to avoid problems caused
+    by rounding errors merging captures with different sample rates.
+    """
+
+    if not array_api_compat.is_numpy_namespace(np):  # type: ignore
+        return xp.asarray(fftfreq(nfft, fs, dtype))
+
+    # high resolution rational representation of frequency resolution
+    fres = decimal.Decimal(fs) / nfft
+    span = range(-nfft // 2, -nfft // 2 + nfft)
+    if nfft % 2 == 0:
+        values = [fres * n for n in span]
+    else:
+        values = [fres * (n + 1) for n in span]
+    return np.array(values, dtype=dtype)

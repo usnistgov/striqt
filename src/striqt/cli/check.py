@@ -30,7 +30,6 @@ def run(yaml_path):
 
     with manager as res:
         assert isinstance(spec.__bindings__, ss.lib.bindings.SensorBinding)
-        schema = spec.__bindings__.schema
 
         print(f'source_id: {res["source"].id!r}')
 
@@ -72,7 +71,7 @@ def run(yaml_path):
         field_sets = {}
         splits = (
             specs.helpers.split_capture_ports(c)
-            for c in specs.helpers.loop_captures(spec)
+            for c in specs.helpers.loop_captures(spec, source_id=res['source'].id)
         )
         for c in itertools.chain(*splits):
             items = kws | c.to_dict()
@@ -89,7 +88,7 @@ def run(yaml_path):
         print(f' {afields_repr[1:-1] }')
 
         print('\n\nUnique capture field coordinates in output:')
-        labels = ss.specs.helpers.list_all_labels(spec, res['source'].id)
+        labels = ss.specs.helpers.list_capture_adjustments(spec, res['source'].id)
 
         if len(labels) == 0:
             return

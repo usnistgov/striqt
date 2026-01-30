@@ -24,6 +24,10 @@ AliasMatch = Annotated[
 AmbientTemperature = Annotated[
     float, Meta(standard_name='Ambient temperature', units='K')
 ]
+AnalysisAdjustments = Annotated[
+    dict[str, Any],
+    Meta('changes to apply across each analysis for any matching parameter')
+]
 AnalysisBandwidth = Annotated[
     float, Meta('Bandwidth of the analysis filter (or inf to disable)', 'Hz', gt=0)
 ]

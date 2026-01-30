@@ -18,6 +18,7 @@ from striqt.waveform import util as waveform_util
 from . import sources, util
 
 if typing.TYPE_CHECKING:
+    import immutabledict
     import numpy as np
     import pandas as pd
     import xarray as xr
@@ -29,6 +30,7 @@ if typing.TYPE_CHECKING:
     WarmupSweep: TypeAlias = specs.Sweep[specs.NoSource, specs.NoPeripherals, _TC]
 
 else:
+    immutabledict = util.lazy_import('immutabledict')
     np = util.lazy_import('numpy')
     pd = util.lazy_import('pandas')
     xr = util.lazy_import('xarray')
@@ -51,7 +53,7 @@ class EvaluationOptions(dataarrays.EvaluationOptions[dataarrays._TA], kw_only=Tr
 @dataclasses.dataclass
 class DelayedDataset:
     delayed: dict[str, dataarrays.DelayedDataArray]
-    capture: specs.ResampledCapture
+    capture: specs.SensorCapture
     extra_coords: specs.SourceCoordinates
     extra_data: dict[str, typing.Any]
     config: EvaluationOptions
@@ -132,10 +134,9 @@ def _msgspec_type_to_coord_info(type_: msgspec.inspect.Type) -> tuple[dict, typi
 
 @util.lru_cache()
 def _coord_template(
-    capture_cls: type[specs.ResampledCapture],
+    capture_cls: type[specs.SensorCapture],
     info_cls: type[specs.SourceCoordinates],
     port_count: int,
-    label_names: tuple[str, ...],
 ) -> 'xr.Coordinates':
     """returns a cached xr.Coordinates object to use as a template for data results"""
 
@@ -144,7 +145,7 @@ def _coord_template(
     vars = {}
 
     for field in capture_fields + info_fields:
-        if field.name.startswith('_'):
+        if field.name.startswith('_') or field.name == 'adjust_analysis':
             continue
 
         attrs, default = _msgspec_type_to_coord_info(field.type)
@@ -158,13 +159,6 @@ def _coord_template(
 
         if isinstance(default, str):
             vars[field.name] = vars[field.name].astype(object)
-
-    for field in label_names:
-        vars[field] = xr.Variable(
-            (CAPTURE_DIM,),
-            data=port_count * [''],
-            fastpath=True,
-        ).astype(object)
 
     return xr.Coordinates(vars)
 
@@ -202,7 +196,7 @@ def build_dataset_attrs(sweep: specs.Sweep):
     attrs['captures'] = [c.to_dict(True) for c in sweep.captures]
 
     for field, entry in as_dict.items():
-        if field in attrs or field == 'labels':
+        if field in attrs or field == 'adjust_captures':
             # label specs with tuple keys are not supported by zarr (at least in 2.x)
             continue
         else:
@@ -212,26 +206,25 @@ def build_dataset_attrs(sweep: specs.Sweep):
 
 
 def build_capture_coords(
-    capture: specs.ResampledCapture,
-    label_spec: specs.LabelDictType,
+    capture: specs.SensorCapture,
     info: specs.SourceCoordinates,
 ) -> 'xr.Coordinates|None':
     captures = helpers.split_capture_ports(capture)
-    labels = helpers.get_labels(capture, label_spec, source_id=info.source_id)
 
     if len(captures) == 0:
         return None
 
     coords = _coord_template(
-        type(captures[0]), type(info), len(captures), tuple(labels[0])
+        type(captures[0]), type(info), len(captures)
     )
     coords = coords.copy(deep=True)
     changes = defaultdict(list)
 
     info_dict = info.to_dict()
 
-    for c, labels in zip(captures, labels):
-        capture_entries = info_dict | c.to_dict(skip_private=True) | labels
+    for c in captures:
+        capture_entries = info_dict | c.to_dict(skip_private=True)
+        del capture_entries['adjust_analysis']
 
         for field, value in capture_entries.items():
             changes[field].append(value)
@@ -280,21 +273,22 @@ def analyze(
 
     overwrite_x = not options.sweep_spec.options.reuse_iq
 
-    assert iq.capture is not None
+    capture = iq.capture
 
-    with options.registry.cache_context(iq.capture, options.cache_callback):
+    assert isinstance(capture, specs.SensorCapture)
+
+    with options.registry.cache_context(capture, options.cache_callback):
         if options.correction:
             with util.stopwatch('resampling filter', logger_level=logging.DEBUG):
                 iq = resampling.resampling_correction(iq, overwrite_x=overwrite_x)
-                assert iq.capture is not None
 
         opts = msgspec.structs.replace(options, as_xarray='delayed')
         opts = typing.cast(
             dataarrays.EvaluationOptions[typing.Literal['delayed']], opts
         )
-        da_delayed = dataarrays.analyze_by_spec(
-            iq, options.sweep_spec.analysis, iq.capture, opts
-        )
+        adjust = immutabledict.immutabledict(capture.adjust_analysis)
+        analysis = helpers.adjust_analysis(options.sweep_spec.analysis, adjust)
+        da_delayed = dataarrays.analyze_by_spec(iq, analysis, capture, opts)
 
     if iq.source_spec.array_backend == 'cupy':
         for name, value in list(iq.extra_data.items()):
@@ -304,7 +298,7 @@ def analyze(
     if not options.as_xarray:
         return da_delayed
 
-    assert isinstance(iq.capture, specs.ResampledCapture)
+    assert isinstance(iq.capture, specs.SensorCapture)
 
     ds_delayed = DelayedDataset(
         delayed=da_delayed,
@@ -321,7 +315,7 @@ def analyze(
 
 
 def _adc_overload_message(
-    extra_data: dict[str, typing.Sequence[float]], capture: specs.ResampledCapture
+    extra_data: dict[str, typing.Sequence[float]], capture: specs.SensorCapture
 ) -> str | None:
     if 'adc_headroom' in extra_data and isinstance(capture, specs.SoapyCapture):
         headroom = extra_data['adc_headroom']
@@ -417,9 +411,7 @@ def from_delayed(dd: DelayedDataset):
         threshold=10e-3,
         logger_level=logging.DEBUG,
     ):
-        coords = build_capture_coords(
-            dd.capture, dd.config.sweep_spec.labels, dd.extra_coords
-        )
+        coords = build_capture_coords(dd.capture, dd.extra_coords)
         analysis = analysis.assign_coords(coords)
 
     # don't duplicate coords as attrs

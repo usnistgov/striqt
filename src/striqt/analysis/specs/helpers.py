@@ -56,44 +56,6 @@ def _warn_on_capture_lookup_miss(capture_value, capture_attr, error_label, defau
     )
 
 
-def maybe_lookup_with_capture_key(
-    capture: msgspec.Struct,
-    value: _T | typing.Mapping[typing.Any, _T],
-    capture_attr: str,
-    error_label: str,
-    default: _T | None = None,
-) -> _T | None:
-    """evaluate a lookup table based on an attribute in a capture object.
-
-    Returns:
-    - If value is dict-like, returns value[getattr(capture, capture_attr)]
-    - Otherwise, returns value
-    """
-    if hasattr(value, 'keys') and hasattr(value, '__getitem__'):
-        value = typing.cast(typing.Mapping, value)
-        try:
-            capture_value = getattr(capture, capture_attr)
-        except AttributeError:
-            raise AttributeError(
-                f'can only look up {error_label!r} if the capture has {capture_attr!r} field'
-            )
-        try:
-            return value[capture_value]
-        except KeyError:
-            _warn_on_capture_lookup_miss(
-                capture_value=capture_value,
-                capture_attr=capture_attr,
-                error_label=error_label,
-                default=default,
-            )
-            return default
-
-    elif typing.TYPE_CHECKING:
-        return typing.cast(_T, value)
-    else:
-        return value
-
-
 def _enc_hook(obj):
     import numpy as np
     from immutabledict import immutabledict

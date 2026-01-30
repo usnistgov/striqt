@@ -48,27 +48,6 @@ def _get_adc_peak(
     return unscaled_peak
 
 
-def _tuplize_port(obj: specs.types.Port) -> tuple[int, ...]:
-    if isinstance(obj, (tuple, list)):
-        return obj
-    else:
-        return (int(obj),)
-
-
-@util.lru_cache()
-def _tuplize_all_ports(
-    captures: tuple[_TC, ...],
-    loops: tuple[specs.LoopSpec, ...] | None = None,
-    capture_cls: type[_TC] | None = None,
-) -> tuple[int, ...]:
-    looped = specs.helpers.loop_captures_from_fields(
-        captures, loops or (), only_fields=('port',), cls=capture_cls
-    )
-
-    all_ports = set().union(*(_tuplize_port(c.port) for c in looped))
-    return tuple(sorted(all_ports))
-
-
 def _probe_channel(
     device: SoapySDR.Device, direction: int, port: int
 ) -> _SoapyPortInfo:
@@ -239,7 +218,7 @@ class RxStream:
             return
 
         if ports is not None:
-            ports = _tuplize_port(ports)
+            ports = specs.helpers.ensure_tuple(ports)
         elif self.setup.stream_all_rx_ports:
             ports = tuple(range(self.info.num_rx_ports))
         else:
@@ -399,7 +378,7 @@ class RxStream:
         return self._enabled
 
     def capture_changes_port(self, capture: specs.SoapyCapture) -> bool:
-        return _tuplize_port(capture.port) == self.ports
+        return specs.helpers.ensure_tuple(capture.port) == self.ports
 
     def set_ports(self, device: 'SoapySDR.Device', ports: specs.types.Port):
         if self.setup.stream_all_rx_ports:
@@ -552,12 +531,12 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
             else:
                 capture_cls = self.__bindings__.capture
 
-            ports = _tuplize_all_ports(captures, loops, capture_cls)
+            ports = specs.helpers.get_unique_ports(captures, loops)
         else:
             ports = ()
 
         self._rx_stream = RxStream(
-            spec, self.info, ports=ports, on_overflow=on_overflow
+            spec, self.info, ports=tuple(ports), on_overflow=on_overflow
         )
 
         self._device.setClockSource(spec.clock_source)

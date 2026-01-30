@@ -200,7 +200,7 @@ def iterate_sweep(
 
     iq = None
     result = None
-    captures = specs.helpers.loop_captures(spec)
+    captures = specs.helpers.loop_captures(spec, source_id=resources['source'].id)
 
     if loop:
         capture_iter = itertools.cycle(captures)

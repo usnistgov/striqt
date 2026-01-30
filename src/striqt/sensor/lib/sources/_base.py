@@ -43,7 +43,7 @@ RESAMPLE_COLA_WINDOW = 'hamming'
 FILTER_DOMAIN = 'time'
 
 _TS = typing.TypeVar('_TS', bound=specs.Source)
-_TC = typing.TypeVar('_TC', bound=specs.ResampledCapture)
+_TC = typing.TypeVar('_TC', bound=specs.SensorCapture)
 _PS = ParamSpec('_PS')
 _PC = ParamSpec('_PC')
 _TB = typing.TypeVar('_TB', bound='specs.SpecBase')
@@ -120,7 +120,7 @@ class _ReceiveBuffers:
         samples: 'np.ndarray',
         sample_start_ns,
         unused_sample_count: int,
-        capture: specs.ResampledCapture,
+        capture: specs.SensorCapture,
     ):
         """stash data needed to carry over extra samples into the next capture"""
         carryover_count = unused_sample_count
@@ -781,7 +781,7 @@ class _ResamplerKws(typing.TypedDict, total=False):
 @util.lru_cache(30000)
 def _design_capture_resampler(
     master_clock_rate: float,
-    capture: specs.ResampledCapture,
+    capture: specs.SensorCapture,
     backend_sample_rate: float | None = None,
     **kwargs: Unpack[_ResamplerKws],
 ) -> ResamplerDesign:
@@ -850,12 +850,12 @@ def _design_capture_resampler(
 @functools.wraps(_design_capture_resampler)
 def design_capture_resampler(
     master_clock_rate: float,
-    capture: specs.ResampledCapture,
+    capture: specs.SensorCapture,
     backend_sample_rate: float | None = None,
     **kws: Unpack[_ResamplerKws],
 ) -> ResamplerDesign:
     # cast the struct in case it's a subclass
-    fixed_capture = specs.ResampledCapture.from_spec(capture)
+    fixed_capture = specs.SensorCapture.from_spec(capture)
     kws = _ResamplerKws(
         bw_lo=0.25e6,
         min_oversampling=1.1,
@@ -880,7 +880,7 @@ def design_capture_resampler(
 
 
 def needs_resample(
-    analysis_filter: ResamplerDesign, capture: specs.ResampledCapture
+    analysis_filter: ResamplerDesign, capture: specs.SensorCapture
 ) -> bool:
     """determine whether an STFT will be needed to filter or resample"""
 
@@ -888,7 +888,7 @@ def needs_resample(
     return is_resample and capture.host_resample
 
 
-def _get_filter_pad(capture: specs.ResampledCapture):
+def _get_filter_pad(capture: specs.SensorCapture):
     if np.isfinite(capture.analysis_bandwidth):
         return FILTER_SIZE // 2 + 1
     else:
@@ -898,7 +898,7 @@ def _get_filter_pad(capture: specs.ResampledCapture):
 @util.lru_cache(30000)
 def _get_fft_resample_pad(
     setup: specs.Source,
-    capture: specs.ResampledCapture,
+    capture: specs.SensorCapture,
     analysis: AnalysisGroup | None = None,
 ) -> tuple[int, int]:
     # accommodate the large fft by padding to a fast size that includes at least lag_pad
@@ -930,17 +930,17 @@ def _get_fft_resample_pad(
 
 def get_fft_resample_pad(
     setup: specs.Source,
-    capture: specs.ResampledCapture,
+    capture: specs.SensorCapture,
     analysis: AnalysisGroup | None = None,
 ) -> tuple[int, int]:
-    capture = specs.ResampledCapture.from_spec(capture)
+    capture = specs.SensorCapture.from_spec(capture)
     return _get_fft_resample_pad(setup, capture, analysis)
 
 
 @util.lru_cache(30000)
 def _get_dsp_pad_size(
     setup: specs.Source,
-    capture: specs.ResampledCapture,
+    capture: specs.SensorCapture,
     analysis: AnalysisGroup | None = None,
 ) -> tuple[int, int]:
     """returns the padding before and after a waveform to achieve an integral number of FFT windows"""
@@ -963,10 +963,10 @@ def _get_dsp_pad_size(
 
 def get_dsp_pad_size(
     setup: specs.Source,
-    capture: specs.ResampledCapture,
+    capture: specs.SensorCapture,
     analysis: AnalysisGroup | None = None,
 ) -> tuple[int, int]:
-    capture = specs.ResampledCapture.from_spec(capture)
+    capture = specs.SensorCapture.from_spec(capture)
     return _get_dsp_pad_size(setup, capture, analysis)
 
 
@@ -990,7 +990,7 @@ def get_signal_trigger_name(setup: specs.Source) -> str | None:
 
 def _get_trigger_pad_size(
     setup: specs.Source,
-    capture: specs.ResampledCapture,
+    capture: specs.SensorCapture,
     trigger_info: Trigger | AnalysisGroup | None = None,
 ) -> int:
     if isinstance(trigger_info, AnalysisGroup):
@@ -1022,7 +1022,7 @@ def _get_next_fast_len(n, array_backend: specs.types.ArrayBackend) -> int:
 
 
 @util.lru_cache()
-def _get_oaresample_pad(master_clock_rate: float, capture: specs.ResampledCapture):
+def _get_oaresample_pad(master_clock_rate: float, capture: specs.SensorCapture):
     resampler_design = design_capture_resampler(master_clock_rate, capture)
 
     nfft = resampler_design['nfft']
@@ -1050,7 +1050,7 @@ def _get_oaresample_pad(master_clock_rate: float, capture: specs.ResampledCaptur
 @util.lru_cache()
 def _cached_channel_read_buffer_count(
     setup: specs.Source,
-    capture: specs.ResampledCapture,
+    capture: specs.SensorCapture,
     *,
     include_holdoff: bool = False,
     analysis: AnalysisGroup | None = None,
@@ -1090,7 +1090,7 @@ def get_channel_read_buffer_count(
 ) -> int:
     assert source._capture is not None
 
-    capture = specs.ResampledCapture.from_spec(source._capture)
+    capture = specs.SensorCapture.from_spec(source._capture)
 
     return _cached_channel_read_buffer_count(
         setup=source.setup_spec,
@@ -1105,7 +1105,7 @@ def get_channel_read_buffer_count(
 )
 def alloc_empty_iq(
     source: SourceBase,
-    capture: specs.ResampledCapture,
+    capture: specs.SensorCapture,
     prior: typing.Optional['np.ndarray'] = None,
 ) -> 'tuple[np.ndarray, tuple[np.ndarray, list[np.ndarray]]]':
     """allocate a buffer of IQ return values.
@@ -1171,8 +1171,8 @@ def alloc_empty_iq(
 
 
 def _is_reusable(
-    c1: specs.ResampledCapture | None,
-    c2: specs.ResampledCapture | None,
+    c1: specs.SensorCapture | None,
+    c2: specs.SensorCapture | None,
     master_clock_rate,
 ):
     """return True if c2 is compatible with the raw and uncalibrated IQ acquired for c1"""
