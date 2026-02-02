@@ -15,6 +15,7 @@ from .. import specs
 from . import dataarrays, register, util
 
 if typing.TYPE_CHECKING:
+    import glob
     import numcodecs
     import numpy as np
     import pandas as pd
@@ -34,6 +35,7 @@ if typing.TYPE_CHECKING:
         StoreType: TypeAlias = zarr.abc.store.Store  # type: ignore
 
 else:
+    glob = util.lazy_import('glob')
     numcodecs = util.lazy_import('numcodecs')
     np = util.lazy_import('numpy')
     pd = util.lazy_import('pandas')
@@ -315,6 +317,25 @@ _YAMLFrozenLoader.add_constructor(
 )
 
 
+def _expand_paths(node: yaml.Node) -> list[str]:
+    def glob_path(s: str):
+        paths = glob.glob(s)
+        if len(paths) == 0:
+            raise FileNotFoundError(s)
+        return paths
+
+    if isinstance(node.value, str):
+        values = glob_path(node.value)
+    elif isinstance(node.value, (list, tuple)):
+        values = []
+        for n in node.value:
+            values.extend(glob_path(n.value))
+    else:
+        raise TypeError(f'invalid tag type {type(node.value)!r} in !import')
+
+    return values
+
+
 class _YAMLIncludeConstructor(yaml.Loader):
     _lock = threading.RLock()
 
@@ -345,12 +366,7 @@ class _YAMLIncludeConstructor(yaml.Loader):
         if not node.tag.startswith('!include'):
             raise ValueError(f'unknown tag {node.tag!r}')
 
-        if isinstance(node.value, str):
-            values = [node.value]
-        elif isinstance(node.value, list):
-            values = [v.value for v in node.value]
-        else:
-            raise TypeError('unknown tag value')
+        values = _expand_paths(node)
 
         content = []
         for v in values:

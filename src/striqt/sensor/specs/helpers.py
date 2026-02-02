@@ -446,7 +446,7 @@ def ensure_tuple(obj: _T | tuple[_T, ...]) -> tuple[_T, ...]:
 def get_unique_ports(
     captures: tuple[_TC, ...],
     loops: tuple[specs.LoopSpec, ...] | None = None,
-) -> list[int]:
+) -> tuple[int, ...]:
     ports = set()
 
     if loops is not None:
@@ -460,7 +460,7 @@ def get_unique_ports(
     for c in captures:
         ports |= set(ensure_tuple(c.port))
 
-    return sorted(ports)
+    return tuple(sorted(ports))
 
 
 @util.lru_cache()

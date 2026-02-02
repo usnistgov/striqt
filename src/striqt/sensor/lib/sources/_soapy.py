@@ -526,17 +526,12 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
             on_overflow = 'except'
 
         if captures is not None:
-            if self.__bindings__ is None:
-                capture_cls = None
-            else:
-                capture_cls = self.__bindings__.capture
-
             ports = specs.helpers.get_unique_ports(captures, loops)
         else:
             ports = ()
 
         self._rx_stream = RxStream(
-            spec, self.info, ports=tuple(ports), on_overflow=on_overflow
+            spec, self.info, ports=ports, on_overflow=on_overflow
         )
 
         self._device.setClockSource(spec.clock_source)

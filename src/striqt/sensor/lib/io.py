@@ -133,9 +133,6 @@ def read_yaml_spec(
     if not isinstance(tree, dict):
         raise TypeError('yaml file does not specify a dict structure')
 
-    if isinstance(tree.get('captures', None), dict):
-        tree['captures'] = list(tree['captures'].values())
-
     mock_source = tree.get('mock_source', None)
     if mock_source is not None:
         assert 'sensor_binding' in tree, TypeError('missing "sensor_binding"')
