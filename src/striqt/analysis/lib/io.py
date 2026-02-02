@@ -317,10 +317,13 @@ _YAMLFrozenLoader.add_constructor(
 )
 
 
-def _expand_paths(node: yaml.Node) -> list[str]:
+def _expand_paths(node: yaml.Node, root_dir: str | Path) -> list[str]:
     def glob_path(s: str):
-        paths = glob.glob(s)
+        paths = glob.glob(s, root_dir=root_dir)
         if len(paths) == 0:
+            import os
+
+            print(os.getcwd(), repr(s), repr(root_dir))
             raise FileNotFoundError(s)
         return paths
 
@@ -366,7 +369,7 @@ class _YAMLIncludeConstructor(yaml.Loader):
         if not node.tag.startswith('!include'):
             raise ValueError(f'unknown tag {node.tag!r}')
 
-        values = _expand_paths(node)
+        values = _expand_paths(node, root_dir=self.nested_paths[0].parent)
 
         content = []
         for v in values:
