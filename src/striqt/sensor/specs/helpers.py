@@ -504,7 +504,7 @@ def _convert_label_lookup_keys(sweep: specs.Sweep) -> specs.AdjustCapturesType:
                 cls = get_capture_type(type(sweep))
                 cls_repr = f'{cls.__module__}.{cls.__name__}'
                 raise msgspec.ValidationError(
-                    f'lookup field name {field!r} was not defined '
+                    f'adjust_captures field {field!r} was not defined '
                     f'in capture class {cls_repr!r}'
                 )
             elif not isinstance(v, specs.CaptureRemap):
