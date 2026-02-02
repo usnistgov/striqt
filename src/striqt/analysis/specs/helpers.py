@@ -179,6 +179,6 @@ def _maybe_container_type(type_: msgspec.inspect.Type) -> bool:
 def freezable_fields(spec_cls: type[msgspec.Struct]) -> tuple[str, ...]:
     """returns a cached xr.Coordinates object to use as a template for data results"""
     from msgspec import inspect as mi
-    
+
     fields = msgspec.structs.fields(spec_cls)
     return tuple([f.name for f in fields if _maybe_container_type(f.type)])

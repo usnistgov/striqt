@@ -15,7 +15,13 @@ from pathlib import Path
 import msgspec
 from msgspec import UNSET, UnsetType
 
-from striqt.analysis.specs.helpers import convert_spec, convert_dict, _deep_freeze, _enc_hook, _dec_hook
+from striqt.analysis.specs.helpers import (
+    convert_spec,
+    convert_dict,
+    _deep_freeze,
+    _enc_hook,
+    _dec_hook,
+)
 
 from . import structs as specs
 from . import types
@@ -110,7 +116,7 @@ def _expand_capture_loops(
             new = [defaults | updates]
 
         if adjust is not None:
-            new = (c|adjust_captures(c, adjust, source_id) for c in new)
+            new = (c | adjust_captures(c, adjust, source_id) for c in new)
 
         if loop_only_nyquist:
             new = (c for c in new if c['sample_rate'] >= c['analysis_bandwidth'])
@@ -121,7 +127,9 @@ def _expand_capture_loops(
         # there were no loops
         return tuple()
     else:
-        return msgspec.convert(result, tuple[cls, ...], strict=False, dec_hook=_dec_hook)
+        return msgspec.convert(
+            result, tuple[cls, ...], strict=False, dec_hook=_dec_hook
+        )
 
 
 def loop_captures(
@@ -664,7 +672,13 @@ def _infer_field_template(type_: msgspec.inspect.Type) -> tuple[dict, typing.Any
     from msgspec import inspect as mi
     import pandas as pd
 
-    BUILTINS = {mi.FloatType: 0.0, mi.BoolType: False, mi.IntType: 0, mi.StrType: '', mi.DictType: {}}
+    BUILTINS = {
+        mi.FloatType: 0.0,
+        mi.BoolType: False,
+        mi.IntType: 0,
+        mi.StrType: '',
+        mi.DictType: {},
+    }
 
     if not isinstance(type_, mi.Type):
         type_ = mi.type_info(type_)
@@ -700,7 +714,9 @@ def _infer_field_template(type_: msgspec.inspect.Type) -> tuple[dict, typing.Any
 
 
 @util.lru_cache()
-def field_template_values(spec_cls: type[msgspec.Struct]) -> tuple[dict[str, typing.Any], dict[str, typing.Any]]:
+def field_template_values(
+    spec_cls: type[msgspec.Struct],
+) -> tuple[dict[str, typing.Any], dict[str, typing.Any]]:
     """returns a cached xr.Coordinates object to use as a template for data results"""
 
     attrs = {}
