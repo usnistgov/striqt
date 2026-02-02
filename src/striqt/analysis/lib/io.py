@@ -15,7 +15,6 @@ from .. import specs
 from . import dataarrays, register, util
 
 if typing.TYPE_CHECKING:
-    import glob
     import numcodecs
     import numpy as np
     import pandas as pd
@@ -35,7 +34,6 @@ if typing.TYPE_CHECKING:
         StoreType: TypeAlias = zarr.abc.store.Store  # type: ignore
 
 else:
-    glob = util.lazy_import('glob')
     numcodecs = util.lazy_import('numcodecs')
     np = util.lazy_import('numpy')
     pd = util.lazy_import('pandas')
