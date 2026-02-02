@@ -305,7 +305,7 @@ class CaptureRemap(SpecBase, frozen=True, kw_only=True):
     lookup: dict[tuple[typing.Any, ...] | typing.Any, typing.Any]
 
 
-_AdjustSourceCapturesMap = dict[str, typing.Union[CaptureRemap, float, int, str]]
+_AdjustSourceCapturesMap = dict[str, typing.Union[CaptureRemap, float, int, str, bool, None]]
 AdjustCapturesType = dict[
     typing.Union[types.SourceID, typing.Literal['defaults']], _AdjustSourceCapturesMap
 ]
