@@ -2,7 +2,7 @@
 
 from __future__ import annotations as __
 
-from collections import Counter, defaultdict
+from collections import Counter, defaultdict, ChainMap
 from fractions import Fraction
 import functools
 import itertools
@@ -323,28 +323,44 @@ def adjust_captures(
     if not isinstance(capture, (dict, immutabledict)):
         raise TypeError('capture must be a dict or mapping')
 
-    ret = {}
-
     fields = _get_capture_adjust_fields(adjust_spec, source_id)
 
-    def get_key(name: str, field: str):
-        if name in ret:
-            value = ret[name]
-        elif name in capture:
-            value = capture[name]
-        else:
-            raise KeyError(f'no such key {name!r} for field {field!r}')
+    ret = {}
+    key_lookup = ChainMap(ret, capture) # type: ignore
 
+    def get_key(fields: str|tuple[str, ...], name: str):
+        if not isinstance(fields, tuple):
+            field = fields
+        elif len(fields) == 1:
+            field = fields[0]
+        else:
+            # a tuple key in lookup_spec
+            # There is probably a clearer way to to this
+            values = [get_key(f, name) for f in fields]
+            size = max(len(obj) if isinstance(obj, tuple) else 1 for obj in values)
+            values = (ensure_tuple(v, size) for v in values)
+            return tuple(zip(*values))
+
+
+        try:
+            value = key_lookup.get(field)
+        except KeyError:
+            raise KeyError(f'no such key {field!r} for field {name!r}')
         return value
 
     def do_lookup(lookup_spec, key):
-        if isinstance(key, tuple):
-            return tuple(do_lookup(lookup_spec, k) for k in key)
+        if not isinstance(key, tuple):
+            k = key
+        elif len(key) == 1:
+            k = key[0]
+        else:
+            # per-port value in the capture
+            return tuple(lookup_spec.lookup[k] for k in key)
         try:
-            return lookup_spec.lookup[key]
+            return lookup_spec.lookup[k]
         except KeyError:
             raise KeyError(
-                f'adjust_captures[{field!r}] is missing a lookup with key {key!r} '
+                f'adjust_captures[{field!r}] is missing a lookup for key {k!r} '
                 f'for source {source_id!r}'
             )
 
@@ -354,13 +370,7 @@ def adjust_captures(
             ret[field] = lookup_spec
             continue
 
-        if isinstance(lookup_spec.key, tuple):
-            # lookup on multiple fields
-            key = tuple(get_key(k, field) for k in lookup_spec.key)
-        else:
-            # lookup on single field
-            key = get_key(lookup_spec.key, field)
-
+        key = get_key(lookup_spec.key, field)
         ret[field] = do_lookup(lookup_spec, key)
 
     return ret
@@ -451,11 +461,16 @@ def get_path_fields(
     return fields
 
 
-def ensure_tuple(obj: _T | tuple[_T, ...]) -> tuple[_T, ...]:
+def ensure_tuple(obj: _T | tuple[_T, ...], size:int|None=None) -> tuple[_T, ...]:
     if isinstance(obj, tuple):
-        return obj
-    else:
+        if size is not None and len(obj) == 1:
+            return obj * size
+        else:
+            return obj
+    elif size is None:
         return (obj,)
+    else:
+        return (obj,) * size
 
 
 @util.lru_cache()
@@ -537,8 +552,9 @@ def _convert_label_lookup_keys(sweep: specs.Sweep) -> specs.AdjustCapturesType:
                         f'no metadata capture lookup with key {v.key!r} in source {source_id!r}'
                     )
                 key_type = lookup_types[v.key]
+            elif len(v.key) == 1:
+                key_type = lookup_types[v.key[0]]
             elif all(kc in lookup_types for kc in v.key):
-                # defines lookup across multiple capture fields
                 key_type = typing.Tuple[tuple(lookup_types[kc] for kc in v.key)]
             else:
                 # prune refs with invalid lookups
@@ -547,11 +563,11 @@ def _convert_label_lookup_keys(sweep: specs.Sweep) -> specs.AdjustCapturesType:
                 raise msgspec.ValidationError(
                     f'no such capture fields {invalid!r} for metadata field {field!r}'
                 )
+            lookup = {}
             try:
-                lookup = {
-                    msgspec.convert(k, key_type, strict=False): v
-                    for k, v in v.lookup.items()
-                }
+                for k, value in v.lookup.items():
+                    lookup_key = msgspec.convert(k, key_type, strict=False)
+                    lookup[lookup_key] = value                
             except msgspec.ValidationError as ex:
                 raise msgspec.ValidationError(
                     f'keys must match type of {v.key!r} field(s) in lookup '
