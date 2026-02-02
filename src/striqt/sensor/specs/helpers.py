@@ -600,8 +600,8 @@ class PathAliasFormatter:
             key = ex.args[0]
             available = tuple(fields.keys())
             raise KeyError(
-                f'invalid format field {key!r} in path {path!r}\n'
-                f'available fields: {available!r}'
+                f'sink path format field {key!r} is invalid - '
+                f'available fields are {available!r}'
             ) from ex
 
         return str(path)
