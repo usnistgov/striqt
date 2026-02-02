@@ -339,11 +339,11 @@ class Sweep(SpecBase, typing.Generic[_TS, _TP, _TC], frozen=True, kw_only=True):
         from collections import Counter
         from . import helpers
 
-        super().__post_init__()
-
-        # do this first, so that it can then also be frozen
+        # do this first, so that its result can then also be frozen
         fixed_labels = helpers._convert_label_lookup_keys(self)
         msgspec.structs.force_setattr(self, 'adjust_captures', fixed_labels)
+
+        super().__post_init__()
 
         if len(self.loops) == 0:
             return

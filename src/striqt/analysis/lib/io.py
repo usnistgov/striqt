@@ -317,9 +317,15 @@ _YAMLFrozenLoader.add_constructor(
 )
 
 
-def _expand_paths(node: yaml.Node, root_dir: str | Path) -> list[str]:
+def _expand_paths(node: yaml.Node, root_dir: Path) -> list[str]:
     def glob_path(s: str):
-        paths = glob.glob(s, root_dir=root_dir)
+        p = Path(s)
+        if p.is_absolute():
+            rel = p.parent
+            s = p.name
+        else:
+            rel = root_dir
+        paths = list(str(g.relative_to(root_dir)) for g in rel.glob(s))
         if len(paths) == 0:
             raise FileNotFoundError(s)
         return paths

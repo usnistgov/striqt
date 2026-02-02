@@ -130,6 +130,7 @@ def read_yaml_spec(
 
     tree = decode_from_yaml_file(path)
 
+
     if not isinstance(tree, dict):
         raise TypeError('yaml file does not specify a dict structure')
 

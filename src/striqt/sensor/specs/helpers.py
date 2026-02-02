@@ -574,7 +574,6 @@ def list_capture_adjustments(
     )
     captures = loop_captures(sweep, only_fields=lookup_fields, source_id=source_id)
     cdicts = typing.cast(tuple[dict[str, typing.Any], ...], to_builtins(captures))
-
     result = defaultdict(dict)
 
     for c in cdicts:
