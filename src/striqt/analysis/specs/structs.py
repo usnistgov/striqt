@@ -71,7 +71,7 @@ class SpecBase(
         return self.from_dict(self.to_dict())
 
     def __post_init__(self):
-        for name in self.__struct_fields__:
+        for name in helpers.freezable_fields(type(self)):
             v = getattr(self, name)
             if isinstance(v, (tuple, dict, list)):
                 msgspec.structs.force_setattr(self, name, helpers._deep_freeze(v))

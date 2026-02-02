@@ -3,6 +3,8 @@
 from __future__ import annotations as __
 
 from collections import Counter, defaultdict
+from fractions import Fraction
+import functools
 import itertools
 import numbers
 import string
@@ -13,7 +15,7 @@ from pathlib import Path
 import msgspec
 from msgspec import UNSET, UnsetType
 
-from striqt.analysis.specs.helpers import convert_spec, convert_dict, _deep_freeze
+from striqt.analysis.specs.helpers import convert_spec, convert_dict, _deep_freeze, _enc_hook, _dec_hook
 
 from . import structs as specs
 from . import types
@@ -61,6 +63,10 @@ def pairwise_by_port(
     return list(pairwise)
 
 
+def to_builtins(obj: typing.Any) -> typing.Any:
+    return msgspec.to_builtins(obj, enc_hook=_enc_hook)
+
+
 @util.lru_cache()
 def _expand_capture_loops(
     captures: tuple[_TC, ...],
@@ -91,29 +97,31 @@ def _expand_capture_loops(
     loop_points = [loop.get_points() for loop in loops]
     combinations = itertools.product(*loop_points)
 
+    cdicts = typing.cast(tuple[dict, ...], to_builtins(captures))
+
     result = []
     for values in combinations:
-        updates = defaults | dict(zip(loop_fields, values))
-        if len(captures) > 0:
-            # iterate specified captures if avialable
-            new = (c.replace(**updates) for c in captures)
+        updates = dict(zip(loop_fields, values))
+        if len(cdicts) > 0:
+            # iterate specified captures if available
+            new = (defaults | c | updates for c in cdicts)
         else:
             # otherwise, instances are new captures
-            new = (cls.from_dict(updates) for _ in range(1))
-
-        if loop_only_nyquist:
-            new = (c for c in new if c.sample_rate >= c.analysis_bandwidth)
+            new = [defaults | updates]
 
         if adjust is not None:
-            new = [adjust_captures(c, adjust, source_id) for c in new]
+            new = (c|adjust_captures(c, adjust, source_id) for c in new)
+
+        if loop_only_nyquist:
+            new = (c for c in new if c['sample_rate'] >= c['analysis_bandwidth'])
 
         result += list(new)
 
     if len(result) == 0:
         # there were no loops
-        return captures
+        return tuple()
     else:
-        return tuple(result)
+        return msgspec.convert(result, tuple[cls, ...], strict=False, dec_hook=_dec_hook)
 
 
 def loop_captures(
@@ -280,7 +288,7 @@ def _list_capture_adjustments(
     ret = set()
     fields = _get_capture_adjust_fields(spec, source_id)
     for lookup_spec in fields.values():
-        if isinstance(lookup_spec, str):
+        if not isinstance(lookup_spec, specs.CaptureRemap):
             continue
 
         if isinstance(lookup_spec.key, tuple):
@@ -295,25 +303,27 @@ def _list_capture_adjustments(
     return tuple(ret)
 
 
-@util.lru_cache()
 def adjust_captures(
-    capture: _TC,
+    capture: typing.Mapping[str, typing.Any],
     adjust_spec: specs.AdjustCapturesType,
     source_id: types.SourceID | None,
-) -> _TC:
+) -> dict[str, typing.Any]:
     """evaluate the field values"""
 
-    if not isinstance(capture, specs.SensorCapture):
-        raise TypeError('capture must be a specs.SensorCapture instance')
+    from immutabledict import immutabledict
+
+    if not isinstance(capture, (dict, immutabledict)):
+        raise TypeError('capture must be a dict or mapping')
 
     ret = {}
+
     fields = _get_capture_adjust_fields(adjust_spec, source_id)
 
     def get_key(name: str, field: str):
         if name in ret:
             value = ret[name]
-        elif hasattr(capture, name):
-            value = getattr(capture, name)
+        elif name in capture:
+            value = capture[name]
         else:
             raise KeyError(f'no such key {name!r} for field {field!r}')
 
@@ -335,8 +345,6 @@ def adjust_captures(
             # no lookup
             ret[field] = lookup_spec
             continue
-        elif capture is None:
-            continue
 
         if isinstance(lookup_spec.key, tuple):
             # lookup on multiple fields
@@ -347,7 +355,7 @@ def adjust_captures(
 
         ret[field] = do_lookup(lookup_spec, key)
 
-    return capture.replace(**ret)
+    return ret
 
 
 def _get_source_capture_adjustments(
@@ -551,20 +559,20 @@ def _convert_label_lookup_keys(sweep: specs.Sweep) -> specs.AdjustCapturesType:
 
 @util.lru_cache()
 def list_capture_adjustments(
-    sweep: specs.Sweep, source_id: str
+    sweep: specs.Sweep[typing.Any, typing.Any, _TC], source_id: str
 ) -> dict[str, tuple[str, ...]]:
     lookup_fields = _list_capture_adjustments(
         sweep.adjust_captures, source_id=source_id
     )
     captures = loop_captures(sweep, only_fields=lookup_fields, source_id=source_id)
+    cdicts = typing.cast(tuple[dict[str, typing.Any], ...], to_builtins(captures))
 
-    result = {}
+    result = defaultdict(dict)
 
-    for c in captures:
-        labels = adjust_captures(c, sweep.adjust_captures, source_id=source_id)
-        for fields in labels:
-            for name, value in fields.items():
-                result.setdefault(name, {})[value] = None
+    for c in cdicts:
+        changes = adjust_captures(c, sweep.adjust_captures, source_id=source_id)
+        for name, value in changes.items():
+            result[name][value] = None
 
     return {name: tuple(v.keys()) for name, v in result.items()}
 
@@ -649,3 +657,79 @@ def concat_group_sizes(
         sizes.append(count)
 
     return sizes
+
+
+def _infer_field_template(type_: msgspec.inspect.Type) -> tuple[dict, typing.Any]:
+    """returns an (attrs, default_value) pair for the given msgspec field type"""
+    from msgspec import inspect as mi
+    import pandas as pd
+
+    BUILTINS = {mi.FloatType: 0.0, mi.BoolType: False, mi.IntType: 0, mi.StrType: '', mi.DictType: {}}
+
+    if not isinstance(type_, mi.Type):
+        type_ = mi.type_info(type_)
+
+    if isinstance(type_, tuple(BUILTINS.keys())):
+        # dicey if subclasses show up
+        return {}, BUILTINS[type(type_)]
+    elif isinstance(type_, mi.CustomType):
+        if issubclass(type_.cls, pd.Timestamp):
+            return {}, pd.Timestamp(0)
+        else:
+            try:
+                return {}, type_.cls()
+            except Exception as ex:
+                name = type_.cls.__qualname__
+                raise TypeError(f'failed to make default for type {name!r}') from ex
+    elif isinstance(type_, mi.Metadata):
+        return type_.extra or {}, _infer_field_template(type_.type)[1]
+    elif isinstance(type_, mi.LiteralType):
+        return {}, type(type_.values[0])
+    elif isinstance(type_, mi.UnionType):
+        UNION_SKIP = (mi.NoneType, mi.VarTupleType)
+        types = [t for t in type_.types if not isinstance(t, UNION_SKIP)]
+        if len(types) == 1:
+            return _infer_field_template(types[0])
+        else:
+            names = tuple(type(t).__qualname__ for t in types)
+            raise TypeError(
+                f'cannot determine xarray type for union of msgspec types {names!r}'
+            )
+    else:
+        raise TypeError(f'unsupported msgspec field type {type_!r}')
+
+
+@util.lru_cache()
+def field_template_values(spec_cls: type[msgspec.Struct]) -> tuple[dict[str, typing.Any], dict[str, typing.Any]]:
+    """returns a cached xr.Coordinates object to use as a template for data results"""
+
+    attrs = {}
+    defaults = {}
+
+    for field in msgspec.structs.fields(spec_cls):
+        if field.name.startswith('_') or field.name == 'adjust_analysis':
+            continue
+
+        attrs[field], defaults[field] = _infer_field_template(field.type)
+
+    return attrs, defaults
+
+
+@util.lru_cache()
+def get_field_metadata(struct: type[specs.SpecBase], field: str) -> dict[str, str]:
+    """introspect an attrs dict for xarray from the specified field in `struct`"""
+    hints = typing.get_type_hints(struct, include_extras=True)
+
+    try:
+        metas = hints[field].__metadata__
+    except (AttributeError, KeyError):
+        return {}
+
+    if len(metas) == 0:
+        return {}
+    elif len(metas) == 1 and isinstance(metas[0], msgspec.Meta):
+        return metas[0].extra
+    else:
+        raise TypeError(
+            'Annotated[] type hints must contain exactly one msgspec.Meta object'
+        )

@@ -103,8 +103,8 @@ def _deep_freeze(
 ) -> 'immutabledict[_K, _V]|tuple[_V, ...]|_T':
     """Recursively transform dict into immutabledict"""
     if isinstance(obj, (list, tuple)):
-        return tuple(_deep_freeze(v) for v in obj)
-    if isinstance(obj, dict):
+        return tuple([_deep_freeze(v) for v in obj])
+    elif isinstance(obj, dict):
         from immutabledict import immutabledict
 
         mapping = {k: _deep_freeze(v) for k, v in obj.items()}
@@ -156,3 +156,29 @@ def convert_spec(other: typing.Any, type: type[_T]) -> _T:
     return msgspec.convert(
         other, type=type, strict=False, from_attributes=True, dec_hook=_dec_hook
     )
+
+
+def _maybe_container_type(type_: msgspec.inspect.Type) -> bool:
+    """returns an (attrs, default_value) pair for the given msgspec field type"""
+    from msgspec import inspect as mi
+
+    if not isinstance(type_, mi.Type):
+        type_ = mi.type_info(type_)
+
+    if isinstance(type_, (mi.DictType, mi.TupleType, mi.ListType)):
+        return True
+    elif isinstance(type_, mi.Metadata):
+        return _maybe_container_type(type_.type)
+    elif isinstance(type_, mi.UnionType):
+        return any(_maybe_container_type(t) for t in type_.types)
+    else:
+        return False
+
+
+@functools.cache
+def freezable_fields(spec_cls: type[msgspec.Struct]) -> tuple[str, ...]:
+    """returns a cached xr.Coordinates object to use as a template for data results"""
+    from msgspec import inspect as mi
+    
+    fields = msgspec.structs.fields(spec_cls)
+    return tuple([f.name for f in fields if _maybe_container_type(f.type)])

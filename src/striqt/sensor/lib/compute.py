@@ -93,45 +93,6 @@ def concat_time_dim(datasets: list['xr.Dataset'], time_dim: str) -> 'xr.Dataset'
     return ds
 
 
-def _msgspec_type_to_coord_info(type_: msgspec.inspect.Type) -> tuple[dict, typing.Any]:
-    """returns an (attrs, default_value) pair for the given msgspec field type"""
-    from msgspec import inspect as mi
-
-    BUILTINS = {mi.FloatType: 0.0, mi.BoolType: False, mi.IntType: 0, mi.StrType: ''}
-
-    if not isinstance(type_, mi.Type):
-        type_ = mi.type_info(type_)
-
-    if isinstance(type_, tuple(BUILTINS.keys())):
-        # dicey if subclasses show up
-        return {}, BUILTINS[type(type_)]
-    elif isinstance(type_, mi.CustomType):
-        if issubclass(type_.cls, pd.Timestamp):
-            return {}, pd.Timestamp(0)
-        else:
-            try:
-                return {}, type_.cls()
-            except Exception as ex:
-                name = type_.cls.__qualname__
-                raise TypeError(f'failed to make default for type {name!r}') from ex
-    elif isinstance(type_, mi.Metadata):
-        return type_.extra or {}, _msgspec_type_to_coord_info(type_.type)[1]
-    elif isinstance(type_, mi.LiteralType):
-        return {}, type(type_.values[0])
-    elif isinstance(type_, mi.UnionType):
-        UNION_SKIP = (mi.NoneType, mi.VarTupleType)
-        types = [t for t in type_.types if not isinstance(t, UNION_SKIP)]
-        if len(types) == 1:
-            return _msgspec_type_to_coord_info(types[0])
-        else:
-            names = tuple(type(t).__qualname__ for t in types)
-            raise TypeError(
-                f'cannot determine xarray type for union of msgspec types {names!r}'
-            )
-    else:
-        raise TypeError(f'unsupported msgspec field type {type_!r}')
-
-
 @util.lru_cache()
 def _coord_template(
     capture_cls: type[specs.SensorCapture],
@@ -140,47 +101,26 @@ def _coord_template(
 ) -> 'xr.Coordinates':
     """returns a cached xr.Coordinates object to use as a template for data results"""
 
-    capture_fields = msgspec.structs.fields(capture_cls)
-    info_fields = msgspec.structs.fields(info_cls)
     vars = {}
 
-    for field in capture_fields + info_fields:
-        if field.name.startswith('_') or field.name == 'adjust_analysis':
-            continue
+    for spec_cls in (capture_cls, info_cls):
+        attrs, defaults = helpers.field_template_values(spec_cls)
 
-        attrs, default = _msgspec_type_to_coord_info(field.type)
+        for name in attrs.keys():
+            if name.startswith('_') or name == 'adjust_analysis':
+                continue
 
-        vars[field.name] = xr.Variable(
-            (CAPTURE_DIM,),
-            data=port_count * [default],
-            fastpath=True,
-            attrs=attrs,
-        )
+            vars[name] = xr.Variable(
+                (CAPTURE_DIM,),
+                data=port_count * [defaults[name]],
+                fastpath=True,
+                attrs=attrs[name],
+            )
 
-        if isinstance(default, str):
-            vars[field.name] = vars[field.name].astype(object)
+            if isinstance(defaults[name], str):
+                vars[name] = vars[name].astype(object)
 
     return xr.Coordinates(vars)
-
-
-@util.lru_cache()
-def get_attrs(struct: type[specs.SpecBase], field: str) -> dict[str, str]:
-    """introspect an attrs dict for xarray from the specified field in `struct`"""
-    hints = typing.get_type_hints(struct, include_extras=True)
-
-    try:
-        metas = hints[field].__metadata__
-    except (AttributeError, KeyError):
-        return {}
-
-    if len(metas) == 0:
-        return {}
-    elif len(metas) == 1 and isinstance(metas[0], msgspec.Meta):
-        return metas[0].extra
-    else:
-        raise TypeError(
-            'Annotated[] type hints must contain exactly one msgspec.Meta object'
-        )
 
 
 def build_dataset_attrs(sweep: specs.Sweep):

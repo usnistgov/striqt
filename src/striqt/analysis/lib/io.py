@@ -321,9 +321,6 @@ def _expand_paths(node: yaml.Node, root_dir: str | Path) -> list[str]:
     def glob_path(s: str):
         paths = glob.glob(s, root_dir=root_dir)
         if len(paths) == 0:
-            import os
-
-            print(os.getcwd(), repr(s), repr(root_dir))
             raise FileNotFoundError(s)
         return paths
 
@@ -336,7 +333,7 @@ def _expand_paths(node: yaml.Node, root_dir: str | Path) -> list[str]:
     else:
         raise TypeError(f'invalid tag type {type(node.value)!r} in !import')
 
-    return values
+    return sorted(values)
 
 
 class _YAMLIncludeConstructor(yaml.Loader):
@@ -381,20 +378,19 @@ class _YAMLIncludeConstructor(yaml.Loader):
         if len(content) == 1:
             return content[0]
 
-        if isinstance(content[0], dict):
+        if all(isinstance(c, dict) for c in content):
             result = dict(content[0])
             for d in content[1:]:
-                assert isinstance(d, dict)
-                _deep_update(result, d)
-
-        elif isinstance(content[0], list):
+                result.update(d)
+        elif all(isinstance(c, (tuple, list)) for c in content):
             result = list(content[0])
             for l in content[1:]:
-                assert isinstance(l, list)
                 result.extend(l)
         else:
-            name = type(content[0]).__qualname__
-            raise TypeError(f'merge is not supported for !include tag type {name!r}')
+            raise TypeError(
+                'contents of multiple !include files be '
+                'either all mappings or all sequences'
+            )
 
         return result
 
