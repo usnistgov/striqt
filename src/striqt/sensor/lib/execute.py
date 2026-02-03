@@ -149,12 +149,14 @@ def _log_cache_info(
     capture_splits = specs.helpers.split_capture_ports(capture)
 
     for c, snr in zip(capture_splits, sw.powtodB(peaks) - noise):
+        if sa.util.is_cupy_array(snr):
+            snr = snr.get()
         snr_desc = f'{round(float(snr))} dB max SNR'
         if 'nan' in snr_desc.lower():
             continue
         capture_desc = specs.helpers.describe_capture(c, **desc_kws)
 
-        logger.info(f'spectrogram ▮ {snr_desc:<14} dB max SNR ▮ {capture_desc}')
+        logger.info(f'spectrogram ▮ {snr_desc} dB max SNR ▮ {capture_desc}')
 
 # spectrogram SNR ▮ 7 dB peak SNR ▮ channel_name='3960 MHz', antenna_name='small_dish', gain=-20.0
 def iterate_sweep(
