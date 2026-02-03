@@ -85,6 +85,8 @@ def _acquire_both(
     except AttributeError:
         arm_both(this)
 
+    print(this)
+
     analysis = specs.helpers.adjust_analysis(sweep_spec.analysis, this.adjust_analysis)
     results = util.concurrently(
         {
