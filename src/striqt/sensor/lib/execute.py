@@ -139,11 +139,9 @@ def _log_cache_info(
     snr = waveform.powtodB(peaks) - noise
 
     snr_desc = ','.join(f'{p:+02.0f}' for p in snr)
-    logger = util.get_logger('analysis')
     if 'nan' not in snr_desc.lower():
+        logger = util.get_logger('analysis')        
         logger.info(f'({snr_desc}) dB SNR spectrogram peak')
-    else:
-        logger.info(f'no SNR data')
 
 
 def iterate_sweep(
