@@ -112,8 +112,7 @@ def cellular_ssb_lag(capture: specs.Capture, spec: _Cellular5GNRSSBCorrelator):
     if spec.trim_cp:
         max_len = max_len - params.min_cp_size
 
-    name = cellular_ssb_lag.__name__
-    return pd.RangeIndex(0, max_len, name=name) / spec.sample_rate
+    return np.arange(0, max_len) / spec.sample_rate
 
 
 def empty_5g_ssb_correlation(
