@@ -1227,14 +1227,24 @@ def truncate_frequency_axis(
     x, nfft: int, fs: float, bandwidth: float, *, offset: float = 0.0, axis: int = 0
 ):
     """trim an array outside of the specified bandwidth on a frequency axis"""
-    ic = round(nfft * (0.5 + offset / fs))
-    count = round(nfft * (bandwidth / fs))
-    start = ic - count//2
+    ic = nfft * (0.5 + offset / fs)
+    if isroundmod(ic, 1):
+        ic = round(ic)
+    else:
+        raise TypeError('offset center frequency is not a multiple of fs/nfft')
+
+    count = nfft * (bandwidth / fs)
+    if isroundmod(count, 1):
+        count = round(count)
+    else:
+        raise TypeError('bandwidth is not a multiple of fs/nfft')
+
+    start = ic - count // 2
     stop = start + count
     if start < 0:
         raise ValueError(f'offset - bandwidth/2 < fs/2')
     if stop > nfft:
-        raise ValueError(f'offset + bandwidth/2 > fs/2')    
+        raise ValueError(f'offset + bandwidth/2 > fs/2')
     return axis_slice(x, start, stop, axis=axis)
 
 

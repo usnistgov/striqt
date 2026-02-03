@@ -222,7 +222,9 @@ def analyze(
         opts = typing.cast(
             dataarrays.EvaluationOptions[typing.Literal['delayed']], opts
         )
-        adjust = typing.cast(specs.immutabledict[str, typing.Any], capture.adjust_analysis)
+        adjust = typing.cast(
+            specs.immutabledict[str, typing.Any], capture.adjust_analysis
+        )
         analysis = helpers.adjust_analysis(options.sweep_spec.analysis, adjust)
         da_delayed = dataarrays.analyze_by_spec(iq, analysis, capture, opts)
 

@@ -72,7 +72,7 @@ class SpecBase(
 
 @functools.lru_cache(1024)
 def _validate(spec: _TS) -> _TS:
-    return spec.from_dict(spec.to_dict())    
+    return spec.from_dict(spec.to_dict())
 
 
 class Capture(SpecBase, kw_only=True, frozen=True):

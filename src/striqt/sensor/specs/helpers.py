@@ -21,7 +21,7 @@ from striqt.analysis.specs.helpers import (
     _deep_freeze,
     _enc_hook,
     _dec_hook,
-    immutabledict
+    immutabledict,
 )
 
 from . import structs as specs
@@ -323,9 +323,9 @@ def adjust_captures(
     fields = _get_capture_adjust_fields(adjust_spec, source_id)
 
     ret = {}
-    key_lookup = ChainMap(ret, capture) # type: ignore
+    key_lookup = ChainMap(ret, capture)  # type: ignore
 
-    def get_key(fields: str|tuple[str, ...], name: str):
+    def get_key(fields: str | tuple[str, ...], name: str):
         if not isinstance(fields, tuple):
             field = fields
         elif len(fields) == 1:
@@ -456,7 +456,7 @@ def get_path_fields(
     return fields
 
 
-def ensure_tuple(obj: _T | tuple[_T, ...], size:int|None=None) -> tuple[_T, ...]:
+def ensure_tuple(obj: _T | tuple[_T, ...], size: int | None = None) -> tuple[_T, ...]:
     if isinstance(obj, tuple):
         if size is not None and len(obj) == 1:
             return obj * size
@@ -562,7 +562,7 @@ def _convert_label_lookup_keys(sweep: specs.Sweep) -> specs.AdjustCapturesType:
             try:
                 for k, value in v.lookup.items():
                     lookup_key = msgspec.convert(k, key_type, strict=False)
-                    lookup[lookup_key] = value                
+                    lookup[lookup_key] = value
             except msgspec.ValidationError as ex:
                 raise msgspec.ValidationError(
                     f'keys must match type of {v.key!r} field(s) in lookup '

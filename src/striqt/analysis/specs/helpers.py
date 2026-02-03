@@ -31,7 +31,7 @@ class immutabledict(typing.Mapping[_K, _V]):
 
     def __new__(cls, *args: typing.Any, **kwargs: typing.Any) -> immutabledict[_K, _V]:
         inst = super().__new__(cls)
-        inst._dict = dict(*args, **kwargs) # type: ignore
+        inst._dict = dict(*args, **kwargs)  # type: ignore
         inst._hash = None
         return inst
 
@@ -54,7 +54,7 @@ class immutabledict(typing.Mapping[_K, _V]):
         return len(self._dict)
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({self._dict!r})"
+        return f'{self.__class__.__name__}({self._dict!r})'
 
     def __hash__(self) -> int:
         if self._hash is None:
@@ -142,7 +142,7 @@ def _enc_hook(obj):
     if isinstance(obj, immutabledict):
         return obj._dict
     elif isinstance(obj, fractions.Fraction):
-        return str(obj)    
+        return str(obj)
     elif hasattr(obj, '__float__'):
         return float(obj)
     else:
