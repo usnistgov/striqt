@@ -1246,7 +1246,6 @@ def truncate_frequency_axis(
         raise ValueError(f'offset + bandwidth/2 > fs/2')
 
     ret = axis_slice(x, start, stop, axis=axis)
-    print(start, stop, ret.shape)
     return ret
 
 

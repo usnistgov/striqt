@@ -587,11 +587,7 @@ class SourceBase(
 
         self.capture_spec  # ensure we are armed
 
-        if correction:
-            trigger = get_trigger_from_spec(self.setup_spec, analysis)
-            assert trigger is not None
-        else:
-            trigger = None
+        trigger = get_trigger_from_spec(self.setup_spec, analysis)          
 
         if self._prev_iq is None:
             samples, time_ns = self.read_iq(analysis)
@@ -633,11 +629,7 @@ class SourceBase(
     ) -> AcquiredIQ:
         info = specs.SourceCoordinates(source_id=self.id)
 
-        if correction:
-            trigger = get_trigger_from_spec(self.setup_spec, analysis)
-            assert trigger is not None
-        else:
-            trigger = None
+        trigger = get_trigger_from_spec(self.setup_spec, analysis)
 
         return AcquiredIQ(
             raw=samples,
