@@ -6,15 +6,96 @@ import functools
 import fractions
 import typing
 import warnings
-
-if typing.TYPE_CHECKING:
-    from immutabledict import immutabledict
 import msgspec
 
 
 _T = typing.TypeVar('_T')
 _K = typing.TypeVar('_K')
 _V = typing.TypeVar('_V')
+
+
+class immutabledict(typing.Mapping[_K, _V]):
+    """
+    An immutable dictionary that supports hashing
+    """
+
+    __slots__ = ['_hash', '_dict']
+    _dict: dict[_K, _V]
+    _hash: int | None
+
+    @classmethod
+    def fromkeys(
+        cls, seq: typing.Iterable[_K], value: typing.Optional[_V] = None
+    ) -> immutabledict[_K, _V]:
+        return cls(dict.fromkeys(seq, value))
+
+    def __new__(cls, *args: typing.Any, **kwargs: typing.Any) -> immutabledict[_K, _V]:
+        inst = super().__new__(cls)
+        inst._dict = dict(*args, **kwargs) # type: ignore
+        inst._hash = None
+        return inst
+
+    def __reduce__(self) -> tuple[typing.Any, ...]:
+        return (self.__class__, (self._dict,))
+
+    def __getitem__(self, key: _K) -> _V:
+        return self._dict[key]
+
+    def __contains__(self, key: object) -> bool:
+        return key in self._dict
+
+    def copy(self) -> immutabledict[_K, _V]:
+        return self.__class__(self)
+
+    def __iter__(self) -> typing.Iterator[_K]:
+        return iter(self._dict)
+
+    def __len__(self) -> int:
+        return len(self._dict)
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}({self._dict!r})"
+
+    def __hash__(self) -> int:
+        if self._hash is None:
+            h = 0
+            for key, value in self.items():
+                h ^= hash((key, value))
+            self._hash = h
+
+        return self._hash
+
+    def __or__(self, other: typing.Any) -> immutabledict[_K, _V]:
+        if not isinstance(other, (dict, self.__class__)):
+            return NotImplemented
+        new = dict(self)
+        new.update(other)
+        return self.__class__(new)
+
+    def __ror__(self, other: typing.Any) -> dict[typing.Any, typing.Any]:
+        if isinstance(other, dict):
+            return other | self._dict
+        elif isinstance(other, immutabledict):
+            return other._dict | self._dict
+        elif hasattr(other, '__len__') or hasattr(other, '__iter__'):
+            return dict(other) | self._dict
+        else:
+            raise TypeError('unsupported mapping')
+
+    def __ior__(self, other: typing.Any) -> immutabledict[_K, _V]:
+        raise TypeError(f"'{self.__class__.__name__}' object is frozen")
+
+    def items(self) -> typing.ItemsView[_K, _V]:  # noqa: D102
+        return self._dict.items()
+
+    def keys(self) -> typing.KeysView[_K]:  # noqa: D102
+        return self._dict.keys()
+
+    def values(self) -> typing.ValuesView[_V]:  # noqa: D102
+        return self._dict.values()
+
+    def update(self, other: dict[_K, _V], /):
+        raise TypeError(f"'{self.__class__.__name__}' object is frozen")
 
 
 def Meta(standard_name: str, units: str | None = None, **kws) -> msgspec.Meta:
@@ -56,26 +137,22 @@ def _warn_on_capture_lookup_miss(capture_value, capture_attr, error_label, defau
     )
 
 
+@functools.lru_cache()
 def _enc_hook(obj):
-    import numpy as np
-    from immutabledict import immutabledict
-
     if isinstance(obj, immutabledict):
-        return dict(obj)
-    if isinstance(obj, fractions.Fraction):
-        return str(obj)
-    elif isinstance(obj, np.floating):
+        return obj._dict
+    elif isinstance(obj, fractions.Fraction):
+        return str(obj)    
+    elif hasattr(obj, '__float__'):
         return float(obj)
     else:
         return obj
 
 
 def _dec_hook(type_, obj):
-    import numpy as np
-
     schema_cls = typing.get_origin(type_) or type_
 
-    if issubclass(schema_cls, (int, float)) and isinstance(obj, np.floating):
+    if issubclass(schema_cls, (int, float)) and hasattr(obj, '__float__'):
         return float(obj)
     elif issubclass(schema_cls, fractions.Fraction):
         return fractions.Fraction(obj)
@@ -105,8 +182,6 @@ def _deep_freeze(
     if isinstance(obj, (list, tuple)):
         return tuple([_deep_freeze(v) for v in obj])
     elif isinstance(obj, dict):
-        from immutabledict import immutabledict
-
         mapping = {k: _deep_freeze(v) for k, v in obj.items()}
         return immutabledict(mapping)
     else:
@@ -132,8 +207,6 @@ def _unfreeze(
     obj: typing.Mapping[_K, _V] | tuple[_V, ...] | list[_V] | _T,
 ) -> 'dict[_K, _V]|list[_V]|_T':
     """Recursively transform dict into immutabledict"""
-    from immutabledict import immutabledict
-
     if isinstance(obj, (list, tuple)):
         return [_unfreeze(v) for v in obj]
     if isinstance(obj, (dict, immutabledict)):
@@ -156,6 +229,11 @@ def convert_spec(other: typing.Any, type: type[_T]) -> _T:
     return msgspec.convert(
         other, type=type, strict=False, from_attributes=True, dec_hook=_dec_hook
     )
+
+
+@functools.lru_cache()
+def to_builtins(obj: msgspec.Struct) -> dict[str, typing.Any]:
+    return msgspec.to_builtins(obj, enc_hook=_enc_hook)
 
 
 def _maybe_container_type(type_: msgspec.inspect.Type) -> bool:

@@ -3,6 +3,7 @@
 from __future__ import annotations as __
 
 import fractions
+import functools
 from math import inf
 import typing
 
@@ -11,6 +12,7 @@ import msgspec
 from . import helpers, types
 
 _T = typing.TypeVar('_T')
+_TS = typing.TypeVar('_TS', bound='SpecBase')
 
 
 class SpecBase(
@@ -39,7 +41,7 @@ class SpecBase(
 
     def to_dict(self, skip_private=False, unfreeze=False) -> dict:
         """return a dictinary representation of `self`"""
-        map = msgspec.to_builtins(self, enc_hook=helpers._enc_hook)
+        map = helpers.to_builtins(self)
 
         if skip_private:
             for name in helpers._private_fields(type(self)):
@@ -50,9 +52,6 @@ class SpecBase(
         else:
             return map
 
-    def to_json(self) -> bytes:
-        return msgspec.json.encode(self, enc_hook=helpers._enc_hook)
-
     @classmethod
     def from_dict(cls: type[_T], d: dict) -> _T:
         return helpers.convert_dict(d, type=cls)
@@ -61,20 +60,19 @@ class SpecBase(
     def from_spec(cls: type[_T], other: SpecBase) -> _T:
         return helpers.convert_spec(other, type=cls)
 
-    @classmethod
-    def from_json(cls: type[_T], d: str | bytes) -> _T:
-        return msgspec.json.decode(
-            d, type=cls, strict=False, dec_hook=helpers._dec_hook
-        )
-
     def validate(self) -> typing.Self:
-        return self.from_dict(self.to_dict())
+        return _validate(self)
 
     def __post_init__(self):
         for name in helpers.freezable_fields(type(self)):
             v = getattr(self, name)
             if isinstance(v, (tuple, dict, list)):
                 msgspec.structs.force_setattr(self, name, helpers._deep_freeze(v))
+
+
+@functools.lru_cache(1024)
+def _validate(spec: _TS) -> _TS:
+    return spec.from_dict(spec.to_dict())    
 
 
 class Capture(SpecBase, kw_only=True, frozen=True):

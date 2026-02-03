@@ -7,7 +7,7 @@ import typing
 import msgspec
 
 from striqt import analysis as _analysis
-from striqt.analysis.specs import AnalysisGroup, SpecBase, Capture
+from striqt.analysis.specs import AnalysisGroup, SpecBase, Capture, immutabledict
 
 from ..lib import util
 from . import types
@@ -22,12 +22,6 @@ if typing.TYPE_CHECKING:
     import SoapySDR  # type: ignore
 else:
     pd = util.lazy_import('pandas')
-
-
-def _immutable_dict():
-    from immutabledict import immutabledict
-
-    return immutabledict()
 
 
 @util.lru_cache()
@@ -169,7 +163,7 @@ class NoSource(Source, frozen=True, kw_only=True):
 class MATSource(Source, kw_only=True, frozen=True, dict=True):
     path: types.WaveformInputPath
     file_format: types.Format = 'auto'
-    file_metadata: types.FileMetadata = msgspec.field(default_factory=_immutable_dict)
+    file_metadata: types.FileMetadata = msgspec.field(default_factory=immutabledict)
     loop: types.FileLoop = False
     transport_dtype: typing.ClassVar[types.TransportDType] = 'complex64'
 
@@ -188,7 +182,6 @@ class ZarrIQSource(Source, frozen=True, kw_only=True):
 class Description(SpecBase, frozen=True, kw_only=True):
     summary: typing.Optional[str] = None
     version: str = 'unversioned'
-    # coord_aliases: dict[str, types.AliasMatch] = immutabledict()
 
 
 class LoopBase(SpecBase, tag=str.lower, tag_field='kind', frozen=True, kw_only=True):

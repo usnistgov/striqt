@@ -37,7 +37,7 @@ def cellular_ssb_baseband_frequency(
     nfft = round(2 * capture.sample_rate / spec.subcarrier_spacing)
     bb_freqs = waveform.fourier.fftfreq(nfft, capture.sample_rate)
     bb_freqs = waveform.util.binned_mean(bb_freqs, count=2, axis=0, fft=True)
-    bb_freqs = waveform.fourier.truncate_spectrogram_bandwidth(
+    bb_freqs = waveform.fourier.truncate_frequency_axis(
         bb_freqs,
         nfft // 2,
         capture.sample_rate,
@@ -135,7 +135,7 @@ def cellular_5g_ssb_spectrogram(iq, capture: specs.Capture, **kwargs):
 
     # select frequency
     nfft = round(capture.sample_rate / spec.subcarrier_spacing)
-    spg = waveform.fourier.truncate_spectrogram_bandwidth(
+    spg = waveform.fourier.truncate_frequency_axis(
         spg,
         nfft,
         capture.sample_rate,

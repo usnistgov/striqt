@@ -365,7 +365,7 @@ def _cached_spectrogram(
     # truncate to the analysis bandwidth
     if spec.trim_stopband and np.isfinite(capture.analysis_bandwidth):
         # stick with python arithmetic to ensure consistency with axis bounds calculations
-        spg = waveform.fourier.truncate_spectrogram_bandwidth(
+        spg = waveform.fourier.truncate_frequency_axis(
             spg, nfft, capture.sample_rate, bandwidth=capture.analysis_bandwidth, axis=2
         )
 
@@ -446,7 +446,7 @@ def spectrogram_baseband_frequency(
 
     if spec.trim_stopband and np.isfinite(capture.analysis_bandwidth):
         # stick with python arithmetic here for numpy/cupy consistency
-        freqs = waveform.fourier.truncate_spectrogram_bandwidth(
+        freqs = waveform.fourier.truncate_frequency_axis(
             freqs, nfft, capture.sample_rate, capture.analysis_bandwidth, axis=0
         )
 

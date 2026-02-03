@@ -21,6 +21,7 @@ from striqt.analysis.specs.helpers import (
     _deep_freeze,
     _enc_hook,
     _dec_hook,
+    immutabledict
 )
 
 from . import structs as specs
@@ -29,8 +30,6 @@ from .structs import _TS, _TC, _TP
 from ..lib import util
 
 if typing.TYPE_CHECKING:
-    from immutabledict import immutabledict
-
     _T = typing.TypeVar('_T')
 
 
@@ -318,8 +317,6 @@ def adjust_captures(
 ) -> dict[str, typing.Any]:
     """evaluate the field values"""
 
-    from immutabledict import immutabledict
-
     if not isinstance(capture, (dict, immutabledict)):
         raise TypeError('capture must be a dict or mapping')
 
@@ -340,8 +337,6 @@ def adjust_captures(
             size = max(len(obj) if isinstance(obj, tuple) else 1 for obj in values)
             values = (ensure_tuple(v, size) for v in values)
             return tuple(zip(*values))
-
-
         try:
             value = key_lookup.get(field)
         except KeyError:
@@ -366,7 +361,7 @@ def adjust_captures(
 
     for field, lookup_spec in fields.items():
         if not isinstance(lookup_spec, specs.CaptureRemap):
-            # no lookup
+            # no lookup - use value
             ret[field] = lookup_spec
             continue
 

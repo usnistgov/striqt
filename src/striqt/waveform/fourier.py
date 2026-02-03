@@ -1223,17 +1223,19 @@ def _freq_band_edges(n, d, cutoff_low, cutoff_hi, *, xp=None):
     return ilo, ihi
 
 
-def truncate_spectrogram_bandwidth(
+def truncate_frequency_axis(
     x, nfft: int, fs: float, bandwidth: float, *, offset: float = 0.0, axis: int = 0
 ):
     """trim an array outside of the specified bandwidth on a frequency axis"""
-    edges = _freq_band_edges(
-        nfft,
-        1.0 / fs,
-        cutoff_low=offset - bandwidth / 2,
-        cutoff_hi=offset + bandwidth / 2,
-    )
-    return axis_slice(x, *edges, axis=axis)
+    ic = round(nfft * (0.5 + offset / fs))
+    count = round(nfft * (bandwidth / fs))
+    start = ic - count//2
+    stop = start + count
+    if start < 0:
+        raise ValueError(f'offset - bandwidth/2 < fs/2')
+    if stop > nfft:
+        raise ValueError(f'offset + bandwidth/2 > fs/2')    
+    return axis_slice(x, start, stop, axis=axis)
 
 
 def null_lo(x, nfft, fs, bandwidth, *, offset=0, axis=0):

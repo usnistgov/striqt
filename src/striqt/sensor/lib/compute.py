@@ -18,7 +18,6 @@ from striqt.waveform import util as waveform_util
 from . import sources, util
 
 if typing.TYPE_CHECKING:
-    import immutabledict
     import numpy as np
     import pandas as pd
     import xarray as xr
@@ -30,7 +29,6 @@ if typing.TYPE_CHECKING:
     WarmupSweep: TypeAlias = specs.Sweep[specs.NoSource, specs.NoPeripherals, _TC]
 
 else:
-    immutabledict = util.lazy_import('immutabledict')
     np = util.lazy_import('numpy')
     pd = util.lazy_import('pandas')
     xr = util.lazy_import('xarray')
@@ -224,7 +222,7 @@ def analyze(
         opts = typing.cast(
             dataarrays.EvaluationOptions[typing.Literal['delayed']], opts
         )
-        adjust = immutabledict.immutabledict(capture.adjust_analysis)
+        adjust = typing.cast(specs.immutabledict[str, typing.Any], capture.adjust_analysis)
         analysis = helpers.adjust_analysis(options.sweep_spec.analysis, adjust)
         da_delayed = dataarrays.analyze_by_spec(iq, analysis, capture, opts)
 

@@ -7,7 +7,6 @@ dependencies = [
     "array-api-compat>=1.6",
     "dask",
     "eval_type_backport",
-    "immutabledict",
     "matplotlib~=3.7",
     "msgspec~=0.19",
     "netCDF4",
