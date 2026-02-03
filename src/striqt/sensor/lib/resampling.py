@@ -31,11 +31,11 @@ else:
 USE_OARESAMPLE = False
 
 
-def _apply_analysis_shifts(x: ArrayType, shifts: ArrayType, size_out: int) -> ArrayType:
+def synchronize(x: ArrayType, shifts: ArrayType, size_out: int) -> ArrayType:
     if x.shape[1] < shifts.max() + size_out:
         raise ValueError('waveform is too short to align')
 
-    if shifts.shape[0] == 1 or len(set(shifts)) == 1:
+    if shifts.shape[0] == 1 or len(set(shifts.tolist())) == 1:
         # fast path: a simple view, if there is only one offset
         return x[:, shifts[0] : shifts[0] + size_out]
 
@@ -150,7 +150,7 @@ def resampling_correction(iq_in: AcquiredIQ, overwrite_x=False, axis=1) -> Acqui
     if iq_in.trigger is not None:
         lags = iq_in.trigger(iq[:, :size_out], capture)
         shifts = xp.rint(lags * capture.sample_rate).astype('int')
-        iq_aligned = _apply_analysis_shifts(iq, shifts, size_out)
+        iq_aligned = synchronize(iq, shifts, size_out)
     else:
         iq_aligned = None
 
