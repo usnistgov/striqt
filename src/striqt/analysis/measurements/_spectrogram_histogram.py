@@ -23,7 +23,7 @@ else:
 @util.lru_cache()
 def spectrogram_power_bin(
     capture: specs.Capture, spec: specs.SpectrogramHistogram
-) -> dict[str, np.ndarray]:
+) -> tuple[np.ndarray, dict[str, typing.Any]]:
     """returns a dictionary of coordinate values, keyed by axis dimension name"""
     bins = _channel_power_histogram.make_power_bins(
         power_low=spec.power_low,

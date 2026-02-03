@@ -48,6 +48,10 @@ warnings.filterwarnings('ignore', message='.*invalid value encountered.*')
 
 _DB_UNIT_MAPPING = {'dBm': 'mW', 'dBW': 'W', 'dB': 'unitless'}
 
+_ALN = typing.TypeVar('_ALN', bound=typing.Union[ArrayLike, Number]) 
+_AL = typing.TypeVar('_AL', bound=ArrayLike)
+_AT = typing.TypeVar('_AT', bound=ArrayType)
+
 
 def unit_dB_to_linear(s: str):
     for db_unit, lin_unit in _DB_UNIT_MAPPING.items():
@@ -150,30 +154,12 @@ def _arraylike_with_buffer(
     return values, out, xp
 
 
-@typing.overload
 def _repackage_arraylike(
     values: ArrayType,
-    obj: Number,
+    obj: _ALN,
     *,
     unit_transform: Optional[typing.Callable] = None,
-) -> Number: ...
-
-
-@typing.overload
-def _repackage_arraylike(
-    values: ArrayType,
-    obj: ArrayLike,
-    *,
-    unit_transform: Optional[typing.Callable] = None,
-) -> ArrayLike: ...
-
-
-def _repackage_arraylike(
-    values: ArrayType,
-    obj: ArrayLike | Number,
-    *,
-    unit_transform: Optional[typing.Callable] = None,
-) -> ArrayLike | Number:
+) -> _ALN:
     """package `values` into a data type matching `obj`"""
 
     # accessing each of these forces imports of each module.
@@ -196,15 +182,7 @@ def _repackage_arraylike(
         raise TypeError(f'unrecognized input type {type(obj)}')
 
 
-@typing.overload
-def powtodB(x: Number, abs: bool = True, eps: float = 0, out=None) -> Number: ...
-
-
-@typing.overload
-def powtodB(x: ArrayLike, abs: bool = True, eps: float = 0, out=None) -> ArrayLike: ...
-
-
-def powtodB(x: ArrayLike | Number, abs: bool = True, eps: float = 0, out=None) -> Any:
+def powtodB(x: _ALN, abs: bool = True, eps: float = 0, out=None) -> _ALN:
     """compute `10*log10(abs(x) + eps)` or `10*log10(x + eps)` with speed optimizations"""
 
     eps_str = '' if eps == 0 else '+eps'
@@ -243,7 +221,7 @@ def powtodB(x: ArrayLike | Number, abs: bool = True, eps: float = 0, out=None) -
     return _repackage_arraylike(values, x, unit_transform=unit_linear_to_dB)
 
 
-def dBtopow(x: Union[ArrayLike, Number], out=None) -> Any:
+def dBtopow(x: _ALN, out=None) -> _ALN:
     """compute `10**(x/10)` with speed optimizations"""
 
     dtype = getattr(x, 'dtype', np.float32())
@@ -268,7 +246,7 @@ def dBtopow(x: Union[ArrayLike, Number], out=None) -> Any:
     return _repackage_arraylike(values, x, unit_transform=unit_dB_to_linear)
 
 
-def envtopow(x: Union[ArrayLike, Number], out=None) -> Any:
+def envtopow(x: _ALN, out=None) -> _ALN:
     """Computes abs(x)**2 with speed optimizations"""
 
     values, out, xp = _arraylike_with_buffer(x, out)
@@ -294,9 +272,7 @@ def envtopow(x: Union[ArrayLike, Number], out=None) -> Any:
     return _repackage_arraylike(values, x, unit_transform=unit_wave_to_linear)
 
 
-def envtodB(
-    x: Union[ArrayLike, Number], abs: bool = True, eps: float = 0, out=None
-) -> Any:
+def envtodB(x: _ALN, abs: bool = True, eps: float = 0, out=None) -> _ALN:
     """compute `20*log10(abs(x) + eps)` or `20*log10(x + eps)` with speed optimizations"""
 
     eps_str = '' if eps == 0 else '+eps'
@@ -335,7 +311,8 @@ def envtodB(
     return _repackage_arraylike(values, x, unit_transform=unit_wave_to_dB)
 
 
-def dBlinmean(x_dB: _T, axis=None, overwrite_x=False) -> _T:
+
+def dBlinmean(x_dB: _AL, axis=None, overwrite_x=False) -> _AL:
     """evaluate the mean in linear power space given power in dB.
 
     This is equivalent to:
@@ -352,10 +329,10 @@ def dBlinmean(x_dB: _T, axis=None, overwrite_x=False) -> _T:
         out = None
 
     linmean = dBtopow(x_dB, out=out).mean(axis)
-    return powtodB(linmean, out=linmean)
+    return powtodB(linmean, out=linmean) # type: ignore
 
 
-def dBlinsum(x_dB: _T, axis=None, overwrite_x=False) -> _T:
+def dBlinsum(x_dB: _AL, axis=None, overwrite_x=False) -> _AL:
     """evaluate the sum in linear power space given power in dB.
 
     This is equivalent to:
@@ -371,8 +348,8 @@ def dBlinsum(x_dB: _T, axis=None, overwrite_x=False) -> _T:
     else:
         out = None
 
-    linmean = dBtopow(x_dB, out=out).sum(axis)
-    return powtodB(linmean, out=linmean)
+    linmean = dBtopow(x_dB, out=out).sum(axis) # type: ignore
+    return powtodB(linmean, out=linmean) # type: ignore
 
 
 def iq_to_bin_power(

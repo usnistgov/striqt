@@ -28,7 +28,7 @@ warnings.filterwarnings(
 @util.lru_cache()
 def spectrogram_time(
     capture: specs.Capture, spec: specs.Spectrogram
-) -> dict[str, np.ndarray]:
+) -> np.ndarray:
     import pandas as pd
 
     # validation of these is handled inside striqt.waveform
@@ -49,7 +49,7 @@ def spectrogram_time(
             'when specified, time_aperture must be a multiple of (1-fractional_overlap)/frequency_resolution'
         )
 
-    return pd.RangeIndex(size) * hop_period
+    return np.arange(size) * hop_period
 
 
 @hint_keywords(specs.Spectrogram)

@@ -74,7 +74,7 @@ def apply_mask(
     flex_as=None,
     normal_cp=True,
     xp=np,
-) -> LinkPair:
+) -> util.ArrayType:
     """splits the spectrogram into TDD downlink and uplink components that are masked
     with `float('nan')`.
 
@@ -132,7 +132,7 @@ def build_tdd_link_symbol_masks(
     normal_cp=True,
     flex_as=None,
     xp=np,
-) -> 'striqt.waveform._typing.ArrayLike':
+) -> util.ArrayType:
     """generate a symbol-by-symbol sequence of masking arrays for uplink and downlink.
 
     The number of slots given in the frame match the appropriate number for a given
@@ -157,7 +157,8 @@ def build_tdd_link_symbol_masks(
     out = xp.empty(out_shape, dtype='float32')
     for i, direction in enumerate(link_direction):
         single_mask = [
-            tdd_config.code_maps[direction][k] for k in tdd_config.frame_by_symbol
+            tdd_config.code_maps[direction][k]
+            for k in tdd_config.frame_by_symbol
         ]
 
         if count is None:

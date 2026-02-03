@@ -32,7 +32,7 @@ def time_statistic(
 @util.lru_cache()
 def baseband_frequency(
     capture: specs.Capture, spec: specs.PowerSpectralDensity
-) -> dict[str, np.ndarray]:
+) -> np.ndarray:
     spg_spec = specs.Spectrogram.from_spec(spec)
     return shared.spectrogram_baseband_frequency(capture, spg_spec)
 

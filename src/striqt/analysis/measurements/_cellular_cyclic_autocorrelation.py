@@ -33,7 +33,7 @@ class NormalizedTDDSlotConfig(typing.NamedTuple):
     slot_by_symbol: SlotBySymbol
     downlink_slot_indexes: tuple[int, ...]
     uplink_slot_indexes: tuple[int, ...]
-    frame_by_symbol: str | None
+    frame_by_symbol: str
 
 
 @util.lru_cache()
@@ -119,7 +119,7 @@ def tdd_config_from_str(
     if 's' not in frame_slots or special_symbols is not None:
         frame_by_symbol = ''.join([slot_by_symbol[k] for k in frame_slots])
     else:
-        frame_by_symbol = None
+        frame_by_symbol = 'd' * len(frame_slots)
 
     return NormalizedTDDSlotConfig(
         frame_slots=frame_slots,

@@ -24,7 +24,7 @@ else:
 @util.lru_cache()
 def spectrogram_ratio_power_bin(
     capture: specs.Capture, spec: specs.SpectrogramHistogramRatio
-) -> dict[str, np.ndarray]:
+) -> tuple[np.ndarray, dict[str, typing.Any]]:
     """returns a dictionary of coordinate values, keyed by axis dimension name"""
 
     abs_spec = specs.SpectrogramHistogram.from_spec(spec)

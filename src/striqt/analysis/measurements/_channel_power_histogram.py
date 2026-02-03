@@ -78,10 +78,7 @@ def channel_power_histogram(iq, capture: specs.Capture, **kwargs):
 
     spec = specs.ChannelPowerHistogram.from_dict(kwargs)
 
-    if typing.TYPE_CHECKING:
-        import array_api_compat.numpy as xp
-    else:
-        xp = waveform.util.array_namespace(iq)
+    xp = waveform.util.array_namespace(iq)
 
     bin_edges = make_power_histogram_bin_edges(
         power_low=spec.power_low,
