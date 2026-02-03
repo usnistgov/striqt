@@ -245,7 +245,7 @@ def build_dataarray(
     expand_dims=None,
 ) -> 'xr.DataArray':
     """build an `xarray.DataArray` from an ndarray, capture information, and channel analysis keyword arguments"""
-    delayed.info.coord_factories
+    
     template = dataarray_stub(
         delayed.info.dims,
         delayed.info.coord_factories,
@@ -257,18 +257,6 @@ def build_dataarray(
     delayed.spec.validate()
 
     _validate_delayed_ndim(delayed)
-
-    # # add a port dimension if needed
-    # if not isinstance(delayed.capture.port, tuple):
-    #     if data.ndim == len(template.dims) + 1:
-    #         # "unbroadcast" dimension of a single-channel
-    #         assert data.shape[0] == 1
-    #         data = data[0]
-    #     target_shape = data.shape
-    # else:
-    #     # broadcast on the capture dimension
-    #     data = np.atleast_1d(data)
-    #     target_shape = (len(delayed.capture.port), *data.shape[1:])
 
     # to bypass initialization overhead, grow from the empty template
     pad = {dim: [0, data.shape[i]] for i, dim in enumerate(template.dims)}
