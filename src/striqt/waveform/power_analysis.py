@@ -160,7 +160,7 @@ def _repackage_arraylike(
     if isinstance(obj, Number):
         return values.item()
     elif not hasattr(obj, 'values'):
-        return typing.cast(_ALN, values)
+        return typing.cast('_ALN', values)
     elif isinstance(obj, pd.Series):
         return pd.Series(values, index=obj.index)
     elif isinstance(obj, pd.DataFrame):
