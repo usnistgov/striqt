@@ -156,7 +156,7 @@ def _log_cache_info(
             continue
         capture_desc = specs.helpers.describe_capture(c, **desc_kws)
 
-        logger.info(f'{capture_desc}: spectrogram SNR ({snr_desc}) dB peak')
+        logger.info(f'{snr_desc:<4d} dB peak SNR ({capture_desc})')
 
 
 def iterate_sweep(
