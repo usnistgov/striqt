@@ -97,7 +97,7 @@ class Capture(SpecBase, kw_only=True, frozen=True):
 
 class AnalysisFilter(SpecBase, kw_only=True, frozen=True):
     nfft: int = 8192
-    window: typing.Union[tuple[str, ...], str] = 'hamming'
+    window: types.WindowType = 'hamming'
     nfft_out: int | None = None
 
 

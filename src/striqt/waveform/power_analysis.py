@@ -10,9 +10,10 @@ import warnings
 from functools import partial
 from numbers import Number
 from types import ModuleType
-from typing import Any, Optional, Union
+from typing import Any, Optional
 
-from . import _typing
+from ._typing import _AL, _ALN, _AT
+
 from .util import (
     Domain,
     array_namespace,
@@ -27,7 +28,7 @@ from .util import (
 )
 
 if typing.TYPE_CHECKING:
-    import array_api_compat.numpy as np
+    import numpy as np
     import numexpr as ne
     import pandas as pd
     import xarray as xr
@@ -48,9 +49,6 @@ warnings.filterwarnings('ignore', message='.*invalid value encountered.*')
 
 _DB_UNIT_MAPPING = {'dBm': 'mW', 'dBW': 'W', 'dB': 'unitless'}
 
-_ALN = typing.TypeVar('_ALN', bound=typing.Union[ArrayLike, Number]) 
-_AL = typing.TypeVar('_AL', bound=ArrayLike)
-_AT = typing.TypeVar('_AT', bound=ArrayType)
 
 
 def unit_dB_to_linear(s: str):
@@ -84,7 +82,7 @@ def unit_wave_to_linear(s: str):
 
 
 @lru_cache()
-def stat_ufunc_from_shorthand(kind, xp=None, axis=0):
+def stat_ufunc_from_shorthand(kind, xp=None, axis=0) -> typing.Callable:
     if xp is None:
         xp = np
 
@@ -167,7 +165,7 @@ def _repackage_arraylike(
     if isinstance(obj, Number):
         return values.item()
     elif not hasattr(obj, 'values'):
-        return values
+        return typing.cast(_ALN, values)
     elif isinstance(obj, pd.Series):
         return pd.Series(values, index=obj.index)
     elif isinstance(obj, pd.DataFrame):
@@ -258,7 +256,7 @@ def envtopow(x: _ALN, out=None) -> _ALN:
         )
 
         if xp.iscomplexobj(values):
-            values = values.real
+            values = values.real # type: ignore
     elif is_cupy_array(xp):
         from ._jit import cuda
 
@@ -433,33 +431,19 @@ def iq_to_cyclic_power(
 
     # apply the detector statistic
     xp = array_namespace(x)
-    domain = get_input_domain()
 
-    if domain == Domain.TIME:
-        # compute the binned power ourselves
-        if detectors is None:
-            raise ValueError(
-                'supply detectors argument to evaluate binned power from time domain IQ'
-            )
+    # compute the binned power ourselves
+    if detectors is None:
+        raise ValueError(
+            'supply detectors argument to evaluate binned power from time domain IQ'
+        )
 
-        power = {
-            d: iq_to_bin_power(
-                x, Ts, detector_period, kind=d, truncate=truncate, axis=axis
-            )
-            for d in detectors
-        }
-
-    elif domain == Domain.TIME_BINNED_POWER:
-        # precalculated binned power
-        power = x
-        if not isinstance(power, dict):
-            raise TypeError(
-                'in time-binned power domain, expected dict input keyed by detector'
-            )
-        if detectors is None:
-            detectors = tuple(x.keys())
-        elif set(x.keys()) != set(detectors):
-            raise ValueError('input data keys do not match supplied ')
+    power = {
+        d: iq_to_bin_power(
+            x, Ts, detector_period, kind=d, truncate=truncate, axis=axis
+        )
+        for d in detectors
+    }
 
     if isroundmod(cyclic_period, detector_period, atol=1e-6):
         cyclic_detector_bins = round(cyclic_period / detector_period)
@@ -507,9 +491,7 @@ def iq_to_cyclic_power(
     return ret
 
 
-def sample_ccdf(
-    a: _typing.ArrayType, edges: _typing.ArrayType, density: bool = True
-) -> _typing.ArrayType:
+def sample_ccdf(a: _AT, edges: _AT, density: bool = True) -> _AT:
     """computes the fraction (or total number) of samples in `a` that
     exceed each edge value.
 

@@ -4,6 +4,7 @@ import typing
 
 if typing.TYPE_CHECKING:
     from typing_extensions import TypeAlias
+    from numbers import Number
 
     # bury this type checking in here to avoid lengthening the import time of iqwaveform
     # if cupy isn't installed
@@ -30,3 +31,10 @@ if typing.TYPE_CHECKING:
     ArrayLike: TypeAlias = typing.Union[
         ArrayType, SeriesType, DataFrameType, DataArrayType
     ]
+
+    WindowSpecType: TypeAlias = typing.Union[str, tuple[str, typing.Any], tuple[str, typing.Any, typing.Any]]
+    WindowType: TypeAlias = typing.Union[ArrayType, WindowSpecType]
+
+    _ALN = typing.TypeVar('_ALN', bound=typing.Union[ArrayLike, Number]) 
+    _AL = typing.TypeVar('_AL', bound=ArrayLike)
+    _AT = typing.TypeVar('_AT', bound=ArrayType)

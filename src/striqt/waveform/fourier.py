@@ -3,10 +3,11 @@ from __future__ import annotations as __
 import decimal
 import functools
 import typing
-from math import ceil
+from math import ceil, inf
 from os import cpu_count
 
 from . import power_analysis
+from ._typing import _AT
 from .util import (
     Domain,
     array_namespace,
@@ -14,7 +15,6 @@ from .util import (
     axis_slice,
     dtype_change_float,
     find_float_inds,
-    get_input_domain,
     grouped_views_along_axis,
     is_cupy_array,
     isroundmod,
@@ -33,15 +33,15 @@ if typing.TYPE_CHECKING:
     import numpy as np
     import scipy
 
-    from ._typing import ArrayType
+    from ._typing import ArrayType, WindowSpecType, WindowType
 
 else:
     np = lazy_import('numpy')
     scipy = lazy_import('scipy')
 
+
 CPU_COUNT = cpu_count() or 1
 OLA_MAX_FFT_SIZE = 128 * 1024
-INF = float('inf')
 
 # this tunes a tradeoff between CPU and memory consumption
 # as of cupy 12
@@ -68,7 +68,7 @@ def get_max_cupy_fft_chunk():
 
 
 def _get_window_uncached(
-    name_or_tuple,
+    name_or_tuple: WindowType,
     nwindow: int,
     nzero: int = 0,
     *,
@@ -78,7 +78,7 @@ def _get_window_uncached(
     norm=True,
     dtype='float32',
     xp=None,
-):
+) -> ArrayType:
     """build an window function with optional zero-padding or parameter finding.
 
     Arguments:
@@ -176,7 +176,7 @@ def _cupy_fftn_helper(
     plan=None,
 ):
     assert cp is not None, ImportError('cupy is not installed')
-    from cupy.fft import _fft
+    from cupy.fft import _fft # type: ignore
 
     kws = dict(overwrite_x=overwrite_x, plan=plan, order='C')
     args = (None,), (axis,), None, direction
@@ -248,34 +248,7 @@ def ifft(
         )
 
 
-def fftfreq(n, d, *, xp=None, dtype='float64') -> ArrayType:
-    """A replacement for `scipy.fft.fftfreq` that mitigates
-    some rounding errors underlying `np.fft.fftfreq`.
-
-    Further, no `fftshift` is needed for complex-valued data;
-    the return result is monotonic beginning in the negative
-    frequency half-space.
-
-    Args:
-        n: fft size
-        d: sample spacing (inverse of sample rate)
-        xp: the array module to use, dictating the return type
-
-    Returns:
-        an array of type `xp.ndarray`
-    """
-    if xp is None:
-        xp = np
-
-    dtype = np.dtype(dtype)
-    fnyq = 1 / (2 * dtype.type(d))
-    if n % 2 == 0:
-        return xp.linspace(-fnyq, fnyq - 2 * fnyq / n, n, dtype=dtype)
-    else:
-        return xp.linspace(-fnyq + fnyq / n, fnyq - fnyq / n, n, dtype=dtype)
-
-
-def _enbw(window: str | tuple[str, float], N, fftbins=True, cached=True, xp=None):
+def _enbw(window: WindowSpecType, N, fftbins=True, cached=True, xp=None):
     """return the equivalent noise bandwidth (ENBW) of a window, in bins"""
     if xp is None:
         xp = np
@@ -340,7 +313,7 @@ def find_window_param_from_enbw(
     return result
 
 
-def broadcast_onto(a: ArrayType, other: ArrayType, *, axis: int) -> ArrayType:
+def broadcast_onto(a: _AT, other: _AT, *, axis: int) -> _AT:
     """reshape a 1-D array to support broadcasting onto a specified axis of `other`"""
 
     if a.ndim != 1:
@@ -348,9 +321,9 @@ def broadcast_onto(a: ArrayType, other: ArrayType, *, axis: int) -> ArrayType:
 
     xp = array_namespace(a)
 
-    slices = [xp.newaxis] * other.ndim
+    slices = [xp.newaxis] * int(other.ndim)
     slices[axis] = slice(None, None)
-    return a[tuple(slices)]
+    return a[tuple(slices)] # type: ignore
 
 
 @lru_cache(16)
@@ -396,7 +369,7 @@ ShiftType = typing.Literal['left', 'right', 'none', False]
 def design_cola_resampler(
     fs_base: float,
     fs_target: float,
-    bw: float = INF,
+    bw: float = inf,
     bw_lo: float = 0,
     min_oversampling: float = 1.1,
     min_fft_size=2 * 4096 - 1,
@@ -423,7 +396,7 @@ def design_cola_resampler(
         (SDR sample rate, RF LO frequency offset in Hz, ola_filter_kws)
     """
 
-    if bw == INF and shift:
+    if bw == inf and shift:
         raise ValueError(
             'frequency shifting may only be applied when an analysis bandwidth is specified'
         )
@@ -448,7 +421,7 @@ def design_cola_resampler(
         decimation = int(fs_base / fs_sdr_min)
         fs_sdr = fs_base / decimation
 
-    if bw != INF and bw > fs_base:
+    if bw != inf and bw > fs_base:
         raise ValueError(
             'passband bandwidth exceeds Nyquist bandwidth at maximum sample rate'
         )
@@ -487,10 +460,10 @@ def design_cola_resampler(
     else:
         raise ValueError(f'shift argument must be "left" or "right", not {repr(shift)}')
 
-    if sign != 0 and bw == INF:
+    if sign != 0 and bw == inf:
         raise ValueError('a passband bandwidth must be set to design a LO shift')
 
-    if bw == INF:
+    if bw == inf:
         lo_offset = 0
         passband = (None, None)
     else:
@@ -514,7 +487,7 @@ def design_cola_resampler(
 def design_fir_resampler(
     fs_base: float,
     fs_target: float,
-    bw: float = INF,
+    bw: float = inf,
     bw_lo: float = 0,
     min_oversampling: float = 1.04,
 ) -> tuple[float, dict]:
@@ -808,14 +781,14 @@ def _fir_lowpass_fft(
 
 
 def stft_fir_lowpass(
-    xstft: ArrayType,
+    xstft: _AT,
     *,
     sample_rate: float,
     bandwidth: float,
     transition_bandwidth: float,
-    axis=0,
+    axis:int=0,
     out=None,
-):
+) -> _AT:
     xp = array_namespace(xstft)
 
     H = _fir_lowpass_fft(
@@ -823,7 +796,7 @@ def stft_fir_lowpass(
         sample_rate=sample_rate,
         cutoff=bandwidth / 2,
         transition=transition_bandwidth,
-        dtype=xstft.dtype,
+        dtype=typing.cast(str, xstft.dtype),
         window='rect',
         xp=xp,
     )
@@ -870,7 +843,7 @@ def _find_downsample_copy_range(
 
 @lru_cache(16)
 def _find_downsampled_freqs(nfft_out, freq_step, xp=None):
-    return fftfreq(nfft_out, 1.0 / (freq_step * nfft_out), xp=xp or None)
+    return fftfreq(nfft_out, 1.0 / (freq_step * nfft_out), xp=xp or np)
 
 
 def _same_base_memory(a: ArrayType, b: ArrayType) -> bool:
@@ -946,7 +919,7 @@ def downsample_stft(
 
 
 def stft(
-    x: ArrayType,
+    x: _AT,
     *,
     fs: float,
     window: ArrayType | str | tuple[str, float],
@@ -959,7 +932,7 @@ def stft(
     overwrite_x=False,
     return_axis_arrays=True,
     out=None,
-) -> tuple[ArrayType, ArrayType, ArrayType]:
+) -> tuple[_AT, _AT, _AT]:
     """Implements a stripped-down subset of scipy.fft.stft in order to avoid
     some overhead that comes with its generality and allow use of the generic
     python array-api for interchangable numpy/cupy support.
@@ -1009,6 +982,7 @@ def stft(
     # )
 
     nfft = nperseg
+    dtype = typing.cast(str, x.dtype)
 
     if norm not in ('power', None):
         raise TypeError('norm must be "power" or None')
@@ -1016,22 +990,20 @@ def stft(
     if window is None:
         window = 'rect'
 
-    if isinstance(window, str) or (
-        isinstance(window, tuple) and isinstance(window[0], str)
-    ):
+    if isinstance(window, str) or isinstance(window, tuple):
         should_norm = norm == 'power'
         w = get_window(
             window,
             nfft - nzero,
             nzero=nzero,
             xp=xp,
-            dtype=x.dtype,
+            dtype=dtype,
             norm=should_norm,
             fftshift=True,
         )
     else:
         w = window * get_window(
-            'rect', nfft - nzero, nzero=nzero, xp=xp, dtype=x.dtype, fftshift=True
+            'rect', nfft - nzero, nzero=nzero, xp=xp, dtype=dtype, fftshift=True
         )
 
     if noverlap == 0:
@@ -1075,7 +1047,7 @@ def stft(
         xp=np,
     )
 
-    return freqs, times, y
+    return typing.cast(tuple[_AT, _AT, _AT], (freqs, times, y))
 
 
 def istft(
@@ -1091,6 +1063,7 @@ def istft(
     """reconstruct and return a waveform given its STFT and associated parameters"""
 
     xp = array_namespace(y)
+    dtype = typing.cast(str, y.dtype)
 
     # give the stacked NFFT-sized time domain vectors in axis + 1
     xstack = ifft(
@@ -1102,7 +1075,7 @@ def istft(
 
     # correct the fft shift in the time domain, since the
     # multiply operation can be applied in-place
-    w = get_window('rect', nfft, xp=xp, dtype=y.dtype, fftshift=True)
+    w = get_window('rect', nfft, xp=xp, dtype=dtype, fftshift=True)
     wstack = broadcast_onto(w, xstack, axis=axis + 1)
     xstack = xp.multiply(
         xstack,
@@ -1110,12 +1083,12 @@ def istft(
         out=xstack,
         dtype=xstack.dtype,
     )
-    assert xstack.dtype == y.dtype
+    assert xstack.dtype == dtype
 
     x = _unstack_stft_windows(
         xstack, noverlap=noverlap, nperseg=nfft, axis=axis, out=out
     )
-    assert x.dtype == y.dtype
+    assert x.dtype == dtype
 
     if size is not None:
         trim = x.shape[axis] - size
@@ -1226,7 +1199,7 @@ def _freq_band_edges(n, d, cutoff_low, cutoff_hi, *, xp=None):
 @lru_cache()
 def frequency_axis_slice(
     nfft: int, fs: float, bandwidth: float, *, offset: float = 0.0
-):
+) -> slice:
     """trim an array outside of the specified bandwidth on a frequency axis"""
     if bandwidth < 0:
         raise ValueError('invalid negative bandwidth')
@@ -1258,7 +1231,7 @@ def truncate_frequency_axis(
     return axis_slice(x, s.start, s.stop, axis=axis)
 
 
-def null_lo(x, nfft, fs, bandwidth, *, offset=0, axis=0):
+def null_lo(x: ArrayType, nfft: int, fs: float, bandwidth: float, *, offset:float=0, axis:int=0):
     """sets samples within the specified bandwidth on a frequency axis to nan in-place"""
     # to make the top bound inclusive
     nfft = x.shape[axis]
@@ -1269,54 +1242,67 @@ def null_lo(x, nfft, fs, bandwidth, *, offset=0, axis=0):
 
 @typing.overload
 def spectrogram(
-    x: ArrayType,
+    x: _AT,
     *,
-    fs: typing.Any,
-    window: typing.Any,
-    nperseg: typing.Any = ...,
-    noverlap: typing.Any = ...,
-    nzero: typing.Any = ...,
-    axis: typing.Any = ...,
-    truncate: typing.Any = ...,
-    return_axis_arrays: typing.Literal[True],
-) -> tuple[ArrayType, ArrayType, ArrayType]: ...
+    fs: float,
+    window: WindowType,
+    nperseg: int,
+    noverlap: int = 0,
+    nzero: int = 0,
+    axis: int = 0,
+    truncate: bool = True,
+    return_axis_arrays: typing.Literal[False],
+) -> _AT: ...
 
 
 @typing.overload
 def spectrogram(
-    x: ArrayType,
+    x: _AT,
     *,
-    fs: typing.Any,
-    window: typing.Any,
-    nperseg: typing.Any = ...,
-    noverlap: typing.Any = ...,
-    nzero: typing.Any = ...,
-    axis: typing.Any = ...,
-    truncate: typing.Any = ...,
-    return_axis_arrays: typing.Literal[False],
-) -> ArrayType: ...
+    fs: float,
+    window: WindowType,
+    nperseg: int,
+    noverlap: int = 0,
+    nzero: int = 0,
+    axis: int = 0,
+    truncate: bool = True,
+    return_axis_arrays: typing.Literal[True] = True,
+) -> tuple[_AT, _AT, _AT]: ...
+
+
+@typing.overload
+def spectrogram(
+    x: _AT,
+    *,
+    fs: float,
+    window: WindowType,
+    nperseg: int,
+    noverlap: int = 0,
+    nzero: int = 0,
+    axis: int = 0,
+    truncate: bool = True,
+    return_axis_arrays: bool,
+) -> _AT | tuple[_AT, _AT, _AT]: ...
 
 
 def spectrogram(
-    x: ArrayType,
+    x: _AT,
     *,
     fs: float,
-    window: ArrayType | str | tuple[str, float],
-    nperseg: int = 256,
+    window: WindowType,
+    nperseg: int,
     noverlap: int = 0,
     nzero: int = 0,
     axis: int = 0,
     truncate: bool = True,
     return_axis_arrays: bool = True,
-):
+) -> _AT | tuple[_AT, _AT, _AT]:
     """evaluate the power spectrogram of x with the given arguments.
 
     The output is scaled such that the noise bandwidth is equal to the
     frequency resolution.
     """
-    kws = dict(locals())
-
-    ret = stft(norm='power', **kws)
+    ret = stft(norm='power', **dict(locals()))
     if return_axis_arrays:
         freqs, times, X = ret
         return freqs, times, power_analysis.envtopow(X)
@@ -1328,15 +1314,15 @@ def power_spectral_density(
     x: ArrayType,
     *,
     fs: float,
-    bandwidth=INF,
-    window,
+    bandwidth=inf,
+    window: WindowType,
     resolution: float,
     fractional_overlap=0,
     fractional_window: float = 1,
     statistics: list[float],
-    truncate=True,
-    dB=True,
-    axis=0,
+    truncate:bool=True,
+    dB:bool=True,
+    axis:int=0,
 ) -> ArrayType:
     if isroundmod(fs, resolution):
         nfft = round(fs / resolution)
@@ -1353,51 +1339,29 @@ def power_spectral_density(
         )
 
     xp = array_namespace(x)
-    domain = get_input_domain()
 
-    if domain == Domain.TIME:
-        freqs, _, X = spectrogram(
-            x,
-            window=window,
-            fs=fs,
-            nperseg=nfft,
-            nzero=nzero,
-            noverlap=noverlap,
-            axis=axis,
-        )
-    elif domain == Domain.FREQUENCY:
-        X = x
-        freqs, _ = _get_stft_axes(
-            fs=fs,
-            nfft=nfft,
-            time_size=X.shape[axis],
-            overlap_frac=noverlap / nfft,
-            xp=np,
-        )
-    else:
-        raise ValueError('unsupported persistence spectrum domain "{domain}')
+    freqs, _, X = spectrogram(
+        x,
+        window=window,
+        fs=fs,
+        nperseg=nfft,
+        nzero=nzero,
+        noverlap=noverlap,
+        axis=axis,
+    )
 
     if truncate:
-        if bandwidth == INF:
+        if bandwidth == inf:
             bw_args = (None, None)
         else:
             bw_args = (-bandwidth / 2, +bandwidth / 2)
         ilo, ihi = _freq_band_edges(freqs.size, 1.0 / fs, *bw_args)
         X = axis_slice(X, ilo, ihi, axis=axis + 1)
 
-    if domain == Domain.TIME:
-        if dB:
-            spg = power_analysis.powtodB(X, eps=1e-25, out=X).real
-        else:
-            spg = X.astype('float32')
-    elif domain == Domain.FREQUENCY:
-        if dB:
-            # here X is complex-valued; use the first-half of its buffer
-            spg = power_analysis.envtodB(X, eps=1e-25, out=X).real
-        else:
-            spg = power_analysis.envtopow(X, out=X.real)
+    if dB:
+        spg = power_analysis.powtodB(X, eps=1e-25, out=X)
     else:
-        raise ValueError(f'unhandled dB and domain: {dB}, {domain}')
+        spg = X.astype('float32')
 
     isquantile = find_float_inds(tuple(statistics))
 
@@ -1480,15 +1444,15 @@ time_ifftshift = time_fftshift
 
 
 def resample(
-    x,
-    num,
+    x: _AT,
+    num: int,
     axis: int = 0,
-    window: str | tuple[str, float] | None = None,
+    window: WindowType = None,
     domain: typing.Literal['time', 'frequency'] = 'time',
     overwrite_x=False,
     scale: ArrayType | float = 1,
     shift: float = 0,
-):
+) -> _AT:
     """limited reimplementation of scipy.signal.resample optimized for reduced memory.
 
     No new buffers are allocated when downsampling if `overwrite_x` is `False`.

@@ -1,16 +1,16 @@
 import math
 
 import numba.cuda
-import cupy
+import cupy # type: ignore
 import numba as nb
 
 
 @numba.cuda.jit(cache=True)
 def _corr_at_indices(inds, x, nfft: int, ncp: int, norm: bool, out):
     # iterate on parallel across the points in the output correlation
-    j = nb.cuda.grid(1)
+    j = numba.cuda.grid(1)
 
-    if j < nfft + ncp:
+    if j < nfft + ncp: # type: ignore
         # from here on, the numba code is identical to _corr_at_indices_cpu
         accum_corr = nb.complex128(0 + 0j)
         accum_power_a = nb.float64(0.0)
@@ -81,13 +81,13 @@ def powtodB(x, out):
 
 
 @cupy.fuse()
-def powtodB_eps_noabs(x, out, eps=0):
+def powtodB_eps_noabs(x, out, eps=0.0):
     out[:] = 10 * cupy.log10(x + eps)
     return out
 
 
 @cupy.fuse()
-def powtodB_eps(x, out, eps=0):
+def powtodB_eps(x, out, eps=0.0):
     out[:] = 10 * cupy.log10(cupy.abs(x) + eps)
     return out
 
