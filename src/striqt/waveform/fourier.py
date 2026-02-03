@@ -1244,7 +1244,11 @@ def truncate_frequency_axis(
         raise ValueError(f'offset - bandwidth/2 < fs/2')
     if stop > nfft:
         raise ValueError(f'offset + bandwidth/2 > fs/2')
-    return axis_slice(x, start, stop, axis=axis)
+
+    
+    ret = axis_slice(x, start, stop, axis=axis)
+    print(start, stop, ret.shape)
+    return ret
 
 
 def null_lo(x, nfft, fs, bandwidth, *, offset=0, axis=0):

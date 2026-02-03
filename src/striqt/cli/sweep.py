@@ -50,7 +50,7 @@ def run(*, yaml_path, debug, verbose, port, **kws):
         dict_repr = pformat(labels, indent=2, sort_dicts=False)
         info = (
             '▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀\n'
-            'the following spans of field values will be set based on adjust_captures:\n'
+            'the following unique field values will be set based on adjust_captures:\n'
             f' {dict_repr[1:-1]} \n'
             '▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀\n'
         )
