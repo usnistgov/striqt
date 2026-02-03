@@ -97,22 +97,25 @@ def _run_click_plotter(
     if 'channel' in dataset.coords:
         dataset = dataset.rename_vars({'channel': 'port'})
 
+    index_dims = [PORT_DIM]
+    if 'center_frequency' in dataset.dims:
+        index_dims.append('center_frequency')
+
     if 'start_time' in dataset.dims:
-        index_dims = [PORT_DIM, 'center_frequency', 'start_time', 'sweep_start_time']
-    else:
-        index_dims = [PORT_DIM, 'center_frequency']
+        index_dims += ['start_time', 'sweep_start_time']
     dataset = dataset.set_xindex(index_dims)
 
-    valid_freqs = tuple(dataset.indexes['center_frequency'].levels[1])
-    if center_frequency is None:
-        fcs = valid_freqs
-    elif center_frequency in valid_freqs:
-        fcs = [center_frequency]
-        dataset = dataset.sel(center_frequency=fcs)
-    else:
-        raise ValueError(
-            f'no frequency {center_frequency} in data set - must be one of {valid_freqs}'
-        )
+    if 'center_frequency' in dataset.dims:
+        valid_freqs = tuple(dataset.indexes['center_frequency'].levels[1])
+        if center_frequency is None:
+            fcs = valid_freqs
+        elif center_frequency in valid_freqs:
+            fcs = [center_frequency]
+            dataset = dataset.sel(center_frequency=fcs)
+        else:
+            raise ValueError(
+                f'no frequency {center_frequency} in data set - must be one of {valid_freqs}'
+            )
 
     valid_vars = tuple(dataset.data_vars.keys())
     if len(data_variable) == 0:

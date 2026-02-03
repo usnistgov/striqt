@@ -7,7 +7,7 @@ import fractions
 import typing
 import warnings
 import msgspec
-
+from striqt.waveform import util
 
 _T = typing.TypeVar('_T')
 _K = typing.TypeVar('_K')
@@ -108,7 +108,7 @@ def Meta(standard_name: str, units: str | None = None, **kws) -> msgspec.Meta:
     return msgspec.Meta(description=standard_name, extra=extra, **kws)
 
 
-@functools.lru_cache()
+@util.lru_cache()
 def get_capture_type_attrs(capture_cls: type[msgspec.Struct]) -> dict[str, typing.Any]:
     """return attrs metadata for each field in `capture`"""
     attrs = {}
@@ -137,7 +137,7 @@ def _warn_on_capture_lookup_miss(capture_value, capture_attr, error_label, defau
     )
 
 
-@functools.lru_cache()
+@util.lru_cache()
 def _enc_hook(obj):
     if isinstance(obj, immutabledict):
         return obj._dict
@@ -216,7 +216,7 @@ def _unfreeze(
         return obj  # type: ignore
 
 
-@functools.lru_cache()
+@util.lru_cache()
 def _private_fields(cls: type[msgspec.Struct]) -> tuple[str, ...]:
     return tuple([n for n in cls.__struct_fields__ if n.startswith('_')])
 

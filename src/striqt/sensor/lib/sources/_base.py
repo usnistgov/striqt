@@ -587,7 +587,7 @@ class SourceBase(
 
         self.capture_spec  # ensure we are armed
 
-        trigger = get_trigger_from_spec(self.setup_spec, analysis)          
+        trigger = get_trigger_from_spec(self.setup_spec, analysis)
 
         if self._prev_iq is None:
             samples, time_ns = self.read_iq(analysis)
@@ -990,6 +990,9 @@ def _get_trigger_pad_size(
     elif isinstance(trigger_info, Trigger):
         trigger = trigger_info
     else:
+        return 0
+
+    if trigger is None:
         return 0
 
     mcr = setup.master_clock_rate

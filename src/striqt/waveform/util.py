@@ -144,6 +144,7 @@ def lru_cache(
 ) -> typing.Callable[[_TC], _TC]:
     # presuming that the API is designed to accept only hashable types, set
     # the type hint to match the wrapped function
+    return lambda func: func
     func = functools.lru_cache(maxsize, typed)
     return typing.cast(typing.Callable[[_TC], _TC], func)
 

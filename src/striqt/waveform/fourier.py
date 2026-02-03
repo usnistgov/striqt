@@ -1223,8 +1223,9 @@ def _freq_band_edges(n, d, cutoff_low, cutoff_hi, *, xp=None):
     return ilo, ihi
 
 
-def truncate_frequency_axis(
-    x, nfft: int, fs: float, bandwidth: float, *, offset: float = 0.0, axis: int = 0
+@lru_cache()
+def frequency_axis_slice(
+    nfft: int, fs: float, bandwidth: float, *, offset: float = 0.0
 ):
     """trim an array outside of the specified bandwidth on a frequency axis"""
     if bandwidth < 0:
@@ -1245,22 +1246,55 @@ def truncate_frequency_axis(
     if stop > nfft:
         raise ValueError(f'offset + bandwidth/2 > fs/2')
 
-    ret = axis_slice(x, start, stop, axis=axis)
-    return ret
+    return slice(start, stop)
+
+
+def truncate_frequency_axis(
+    x, nfft: int, fs: float, bandwidth: float, *, offset: float = 0.0, axis: int = 0
+):
+    """trim an array outside of the specified bandwidth on a frequency axis"""
+
+    s = frequency_axis_slice(nfft, fs, bandwidth, offset=offset)
+    return axis_slice(x, s.start, s.stop, axis=axis)
 
 
 def null_lo(x, nfft, fs, bandwidth, *, offset=0, axis=0):
     """sets samples within the specified bandwidth on a frequency axis to nan in-place"""
     # to make the top bound inclusive
-    pad_hi = fs / nfft / 2
-    edges = _freq_band_edges(
-        nfft,
-        1.0 / fs,
-        cutoff_low=offset - bandwidth / 2,
-        cutoff_hi=offset + bandwidth / 2 + pad_hi,
-    )
-    view = axis_slice(x, *edges, axis=axis)
+    nfft = x.shape[axis]
+    s = frequency_axis_slice(nfft, fs, bandwidth, offset=offset)
+    view = axis_slice(x, s.start, s.stop, axis=axis)
     view[:] = float('nan')
+
+
+@typing.overload
+def spectrogram(
+    x: ArrayType,
+    *,
+    fs: typing.Any,
+    window: typing.Any,
+    nperseg: typing.Any = ...,
+    noverlap: typing.Any = ...,
+    nzero: typing.Any = ...,
+    axis: typing.Any = ...,
+    truncate: typing.Any = ...,
+    return_axis_arrays: typing.Literal[True],
+) -> tuple[ArrayType, ArrayType, ArrayType]: ...
+
+
+@typing.overload
+def spectrogram(
+    x: ArrayType,
+    *,
+    fs: typing.Any,
+    window: typing.Any,
+    nperseg: typing.Any = ...,
+    noverlap: typing.Any = ...,
+    nzero: typing.Any = ...,
+    axis: typing.Any = ...,
+    truncate: typing.Any = ...,
+    return_axis_arrays: typing.Literal[False],
+) -> ArrayType: ...
 
 
 def spectrogram(

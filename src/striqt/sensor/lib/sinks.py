@@ -84,7 +84,6 @@ class SinkBase(_typing.Generic[_specs._TC]):
 
         ds = _compute.from_delayed(capture_result)
         self._pending_data.append(ds)
-        return ds
 
     def open(self) -> None:
         raise NotImplementedError

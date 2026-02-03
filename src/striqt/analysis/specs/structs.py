@@ -10,6 +10,7 @@ import typing
 import msgspec
 
 from . import helpers, types
+from striqt.waveform import util
 
 _T = typing.TypeVar('_T')
 _TS = typing.TypeVar('_TS', bound='SpecBase')
@@ -70,7 +71,7 @@ class SpecBase(
                 msgspec.structs.force_setattr(self, name, helpers._deep_freeze(v))
 
 
-@functools.lru_cache(1024)
+@util.lru_cache(1024)
 def _validate(spec: _TS) -> _TS:
     return spec.from_dict(spec.to_dict())
 
