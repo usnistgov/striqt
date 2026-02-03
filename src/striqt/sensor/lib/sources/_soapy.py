@@ -163,6 +163,29 @@ def probe_soapy_info(device: SoapySDR.Device) -> specs.SoapySourceInfo:
     )
 
 
+def compute_overload_info(samples: ArrayType, setup: specs.SoapySource, capture: specs.SoapyCapture):
+    adc_limit = setup.adc_overload_limit
+    if_limit = setup.if_overload_limit
+    if adc_limit is None and if_limit is None:
+        return {}
+    
+    info = {}
+    peak = _get_adc_peak(samples, capture, setup)
+    xp = array_namespace(peak)
+
+    if adc_limit is not None:
+        adc_headroom = xp.floor(adc_limit - peak)
+        info['adc_headroom'] = xp.clip(adc_headroom, -100, 100).astype('int8')
+    if if_limit is not None:
+        xp = array_namespace(samples)
+        gains = [c.gain for c in specs.helpers.split_capture_ports(capture)]
+        peak_im3 = peak + (2 / 3) * xp.array(gains)  # 2/3 arises from intermod
+        if_headroom = xp.floor(if_limit - peak_im3)
+        info['if_headroom'] = xp.clip(if_headroom, -100, 100).astype('int8')
+
+    return info
+
+
 @contextlib.contextmanager
 def read_retries(source: SoapySourceBase) -> typing.Generator[None]:
     """in this context, retry source.read_iq on stream errors"""
@@ -624,24 +647,7 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
             **iq.info.to_dict(),
         )
 
-        # overloads
-        adc_limit = self.setup_spec.adc_overload_limit
-        if_limit = self.setup_spec.if_overload_limit
-        if not (adc_limit is None and if_limit is None):
-            peak = _get_adc_peak(samples, self.capture_spec, self.setup_spec)
-            xp = array_namespace(peak)
-
-            if adc_limit is not None:
-                adc_headroom = xp.floor(adc_limit - peak).astype('int8')
-                iq.extra_data['adc_headroom'] = adc_headroom
-            if if_limit is not None:
-                xp = array_namespace(samples)
-                gains = [c.gain for c in specs.helpers.split_capture_ports(capture)]
-                peak_im3 = peak + (2 / 3) * xp.array(gains)  # 2/3 arises from intermod
-                if_headroom = xp.floor(if_limit - peak_im3).astype('int8')
-                iq.extra_data['if_headroom'] = if_headroom
-
-        # built-in peripherals
+        iq.extra_data.update(compute_overload_info(samples, self.setup_spec, capture))
         iq.extra_data.update(self.read_peripherals())
 
         # calibration data

@@ -483,7 +483,7 @@ def package_analysis(
     expand_dims=None,
 ) -> 'xr.Dataset':
     # materialize as xarrays
-    with util.stopwatch('package analyses into xarray'):
+    with util.stopwatch('package dataset'):
         xarrays = {}
         for name, res in results.items():
             assert isinstance(res, DelayedDataArray)
