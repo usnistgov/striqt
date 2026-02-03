@@ -39,7 +39,11 @@ BackendSampleRate = Annotated[float, Meta('Source sample rate', 'Hz', gt=0)]
 MasterClockRate = Annotated[
     float, Meta('Base sample rate used inside the source', 'Hz', gt=0)
 ]
-CenterFrequency = Annotated[float, Meta('RF center frequency', 'Hz', gt=0)]
+CenterFrequencyScalar = Annotated[float, Meta('RF center frequency', 'Hz', gt=0)]
+CenterFrequency = Annotated[
+    Union[CenterFrequencyScalar, tuple[CenterFrequencyScalar, ...]],
+    Meta('Center frequency for each port', 'Hz'),
+]
 ClockSource = Annotated[
     Literal['internal', 'external', 'gps'],
     Meta('Hardware source for the frequency reference'),

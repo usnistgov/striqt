@@ -170,19 +170,21 @@ def _lookup_calibration_var(
 ):
     results = []
 
-    for capture_chan in _specs.helpers.split_capture_ports(capture):
-        fs = _sources._base.design_capture_resampler(master_clock_rate, capture_chan)[
+    for c in _specs.helpers.split_capture_ports(capture):
+        assert not isinstance(c.center_frequency, tuple)
+
+        fs = _sources._base.design_capture_resampler(master_clock_rate, c)[
             'fs_sdr'
         ]
         port_key = _get_port_variable(cal_var)
 
         # these capture fields must match the calibration conditions exactly
         exact_matches = {
-            port_key: capture_chan.port,
-            'gain': capture_chan.gain,
-            'lo_shift': capture_chan.lo_shift,
+            port_key: c.port,
+            'gain': c.gain,
+            'lo_shift': c.lo_shift,
             'backend_sample_rate': fs,
-            'analysis_bandwidth': capture_chan.analysis_bandwidth or _np.inf,
+            'analysis_bandwidth': c.analysis_bandwidth or _np.inf,
         }
 
         try:
@@ -214,20 +216,20 @@ def _lookup_calibration_var(
             raise ValueError(
                 'no calibration data is available for this combination of sampling parameters'
             )
-        elif capture_chan.center_frequency > sel.center_frequency.max():
+        elif c.center_frequency > sel.center_frequency.max():
             raise ValueError(
-                f'center_frequency {capture_chan.center_frequency / 1e6} MHz exceeds calibration max {sel.center_frequency.max() / 1e6} MHz'
+                f'center_frequency {c.center_frequency / 1e6} MHz exceeds calibration max {sel.center_frequency.max() / 1e6} MHz'
             )
-        elif capture_chan.center_frequency < sel.center_frequency.min():
+        elif c.center_frequency < sel.center_frequency.min():
             raise ValueError(
-                f'center_frequency {capture_chan.center_frequency / 1e6} MHz is below calibration min {sel.center_frequency.min() / 1e6} MHz'
+                f'center_frequency {c.center_frequency / 1e6} MHz is below calibration min {sel.center_frequency.min() / 1e6} MHz'
             )
 
         # allow interpolation between sample points in these fields
         try:
-            sel = sel.sel(center_frequency=capture_chan.center_frequency)
+            sel = sel.sel(center_frequency=c.center_frequency)
         except BaseException:
-            fc = [capture_chan.center_frequency]
+            fc = [c.center_frequency]
             sel = sel.interp(center_frequency=fc).squeeze('center_frequency')
 
         results.append(float(sel))

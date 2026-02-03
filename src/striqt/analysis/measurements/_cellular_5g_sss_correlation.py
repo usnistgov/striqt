@@ -149,8 +149,7 @@ def cellular_5g_sss_correlation(iq, capture: specs.Capture, **kwargs):
         sample_rate (samples/s): downsample to this rate before analysis (or None to follow capture.sample_rate)
         subcarrier_spacing (Hz): OFDM subcarrier spacing
         discovery_periodicity (s): interval between synchronization blocks
-        frequency_offset (Hz): baseband center frequency of the synchronization block,
-            (or a mapping to look up frequency_offset[capture.center_frequency])
+        frequency_offset (Hz): baseband center frequency of the synchronization block
         shared_spectrum: whether to assume "shared_spectrum" symbol layout in the SSB
             according to 3GPP TS 138 213: Section 4.1)
         max_block_count: if not None, the number of synchronization blocks to analyze

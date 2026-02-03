@@ -95,8 +95,7 @@ def cellular_5g_ssb_spectrogram(iq, capture: specs.Capture, **kwargs):
         sample_rate (samples/s): downsample to this rate before analysis (or None to follow capture.sample_rate)
         subcarrier_spacing (Hz): OFDM subcarrier spacing
         discovery_periodicity (s): interval between synchronization blocks
-        frequency_offset (Hz): baseband center frequency of the synchronization block,
-            (or a mapping to look up frequency_offset[capture.center_frequency])
+        frequency_offset (Hz): baseband center frequency of the synchronization block
         max_block_count: if not None, the number of synchronization blocks to analyze
         as_xarray: if True (default), return an xarray.DataArray, otherwise a ChannelAnalysisResult object
 

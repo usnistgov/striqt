@@ -112,6 +112,10 @@ def _acquire_both(
     return iq
 
 
+def _label_capture(capture: specs.SensorCapture):
+    pass
+
+
 def _log_cache_info(
     resources: Resources[_TS, _TP, _TC, _PS, _PC], cache, capture: _TC, result, *_, **__
 ):

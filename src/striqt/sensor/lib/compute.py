@@ -260,11 +260,14 @@ def _adc_overload_message(
     else:
         return None
 
-    overload_ports = [
-        f'port {c.port} ({c.center_frequency / 1e6:0.0f} MHz)'
-        for c, hr in zip(caps, headroom)
-        if hr <= 0
-    ]
+    overload_ports = []
+    for c, hr in zip(caps, headroom):
+        if hr > 0:
+            continue
+        else:
+            assert not isinstance(c.center_frequency, tuple)
+        msg = f'port {c.port} ({c.center_frequency / 1e6:0.0f} MHz)'
+        overload_ports.append(msg)
 
     if len(overload_ports) > 0:
         return 'adc overload on ' + ', '.join(overload_ports)
