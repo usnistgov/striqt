@@ -736,7 +736,7 @@ def field_template_values(
         if field.name.startswith('_') or field.name == 'adjust_analysis':
             continue
 
-        attrs[field], defaults[field] = _infer_field_template(field.type)
+        attrs[field.name], defaults[field.name] = _infer_field_template(field.type)
 
     return attrs, defaults
 
