@@ -26,9 +26,7 @@ warnings.filterwarnings(
     dtype='float32', attrs={'standard_name': 'Time Elapsed', 'units': 's'}
 )
 @util.lru_cache()
-def spectrogram_time(
-    capture: specs.Capture, spec: specs.Spectrogram
-) -> np.ndarray:
+def spectrogram_time(capture: specs.Capture, spec: specs.Spectrogram) -> np.ndarray:
     import pandas as pd
 
     # validation of these is handled inside striqt.waveform

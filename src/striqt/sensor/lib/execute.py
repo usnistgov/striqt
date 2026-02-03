@@ -140,7 +140,7 @@ def _log_cache_info(
 
     snr_desc = ','.join(f'{p:+02.0f}' for p in snr)
     if 'nan' not in snr_desc.lower():
-        logger = util.get_logger('analysis')        
+        logger = util.get_logger('analysis')
         logger.info(f'({snr_desc}) dB SNR spectrogram peak')
 
 

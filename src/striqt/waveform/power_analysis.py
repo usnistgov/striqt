@@ -12,14 +12,10 @@ from numbers import Number
 from types import ModuleType
 from typing import Any, Optional
 
-from ._typing import _AL, _ALN, _AT
 
 from .util import (
-    Domain,
     array_namespace,
     float_dtype_like,
-    get_input_domain,
-    histogram_last_axis,
     is_cupy_array,
     isroundmod,
     lazy_import,
@@ -33,7 +29,7 @@ if typing.TYPE_CHECKING:
     import pandas as pd
     import xarray as xr
 
-    from ._typing import ArrayLike, ArrayType
+    from ._typing import ArrayLike, ArrayType, _AL, _ALN, _AT
 
     _T = typing.TypeVar('_T')
 
@@ -48,7 +44,6 @@ warnings.filterwarnings('ignore', message='.*invalid value encountered.*')
 
 
 _DB_UNIT_MAPPING = {'dBm': 'mW', 'dBW': 'W', 'dB': 'unitless'}
-
 
 
 def unit_dB_to_linear(s: str):
@@ -256,7 +251,7 @@ def envtopow(x: _ALN, out=None) -> _ALN:
         )
 
         if xp.iscomplexobj(values):
-            values = values.real # type: ignore
+            values = values.real  # type: ignore
     elif is_cupy_array(xp):
         from ._jit import cuda
 
@@ -309,7 +304,6 @@ def envtodB(x: _ALN, abs: bool = True, eps: float = 0, out=None) -> _ALN:
     return _repackage_arraylike(values, x, unit_transform=unit_wave_to_dB)
 
 
-
 def dBlinmean(x_dB: _AL, axis=None, overwrite_x=False) -> _AL:
     """evaluate the mean in linear power space given power in dB.
 
@@ -327,7 +321,7 @@ def dBlinmean(x_dB: _AL, axis=None, overwrite_x=False) -> _AL:
         out = None
 
     linmean = dBtopow(x_dB, out=out).mean(axis)
-    return powtodB(linmean, out=linmean) # type: ignore
+    return powtodB(linmean, out=linmean)  # type: ignore
 
 
 def dBlinsum(x_dB: _AL, axis=None, overwrite_x=False) -> _AL:
@@ -346,8 +340,8 @@ def dBlinsum(x_dB: _AL, axis=None, overwrite_x=False) -> _AL:
     else:
         out = None
 
-    linmean = dBtopow(x_dB, out=out).sum(axis) # type: ignore
-    return powtodB(linmean, out=linmean) # type: ignore
+    linmean = dBtopow(x_dB, out=out).sum(axis)  # type: ignore
+    return powtodB(linmean, out=linmean)  # type: ignore
 
 
 def iq_to_bin_power(
@@ -439,9 +433,7 @@ def iq_to_cyclic_power(
         )
 
     power = {
-        d: iq_to_bin_power(
-            x, Ts, detector_period, kind=d, truncate=truncate, axis=axis
-        )
+        d: iq_to_bin_power(x, Ts, detector_period, kind=d, truncate=truncate, axis=axis)
         for d in detectors
     }
 

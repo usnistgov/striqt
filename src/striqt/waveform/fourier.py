@@ -7,12 +7,11 @@ from math import ceil, inf
 from os import cpu_count
 
 from . import power_analysis
-from ._typing import _AT
 from .util import (
-    Domain,
     array_namespace,
     axis_index,
     axis_slice,
+    cp,
     dtype_change_float,
     find_float_inds,
     grouped_views_along_axis,
@@ -23,7 +22,6 @@ from .util import (
     pad_along_axis,
     sliding_window_view,
     to_blocks,
-    cp,
 )
 from .windows import register_extra_windows
 
@@ -33,7 +31,7 @@ if typing.TYPE_CHECKING:
     import numpy as np
     import scipy
 
-    from ._typing import ArrayType, WindowSpecType, WindowType
+    from ._typing import ArrayType, _AT, WindowSpecType, WindowType
 
 else:
     np = lazy_import('numpy')
@@ -176,7 +174,7 @@ def _cupy_fftn_helper(
     plan=None,
 ):
     assert cp is not None, ImportError('cupy is not installed')
-    from cupy.fft import _fft # type: ignore
+    from cupy.fft import _fft  # type: ignore
 
     kws = dict(overwrite_x=overwrite_x, plan=plan, order='C')
     args = (None,), (axis,), None, direction
@@ -323,7 +321,7 @@ def broadcast_onto(a: _AT, other: _AT, *, axis: int) -> _AT:
 
     slices = [xp.newaxis] * int(other.ndim)
     slices[axis] = slice(None, None)
-    return a[tuple(slices)] # type: ignore
+    return a[tuple(slices)]  # type: ignore
 
 
 @lru_cache(16)
@@ -786,7 +784,7 @@ def stft_fir_lowpass(
     sample_rate: float,
     bandwidth: float,
     transition_bandwidth: float,
-    axis:int=0,
+    axis: int = 0,
     out=None,
 ) -> _AT:
     xp = array_namespace(xstft)
@@ -1231,7 +1229,15 @@ def truncate_frequency_axis(
     return axis_slice(x, s.start, s.stop, axis=axis)
 
 
-def null_lo(x: ArrayType, nfft: int, fs: float, bandwidth: float, *, offset:float=0, axis:int=0):
+def null_lo(
+    x: ArrayType,
+    nfft: int,
+    fs: float,
+    bandwidth: float,
+    *,
+    offset: float = 0,
+    axis: int = 0,
+):
     """sets samples within the specified bandwidth on a frequency axis to nan in-place"""
     # to make the top bound inclusive
     nfft = x.shape[axis]
@@ -1320,9 +1326,9 @@ def power_spectral_density(
     fractional_overlap=0,
     fractional_window: float = 1,
     statistics: list[float],
-    truncate:bool=True,
-    dB:bool=True,
-    axis:int=0,
+    truncate: bool = True,
+    dB: bool = True,
+    axis: int = 0,
 ) -> ArrayType:
     if isroundmod(fs, resolution):
         nfft = round(fs / resolution)

@@ -361,7 +361,9 @@ class AnalysisRegistry(collections.UserDict[type[specs.Analysis], AnalysisInfo])
         | CallableCoordinateFactory
         | None = None,
         depends: typing.Iterable[typing.Callable] | typing.Callable = [],
-        caches: typing.Iterable[KeywordArgumentCache] | KeywordArgumentCache | None = None,
+        caches: typing.Iterable[KeywordArgumentCache]
+        | KeywordArgumentCache
+        | None = None,
         prefer_unaligned_input=False,
         store_compressed=True,
         attrs={},

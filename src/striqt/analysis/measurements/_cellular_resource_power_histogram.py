@@ -157,8 +157,7 @@ def build_tdd_link_symbol_masks(
     out = xp.empty(out_shape, dtype='float32')
     for i, direction in enumerate(link_direction):
         single_mask = [
-            tdd_config.code_maps[direction][k]
-            for k in tdd_config.frame_by_symbol
+            tdd_config.code_maps[direction][k] for k in tdd_config.frame_by_symbol
         ]
 
         if count is None:

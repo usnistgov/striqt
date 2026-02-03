@@ -32,9 +32,11 @@ if typing.TYPE_CHECKING:
         ArrayType, SeriesType, DataFrameType, DataArrayType
     ]
 
-    WindowSpecType: TypeAlias = typing.Union[str, tuple[str, typing.Any], tuple[str, typing.Any, typing.Any]]
+    WindowSpecType: TypeAlias = typing.Union[
+        str, tuple[str, typing.Any], tuple[str, typing.Any, typing.Any]
+    ]
     WindowType: TypeAlias = typing.Union[ArrayType, WindowSpecType]
 
-    _ALN = typing.TypeVar('_ALN', bound=typing.Union[ArrayLike, Number]) 
+    _ALN = typing.TypeVar('_ALN', bound=typing.Union[ArrayLike, Number])
     _AL = typing.TypeVar('_AL', bound=ArrayLike)
     _AT = typing.TypeVar('_AT', bound=ArrayType)

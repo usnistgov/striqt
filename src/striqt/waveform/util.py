@@ -15,9 +15,6 @@ import array_api_compat
 _TC = typing.TypeVar('_TC', bound=typing.Callable)
 
 
-_input_domain = []
-
-
 # class _LazyLoader(importlib.util.LazyLoader):
 #     lock = threading.Lock()
 
@@ -174,31 +171,6 @@ def isroundmod(value: float | np.ndarray, div, atol=1e-6) -> bool:
 
 def is_cupy_array(x: object) -> TypeIsCupy:
     return array_api_compat.is_cupy_array(x)
-
-
-class Domain(Enum):
-    TIME = 'time'
-    FREQUENCY = 'frequency'
-    TIME_BINNED_POWER = 'time_binned_power'
-
-
-@contextmanager
-def set_input_domain(domain: str | Domain):
-    """set the current domain from input arrays of DSP calls"""
-    i = len(_input_domain)
-    _input_domain.append(Domain(domain))
-    yield
-    del _input_domain[i]
-
-
-def get_input_domain(default=Domain.TIME):
-    # validate the domain
-    Domain(default)
-
-    if len(_input_domain) > 0:
-        return _input_domain[-1]
-    else:
-        return default
 
 
 class NonStreamContext:

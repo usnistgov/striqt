@@ -1,7 +1,7 @@
 import math
 
 import numba.cuda
-import cupy # type: ignore
+import cupy  # type: ignore
 import numba as nb
 
 
@@ -10,7 +10,7 @@ def _corr_at_indices(inds, x, nfft: int, ncp: int, norm: bool, out):
     # iterate on parallel across the points in the output correlation
     j = numba.cuda.grid(1)
 
-    if j < nfft + ncp: # type: ignore
+    if j < nfft + ncp:  # type: ignore
         # from here on, the numba code is identical to _corr_at_indices_cpu
         accum_corr = nb.complex128(0 + 0j)
         accum_power_a = nb.float64(0.0)

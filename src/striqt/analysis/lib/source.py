@@ -143,7 +143,7 @@ def simulated_awgn(
 
 
 def read_tdms(path, analysis_bandwidth: float = float('nan')):
-    from nptdms import TdmsFile # type: ignore
+    from nptdms import TdmsFile  # type: ignore
 
     fd = TdmsFile.read(path)
 
