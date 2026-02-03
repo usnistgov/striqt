@@ -1233,11 +1233,7 @@ def truncate_frequency_axis(
     else:
         raise TypeError('offset center frequency is not a multiple of fs/nfft')
 
-    count = nfft * (bandwidth / fs)
-    if isroundmod(count, 1):
-        count = round(count)
-    else:
-        raise TypeError('bandwidth is not a multiple of fs/nfft')
+    count = int(nfft * (bandwidth / fs))
 
     start = ic - count // 2
     stop = start + count
