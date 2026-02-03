@@ -315,7 +315,8 @@ def describe_capture(
         use_fields = fields
 
     for name in use_fields:
-        diffs.append(sa.lib.dataarrays.describe_field(capture, name))
+        desc = sa.lib.dataarrays.describe_field(capture, name, sep=': ')
+        diffs.append(desc)
 
     return join.join(diffs)
 

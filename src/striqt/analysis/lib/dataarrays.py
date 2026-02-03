@@ -106,13 +106,13 @@ def format_units(value, unit='', places=None, force_prefix=None, sep=' ') -> str
     return f'{mant:{fmt}}{suffix}'
 
 
-def describe_field(capture: specs.Capture, name: str):
+def describe_field(capture: specs.Capture, name: str, *, sep='='):
     meta = specs.helpers.get_capture_type_attrs(type(capture))
     attrs = meta[name]
     value = getattr(capture, name)
     value_str = describe_value(value, attrs)
 
-    return f'{name}={value_str}'
+    return f'{name}{sep}{value_str}'
 
 
 def describe_value(value, attrs: dict, unit_prefix=None):

@@ -134,10 +134,8 @@ def _log_cache_info(
         'adjust_spec': resources['sweep_spec'].adjust_captures,
     }
 
-    # conversion to dB is left for after this function, but display
-    # log messages in dB
+    # convert to dB after this function
     peaks = spg.max(axis=tuple(range(1, spg.ndim)))
-
     noise = lookup_system_noise_power(
         cal,
         specs.SoapyCapture.from_spec(capture),
@@ -156,9 +154,9 @@ def _log_cache_info(
             continue
         capture_desc = specs.helpers.describe_capture(c, **desc_kws)
 
-        logger.info(f'{snr_desc:<4} dB peak SNR ({capture_desc})')
+        logger.info(f'spectrogram ▮ {snr_desc} dB max SNR ▮ {capture_desc}')
 
-
+# spectrogram SNR ▮ 7 dB peak SNR ▮ channel_name='3960 MHz', antenna_name='small_dish', gain=-20.0
 def iterate_sweep(
     resources: Resources[_TS, _TP, _TC, _PS, _PC],
     *,
