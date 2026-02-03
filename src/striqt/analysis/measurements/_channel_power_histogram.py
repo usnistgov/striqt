@@ -11,9 +11,9 @@ from .shared import registry, hint_keywords
 if typing.TYPE_CHECKING:
     import numpy as np
 
-    import striqt.waveform as waveform
+    import striqt.waveform as sw
 else:
-    waveform = util.lazy_import('striqt.waveform')
+    sw = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
 
 
@@ -78,7 +78,7 @@ def channel_power_histogram(iq, capture: specs.Capture, **kwargs):
 
     spec = specs.ChannelPowerHistogram.from_dict(kwargs)
 
-    xp = waveform.util.array_namespace(iq)
+    xp = sw.util.array_namespace(iq)
 
     bin_edges = make_power_histogram_bin_edges(
         power_low=spec.power_low,

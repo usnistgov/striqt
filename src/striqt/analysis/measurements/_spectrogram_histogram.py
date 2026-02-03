@@ -11,9 +11,9 @@ from .shared import registry, hint_keywords
 if typing.TYPE_CHECKING:
     import numpy as np
 
-    import striqt.waveform as waveform
+    import striqt.waveform as sw
 else:
-    waveform = util.lazy_import('striqt.waveform')
+    sw = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
 
 
@@ -31,7 +31,7 @@ def spectrogram_power_bin(
         power_resolution=spec.power_resolution,
     )
 
-    if waveform.isroundmod(capture.sample_rate, spec.frequency_resolution):
+    if sw.isroundmod(capture.sample_rate, spec.frequency_resolution):
         # need capture.sample_rate/resolution to give us a counting number
         nfft = round(capture.sample_rate / spec.frequency_resolution)
     else:
@@ -53,9 +53,7 @@ def spectrogram_power_bin(
     dtype='float32',
     attrs={'standard_name': 'Fraction of counts'},
 )
-def spectrogram_histogram(
-    iq: 'waveform.util.ArrayType', capture: specs.Capture, **kwargs
-):
+def spectrogram_histogram(iq: 'sw.util.ArrayType', capture: specs.Capture, **kwargs):
     spec = specs.SpectrogramHistogram.from_dict(kwargs)
     spg_spec = specs.Spectrogram.from_spec(spec)
 
@@ -69,7 +67,7 @@ def spectrogram_histogram(
     metadata = dict(metadata)
     metadata.pop('units')
 
-    xp = waveform.util.array_namespace(iq)
+    xp = sw.util.array_namespace(iq)
     bin_edges = _channel_power_histogram.make_power_histogram_bin_edges(
         power_low=spec.power_low,
         power_high=spec.power_high,

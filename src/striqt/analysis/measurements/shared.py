@@ -18,7 +18,7 @@ if typing.TYPE_CHECKING:
     import numpy as np
     import pandas as pd
 
-    import striqt.waveform as waveform
+    import striqt.waveform as sw
     from striqt.waveform._typing import ArrayType
 
     _P = ParamSpec('_P')
@@ -27,7 +27,7 @@ if typing.TYPE_CHECKING:
     class _AnalysisProtocol(typing.Protocol[_P, _R]):
         def __call__(
             self,
-            iq: 'waveform.util.ArrayType',
+            iq: 'sw.util.ArrayType',
             capture: specs.Capture,
             as_xarray: specs.types.AsXArray = True,
             *args: _P.args,
@@ -38,7 +38,7 @@ if typing.TYPE_CHECKING:
 
 
 else:
-    waveform = util.lazy_import('striqt.waveform')
+    sw = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
     pd = util.lazy_import('pandas')
     array_api_compat = util.lazy_import('array_api_compat')
@@ -64,7 +64,7 @@ def cellular_cell_id2(capture: specs.Capture, spec: typing.Any):
 @util.lru_cache()
 def cellular_ssb_beam_index(capture: specs.Capture, spec: _Cellular5GNRSSBSync):
     # pss_params and sss_params return the same number of symbol indexes
-    params = waveform.ofdm.sss_params(
+    params = sw.ofdm.sss_params(
         sample_rate=spec.sample_rate,
         subcarrier_spacing=spec.subcarrier_spacing,
         discovery_periodicity=spec.discovery_periodicity,
@@ -80,7 +80,7 @@ def cellular_ssb_beam_index(capture: specs.Capture, spec: _Cellular5GNRSSBSync):
 @util.lru_cache()
 def cellular_ssb_start_time(capture: specs.Capture, spec: _Cellular5GNRSSBSync):
     # pss_params and sss_params return the same number of symbol indexes
-    params = waveform.ofdm.pss_params(
+    params = sw.ofdm.pss_params(
         sample_rate=spec.sample_rate,
         subcarrier_spacing=spec.subcarrier_spacing,
         discovery_periodicity=spec.discovery_periodicity,
@@ -100,7 +100,7 @@ def cellular_ssb_start_time(capture: specs.Capture, spec: _Cellular5GNRSSBSync):
 )
 @util.lru_cache()
 def cellular_ssb_lag(capture: specs.Capture, spec: _Cellular5GNRSSBCorrelator):
-    params = waveform.ofdm.sss_params(
+    params = sw.ofdm.sss_params(
         sample_rate=spec.sample_rate,
         subcarrier_spacing=spec.subcarrier_spacing,
         discovery_periodicity=spec.discovery_periodicity,
@@ -123,7 +123,7 @@ def empty_5g_ssb_correlation(
     coord_factories: list[typing.Callable],
     dtype='complex64',
 ):
-    xp = waveform.util.array_namespace(iq)
+    xp = sw.util.array_namespace(iq)
     meas_ax_shape = [len(f(capture, spec)) for f in coord_factories]
     new_shape = iq.shape[:-1] + tuple(meas_ax_shape)
     return xp.full(new_shape, 0, dtype=dtype)
@@ -134,7 +134,7 @@ def correlate_sync_sequence(
     sync_seq,
     *,
     spec: _Cellular5GNRSSBCorrelator,
-    params: waveform.ofdm.SyncParams,
+    params: sw.ofdm.SyncParams,
     cell_id_split: int | None = None,
 ):
     """correlate the IQ of a synchronization block against a synchronization sequence.
@@ -146,7 +146,7 @@ def correlate_sync_sequence(
         params: The cell synchronization parameters (e.g. from `striqt.waveform.ofdm.pss_params` or `striqt.waveform.ofdm.sss_params`)
         cell_id_split: if not None, operate on groups of this size along the cell id axis (to reduce memory usage)
     """
-    xp = waveform.util.array_namespace(ssb_iq)
+    xp = sw.util.array_namespace(ssb_iq)
 
     slot_count = params.slot_count
     corr_size = params.corr_size
@@ -172,7 +172,7 @@ def correlate_sync_sequence(
 
     # TODO: cell_id_split wasn't implemented restore it here
     for cell_id in range(template_bcast.shape[1]):
-        R[:, cell_id] = waveform.oaconvolve(
+        R[:, cell_id] = sw.oaconvolve(
             iq_bcast[:, 0], template_bcast[:, cell_id], axes=2, mode='full'
         )
     R = xp.roll(R, -offs, axis=-1)[..., :corr_size]
@@ -208,7 +208,7 @@ def get_5g_ssb_iq(
     """return a sync block waveform, which returns IQ that is recentered
     at baseband frequency spec.frequency_offset and downsampled to spec.sample_rate."""
 
-    xp = waveform.util.array_namespace(iq)
+    xp = sw.util.array_namespace(iq)
 
     if oaresample:
         down = round(capture.sample_rate / spec.subcarrier_spacing / 8)
@@ -232,7 +232,7 @@ def get_5g_ssb_iq(
         out = xp.empty((iq.shape[0], size_out), dtype=iq.dtype)
 
         for i in range(out.shape[0]):
-            out[i] = waveform.fourier.oaresample(
+            out[i] = sw.fourier.oaresample(
                 iq[i],
                 fs=capture.sample_rate,
                 up=up,
@@ -256,7 +256,7 @@ def get_5g_ssb_iq(
         shift = round(iq.shape[1] * spec.frequency_offset / capture.sample_rate)
 
         for i in range(out.shape[0]):
-            out[i] = waveform.fourier.resample(
+            out[i] = sw.fourier.resample(
                 iq[i], num=size_out, axis=0, overwrite_x=False, shift=shift
             )
 
@@ -275,11 +275,11 @@ def evaluate_spectrogram(
     dB=True,
 ) -> tuple[ArrayType, dict]:
     spg, attrs = _cached_spectrogram(iq=iq, capture=capture, spec=spec)
-    xp = waveform.util.array_namespace(iq)
+    xp = sw.util.array_namespace(iq)
 
     copied = False
     if dB:
-        spg = waveform.powtodB(spg, eps=1e-25)
+        spg = sw.powtodB(spg, eps=1e-25)
         copied = True
 
     if limit_digits is not None:
@@ -305,12 +305,12 @@ def _cached_spectrogram(
 ) -> tuple[ArrayType, dict]:
     spec = spec.validate()
 
-    if waveform.isroundmod(capture.sample_rate, spec.frequency_resolution):
+    if sw.isroundmod(capture.sample_rate, spec.frequency_resolution):
         nfft = round(capture.sample_rate / spec.frequency_resolution)
     else:
         raise ValueError('sample_rate/resolution must be a counting number')
 
-    if waveform.isroundmod(capture.sample_rate, spec.frequency_resolution):
+    if sw.isroundmod(capture.sample_rate, spec.frequency_resolution):
         noverlap = round(spec.fractional_overlap * nfft)
     else:
         raise ValueError('sample_rate_Hz/resolution must be a counting number')
@@ -325,7 +325,7 @@ def _cached_spectrogram(
 
     if spec.integration_bandwidth is None:
         frequency_bin_averaging = None
-    elif waveform.isroundmod(spec.integration_bandwidth, spec.frequency_resolution):
+    elif sw.isroundmod(spec.integration_bandwidth, spec.frequency_resolution):
         frequency_bin_averaging = round(
             spec.integration_bandwidth / spec.frequency_resolution
         )
@@ -338,14 +338,14 @@ def _cached_spectrogram(
     hop_period = hop_size / capture.sample_rate
     if spec.time_aperture is None:
         time_bin_averaging = None
-    elif waveform.isroundmod(spec.time_aperture, hop_period):
+    elif sw.isroundmod(spec.time_aperture, hop_period):
         time_bin_averaging = round(spec.time_aperture / hop_period)
     else:
         raise ValueError(
             'when specified, time_aperture must be a multiple of (1-fractional_overlap)/frequency_resolution'
         )
 
-    spg = waveform.fourier.spectrogram(
+    spg = sw.fourier.spectrogram(
         iq,
         window=spec.window,
         fs=capture.sample_rate,
@@ -357,25 +357,23 @@ def _cached_spectrogram(
     )
 
     if spec.lo_bandstop is not None:
-        waveform.fourier.null_lo(
-            spg, nfft, capture.sample_rate, spec.lo_bandstop, axis=2
-        )
+        sw.fourier.null_lo(spg, nfft, capture.sample_rate, spec.lo_bandstop, axis=2)
 
     # truncate to the analysis bandwidth
     if spec.trim_stopband and np.isfinite(capture.analysis_bandwidth):
         # stick with python arithmetic to ensure consistency with axis bounds calculations
-        spg = waveform.fourier.truncate_frequency_axis(
+        spg = sw.fourier.truncate_frequency_axis(
             spg, nfft, capture.sample_rate, bandwidth=capture.analysis_bandwidth, axis=2
         )
 
     if frequency_bin_averaging is not None:
-        spg = waveform.util.binned_mean(spg, frequency_bin_averaging, axis=2, fft=True)
+        spg = sw.util.binned_mean(spg, frequency_bin_averaging, axis=2, fft=True)
 
         # mean -> sum
         spg *= frequency_bin_averaging
 
     if time_bin_averaging is not None:
-        spg = waveform.util.binned_mean(spg, time_bin_averaging, axis=1, fft=False)
+        spg = sw.util.binned_mean(spg, time_bin_averaging, axis=1, fft=False)
 
     if spec.integration_bandwidth is None:
         enbw = spec.frequency_resolution
@@ -422,14 +420,14 @@ def spectrogram_baseband_frequency(
     if xp is not np:
         return xp.array(spectrogram_baseband_frequency(capture, spec))
 
-    if waveform.isroundmod(capture.sample_rate, spec.frequency_resolution):
+    if sw.isroundmod(capture.sample_rate, spec.frequency_resolution):
         nfft = round(capture.sample_rate / spec.frequency_resolution)
     else:
         raise ValueError('sample_rate/resolution must be a counting number')
 
     if spec.integration_bandwidth is None:
         frequency_bin_averaging = None
-    elif waveform.isroundmod(spec.integration_bandwidth, spec.frequency_resolution):
+    elif sw.isroundmod(spec.integration_bandwidth, spec.frequency_resolution):
         frequency_bin_averaging = round(
             spec.integration_bandwidth / spec.frequency_resolution
         )
@@ -441,16 +439,16 @@ def spectrogram_baseband_frequency(
     # use the striqt.waveform.fourier fftfreq for higher precision, which avoids
     # headaches when merging spectra with different sampling parameters due
     # to rounding errors.
-    freqs = waveform.fourier.fftfreq(nfft, capture.sample_rate)
+    freqs = sw.fourier.fftfreq(nfft, capture.sample_rate)
 
     if spec.trim_stopband and np.isfinite(capture.analysis_bandwidth):
         # stick with python arithmetic here for numpy/cupy consistency
-        freqs = waveform.fourier.truncate_frequency_axis(
+        freqs = sw.fourier.truncate_frequency_axis(
             freqs, nfft, capture.sample_rate, capture.analysis_bandwidth, axis=0
         )
 
     if spec.integration_bandwidth is not None:
-        freqs = waveform.util.binned_mean(freqs, frequency_bin_averaging, fft=True)
+        freqs = sw.util.binned_mean(freqs, frequency_bin_averaging, fft=True)
 
     # only now downconvert. round to a still-large number of digits
     return freqs.astype('float64').round(16)

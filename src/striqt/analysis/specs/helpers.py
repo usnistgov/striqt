@@ -161,28 +161,28 @@ def _dec_hook(type_, obj):
 
 
 @typing.overload
-def _deep_freeze(obj: dict[_K, _V]) -> 'immutabledict[_K, _V]':
+def deep_freeze(obj: dict[_K, _V]) -> 'immutabledict[_K, _V]':
     pass
 
 
 @typing.overload
-def _deep_freeze(obj: tuple[_V, ...] | list[_V]) -> tuple[_V, ...]:
+def deep_freeze(obj: tuple[_V, ...] | list[_V]) -> tuple[_V, ...]:
     pass
 
 
 @typing.overload
-def _deep_freeze(obj: _T) -> _T:
+def deep_freeze(obj: _T) -> _T:
     pass
 
 
-def _deep_freeze(
+def deep_freeze(
     obj: typing.Mapping[_K, _V] | tuple[_V, ...] | list[_V] | _T,
 ) -> 'immutabledict[_K, _V]|tuple[_V, ...]|_T':
     """Recursively transform dict into immutabledict"""
     if isinstance(obj, (list, tuple)):
-        return tuple([_deep_freeze(v) for v in obj])
+        return tuple([deep_freeze(v) for v in obj])
     elif isinstance(obj, dict):
-        mapping = {k: _deep_freeze(v) for k, v in obj.items()}
+        mapping = {k: deep_freeze(v) for k, v in obj.items()}
         return immutabledict(mapping)
     else:
         return obj  # type: ignore

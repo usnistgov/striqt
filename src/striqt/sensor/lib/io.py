@@ -6,11 +6,11 @@ import sys
 import typing
 from pathlib import Path
 
-from striqt import analysis
+import striqt.analysis as sa
+
 from striqt.analysis.lib.io import decode_from_yaml_file
 from striqt.analysis.lib.io import dump as dump_data  # noqa: F401
 from striqt.analysis.lib.io import load as load_data  # noqa: F401
-from ..specs.helpers import convert_dict
 from .. import specs
 
 from . import util
@@ -57,7 +57,7 @@ def open_store(
         fixed_path = spec_path
 
     fixed_path.parent.mkdir(parents=True, exist_ok=True)
-    store_backend = analysis.open_store(fixed_path, mode='w' if force else 'a')
+    store_backend = sa.open_store(fixed_path, mode='w' if force else 'a')
     return store_backend
 
 
@@ -147,7 +147,7 @@ def read_yaml_spec(
         ext = specs.Extension.from_dict(tree['extensions'])
         _import_extensions_from_spec(ext, root_dir=Path(path).parent)
 
-    spec = convert_dict(tree, type=get_tagged_sweep_type())
+    spec = sa.specs.helpers.convert_dict(tree, type=get_tagged_sweep_type())
 
     sink = spec.sink
     if output_path is not None:

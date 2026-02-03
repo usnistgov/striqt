@@ -13,21 +13,15 @@ from datetime import datetime
 from pathlib import Path
 
 import msgspec
-from msgspec import UNSET, UnsetType
 
-from striqt.analysis.specs.helpers import (
-    convert_spec,
-    convert_dict,
-    _deep_freeze,
-    _enc_hook,
-    _dec_hook,
-    immutabledict,
-)
+import striqt.analysis as sa
+from striqt.analysis.specs.helpers import _dec_hook, immutabledict
 
 from . import structs as specs
 from . import types
 from .structs import _TS, _TC, _TP
 from ..lib import util
+
 
 if typing.TYPE_CHECKING:
     _T = typing.TypeVar('_T')
@@ -66,10 +60,6 @@ def pairwise_by_port(
 
     pairwise = zip(*(c1_split, c2_split))
     return list(pairwise)
-
-
-def to_builtins(obj: typing.Any) -> typing.Any:
-    return msgspec.to_builtins(obj, enc_hook=_enc_hook)
 
 
 @util.lru_cache()
@@ -189,7 +179,7 @@ def adjust_analysis(
             f'no analysis parameters match analysis_adjust keys {unused_names}'
         )
 
-    return _deep_freeze(specs.BundledAnalysis.from_dict(result))
+    return sa.specs.helpers.deep_freeze(specs.BundledAnalysis.from_dict(result))
 
 
 def varied_capture_fields(
@@ -286,6 +276,48 @@ def _get_capture_adjust_fields(
         fields.update(source_fields)
 
     return fields
+
+
+@util.lru_cache()
+def _get_capture_adjust_dependencies(
+    spec: specs.AdjustCapturesType, source_id: str | None
+) -> dict[str, str]:
+    adjust_specs = _get_capture_adjust_fields(spec, source_id)
+    deps = {}
+    for name, s in adjust_specs.items():
+        if not isinstance(s, specs.CaptureRemap):
+            continue
+        if isinstance(s.key, str):
+            keys = ((s.key),)
+        else:
+            keys = s.key
+        for k in keys:
+            deps.setdefault(k, name)
+    return deps
+
+
+@util.lru_cache()
+def describe_capture(
+    capture: specs.Capture,
+    fields: tuple[str, ...],
+    *,
+    adjust_spec: specs.AdjustCapturesType | None = None,
+    source_id: specs.types.SourceID | None,
+    join: str = ', ',
+) -> str:
+    """generate a description of a capture"""
+    diffs = []
+
+    if adjust_spec is not None:
+        deps = _get_capture_adjust_dependencies(adjust_spec, source_id)
+        use_fields = [deps.get(name, name) for name in fields]
+    else:
+        use_fields = fields
+
+    for name in use_fields:
+        diffs.append(sa.lib.dataarrays.describe_field(capture, name))
+
+    return join.join(diffs)
 
 
 @util.lru_cache()
@@ -573,7 +605,11 @@ def _convert_label_lookup_keys(sweep: specs.Sweep) -> specs.AdjustCapturesType:
             lookup_types[field] = str
 
     fixed = msgspec.convert(result, specs.AdjustCapturesType, strict=False)
-    return _deep_freeze(fixed)  # type: ignore
+    return sa.specs.helpers.deep_freeze(fixed)  # type: ignore
+
+
+def to_builtins(obj: typing.Any) -> typing.Any:
+    return msgspec.to_builtins(obj, enc_hook=sa.specs.helpers._enc_hook)
 
 
 @util.lru_cache()
@@ -647,7 +683,7 @@ def concat_group_sizes(
     class C(specs.SensorCapture, frozen=True, forbid_unknown_fields=False):
         """minimal capture fields that safely ignore fields from subclasses"""
 
-    remaining = convert_spec(captures, type=list[C])
+    remaining = sa.specs.helpers.convert_spec(captures, type=list[C])
     whole_set = set(remaining)
     counts = Counter(remaining)
 

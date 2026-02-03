@@ -12,9 +12,9 @@ from .shared import registry, hint_keywords
 if typing.TYPE_CHECKING:
     import numpy as np
 
-    import striqt.waveform as waveform
+    import striqt.waveform as sw
 else:
-    waveform = util.lazy_import('striqt.waveform')
+    sw = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
 
 warnings.filterwarnings(
@@ -38,7 +38,7 @@ def spectrogram_time(capture: specs.Capture, spec: specs.Spectrogram) -> np.ndar
 
     if spec.time_aperture is None:
         pass
-    elif waveform.isroundmod(spec.time_aperture, hop_period):
+    elif sw.isroundmod(spec.time_aperture, hop_period):
         average_bins = round(spec.time_aperture / hop_period)
         size = size // average_bins
         hop_period = hop_period * average_bins
@@ -59,7 +59,7 @@ def spectrogram_time(capture: specs.Capture, spec: specs.Spectrogram) -> np.ndar
     # typed_kwargs=shared.SpectrogramKeywords,
     attrs={'standard_name': 'PSD', 'long_name': 'Power Spectral Density'},
 )
-def spectrogram(iq: 'waveform.util.ArrayType', capture: specs.Capture, **kwargs):
+def spectrogram(iq: 'sw.util.ArrayType', capture: specs.Capture, **kwargs):
     """Evaluate a spectrogram based on an STFT.
 
     The analysis parameters are in physical time and frequency units

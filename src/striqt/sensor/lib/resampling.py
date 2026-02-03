@@ -17,12 +17,12 @@ from striqt.analysis.lib import register
 
 if typing.TYPE_CHECKING:
     import numpy as np
-    import striqt.waveform as waveform
+    import striqt.waveform as sw
     from striqt.waveform._typing import ArrayType
 
 else:
     array_api_compat = util.lazy_import('array_api_compat')
-    waveform = util.lazy_import('striqt.waveform')
+    sw = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
 
 
@@ -40,7 +40,7 @@ def synchronize(x: ArrayType, shifts: ArrayType, size_out: int) -> ArrayType:
         return x[:, shifts[0] : shifts[0] + size_out]
 
     else:
-        xp = waveform.util.array_namespace(x)
+        xp = sw.util.array_namespace(x)
         out = xp.empty((x.shape[0], size_out), dtype=x.dtype)
         for i in range(x.shape[0]):
             out[i, :] = x[i, shifts[i] : shifts[i] + size_out]
@@ -61,7 +61,7 @@ def resampling_correction(iq_in: AcquiredIQ, overwrite_x=False, axis=1) -> Acqui
 
     iq = iq_in.raw
     source_spec = iq_in.source_spec
-    xp = waveform.util.array_namespace(iq)
+    xp = sw.util.array_namespace(iq)
 
     if not isinstance(iq_in.capture, specs.SensorCapture):
         raise TypeError('iq.capture must be a capture specification')
@@ -85,7 +85,7 @@ def resampling_correction(iq_in: AcquiredIQ, overwrite_x=False, axis=1) -> Acqui
 
     elif USE_OARESAMPLE:
         # this is broken. don't use it yet.
-        iq = waveform.fourier.oaresample(
+        iq = sw.fourier.oaresample(
             iq,
             up=iq_in.resampler['nfft_out'],
             down=iq_in.resampler['nfft'],
@@ -107,16 +107,16 @@ def resampling_correction(iq_in: AcquiredIQ, overwrite_x=False, axis=1) -> Acqui
         offset = iq_in.resampler['nfft_out']
 
         assert size_out + offset <= iq.shape[axis]
-        iq = waveform.util.axis_slice(iq, offset, offset + size_out, axis=axis)
+        iq = sw.util.axis_slice(iq, offset, offset + size_out, axis=axis)
         assert iq.shape[axis] == size_out
 
     else:
-        assert waveform.util.isroundmod(iq.shape[1] * capture.sample_rate, fs)
+        assert sw.util.isroundmod(iq.shape[1] * capture.sample_rate, fs)
         resample_size_out = round(iq.shape[1] * capture.sample_rate / fs)
         offset_in = _base.get_fft_resample_pad(source_spec, capture, iq_in.analysis)[0]
         offset_out = round(offset_in * capture.sample_rate / fs)
 
-        iq = waveform.fourier.resample(
+        iq = sw.fourier.resample(
             iq,
             resample_size_out,
             overwrite_x=overwrite_x,
@@ -126,7 +126,7 @@ def resampling_correction(iq_in: AcquiredIQ, overwrite_x=False, axis=1) -> Acqui
 
         # apply the filter here and ensure we're working with a copy if needed
         if np.isfinite(capture.analysis_bandwidth):
-            h = waveform.design_fir_lpf(
+            h = sw.design_fir_lpf(
                 bandwidth=capture.analysis_bandwidth,
                 sample_rate=capture.sample_rate,
                 transition_bandwidth=250e3,
@@ -134,7 +134,7 @@ def resampling_correction(iq_in: AcquiredIQ, overwrite_x=False, axis=1) -> Acqui
                 xp=xp,
             )
             # pad = _base._get_filter_pad(capture)
-            iq = waveform.oaconvolve(iq, h[xp.newaxis, :], 'same', axes=axis)
+            iq = sw.oaconvolve(iq, h[xp.newaxis, :], 'same', axes=axis)
 
             # offset_out = offset_out + pad
             # iq = iqwaveform.util.axis_slice(iq, pad, iq.shape[axis], axis=axis)
@@ -142,7 +142,7 @@ def resampling_correction(iq_in: AcquiredIQ, overwrite_x=False, axis=1) -> Acqui
             # the freshly allocated iq can be safely overridden
             overwrite_x = True
 
-        iq = waveform.util.axis_slice(iq, offset_out, iq.shape[axis], axis=axis)
+        iq = sw.util.axis_slice(iq, offset_out, iq.shape[axis], axis=axis)
 
     size_out = round(capture.duration * capture.sample_rate)
 

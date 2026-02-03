@@ -12,10 +12,10 @@ from .shared import registry, hint_keywords
 if typing.TYPE_CHECKING:
     import numpy as np
 
-    import striqt.waveform as waveform
+    import striqt.waveform as sw
 else:
     np = util.lazy_import('numpy')
-    waveform = util.lazy_import('striqt.waveform')
+    sw = util.lazy_import('striqt.waveform')
 
 
 @registry.coordinates(dtype='uint16', attrs={'standard_name': 'Symbols elapsed'})
@@ -35,9 +35,9 @@ def cellular_ssb_baseband_frequency(
     capture: specs.Capture, spec: specs.Cellular5GNRSSBSpectrogram, xp=np
 ) -> np.ndarray:
     nfft = round(2 * capture.sample_rate / spec.subcarrier_spacing)
-    bb_freqs = waveform.fourier.fftfreq(nfft, capture.sample_rate)
-    bb_freqs = waveform.util.binned_mean(bb_freqs, count=2, axis=0, fft=True)
-    bb_freqs = waveform.fourier.truncate_frequency_axis(
+    bb_freqs = sw.fourier.fftfreq(nfft, capture.sample_rate)
+    bb_freqs = sw.util.binned_mean(bb_freqs, count=2, axis=0, fft=True)
+    bb_freqs = sw.fourier.truncate_frequency_axis(
         bb_freqs,
         nfft // 2,
         capture.sample_rate,
@@ -134,7 +134,7 @@ def cellular_5g_ssb_spectrogram(iq, capture: specs.Capture, **kwargs):
 
     # select frequency
     nfft = round(capture.sample_rate / spec.subcarrier_spacing)
-    spg = waveform.fourier.truncate_frequency_axis(
+    spg = sw.fourier.truncate_frequency_axis(
         spg,
         nfft,
         capture.sample_rate,

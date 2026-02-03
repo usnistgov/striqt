@@ -14,7 +14,7 @@ import xarray as xr
 from matplotlib import pyplot as plt
 from matplotlib import ticker
 
-import striqt.waveform as waveform
+import striqt.waveform as sw
 
 from ..analysis.lib import dataarrays
 from ..analysis.specs import Capture
@@ -372,7 +372,7 @@ class CapturePlotter:
             sub = sub.sel(link_direction='downlink')
 
         if dB:
-            sub = waveform.powtodB(sub)
+            sub = sw.powtodB(sub)
 
         return self._line(
             sub, name=key, x='cyclic_sample_lag', hue=hue, meta=data.attrs
@@ -386,7 +386,7 @@ class CapturePlotter:
 
         Rpss = data[key].sel(sel).isel(cellular_ssb_start_time=0)
 
-        power = waveform.envtopow(Rpss)
+        power = sw.envtopow(Rpss)
 
         if hue == 'cellular_cell_id2':
             power = power.mean('cellular_ssb_beam_index', keep_attrs=True)
@@ -396,7 +396,7 @@ class CapturePlotter:
             raise KeyError('invalid hue')
 
         if dB:
-            power = waveform.powtodB(power)
+            power = sw.powtodB(power)
 
         fig = self._line(
             power,
@@ -614,7 +614,7 @@ def plot_cyclic_channel_power(
         a = cyclic_channel_power.sel(power_detector=detector)
 
         if not dB:
-            a = waveform.dBtopow(a)
+            a = sw.dBtopow(a)
 
         ax.plot(
             time,
@@ -627,7 +627,7 @@ def plot_cyclic_channel_power(
         a = cyclic_channel_power.sel(power_detector=detector)
 
         if not dB:
-            a = waveform.dBtopow(a)
+            a = sw.dBtopow(a)
 
         ax.fill_between(
             time,

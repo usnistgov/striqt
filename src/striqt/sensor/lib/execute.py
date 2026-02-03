@@ -7,10 +7,10 @@ import dataclasses
 import itertools
 import typing
 
-import striqt.waveform as waveform
-from striqt.analysis import registry
+import striqt.waveform as sw
+import striqt.analysis as sa
 
-from . import compute, sources, peripherals, util
+from . import compute, sources, util
 from .. import specs
 from .resources import Resources, AnyResources
 from .calibration import lookup_system_noise_power
@@ -112,10 +112,6 @@ def _acquire_both(
     return iq
 
 
-def _label_capture(capture: specs.SensorCapture):
-    pass
-
-
 def _log_cache_info(
     resources: Resources[_TS, _TP, _TC, _PS, _PC], cache, capture: _TC, result, *_, **__
 ):
@@ -125,7 +121,18 @@ def _log_cache_info(
 
     spg, attrs = result
 
-    xp = waveform.util.array_namespace(spg)
+    xp = sw.util.array_namespace(spg)
+
+    if isinstance(capture, specs.SoapyCapture):
+        info_fields = ('center_frequency', 'port', 'gain')
+    else:
+        info_fields = ('port',)
+
+    desc_kws = {
+        'fields': info_fields,
+        'source_id': resources['source'].id,
+        'adjust_spec': resources['sweep_spec'].adjust_captures,
+    }
 
     # conversion to dB is left for after this function, but display
     # log messages in dB
@@ -140,12 +147,16 @@ def _log_cache_info(
         xp=xp,
     )
 
-    snr = waveform.powtodB(peaks) - noise
+    logger = util.get_logger('analysis')
+    capture_splits = specs.helpers.split_capture_ports(capture)
 
-    snr_desc = ','.join(f'{p:+02.0f}' for p in snr)
-    if 'nan' not in snr_desc.lower():
-        logger = util.get_logger('analysis')
-        logger.info(f'({snr_desc}) dB SNR spectrogram peak')
+    for c, snr in zip(capture_splits, sw.powtodB(peaks) - noise):
+        snr_desc = f'{snr:+02.0f}'
+        if 'nan' in snr_desc.lower():
+            continue
+        capture_desc = specs.helpers.describe_capture(c, **desc_kws)
+
+        logger.info(f'{capture_desc}: spectrogram SNR ({snr_desc}) dB peak')
 
 
 def iterate_sweep(
@@ -206,7 +217,7 @@ def iterate_sweep(
 
     compute_opts = compute.EvaluationOptions(
         sweep_spec=spec,
-        registry=registry,
+        registry=sa.registry,
         extra_attrs=compute.build_dataset_attrs(spec),
         correction=True,
         cache_callback=log,
@@ -231,8 +242,9 @@ def iterate_sweep(
     # iterate across (previous-1, previous, current, next) captures to support concurrency
     offset_captures = util.zip_offsets(capture_iter, (-2, -1, 0, 1), fill=None)
 
-    for i, (_, _, this, next_) in enumerate(offset_captures):
+    for i, (_, prev, this, next_) in enumerate(offset_captures):
         calls = {}
+        print(sa.describe_capture(this, prev=prev, ignore=('adjust_captures',)))
 
         with _log_progress_contexts(i, count):
             if iq is None:

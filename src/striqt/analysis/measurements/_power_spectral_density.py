@@ -11,9 +11,9 @@ from .shared import registry, hint_keywords
 if typing.TYPE_CHECKING:
     import numpy as np
 
-    import striqt.waveform as waveform
+    import striqt.waveform as sw
 else:
-    waveform = util.lazy_import('striqt.waveform')
+    sw = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
 
 
@@ -71,7 +71,7 @@ def power_spectral_density(iq, capture, **kwargs):
         dtype=working_dtype,
     )
 
-    findquantile = waveform.util.find_float_inds(tuple(spec.time_statistic))
+    findquantile = sw.util.find_float_inds(tuple(spec.time_statistic))
 
     newshape = list(spg.shape)
     newshape[axis] = len(spec.time_statistic)
@@ -91,6 +91,6 @@ def power_spectral_density(iq, capture, **kwargs):
         ufunc = stat_ufunc_from_shorthand(spec.time_statistic[i], xp=xp)
         axis_index(psd, i, axis=axis)[:] = ufunc(spg, axis=axis)
 
-    psd = waveform.powtodB(psd).astype('float16')
+    psd = sw.powtodB(psd).astype('float16')
 
     return psd, metadata

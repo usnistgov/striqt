@@ -68,7 +68,7 @@ class SpecBase(
         for name in helpers.freezable_fields(type(self)):
             v = getattr(self, name)
             if isinstance(v, (tuple, dict, list)):
-                msgspec.structs.force_setattr(self, name, helpers._deep_freeze(v))
+                msgspec.structs.force_setattr(self, name, helpers.deep_freeze(v))
 
 
 @util.lru_cache(1024)

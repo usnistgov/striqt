@@ -59,51 +59,6 @@ _ENG_PREFIXES = {
 
 
 @util.lru_cache()
-def describe_capture(
-    this: specs.Capture | None,
-    prev: specs.Capture | None = None,
-    *,
-    index: int | None = None,
-    count: int | None = None,
-    constrain: tuple[str, ...] | None = None,
-    join: str = ', ',
-) -> str:
-    """generate a description of a capture"""
-    if this is None:
-        if prev is None:
-            return 'saving last analysis'
-        else:
-            return 'performing last analysis'
-
-    diffs = []
-
-    for name in type(this).__struct_fields__:
-        if constrain is not None and name not in constrain:
-            continue
-        if name == 'start_time':
-            continue
-        value = getattr(this, name)
-        if prev is not None and name == 'backend_sample_rate' and value is None:
-            continue
-        elif prev is None or value != getattr(prev, name):
-            diffs.append(describe_field(this, name))
-
-    capture_diff = join.join(diffs)
-
-    if index is not None:
-        progress = str(index + 1)
-
-        if count is not None:
-            progress = f'{progress}/{count}'
-
-        progress = progress + ' '
-    else:
-        progress = ''
-
-    return progress + capture_diff
-
-
-@util.lru_cache()
 def format_units(value, unit='', places=None, force_prefix=None, sep=' ') -> str:
     """Format a number with SI unit prefixes"""
 
@@ -245,7 +200,7 @@ def build_dataarray(
     expand_dims=None,
 ) -> 'xr.DataArray':
     """build an `xarray.DataArray` from an ndarray, capture information, and channel analysis keyword arguments"""
-    
+
     template = dataarray_stub(
         delayed.info.dims,
         delayed.info.coord_factories,
