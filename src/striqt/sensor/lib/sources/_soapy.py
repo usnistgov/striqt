@@ -163,12 +163,14 @@ def probe_soapy_info(device: SoapySDR.Device) -> specs.SoapySourceInfo:
     )
 
 
-def compute_overload_info(samples: ArrayType, setup: specs.SoapySource, capture: specs.SoapyCapture):
+def compute_overload_info(
+    samples: ArrayType, setup: specs.SoapySource, capture: specs.SoapyCapture
+):
     adc_limit = setup.adc_overload_limit
     if_limit = setup.if_overload_limit
     if adc_limit is None and if_limit is None:
         return {}
-    
+
     info = {}
     peak = _get_adc_peak(samples, capture, setup)
     xp = array_namespace(peak)

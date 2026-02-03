@@ -166,7 +166,7 @@ def loop_captures(
 @util.lru_cache()
 def adjust_analysis(
     analyses: specs.AnalysisGroup,
-    adjust_analysis: immutabledict[str, typing.Any] | None,
+    adjust_analysis: typing.Mapping[str, typing.Any] | None,
 ) -> specs.AnalysisGroup:
     if adjust_analysis is None or len(adjust_analysis) == 0:
         return analyses

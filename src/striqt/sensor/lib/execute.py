@@ -66,23 +66,35 @@ def _acquire_both(
 
     assert this is not None
 
-    s = res['source']
-    p = res['peripherals']
+    source = res['source']
+    peripherals = res['peripherals']
+    sweep_spec = res['sweep_spec']
 
     def arm_both(c: _TC | None):
         if c is None:
             return
-        util.concurrently({'s': util.Call(s.arm_spec, c), 'p': util.Call(p.arm, c)})
+        util.concurrently(
+            {
+                'source': util.Call(source.arm_spec, c),
+                'peripherals': util.Call(peripherals.arm, c),
+            }
+        )
 
     try:
-        s.capture_spec
+        source.capture_spec
     except AttributeError:
         arm_both(this)
 
+    analysis = specs.helpers.adjust_analysis(sweep_spec.analysis, this.adjust_analysis)
     results = util.concurrently(
         {
-            'iq': util.Call(s.acquire, correction=False, alias_func=res['alias_func']),
-            'ext_data': util.Call(p.acquire, this),
+            'iq': util.Call(
+                source.acquire,
+                analysis=analysis,
+                correction=False,
+                alias_func=res['alias_func'],
+            ),
+            'ext_data': util.Call(peripherals.acquire, this),
         }
     )
     iq = results['iq']
