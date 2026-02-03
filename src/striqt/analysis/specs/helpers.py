@@ -231,11 +231,6 @@ def convert_spec(other: typing.Any, type: type[_T]) -> _T:
     )
 
 
-@functools.lru_cache()
-def to_builtins(obj: msgspec.Struct) -> dict[str, typing.Any]:
-    return msgspec.to_builtins(obj, enc_hook=_enc_hook)
-
-
 def _maybe_container_type(type_: msgspec.inspect.Type) -> bool:
     """returns an (attrs, default_value) pair for the given msgspec field type"""
     from msgspec import inspect as mi

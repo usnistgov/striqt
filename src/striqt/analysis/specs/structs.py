@@ -41,7 +41,7 @@ class SpecBase(
 
     def to_dict(self, skip_private=False, unfreeze=False) -> dict:
         """return a dictinary representation of `self`"""
-        map = helpers.to_builtins(self)
+        map = msgspec.to_builtins(self, enc_hook=helpers._enc_hook)
 
         if skip_private:
             for name in helpers._private_fields(type(self)):
@@ -61,13 +61,18 @@ class SpecBase(
         return helpers.convert_spec(other, type=cls)
 
     def validate(self) -> typing.Self:
-        return self.from_dict(self.to_dict())
+        return _validate(self)
 
     def __post_init__(self):
         for name in helpers.freezable_fields(type(self)):
             v = getattr(self, name)
             if isinstance(v, (tuple, dict, list)):
                 msgspec.structs.force_setattr(self, name, helpers._deep_freeze(v))
+
+
+@functools.lru_cache(1024)
+def _validate(spec: _TS) -> _TS:
+    return spec.from_dict(spec.to_dict())
 
 
 class Capture(SpecBase, kw_only=True, frozen=True):
