@@ -61,18 +61,13 @@ class SpecBase(
         return helpers.convert_spec(other, type=cls)
 
     def validate(self) -> typing.Self:
-        return _validate(self)
+        return self.from_dict(self.to_dict())
 
     def __post_init__(self):
         for name in helpers.freezable_fields(type(self)):
             v = getattr(self, name)
             if isinstance(v, (tuple, dict, list)):
                 msgspec.structs.force_setattr(self, name, helpers._deep_freeze(v))
-
-
-@functools.lru_cache(1024)
-def _validate(spec: _TS) -> _TS:
-    return spec.from_dict(spec.to_dict())
 
 
 class Capture(SpecBase, kw_only=True, frozen=True):
