@@ -9,17 +9,13 @@ from ..lib.dataarrays import CAPTURE_DIM
 from . import shared
 from .shared import registry
 
+import striqt.waveform as sw
+
 if typing.TYPE_CHECKING:
-    import array_api_compat
     import numpy as np
-
-    import striqt.waveform as sw
     from striqt.waveform._typing import ArrayType
-
 else:
-    sw = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
-    array_api_compat = util.lazy_import('array_api_compat')
 
 
 _coord_factories = [

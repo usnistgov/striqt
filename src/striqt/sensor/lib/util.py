@@ -14,18 +14,9 @@ import time
 import typing
 from pathlib import Path
 
-from striqt.analysis.lib.util import (
-    PERFORMANCE_DETAIL,
-    PERFORMANCE_INFO,
-    _StriqtLogger,
-    blocking_input,
-    get_logger,
-    show_messages,
-    stopwatch,
-    configure_cupy,
-    cp,
-)
-from striqt.waveform.util import lazy_import, lru_cache
+import striqt.analysis as sa
+
+from striqt.waveform.util import lazy_import
 
 _LOG_LEVEL_NAMES = {
     'debug': logging.DEBUG,
@@ -57,10 +48,10 @@ else:
     _R = typing.TypeVar('_R')
 
 
-_StriqtLogger('sweep')
-_StriqtLogger('source')
-_StriqtLogger('sink')
-_StriqtLogger('periph')
+sa.util._StriqtLogger('sweep')
+sa.util._StriqtLogger('source')
+sa.util._StriqtLogger('sink')
+sa.util._StriqtLogger('periph')
 
 _concurrency_count = 0
 _handling_tracebacks = False
@@ -453,7 +444,7 @@ def concurrently(
     """see labbench.util for docs"""
     global _concurrency_count
 
-    logger = get_logger('sweep')
+    logger = sa.util.get_logger('sweep')
 
     def traceback_skip(exc_tuple, count):
         """Skip the first `count` traceback entries in
@@ -637,19 +628,19 @@ class DebugOnException:
 def log_verbosity(verbose: int = 0):
     names = ('sweep', 'source', 'analysis', 'sink', 'periph')
     if verbose == 0:
-        show_messages(logging.INFO, logger_names=names)
+        sa.util.show_messages(logging.INFO, logger_names=names)
     elif verbose == 1:
-        show_messages(PERFORMANCE_INFO, logger_names=names)
+        sa.util.show_messages(sa.util.PERFORMANCE_INFO, logger_names=names)
     elif verbose == 2:
-        show_messages(PERFORMANCE_DETAIL, logger_names=names)
+        sa.util.show_messages(sa.util.PERFORMANCE_DETAIL, logger_names=names)
     else:
-        show_messages(logging.DEBUG, logger_names=names)
+        sa.util.show_messages(logging.DEBUG, logger_names=names)
 
 
 @contextlib.contextmanager
 def log_capture_context(name_suffix, /, capture_index=0, capture_count=None):
     extra = {'capture_index': capture_index}
-    logger = get_logger(name_suffix)
+    logger = sa.util.get_logger(name_suffix)
 
     assert isinstance(logger.extra, dict)
 
@@ -668,4 +659,4 @@ def log_capture_context(name_suffix, /, capture_index=0, capture_count=None):
     logger.extra = start_extra
 
 
-show_messages(logging.INFO)
+sa.util.show_messages(logging.INFO)

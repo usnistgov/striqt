@@ -81,11 +81,12 @@ def _run_click_plotter(
     """handle keyword arguments passed in from click, and call plot_func()"""
 
     from matplotlib import pyplot as plt
-    from striqt import analysis
     import striqt.figures
     from striqt.analysis.lib.dataarrays import PORT_DIM
     from pathlib import Path
     import numpy as np
+
+    import striqt.analysis as sa
 
     if interactive:
         plt.ion()
@@ -93,7 +94,7 @@ def _run_click_plotter(
         plt.ioff()
 
     # index on the following fields in order, matching the input options
-    dataset = analysis.load(zarr_path)
+    dataset = sa.load(zarr_path)
     if 'channel' in dataset.coords:
         dataset = dataset.rename_vars({'channel': 'port'})
 
@@ -145,7 +146,7 @@ def _run_click_plotter(
     plot_func(dataset, output_path, interactive, style=style, **plot_func_kws)
 
     if interactive:
-        analysis.util.blocking_input('press enter to quit')
+        sa.util.blocking_input('press enter to quit')
 
 
 def click_capture_plotter(description: typing.Optional[str] = None):

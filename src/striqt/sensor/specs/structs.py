@@ -6,7 +6,7 @@ import typing
 
 import msgspec
 
-from striqt import analysis as _analysis
+from striqt import analysis as _sa
 from striqt.analysis.specs import AnalysisGroup, SpecBase, Capture, immutabledict
 
 from ..lib import util
@@ -24,7 +24,7 @@ else:
     pd = util.lazy_import('pandas')
 
 
-@util.lru_cache()
+@_sa.util.lru_cache()
 def _validate_multichannel(port, gain):
     """ensure self.gain is a number or matches len(self.port)"""
     if not isinstance(port, tuple):
@@ -272,8 +272,8 @@ class ManualYFactorPeripheral(Peripherals, frozen=True, kw_only=True):
     ambient_temperature: types.AmbientTemperature
 
 
-BundledAnalysis = _analysis.registry.tospec()
-BundledTriggers = _analysis.registry.signal_trigger.to_spec()
+BundledAnalysis = _sa.registry.tospec()
+BundledTriggers = _sa.registry.signal_trigger.to_spec()
 
 
 class SweepOptions(SpecBase, frozen=True, kw_only=True):

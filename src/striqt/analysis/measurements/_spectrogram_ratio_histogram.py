@@ -7,13 +7,11 @@ from .. import specs
 from ..lib import util
 from . import _channel_power_histogram, _spectrogram, _spectrogram_histogram, shared
 from .shared import registry, hint_keywords
+import striqt.waveform as sw
 
 if typing.TYPE_CHECKING:
     import numpy as np
-
-    import striqt.waveform as sw
 else:
-    sw = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
 
 

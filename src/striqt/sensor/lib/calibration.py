@@ -13,6 +13,8 @@ from . import util as _util
 import msgspec as _msgspec
 from typing_extensions import ParamSpec
 
+import striqt.analysis as sa
+
 if typing.TYPE_CHECKING:
     import numpy as _np
     import pandas as _pd
@@ -290,7 +292,7 @@ def _ensure_loop_at_position(sweep: _specs.Sweep):
             raise TypeError('noise_diode_enabled must be the first specified loop')
 
 
-@_util.lru_cache()
+@sa.util.lru_cache()
 def lookup_power_correction(
     cal_data: 'str | Path | None',
     capture: _specs.SoapyCapture,
@@ -314,7 +316,7 @@ def lookup_power_correction(
     )
 
 
-@_util.lru_cache()
+@sa.util.lru_cache()
 def lookup_system_noise_power(
     cal_data: 'Path | str | None',
     capture: _specs.SoapyCapture,
@@ -481,7 +483,7 @@ class ManualYFactorPeripheral(
         enr = self.calibration_spec.enr
         prompt = f'Confirm that the noise diode ENR is {enr} dB (y/n): '
         while True:
-            response = _util.blocking_input(prompt)
+            response = sa.util.blocking_input(prompt)
             if response.lower() == 'y':
                 break
             elif response.lower() == 'n':
@@ -496,9 +498,9 @@ class ManualYFactorPeripheral(
         if state != self._last_state:
             what = f'noise diode at port {capture.port}'
             if capture.noise_diode_enabled:
-                _util.blocking_input(f'enable {what} and press enter: ')
+                sa.util.blocking_input(f'enable {what} and press enter: ')
             else:
-                _util.blocking_input(f'disable {what} and press enter: ')
+                sa.util.blocking_input(f'disable {what} and press enter: ')
 
         self._last_state = state
 

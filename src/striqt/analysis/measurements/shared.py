@@ -8,17 +8,14 @@ from .. import specs
 from ..lib import dataarrays, register, util
 from ..lib.register import registry
 
+import striqt.waveform as sw
+
 if typing.TYPE_CHECKING:
     from types import ModuleType
     from typing_extensions import ParamSpec
-
     from ..specs.structs import _Cellular5GNRSSBSync, _Cellular5GNRSSBCorrelator
-
     import array_api_compat
     import numpy as np
-    import pandas as pd
-
-    import striqt.waveform as sw
     from striqt.waveform._typing import ArrayType
 
     _P = ParamSpec('_P')
@@ -38,9 +35,7 @@ if typing.TYPE_CHECKING:
 
 
 else:
-    sw = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
-    pd = util.lazy_import('pandas')
     array_api_compat = util.lazy_import('array_api_compat')
 
 

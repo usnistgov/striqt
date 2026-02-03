@@ -5,15 +5,11 @@ __all__ = ['resampling_correction']
 
 
 import dataclasses
-from numbers import Number
 import typing
 
-from .. import specs
-
-from . import calibration, util
+from . import util
 from .sources import AcquiredIQ, _base
-from striqt.analysis.specs import AnalysisGroup, Analysis
-from striqt.analysis.lib import register
+from .. import specs
 
 if typing.TYPE_CHECKING:
     import numpy as np

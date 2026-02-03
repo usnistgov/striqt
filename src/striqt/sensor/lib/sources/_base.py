@@ -10,11 +10,8 @@ from math import ceil
 from threading import Event
 from typing_extensions import Self, Unpack, ParamSpec
 
-from striqt.analysis import dataarrays, registry, Trigger
-from striqt.analysis.lib import register
-from striqt.analysis.specs import AnalysisGroup, Analysis
-from striqt.analysis.lib.util import pinned_array_as_cupy
-from striqt.waveform.fourier import ResamplerDesign
+import striqt.analysis as sa
+import striqt.waveform as sw
 
 from ... import specs
 from .. import util
@@ -22,14 +19,10 @@ from .. import util
 if typing.TYPE_CHECKING:
     import numpy as np
     import pandas as pd
-    import typing_extensions
 
-    import striqt.waveform as sw
     from striqt.waveform._typing import ArrayType
-    from striqt.waveform.fourier import ResamplerDesign
 
 else:
-    sw = util.lazy_import('striqt.waveform')
     pd = util.lazy_import('pandas')
     np = util.lazy_import('numpy')
 
@@ -51,15 +44,15 @@ _T = typing.TypeVar('_T', bound='SourceBase')
 
 
 @dataclasses.dataclass
-class AcquiredIQ(dataarrays.AcquiredIQ):
+class AcquiredIQ(sa.dataarrays.AcquiredIQ):
     """extra metadata needed for downstream analysis"""
 
     info: specs.SourceCoordinates
     extra_data: dict[str, typing.Any]
     alias_func: specs.helpers.PathAliasFormatter | None
     source_spec: specs.Source
-    resampler: ResamplerDesign
-    trigger: register.Trigger | None
+    resampler: sw.fourier.ResamplerDesign
+    trigger: sa.Trigger | None
     analysis: specs.AnalysisGroup | None = None
     voltage_scale: ArrayType | float = 1
 
@@ -158,9 +151,9 @@ def _cast_iq(
     dtype_in = np.dtype(source.setup_spec.transport_dtype)
 
     if source.setup_spec.array_backend == 'cupy':
-        xp = util.cp
+        xp = sa.util.cp
         assert xp is not None, ImportError('cupy is not installed')
-        buffer = pinned_array_as_cupy(buffer)
+        buffer = sa.util.pinned_array_as_cupy(buffer)
     else:
         xp = np
         buffer = xp.array(buffer)
@@ -268,7 +261,9 @@ class HasCaptureType(typing.Protocol[_TC, _PC]):
 
     def _prepare_capture(self, capture: _TC) -> _TC | None: ...
 
-    def get_resampler(self, capture: _TC | None = None) -> ResamplerDesign: ...
+    def get_resampler(
+        self, capture: _TC | None = None
+    ) -> sw.fourier.ResamplerDesign: ...
 
 
 @typing.overload
@@ -277,30 +272,30 @@ def get_trigger_from_spec(setup: specs.Source, analysis: None = None) -> None: .
 
 @typing.overload
 def get_trigger_from_spec(
-    setup: specs.Source, analysis: AnalysisGroup
-) -> register.Trigger: ...
+    setup: specs.Source, analysis: specs.AnalysisGroup
+) -> sa.Trigger: ...
 
 
-@util.lru_cache()
+@sa.util.lru_cache()
 def get_trigger_from_spec(
-    setup: specs.Source, analysis: AnalysisGroup | None = None
-) -> register.Trigger | None:
+    setup: specs.Source, analysis: specs.AnalysisGroup | None = None
+) -> sa.Trigger | None:
     name = get_signal_trigger_name(setup)
     if name is None:
         return None
 
-    if analysis is None and isinstance(setup.signal_trigger, AnalysisGroup):
+    if analysis is None and isinstance(setup.signal_trigger, specs.AnalysisGroup):
         analysis = setup.signal_trigger
 
     if analysis is None:
-        meas_name = register.get_signal_trigger_measurement_name(name, registry)
+        meas_name = sa.register.get_signal_trigger_measurement_name(name, sa.registry)
         raise ValueError(
             f'signal_trigger {meas_name!r} requires an analysis specification for {setup.signal_trigger!r}'
         )
-    elif isinstance(analysis, AnalysisGroup):
-        return register.Trigger.from_spec(name, analysis, registry=registry)
+    elif isinstance(analysis, specs.AnalysisGroup):
+        return sa.Trigger.from_spec(name, analysis, registry=sa.registry)
     elif isinstance(analysis, Analysis):
-        return register.Trigger(setup.signal_trigger, analysis, registry=registry)
+        return sa.Trigger(setup.signal_trigger, analysis, registry=sa.registry)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -338,7 +333,7 @@ def get_bound_spec(spec: specs.SpecBase | None, cls: type[_TB] | None, **kws) ->
 
 def get_array_namespace(array_backend: specs.types.ArrayBackend) -> types.ModuleType:
     if array_backend == 'cupy':
-        return util.cp
+        return sa.util.cp
     elif array_backend == 'numpy':
         return np
     else:
@@ -392,7 +387,7 @@ class SourceBase(
 
         if _spec.array_backend == 'cupy':
             util.safe_import('cupy')
-            util.configure_cupy()
+            sa.util.configure_cupy()
 
         self._apply_setup(_spec, **_extra_specs)
 
@@ -444,7 +439,7 @@ class SourceBase(
     def setup_spec(self) -> _TS:
         return self.__setup__
 
-    @util.stopwatch('arm', 'source', threshold=10e-3)
+    @sa.util.stopwatch('arm', 'source', threshold=10e-3)
     def arm(self, *args, **kwargs):
         """stop the stream, apply a capture configuration, and start it"""
         assert self._buffers is not None
@@ -480,7 +475,7 @@ class SourceBase(
         self._capture = self._prepare_capture(spec) or spec
 
     def read_iq(
-        self, analysis: AnalysisGroup | None = None
+        self, analysis: specs.AnalysisGroup | None = None
     ) -> 'tuple[ArrayType, int|None]':
         """read IQ for the armed capture"""
         assert self._capture is not None, 'soapy source must be armed to read IQ'
@@ -577,7 +572,7 @@ class SourceBase(
 
         return samples[:, sample_span], start_ns
 
-    @util.stopwatch('acquire', 'source')
+    @sa.util.stopwatch('acquire', 'source')
     def acquire(self, *, analysis=None, correction=True, alias_func=None) -> AcquiredIQ:
         """arm a capture and enable the channel (if necessary), read the resulting IQ waveform.
 
@@ -615,7 +610,7 @@ class SourceBase(
             return iq
         else:
             tmin = self.capture_spec.duration / 2
-            with util.stopwatch('resampling filter', threshold=tmin):
+            with sa.util.stopwatch('resampling filter', threshold=tmin):
                 return resampling.resampling_correction(iq, overwrite_x=True)
 
     def _package_acquisition(
@@ -670,7 +665,7 @@ class SourceBase(
 
         return self._capture
 
-    def get_resampler(self, capture=None) -> ResamplerDesign:
+    def get_resampler(self, capture=None) -> sw.fourier.ResamplerDesign:
         if capture is None:
             capture = self.capture_spec
 
@@ -770,13 +765,13 @@ class _ResamplerKws(typing.TypedDict, total=False):
     min_fft_size: int
 
 
-@util.lru_cache(30000)
+@sa.util.lru_cache(30000)
 def _design_capture_resampler(
     master_clock_rate: float,
     capture: specs.SensorCapture,
     backend_sample_rate: float | None = None,
     **kwargs: Unpack[_ResamplerKws],
-) -> ResamplerDesign:
+) -> sw.fourier.ResamplerDesign:
     """design a filter specified by the capture for a radio with the specified MCR.
 
     For the return value, see `striqt.waveform.fourier.design_cola_resampler`
@@ -845,7 +840,7 @@ def design_capture_resampler(
     capture: specs.SensorCapture,
     backend_sample_rate: float | None = None,
     **kws: Unpack[_ResamplerKws],
-) -> ResamplerDesign:
+) -> sw.fourier.ResamplerDesign:
     # cast the struct in case it's a subclass
     fixed_capture = specs.SensorCapture.from_spec(capture)
     kws = _ResamplerKws(
@@ -872,7 +867,7 @@ def design_capture_resampler(
 
 
 def needs_resample(
-    analysis_filter: ResamplerDesign, capture: specs.SensorCapture
+    analysis_filter: sw.fourier.ResamplerDesign, capture: specs.SensorCapture
 ) -> bool:
     """determine whether an STFT will be needed to filter or resample"""
 
@@ -887,11 +882,11 @@ def _get_filter_pad(capture: specs.SensorCapture):
         return 0
 
 
-@util.lru_cache(30000)
+@sa.util.lru_cache(30000)
 def _get_fft_resample_pad(
     setup: specs.Source,
     capture: specs.SensorCapture,
-    analysis: AnalysisGroup | None = None,
+    analysis: specs.AnalysisGroup | None = None,
 ) -> tuple[int, int]:
     # accommodate the large fft by padding to a fast size that includes at least lag_pad
     min_lag_pad = _get_trigger_pad_size(setup, capture, analysis)
@@ -923,17 +918,17 @@ def _get_fft_resample_pad(
 def get_fft_resample_pad(
     setup: specs.Source,
     capture: specs.SensorCapture,
-    analysis: AnalysisGroup | None = None,
+    analysis: specs.AnalysisGroup | None = None,
 ) -> tuple[int, int]:
     capture = specs.SensorCapture.from_spec(capture)
     return _get_fft_resample_pad(setup, capture, analysis)
 
 
-@util.lru_cache(30000)
+@sa.util.lru_cache(30000)
 def _get_dsp_pad_size(
     setup: specs.Source,
     capture: specs.SensorCapture,
-    analysis: AnalysisGroup | None = None,
+    analysis: specs.AnalysisGroup | None = None,
 ) -> tuple[int, int]:
     """returns the padding before and after a waveform to achieve an integral number of FFT windows"""
 
@@ -956,15 +951,15 @@ def _get_dsp_pad_size(
 def get_dsp_pad_size(
     setup: specs.Source,
     capture: specs.SensorCapture,
-    analysis: AnalysisGroup | None = None,
+    analysis: specs.AnalysisGroup | None = None,
 ) -> tuple[int, int]:
     capture = specs.SensorCapture.from_spec(capture)
     return _get_dsp_pad_size(setup, capture, analysis)
 
 
-@util.lru_cache()
+@sa.util.lru_cache()
 def get_signal_trigger_name(setup: specs.Source) -> str | None:
-    if isinstance(setup.signal_trigger, AnalysisGroup):
+    if isinstance(setup.signal_trigger, specs.AnalysisGroup):
         analysis = setup.signal_trigger
         meas = {
             name: meas for name, meas in analysis.to_dict().items() if meas is not None
@@ -983,11 +978,11 @@ def get_signal_trigger_name(setup: specs.Source) -> str | None:
 def _get_trigger_pad_size(
     setup: specs.Source,
     capture: specs.SensorCapture,
-    trigger_info: Trigger | AnalysisGroup | None = None,
+    trigger_info: sa.Trigger | specs.AnalysisGroup | None = None,
 ) -> int:
-    if isinstance(trigger_info, AnalysisGroup):
+    if isinstance(trigger_info, specs.AnalysisGroup):
         trigger = get_trigger_from_spec(setup, trigger_info)
-    elif isinstance(trigger_info, Trigger):
+    elif isinstance(trigger_info, sa.Trigger):
         trigger = trigger_info
     else:
         return 0
@@ -1004,7 +999,6 @@ def _get_trigger_pad_size(
 
 def _get_next_fast_len(n, array_backend: specs.types.ArrayBackend) -> int:
     if array_backend == 'cupy':
-        from ..util import cp
         import cupyx.scipy.fft as fft  # type: ignore
     elif array_backend == 'numpy':
         import scipy.fft as fft
@@ -1016,7 +1010,7 @@ def _get_next_fast_len(n, array_backend: specs.types.ArrayBackend) -> int:
     return size
 
 
-@util.lru_cache()
+@sa.util.lru_cache()
 def _get_oaresample_pad(master_clock_rate: float, capture: specs.SensorCapture):
     resampler_design = design_capture_resampler(master_clock_rate, capture)
 
@@ -1042,13 +1036,13 @@ def _get_oaresample_pad(master_clock_rate: float, capture: specs.SensorCapture):
     return (samples_in - min_samples_in) + noverlap + nfft // 2, noverlap
 
 
-@util.lru_cache()
+@sa.util.lru_cache()
 def _cached_channel_read_buffer_count(
     setup: specs.Source,
     capture: specs.SensorCapture,
     *,
     include_holdoff: bool = False,
-    analysis: AnalysisGroup | None = None,
+    analysis: specs.AnalysisGroup | None = None,
 ) -> int:
     if sw.isroundmod(capture.duration * capture.sample_rate, 1):
         samples_out = round(capture.duration * capture.sample_rate)
@@ -1081,7 +1075,9 @@ def _cached_channel_read_buffer_count(
 
 
 def get_channel_read_buffer_count(
-    source: SourceBase, analysis: AnalysisGroup | None = None, include_holdoff=False
+    source: SourceBase,
+    analysis: specs.AnalysisGroup | None = None,
+    include_holdoff=False,
 ) -> int:
     assert source._capture is not None
 
@@ -1095,7 +1091,7 @@ def get_channel_read_buffer_count(
     )
 
 
-@util.stopwatch(
+@sa.util.stopwatch(
     'allocate buffers', 'source', threshold=5e-3, logger_level=logging.DEBUG
 )
 def alloc_empty_iq(

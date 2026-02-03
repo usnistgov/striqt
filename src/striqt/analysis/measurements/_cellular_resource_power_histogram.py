@@ -12,13 +12,11 @@ from . import _channel_power_histogram, _spectrogram, shared
 from ._cellular_cyclic_autocorrelation import link_direction, tdd_config_from_str
 from .shared import registry, hint_keywords
 
+import striqt.waveform as sw
+
 if typing.TYPE_CHECKING:
     import numpy as np
-
-    import striqt.waveform as sw
-    import striqt.waveform._typing
 else:
-    sw = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
 
 

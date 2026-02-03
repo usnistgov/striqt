@@ -19,6 +19,7 @@ from .. import specs
 from ..specs import _TC, _TP, _TS
 
 import typing_extensions
+import striqt.analysis as sa
 
 
 if typing.TYPE_CHECKING:
@@ -103,7 +104,7 @@ class Call(util.Call[util._P, util._R]):
                 name = 'compute'
             else:
                 name = threading.current_thread().name
-            with util.stopwatch(name, 'sweep', 0.5, util.logging.INFO):
+            with sa.util.stopwatch(name, 'sweep', 0.5, util.logging.INFO):
                 result = func(*a, **k)
                 if self._dest is not None:
                     self._dest[name] = result
@@ -213,7 +214,7 @@ def _open_devices(
         peripherals.setup(spec.captures, spec.loops)
 
 
-@util.stopwatch('open resources', 'sweep', 1.0, util.PERFORMANCE_INFO)
+@sa.util.stopwatch('open resources', 'sweep', 1.0, sa.util.PERFORMANCE_INFO)
 def open_resources(
     spec: specs.Sweep[_TS, _TP, _TC],
     spec_path: str | Path | None = None,

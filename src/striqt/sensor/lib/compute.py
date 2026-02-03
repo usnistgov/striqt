@@ -6,16 +6,16 @@ from collections import defaultdict
 import dataclasses
 import logging
 import typing
+import warnings
+
+from .. import specs
+from . import sources, util
+
+import striqt.analysis as sa
+import striqt.waveform as sw
+from striqt.analysis.lib.dataarrays import CAPTURE_DIM, PORT_DIM  # noqa: F401
 
 import msgspec
-
-from striqt.analysis import dataarrays, measurements
-from striqt.analysis.lib.dataarrays import CAPTURE_DIM, PORT_DIM  # noqa: F401
-from striqt.analysis.lib.util import is_cupy_array
-from ..specs import helpers
-from .. import specs
-from striqt.waveform import util as waveform_util
-from . import sources, util
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -37,12 +37,12 @@ else:
 SOURCE_ID_NAME = 'source_id'
 
 
-class EvaluationOptions(dataarrays.EvaluationOptions[dataarrays._TA], kw_only=True):
+class EvaluationOptions(sa.EvaluationOptions[sa.dataarrays._TA], kw_only=True):
     sweep_spec: specs.Sweep
     extra_attrs: dict[str, typing.Any] = dataclasses.field(default_factory=dict)
     correction: bool = False
     cache_callback: typing.Callable | None = None
-    expand_dims: typing.Sequence[str] = (dataarrays.CAPTURE_DIM,)
+    expand_dims: typing.Sequence[str] = (CAPTURE_DIM,)
 
     def __post_init__(self):
         super().__post_init__()
@@ -50,7 +50,7 @@ class EvaluationOptions(dataarrays.EvaluationOptions[dataarrays._TA], kw_only=Tr
 
 @dataclasses.dataclass
 class DelayedDataset:
-    delayed: dict[str, dataarrays.DelayedDataArray]
+    delayed: dict[str, sa.dataarrays.DelayedDataArray]
     capture: specs.SensorCapture
     extra_coords: specs.SourceCoordinates
     extra_data: dict[str, typing.Any]
@@ -91,7 +91,7 @@ def concat_time_dim(datasets: list['xr.Dataset'], time_dim: str) -> 'xr.Dataset'
     return ds
 
 
-@util.lru_cache()
+@sa.util.lru_cache()
 def _coord_template(
     capture_cls: type[specs.SensorCapture],
     info_cls: type[specs.SourceCoordinates],
@@ -102,7 +102,7 @@ def _coord_template(
     vars = {}
 
     for spec_cls in (capture_cls, info_cls):
-        attrs, defaults = helpers.field_template_values(spec_cls)
+        attrs, defaults = specs.helpers.field_template_values(spec_cls)
 
         for name in attrs.keys():
             if name.startswith('_') or name == 'adjust_analysis':
@@ -147,7 +147,7 @@ def build_capture_coords(
     capture: specs.SensorCapture,
     info: specs.SourceCoordinates,
 ) -> 'xr.Coordinates|None':
-    captures = helpers.split_capture_ports(capture)
+    captures = specs.helpers.split_capture_ports(capture)
 
     if len(captures) == 0:
         return None
@@ -192,7 +192,7 @@ def analyze(
 ) -> 'dict[str, ArrayType]': ...
 
 
-@util.stopwatch('', 'analysis')
+@sa.util.stopwatch('', 'analysis')
 def analyze(
     iq: sources.AcquiredIQ,
     options: EvaluationOptions,
@@ -215,21 +215,19 @@ def analyze(
 
     with options.registry.cache_context(capture, options.cache_callback):
         if options.correction:
-            with util.stopwatch('resampling filter', logger_level=logging.DEBUG):
+            with sa.util.stopwatch('resampling filter', logger_level=logging.DEBUG):
                 iq = resampling.resampling_correction(iq, overwrite_x=overwrite_x)
 
         opts = msgspec.structs.replace(options, as_xarray='delayed')
-        opts = typing.cast(
-            dataarrays.EvaluationOptions[typing.Literal['delayed']], opts
-        )
-        analysis = helpers.adjust_analysis(
+        opts = typing.cast(sa.EvaluationOptions[typing.Literal['delayed']], opts)
+        analysis = specs.helpers.adjust_analysis(
             options.sweep_spec.analysis, capture.adjust_analysis
         )
-        da_delayed = dataarrays.analyze_by_spec(iq, analysis, capture, opts)
+        da_delayed = sa.analyze_by_spec(iq, analysis, capture, opts)
 
     if iq.source_spec.array_backend == 'cupy':
         for name, value in list(iq.extra_data.items()):
-            if is_cupy_array(value):
+            if sw.util.is_cupy_array(value):
                 iq.extra_data[name] = value.get()
 
     if not options.as_xarray:
@@ -321,13 +319,13 @@ def _if_overload_message(
 def from_delayed(dd: DelayedDataset):
     """complete any remaining calculations, transfer from the device, and build an output dataset"""
 
-    with util.stopwatch(
+    with sa.util.stopwatch(
         'package xarray',
         'analysis',
         threshold=10e-3,
         logger_level=logging.DEBUG,
     ):
-        analysis = dataarrays.package_analysis(
+        analysis = sa.dataarrays.package_analysis(
             dd.capture, dd.delayed, expand_dims=(CAPTURE_DIM,)
         )
 
@@ -343,9 +341,9 @@ def from_delayed(dd: DelayedDataset):
     if if_ol_info is not None:
         overload_msgs.append(if_ol_info)
     if len(overload_msgs) > 0:
-        util.get_logger('analysis').warning(', '.join(overload_msgs))
+        sa.util.get_logger('analysis').warning(', '.join(overload_msgs))
 
-    with util.stopwatch(
+    with sa.util.stopwatch(
         'build coords',
         'analysis',
         threshold=10e-3,
@@ -361,7 +359,7 @@ def from_delayed(dd: DelayedDataset):
 
     analysis.attrs.update(dd.config.extra_attrs)
 
-    with util.stopwatch(
+    with sa.util.stopwatch(
         'add peripheral data',
         'analysis',
         threshold=10e-3,
@@ -403,7 +401,7 @@ def sweep_touches_gpu(sweep: specs.Sweep) -> bool:
         return True
 
     analysis_dict = sweep.analysis.to_dict()
-    if tuple(analysis_dict.keys()) != (measurements.iq_waveform.__name__,):
+    if tuple(analysis_dict.keys()) != (sa.measurements.iq_waveform.__name__,):
         # everything except iq_clipping requires a warmup
         return True
 
@@ -493,8 +491,8 @@ def import_compute_modules(cupy=False):
         # this order is important on some versions/platforms!
         # https://github.com/numba/numba/issues/6131
         util.safe_import('numba.cuda')
-        waveform_util.cp = util.safe_import('cupy')
-        util.configure_cupy()
+        sw.util.cp = util.safe_import('cupy')
+        sa.util.configure_cupy()
         # safe_import('cupyx')
         # safe_import('cupyx.scipy')
 
@@ -507,6 +505,12 @@ def import_compute_modules(cupy=False):
 
 def prepare_compute(input_spec: specs.Sweep, skip_warmup: bool = False):
     import_compute_modules(cupy=input_spec.source.array_backend == 'cupy')
+
+    warnings.filterwarnings(
+        'ignore',
+        category=RuntimeWarning,
+        message='Mean of empty slice.*',
+    )
 
     if skip_warmup or input_spec.options.skip_warmup:
         return

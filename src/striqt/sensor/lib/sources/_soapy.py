@@ -1,9 +1,7 @@
 from __future__ import annotations as __
 
 import contextlib
-import dataclasses
 import functools
-import math
 import time
 import typing
 
@@ -17,7 +15,9 @@ from ...specs.structs import (
 
 from .. import calibration, util
 from . import _base
-from striqt.waveform.util import array_namespace
+
+import striqt.analysis as sa
+import striqt.waveform as sw
 
 if typing.TYPE_CHECKING:
     import SoapySDR  # type: ignore
@@ -39,7 +39,7 @@ _TC = typing.TypeVar('_TC', bound=specs.SoapyCapture)
 def _get_adc_peak(
     x: 'ArrayType', capture: specs.SoapyCapture, source: specs.SoapySource
 ):
-    xp = array_namespace(x)
+    xp = sw.util.array_namespace(x)
 
     adc_scale = _base._get_dtype_scale(source.transport_dtype)
 
@@ -173,13 +173,13 @@ def compute_overload_info(
 
     info = {}
     peak = _get_adc_peak(samples, capture, setup)
-    xp = array_namespace(peak)
+    xp = sw.util.array_namespace(peak)
 
     if adc_limit is not None:
         adc_headroom = xp.floor(adc_limit - peak)
         info['adc_headroom'] = xp.clip(adc_headroom, -100, 100).astype('int8')
     if if_limit is not None:
-        xp = array_namespace(samples)
+        xp = sw.util.array_namespace(samples)
         gains = [c.gain for c in specs.helpers.split_capture_ports(capture)]
         peak_im3 = peak + (2 / 3) * xp.array(gains)  # 2/3 arises from intermod
         if_headroom = xp.floor(if_limit - peak_im3)
@@ -237,7 +237,7 @@ class RxStream:
         self._on_overflow: _base.OnOverflowType = on_overflow
         self.ports = ports
 
-    @util.stopwatch('stream initialization', 'source')
+    @sa.util.stopwatch('stream initialization', 'source')
     def open(self, device: 'SoapySDR.Device', ports: specs.types.Port | None = None):
         if self.stream is not None and self.ports is not None:
             return
@@ -473,7 +473,7 @@ class HardwareTimeSync:
             full_secs += 1
         elif frac_secs > 0.2:
             # System time and PPS are off, warn caller
-            util.get_logger('source').warning(
+            sa.util.get_logger('source').warning(
                 f'system time and PPS out of sync by {frac_secs:0.2f}s'
             )
         time_to_set_ns = int((full_secs + 1) * 1e9)
@@ -514,10 +514,10 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
             self._rx_stream.close(self._device)
         finally:
             self._device.close()
-        util.get_logger('source').info('closed')
+        sa.util.get_logger('source').info('closed')
         super().close()
 
-    @util.stopwatch('open soapy radio', 'source', threshold=1)
+    @sa.util.stopwatch('open soapy radio', 'source', threshold=1)
     def _connect(self, spec: _TS, **device_kwargs):
         if SoapySDR is None:
             raise ImportError('could not import SoapySDR')
@@ -531,7 +531,7 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
         else:
             raise RuntimeError('SoapySDR instantiated an unexpected type')
 
-    @util.stopwatch('setup radio', 'source', threshold=1)
+    @sa.util.stopwatch('setup radio', 'source', threshold=1)
     def _apply_setup(self, spec, *, captures=None, loops=None):
         for p in range(self.info.num_rx_ports):
             self._device.setGainMode(SoapySDR.SOAPY_SDR_RX, p, False)
@@ -543,7 +543,7 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
             on_overflow = 'log'
             trigger_strobe = getattr(spec, 'trigger_strobe', None)
             if trigger_strobe is not None:
-                util.get_logger('source').warning(
+                sa.util.get_logger('source').warning(
                     'periodic trigger with host time will suffer from inaccuracy on overflow'
                 )
         else:
@@ -586,6 +586,7 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
 
         # gain before center frequency to accommodate attenuator settling time
         for c in specs.helpers.split_capture_ports(capture):
+            assert not isinstance(c.center_frequency, tuple)
             freq = c.center_frequency - rs['lo_offset']
             self._device.setGain(SoapySDR.SOAPY_SDR_RX, c.port, c.gain)
             self._device.setFrequency(SoapySDR.SOAPY_SDR_RX, c.port, freq)
@@ -658,7 +659,7 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
             self.capture_spec,
             self.setup_spec.master_clock_rate,
             alias_func=alias_func,
-            xp=array_namespace(samples),
+            xp=sw.util.array_namespace(samples),
         )
         if power_scale is not None:
             iq.voltage_scale = iq.voltage_scale * (power_scale**0.5)
@@ -686,7 +687,7 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
     def info(self) -> specs.SoapySourceInfo:
         return probe_soapy_info(self._device)
 
-    @util.stopwatch('read_iq', 'source')
+    @sa.util.stopwatch('read_iq', 'source')
     def read_iq(self, analysis=None):
         assert self._rx_stream is not None, 'soapy device is not open'
         assert self._device is not None, 'soapy device is not open'

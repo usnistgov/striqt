@@ -36,7 +36,8 @@ def adjust_port(spec, port):
     help='limit the acquisition the specified input port index',
 )
 def run(*, yaml_path, debug, verbose, port, **kws):
-    from striqt import sensor as ss
+    import striqt.sensor as ss
+    import striqt.analysis as sa
 
     def confirm_labels(sweep: ss.specs.Sweep, source_id: str):
         from striqt import sensor as ss
@@ -56,7 +57,7 @@ def run(*, yaml_path, debug, verbose, port, **kws):
         )
 
         while True:
-            response = ss.util.blocking_input(
+            response = sa.util.blocking_input(
                 f'{info}\nconfirm: are these correct? (y/n) '
             )
 

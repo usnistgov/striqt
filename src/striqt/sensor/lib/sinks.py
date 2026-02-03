@@ -16,6 +16,8 @@ from . import util as _util
 from . import sources as _sources
 from .. import specs as _specs
 
+import striqt.analysis as _sa
+
 if _typing.TYPE_CHECKING:
     import xarray as _xr
 else:
@@ -111,7 +113,7 @@ class NoSink(SinkBase):
         with _util.log_capture_context(
             'sink', capture_index=count - 1, capture_count=count
         ):
-            _util.get_logger('sink').info(f'done')
+            _sa.util.get_logger('sink').info(f'done')
 
     def append(self, capture_result) -> _compute.DelayedDataset:
         self.captures_elapsed += 1
@@ -135,9 +137,8 @@ class ZarrSinkBase(SinkBase):
             self.store.close()
 
         path = self.get_root_path()
-        count = self.captures_elapsed
 
-        _util.get_logger('sink').info(f'closed "{str(path)}"')
+        _sa.util.get_logger('sink').info(f'closed "{str(path)}"')
 
     def get_root_path(self):
         if hasattr(self.store, 'path'):
@@ -156,7 +157,7 @@ class ZarrCaptureSink(ZarrSinkBase):
             self.flush()
             self._group_sizes.pop(0)
         else:
-            _util.get_logger('sink').debug('queued')
+            _sa.util.get_logger('sink').debug('queued')
 
         return ret
 
@@ -171,7 +172,7 @@ class ZarrCaptureSink(ZarrSinkBase):
         self.submit(self._flush_thread, data_list)
 
     def _flush_thread(self, data_list):
-        with _util.stopwatch('merge dataset', 'sink', threshold=0.25):
+        with _sa.util.stopwatch('merge dataset', 'sink', threshold=0.25):
             dataset = _xr.concat(
                 data_list,
                 _compute.CAPTURE_DIM,
@@ -182,11 +183,11 @@ class ZarrCaptureSink(ZarrSinkBase):
 
         path = self.get_root_path()
         count = self.captures_elapsed
-        logger = _util.get_logger('sink')
+        logger = _sa.util.get_logger('sink')
 
         with (
             _util.log_capture_context('sink', capture_index=count - 1),
-            _util.stopwatch(f'sync to {path}', 'sink'),
+            _sa.util.stopwatch(f'sync to {path}', 'sink'),
         ):
             _io.dump_data(self.store, dataset, max_threads=self._spec.max_threads)
 
@@ -228,16 +229,16 @@ class ZarrTimeAppendSink(ZarrSinkBase):
         self.submit(self._flush_thread, data_list)
 
     def _flush_thread(self, data_list):
-        with _util.stopwatch('build dataset', 'sink', threshold=0.5):
+        with _sa.util.stopwatch('build dataset', 'sink', threshold=0.5):
             by_spectrogram = _compute.concat_time_dim(data_list, 'spectrogram_time')
 
         path = self.get_root_path()
         count = self.captures_elapsed
-        logger = _util.get_logger('sink')
+        logger = _sa.util.get_logger('sink')
 
         with (
             _util.log_capture_context('sink', capture_index=count - 1),
-            _util.stopwatch(f'sync {path}', 'sink', threshold=0.5),
+            _sa.util.stopwatch(f'sync {path}', 'sink', threshold=0.5),
         ):
             _io.dump_data(
                 self.store,

@@ -7,7 +7,9 @@ import typing
 
 from ... import specs
 from .. import util
-from striqt.analysis.lib import io
+
+import striqt.analysis as sa
+import striqt.waveform as sw
 
 from . import _base
 
@@ -68,7 +70,7 @@ class TDMSSource(
 
     def get_resampler(
         self, capture: specs.FileCapture | None = None
-    ) -> _base.ResamplerDesign:
+    ) -> sw.fourier.ResamplerDesign:
         if capture is None:
             capture = self.capture_spec
 
@@ -85,12 +87,12 @@ class MATSource(
     """returns IQ waveforms from a .mat file"""
 
     _file_info: specs.FileAcquisitionInfo
-    _file_stream: io._FileStreamBase
+    _file_stream: sa.io._FileStreamBase
 
     def _connect(self, spec):
         meta = spec.file_metadata
 
-        self._file_stream = io.open_bare_iq(
+        self._file_stream = sa.io.open_bare_iq(
             spec.path,
             format=spec.file_format,
             dtype='complex64',
@@ -129,7 +131,7 @@ class MATSource(
 
     def get_resampler(
         self, capture: specs.FileCapture | None = None
-    ) -> _base.ResamplerDesign:
+    ) -> sw.fourier.ResamplerDesign:
         if capture is None:
             capture = self.capture_spec
         mcr = self._file_info.backend_sample_rate
@@ -175,7 +177,7 @@ class ZarrIQSource(
     def _connect(self, spec):
         """set the waveform from an xarray.DataArray containing a single capture of IQ samples"""
 
-        waveform = io.load(spec.path).iq_waveform
+        waveform = sa.io.load(spec.path).iq_waveform
 
         if len(spec.select) > 0:
             waveform = waveform.set_xindex(list(spec.select.keys()))
@@ -206,7 +208,7 @@ class ZarrIQSource(
             backend_sample_rate=self._read_coord('sample_rate'),
         )
 
-    def get_resampler(self, capture=None) -> _base.ResamplerDesign:
+    def get_resampler(self, capture=None) -> sw.fourier.ResamplerDesign:
         if capture is None:
             capture = self.capture_spec
         fs = self._read_coord('sample_rate')

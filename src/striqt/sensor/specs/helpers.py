@@ -27,7 +27,7 @@ if typing.TYPE_CHECKING:
     _T = typing.TypeVar('_T')
 
 
-@util.lru_cache()
+@sa.util.lru_cache()
 def _check_fields(
     cls: type[specs.SpecBase], names: tuple[str, ...], new_instance=False
 ):
@@ -45,7 +45,7 @@ def _check_fields(
         raise TypeError(f'invalid capture fields {extra!r} specified in loops')
 
 
-@util.lru_cache()
+@sa.util.lru_cache()
 def pairwise_by_port(
     c1: _TC, c2: _TC | None, is_new: bool
 ) -> list[tuple[_TC, _TC | None]]:
@@ -62,7 +62,7 @@ def pairwise_by_port(
     return list(pairwise)
 
 
-@util.lru_cache()
+@sa.util.lru_cache()
 def _expand_capture_loops(
     captures: tuple[_TC, ...],
     loops: tuple[specs.LoopSpec, ...],
@@ -153,7 +153,7 @@ def loop_captures(
     )
 
 
-@util.lru_cache()
+@sa.util.lru_cache()
 def adjust_analysis(
     analyses: specs.AnalysisGroup,
     adjust_analysis: typing.Mapping[str, typing.Any] | None,
@@ -174,7 +174,7 @@ def adjust_analysis(
     unused_names = adjust_analysis.keys() - used_names
 
     if len(unused_names) > 0:
-        logger = util.get_logger('sweep')
+        logger = sa.util.get_logger('sweep')
         logger.warning(
             f'no analysis parameters match analysis_adjust keys {unused_names}'
         )
@@ -198,7 +198,7 @@ def varied_capture_fields(
     return [f for f, c in totals.items() if c > 1]
 
 
-@util.lru_cache()
+@sa.util.lru_cache()
 def get_capture_type(sweep_cls: type[specs.Sweep]) -> type[specs.SensorCapture]:
     if sweep_cls.__bindings__ is not None:
         return sweep_cls.__bindings__.schema.capture
@@ -210,7 +210,7 @@ def get_capture_type(sweep_cls: type[specs.Sweep]) -> type[specs.SensorCapture]:
 Capture = typing.TypeVar('Capture', bound=specs.SensorCapture)
 
 
-@util.lru_cache()
+@sa.util.lru_cache()
 def split_capture_ports(capture: Capture) -> list[Capture]:
     """split a multi-channel capture into a list of single-channel captures.
 
@@ -236,7 +236,7 @@ def split_capture_ports(capture: Capture) -> list[Capture]:
     return [capture.replace(**remap) for remap in remaps]
 
 
-@util.lru_cache()
+@sa.util.lru_cache()
 def max_by_frequency(
     field: str,
     captures: tuple[specs.SoapyCapture, ...],
@@ -260,7 +260,7 @@ def max_by_frequency(
     return map
 
 
-@util.lru_cache()
+@sa.util.lru_cache()
 def _get_capture_adjust_fields(
     spec: specs.AdjustCapturesType, source_id: str | None
 ) -> dict[str, str | specs.CaptureRemap]:
@@ -278,7 +278,7 @@ def _get_capture_adjust_fields(
     return fields
 
 
-@util.lru_cache()
+@sa.util.lru_cache()
 def _get_capture_adjust_dependencies(
     spec: specs.AdjustCapturesType, source_id: str | None
 ) -> dict[str, str]:
@@ -296,7 +296,7 @@ def _get_capture_adjust_dependencies(
     return deps
 
 
-@util.lru_cache()
+@sa.util.lru_cache()
 def describe_capture(
     capture: specs.Capture,
     fields: tuple[str, ...],
@@ -320,7 +320,7 @@ def describe_capture(
     return join.join(diffs)
 
 
-@util.lru_cache()
+@sa.util.lru_cache()
 def _list_capture_adjustments(
     spec: specs.AdjustCapturesType, source_id: str | None
 ) -> tuple[str, ...]:
@@ -419,46 +419,7 @@ def _get_source_capture_adjustments(
     return ret
 
 
-# @util.lru_cache()
-# def apply_capture_adjustments(
-#     capture: _TC,
-#     spec: specs.AdjustCapturesType,
-#     *,
-#     source_id: str | None = None,
-# ) -> _TC:
-#     remap_by_port = defaultdict(list)
-#     splits = split_capture_ports(capture)
-
-#     for c in splits:
-#         map = _adjust_captures_single_port(c, spec, source_id)
-#         for k, v in map.items():
-#             remap_by_port[k].append(v)
-
-#     remap = {}
-#     for field, values in remap_by_port.items():
-#         counts = len(set(values))
-
-#         if counts > 1:
-#             remap[field] = tuple(values)
-#             continue
-
-#         capture_value = getattr(capture, field)
-#         if isinstance(capture_value, tuple):
-#             input_len = len(capture_value)
-#         else:
-#             input_len = 0
-
-#         if input_len == 0:
-#             remap[field] = values[0]
-#         elif input_len == 1:
-#             remap[field] = (values[0],)
-#         else:
-#             remap[field] = len(splits) * (values[0],)
-
-#     return capture.replace(**remap)
-
-
-@util.lru_cache()
+@sa.util.lru_cache()
 def get_path_fields(
     sweep: specs.Sweep,
     *,
@@ -500,7 +461,7 @@ def ensure_tuple(obj: _T | tuple[_T, ...], size: int | None = None) -> tuple[_T,
         return (obj,) * size
 
 
-@util.lru_cache()
+@sa.util.lru_cache()
 def get_unique_ports(
     captures: tuple[_TC, ...],
     loops: tuple[specs.LoopSpec, ...] | None = None,
@@ -521,7 +482,7 @@ def get_unique_ports(
     return tuple(sorted(ports))
 
 
-@util.lru_cache()
+@sa.util.lru_cache()
 def _get_format_fields(s: str):
     """
     Extracts and returns a list of formatting field names from a given format string.
@@ -612,7 +573,7 @@ def to_builtins(obj: typing.Any) -> typing.Any:
     return msgspec.to_builtins(obj, enc_hook=sa.specs.helpers._enc_hook)
 
 
-@util.lru_cache()
+@sa.util.lru_cache()
 def list_capture_adjustments(
     sweep: specs.Sweep[typing.Any, typing.Any, _TC], source_id: str
 ) -> dict[str, tuple[str, ...]]:
@@ -759,7 +720,7 @@ def _infer_field_template(type_: msgspec.inspect.Type) -> tuple[dict, typing.Any
         raise TypeError(f'unsupported msgspec field type {type_!r}')
 
 
-@util.lru_cache()
+@sa.util.lru_cache()
 def field_template_values(
     spec_cls: type[msgspec.Struct],
 ) -> tuple[dict[str, typing.Any], dict[str, typing.Any]]:
@@ -777,7 +738,7 @@ def field_template_values(
     return attrs, defaults
 
 
-@util.lru_cache()
+@sa.util.lru_cache()
 def get_field_metadata(struct: type[specs.SpecBase], field: str) -> dict[str, str]:
     """introspect an attrs dict for xarray from the specified field in `struct`"""
     hints = typing.get_type_hints(struct, include_extras=True)

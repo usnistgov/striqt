@@ -54,7 +54,7 @@ def _log_progress_contexts(index, count):
             raise
 
 
-@util.stopwatch('acquire', 'sweep', threshold=0.25)
+@sa.util.stopwatch('acquire', 'sweep', threshold=0.25)
 def _acquire_both(
     res: Resources[typing.Any, typing.Any, _TC, _PS, _PC], this: _TC, next_: _TC | None
 ) -> sources.AcquiredIQ:
@@ -147,7 +147,7 @@ def _log_cache_info(
         xp=xp,
     )
 
-    logger = util.get_logger('analysis')
+    logger = sa.util.get_logger('analysis')
     capture_splits = specs.helpers.split_capture_ports(capture)
 
     for c, snr in zip(capture_splits, sw.powtodB(peaks) - noise):

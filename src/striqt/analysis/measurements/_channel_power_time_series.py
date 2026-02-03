@@ -1,6 +1,5 @@
 from __future__ import annotations as __
 
-import fractions
 import typing
 
 from .. import specs
@@ -8,13 +7,12 @@ from .. import specs
 from ..lib import dataarrays, register, util
 from .shared import registry, hint_keywords
 
+import striqt.waveform as sw
+
 if typing.TYPE_CHECKING:
     import numpy as np
     import pandas as pd
-
-    import striqt.waveform as sw
 else:
-    sw = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
     pd = util.lazy_import('pandas')
 

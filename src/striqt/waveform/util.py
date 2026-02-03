@@ -6,8 +6,6 @@ import itertools
 import math
 import sys
 import typing
-from contextlib import contextmanager
-from enum import Enum
 from numbers import Number
 from types import ModuleType
 import array_api_compat

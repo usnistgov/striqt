@@ -8,14 +8,13 @@ from ..lib import register, util
 from . import shared
 from .shared import registry
 
+import striqt.waveform as sw
+
 if typing.TYPE_CHECKING:
     import array_api_compat
     import numpy as np
-
-    import striqt.waveform as sw
     import striqt.waveform._typing
 else:
-    sw = util.lazy_import('striqt.waveform')
     np = util.lazy_import('numpy')
     array_api_compat = util.lazy_import('array_api_compat')
 
