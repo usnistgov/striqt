@@ -149,7 +149,7 @@ def _log_cache_info(
     capture_splits = specs.helpers.split_capture_ports(capture)
 
     for c, snr in zip(capture_splits, sw.powtodB(peaks) - noise):
-        snr_desc = f'{round(snr)} dB max SNR'
+        snr_desc = f'{round(float(snr))} dB max SNR'
         if 'nan' in snr_desc.lower():
             continue
         capture_desc = specs.helpers.describe_capture(c, **desc_kws)
