@@ -242,9 +242,8 @@ def iterate_sweep(
     # iterate across (previous-1, previous, current, next) captures to support concurrency
     offset_captures = util.zip_offsets(capture_iter, (-2, -1, 0, 1), fill=None)
 
-    for i, (_, prev, this, next_) in enumerate(offset_captures):
+    for i, (_, _, this, next_) in enumerate(offset_captures):
         calls = {}
-        print(sa.describe_capture(this, prev=prev, ignore=('adjust_captures',)))
 
         with _log_progress_contexts(i, count):
             if iq is None:
