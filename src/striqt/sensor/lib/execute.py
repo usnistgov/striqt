@@ -159,7 +159,7 @@ def _log_cache_info(
 
         snr_desc = f'{round(snr)} dB max SNR'
         capture_desc = specs.helpers.describe_capture(c, **desc_kws)
-        logger.info(f'spectrogram ▮ {snr_desc:<14} ▮ {capture_desc}')
+        logger.info(f'spectrogram ▮ {snr_desc:<15} ▮ {capture_desc}')
 
 # spectrogram SNR ▮ 7 dB peak SNR ▮ channel_name='3960 MHz', antenna_name='small_dish', gain=-20.0
 def iterate_sweep(
