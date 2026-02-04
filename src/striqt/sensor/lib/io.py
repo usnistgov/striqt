@@ -149,12 +149,13 @@ def read_yaml_spec(
 
     spec = sa.specs.helpers.convert_dict(tree, type=get_tagged_sweep_type())
 
-    sink = spec.sink
-    if output_path is not None:
-        sink = sink.replace(path=output_path)
     if store_backend is not None:
         sink = sink.replace(store=store_backend)
-    return spec.replace(sink=sink)
+    replace = dict(sink=spec.sink)
+    if output_path is not None:
+        replace['path'] = output_path
+
+    return spec.replace(**replace)
 
 
 def read_tdms_iq(

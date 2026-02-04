@@ -7,7 +7,7 @@ import typing
 import msgspec
 
 from striqt import analysis as _sa
-from striqt.analysis.specs import AnalysisGroup, SpecBase, Capture, immutabledict
+from striqt.analysis.specs import AnalysisGroup, SpecBase, Capture, frozendict
 
 from ..lib import util
 from . import types
@@ -163,7 +163,7 @@ class NoSource(Source, frozen=True, kw_only=True):
 class MATSource(Source, kw_only=True, frozen=True, dict=True):
     path: types.WaveformInputPath
     file_format: types.Format = 'auto'
-    file_metadata: types.FileMetadata = msgspec.field(default_factory=immutabledict)
+    file_metadata: types.FileMetadata = msgspec.field(default_factory=frozendict)
     loop: types.FileLoop = False
     transport_dtype: typing.ClassVar[types.TransportDType] = 'complex64'
 
@@ -228,7 +228,6 @@ class FrequencyBinRange(LoopBase, frozen=True, kw_only=True):
 
     def get_points(self) -> list[float]:
         from math import ceil
-
         import numpy as np
 
         span = self.stop - self.start

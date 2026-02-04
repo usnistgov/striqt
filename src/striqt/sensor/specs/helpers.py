@@ -15,7 +15,7 @@ from pathlib import Path
 import msgspec
 
 import striqt.analysis as sa
-from striqt.analysis.specs.helpers import _dec_hook, immutabledict
+from striqt.analysis.specs.helpers import _dec_hook, frozendict
 
 from . import structs as specs
 from . import types
@@ -179,7 +179,7 @@ def adjust_analysis(
             f'no analysis parameters match analysis_adjust keys {unused_names}'
         )
 
-    return sa.specs.helpers.deep_freeze(specs.BundledAnalysis.from_dict(result))
+    return sa.specs.helpers.freeze(specs.BundledAnalysis.from_dict(result))
 
 
 def varied_capture_fields(
@@ -350,7 +350,7 @@ def adjust_captures(
 ) -> dict[str, typing.Any]:
     """evaluate the field values"""
 
-    if not isinstance(capture, (dict, immutabledict)):
+    if not isinstance(capture, (dict, frozendict)):
         raise TypeError('capture must be a dict or mapping')
 
     fields = _get_capture_adjust_fields(adjust_spec, source_id)
@@ -566,8 +566,9 @@ def _convert_label_lookup_keys(sweep: specs.Sweep) -> specs.AdjustCapturesType:
             result[source_id][field] = specs.CaptureRemap(key=v.key, lookup=lookup)
             lookup_types[field] = str
 
+    depth = sa.specs.helpers.inspect_freeze_depths(type(sweep))['adjust_captures']
     fixed = msgspec.convert(result, specs.AdjustCapturesType, strict=False)
-    return sa.specs.helpers.deep_freeze(fixed)  # type: ignore
+    return sa.specs.helpers.freeze(fixed, depth)  # type: ignore
 
 
 def to_builtins(obj: typing.Any) -> typing.Any:
@@ -675,6 +676,7 @@ def concat_group_sizes(
     return sizes
 
 
+# %% msgspec field type introspection
 def _infer_field_template(type_: msgspec.inspect.Type) -> tuple[dict, typing.Any]:
     """returns an (attrs, default_value) pair for the given msgspec field type"""
     from msgspec import inspect as mi

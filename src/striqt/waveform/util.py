@@ -133,15 +133,33 @@ def binned_mean(
     return ret
 
 
+_caches = {}
+
+
 @functools.wraps(functools.lru_cache)
 def lru_cache(
     maxsize: int | None = 128, typed: bool = False
 ) -> typing.Callable[[_TC], _TC]:
     # presuming that the API is designed to accept only hashable types, set
     # the type hint to match the wrapped function
-    return lambda func: func
     func = functools.lru_cache(maxsize, typed)
-    return typing.cast(typing.Callable[[_TC], _TC], func)
+
+    @functools.wraps(func)
+    def wrap(wrapee):
+        wrapped = func(wrapee)
+        _caches[wrapee] = wrapped
+        return wrapped
+
+    return typing.cast(typing.Callable[[_TC], _TC], wrap)
+
+
+def clear_caches():
+    for cache in _caches.values():
+        cache.cache_clear()
+
+
+def cache_info() -> dict[str, typing.Any]:
+    return {f'{f.__module__}.{f.__name__}': c.cache_info() for f, c in _caches.items()}
 
 
 @lru_cache()

@@ -14,7 +14,7 @@ _K = typing.TypeVar('_K')
 _V = typing.TypeVar('_V')
 
 
-class immutabledict(typing.Mapping[_K, _V]):
+class frozendict(typing.Mapping[_K, _V]):
     """
     An immutable dictionary that supports hashing
     """
@@ -26,10 +26,10 @@ class immutabledict(typing.Mapping[_K, _V]):
     @classmethod
     def fromkeys(
         cls, seq: typing.Iterable[_K], value: typing.Optional[_V] = None
-    ) -> immutabledict[_K, _V]:
+    ) -> frozendict[_K, _V]:
         return cls(dict.fromkeys(seq, value))
 
-    def __new__(cls, *args: typing.Any, **kwargs: typing.Any) -> immutabledict[_K, _V]:
+    def __new__(cls, *args: typing.Any, **kwargs: typing.Any) -> frozendict[_K, _V]:
         inst = super().__new__(cls)
         inst._dict = dict(*args, **kwargs)  # type: ignore
         inst._hash = None
@@ -44,7 +44,7 @@ class immutabledict(typing.Mapping[_K, _V]):
     def __contains__(self, key: object) -> bool:
         return key in self._dict
 
-    def copy(self) -> immutabledict[_K, _V]:
+    def copy(self) -> frozendict[_K, _V]:
         return self.__class__(self)
 
     def __iter__(self) -> typing.Iterator[_K]:
@@ -57,15 +57,20 @@ class immutabledict(typing.Mapping[_K, _V]):
         return f'{self.__class__.__name__}({self._dict!r})'
 
     def __hash__(self) -> int:
-        if self._hash is None:
-            h = 0
-            for key, value in self.items():
+        if self._hash is not None:
+            return self._hash
+
+        h = 0
+        for key, value in self.items():
+            try:
                 h ^= hash((key, value))
-            self._hash = h
+            except:
+                raise TypeError(f'unhashable frozendict entry {(key, value)!r}')
+        self._hash = h
 
         return self._hash
 
-    def __or__(self, other: typing.Any) -> immutabledict[_K, _V]:
+    def __or__(self, other: typing.Any) -> frozendict[_K, _V]:
         if not isinstance(other, (dict, self.__class__)):
             return NotImplemented
         new = dict(self)
@@ -75,14 +80,14 @@ class immutabledict(typing.Mapping[_K, _V]):
     def __ror__(self, other: typing.Any) -> dict[typing.Any, typing.Any]:
         if isinstance(other, dict):
             return other | self._dict
-        elif isinstance(other, immutabledict):
+        elif isinstance(other, frozendict):
             return other._dict | self._dict
         elif hasattr(other, '__len__') or hasattr(other, '__iter__'):
             return dict(other) | self._dict
         else:
             raise TypeError('unsupported mapping')
 
-    def __ior__(self, other: typing.Any) -> immutabledict[_K, _V]:
+    def __ior__(self, other: typing.Any) -> frozendict[_K, _V]:
         raise TypeError(f"'{self.__class__.__name__}' object is frozen")
 
     def items(self) -> typing.ItemsView[_K, _V]:  # noqa: D102
@@ -139,7 +144,7 @@ def _warn_on_capture_lookup_miss(capture_value, capture_attr, error_label, defau
 
 @util.lru_cache()
 def _enc_hook(obj):
-    if isinstance(obj, immutabledict):
+    if isinstance(obj, frozendict):
         return obj._dict
     elif isinstance(obj, fractions.Fraction):
         return str(obj)
@@ -161,63 +166,86 @@ def _dec_hook(type_, obj):
 
 
 @typing.overload
-def deep_freeze(obj: dict[_K, _V]) -> 'immutabledict[_K, _V]':
+def freeze(obj: dict[_K, _V], max_depth: int | None = None) -> 'frozendict[_K, _V]':
     pass
 
 
 @typing.overload
-def deep_freeze(obj: tuple[_V, ...] | list[_V]) -> tuple[_V, ...]:
+def freeze(
+    obj: tuple[_V, ...] | list[_V], max_depth: int | None = None
+) -> tuple[_V, ...]:
     pass
 
 
 @typing.overload
-def deep_freeze(obj: _T) -> _T:
+def freeze(obj: _T, max_depth: int | None = None) -> _T:
     pass
 
 
-def deep_freeze(
+def freeze(
     obj: typing.Mapping[_K, _V] | tuple[_V, ...] | list[_V] | _T,
-) -> 'immutabledict[_K, _V]|tuple[_V, ...]|_T':
-    """Recursively transform dict into immutabledict"""
+    max_depth: int | None = None,
+) -> 'frozendict[_K, _V]|tuple[_V, ...]|_T':
+    """recursively transform list and dict into tuple and frozendict"""
     if isinstance(obj, (list, tuple)):
-        return tuple([deep_freeze(v) for v in obj])
+        nd = None if max_depth is None else max_depth - 1
+        if nd is None or nd > 0:
+            return tuple([freeze(v, nd) for v in obj])
+        else:
+            return tuple(obj)
     elif isinstance(obj, dict):
-        mapping = {k: deep_freeze(v) for k, v in obj.items()}
-        return immutabledict(mapping)
+        nd = None if max_depth is None else max_depth - 1
+        if nd is None or nd > 0:
+            mapping = {k: freeze(v, nd) for k, v in obj.items()}
+            return frozendict(mapping)
+        else:
+            return frozendict(obj)
     else:
         return obj  # type: ignore
 
 
 @typing.overload
-def _unfreeze(obj: typing.Mapping[_K, _V]) -> 'dict[_K, _V]':
+def unfreeze(
+    obj: typing.Mapping[_K, _V], max_depth: int | None = None
+) -> 'dict[_K, _V]':
     pass
 
 
 @typing.overload
-def _unfreeze(obj: tuple[_V, ...] | list[_V]) -> list[_V]:
+def unfreeze(obj: tuple[_V, ...] | list[_V], max_depth: int | None = None) -> list[_V]:
     pass
 
 
 @typing.overload
-def _unfreeze(obj: _T) -> _T:
+def unfreeze(obj: _T, max_depth: int | None = None) -> _T:
     pass
 
 
-def _unfreeze(
+def unfreeze(
     obj: typing.Mapping[_K, _V] | tuple[_V, ...] | list[_V] | _T,
+    max_depth: int | None = None,
 ) -> 'dict[_K, _V]|list[_V]|_T':
-    """Recursively transform dict into immutabledict"""
+    """Recursively transform dict into frozendict"""
     if isinstance(obj, (list, tuple)):
-        return [_unfreeze(v) for v in obj]
-    if isinstance(obj, (dict, immutabledict)):
-        mapping = {k: _unfreeze(v) for k, v in obj.items()}
-        return dict(mapping)
+        nd = None if max_depth is None else max_depth - 1
+        if nd is None or nd > 0:
+            return [unfreeze(v, nd) for v in obj]
+        else:
+            return list(obj)
+
+    if isinstance(obj, (dict, frozendict)):
+        nd = None if max_depth is None else max_depth - 1
+        if nd is None or nd > 0:
+            mapping = {k: unfreeze(v, nd) for k, v in obj.items()}
+            return dict(mapping)
+        else:
+            return dict(obj)
     else:
         return obj  # type: ignore
 
 
 @util.lru_cache()
-def _private_fields(cls: type[msgspec.Struct]) -> tuple[str, ...]:
+def private_fields(cls: type[msgspec.Struct]) -> tuple[str, ...]:
     return tuple([n for n in cls.__struct_fields__ if n.startswith('_')])
 
 
@@ -231,27 +259,35 @@ def convert_spec(other: typing.Any, type: type[_T]) -> _T:
     )
 
 
-def _maybe_container_type(type_: msgspec.inspect.Type) -> bool:
-    """returns an (attrs, default_value) pair for the given msgspec field type"""
+def _inspect_container_depth(type_: msgspec.inspect.Type) -> int:
+    """returns the maximum depth needed to freeze the given msgspec type"""
     from msgspec import inspect as mi
 
     if not isinstance(type_, mi.Type):
         type_ = mi.type_info(type_)
 
-    if isinstance(type_, (mi.DictType, mi.TupleType, mi.ListType)):
-        return True
+    if isinstance(type_, mi.DictType):
+        return 1 + _inspect_container_depth(type_.value_type)
+    elif isinstance(type_, mi.TupleType):
+        return 1 + max(_inspect_container_depth(t) for t in type_.item_types)
+    elif isinstance(type_, mi.ListType):
+        return 1 + _inspect_container_depth(type_.item_type)
     elif isinstance(type_, mi.Metadata):
-        return _maybe_container_type(type_.type)
+        return _inspect_container_depth(type_.type)
     elif isinstance(type_, mi.UnionType):
-        return any(_maybe_container_type(t) for t in type_.types)
+        return max(_inspect_container_depth(t) for t in type_.types)
     else:
-        return False
+        return 0
 
 
 @functools.cache
-def freezable_fields(spec_cls: type[msgspec.Struct]) -> tuple[str, ...]:
+def inspect_freeze_depths(spec_cls: type[msgspec.Struct]) -> dict[str, int]:
     """returns a cached xr.Coordinates object to use as a template for data results"""
-    from msgspec import inspect as mi
 
     fields = msgspec.structs.fields(spec_cls)
-    return tuple([f.name for f in fields if _maybe_container_type(f.type)])
+    depths = {}
+    for field in fields:
+        n = _inspect_container_depth(field.type)
+        if n > 0:
+            depths[field.name] = n
+    return depths

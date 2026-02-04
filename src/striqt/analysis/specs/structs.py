@@ -45,13 +45,15 @@ class SpecBase(
         map = msgspec.to_builtins(self, enc_hook=helpers._enc_hook)
 
         if skip_private:
-            for name in helpers._private_fields(type(self)):
+            for name in helpers.private_fields(type(self)):
                 del map[name]
 
         if unfreeze:
-            return helpers._unfreeze(map)
-        else:
-            return map
+            depths = helpers.inspect_freeze_depths(type(self))
+            for name, depth in depths.items():
+                map[name] = helpers.unfreeze(map[name], depth)
+
+        return map
 
     @classmethod
     def from_dict(cls: type[_T], d: dict) -> _T:
@@ -65,10 +67,11 @@ class SpecBase(
         return _validate(self)
 
     def __post_init__(self):
-        for name in helpers.freezable_fields(type(self)):
+        for name, depth in helpers.inspect_freeze_depths(type(self)).items():
             v = getattr(self, name)
             if isinstance(v, (tuple, dict, list)):
-                msgspec.structs.force_setattr(self, name, helpers.deep_freeze(v))
+                frozen = helpers.freeze(v, depth)
+                msgspec.structs.force_setattr(self, name, frozen)
 
 
 @util.lru_cache(1024)

@@ -332,7 +332,7 @@ def _get_stft_axes(
     if xp is None:
         xp = np
 
-    freqs = fftfreq(nfft, 1 / fs, xp=xp)
+    freqs = fftfreq(nfft, fs, xp=xp)
     times = xp.arange(time_size) * ((1 - overlap_frac) * nfft / fs)
 
     return freqs, times
@@ -1631,16 +1631,31 @@ def oaresample(
 
 
 @lru_cache()
-def fftfreq(nfft: int, fs: float, dtype='float64', xp=np) -> ArrayType:
+def fftfreq(
+    nfft: int, fs: float, dtype='float64', as_index: bool = True, xp=np
+) -> ArrayType:
     """compute fftfreq for a specified sample rate.
 
-    This is meant to produce high-precision results for
-    rational sample rates in order to avoid problems caused
-    by rounding errors merging captures with different sample rates.
+    This supports varying levels of accuracy:
+    - with as_index=True, the result is accurate to full supported
+      floating point precision using fixed-point evaluation
+    - with as_index=False, the result is at least as accurate as
+      `scipy.fft.fftfreq`, which includes rounding error relative
+      to floating point precision
     """
 
+    if not as_index:
+        dtype = np.dtype(dtype)
+        fnyq = fs / 2
+        if nfft % 2 == 0:
+            return xp.linspace(-fnyq, fnyq - 2 * fnyq / nfft, nfft, dtype=dtype)
+        else:
+            return xp.linspace(
+                -fnyq + fnyq / nfft, fnyq - fnyq / nfft, nfft, dtype=dtype
+            )
+
     if not array_api_compat.is_numpy_namespace(np):  # type: ignore
-        return xp.asarray(fftfreq(nfft, fs, dtype))
+        return xp.asarray(fftfreq(nfft, fs, dtype, as_index=as_index))
 
     # high resolution rational representation of frequency resolution
     fres = decimal.Decimal(fs) / nfft
