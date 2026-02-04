@@ -4,6 +4,7 @@ from __future__ import annotations as __
 
 import contextlib
 import dataclasses
+import math
 import itertools
 import typing
 
@@ -150,14 +151,14 @@ def _log_cache_info(
 
     for c, snr in zip(capture_splits, sw.powtodB(peaks) - noise):
         if sa.util.is_cupy_array(snr.data):
-            snr = snr.data.get()
+            snr = float(snr.data.get())
         else:
-            snr = snr.values
-        snr_desc = f'{round(float(snr))} dB max SNR'
-        if 'nan' in snr_desc.lower():
+            snr = float(snr.values)
+        if snr in (math.inf, -math.inf, math.nan):
             continue
-        capture_desc = specs.helpers.describe_capture(c, **desc_kws)
 
+        snr_desc = f'{round(float(snr))} dB max SNR'
+        capture_desc = specs.helpers.describe_capture(c, **desc_kws)
         logger.info(f'spectrogram ▮ {snr_desc} dB max SNR ▮ {capture_desc}')
 
 # spectrogram SNR ▮ 7 dB peak SNR ▮ channel_name='3960 MHz', antenna_name='small_dish', gain=-20.0
