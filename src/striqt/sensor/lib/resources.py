@@ -227,10 +227,6 @@ def open_resources(
     exc = util.ExceptionStack('failed to open resources')
     with util.share_thread_interrupts():
         # background threads
-        sink = util.threadpool.submit(
-            _timeit('open sink')(sink_cls), spec, alias_func=formatter
-        )
-
         devices = util.threadpool.submit(
             _open_devices,
             conn,
@@ -240,6 +236,26 @@ def open_resources(
             on_source_opened=on_source_opened,
         )
 
+        if spec.sink.log_path is not None:
+            log_setup = util.threadpool.submit(_setup_logging, spec.sink, formatter)
+        else:
+            log_setup = None
+
+        with exc.defer():
+            # foreground thread part 1: initialize warmup sweeps
+            try:
+                # prioritize compute as we get started; load up buffers
+                compute_iter = prepare_compute(spec, skip_warmup=test_only)
+                next(compute_iter)
+            except:
+                sw.util.cancel_threads()
+                raise
+
+        # once the CPU has freed up, start the sink and calibration opening
+        sink = util.threadpool.submit(
+            _timeit('open sink')(sink_cls), spec, alias_func=formatter
+        )
+
         if spec.source.calibration is not None:
             cal = util.threadpool.submit(
                 _timeit('read calibration')(io.read_calibration),
@@ -247,20 +263,14 @@ def open_resources(
                 formatter,
             )
         else:
-            cal = None
-
-        if spec.sink.log_path is not None:
-            log_setup = util.threadpool.submit(_setup_logging, spec.sink, formatter)
-        else:
-            log_setup = None
+            cal = None        
 
         with exc.defer():
-            # foreground thread
+            # finish any warmups
             try:
-                for op in prepare_compute(spec, skip_warmup=test_only):
-                    print('op')
-                    logger.warning('op')
-                print('done')
+                # prioritize compute as we get started; load up buffers
+                for _ in compute_iter:
+                    pass
             except:
                 sw.util.cancel_threads()
                 raise
