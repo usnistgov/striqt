@@ -234,10 +234,7 @@ def open_resources(
             on_source_opened=on_source_opened,
         )
 
-        if spec.sink.log_path is not None:
-            log_setup = util.threadpool.submit(_setup_logging, spec.sink, formatter)
-        else:
-            log_setup = None
+        sink = util.threadpool.submit(_open_sink, spec, bind.sink, formatter)
 
         with exc.defer():
             # foreground thread part 1: initialize warmup sweeps
@@ -249,9 +246,6 @@ def open_resources(
                 util.cancel_threads()
                 raise
 
-        # once the CPU has freed up, start the sink and calibration opening
-        sink = util.threadpool.submit(_open_sink, spec, bind.sink, formatter)
-
         if spec.source.calibration is not None:
             cal = util.threadpool.submit(
                 _timeit('read calibration')(io.read_calibration),
@@ -260,6 +254,10 @@ def open_resources(
             )
         else:
             cal = None        
+        if spec.sink.log_path is not None:
+            log_setup = util.threadpool.submit(_setup_logging, spec.sink, formatter)
+        else:
+            log_setup = None
 
         with exc.defer():
             # finish any warmups
