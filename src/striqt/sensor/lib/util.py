@@ -51,7 +51,7 @@ def _service_import_requests():
             raise
 
 
-def safe_import(name, timeout: float | None = 30):
+def safe_import(name, timeout: float | None = 5):
     """wait in child threads until called by the parent with the same name"""
 
     if threading.current_thread() == threading.main_thread():

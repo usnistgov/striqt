@@ -57,9 +57,10 @@ def lazy_import(module_name: str, package=None):
         raise ImportError(f'no module found named "{module_name}"')
     # spec.loader = importlib.util.LazyLoader(spec.loader)
     spec.loader = _LazyLoader(spec.loader)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = module
-    spec.loader.exec_module(module)
+    with _LazyLoader.lock:
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[module_name] = module
+        spec.loader.exec_module(module)
     return module
 
 
