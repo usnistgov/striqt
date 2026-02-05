@@ -104,21 +104,24 @@ class _LazyLoader(importlib.util.LazyLoader):
 
     def exec_module(self, module):
         if threading.current_thread() == threading.main_thread():
-            print('main thread: exec module ', module.__name__)
+            t0 = time.perf_counter()
             super().exec_module(module)
+            print('main thread: exec module ', module.__name__, time.perf_counter()-t0)
         else:
             print('main thread: skip exec module', module.__name__)
 
     def create_module(self, spec):
         if threading.current_thread() == threading.main_thread():
-            print('main thread: create module ', spec.name)
+            t0 = time.perf_counter()
+            print('main thread: create module ', spec.name, time.perf_counter()-t0)
             return super().create_module(spec)
         else:
             print('other thread: skip create module ', spec.name)
 
     def load_module(self, fullname: str) -> ModuleType:
         if threading.current_thread() == threading.main_thread():
-            print('main thread: load module ', fullname)
+            t0 = time.perf_counter()
+            print('main thread: load module ', fullname, time.perf_counter()-t0)
             return super().load_module(fullname)
         else:
             print('other thread: load module ', fullname)
