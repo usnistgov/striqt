@@ -563,7 +563,7 @@ def _calibration_peripherals_cls(
             ext_fut = _util.threadpool.submit(self.ext.acquire, capture)
             cal_fut = _util.threadpool.submit(self.cal.acquire, capture)
 
-            with _util.ExceptionGrouper() as exc:
+            with _util.ExceptionStack() as exc:
                 with exc.defer():
                     ext = ext_fut.result()
                 with exc.defer():

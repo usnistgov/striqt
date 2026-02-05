@@ -20,6 +20,7 @@ from ..specs import _TC, _TP, _TS
 
 import typing_extensions
 import striqt.analysis as sa
+import striqt.waveform as sw
 
 
 if typing.TYPE_CHECKING:
@@ -170,7 +171,7 @@ def _open_devices(
     else:
         peripherals = None
 
-    with util.ExceptionGrouper() as exc:
+    with util.ExceptionStack() as exc:
         with exc.defer():
             source = conn._resources['source'] = source.result()
             conn.enter_context(source)
@@ -219,7 +220,7 @@ def open_resources(
     else:
         raise TypeError('no sink class in sensor binding or extensions.sink spec')
 
-    exc = util.ExceptionGrouper('failed to open resources')
+    exc = util.ExceptionStack('failed to open resources')
     with util.share_thread_interrupts():
         # background threads
         sink = util.threadpool.submit(
@@ -249,8 +250,13 @@ def open_resources(
         else:
             log_setup = None
 
-        # foreground thread
-        prepare_compute(spec, skip_warmup=test_only)
+        with exc.defer():
+            # foreground thread
+            try:
+                prepare_compute(spec, skip_warmup=test_only)
+            except:
+                sw.util.cancel_threads()
+                raise
 
         with exc.defer():
             sink = conn._resources['sink'] = sink.result()
@@ -264,10 +270,6 @@ def open_resources(
         with exc.defer():
             if log_setup is not None:
                 log_setup.result()
-
-        # if except_context is not None:
-        #     conn.enter_context(except_context)
-        #     conn._resources['except_context'] = except_context
 
     try:
         exc.handle()

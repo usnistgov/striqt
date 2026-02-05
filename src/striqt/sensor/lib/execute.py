@@ -96,7 +96,7 @@ def _acquire_both(
     )
     ext_data = util.threadpool.submit(res['peripherals'].acquire, this)
 
-    with util.ExceptionGrouper('failed to acquire data') as exc:
+    with util.ExceptionStack('failed to acquire data') as exc:
         with exc.defer():
             iq = iq.result()
         with exc.defer():
@@ -244,7 +244,7 @@ def iterate_sweep(
 
     # iterate across (previous-1, previous, current, next) captures to support concurrency
     offset_captures = util.zip_offsets(capture_iter, (-2, -1, 0, 1), fill=None)
-    exc = util.ExceptionGrouper('threaded failure')
+    exc = util.ExceptionStack('threaded failure')
 
     for i, (_, _, this, next_) in enumerate(offset_captures):
         with _log_progress_contexts(i, count), exc:
@@ -262,7 +262,7 @@ def iterate_sweep(
                 if iq is None:
                     analysis = None  # first and last iterations
                 else:
-                    # cupy/cuda prefers this in the foreground
+                    # cupy/cuda wants this in the foreground
                     analysis = compute.analyze(iq, compute_opts)
                     assert isinstance(analysis, compute.DelayedDataset)
 
@@ -282,4 +282,4 @@ def iterate_sweep(
         elif always_yield:
             yield None
 
-        util.check_thread_interrupts()
+        util.propagate_thread_interrupts()

@@ -193,7 +193,7 @@ def get_source_id(spec: specs.Source, timeout=0.5) -> str:
         return obj.id
 
     if not obj.wait(timeout=timeout):
-        sw.util.check_thread_interrupts()
+        util.propagate_thread_interrupts()
         raise TimeoutError('timeout while waiting for a source ID')
 
     source = _source_id_map[spec]

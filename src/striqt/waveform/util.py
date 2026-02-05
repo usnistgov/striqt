@@ -19,7 +19,7 @@ _TC = typing.TypeVar('_TC', bound=typing.Callable)
 
 
 
-
+#%% Some concurrency hooks for striqt.sensor
 _cancel_threads = threading.Event()
 
 
@@ -39,7 +39,7 @@ def cancel_threads():
     _cancel_threads.set()
 
 
-def check_thread_interrupts():
+def propagate_thread_interrupts():
     if threading.current_thread() == threading.main_thread():
         return
 
@@ -75,14 +75,14 @@ def safe_import(name, timeout: float | None = 5):
             cancel_threads()
             raise
     else:
-        check_thread_interrupts()
+        propagate_thread_interrupts()
         t0 = time.perf_counter()
         _import_requests.put(name)
         while timeout is None or time.perf_counter() - t0 < timeout:
             if _imports_ready[name].wait(0.5):
                 break
             else:
-                check_thread_interrupts()
+                propagate_thread_interrupts()
         else:
             raise TimeoutError(f'timeout waiting for main thread to import {name}')
 

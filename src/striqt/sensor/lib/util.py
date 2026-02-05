@@ -13,7 +13,7 @@ from pathlib import Path
 
 import striqt.analysis as sa
 
-from striqt.waveform.util import lazy_import, safe_import, ThreadInterruptRequest, share_thread_interrupts, check_thread_interrupts
+from striqt.waveform.util import lazy_import, safe_import, ThreadInterruptRequest, share_thread_interrupts, propagate_thread_interrupts
 
 if typing.TYPE_CHECKING:
     import typing_extensions
@@ -89,7 +89,13 @@ def __getattr__(name):
         raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 
-class ExceptionGrouper:
+class ExceptionStack:
+    """Creates a context manager object that accumulates exceptions.
+    
+    Any exception raised within a `defer()` context is stashed to be raised later.
+    An exception (possibly an ExceptionGroup) is raised when the ExceptionDeferral
+    context exits, or on a call to `handle()`.
+    """
     def __init__(self, group_label: str | None = None):
         if group_label is None:
             self.group_label = 'exceptions raised by multiple threads'
@@ -104,25 +110,40 @@ class ExceptionGrouper:
     def __exit__(self, *exc_info):
         self.handle()
 
+    def __del__(self):
+        self.handle()
+
     @contextlib.contextmanager
     def defer(self):
         try:
             yield
         except BaseException as ex:
             self.exceptions.append(ex)
-            print('take exception')
 
     def handle(self):
+        """raise an exception based on any deferred exceptions.
+
+        The raised exception type follows these rules:
+        - No exceptions: no exception is raised
+        - Exactly one exception: raise that exception
+        - More than one exception: raise an ExceptionGroup
+
+        A ThreadInterruptRequest will only be raised if it was the only
+        deferred exception. ThreadInterruptRequest is never included in an
+        ExceptionGroup.
+        """
         exc_list = self.exceptions
+        if len(exc_list) == 0:
+            pass
 
         ints = [exc for exc in exc_list if isinstance(exc, ThreadInterruptRequest)]
         non_ints = [
             exc for exc in exc_list if not isinstance(exc, ThreadInterruptRequest)
         ]
 
-        if len(exc_list) == 0:
-            pass
-        elif len(non_ints) == 1:
+        self.exceptions = []
+
+        if len(non_ints) == 1:
             raise non_ints[0]
         elif len(non_ints) > 1:
             raise exceptiongroup.ExceptionGroup(self.group_label, non_ints)  # type: ignore
@@ -133,7 +154,7 @@ class ExceptionGrouper:
 def await_and_ignore(
     futures: 'typing.Iterable[concurrent.futures.Future]', except_msg: str | None = None
 ):
-    exc = ExceptionGrouper(except_msg)
+    exc = ExceptionStack(except_msg)
     try:
         for fut in futures:
             with exc:
