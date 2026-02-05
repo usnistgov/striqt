@@ -1,13 +1,10 @@
 from __future__ import annotations as __
 
-import collections
 import contextlib
 import datetime
 import functools
-import importlib
 import itertools
 import logging
-import queue
 import sys
 import threading
 import time
@@ -16,7 +13,7 @@ from pathlib import Path
 
 import striqt.analysis as sa
 
-from striqt.waveform.util import lazy_import
+from striqt.waveform.util import lazy_import, safe_import, ThreadInterruptRequest, share_thread_interrupts, check_thread_interrupts
 
 if typing.TYPE_CHECKING:
     import typing_extensions
@@ -35,47 +32,6 @@ else:
 
 
 # %% Miscellaneous
-_imports_ready = collections.defaultdict(threading.Event)
-_import_requests = queue.Queue()
-
-
-def _service_import_requests():
-    while True:
-        try:
-            name = _import_requests.get_nowait()
-            safe_import(name)
-        except queue.Empty:
-            break
-        except:
-            cancel_threads()
-            raise
-
-
-def safe_import(name, timeout: float | None = 5):
-    """wait in child threads until called by the parent with the same name"""
-
-    if threading.current_thread() == threading.main_thread():
-        _service_import_requests()
-        try:
-            mod = importlib.import_module(name)
-            _imports_ready[name].set()
-        except BaseException:
-            cancel_threads()
-            raise
-    else:
-        check_thread_interrupts()
-        t0 = time.perf_counter()
-        _import_requests.put(name)
-        while timeout is None or time.perf_counter() - t0 < timeout:
-            if _imports_ready[name].wait(0.5):
-                break
-            else:
-                check_thread_interrupts()
-        else:
-            raise TimeoutError(f'timeout waiting for main thread to import {name}')
-
-        mod = sys.modules[name]
-    return mod
 
 
 def zip_offsets(
@@ -120,29 +76,6 @@ def zip_offsets(
 
 # %% Concurrency
 stop_request_event = threading.Event()
-_cancel_threads = threading.Event()
-
-
-@contextlib.contextmanager
-def share_thread_interrupts():
-    try:
-        yield
-    finally:
-        _cancel_threads.clear()
-
-
-def cancel_threads():
-    _cancel_threads.set()
-
-
-def check_thread_interrupts():
-    if threading.current_thread() == threading.main_thread():
-        return
-
-    if _cancel_threads.is_set():
-        raise ThreadInterruptRequest()
-
-
 threadpool: 'concurrent.futures.ThreadPoolExecutor'
 
 
@@ -207,10 +140,6 @@ def await_and_ignore(
                 fut.result()
     finally:
         exc.handle()
-
-
-class ThreadInterruptRequest(Exception):
-    """Raised in a thread to indicate the owning thread requested termination"""
 
 
 # %% traceback and exception handling

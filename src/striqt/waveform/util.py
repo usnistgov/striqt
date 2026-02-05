@@ -1,17 +1,93 @@
 from __future__ import annotations as __
 
+import collections
+import contextlib
 import functools
 import importlib.util
 import itertools
 import math
+import queue
 import sys
 import threading
+import time
 import typing
 from numbers import Number
 from types import ModuleType
 import array_api_compat
 
 _TC = typing.TypeVar('_TC', bound=typing.Callable)
+
+
+
+
+_cancel_threads = threading.Event()
+
+
+class ThreadInterruptRequest(Exception):
+    """Raised in a thread to indicate the owning thread requested termination"""
+
+
+@contextlib.contextmanager
+def share_thread_interrupts():
+    try:
+        yield
+    finally:
+        _cancel_threads.clear()
+
+
+def cancel_threads():
+    _cancel_threads.set()
+
+
+def check_thread_interrupts():
+    if threading.current_thread() == threading.main_thread():
+        return
+
+    if _cancel_threads.is_set():
+        raise ThreadInterruptRequest()
+
+
+_imports_ready = collections.defaultdict(threading.Event)
+_import_requests = queue.Queue()
+
+
+def _service_import_requests():
+    while True:
+        try:
+            name = _import_requests.get_nowait()
+            safe_import(name)
+        except queue.Empty:
+            break
+        except:
+            cancel_threads()
+            raise
+
+
+def safe_import(name, timeout: float | None = 5):
+    """wait in child threads until called by the parent with the same name"""
+
+    if threading.current_thread() == threading.main_thread():
+        _service_import_requests()
+        try:
+            mod = importlib.import_module(name)
+            _imports_ready[name].set()
+        except BaseException:
+            cancel_threads()
+            raise
+    else:
+        check_thread_interrupts()
+        t0 = time.perf_counter()
+        _import_requests.put(name)
+        while timeout is None or time.perf_counter() - t0 < timeout:
+            if _imports_ready[name].wait(0.5):
+                break
+            else:
+                check_thread_interrupts()
+        else:
+            raise TimeoutError(f'timeout waiting for main thread to import {name}')
+
+        mod = sys.modules[name]
+    return mod
 
 
 class _LazyLoader(importlib.util.LazyLoader):
@@ -46,7 +122,7 @@ def lazy_import(module_name: str, package=None):
     until it is used.
     """
     # see https://docs.python.org/3/library/importlib.html#implementing-lazy-imports
-    with _LazyLoader.lock:
+    if threading.current_thread() == threading.main_thread():
         try:
             ret = sys.modules[module_name]
             return ret
@@ -56,13 +132,14 @@ def lazy_import(module_name: str, package=None):
         spec = importlib.util.find_spec(module_name, package=package)
         if spec is None or spec.loader is None:
             raise ImportError(f'no module found named "{module_name}"')
-        # spec.loader = importlib.util.LazyLoader(spec.loader)
-        spec.loader = _LazyLoader(spec.loader)
+        spec.loader = importlib.util.LazyLoader(spec.loader)
+        # spec.loader = _LazyLoader(spec.loader)
         module = importlib.util.module_from_spec(spec)
         sys.modules[module_name] = module
         spec.loader.exec_module(module)
         return module
-
+    else:
+        return safe_import(module_name)
 
 if typing.TYPE_CHECKING:
     import typing_extensions
