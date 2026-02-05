@@ -180,21 +180,24 @@ def _cast_iq(
 _source_id_map: dict[specs.Source, SourceBase | Event] = defaultdict(Event)
 
 
-def get_source_id(spec: specs.Source, timeout=0.2) -> str:
+def get_source_id(spec: specs.Source, timeout=0.5) -> str:
     """lookup a source ID from a source specification.
 
     This assumes that a source is either instantiated, or will be
-    within `timeout` seconds.
+    within `timeout` seconds; otherwise `TimeoutError` is raised.
     """
     obj = _source_id_map[spec]
 
-    if isinstance(obj, Event):
-        if not obj.wait(timeout=timeout):
-            raise TimeoutError('timeout while waiting for a source ID')
-        source = _source_id_map[spec]
-        assert isinstance(source, SourceBase)
-    else:
-        source = obj
+    if not isinstance(obj, Event):
+        # already have this source!
+        return obj.id
+
+    if not obj.wait(timeout=timeout):
+        sw.util.check_thread_interrupts()
+        raise TimeoutError('timeout while waiting for a source ID')
+
+    source = _source_id_map[spec]
+    assert isinstance(source, SourceBase)
 
     # this triggers a property access that may have its own
     # blocking wait

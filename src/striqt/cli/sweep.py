@@ -75,7 +75,7 @@ def run(*, yaml_path, debug, verbose, port, **kws):
     if port is not None:
         spec = adjust_port(spec, port)
 
-    with except_handler, ss.open_resources(
+    with ss.open_resources(
         spec, yaml_path, except_handler, on_source_opened=confirm_labels
     ) as resources:
         sweep = ss.iterate_sweep(resources, yield_values=False, always_yield=True)
