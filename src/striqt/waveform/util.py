@@ -50,14 +50,13 @@ _imports_ready = collections.defaultdict(threading.Event)
 _import_requests = queue.Queue()
 _lazy_import_locks = collections.defaultdict(threading.RLock)
 
+
 def _service_import_requests():
     while True:
         try:
             name = _import_requests.get_nowait()
             t0 = time.perf_counter()
-            print('servicing request for module ', name)
             safe_import(name)
-            print(time.perf_counter()-t0)
         except queue.Empty:
             break
         except:
