@@ -480,17 +480,9 @@ def build_warmup_sweep(sweep: specs.Sweep[_TS, _TP, _TC]) -> WarmupSweep:
     )
 
 
-def import_compute_modules(cupy=False):
-    """import expensive compute modules.
-
-    If used at all, this needs to be run from _at least_ the main thread.
-    The use of util.safe_imports means that child threads will wait for
-    the main thread to import these.
-    """
-    args = 'sweep', 1, sa.util.INFO
-
-    if cupy:
-        with sa.util.stopwatch('import cuda computing packages', *args):
+def prepare_compute(input_spec: specs.Sweep, skip_warmup: bool = False):
+    if input_spec.source.array_backend == 'cupy':
+        with sa.util.stopwatch('import cuda computing packages', 'sweep'):
             # this order is important on some versions/platforms!
             # https://github.com/numba/numba/issues/6131
             np.__version__  # reify
@@ -499,19 +491,8 @@ def import_compute_modules(cupy=False):
             # safe_import('cupyx')
             # safe_import('cupyx.scipy')
 
-    with sa.util.stopwatch('import general computing packages', *args):
-        util.safe_import('scipy')
-        util.safe_import('numpy')
-        util.safe_import('pandas')
-        util.safe_import('xarray')
-        util.safe_import('numba')
-
-    if cupy:
-        with sa.util.stopwatch('configure cupy', *args):        
+        with sa.util.stopwatch('configure cupy', 'sweep'):        
             sa.util.configure_cupy()
-
-def prepare_compute(input_spec: specs.Sweep, skip_warmup: bool = False):
-    import_compute_modules(cupy=input_spec.source.array_backend == 'cupy')
 
     warnings.filterwarnings(
         'ignore',
@@ -520,12 +501,13 @@ def prepare_compute(input_spec: specs.Sweep, skip_warmup: bool = False):
     )
 
     if skip_warmup or input_spec.options.skip_warmup:
-        return
+        yield from (None,)
 
     from .. import bindings
     from . import execute, resources, sinks
 
-    spec = build_warmup_sweep(input_spec)
+    with sa.util.stopwatch('build warmup sweep', 'sweep'):
+        spec = build_warmup_sweep(input_spec)
 
     if len(spec.captures) == 0:
         return
@@ -543,4 +525,4 @@ def prepare_compute(input_spec: specs.Sweep, skip_warmup: bool = False):
         sweep = execute.iterate_sweep(res, always_yield=True, calibration=None)
 
         for _ in sweep:
-            pass
+            yield _

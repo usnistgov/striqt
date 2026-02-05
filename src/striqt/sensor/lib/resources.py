@@ -207,6 +207,8 @@ def open_resources(
 
     sa.util.get_logger('sweep').log(sa.util.PERFORMANCE_INFO, 'opening sweep resources')
 
+    logger = sa.util.get_logger('sweep')
+
     formatter = specs.helpers.PathAliasFormatter(spec, spec_path=spec_path)
 
     if spec_path is not None:
@@ -255,7 +257,10 @@ def open_resources(
         with exc.defer():
             # foreground thread
             try:
-                prepare_compute(spec, skip_warmup=test_only)
+                for op in prepare_compute(spec, skip_warmup=test_only):
+                    print('op')
+                    logger.warning('op')
+                print('done')
             except:
                 sw.util.cancel_threads()
                 raise
