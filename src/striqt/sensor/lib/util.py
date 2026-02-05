@@ -149,6 +149,7 @@ threadpool: 'concurrent.futures.ThreadPoolExecutor'
 def __getattr__(name):
     if name == 'threadpool':
         import concurrent.futures
+
         thread_pool = globals()[name] = concurrent.futures.ThreadPoolExecutor()
         return thread_pool
     else:
@@ -156,7 +157,7 @@ def __getattr__(name):
 
 
 class ExceptionGrouper:
-    def __init__(self, group_label: str|None = None):
+    def __init__(self, group_label: str | None = None):
         if group_label is None:
             self.group_label = 'exceptions raised by multiple threads'
         else:
@@ -166,7 +167,7 @@ class ExceptionGrouper:
 
     def __enter__(self):
         return self
-    
+
     def __exit__(self, *exc_info):
         self.handle()
 
@@ -182,19 +183,23 @@ class ExceptionGrouper:
         exc_list = self.exceptions
 
         ints = [exc for exc in exc_list if isinstance(exc, ThreadInterruptRequest)]
-        non_ints = [exc for exc in exc_list if not isinstance(exc, ThreadInterruptRequest)]
+        non_ints = [
+            exc for exc in exc_list if not isinstance(exc, ThreadInterruptRequest)
+        ]
 
         if len(exc_list) == 0:
             pass
         elif len(non_ints) == 1:
             raise non_ints[0]
         elif len(non_ints) > 1:
-            raise exceptiongroup.ExceptionGroup(self.group_label, non_ints) # type: ignore
+            raise exceptiongroup.ExceptionGroup(self.group_label, non_ints)  # type: ignore
         else:
             raise ints[0]
 
 
-def await_and_ignore(futures: 'typing.Iterable[concurrent.futures.Future]', except_msg: str|None=None):
+def await_and_ignore(
+    futures: 'typing.Iterable[concurrent.futures.Future]', except_msg: str | None = None
+):
     exc = ExceptionGrouper(except_msg)
     try:
         for fut in futures:
@@ -246,18 +251,23 @@ class DebugOnException:
                 sys.last_traceback = tb
 
             from . import tracebacks
+
             if self.verbose:
                 handler = tracebacks.VerboseTB(call_pdb=self.enable, include_vars=True)
             else:
                 handler = tracebacks.FormattedTB(call_pdb=self.enable)
 
             if isinstance(exc, exceptiongroup.ExceptionGroup):
-                print('▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀')
+                print(
+                    '▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀'
+                )
                 print('Exception in owning thread\n')
                 handler(etype, exc, tb)
                 for n, sub_exc in enumerate(exc.exceptions):
-                    print('▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀')
-                    print(f'Sub-exception {n+1}/{len(exc.exceptions)}\n')
+                    print(
+                        '▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀'
+                    )
+                    print(f'Exception {n + 1}/{len(exc.exceptions)} in spawned threads\n')
                     handler(type(sub_exc), sub_exc, sub_exc.__traceback__)
             else:
                 handler(etype, exc, tb)

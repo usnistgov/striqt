@@ -532,7 +532,10 @@ def _calibration_peripherals_cls(
             self.cal = cal(spec)
 
         def open(self):
-            futures = [_util.threadpool.submit(self.ext.open), _util.threadpool.submit(self.cal.open)]
+            futures = [
+                _util.threadpool.submit(self.ext.open),
+                _util.threadpool.submit(self.cal.open),
+            ]
             _util.await_and_ignore(futures)
 
         def setup(
@@ -552,7 +555,7 @@ def _calibration_peripherals_cls(
         def arm(self, capture):
             futs = [
                 _util.threadpool.submit(self.ext.arm, capture),
-                _util.threadpool.submit(self.cal.arm, capture)
+                _util.threadpool.submit(self.cal.arm, capture),
             ]
             _util.await_and_ignore(futs)
 

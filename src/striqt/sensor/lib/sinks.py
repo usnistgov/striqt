@@ -125,7 +125,6 @@ class NoSink(SinkBase):
 
 class ZarrSinkBase(SinkBase):
     def open(self):
-
         # 1//0
 
         _util.safe_import('xarray')

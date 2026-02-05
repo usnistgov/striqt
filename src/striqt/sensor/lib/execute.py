@@ -74,7 +74,7 @@ def _acquire_both(
     def arm_both(c: _TC | None):
         if c is None:
             return
-        
+
         source = util.threadpool.submit(res['source'].arm_spec, c)
         peripherals = util.threadpool.submit(res['peripherals'].arm, c)
         util.await_and_ignore([source, peripherals], 'arm sensor')
@@ -84,10 +84,15 @@ def _acquire_both(
     except AttributeError:
         arm_both(this)
 
-    analysis = specs.helpers.adjust_analysis(res['sweep_spec'].analysis, this.adjust_analysis)
+    analysis = specs.helpers.adjust_analysis(
+        res['sweep_spec'].analysis, this.adjust_analysis
+    )
 
     iq = util.threadpool.submit(
-        res['source'].acquire, analysis=analysis, correction=False, alias_func=res['alias_func']
+        res['source'].acquire,
+        analysis=analysis,
+        correction=False,
+        alias_func=res['alias_func'],
     )
     ext_data = util.threadpool.submit(res['peripherals'].acquire, this)
 
@@ -255,7 +260,7 @@ def iterate_sweep(
 
             with exc.defer():
                 if iq is None:
-                    analysis = None # first and last iterations
+                    analysis = None  # first and last iterations
                 else:
                     # cupy/cuda prefers this in the foreground
                     analysis = compute.analyze(iq, compute_opts)

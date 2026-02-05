@@ -83,7 +83,9 @@ else:
 
 
 def _timeit(desc: str = '') -> typing.Callable[[util._Tfunc], util._Tfunc]:
-    return sa.util.stopwatch(desc, 'sweep', threshold=0.5, logger_level=util.logging.INFO)
+    return sa.util.stopwatch(
+        desc, 'sweep', threshold=0.5, logger_level=util.logging.INFO
+    )
 
 
 def import_sink_cls(spec: specs.Extension, lazy: bool = False) -> type[SinkBase]:
@@ -96,7 +98,7 @@ def import_sink_cls(spec: specs.Extension, lazy: bool = False) -> type[SinkBase]
         mod = importlib.import_module(mod_name)
     for name in sub_names:
         mod = getattr(mod, name)
-    
+
     return getattr(mod, obj_name)
 
 
@@ -151,7 +153,7 @@ def _open_devices(
         if on_source_opened is not None:
             on_source_opened(spec, source_id)
 
-    1//0
+    1 // 0
 
     source = util.threadpool.submit(
         _timeit('open sensor source')(binding.source.from_spec),
@@ -165,8 +167,7 @@ def _open_devices(
 
     if not skip_peripherals:
         peripherals = util.threadpool.submit(
-            _timeit('open peripherals')(binding.peripherals),
-            spec
+            _timeit('open peripherals')(binding.peripherals), spec
         )
     else:
         peripherals = None
@@ -224,23 +225,23 @@ def open_resources(
     with util.share_thread_interrupts():
         # background threads
         sink = util.threadpool.submit(
-            _timeit('open sink')(sink_cls),
-            spec, alias_func=formatter)
-        
+            _timeit('open sink')(sink_cls), spec, alias_func=formatter
+        )
+
         devices = util.threadpool.submit(
             _open_devices,
             conn,
             bind,
             spec,
             skip_peripherals=test_only,
-            on_source_opened=on_source_opened
+            on_source_opened=on_source_opened,
         )
 
         if spec.source.calibration is not None:
             cal = util.threadpool.submit(
                 _timeit('read calibration')(io.read_calibration),
                 spec.source.calibration,
-                formatter
+                formatter,
             )
         else:
             cal = None
