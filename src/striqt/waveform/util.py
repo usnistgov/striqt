@@ -15,7 +15,7 @@ _TC = typing.TypeVar('_TC', bound=typing.Callable)
 
 
 class _LazyLoader(importlib.util.LazyLoader):
-    lock = threading.Lock()
+    lock = threading.RLock()
 
     def __init__(self, loader):
         super().__init__(loader)
