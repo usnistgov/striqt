@@ -204,9 +204,8 @@ def open_resources(
 
     from .compute import prepare_compute
 
-    sa.util.get_logger('sweep').log(sa.util.PERFORMANCE_INFO, 'opening sweep resources')
-
     logger = sa.util.get_logger('sweep')
+    logger.log(sa.util.INFO, 'opening sensor resources')
 
     formatter = specs.helpers.PathAliasFormatter(spec, spec_path=spec_path)
 
@@ -245,6 +244,7 @@ def open_resources(
             try:
                 # prioritize compute as we get started; load up buffers
                 compute_iter = prepare_compute(spec, skip_warmup=test_only)
+                next(compute_iter)
                 next(compute_iter)
             except Exception:
                 util.cancel_threads()
