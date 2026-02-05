@@ -482,7 +482,7 @@ def build_warmup_sweep(sweep: specs.Sweep[_TS, _TP, _TC]) -> WarmupSweep:
 
 def prepare_compute(input_spec: specs.Sweep, skip_warmup: bool = False):
     if input_spec.source.array_backend == 'cupy':
-        with sa.util.stopwatch('import cuda computing packages', 'sweep'1, ):
+        with sa.util.stopwatch('import cuda computing packages', 'sweep', 2):
             # this order is important on some versions/platforms!
             # https://github.com/numba/numba/issues/6131
             np.__version__  # reify
