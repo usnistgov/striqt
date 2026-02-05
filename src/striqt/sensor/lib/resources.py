@@ -82,6 +82,10 @@ else:
         alias_func: specs.helpers.PathAliasFormatter | None
 
 
+def _timeit(desc: str = '') -> typing.Callable[[util._Tfunc], util._Tfunc]:
+    return sa.util.stopwatch(desc, 'sweep', threshold=0.5, logger_level=util.logging.INFO)
+
+
 def import_sink_cls(spec: specs.Extension, lazy: bool = False) -> type[SinkBase]:
     if spec.sink is None:
         raise TypeError('extension sink was not specified')
@@ -92,29 +96,8 @@ def import_sink_cls(spec: specs.Extension, lazy: bool = False) -> type[SinkBase]
         mod = importlib.import_module(mod_name)
     for name in sub_names:
         mod = getattr(mod, name)
+    
     return getattr(mod, obj_name)
-
-
-class Call(util.Call[util._P, util._R]):
-    _dest = None
-
-    def __init__(self, func, *args, **kws):
-        def wrapper(*a, **k):
-            if threading.current_thread() == threading.main_thread():
-                name = 'compute'
-            else:
-                name = threading.current_thread().name
-            with sa.util.stopwatch(name, 'sweep', 0.5, util.logging.INFO):
-                result = func(*a, **k)
-                if self._dest is not None:
-                    self._dest[name] = result
-                return result
-
-        super().__init__(wrapper, *args, **kws)
-
-    def return_into(self, d) -> typing_extensions.Self:
-        self._dest = d
-        return self
 
 
 class ConnectionManager(
@@ -129,29 +112,6 @@ class ConnectionManager(
 
     def __enter__(self):  # type: ignore
         return self.resources
-
-    def open(
-        self, func: typing.Callable[_P, _R], *args: _P.args, **kws: _P.kwargs
-    ) -> Call[[], _R]:
-        def wrapper():
-            obj = func(*args, **kws)
-            self.enter_context(obj)  # type: ignore
-            return obj
-
-        return Call(wrapper).return_into(self._resources)
-
-    def get(
-        self, func: typing.Callable[_P, _R], *args: _P.args, **kws: _P.kwargs
-    ) -> Call[_P, _R]:
-        return Call(func, *args, **kws).return_into(self._resources)
-
-    def enter(self, ctx, name):
-        self._resources[name] = self.enter_context(ctx)
-
-    def log_call(
-        self, func: typing.Callable[_P, _R], *args: _P.args, **kws: _P.kwargs
-    ) -> Call[_P, _R]:
-        return Call(func, *args, **kws)
 
     @functools.cached_property
     def resources(self) -> Resources[_TS, _TP, _TC, _PS, _PC]:
@@ -182,7 +142,7 @@ def _open_devices(
     skip_peripherals: bool = False,
     on_source_opened: _SourceOpenCallback | None = None,
 ):
-    """the source and any peripherals"""
+    """open source and any peripherals"""
 
     def _post_source_open():
         source_id = get_source_id(spec.source)
@@ -191,26 +151,40 @@ def _open_devices(
         if on_source_opened is not None:
             on_source_opened(spec, source_id)
 
-    calls: dict[str, typing.Any] = {
-        'source': conn.open(
-            binding.source.from_spec,
-            spec.source,
-            captures=spec.captures,
-            loops=spec.loops,
-            reuse_iq=spec.options.reuse_iq,
-        ),
-        'source_opened': util.Call(_post_source_open),
-    }
+    1//0
+
+    source = util.threadpool.submit(
+        _timeit('open sensor source')(binding.source.from_spec),
+        spec.source,
+        captures=spec.captures,
+        loops=spec.loops,
+        reuse_iq=spec.options.reuse_iq,
+    )
+
+    source_callback = util.threadpool.submit(_post_source_open)
 
     if not skip_peripherals:
-        calls['peripherals'] = conn.open(binding.peripherals, spec)
-
-    util.concurrently(calls)
-
-    peripherals = conn._resources.get('peripherals', None)
-    if skip_peripherals or peripherals is None:
-        pass
+        peripherals = util.threadpool.submit(
+            _timeit('open peripherals')(binding.peripherals),
+            spec
+        )
     else:
+        peripherals = None
+
+    with util.ExceptionGrouper() as exc:
+        with exc.defer():
+            source = conn._resources['source'] = source.result()
+            conn.enter_context(source)
+
+        with exc.defer():
+            source_callback.result()
+
+        with exc.defer():
+            if peripherals is not None:
+                peripherals = conn._resources['peripherals'] = peripherals.result()
+                conn.enter_context(peripherals)
+
+    if peripherals is not None:
         peripherals.setup(spec.captures, spec.loops)
 
 
@@ -246,53 +220,64 @@ def open_resources(
     else:
         raise TypeError('no sink class in sensor binding or extensions.sink spec')
 
+    exc = util.ExceptionGrouper('failed to open resources')
     with util.share_thread_interrupts():
-        try:
-            calls = {
-                # 'compute' MUST be first to run in the foreground.
-                # otherwise, any cuda-dependent imports will hang.
-                'compute': conn.log_call(prepare_compute, spec, skip_warmup=test_only),
-                'sink': conn.open(sink_cls, spec, alias_func=formatter),
-                'devices': util.Call(
-                    _open_devices,
-                    conn,
-                    bind,
-                    spec,
-                    skip_peripherals=test_only,
-                    on_source_opened=on_source_opened,
-                ),
-            }
+        # background threads
+        sink = util.threadpool.submit(
+            _timeit('open sink')(sink_cls),
+            spec, alias_func=formatter)
+        
+        devices = util.threadpool.submit(
+            _open_devices,
+            conn,
+            bind,
+            spec,
+            skip_peripherals=test_only,
+            on_source_opened=on_source_opened
+        )
 
-            if spec.source.calibration is not None:
-                calls['calibration'] = conn.get(
-                    io.read_calibration, spec.source.calibration, formatter
-                )
-            else:
-                conn._resources['calibration'] = None
+        if spec.source.calibration is not None:
+            cal = util.threadpool.submit(
+                _timeit('read calibration')(io.read_calibration),
+                spec.source.calibration,
+                formatter
+            )
+        else:
+            cal = None
 
-            if spec.sink.log_path is not None:
-                calls['log_to_file'] = Call(_setup_logging, spec.sink, formatter)
+        if spec.sink.log_path is not None:
+            log_setup = util.threadpool.submit(_setup_logging, spec.sink, formatter)
+        else:
+            log_setup = None
 
-            util.concurrently_with_fg(calls)
+        # foreground thread
+        prepare_compute(spec, skip_warmup=test_only)
 
-            if except_context is not None:
-                conn.enter(except_context, 'except_context')
+        with exc.defer():
+            sink = conn._resources['sink'] = sink.result()
+            conn.enter_context(sink)
+        with exc.defer():
+            devices.result()
+        with exc.defer():
+            if cal is not None:
+                cal = cal.result()
+            conn._resources['calibration'] = cal
+        with exc.defer():
+            if log_setup is not None:
+                log_setup.result()
 
-            if test_only:
-                conn._resources.pop('peripherals', None)
+        # if except_context is not None:
+        #     conn.enter_context(except_context)
+        #     conn._resources['except_context'] = except_context
 
-            conn._resources['sweep_spec'] = spec
-            conn._resources['alias_func'] = formatter
+    try:
+        exc.handle()
+    except:
+        conn.__exit__(*sys.exc_info())
+        raise
 
-        except BaseException as ex:
-            if except_context is not None:
-                print(ex)
-                except_context.__exit__(*sys.exc_info())
-            else:
-                raise
-
-            conn.__exit__(*sys.exc_info())
-            raise
+    conn._resources['sweep_spec'] = spec
+    conn._resources['alias_func'] = formatter
 
     return conn
 

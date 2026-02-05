@@ -125,6 +125,9 @@ class NoSink(SinkBase):
 
 class ZarrSinkBase(SinkBase):
     def open(self):
+
+        # 1//0
+
         _util.safe_import('xarray')
         self.store = _io.open_store(
             self._spec, alias_func=self._alias_func, force=self.force

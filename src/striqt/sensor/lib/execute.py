@@ -67,50 +67,44 @@ def _acquire_both(
 
     assert this is not None
 
-    source = res['source']
-    peripherals = res['peripherals']
-    sweep_spec = res['sweep_spec']
+    # source = res['source']
+    # peripherals = res['peripherals']
+    # sweep_spec = res['sweep_spec']
 
     def arm_both(c: _TC | None):
         if c is None:
             return
-        util.concurrently(
-            {
-                'source': util.Call(source.arm_spec, c),
-                'peripherals': util.Call(peripherals.arm, c),
-            }
-        )
+        
+        source = util.threadpool.submit(res['source'].arm_spec, c)
+        peripherals = util.threadpool.submit(res['peripherals'].arm, c)
+        util.await_and_ignore([source, peripherals], 'arm sensor')
 
     try:
-        source.capture_spec
+        res['source'].capture_spec
     except AttributeError:
         arm_both(this)
 
-    analysis = specs.helpers.adjust_analysis(sweep_spec.analysis, this.adjust_analysis)
-    results = util.concurrently(
-        {
-            'iq': util.Call(
-                source.acquire,
-                analysis=analysis,
-                correction=False,
-                alias_func=res['alias_func'],
-            ),
-            'ext_data': util.Call(peripherals.acquire, this),
-        }
+    analysis = specs.helpers.adjust_analysis(res['sweep_spec'].analysis, this.adjust_analysis)
+
+    iq = util.threadpool.submit(
+        res['source'].acquire, analysis=analysis, correction=False, alias_func=res['alias_func']
     )
-    iq = results['iq']
-    ext_data = results['ext_data']
+    ext_data = util.threadpool.submit(res['peripherals'].acquire, this)
+
+    with util.ExceptionGrouper('failed to acquire data') as exc:
+        with exc.defer():
+            iq = iq.result()
+        with exc.defer():
+            ext_data = ext_data.result()
 
     if not isinstance(ext_data, dict):
         raise TypeError(f'peripheral acquire() returned {type(ext_data)!r}, not dict')
-    elif not isinstance(iq, sources.AcquiredIQ):
+    if not isinstance(iq, sources.AcquiredIQ):
         raise TypeError(f'source acquire() returned {type(iq)!r}, not AcquiredIQ')
-    else:
-        iq = dataclasses.replace(iq, extra_data=iq.extra_data | ext_data)
 
     arm_both(next_)
 
-    return iq
+    return dataclasses.replace(iq, extra_data=iq.extra_data | ext_data)
 
 
 def _log_cache_info(
@@ -230,7 +224,7 @@ def iterate_sweep(
     )
 
     iq = None
-    result = None
+    analysis = None
     captures = specs.helpers.loop_captures(spec, source_id=resources['source'].id)
 
     if loop:
@@ -245,49 +239,42 @@ def iterate_sweep(
 
     # iterate across (previous-1, previous, current, next) captures to support concurrency
     offset_captures = util.zip_offsets(capture_iter, (-2, -1, 0, 1), fill=None)
+    exc = util.ExceptionGrouper('threaded failure')
 
     for i, (_, _, this, next_) in enumerate(offset_captures):
-        calls = {}
-
-        with _log_progress_contexts(i, count):
-            if iq is None:
-                pass  # first and last iterations
-            else:
-                # insert first so that concurrently_with_fg will run it in the foreground
-                # (cupy/cuda seems to prefer this)
-                calls['analyze'] = util.Call(compute.analyze, iq, compute_opts)
-
+        with _log_progress_contexts(i, count), exc:
             if this is None:
-                pass  # last 2 iterations
+                acquire = None  # last 2 iterations
             else:
-                calls['acquire'] = util.Call(_acquire_both, resources, this, next_)
+                acquire = util.threadpool.submit(_acquire_both, resources, this, next_)
 
-            if result is None:
-                pass  # first 2 iterations
+            if analysis is None:
+                sink = None  # first 2 iterations
             else:
-                calls['sink'] = util.Call(resources['sink'].append, result)
+                sink = util.threadpool.submit(resources['sink'].append, analysis)
 
-            ret = util.concurrently_with_fg(calls)
-
-            if 'analyze' in ret:
-                result = ret['analyze']
-                assert isinstance(result, compute.DelayedDataset)
-
-            if 'acquire' in ret:
-                iq = ret['acquire']
-                assert isinstance(iq, sources.AcquiredIQ)
-            else:
-                iq = None
-
-            if 'sink' in ret:
-                if yield_values:
-                    yield ret['sink']
+            with exc.defer():
+                if iq is None:
+                    analysis = None # first and last iterations
                 else:
-                    yield None
+                    # cupy/cuda prefers this in the foreground
+                    analysis = compute.analyze(iq, compute_opts)
+                    assert isinstance(analysis, compute.DelayedDataset)
 
-            elif always_yield:
-                yield None
+            with exc.defer():
+                if acquire is not None:
+                    iq = acquire.result()
+                    assert isinstance(iq, sources.AcquiredIQ)
+                else:
+                    iq = None
 
-            del ret
+            with exc.defer():
+                if sink is not None:
+                    sink = sink.result()
 
-            util.check_thread_interrupts()
+        if yield_values:
+            yield sink
+        elif always_yield:
+            yield None
+
+        util.check_thread_interrupts()

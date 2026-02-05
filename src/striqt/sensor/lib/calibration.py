@@ -532,9 +532,8 @@ def _calibration_peripherals_cls(
             self.cal = cal(spec)
 
         def open(self):
-            _util.concurrently(
-                dict(ext=_util.Call(self.ext.open), cal=_util.Call(self.cal.open))
-            )
+            futures = [_util.threadpool.submit(self.ext.open), _util.threadpool.submit(self.cal.open)]
+            _util.await_and_ignore(futures)
 
         def setup(
             self,
@@ -551,21 +550,23 @@ def _calibration_peripherals_cls(
                 self.cal.close()
 
         def arm(self, capture):
-            _util.concurrently(
-                dict(
-                    ext=_util.Call(self.ext.arm, capture),
-                    cal=_util.Call(self.cal.arm, capture),
-                )
-            )
+            futs = [
+                _util.threadpool.submit(self.ext.arm, capture),
+                _util.threadpool.submit(self.cal.arm, capture)
+            ]
+            _util.await_and_ignore(futs)
 
         def acquire(self, capture):
-            returns = _util.concurrently(
-                dict(
-                    ext=_util.Call(self.ext.acquire, capture),
-                    cal=_util.Call(self.cal.acquire, capture),
-                )
-            )
-            return returns['ext'] | returns['cal']
+            ext_fut = _util.threadpool.submit(self.ext.acquire, capture)
+            cal_fut = _util.threadpool.submit(self.cal.acquire, capture)
+
+            with _util.ExceptionGrouper() as exc:
+                with exc.defer():
+                    ext = ext_fut.result()
+                with exc.defer():
+                    cal = cal_fut.result()
+
+            return ext | cal
 
     return cls
 

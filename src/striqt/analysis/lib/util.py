@@ -171,7 +171,7 @@ def stopwatch(
         elapsed = time.perf_counter() - t0
 
         if elapsed < threshold:
-            logger_level = logger_level - 10
+            logger_level = PERFORMANCE_DETAIL
 
         msg = str(desc) + ' ' if len(desc) else ''
         msg += f'⏱ {elapsed:0.3f} s'
