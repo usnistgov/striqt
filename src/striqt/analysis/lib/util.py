@@ -31,6 +31,7 @@ _logger_adapters = {}
 
 
 # additional logging levels
+from logging import WARNING, INFO, DEBUG
 PERFORMANCE_INFO = 15
 PERFORMANCE_DETAIL = 12
 

@@ -147,6 +147,7 @@ def lazy_import(module_name: str, package=None):
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
     spec.loader.exec_module(module)
+
     return module
 
 

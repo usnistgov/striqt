@@ -205,6 +205,8 @@ def open_resources(
 
     from .compute import prepare_compute
 
+    sa.util.get_logger('sweep').log(sa.util.PERFORMANCE_INFO, 'opening sweep resources')
+
     formatter = specs.helpers.PathAliasFormatter(spec, spec_path=spec_path)
 
     if spec_path is not None:

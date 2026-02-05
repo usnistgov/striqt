@@ -487,7 +487,8 @@ def import_compute_modules(cupy=False):
     The use of util.safe_imports means that child threads will wait for
     the main thread to import these.
     """
-    args = 'sweep', 0.5, sa.util.PERFORMANCE_INFO
+    args = 'sweep', 1, sa.util.INFO
+
     if cupy:
         with sa.util.stopwatch('import cuda computing packages', *args):
             # this order is important on some versions/platforms!
