@@ -62,11 +62,12 @@ def _service_import_requests():
             raise
 
 
-def safe_import(name, timeout: float | None = 5):
+def safe_import(name, timeout: float | None = 5, service=True):
     """wait in child threads until called by the parent with the same name"""
 
     if threading.current_thread() == threading.main_thread():
-        _service_import_requests()
+        if service:
+            _service_import_requests()
         try:
             mod = importlib.import_module(name)
             _imports_ready[name].set()
