@@ -90,30 +90,6 @@ def safe_import(name, timeout: float | None = 5):
     return mod
 
 
-class _LazyLoader(importlib.util.LazyLoader):
-    lock = threading.RLock()
-
-    def __init__(self, loader):
-        super().__init__(loader)
-
-    @classmethod
-    def factory(cls, loader):
-        with cls.lock:
-            return super().factory(loader)
-
-    def exec_module(self, module):
-        with self.lock:
-            return super().exec_module(module)
-
-    def create_module(self, spec):
-        with self.lock:
-            return super().create_module(spec)
-
-    def load_module(self, fullname: str) -> ModuleType:
-        with self.lock:
-            return super().load_module(fullname)
-
-
 def lazy_import(module_name: str, package=None):
     """postponed import of the module with the specified name.
 
@@ -122,24 +98,22 @@ def lazy_import(module_name: str, package=None):
     until it is used.
     """
     # see https://docs.python.org/3/library/importlib.html#implementing-lazy-imports
-    if threading.current_thread() == threading.main_thread():
-        try:
-            ret = sys.modules[module_name]
-            return ret
-        except KeyError:
-            pass
+    try:
+        ret = sys.modules[module_name]
+        return ret
+    except KeyError:
+        pass
 
-        spec = importlib.util.find_spec(module_name, package=package)
-        if spec is None or spec.loader is None:
-            raise ImportError(f'no module found named "{module_name}"')
-        spec.loader = importlib.util.LazyLoader(spec.loader)
-        # spec.loader = _LazyLoader(spec.loader)
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[module_name] = module
-        spec.loader.exec_module(module)
-        return module
-    else:
-        return safe_import(module_name)
+    spec = importlib.util.find_spec(module_name, package=package)
+    if spec is None or spec.loader is None:
+        raise ImportError(f'no module found named "{module_name}"')
+    spec.loader = importlib.util.LazyLoader(spec.loader)
+    # spec.loader = _LazyLoader(spec.loader)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
 
 if typing.TYPE_CHECKING:
     import typing_extensions
