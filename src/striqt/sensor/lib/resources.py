@@ -89,18 +89,25 @@ def _timeit(desc: str = '') -> typing.Callable[[util._Tfunc], util._Tfunc]:
     )
 
 
-def import_sink_cls(spec: specs.Extension, lazy: bool = False) -> type[SinkBase]:
-    if spec.sink is None:
-        raise TypeError('extension sink was not specified')
-    mod_name, *sub_names, obj_name = spec.sink.rsplit('.')
-    if lazy:
-        mod = util.lazy_import(mod_name)
-    else:
-        mod = importlib.import_module(mod_name)
-    for name in sub_names:
-        mod = getattr(mod, name)
+def _open_sink(
+    spec: specs.Sweep[typing.Any, typing.Any, specs._TC],
+    default_cls: type[SinkBase]|None,
+    alias_func: specs.helpers.PathAliasFormatter | None = None
+) -> SinkBase[specs._TC]:
+    
+    with sa.util.stopwatch('open sink', 'sweep', 0.5, util.logging.INFO):
+        if spec.extensions.sink is not None:
+            mod_name, *sub_names, obj_name = spec.extensions.sink.rsplit('.')
+            mod = importlib.import_module(mod_name)
+            for name in sub_names:
+                mod = getattr(mod, name)
+            sink_cls: type[SinkBase] = getattr(mod, obj_name)
+        elif default_cls is not None:
+            sink_cls = default_cls
+        else:
+            raise TypeError('no sink class in sensor binding or spec .extensions.sink')
 
-    return getattr(mod, obj_name)
+        return sink_cls(spec, alias_func)
 
 
 class ConnectionManager(
@@ -215,13 +222,6 @@ def open_resources(
     bind = bindings.get_binding(spec)
     conn = ConnectionManager(sweep_spec=spec)
 
-    if spec.extensions.sink is not None:
-        sink_cls = import_sink_cls(spec.extensions, lazy=True)
-    elif bind.sink is not None:
-        sink_cls = bind.sink
-    else:
-        raise TypeError('no sink class in sensor binding or extensions.sink spec')
-
     exc = util.ExceptionStack('failed to open resources', cancel_on_except=True)
     with util.share_thread_interrupts():
         # background threads
@@ -245,15 +245,12 @@ def open_resources(
                 # prioritize compute as we get started; load up buffers
                 compute_iter = prepare_compute(spec, skip_warmup=test_only)
                 next(compute_iter)
-                next(compute_iter)
             except Exception:
                 util.cancel_threads()
                 raise
 
         # once the CPU has freed up, start the sink and calibration opening
-        sink = util.threadpool.submit(
-            _timeit('open sink')(sink_cls), spec, alias_func=formatter
-        )
+        sink = util.threadpool.submit(_open_sink, spec, bind.sink, formatter)
 
         if spec.source.calibration is not None:
             cal = util.threadpool.submit(
