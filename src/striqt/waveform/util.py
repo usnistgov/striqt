@@ -5,6 +5,7 @@ import importlib.util
 import itertools
 import math
 import sys
+import threading
 import typing
 from numbers import Number
 from types import ModuleType
@@ -13,28 +14,28 @@ import array_api_compat
 _TC = typing.TypeVar('_TC', bound=typing.Callable)
 
 
-# class _LazyLoader(importlib.util.LazyLoader):
-#     lock = threading.Lock()
+class _LazyLoader(importlib.util.LazyLoader):
+    lock = threading.Lock()
 
-#     def __init__(self, loader):
-#         super().__init__(loader)
+    def __init__(self, loader):
+        super().__init__(loader)
 
-#     @classmethod
-#     def factory(cls, loader):
-#         with cls.lock:
-#             return super().factory(loader)
+    @classmethod
+    def factory(cls, loader):
+        with cls.lock:
+            return super().factory(loader)
 
-#     def exec_module(self, module):
-#         with self.lock:
-#             return super().exec_module(module)
+    def exec_module(self, module):
+        with self.lock:
+            return super().exec_module(module)
 
-#     def create_module(self, spec):
-#         with self.lock:
-#             return super().create_module(spec)
+    def create_module(self, spec):
+        with self.lock:
+            return super().create_module(spec)
 
-#     def load_module(self, fullname: str) -> ModuleType:
-#         with self.lock:
-#             return super().load_module(fullname)
+    def load_module(self, fullname: str) -> ModuleType:
+        with self.lock:
+            return super().load_module(fullname)
 
 
 def lazy_import(module_name: str, package=None):
@@ -54,7 +55,8 @@ def lazy_import(module_name: str, package=None):
     spec = importlib.util.find_spec(module_name, package=package)
     if spec is None or spec.loader is None:
         raise ImportError(f'no module found named "{module_name}"')
-    spec.loader = importlib.util.LazyLoader(spec.loader)
+    # spec.loader = importlib.util.LazyLoader(spec.loader)
+    spec.loader = _LazyLoader(spec.loader)
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
     spec.loader.exec_module(module)

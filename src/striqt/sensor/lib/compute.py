@@ -488,7 +488,6 @@ def import_compute_modules(cupy=False):
     the main thread to import these.
     """
     if cupy:
-        util.safe_import('numpy')
         # this order is important on some versions/platforms!
         # https://github.com/numba/numba/issues/6131
         util.safe_import('numba.cuda')
