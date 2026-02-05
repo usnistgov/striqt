@@ -40,8 +40,6 @@ def open_store(
     alias_func: specs.helpers.PathAliasFormatter | None = None,
     force=False,
 ) -> StoreType:
-    util.safe_import('xarray')
-
     spec_path = spec.path
 
     if alias_func is not None:
@@ -198,8 +196,6 @@ def read_calibration(
 ) -> 'xr.Dataset|None':
     if path is None:
         return None
-
-    util.safe_import('xarray')
 
     if alias_func is not None:
         path = alias_func(path)

@@ -486,8 +486,10 @@ def prepare_compute(input_spec: specs.Sweep, skip_warmup: bool = False):
             # this order is important on some versions/platforms!
             # https://github.com/numba/numba/issues/6131
             np.__version__  # reify
-            util.safe_import('numba.cuda', service=False)
-            sw.util.cp = util.safe_import('cupy', service=False)
+            import numba.cuda
+            import cupy
+            # util.safe_import('numba.cuda', service=False)
+            # sw.util.cp = util.safe_import('cupy', service=False)
             # safe_import('cupyx')
             # safe_import('cupyx.scipy')
 

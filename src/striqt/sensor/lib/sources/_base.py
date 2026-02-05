@@ -389,8 +389,8 @@ class SourceBase(
             open_event.set()
 
         if _spec.array_backend == 'cupy':
-            util.safe_import('cupy')
-            sa.util.configure_cupy()
+            with sa.util.stopwatch('configure cupy in source'):
+                sa.util.configure_cupy()
 
         self._apply_setup(_spec, **_extra_specs)
 
