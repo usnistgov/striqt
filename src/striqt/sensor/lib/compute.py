@@ -507,7 +507,8 @@ def import_compute_modules(cupy=False):
         util.safe_import('numba')
 
     if cupy:
-        sa.util.configure_cupy()
+        with sa.util.stopwatch('configure cupy', *args):        
+            sa.util.configure_cupy()
 
 def prepare_compute(input_spec: specs.Sweep, skip_warmup: bool = False):
     import_compute_modules(cupy=input_spec.source.array_backend == 'cupy')
