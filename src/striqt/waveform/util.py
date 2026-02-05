@@ -54,6 +54,7 @@ def _service_import_requests():
     while True:
         try:
             name = _import_requests.get_nowait()
+            print('servicing request for module ', name)
             safe_import(name)
         except queue.Empty:
             break
@@ -90,6 +91,40 @@ def safe_import(name, timeout: float | None = 5, service=True):
     return mod
 
 
+class _LazyLoader(importlib.util.LazyLoader):
+    lock = threading.RLock()
+
+    def __init__(self, loader):
+        super().__init__(loader)
+
+    @classmethod
+    def factory(cls, loader):
+        with cls.lock:
+            return super().factory(loader)
+
+    def exec_module(self, module):
+        if threading.current_thread() == threading.main_thread():
+            print('main thread: exec module ', module.__name__)
+            super().exec_module(module)
+        else:
+            print('main thread: skip exec module', module.__name__)
+
+    def create_module(self, spec):
+        if threading.current_thread() == threading.main_thread():
+            print('main thread: create module ', spec.name)
+            return super().create_module(spec)
+        else:
+            print('other thread: skip create module ', spec.name)
+
+    def load_module(self, fullname: str) -> ModuleType:
+        if threading.current_thread() == threading.main_thread():
+            print('main thread: load module ', fullname)
+            return super().load_module(fullname)
+        else:
+            print('other thread: load module ', fullname)
+            return safe_import(fullname)
+
+
 def lazy_import(module_name: str, package=None):
     """postponed import of the module with the specified name.
 
@@ -107,8 +142,8 @@ def lazy_import(module_name: str, package=None):
     spec = importlib.util.find_spec(module_name, package=package)
     if spec is None or spec.loader is None:
         raise ImportError(f'no module found named "{module_name}"')
-    spec.loader = importlib.util.LazyLoader(spec.loader)
-    # spec.loader = _LazyLoader(spec.loader)
+    # spec.loader = importlib.util.LazyLoader(spec.loader)
+    spec.loader = _LazyLoader(spec.loader)
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
     spec.loader.exec_module(module)
