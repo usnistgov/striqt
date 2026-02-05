@@ -141,12 +141,15 @@ class ExceptionStack:
         """
         exc_list = self.exceptions
         if len(exc_list) == 0:
-            pass
+            return
 
         ints = [exc for exc in exc_list if isinstance(exc, ThreadInterruptRequest)]
         non_ints = [
             exc for exc in exc_list if not isinstance(exc, ThreadInterruptRequest)
         ]
+
+        if len(exc_list) == 0:
+            pass
 
         self.exceptions = []
 
