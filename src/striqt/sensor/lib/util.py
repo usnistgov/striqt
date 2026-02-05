@@ -13,7 +13,13 @@ from pathlib import Path
 
 import striqt.analysis as sa
 
-from striqt.waveform.util import lazy_import, safe_import, ThreadInterruptRequest, share_thread_interrupts, propagate_thread_interrupts
+from striqt.waveform.util import (
+    lazy_import,
+    safe_import,
+    ThreadInterruptRequest,
+    share_thread_interrupts,
+    propagate_thread_interrupts,
+)
 
 if typing.TYPE_CHECKING:
     import typing_extensions
@@ -91,11 +97,12 @@ def __getattr__(name):
 
 class ExceptionStack:
     """Creates a context manager object that accumulates exceptions.
-    
+
     Any exception raised within a `defer()` context is stashed to be raised later.
     An exception (possibly an ExceptionGroup) is raised when the ExceptionDeferral
     context exits, or on a call to `handle()`.
     """
+
     def __init__(self, group_label: str | None = None):
         if group_label is None:
             self.group_label = 'exceptions raised by multiple threads'
@@ -217,7 +224,9 @@ class DebugOnException:
                     print(
                         '▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀'
                     )
-                    print(f'Exception {n + 1}/{len(exc.exceptions)} in spawned threads\n')
+                    print(
+                        f'Exception {n + 1}/{len(exc.exceptions)} in spawned threads\n'
+                    )
                     handler(type(sub_exc), sub_exc, sub_exc.__traceback__)
             else:
                 handler(etype, exc, tb)

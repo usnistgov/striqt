@@ -18,8 +18,7 @@ import array_api_compat
 _TC = typing.TypeVar('_TC', bound=typing.Callable)
 
 
-
-#%% Some concurrency hooks for striqt.sensor
+# %% Some concurrency hooks for striqt.sensor
 _cancel_threads = threading.Event()
 
 

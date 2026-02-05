@@ -490,7 +490,7 @@ def import_compute_modules(cupy=False):
     if cupy:
         # this order is important on some versions/platforms!
         # https://github.com/numba/numba/issues/6131
-        np.__version__ # reify
+        np.__version__  # reify
         util.safe_import('numba.cuda')
         sw.util.cp = util.safe_import('cupy')
         sa.util.configure_cupy()
