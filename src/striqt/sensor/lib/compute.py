@@ -487,21 +487,24 @@ def import_compute_modules(cupy=False):
     The use of util.safe_imports means that child threads will wait for
     the main thread to import these.
     """
+    args = 'sweep', sa.util.PERFORMANCE_DETAIL
     if cupy:
-        # this order is important on some versions/platforms!
-        # https://github.com/numba/numba/issues/6131
-        np.__version__  # reify
-        util.safe_import('numba.cuda')
-        sw.util.cp = util.safe_import('cupy')
-        sa.util.configure_cupy()
-        # safe_import('cupyx')
-        # safe_import('cupyx.scipy')
+        with sa.util.stopwatch('import cuda computating packages', *args):
+            # this order is important on some versions/platforms!
+            # https://github.com/numba/numba/issues/6131
+            np.__version__  # reify
+            util.safe_import('numba.cuda')
+            sw.util.cp = util.safe_import('cupy')
+            sa.util.configure_cupy()
+            # safe_import('cupyx')
+            # safe_import('cupyx.scipy')
 
-    util.safe_import('scipy')
-    util.safe_import('numpy')
-    util.safe_import('pandas')
-    util.safe_import('xarray')
-    util.safe_import('numba')
+    with sa.util.stopwatch('import general computing packages', *args):
+        util.safe_import('scipy')
+        util.safe_import('numpy')
+        util.safe_import('pandas')
+        util.safe_import('xarray')
+        util.safe_import('numba')
 
 
 def prepare_compute(input_spec: specs.Sweep, skip_warmup: bool = False):
