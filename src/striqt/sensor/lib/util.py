@@ -19,6 +19,7 @@ from striqt.waveform.util import (
     ThreadInterruptRequest,
     share_thread_interrupts,
     propagate_thread_interrupts,
+    cancel_threads
 )
 
 if typing.TYPE_CHECKING:
@@ -103,13 +104,14 @@ class ExceptionStack:
     context exits, or on a call to `handle()`.
     """
 
-    def __init__(self, group_label: str | None = None):
+    def __init__(self, group_label: str | None = None, cancel_on_except: bool = False):
         if group_label is None:
             self.group_label = 'exceptions raised by multiple threads'
         else:
             self.group_label = group_label
 
         self.exceptions: list[BaseException] = []
+        self.cancel = cancel_on_except
 
     def __enter__(self):
         return self
@@ -124,8 +126,13 @@ class ExceptionStack:
     def defer(self):
         try:
             yield
-        except BaseException as ex:
+        except Exception as ex:
+            if self.cancel:
+                cancel_threads()
             self.exceptions.append(ex)
+        except BaseException:
+            if self.cancel:
+                cancel_threads()
 
     def handle(self):
         """raise an exception based on any deferred exceptions.

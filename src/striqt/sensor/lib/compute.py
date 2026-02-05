@@ -508,8 +508,7 @@ def prepare_compute(input_spec: specs.Sweep, skip_warmup: bool = False):
     from .. import bindings
     from . import execute, resources, sinks
 
-    with sa.util.stopwatch('build warmup sweep', 'sweep'):
-        spec = build_warmup_sweep(input_spec)
+    spec = build_warmup_sweep(input_spec)
 
     if len(spec.captures) == 0:
         return

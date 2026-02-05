@@ -187,7 +187,7 @@ def _open_devices(
         peripherals.setup(spec.captures, spec.loops)
 
 
-@sa.util.stopwatch('open resources', 'sweep', 1.0, sa.util.PERFORMANCE_INFO)
+@sa.util.stopwatch('open resources', 'sweep', 1.0, sa.util.INFO)
 def open_resources(
     spec: specs.Sweep[_TS, _TP, _TC],
     spec_path: str | Path | None = None,
@@ -223,7 +223,7 @@ def open_resources(
     else:
         raise TypeError('no sink class in sensor binding or extensions.sink spec')
 
-    exc = util.ExceptionStack('failed to open resources')
+    exc = util.ExceptionStack('failed to open resources', cancel_on_except=True)
     with util.share_thread_interrupts():
         # background threads
         devices = util.threadpool.submit(
@@ -246,7 +246,7 @@ def open_resources(
                 # prioritize compute as we get started; load up buffers
                 compute_iter = prepare_compute(spec, skip_warmup=test_only)
                 next(compute_iter)
-            except:
+            except Exception:
                 sw.util.cancel_threads()
                 raise
 
@@ -270,7 +270,7 @@ def open_resources(
                 # prioritize compute as we get started; load up buffers
                 for _ in compute_iter:
                     pass
-            except:
+            except Exception:
                 sw.util.cancel_threads()
                 raise
 
