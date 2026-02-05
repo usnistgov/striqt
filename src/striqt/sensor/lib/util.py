@@ -13,14 +13,7 @@ from pathlib import Path
 
 import striqt.analysis as sa
 
-from striqt.waveform.util import (
-    lazy_import,
-    safe_import,
-    ThreadInterruptRequest,
-    share_thread_interrupts,
-    propagate_thread_interrupts,
-    cancel_threads
-)
+from striqt.waveform.util import lazy_import
 
 if typing.TYPE_CHECKING:
     import typing_extensions
@@ -82,8 +75,32 @@ def zip_offsets(
 
 
 # %% Concurrency
-stop_request_event = threading.Event()
 threadpool: 'concurrent.futures.ThreadPoolExecutor'
+_cancel_threads = threading.Event()
+
+
+class ThreadInterruptRequest(Exception):
+    """Raised in a thread to indicate the owning thread requested termination"""
+
+
+@contextlib.contextmanager
+def share_thread_interrupts():
+    try:
+        yield
+    finally:
+        _cancel_threads.clear()
+
+
+def cancel_threads():
+    _cancel_threads.set()
+
+
+def propagate_thread_interrupts():
+    if threading.current_thread() == threading.main_thread():
+        return
+
+    if _cancel_threads.is_set():
+        raise ThreadInterruptRequest()
 
 
 def __getattr__(name):
@@ -126,13 +143,10 @@ class ExceptionStack:
     def defer(self):
         try:
             yield
-        except Exception as ex:
+        except BaseException as ex:
             if self.cancel:
                 cancel_threads()
             self.exceptions.append(ex)
-        except BaseException:
-            if self.cancel:
-                cancel_threads()
 
     def handle(self):
         """raise an exception based on any deferred exceptions.
@@ -150,13 +164,12 @@ class ExceptionStack:
         if len(exc_list) == 0:
             return
 
-        ints = [exc for exc in exc_list if isinstance(exc, ThreadInterruptRequest)]
-        non_ints = [
-            exc for exc in exc_list if not isinstance(exc, ThreadInterruptRequest)
-        ]
+        INT_TYPES = (ThreadInterruptRequest, KeyboardInterrupt)
 
-        if len(exc_list) == 0:
-            pass
+        ints = [exc for exc in exc_list if isinstance(exc, INT_TYPES)]
+        non_ints = [
+            exc for exc in exc_list if not isinstance(exc, INT_TYPES)
+        ]
 
         self.exceptions = []
 
@@ -165,7 +178,12 @@ class ExceptionStack:
         elif len(non_ints) > 1:
             raise exceptiongroup.ExceptionGroup(self.group_label, non_ints)  # type: ignore
         else:
-            raise ints[0]
+            for int in ints:
+                # prefer keyboardinterrupts
+                if isinstance(int, KeyboardInterrupt):
+                    raise int
+            else:
+                raise ints[0]
 
 
 def await_and_ignore(

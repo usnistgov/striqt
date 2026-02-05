@@ -392,6 +392,12 @@ class SourceBase(
             with sa.util.stopwatch('configure cupy in source'):
                 sa.util.configure_cupy()
 
+        try:
+            util.propagate_thread_interrupts()
+        except:
+            self.close()
+            raise
+
         self._apply_setup(_spec, **_extra_specs)
 
     @classmethod
@@ -612,6 +618,7 @@ class SourceBase(
         if not correction:
             return iq
         else:
+            util.propagate_thread_interrupts()
             tmin = self.capture_spec.duration / 2
             with sa.util.stopwatch('resampling filter', threshold=tmin):
                 return resampling.resampling_correction(iq, overwrite_x=True)

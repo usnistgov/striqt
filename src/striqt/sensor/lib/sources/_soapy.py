@@ -696,8 +696,12 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
             self._rx_stream.enable(self._device, False)
             self._sync_time_source(self._device)
 
+        util.propagate_thread_interrupts()
+
         if not self._rx_stream.is_enabled:
             self._rx_stream.enable(self._device, True)
+
+        util.propagate_thread_interrupts()
 
         return super().read_iq(analysis)
 

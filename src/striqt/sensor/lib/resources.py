@@ -247,7 +247,7 @@ def open_resources(
                 compute_iter = prepare_compute(spec, skip_warmup=test_only)
                 next(compute_iter)
             except Exception:
-                sw.util.cancel_threads()
+                util.cancel_threads()
                 raise
 
         # once the CPU has freed up, start the sink and calibration opening
@@ -271,7 +271,7 @@ def open_resources(
                 for _ in compute_iter:
                     pass
             except Exception:
-                sw.util.cancel_threads()
+                util.cancel_threads()
                 raise
 
         with exc.defer():

@@ -147,9 +147,11 @@ def read_yaml_spec(
 
     spec = sa.specs.helpers.convert_dict(tree, type=get_tagged_sweep_type())
 
+    sink = spec.sink
     if store_backend is not None:
         sink = sink.replace(store=store_backend)
-    replace = dict(sink=spec.sink)
+
+    replace: dict[str, typing.Any] = dict(sink=sink)
     if output_path is not None:
         replace['path'] = output_path
 
