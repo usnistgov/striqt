@@ -389,8 +389,7 @@ class SourceBase(
             open_event.set()
 
         if _spec.array_backend == 'cupy':
-            with sa.util.stopwatch('configure cupy in source'):
-                sa.util.configure_cupy()
+            sa.util.configure_cupy()
 
         try:
             util.propagate_thread_interrupts()
