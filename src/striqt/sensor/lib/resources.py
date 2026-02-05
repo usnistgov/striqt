@@ -153,8 +153,6 @@ def _open_devices(
         if on_source_opened is not None:
             on_source_opened(spec, source_id)
 
-    1 // 0
-
     source = util.threadpool.submit(
         _timeit('open sensor source')(binding.source.from_spec),
         spec.source,
