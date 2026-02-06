@@ -103,7 +103,8 @@ class FixedEngFormatter(ticker.EngFormatter):
         if self.unitInTick and (self.unit or unit_prefix):
             suffix = f'{self.sep}{unit_prefix}{self.unit}'
         else:
-            suffix = ''
+            suffix = ''       
+
         if self._usetex or self._useMathText:
             return f'${mant:{fmt}}${suffix}'
         else:
@@ -143,7 +144,7 @@ def _count_facets(facet_col, data) -> int:
         return data[facet_col].shape[0]
 
 
-def _fix_axes(data, grid, x, y=None, xticklabelunits=True):
+def _fix_axes(data: xr.DataArray, grid, x, y=None, xticklabelunits=True):
     axs = list(np.array(grid.axes).flatten())
 
     label_axis('x', data[x], fig=grid.fig, tick_units=xticklabelunits)
@@ -214,6 +215,9 @@ class CapturePlotter:
         warnings.filterwarnings(
             'ignore', category=UserWarning, message=r'.*figure layout has changed.*'
         )
+        warnings.filterwarnings(
+            'ignore', category=UserWarning, message='.*artists with labels.*'
+        )
 
         yield fig
 
@@ -248,12 +252,7 @@ class CapturePlotter:
             for ax, title in zip(axs, titles):
                 ax.set_title(title)
 
-        if x is not None:
-            for ax in axs[:facet_count]:
-                label_axis('x', data[x], ax=ax, tick_units=xticklabelunits)
-
-        if y is not None:
-            label_axis('y', data[y], fig=fig, tick_units=False)
+        label_axis('x', data[x], fig=fig, tick_units=xticklabelunits)
 
         if hue is not None and fig.legends:
             fig.legends[0].remove()
@@ -262,7 +261,7 @@ class CapturePlotter:
         if len(axs) > facet_count:
             # assume heatmap
             clabel_ax = axs[-1]
-            ylabel = clabel_ax.get_ylabel().replace('\n', '\N{THIN SPACE}')
+            ylabel = clabel_ax.get_ylabel().replace('\n', ' ')
             clabel_ax.set_ylabel(ylabel, rotation=90)
 
         warning_ctx.__exit__(None, None, None)

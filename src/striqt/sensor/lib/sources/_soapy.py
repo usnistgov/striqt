@@ -462,7 +462,7 @@ class HardwareTimeSync:
             if time.perf_counter() - start_time > 1.5:
                 raise RuntimeError('no pps input detected for external time source')
             else:
-                time.sleep(10e-3)
+                time.sleep(20e-3)
 
         # PPS transition occurred, should be safe to snag system time and apply it
         sys_time_now = time.time()
@@ -471,13 +471,15 @@ class HardwareTimeSync:
         if frac_secs > 0.8:
             # System time is lagging behind the PPS transition
             full_secs += 1
-        elif frac_secs > 0.2:
+        time_to_set_ns = int((full_secs + 1) * 1e9)
+        device.setHardwareTime(time_to_set_ns, 'pps')
+
+        if frac_secs > 0.2:
             # System time and PPS are off, warn caller
             sa.util.get_logger('source').warning(
                 f'system time and PPS out of sync by {frac_secs:0.2f}s'
             )
-        time_to_set_ns = int((full_secs + 1) * 1e9)
-        device.setHardwareTime(time_to_set_ns, 'pps')
+
         return time_to_set_ns
 
 

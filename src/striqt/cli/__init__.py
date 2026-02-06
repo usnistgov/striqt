@@ -200,7 +200,7 @@ def click_capture_plotter(description: typing.Optional[str] = None):
                     'ieee_double_column',
                 ]
             ),
-            default='presentation_half_width',
+            default='presentation_full_width',
             help='matplotlib style sheet to use',
         ),
         click.option(
