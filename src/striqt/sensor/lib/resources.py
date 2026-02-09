@@ -91,10 +91,9 @@ def _timeit(desc: str = '') -> typing.Callable[[util._Tfunc], util._Tfunc]:
 
 def _open_sink(
     spec: specs.Sweep[typing.Any, typing.Any, specs._TC],
-    default_cls: type[SinkBase]|None,
-    alias_func: specs.helpers.PathAliasFormatter | None = None
+    default_cls: type[SinkBase] | None,
+    alias_func: specs.helpers.PathAliasFormatter | None = None,
 ) -> SinkBase[specs._TC]:
-    
     with sa.util.stopwatch('open sink', 'sweep', 0.5, util.logging.INFO):
         if spec.extensions.sink is not None:
             mod_name, *sub_names, obj_name = spec.extensions.sink.rsplit('.')
@@ -253,7 +252,7 @@ def open_resources(
                 formatter,
             )
         else:
-            cal = None        
+            cal = None
         if spec.sink.log_path is not None:
             log_setup = util.threadpool.submit(_setup_logging, spec.sink, formatter)
         else:

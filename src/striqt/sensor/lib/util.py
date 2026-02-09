@@ -167,9 +167,7 @@ class ExceptionStack:
         INT_TYPES = (ThreadInterruptRequest, KeyboardInterrupt)
 
         ints = [exc for exc in exc_list if isinstance(exc, INT_TYPES)]
-        non_ints = [
-            exc for exc in exc_list if not isinstance(exc, INT_TYPES)
-        ]
+        non_ints = [exc for exc in exc_list if not isinstance(exc, INT_TYPES)]
 
         self.exceptions = []
 

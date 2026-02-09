@@ -103,7 +103,7 @@ class FixedEngFormatter(ticker.EngFormatter):
         if self.unitInTick and (self.unit or unit_prefix):
             suffix = f'{self.sep}{unit_prefix}{self.unit}'
         else:
-            suffix = ''       
+            suffix = ''
 
         if self._usetex or self._useMathText:
             return f'${mant:{fmt}}${suffix}'
@@ -135,6 +135,27 @@ def _maybe_skip_missing(func):
             raise ex
 
     return wrapped
+
+
+def _color_levels(data: xr.DataArray, step_size, plot_kws):
+    if 'vmin' in plot_kws and plot_kws['vmin'] is not None:
+        vmin = plot_kws['vmin']
+    else:
+        vmin = float(data.min())
+
+    if 'vmax' in plot_kws and plot_kws['vmax'] is not None:
+        vmax = plot_kws['vmax']
+    else:
+        vmax = float(data.max())
+
+    vmax_edge = math.ceil(vmax / step_size) * step_size
+    vmin_edge = math.floor(vmin / step_size) * step_size
+
+    n = round((vmax_edge - vmin_edge) / step_size) + 1
+
+    levels = np.linspace(vmin_edge, vmax_edge, n).tolist()
+
+    return levels
 
 
 def _count_facets(facet_col, data) -> int:
@@ -169,6 +190,7 @@ class CapturePlotter:
         ignore_missing=False,
     ):
         self.interactive: bool = interactive
+
         if subplot_by_port:
             self.facet_col = dataarrays.CAPTURE_DIM
         else:
@@ -186,29 +208,12 @@ class CapturePlotter:
         self._ignore_missing = ignore_missing
         self._style = style
 
-    @contextlib.contextmanager
-    def _plot_context(
-        self,
-        data,
-        name: str,
-        x: str = None,
-        y: str = None,
-        hue: str = None,
-        xticklabelunits=True,
-        meta: dict = {},
-    ):
+    def process_setup(self):
+        if not self.interactive:
+            mpl.use('agg')
+
         if self._style is not None:
             plt.style.use(self._style)
-
-        if self.facet_col is None:
-            facet_count = 1
-        else:
-            facet_count = data[self.facet_col].shape[0]
-
-        if facet_count == 1:
-            fig, axs = plt.subplots()
-        else:
-            fig, axs = None, []
 
         warning_ctx = warnings.catch_warnings()
         warning_ctx.__enter__()
@@ -218,6 +223,27 @@ class CapturePlotter:
         warnings.filterwarnings(
             'ignore', category=UserWarning, message='.*artists with labels.*'
         )
+
+    @contextlib.contextmanager
+    def _plot_context(
+        self,
+        data,
+        name: str,
+        x: str | None = None,
+        y: str | None = None,
+        hue: str | None = None,
+        xticklabelunits=True,
+        meta: dict = {},
+    ):
+        if self.facet_col is None:
+            facet_count = 1
+        else:
+            facet_count = data[self.facet_col].shape[0]
+
+        if facet_count == 1:
+            fig, axs = plt.subplots()
+        else:
+            fig, axs = None, []
 
         yield fig
 
@@ -264,8 +290,6 @@ class CapturePlotter:
             ylabel = clabel_ax.get_ylabel().replace('\n', ' ')
             clabel_ax.set_ylabel(ylabel, rotation=90)
 
-        warning_ctx.__exit__(None, None, None)
-
         if self.output_dir is not None:
             filename = set(
                 label_by_coord(
@@ -277,7 +301,7 @@ class CapturePlotter:
             #         'select a filename format that does not depend on port index'
             #     )
             path = Path(self.output_dir) / list(filename)[0]
-            plt.savefig(path, dpi=300)
+            fig.savefig(path, dpi=300)
 
         if not self.interactive:
             plt.close()
@@ -316,6 +340,7 @@ class CapturePlotter:
                 grid = data.sel(sel).plot.line(**kws, **plot_kws)
                 _fix_axes(data=data, grid=grid, x=x, xticklabelunits=xticklabelunits)
                 fig = grid.fig
+                fig.tight_layout()
 
         return fig
 
@@ -332,9 +357,18 @@ class CapturePlotter:
         transpose: bool = True,
         meta: dict = {},
         facet_as_row=False,
+        cmap='cubehelix',
         **kws,
     ):
-        kws.update(x=x, y=y, rasterized=rasterized)
+        from matplotlib import colors
+
+        levels = _color_levels(data, 2, kws)
+        cmap = plt.get_cmap(cmap, len(levels) - 1)
+        norm = colors.BoundaryNorm(levels, ncolors=cmap.N)
+        kws.pop('vmin', None)
+        kws.pop('vmax', None)
+
+        kws.update(x=x, y=y, rasterized=rasterized, cmap=cmap, norm=norm)
 
         if self.facet_col is not None:
             # treat the sequence of multiple captures in one plot
@@ -468,12 +502,22 @@ class CapturePlotter:
     @_maybe_skip_missing
     def spectrogram(self, data: xr.Dataset, **sel):
         key = self.spectrogram.__name__
+
+        if 'system_noise' in data.data_vars:
+            noise_power = data.system_noise + sw.powtodB(
+                data.spectrogram.attrs['noise_bandwidth']
+            )
+            vmin = float(noise_power.min() - 6)
+        else:
+            vmin = None
+
         return self._heatmap(
             data[key].sel(sel).dropna('spectrogram_baseband_frequency'),
             name=key,
             x='spectrogram_time',
             y='spectrogram_baseband_frequency',
             meta=data.attrs,
+            vmin=vmin,
         )
 
     @_maybe_skip_missing

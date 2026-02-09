@@ -13,9 +13,10 @@ def _submit_if_available(executor, func: callable, data, *args, **kws) -> list:
 @click_capture_plotter()
 def run(dataset, output_path: str, interactive: bool, style: str):
     """generic plots"""
-    from striqt import figures
+    from striqt import figures as sf
     from concurrent import futures
     import numpy as np
+    import os
 
     if 'center_frequency' in dataset.coords and np.isfinite(
         dataset.center_frequency.data[0]
@@ -26,7 +27,7 @@ def run(dataset, output_path: str, interactive: bool, style: str):
         suptitle_fmt = '{path}'
         filename_fmt = '{name} {path}.svg'
 
-    plotter = figures.CapturePlotter(
+    plotter = sf.CapturePlotter(
         interactive=interactive,
         output_dir=output_path,
         subplot_by_port=True,
@@ -38,7 +39,9 @@ def run(dataset, output_path: str, interactive: bool, style: str):
         style=f'striqt.figures.{style}',
     )
 
-    executor = futures.ProcessPoolExecutor(max_workers=6)
+    executor = futures.ProcessPoolExecutor(
+        max_workers=os.process_cpu_count(), initializer=plotter.process_setup
+    )
 
     ex = None
 
