@@ -220,7 +220,7 @@ def _get_fig_center_y(fig: 'matplotlib.figure.Figure') -> float:
     return (top + bot) / 2
 
 
-def _get_system_noise(data: xr.Dataset, var_name: str, margin=None):
+def get_system_noise(data: xr.Dataset, var_name: str, margin=None):
     da = data[var_name]
     if 'system_noise' not in data:
         return None
@@ -242,8 +242,8 @@ def _get_system_noise(data: xr.Dataset, var_name: str, margin=None):
         return float(noise.min() - margin)
 
 
-def _select_histogram_bins(data, var_name, bin_name, pad_low=12, pad_hi=3):
-    xmin = _get_system_noise(data, bin_name, margin=pad_low)
+def select_histogram_bins(data, var_name, bin_name, pad_low=12, pad_hi=3):
+    xmin = get_system_noise(data, bin_name, margin=pad_low)
     sub = data[var_name]
     xmax = sub.cumsum(bin_name).idxmax(bin_name).max() + pad_hi
     return sub.sel({bin_name: slice(xmin, xmax)})
@@ -452,7 +452,7 @@ class _PlotKwArgs(_BasePlotKws):
     figsize: typing.NotRequired[list[float]]
 
 
-def quantize_heatmap(
+def quantize_heatmap_kws(
     data,
     cmap: str = 'cubehelix',
     vmin: float | None = None,

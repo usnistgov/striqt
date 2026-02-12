@@ -278,8 +278,8 @@ def cellular_5g_ssb_spectrogram(plotter: CapturePlotter, data: xr.Dataset, **sel
     coords = plotter.kwargs(
         x='cellular_ssb_symbol_index', y='cellular_ssb_baseband_frequency'
     )
-    vmin = util._get_system_noise(data, key, 6)
-    colors = util.quantize_heatmap(sub, vmin=vmin, vstep=2)
+    vmin = util.get_system_noise(data, key, 6)
+    colors = util.quantize_heatmap_kws(sub, vmin=vmin, vstep=2)
     grid = sub.plot.pcolormesh(**coords, **colors, rasterized=True)
     plotter.finish(grid, coords, rasterized=True)
 
@@ -294,7 +294,7 @@ def cellular_resource_power_histogram(
 ):
     key = cellular_resource_power_histogram.__name__
     coords = plotter.kwargs(x='cellular_resource_power_bin', hue=hue)
-    sub = util._select_histogram_bins(data, key, coords['x']).sel(**sel)
+    sub = util.select_histogram_bins(data, key, coords['x']).sel(**sel)
     grid = sub.plot.line(yscale=yscale, **coords)
     if noise_line:
         _plot_noise_line(data, key, grid, horizontal=False)
@@ -310,7 +310,7 @@ def channel_power_histogram(
 ):
     key = channel_power_histogram.__name__
     coords = plotter.kwargs(x='channel_power_bin', hue=hue)
-    sub = util._select_histogram_bins(data, key, coords['x']).sel(**sel)
+    sub = util.select_histogram_bins(data, key, coords['x']).sel(**sel)
     grid = sub.plot.line(**coords)
     if noise_line:
         _plot_noise_line(data, key, grid, horizontal=False)
@@ -381,8 +381,8 @@ def spectrogram(plotter: CapturePlotter, data: xr.Dataset, **sel):
     key = spectrogram.__name__
     sub = data[key].sel(sel).dropna('spectrogram_baseband_frequency')
     coords = plotter.kwargs(x='spectrogram_time', y='spectrogram_baseband_frequency')
-    vmin = util._get_system_noise(data, key, 6)
-    colors = util.quantize_heatmap(sub, vmin=vmin, vstep=2)
+    vmin = util.get_system_noise(data, key, 6)
+    colors = util.quantize_heatmap_kws(sub, vmin=vmin, vstep=2)
     grid = sub.plot.pcolormesh(**coords, **colors, rasterized=True)
     plotter.finish(grid, coords, rasterized=True)
 
@@ -397,7 +397,7 @@ def spectrogram_histogram(
 ):
     key = spectrogram_histogram.__name__
     coords = plotter.kwargs(x='spectrogram_power_bin', hue=hue)
-    sub = util._select_histogram_bins(data, key, coords['x']).sel(**sel)
+    sub = util.select_histogram_bins(data, key, coords['x']).sel(**sel)
     grid = sub.plot.line(yscale=yscale, **coords)
     if noise_line:
         _plot_noise_line(data, key, grid, horizontal=False)
@@ -475,11 +475,12 @@ def plot_cyclic_channel_power(
 
 
 def _plot_noise_line(
-    data: xr.Dataset, key: str, grid: 'xarray.plot.FacetGrid', horizontal=True
+    data: xr.Dataset, var_name: str, grid: 'xarray.plot.FacetGrid', horizontal=True
 ):
-    noise = util._get_system_noise(data, key)
+    noise = util.get_system_noise(data, var_name)
     if noise is None:
         return
+    assert not isinstance(noise, (int, float))
     for pow, ax in zip(noise.values.flat, grid.axs.flat):
         if horizontal:
             ax.axhline(pow, color='k', linestyle=':')
