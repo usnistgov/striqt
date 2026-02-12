@@ -2,12 +2,14 @@ from matplotlib.style import use
 
 from .analysis import (
     CapturePlotter,
-    FixedEngFormatter,
+    plot_cyclic_channel_power,
+)
+from .util import (
+    EngFormatter,
     label_axis,
     label_by_coord,
     label_legend,
     label_selection,
-    plot_cyclic_channel_power,
     summarize_metadata,
 )
 from .waveform import (

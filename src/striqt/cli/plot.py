@@ -1,11 +1,12 @@
 #!/usr/bin/env python
 
 from . import click_capture_plotter
+import typing
 
 
-def _submit_if_available(executor, func: callable, data, *args, **kws) -> list:
+def try_submit(executor, func: typing.Callable, plotter, data, *args, **kws) -> list:
     if func.__name__ in data.data_vars:
-        return [executor.submit(func, data, *args, **kws)]
+        return [executor.submit(func, plotter, data, *args, **kws)]
     else:
         return []
 
@@ -13,10 +14,13 @@ def _submit_if_available(executor, func: callable, data, *args, **kws) -> list:
 @click_capture_plotter()
 def run(dataset, output_path: str, interactive: bool, style: str):
     """generic plots"""
+
     from striqt import figures as sf
+    from striqt import sensor as ss
     from concurrent import futures
     import numpy as np
     import os
+    from pathlib import Path
 
     if 'center_frequency' in dataset.coords and np.isfinite(
         dataset.center_frequency.data[0]
@@ -28,11 +32,12 @@ def run(dataset, output_path: str, interactive: bool, style: str):
         filename_fmt = '{name} {path}.svg'
 
     plotter = sf.CapturePlotter(
+        unstack=['sweep_start_time', 'start_time', 'port'],
         interactive=interactive,
-        output_dir=output_path,
-        subplot_by_port=True,
+        output_dir=Path(output_path),
+        col='port',
         col_wrap=2,
-        title_fmt='Port {port}',
+        col_label_format='{antenna_name}',
         suptitle_fmt=suptitle_fmt,
         filename_fmt=filename_fmt,
         ignore_missing=True,
@@ -42,69 +47,81 @@ def run(dataset, output_path: str, interactive: bool, style: str):
     executor = futures.ProcessPoolExecutor(
         max_workers=os.process_cpu_count(), initializer=plotter.process_setup
     )
+    exc = ss.util.ExceptionStack('plots')
 
-    ex = None
+    # with executor, exc:
+    pending = []
+    if 'start_time' in dataset.coords:
+        groups = dataset.groupby('start_time')
+    else:
+        groups = [(None, dataset)]
 
-    with executor:
-        pending = []
-        if 'start_time' in dataset.coords:
-            groups = dataset.groupby('start_time')
-        else:
-            groups = [(None, dataset)]
-        for _, data in groups:
-            # 1 start time per (maybe multi-channel) capture
+    for _, data in groups:
+        pending += try_submit(
+            executor,
+            sf.analysis.spectrogram,
+            plotter,
+            data,
+            spectrogram_time=slice(0, 20e-3),
+        )
+        pending += try_submit(
+            executor,
+            sf.analysis.cellular_5g_pss_correlation,
+            plotter,
+            data,
+            dB=True,
+        )
+        pending += try_submit(
+            executor, sf.analysis.cellular_5g_ssb_spectrogram, plotter, data
+        )
+        pending += try_submit(
+            executor,
+            sf.analysis.cellular_cyclic_autocorrelation,
+            plotter,
+            data,
+            dB=True,
+        )
+        pending += try_submit(
+            executor,
+            sf.analysis.cellular_resource_power_histogram,
+            plotter,
+            data,
+            yscale='log',
+        )
+        pending += try_submit(
+            executor,
+            sf.analysis.channel_power_histogram,
+            plotter,
+            data,
+            channel_power_bin=slice(-95, -15),
+        )
+        pending += try_submit(
+            executor, sf.analysis.channel_power_time_series, plotter, data
+        )
+        pending += try_submit(executor, sf.analysis.cyclic_channel_power, plotter, data)
+        pending += try_submit(
+            executor,
+            sf.analysis.power_spectral_density,
+            plotter,
+            data,
+        )
+        pending += try_submit(
+            executor,
+            sf.analysis.spectrogram_histogram,
+            plotter,
+            data,
+            yscale='log',
+            spectrogram_power_bin=slice(-130, -50),
+        )
+        # pending += try_submit(
+        #     executor, sf.analysis.spectrogram_ratio_histogram, plotter, data
+        # )
 
-            # channel power representations
-            pending += _submit_if_available(
-                executor, plotter.spectrogram, data, spectrogram_time=slice(0, 20e-3)
-            )
-
-            pending += _submit_if_available(
-                executor, plotter.cellular_5g_pss_correlation, data, dB=True
-            )
-            pending += _submit_if_available(
-                executor, plotter.cellular_5g_ssb_spectrogram, data
-            )
-            pending += _submit_if_available(
-                executor, plotter.cellular_cyclic_autocorrelation, data, dB=True
-            )
-            pending += _submit_if_available(
-                executor, plotter.channel_power_time_series, data
-            )
-            pending += _submit_if_available(
-                executor,
-                plotter.channel_power_histogram,
-                data,
-                channel_power_bin=slice(-95, -15),
-            )
-            pending += _submit_if_available(
-                executor, plotter.cyclic_channel_power, data
-            )
-            pending += _submit_if_available(
-                executor,
-                plotter.power_spectral_density,
-                data,
-            )
-            pending += _submit_if_available(
-                executor,
-                plotter.spectrogram_histogram,
-                data,
-                spectrogram_power_bin=slice(-130, -50),
-            )
-            pending += _submit_if_available(
-                executor, plotter.spectrogram_ratio_histogram, data
-            )
+    with exc:
         for future in futures.as_completed(pending):
-            try:
+            with exc.defer():
                 future.result()
-            except Exception as exc:
-                print(f'generated an exception: {exc}')
-                if ex is None:
-                    ex = exc
-
-    if ex is not None:
-        raise ex
 
 
 if __name__ == '__main__':
-    run()
+    run()  # type: ignore
