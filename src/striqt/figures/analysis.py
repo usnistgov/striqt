@@ -9,72 +9,39 @@ import striqt.analysis as sa
 
 import matplotlib as mpl
 from matplotlib import pyplot as plt
-import msgspec
 import xarray as xr
 
-from . import util
+from . import specs, util
+
 
 if typing.TYPE_CHECKING:
-    from typing_extensions import ParamSpec
-
-    _P = ParamSpec('_P')
-    _R = typing.TypeVar('_R', covariant=True)
     import xarray.plot
     import xarray.core.types
 
-    class PlotCallerProtocol(typing.Protocol[_P, _R]):
+    class DataVariablePlotter(typing.Protocol):
         def __call__(
             self,
-            data: xr.DataArray | xr.Dataset,
-            name: str,
-            *args: _P.args,
-            **kwargs: _P.kwargs,
-        ) -> _R: ...
+            plotter: CapturePlotter,
+            data: xr.Dataset,
+            *args,
+            **kwargs,
+        ) -> typing.Any: ...
 
         __name__: str
 
-    class InitKwArgsCallable(typing.Protocol[_P, _R]):
-        def __call__(
-            self,
-            *args: _P.args,
-            **kwargs: _P.kwargs,
-        ) -> _R: ...
+    _TVP = typing.TypeVar('_TVP', bound=DataVariablePlotter)
 
-        __name__: str
-
-    class KwArgsOnly(typing.Protocol[_P, _R]):
-        def __call__(
-            *args: _P.args,
-            **kwargs: _P.kwargs,
-        ) -> _R: ...
-
-        __name__: str
+data_var_plotters: dict[str, DataVariablePlotter] = {}
 
 
-def spec_as_init_kwargs(
-    spec_cls: typing.Callable[_P, typing.Any],
-) -> typing.Callable[[typing.Callable[..., _R]], 'InitKwArgsCallable[_P, _R]']:
-    """fill in type hints for the analysis parameters"""
-    return lambda f: f  # type: ignore
+def register_data_var_plot(func: '_TVP') -> '_TVP':
+    name = func.__name__
+    func = sa.util.stopwatch(name, 'analysis', logger_level=sa.util.WARNING)(func)
+    data_var_plotters[name] = func
+    return func
 
 
-class CapturePlotterOptions(msgspec.Struct, kw_only=True, forbid_unknown_fields=True):
-    unstack: list[str]
-    style: str | None = None
-    interactive: bool = True
-    output_dir: Path | None = None
-    col: str | None = 'port'
-    row: str | None = None
-    col_label_format: str | None = 'Port {port}'
-    row_label_format: str | None = None
-    col_wrap: int = 2
-    title_fmt: str = 'Port {port}'
-    suptitle_fmt: str = '{center_frequency}'
-    filename_fmt: str = '{name} {center_frequency}.svg'
-    ignore_missing: bool = False
-
-
-def coerce_griddable_plot_data(
+def _coerce_griddable_plot_data(
     data: xr.DataArray, plotter: CapturePlotter
 ) -> xr.DataArray:
     opts = plotter.opts
@@ -85,17 +52,28 @@ def coerce_griddable_plot_data(
 
 
 class CapturePlotter:
-    @spec_as_init_kwargs(CapturePlotterOptions)
-    def __init__(self, *args, **kwargs):
-        self.opts = msgspec.convert(kwargs, CapturePlotterOptions, strict=False)
+    opts: specs.SharedPlotOptions
 
-        if self.opts.output_dir is not None:
-            self.opts.output_dir.mkdir(parents=True, exist_ok=True)
+    def __init__(
+        self,
+        opts: specs.SharedPlotOptions,
+        output_dir: Path | None,
+        *,
+        interactive: bool = False,
+    ):
+        self.opts = opts
+        self.output_dir = output_dir
+        self.interactive = interactive
 
-    def process_setup(self):
-        if not self.opts.interactive:
+        if self.output_dir is not None:
+            self.output_dir.mkdir(parents=True, exist_ok=True)
+
+    def setup(self):
+        if not self.interactive:
             mpl.use('agg')
+            plt.ioff()
         if self.opts.style is not None:
+            plt.ion()
             plt.style.use(self.opts.style)
 
         warning_ctx = warnings.catch_warnings()
@@ -202,7 +180,7 @@ class CapturePlotter:
             ylabel = grid.cbar.ax.get_ylabel().replace('\n', ' ')
             grid.cbar.ax.set_ylabel(ylabel, rotation=90)
 
-        if self.opts.output_dir is not None:
+        if self.output_dir is not None:
             filename = set(
                 util.label_by_coord(
                     data,
@@ -212,13 +190,14 @@ class CapturePlotter:
                     **data.attrs,
                 )
             )
-            path = Path(self.opts.output_dir) / list(filename)[0]
+            path = Path(self.output_dir) / list(filename)[0]
             grid.fig.savefig(path, dpi=dpi)
 
-        if not self.opts.interactive:
+        if not self.interactive:
             plt.close(grid.fig)
 
 
+@register_data_var_plot
 def cellular_cyclic_autocorrelation(
     plotter: CapturePlotter,
     data: xr.Dataset,
@@ -227,7 +206,7 @@ def cellular_cyclic_autocorrelation(
     **sel,
 ):
     sub = data.cellular_cyclic_autocorrelation.sel(sel).pipe(
-        coerce_griddable_plot_data, plotter
+        _coerce_griddable_plot_data, plotter
     )
 
     if hue == 'link_direction':
@@ -247,6 +226,7 @@ def cellular_cyclic_autocorrelation(
     return plotter.finish(grid, coords)
 
 
+@register_data_var_plot
 def cellular_5g_pss_correlation(
     plotter: CapturePlotter,
     data: xr.Dataset,
@@ -272,6 +252,7 @@ def cellular_5g_pss_correlation(
     return plotter.finish(grid, coords)
 
 
+@register_data_var_plot
 def cellular_5g_ssb_spectrogram(plotter: CapturePlotter, data: xr.Dataset, **sel):
     key = cellular_5g_ssb_spectrogram.__name__
     sub = data[key].sel(sel).isel(cellular_ssb_index=0)
@@ -280,10 +261,13 @@ def cellular_5g_ssb_spectrogram(plotter: CapturePlotter, data: xr.Dataset, **sel
     )
     vmin = util.get_system_noise(data, key, 6)
     colors = util.quantize_heatmap_kws(sub, vmin=vmin, vstep=2)
-    grid = sub.plot.pcolormesh(**coords, **colors, rasterized=True)
+    grid = sub.plot.imshow(**coords, **colors, rasterized=True, interpolation='nearest')
+    for ax in grid.axs.flat:
+        ax.grid(False)
     plotter.finish(grid, coords, rasterized=True)
 
 
+@register_data_var_plot
 def cellular_resource_power_histogram(
     plotter: CapturePlotter,
     data: xr.Dataset,
@@ -301,6 +285,7 @@ def cellular_resource_power_histogram(
     return plotter.finish(grid, coords)
 
 
+@register_data_var_plot
 def channel_power_histogram(
     plotter: CapturePlotter,
     data: xr.Dataset,
@@ -317,6 +302,7 @@ def channel_power_histogram(
     return plotter.finish(grid, coords)
 
 
+@register_data_var_plot
 def channel_power_time_series(
     plotter: CapturePlotter,
     data: xr.Dataset,
@@ -332,6 +318,7 @@ def channel_power_time_series(
     return plotter.finish(grid, coords)
 
 
+@register_data_var_plot
 def cyclic_channel_power(
     plotter: CapturePlotter, data: xr.Dataset, noise_line=True, **sel
 ):
@@ -351,6 +338,7 @@ def cyclic_channel_power(
     return plotter.finish(grid, coords)
 
 
+@register_data_var_plot
 def power_spectral_density(
     plotter: CapturePlotter,
     data: xr.Dataset,
@@ -377,16 +365,20 @@ def power_spectral_density(
     return plotter.finish(grid, coords)
 
 
+@register_data_var_plot
 def spectrogram(plotter: CapturePlotter, data: xr.Dataset, **sel):
     key = spectrogram.__name__
     sub = data[key].sel(sel).dropna('spectrogram_baseband_frequency')
     coords = plotter.kwargs(x='spectrogram_time', y='spectrogram_baseband_frequency')
     vmin = util.get_system_noise(data, key, 6)
     colors = util.quantize_heatmap_kws(sub, vmin=vmin, vstep=2)
-    grid = sub.plot.pcolormesh(**coords, **colors, rasterized=True)
+    grid = sub.plot.imshow(**coords, **colors, rasterized=True, interpolation='nearest')
+    for ax in grid.axs.flat:
+        ax.grid(False)
     plotter.finish(grid, coords, rasterized=True)
 
 
+@register_data_var_plot
 def spectrogram_histogram(
     plotter: CapturePlotter,
     data: xr.Dataset,
@@ -404,16 +396,22 @@ def spectrogram_histogram(
     return plotter.finish(grid, coords)
 
 
-def spectrogram_ratio_histogram(plotter: CapturePlotter, data: xr.Dataset, **sel):
+@register_data_var_plot
+def spectrogram_ratio_histogram(
+    plotter: CapturePlotter,
+    data: xr.Dataset,
+    yscale='linear',
+    noise_line=True,
+    hue=None,
+    **sel,
+):
     key = spectrogram_ratio_histogram.__name__
-    return plotter.line(
-        data[key].sel(sel),
-        name=key,
-        x='spectrogram_ratio_power_bin',
-        xticklabelunits=False,
-        meta=data.attrs,
-        # hue=hue,
-    )
+    coords = plotter.kwargs(x='spectrogram_ratio_power_bin', hue=hue)
+    sub = util.select_histogram_bins(data, key, coords['x']).sel(**sel)
+    grid = sub.plot.line(yscale=yscale, **coords)
+    if noise_line:
+        _plot_noise_line(data, key, grid, horizontal=False)
+    return plotter.finish(grid, coords)
 
 
 def plot_cyclic_channel_power(
@@ -439,11 +437,11 @@ def plot_cyclic_channel_power(
     if sa.dataarrays.CAPTURE_DIM in cyclic_channel_power.dims:
         cyclic_channel_power = cyclic_channel_power.squeeze(sa.dataarrays.CAPTURE_DIM)
 
+    if not dB:
+        cyclic_channel_power = sw.dBtopow(cyclic_channel_power)
+
     for i, detector in enumerate(cyclic_channel_power.power_detector.data):
         a = cyclic_channel_power.sel(power_detector=detector)
-
-        if not dB:
-            a = sw.dBtopow(a)
 
         ax.plot(
             time,
@@ -454,9 +452,6 @@ def plot_cyclic_channel_power(
 
     for i, detector in enumerate(cyclic_channel_power.power_detector.data):
         a = cyclic_channel_power.sel(power_detector=detector)
-
-        if not dB:
-            a = sw.dBtopow(a)
 
         ax.fill_between(
             time,

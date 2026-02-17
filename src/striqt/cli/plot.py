@@ -1,52 +1,83 @@
 #!/usr/bin/env python
 
-from . import click_capture_plotter
-import typing
+import click
 
 
-def try_submit(executor, func: typing.Callable, plotter, data, *args, **kws) -> list:
-    if func.__name__ in data.data_vars:
-        return [executor.submit(func, plotter, data, *args, **kws)]
-    else:
-        return []
-
-
-@click_capture_plotter()
-def run(dataset, output_path: str, interactive: bool, style: str):
+@click.command('plot signal analysis from zarr or zarr.zip files')
+@click.argument('zarr_path', type=click.Path(exists=True, dir_okay=True))
+@click.argument('yaml_path', type=click.Path(exists=True, dir_okay=False))
+@click.option(
+    '--interactive/',
+    '-i',
+    is_flag=True,
+    show_default=True,
+    default=False,
+    help='',
+)
+@click.option(
+    '--no-save',
+    is_flag=True,
+    show_default=True,
+    default=False,
+    help="don't save the resulting plots",
+)
+def run(zarr_path: str, yaml_path: str, interactive=False, no_save=False):
     """generic plots"""
 
+    # yaml first, since it fails fastest
+    import msgspec
     from striqt import figures as sf
+
+    yaml_text = open(yaml_path, 'rb').read()
+    opts = msgspec.yaml.decode(yaml_text, type=sf.specs.PlotOptions, strict=False)
+
+    # then the heavier data
+    import striqt.analysis as sa
+
+    dataset = sa.load(zarr_path)
+
+    for func_name, kwargs in opts.variables.items():
+        if func_name not in dataset.data_vars:
+            raise KeyError(
+                f'yaml specifies a {func_name!r} plot, but no such variable is in the dataset'
+            )
+
+    if 'channel' in dataset.coords:
+        # legacy coord name
+        dataset = dataset.rename_vars({'channel': 'port'})
+
+    if (
+        'sweep_start_time' in dataset.coords
+        and 'sweep_start_time' not in opts.data.index_dims
+    ):
+        index_dims = ('sweep_start_time',) + opts.data.index_dims
+    else:
+        index_dims = opts.data.index_dims
+
+    dataset = dataset.set_xindex(index_dims)
+    if 'sweep_start_time' in dataset.coords:
+        sweep_idx = dataset.coords['sweep_start_time'][opts.data.sweep_index]
+        dataset = dataset.sel(sweep_start_time=sweep_idx, drop=True)
+
+    if opts.data.query is not None:
+        dataset = dataset.query({'capture': opts.data.query})
+
+    # the actual runner
     from striqt import sensor as ss
     from concurrent import futures
-    import numpy as np
+    import xarray as xr
     import os
     from pathlib import Path
 
-    if 'center_frequency' in dataset.coords and np.isfinite(
-        dataset.center_frequency.data[0]
-    ):
-        suptitle_fmt = '{center_frequency}'
-        filename_fmt = '{name} {center_frequency}.svg'
+    if no_save:
+        output_path = None
     else:
-        suptitle_fmt = '{path}'
-        filename_fmt = '{name} {path}.svg'
+        output_path = Path(zarr_path).parent / Path(zarr_path).name.split('.', 1)[0]
+        output_path.mkdir(exist_ok=True)
 
-    plotter = sf.CapturePlotter(
-        unstack=['sweep_start_time', 'start_time', 'port'],
-        interactive=interactive,
-        output_dir=Path(output_path),
-        col='port',
-        col_wrap=2,
-        col_label_format='{antenna_name}',
-        suptitle_fmt=suptitle_fmt,
-        filename_fmt=filename_fmt,
-        ignore_missing=True,
-        style=f'striqt.figures.{style}',
-    )
-
-    executor = futures.ProcessPoolExecutor(
-        max_workers=os.process_cpu_count(), initializer=plotter.process_setup
-    )
+    ncores = os.process_cpu_count()
+    plotter = sf.CapturePlotter(opts.plotter, output_path, interactive=interactive)
+    executor = futures.ProcessPoolExecutor(ncores, initializer=plotter.setup)
     exc = ss.util.ExceptionStack('plots')
 
     # with executor, exc:
@@ -56,71 +87,35 @@ def run(dataset, output_path: str, interactive: bool, style: str):
     else:
         groups = [(None, dataset)]
 
+    new_index = [
+        n
+        for n in dataset.capture.indexes
+        if n not in ('capture', 'start_time', 'sweep_start_time')
+    ]
+
+    # queue
     for _, data in groups:
-        pending += try_submit(
-            executor,
-            sf.analysis.spectrogram,
-            plotter,
-            data,
-            spectrogram_time=slice(0, 20e-3),
-        )
-        pending += try_submit(
-            executor,
-            sf.analysis.cellular_5g_pss_correlation,
-            plotter,
-            data,
-            dB=True,
-        )
-        pending += try_submit(
-            executor, sf.analysis.cellular_5g_ssb_spectrogram, plotter, data
-        )
-        pending += try_submit(
-            executor,
-            sf.analysis.cellular_cyclic_autocorrelation,
-            plotter,
-            data,
-            dB=True,
-        )
-        pending += try_submit(
-            executor,
-            sf.analysis.cellular_resource_power_histogram,
-            plotter,
-            data,
-            yscale='log',
-        )
-        pending += try_submit(
-            executor,
-            sf.analysis.channel_power_histogram,
-            plotter,
-            data,
-            channel_power_bin=slice(-95, -15),
-        )
-        pending += try_submit(
-            executor, sf.analysis.channel_power_time_series, plotter, data
-        )
-        pending += try_submit(executor, sf.analysis.cyclic_channel_power, plotter, data)
-        pending += try_submit(
-            executor,
-            sf.analysis.power_spectral_density,
-            plotter,
-            data,
-        )
-        pending += try_submit(
-            executor,
-            sf.analysis.spectrogram_histogram,
-            plotter,
-            data,
-            yscale='log',
-            spectrogram_power_bin=slice(-130, -50),
-        )
-        # pending += try_submit(
-        #     executor, sf.analysis.spectrogram_ratio_histogram, plotter, data
-        # )
+        assert isinstance(data, xr.Dataset)
+
+        if len(new_index) > 0:
+            data = data.reset_index(list(data.capture.indexes.keys())).set_xindex(
+                new_index
+            )
+
+        for func_name, kwargs in opts.variables.items():
+            pending += [
+                executor.submit(
+                    sf.analysis.data_var_plotters[func_name], plotter, data, **kwargs
+                )
+            ]
 
     with exc:
         for future in futures.as_completed(pending):
             with exc.defer():
                 future.result()
+
+    if interactive:
+        sa.util.blocking_input('press enter to quit')
 
 
 if __name__ == '__main__':

@@ -1,5 +1,7 @@
 from matplotlib.style import use
 
+from . import specs
+
 from .analysis import (
     CapturePlotter,
     plot_cyclic_channel_power,
