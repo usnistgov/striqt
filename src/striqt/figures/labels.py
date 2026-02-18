@@ -30,8 +30,15 @@ def _show_xarray_units_in_parentheses():
 _show_xarray_units_in_parentheses()
 
 
-def label_by_coord(data: xr.DataArray, fmt: str, *, title_case=True, **extra_fields):
-    coords = _coords_to_dicts(data, title_case=title_case)
+def label_by_coord(
+    data: xr.DataArray,
+    fmt: str,
+    coord_or_dim='port',
+    *,
+    title_case=True,
+    **extra_fields,
+):
+    coords = _coords_to_dicts(data, coord_or_dim=coord_or_dim, title_case=title_case)
     return [fmt.format(**(extra_fields | c)) for c in coords]
 
 
@@ -61,26 +68,39 @@ def summarize_metadata(
         return meta
 
 
-def _coords_to_dicts(da: xr.DataArray, title_case=False) -> list[dict[str, typing.Any]]:
+def _coords_to_dicts(
+    da: xr.DataArray, coord_or_dim='port', title_case=False
+) -> list[dict[str, typing.Any]]:
     UNIT_PREFIXES = {'center_frequency': 'M'}
 
-    result = [{} for _ in range(len(da.coords['port']))]
-    for k, values in da.port.coords.variables.items():
-        attrs = values.attrs
-        if np.ndim(values) == 0:
-            values = [values] * len(result)
+    coord = da.coords[coord_or_dim]
+    result = [{} for _ in range(len(coord))]
+    for k, var in coord.coords.variables.items():
+        dtype = var.values.dtype
+        value = np.atleast_1d(var.values)[0]
+        if np.ndim(var) == 0:
+            value = [var.data] * len(result)
         else:
-            values = values.values.tolist()
-        for d, item in zip(result, values):
-            if isinstance(item, numbers.Number):
+            value = var.data
+        for d, v in zip(result, value):
+            if np.issubdtype(dtype, np.datetime64):
+                d[k] = np.datetime_as_string(v, unit='ms').item()
+            elif np.issubdtype(dtype, np.number):
                 prefix = UNIT_PREFIXES.get(k, None)
-                d[k] = sa.dataarrays.describe_value(item, attrs, unit_prefix=prefix)
-            elif isinstance(item, str):
-                d[k] = item.replace('_', ' ')
+                d[k] = sa.dataarrays.describe_value(
+                    v.item(), var.attrs, unit_prefix=prefix
+                )
+            elif np.issubdtype(dtype, np.str_):
+                d[k] = v.item().replace('_', ' ')
                 if title_case:
                     d[k] = d[k].title()
+            elif np.issubdtype(dtype, np.bool):
+                d[k] = str(v.item())
             else:
-                d[k] = item
+                sa.util.get_logger('analysis').warning(
+                    f'unhandled type for coord {k!r}'
+                )
+                d[k] = v.item()
     return result
 
 

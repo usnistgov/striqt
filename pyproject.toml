@@ -58,9 +58,9 @@ edge-airstack-1 = [
 ]
 
 [project.scripts]
-check-sweep = "striqt.cli.check:run"
-sensor-sweep = "striqt.cli.sweep:run"
-plot-sensor-captures = "striqt.cli.plot:run"
+check-sweep = "striqt.cli.check_sweep:run"
+sensor-sweep = "striqt.cli.sweep_sweep:run"
+plot-capture = "striqt.cli.plot_capture:run"
 
 [tool.ruff]
 target-version = "py39"

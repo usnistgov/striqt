@@ -171,6 +171,7 @@ class CapturePlotter:
                 data,
                 self.opts.suptitle_fmt,
                 title_case=True,
+                coord_or_dim=self.opts.col or 'port',
                 name=data.name,
                 meta=data.attrs,
             )[0]
@@ -195,6 +196,7 @@ class CapturePlotter:
             col_text = labels.label_by_coord(
                 data,
                 self.opts.col_label_format,
+                coord_or_dim=self.opts.col or 'port',
                 title_case=True,
                 name=data.name,
                 **data.attrs,
@@ -206,6 +208,7 @@ class CapturePlotter:
                 data,
                 self.opts.row_label_format,
                 title_case=True,
+                coord_or_dim=self.opts.col or 'port',
                 name=data.name,
                 **data.attrs,
             )
@@ -225,13 +228,17 @@ class CapturePlotter:
 
         if self.output_dir is not None:
             filename = labels.label_by_coord(
-                data, self.opts.filename_fmt, name=data.name, **data.attrs
+                data,
+                self.opts.filename_fmt,
+                coord_or_dim=self.opts.col or 'port',
+                name=data.name,
+                **data.attrs,
             )
             path = Path(self.output_dir) / filename[0]
             grid.fig.savefig(path, dpi=dpi)
 
         if not self.interactive:
-            plt.close('all')
+            plt.close(grid.fig)
 
 
 @_register_data_var_plot

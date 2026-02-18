@@ -204,6 +204,7 @@ def dump(
     compute: bool = True,
     chunk_bytes: int | typing.Literal['auto'] = 50_000_000,
     max_threads: int | None = None,
+    **kwargs,
 ) -> 'StoreType':
     """serialize a dataset into a zarr directory or zipfile"""
 
@@ -262,7 +263,7 @@ def dump(
         warnings.simplefilter('ignore', xr.SerializationWarning)
         warnings.simplefilter('ignore', UserWarning)
 
-        return data.to_zarr(store, **kws)
+        return data.to_zarr(store, **kws, **kwargs)
 
 
 def load(
