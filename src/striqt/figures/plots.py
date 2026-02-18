@@ -19,8 +19,6 @@ if typing.TYPE_CHECKING:
     import xarray.plot
     import xarray.core.types
 
-    from . import labels
-
     class DataVariablePlotter(typing.Protocol):
         def __call__(
             self,
