@@ -447,7 +447,6 @@ def spectrogram_ratio_histogram(
     plotter: CapturePlotter,
     data: xr.Dataset,
     yscale: 'xarray.core.types.ScaleOptions' = 'linear',
-    noise_line=True,
     hue: str | None = None,
     **sel,
 ):
@@ -455,8 +454,6 @@ def spectrogram_ratio_histogram(
     coords = plotter.kwargs(x='spectrogram_ratio_power_bin', hue=hue)
     sub = _select_histogram_bins(data, key, coords['x']).sel(**sel)
     grid = sub.plot.line(yscale=yscale, **coords)
-    if noise_line:
-        _plot_noise_line(data, key, grid, horizontal=False)
     return plotter.finish(grid, coords)
 
 
