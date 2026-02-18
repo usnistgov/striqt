@@ -164,9 +164,7 @@ def run(zarr_path: str, yaml_path: str, interactive=False, no_save=False):
 
     combos = list(itertools.product(opts.variables.keys(), (g[0] for g in groups)))
 
-    for _ in executor.map(
-        worker_plot, *zip(*combos)
-    ):  # , chunksize=len(combos)//ncores):
+    for _ in executor.map(worker_plot, *zip(*combos)):
         pass
 
     if interactive:

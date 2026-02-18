@@ -12,7 +12,7 @@ from . import specs
 
 if typing.TYPE_CHECKING:
     import matplotlib as mpl
-    from matplotlib import colors
+    from matplotlib import axes, colors
     from matplotlib import pyplot as plt
     import numpy as np
     import xarray as xr
@@ -111,6 +111,19 @@ def _register_data_var_plot(func: '_TVP') -> '_TVP':
     return func
 
 
+def _select_dpi(grid, x_data, y_data, min_=0):
+    dpi = min_
+    scale_inv = grid.fig.dpi_scale_trans.inverted()
+    for ax in grid.fig.axes:
+        if grid.cbar is not None and ax is grid.cbar.ax:
+            continue
+        bbox = ax.get_window_extent().transformed(scale_inv)
+        width, height = bbox.width, bbox.height
+        dpi = max(dpi, x_data.size / width, y_data.size / height)
+
+    return dpi
+
+
 class CapturePlotter:
     opts: specs.SharedPlotOptions
 
@@ -203,43 +216,24 @@ class CapturePlotter:
                 label.set_text(s)
 
         # rasterization
-        dpi = 0
         if grid.cbar is not None and grid.cbar.solids is not None:
             grid.cbar.solids.set_rasterized(rasterized)
-        for ax in grid.fig.axes:
-            if grid.cbar is None or ax is not grid.cbar.ax:
-                bbox = ax.get_window_extent().transformed(
-                    grid.fig.dpi_scale_trans.inverted()
-                )
-                width, height = bbox.width, bbox.height
-                dpi = max(
-                    dpi,
-                    max(
-                        data[x].size / width,
-                        (data if y is None else data[y]).size / height,
-                    ),
-                )
-        grid.fig.set_dpi(max(100, dpi))
+        dpi = _select_dpi(grid, data[x], data if y is None else data[y], min_=100)
+        grid.fig.set_dpi(dpi)
 
         if grid.cbar is not None:
             ylabel = grid.cbar.ax.get_ylabel().replace('\n', ' ')
             grid.cbar.ax.set_ylabel(ylabel, rotation=90)
 
         if self.output_dir is not None:
-            filename = set(
-                labels.label_by_coord(
-                    data,
-                    self.opts.filename_fmt,
-                    name=data.name,
-                    title_case=True,
-                    **data.attrs,
-                )
+            filename = labels.label_by_coord(
+                data, self.opts.filename_fmt, name=data.name, **data.attrs
             )
-            path = Path(self.output_dir) / list(filename)[0]
-            grid.fig.savefig(path, dpi=100)
+            path = Path(self.output_dir) / filename[0]
+            grid.fig.savefig(path, dpi=dpi)
 
         if not self.interactive:
-            plt.close(grid.fig)
+            plt.close('all')
 
 
 @_register_data_var_plot
@@ -251,7 +245,7 @@ def cellular_cyclic_autocorrelation(
     **sel,
 ):
     sub = data.cellular_cyclic_autocorrelation.sel(sel).pipe(
-        _coerce_griddable_plot_data, plotter
+        _coerce_griddable_data, plotter
     )
 
     if hue == 'link_direction':
@@ -549,9 +543,7 @@ def _plot_noise_line(
             ax.axvline(pow, color='k', linestyle=':')
 
 
-def _coerce_griddable_plot_data(
-    data: xr.DataArray, plotter: CapturePlotter
-) -> xr.DataArray:
+def _coerce_griddable_data(data: xr.DataArray, plotter: CapturePlotter) -> xr.DataArray:
     opts = plotter.opts
     if opts.col is None and opts.row is None:
         return data.extend_dims(_view=[''])
