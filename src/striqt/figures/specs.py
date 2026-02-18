@@ -6,7 +6,7 @@ class SharedPlotOptions(msgspec.Struct, kw_only=True, forbid_unknown_fields=True
     style: str | None = None
     col: str | None = 'port'
     row: str | None = None
-    col_label_format: str | None = 'Port {port}'
+    col_label_format: str = 'Port {port}'
     row_label_format: str | None = None
     col_wrap: int = 2
     title_fmt: str = 'Port {port}'
@@ -26,7 +26,7 @@ class PlotOptions(msgspec.Struct, kw_only=True, forbid_unknown_fields=True):
     variables: dict[str, dict[str, typing.Any]] = msgspec.field(default_factory=dict)
 
     def __post_init__(self):
-        from .analysis import data_var_plotters
+        from .variables import data_var_plotters
 
         for name, kwargs in list(self.variables.items()):
             if name not in data_var_plotters:

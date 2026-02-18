@@ -4,7 +4,10 @@ import click
 import typing
 
 
-def _chain_decorators(decorators: list[callable], func: callable) -> callable:
+_DT = typing.TypeVar('_DT', bound=typing.Callable)
+
+
+def _chain_decorators(decorators: tuple[_DT, ...], func: _DT) -> _DT:
     for option in decorators:
         func = option(func)
     return func
