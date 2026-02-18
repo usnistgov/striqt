@@ -12,7 +12,7 @@ from . import specs
 
 if typing.TYPE_CHECKING:
     import matplotlib as mpl
-    from matplotlib import axes, colors
+    from matplotlib import colors
     from matplotlib import pyplot as plt
     import numpy as np
     import xarray as xr
