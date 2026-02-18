@@ -26,7 +26,7 @@ class PlotOptions(msgspec.Struct, kw_only=True, forbid_unknown_fields=True):
     variables: dict[str, dict[str, typing.Any]] = msgspec.field(default_factory=dict)
 
     def __post_init__(self):
-        from .variables import data_var_plotters
+        from .plots import data_var_plotters
 
         for name, kwargs in list(self.variables.items()):
             if name not in data_var_plotters:

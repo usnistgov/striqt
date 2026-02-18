@@ -1,6 +1,6 @@
 from . import specs
 
-from .variables import (
+from .plots import (
     CapturePlotter,
     cellular_5g_pss_correlation,
     cellular_5g_ssb_spectrogram,

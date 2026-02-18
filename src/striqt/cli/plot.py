@@ -106,7 +106,7 @@ def worker_plot(variable: str, start_time: typing.Any):
 
     kwargs = ctx['opts'].variables[variable]
     data = ctx['data'].sel(start_time=start_time)
-    func = sf.variables.data_var_plotters[variable]
+    func = sf.plots.data_var_plotters[variable]
 
     return func(ctx['plotter'], data, **kwargs)
 
