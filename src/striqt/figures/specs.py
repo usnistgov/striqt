@@ -44,6 +44,12 @@ class DataOptions(msgspec.Struct, kw_only=True, forbid_unknown_fields=True):
     groupby_dims: tuple[str, ...] = ()
     sweep_index: int
     query: str | None = None
+    select: dict[str, typing.Any] = msgspec.field(default_factory=dict)
+
+    def __post_init__(self):
+        for k, v in list(self.select.items()):
+            if isinstance(v, str):
+                self.select[k] = eval(v, {}, {'slice': slice})
 
 
 class PlotOptions(msgspec.Struct, kw_only=True, forbid_unknown_fields=True):
@@ -54,14 +60,11 @@ class PlotOptions(msgspec.Struct, kw_only=True, forbid_unknown_fields=True):
     def __post_init__(self):
         from .data_vars import _data_plots
 
-        for name, kwargs in list(self.variables.items()):
+        for name in list(self.variables.keys()):
             if name not in _data_plots:
                 raise KeyError(
                     f'not such plot func {name!r}. must be one of {_data_plots!r}'
                 )
-            for k, v in list(kwargs.items()):
-                if isinstance(v, str) and v.startswith('slice'):
-                    self.variables[name][k] = eval(v, {}, {'slice': slice})
 
         for n in self.data.groupby_dims:
             if n in (self.plotter.row, self.plotter.col):

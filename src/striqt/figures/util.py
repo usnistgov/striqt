@@ -38,12 +38,10 @@ def get_system_noise(
     if 'noise_bandwidth' in da.attrs:
         B = da.attrs['noise_bandwidth']
     elif da.attrs.get('units', None) != 'dBm':
-        print(var_name, 'no units')
         return None
     elif 'analysis_bandwidth' in data.coords:
         B = data.coords['analysis_bandwidth']
     else:
-        print(var_name, 'other')
         return None
 
     noise = data.system_noise + sw.powtodB(B)
