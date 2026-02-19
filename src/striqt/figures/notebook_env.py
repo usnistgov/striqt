@@ -2,22 +2,23 @@
 
 # Set up the plotting environment for notebooks that convert cleanly
 # to pdf or html output.
+from __future__ import annotations
 import datetime
 import functools
 
-import IPython
-import IPython.display
-import matplotlib as mpl
+
+from IPython.display import HTML, display
+from matplotlib.backends.backend_svg import FigureCanvasSVG
 import matplotlib.pyplot as plt
+import matplotlib.dates as mpldates
+import matplotlib.units as mplunits
+from matplotlib_inline import backend_inline
 import numpy as np
-from IPython.display import HTML, display, set_matplotlib_formats
 
 _captions = {}
 
-from matplotlib.backends import backend_svg
 
-
-@functools.wraps(backend_svg.FigureCanvasSVG.print_svg)
+@functools.wraps(FigureCanvasSVG.print_svg)
 def print_svg(self, *a, **k):
     def guess_title(fig):
         if self.figure._suptitle is not None:
@@ -43,29 +44,29 @@ def print_svg(self, *a, **k):
     title_ = f'{label}##{caption_text}' if caption_text else label
     k.setdefault('metadata', {})['Title'] = title_
 
-    return backend_svg.FigureCanvasSVG._print_svg(self, *a, **k)
+    return FigureCanvasSVG._ps(self, *a, **k)  # type: ignore
 
 
-backend_svg.FigureCanvasSVG.print_svg, backend_svg.FigureCanvasSVG._print_svg = (
+FigureCanvasSVG.print_svg, FigureCanvasSVG._ps = (  # type: ignore
     print_svg,
-    backend_svg.FigureCanvasSVG.print_svg,
+    FigureCanvasSVG.print_svg,
 )
 
 
-@functools.wraps(IPython.display.set_matplotlib_formats)
+@functools.wraps(backend_inline.set_matplotlib_formats)
 def set_matplotlib_formats(formats, *args, **kws):
     """apply wrappers to inject title (from figure or axis titles) and caption (from set_caption metadata),
     when available, into image 'Title' metadata
     """
 
-    IPython.display.set_matplotlib_formats(formats, *args, **kws)
+    backend_inline.set_matplotlib_formats(formats, *args, **kws)
 
     # monkeypatch IPython's internal print_figure to include title metadata
     from importlib import reload
 
-    from IPython.core import pylabtools
+    from IPython.core import pylabtools as pltt
 
-    pylabtools = reload(pylabtools)
+    pltt = reload(pltt)
 
     def guess_title(fig):
         if fig._suptitle is not None:
@@ -85,23 +86,20 @@ def set_matplotlib_formats(formats, *args, **kws):
         pattern = re.compile(r'[\W_]+')
         return pattern.sub('-', title_).lower()
 
-    @functools.wraps(pylabtools.print_figure)
+    @functools.wraps(pltt.print_figure)
     def wrapper(fig, fmt='png', *a, **k):
         k = dict(k)
         label = title_to_label(guess_title(fig))
         caption_text = _captions.get(id(fig), '')
 
-        ret = pylabtools._print_figure(fig, fmt=fmt, *a, **k)
+        ret = pltt._print_figure(fig, fmt=fmt, *a, **k)
 
         markup = f'<tt>{label}.{fmt}:</tt>{"<br>" + caption_text if caption_text else " (no caption data)"}'
         display(HTML(markup))
 
         return ret
 
-    pylabtools.print_figure, pylabtools._print_figure = wrapper, pylabtools.print_figure
-
-
-convert_datetime = mpl.units.registry[np.datetime64]
+    pltt.print_figure, pltt._print_figure = wrapper, pylabtools.pltt  # type: ignore
 
 
 def set_caption(*args):
@@ -121,10 +119,12 @@ def set_caption(*args):
     _captions[id(fig)] = text
 
 
+convert_datetime = mplunits.registry[np.datetime64]
+
 # concise date formatting by default
-converter = mpl.dates.ConciseDateConverter()
-mpl.units.registry[np.datetime64] = converter
-mpl.units.registry[datetime.date] = converter
-mpl.units.registry[datetime.datetime] = converter
+converter = mpldates.ConciseDateConverter()
+mplunits.registry[np.datetime64] = converter
+mplunits.registry[datetime.date] = converter
+mplunits.registry[datetime.datetime] = converter
 
 set_matplotlib_formats('svg')

@@ -9,7 +9,7 @@ if typing.TYPE_CHECKING:
 
     class WorkerData(typing.TypedDict):
         data: xr.Dataset
-        plotter: sf.CapturePlotter
+        plotter: sf.backend.PlotBackend
         opts: sf.specs.PlotOptions
 
 else:
@@ -21,10 +21,10 @@ worker_ctx: WorkerData | None = None
 
 def load_data(zarr_path: str, opts: 'sf.specs.PlotOptions', index=True) -> 'xr.Dataset':
     import striqt.analysis as sa
+    import striqt.figures as sf
     import xarray as xr
 
     dataset = sa.load(zarr_path)
-    # data_var_coords = [n for n, c in dataset.coords.items() if 'capture' not in c.dims]
 
     if not isinstance(dataset, xr.Dataset):
         raise TypeError(f'file contents are {type(dataset).__name__!r} a dataset')
@@ -39,7 +39,7 @@ def load_data(zarr_path: str, opts: 'sf.specs.PlotOptions', index=True) -> 'xr.D
         # legacy name
         dataset = dataset.rename_vars({'channel': 'port'})
 
-    dataset = _query_match_at_index(
+    dataset = sf.util.query_match_at_index(
         dataset, 'capture', 'sweep_start_time', opts.data.sweep_index
     )
 
@@ -47,7 +47,7 @@ def load_data(zarr_path: str, opts: 'sf.specs.PlotOptions', index=True) -> 'xr.D
         dataset = dataset.query({'capture': opts.data.query})
 
     if index:
-        idx_coords = _get_index_coords(dataset, opts) + [opts.plotter.col]
+        idx_coords = sf.util.guess_index_coords(dataset, opts) + [opts.plotter.col]
         dataset = dataset.set_xindex(idx_coords)
 
     return dataset
@@ -55,7 +55,7 @@ def load_data(zarr_path: str, opts: 'sf.specs.PlotOptions', index=True) -> 'xr.D
 
 def worker_init(zarr_path, opts: 'sf.specs.PlotOptions', interactive: bool, no_save):
     from pathlib import Path
-    import warnings
+    from warnings import filterwarnings
 
     import striqt.figures as sf
     import matplotlib as mpl
@@ -69,14 +69,8 @@ def worker_init(zarr_path, opts: 'sf.specs.PlotOptions', interactive: bool, no_s
     if opts.plotter.style is not None:
         plt.style.use(opts.plotter.style)
 
-    warning_ctx = warnings.catch_warnings()
-    warning_ctx.__enter__()
-    warnings.filterwarnings(
-        'ignore', category=UserWarning, message=r'.*figure layout has changed.*'
-    )
-    warnings.filterwarnings(
-        'ignore', category=UserWarning, message='.*artists with labels.*'
-    )
+    filterwarnings('ignore', r'.*figure layout has changed.*', UserWarning)
+    filterwarnings('ignore', '.*artists with labels.*', UserWarning)
 
     dataset = load_data(zarr_path, opts)
 
@@ -85,11 +79,12 @@ def worker_init(zarr_path, opts: 'sf.specs.PlotOptions', interactive: bool, no_s
     else:
         output_path = Path(zarr_path).parent / Path(zarr_path).name.split('.', 1)[0]
         output_path.mkdir(exist_ok=True)
-    plotter = sf.CapturePlotter(
+
+    plotter = sf.backend.PlotBackend(
         opts.plotter, output_dir=output_path, interactive=interactive
     )
 
-    for name in _get_looped_coords(dataset):
+    for name in sf.util.get_looped_coords(dataset):
         if name in (opts.plotter.col, opts.plotter.row):
             continue
         if f'{{{name}}}' in opts.plotter.filename_fmt:
@@ -109,9 +104,9 @@ def worker_plot(variable: str, sel: dict[str, typing.Any]):
         raise TimeoutError('no data to plot')
 
     kwargs = ctx['opts'].variables[variable]
-    func = sf.plots.data_var_plotters[variable]
+    func = sf.data_vars._data_plots[variable]
 
-    return func(ctx['plotter'], ctx['data'].sel(**sel), **kwargs)
+    return func(ctx['data'].sel(**sel), ctx['plotter'], **kwargs)
 
 
 @click.command('plot signal analysis from zarr or zarr.zip files')
@@ -160,7 +155,7 @@ def run(zarr_path: str, yaml_path: str, interactive=False, no_save=False):
     # run
     import itertools
 
-    gb_fields = _get_groupby_fields(dataset, opts)
+    gb_fields = sf.util.get_groupby_fields(dataset, opts)
     groups = dataset.groupby(gb_fields)
     group_sel = [dict(zip(gb_fields, idx)) for idx, _ in groups]
     combos = list(itertools.product(opts.variables.keys(), group_sel))
@@ -176,33 +171,3 @@ def run(zarr_path: str, yaml_path: str, interactive=False, no_save=False):
 
 if __name__ == '__main__':
     run()  # type: ignore
-
-
-def _ordered_union(*args: typing.Iterable[typing.Any]):
-    result = []
-    for seq in args:
-        result += list(dict.fromkeys(seq))
-    return result
-
-
-def _get_looped_coords(ds: 'xr.Dataset|xr.DataArray'):
-    return [l['field'] for l in ds.attrs['loops'] if l['kind'] != 'repeat']
-
-
-def _get_groupby_fields(ds: 'xr.Dataset', opts: 'sf.specs.PlotOptions'):
-    from striqt import figures as sf
-
-    loops = _get_looped_coords(ds)
-    fields = sf.specs.get_format_fields(opts.plotter.filename_fmt, exclude=('name',))
-    return _ordered_union(opts.data.groupby_dims, fields, loops)
-
-
-def _get_index_coords(ds: 'xr.Dataset', opts: 'sf.specs.PlotOptions'):
-    idx_coords = _get_groupby_fields(ds, opts) + [opts.plotter.col]
-    if opts.plotter.row:
-        idx_coords = idx_coords + [opts.plotter.row]
-    return idx_coords
-
-
-def _query_match_at_index(ds: 'xr.Dataset', dim: str, var_name: str, index: int):
-    return ds.query({dim: f'{var_name} == {var_name}[{index}]'})  # .squeeze(var_name)

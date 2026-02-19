@@ -1,3 +1,5 @@
+from __future__ import annotations as __
+
 import msgspec
 import typing
 import string
@@ -50,12 +52,12 @@ class PlotOptions(msgspec.Struct, kw_only=True, forbid_unknown_fields=True):
     variables: dict[str, dict[str, typing.Any]] = msgspec.field(default_factory=dict)
 
     def __post_init__(self):
-        from .plots import data_var_plotters
+        from .data_vars import _data_plots
 
         for name, kwargs in list(self.variables.items()):
-            if name not in data_var_plotters:
+            if name not in _data_plots:
                 raise KeyError(
-                    f'not such plot func {name!r}. must be one of {data_var_plotters!r}'
+                    f'not such plot func {name!r}. must be one of {_data_plots!r}'
                 )
             for k, v in list(kwargs.items()):
                 if isinstance(v, str) and v.startswith('slice'):
