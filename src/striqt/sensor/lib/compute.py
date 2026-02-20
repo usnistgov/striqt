@@ -538,7 +538,9 @@ def get_looped_coords(ds: 'xr.Dataset', include_repeats=False) -> list[str]:
 
 def _check_coord_indexes(ds, index_coords: list[str]):
     if _xarray_version() < (2024, 9, 0):
-        sa.util.get_logger('analysis').warning('xarray is too old to to validate coord indexes')
+        sa.util.get_logger('analysis').warning(
+            'xarray is too old to to validate coord indexes'
+        )
         return
 
     coords_ds = ds.capture.coords.to_dataset()
@@ -568,7 +570,7 @@ def _check_coord_indexes(ds, index_coords: list[str]):
         )
 
 
-def _xarray_version() -> tuple[int,int,int]:
+def _xarray_version() -> tuple[int, int, int]:
     version = tuple(int(v) for v in xr.__version__.split('.'))
     assert len(version) == 3
     return version

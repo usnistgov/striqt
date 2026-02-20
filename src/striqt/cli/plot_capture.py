@@ -59,7 +59,7 @@ def run(zarr_path: str, yaml_path: str, interactive=False, no_save=False):
 
     assert ncores is not None
     executor = futures.ProcessPoolExecutor(
-        max(1,ncores-1),
+        max(1, ncores - 1),
         initializer=worker_init,
         initargs=(zarr_path, opts, interactive, no_save),
     )
@@ -71,7 +71,9 @@ def run(zarr_path: str, yaml_path: str, interactive=False, no_save=False):
     import itertools
 
     gb_fields = sf.util.get_groupby_fields(dataset, opts)
-    indexed = dataset.reset_index(list(dataset.indexes.keys())).set_xindex(gb_fields)#.unstack(gb_fields)
+    indexed = dataset.reset_index(list(dataset.indexes.keys())).set_xindex(
+        gb_fields
+    )  # .unstack(gb_fields)
     idx_values = list(dict.fromkeys(indexed.indexes['capture']))
     group_sel = [dict(zip(gb_fields, v)) for v in idx_values]
 
