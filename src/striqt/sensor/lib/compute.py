@@ -536,12 +536,16 @@ def get_looped_coords(ds: 'xr.Dataset', include_repeats=False) -> list[str]:
     ]
 
 
-def _check_coord_indexes(ds, gb_fields: list[str]):
+def _check_coord_indexes(ds, index_coords: list[str]):
+    if _xarray_version() < (2024, 9, 0):
+        sa.util.get_logger('analysis').warning('xarray is too old to to validate coord indexes')
+        return
+
     coords_ds = ds.capture.coords.to_dataset()
-    for _, coords_group in coords_ds.groupby(gb_fields):
+    for _, coords_group in coords_ds.groupby(index_coords):
         break
     else:
-        raise ValueError(f'no groups matched groupby fields {gb_fields}')
+        raise ValueError(f'no groups matched groupby fields {index_coords}')
 
     sub = coords_group.reset_coords()  # .drop_vars('start_time')
     if sub.sizes['capture'] == 1:
@@ -555,13 +559,19 @@ def _check_coord_indexes(ds, gb_fields: list[str]):
 
     if len(counts) == 0:
         raise ValueError(
-            f'coords {gb_fields} are insufficient to unstack and least two more may be needed'
+            f'coords {index_coords} are insufficient to unstack and least two more may be needed'
         )
     else:
         suggest = set(counts.keys())
         raise ValueError(
-            f'coords {gb_fields} are insufficient to unstack. consider adding one of {suggest}'
+            f'coords {index_coords} are insufficient to unstack. consider adding one of {suggest}'
         )
+
+
+def _xarray_version() -> tuple[int,int,int]:
+    version = tuple(int(v) for v in xr.__version__.split('.'))
+    assert len(version) == 3
+    return version
 
 
 def index_dataset(

@@ -52,10 +52,15 @@ def run(zarr_path: str, yaml_path: str, interactive=False, no_save=False):
     from concurrent import futures
     import os
 
-    ncores = os.process_cpu_count()
+
+    if hasattr(os, 'process_cpu_count'):
+        ncores = os.process_cpu_count() or 1
+    else:
+        ncores = os.cpu_count() or 1
+
     assert ncores is not None
     executor = futures.ProcessPoolExecutor(
-        ncores,
+        max(1,ncores-1),
         initializer=worker_init,
         initargs=(zarr_path, opts, interactive, no_save),
     )
