@@ -72,8 +72,10 @@ def run(zarr_path: str, yaml_path: str, interactive=False, no_save=False):
     import itertools
 
     gb_fields = sf.util.get_groupby_fields(dataset, opts)
-    groups = dataset.groupby(gb_fields)
-    group_sel = [dict(zip(gb_fields, idx)) for idx, _ in groups]
+    indexed = dataset.reset_index(list(dataset.indexes.keys())).set_xindex(gb_fields)#.unstack(gb_fields)
+    idx_values = list(dict.fromkeys(indexed.indexes['capture']))
+    group_sel = [dict(zip(gb_fields, v)) for v in idx_values]
+
     combos = list(itertools.product(opts.variables.keys(), group_sel))
 
     for _ in executor.map(worker_plot, *zip(*combos)):
