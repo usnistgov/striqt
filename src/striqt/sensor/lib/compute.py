@@ -565,7 +565,7 @@ def _check_coord_indexes(ds, gb_fields: list[str]):
 
 
 def index_dataset(
-    ds: 'xr.Dataset', capture_coords: list[str] = ['start_time']
+    ds: 'xr.Dataset', index_coords: list[str] = ['start_time']
 ) -> 'xr.Dataset':
     """Quasi-automatically apply multiple-coordinate indexing to the dataset.
 
@@ -590,7 +590,7 @@ def index_dataset(
 
     loop_coords = get_looped_coords(ds)
     index_coords = sa.util.ordered_set_union(
-        sweep_coord, loop_coords, capture_coords, ['port']
+        sweep_coord, loop_coords, index_coords, ['port']
     )
     _check_coord_indexes(ds, index_coords)
     return ds.set_xindex(index_coords)
@@ -598,7 +598,7 @@ def index_dataset(
 
 def unstack_dataset(
     ds: 'xr.Dataset',
-    capture_coords: list[str] = ['start_time'],
+    index_coords: list[str] = ['start_time'],
     chunks: int | typing.Literal['auto'] | None = None,
 ) -> 'xr.Dataset':
     """Unstack a dataset from a flat list of captures into multiple dimensions.
@@ -607,7 +607,7 @@ def unstack_dataset(
     `loop_vars` are introspected by the sweep loop specification from ds.attrs['loops'].
 
     Args:
-        extra_coord_dims:
+        index_coords:
             specify any set of coordinates that can index entries in the sweep
             `captures` specification. Each set of these coordinates in the dataset
             must uniquely specify exactly one capture in the captures list.
@@ -620,7 +620,7 @@ def unstack_dataset(
     Returns:
         The unstacked array.
     """
-    idx_ds = index_dataset(ds, capture_coords)
+    idx_ds = index_dataset(ds, index_coords)
 
     if chunks is not None:
         idx_ds = idx_ds.chunk(chunks)
