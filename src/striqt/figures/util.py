@@ -88,7 +88,7 @@ def get_groupby_fields(ds: 'xr.Dataset', opts: specs.PlotOptions) -> list[str]:
 
     loops = ss.lib.compute.get_looped_coords(ds)
     fields = sf.specs.get_format_fields(opts.plotter.filename_fmt, exclude=('name',))
-    return sa.util.ordered_set_union(opts.data.groupby_dims, fields, loops, ['port'])
+    return sa.util.ordered_set_union(opts.data.groupby_dims, fields, loops)
 
 
 def guess_index_coords(ds: 'xr.Dataset', opts: specs.PlotOptions) -> list[str | None]:

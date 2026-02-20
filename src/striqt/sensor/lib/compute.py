@@ -593,7 +593,6 @@ def index_dataset(
         sweep_coord, loop_coords, capture_coords, ['port']
     )
     _check_coord_indexes(ds, index_coords)
-    print(index_coords)
     return ds.set_xindex(index_coords)
 
 
