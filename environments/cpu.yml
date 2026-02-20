@@ -38,4 +38,4 @@ dependencies:
 - open-fonts
 
 - pip:
-  - striqt @ git+https://github.com/usnistgov/striqt@channel-enable-fix
+  - striqt @ git+https://github.com/usnistgov/striqt
