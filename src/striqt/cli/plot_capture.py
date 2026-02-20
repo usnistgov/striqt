@@ -52,7 +52,6 @@ def run(zarr_path: str, yaml_path: str, interactive=False, no_save=False):
     from concurrent import futures
     import os
 
-
     if hasattr(os, 'process_cpu_count'):
         ncores = os.process_cpu_count() or 1
     else:
