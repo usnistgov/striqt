@@ -1,59 +1,80 @@
-from __future__ import annotations
-from . import specs, sources
+from __future__ import annotations as __
+
+import typing
+
+from .. import specs
+
+_TC = typing.TypeVar('_TC', bound=specs.SensorCapture, contravariant=True)
+_TP = typing.TypeVar('_TP', bound=specs.Peripherals)
 
 
-class PeripheralsBase:
+class PeripheralsProtocol(typing.Protocol[_TC]):
+    """a peripherals extension class must implement these"""
+
+    def open(self): ...
+
+    def close(self): ...
+
+    def setup(
+        self, captures: typing.Sequence[_TC], loops: typing.Sequence[specs.LoopSpec]
+    ): ...
+
+    def arm(self, capture: _TC): ...
+
+    def acquire(self, capture: _TC) -> dict[str, typing.Any]: ...
+
+
+class PeripheralsBase(typing.Generic[_TP, _TC], PeripheralsProtocol[_TC]):
     """base class defining the object protocol peripheral hardware support.
 
     This is implemented primarily through connection management and callback
     methods for arming and acquisition.
     """
 
-    def __init__(
-        self, sweep: specs.Sweep | None, source: sources.SourceBase | None = None
-    ):
-        self.set_sweep(sweep)
-        self.source = source
+    spec: _TP
 
-    def enable_frontend(self, enabled: bool):
-        raise NotImplementedError
-
-    def open(self):
-        pass
-
-    def close(self):
-        pass
-
-    def arm(self, capture: specs.RadioCapture) -> dict[str]:
-        """called while the capture is being armed in the radio.
-
-        This then returns a dictionary of {field_name: value} pairs to update in `capture`.
-        """
-        return {}
-
-    def acquire(self, capture: specs.RadioCapture) -> dict[str]:
-        """called while the capture is being acquired in the radio.
-
-        This returns a dictionary of new {data_variable: value} pairs that specify that
-        a data variable named `data_variable` should be added to the saved dataset. Value
-        can be a scalar or an xarray DataArray.
-        """
-        return {}
-
-    def set_sweep(self, sweep: specs.Sweep):
-        self.sweep = sweep
-
-    def set_source(self, source: sources.SourceBase | None = None):
-        self.source = source
+    def __init__(self, spec: specs.Sweep[typing.Any, _TP, _TC]):
+        self.spec = spec.peripherals
+        self.open()
 
     def __enter__(self):
-        self.open()
         return self
 
     def __exit__(self, *_):
         self.close()
 
 
-class NoPeripherals(PeripheralsBase):
-    def __init__(self, sweep=None, source=None):
+class CalibrationPeripheralsBase(
+    PeripheralsBase[_TP, _TC],
+    typing.Generic[_TP, _TC, specs._TPC],
+):
+    """base class defining the object protocol peripheral hardware support.
+
+    This is implemented primarily through connection management and callback
+    methods for arming and acquisition.
+    """
+
+    calibration_spec: specs._TPC | None
+
+    def __init__(self, spec: specs.CalibrationSweep[typing.Any, _TP, _TC, specs._TPC]):
+        self.calibration_spec = spec.calibration
+        self.open()
+
+
+class NoPeripherals(PeripheralsBase[_TP, _TC]):
+    def open(self):
+        return
+
+    def close(self):
+        return
+
+    def setup(
+        self, captures: typing.Iterable[_TC], loops: typing.Iterable[specs.LoopBase]
+    ):
+        return
+
+    def arm(self, capture):
         pass
+
+    def acquire(self, capture):
+        return {}

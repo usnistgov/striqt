@@ -1,38 +1,21 @@
-from __future__ import annotations
+from __future__ import annotations as __
+
 import typing
 
-from ..lib import register, specs, util
+from .. import specs
+
+from ..lib import util
+from .shared import registry, hint_keywords
 
 if typing.TYPE_CHECKING:
-    import iqwaveform
     import pandas as pd
-    import numpy as np
-
 else:
-    iqwaveform = util.lazy_import('iqwaveform')
     pd = util.lazy_import('pandas')
-    np = util.lazy_import('numpy')
-
-
-class IQWaveformSpec(
-    specs.Measurement,
-    forbid_unknown_fields=True,
-    cache_hash=True,
-    kw_only=True,
-    frozen=True,
-):
-    start_time_sec: typing.Optional[float] = None
-    stop_time_sec: typing.Optional[float] = None
-
-
-class IQWaveformKeywords(specs.AnalysisKeywords):
-    start_time_sec: typing.NotRequired[typing.Optional[float]]
-    stop_time_sec: typing.NotRequired[typing.Optional[float]]
 
 
 def _get_start_stop_index(
     capture: specs.Capture,
-    spec: IQWaveformSpec,
+    spec: specs.IQWaveform,
     allow_none=True,
 ):
     if spec.start_time_sec is None:
@@ -54,30 +37,27 @@ def _get_start_stop_index(
     return start, stop
 
 
-@register.coordinate_factory(dtype='uint64', attrs={'standard_name': 'Sample Index'})
+@registry.coordinates(dtype='uint64', attrs={'standard_name': 'Sample Index'})
 @util.lru_cache()
-def iq_index(capture: specs.Capture, spec: IQWaveformSpec) -> typing.Iterable[int]:
+def iq_index(capture: specs.Capture, spec: specs.IQWaveform) -> typing.Iterable[int]:
     start, stop = _get_start_stop_index(capture, spec, allow_none=False)
     return pd.RangeIndex(start, stop, name=iq_index.__name__)
 
 
-@register.measurement(
+@hint_keywords(specs.IQWaveform)
+@registry.measurement(
     coord_factories=[iq_index],
-    spec_type=IQWaveformSpec,
+    spec_type=specs.IQWaveform,
     dtype='complex64',
     attrs={'standard_name': 'IQ waveform', 'units': 'V/√Ω'},
     store_compressed=False,
 )
-def iq_waveform(
-    iq: 'iqwaveform.util.Array',
-    capture: specs.Capture,
-    **kwargs: typing.Unpack[IQWaveformKeywords],
-) -> 'iqwaveform.util.Array':
+def iq_waveform(iq, capture, **kwargs):
     """package a clipping of the IQ waveform"""
 
-    spec = IQWaveformSpec.fromdict(kwargs)
+    spec = specs.IQWaveform.from_dict(kwargs)
 
-    metadata = spec.todict()
+    metadata = spec.to_dict()
 
     if spec.start_time_sec is None:
         start = None

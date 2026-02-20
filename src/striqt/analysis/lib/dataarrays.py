@@ -1,50 +1,49 @@
-"""wrap lower-level iqwaveform DSP calls to accept physical inputs and return xarray.DataArray"""
+"""wrap lower-level striqt.waveform DSP calls to accept physical inputs and return xarray.DataArray"""
 
-from __future__ import annotations
+from __future__ import annotations as __
 
 import collections
-from fractions import Fraction
-import functools
 import dataclasses
-import logging
 import math
-from numbers import Number
 import typing
 
-from . import register, specs, util
+import msgspec
 
-import array_api_compat
+from .. import specs
+
+
+from . import register, util
 
 if typing.TYPE_CHECKING:
-    import iqwaveform
-    import iqwaveform.type_stubs
-    import labbench as lb
+    import array_api_compat
     import numpy as np
     import xarray as xr
+
+    from striqt.waveform._typing import ArrayType
+
+
 else:
-    iqwaveform = util.lazy_import('iqwaveform')
-    lb = util.lazy_import('labbench')
     np = util.lazy_import('numpy')
     xr = util.lazy_import('xarray')
+    array_api_compat = util.lazy_import('array_api_compat')
+
+
+AnalysisReturnFlag = typing.Literal[True, False, 'delayed']
+_TA = typing.TypeVar('_TA', bound=AnalysisReturnFlag)
 
 
 CAPTURE_DIM = 'capture'
 PORT_DIM = 'port'
 
 
-class AcquiredIQ(typing.NamedTuple):
-    raw: 'iqwaveform.type_stubs.ArrayType'
-    aligned: 'iqwaveform.type_stubs.ArrayType' | None = None
-    capture: specs.Capture = None
-    unscaled_peak: float | None = None
+@dataclasses.dataclass
+class AcquiredIQ:
+    raw: ArrayType
+    aligned: ArrayType | None
+    capture: specs.Capture | None
 
 
 _ENG_PREFIXES = {
-    -30: 'q',
-    -27: 'r',
-    -24: 'y',
-    -21: 'z',
-    -18: 'a',
     -15: 'f',
     -12: 'p',
     -9: 'n',
@@ -56,60 +55,10 @@ _ENG_PREFIXES = {
     9: 'G',
     12: 'T',
     15: 'P',
-    18: 'E',
-    21: 'Z',
-    24: 'Y',
-    27: 'R',
-    30: 'Q',
 }
 
 
 @util.lru_cache()
-def describe_capture(
-    this: specs.Capture | None,
-    prev: specs.Capture | None = None,
-    *,
-    index: int = None,
-    count: int = None,
-    constrain: tuple[str] | None = None,
-    join: str = ', ',
-) -> str:
-    """generate a description of a capture"""
-    if this is None:
-        if prev is None:
-            return 'saving last analysis'
-        else:
-            return 'performing last analysis'
-
-    diffs = []
-
-    for name in type(this).__struct_fields__:
-        if constrain is not None and name not in constrain:
-            continue
-        if name == 'start_time':
-            continue
-        value = getattr(this, name)
-        if prev is not None and name == 'backend_sample_rate' and value is None:
-            continue
-        elif prev is None or value != getattr(prev, name):
-            diffs.append(describe_field(this, name))
-
-    capture_diff = join.join(diffs)
-
-    if index is not None:
-        progress = str(index + 1)
-
-        if count is not None:
-            progress = f'{progress}/{count}'
-
-        progress = progress + ' '
-    else:
-        progress = ''
-
-    return progress + capture_diff
-
-
-@functools.lru_cache()
 def format_units(value, unit='', places=None, force_prefix=None, sep=' ') -> str:
     """Format a number with SI unit prefixes"""
 
@@ -157,13 +106,13 @@ def format_units(value, unit='', places=None, force_prefix=None, sep=' ') -> str
     return f'{mant:{fmt}}{suffix}'
 
 
-def describe_field(capture: specs.Capture, name: str):
-    meta = specs.get_capture_type_attrs(type(capture))
+def describe_field(capture: specs.Capture, name: str, *, sep='='):
+    meta = specs.helpers.get_capture_type_attrs(type(capture))
     attrs = meta[name]
     value = getattr(capture, name)
     value_str = describe_value(value, attrs)
 
-    return f'{name}={value_str}'
+    return f'{name}{sep}{value_str}'
 
 
 def describe_value(value, attrs: dict, unit_prefix=None):
@@ -182,12 +131,14 @@ def describe_value(value, attrs: dict, unit_prefix=None):
     return value_str
 
 
-def _results_as_arrays(obj: tuple | list | dict | 'iqwaveform.util.Array'):
+def _results_as_arrays(
+    obj: tuple | list | dict | ArrayType,
+) -> ArrayType | dict[str, ArrayType] | xr.Dataset | dict[str, DelayedDataArray]:
     """convert an array, or a container of arrays, into a numpy array (or container of numpy arrays)"""
 
     if array_api_compat.is_torch_array(obj):
         array = obj.cpu()
-    elif array_api_compat.is_cupy_array(obj):
+    elif util.is_cupy_array(obj):
         array = obj.get()
     elif array_api_compat.is_numpy_array(obj):
         return obj
@@ -204,8 +155,8 @@ def _empty_stub(dims, dtype, attrs={}):
 
 @util.lru_cache()
 def dataarray_stub(
-    dims: tuple[str, ...],
-    coord_factories: tuple[callable, ...],
+    dims: tuple[str, ...] | None,
+    coord_factories: tuple[register.CallableCoordinateFactory, ...],
     dtype: str,
     expand_dims: tuple[str, ...] | None = None,
 ) -> typing.Any:
@@ -213,7 +164,7 @@ def dataarray_stub(
 
     coord_stubs = {}
     for func in coord_factories:
-        info = register.coordinate_factory[func]
+        info = register.registry.coordinates[func]
         coord_stubs[info.name] = _empty_stub(info.dims, info.dtype, attrs=info.attrs)
 
     if dims is None or dims == ():
@@ -239,16 +190,13 @@ def _reraise_coord_error(*, exc, coord, factory_info, data, name):
         exc.args = (f'in coordinate {name!r}, {exc.args[0]}',) + exc.args[1:]
         raise exc
     else:
-        problem = (
-            f'unexpected shape in coordinate {name!r}: '
-            f'data dimensions {factory_info.dims!r} have shape {template_shape}, '
-            f'but coordinate factory gave {data_shape}'
-        )
+        problem = f'unexpected shape in coordinate {name!r}: data dimensions {factory_info.dims!r} have shape {template_shape}, but coordinate factory gave {data_shape}'
         raise ValueError(problem) from exc
 
 
 def build_dataarray(
     delayed: DelayedDataArray,
+    *,
     expand_dims=None,
 ) -> 'xr.DataArray':
     """build an `xarray.DataArray` from an ndarray, capture information, and channel analysis keyword arguments"""
@@ -259,39 +207,34 @@ def build_dataarray(
         delayed.info.dtype,
         expand_dims=expand_dims,
     )
-    data = np.asarray(delayed.data)
+
+    data = np.asarray(delayed.result)
     delayed.spec.validate()
 
     _validate_delayed_ndim(delayed)
 
-    # add a port dimension if needed
-    if isinstance(delayed.capture.port, Number):
-        if data.ndim == len(template.dims) + 1:
-            # "unbroadcast" dimension of a single-channel
-            assert data.shape[0] == 1
-            data = data[0]
-        target_shape = data.shape
-    else:
-        # broadcast on the capture dimension
-        data = np.atleast_1d(delayed.data)
-        target_shape = (len(delayed.capture.port), *data.shape[1:])
-
     # to bypass initialization overhead, grow from the empty template
-    pad = {dim: [0, target_shape[i]] for i, dim in enumerate(template.dims)}
+    pad = {dim: [0, data.shape[i]] for i, dim in enumerate(template.dims)}
     da = template.pad(pad)
 
     try:
         if da.values.ndim == 0:
-            da.values = data
+            da.data = data
         else:
-            da.values[:] = data
+            da.data[:] = data
     except ValueError as ex:
-        raise ValueError(
-            f'{delayed.info.name} measurement data has unexpected shape {data.shape}'
-        ) from ex
+        exc = ValueError(
+            f'{delayed.info.name} measurement data has unexpected '
+            f'shape {data.shape} -- expected {da.data.shape}'
+        )
+    else:
+        exc = None
+
+    if exc is not None:
+        raise exc
 
     for coord_factory in delayed.info.coord_factories:
-        factory_info = register.coordinate_factory[coord_factory]
+        factory_info = register.registry.coordinates[coord_factory]
         coord = da[factory_info.name]
 
         ret = coord_factory(delayed.capture, delayed.spec)
@@ -312,12 +255,14 @@ def build_dataarray(
 
         da[factory_info.name] = coord.assign_attrs(metadata)
 
-    spec_attrs = delayed.spec.todict(skip_private=True)
+    spec_attrs = delayed.spec.to_dict(skip_private=True)
     return da.assign_attrs(delayed.info.attrs | spec_attrs | delayed.attrs)
 
 
 @util.lru_cache()
-def _infer_coord_dims(coord_factories: typing.Iterable[callable]) -> list[str]:
+def _infer_coord_dims(
+    coord_factories: tuple[register.CallableCoordinateFactory, ...],
+) -> tuple[str, ...]:
     """guess dimensions of a dataarray based on its coordinates.
 
     This orders the dimensions according to (1) first appearance in each
@@ -328,11 +273,12 @@ def _infer_coord_dims(coord_factories: typing.Iterable[callable]) -> list[str]:
     # build an ordered list of unique coordinates
     coord_dims = {}
     for func in coord_factories:
-        coord = register.coordinate_factory[func]
+        coord = register.registry.coordinates[func]
         if coord is None:
             continue
-        coord_dims.update(dict.fromkeys(coord.dims, None))
-    return list(coord_dims.keys())
+        empty_coords = dict.fromkeys(coord.dims or {}, None)
+        coord_dims.update(empty_coords)
+    return tuple(coord_dims.keys())
 
 
 def _validate_delayed_ndim(delayed: DelayedDataArray) -> None:
@@ -341,15 +287,17 @@ def _validate_delayed_ndim(delayed: DelayedDataArray) -> None:
     else:
         expect_dims = delayed.info.dims
 
-    ndim = delayed.data.ndim
+    if isinstance(delayed.result, dict):
+        raise TypeError('could not evaluate number of dimensions for dict return type')
+    else:
+        ndim = delayed.result.ndim
 
     if len(expect_dims) == ndim == 0:
         # allow scalar values
         pass
     elif len(expect_dims) + 1 != ndim:
         raise ValueError(
-            f'coordinates of {delayed.info.name!r} indicate {len(expect_dims) + 1} '
-            f'dimensions, but the data has {ndim}'
+            f'coordinates of {delayed.info.name!r} indicate {len(expect_dims) + 1} dimensions, but the data has {ndim}'
         )
 
 
@@ -362,11 +310,10 @@ class DelayedDataArray(collections.UserDict):
     analyses before we materialize them on the CPU.
     """
 
-    # datacls: type
-    capture: specs.RadioCapture
-    spec: specs.Measurement
-    data: typing.Union['iqwaveform.type_stubs.ArrayLike', dict]
-    info: register.MeasurementInfo
+    capture: specs.Capture
+    spec: specs.Analysis
+    result: ArrayType | dict[str, ArrayType] | xr.Dataset | dict[str, DelayedDataArray]
+    info: register.AnalysisInfo
     attrs: dict
 
     def compute(self) -> DelayedDataArray:
@@ -374,7 +321,7 @@ class DelayedDataArray(collections.UserDict):
             # datacls=self.datacls,
             capture=self.capture,
             spec=self.spec,
-            data=_results_as_arrays(self.data),
+            result=_results_as_arrays(self.result),
             info=self.info,
             attrs=self.attrs,
         )
@@ -390,32 +337,48 @@ def select_parameter_kws(locals_: dict, omit=(PORT_DIM, 'out')) -> dict:
     return {k: v for k, v in items[1:] if k not in omit}
 
 
+class EvaluationOptions(msgspec.Struct, typing.Generic[_TA]):
+    as_xarray: _TA
+    registry: register.AnalysisRegistry
+    block_each: bool = True
+    expand_dims: typing.Sequence[str] = ()
+
+    def __post_init__(self):
+        if self.as_xarray not in (True, False, 'delayed'):
+            raise TypeError('as_xarray must be True, False, or "delayed"')
+        assert self.registry is not None
+
+
 def evaluate_by_spec(
-    iq: 'iqwaveform.type_stubs.ArrayType' | AcquiredIQ,
+    iq: ArrayType | AcquiredIQ,
+    spec: dict[str, specs.Analysis] | specs.AnalysisGroup,
     capture: specs.Capture,
-    *,
-    spec: str | dict | specs.Measurement,
-    as_xarray: typing.Literal[True]
-    | typing.Literal[False]
-    | typing.Literal['delayed'] = 'delayed',
-    block_each=True,
-):
+    options: EvaluationOptions,
+) -> dict[str, DelayedDataArray] | dict[str, ArrayType]:
     """evaluate each analysis for the given IQ waveform"""
 
-    if isinstance(spec, specs.Analysis):
+    if isinstance(spec, specs.AnalysisGroup):
         spec = spec.validate()
+    elif isinstance(spec, dict):
+        spec = options.registry.tospec().from_dict(spec)
     else:
-        spec = register.to_analysis_spec_type(register.measurement).fromdict(spec)
+        raise TypeError('invalid analysis spec argument')
 
-    spec_dict = spec.todict()
-    results: dict[str, DelayedDataArray] = {}
-    as_xarray = 'delayed' if as_xarray else False
+    if not isinstance(iq, AcquiredIQ):
+        iq = AcquiredIQ(raw=iq, aligned=None, capture=None)
 
-    if array_api_compat.is_cupy_array(getattr(iq, 'raw', iq)):
+    if isinstance(spec, dict):
+        spec_dict = spec
+    else:
+        spec_dict = spec.to_dict()
+    results: dict[str, DelayedDataArray] | dict[str, ArrayType] = {}
+    as_xarray = 'delayed' if options.as_xarray else False
+
+    if util.is_cupy_array(getattr(iq, 'raw', iq)):
         util.configure_cupy()
 
     for name in spec_dict.keys():
-        meas = register.measurement[type(getattr(spec, name))]
+        meas = options.registry[type(getattr(spec, name))]
 
         with util.stopwatch(name, 'analysis'):
             func_kws = spec_dict[name]
@@ -430,26 +393,28 @@ def evaluate_by_spec(
 
             ret = meas.func(iq=iq_sel, capture=capture, as_xarray=as_xarray, **func_kws)
 
-            if block_each:
+            if options.block_each:
                 results[name] = ret.compute()
             else:
                 results[name] = ret
 
-    if as_xarray == 'delayed' and block_each:
+    if as_xarray == 'delayed' and options.block_each:
         return results
 
     for name in list(results.keys()):
-        if block_each:
-            res = results[name]
-        else:
-            res = results[name].compute()
+        res = results[name]
+
+        if not options.block_each:
+            assert isinstance(res, DelayedDataArray)
+            res = res.compute()
 
         if as_xarray == 'delayed':
             results[name] = res
         else:
+            assert isinstance(res, DelayedDataArray)
             results[name] = res.to_xarray()
 
-    if array_api_compat.is_cupy_array(getattr(iq, 'raw', iq)):
+    if util.is_cupy_array(getattr(iq, 'raw', iq)):
         util.free_cupy_mempool()
 
     return results
@@ -457,43 +422,62 @@ def evaluate_by_spec(
 
 def package_analysis(
     capture: specs.Capture,
-    results: dict[str, DelayedDataArray],
+    results: dict[str, DelayedDataArray] | dict[str, ArrayType],
     expand_dims=None,
 ) -> 'xr.Dataset':
     # materialize as xarrays
-    with util.stopwatch('package analyses into xarray'):
+    with util.stopwatch('package dataset'):
         xarrays = {}
         for name, res in results.items():
+            assert isinstance(res, DelayedDataArray)
             xarrays[name] = res.compute().to_xarray(expand_dims)
 
-        attrs = capture.todict(skip_private=True)
+        attrs = capture.to_dict(skip_private=True)
         if isinstance(capture, specs.FilteredCapture):
-            attrs['analysis_filter'] = capture.analysis_filter.todict()
+            attrs['analysis_filter'] = capture.analysis_filter.to_dict()
         ret = xr.Dataset(xarrays, attrs=attrs)
 
     return ret
 
 
+@typing.overload
 def analyze_by_spec(
-    iq: 'iqwaveform.type_stubs.ArrayType' | AcquiredIQ,
+    iq: ArrayType | AcquiredIQ,
+    spec: dict[str, specs.Analysis] | specs.AnalysisGroup,
     capture: specs.Capture,
-    *,
-    spec: str | dict | specs.Measurement,
-    as_xarray: bool | typing.Literal['delayed'] = True,
-    block_each: bool = True,
-    expand_dims=None,
-) -> 'xr.Dataset':
+    options: EvaluationOptions[typing.Literal[True]],
+) -> 'xr.Dataset': ...
+
+
+@typing.overload
+def analyze_by_spec(
+    iq: ArrayType | AcquiredIQ,
+    spec: dict[str, specs.Analysis] | specs.AnalysisGroup,
+    capture: specs.Capture,
+    options: EvaluationOptions[typing.Literal['delayed']],
+) -> 'dict[str, DelayedDataArray]': ...
+
+
+@typing.overload
+def analyze_by_spec(
+    iq: ArrayType | AcquiredIQ,
+    spec: dict[str, specs.Analysis] | specs.AnalysisGroup,
+    capture: specs.Capture,
+    options: EvaluationOptions[typing.Literal[False]],
+) -> 'dict[str, ArrayType]': ...
+
+
+def analyze_by_spec(
+    iq: ArrayType | AcquiredIQ,
+    spec: dict[str, specs.Analysis] | specs.AnalysisGroup,
+    capture: specs.Capture,
+    options: EvaluationOptions,
+) -> ArrayType | dict[str, ArrayType] | xr.Dataset | dict[str, DelayedDataArray]:
     """evaluate a set of different channel analyses on the iq waveform as specified by spec"""
 
-    results = evaluate_by_spec(
-        iq,
-        capture,
-        spec=spec,
-        block_each=block_each,
-        as_xarray='delayed' if as_xarray else False,
-    )
+    results = evaluate_by_spec(iq, spec, capture, options)
 
-    if not as_xarray or as_xarray == 'delayed':
+    if not options.as_xarray or options.as_xarray == 'delayed':
         return results
     else:
-        return package_analysis(capture, results, expand_dims=expand_dims)
+        return package_analysis(capture, results, expand_dims=options.expand_dims)

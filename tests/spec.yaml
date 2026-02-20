@@ -1,0 +1,58 @@
+sensor_binding: "air7201b"
+
+description:
+  summary: Sweep all (cell channel, antenna) combinations and evaluate a wide range of channel measurements
+
+sink:
+  path: ~/Documents/data/{site_name}/{yaml_name}/{start_time}
+  store: zip
+  # coord_aliases: !include '../sites.yaml'
+  max_threads: 1
+
+source:
+  warmup_sweep: true
+  periodic_trigger: 20e-3
+  time_source: internal
+  clock_source: internal
+  channel_sync_source: "cellular_5g_pss_sync"
+  time_sync_every_capture: true
+
+captures:
+  - center_frequency: 3750e6 # Hz
+    analysis_bandwidth: 100e6 # Hz
+    sample_rate: 107.52e6 # Hz
+    port: [0, 1]
+    gain: -10 # dB
+    duration: 0.1
+
+  - center_frequency: 3829.8e6 # Hz
+    analysis_bandwidth: 60e6 # Hz
+    sample_rate: 80.64e6 # Hz
+    port: [0, 1]
+    gain: -10 # dB
+    duration: 0.1
+
+  - center_frequency: 3900e6 # Hz
+    analysis_bandwidth: 80e6 # Hz
+    sample_rate: 107.52e6 # Hz
+    port: [0, 1]
+    gain: -10 # dB
+    duration: 0.1
+
+  - center_frequency: 3960e6 # Hz
+    sample_rate: 53.76e6 # Hz
+    analysis_bandwidth: 40e6 # Hz
+    port: [0, 1]
+    gain: -10 # dB
+    duration: 0.1
+
+analysis:
+    power_spectral_density:
+        time_statistic:
+        - mean
+        - max
+        frequency_resolution: 15000 # SCS/2
+        fractional_overlap: 13/28
+        window_fill: 15/28 
+        window: ['kaiser', 11.884] # gives ENBW = 2    
+        trim_stopband: false

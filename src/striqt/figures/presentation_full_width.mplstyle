@@ -1,0 +1,64 @@
+# Match all text to the Times New Roman (size 10) used in document text
+font.size: 18
+font.family: "serif"
+font.serif: Stix Two Text, Times New Roman, DejaVu Serif, Computer Modern Roman, serif
+axes.formatter.use_mathtext: True
+axes.labelsize: 18
+axes.titlesize: 18
+figure.titlesize: 18
+figure.labelsize: 18
+legend.fontsize: 18
+legend.title_fontsize: 18
+xtick.labelsize: 18
+ytick.labelsize: 18
+mathtext.fontset: custom
+mathtext.it: "serif:italic"
+mathtext.rm: "serif:normal"
+mathtext.bf: "serif:bold"
+mathtext.default: "it"
+
+# the following were tuned to some sense of "good proportion" with the font size
+xtick.major.size: 9
+xtick.minor.size: 4.5
+xtick.major.pad: 3.15
+xtick.minor.pad: 3.15
+ytick.major.size: 9
+ytick.minor.size: 4.5
+ytick.major.pad: 3.15
+ytick.minor.pad: 3.15
+
+# Selected colors from the seaborn 'colorblind' palette for limited color vision
+axes.prop_cycle: cycler('color',['0173b2', 'de8f05', '029e73', 'd55e00', 'cc78bc', 'ca9161', 'fbafe4'])
+axes.grid: True
+grid.linestyle: ":"
+lines.linewidth : 1.8
+lines.markersize : 16
+
+figure.figsize: 13.333,6.1
+
+# The following applies mostly to layout of subplots. The "constrained_layout" engine results
+# seems like a good first pass for tight figures
+figure.constrained_layout.use: True
+figure.constrained_layout.h_pad: 0.03 # avoids slight clipping on the axes border box
+figure.constrained_layout.w_pad: 0.03 # avoids slight clipping on the axes border box
+figure.constrained_layout.hspace: 0.0
+figure.constrained_layout.wspace: 0.0
+
+# tight legend based on the font and figure size
+legend.handletextpad: 0.2
+legend.labelspacing: 0.005
+legend.borderaxespad: 0.0
+legend.columnspacing: 0.5
+legend.handlelength: 1.
+legend.edgecolor: "black"
+legend.framealpha: 1
+legend.borderpad: 0.25
+legend.fancybox: False # keep the sharp corners, matching the axis lines
+
+# export without the white background box at high default resolution
+savefig.pad_inches: 0.005
+savefig.facecolor: "none"
+savefig.dpi: 300
+savefig.bbox: "tight"
+
+image.cmap: cubehelix

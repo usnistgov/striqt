@@ -1,73 +1,54 @@
-from __future__ import annotations
+from __future__ import annotations as __
+
 import fractions
 import typing
 
-from ._channel_power_time_series import power_detector
+from .. import specs
 
-from ..lib import register, specs, util
+from ..lib import util
+from ._channel_power_time_series import power_detector
+from .shared import registry, hint_keywords
+import striqt.waveform as sw
 
 if typing.TYPE_CHECKING:
-    import iqwaveform
     import numpy as np
 else:
-    iqwaveform = util.lazy_import('iqwaveform')
     np = util.lazy_import('numpy')
 
 
-class CyclicChannelPowerSpec(
-    specs.Measurement,
-    forbid_unknown_fields=True,
-    cache_hash=True,
-    kw_only=True,
-    frozen=True,
-):
-    cyclic_period: float
-    detector_period: fractions.Fraction
-    power_detectors: tuple[str, ...] = ('rms', 'peak')
-    cyclic_statistics: tuple[typing.Union[str, float], ...] = ('min', 'mean', 'max')
-
-
-class CyclicChannelPowerKeywords(specs.AnalysisKeywords):
-    cyclic_period: float
-    detector_period: fractions.Fraction
-    power_detectors: typing.Optional[tuple[str, ...]]
-    cyclic_statistics: typing.Optional[tuple[typing.Union[str, float], ...]]
-
-
-@register.coordinate_factory(dtype=object, attrs={'standard_name': 'Cyclic statistic'})
+@registry.coordinates(dtype=object, attrs={'standard_name': 'Cyclic statistic'})
 @util.lru_cache()
-def cyclic_statistic(capture: specs.Capture, spec: CyclicChannelPowerSpec):
+def cyclic_statistic(capture: specs.Capture, spec: specs.CyclicChannelPower):
     return list(spec.cyclic_statistics)
 
 
-@register.coordinate_factory(
+@registry.coordinates(
     dtype='float32', attrs={'standard_name': 'Cyclic lag', 'units': 's'}
 )
 @util.lru_cache()
-def cyclic_lag(capture: specs.Capture, spec: CyclicChannelPowerSpec):
+def cyclic_lag(capture: specs.Capture, spec: specs.CyclicChannelPower):
     lag_count = int(np.rint(spec.cyclic_period / spec.detector_period))
 
-    return np.arange(lag_count) * spec.detector_period
+    return np.arange(lag_count) * float(spec.detector_period)
 
 
-@register.measurement(
+@hint_keywords(specs.CyclicChannelPower)
+@registry.measurement(
     coord_factories=[power_detector, cyclic_statistic, cyclic_lag],
-    spec_type=CyclicChannelPowerSpec,
+    spec_type=specs.CyclicChannelPower,
     dtype='float32',
     attrs={'standard_name': 'Cyclic channel power', 'units': 'dBm'},
 )
-def cyclic_channel_power(
-    iq, capture: specs.Capture, **kwargs: typing.Unpack[CyclicChannelPowerSpec]
-):
-    spec = CyclicChannelPowerSpec.fromdict(kwargs)
+def cyclic_channel_power(iq, capture: specs.Capture, **kwargs):
+    spec = specs.CyclicChannelPower.from_dict(kwargs)
 
-    xp = iqwaveform.util.array_namespace(iq)
+    xp = sw.util.array_namespace(iq)
 
-    nested_ret = iqwaveform.iq_to_cyclic_power(
+    nested_ret = sw.iq_to_cyclic_power(
         iq,
         1 / capture.sample_rate,
         cyclic_period=spec.cyclic_period,
-        detector_period=spec.detector_period,
+        detector_period=float(spec.detector_period),
         detectors=spec.power_detectors,
         cycle_stats=spec.cyclic_statistics,
         axis=1,
@@ -79,4 +60,4 @@ def cyclic_channel_power(
     # move the capture axis to the front
     x = xp.moveaxis(x, -2, 0)
 
-    return iqwaveform.powtodB(x).astype('float32')
+    return sw.powtodB(x).astype('float32')

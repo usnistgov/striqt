@@ -1,4 +1,0 @@
-# CPU computations (no GPU and no SDR hardware support)
-
-inherit:
-  - layers/base.yml

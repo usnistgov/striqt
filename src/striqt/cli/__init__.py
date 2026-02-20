@@ -4,7 +4,10 @@ import click
 import typing
 
 
-def _chain_decorators(decorators: list[callable], func: callable) -> callable:
+_DT = typing.TypeVar('_DT', bound=typing.Callable)
+
+
+def _chain_decorators(decorators: tuple[_DT, ...], func: _DT) -> _DT:
     for option in decorators:
         func = option(func)
     return func
@@ -34,21 +37,6 @@ def click_sensor_sweep(description: typing.Optional[str] = None):
             type=str,
             default=None,
             help='run on the specified remote host (at host or host:port)',
-        ),
-        click.option(
-            '--tui/',
-            '-t',
-            is_flag=True,
-            show_default=True,
-            default=False,
-            help='show a fancy progress display (experimental))',
-        ),
-        click.option(
-            '--store-backend/',
-            '-s',
-            type=click.Choice(['zip', 'directory', 'db'], case_sensitive=True),
-            default=None,
-            help='override yaml file data store setting: "zip" for single acquisition, "directory" to support appending acquisitions',
         ),
         click.option(
             '--force/',
@@ -82,134 +70,6 @@ def click_sensor_sweep(description: typing.Optional[str] = None):
     return decorate
 
 
-def _run_click_plotter(
-    plot_func: callable,
-    zarr_path: str,
-    center_frequency=None,
-    interactive=False,
-    no_save=False,
-    data_variable=[],
-    sweep_index=-1,
-    **plot_func_kws,
-):
-    """handle keyword arguments passed in from click, and call plot_func()"""
-
-    from matplotlib import pyplot as plt
-    from striqt import analysis
-    from striqt.analysis.lib.dataarrays import PORT_DIM
-    from pathlib import Path
-    import numpy as np
-
-    if interactive:
-        plt.ion()
-    else:
-        plt.ioff()
-
-    plt.style.use('iqwaveform.ieee_double_column')
-
-    # index on the following fields in order, matching the input options
-    dataset = analysis.load(zarr_path).set_xindex(
-        [PORT_DIM, 'center_frequency', 'start_time', 'sweep_start_time']
-    )
-
-    valid_freqs = tuple(dataset.indexes['center_frequency'].levels[1])
-    if center_frequency is None:
-        fcs = valid_freqs
-    elif center_frequency in valid_freqs:
-        fcs = [center_frequency]
-        dataset = dataset.sel(center_frequency=fcs)
-    else:
-        raise ValueError(
-            f'no frequency {center_frequency} in data set - must be one of {valid_freqs}'
-        )
-
-    valid_vars = tuple(dataset.data_vars.keys())
-    if len(data_variable) == 0:
-        variables = valid_vars
-    elif len(set(data_variable) - set(valid_vars)) == 0:
-        variables = list(data_variable)
-        drop_set = set(dataset.data_vars.keys()) - set(variables)
-        dataset = dataset.drop_vars(list(drop_set))
-    else:
-        invalid = tuple(set(data_variable) - set(valid_vars))
-        raise ValueError(
-            f'data variables {invalid} are not in data set - must be one of {valid_vars}'
-        )
-
-    sweep_start_time = np.atleast_1d(dataset.sweep_start_time)[sweep_index]
-    dataset = dataset.sel(sweep_start_time=sweep_start_time).load()
-
-    if no_save:
-        output_path = None
-    else:
-        output_path = Path(zarr_path).parent / Path(zarr_path).name.split('.', 1)[0]
-        output_path.mkdir(exist_ok=True)
-
-    plot_func(dataset, output_path, interactive, **plot_func_kws)
-
-    if interactive:
-        input('press enter to quit')
-
-
-def click_capture_plotter(description: typing.Optional[str] = None):
-    """decorate a function to handle single-capture plots of zarr or zarr.zip files"""
-
-    if description is None:
-        description = 'plot signal analysis from zarr or zarr.zip files'
-
-    click_decorators = (
-        click.command(description),
-        click.argument('zarr_path', type=click.Path(exists=True, dir_okay=True)),
-        click.option(
-            '--interactive/',
-            '-i',
-            is_flag=True,
-            show_default=True,
-            default=False,
-            help='',
-        ),
-        click.option(
-            '--center-frequency/',
-            '-f',
-            type=float,
-            default=None,
-            help='if specified, plot for only this frequency',
-        ),
-        click.option(
-            '--sweep-index/',
-            '-s',
-            type=int,
-            show_default=True,
-            default=-1,
-            help='sweep index to plot (-1 for last)',
-        ),
-        click.option(
-            '--data-variable',
-            '-d',
-            type=str,
-            multiple=True,
-            default=[],
-            help='plot only the specified variable if specified',
-        ),
-        click.option(
-            '--no-save/',
-            '-n',
-            is_flag=True,
-            show_default=True,
-            default=False,
-            help="don't save the resulting plots",
-        ),
-    )
-
-    def decorate(func):
-        def wrapped(*args, **kws):
-            return _run_click_plotter(func, *args, **kws)
-
-        return _chain_decorators(click_decorators, wrapped)
-
-    return decorate
-
-
 # %% Server scripts
 
 
@@ -233,7 +93,7 @@ def click_server(func):
             '--driver/',
             '-d',
             show_default=True,
-            default='NullRadio',
+            default='NoSource',
             type=str,
             help='name of the default driver to load',
         ),

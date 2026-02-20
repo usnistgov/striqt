@@ -1,33 +1,42 @@
-from __future__ import annotations
+from __future__ import annotations as __
 
 import functools
 import math
 import threading
 import typing
 import warnings
-from pathlib import Path
 from collections import defaultdict
+from pathlib import Path
 
-import numcodecs
-import zarr.storage
+from yaml import SequenceNode
 
-from . import dataarrays, register, specs, util
+from .. import specs
+
+from . import dataarrays, register, util
 
 if typing.TYPE_CHECKING:
+    import numcodecs
     import numpy as np
-    import xarray as xr
-    import zarr
     import pandas as pd
+    import xarray as xr
     import yaml
+    import zarr
+    import zarr.storage
+    from typing_extensions import TypeAlias
+
+    from striqt.waveform._typing import ArrayType
+
+    _ChunksType = str | int | typing.Literal['auto'] | tuple[int, ...] | None
 
     if hasattr(zarr.storage, 'Store'):
         # zarr 2.x
-        StoreType = typing.TypeVar('StoreType', bound=zarr.storage.Store)
+        StoreType: TypeAlias = zarr.storage.Store  # type: ignore
     else:
         # zarr 3.x
-        StoreType = typing.TypeVar('StoreType', bound=zarr.abc.store.Store)
+        StoreType: TypeAlias = zarr.abc.store.Store  # type: ignore
 
 else:
+    numcodecs = util.lazy_import('numcodecs')
     np = util.lazy_import('numpy')
     pd = util.lazy_import('pandas')
     xr = util.lazy_import('xarray')
@@ -55,7 +64,9 @@ def _xarray_version() -> tuple[int, ...]:
     return tuple(int(n) for n in xr.__version__.split('.'))
 
 
-def _get_store_info(store, zarr_format='auto') -> tuple[bool, dict]:
+def _get_store_info(
+    store, zarr_format: str | typing.Literal[2, 3] = 'auto'
+) -> tuple[bool, dict]:
     path = store.path if hasattr(store, 'path') else store.root
 
     if isinstance(zarr_format, str):
@@ -82,7 +93,7 @@ def _get_store_info(store, zarr_format='auto') -> tuple[bool, dict]:
 
 
 def _choose_chunk_sizes(
-    ds: xr.Dataset, data_bytes=100_000_000, dim='capture'
+    ds: 'xr.Dataset|xr.DataArray', data_bytes=100_000_000, dim: str = 'capture'
 ) -> dict[str, int]:
     """pick chunk and chunk sizing for each data variable in data"""
     chunks = {dim: ds.sizes[dim]}
@@ -90,15 +101,13 @@ def _choose_chunk_sizes(
     if data_bytes is None:
         return chunks
 
-    for name, reduce_dim in ds.data_vars.items():
-        da = ds[name]
-
+    for da in ds.data_vars.values():
         if da.nbytes < data_bytes:
             continue
         else:
             reduction = math.ceil(da.nbytes / data_bytes)
 
-        reduce_dim = da.dims[-1]
+        reduce_dim = str(da.dims[-1])
         if reduce_dim == dim:
             continue
 
@@ -110,17 +119,21 @@ def _choose_chunk_sizes(
     return chunks
 
 
-def _build_encodings_zarr_v3(data, compression=True):
-    if isinstance(compression, zarr.core.codec_pipeline.Codec):
+def _build_encodings_zarr_v3(
+    data, registry: register.AnalysisRegistry, compression=True
+):
+    if isinstance(compression, zarr.core.codec_pipeline.Codec):  # type: ignore
         compressors = [compression]
     elif compression:
-        shuffle = zarr.codecs.BloscShuffle.shuffle
-        compressors = [zarr.codecs.BloscCodec(cname='zstd', clevel=1, shuffle=shuffle)]
+        from zarr import codecs  # type: ignore
+
+        shuffle = codecs.BloscShuffle.shuffle
+        compressors = [codecs.BloscCodec(cname='zstd', clevel=1, shuffle=shuffle)]
     else:
         compressors = None
 
     encodings = defaultdict(dict)
-    info_map = {info.name: info for info in register.measurement.values()}
+    info_map = {info.name: info for info in registry.values()}
 
     for name, var in data.variables.items():
         meas_info = info_map.get(name, None)
@@ -134,8 +147,10 @@ def _build_encodings_zarr_v3(data, compression=True):
     return encodings
 
 
-def _build_encodings_zarr_v2(data, compression=True):
-    if isinstance(compression, numcodecs.abc.Codec):
+def _build_encodings_zarr_v2(
+    data, registry: register.AnalysisRegistry, compression=True
+):
+    if isinstance(compression, numcodecs.abc.Codec):  # type: ignore
         compressor = compression
     elif compression:
         compressor = numcodecs.Blosc('lz4', clevel=3)
@@ -143,7 +158,7 @@ def _build_encodings_zarr_v2(data, compression=True):
         compressor = None
 
     encodings = defaultdict(dict)
-    info_map = {info.name: info for info in register.measurement.values()}
+    info_map = {info.name: info for info in registry.values()}
 
     for name in data.data_vars.keys():
         meas_info = info_map.get(name, None)
@@ -155,23 +170,25 @@ def _build_encodings_zarr_v2(data, compression=True):
     return encodings
 
 
-def open_store(
-    path: str | Path, *, mode: str
-) -> 'zarr.storage.Store|zarr.abc.store.Store':
+def open_store(path: str | Path, *, mode: str) -> StoreType:
+    import zarr.storage
+
     if _zarr_version() < (3, 0, 0):
-        StoreBase = zarr.storage.Store
-        DirectoryStore = zarr.storage.DirectoryStore
+        StoreBase = zarr.storage.Store  # type: ignore
+        DirectoryStore = zarr.storage.DirectoryStore  # type: ignore
     else:
-        StoreBase = zarr.abc.store.Store
-        DirectoryStore = zarr.storage.LocalStore
+        StoreBase = zarr.abc.store.Store  # type: ignore
+        DirectoryStore = zarr.storage.LocalStore  # type: ignore
 
     if isinstance(path, StoreBase):
         store = path
     elif not isinstance(path, (str, Path)):
         raise ValueError('must pass a string or Path savefile or zarr Store')
     elif str(path).endswith('.zip'):
-        if mode == 'a' and path.exists():
+        if mode == 'a' and Path(path).exists():
             raise IOError('zip store does support appends')
+        else:
+            assert mode in ('r', 'w', 'a')
         store = zarr.storage.ZipStore(path, mode=mode, compression=0)
     else:
         store = DirectoryStore(path)
@@ -181,13 +198,15 @@ def open_store(
 
 def dump(
     store: 'StoreType',
-    data: typing.Optional['xr.DataArray' | 'xr.Dataset'] = None,
+    data: 'xr.DataArray | xr.Dataset',
+    *,
     append_dim: str = 'capture',
     compression: bool = True,
-    zarr_format: str | typing.Literal[2] | typing.Literal[3] = 'auto',
+    zarr_format: str | typing.Literal[2, 3] = 'auto',
     compute: bool = True,
-    chunk_bytes: int = 50_000_000,
+    chunk_bytes: int | typing.Literal['auto'] = 50_000_000,
     max_threads: int | None = None,
+    **kwargs,
 ) -> 'StoreType':
     """serialize a dataset into a zarr directory or zipfile"""
 
@@ -197,14 +216,16 @@ def dump(
     # prefer the variable-length string dtype from numpy 2, if available
     string_dtype = getattr(np.dtype, 'StrDType', 'str')
 
+    from ..measurements.registry import measurements as registry
+
     for name in dict(data.coords).keys():
         if data[name].size == 0:
             continue
 
-        if isinstance(data[name].values[0], pd.Timestamp):
+        if isinstance(data[name].data[0], pd.Timestamp):
             # ensure nanosecond resolution
             target_dtype = 'datetime64[ns]'
-        elif _xarray_version() < (2025, 7, 1) and isinstance(data[name].values[0], str):
+        elif _xarray_version() < (2025, 7, 1) and isinstance(data[name].data[0], str):
             # avoid potential truncation bug due to fixed-length strings
             target_dtype = string_dtype
         else:
@@ -223,26 +244,31 @@ def dump(
         # establish the chunking and encodings for this and any subsequent writes
         kws['mode'] = 'w'
 
-        chunks = _choose_chunk_sizes(data, dim=append_dim, data_bytes=chunk_bytes)
-        data = data.chunk(chunks)
+        if isinstance(chunk_bytes, int):
+            chunks = _choose_chunk_sizes(data, dim=append_dim, data_bytes=chunk_bytes)
+            data = data.chunk(chunks)
+        elif chunk_bytes == 'auto':
+            data = data.chunk('auto')
+        else:
+            raise TypeError(f'invalid chunk_bytes argument {chunk_bytes!r}')
 
         if _zarr_version() >= (3, 0, 0):
-            kws['encoding'] = _build_encodings_zarr_v3(data, compression=compression)
+            kws['encoding'] = _build_encodings_zarr_v3(
+                data, registry=registry, compression=compression
+            )
         else:
-            kws['encoding'] = _build_encodings_zarr_v2(data, compression=compression)
+            kws['encoding'] = _build_encodings_zarr_v2(
+                data, registry=registry, compression=compression
+            )
 
     with warnings.catch_warnings():
         warnings.simplefilter('ignore', xr.SerializationWarning)
         warnings.simplefilter('ignore', UserWarning)
 
-        return data.to_zarr(store, **kws)
+        return data.to_zarr(store, **kws, **kwargs)
 
 
-def load(
-    path: str | Path,
-    chunks: str | int | Literal['auto'] | tuple[int, ...] | None = None,
-    **kwargs,
-) -> 'xr.DataArray' | 'xr.Dataset':
+def load(path: str | Path, chunks: _ChunksType = None, **kwargs) -> 'xr.Dataset':
     """load a dataset or data array.
 
     Args:
@@ -262,7 +288,58 @@ def load(
         return result.unify_chunks()
 
 
-class _YAMLIncludeConstructor:
+def _deep_update(dict1, dict2):
+    """nested merge of two dictionaries"""
+    for key, value in dict2.items():
+        if key not in dict1:
+            continue
+        if isinstance(dict1[key], dict) and isinstance(value, dict):
+            # If both values are dicts, merge them recursively
+            _deep_update(dict1[key], value)
+        else:
+            # Otherwise, the value from dict2 overwrites the one from dict1
+            dict1[key] = value
+
+
+class _YAMLFrozenLoader(yaml.SafeLoader):
+    def _construct_sequence(
+        self, node: SequenceNode, deep: bool = False
+    ) -> tuple[typing.Any, ...]:
+        return tuple(super().construct_sequence(node, deep))
+
+
+_YAMLFrozenLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_SEQUENCE_TAG,
+    _YAMLFrozenLoader._construct_sequence,
+)
+
+
+def _expand_paths(node: yaml.Node, root_dir: Path) -> list[str]:
+    def glob_path(s: str):
+        p = Path(s)
+        if p.is_absolute():
+            rel = p.parent
+            s = p.name
+        else:
+            rel = root_dir
+        paths = list(str(g.relative_to(root_dir)) for g in rel.glob(s))
+        if len(paths) == 0:
+            raise FileNotFoundError(s)
+        return paths
+
+    if isinstance(node.value, str):
+        values = glob_path(node.value)
+    elif isinstance(node.value, (list, tuple)):
+        values = []
+        for n in node.value:
+            values.extend(glob_path(n.value))
+    else:
+        raise TypeError(f'invalid tag type {type(node.value)!r} in !import')
+
+    return sorted(values)
+
+
+class _YAMLIncludeConstructor(yaml.Loader):
     _lock = threading.RLock()
 
     def __init__(self, path):
@@ -270,34 +347,60 @@ class _YAMLIncludeConstructor:
 
     def __enter__(self):
         self._lock.acquire()
-        yaml.add_constructor('!include', self, Loader=yaml.CSafeLoader)
+        yaml.add_constructor('!include', self, Loader=_YAMLFrozenLoader)  # type: ignore
 
     def __exit__(self, *args):
         self._lock.release()
 
     def get_include_path(self, s: str):
-        s = Path(s)
-        if s.is_absolute():
-            path = s
+        p = Path(s)
+        if p.is_absolute():
+            pass
         else:
-            path = self.nested_paths[-1].parent / s
-        self.nested_paths.append(path)
+            p = self.nested_paths[-1].parent / p
+        self.nested_paths.append(p)
 
-        return path
+        return p
 
     def pop_include_path(self):
         self.nested_paths.pop()
 
-    def __call__(self, _, node):
-        path = self.get_include_path(node.value)
-        with open(path, 'rb') as stream:
-            content = yaml.load(stream, yaml.CSafeLoader)
+    def __call__(self, loader: yaml.Loader, node: yaml.Node):
+        if not node.tag.startswith('!include'):
+            raise ValueError(f'unknown tag {node.tag!r}')
 
-        self.pop_include_path()
-        return content
+        values = _expand_paths(node, root_dir=self.nested_paths[0].parent)
+
+        content = []
+        for v in values:
+            path = self.get_include_path(v)
+            with open(path, 'rb') as stream:
+                content.append(yaml.load(stream, _YAMLFrozenLoader))
+            self.pop_include_path()
+
+        if len(content) == 1:
+            return content[0]
+
+        if all(isinstance(c, dict) for c in content):
+            result = dict(content[0])
+            for d in content[1:]:
+                result.update(d)
+        elif all(isinstance(c, (tuple, list)) for c in content):
+            result = list(content[0])
+            for l in content[1:]:
+                result.extend(l)
+        else:
+            raise TypeError(
+                'contents of multiple !include files be '
+                'either all mappings or all sequences'
+            )
+
+        return result
 
 
-def decode_from_yaml_file(path: str | Path, *, type=typing.Any):
+def decode_from_yaml_file(
+    path: str | Path, *, type: type[specs.SpecBase] | type[dict] = dict
+):
     """Deserialize an object from YAML.
 
     Parameters
@@ -321,50 +424,55 @@ def decode_from_yaml_file(path: str | Path, *, type=typing.Any):
     """
 
     with open(path) as f, _YAMLIncludeConstructor(path):
-        obj = yaml.load(f, yaml.CSafeLoader)
+        obj = yaml.load(f, _YAMLFrozenLoader)
 
-    if type is typing.Any:
+    if issubclass(type, dict):
         return obj
     elif issubclass(type, specs.SpecBase):
-        return type.fromdict(obj)
+        return type.from_dict(obj)
     else:
         raise TypeError(f'unsupported type {repr(type)}')
 
 
-class _FileStreamBase:
+class _FileStreamProtocol(typing.Protocol):
+    def close(self):
+        pass
+
+    def read(self, count: int) -> ArrayType:
+        pass
+
+
+class _FileStreamBase(_FileStreamProtocol):
     def __init__(
         self,
         path,
         *,
-        rx_port_count=1,
         skip_samples=0,
         dtype='complex64',
         xp=np,
-        **meta,
+        **capture_dict: typing.Any,
     ):
-        self._rx_port_count = rx_port_count
         self._leftover = None
         self._position = None
         self._skip_samples = skip_samples
         self.dtype = dtype
         self._xp = xp
-        self._meta = meta
+        self._capture_dict = capture_dict
         self.seek(0)
 
     def seek(self, pos):
         self._leftover = None
         self._position = pos
 
-    def get_metadata(self) -> dict:
-        return self._meta
+    def get_capture_fields(self) -> dict:
+        return self._capture_dict
 
 
 class MATNewFileStream(_FileStreamBase):
     def __init__(
         self,
         path,
-        sample_rate: float,
-        rx_port_count=1,
+        backend_sample_rate: float,
         skip_samples=0,
         dtype='complex64',
         input_dtype='complex128',
@@ -373,15 +481,14 @@ class MATNewFileStream(_FileStreamBase):
         **meta,
     ):
         kws = {
-            'sample_rate': sample_rate,
-            'rx_port_count': rx_port_count,
+            'backend_sample_rate': backend_sample_rate,
             'skip_samples': skip_samples,
             'dtype': dtype,
             'input_dtype': input_dtype,
             'xp': xp,
         }
 
-        import h5py  # noqa
+        import h5py  # noqa # type: ignore
 
         self._fd = h5py.File(path, 'r')
         self._input_dtype = input_dtype
@@ -392,7 +499,7 @@ class MATNewFileStream(_FileStreamBase):
     def close(self):
         self._fd.close()
 
-    def read(self, count=None):
+    def read(self, count: int):
         if count == 0:
             return
 
@@ -427,14 +534,17 @@ class MATNewFileStream(_FileStreamBase):
             tally += x.shape[1]
 
         iq = xp.concat(array_list, axis=1)
-        self._meta[dataarrays.PORT_DIM] = list(range(iq.shape[0]))
+        self._capture_dict[dataarrays.PORT_DIM] = list(range(iq.shape[0]))
 
         if count is None:
             self._leftover = None
             return iq
 
         self._leftover = iq[:, count:]
-        self._position += count
+        if self._position is None:
+            self._position = count
+        else:
+            self._position += count
         return iq[:, :count]
 
     def seek(self, pos):
@@ -451,9 +561,8 @@ class MATLegacyFileStream(_FileStreamBase):
     def __init__(
         self,
         path,
-        sample_rate: float,
+        backend_sample_rate: float,
         key: str = 'waveform',
-        rx_port_count=1,
         skip_samples=0,
         dtype='complex64',
         xp=np,
@@ -475,11 +584,10 @@ class MATLegacyFileStream(_FileStreamBase):
 
         super().__init__(
             path,
-            rx_port_count=rx_port_count,
             skip_samples=skip_samples,
             dtype=dtype,
             xp=xp,
-            sample_rate=sample_rate,
+            backend_sample_rate=backend_sample_rate,
             **meta,
         )
 
@@ -526,15 +634,18 @@ class MATLegacyFileStream(_FileStreamBase):
             array_list.append(x)
             tally += x.shape[1]
 
-        iq = xp.concat(array_list, axis=1)
-        self._meta[dataarrays.PORT_DIM] = list(range(iq.shape[0]))
+        iq = xp.concatenate(array_list, axis=1)
+        self._capture_dict[dataarrays.PORT_DIM] = list(range(iq.shape[0]))
 
         if count is None:
             self._leftover = None
             return iq
 
         self._leftover = iq[:, count:]
-        self._position += count
+        if self._position is None:
+            self._position = count
+        else:
+            self._position += count
         return iq[:, :count]
 
     def seek(self, pos):
@@ -552,8 +663,7 @@ class NPYFileStream(_FileStreamBase):
     def __init__(
         self,
         path,
-        sample_rate: float,
-        rx_port_count=1,
+        backend_sample_rate: float,
         skip_samples=0,
         dtype='complex64',
         xp=np,
@@ -561,20 +671,14 @@ class NPYFileStream(_FileStreamBase):
     ):
         self._data = xp.asarray(np.atleast_2d(np.load(path))).astype(dtype)
 
-        if rx_port_count <= self._data.shape[-2]:
-            self._data = self._data[..., :rx_port_count, :]
-        else:
-            raise ValueError(
-                f'rx_port_count exceeds input data channel dimension size ({self._data.shape[-2]})'
-            )
+        self.meta = meta
 
         super().__init__(
             path,
-            rx_port_count=rx_port_count,
             skip_samples=skip_samples,
             dtype=dtype,
             xp=xp,
-            sample_rate=sample_rate,
+            backend_sample_rate=backend_sample_rate,
             **meta,
         )
 
@@ -610,14 +714,17 @@ class NPYFileStream(_FileStreamBase):
             tally += ref.shape[1]
 
         iq = xp.concat(array_list, axis=1)
-        self._meta[dataarrays.PORT_DIM] = list(range(iq.shape[0]))
+        self._capture_dict[dataarrays.PORT_DIM] = list(range(iq.shape[0]))
 
         if count is None:
             self._leftover = None
             return iq
 
         self._leftover = iq[:, count:]
-        self._position += count
+        if self._position is None:
+            self._position = count
+        else:
+            self._position += count
         return iq[:, :count]
 
     def seek(self, pos):
@@ -634,21 +741,20 @@ class TDMSFileStream(_FileStreamBase):
     def __init__(
         self,
         path,
-        rx_port_count=1,
         skip_samples=0,
         dtype='complex64',
         loop=False,
         xp=np,
         **meta,
     ):
-        from nptdms import TdmsFile  # noqa
+        from nptdms import TdmsFile  # type: ignore
 
-        self._fd = TdmsFile.read(self.path)
+        self._fd = TdmsFile.read(path)
         self._header_fd, self._iq_fd = self._fd.groups()
+        self._position = 0
 
         super().__init__(
             path,
-            rx_port_count=rx_port_count,
             skip_samples=skip_samples,
             dtype=dtype,
             xp=xp,
@@ -663,8 +769,8 @@ class TDMSFileStream(_FileStreamBase):
 
         offset = self._position
 
-        size = int(self.backend['header_fd']['total_samples'][0])
-        ref_level = self.backend['header_fd']['reference_level_dBm'][0]
+        size = int(self._fd['header_fd']['total_samples'][0])
+        ref_level = self._fd['header_fd']['reference_level_dBm'][0]
 
         if size < count:
             raise ValueError(
@@ -672,25 +778,28 @@ class TDMSFileStream(_FileStreamBase):
             )
 
         scale = 10 ** (float(ref_level) / 20.0) / np.iinfo(xp.int16).max
-        i, q = self.backend['iq_fd'].channels()
+        i, q = self._fd['iq_fd'].channels()
         iq = xp.empty((2 * count,), dtype=xp.int16)
         iq[offset * 2 :: 2] = xp.asarray(i[offset : count + offset])
         iq[1 + offset * 2 :: 2] = xp.asarray(q[offset : count + offset])
 
-        float_dtype = np.finfo(np.dtype(self.dtype)).dtype
-
         self._position += count
 
-        iq = (iq * float_dtype(scale)).view(self.dtype).copy()
+        iq = (iq * float_dtype(scale)).view(self.dtype)  # type: ignore
 
-        return iq[np.newaxis, :]
+        return iq[np.newaxis, :].copy()
 
-    def get_metadata(self):
+    def get_capture_fields(self):
         fs = self._header_fd['IQ_samples_per_second'][0]
         fc = self._header_fd['carrier_frequency'][0]
         duration = self._header_fd['header_fd']['total_samples'][0] * fs
 
-        return dict(self.meta, sample_rate=fs, center_frequency=fc, duration=duration)
+        return dict(
+            self._capture_dict,
+            backend_sample_rate=fs,
+            center_frequency=fc,
+            duration=duration,
+        )
 
 
 def open_bare_iq(
@@ -698,7 +807,6 @@ def open_bare_iq(
     *args,
     format='auto',
     skip_samples=0,
-    rx_port_count=1,
     dtype='complex64',
     loop: bool = False,
     xp=np,
@@ -726,7 +834,6 @@ def open_bare_iq(
         *args,
         loop=loop,
         skip_samples=skip_samples,
-        rx_port_count=rx_port_count,
         dtype=dtype,
         xp=xp,
         **kws,

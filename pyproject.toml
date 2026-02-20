@@ -1,69 +1,70 @@
 [project]
 name = "striqt"
-version = "0.0.3"
+version = "0.1"
 description = "tooling to support precision gpu-accelerated radio signal analysis and software radio automation"
 requires-python = ">=3.9"
-dependencies = [ "array-api-compat",
- "dask",
- "iqwaveform @ git+https://github.com/dgkuester/iqwaveform",
- "labbench>=0.42.0,<1",
- "matplotlib~=3.7",
- "methodtools",
- "msgspec~=0.18",
- "netCDF4",
- "numba",
- "numexpr~=2.8",
- "numpy>=1.21,<3",
- "pandas",
- "rpyc~=5.3",
- "scipy>=1.13,<2",
- "xarray>=2024.3",
- "zarr>=2.18,<4",
+dependencies = [
+    "array-api-compat>=1.6",
+    "dask",
+    "eval_type_backport",
+    "matplotlib~=3.7",
+    "msgspec~=0.19",
+    "netCDF4",
+    "numba",
+    "numexpr~=2.8",
+    "numpy>=1.21,<3",
+    "pandas>=1.5",
+    "scipy>=1.13,<2",
+    "typing-extensions",
+    "xarray>=2024.3",
+    "zarr>=2.18,<4",
 ]
+
 [[project.authors]]
 name = "Dan Kuester"
 email = "daniel.kuester@nist.gov"
 
 [build-system]
-requires = [ "hatchling",
-]
+requires = [ "hatchling",]
 build-backend = "hatchling.build"
 
 [project.optional-dependencies]
-dev = [ "jupyter",
- "ruamel_yaml",
- "ruff",
- "toml",
+dev = [
+    "jupyter",
+    "ruff",
 ]
-gpu-cpu = [ "cupy ~= 12.2",
- "cython",
+gpu = [
+    "cupy >= 12.2",
+    "cython",
 ]
-edge-airt = [ "cupy-cuda102",
- "cython<3",
- "dulwich",
- "matplotlib>=3.7,<3.10",
- "numba~=0.56.0",
- "numpy>=1.21,<2",
- "pandas~=1.5",
- "pyqtgraph",
- "pyside6",
- "pytools==2022.1.12",
- "scipy~=1.9",
- "ssmdevices",
- "zarr~=2.18.2",
+test = [
+    "pytest",
+    "nptdms",
+]
+# this will still require external SoapySDR
+edge-airstack-1 = [
+    "cupy-cuda102",
+    "cython<3",
+    "dulwich",
+    "matplotlib>=3.7",
+    "numba~=0.56.0",
+    "numpy>=1.21,<2",
+    "pandas",
+    "pytools>=2022.1.12",
+    "scipy~=1.9",
+    "ssmdevices",
+    "zarr~=2.18.2",
+    "eval_type_backport"
 ]
 
 [project.scripts]
-calibrate-sensor = "striqt.cli.calibrate:run"
-check-sweep = "striqt.cli.check:run"
-sensor-sweep = "striqt.cli.sweep:run"
-plot-sensor-captures = "striqt.cli.plot:run"
-serve-sensor = "striqt.cli.server:run"
+check-sweep = "striqt.cli.check_sweep:run"
+sensor-sweep = "striqt.cli.sweep_sweep:run"
+plot-capture = "striqt.cli.plot_capture:run"
 
 [tool.ruff]
 target-version = "py39"
-extend-include = [ "*.ipynb",
-]
+extend-include = [ "*.ipynb", ]
 line-length = 88
 
 [tool.ruff.format]
@@ -76,15 +77,10 @@ docstring-code-line-length = "dynamic"
 allow-direct-references = true
 
 [tool.ruff.lint.extend-per-file-ignores]
-"**/__init__.py" = [ "F401",
- "F403",
- "E402",
-]
+"**/__init__.py" = [ "F401", "F403", "E402"]
 
 [tool.hatch.build.targets.wheel]
-packages = [ "src/striqt",
-]
+packages = [ "src/striqt", ]
 
 [tool.hatch.build.targets.sdist]
-packages = [ "src/striqt",
-]
+packages = [ "src/striqt", ]

@@ -1,23 +1,25 @@
-"""wrap lower-level iqwaveform DSP calls to accept physical inputs and return xarray.DataArray"""
+"""wrap lower-level striqt.waveform DSP calls to accept physical inputs and return xarray.DataArray"""
 
-from __future__ import annotations
+from __future__ import annotations as __
 
-import functools
 import typing
 
-from . import dataarrays, specs, util
+from .. import specs
 
+from . import dataarrays, util
 
 if typing.TYPE_CHECKING:
+    import array_api_compat
     import numpy as np
     import scipy
-    import array_api_compat
-    import iqwaveform
+
+    import striqt.waveform as sw
+    from striqt.waveform._typing import ArrayType
 else:
     np = util.lazy_import('numpy')
     scipy = util.lazy_import('scipy')
     array_api_compat = util.lazy_import('array_api_compat')
-    iqwaveform = util.lazy_import('iqwaveform')
+    sw = util.lazy_import('striqt.waveform')
 
 
 def select_parameter_kws(locals_: dict, omit=(dataarrays.CAPTURE_DIM, 'out')) -> dict:
@@ -27,7 +29,7 @@ def select_parameter_kws(locals_: dict, omit=(dataarrays.CAPTURE_DIM, 'out')) ->
     return {k: v for k, v in items[1:] if k not in omit}
 
 
-@functools.lru_cache(8)
+@util.lru_cache(8)
 def _generate_iir_lpf(
     capture: specs.Capture,
     *,
@@ -74,7 +76,7 @@ def _generate_iir_lpf(
 
 
 def iir_filter(
-    iq: 'iqwaveform.util.Array',
+    iq: ArrayType,
     capture: specs.Capture,
     *,
     passband_ripple: float | int,
@@ -86,9 +88,9 @@ def iir_filter(
     filter_kws = select_parameter_kws(locals())
     sos = _generate_iir_lpf(capture, **filter_kws)
 
-    xp = iqwaveform.util.array_namespace(iq)
+    xp = sw.util.array_namespace(iq)
 
-    if array_api_compat.is_cupy_array(iq):
+    if util.is_cupy_array(iq):
         from . import cuda_kernels
 
         sos = xp.asarray(sos)
@@ -99,7 +101,7 @@ def iir_filter(
 
 
 def ola_filter(
-    iq: 'iqwaveform.util.Array',
+    iq: ArrayType,
     capture: specs.Capture,
     *,
     nfft: int,
@@ -109,7 +111,7 @@ def ola_filter(
 ):
     kwargs = select_parameter_kws(locals())
 
-    return iqwaveform.fourier.ola_filter(
+    return sw.fourier.ola_filter(
         iq,
         fs=capture.sample_rate,
         passband=(-capture.analysis_bandwidth / 2, capture.analysis_bandwidth / 2),

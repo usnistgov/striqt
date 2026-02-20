@@ -12,32 +12,30 @@ dependencies:
 - pip
 - jupyter
 - ruff
-- toml
-- ruamel.yaml
 
-  # hard-coded on behalf of pip for iqwaveform
+# low-level analysis
 - pandas
-- scipy>=1.13,<2
-- numpy>=1.21,<3
-- matplotlib-base~=3.7
-- numexpr~=2.8
+- scipy>=1.13
+- numpy>=1.21
+- numexpr>=2.8
 - array-api-compat
-- methodtools
 - numba
 
-  # for device wrappers and remote control
-- labbench>=0.42.0,<1
-- rpyc~=5.3
-
-  # data management (including zarr and data chunking in xarray)
-- xarray>=2024.3
-- zarr>=2.18,<4
-- dask
+# data formats
+- yaml
+- pyyaml
 - msgspec~=0.18
+- zarr>=2.18,<4
 - netCDF4
 
-  # for documentation and plotting
+# higher-level data analysis
+- xarray>=2024.3
+- dask
+
+# for documentation and plotting
 - mscorefonts
+- matplotlib-base>=3.7
+- open-fonts
 
 - pip:
-  - striqt @ git+https://github.com/usnistgov/striqt
+  - striqt @ git+https://github.com/usnistgov/striqt@channel-enable-fix

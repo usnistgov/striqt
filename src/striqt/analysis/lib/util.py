@@ -1,19 +1,37 @@
-from __future__ import annotations
-import array_api_compat
+from __future__ import annotations as __
+
 import contextlib
-import functools
 import importlib
 import importlib.util
+import io
 import logging
-import time
+import math
 import sys
 import threading
+import time
 import typing
-import iqwaveform.type_stubs
-import typing_extensions
+
+from striqt.waveform.util import (
+    configure_cupy,
+    except_on_low_memory,
+    free_cupy_mempool,
+    is_cupy_array,
+    lru_cache,
+    lazy_import,
+    pinned_array_as_cupy,
+    cp,
+)
+
+if typing.TYPE_CHECKING:
+    from striqt.waveform._typing import ArrayType
 
 
+_compute_lock = threading.RLock()
 _logger_adapters = {}
+
+
+# additional logging levels
+from logging import WARNING, INFO, DEBUG
 
 PERFORMANCE_INFO = 15
 PERFORMANCE_DETAIL = 12
@@ -22,13 +40,13 @@ PERFORMANCE_DETAIL = 12
 class _StriqtLogger(logging.LoggerAdapter):
     EXTRA_DEFAULTS = {
         'capture_index': 0,
-        'capture_progress': 'initializing',
+        'capture_progress': 'startup',
         'capture_count': 'unknown',
         'capture': None,
     }
 
     def __init__(self, name_suffix, extra={}):
-        _logger = logging.getLogger('striqt').getChild(name_suffix)
+        _logger = logging.getLogger(name_suffix)
         super().__init__(_logger, self.EXTRA_DEFAULTS | extra)
         _logger_adapters[name_suffix] = self
 
@@ -37,25 +55,14 @@ def get_logger(name_suffix) -> _StriqtLogger:
     return _logger_adapters[name_suffix]
 
 
-@contextlib.contextmanager
-def log_capture_context(name_suffix, /, capture_index=0, capture_count=None):
-    extra = {'capture_index': capture_index}
-    logger = get_logger(name_suffix)
+def isroundmod(value: float, div, atol=1e-6) -> bool:
+    ratio = value / div
+    try:
+        return abs(math.remainder(ratio, 1)) <= atol
+    except TypeError:
+        import numpy as np
 
-    if capture_count is not None:
-        logger.extra['capture_count'] = capture_count
-
-    if capture_count is None:
-        capture_count = extra['capture_count'] = logger.extra.get(
-            'capture_count', 'unknown'
-        )
-
-    extra['capture_progress'] = f'{capture_index + 1}/{capture_count}'
-
-    start_extra = logger.extra
-    logger.extra = start_extra | extra
-    yield
-    logger.extra = start_extra
+        return np.abs(np.rint(ratio) - ratio) <= atol
 
 
 _StriqtLogger('analysis')
@@ -64,7 +71,7 @@ _StriqtLogger('analysis')
 def show_messages(
     level: int | None,
     colors: bool | None = None,
-    logger_names: tuple[str] = ('controller', 'source', 'analysis', 'sink'),
+    logger_names: tuple[str, ...] | typing.Literal['all'] = 'all',
 ):
     """filters logging messages displayed to the console by importance
 
@@ -75,6 +82,9 @@ def show_messages(
     Returns:
         None
     """
+
+    if logger_names == 'all':
+        logger_names = tuple(_logger_adapters.keys())
 
     for name in logger_names:
         logger = _logger_adapters[name]
@@ -95,10 +105,7 @@ def show_messages(
         logger._screen_handler.setLevel(level)
 
         if colors or (colors is None and sys.stderr.isatty()):
-            log_fmt = (
-                '\x1b[32m{asctime}\x1b[0m \x1b[1;30m{name:>15s}\x1b[0m '
-                '\x1b[34mcapture {capture_progress} \x1b[0m {message}'
-            )
+            log_fmt = '\x1b[32m{asctime}\x1b[0m \x1b[1;30m{name:>8s}\x1b[0m \x1b[34m{capture_progress} \x1b[0m {message}'
         else:
             log_fmt = '{levelname:^7s} {asctime} • {capture_progress}: {message}'
         formatter = logging.Formatter(log_fmt, style='{', datefmt='%X')
@@ -108,37 +115,12 @@ def show_messages(
         logger.logger.addHandler(logger._screen_handler)
 
 
-def lazy_import(module_name: str, package=None):
-    """postponed import of the module with the specified name.
-
-    The import is not performed until the module is accessed in the code. This
-    reduces the total time to import labbench by waiting to import the module
-    until it is used.
-    """
-
-    # see https://docs.python.org/3/library/importlib.html#implementing-lazy-imports
-    try:
-        ret = sys.modules[module_name]
-        return ret
-    except KeyError:
-        pass
-
-    spec = importlib.util.find_spec(module_name, package=package)
-    if spec is None:
-        raise ImportError(f'no module found named "{module_name}"')
-    spec.loader = importlib.util.LazyLoader(spec.loader)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
 @contextlib.contextmanager
 def stopwatch(
     desc: str = '',
     logger_suffix: str = 'analysis',
     threshold: float = 0,
-    logger_level: int = PERFORMANCE_DETAIL,
+    logger_level: int = PERFORMANCE_INFO,
 ):
     """Time a block of code using a with statement like this:
 
@@ -156,6 +138,7 @@ def stopwatch(
     """
     t0 = time.perf_counter()
     logger = get_logger(logger_suffix)
+    assert isinstance(logger.extra, dict)
 
     try:
         yield
@@ -163,7 +146,7 @@ def stopwatch(
         elapsed = time.perf_counter() - t0
 
         if elapsed < threshold:
-            logger_level = logger_level - 10
+            logger_level = PERFORMANCE_DETAIL
 
         msg = str(desc) + ' ' if len(desc) else ''
         msg += f'⏱ {elapsed:0.3f} s'
@@ -177,63 +160,9 @@ def stopwatch(
         logger.log(logger_level, msg.strip().lstrip(), logger.extra | extra)
 
 
-if typing.TYPE_CHECKING:
-    _P = typing_extensions.ParamSpec('_P')
-    _R = typing_extensions.TypeVar('_R')
-    import iqwaveform
-    import labbench as lb
-else:
-    iqwaveform = lazy_import('iqwaveform')
-    lb = lazy_import('labbench')
-
-
-@functools.wraps(functools.lru_cache)
-def lru_cache(
-    maxsize: int | None = 128, typed: bool = False
-) -> typing.Callable[[typing.Callable[_P, _R]], typing.Callable[_P, _R]]:
-    # presuming that the API is designed to accept only hashable types, set
-    # the type hint to match the wrapped function
-    return functools.lru_cache(maxsize, typed)
-
-
-def pinned_array_as_cupy(x, stream=None):
-    import cupy as cp
-
-    out = cp.empty_like(x)
-    out.data.copy_from_host_async(x.ctypes.data, x.data.nbytes, stream=stream)
-    return out
-
-
-def except_on_low_memory(threshold_bytes=500_000_000):
-    try:
-        import cupy as cp
-    except ModuleNotFoundError:
-        return
-    import psutil
-
-    if psutil.virtual_memory().available >= threshold_bytes:
-        return
-
-    raise MemoryError('too little memory to proceed')
-
-
-def free_cupy_mempool():
-    try:
-        import cupy as cp
-    except ModuleNotFoundError:
-        pass
-    else:
-        mempool = cp.get_default_memory_pool()
-        if mempool is not None:
-            mempool.free_all_blocks()
-
-
-_compute_lock = threading.RLock()
-
-
 @contextlib.contextmanager
 def compute_lock(array=None):
-    is_cupy = array_api_compat.is_cupy_array(array)
+    is_cupy = is_cupy_array(array)
     get_lock = array is None or is_cupy
     if get_lock:
         _compute_lock.acquire()
@@ -242,19 +171,75 @@ def compute_lock(array=None):
         _compute_lock.release()
 
 
-def sync_if_cupy(x: 'iqwaveform.type_stubs.ArrayType'):
-    if iqwaveform.util.is_cupy_array(x):
-        import cupy
+@contextlib.contextmanager
+def hold_logger_outputs():
+    """apply redirected streams to log outputs, and restore on exit.
 
-        stream = cupy.cuda.get_current_stream()
-        with stopwatch('cuda synchronize', threshold=10e-3):
-            stream.synchronize()
+    This is needed because the loggers hold their own references to the original
+    stderr/stdout, so they are not updated on use of contextlib.redirect_ functions.
+    """
+
+    streams = {}
+
+    for name, adapter in _logger_adapters.items():
+        if not hasattr(adapter, '_screen_handler'):
+            continue
+        streams[name] = adapter._screen_handler.stream
+        adapter._screen_handler.stream = sys.stderr
+
+    try:
+        yield
+    finally:
+        for name in streams.keys():
+            _logger_adapters[name]._screen_handler.stream = streams[name]
 
 
-@functools.cache
-def configure_cupy():
-    import cupy
+_input_lock = threading.RLock()
 
-    # the FFT plan sets up large caches that don't help us
-    cupy.fft.config.get_plan_cache().set_size(0)
-    cupy.cuda.set_pinned_memory_allocator(None)
+
+def blocking_input(prompt: str | None = None, /) -> str:
+    """wraps a call to builtin input() to avoid threading issues.
+
+    Specifically:
+    - A lock protects access to sys.stdin in case of calls from multiple threads
+    - Log outputs, sys.stderr, and sys.stdout are buffered until entry is complete
+    """
+
+    stderr = io.StringIO()
+    stdout = io.StringIO()
+
+    try:
+        with (
+            _input_lock,
+            contextlib.redirect_stderr(stderr),
+            contextlib.redirect_stdout(stdout),
+            hold_logger_outputs(),
+        ):
+            assert isinstance(sys.__stdout__, io.TextIOWrapper)
+            if prompt is not None:
+                sys.__stdout__.write(prompt)
+                sys.__stdout__.flush()
+            response = input()
+    finally:
+        output = stderr.getvalue()
+        if output:
+            sys.stderr.write(output)
+            sys.stderr.flush()
+
+        output = stdout.getvalue()
+        if output:
+            sys.stdout.write(output)
+            sys.stdout.flush()
+
+    return response
+
+
+def ordered_set_union(*args: typing.Iterable[typing.Any]) -> list[typing.Any]:
+    """perform a set union on the supplied iterables.
+
+    Maintains ordering in the same way as dict/OrderedDict.
+    """
+    union = []
+    for it in args:
+        union += list(dict.fromkeys(it))
+    return union
