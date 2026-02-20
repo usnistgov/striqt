@@ -1,7 +1,6 @@
 from __future__ import annotations as __
 
 import math
-import numbers
 import typing
 
 import striqt.analysis as sa
