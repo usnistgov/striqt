@@ -26,6 +26,8 @@ if typing.TYPE_CHECKING:
 
     from striqt.waveform._typing import ArrayType
 
+    _ChunksType = str | int | typing.Literal['auto'] | tuple[int, ...] | None
+
     if hasattr(zarr.storage, 'Store'):
         # zarr 2.x
         StoreType: TypeAlias = zarr.storage.Store  # type: ignore
@@ -266,11 +268,7 @@ def dump(
         return data.to_zarr(store, **kws, **kwargs)
 
 
-def load(
-    path: str | Path,
-    chunks: str | int | typing.Literal['auto'] | tuple[int, ...] | None = None,
-    **kwargs,
-) -> 'xr.DataArray | xr.Dataset':
+def load(path: str | Path, chunks: _ChunksType = None, **kwargs) -> 'xr.Dataset':
     """load a dataset or data array.
 
     Args:

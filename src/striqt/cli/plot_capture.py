@@ -118,6 +118,7 @@ def worker_init(zarr_path, opts: 'sf.specs.PlotOptions', interactive: bool, no_s
     from warnings import filterwarnings
 
     import striqt.figures as sf
+    import striqt.sensor as ss
     import matplotlib as mpl
     from matplotlib import pyplot as plt
 
@@ -145,7 +146,7 @@ def worker_init(zarr_path, opts: 'sf.specs.PlotOptions', interactive: bool, no_s
         opts.plotter, output_dir=output_path, interactive=interactive
     )
 
-    for name in sf.util.get_looped_coords(dataset):
+    for name in ss.lib.compute.get_looped_coords(dataset):
         if name in (opts.plotter.col, opts.plotter.row):
             continue
         if f'{{{name}}}' in opts.plotter.filename_fmt:

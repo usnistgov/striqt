@@ -232,3 +232,14 @@ def blocking_input(prompt: str | None = None, /) -> str:
             sys.stdout.flush()
 
     return response
+
+
+def ordered_set_union(*args: typing.Iterable[typing.Any]) -> list[typing.Any]:
+    """perform a set union on the supplied iterables.
+
+    Maintains ordering in the same way as dict/OrderedDict.
+    """
+    union = []
+    for it in args:
+        union += list(dict.fromkeys(it))
+    return union

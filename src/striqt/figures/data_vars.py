@@ -13,7 +13,7 @@ if _typing.TYPE_CHECKING:
 
     class _DataVariablePlotter(_typing.Protocol):
         def __call__(
-            self, data: '_DS', plotter: _PlotBackend, *args, **kwargs
+            self, data: '_DS', plotter: _PlotBackend, /, *args, **kwargs
         ) -> _typing.Any: ...
 
         __name__: str

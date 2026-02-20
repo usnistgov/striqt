@@ -59,12 +59,21 @@ class PlotOptions(msgspec.Struct, kw_only=True, forbid_unknown_fields=True):
 
     def __post_init__(self):
         from .data_vars import _data_plots
+        import inspect
 
-        for name in list(self.variables.keys()):
+        for name, kwargs in self.variables.items():
             if name not in _data_plots:
                 raise KeyError(
                     f'not such plot func {name!r}. must be one of {_data_plots!r}'
                 )
+            sig = inspect.signature(_data_plots[name])
+            try:
+                sig.bind(None, None, **kwargs)
+            except Exception as ex:
+                ex.args = (f'.variables[{name!r}]: function ' + ex.args[0],) + ex.args[
+                    1:
+                ]
+                raise ex
 
         for n in self.data.groupby_dims:
             if n in (self.plotter.row, self.plotter.col):

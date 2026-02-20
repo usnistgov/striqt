@@ -7,3 +7,4 @@ from .lib.io import dump, load, open_store
 from .lib.register import AnalysisRegistry, Trigger
 from .specs import Capture
 from .measurements import *
+from striqt.waveform import dBlinmean, dBlinsum, dBtopow, envtodB, envtopow, powtodB

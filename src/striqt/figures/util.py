@@ -1,7 +1,9 @@
 from __future__ import annotations as __
 
 import math
+import striqt.analysis as sa
 import striqt.waveform as sw
+import striqt.sensor as ss
 import typing
 
 from . import specs
@@ -80,18 +82,13 @@ def quantized_value_range(data: xr.DataArray, vmin, vmax, vstep):
     return levels
 
 
-def get_looped_coords(ds: 'xr.Dataset') -> list[str]:
-    """return a list of coordinates that were looped"""
-    return [l['field'] for l in ds.attrs['loops'] if l['kind'] != 'repeat']
-
-
 def get_groupby_fields(ds: 'xr.Dataset', opts: specs.PlotOptions) -> list[str]:
     """guess a list of fields that produce groups compatible with the plot options"""
     from striqt import figures as sf
 
-    loops = get_looped_coords(ds)
+    loops = ss.lib.compute.get_looped_coords(ds)
     fields = sf.specs.get_format_fields(opts.plotter.filename_fmt, exclude=('name',))
-    return _ordered_set_union(opts.data.groupby_dims, fields, loops)
+    return sa.util.ordered_set_union(opts.data.groupby_dims, fields, loops, ['port'])
 
 
 def guess_index_coords(ds: 'xr.Dataset', opts: specs.PlotOptions) -> list[str | None]:
@@ -103,11 +100,3 @@ def guess_index_coords(ds: 'xr.Dataset', opts: specs.PlotOptions) -> list[str | 
 
 def query_match_at_index(ds: '_T', dim: str, var_name: str, index: int) -> '_T':
     return ds.query({dim: f'{var_name} == {var_name}[{index}]'})  # .squeeze(var_name)
-
-
-def _ordered_set_union(*args: typing.Iterable[typing.Any]):
-    """"""
-    result = []
-    for seq in args:
-        result += list(dict.fromkeys(seq))
-    return result

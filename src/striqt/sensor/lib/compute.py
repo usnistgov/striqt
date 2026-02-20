@@ -523,3 +523,107 @@ def prepare_compute(input_spec: specs.Sweep, skip_warmup: bool = False):
 
         for _ in sweep:
             yield _
+
+
+def get_looped_coords(ds: 'xr.Dataset', include_repeats=False) -> list[str]:
+    """return a list of coordinates that were looped"""
+    if 'loops' not in ds.attrs:
+        raise AttributeError('no loops metadata in data attributes')
+    return [
+        l['field']
+        for l in ds.attrs['loops']
+        if include_repeats or l['kind'] != 'repeat'
+    ]
+
+
+def _check_coord_indexes(ds, gb_fields: list[str]):
+    coords_ds = ds.capture.coords.to_dataset()
+    for _, coords_group in coords_ds.groupby(gb_fields):
+        break
+    else:
+        raise ValueError(f'no groups matched groupby fields {gb_fields}')
+
+    sub = coords_group.reset_coords()  # .drop_vars('start_time')
+    if sub.sizes['capture'] == 1:
+        # success! the specified index fields indexed a unique value
+        # in the first group
+        return
+
+    # check for easy alternatives
+    counts = {n: np.unique(da).tolist() for n, da in sub.data_vars.items()}
+    counts = {n: c for n, c in counts.items() if len(c) == sub.sizes['capture']}
+
+    if len(counts) == 0:
+        raise ValueError(
+            f'coords {gb_fields} are insufficient to unstack and least two more may be needed'
+        )
+    else:
+        suggest = set(counts.keys())
+        raise ValueError(
+            f'coords {gb_fields} are insufficient to unstack. consider adding one of {suggest}'
+        )
+
+
+def index_dataset(
+    ds: 'xr.Dataset', capture_coords: list[str] = ['start_time']
+) -> 'xr.Dataset':
+    """Quasi-automatically apply multiple-coordinate indexing to the dataset.
+
+    The dimensions are `['sweep_start_time', *loop_vars, *extra_coord_dims, 'port']`.
+    `loop_vars` are introspected by the sweep loop specification from ds.attrs['loops'].
+
+    Args:
+        extra_coord_dims:
+            specify any set of coordinates that can index entries in the
+            sweep `captures` specification. The set of specified coordinates must
+            uniquely specify exactly one capture in the captures list.
+
+    Returns:
+        The unstacked array.
+    """
+    if 'sweep_start_time' in ds.coords:
+        sweep_coord = ['sweep_start_time']
+    elif 'sweep_index' in ds.coords:
+        sweep_coord = ['sweep_index']
+    else:
+        sweep_coord = []
+
+    loop_coords = get_looped_coords(ds)
+    index_coords = sa.util.ordered_set_union(
+        sweep_coord, loop_coords, capture_coords, ['port']
+    )
+    _check_coord_indexes(ds, index_coords)
+    print(index_coords)
+    return ds.set_xindex(index_coords)
+
+
+def unstack_dataset(
+    ds: 'xr.Dataset',
+    capture_coords: list[str] = ['start_time'],
+    chunks: int | typing.Literal['auto'] | None = None,
+) -> 'xr.Dataset':
+    """Unstack a dataset from a flat list of captures into multiple dimensions.
+
+    The dimensions are `['sweep_start_time', *loop_vars, *extra_coord_dims, 'port']`.
+    `loop_vars` are introspected by the sweep loop specification from ds.attrs['loops'].
+
+    Args:
+        extra_coord_dims:
+            specify any set of coordinates that can index entries in the sweep
+            `captures` specification. Each set of these coordinates in the dataset
+            must uniquely specify exactly one capture in the captures list.
+
+        chunk:
+            If None, the returned array is not chunked, and is backed by numpy.
+            Otherwise, the returned array is a dask array with the specified chunk size.
+            The chunk size may be specified as 'auto' to automatically choose.
+
+    Returns:
+        The unstacked array.
+    """
+    idx_ds = index_dataset(ds, capture_coords)
+
+    if chunks is not None:
+        idx_ds = idx_ds.chunk(chunks)
+
+    return idx_ds.unstack()
