@@ -7,6 +7,7 @@ dependencies = [
     "array-api-compat>=1.6",
     "dask",
     "eval_type_backport",
+    "exceptiongroup>=1.2",
     "matplotlib~=3.7",
     "msgspec~=0.19",
     "netCDF4",
@@ -41,21 +42,22 @@ test = [
     "pytest",
     "nptdms",
 ]
+
 # this will still require external SoapySDR
-edge-airstack-1 = [
-    "cupy-cuda102",
-    "cython<3",
-    "dulwich",
-    "matplotlib>=3.7",
-    "numba~=0.56.0",
-    "numpy>=1.21,<2",
-    "pandas",
-    "pytools>=2022.1.12",
-    "scipy~=1.9",
-    "ssmdevices",
-    "zarr~=2.18.2",
-    "eval_type_backport"
-]
+#edge-airstack-1 = [
+#    "cupy-cuda102",
+#    "cython<3",
+#    "dulwich",
+#    "matplotlib>=3.7",
+#    "numba~=0.56.0",
+#    "numpy>=1.21,<2",
+#    "pandas",
+#    "pytools>=2022.1.12",
+#    "scipy~=1.9",
+#    "ssmdevices",
+#    "zarr~=2.18.2",
+#    "eval_type_backport"
+#]
 
 [project.scripts]
 check-sweep = "striqt.cli.check_sweep:run"
