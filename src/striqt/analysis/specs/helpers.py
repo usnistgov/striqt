@@ -14,6 +14,35 @@ _K = typing.TypeVar('_K')
 _V = typing.TypeVar('_V')
 
 
+if typing.TYPE_CHECKING:
+    import typing_extensions
+
+    _P = typing_extensions.ParamSpec('_P')
+    _R = typing.TypeVar('_R', covariant=True)
+
+    class _MetaP(typing_extensions.Protocol[_P, _R]):
+        def __call__(
+            self,
+            standard_name: str,
+            units: str | None = None,
+            *args: _P.args,
+            **kws: _P.kwargs,
+        ) -> _R: ...
+
+    def _like_meta(
+        _: typing.Callable[_P, _R], /
+    ) -> typing.Callable[[_MetaP[_P, _R]], _MetaP[_P, _R]]:
+        def impl(x: _MetaP[_P, _R]) -> _MetaP[_P, _R]:
+            return x
+
+        return impl
+else:
+
+    def _like_meta(_):
+        def impl(x):
+            return x
+
+
 class frozendict(typing.Mapping[_K, _V]):
     """
     An immutable dictionary that supports hashing
@@ -103,6 +132,7 @@ class frozendict(typing.Mapping[_K, _V]):
         raise TypeError(f"'{self.__class__.__name__}' object is frozen")
 
 
+@_like_meta(msgspec.Meta)
 def Meta(standard_name: str, units: str | None = None, **kws) -> msgspec.Meta:
     """annotation that is used to generate 'standard_name' and 'units' fields of xarray attrs objects"""
     extra = {'standard_name': standard_name}

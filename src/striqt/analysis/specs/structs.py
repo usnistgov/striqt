@@ -3,7 +3,6 @@
 from __future__ import annotations as __
 
 import fractions
-import functools
 from math import inf
 import typing
 

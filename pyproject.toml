@@ -4,6 +4,7 @@ version = "0.1"
 description = "tooling to support precision gpu-accelerated radio signal analysis and software radio automation"
 requires-python = ">=3.9"
 dependencies = [
+    "aiohttp>=3.13",
     "array-api-compat>=1.6",
     "dask",
     "eval_type_backport",
@@ -15,6 +16,7 @@ dependencies = [
     "numexpr~=2.8",
     "numpy>=1.21,<3",
     "pandas>=1.5",
+    "requests>=2.32",
     "scipy>=1.13,<2",
     "typing-extensions",
     "xarray>=2024.3",

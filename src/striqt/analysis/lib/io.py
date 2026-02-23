@@ -170,7 +170,13 @@ def _build_encodings_zarr_v2(
     return encodings
 
 
-def open_store(path: str | Path, *, mode: str) -> StoreType:
+def _is_fsspec_url(url_string):
+    import fsspec.core
+    protocol, _ = fsspec.core.split_protocol(url_string)    
+    return protocol is not None
+
+
+def open_store(target: str | Path, *, mode: str) -> StoreType:
     import zarr.storage
 
     if _zarr_version() < (3, 0, 0):
@@ -180,18 +186,24 @@ def open_store(path: str | Path, *, mode: str) -> StoreType:
         StoreBase = zarr.abc.store.Store  # type: ignore
         DirectoryStore = zarr.storage.LocalStore  # type: ignore
 
-    if isinstance(path, StoreBase):
-        store = path
-    elif not isinstance(path, (str, Path)):
+    if isinstance(target, StoreBase):
+        store = target
+    elif not isinstance(target, (str, Path)):
         raise ValueError('must pass a string or Path savefile or zarr Store')
-    elif str(path).endswith('.zip'):
-        if mode == 'a' and Path(path).exists():
+    elif _is_fsspec_url(target):
+        import fsspec
+        p = Path.home()/'.cache'/'fsspec'
+        p.mkdir(parents=True, exist_ok=True)
+        fs, _ = fsspec.url_to_fs(target, asynchronous=True, cache_storage=str(p))
+        return fs.get_mapper("")
+    elif str(target).endswith('.zip'):
+        if mode == 'a' and Path(target).exists():
             raise IOError('zip store does support appends')
         else:
             assert mode in ('r', 'w', 'a')
-        store = zarr.storage.ZipStore(path, mode=mode, compression=0)
+        store = zarr.storage.ZipStore(target, mode=mode, compression=0)
     else:
-        store = DirectoryStore(path)
+        store = DirectoryStore(target)
 
     return store
 
@@ -277,8 +289,7 @@ def load(path: str | Path, chunks: _ChunksType = None, **kwargs) -> 'xr.Dataset'
             array with automatically selected chunk sizes
     """
 
-    if isinstance(path, (str, Path)):
-        store = open_store(path, mode='r')
+    store = open_store(path, mode='r')
 
     result = xr.open_dataset(store, chunks=chunks, engine='zarr', **kwargs)
 
