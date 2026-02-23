@@ -1,71 +1,98 @@
 `striqt` provides a python-based toolset for rapid prototyping of
 bespoke real-time signal analyzers (RTSAs).
 
-## Basic Usage
 
-### Command line
-Once a `striqt` environment is installed and activated, the following scripts are installed into the environment `PATH`, so they can be run from any working directory.
+### Basic CLI usage
+🏃 Run a batched acquisition and analysis for measurement or calibration, given a path to a YAML input specification:
+```sh
+sensor-sweep [OPTIONS] YAML_PATH
+#  Selected options:
+#  -d, --debug                if set, drop to IPython debug prompt on exception
+#  -v, --verbose              verbosity (or -vv, or -vvv)
+```
 
-* `sensor-sweep`: Acquire and analyze a capture sequence (sweep) according to [a YAML input file specification](https://github.com/usnistgov/striqt/blob/main/doc/reference-sweep.yaml).
-  Output datasets are serialized to `zarr` with `xarray`.
-  This can run locally or on a remote host (`-r` argument) running `serve-sensor`.
+📈 Plot the data variables in captures of a sweep from a zarr archive, given a YAML plotting configuration specification:
 
-* `serve-sensor`: Serve access to local compute and radio resources for `sensor-sweep` on remote clients.
+```sh
+plot-capture [OPTIONS] ZARR_PATH YAML_PATH
 
-Detailed usage instructions for each can be discovered with the `--help` flag.
+# Selected options:
+#  -i, --interactive
+#  --no-save          don't save the resulting plots
+```
+
+Detailed usage instructions for these tools can be discovered with the `--help` flag.
 
 ### Python module APIs
-This is alpha software. The API may still change without warning.
+This is beta software. The API in the base of each module is expected not to change,
+but internals (`.lib`, etc.) may change without warning.
 
-The API is organized into two python modules that are importable as :
+The API is organized into three externally-facing python modules:
 
-`striqt.analysis`
-* Validated routines to perform real-time signal analysis (RTSA) from complex-valued baseband
-    - Spectrum and spectrogram evaluation
-    - Empirical statistical distributions
-    - Cellular cyclic prefix and synchronization correlators
-* Packaging as [xarray Dataset objects](https://docs.xarray.dev/en/stable/generated/xarray.Dataset.html) for easy-to-explore data management
-* Archive datasets to `zarr` for local or cloud storage support
-* Optimized CPU or CUDA GPU compute using full-precision float
+#### `striqt.analysis` package
+Validated real-time signal analysis of complex-valued ``IQ'' baseband
+* Power spectral density and spectrogram evaluation
+* Power detectors in various time-domain representation
+* Empirical statistical distributions
+* Cellular cyclic prefix and synchronization correlators
+* Extensible with custom analyses based on custom
 
-`striqt.sensor`
-* Acquire data from sensor hardware according to a configuration file
-* Concurrent acquisition, analysis, and archival
-* Automated sensor calibration based on the Y-factor technique
+Interoperability within the modern python data ecosystem
+* Interchangable across CPU (numpy) or GPU (cupy) at full-precision floating point
+* Fast `numba` numerical kernels for speed and portability across operating systems
+* Package as multi-dimensional [`xarray.Dataset` objects](https://docs.xarray.dev/en/stable/generated/xarray.Dataset.html) 
+    - Detailed coordinates, units, and metadata across all axes
+* Load and save [`zarr`](https://zarr.dev/) dataset archive format for easy aggregation and dissemination local or cloud storage
+
+#### `striqt.sensor` package
+Implements batch IQ data acquisition and resampling oriented toward test and measurement
+* Input power level calibration based on the Y-factor technique
+* Support for exact rational Fourier resampling on CPU/GPU
+* Multi-threaded acquisition, analysis, and archival to maximize throughput
+* Software-defined radio interoperability via `SoapySDR`
+* Acquisition and analysis input specification schema (and yaml input decode support)
+
+#### `striqt.figures` package
+Implements plotting capabilities for saved data analyses:
+* Generates plots in `matplotlib` for publication-ready in selectable output formats
+* CLI tool: `plot-capture` to plot a single capture
 
 ## Installation
-The following options require that the host has internet access in order to download dependencies. Installs via local package indexes may require customization that has not been tested.
+The following assume access to the open internet.
 
 ### Option 1: Conda Environment
 Installation with radio hardware and GPU support is provided via conda environments. Several variants of a `striqt` environment are provided here, targeted at different host computing environments.
 
 1. Ensure that `conda` is installed (or `mamba`/`micromamba`, substituted in what follows)
 2. Clone this repository
-3. Select a predefined environment based on use-case and hardware:
-    - `environments/cpu.yml`: Analyze pre-recorded IQ or run remote control (cross-platform, CPU only)
-    - `environments/gpu-cpu.yml`: Analyze pre-recorded IQ or run remote control (cross-platform, CPU or CUDA GPU)
-    - `environments/edge-airt.yml`: Signal acquisition and analysis to run on AirT/AirStack radios
+3. Download a predefined environment based on use-case and hardware:
+    - [`environments/cpu.yml`](https://github.com/usnistgov/striqt/blob/main/environments/cpu.yml) supports radio hardware acquisition, loading data archives, and CPU-only IQ analysis
+    - [`environments/gpu-cpu.yml`](https://github.com/usnistgov/striqt/blob/main/environments/gpu-cpu.yml) adds further support for GPU analysis
 4. Create the chosen environment:
     ```sh
-        conda env create -f <path-to-environment-here.yml>
+        conda env create -f [path-to-environment-here.yml]
     ```
-4. Activate:
-    - IDE: select the `striqt` virtual environment 
-    - Command line: `conda activate striqt`
-
-> **_NOTE:_**  The environment operates on an [editable install](https://setuptools.pypa.io/en/latest/userguide/development_mode.html) of the modules and command line tools. As a result, if the location of the cloned source code repository is moved, the conda environment needs to be removed and built again according to the instructions above.
+4. To activate the environment, select the `striqt` conda environment in your IDE, or run 
+    ```sh
+        conda activate striqt
+    ```
 
 ### Option 2: pip installation
-The dependencies, APIs, and CLIs can be installed without radio hardware or GPU support (for post-analysis, plotting, testing, etc.) via `pip install`. In order to avoid conflicts with other projects, the recommended practice for this is to install into a python virtual environment.
+A limited environment that supports APIs and CLIs for post-analysis, plotting, testing, etc. can be installed via the python package index (`pypi`):
 
-1. Clone this repository
-2. `pip install <path-to-repository>`
+```sh
+pip install "striqt @ git+https://github.com/usnistgov/striqt"
+```
+
+> **_NOTE:_** In order to create an environment that is reproducible environment and to isolate the install from dependency versioning conflicts, it is _highly_ recommended to install `striqt`` into a container or virtual environment.
+
+> **_NOTE:_** `SoapySDR` is required to to acquire radio captures, but it is not distributed on `pypi`
 
 ## Documentation
-In keeping with the alpha development status of this codebase, documentation is limited.
+In keeping with the early beta development status of this codebase, documentation is limited.
 * [reference](https://github.com/usnistgov/striqt/blob/main/doc/reference-sweep.yaml) for the `yaml` configuration files that drive `edge_sensor`
 * Docstrings in the source code are the most up-to-date API documentation
 * A few examples are located in [tests](https://github.com/usnistgov/striqt/tree/main/tests) and [notebooks](https://github.com/usnistgov/striqt/tree/main/notebooks). Some of these may not be up to date.
-
+<!-- 
 ### See Also
-* [Validation and calibration with hardware](https://github.com/usnistgov/striqt-tests)
+* [Validation and calibration with hardware](https://github.com/usnistgov/striqt-tests) -->

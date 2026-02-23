@@ -7,27 +7,46 @@ channels:
 - conda-forge
 - nodefaults
 dependencies:
+
+# hardware
+- SoapySDR
+
   # development
 - python
 - pip
 - jupyter
 - ruff
-- toml
+
+# low-level analysis
 - pandas
-- scipy>=1.13,<2
-- numpy>=1.21,<3
-- matplotlib-base>=3.7
-- numexpr~=2.8
+- scipy>=1.13
+- numpy>=1.21
+- numexpr>=2.8
 - array-api-compat
 - numba
-- labbench>=0.42.0,<1
-- xarray>=2024.3
-- zarr>=2.18,<4
-- dask
+
+# data formats
+- yaml
+- pyyaml
 - msgspec~=0.18
+- zarr>=2.18,<4
 - netCDF4
+
+# higher-level data analysis
+- xarray>=2024.3
+- dask
+- flox
+
+# for documentation and plotting
 - mscorefonts
-- cupy ~= 12.2
-- cython
+- matplotlib-base>=3.7
+- open-fonts
+
+# hardware
+- SoapySDR
+
+# GPU
+- cupy
+
 - pip:
   - striqt @ git+https://github.com/usnistgov/striqt

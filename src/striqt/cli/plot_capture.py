@@ -20,7 +20,7 @@ else:
 worker_ctx: WorkerData | None = None
 
 
-@click.command('plot signal analysis from zarr or zarr.zip files')
+@click.command('plot signal analysis from .zarr or .zarr.zip files')
 @click.argument('zarr_path', type=click.Path(exists=True, dir_okay=True))
 @click.argument('yaml_path', type=click.Path(exists=True, dir_okay=False))
 @click.option(
@@ -39,8 +39,6 @@ worker_ctx: WorkerData | None = None
     help="don't save the resulting plots",
 )
 def run(zarr_path: str, yaml_path: str, interactive=False, no_save=False):
-    """generic plots"""
-
     # yaml first, since it fails fastest
     import msgspec
     from striqt import figures as sf
