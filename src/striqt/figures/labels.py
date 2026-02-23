@@ -11,12 +11,13 @@ if typing.TYPE_CHECKING:
     import matplotlib.axes
     import matplotlib.legend
     import matplotlib.figure
-    from matplotlib import pyplot as plt
+    import matplotlib.pyplot as plt
     import numpy as np
     import xarray as xr
 else:
     xr = sa.util.lazy_import('xarray')
     np = sa.util.lazy_import('numpy')
+    mpl = sa.util.lazy_import('matplotlib')
     plt = sa.util.lazy_import('matplotlib.pyplot')
 
 
