@@ -50,7 +50,7 @@ Implements batch IQ data acquisition and resampling oriented toward test and mea
 * Acquisition and analysis input specification schema (and yaml input decode support)
 
 #### `striqt.figures`
-Implements visualization for in `striqt.analysis`
+Implements visualization for the data variables produced by `striqt.analysis`
 * Provides a plot function for each type of data variable
 * Uses the labeled coordinates and metadata to display proper units
 * Generates plots in `matplotlib` for publication-ready in selectable output formats
