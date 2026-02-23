@@ -1,5 +1,3 @@
-# the base environment that supports CPU computations (no GPU or SDRs)
-
 name: striqt
 
 channels:

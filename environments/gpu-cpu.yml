@@ -1,4 +1,4 @@
-# the base environment that supports CPU computations (no GPU or SDRs)
+# the base environment that supports CPU and GPU computations
 
 name: striqt
 
