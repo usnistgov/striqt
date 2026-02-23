@@ -1,4 +1,4 @@
-`striqt` is a set of open-source python packages for batched real-time signal analysis on CPU/GPU and rapid prototyping of bespoke radio environment sensors. 
+`striqt` is a set of open-source python packages for batched real-time signal analysis on CPU/GPU and rapid prototyping of bespoke radio environment sensors.
 
 ### Basic CLI usage
 🏃 Run a batched acquisition and analysis for measurement or calibration, given a path to a YAML input specification:
@@ -24,12 +24,9 @@ plot-capture [OPTIONS] ZARR_PATH YAML_PATH
 More detailed usage instructions for these tools can be discovered with the `--help` flag.
 
 ### Python module APIs
-This is beta software. The API in the base of each module is expected not to change,
-but internals (`.lib`, etc.) may change without warning.
+The API is organized into python packages:
 
-The API is organized into three externally-facing python modules:
-
-#### `striqt.analysis` package
+#### `striqt.analysis`
 Validated real-time signal analysis of complex-valued ``IQ'' baseband
 * Power spectral density and spectrogram evaluation
 * Power detectors in various time-domain representation
@@ -44,7 +41,7 @@ Interoperability within the modern python data ecosystem
     - Detailed coordinates, units, and metadata across all axes
 * Load and save [`zarr`](https://zarr.dev/) dataset archive format for easy aggregation and dissemination local or cloud storage
 
-#### `striqt.sensor` package
+#### `striqt.sensor`
 Implements batch IQ data acquisition and resampling oriented toward test and measurement
 * Input power level calibration based on the Y-factor technique
 * Support for exact rational Fourier resampling on CPU/GPU
@@ -52,15 +49,16 @@ Implements batch IQ data acquisition and resampling oriented toward test and mea
 * Software-defined radio interoperability via `SoapySDR`
 * Acquisition and analysis input specification schema (and yaml input decode support)
 
-#### `striqt.figures` package
-Implements plotting capabilities for saved data analyses:
+#### `striqt.figures`
+Implements visualization for in `striqt.analysis`
+* Provides a plot function for each type of data variable
+* Uses the labeled coordinates and metadata to display proper units
 * Generates plots in `matplotlib` for publication-ready in selectable output formats
-* CLI tool: `plot-capture` to plot a single capture
 
-## Installation
+### Installation
 The following assume access to the open internet.
 
-### Option 1: Conda Environment
+#### Option 1: Conda Environment
 Installation with radio hardware and GPU support is provided via conda environments. Several variants of a `striqt` environment are provided here, targeted at different host computing environments.
 
 1. Ensure that `conda` is installed (or `mamba`/`micromamba`, substituted in what follows)
@@ -77,7 +75,7 @@ Installation with radio hardware and GPU support is provided via conda environme
         conda activate striqt
     ```
 
-### Option 2: pip installation
+#### Option 2: pip installation
 A limited environment that supports APIs and CLIs for post-analysis, plotting, testing, etc. can be installed via the python package index (`pypi`):
 
 ```sh
@@ -87,6 +85,12 @@ pip install "striqt @ git+https://github.com/usnistgov/striqt"
 > **_NOTE:_** In order to create an environment that is reproducible environment and to isolate the install from dependency versioning conflicts, it is _highly_ recommended to install `striqt`` into a container or virtual environment.
 
 > **_NOTE:_** `SoapySDR` is required to to acquire radio captures, but it is not distributed on `pypi`
+
+### Development status
+`striqt` is in early beta. The pace of change has slowed
+* The API in the base of each module is expected not to change, but internals (`.lib`, etc.) may change without warning
+* Incompatible changes to yaml schemas in `striqt.sensor` and `striqt.figure` (and the CLIs) may still change slightly
+* The data variable, coordinate, and metadata field names in `.zarr` files follow the names in the yaml schemas
 
 ## Documentation
 In keeping with the early beta development status of this codebase, documentation is limited.
