@@ -170,12 +170,6 @@ def _build_encodings_zarr_v2(
     return encodings
 
 
-def _is_fsspec_url(url_string):
-    import fsspec.core
-    protocol, _ = fsspec.core.split_protocol(url_string)    
-    return protocol is not None
-
-
 def open_store(target: str | Path, *, mode: str) -> StoreType:
     import zarr.storage
 
@@ -192,9 +186,13 @@ def open_store(target: str | Path, *, mode: str) -> StoreType:
         raise ValueError('must pass a string or Path savefile or zarr Store')
     elif _is_fsspec_url(target):
         import fsspec
-        p = Path.home()/'.cache'/'fsspec'
-        p.mkdir(parents=True, exist_ok=True)
-        fs, _ = fsspec.url_to_fs(target, asynchronous=True, cache_storage=str(p))
+        if 'simplecache' in target:
+            p = Path.home()/'.cache'/'fsspec'
+            p.mkdir(parents=True, exist_ok=True)
+            kws = dict(cache_storage=str(p))
+        else:
+            kws = {}
+        fs, _ = fsspec.url_to_fs(target, asynchronous=True, **kws)
         return fs.get_mapper("")
     elif str(target).endswith('.zip'):
         if mode == 'a' and Path(target).exists():
@@ -849,3 +847,12 @@ def open_bare_iq(
         xp=xp,
         **kws,
     )
+
+
+def _is_fsspec_url(url_string: Path | str) -> typing.TypeIs[str]:
+    if isinstance(url_string, Path):
+        return False
+    
+    import fsspec.core
+    protocol, _ = fsspec.core.split_protocol(url_string)    
+    return protocol is not None
