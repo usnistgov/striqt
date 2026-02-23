@@ -41,6 +41,7 @@ else:
     def _like_meta(_):
         def impl(x):
             return x
+        return impl
 
 
 class frozendict(typing.Mapping[_K, _V]):
