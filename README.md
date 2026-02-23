@@ -1,5 +1,4 @@
-`striqt` provides a python-based toolset for rapid prototyping of
-bespoke real-time signal analyzers (RTSAs).
+`striqt` provides a python-based toolset for batched real-time signal analysis.
 
 
 ### Basic CLI usage
