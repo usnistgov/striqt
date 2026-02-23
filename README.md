@@ -63,9 +63,10 @@ Installation with radio hardware and GPU support is provided via conda environme
 
 1. Ensure that `conda` is installed (or `mamba`/`micromamba`, substituted in what follows)
 2. Clone this repository
-3. Download a predefined environment based on use-case and hardware:
-    - [`environments/cpu.yml`](https://github.com/usnistgov/striqt/blob/main/environments/cpu.yml) supports radio hardware acquisition, loading data archives, and CPU-only IQ analysis
-    - [`environments/gpu-cpu.yml`](https://github.com/usnistgov/striqt/blob/main/environments/gpu-cpu.yml) adds further support for GPU analysis
+3. Download a predefined environment based on needed capabilities:
+    - [`cpu.yml`](https://github.com/usnistgov/striqt/blob/main/environments/cpu.yml): acquire radio data, perform CPU-only IQ signal analysis, load/save `zarr` archives, and plot data
+    - [`gpu-cpu.yml`](https://github.com/usnistgov/striqt/blob/main/environments/gpu-cpu.yml): support the above, and analyze IQ on CUDA GPUs
+      
 4. Create the chosen environment:
     ```sh
         conda env create -f [path-to-environment-here.yml]
