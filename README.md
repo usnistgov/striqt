@@ -1,16 +1,17 @@
-`striqt` provides a python-based toolset for batched real-time signal analysis.
-
+`striqt` is a set of open-source python packages for batched real-time signal analysis on CPU/GPU and rapid prototyping of bespoke radio environment sensors. 
 
 ### Basic CLI usage
 🏃 Run a batched acquisition and analysis for measurement or calibration, given a path to a YAML input specification:
+
 ```sh
 sensor-sweep [OPTIONS] YAML_PATH
+
 #  Selected options:
 #  -d, --debug                if set, drop to IPython debug prompt on exception
 #  -v, --verbose              verbosity (or -vv, or -vvv)
 ```
 
-📈 Plot the data variables in captures of a sweep from a zarr archive, given a YAML plotting configuration specification:
+📈 Plot the data variables in captures contained in one sweep of a zarr archive, given a YAML plotting configuration specification:
 
 ```sh
 plot-capture [OPTIONS] ZARR_PATH YAML_PATH
@@ -20,7 +21,7 @@ plot-capture [OPTIONS] ZARR_PATH YAML_PATH
 #  --no-save          don't save the resulting plots
 ```
 
-Detailed usage instructions for these tools can be discovered with the `--help` flag.
+More detailed usage instructions for these tools can be discovered with the `--help` flag.
 
 ### Python module APIs
 This is beta software. The API in the base of each module is expected not to change,
