@@ -77,11 +77,13 @@ Installation with radio hardware and GPU support is provided via conda environme
     ```
 
 #### Option 2: pip installation
-A limited environment that supports APIs and CLIs for post-analysis, plotting, testing, etc. can be installed via the python package index (`pypi`):
+A limited environment that supports the latest APIs and CLIs for post-analysis, plotting, testing, etc. can be installed via the python package index (`pypi`):
 
 ```sh
 pip install "striqt @ git+https://github.com/usnistgov/striqt"
 ```
+
+It is encouraged to use a lockfile (through `pipenv`, `uv`, `pixi`, etc. in lieu of `pip` above) to enforce a fully reproducable install.
 
 > **_NOTE:_** In order to create an environment that is reproducible environment and to isolate the install from dependency versioning conflicts, it is _highly_ recommended to install `striqt`` into a container or virtual environment.
 
