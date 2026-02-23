@@ -1,21 +1,26 @@
 from __future__ import annotations as __
 
+import functools
 import math
 import typing
 
 import striqt.analysis as sa
-
-from matplotlib import pyplot as plt
-import numpy as np
-import xarray as xr
 
 
 if typing.TYPE_CHECKING:
     import matplotlib.axes
     import matplotlib.legend
     import matplotlib.figure
+    from matplotlib import pyplot as plt
+    import numpy as np
+    import xarray as xr
+else:
+    xr = sa.util.lazy_import('xarray')
+    np = sa.util.lazy_import('numpy')
+    plt = sa.util.lazy_import('matplotlib.pyplot')
 
 
+@functools.cache
 def _show_xarray_units_in_parentheses():
     """change xarray plots to "Label ({units})" to match IEEE style guidelines"""
 
@@ -26,9 +31,6 @@ def _show_xarray_units_in_parentheses():
     _get_units_from_attrs.__code__ = code.replace(co_consts=consts)
 
 
-_show_xarray_units_in_parentheses()
-
-
 def label_by_coord(
     data: xr.DataArray,
     fmt: str,
@@ -37,6 +39,7 @@ def label_by_coord(
     title_case=True,
     **extra_fields,
 ):
+    _show_xarray_units_in_parentheses()
     coords = _coords_to_dicts(data, coord_or_dim=coord_or_dim, title_case=title_case)
     return [fmt.format(**(extra_fields | c)) for c in coords]
 
@@ -151,6 +154,8 @@ def label_axis(
 
     from . import ticker
 
+    _show_xarray_units_in_parentheses()
+
     if which_axis not in ('x', 'y', 'colorbar'):
         raise ValueError("which_axis must be one of 'x', 'y', 'colorbar'")
 
@@ -256,6 +261,8 @@ def label_legend(
     """apply legend labeling based on label and unit metadata in the specified dimension of `a`"""
     from . import ticker
 
+    _show_xarray_units_in_parentheses()
+
     if ax is None:
         ax = plt.gca()
 
@@ -286,6 +293,8 @@ def label_selection(
     attrs=True,
 ):
     from . import ticker
+
+    _show_xarray_units_in_parentheses()
 
     if ax is None:
         ax = plt.gca()
