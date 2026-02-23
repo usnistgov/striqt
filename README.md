@@ -27,14 +27,14 @@ More detailed usage instructions for these tools can be discovered with the `--h
 The API is organized into python packages:
 
 #### `striqt.analysis`
-Validated real-time signal analysis of complex-valued ``IQ'' baseband
+Provides validated real-time signal analysis of complex-valued ``IQ'' baseband:
 * Power spectral density and spectrogram evaluation
 * Power detectors in various time-domain representation
 * Empirical statistical distributions
 * Cellular cyclic prefix and synchronization correlators
 * Extensible with custom analyses based on custom
 
-Interoperability within the modern python data ecosystem
+Interoperability within the modern python data ecosystem:
 * Interchangable across CPU (numpy) or GPU (cupy) at full-precision floating point
 * Fast `numba` numerical kernels for speed and portability across operating systems
 * Package as multi-dimensional [`xarray.Dataset` objects](https://docs.xarray.dev/en/stable/generated/xarray.Dataset.html) 
