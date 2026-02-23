@@ -91,36 +91,6 @@ def concat_time_dim(datasets: list['xr.Dataset'], time_dim: str) -> 'xr.Dataset'
     return ds
 
 
-@sa.util.lru_cache()
-def _coord_template(
-    capture_cls: type[specs.SensorCapture],
-    info_cls: type[specs.SourceCoordinates],
-    port_count: int,
-) -> 'xr.Coordinates':
-    """returns a cached xr.Coordinates object to use as a template for data results"""
-
-    vars = {}
-
-    for spec_cls in (capture_cls, info_cls):
-        attrs, defaults = specs.helpers.field_template_values(spec_cls)
-
-        for name in attrs.keys():
-            if name.startswith('_') or name == 'adjust_analysis':
-                continue
-
-            vars[name] = xr.Variable(
-                (CAPTURE_DIM,),
-                data=port_count * [defaults[name]],
-                fastpath=True,
-                attrs=attrs[name],
-            )
-
-            if isinstance(defaults[name], str):
-                vars[name] = vars[name].astype(object)
-
-    return xr.Coordinates(vars)
-
-
 def build_dataset_attrs(sweep: specs.Sweep):
     attrs: dict[str, typing.Any] = {}
     as_dict = sweep.to_dict(skip_private=True, unfreeze=True)
@@ -247,73 +217,6 @@ def analyze(
         return ds_delayed
     else:
         return from_delayed(ds_delayed)
-
-
-def _adc_overload_message(
-    extra_data: dict[str, typing.Sequence[float]], capture: specs.SensorCapture
-) -> str | None:
-    if 'adc_headroom' in extra_data and isinstance(capture, specs.SoapyCapture):
-        headroom = extra_data['adc_headroom']
-        caps = specs.helpers.split_capture_ports(capture)
-    else:
-        return None
-
-    overload_ports = []
-    for c, hr in zip(caps, headroom):
-        if hr > 0:
-            continue
-        else:
-            assert not isinstance(c.center_frequency, tuple)
-        msg = f'port {c.port} ({c.center_frequency / 1e6:0.0f} MHz)'
-        overload_ports.append(msg)
-
-    if len(overload_ports) > 0:
-        return 'adc overload on ' + ', '.join(overload_ports)
-    else:
-        return None
-
-
-def _if_overload_message(
-    extra_data: dict[str, typing.Sequence[float]],
-    capture: _TC,
-    sweep_spec: specs.Sweep[_TS, _TP, _TC],
-) -> str | None:
-    if 'if_headroom' in extra_data:
-        if_headroom = extra_data['if_headroom']
-    else:
-        return None
-
-    if not isinstance(capture, specs.SoapyCapture):
-        return None
-    else:
-        captures = typing.cast(tuple[specs.SoapyCapture, ...], sweep_spec.captures)
-
-    gains = specs.helpers.max_by_frequency('gain', captures, sweep_spec.loops)
-    caps = specs.helpers.split_capture_ports(capture)
-
-    ol_cases = {}
-    for c, hr in zip(caps, if_headroom):
-        # estimate IM3 levels in other channels
-        ol_cases.setdefault(c.port, set())
-
-        for fc, gain in gains[c.port].items():
-            im3_headroom = hr + (2 / 3 * (c.gain - gain))
-
-            if im3_headroom > 0:
-                continue
-
-            ol_cases[c.port].add(fc)
-
-    ol_labels = []
-    for port, freqs in ol_cases.items():
-        if len(freqs) > 0:
-            freqs_MHz = ', '.join([f'{f / 1e6:0.0f}' for f in sorted(freqs)])
-            ol_labels.append(f'port {port} (onto {freqs_MHz} MHz)')
-
-    if len(ol_labels) > 0:
-        return 'if overload at ' + ' and '.join(ol_labels)
-    else:
-        return None
 
 
 def from_delayed(dd: DelayedDataset):
@@ -536,46 +439,6 @@ def get_looped_coords(ds: 'xr.Dataset', include_repeats=False) -> list[str]:
     ]
 
 
-def _check_coord_indexes(ds, index_coords: list[str]):
-    if _xarray_version() < (2024, 9, 0):
-        sa.util.get_logger('analysis').warning(
-            'xarray is too old to to validate coord indexes'
-        )
-        return
-
-    coords_ds = ds.capture.coords.to_dataset()
-    for _, coords_group in coords_ds.groupby(index_coords):
-        break
-    else:
-        raise ValueError(f'no groups matched groupby fields {index_coords}')
-
-    sub = coords_group.reset_coords()  # .drop_vars('start_time')
-    if sub.sizes['capture'] == 1:
-        # success! the specified index fields indexed a unique value
-        # in the first group
-        return
-
-    # check for easy alternatives
-    counts = {n: np.unique(da).tolist() for n, da in sub.data_vars.items()}
-    counts = {n: c for n, c in counts.items() if len(c) == sub.sizes['capture']}
-
-    if len(counts) == 0:
-        raise ValueError(
-            f'coords {index_coords} are insufficient to unstack and least two more may be needed'
-        )
-    else:
-        suggest = set(counts.keys())
-        raise ValueError(
-            f'coords {index_coords} are insufficient to unstack. consider adding one of {suggest}'
-        )
-
-
-def _xarray_version() -> tuple[int, int, int]:
-    version = tuple(int(v) for v in xr.__version__.split('.'))
-    assert len(version) == 3
-    return version
-
-
 def index_dataset(
     ds: 'xr.Dataset', index_coords: list[str] = ['start_time']
 ) -> 'xr.Dataset':
@@ -638,3 +501,140 @@ def unstack_dataset(
         idx_ds = idx_ds.chunk(chunks)
 
     return idx_ds.unstack()
+
+
+@sa.util.lru_cache()
+def _coord_template(
+    capture_cls: type[specs.SensorCapture],
+    info_cls: type[specs.SourceCoordinates],
+    port_count: int,
+) -> 'xr.Coordinates':
+    """returns a cached xr.Coordinates object to use as a template for data results"""
+
+    vars = {}
+
+    for spec_cls in (capture_cls, info_cls):
+        attrs, defaults = specs.helpers.field_template_values(spec_cls)
+
+        for name in attrs.keys():
+            if name.startswith('_') or name == 'adjust_analysis':
+                continue
+
+            vars[name] = xr.Variable(
+                (CAPTURE_DIM,),
+                data=port_count * [defaults[name]],
+                fastpath=True,
+                attrs=attrs[name],
+            )
+
+            if isinstance(defaults[name], str):
+                vars[name] = vars[name].astype(object)
+
+    return xr.Coordinates(vars)
+
+
+def _adc_overload_message(
+    extra_data: dict[str, typing.Sequence[float]], capture: specs.SensorCapture
+) -> str | None:
+    if 'adc_headroom' in extra_data and isinstance(capture, specs.SoapyCapture):
+        headroom = extra_data['adc_headroom']
+        caps = specs.helpers.split_capture_ports(capture)
+    else:
+        return None
+
+    overload_ports = []
+    for c, hr in zip(caps, headroom):
+        if hr > 0:
+            continue
+        else:
+            assert not isinstance(c.center_frequency, tuple)
+        msg = f'port {c.port} ({c.center_frequency / 1e6:0.0f} MHz)'
+        overload_ports.append(msg)
+
+    if len(overload_ports) > 0:
+        return 'adc overload on ' + ', '.join(overload_ports)
+    else:
+        return None
+
+
+def _check_coord_indexes(ds, index_coords: list[str]):
+    if _xarray_version() < (2024, 9, 0):
+        sa.util.get_logger('analysis').warning(
+            'xarray is too old to to validate coord indexes'
+        )
+        return
+
+    coords_ds = ds.capture.coords.to_dataset()
+    for _, coords_group in coords_ds.groupby(index_coords):
+        break
+    else:
+        raise ValueError(f'no groups matched groupby fields {index_coords}')
+
+    sub = coords_group.reset_coords()  # .drop_vars('start_time')
+    if sub.sizes['capture'] == 1:
+        # success! the specified index fields indexed a unique value
+        # in the first group
+        return
+
+    # check for easy alternatives
+    counts = {n: np.unique(da).tolist() for n, da in sub.data_vars.items()}
+    counts = {n: c for n, c in counts.items() if len(c) == sub.sizes['capture']}
+
+    if len(counts) == 0:
+        raise ValueError(
+            f'coords {index_coords} are insufficient to unstack and least two more may be needed'
+        )
+    else:
+        suggest = set(counts.keys())
+        raise ValueError(
+            f'coords {index_coords} are insufficient to unstack. consider adding one of {suggest}'
+        )
+
+
+def _if_overload_message(
+    extra_data: dict[str, typing.Sequence[float]],
+    capture: _TC,
+    sweep_spec: specs.Sweep[_TS, _TP, _TC],
+) -> str | None:
+    if 'if_headroom' in extra_data:
+        if_headroom = extra_data['if_headroom']
+    else:
+        return None
+
+    if not isinstance(capture, specs.SoapyCapture):
+        return None
+    else:
+        captures = typing.cast(tuple[specs.SoapyCapture, ...], sweep_spec.captures)
+
+    gains = specs.helpers.max_by_frequency('gain', captures, sweep_spec.loops)
+    caps = specs.helpers.split_capture_ports(capture)
+
+    ol_cases = {}
+    for c, hr in zip(caps, if_headroom):
+        # estimate IM3 levels in other channels
+        ol_cases.setdefault(c.port, set())
+
+        for fc, gain in gains[c.port].items():
+            im3_headroom = hr + (2 / 3 * (c.gain - gain))
+
+            if im3_headroom > 0:
+                continue
+
+            ol_cases[c.port].add(fc)
+
+    ol_labels = []
+    for port, freqs in ol_cases.items():
+        if len(freqs) > 0:
+            freqs_MHz = ', '.join([f'{f / 1e6:0.0f}' for f in sorted(freqs)])
+            ol_labels.append(f'port {port} (onto {freqs_MHz} MHz)')
+
+    if len(ol_labels) > 0:
+        return 'if overload at ' + ' and '.join(ol_labels)
+    else:
+        return None
+
+
+def _xarray_version() -> tuple[int, int, int]:
+    version = tuple(int(v) for v in xr.__version__.split('.'))
+    assert len(version) == 3
+    return version
