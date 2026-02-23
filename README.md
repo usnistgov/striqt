@@ -1,4 +1,4 @@
-`striqt` is a set of open-source python packages for batched real-time signal analysis on CPU/GPU and rapid prototyping of bespoke radio environment sensors.
+`striqt` is a set of open-source python packages for batched real-time signal analysis on CPU or GPU, and rapid prototyping of bespoke radio environment sensors.
 
 ### Basic CLI usage
 🏃 Run a batched acquisition and analysis for measurement or calibration, given a path to a YAML input specification:
@@ -61,17 +61,16 @@ The following assume access to the open internet.
 #### Option 1: Conda Environment
 Installation with radio hardware and GPU support is provided via conda environments. Several variants of a `striqt` environment are provided here, targeted at different host computing environments.
 
-1. Ensure that `conda` is installed (or `mamba`/`micromamba`, substituted in what follows)
+1. Ensure that `conda` is installed (or `mamba`/`micromamba` substituted in what follows)
 2. Clone this repository
 3. Download a predefined environment based on needed capabilities:
     - [`cpu.yml`](https://github.com/usnistgov/striqt/blob/main/environments/cpu.yml): acquire radio data, perform CPU-only IQ signal analysis, load/save `zarr` archives, and plot data
     - [`gpu-cpu.yml`](https://github.com/usnistgov/striqt/blob/main/environments/gpu-cpu.yml): support the above, and analyze IQ on CUDA GPUs
-      
 4. Create the chosen environment:
     ```sh
         conda env create -f [path-to-environment-here.yml]
     ```
-4. To activate the environment, select the `striqt` conda environment in your IDE, or run 
+5. To activate the environment, select the `striqt` conda environment in your IDE, or run 
     ```sh
         conda activate striqt
     ```
