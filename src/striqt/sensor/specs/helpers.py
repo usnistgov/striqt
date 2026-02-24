@@ -387,8 +387,8 @@ def adjust_captures(
         try:
             return lookup_spec.lookup[k]
         except KeyError:
-            if lookup_spec.default != msgspec.UNSET:
-                return lookup_spec.default
+            if not lookup_spec.required:
+                return msgspec.UNSET
             else:
                 raise KeyError(
                     f'adjust_captures[{field!r}] is missing a lookup for key {k!r} '
@@ -402,7 +402,9 @@ def adjust_captures(
             continue
 
         key = get_key(lookup_spec.key, field)
-        ret[field] = do_lookup(lookup_spec, key)
+        v = do_lookup(lookup_spec, key)
+        if v != msgspec.UNSET:
+            ret[field] = v
 
     return ret
 
