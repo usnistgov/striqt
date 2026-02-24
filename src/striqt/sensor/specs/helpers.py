@@ -376,7 +376,11 @@ def adjust_captures(
             raise KeyError(f'no such key {field!r} for field {name!r}')
         return value
 
-    def do_lookup(lookup_spec: specs.CaptureRemap, key):
+    def do_lookup(
+        lookup_spec: specs.CaptureRemap,
+        key,
+        field_default: str | specs.CaptureRemap | None,
+    ):
         if not isinstance(key, tuple):
             k = key
         elif len(key) == 1:
@@ -387,9 +391,14 @@ def adjust_captures(
         try:
             return lookup_spec.lookup[k]
         except KeyError:
-            if lookup_spec.default is not msgspec.UNSET:
+            has_default = isinstance(field_default, specs.CaptureRemap)
+            if lookup_spec.default != msgspec.UNSET:
                 return lookup_spec.default
+            elif has_default and field_default.default != msgspec.UNSET:
+                return field_default.default
             elif not lookup_spec.required:
+                return msgspec.UNSET
+            elif has_default and not field_default.required:
                 return msgspec.UNSET
             else:
                 raise KeyError(
@@ -397,6 +406,10 @@ def adjust_captures(
                     f'for source {source_id!r}'
                 )
 
+    defaults = adjust_spec.get('default', {})
+    default_fields = {
+        k: v for k, v in defaults.items() if isinstance(v, specs.CaptureRemap)
+    }
     for field, lookup_spec in fields.items():
         if not isinstance(lookup_spec, specs.CaptureRemap):
             # no lookup - use value
@@ -404,7 +417,7 @@ def adjust_captures(
             continue
 
         key = get_key(lookup_spec.key, field)
-        v = do_lookup(lookup_spec, key)
+        v = do_lookup(lookup_spec, key, field_default=default_fields.get(field, None))
         if v != msgspec.UNSET:
             ret[field] = v
 
