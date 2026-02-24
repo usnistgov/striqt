@@ -19,7 +19,7 @@ else:
 
 
 @functools.cache
-def _show_xarray_units_in_parentheses():
+def _monkeypatch_xarray_unit_labels():
     """change xarray plots to "Label ({units})" to match IEEE style guidelines"""
 
     from xarray.plot.utils import _get_units_from_attrs
@@ -37,7 +37,7 @@ def label_by_coord(
     title_case=True,
     **extra_fields,
 ):
-    _show_xarray_units_in_parentheses()
+    _monkeypatch_xarray_unit_labels()
     coords = _coords_to_dicts(data, coord_or_dim=coord_or_dim, title_case=title_case)
     return [fmt.format(**(extra_fields | c)) for c in coords]
 
@@ -153,7 +153,7 @@ def label_axis(
     from . import ticker
     import matplotlib.pyplot as plt
 
-    _show_xarray_units_in_parentheses()
+    _monkeypatch_xarray_unit_labels()
 
     if which_axis not in ('x', 'y', 'colorbar'):
         raise ValueError("which_axis must be one of 'x', 'y', 'colorbar'")
@@ -261,7 +261,7 @@ def label_legend(
     from . import ticker
     import matplotlib.pyplot as plt
 
-    _show_xarray_units_in_parentheses()
+    _monkeypatch_xarray_unit_labels()
 
     if ax is None:
         ax = plt.gca()
@@ -294,7 +294,7 @@ def label_selection(
 ):
     from . import ticker
 
-    _show_xarray_units_in_parentheses()
+    _monkeypatch_xarray_unit_labels()
 
     if ax is None:
         ax = plt.gca()

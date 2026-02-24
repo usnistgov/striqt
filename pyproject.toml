@@ -63,7 +63,7 @@ test = [
 
 [project.scripts]
 check-sweep = "striqt.cli.check_sweep:run"
-sensor-sweep = "striqt.cli.sweep_sweep:run"
+sensor-sweep = "striqt.cli.sensor_sweep:run"
 plot-capture = "striqt.cli.plot_capture:run"
 
 [tool.ruff]
