@@ -406,7 +406,7 @@ def adjust_captures(
                     f'for source {source_id!r}'
                 )
 
-    defaults = adjust_spec.get('default', {})
+    defaults = adjust_spec.get('defaults', {})
     default_fields = {
         k: v for k, v in defaults.items() if isinstance(v, specs.CaptureRemap)
     }
@@ -583,7 +583,9 @@ def _convert_label_lookup_keys(sweep: specs.Sweep) -> specs.AdjustCapturesType:
                     f'for {field!r} in label for {source_id!r} source'
                 ) from ex
 
-            result[source_id][field] = specs.CaptureRemap(key=v.key, lookup=lookup)
+            result[source_id][field] = specs.CaptureRemap(
+                key=v.key, lookup=lookup, default=v.default, required=v.required
+            )
             lookup_types[field] = str
 
     depth = sa.specs.helpers.inspect_freeze_depths(type(sweep))['adjust_captures']
