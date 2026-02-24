@@ -494,7 +494,6 @@ class ManualYFactorPeripheral(
 
     def arm(self, capture):
         state = (capture.port, capture.noise_diode_enabled)
-        print(capture)
         if state != self._last_state:
             what = f'noise diode at port {capture.port}'
             if capture.noise_diode_enabled:
