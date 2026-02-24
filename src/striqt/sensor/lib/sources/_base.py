@@ -952,7 +952,7 @@ def _get_dsp_pad_size(
         fft_pad = _get_fft_resample_pad(setup, capture, analysis)
 
         filter_pad = _get_filter_pad(capture)
-        assert fft_pad[0] > 2 * filter_pad
+        assert fft_pad[0] > filter_pad and fft_pad[1] > filter_pad
 
         return (fft_pad[0], fft_pad[1])
 

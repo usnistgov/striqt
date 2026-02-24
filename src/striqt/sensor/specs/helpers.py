@@ -107,18 +107,20 @@ def _expand_capture_loops(
         if adjust is not None:
             new = (c | adjust_captures(c, adjust, source_id) for c in new)
 
-        if loop_only_nyquist:
-            new = (c for c in new if c['sample_rate'] >= c['analysis_bandwidth'])
-
         result += list(new)
 
     if len(result) == 0:
         # there were no loops
         return tuple()
     else:
-        return msgspec.convert(
+        captures = msgspec.convert(
             result, tuple[cls, ...], strict=False, dec_hook=_dec_hook
         )
+
+    if loop_only_nyquist:
+        captures = tuple(c for c in captures if c.sample_rate >= c.analysis_bandwidth)
+
+    return tuple()
 
 
 def loop_captures(
