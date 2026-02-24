@@ -387,7 +387,9 @@ def adjust_captures(
         try:
             return lookup_spec.lookup[k]
         except KeyError:
-            if not lookup_spec.required:
+            if lookup_spec.default is not msgspec.UNSET:
+                return lookup_spec.default
+            elif not lookup_spec.required:
                 return msgspec.UNSET
             else:
                 raise KeyError(
