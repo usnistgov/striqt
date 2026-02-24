@@ -636,6 +636,7 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
         if time_ns is None:
             ts = None
         else:
+            import pandas as pd
             ts = pd.Timestamp(time_ns, unit='ns')
 
         if self._sweep_time is None:
