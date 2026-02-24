@@ -11,14 +11,11 @@ if typing.TYPE_CHECKING:
     import matplotlib.axes
     import matplotlib.legend
     import matplotlib.figure
-    import matplotlib.pyplot as plt
     import numpy as np
     import xarray as xr
 else:
     xr = sa.util.lazy_import('xarray')
     np = sa.util.lazy_import('numpy')
-    mpl = sa.util.lazy_import('matplotlib')
-    plt = sa.util.lazy_import('matplotlib.pyplot')
 
 
 @functools.cache
@@ -154,6 +151,7 @@ def label_axis(
     """
 
     from . import ticker
+    import matplotlib.pyplot as plt
 
     _show_xarray_units_in_parentheses()
 
@@ -261,6 +259,7 @@ def label_legend(
 ) -> 'matplotlib.legend.Legend':
     """apply legend labeling based on label and unit metadata in the specified dimension of `a`"""
     from . import ticker
+    import matplotlib.pyplot as plt
 
     _show_xarray_units_in_parentheses()
 

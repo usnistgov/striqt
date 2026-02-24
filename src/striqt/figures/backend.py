@@ -9,7 +9,6 @@ import striqt.waveform as sw
 
 if typing.TYPE_CHECKING:
     import matplotlib as mpl
-    from matplotlib import pyplot as plt
     import xarray as xr
     import xarray.plot
     import xarray.core.types
@@ -18,7 +17,6 @@ if typing.TYPE_CHECKING:
 
 else:
     mpl = sw.util.lazy_import('matplotlib')
-    plt = sw.util.lazy_import('matplotlib.pyplot')
     xr = sw.util.lazy_import('xarray')
     np = sw.util.lazy_import('numpy')
 
@@ -70,6 +68,7 @@ def plot_cyclic_channel_power(
     plot_kws={},
 ):
     from . import labels
+    import matplotlib.pyplot as plt
 
     if ax is None:
         _, ax = plt.subplots()
@@ -168,7 +167,7 @@ class PlotBackend:
             norm = None
         else:
             levels = util.quantized_value_range(data, vmin, vmax, vstep)
-            _cmap = plt.get_cmap(cmap, len(levels) - 1)
+            _cmap = mpl.colormaps.get_cmap(cmap).resampled(len(levels) - 1)
             norm = colors.BoundaryNorm(levels, ncolors=_cmap.N)
 
         grid = data.plot.imshow(
@@ -216,6 +215,7 @@ class PlotBackend:
         xticklabelunits: bool | typing.Literal['auto'] = 'auto',
     ):
         from . import labels
+        import matplotlib.pyplot as plt
 
         data = grid.data
         x = grid._x_var
