@@ -295,6 +295,7 @@ SWEEP_TAG_FIELD = 'sensor_binding'
 class CaptureRemap(SpecBase, frozen=True, kw_only=True):
     key: str | tuple[str, ...]
     lookup: dict[tuple[typing.Any, ...] | typing.Any, typing.Any]
+    default: typing.Any = msgspec.UNSET
 
 
 _AdjustSourceCapturesMap = dict[

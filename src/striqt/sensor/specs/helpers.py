@@ -376,7 +376,7 @@ def adjust_captures(
             raise KeyError(f'no such key {field!r} for field {name!r}')
         return value
 
-    def do_lookup(lookup_spec, key):
+    def do_lookup(lookup_spec: specs.CaptureRemap, key):
         if not isinstance(key, tuple):
             k = key
         elif len(key) == 1:
@@ -387,10 +387,13 @@ def adjust_captures(
         try:
             return lookup_spec.lookup[k]
         except KeyError:
-            raise KeyError(
-                f'adjust_captures[{field!r}] is missing a lookup for key {k!r} '
-                f'for source {source_id!r}'
-            )
+            if lookup_spec.default != msgspec.UNSET:
+                return lookup_spec.default
+            else:
+                raise KeyError(
+                    f'adjust_captures[{field!r}] is missing a lookup for key {k!r} '
+                    f'for source {source_id!r}'
+                )
 
     for field, lookup_spec in fields.items():
         if not isinstance(lookup_spec, specs.CaptureRemap):
