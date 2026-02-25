@@ -399,8 +399,6 @@ class YFactorSink(_sinks.SinkBase):
 
         assert isinstance(capture_result.extra_coords, _specs.SoapyAcquisitionInfo)
 
-        sweep_start_time = capture_result.extra_coords.sweep_start_time
-
         if len(self._pending_data) == self._group_sizes[0]:
             self.flush()
             self._group_sizes.pop(0)
@@ -430,7 +428,7 @@ class YFactorSink(_sinks.SinkBase):
         capture_data = (
             _xr.concat(data, _compute.CAPTURE_DIM)
             .assign_attrs(attrs)
-            .drop_vars(self._DROP_FIELDS)
+            .drop_vars(self._DROP_FIELDS, errors='ignore')
             .set_xindex(fields)
         )
 
