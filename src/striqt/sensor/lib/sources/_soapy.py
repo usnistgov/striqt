@@ -282,7 +282,8 @@ class RxStream:
             device.setGain(SoapySDR.SOAPY_SDR_RX, port, gain)
 
     def close(self, device: 'SoapySDR.Device'):
-        if getattr(self, '_rx_stream', None) is None:
+        stream = getattr(self, 'stream', None)
+        if stream is None:
             return
 
         try:
@@ -512,10 +513,16 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
             return
 
         self._device.__del__ = lambda: None
+        
         try:
-            self._rx_stream.close(self._device)
+            rx_stream = getattr(self, '_rx_stream', None)
+            if rx_stream is not None:
+                rx_stream.close()
         finally:
-            self._device.close()
+            device = getattr(self, '_device', None)
+            if device is not None:
+                device.close()
+
         sa.util.get_logger('source').info('closed')
         super().close()
 
