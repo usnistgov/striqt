@@ -321,9 +321,9 @@ class PlotBackend:
                         labels + ['$k T B$' if i == 0 else ''],
                     )
                     label = cbar.long_axis.get_ticklabels()[-1]
-                    label.set_color("#eec009")
+                    label.set_color('#eec009')
                     label.set_y(meanloc)
-                    cbar.long_axis.get_ticklines()[-1].set_markeredgecolor("#eec009")
+                    cbar.long_axis.get_ticklines()[-1].set_markeredgecolor('#eec009')
                 ind = np.argmin(np.abs(cbar.get_ticks() - meanloc))
                 labels = list(cbar.long_axis.get_ticklabels())
                 labels[ind] = ''

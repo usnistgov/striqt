@@ -645,6 +645,7 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
             ts = None
         else:
             from pandas._libs import tslibs
+
             ts = tslibs.Timestamp(time_ns, unit='ns')
 
         iq.info = specs.SoapyAcquisitionInfo(
