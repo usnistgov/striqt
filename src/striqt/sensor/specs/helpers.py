@@ -90,7 +90,7 @@ def _expand_capture_loops(
     }
     _check_fields(cls, tuple(loop_points.keys()), False)
     defaults = {k: v[0] for k, v in loop_points.items() if len(v) > 0}
-    combinations = itertools.product(*loop_points)
+    combinations = itertools.product(*loop_points.values())
 
     cdicts = typing.cast(tuple[dict, ...], to_builtins(captures))
 

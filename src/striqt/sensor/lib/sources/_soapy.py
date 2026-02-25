@@ -513,7 +513,7 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
             return
 
         self._device.__del__ = lambda: None
-        
+
         try:
             rx_stream = getattr(self, '_rx_stream', None)
             if rx_stream is not None:
