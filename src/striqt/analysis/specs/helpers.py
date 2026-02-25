@@ -276,11 +276,6 @@ def unfreeze(
         return obj  # type: ignore
 
 
-@util.lru_cache()
-def private_fields(cls: type[msgspec.Struct]) -> tuple[str, ...]:
-    return tuple([n for n in cls.__struct_fields__ if n.startswith('_')])
-
-
 def convert_dict(obj: typing.Any, type: type[_T]) -> _T:
     return msgspec.convert(obj, type=type, strict=False, dec_hook=_dec_hook)
 

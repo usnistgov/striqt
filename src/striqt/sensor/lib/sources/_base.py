@@ -47,7 +47,7 @@ _T = typing.TypeVar('_T', bound='SourceBase')
 class AcquiredIQ(sa.dataarrays.AcquiredIQ):
     """extra metadata needed for downstream analysis"""
 
-    info: specs.SourceCoordinates
+    info: specs.AcquisitionInfo
     extra_data: dict[str, typing.Any]
     alias_func: specs.helpers.PathAliasFormatter | None
     source_spec: specs.Source
@@ -351,7 +351,6 @@ class SourceBase(
     _buffers: _ReceiveBuffers
     _is_open: bool | Event = False
     _timeout: float = 10
-    _sweep_time: 'pd.Timestamp | None' = None
 
     def __init__(self, reuse_iq=False, *args: _PS.args, **kwargs: _PS.kwargs):
         open_event = self._is_open = Event()  # first, to serve other threads
@@ -631,7 +630,7 @@ class SourceBase(
         correction=True,
         alias_func: specs.helpers.PathAliasFormatter | None = None,
     ) -> AcquiredIQ:
-        info = specs.SourceCoordinates(source_id=self.id)
+        info = specs.AcquisitionInfo(source_id=self.id)
 
         trigger = get_trigger_from_spec(self.setup_spec, analysis)
 

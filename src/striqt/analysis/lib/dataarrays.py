@@ -255,7 +255,7 @@ def build_dataarray(
 
         da[factory_info.name] = coord.assign_attrs(metadata)
 
-    spec_attrs = delayed.spec.to_dict(skip_private=True)
+    spec_attrs = delayed.spec.to_dict()
     return da.assign_attrs(delayed.info.attrs | spec_attrs | delayed.attrs)
 
 
@@ -432,7 +432,7 @@ def package_analysis(
             assert isinstance(res, DelayedDataArray)
             xarrays[name] = res.compute().to_xarray(expand_dims)
 
-        attrs = capture.to_dict(skip_private=True)
+        attrs = capture.to_dict()
         if isinstance(capture, specs.FilteredCapture):
             attrs['analysis_filter'] = capture.analysis_filter.to_dict()
         ret = xr.Dataset(xarrays, attrs=attrs)

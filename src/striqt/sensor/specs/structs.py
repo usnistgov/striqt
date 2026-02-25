@@ -45,10 +45,6 @@ class SensorCapture(Capture, frozen=True, kw_only=True):
     lo_shift: types.LOShift = 'none'
     host_resample: bool = True
     backend_sample_rate: typing.Optional[types.BackendSampleRate] = None
-
-    # a counter used to track the loop index for Repeat(None)
-    _sweep_index: int = 0
-
     adjust_analysis: types.AnalysisAdjustments = msgspec.field(default_factory=dict)
 
 
@@ -185,13 +181,14 @@ class Description(SpecBase, frozen=True, kw_only=True):
 
 
 class LoopBase(SpecBase, tag=str.lower, tag_field='kind', frozen=True, kw_only=True):
-    field: str
+    field: str | None
 
     def get_points(self) -> list:
         raise NotImplementedError
 
 
 class Range(LoopBase, frozen=True, kw_only=True):
+    field: str
     start: float
     stop: float
     step: float
@@ -207,7 +204,7 @@ class Range(LoopBase, frozen=True, kw_only=True):
 
 
 class Repeat(LoopBase, frozen=True, kw_only=True):
-    field: str = '_sweep_index'
+    field: None = None
     count: int = 1
 
     def get_points(self) -> list[int]:
@@ -215,6 +212,7 @@ class Repeat(LoopBase, frozen=True, kw_only=True):
 
 
 class List(LoopBase, frozen=True, kw_only=True):
+    field: str
     values: tuple[typing.Any, ...]
 
     def get_points(self) -> list:
@@ -222,6 +220,7 @@ class List(LoopBase, frozen=True, kw_only=True):
 
 
 class FrequencyBinRange(LoopBase, frozen=True, kw_only=True):
+    field: str
     start: float
     stop: float
     step: float
@@ -307,6 +306,30 @@ AdjustCapturesType = dict[
 ]
 
 
+@_sa.util.lru_cache()
+def _validate_loops(loops: tuple[LoopSpec, ...]):
+    from collections import Counter
+
+    if len(loops) == 0:
+        return
+
+    if loops[0].field is None:
+        named_loops = loops[1:]
+    else:
+        named_loops = loops
+
+    counts = Counter(l.field for l in named_loops)
+
+    if None in counts:
+        raise msgspec.ValidationError('a repeat may only be the outermost (first) loop')
+
+    (which, howmany), *_ = counts.most_common(1)
+    if howmany > 1:
+        raise msgspec.ValidationError(
+            f'more than one loop specified for capture field {which!r}'
+        )
+
+
 class Sweep(SpecBase, typing.Generic[_TS, _TP, _TC], frozen=True, kw_only=True):
     # sweep bindings also accept the following tag field in input files, which
     # msgspec uses to determine the Sweep subclass to instantiate from e.g.
@@ -330,7 +353,6 @@ class Sweep(SpecBase, typing.Generic[_TS, _TP, _TC], frozen=True, kw_only=True):
     __bindings__: typing.ClassVar[typing.Any] = None
 
     def __post_init__(self):
-        from collections import Counter
         from . import helpers
 
         # do this first, so that its result can then also be frozen
@@ -338,13 +360,7 @@ class Sweep(SpecBase, typing.Generic[_TS, _TP, _TC], frozen=True, kw_only=True):
         msgspec.structs.force_setattr(self, 'adjust_captures', fixed_labels)
 
         super().__post_init__()
-
-        if len(self.loops) == 0:
-            return
-
-        (which, howmany), *_ = Counter(l.field for l in self.loops).most_common(1)
-        if howmany > 1:
-            raise TypeError(f'more than one loop of capture field {which!r}')
+        _validate_loops(self.loops)
 
 
 class CalibrationSweep(
@@ -372,17 +388,20 @@ class CalibrationSweep(
             raise ValueError('source.calibration must be None for a calibration sweep')
 
 
-# we really only need a dataclass for internal message-passing,
-# but use msgspec.Struct to support kw_only=True for python < 3.10.
+# we really only need a dataclass for internal message-passing.
+# instead, use msgspec.Struct as dataclass here in order to support
+# kw_only=True for python < 3.10.
 #
 # this does not perform validation, which is left to type-checking for this
 # internal message passing
-class SourceCoordinates(msgspec.Struct, kw_only=True, frozen=True):
+class AcquisitionInfo(msgspec.Struct, kw_only=True, frozen=True):
     """information about an acquired acquisition"""
 
     # duck-type methods and structure of SpecBase
 
     source_id: types.SourceID = ''
+    sweep_index: int | None = None
+    capture_index: int = 0
 
     def replace(self, **attrs) -> _Self:
         """returns a copy of self with changed attributes.
@@ -401,16 +420,16 @@ class SourceCoordinates(msgspec.Struct, kw_only=True, frozen=True):
         return cls(**d)
 
 
-class SoapyAcquisitionCoordinates(SourceCoordinates, kw_only=True, frozen=True):
+class SoapyAcquisitionInfo(AcquisitionInfo, kw_only=True, frozen=True):
     """extra coordinate information returned from an acquisition"""
 
-    sweep_start_time: types.SweepStartTime | None
+    sweep_start_time: types.SweepStartTime | None = None
     start_time: types.StartTime | None
     backend_sample_rate: typing.Optional[types.BackendSampleRate]
     source_id: types.SourceID = ''
 
 
-class FileAcquisitionInfo(SourceCoordinates, kw_only=True, frozen=True):
+class FileAcquisitionInfo(AcquisitionInfo, kw_only=True, frozen=True):
     center_frequency: types.CenterFrequency = float('nan')
     backend_sample_rate: types.BackendSampleRate
     port: types.Port = 0

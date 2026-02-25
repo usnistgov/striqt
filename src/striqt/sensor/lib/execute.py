@@ -21,147 +21,11 @@ from ..specs import _TC, _TP, _TS
 if typing.TYPE_CHECKING:
     from typing_extensions import Unpack
     import xarray as xr
+    import pandas as pd
 else:
     xr = util.lazy_import('xarray')
 
 
-@contextlib.contextmanager
-def _log_progress_contexts(index, count):
-    """set the log context information for reporting progress"""
-
-    contexts = (
-        util.log_capture_context('source', capture_index=index, capture_count=count),
-        util.log_capture_context(
-            'analysis',
-            capture_index=index - 1,
-            capture_count=count,
-        ),
-        util.log_capture_context(
-            'sink',
-            capture_index=index - 2,
-            capture_count=count,
-        ),
-    )
-
-    cm = contextlib.ExitStack()
-
-    with cm:
-        try:
-            for ctx in contexts:
-                cm.enter_context(ctx)
-            yield cm
-        except:
-            cm.close()
-            raise
-
-
-@sa.util.stopwatch('acquire', 'sweep', threshold=0.25)
-def _acquire_both(
-    res: Resources[typing.Any, typing.Any, _TC, _PS, _PC], this: _TC, next_: _TC | None
-) -> sources.AcquiredIQ:
-    """arm and acquire from the source and peripherals.
-
-    Any acquired data returned from the peripherals is merged
-    into the `extra_data` of the returned acquisition struct.
-    """
-
-    assert this is not None
-
-    # source = res['source']
-    # peripherals = res['peripherals']
-    # sweep_spec = res['sweep_spec']
-
-    def arm_both(c: _TC | None):
-        if c is None:
-            return
-
-        source = util.threadpool.submit(res['source'].arm_spec, c)
-        peripherals = util.threadpool.submit(res['peripherals'].arm, c)
-        util.await_and_ignore([source, peripherals], 'arm sensor')
-
-    try:
-        res['source'].capture_spec
-    except AttributeError:
-        arm_both(this)
-
-    analysis = specs.helpers.adjust_analysis(
-        res['sweep_spec'].analysis, this.adjust_analysis
-    )
-
-    iq = util.threadpool.submit(
-        res['source'].acquire,
-        analysis=analysis,
-        correction=False,
-        alias_func=res['alias_func'],
-    )
-    ext_data = util.threadpool.submit(res['peripherals'].acquire, this)
-
-    with util.ExceptionStack('failed to acquire data') as exc:
-        with exc.defer():
-            iq = iq.result()
-        with exc.defer():
-            ext_data = ext_data.result()
-
-    if not isinstance(ext_data, dict):
-        raise TypeError(f'peripheral acquire() returned {type(ext_data)!r}, not dict')
-    if not isinstance(iq, sources.AcquiredIQ):
-        raise TypeError(f'source acquire() returned {type(iq)!r}, not AcquiredIQ')
-
-    arm_both(next_)
-
-    return dataclasses.replace(iq, extra_data=iq.extra_data | ext_data)
-
-
-def _log_cache_info(
-    resources: Resources[_TS, _TP, _TC, _PS, _PC], cache, capture: _TC, result, *_, **__
-):
-    cal = resources['sweep_spec'].source.calibration
-    if cal is None or 'spectrogram' not in cache.name:
-        return
-
-    spg, attrs = result
-
-    xp = sw.util.array_namespace(spg)
-
-    if isinstance(capture, specs.SoapyCapture):
-        info_fields = ('center_frequency', 'port', 'gain')
-    else:
-        info_fields = ('port',)
-
-    desc_kws = {
-        'fields': info_fields,
-        'source_id': resources['source'].id,
-        'adjust_spec': resources['sweep_spec'].adjust_captures,
-    }
-
-    # convert to dB after this function
-    peaks = spg.max(axis=tuple(range(1, spg.ndim)))
-    noise = lookup_system_noise_power(
-        cal,
-        specs.SoapyCapture.from_spec(capture),
-        master_clock_rate=resources['sweep_spec'].source.master_clock_rate,
-        alias_func=resources['alias_func'],
-        B=attrs['noise_bandwidth'],
-        xp=xp,
-    )
-
-    logger = sa.util.get_logger('analysis')
-    capture_splits = specs.helpers.split_capture_ports(capture)
-
-    for c, snr in zip(capture_splits, sw.powtodB(peaks) - noise):
-        if sa.util.is_cupy_array(snr.data):
-            snr = float(snr.data.get())
-        else:
-            snr = float(snr.values)
-        if not abs(snr) < math.inf:
-            continue
-
-        snr_desc = f'{round(snr)} dB max SNR'
-        capture_desc = specs.helpers.describe_capture(c, **desc_kws)
-        logger.info(f'spectrogram ▮ {snr_desc:<14} ▮ {capture_desc}')
-
-
-# spectrogram SNR ▮ 7 dB peak SNR ▮ channel_name='3960 MHz', antenna_name='small_dish', gain=-20.0
 def iterate_sweep(
     resources: Resources[_TS, _TP, _TC, _PS, _PC],
     *,
@@ -231,6 +95,10 @@ def iterate_sweep(
     iq = None
     analysis = None
     captures = specs.helpers.loop_captures(spec, source_id=resources['source'].id)
+    indexer = _AcquisitionIndexer(len(captures))
+
+    if len(spec.loops) > 0 and isinstance(spec.loops[0], specs.Repeat):
+        captures = spec.loops[0].count * captures
 
     if loop:
         capture_iter = itertools.cycle(captures)
@@ -251,7 +119,9 @@ def iterate_sweep(
             if this is None:
                 acquire = None  # last 2 iterations
             else:
-                acquire = util.threadpool.submit(_acquire_both, resources, this, next_)
+                acquire = util.threadpool.submit(
+                    _acquire_both, resources, this, next_, indexer
+                )
 
             if analysis is None:
                 sink = None  # first 2 iterations
@@ -283,3 +153,168 @@ def iterate_sweep(
             yield None
 
         util.propagate_thread_interrupts()
+
+
+@contextlib.contextmanager
+def _log_progress_contexts(index, count):
+    """set the log context information for reporting progress"""
+
+    contexts = (
+        util.log_capture_context('source', capture_index=index, capture_count=count),
+        util.log_capture_context(
+            'analysis',
+            capture_index=index - 1,
+            capture_count=count,
+        ),
+        util.log_capture_context(
+            'sink',
+            capture_index=index - 2,
+            capture_count=count,
+        ),
+    )
+
+    cm = contextlib.ExitStack()
+
+    with cm:
+        try:
+            for ctx in contexts:
+                cm.enter_context(ctx)
+            yield cm
+        except:
+            cm.close()
+            raise
+
+
+class _AcquisitionIndexer:
+    def __init__(self, captures_per_sweep: int):
+        self.capture_count = captures_per_sweep
+        self.sweep_index: int = 0
+        self.capture_index: int = 0
+        self.sweep_start_time: 'pd.Timestamp|None' = None
+
+    def apply(self, info: specs.AcquisitionInfo) -> specs.AcquisitionInfo:
+        """return a copy of `info` with updated indexing variables"""
+        result = info.replace(
+            sweep_index=self.sweep_index, capture_index=self.capture_index
+        )
+
+        if isinstance(info, specs.SoapyAcquisitionInfo):
+            if self.capture_index == 0:
+                self.sweep_start_time = info.start_time
+
+            result = result.replace(sweep_start_time=self.sweep_start_time)
+
+        self.capture_index += 1
+
+        if self.capture_index == self.capture_count:
+            self.capture_index = 0
+            self.sweep_index += 1
+
+        return result
+
+
+@sa.util.stopwatch('acquire', 'sweep', threshold=0.25)
+def _acquire_both(
+    res: Resources[typing.Any, typing.Any, _TC, _PS, _PC],
+    this: _TC,
+    next_: _TC | None,
+    indexer: _AcquisitionIndexer,
+) -> sources.AcquiredIQ:
+    """arm and acquire from the source and peripherals.
+
+    Any acquired data returned from the peripherals is merged
+    into the `extra_data` of the returned acquisition struct.
+    """
+
+    assert this is not None
+
+    def arm_both(c: _TC | None):
+        if c is None:
+            return
+
+        source = util.threadpool.submit(res['source'].arm_spec, c)
+        peripherals = util.threadpool.submit(res['peripherals'].arm, c)
+        util.await_and_ignore([source, peripherals], 'arm sensor')
+
+    try:
+        res['source'].capture_spec
+    except AttributeError:
+        arm_both(this)
+
+    analysis = specs.helpers.adjust_analysis(
+        res['sweep_spec'].analysis, this.adjust_analysis
+    )
+
+    iq = util.threadpool.submit(
+        res['source'].acquire,
+        analysis=analysis,
+        correction=False,
+        alias_func=res['alias_func'],
+    )
+    ext_data = util.threadpool.submit(res['peripherals'].acquire, this)
+
+    with util.ExceptionStack('failed to acquire data') as exc:
+        with exc.defer():
+            iq = iq.result()
+        with exc.defer():
+            ext_data = ext_data.result()
+
+    if not isinstance(ext_data, dict):
+        raise TypeError(f'peripheral acquire() returned {type(ext_data)!r}, not dict')
+    if not isinstance(iq, sources.AcquiredIQ):
+        raise TypeError(f'source acquire() returned {type(iq)!r}, not AcquiredIQ')
+
+    arm_both(next_)
+
+    iq.info = indexer.apply(iq.info)
+    iq.extra_data = iq.extra_data | ext_data
+    return iq
+
+
+def _log_cache_info(
+    resources: Resources[_TS, _TP, _TC, _PS, _PC], cache, capture: _TC, result, *_, **__
+):
+    cal = resources['sweep_spec'].source.calibration
+    if cal is None or 'spectrogram' not in cache.name:
+        return
+
+    spg, attrs = result
+
+    xp = sw.util.array_namespace(spg)
+
+    if isinstance(capture, specs.SoapyCapture):
+        info_fields = ('center_frequency', 'port', 'gain')
+    else:
+        info_fields = ('port',)
+
+    desc_kws = {
+        'fields': info_fields,
+        'source_id': resources['source'].id,
+        'adjust_spec': resources['sweep_spec'].adjust_captures,
+    }
+
+    # convert to dB after this function
+    peaks = spg.max(axis=tuple(range(1, spg.ndim)))
+    noise = lookup_system_noise_power(
+        cal,
+        specs.SoapyCapture.from_spec(capture),
+        master_clock_rate=resources['sweep_spec'].source.master_clock_rate,
+        alias_func=resources['alias_func'],
+        B=attrs['noise_bandwidth'],
+        xp=xp,
+    )
+
+    logger = sa.util.get_logger('analysis')
+    capture_splits = specs.helpers.split_capture_ports(capture)
+
+    for c, snr in zip(capture_splits, sw.powtodB(peaks) - noise):
+        if sa.util.is_cupy_array(snr.data):
+            snr = float(snr.data.get())
+        else:
+            snr = float(snr.values)
+        if not abs(snr) < math.inf:
+            continue
+
+        snr_desc = f'{round(snr)} dB max SNR'
+        capture_desc = specs.helpers.describe_capture(c, **desc_kws)
+        logger.info(f'spectrogram ▮ {snr_desc:<14} ▮ {capture_desc}')

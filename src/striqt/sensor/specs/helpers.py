@@ -75,28 +75,28 @@ def _expand_capture_loops(
 ) -> tuple[_TC, ...]:
     """evaluate the loop specification, and flatten into one list of loops"""
 
-    defaults = {l.field: l.get_points()[0] for l in loops if len(l.get_points()) > 0}
     if only_fields is not None:
         loops = tuple(l for l in loops if l.field in only_fields)
-
-    loop_fields = tuple([loop.field for loop in loops])
 
     if len(captures) == 0 and len(loops) == 0:
         return ()
     if cls is None:
         assert len(captures) > 0
         cls = type(captures[0])
-    _check_fields(cls, loop_fields, False)
     assert issubclass(cls, specs.Capture)
 
-    loop_points = [loop.get_points() for loop in loops]
+    loop_points = {
+        loop.field: loop.get_points() for loop in loops if loop.field is not None
+    }
+    _check_fields(cls, tuple(loop_points.keys()), False)
+    defaults = {k: v[0] for k, v in loop_points.items() if len(v) > 0}
     combinations = itertools.product(*loop_points)
 
     cdicts = typing.cast(tuple[dict, ...], to_builtins(captures))
 
     result = []
     for values in combinations:
-        updates = dict(zip(loop_fields, values))
+        updates = dict(zip(loop_points.keys(), values))
         if len(cdicts) > 0:
             # iterate specified captures if available
             new = (defaults | c | updates for c in cdicts)

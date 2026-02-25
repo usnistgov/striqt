@@ -639,15 +639,7 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
             with sw.util._lazy_import_locks['pd']:
                 ts = pd.Timestamp(time_ns, unit='ns')
 
-        if self._sweep_time is None:
-            self._sweep_time = ts
-            self._sweep_index = self.capture_spec._sweep_index
-        elif self._sweep_index != self.capture_spec._sweep_index:
-            self._sweep_time = ts
-            self._sweep_index = self.capture_spec._sweep_index
-
-        iq.info = specs.SoapyAcquisitionCoordinates(
-            sweep_start_time=self._sweep_time,
+        iq.info = specs.SoapyAcquisitionInfo(
             start_time=ts,
             backend_sample_rate=self.get_resampler()['fs_sdr'],
             **iq.info.to_dict(),

@@ -39,13 +39,9 @@ class SpecBase(
             return self
         return msgspec.structs.replace(self, **attrs).validate()
 
-    def to_dict(self, skip_private=False, unfreeze=False) -> dict:
+    def to_dict(self, unfreeze=False) -> dict:
         """return a dictinary representation of `self`"""
         map = msgspec.to_builtins(self, enc_hook=helpers._enc_hook)
-
-        if skip_private:
-            for name in helpers.private_fields(type(self)):
-                del map[name]
 
         if unfreeze:
             depths = helpers.inspect_freeze_depths(type(self))

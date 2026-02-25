@@ -52,7 +52,7 @@ class EvaluationOptions(sa.EvaluationOptions[sa.dataarrays._TA], kw_only=True):
 class DelayedDataset:
     delayed: dict[str, sa.dataarrays.DelayedDataArray]
     capture: specs.SensorCapture
-    extra_coords: specs.SourceCoordinates
+    extra_coords: specs.AcquisitionInfo
     extra_data: dict[str, typing.Any]
     config: EvaluationOptions
 
@@ -93,7 +93,7 @@ def concat_time_dim(datasets: list['xr.Dataset'], time_dim: str) -> 'xr.Dataset'
 
 def build_dataset_attrs(sweep: specs.Sweep):
     attrs: dict[str, typing.Any] = {}
-    as_dict = sweep.to_dict(skip_private=True, unfreeze=True)
+    as_dict = sweep.to_dict(unfreeze=True)
 
     if isinstance(sweep.description, str):
         attrs['description'] = sweep.description
@@ -115,7 +115,7 @@ def build_dataset_attrs(sweep: specs.Sweep):
 
 def build_capture_coords(
     capture: specs.SensorCapture,
-    info: specs.SourceCoordinates,
+    info: specs.AcquisitionInfo,
 ) -> 'xr.Coordinates|None':
     captures = specs.helpers.split_capture_ports(capture)
 
@@ -129,7 +129,7 @@ def build_capture_coords(
     info_dict = info.to_dict()
 
     for c in captures:
-        capture_entries = info_dict | c.to_dict(skip_private=True)
+        capture_entries = info_dict | c.to_dict()
         del capture_entries['adjust_analysis']
 
         for field, value in capture_entries.items():
@@ -506,7 +506,7 @@ def unstack_dataset(
 @sa.util.lru_cache()
 def _coord_template(
     capture_cls: type[specs.SensorCapture],
-    info_cls: type[specs.SourceCoordinates],
+    info_cls: type[specs.AcquisitionInfo],
     port_count: int,
 ) -> 'xr.Coordinates':
     """returns a cached xr.Coordinates object to use as a template for data results"""
