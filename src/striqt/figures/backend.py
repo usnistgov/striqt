@@ -9,6 +9,7 @@ import striqt.waveform as sw
 
 if typing.TYPE_CHECKING:
     import matplotlib as mpl
+    import numpy as np
     import xarray as xr
     import xarray.plot
     import xarray.core.types
@@ -295,7 +296,7 @@ class PlotBackend:
         data: 'xr.Dataset',
         var_name: str,
         grid: 'xarray.plot.FacetGrid',
-        horizontal=True,
+        where: typing.Literal['x'] | typing.Literal['y'] | typing.Literal['colorbar'],
     ):
         noise = util.get_system_noise(data, var_name)
 
@@ -303,7 +304,30 @@ class PlotBackend:
             return
         assert not isinstance(noise, (int, float))
         for pow, ax in zip(noise.values.flat, grid.axs.flat):
-            if horizontal:
+            if where == 'x':
                 ax.axhline(pow, color='k', linestyle=':')
-            else:
+            elif where == 'y':
                 ax.axvline(pow, color='k', linestyle=':')
+            elif where == 'colorbar':
+                cbar = grid.cbar
+                if cbar is None:
+                    raise TypeError('no colorbar on facet grid')
+
+                meanloc = noise.values.mean()
+                for i, n in enumerate(noise.values.tolist()):
+                    labels: list[typing.Any] = cbar.long_axis.get_ticklabels()
+                    cbar.long_axis.set_ticks(
+                        cbar.get_ticks().tolist() + [n],
+                        labels + ['$k T B$' if i == 0 else ''],
+                    )
+                    label = cbar.long_axis.get_ticklabels()[-1]
+                    label.set_color("#eec009")
+                    label.set_y(meanloc)
+                    cbar.long_axis.get_ticklines()[-1].set_markeredgecolor("#eec009")
+                ind = np.argmin(np.abs(cbar.get_ticks() - meanloc))
+                labels = list(cbar.long_axis.get_ticklabels())
+                labels[ind] = ''
+                cbar.long_axis.set_ticklabels(labels)
+
+            else:
+                raise TypeError('where must be "x", "y", or "colorbar"')

@@ -87,13 +87,15 @@ def cellular_5g_pss_correlation(
 
 
 @_register_data_var_plot
-def cellular_5g_ssb_spectrogram(data: '_DS', plotter: '_PlotBackend'):
+def cellular_5g_ssb_spectrogram(data: '_DS', plotter: '_PlotBackend', noise_line=True):
     name = _sa.measurements.cellular_5g_ssb_spectrogram.__name__
     x = 'cellular_ssb_symbol_index'
     y = 'cellular_ssb_baseband_frequency'
     sub = data[name].isel(cellular_ssb_index=0)
     vmin = util.get_system_noise(data, name, 6)
     grid = plotter.heatmap(sub, x=x, y=y, vmin=vmin, vstep=2)
+    if noise_line:
+        plotter.mark_noise_level(data, name, grid, where='colorbar')
     plotter.finish(grid)
 
 
@@ -111,7 +113,7 @@ def cellular_resource_power_histogram(
     sub = util.select_histogram_bins(data, name, x)
     grid = plotter.line(sub, x=x, yscale=yscale, hue=hue)
     if noise_line:
-        plotter.mark_noise_level(data, x, grid, horizontal=False)
+        plotter.mark_noise_level(data, x, grid, where='y')
     return plotter.finish(grid)
 
 
@@ -129,7 +131,7 @@ def channel_power_histogram(
 
     grid = plotter.line(sub, x=x, yscale=yscale, hue=hue)
     if noise_line:
-        plotter.mark_noise_level(data, x, grid, horizontal=False)
+        plotter.mark_noise_level(data, x, grid, where='y')
     return plotter.finish(grid)
 
 
@@ -144,7 +146,7 @@ def channel_power_time_series(
     name = _sa.measurements.channel_power_time_series.__name__
     grid = plotter.line(data[name], x='time_elapsed', hue=hue)
     if noise_line:
-        plotter.mark_noise_level(data, name, grid, horizontal=True)
+        plotter.mark_noise_level(data, name, grid, where='x')
     return plotter.finish(grid)
 
 
@@ -165,7 +167,7 @@ def cyclic_channel_power(data: '_DS', plotter: '_PlotBackend', *, noise_line=Tru
         backend.plot_cyclic_channel_power(sub.sel({coords['col']: col}), ax=ax)
 
     if noise_line:
-        plotter.mark_noise_level(data, name, grid, horizontal=True)
+        plotter.mark_noise_level(data, name, grid, where='x')
 
     return plotter.finish(grid)
 
@@ -183,18 +185,20 @@ def power_spectral_density(
         hue = 'persistence_statistics'
     grid = plotter.line(data[name], x=x, hue=hue)
     if noise_line:
-        plotter.mark_noise_level(data, name, grid, horizontal=True)
+        plotter.mark_noise_level(data, name, grid, where='x')
     return plotter.finish(grid)
 
 
 @_register_data_var_plot
-def spectrogram(data: '_DS', plotter: '_PlotBackend'):
+def spectrogram(data: '_DS', plotter: '_PlotBackend', noise_line=True):
     name = _sa.measurements.spectrogram.__name__
     sub = data[name].dropna('spectrogram_baseband_frequency')
     x = _sa.measurements._spectrogram.spectrogram_time.__name__
     y = _sa.measurements.shared.spectrogram_baseband_frequency.__name__
     vmin = util.get_system_noise(data, name, 6)
     grid = plotter.heatmap(sub, x=x, y=y, vmin=vmin, vstep=2)
+    if noise_line:
+        plotter.mark_noise_level(data, name, grid, where='colorbar')
     plotter.finish(grid)
 
 
@@ -211,7 +215,7 @@ def spectrogram_histogram(
     sub = util.select_histogram_bins(data, name, x)
     grid = plotter.line(sub, x=x, yscale=yscale)
     if noise_line:
-        plotter.mark_noise_level(data, x, grid, horizontal=True)
+        plotter.mark_noise_level(data, x, grid, where='x')
     return plotter.finish(grid)
 
 
