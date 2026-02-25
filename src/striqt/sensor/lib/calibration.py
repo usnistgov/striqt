@@ -416,7 +416,8 @@ class YFactorSink(_sinks.SinkBase):
         # re-index by radio setting rather than capture
         port = int(data[0].port)
 
-        fields = list(data[0].attrs['loops'])
+        loops = data[0].attrs['loops']
+        fields = [l['field'] for l in loops if l['field'] is not None]
         if 'sample_rate' in fields:
             i = fields.index('sample_rate')
             fields[i] = 'backend_sample_rate'
