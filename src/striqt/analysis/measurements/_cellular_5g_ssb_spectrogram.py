@@ -41,7 +41,7 @@ def cellular_ssb_baseband_frequency(
         nfft // 2,
         capture.sample_rate,
         spec.sample_rate,
-        offset=frequency_offset,
+        offset=spec.frequency_offset,
         axis=0,
     )
 

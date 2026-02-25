@@ -118,9 +118,9 @@ def _expand_capture_loops(
         )
 
     if loop_only_nyquist:
-        captures = tuple(c for c in captures if c.sample_rate >= c.analysis_bandwidth)
-
-    return tuple()
+        return tuple(c for c in captures if c.sample_rate >= c.analysis_bandwidth)
+    else:
+        return captures
 
 
 def loop_captures(
