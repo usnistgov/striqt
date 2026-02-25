@@ -653,8 +653,6 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
             **iq.info.to_dict(),
         )
 
-        print(iq.info)
-
         iq.extra_data.update(compute_overload_info(samples, self.setup_spec, capture))
         iq.extra_data.update(self.read_peripherals())
 

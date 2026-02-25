@@ -115,21 +115,21 @@ def build_dataset_attrs(sweep: specs.Sweep):
 
 def build_capture_coords(
     capture: specs.SensorCapture,
-    info: specs.AcquisitionInfo,
+    extras: specs.AcquisitionInfo,
 ) -> 'xr.Coordinates|None':
     captures = specs.helpers.split_capture_ports(capture)
 
     if len(captures) == 0:
         return None
 
-    coords = _coord_template(type(captures[0]), type(info), len(captures))
+    coords = _coord_template(type(captures[0]), type(extras), len(captures))
     coords = coords.copy(deep=True)
     changes = defaultdict(list)
 
-    info_dict = info.to_dict()
+    extra_coords = extras.to_dict()
 
     for c in captures:
-        capture_entries = info_dict | c.to_dict()
+        capture_entries = c.to_dict() | extra_coords
         del capture_entries['adjust_analysis']
 
         for field, value in capture_entries.items():
