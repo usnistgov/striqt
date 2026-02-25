@@ -514,12 +514,13 @@ class SoapySourceBase(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
 
         self._device.__del__ = lambda: None
 
+        device = getattr(self, '_device', None)
+        rx_stream = getattr(self, '_rx_stream', None)
+
         try:
-            rx_stream = getattr(self, '_rx_stream', None)
-            if rx_stream is not None:
-                rx_stream.close()
+            if device is not None and rx_stream is not None:
+                rx_stream.close(device)
         finally:
-            device = getattr(self, '_device', None)
             if device is not None:
                 device.close()
 
