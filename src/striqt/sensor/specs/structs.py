@@ -298,11 +298,12 @@ class CaptureRemap(SpecBase, frozen=True, kw_only=True):
     default: typing.Any = msgspec.UNSET
 
 
-_AdjustSourceCapturesMap = dict[
-    str, typing.Union[CaptureRemap, float, int, str, bool, None]
-]
+_CaptureMapScalarType = typing.Union[float, int, str, bool, None]
+_AdjustSourceCapturesMap = dict[str, typing.Union[CaptureRemap, _CaptureMapScalarType]]
+_AdjustSourceCapturesTup = tuple[str, typing.Union[CaptureRemap, _CaptureMapScalarType]]
 AdjustCapturesType = dict[
-    typing.Union[types.SourceID, typing.Literal['defaults']], _AdjustSourceCapturesMap
+    typing.Union[types.SourceID, typing.Literal['defaults']],
+    typing.Union[_AdjustSourceCapturesMap, _AdjustSourceCapturesTup]
 ]
 
 

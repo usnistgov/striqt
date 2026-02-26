@@ -104,7 +104,7 @@ def build_dataset_attrs(sweep: specs.Sweep):
     attrs['captures'] = [c.to_dict(True) for c in sweep.captures]
 
     for field, entry in as_dict.items():
-        if field in attrs or field == 'adjust_captures':
+        if field == 'adjust_captures':
             # label specs with tuple keys are not supported by zarr (at least in 2.x)
             continue
         else:

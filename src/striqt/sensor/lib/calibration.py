@@ -379,14 +379,6 @@ class YFactorSink(_sinks.SinkBase):
             return None
 
     def open(self) -> None:
-        path = self._get_path()
-
-        if path is not None and not self.force and Path(path).exists():
-            print(f'Reading existing calibration data from {str(path)!r}')
-            self.prev_corrections = _io.read_calibration(path)
-        else:
-            self.prev_corrections = None
-
         self.sweep_start_time = None
 
     def close(self, *exc_info):
@@ -441,21 +433,6 @@ class YFactorSink(_sinks.SinkBase):
         corrections = compute_y_factor_corrections(by_field)
 
         path = self._get_path()
-
-        if self.prev_corrections is None or path is None or self.force:
-            pass
-        elif Path(path).exists():
-            prev_port_key = _get_port_variable(self.prev_corrections)
-
-            print('merging results from previous file')
-            if port in self.prev_corrections[prev_port_key]:
-                self.prev_corrections = self.prev_corrections.drop_sel(
-                    {prev_port_key: port}
-                )
-
-            corrections = _xr.concat(
-                [corrections, self.prev_corrections], dim=_compute.PORT_DIM
-            )
 
         for port, _ in corrections.groupby('port'):
             print(f'calibration results on port {port} (shown for max gain)')
