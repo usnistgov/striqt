@@ -25,14 +25,15 @@ else:
     _xr = _util.lazy_import('xarray')
 
 
-class BatchTracker:
+class _BatchTracker:
     size: int
 
     def __init__(self, captures: tuple[_specs.SensorCapture, ...]):
         min_size = len(captures)
         sizes = _specs.helpers.concat_group_sizes(captures, min_size=min_size)
         self._cycler = _itertools.cycle(sizes)
-        self.next()
+        if len(sizes) > 0 and sizes[0] > 0:
+            self.next()
 
     def next(self) -> int:
         """step to the next batch size in the cycle"""
@@ -65,7 +66,7 @@ class SinkBase(_typing.Generic[_specs._TC]):
         # decide group sizes
         source_id = _sources.get_source_id(sweep_spec.source)
         captures = _specs.helpers.loop_captures(sweep_spec, source_id)
-        self._batch = BatchTracker(captures)
+        self._batch = _BatchTracker(captures)
 
     def pop(self) -> list['_xr.Dataset']:
         result = self._pending_data
