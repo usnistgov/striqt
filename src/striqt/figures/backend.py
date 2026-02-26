@@ -312,22 +312,29 @@ class PlotBackend:
                 cbar = grid.cbar
                 if cbar is None:
                     raise TypeError('no colorbar on facet grid')
+                
+                if hasattr(cbar, 'long_axis'):
+                    # newer matplotlib
+                    long_axis = cbar.long_axis # type: ignore
+                else:
+                    # older matplotlib
+                    long_axis = cbar.yaxis # type: ignore
 
                 meanloc = noise.values.mean()
                 for i, n in enumerate(noise.values.tolist()):
-                    labels: list[typing.Any] = cbar.long_axis.get_ticklabels()
-                    cbar.long_axis.set_ticks(
+                    labels: list[typing.Any] = long_axis.get_ticklabels()
+                    long_axis.set_ticks(
                         cbar.get_ticks().tolist() + [n],
                         labels + ['$k T B$' if i == 0 else ''],
                     )
-                    label = cbar.long_axis.get_ticklabels()[-1]
+                    label = long_axis.get_ticklabels()[-1]
                     label.set_color('#eec009')
                     label.set_y(meanloc)
-                    cbar.long_axis.get_ticklines()[-1].set_markeredgecolor('#eec009')
+                    long_axis.get_ticklines()[-1].set_markeredgecolor('#eec009')
                 ind = np.argmin(np.abs(cbar.get_ticks() - meanloc))
-                labels = list(cbar.long_axis.get_ticklabels())
+                labels = list(long_axis.get_ticklabels())
                 labels[ind] = ''
-                cbar.long_axis.set_ticklabels(labels)
+                long_axis.set_ticklabels(labels)
 
             else:
                 raise TypeError('where must be "x", "y", or "colorbar"')
