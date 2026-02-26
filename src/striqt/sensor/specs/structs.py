@@ -303,7 +303,7 @@ _AdjustSourceCapturesMap = dict[str, typing.Union[CaptureRemap, _CaptureMapScala
 _AdjustSourceCapturesTup = tuple[str, typing.Union[CaptureRemap, _CaptureMapScalarType]]
 AdjustCapturesType = dict[
     typing.Union[types.SourceID, typing.Literal['defaults']],
-    typing.Union[_AdjustSourceCapturesMap, _AdjustSourceCapturesTup]
+    typing.Union[_AdjustSourceCapturesMap, _AdjustSourceCapturesTup],
 ]
 
 

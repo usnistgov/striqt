@@ -19,7 +19,7 @@ from striqt.analysis.specs.helpers import _dec_hook, frozendict
 
 from . import structs as specs
 from . import types
-from .structs import _TS, _TC, _TP
+from .structs import _TS, _TC, _TP, _AdjustSourceCapturesMap, Sweep
 from ..lib import util
 
 
@@ -262,19 +262,32 @@ def max_by_frequency(
     return map
 
 
+_AdjustCaptureMap = dict[
+    typing.Union[types.SourceID, typing.Literal['defaults']], _AdjustSourceCapturesMap
+]
+
+
+def _get_capture_adjust_map(spec: specs.AdjustCapturesType) -> _AdjustCaptureMap:
+    if isinstance(spec, tuple):
+        return dict(zip(source_fields))  # type: ignore
+    else:
+        return spec  # type: ignore
+
+
 @sa.util.lru_cache()
 def _get_capture_adjust_fields(
     spec: specs.AdjustCapturesType, source_id: str | None
 ) -> dict[str, str | specs.CaptureRemap]:
     fields = {}
+    map = _get_capture_adjust_map(spec)
 
     # the globals spec may use the source-specific spec
-    for name, value in spec.get('defaults', {}).items():
+    for name, value in map.get('defaults', {}).items():
         if name not in fields:
             fields[name] = value
 
     if isinstance(source_id, str):
-        source_fields = spec.get(source_id, {})
+        source_fields = map.get(source_id, {})
         fields.update(source_fields)
 
     return fields
@@ -408,7 +421,7 @@ def adjust_captures(
                     f'for source {source_id!r}'
                 )
 
-    defaults = adjust_spec.get('defaults', {})
+    defaults = _get_capture_adjust_map(adjust_spec).get('defaults', {})
     default_fields = {
         k: v for k, v in defaults.items() if isinstance(v, specs.CaptureRemap)
     }
@@ -525,8 +538,9 @@ def _convert_label_lookup_keys(sweep: specs.Sweep) -> specs.AdjustCapturesType:
     capture_cls = get_capture_type(type(sweep))
 
     field_types = {f.name: f.type for f in msgspec.structs.fields(capture_cls)}
+    adjust_map = _get_capture_adjust_map(sweep.adjust_captures)
 
-    for source_id, lookup_map in sweep.adjust_captures.items():
+    for source_id, lookup_map in adjust_map.items():
         if source_id != 'defaults':
             try:
                 bytes.fromhex(source_id)

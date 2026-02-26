@@ -312,13 +312,13 @@ class PlotBackend:
                 cbar = grid.cbar
                 if cbar is None:
                     raise TypeError('no colorbar on facet grid')
-                
+
                 if hasattr(cbar, 'long_axis'):
                     # newer matplotlib
-                    long_axis = cbar.long_axis # type: ignore
+                    long_axis = cbar.long_axis  # type: ignore
                 else:
                     # older matplotlib
-                    long_axis = cbar.yaxis # type: ignore
+                    long_axis = cbar.yaxis  # type: ignore
 
                 meanloc = noise.values.mean()
                 for i, n in enumerate(noise.values.tolist()):

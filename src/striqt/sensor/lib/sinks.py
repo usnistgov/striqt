@@ -8,6 +8,7 @@ __all__ = [
     'ZarrTimeAppendSink',
 ]
 
+import itertools as _itertools
 import typing as _typing
 
 from . import compute as _compute
@@ -22,6 +23,21 @@ if _typing.TYPE_CHECKING:
     import xarray as _xr
 else:
     _xr = _util.lazy_import('xarray')
+
+
+class BatchTracker:
+    size: int
+
+    def __init__(self, captures: tuple[_specs.SensorCapture, ...]):
+        min_size = len(captures)
+        sizes = _specs.helpers.concat_group_sizes(captures, min_size=min_size)
+        self._cycler = _itertools.cycle(sizes)
+        self.next()
+
+    def next(self) -> int:
+        """step to the next batch size in the cycle"""
+        self.size = next(self._cycler)
+        return self.size
 
 
 class SinkBase(_typing.Generic[_specs._TC]):
@@ -49,10 +65,7 @@ class SinkBase(_typing.Generic[_specs._TC]):
         # decide group sizes
         source_id = _sources.get_source_id(sweep_spec.source)
         captures = _specs.helpers.loop_captures(sweep_spec, source_id)
-        min_size = len(sweep_spec.captures)  # number of unlooped captures
-        self._group_sizes = _specs.helpers.concat_group_sizes(
-            captures, min_size=min_size
-        )
+        self._batch = BatchTracker(captures)
 
     def pop(self) -> list['_xr.Dataset']:
         result = self._pending_data
@@ -152,9 +165,9 @@ class ZarrCaptureSink(ZarrSinkBase):
     def append(self, capture_result: _compute.DelayedDataset):
         ret = super().append(capture_result)
 
-        if len(self._pending_data) == self._group_sizes[0]:
+        if len(self._pending_data) == self._batch.size:
             self.flush()
-            self._group_sizes.pop(0)
+            self._batch.next()
         else:
             _sa.util.get_logger('sink').debug('queued')
 
@@ -213,9 +226,9 @@ class ZarrTimeAppendSink(ZarrSinkBase):
     def append(self, capture_result):
         ret = super().append(capture_result)
 
-        if len(self._pending_data) == self._group_sizes[0]:
+        if len(self._pending_data) == self._batch.size:
             self.flush()
-            self._group_sizes.pop(0)
+            self._batch.next()
         return ret
 
     def flush(self):
