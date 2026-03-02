@@ -159,7 +159,7 @@ def dataarray_stub(
     coord_factories: tuple[register.CallableCoordinateFactory, ...],
     dtype: str,
     expand_dims: tuple[str, ...] | None = None,
-) -> typing.Any:
+) -> 'xr.DataArray':
     """return an empty array of type `cls`"""
 
     coord_stubs = {}
@@ -183,7 +183,15 @@ def dataarray_stub(
 
 
 def _reraise_coord_error(*, exc, coord, factory_info, data, name):
-    template_shape = tuple([coord.indexes[d].shape for d in factory_info.dims])
+    template_shape = []
+    for d in factory_info.dims:
+        shape = coord.indexes[d].shape
+        if isinstance(shape, tuple):
+            template_shape.extend(shape)
+        else:
+            template_shape.append(shape)
+    template_shape = tuple(template_shape)
+
     data_shape = np.array(data).shape
 
     if template_shape == data_shape:
@@ -214,7 +222,7 @@ def build_dataarray(
     _validate_delayed_ndim(delayed)
 
     # to bypass initialization overhead, grow from the empty template
-    pad = {dim: [0, data.shape[i]] for i, dim in enumerate(template.dims)}
+    pad = {dim: (0, data.shape[i]) for i, dim in enumerate(template.dims)}
     da = template.pad(pad)
 
     try:
@@ -242,7 +250,8 @@ def build_dataarray(
         arr, metadata = register.normalize_factory_return(ret, qualname)
 
         try:
-            coord.indexes[factory_info.dims[0]].values[:] = arr
+            idx = coord.indexes[factory_info.dims[0]]
+            idx.values[:] = arr
         except ValueError as ex:
             exc = ex
         else:

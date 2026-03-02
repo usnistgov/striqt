@@ -18,7 +18,6 @@ from . import util
 if typing.TYPE_CHECKING:
     import numpy as np
     import xarray as xr
-    from striqt.analysis.lib.io import StoreType
 else:
     np = util.lazy_import('numpy')
     xr = util.lazy_import('xarray')
@@ -39,7 +38,7 @@ def open_store(
     *,
     alias_func: specs.helpers.PathAliasFormatter | None = None,
     force=False,
-) -> StoreType:
+) -> sa.io.StoreType:
     spec_path = spec.path
 
     if alias_func is not None:

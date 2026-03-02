@@ -248,7 +248,11 @@ class Sink(SpecBase, frozen=True, kw_only=True):
     log_path: typing.Optional[str] = None
     log_level: str = 'info'
     store: types.StoreFormat = 'directory'
+
+    # zarr store tuning parameters
     max_threads: typing.Optional[int] = None
+    batched_write_count: int = 1
+    max_chunk_bytes: int = 50000000
 
 
 class Extension(SpecBase, frozen=True, kw_only=True):
@@ -324,7 +328,12 @@ def _validate_loops(loops: tuple[LoopSpec, ...]):
     if None in counts:
         raise msgspec.ValidationError('a repeat may only be the outermost (first) loop')
 
-    (which, howmany), *_ = counts.most_common(1)
+    common = counts.most_common(1)
+
+    if len(common) == 0:
+        return
+
+    (which, howmany), *_ = common
     if howmany > 1:
         raise msgspec.ValidationError(
             f'more than one loop specified for capture field {which!r}'

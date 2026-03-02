@@ -121,9 +121,12 @@ def register_extra_windows():
     """add 'acg', 'cosh', 'modified_bessel', 'knab', and 'taylor' windows to
     the window functions registered for access by `scipy.signal.get_window`.
     """
-    from scipy import signal
+    import scipy.signal.windows._windows as _windows
 
-    registry = signal.windows._windows._win_equiv
+    if hasattr(_windows, '_win_equiv'):
+        registry: dict[str, typing.Callable] = _windows._win_equiv  # type: ignore
+    else:
+        registry: dict[str, typing.Callable] = _windows._WIN_FUNCS  # type: ignore
     registry['acg'] = acg
     registry['cosh'] = cosh
     registry['modified_bessel'] = modified_bessel

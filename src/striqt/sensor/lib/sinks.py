@@ -28,9 +28,9 @@ else:
 class _BatchTracker:
     size: int
 
-    def __init__(self, captures: tuple[_specs.SensorCapture, ...]):
-        min_size = len(captures)
+    def __init__(self, captures: tuple[_specs.SensorCapture, ...], min_size: int):
         sizes = _specs.helpers.concat_group_sizes(captures, min_size=min_size)
+
         self._cycler = _itertools.cycle(sizes)
         if len(sizes) > 0 and sizes[0] > 0:
             self.next()
@@ -66,7 +66,9 @@ class SinkBase(_typing.Generic[_specs._TC]):
         # decide group sizes
         source_id = _sources.get_source_id(sweep_spec.source)
         captures = _specs.helpers.loop_captures(sweep_spec, source_id)
-        self._batch = _BatchTracker(captures)
+        if len(sweep_spec.loops) > 0 and isinstance(sweep_spec.loops[0], _specs.Repeat):
+            captures = sweep_spec.loops[0].count * captures
+        self._batch = _BatchTracker(captures, min_size=sweep_spec.sink.batched_write_count)
 
     def pop(self) -> list['_xr.Dataset']:
         result = self._pending_data
@@ -202,7 +204,12 @@ class ZarrCaptureSink(ZarrSinkBase):
             _util.log_capture_context('sink', capture_index=count - 1),
             _sa.util.stopwatch(f'sync to {path}', 'sink'),
         ):
-            _io.dump_data(self.store, dataset, max_threads=self._spec.max_threads)
+            _io.dump_data(
+                self.store,
+                dataset,
+                max_threads=self._spec.max_threads,
+                chunk_bytes=self._spec.max_chunk_bytes,
+            )
 
             for i in range(count - len(data_list), count):
                 with _util.log_capture_context('sink', capture_index=i):
