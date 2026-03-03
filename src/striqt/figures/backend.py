@@ -188,7 +188,7 @@ class PlotBackend:
         x = grid._x_var = kwargs['x']  # type: ignore
         y = grid._y_var = kwargs.get('y', None)  # type: ignore
         ydata = data if y is None else data[y]
-        grid._dpi = _select_dpi(grid, data[x], ydata, 150, 300)  # type: ignore
+        grid._dpi = _select_dpi(grid, data[x], ydata, 300, 600)  # type: ignore
 
         return grid
 
@@ -205,7 +205,7 @@ class PlotBackend:
 
         grid._x_var = kwargs['x']  # type: ignore
         grid._y_var = None
-        grid._dpi = _select_dpi(grid, data[grid._x_var], None, min_=150, max_=300)  # type: ignore
+        grid._dpi = _select_dpi(grid, data[grid._x_var], None, min_=300, max_=600)  # type: ignore
 
         return grid
 
