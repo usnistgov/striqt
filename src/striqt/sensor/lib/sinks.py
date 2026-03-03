@@ -68,7 +68,9 @@ class SinkBase(_typing.Generic[_specs._TC]):
         captures = _specs.helpers.loop_captures(sweep_spec, source_id)
         if len(sweep_spec.loops) > 0 and isinstance(sweep_spec.loops[0], _specs.Repeat):
             captures = sweep_spec.loops[0].count * captures
-        self._batch = _BatchTracker(captures, min_size=sweep_spec.sink.batched_write_count)
+        self._batch = _BatchTracker(
+            captures, min_size=sweep_spec.sink.batched_write_count
+        )
 
     def pop(self) -> list['_xr.Dataset']:
         result = self._pending_data

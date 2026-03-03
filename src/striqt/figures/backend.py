@@ -181,7 +181,7 @@ class PlotBackend:
             cmap=_cmap,
             norm=norm,
             rasterized=rasterized,
-            interpolation='nearest'
+            interpolation='nearest',
         )
 
         for ax in grid.axs.flat:
@@ -193,7 +193,7 @@ class PlotBackend:
         x = grid._x_var = kwargs['x']  # type: ignore
         y = grid._y_var = kwargs.get('y', None)  # type: ignore
         ydata = data if y is None else data[y]
-        grid._dpi = _select_dpi(grid, data[x], ydata, min_=120, 300)  # type: ignore
+        grid._dpi = _select_dpi(grid, data[x], ydata, min_=120, max_=300)  # type: ignore
 
         return grid
 
