@@ -16,7 +16,7 @@ dependencies = [
     "numba",
     "numexpr~=2.8",
     "numpy>=1.21,<3",
-    "pandas>=1.5,<3",
+    "pandas>=1.5",
     "psutil>=7.0.0",
     "requests>=2.32",
     "scipy>=1.13",

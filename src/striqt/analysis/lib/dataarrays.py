@@ -251,7 +251,7 @@ def build_dataarray(
 
         try:
             idx = coord.indexes[factory_info.dims[0]]
-            idx.values[:] = arr
+            idx._values[:] = arr
         except ValueError as ex:
             exc = ex
         else:
