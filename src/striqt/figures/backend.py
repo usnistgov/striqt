@@ -171,7 +171,7 @@ class PlotBackend:
             _cmap = mpl.colormaps.get_cmap(cmap).resampled(len(levels) - 1)
             norm = colors.BoundaryNorm(levels, ncolors=_cmap.N)
 
-        grid = data.plot.pcolormesh(
+        grid = data.plot.imshow(
             **coords,
             cmap=_cmap,
             norm=norm,
@@ -285,6 +285,7 @@ class PlotBackend:
                 **data.attrs,
             )
             path = Path(self.output_dir) / filename[0]
+            print(dpi)
             grid.fig.savefig(path, dpi=dpi)
 
         if not self.interactive:
