@@ -13,7 +13,9 @@ if typing.TYPE_CHECKING:
     import matplotlib.figure
     import numpy as np
     import xarray as xr
+    import dask.array as dask_array
 else:
+    dask_array = sa.util.lazy_import('dask.array')
     xr = sa.util.lazy_import('xarray')
     np = sa.util.lazy_import('numpy')
 
@@ -83,7 +85,11 @@ def _coords_to_dicts(
         else:
             value = var.data
         for d, v in zip(result, value):
-            if np.issubdtype(dtype, np.datetime64):
+            if isinstance(v, dask_array.Array):
+                v = v.compute()
+            if isinstance(v, (str, float, int)):
+                d[k] = v
+            elif np.issubdtype(dtype, np.datetime64):
                 d[k] = np.datetime_as_string(v, unit='ms').item()
             elif np.issubdtype(dtype, np.number):
                 prefix = UNIT_PREFIXES.get(k, None)
