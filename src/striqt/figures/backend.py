@@ -221,6 +221,7 @@ class PlotBackend:
         x = grid._x_var
         y = grid._y_var
         dpi: int = getattr(grid, '_dpi', 150)
+        print('grid dpi: ', dpi)
 
         if self.opts.suptitle_fmt is not None:
             suptitle = labels.label_by_coord(
@@ -285,7 +286,6 @@ class PlotBackend:
                 **data.attrs,
             )
             path = Path(self.output_dir) / filename[0]
-            print(dpi)
             grid.fig.savefig(path, dpi=dpi)
 
         if not self.interactive:
