@@ -176,7 +176,7 @@ class PlotBackend:
             cmap=_cmap,
             norm=norm,
             rasterized=rasterized,
-            interpolation='kaiser',
+            interpolation='none',
         )
 
         for ax in grid.axs.flat:
