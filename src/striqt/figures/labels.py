@@ -98,7 +98,7 @@ def _coords_to_dicts(
                 )
             elif np.issubdtype(dtype, np.str_):
                 d[k] = v.item().replace('_', ' ')
-                if title_case:
+                if title_case and d[k] == d[k].lower():
                     d[k] = d[k].title()
             elif np.issubdtype(dtype, np.bool):
                 d[k] = str(v.item())
