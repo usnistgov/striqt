@@ -33,8 +33,7 @@ def _select_dpi(grid, x_data, y_data: 'xr.DataArray | None', min_=0, max_=300):
         x_dpi = x_data.size / width
         dpi = max([dpi, x_dpi] + [] if y_data is None else [y_data.size / height])
 
-    print('selected dpi: ', min(dpi, max_))
-    return min(dpi, max_)
+    return max(min(dpi, max_), min_)
 
 
 def coerce_column(data: '_T', plotter: 'PlotBackend') -> '_T':
