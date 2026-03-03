@@ -33,7 +33,12 @@ def _select_dpi(grid, x_data, y_data: 'xr.DataArray | None', min_=0, max_=300):
         x_dpi = x_data.size / width
         dpi = max([dpi, x_dpi] + [] if y_data is None else [y_data.size / height])
 
-    return max(min(dpi, max_), min_)
+    if dpi > max_:
+        return max_
+    elif dpi < min_:
+        return min_
+    else:
+        return dpi
 
 
 def coerce_column(data: '_T', plotter: 'PlotBackend') -> '_T':
@@ -176,6 +181,7 @@ class PlotBackend:
             cmap=_cmap,
             norm=norm,
             rasterized=rasterized,
+            interpolation='kaiser'
         )
 
         for ax in grid.axs.flat:
@@ -221,7 +227,6 @@ class PlotBackend:
         x = grid._x_var
         y = grid._y_var
         dpi: int = getattr(grid, '_dpi', 150)
-        print('grid dpi: ', dpi)
 
         if self.opts.suptitle_fmt is not None:
             suptitle = labels.label_by_coord(
