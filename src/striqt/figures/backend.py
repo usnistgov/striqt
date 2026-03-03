@@ -171,12 +171,11 @@ class PlotBackend:
             _cmap = mpl.colormaps.get_cmap(cmap).resampled(len(levels) - 1)
             norm = colors.BoundaryNorm(levels, ncolors=_cmap.N)
 
-        grid = data.plot.imshow(
+        grid = data.plot.pcolormesh(
             **coords,
             cmap=_cmap,
             norm=norm,
             rasterized=rasterized,
-            interpolation='none',
         )
 
         for ax in grid.axs.flat:
