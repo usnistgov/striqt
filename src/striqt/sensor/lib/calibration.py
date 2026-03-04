@@ -84,7 +84,6 @@ def _y_factor_power_corrections(dataset: '_xr.Dataset', Tref=290.0) -> '_xr.Data
     Y = Pon / Poff
 
     noise_figure = enr_dB - 10 * _np.log10(Y - 1)
-    print(noise_figure.values)
     noise_figure.name = 'Noise figure'
     noise_figure.attrs = {'units': 'dB'}
 
