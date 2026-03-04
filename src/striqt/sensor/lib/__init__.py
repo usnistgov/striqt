@@ -1,1 +1,1 @@
-from . import bindings, calibration, compute, resampling, util
+from . import calibration, compute, resampling, util, bindings
