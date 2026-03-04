@@ -84,6 +84,7 @@ def _y_factor_power_corrections(dataset: '_xr.Dataset', Tref=290.0) -> '_xr.Data
     Y = Pon / Poff
 
     noise_figure = enr_dB - 10 * _np.log10(Y - 1)
+    print(noise_figure.values)
     noise_figure.name = 'Noise figure'
     noise_figure.attrs = {'units': 'dB'}
 
@@ -438,7 +439,7 @@ class YFactorSink(_sinks.SinkBase):
 
         path = self._get_path()
 
-        for port, _ in corrections.groupby('port'):
+        for port, _ in corrections.groupby('port', squeeze=False):
             print(f'calibration results on port {port} (shown for max gain)')
             summary = summarize_calibration(corrections, port=port)
             with _pd.option_context('display.max_rows', None):
