@@ -877,7 +877,9 @@ def design_capture_resampler(
 def needs_resample(
     analysis_filter: sw.fourier.ResamplerDesign, capture: specs.SensorCapture
 ) -> bool:
-    """determine whether an STFT will be needed to filter or resample"""
+    """determine whether host resampling will be needed to filter or resample"""
+    if not capture.host_resample:
+        return False
 
     is_resample = analysis_filter['nfft'] != analysis_filter['nfft_out']
     return is_resample and capture.host_resample

@@ -65,10 +65,10 @@ def resampling_correction(iq_in: AcquiredIQ, overwrite_x=False, axis=1) -> Acqui
         capture = iq_in.capture
 
     fs = iq_in.resampler['fs_sdr']
-
     needs_resample = _base.needs_resample(iq_in.resampler, capture)
-
+    needs_filter = np.isfinite(capture.analysis_bandwidth)
     vscale = iq_in.voltage_scale
+
     if not needs_resample:
         if not isinstance(vscale, (int, float)):
             if vscale.ndim == 1:
@@ -78,6 +78,7 @@ def resampling_correction(iq_in: AcquiredIQ, overwrite_x=False, axis=1) -> Acqui
 
         if vscale is not None:
             iq = xp.multiply(iq, vscale, out=iq if overwrite_x else None)
+        offset_out = _base.get_fft_resample_pad(source_spec, capture, iq_in.analysis)[0]
 
     elif USE_OARESAMPLE:
         # this is broken. don't use it yet.
@@ -105,6 +106,8 @@ def resampling_correction(iq_in: AcquiredIQ, overwrite_x=False, axis=1) -> Acqui
         assert size_out + offset <= iq.shape[axis]
         iq = sw.util.axis_slice(iq, offset, offset + size_out, axis=axis)
         assert iq.shape[axis] == size_out
+        needs_filter = False
+        offset_out = None
 
     else:
         assert sw.util.isroundmod(iq.shape[1] * capture.sample_rate, fs)
@@ -120,24 +123,19 @@ def resampling_correction(iq_in: AcquiredIQ, overwrite_x=False, axis=1) -> Acqui
             scale=1 if vscale is None else vscale,
         )
 
-        # apply the filter here and ensure we're working with a copy if needed
-        if np.isfinite(capture.analysis_bandwidth):
-            h = sw.design_fir_lpf(
-                bandwidth=capture.analysis_bandwidth,
-                sample_rate=capture.sample_rate,
-                transition_bandwidth=250e3,
-                numtaps=_base.FILTER_SIZE,
-                xp=xp,
-            )
-            # pad = _base._get_filter_pad(capture)
-            iq = sw.oaconvolve(iq, h[xp.newaxis, :], 'same', axes=axis)
+    # apply the filter here and ensure we're working with a copy if needed
+    if needs_filter:
+        h = sw.design_fir_lpf(
+            bandwidth=capture.analysis_bandwidth,
+            sample_rate=capture.sample_rate,
+            transition_bandwidth=250e3,
+            numtaps=_base.FILTER_SIZE,
+            xp=xp,
+        )
+        # pad = _base._get_filter_pad(capture)
+        iq = sw.oaconvolve(iq, h[xp.newaxis, :], 'same', axes=axis)
 
-            # offset_out = offset_out + pad
-            # iq = iqwaveform.util.axis_slice(iq, pad, iq.shape[axis], axis=axis)
-
-            # the freshly allocated iq can be safely overridden
-            overwrite_x = True
-
+    if offset_out is not None:
         iq = sw.util.axis_slice(iq, offset_out, iq.shape[axis], axis=axis)
 
     size_out = round(capture.duration * capture.sample_rate)
