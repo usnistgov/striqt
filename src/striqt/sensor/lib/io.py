@@ -152,7 +152,7 @@ def read_tdms_iq(
     skip_samples=0,
     array_backend: specs.types.ArrayBackend,
 ) -> tuple['np.ndarray', specs.FileCapture]:
-    from .sources._file import TDMSSource
+    from .sources.file import TDMSSource
 
     source_spec = specs.TDMSSource(master_clock_rate=master_clock_rate, path=str(path))
     source = TDMSSource.from_spec(source_spec)

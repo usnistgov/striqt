@@ -11,7 +11,7 @@ from .. import util
 import striqt.analysis as sa
 import striqt.waveform as sw
 
-from . import _base
+from . import base
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -20,9 +20,9 @@ else:
     np = util.lazy_import('numpy')
 
 
-@_base.bind_schema_types(specs.TDMSSource, specs.FileCapture)
+@base.bind_schema_types(specs.TDMSSource, specs.FileCapture)
 class TDMSSource(
-    _base.VirtualSourceBase[specs.TDMSSource, specs.FileCapture, _base._PS, _base._PC]
+    base.VirtualSourceBase[specs.TDMSSource, specs.FileCapture, base._PS, base._PC]
 ):
     """a source of IQ waveforms from a TDMS file"""
 
@@ -75,14 +75,14 @@ class TDMSSource(
             capture = self.capture_spec
 
         mcr = self.setup_spec.master_clock_rate
-        return _base.design_capture_resampler(
+        return base.design_capture_resampler(
             mcr, capture, backend_sample_rate=self._file_info.backend_sample_rate
         )
 
 
-@_base.bind_schema_types(specs.MATSource, specs.FileCapture)
+@base.bind_schema_types(specs.MATSource, specs.FileCapture)
 class MATSource(
-    _base.VirtualSourceBase[specs.MATSource, specs.FileCapture, _base._PS, _base._PC]
+    base.VirtualSourceBase[specs.MATSource, specs.FileCapture, base._PS, base._PC]
 ):
     """returns IQ waveforms from a .mat file"""
 
@@ -96,7 +96,7 @@ class MATSource(
             spec.path,
             format=spec.file_format,
             dtype='complex64',
-            xp=_base.get_array_namespace(self.setup_spec.array_backend),
+            xp=base.get_array_namespace(self.setup_spec.array_backend),
             loop=spec.loop,
             backend_sample_rate=spec.master_clock_rate,
             **meta,
@@ -136,7 +136,7 @@ class MATSource(
             capture = self.capture_spec
         mcr = self._file_info.backend_sample_rate
         fs_sdr = self._file_info.backend_sample_rate
-        return _base.design_capture_resampler(mcr, capture, backend_sample_rate=fs_sdr)
+        return base.design_capture_resampler(mcr, capture, backend_sample_rate=fs_sdr)
 
     @functools.cached_property
     def info(self):
@@ -147,9 +147,9 @@ class MATSource(
         return str(self.setup_spec.path)
 
 
-@_base.bind_schema_types(specs.ZarrIQSource, specs.FileCapture)
+@base.bind_schema_types(specs.ZarrIQSource, specs.FileCapture)
 class ZarrIQSource(
-    _base.VirtualSourceBase[specs.ZarrIQSource, specs.FileCapture, _base._PS, _base._PC]
+    base.VirtualSourceBase[specs.ZarrIQSource, specs.FileCapture, base._PS, base._PC]
 ):
     """a sources of IQ samples from iq_waveform variables in a zarr store"""
 
@@ -212,7 +212,7 @@ class ZarrIQSource(
         if capture is None:
             capture = self.capture_spec
         fs = self._read_coord('sample_rate')
-        return _base.design_capture_resampler(fs, capture, fs)
+        return base.design_capture_resampler(fs, capture, fs)
 
     def _read_stream(
         self,

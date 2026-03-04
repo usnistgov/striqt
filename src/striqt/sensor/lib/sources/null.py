@@ -7,14 +7,14 @@ import typing
 import striqt.waveform as sw
 
 from ... import specs
-from . import _base
+from . import base
 
 
 _TS = typing.TypeVar('_TS', bound=specs.NoSource)
 _TC = typing.TypeVar('_TC', bound=specs.SensorCapture)
 
 
-class NoSource(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
+class NoSource(base.SourceBase[_TS, _TC, base._PS, base._PC]):
     """fast paths to acquire empty buffers"""
 
     _samples_elapsed = 0
@@ -57,4 +57,4 @@ class NoSource(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
             capture = self.capture_spec
 
         mcr = self.setup_spec.master_clock_rate
-        return _base.design_capture_resampler(mcr, capture)
+        return base.design_capture_resampler(mcr, capture)

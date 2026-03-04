@@ -1,7 +1,7 @@
-from . import _base, deepwave
+from . import base, deepwave
 
-from ._base import AcquiredIQ, SourceBase, bind_schema_types, get_source_id, _PS, _PC
-from ._null import NoSource
-from ._file import MATSource, TDMSSource, ZarrIQSource
-from ._function import DiracDeltaSource, NoiseSource, SawtoothSource, SingleToneSource
-from ._soapy import SoapySourceBase
+from .base import AcquiredIQ, SourceBase, bind_schema_types, get_source_id, _PS, _PC
+from .null import NoSource
+from .file import MATSource, TDMSSource, ZarrIQSource
+from .function import DiracDeltaSource, NoiseSource, SawtoothSource, SingleToneSource
+from .soapy import SoapySourceBase

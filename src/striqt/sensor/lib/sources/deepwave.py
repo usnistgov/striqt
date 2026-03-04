@@ -5,7 +5,7 @@ import typing
 
 from ... import specs
 from .. import util
-from . import _soapy
+from . import soapy
 
 if typing.TYPE_CHECKING:
     import psutil
@@ -43,13 +43,13 @@ class Air8201BSourceSpec(specs.SoapySource, kw_only=True, frozen=True):
     stream_all_rx_ports = True
 
 
-class Airstack1Source(_soapy.SoapySourceBase):
+class Airstack1Source(soapy.SoapySourceBase):
     def _connect(self, spec: specs.SoapySource, **kwargs):
         # trim script startup time by setting these here
         air_kwargs = dict(
             kwargs,
             driver='SoapyAIRT',
-            time_src=_soapy.device_time_source(spec),
+            time_src=soapy.device_time_source(spec),
             clk_src=spec.clock_source,
         )
 

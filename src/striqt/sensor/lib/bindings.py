@@ -10,7 +10,7 @@ from .sources import SourceBase
 from . import sinks, sources
 from .. import specs
 from ..specs import _TS, _TC, _TP
-from .sources._base import _PS, _PC
+from .sources.base import _PS, _PC
 
 
 _TC2 = typing.TypeVar('_TC2', bound=specs.SensorCapture)
@@ -64,7 +64,7 @@ class Sensor(typing.Generic[_TS, _TP, _TC, _PS, _PC]):
 
 
 @dataclasses.dataclass(frozen=True)
-class Schema(typing.Generic[_TS, _TP, _TC, _PS, _PC], sources._base.Schema[_TS, _TC]):
+class Schema(typing.Generic[_TS, _TP, _TC, _PS, _PC], sources.base.Schema[_TS, _TC]):
     peripherals: type[_TP]
 
     # these aren't actually used; they just set up the type hinting properly

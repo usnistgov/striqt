@@ -8,7 +8,7 @@ import typing
 from striqt.analysis import Capture, source
 from ... import specs
 from .. import util
-from . import _base
+from . import base
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -20,7 +20,7 @@ _TS = typing.TypeVar('_TS', bound=specs.FunctionSource)
 _TC = typing.TypeVar('_TC', bound=specs.SensorCapture)
 
 
-def _lo_shift_tone(inds, source: _base.SourceBase, xp, lo_offset=None):
+def _lo_shift_tone(inds, source: base.SourceBase, xp, lo_offset=None):
     design = source.get_resampler()
     if lo_offset is None:
         lo_offset = design['lo_offset']
@@ -28,7 +28,7 @@ def _lo_shift_tone(inds, source: _base.SourceBase, xp, lo_offset=None):
     return xp.exp(phase_scale * inds).astype('complex64')
 
 
-class TestSourceBase(_base.VirtualSourceBase[_TS, _TC, _base._PS, _base._PC]):
+class TestSourceBase(base.VirtualSourceBase[_TS, _TC, base._PS, base._PC]):
     def _read_stream(
         self,
         buffers,
@@ -36,7 +36,7 @@ class TestSourceBase(_base.VirtualSourceBase[_TS, _TC, _base._PS, _base._PC]):
         count,
         timeout_sec=None,
         *,
-        on_overflow: _base.OnOverflowType = 'except',
+        on_overflow: base.OnOverflowType = 'except',
     ):
         assert self._capture is not None
 
@@ -71,7 +71,7 @@ class TestSourceBase(_base.VirtualSourceBase[_TS, _TC, _base._PS, _base._PC]):
 
 
 class SingleToneSource(
-    TestSourceBase[specs.FunctionSource, specs.SingleToneCapture, _base._PS, _base._PC]
+    TestSourceBase[specs.FunctionSource, specs.SingleToneCapture, base._PS, base._PC]
 ):
     def get_waveform(
         self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
@@ -102,7 +102,7 @@ class SingleToneSource(
 
 
 class DiracDeltaSource(
-    TestSourceBase[specs.FunctionSource, specs.DiracDeltaCapture, _base._PS, _base._PC]
+    TestSourceBase[specs.FunctionSource, specs.DiracDeltaCapture, base._PS, base._PC]
 ):
     def get_waveform(
         self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
@@ -122,7 +122,7 @@ class DiracDeltaSource(
 
 
 class SawtoothSource(
-    TestSourceBase[specs.FunctionSource, specs.SawtoothCapture, _base._PS, _base._PC]
+    TestSourceBase[specs.FunctionSource, specs.SawtoothCapture, base._PS, base._PC]
 ):
     def get_waveform(
         self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
@@ -139,7 +139,7 @@ class SawtoothSource(
 
 
 class NoiseSource(
-    TestSourceBase[specs.FunctionSource, specs.NoiseCapture, _base._PS, _base._PC]
+    TestSourceBase[specs.FunctionSource, specs.NoiseCapture, base._PS, base._PC]
 ):
     def get_waveform(
         self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
