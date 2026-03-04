@@ -1,5 +1,4 @@
 from IPython.core import ultratb
-import exceptiongroup
 import typing
 
 

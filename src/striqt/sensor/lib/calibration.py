@@ -3,12 +3,11 @@ from __future__ import annotations as __
 import typing
 from pathlib import Path
 
-from .. import specs as specs
-from . import compute, io, peripherals, sinks, sources, util
-
 import msgspec
 from typing_extensions import ParamSpec
 
+from .. import specs as specs
+from . import compute, io, peripherals, sinks, sources, util
 import striqt.analysis as sa
 
 if typing.TYPE_CHECKING:

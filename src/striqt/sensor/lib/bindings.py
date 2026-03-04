@@ -6,12 +6,11 @@ from typing_extensions import ParamSpec
 import msgspec
 
 from .peripherals import NoPeripherals, PeripheralsBase
-from .sources import SourceBase
 from . import sinks, sources
 from .. import specs
+
 from ..specs import _TS, _TC, _TP
 from .sources.base import _PS, _PC
-
 
 _TC2 = typing.TypeVar('_TC2', bound=specs.SensorCapture)
 _TP2 = typing.TypeVar('_TP2', bound=specs.Peripherals)
@@ -51,13 +50,13 @@ def tagged_subclass(
 
 @dataclasses.dataclass(frozen=True)
 class Sensor(typing.Generic[_TS, _TP, _TC, _PS, _PC]):
-    source: type[SourceBase[_TS, _TC, _PS, _PC]]
+    source: type[sources.SourceBase[_TS, _TC, _PS, _PC]]
     sweep_spec: type[specs.Sweep[_TS, _TP, _TC]] = specs.Sweep
     peripherals: type[PeripheralsBase[_TP, _TC]] = NoPeripherals
     sink: type[sinks.SinkBase[_TC]] = sinks.ZarrCaptureSink
 
     def __post_init__(self):
-        assert issubclass(self.source, SourceBase)
+        assert issubclass(self.source, sources.SourceBase)
         assert issubclass(self.sweep_spec, specs.Sweep)
         assert issubclass(self.peripherals, PeripheralsBase)
         assert issubclass(self.sink, sinks.SinkBase)

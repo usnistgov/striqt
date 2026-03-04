@@ -7,20 +7,18 @@ import functools
 import importlib
 import os
 import sys
-import threading
 import typing
 from pathlib import Path
 
-from . import bindings, io, util
+import typing_extensions
+
+from . import bindings, io, sources, util
 from .peripherals import PeripheralsBase
 from .sinks import SinkBase
-from .sources import get_source_id, SourceBase, _PS, _PC
 from .. import specs
+from .sources import _PS, _PC
 from ..specs import _TC, _TP, _TS
-
-import typing_extensions
 import striqt.analysis as sa
-import striqt.waveform as sw
 
 
 if typing.TYPE_CHECKING:
@@ -35,7 +33,7 @@ if typing.TYPE_CHECKING:
     ):
         """Sensor resources needed to run a sweep"""
 
-        source: SourceBase[_TS, _TC, _PS, _PC]
+        source: sources.SourceBase[_TS, _TC, _PS, _PC]
         sink: SinkBase
         peripherals: PeripheralsBase[_TP, _TC]
         except_context: typing_extensions.NotRequired[typing.ContextManager]
@@ -50,7 +48,7 @@ if typing.TYPE_CHECKING:
     ):
         """Sensor resources needed to run a sweep"""
 
-        source: SourceBase[_TS, _TC, _PS, _PC]
+        source: sources.SourceBase[_TS, _TC, _PS, _PC]
         sink: SinkBase
         peripherals: PeripheralsBase[_TP, _TC]
         except_context: typing_extensions.NotRequired[typing.ContextManager]
@@ -63,7 +61,7 @@ else:
     class Resources(typing_extensions.TypedDict):
         """Sensor resources needed to run a sweep"""
 
-        source: SourceBase
+        source: sources.SourceBase
         sink: SinkBase
         peripherals: typing_extensions.NotRequired[PeripheralsBase]
         except_context: typing_extensions.NotRequired[typing.ContextManager]
@@ -74,7 +72,7 @@ else:
     class AnyResources(typing_extensions.TypedDict, total=False):
         """Sensor resources needed to run a sweep"""
 
-        source: SourceBase
+        source: sources.SourceBase
         sink: SinkBase
         peripherals: typing_extensions.NotRequired[PeripheralsBase]
         except_context: typing_extensions.NotRequired[typing.ContextManager]
@@ -153,7 +151,7 @@ def _open_devices(
     """open source and any peripherals"""
 
     def _post_source_open():
-        source_id = get_source_id(spec.source)
+        source_id = sources.get_source_id(spec.source)
         specs.helpers.list_capture_adjustments(spec, source_id=source_id)
 
         if on_source_opened is not None:

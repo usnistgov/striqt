@@ -4,9 +4,9 @@ from __future__ import annotations as __
 import dataclasses
 import typing
 
-from . import util
-from .sources import AcquiredIQ, base
+from . import sources, util
 from .. import specs
+
 
 if typing.TYPE_CHECKING:
     import numpy as np
@@ -40,7 +40,7 @@ def synchronize(x: ArrayType, shifts: ArrayType, size_out: int) -> ArrayType:
         return out
 
 
-def resampling_correction(iq_in: AcquiredIQ, overwrite_x=False, axis=1) -> AcquiredIQ:
+def resampling_correction(iq_in: sources.base.AcquiredIQ, overwrite_x=False, axis=1) -> sources.base.AcquiredIQ:
     """resample, filter, and apply calibration corrections.
 
     Args:
@@ -62,7 +62,7 @@ def resampling_correction(iq_in: AcquiredIQ, overwrite_x=False, axis=1) -> Acqui
         capture = iq_in.capture
 
     fs = iq_in.resampler['fs_sdr']
-    needs_resample = base.needs_resample(iq_in.resampler, capture)
+    needs_resample = sources.base.needs_resample(iq_in.resampler, capture)
     needs_filter = np.isfinite(capture.analysis_bandwidth)
     vscale = iq_in.voltage_scale
 
@@ -75,7 +75,7 @@ def resampling_correction(iq_in: AcquiredIQ, overwrite_x=False, axis=1) -> Acqui
 
         if vscale is not None:
             iq = xp.multiply(iq, vscale, out=iq if overwrite_x else None)
-        offset_out = base.get_fft_resample_pad(source_spec, capture, iq_in.analysis)[0]
+        offset_out = sources.base.get_fft_resample_pad(source_spec, capture, iq_in.analysis)[0]
 
     elif USE_OARESAMPLE:
         # this is broken. don't use it yet.
@@ -93,8 +93,8 @@ def resampling_correction(iq_in: AcquiredIQ, overwrite_x=False, axis=1) -> Acqui
             scale=1 if vscale is None else vscale,
         )
         scale = iq_in.resampler['nfft_out'] / iq_in.resampler['nfft']
-        oapad = base._get_oaresample_pad(source_spec.master_clock_rate, capture)
-        lag_pad = base._get_trigger_pad_size(source_spec, capture, iq_in.trigger)
+        oapad = sources.base._get_oaresample_pad(source_spec.master_clock_rate, capture)
+        lag_pad = sources.base._get_trigger_pad_size(source_spec, capture, iq_in.trigger)
         size_out = round(capture.duration * capture.sample_rate) + round(
             (oapad[1] + lag_pad) * scale
         )
@@ -109,7 +109,7 @@ def resampling_correction(iq_in: AcquiredIQ, overwrite_x=False, axis=1) -> Acqui
     else:
         assert sw.util.isroundmod(iq.shape[1] * capture.sample_rate, fs)
         resample_size_out = round(iq.shape[1] * capture.sample_rate / fs)
-        offset_in = base.get_fft_resample_pad(source_spec, capture, iq_in.analysis)[0]
+        offset_in = sources.base.get_fft_resample_pad(source_spec, capture, iq_in.analysis)[0]
         offset_out = round(offset_in * capture.sample_rate / fs)
 
         iq = sw.fourier.resample(
@@ -126,7 +126,7 @@ def resampling_correction(iq_in: AcquiredIQ, overwrite_x=False, axis=1) -> Acqui
             bandwidth=capture.analysis_bandwidth,
             sample_rate=capture.sample_rate,
             transition_bandwidth=250e3,
-            numtaps=base.FILTER_SIZE,
+            numtaps=sources.base.FILTER_SIZE,
             xp=xp,
         )
         # pad = _base._get_filter_pad(capture)

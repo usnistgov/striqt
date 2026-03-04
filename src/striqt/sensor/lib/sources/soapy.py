@@ -205,7 +205,7 @@ def _probe_channel(
     )
 
 
-def probe_soapy_info(device: SoapySDR.Device) -> specs.SoapySourceInfo:
+def probe_soapy_info(device: SoapySDR.Device) -> SoapySourceInfo:
     """
     Probes a SoapySDR device and returns its capabilities as a nested NamedTuple.
 
@@ -238,7 +238,7 @@ def probe_soapy_info(device: SoapySDR.Device) -> specs.SoapySourceInfo:
         _probe_channel(device, SoapySDR.SOAPY_SDR_TX, i) for i in range(num_tx)
     )
 
-    return specs.SoapySourceInfo(
+    return SoapySourceInfo(
         driver=device.getDriverKey(),
         hardware=device.getHardwareKey(),
         hardware_info=device.getHardwareInfo(),
@@ -317,7 +317,7 @@ class RxStream:
     def __init__(
         self,
         setup: specs.SoapySource,
-        info: specs.SoapySourceInfo,
+        info: SoapySourceInfo,
         *,
         ports: tuple[int, ...] = (),
         on_overflow: base.OnOverflowType = 'except',
@@ -782,7 +782,7 @@ class SoapySourceBase(base.SourceBase[_TS, _TC, base._PS, base._PC]):
         raise self._device.getHardwareKey()
 
     @functools.cached_property
-    def info(self) -> specs.SoapySourceInfo:
+    def info(self) -> SoapySourceInfo:
         return probe_soapy_info(self._device)
 
     @sa.util.stopwatch('read_iq', 'source')
