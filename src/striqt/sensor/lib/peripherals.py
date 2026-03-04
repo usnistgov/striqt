@@ -4,9 +4,10 @@ import typing
 
 from .. import specs
 
-_TC = typing.TypeVar('_TC', bound=specs.SensorCapture, contravariant=True)
-_TP = typing.TypeVar('_TP', bound=specs.Peripherals)
 
+_TC = typing.TypeVar('_TC', bound='specs.SensorCapture', contravariant=True)
+_TP = typing.TypeVar('_TP', bound='specs.Peripherals')
+_TPC = typing.TypeVar('_TPC', bound='specs.Peripherals')
 
 class PeripheralsProtocol(typing.Protocol[_TC]):
     """a peripherals extension class must implement these"""
@@ -46,7 +47,7 @@ class PeripheralsBase(typing.Generic[_TP, _TC], PeripheralsProtocol[_TC]):
 
 class CalibrationPeripheralsBase(
     PeripheralsBase[_TP, _TC],
-    typing.Generic[_TP, _TC, specs._TPC],
+    typing.Generic[_TP, _TC, _TPC],
 ):
     """base class defining the object protocol peripheral hardware support.
 
@@ -56,7 +57,7 @@ class CalibrationPeripheralsBase(
 
     calibration_spec: specs._TPC | None
 
-    def __init__(self, spec: specs.CalibrationSweep[typing.Any, _TP, _TC, specs._TPC]):
+    def __init__(self, spec: specs.CalibrationSweep[typing.Any, _TP, _TC, _TPC]):
         self.calibration_spec = spec.calibration
         self.open()
 

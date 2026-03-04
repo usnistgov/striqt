@@ -22,9 +22,9 @@ else:
     xr = sa.util.lazy_import('xarray')
 
 
-_TC = typing.TypeVar('_TC', bound=specs.SoapyCapture)
+_TC = typing.TypeVar('_TC', bound='specs.SoapyCapture')
 _TP = typing.TypeVar('_TP', bound=specs.Peripherals)
-_TS = typing.TypeVar('_TS', bound=specs.SoapySource)
+_TS = typing.TypeVar('_TS', bound='specs.SoapySource')
 _PS = ParamSpec('_PS')
 _PC = ParamSpec('_PC')
 

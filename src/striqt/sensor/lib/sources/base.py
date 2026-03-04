@@ -18,12 +18,8 @@ from .. import util
 
 if typing.TYPE_CHECKING:
     import numpy as np
-    import pandas as pd
-
     from striqt.waveform._typing import ArrayType
-
 else:
-    pd = util.lazy_import('pandas')
     np = util.lazy_import('numpy')
 
 
@@ -35,8 +31,8 @@ MIN_OARESAMPLE_FFT_SIZE = 4 * 4096 - 1
 RESAMPLE_COLA_WINDOW = 'hamming'
 FILTER_DOMAIN = 'time'
 
-_TS = typing.TypeVar('_TS', bound=specs.Source)
-_TC = typing.TypeVar('_TC', bound=specs.SensorCapture)
+_TS = typing.TypeVar('_TS', bound='specs.Source')
+_TC = typing.TypeVar('_TC', bound='specs.SensorCapture')
 _PS = ParamSpec('_PS')
 _PC = ParamSpec('_PC')
 _TB = typing.TypeVar('_TB', bound='specs.SpecBase')
