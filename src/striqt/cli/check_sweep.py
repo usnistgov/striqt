@@ -29,7 +29,7 @@ def run(yaml_path):
     manager = ss.open_resources(spec, spec_path=yaml_path, test_only=True)
 
     with manager as res:
-        assert isinstance(spec.__bindings__, ss.lib.bindings.SensorBinding)
+        assert isinstance(spec._bindings__, ss.lib.bindings.SensorBinding)
 
         print(f'source_id: {res["source"].id!r}')
 

@@ -1,37 +1,26 @@
 from __future__ import annotations as __
 
-__all__ = [
-    'SinkBase',
-    'NoSink',
-    'ZarrSinkBase',
-    'ZarrCaptureSink',
-    'ZarrTimeAppendSink',
-]
+import itertools as itertools
+import typing as typing
 
-import itertools as _itertools
-import typing as _typing
+from . import compute, io, sources, util
+from .. import specs as specs
 
-from . import compute as _compute
-from . import io as _io
-from . import util as _util
-from . import sources as _sources
-from .. import specs as _specs
+import striqt.analysis as sa
 
-import striqt.analysis as _sa
-
-if _typing.TYPE_CHECKING:
-    import xarray as _xr
+if typing.TYPE_CHECKING:
+    import xarray as xr
 else:
-    _xr = _util.lazy_import('xarray')
+    xr = sa.util.lazy_import('xarray')
 
 
 class _BatchTracker:
     size: int
 
-    def __init__(self, captures: tuple[_specs.SensorCapture, ...], min_size: int):
-        sizes = _specs.helpers.concat_group_sizes(captures, min_size=min_size)
+    def __init__(self, captures: tuple[specs.SensorCapture, ...], min_size: int):
+        sizes = specs.helpers.concat_group_sizes(captures, min_size=min_size)
 
-        self._cycler = _itertools.cycle(sizes)
+        self._cycler = itertools.cycle(sizes)
         if len(sizes) > 0 and sizes[0] > 0:
             self.next()
 
@@ -41,13 +30,13 @@ class _BatchTracker:
         return self.size
 
 
-class SinkBase(_typing.Generic[_specs._TC]):
+class SinkBase(typing.Generic[specs._TC]):
     """intake acquisitions one at a time, and parcel data store"""
 
     def __init__(
         self,
-        sweep_spec: _specs.Sweep[_typing.Any, _typing.Any, _specs._TC],
-        alias_func: _specs.helpers.PathAliasFormatter | None = None,
+        sweep_spec: specs.Sweep[typing.Any, typing.Any, specs._TC],
+        alias_func: specs.helpers.PathAliasFormatter | None = None,
         *,
         force: bool = False,
     ):
@@ -60,19 +49,19 @@ class SinkBase(_typing.Generic[_specs._TC]):
         self.store = None
         self.force = force
         self._future = None
-        self._pending_data: list['_xr.Dataset'] = []
+        self._pending_data: list['xr.Dataset'] = []
         self._executor = ThreadPoolExecutor(1)
 
         # decide group sizes
-        source_id = _sources.get_source_id(sweep_spec.source)
-        captures = _specs.helpers.loop_captures(sweep_spec, source_id)
-        if len(sweep_spec.loops) > 0 and isinstance(sweep_spec.loops[0], _specs.Repeat):
+        source_id = sources.get_source_id(sweep_spec.source)
+        captures = specs.helpers.loop_captures(sweep_spec, source_id)
+        if len(sweep_spec.loops) > 0 and isinstance(sweep_spec.loops[0], specs.Repeat):
             captures = sweep_spec.loops[0].count * captures
         self._batch = _BatchTracker(
             captures, min_size=sweep_spec.sink.batched_write_count
         )
 
-    def pop(self) -> list['_xr.Dataset']:
+    def pop(self) -> list['xr.Dataset']:
         result = self._pending_data
         self._pending_data = []
         self.captures_elapsed += len(result)
@@ -97,12 +86,12 @@ class SinkBase(_typing.Generic[_specs._TC]):
             self._executor.__exit__(*exc_info)
 
     def append(
-        self, capture_result: _compute.DelayedDataset
-    ) -> '_xr.Dataset|_compute.DelayedDataset':
+        self, capture_result: compute.DelayedDataset
+    ) -> 'xr.Dataset|compute.DelayedDataset':
         if capture_result is None:
             return
 
-        ds = _compute.from_delayed(capture_result)
+        ds = compute.from_delayed(capture_result)
         self._pending_data.append(ds)
         return ds
 
@@ -128,12 +117,12 @@ class NoSink(SinkBase):
 
     def flush(self):
         count = self.captures_elapsed
-        with _util.log_capture_context(
+        with util.log_capture_context(
             'sink', capture_index=count - 1, capture_count=count
         ):
-            _sa.util.get_logger('sink').info(f'done')
+            sa.util.get_logger('sink').info(f'done')
 
-    def append(self, capture_result) -> _compute.DelayedDataset:
+    def append(self, capture_result) -> compute.DelayedDataset:
         self.captures_elapsed += 1
         return capture_result
 
@@ -143,7 +132,7 @@ class NoSink(SinkBase):
 
 class ZarrSinkBase(SinkBase):
     def open(self):
-        self.store = _io.open_store(
+        self.store = io.open_store(
             self._spec, alias_func=self._alias_func, force=self.force
         )
 
@@ -155,7 +144,7 @@ class ZarrSinkBase(SinkBase):
 
         path = self.get_root_path()
 
-        _sa.util.get_logger('sink').info(f'closed "{str(path)}"')
+        sa.util.get_logger('sink').info(f'closed "{str(path)}"')
 
     def get_root_path(self):
         if hasattr(self.store, 'path'):
@@ -167,14 +156,14 @@ class ZarrSinkBase(SinkBase):
 class ZarrCaptureSink(ZarrSinkBase):
     """concatenates the data from each capture and dumps to a zarr data store"""
 
-    def append(self, capture_result: _compute.DelayedDataset):
+    def append(self, capture_result: compute.DelayedDataset):
         ret = super().append(capture_result)
 
         if len(self._pending_data) == self._batch.size:
             self.flush()
             self._batch.next()
         else:
-            _sa.util.get_logger('sink').debug('queued')
+            sa.util.get_logger('sink').debug('queued')
 
         return ret
 
@@ -189,24 +178,24 @@ class ZarrCaptureSink(ZarrSinkBase):
         self.submit(self._flush_thread, data_list)
 
     def _flush_thread(self, data_list):
-        with _sa.util.stopwatch('merge dataset', 'sink', threshold=0.25):
-            dataset = _xr.concat(
+        with sa.util.stopwatch('merge dataset', 'sink', threshold=0.25):
+            dataset = xr.concat(
                 data_list,
-                _compute.CAPTURE_DIM,
+                compute.CAPTURE_DIM,
                 join='outer',
                 combine_attrs='drop_conflicts',
             )
-            dataset = _typing.cast(_xr.Dataset, dataset)
+            dataset = typing.cast(xr.Dataset, dataset)
 
         path = self.get_root_path()
         count = self.captures_elapsed
-        logger = _sa.util.get_logger('sink')
+        logger = sa.util.get_logger('sink')
 
         with (
-            _util.log_capture_context('sink', capture_index=count - 1),
-            _sa.util.stopwatch(f'sync to {path}', 'sink'),
+            util.log_capture_context('sink', capture_index=count - 1),
+            sa.util.stopwatch(f'sync to {path}', 'sink'),
         ):
-            _io.dump_data(
+            sa.dump(
                 self.store,
                 dataset,
                 max_threads=self._spec.max_threads,
@@ -214,15 +203,15 @@ class ZarrCaptureSink(ZarrSinkBase):
             )
 
             for i in range(count - len(data_list), count):
-                with _util.log_capture_context('sink', capture_index=i):
+                with util.log_capture_context('sink', capture_index=i):
                     logger.info('💾')
 
 
 class ZarrTimeAppendSink(ZarrSinkBase):
     def __init__(
         self,
-        sweep_spec: _specs.Sweep,
-        alias_func: _specs.helpers.PathAliasFormatter | None = None,
+        sweep_spec: specs.Sweep,
+        alias_func: specs.helpers.PathAliasFormatter | None = None,
         *,
         force: bool = False,
     ):
@@ -251,18 +240,18 @@ class ZarrTimeAppendSink(ZarrSinkBase):
         self.submit(self._flush_thread, data_list)
 
     def _flush_thread(self, data_list):
-        with _sa.util.stopwatch('build dataset', 'sink', threshold=0.5):
-            by_spectrogram = _compute.concat_time_dim(data_list, 'spectrogram_time')
+        with sa.util.stopwatch('build dataset', 'sink', threshold=0.5):
+            by_spectrogram = compute.concat_time_dim(data_list, 'spectrogram_time')
 
         path = self.get_root_path()
         count = self.captures_elapsed
-        logger = _sa.util.get_logger('sink')
+        logger = sa.util.get_logger('sink')
 
         with (
-            _util.log_capture_context('sink', capture_index=count - 1),
-            _sa.util.stopwatch(f'sync {path}', 'sink', threshold=0.5),
+            util.log_capture_context('sink', capture_index=count - 1),
+            sa.util.stopwatch(f'sync {path}', 'sink', threshold=0.5),
         ):
-            _io.dump_data(
+            sa.dump(
                 self.store,
                 by_spectrogram,
                 compression=False,
@@ -270,5 +259,5 @@ class ZarrTimeAppendSink(ZarrSinkBase):
             )
 
             for i in range(count - len(data_list), count):
-                with _util.log_capture_context('sink', capture_index=i):
+                with util.log_capture_context('sink', capture_index=i):
                     logger.info('💾')

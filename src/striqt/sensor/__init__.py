@@ -1,6 +1,6 @@
-from .lib import calibration, io, peripherals, sinks, sources, util
-from . import bindings, lib, specs
+from . import bindings, calibration, io, lib, peripherals, sinks, specs, util
 
+from .io import dump_data, load_data, open_store, read_yaml_spec, read_calibration
 from .lib.execute import iterate_sweep
-from .lib.io import dump_data, load_data, open_store, read_yaml_spec, read_calibration
+from .lib.resampling import resampling_correction
 from .lib.resources import open_resources

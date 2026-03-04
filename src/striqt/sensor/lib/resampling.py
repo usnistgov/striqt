@@ -1,9 +1,6 @@
 from __future__ import annotations as __
 
 
-__all__ = ['resampling_correction']
-
-
 import dataclasses
 import typing
 

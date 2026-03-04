@@ -4,6 +4,8 @@ import functools
 import time
 import typing
 
+import striqt.waveform as sw
+
 from ... import specs
 from . import _base
 
@@ -50,7 +52,7 @@ class NoSource(_base.SourceBase[_TS, _TC, _base._PS, _base._PC]):
 
         return count, round(timestamp_ns)
 
-    def get_resampler(self, capture: _TC | None = None) -> _base.ResamplerDesign:
+    def get_resampler(self, capture: _TC | None = None) -> sw.fourier.ResamplerDesign:
         if capture is None:
             capture = self.capture_spec
 

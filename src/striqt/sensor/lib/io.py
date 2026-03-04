@@ -8,11 +8,7 @@ from pathlib import Path
 
 import striqt.analysis as sa
 
-from striqt.analysis.lib.io import decode_from_yaml_file
-from striqt.analysis.lib.io import dump as dump_data  # noqa: F401
-from striqt.analysis.lib.io import load as load_data  # noqa: F401
 from .. import specs
-
 from . import util
 
 if typing.TYPE_CHECKING:
@@ -21,16 +17,6 @@ if typing.TYPE_CHECKING:
 else:
     np = util.lazy_import('numpy')
     xr = util.lazy_import('xarray')
-
-__all__ = [
-    'decode_from_yaml_file',
-    'open_store',
-    'read_yaml_spec',
-    'dump_data',
-    'load_data',
-    'read_calibration',
-    'save_calibration',
-]
 
 
 def open_store(
@@ -125,7 +111,7 @@ def read_yaml_spec(
 
     from .bindings import get_tagged_sweep_type
 
-    tree = decode_from_yaml_file(path)
+    tree = sa.lib.io.decode_from_yaml_file(path)
 
     if not isinstance(tree, dict):
         raise TypeError('yaml file does not specify a dict structure')

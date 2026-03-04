@@ -313,7 +313,7 @@ def bind_schema_types(
     """set the default to a SourceBase subclass"""
 
     def decorator(cls: type[_T]) -> type[_T]:
-        cls.__bindings__ = Schema(source=source, capture=capture)
+        cls._bindings__ = Schema(source=source, capture=capture)
         return cls
 
     return decorator
@@ -346,7 +346,7 @@ def get_array_namespace(array_backend: specs.types.ArrayBackend) -> types.Module
 class SourceBase(
     typing.Generic[_TS, _TC, _PS, _PC], HasSetupType[_TS, _PS], HasCaptureType[_TC, _PC]
 ):
-    __bindings__: typing.ClassVar[Schema | None] = None
+    _bindings__: typing.ClassVar[Schema | None] = None
 
     _buffers: _ReceiveBuffers
     _is_open: bool | Event = False
@@ -362,10 +362,10 @@ class SourceBase(
         if _spec is not None:
             _spec = typing.cast(_TS, _spec)
 
-        if self.__bindings__ is None:
+        if self._bindings__ is None:
             spec_cls = None
         else:
-            spec_cls = typing.cast(type[_TS], self.__bindings__.source)
+            spec_cls = typing.cast(type[_TS], self._bindings__.source)
 
         _spec = get_bound_spec(_spec, spec_cls, **kwargs)
 
@@ -403,7 +403,7 @@ class SourceBase(
         kwargs = spec.to_dict()
         kwargs['__specs'] = {'source': spec, 'captures': captures, 'loops': loops}
 
-        if captures is not None and len(captures) > 0 and cls.__bindings__ is None:
+        if captures is not None and len(captures) > 0 and cls._bindings__ is None:
             raise TypeError('can only hint captures for source class bindings')
 
         return cls(reuse_iq=reuse_iq, **kwargs)  # type: ignore
@@ -451,8 +451,8 @@ class SourceBase(
         """stop the stream, apply a capture configuration, and start it"""
         assert self._buffers is not None
 
-        if self.__bindings__ is not None:
-            capture_cls = self.__bindings__.capture
+        if self._bindings__ is not None:
+            capture_cls = self._bindings__.capture
         elif self._capture is not None:
             capture_cls = type(self._capture)
         else:

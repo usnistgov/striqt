@@ -6,7 +6,7 @@ import typing
 
 import msgspec
 
-from striqt import analysis as _sa
+from striqt import analysis as sa
 from striqt.analysis.specs import AnalysisGroup, SpecBase, Capture, frozendict
 
 from ..lib import util
@@ -24,7 +24,7 @@ else:
     pd = util.lazy_import('pandas')
 
 
-@_sa.util.lru_cache()
+@sa.util.lru_cache()
 def _validate_multichannel(port, gain):
     """ensure self.gain is a number or matches len(self.port)"""
     if not isinstance(port, tuple):
@@ -274,8 +274,8 @@ class ManualYFactorPeripheral(Peripherals, frozen=True, kw_only=True):
     ambient_temperature: types.AmbientTemperature
 
 
-BundledAnalysis = _sa.registry.tospec()
-BundledTriggers = _sa.registry.signal_trigger.to_spec()
+BundledAnalysis = sa.registry.tospec()
+BundledTriggers = sa.registry.signal_trigger.to_spec()
 
 
 class SweepOptions(SpecBase, frozen=True, kw_only=True):
@@ -311,7 +311,7 @@ AdjustCapturesType = dict[
 ]
 
 
-@_sa.util.lru_cache()
+@sa.util.lru_cache()
 def _validate_loops(loops: tuple[LoopSpec, ...]):
     from collections import Counter
 
@@ -360,7 +360,7 @@ class Sweep(SpecBase, typing.Generic[_TS, _TP, _TC], frozen=True, kw_only=True):
     peripherals: _TP = typing.cast(_TP, Peripherals())
 
     options: SweepOptions = SweepOptions(reuse_iq=False, loop_only_nyquist=False)
-    __bindings__: typing.ClassVar[typing.Any] = None
+    _bindings__: typing.ClassVar[typing.Any] = None
 
     def __post_init__(self):
         from . import helpers
@@ -547,8 +547,8 @@ class SoapySourceInfo(BaseSourceInfo, kw_only=True, frozen=True, cache_hash=True
     num_rx_ports: int
     num_tx_ports: int
     has_timestamps: bool
-    clock_sources: tuple[str, ...]
-    time_sources: tuple[str, ...]
+    clocksources: tuple[str, ...]
+    timesources: tuple[str, ...]
     global_sensors: dict[str, _SoapySensorReading]
     registers: tuple[str, ...]
     settings: dict[str, _SoapyArgInfo]

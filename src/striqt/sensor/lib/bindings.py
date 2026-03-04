@@ -110,22 +110,22 @@ def bind_sensor(
 
     # bind the schema to the source
     class BoundSource(sensor.source):
-        __bindings__ = schema
+        _bindings__ = schema
 
     BoundSource.__name__ = sensor.source.__name__
     sensor = dataclasses.replace(sensor, source=BoundSource)
     binding = SensorBinding(**dataclasses.asdict(sensor), schema=schema)
 
     class BoundSweep(sensor.sweep_spec, frozen=True, kw_only=True):
-        __bindings__ = binding
+        _bindings__ = binding
 
         mock_source: typing.Optional[str] = None
-        source: __bindings__.schema.source = msgspec.field(
-            default_factory=__bindings__.schema.source
+        source: _bindings__.schema.source = msgspec.field(
+            default_factory=_bindings__.schema.source
         )
-        captures: tuple[__bindings__.schema.capture, ...] = ()
-        peripherals: __bindings__.schema.peripherals = msgspec.field(
-            default_factory=__bindings__.schema.peripherals
+        captures: tuple[_bindings__.schema.capture, ...] = ()
+        peripherals: _bindings__.schema.peripherals = msgspec.field(
+            default_factory=_bindings__.schema.peripherals
         )
 
         def __post_init__(self):

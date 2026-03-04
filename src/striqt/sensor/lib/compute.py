@@ -365,7 +365,7 @@ def build_warmup_sweep(sweep: specs.Sweep[_TS, _TP, _TC]) -> WarmupSweep:
     if len(captures) > 1:
         captures = [by_size[min(by_size.keys())]]
 
-    b = mock_binding(sweep.__bindings__, 'warmup', register=False)
+    b = mock_binding(sweep._bindings__, 'warmup', register=False)
 
     source = warmup.schema.source(
         num_rx_ports=num_rx_ports,
