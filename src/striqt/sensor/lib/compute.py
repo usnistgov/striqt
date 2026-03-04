@@ -453,7 +453,9 @@ def index_dataset(
             A list of coordinate names to index, matching index entries from the sweep
             sweep `captures` specification, or 'sweep_start_time'. The set of specified
             coordinates must uniquely specify exactly one capture from captures list.
-
+        chunks:
+            If not None, the returned dataset will be backed by dask arrays for
+            multiprocessing (see `xarray.Dataset.chunk`)
     Returns:
         A xr.Dataset containing the data and coordinates of `ds` with indexing applied.
     """
@@ -480,6 +482,9 @@ def unstack_dataset(
         dim_coords:
             A list of coordinate names to transform into dimensions, which must fulfill
             the conditions given for the `index_coords` parameter of `index_dataset`.
+        chunks:
+            If not None, the returned dataset will be backed by dask arrays for
+            multiprocessing (see `xarray.Dataset.chunk`)
 
     Returns:
         The unstacked dataset.
