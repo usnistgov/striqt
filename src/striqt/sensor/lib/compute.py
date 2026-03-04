@@ -440,46 +440,34 @@ def get_looped_coords(ds: 'xr.Dataset', include_repeats=False) -> list[str]:
 
 
 def index_dataset(
-    ds: 'xr.Dataset', index_coords: list[str] = ['start_time'], auto_loops: bool = False
+    ds: 'xr.Dataset',
+    index_coords: list[str] = ['start_time', 'port'],
+    *,
+    chunks: int | typing.Literal['auto'] | None = None,
 ) -> 'xr.Dataset':
-    """Quasi-automatically apply multiple-coordinate indexing to the dataset.
-
-    The dimensions are `['sweep_start_time', *loop_vars, *extra_coord_dims, 'port']`.
-    `loop_vars` are introspected by the sweep loop specification from ds.attrs['loops'].
+    """Return an dataset with indexes applied across multiple axes. Apply multiple-coordinate indexing to the dataset.
 
     Args:
+        ds: the sensor dataset to index
         index_coords:
-            specify any set of coordinates that can index entries in the
-            sweep `captures` specification. The set of specified coordinates must
-            uniquely specify exactly one capture in the captures list.
+            A list of coordinate names to index, matching index entries from the sweep
+            sweep `captures` specification, or 'sweep_start_time'. The set of specified
+            coordinates must uniquely specify exactly one capture from captures list.
 
     Returns:
-        The unstacked array.
+        A xr.Dataset containing the data and coordinates of `ds` with indexing applied.
     """
-    if 'sweep_start_time' in index_coords or 'sweep_index' in index_coords:
-        sweep_coord = []
-    elif 'sweep_start_time' in ds.coords:
-        sweep_coord = ['sweep_start_time']
-    elif 'sweep_index' in ds.coords:
-        sweep_coord = ['sweep_index']
-    else:
-        sweep_coord = []
 
-    if auto_loops:
-        loop_coords = get_looped_coords(ds)
-    else:
-        loop_coords = []
-
-    coords = sa.util.ordered_set_union(
-        sweep_coord, loop_coords, index_coords, ['port']
-    )
-    _check_coord_indexes(ds, coords)
-    return ds.set_xindex(coords)
+    _check_coord_indexes(ds, index_coords)  # must be before ds.chunk(...)
+    if chunks is not None:
+        ds = ds.chunk(chunks)
+    return ds.set_xindex(index_coords)
 
 
 def unstack_dataset(
     ds: 'xr.Dataset',
-    dim_coords: list[str] = ['start_time'],
+    dim_coords: list[str] = ['start_time', 'port'],
+    *,
     chunks: int | typing.Literal['auto'] | None = None,
 ) -> 'xr.Dataset':
     """Unstack a dataset from a flat list of captures into multiple dimensions.
@@ -488,24 +476,15 @@ def unstack_dataset(
     `loop_vars` are introspected by the sweep loop specification from ds.attrs['loops'].
 
     Args:
+        ds: the sensor dataset to unstack
         dim_coords:
-            specify any set of coordinates for the indexer to use in the sweep
-            `captures` specification. Each set of these coordinates in the dataset
-            must uniquely specify exactly one capture in the captures list.
-
-        chunk:
-            If None, the returned array is not chunked, and is backed by numpy.
-            Otherwise, the returned array is a dask array with the specified chunk size.
-            The chunk size may be specified as 'auto' to automatically choose.
+            A list of coordinate names to transform into dimensions, which must fulfill
+            the conditions given for the `index_coords` parameter of `index_dataset`.
 
     Returns:
-        The unstacked array.
+        The unstacked dataset.
     """
-    idx_ds = index_dataset(ds, dim_coords)
-
-    if chunks is not None:
-        idx_ds = idx_ds.chunk(chunks)
-
+    idx_ds = index_dataset(ds, dim_coords, chunks=chunks)
     unstacked = idx_ds.unstack()
 
     if 'sweep_start_time' in dim_coords:
@@ -516,16 +495,17 @@ def unstack_dataset(
         sweep_dim = None
 
     if sweep_dim is not None:
-        # the sweep dimension is for repeats. assume capture coordinates 
+        # the sweep dimension is for repeats. assume capture coordinates
         # are invariant and remove this dimension
         other_dims = [d for d in dim_coords if d != sweep_dim]
-        fix_coords = {}
-        for name, coord in ds.isel(sweep_start_time=0).coords.items():
-            if any(d in coord.dims for d in other_dims):
-                fix_coords[name] = coord
-        return unstacked.assign_coords(fix_coords)
-    else:
-        return unstacked
+        for name, coord in unstacked.isel(sweep_start_time=0).coords.items():
+            if name == sweep_dim:
+                continue
+            elif any(d in coord.dims for d in other_dims):
+                unstacked[name] = coord
+
+    return unstacked
+
 
 @sa.util.lru_cache()
 def _coord_template(
