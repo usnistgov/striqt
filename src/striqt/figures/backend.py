@@ -279,8 +279,7 @@ class PlotBackend:
                 label.set_text(s)
 
         if grid.cbar is not None:
-            ylabel = grid.cbar.ax.get_ylabel().replace('\n', ' ')
-            grid.cbar.ax.set_ylabel(ylabel, rotation=90)
+            labels.label_axis('colorbar', grid.data, fig=grid.fig)
 
         if self.output_dir is not None:
             filename = labels.label_by_coord(

@@ -327,7 +327,7 @@ def lookup_system_noise_power(
     B=1.0,
     xp=None,
 ):
-    """return the calibrated system noise power, in dBm/Hz"""
+    """return the power spectral density of the receive system noise"""
     from scipy.constants import Boltzmann
 
     if xp is None:
@@ -348,12 +348,16 @@ def lookup_system_noise_power(
     )
 
     k = Boltzmann * 1000  # W/K -> mW/K
-    noise_psd = (10 ** (noise_figure / 10) - 1) * k * T * B
+    noise_psd = noise_figure + 10*xp.log10(k * T * B)
 
+    if B == 1:
+        units = 'dBm/Hz'
+    else:
+        units = f'dBm/{round(B)} Hz'
     return _xr.DataArray(
-        data=10 * xp.log10(noise_psd),
+        data=noise_psd,
         dims=_compute.CAPTURE_DIM,
-        attrs={'name': 'Sensor system noise PSD', 'units': 'dBm/Hz'},
+        attrs={'name': 'Sensor system noise spectral density', 'units': units}
     )
 
 
