@@ -67,6 +67,7 @@ test = [
 check-sweep = "striqt.cli.check_sweep:run"
 sensor-sweep = "striqt.cli.sensor_sweep:run"
 plot-capture = "striqt.cli.plot_capture:run"
+rechunk-zarr = "striqt.cli.rechunk_zarr:run"
 
 [tool.ruff]
 target-version = "py39"
