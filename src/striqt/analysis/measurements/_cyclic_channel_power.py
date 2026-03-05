@@ -37,7 +37,6 @@ def cyclic_lag(capture: specs.Capture, spec: specs.CyclicChannelPower):
     coord_factories=[power_detector, cyclic_statistic, cyclic_lag],
     spec_type=specs.CyclicChannelPower,
     dtype='float32',
-    prefer_iq_source='aligned',
     attrs={'standard_name': 'Cyclic channel power', 'units': 'dBm'},
 )
 def cyclic_channel_power(iq, capture: specs.Capture, **kwargs):

@@ -38,8 +38,7 @@ PORT_DIM = 'port'
 
 @dataclasses.dataclass
 class AcquiredIQ:
-    pre_align: ArrayType
-    pre_filter: ArrayType | None
+    raw: ArrayType
     aligned: ArrayType | None
     capture: specs.Capture | None
 
@@ -375,7 +374,7 @@ def evaluate_by_spec(
         raise TypeError('invalid analysis spec argument')
 
     if not isinstance(iq, AcquiredIQ):
-        iq = AcquiredIQ(pre_align=iq, pre_filter=None, aligned=None, capture=None)
+        iq = AcquiredIQ(raw=iq, aligned=None, capture=None)
 
     if isinstance(spec, dict):
         spec_dict = spec
@@ -384,7 +383,7 @@ def evaluate_by_spec(
     results: dict[str, DelayedDataArray] | dict[str, ArrayType] = {}
     as_xarray = 'delayed' if options.as_xarray else False
 
-    if util.is_cupy_array(getattr(iq, 'pre_align', iq)):
+    if util.is_cupy_array(getattr(iq, 'raw', iq)):
         util.configure_cupy()
 
     for name in spec_dict.keys():
@@ -396,10 +395,8 @@ def evaluate_by_spec(
                 continue
             if not isinstance(iq, AcquiredIQ):
                 iq_sel = iq
-            elif meas.prefer_iq_source == 'pre_filter':
-                iq_sel = iq.pre_filter
-            elif iq.aligned is None or meas.prefer_iq_source == 'pre_align':
-                iq_sel = iq.pre_align
+            if iq.aligned is None or meas.prefer_unaligned_input:
+                iq_sel = iq.raw
             else:
                 iq_sel = iq.aligned
 
@@ -426,7 +423,7 @@ def evaluate_by_spec(
             assert isinstance(res, DelayedDataArray)
             results[name] = res.to_xarray()
 
-    if util.is_cupy_array(getattr(iq, 'pre_align', iq)):
+    if util.is_cupy_array(getattr(iq, 'raw', iq)):
         util.free_cupy_mempool()
 
     return results

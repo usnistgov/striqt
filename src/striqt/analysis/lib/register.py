@@ -276,14 +276,11 @@ class AlignmentSourceRegistry(
         return to_analysis_spec_type(self, base)
 
 
-PreferIQSource = typing.Literal['aligned'] | typing.Literal['pre_filter'] | typing.Literal['pre_align']
-
-
 class AnalysisInfo(typing.NamedTuple):
     name: str
     func: CallableAnalysis
     coord_factories: tuple[CallableCoordinateFactory, ...]
-    prefer_iq_source: PreferIQSource
+    prefer_unaligned_input: bool
     cache: KeywordArgumentCache | None
     dtype: str
     attrs: dict
@@ -367,7 +364,7 @@ class AnalysisRegistry(collections.UserDict[type[specs.Analysis], AnalysisInfo])
         caches: typing.Iterable[KeywordArgumentCache]
         | KeywordArgumentCache
         | None = None,
-        prefer_iq_source: PreferIQSource = 'aligned',
+        prefer_unaligned_input=False,
         store_compressed=True,
         attrs={},
     ) -> typing.Callable[
@@ -381,7 +378,7 @@ class AnalysisRegistry(collections.UserDict[type[specs.Analysis], AnalysisInfo])
 
         info_kws: dict[str, typing.Any] = dict(
             name=name,
-            prefer_iq_source=prefer_iq_source,
+            prefer_unaligned_input=prefer_unaligned_input,
             cache=caches,
             dtype=dtype,
             attrs=attrs,

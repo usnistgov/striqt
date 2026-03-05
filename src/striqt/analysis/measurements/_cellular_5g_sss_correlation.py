@@ -133,7 +133,7 @@ def cellular_5g_sss_sync(iq, capture: specs.Capture, window_fill=0.5, **kwargs):
     coord_factories=_coord_factories,
     dtype=dtype,
     caches=(sss_correlation_cache, shared.ssb_iq_cache),
-    prefer_iq_source='pre_align',
+    prefer_unaligned_input=True,
     store_compressed=False,
     attrs={'standard_name': 'SSS Cross-Covariance'},
 )

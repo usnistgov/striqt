@@ -41,7 +41,6 @@ def baseband_frequency(
     depends=_spectrogram.spectrogram,
     coord_factories=[time_statistic, baseband_frequency],
     spec_type=specs.PowerSpectralDensity,
-    prefer_iq_source='pre_filter',
     dtype='float32',
     attrs={'standard_name': 'Power spectral density'},
 )

@@ -66,7 +66,6 @@ def channel_power_bin(
     depends=[_channel_power_time_series.channel_power_time_series],
     spec_type=specs.ChannelPowerHistogram,
     dtype='float32',
-    prefer_iq_source='aligned',
     attrs={'standard_name': 'Fraction of channel power readings'},
 )
 def channel_power_histogram(iq, capture: specs.Capture, **kwargs):

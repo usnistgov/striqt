@@ -178,7 +178,7 @@ def adjust_analysis(
     if len(unused_names) > 0:
         logger = sa.util.get_logger('sweep')
         logger.warning(
-            f'analysis_adjust keys {unused_names} do not match any analysis parameters'
+            f'no analysis parameters match analysis_adjust keys {unused_names}'
         )
 
     return sa.specs.helpers.freeze(specs.BundledAnalysis.from_dict(result))

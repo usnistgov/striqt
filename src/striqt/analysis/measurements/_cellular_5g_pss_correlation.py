@@ -148,7 +148,7 @@ def pss_local_weighted_correlator(
     coord_factories=[],
     dtype='float32',
     caches=(pss_cache, shared.ssb_iq_cache, pss_weighted_cache),
-    prefer_iq_source='pre_align',
+    prefer_unaligned_input=True,
     store_compressed=False,
     attrs={'standard_name': 'PSS Synchronization Delay', 'units': 's'},
 )
@@ -182,7 +182,7 @@ def cellular_5g_pss_sync(iq, capture: specs.Capture, **kwargs):
     coord_factories=_coord_factories,
     dtype=dtype,
     caches=(pss_cache, shared.ssb_iq_cache),
-    prefer_iq_source='pre_align',
+    prefer_unaligned_input=True,
     store_compressed=False,
     attrs={'standard_name': 'PSS Cross-Covariance'},
 )

@@ -194,7 +194,6 @@ def _struct_defaults(spec_type: type[specs.SpecBase]) -> dict[str, typing.Any]:
     dtype='float32',
     depends=_spectrogram.spectrogram,
     spec_type=specs.CellularResourcePowerHistogram,
-    prefer_iq_source='pre_filter',
     attrs={'standard_name': 'Fraction of resource grid'},
 )
 def cellular_resource_power_histogram(

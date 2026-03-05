@@ -37,7 +37,6 @@ def spectrogram_ratio_power_bin(
     coord_factories=[spectrogram_ratio_power_bin],
     spec_type=specs.SpectrogramHistogramRatio,
     dtype='float32',
-    prefer_iq_source='pre_filter',
     attrs={'standard_name': 'Fraction of counts'},
 )
 def spectrogram_ratio_histogram(
