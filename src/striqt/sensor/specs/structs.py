@@ -200,7 +200,7 @@ class Range(LoopBase, frozen=True, kw_only=True):
             return [self.start]
 
         a = np.arange(self.start, self.stop + self.step / 2, self.step)
-        return list(a)
+        return a.tolist()
 
 
 class Repeat(LoopBase, frozen=True, kw_only=True):
