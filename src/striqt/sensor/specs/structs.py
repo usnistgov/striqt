@@ -237,7 +237,7 @@ class FrequencyBinRange(LoopBase, frozen=True, kw_only=True):
             points = points[1:]
         if points[-1] > self.stop:
             points = points[:-1]
-        return list(points)
+        return points.tolist()
 
 
 LoopSpec = typing.Union[Repeat, List, Range, FrequencyBinRange]
