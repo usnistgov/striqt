@@ -40,7 +40,7 @@ def synchronize(x: ArrayType, shifts: ArrayType, size_out: int) -> ArrayType:
         return out
 
 
-def resampling_correction(iq_in: sources.base.AcquiredIQ, overwrite_x=False, axis=1) -> sources.base.AcquiredIQ:
+def resampling_correction(iq: sources.base.AcquiredIQ, overwrite_x=False, axis=1) -> sources.base.AcquiredIQ:
     """resample, filter, and apply calibration corrections.
 
     Args:
@@ -52,19 +52,19 @@ def resampling_correction(iq_in: sources.base.AcquiredIQ, overwrite_x=False, axi
         the filtered IQ waveform
     """
 
-    iq = iq_in.raw
-    source_spec = iq_in.source_spec
-    xp = sw.util.array_namespace(iq)
+    x = iq.pre_align
+    source_spec = iq.source_spec
+    xp = sw.util.array_namespace(x)
 
-    if not isinstance(iq_in.capture, specs.SensorCapture):
+    if not isinstance(iq.capture, specs.SensorCapture):
         raise TypeError('iq.capture must be a capture specification')
     else:
-        capture = iq_in.capture
+        capture = iq.capture
 
-    fs = iq_in.resampler['fs_sdr']
-    needs_resample = sources.base.needs_resample(iq_in.resampler, capture)
+    fs = iq.resampler['fs_sdr']
+    needs_resample = sources.base.needs_resample(iq.resampler, capture)
     needs_filter = np.isfinite(capture.analysis_bandwidth)
-    vscale = iq_in.voltage_scale
+    vscale = iq.voltage_scale
 
     if not needs_resample:
         if not isinstance(vscale, (int, float)):
@@ -74,51 +74,53 @@ def resampling_correction(iq_in: sources.base.AcquiredIQ, overwrite_x=False, axi
             vscale = None
 
         if vscale is not None:
-            iq = xp.multiply(iq, vscale, out=iq if overwrite_x else None)
-        offset_out = sources.base.get_fft_resample_pad(source_spec, capture, iq_in.analysis)[0]
+            x = xp.multiply(x, vscale, out=x if overwrite_x else None)
+        offset_out = sources.base.get_fft_resample_pad(source_spec, capture, iq.analysis)[0]
 
     elif USE_OARESAMPLE:
         # this is broken. don't use it yet.
-        iq = sw.fourier.oaresample(
-            iq,
-            up=iq_in.resampler['nfft_out'],
-            down=iq_in.resampler['nfft'],
+        x = sw.fourier.oaresample(
+            x,
+            up=iq.resampler['nfft_out'],
+            down=iq.resampler['nfft'],
             fs=fs,
-            window=iq_in.resampler['window'],
+            window=iq.resampler['window'],
             overwrite_x=overwrite_x,
             axis=axis,
-            frequency_shift=iq_in.resampler['lo_offset'],
+            frequency_shift=iq.resampler['lo_offset'],
             filter_bandwidth=capture.analysis_bandwidth,
             transition_bandwidth=250e3,
             scale=1 if vscale is None else vscale,
         )
-        scale = iq_in.resampler['nfft_out'] / iq_in.resampler['nfft']
+        scale = iq.resampler['nfft_out'] / iq.resampler['nfft']
         oapad = sources.base._get_oaresample_pad(source_spec.master_clock_rate, capture)
-        lag_pad = sources.base._get_trigger_pad_size(source_spec, capture, iq_in.trigger)
+        lag_pad = sources.base._get_trigger_pad_size(source_spec, capture, iq.trigger)
         size_out = round(capture.duration * capture.sample_rate) + round(
             (oapad[1] + lag_pad) * scale
         )
-        offset = iq_in.resampler['nfft_out']
+        offset = iq.resampler['nfft_out']
 
-        assert size_out + offset <= iq.shape[axis]
-        iq = sw.util.axis_slice(iq, offset, offset + size_out, axis=axis)
-        assert iq.shape[axis] == size_out
+        assert size_out + offset <= x.shape[axis]
+        x = sw.util.axis_slice(x, offset, offset + size_out, axis=axis)
+        assert x.shape[axis] == size_out
         needs_filter = False
         offset_out = None
 
     else:
-        assert sw.util.isroundmod(iq.shape[1] * capture.sample_rate, fs)
-        resample_size_out = round(iq.shape[1] * capture.sample_rate / fs)
-        offset_in = sources.base.get_fft_resample_pad(source_spec, capture, iq_in.analysis)[0]
+        assert sw.util.isroundmod(x.shape[1] * capture.sample_rate, fs)
+        resample_size_out = round(x.shape[1] * capture.sample_rate / fs)
+        offset_in = sources.base.get_fft_resample_pad(source_spec, capture, iq.analysis)[0]
         offset_out = round(offset_in * capture.sample_rate / fs)
 
-        iq = sw.fourier.resample(
-            iq,
+        x = sw.fourier.resample(
+            x,
             resample_size_out,
             overwrite_x=overwrite_x,
             axis=axis,
             scale=1 if vscale is None else vscale,
         )
+
+    x_pre_filter = x
 
     # apply the filter here and ensure we're working with a copy if needed
     if needs_filter:
@@ -129,31 +131,33 @@ def resampling_correction(iq_in: sources.base.AcquiredIQ, overwrite_x=False, axi
             numtaps=sources.base.FILTER_SIZE,
             xp=xp,
         )
-        # pad = _base._get_filter_pad(capture)
-        iq = sw.oaconvolve(iq, h[xp.newaxis, :], 'same', axes=axis)
+        x = sw.oaconvolve(x, h[xp.newaxis, :], 'same', axes=axis)
 
     if offset_out is not None:
-        iq = sw.util.axis_slice(iq, offset_out, iq.shape[axis], axis=axis)
+        x = sw.util.axis_slice(x, offset_out, x.shape[axis], axis=axis)
+        x_pre_filter = sw.util.axis_slice(x_pre_filter, offset_out, x_pre_filter.shape[axis], axis=axis)
 
     size_out = round(capture.duration * capture.sample_rate)
 
-    iq_unaligned = iq[:, :size_out]
-    if iq_in.trigger is not None:
-        lags = iq_in.trigger(iq[:, :size_out], capture)
+    x_pre_align = x_pre_filter[:, :size_out]
+    if iq.trigger is not None:
+        lags = iq.trigger(x[:, :size_out], capture)
         shifts = xp.rint(lags * capture.sample_rate).astype('int')
-        iq_aligned = synchronize(iq, shifts, size_out)
+        out = synchronize(x, shifts, size_out)
+        x_pre_filter = synchronize(x_pre_filter, shifts, size_out)
     else:
-        iq_aligned = None
+        out = None
 
-    del iq
+    del x
 
-    assert iq_unaligned.shape[axis] == size_out
-    assert iq_aligned is None or iq_aligned.shape[axis] == size_out
+    assert x_pre_align.shape[axis] == size_out
+    assert out is None or out.shape[axis] == size_out
 
     return dataclasses.replace(
-        iq_in,
-        aligned=iq_aligned,
-        raw=iq_unaligned,
+        iq,
+        aligned=out,
+        pre_align=x_pre_align,
+        pre_filter=x_pre_filter,
         capture=capture,
-        extra_data=iq_in.extra_data,
+        extra_data=iq.extra_data,
     )

@@ -56,6 +56,7 @@ def spectrogram_time(capture: specs.Capture, spec: specs.Spectrogram) -> np.ndar
     spec_type=specs.Spectrogram,
     dtype='float16',
     caches=shared.spectrogram_cache,
+    prefer_iq_source='pre_filter',
     # typed_kwargs=shared.SpectrogramKeywords,
     attrs={'standard_name': 'PSD', 'long_name': 'Power Spectral Density'},
 )
