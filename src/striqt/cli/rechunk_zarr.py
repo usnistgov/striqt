@@ -17,7 +17,7 @@ def run(zarr_input: str, zarr_output: str|None):
         if path_in.name.endswith('.zarr'):
             raise ValueError('must pass in zarr_output for .zarr directory inputs')
         else:
-            path_out = path_in.with_suffix('.zarr')
+            path_out = path_in.with_suffix('').with_suffix('.zarr')
     else:
         path_out = Path(zarr_output)
 
