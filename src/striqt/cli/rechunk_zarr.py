@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 import click
+import functools
 
 
+@functools.cache
 def try_zarrs_input():
     try:
         import zarrs
@@ -25,11 +27,13 @@ def generate_timestamp_suffix(data) -> str:
     return datetime.fromtimestamp(ts/1e9).strftime('%Y%m%d-%Hh%Mm%S')
 
 
-
+click.Option()
 @click.command('plot signal analysis from .zarr or .zarr.zip files')
 @click.argument('zarr_input', type=click.Path(exists=True, dir_okay=True))
 @click.argument('zarr_output', type=click.Path(exists=False, dir_okay=True), required=False)
-def run(zarr_input: str, zarr_output: str|None):
+@click.option('chunk_size', type=int, default=50, required=False, help='maximum chunk size (in MB)')
+@click.option('compression', type=int, default=1, required=False, help='compression level (0-9)')
+def run(zarr_input: str, zarr_output: str|None, chunk_size=50, compression=1):
     # yaml first, since it fails fastest
     import striqt.analysis as sa
     from pathlib import Path
@@ -53,9 +57,23 @@ def run(zarr_input: str, zarr_output: str|None):
     if path_out.exists():
         raise click.ClickException(f'file or directory already exists at output {str(path_out)!r}')
 
+    try_zarrs_input()
+
     store = sa.open_store(path_out, mode='w')
     print(f'rechunking input into {str(path_out)}')
-    sa.dump(store, data)
+
+    if compression > 1:
+        try:
+            from zarr import codecs  # type: ignore
+            # zarr v3
+            shuffle = codecs.BloscShuffle.shuffle
+            c = codecs.BloscCodec(cname='zstd', clevel=1, shuffle=shuffle)
+        except ImportError, AttributeError:
+            # zarr v2
+            import numcodecs
+            c = numcodecs.Blosc('zstd', clevel=1)
+
+    sa.dump(store, data, chunk_bytes=1_000_000 * chunk_size, compression=c)
 
 
 if __name__ == '__main__':

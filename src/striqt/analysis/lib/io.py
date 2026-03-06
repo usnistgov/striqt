@@ -153,7 +153,7 @@ def _build_encodings_zarr_v2(
     if isinstance(compression, numcodecs.abc.Codec):  # type: ignore
         compressor = compression
     elif compression:
-        compressor = numcodecs.Blosc('lz4', clevel=3)
+        compressor = numcodecs.Blosc('zstd', clevel=1)
     else:
         compressor = None
 
