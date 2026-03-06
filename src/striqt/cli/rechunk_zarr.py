@@ -31,8 +31,8 @@ click.Option()
 @click.command('plot signal analysis from .zarr or .zarr.zip files')
 @click.argument('zarr_input', type=click.Path(exists=True, dir_okay=True))
 @click.argument('zarr_output', type=click.Path(exists=False, dir_okay=True), required=False)
-@click.option('chunk_size', type=int, default=50, required=False, help='maximum chunk size (in MB)')
-@click.option('compression', type=int, default=1, required=False, help='compression level (0-9)')
+@click.option('chunk_size', type=int, required=False, help='maximum chunk size (in MB)')
+@click.option('compression', type=int, required=False, help='compression level (0-9)')
 def run(zarr_input: str, zarr_output: str|None, chunk_size=50, compression=1):
     # yaml first, since it fails fastest
     import striqt.analysis as sa
