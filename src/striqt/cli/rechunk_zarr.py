@@ -69,6 +69,8 @@ def run(zarr_input: str, zarr_output: str|None, chunk_size, compression):
             # zarr v2
             import numcodecs
             c = numcodecs.Blosc('zstd', clevel=1)
+    else:
+        c = compression
 
     sa.dump(store, data, chunk_bytes=1_000_000 * chunk_size, compression=c)
 
