@@ -59,7 +59,7 @@ def run(zarr_input: str, zarr_output: str|None, chunk_size, compression):
         raise click.ClickException(f'file or directory already exists at output {str(path_out)!r}')
 
     store = sa.open_store(path_out, mode='w')
-    print(f'rechunking input into {str(path_out)}')
+    print(f'rechunking input into {str(path_out)} (compression={compression}, chunk_size={chunk_size} MB)')
 
     if compression > 1:
         try:
