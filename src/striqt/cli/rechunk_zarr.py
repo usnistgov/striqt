@@ -30,7 +30,7 @@ def generate_timestamp_suffix(data) -> str:
 @click.command('plot signal analysis from .zarr or .zarr.zip files')
 @click.argument('zarr_input', type=click.Path(exists=True, dir_okay=True))
 @click.argument('zarr_output', type=click.Path(exists=False), required=False)
-@click.option('--chunk-size', type=int, required=False, show_default=True, default=50)
+@click.option('--chunk-size', type=int, required=False, show_default=True, default=200)
 @click.option('--compression', type=int, required=False, show_default=True, default=1, help='compression level (0-9)')
 def run(zarr_input: str, zarr_output: str|None, chunk_size, compression):
     # yaml first, since it fails fastest
