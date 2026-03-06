@@ -72,9 +72,7 @@ def run(zarr_input: str, zarr_output: str | None, chunk_size, compression):
         )
 
     store = sa.open_store(path_out, mode='w')
-    print(
-        f'rechunking input into {str(path_out)} (compression={compression}, chunk_size={chunk_size} MB)'
-    )
+    print(f'rechunking input into {str(path_out)}')
 
     if compression > 1:
         try:
