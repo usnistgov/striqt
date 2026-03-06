@@ -36,6 +36,8 @@ def run(zarr_input: str, zarr_output: str|None, chunk_size, compression):
     # yaml first, since it fails fastest
     import striqt.analysis as sa
     from pathlib import Path
+    import warnings
+    warnings.filterwarnings('ignore', message='.*may change without warning.*')
 
     path_in = Path(zarr_input)
 
@@ -64,7 +66,7 @@ def run(zarr_input: str, zarr_output: str|None, chunk_size, compression):
             from zarr import codecs  # type: ignore
             # zarr v3
             shuffle = codecs.BloscShuffle.shuffle
-            c = codecs.BloscCodec(cname='zstd', clevel=1, shuffle=shuffle)
+            c = codecs.BloscCodec(cname='zstd', clevel=compression, shuffle=shuffle)
         except ImportError, AttributeError:
             # zarr v2
             import numcodecs
