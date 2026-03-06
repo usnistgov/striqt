@@ -9,6 +9,7 @@ _TC = typing.TypeVar('_TC', bound='specs.SensorCapture', contravariant=True)
 _TP = typing.TypeVar('_TP', bound='specs.Peripherals')
 _TPC = typing.TypeVar('_TPC', bound='specs.Peripherals')
 
+
 class PeripheralsProtocol(typing.Protocol[_TC]):
     """a peripherals extension class must implement these"""
 
