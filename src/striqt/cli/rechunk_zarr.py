@@ -57,8 +57,6 @@ def run(zarr_input: str, zarr_output: str|None, chunk_size=50, compression=1):
     if path_out.exists():
         raise click.ClickException(f'file or directory already exists at output {str(path_out)!r}')
 
-    try_zarrs_input()
-
     store = sa.open_store(path_out, mode='w')
     print(f'rechunking input into {str(path_out)}')
 
