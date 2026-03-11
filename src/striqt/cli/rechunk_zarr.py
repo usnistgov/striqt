@@ -25,7 +25,7 @@ def generate_timestamp_suffix(data) -> str:
             'the data contained no timestamp to autogenerate an output file'
         )
 
-    ts = float(data['start_time'][0])
+    ts = data['start_time'][0]
 
     return datetime.fromtimestamp(ts / 1e9).strftime('%Y%m%d-%Hh%Mm%S')
 
@@ -81,7 +81,7 @@ def run(zarr_input: str, zarr_output: str | None, chunk_size, compression):
             # zarr v3
             shuffle = codecs.BloscShuffle.shuffle
             c = codecs.BloscCodec(cname='zstd', clevel=compression, shuffle=shuffle)
-        except (ImportError, AttributeError):
+        except ImportError, AttributeError:
             # zarr v2
             import numcodecs
 

@@ -141,7 +141,7 @@ def resampling_correction(
         iq = sw.oaconvolve(iq, h[xp.newaxis, :], 'same', axes=axis)
 
     if offset_out is not None:
-        iq = sw.util.axis_slice(iq, offset_out, iq.shape[axis] - offset_out, axis=axis)
+        iq = sw.util.axis_slice(iq, offset_out, iq.shape[axis], axis=axis)
 
     size_out = round(capture.duration * capture.sample_rate)
 
