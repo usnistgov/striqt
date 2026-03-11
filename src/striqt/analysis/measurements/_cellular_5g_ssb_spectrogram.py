@@ -80,7 +80,7 @@ _coord_factories = [
     coord_factories=_coord_factories,
     dtype='float16',
     caches=(shared.spectrogram_cache,),
-    prefer_unaligned_input=False,
+    prefer_iq_source='pre_filter',
     attrs={'standard_name': 'SSB Spectrogram'},
 )
 def cellular_5g_ssb_spectrogram(iq, capture: specs.Capture, **kwargs):

@@ -245,7 +245,7 @@ def _get_spec_range(
 @registry.measurement(
     coord_factories=[link_direction, subcarrier_spacing, cyclic_sample_lag],
     dtype='float32',
-    prefer_unaligned_input=True,
+    prefer_iq_source='pre_align',
     spec_type=specs.CellularCyclicAutocorrelator,
     attrs={'units': 'mW', 'standard_name': 'Cyclic Autocovariance'},
 )

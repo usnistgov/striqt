@@ -49,6 +49,7 @@ def spectrogram_power_bin(
     coord_factories=[spectrogram_power_bin],
     spec_type=specs.SpectrogramHistogram,
     dtype='float32',
+    prefer_iq_source='pre_filter',
     attrs={'standard_name': 'Fraction of counts'},
 )
 def spectrogram_histogram(iq: 'sw.util.ArrayType', capture: specs.Capture, **kwargs):

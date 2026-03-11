@@ -631,7 +631,8 @@ class SourceBase(
         trigger = get_trigger_from_spec(self.setup_spec, analysis)
 
         return AcquiredIQ(
-            raw=samples,
+            pre_align=samples,
+            pre_filter=None,
             aligned=None,
             capture=self.capture_spec,
             info=info,

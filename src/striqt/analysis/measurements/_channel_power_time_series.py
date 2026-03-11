@@ -66,6 +66,7 @@ def evaluate_channel_power_time_series(
     dtype='float32',
     spec_type=specs.ChannelPowerTimeSeries,
     caches=_channel_power_cache,
+    prefer_iq_source='aligned',
     attrs={'standard_name': 'Channel Power', 'units': 'dBm'},
 )
 def channel_power_time_series(iq, capture: specs.Capture, **kwargs):
