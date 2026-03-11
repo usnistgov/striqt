@@ -88,7 +88,7 @@ def iterate_sweep(
         correction=True,
         cache_callback=log,
         as_xarray='delayed',
-        block_each=False,
+        block_each=True, # important: data corruption observed otherwise
     )
 
     iq = None
