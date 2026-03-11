@@ -276,7 +276,7 @@ class AlignmentSourceRegistry(
         return to_analysis_spec_type(self, base)
 
 
-PreferIQSource = typing.Literal['aligned'] | typing.Literal['pre_filter'] | typing.Literal['pre_align']
+PreferIQSource = typing.Literal['aligned','pre_filter','pre_align']
 
 
 class AnalysisInfo(typing.NamedTuple):
