@@ -75,7 +75,7 @@ def resampling_correction(iq: sources.base.AcquiredIQ, overwrite_x=False, axis=1
 
         if vscale is not None:
             x = xp.multiply(x, vscale, out=x if overwrite_x else None)
-        offset_out = sources.base.get_fft_resample_pad(source_spec, capture, iq.analysis)[0]
+        pad = sources.base.get_fft_resample_pad(source_spec, capture, iq.analysis)[0]
 
     elif USE_OARESAMPLE:
         # this is broken. don't use it yet.
@@ -104,13 +104,13 @@ def resampling_correction(iq: sources.base.AcquiredIQ, overwrite_x=False, axis=1
         x = sw.util.axis_slice(x, offset, offset + size_out, axis=axis)
         assert x.shape[axis] == size_out
         needs_filter = False
-        offset_out = None
+        pad = None
 
     else:
         assert sw.util.isroundmod(x.shape[1] * capture.sample_rate, fs)
         resample_size_out = round(x.shape[1] * capture.sample_rate / fs)
-        offset_in = sources.base.get_fft_resample_pad(source_spec, capture, iq.analysis)[0]
-        offset_out = round(offset_in * capture.sample_rate / fs)
+        pad_in = sources.base.get_fft_resample_pad(source_spec, capture, iq.analysis)[0]
+        pad = round(pad_in * capture.sample_rate / fs)
 
         x = sw.fourier.resample(
             x,
@@ -133,9 +133,9 @@ def resampling_correction(iq: sources.base.AcquiredIQ, overwrite_x=False, axis=1
         )
         x = sw.oaconvolve(x, h[xp.newaxis, :], 'same', axes=axis)
 
-    if offset_out is not None:
-        x = sw.util.axis_slice(x, offset_out, x.shape[axis], axis=axis)
-        x_pre_filter = sw.util.axis_slice(x_pre_filter, offset_out, x_pre_filter.shape[axis], axis=axis)
+    if pad is not None:
+        x = sw.util.axis_slice(x, pad, None, axis=axis)
+        x_pre_filter = sw.util.axis_slice(x_pre_filter, pad, None, axis=axis)
 
     size_out = round(capture.duration * capture.sample_rate)
 
