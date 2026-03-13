@@ -100,7 +100,6 @@ def _get_cache_shelf():
     import platformdirs
     import shelve
     from threading import Lock
-    import dbm.sqlite3
 
     dir = Path(platformdirs.user_cache_dir('striqt'))
     dir.mkdir(parents=True, exist_ok=True)
