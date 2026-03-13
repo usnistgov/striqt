@@ -84,7 +84,7 @@ def get_window(
     register_extra_windows()
 
     ws = signal.windows.get_window(name_or_tuple, nwindow, fftbins=fftbins)
-    ws = typing.cast(Array, ws)
+    ws = typing.cast('Array', ws)
 
     ntotal = nwindow + nzero
 

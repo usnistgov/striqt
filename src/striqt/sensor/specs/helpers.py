@@ -46,7 +46,7 @@ def convert_capture_arg(
     def wrapper(func):
         @functools.wraps(func)
         def wrapped(capture: specs.Capture, *args, **kwargs):
-            return func(*args, capture=capture_cls.from_spec(capture), **kwargs)
+            return func(capture_cls.from_spec(capture), *args, **kwargs)
 
         return wrapped
 

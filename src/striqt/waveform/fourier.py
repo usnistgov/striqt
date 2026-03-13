@@ -8,10 +8,12 @@ from .lib.fourier import (
     get_window,
     ifft,
     istft,
+    null_lo,
     oaconvolve,
     oaresample,
     resample,
     ResamplerDesign,
     spectrogram,
     stft,
+    truncate_freqs
 )

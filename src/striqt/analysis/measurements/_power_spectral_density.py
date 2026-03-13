@@ -55,7 +55,7 @@ def power_spectral_density(iq, capture, **kwargs):
     spec = specs.PowerSpectralDensity.from_dict(kwargs)
     spg_spec = specs.Spectrogram.from_spec(spec)
 
-    from striqt.waveform.power_analysis import stat_ufunc_from_shorthand
+    from striqt.waveform.lib.power_analysis import stat_ufunc_from_shorthand
 
     working_dtype = 'float32'
 

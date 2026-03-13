@@ -3,8 +3,10 @@ from __future__ import annotations as __
 import collections
 import functools
 import importlib.util
+from pathlib import Path
 import sys
 import threading
+from types import ModuleType
 from typing import Any, Callable, cast, TYPE_CHECKING
 
 
@@ -65,6 +67,8 @@ else:
     pickle = lazy_import('pickle')
 
 
+#%% function call caching
+
 _caches = {}
 
 
@@ -92,55 +96,84 @@ def lru_cache(
 
 
 @functools.cache
-def _get_cache_shelf(func):
+def _get_cache_shelf():
     import platformdirs
     import shelve
     from threading import Lock
+    import dbm.sqlite3
 
-    dir = platformdirs.user_cache_dir('striqt.waveform')
-    filename = f'{dir}/{func.__name__}.db'
+    dir = Path(platformdirs.user_cache_dir('striqt'))
+    dir.mkdir(parents=True, exist_ok=True)
+    filename = dir/'calls.db'
 
     cache_lock = Lock()
-    return shelve.open(filename, writeback=True), cache_lock
+    shelf = shelve.open(filename, writeback=True)
+
+    def close():
+        dict = getattr(shelf, 'dict', None)
+        if dict is None:
+            return
+        try:
+            dict.close()
+        except dbm.sqlite3.error:
+            pass
+
+    shelf.__del__ = close
+    return shelf, cache_lock
+
+
+def _make_lru_key(func, args, kwargs) -> str:
+    import pickle
+
+    def fix_arg(obj):
+        if isinstance(obj, ModuleType):
+            return repr(obj)
+        else:
+            return obj
+
+    p = pickle.dumps((
+        (func.__name__,),
+        tuple(fix_arg(v) for v in args),
+        tuple((k, fix_arg(v)) for k, v in kwargs.items())
+    ))
+
+    return p.decode(errors='replace')
 
 
 def persistent_lru_cache(
     maxsize=128,
-) -> Callable[
-    [Callable[P, R]],
-    CachedCallable[P, R],
-]:
+) -> Callable[[Callable[P, R]], CachedCallable[P, R]]:
+    """caches a decorated function persistently on disk"""
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            shelf, lock = _get_cache_shelf(func)
+            shelf, lock = _get_cache_shelf()
             access_order = collections.OrderedDict().fromkeys(shelf.keys())
 
-            # Create a unique string key based on arguments
-            # We include the function name to avoid collisions if sharing a file
-            key = repr(hash((tuple(args), frozenset(kwargs.items()))))
+            key = _make_lru_key(func, args, kwargs)
 
             with lock:
-                if key in shelf:
+                try:
+                    if key in shelf:
+                        access_order.move_to_end(key)
+                        return shelf[key]
+
+                    # If not in cache, compute the result
+                    result = func(*args, **kwargs)
+
+                    # Add to cache
+                    shelf[key] = result
+                    access_order[key] = None
                     access_order.move_to_end(key)
-                    return shelf[key]
 
-                # If not in cache, compute the result
-                result = func(*args, **kwargs)
+                    # Evict if over limit
+                    if len(access_order) > maxsize:
+                        oldest_key, _ = access_order.popitem(last=False)
+                        del shelf[oldest_key]
 
-                # Add to cache
-                shelf[key] = result
-                access_order[key] = None
-                access_order.move_to_end(key)
-
-                # Evict if over limit
-                if len(access_order) > maxsize:
-                    oldest_key, _ = access_order.popitem(last=False)
-                    del shelf[oldest_key]
-
-                # Ensure data is written to disk
-                shelf.sync()
-                return result
+                finally:
+                    shelf.sync()
+            return result
 
         wrapper.__wrapped__ = func
         return wrapper
@@ -157,11 +190,7 @@ def cache_info() -> dict[str, Any]:
     return {f'{f.__module__}.{f.__name__}': c.cache_info() for f, c in _caches.items()}
 
 
-def ceildiv(a: int, b: int) -> int:
-    """Returns ceil(a/b)."""
-    return -(-a // b)
-
-
+#%% memory management
 def except_on_low_memory(threshold_bytes=500_000_000):
     import psutil
 
@@ -170,6 +199,11 @@ def except_on_low_memory(threshold_bytes=500_000_000):
 
     raise MemoryError('too little memory to proceed')
 
+
+#%% numbers
+def ceildiv(a: int, b: int) -> int:
+    """Returns ceil(a/b)."""
+    return -(-a // b)
 
 @lru_cache()
 def find_float_inds(seq: tuple[str | float, ...]) -> list[bool]:
