@@ -1,6 +1,7 @@
 import typing
 from typing_extensions import ParamSpec, Self, TypeAlias, TypeVar, Unpack
 from typing import (
+    Any,
     Callable,
     Protocol,
     Sequence,
@@ -35,11 +36,13 @@ _TC = TypeVar('_TC', bound='specs.SensorCapture', contravariant=True)
 
 # %% peripherals.py
 class PeripheralsProtocol(Protocol[_TC]):
+    def __init__(self, spec: 'specs.Sweep[Any, TP, TC]'): ...
+
     def open(self): ...
 
     def close(self): ...
 
-    def setup(self, captures: Sequence[_TC], loops: Sequence[specs.LoopSpec]): ...
+    def setup(self, captures: 'Sequence[_TC]', loops: 'Sequence[specs.LoopSpec]'): ...
 
     def arm(self, capture: _TC): ...
 
@@ -76,7 +79,7 @@ class HasSetup(Protocol[TS, PS]):
         spec: TS,
         *,
         captures: tuple[TC, ...] | None = None,
-        loops: tuple[specs.LoopSpec, ...] | None = None,
+        loops: 'tuple[specs.LoopSpec, ...] | None' = None,
     ) -> None: ...
 
 
@@ -91,7 +94,7 @@ class HasCapture(typing.Protocol[TC, PC]):
         self,
         *,
         correction: bool = True,
-        alias_func: specs.helpers.PathAliasFormatter | None = None,
+        alias_func: 'specs.helpers.PathAliasFormatter | None' = None,
     ) -> sources.AcquiredIQ: ...
 
     @property
@@ -99,7 +102,7 @@ class HasCapture(typing.Protocol[TC, PC]):
 
     def _prepare_capture(self, capture: TC) -> TC | None: ...
 
-    def get_resampler(self, capture: TC | None = None) -> ResamplerDesign: ...
+    def get_resampler(self, capture: 'TC | None' = None) -> ResamplerDesign: ...
 
 
 if typing.TYPE_CHECKING:
