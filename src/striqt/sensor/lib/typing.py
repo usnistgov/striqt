@@ -80,7 +80,7 @@ class HasSetup(Protocol[TS, PS]):
         spec: TS,
         *,
         captures: tuple[TC, ...] | None = None,
-        loops: tuple[specs.LoopSpec, ...] | None = None,
+        loops: 'tuple[specs.LoopSpec, ...] | None' = None,
     ) -> None: ...
 
 
@@ -95,7 +95,7 @@ class HasCapture(typing.Protocol[TC, PC]):
         self,
         *,
         correction: bool = True,
-        alias_func: specs.helpers.PathAliasFormatter | None = None,
+        alias_func: 'specs.helpers.PathAliasFormatter | None' = None,
     ) -> sources.AcquiredIQ: ...
 
     @property
@@ -103,7 +103,7 @@ class HasCapture(typing.Protocol[TC, PC]):
 
     def _prepare_capture(self, capture: TC) -> TC | None: ...
 
-    def get_resampler(self, capture: TC | None = None) -> ResamplerDesign: ...
+    def get_resampler(self, capture: 'TC | None' = None) -> ResamplerDesign: ...
 
 
 if typing.TYPE_CHECKING:
