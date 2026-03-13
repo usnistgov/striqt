@@ -1,6 +1,7 @@
 import typing
 from typing_extensions import ParamSpec, Self, TypeVar, Unpack
 from typing import (
+    Any,
     Callable,
     Protocol,
     Sequence,
@@ -36,11 +37,13 @@ _TC = TypeVar('_TC', bound='specs.SensorCapture', contravariant=True)
 
 # %% peripherals.py
 class PeripheralsProtocol(Protocol[_TC]):
+    def __init__(self, spec: 'specs.Sweep[Any, TP, TC]'): ...
+
     def open(self): ...
 
     def close(self): ...
 
-    def setup(self, captures: Sequence[_TC], loops: Sequence[specs.LoopSpec]): ...
+    def setup(self, captures: 'Sequence[_TC]', loops: 'Sequence[specs.LoopSpec]'): ...
 
     def arm(self, capture: _TC): ...
 
