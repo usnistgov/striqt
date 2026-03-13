@@ -109,16 +109,8 @@ def _get_cache_shelf():
     cache_lock = Lock()
     shelf = shelve.open(filename, writeback=True)
 
-    def close():
-        dict = getattr(shelf, 'dict', None)
-        if dict is None:
-            return
-        try:
-            dict.close()
-        except dbm.sqlite3.error:
-            pass
-
-    shelf.__del__ = close
+    # sync is forced on each operation already
+    shelf.__del__ = lambda: None
     return shelf, cache_lock
 
 
