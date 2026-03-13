@@ -103,7 +103,7 @@ def _get_cache_shelf():
 
     dir = Path(platformdirs.user_cache_dir('striqt'))
     dir.mkdir(parents=True, exist_ok=True)
-    filename = dir/'calls.db'
+    filename = str(dir/'calls.db') # python 3.9 shelve wants str
 
     cache_lock = Lock()
     shelf = shelve.open(filename, writeback=True)
