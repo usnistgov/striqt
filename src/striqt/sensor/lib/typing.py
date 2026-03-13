@@ -21,7 +21,7 @@ PC = ParamSpec('PC')
 R = TypeVar('R')
 
 TS = TypeVar('TS', bound='specs.Source')
-TC = TypeVar('TC', bound='specs.SensorCapture', infer_variance=True)
+TC = TypeVar('TC', bound='specs.SensorCapture')
 TB = TypeVar('TB', bound='specs.SpecBase')
 TP = TypeVar('TP', bound='specs.Peripherals')
 TPC = TypeVar('TPC', bound='specs.Peripherals')
@@ -31,17 +31,20 @@ TPC = TypeVar('TPC', bound='specs.Peripherals')
 from striqt.analysis.lib.typing import TAR
 
 
+_TC = TypeVar('_TC', bound='specs.SensorCapture', contravariant=True)
+
+
 # %% peripherals.py
-class PeripheralsProtocol(Protocol[TC]):
+class PeripheralsProtocol(Protocol[_TC]):
     def open(self): ...
 
     def close(self): ...
 
-    def setup(self, captures: Sequence[TC], loops: Sequence[specs.LoopSpec]): ...
+    def setup(self, captures: Sequence[_TC], loops: Sequence[specs.LoopSpec]): ...
 
-    def arm(self, capture: TC): ...
+    def arm(self, capture: _TC): ...
 
-    def acquire(self, capture: TC) -> dict[str, typing.Any]: ...
+    def acquire(self, capture: _TC) -> dict[str, typing.Any]: ...
 
 
 # %% sources/base.py
