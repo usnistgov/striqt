@@ -5,6 +5,7 @@ import typing
 from .. import specs
 
 from ..lib import util
+from ..lib import typing as _t
 from . import _channel_power_histogram, _spectrogram, _spectrogram_histogram, shared
 from .shared import registry, hint_keywords
 import striqt.waveform as sw
@@ -41,7 +42,7 @@ def spectrogram_ratio_power_bin(
     attrs={'standard_name': 'Fraction of counts'},
 )
 def spectrogram_ratio_histogram(
-    iq: 'sw.util.ArrayType',
+    iq: 'sw.util.Array',
     capture: specs.Capture,
     **kwargs,
 ):

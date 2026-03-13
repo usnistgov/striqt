@@ -14,7 +14,7 @@ if typing.TYPE_CHECKING:
     import scipy
 
     import striqt.waveform as sw
-    from striqt.waveform._typing import ArrayType
+    from striqt.waveform._typing import Array
 else:
     np = util.lazy_import('numpy')
     scipy = util.lazy_import('scipy')
@@ -76,7 +76,7 @@ def _generate_iir_lpf(
 
 
 def iir_filter(
-    iq: ArrayType,
+    iq: Array,
     capture: specs.Capture,
     *,
     passband_ripple: float | int,
@@ -101,7 +101,7 @@ def iir_filter(
 
 
 def ola_filter(
-    iq: ArrayType,
+    iq: Array,
     capture: specs.Capture,
     *,
     nfft: int,

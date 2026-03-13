@@ -29,7 +29,7 @@ if typing.TYPE_CHECKING:
     import pandas as pd
     import xarray as xr
 
-    from ._typing import ArrayLike, ArrayType, _AL, _ALN, _AT
+    from ._typing import ArrayLike, Array, _AL, _ALN, _AT
 
     _T = typing.TypeVar('_T')
 
@@ -112,11 +112,11 @@ def stat_ufunc_from_shorthand(kind, xp=None, axis=0) -> typing.Callable:
 
 def _arraylike_with_buffer(
     x: ArrayLike | Number, out: ArrayLike | None = None, min_dtype: Any = None
-) -> tuple[ArrayType, ArrayType, ModuleType]:
+) -> tuple[Array, Array, ModuleType]:
     """interpret the array-like input and output buffer arguments.
 
     Returns:
-        ArrayType objects pointing to the underlying array-type objects,
+        Array objects pointing to the underlying array-type objects,
         and the module to work with them
     """
     try:
@@ -148,7 +148,7 @@ def _arraylike_with_buffer(
 
 
 def _repackage_arraylike(
-    values: ArrayType,
+    values: Array,
     obj: _ALN,
     *,
     unit_transform: Optional[typing.Callable] = None,
@@ -345,7 +345,7 @@ def dBlinsum(x_dB: _AL, axis=None, overwrite_x=False) -> _AL:
 
 
 def iq_to_bin_power(
-    iq: ArrayType,
+    iq: Array,
     Ts: float,
     Tbin: float,
     randomize: bool = False,
@@ -392,7 +392,7 @@ def iq_to_bin_power(
 
 
 def iq_to_cyclic_power(
-    x: ArrayType,
+    x: Array,
     Ts: float,
     detector_period: float,
     cyclic_period: float,
@@ -400,7 +400,7 @@ def iq_to_cyclic_power(
     detectors=('rms', 'peak'),
     cycle_stats=('min', 'mean', 'max'),
     axis=0,
-) -> dict[str, dict[str, ArrayType]]:
+) -> dict[str, dict[str, Array]]:
     """computes a time series of periodic frame power statistics.
 
     The time axis on the cyclic time lag [0, cyclic_period) is binned with step size

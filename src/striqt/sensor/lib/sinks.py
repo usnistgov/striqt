@@ -1,14 +1,14 @@
 from __future__ import annotations as __
 
 import itertools as itertools
-import typing as typing
+from typing import Any, cast, Generic, TYPE_CHECKING
 
 from . import compute, io, sources, util
 from .. import specs as specs
 
 import striqt.analysis as sa
 
-if typing.TYPE_CHECKING:
+if TYPE_CHECKING:
     import xarray as xr
 else:
     xr = sa.util.lazy_import('xarray')
@@ -30,12 +30,12 @@ class _BatchTracker:
         return self.size
 
 
-class SinkBase(typing.Generic[specs._TC]):
+class SinkBase(Generic[specs.TC]):
     """intake acquisitions one at a time, and parcel data store"""
 
     def __init__(
         self,
-        sweep_spec: specs.Sweep[typing.Any, typing.Any, specs._TC],
+        sweep_spec: specs.Sweep[Any, Any, specs.TC],
         alias_func: specs.helpers.PathAliasFormatter | None = None,
         *,
         force: bool = False,
@@ -185,7 +185,7 @@ class ZarrCaptureSink(ZarrSinkBase):
                 join='outer',
                 combine_attrs='drop_conflicts',
             )
-            dataset = typing.cast(xr.Dataset, dataset)
+            dataset = cast(xr.Dataset, dataset)
 
         path = self.get_root_path()
         count = self.captures_elapsed

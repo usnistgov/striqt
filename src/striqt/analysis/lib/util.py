@@ -1,15 +1,13 @@
 from __future__ import annotations as __
 
 import contextlib
-import importlib
-import importlib.util
 import io
 import logging
 import math
 import sys
 import threading
 import time
-import typing
+from typing import Any, Iterable, Literal, TYPE_CHECKING
 
 from striqt.waveform.util import (
     configure_cupy,
@@ -22,8 +20,9 @@ from striqt.waveform.util import (
     cp,
 )
 
-if typing.TYPE_CHECKING:
-    from striqt.waveform._typing import ArrayType
+
+if TYPE_CHECKING:
+    from .typing import Array
 
 
 _compute_lock = threading.RLock()
@@ -71,7 +70,7 @@ _StriqtLogger('analysis')
 def show_messages(
     level: int | None,
     colors: bool | None = None,
-    logger_names: tuple[str, ...] | typing.Literal['all'] = 'all',
+    logger_names: tuple[str, ...] | Literal['all'] = 'all',
 ):
     """filters logging messages displayed to the console by importance
 
@@ -234,7 +233,7 @@ def blocking_input(prompt: str | None = None, /) -> str:
     return response
 
 
-def ordered_set_union(*args: typing.Iterable[typing.Any]) -> list[typing.Any]:
+def ordered_set_union(*args: Iterable[Any]) -> list[Any]:
     """perform a set union on the supplied iterables.
 
     Maintains ordering in the same way as dict/OrderedDict.

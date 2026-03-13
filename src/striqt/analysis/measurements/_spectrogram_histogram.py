@@ -52,7 +52,7 @@ def spectrogram_power_bin(
     prefer_iq_source='pre_filter',
     attrs={'standard_name': 'Fraction of counts'},
 )
-def spectrogram_histogram(iq: 'sw.util.ArrayType', capture: specs.Capture, **kwargs):
+def spectrogram_histogram(iq: 'sw.util.Array', capture: specs.Capture, **kwargs):
     spec = specs.SpectrogramHistogram.from_dict(kwargs)
     spg_spec = specs.Spectrogram.from_spec(spec)
 

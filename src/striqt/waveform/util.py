@@ -7,12 +7,13 @@ import itertools
 import math
 import sys
 import threading
-import typing
+from typing import Any, Callable, cast, Generator, TypeVar, TYPE_CHECKING
+
 from numbers import Number
 from types import ModuleType
 import array_api_compat
 
-_TC = typing.TypeVar('_TC', bound=typing.Callable)
+_TC = TypeVar('_TC', bound=Callable)
 
 
 _lazy_import_locks = collections.defaultdict(threading.RLock)
@@ -48,8 +49,9 @@ def lazy_import(module_name: str, package=None):
     return module
 
 
-if typing.TYPE_CHECKING:
+if TYPE_CHECKING:
     import typing_extensions
+    from ._typing import CachedCallable, P, R
 
     try:
         import cupy as cp  # pyright: ignore[reportMissingImports]
@@ -60,7 +62,7 @@ if typing.TYPE_CHECKING:
 
     import numpy as np
 
-    from ._typing import ArrayLike, ArrayType
+    from ._typing import ArrayLike, Array
 
 else:
     np = lazy_import('numpy')
@@ -68,17 +70,18 @@ else:
         cp = lazy_import('cupy')
     except ImportError:
         cp = None
+    pickle = lazy_import('pickle')
 
 
 def binned_mean(
-    x: ArrayType,
+    x: Array,
     count,
     *,
     axis=0,
     truncate=True,
     reject_extrema=False,
     fft=True,
-) -> ArrayType:
+) -> Array:
     """reduce an array by averaging into bins on the specified axis.
 
     Arguments:
@@ -117,6 +120,7 @@ def binned_mean(
         x = np.sort(x, axis=stat_axis)
         x = axis_slice(x, 1, -1, axis=stat_axis)
     ret = xp.nanmean(x, axis=stat_axis)
+
     return ret
 
 
@@ -126,7 +130,10 @@ _caches = {}
 @functools.wraps(functools.lru_cache)
 def lru_cache(
     maxsize: int | None = 128, typed: bool = False
-) -> typing.Callable[[_TC], _TC]:
+) -> Callable[
+    [Callable[P, R]],
+    CachedCallable[P, R],
+]:
     # presuming that the API is designed to accept only hashable types, set
     # the type hint to match the wrapped function
     func = functools.lru_cache(maxsize, typed)
@@ -137,7 +144,93 @@ def lru_cache(
         _caches[wrapee] = wrapped
         return wrapped
 
-    return typing.cast(typing.Callable[[_TC], _TC], wrap)
+    return cast(
+        'Callable[[Callable[P, R]], CachedCallable[P, R]]',
+        wrap,
+    )
+
+
+@functools.cache
+def _get_cache_shelf(func):
+    import platformdirs
+    import shelve
+    from threading import Lock
+
+    dir = platformdirs.user_cache_dir('striqt.waveform')
+    filename = f'{dir}/{func.__name__}.db'
+
+    cache_lock = Lock()
+    return shelve.open(filename, writeback=True), cache_lock
+
+
+def persistent_lru_cache(
+    maxsize=128,
+) -> Callable[
+    [Callable[P, R]],
+    CachedCallable[P, R],
+]:
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            shelf, lock = _get_cache_shelf(func)
+            access_order = collections.OrderedDict().fromkeys(shelf.keys())
+
+            # Create a unique string key based on arguments
+            # We include the function name to avoid collisions if sharing a file
+            key = repr(hash((tuple(args), frozenset(kwargs.items()))))
+
+            with lock:
+                if key in shelf:
+                    access_order.move_to_end(key)
+                    return shelf[key]
+
+                # If not in cache, compute the result
+                result = func(*args, **kwargs)
+
+                # Add to cache
+                shelf[key] = result
+                access_order[key] = None
+                access_order.move_to_end(key)
+
+                # Evict if over limit
+                if len(access_order) > maxsize:
+                    oldest_key, _ = access_order.popitem(last=False)
+                    del shelf[oldest_key]
+
+                # Ensure data is written to disk
+                shelf.sync()
+                return result
+
+        wrapper.__wrapped__ = func
+        return wrapper
+
+    return decorator
+
+
+def compute_xp_from_np(func: _TC) -> _TC:
+    @functools.wraps(func)
+    def wrapped(*args, **kwargs):
+        import array_api_compat.numpy as anp
+
+        xp = kwargs.get('xp', anp)
+        if xp is None or xp is np:
+            xp = anp
+
+        if xp is anp:
+            return func(*args, **kwargs)
+
+        kwargs_with_np = dict(kwargs, xp=anp)
+        x = func(*args, **kwargs_with_np)
+        if hasattr(xp, 'asarray'):
+            x = xp.asarray(x)
+        elif hasattr(xp, 'array'):
+            x = xp.array(x)  # type: ignore
+        else:
+            raise AttributeError(f'invalid array module {xp}')
+
+        return xp.asarray(x)
+
+    return cast(_TC, wrapped)
 
 
 def clear_caches():
@@ -145,7 +238,7 @@ def clear_caches():
         cache.cache_clear()
 
 
-def cache_info() -> dict[str, typing.Any]:
+def cache_info() -> dict[str, Any]:
     return {f'{f.__module__}.{f.__name__}': c.cache_info() for f, c in _caches.items()}
 
 
@@ -195,7 +288,7 @@ class NonStreamContext:
         pass
 
 
-def array_stream(obj: ArrayType, null=False, non_blocking=False, ptds=False):
+def array_stream(obj: Array, null=False, non_blocking=False, ptds=False):
     """returns a cupy.Stream (or a do-nothing stand in) object as appropriate for obj"""
     if is_cupy_array(obj) and cp is not None:
         return cp.cuda.Stream(null=null, non_blocking=non_blocking, ptds=ptds)  # type: ignore
@@ -367,7 +460,7 @@ def sliding_window_view(x, window_shape, axis=None, *, subok=False, writeable=Fa
     return xp.lib.stride_tricks.as_strided(x, strides=out_strides, shape=out_shape)
 
 
-def float_dtype_like(x: ArrayType, min_dtype: typing.Any | None = None):
+def float_dtype_like(x: Array, min_dtype: Any | None = None):
     """returns a floating-point dtype corresponding to x.
 
     `x` may be complex, in which case the returned data type corresponds to
@@ -402,7 +495,7 @@ def float_dtype_like(x: ArrayType, min_dtype: typing.Any | None = None):
     return dtype
 
 
-def to_blocks(y: ArrayType, size: int, truncate=False, axis=0) -> ArrayType:
+def to_blocks(y: Array, size: int, truncate=False, axis=0) -> Array:
     """Returns a view on y reshaped into blocks along axis `axis`.
 
     Args:
@@ -498,8 +591,8 @@ def axis_slice(a, start, stop=None, step=None, axis=-1):
 
 
 def histogram_last_axis(
-    x: ArrayType, bins: int | ArrayType, range: tuple | None = None
-) -> ArrayType:
+    x: Array, bins: int | Array, range: tuple | None = None
+) -> Array:
     """computes a histogram along the last axis of an input array.
 
     For reference see https://stackoverflow.com/questions/44152436/calculate-histograms-along-axis
@@ -607,8 +700,8 @@ def grouped_slices_along_axis(shape: tuple[int, ...], max_size: int, axis: int):
 
 
 def grouped_views_along_axis(
-    x: ArrayType, max_size: int, axis: int = 0
-) -> typing.Generator[ArrayLike]:
+    x: Array, max_size: int, axis: int = 0
+) -> Generator[ArrayLike]:
     if x.size < max_size:
         yield x
         return
@@ -626,7 +719,7 @@ def grouped_views_along_axis(
         yield x
 
 
-def sync_if_cupy(x: ArrayType):
+def sync_if_cupy(x: Array):
     if is_cupy_array(x) and cp is not None:
         stream = cp.cuda.get_current_stream()  # type: ignore
         stream.synchronize()

@@ -34,7 +34,7 @@ def power_detector(
     return np.array(spec.power_detectors)
 
 
-_channel_power_cache = register.KeywordArgumentCache([dataarrays.CAPTURE_DIM, 'spec'])
+_channel_power_cache = register.KwArgCache([dataarrays.CAPTURE_DIM, 'spec'])
 
 
 @_channel_power_cache.apply

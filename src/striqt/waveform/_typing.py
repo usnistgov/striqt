@@ -3,8 +3,10 @@ from __future__ import annotations as __
 import typing
 
 if typing.TYPE_CHECKING:
-    from typing_extensions import TypeAlias
+    from typing_extensions import TypeAlias, ParamSpec
+    from typing import Any, Callable, Protocol, TypeVar, Union
     from numbers import Number
+    from types import ModuleType
 
     # bury this type checking in here to avoid lengthening the import time of iqwaveform
     # if cupy isn't installed
@@ -12,12 +14,14 @@ if typing.TYPE_CHECKING:
         import cupy as cp  # type: ignore
     except ModuleNotFoundError:
         import numpy as cp
+
+    import array_api_compat.numpy, array_api_compat.cupy
     import numpy as np
     import pandas as pd
     import xarray as xr
 
     # union of supported array types
-    ArrayType: TypeAlias = 'cp.ndarray|np.ndarray'
+    Array: TypeAlias = 'cp.ndarray|np.ndarray'
 
     # pandas types
     DataFrameType: TypeAlias = 'pd.DataFrame'
@@ -27,16 +31,22 @@ if typing.TYPE_CHECKING:
     DataArrayType: TypeAlias = 'xr.DataArray'
     DatasetType: TypeAlias = 'xr.Dataset'
 
-    # Union types
-    ArrayLike: TypeAlias = typing.Union[
-        ArrayType, SeriesType, DataFrameType, DataArrayType
-    ]
+    ArrayLike: TypeAlias = Union[Array, SeriesType, DataFrameType, DataArrayType]
 
-    WindowSpecType: TypeAlias = typing.Union[
-        str, tuple[str, typing.Any], tuple[str, typing.Any, typing.Any]
-    ]
-    WindowType: TypeAlias = typing.Union[ArrayType, WindowSpecType]
+    ShiftType = typing.Literal['left', 'right', 'none', False]
 
-    _ALN = typing.TypeVar('_ALN', bound=typing.Union[ArrayLike, Number])
-    _AL = typing.TypeVar('_AL', bound=ArrayLike)
-    _AT = typing.TypeVar('_AT', bound=ArrayType)
+    WindowSpecType: TypeAlias = Union[str, tuple[str, Any], tuple[str, Any, Any]]
+    WindowType: TypeAlias = Union[Array, WindowSpecType]
+
+    XpType: TypeAlias = ModuleType | None
+
+    _ALN = TypeVar('_ALN', bound=Union[ArrayLike, Number])
+    _AL = TypeVar('_AL', bound=ArrayLike)
+    _AT = TypeVar('_AT', bound=Array)
+    P = ParamSpec('P')
+    R = TypeVar('R')
+
+    class CachedCallable(Protocol[P, R]):
+        __wrapped__: Callable[P, R]
+
+        def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R: ...

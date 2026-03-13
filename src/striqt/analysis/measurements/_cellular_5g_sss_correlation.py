@@ -42,16 +42,16 @@ _coord_factories = [
 dtype = 'complex64'
 
 
-sss_correlation_cache = register.KeywordArgumentCache(['capture', 'spec'])
+sss_correlation_cache = register.KwArgCache(['capture', 'spec'])
 
 
 @sss_correlation_cache.apply
 def correlate_5g_sss(
-    iq: 'striqt.waveform._typing.ArrayType',
+    iq: 'striqt.waveform._typing.Array',
     capture: specs.Capture,
     *,
     spec: specs.Cellular5GNRSSSCorrelator,
-) -> 'striqt.waveform._typing.ArrayType':
+) -> 'striqt.waveform._typing.Array':
     xp = sw.util.array_namespace(iq)
 
     ssb_iq = shared.get_5g_ssb_iq(iq, capture=capture, spec=spec)

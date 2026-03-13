@@ -7,14 +7,15 @@ import typing
 import striqt.waveform as sw
 
 from ... import specs
-from . import base
+from . import base, buffers
+from ..typing import PS, PC
 
 
-_TS = typing.TypeVar('_TS', bound=specs.NoSource)
-_TC = typing.TypeVar('_TC', bound=specs.SensorCapture)
+TS = typing.TypeVar('TS', bound=specs.NoSource)
+TC = typing.TypeVar('TC', bound=specs.SensorCapture)
 
 
-class NoSource(base.SourceBase[_TS, _TC, base._PS, base._PC]):
+class NoSource(base.SourceBase[TS, TC, PS, PC]):
     """fast paths to acquire empty buffers"""
 
     _samples_elapsed = 0
@@ -38,7 +39,7 @@ class NoSource(base.SourceBase[_TS, _TC, base._PS, base._PC]):
     def _apply_setup(self, spec, *, captures=None, loops=None):
         self.reset_sample_counter()
 
-    def _prepare_capture(self, capture) -> _TC | None:
+    def _prepare_capture(self, capture) -> TC | None:
         self.reset_sample_counter()
 
     def _read_stream(
@@ -52,9 +53,9 @@ class NoSource(base.SourceBase[_TS, _TC, base._PS, base._PC]):
 
         return count, round(timestamp_ns)
 
-    def get_resampler(self, capture: _TC | None = None) -> sw.fourier.ResamplerDesign:
+    def get_resampler(self, capture: TC | None = None) -> sw.fourier.ResamplerDesign:
         if capture is None:
             capture = self.capture_spec
 
         mcr = self.setup_spec.master_clock_rate
-        return base.design_capture_resampler(mcr, capture)
+        return buffers.design_resampler(capture, mcr)

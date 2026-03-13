@@ -1,33 +1,30 @@
 from __future__ import annotations as __
 import functools
-import typing
+from typing import Any, Callable, cast, Generic, Optional, TYPE_CHECKING, Union
 import dataclasses
 from typing_extensions import ParamSpec
-import msgspec
 
 from .peripherals import NoPeripherals, PeripheralsBase
 from . import sinks, sources
 from .. import specs
+from .typing import PC, PS, TC, TS, TP, TypeVar
 
-from ..specs import _TS, _TC, _TP
-from .sources.base import _PS, _PC
+import msgspec
 
-_TC2 = typing.TypeVar('_TC2', bound=specs.SensorCapture)
-_TP2 = typing.TypeVar('_TP2', bound=specs.Peripherals)
-_TS2 = typing.TypeVar('_TS2', bound=specs.Source)
-_PS2 = ParamSpec('_PS2')
-_PC2 = ParamSpec('_PC2')
+TC2 = TypeVar('TC2', bound=specs.SensorCapture)
+TP2 = TypeVar('TP2', bound=specs.Peripherals)
+TS2 = TypeVar('TS2', bound=specs.Source)
+PS2 = ParamSpec('PS2')
+PC2 = ParamSpec('PC2')
 
 
-if typing.TYPE_CHECKING:
+if TYPE_CHECKING:
 
     class BoundSweep(specs.Sweep, frozen=True, kw_only=True):
         mock_sensor: specs.types.MockSensor = None
 
 
-registry: dict[
-    str, 'SensorBinding[typing.Any, typing.Any, typing.Any, typing.Any, typing.Any]'
-] = {}
+registry: dict[str, 'SensorBinding[Any, Any, Any, Any, Any]'] = {}
 tagged_sweeps: type[specs.Sweep] | None = None
 
 
@@ -45,15 +42,15 @@ def tagged_subclass(
         kw_only=True,
     )
 
-    return typing.cast(type[specs.Sweep], kls)
+    return cast(type[specs.Sweep], kls)
 
 
 @dataclasses.dataclass(frozen=True)
-class Sensor(typing.Generic[_TS, _TP, _TC, _PS, _PC]):
-    source: type[sources.SourceBase[_TS, _TC, _PS, _PC]]
-    sweep_spec: type[specs.Sweep[_TS, _TP, _TC]] = specs.Sweep
-    peripherals: type[PeripheralsBase[_TP, _TC]] = NoPeripherals
-    sink: type[sinks.SinkBase[_TC]] = sinks.ZarrCaptureSink
+class Sensor(Generic[TS, TP, TC, PS, PC]):
+    source: type[sources.SourceBase[TS, TC, PS, PC]]
+    sweep_spec: type[specs.Sweep[TS, TP, TC]] = specs.Sweep
+    peripherals: type[PeripheralsBase[TP, TC]] = NoPeripherals
+    sink: type[sinks.SinkBase[TC]] = sinks.ZarrCaptureSink
 
     def __post_init__(self):
         assert issubclass(self.source, sources.SourceBase)
@@ -63,12 +60,12 @@ class Sensor(typing.Generic[_TS, _TP, _TC, _PS, _PC]):
 
 
 @dataclasses.dataclass(frozen=True)
-class Schema(typing.Generic[_TS, _TP, _TC, _PS, _PC], sources.base.Schema[_TS, _TC]):
-    peripherals: type[_TP]
+class Schema(Generic[TS, TP, TC, PS, PC], sources.base.Schema[TS, TC]):
+    peripherals: type[TP]
 
     # these aren't actually used; they just set up the type hinting properly
-    init_like: typing.Callable[_PS, typing.Any]
-    arm_like: typing.Callable[_PC, typing.Any]
+    init_like: Callable[PS, Any]
+    arm_like: Callable[PC, Any]
 
     def __post_init__(self):
         assert issubclass(self.source, specs.Source)
@@ -77,9 +74,9 @@ class Schema(typing.Generic[_TS, _TP, _TC, _PS, _PC], sources.base.Schema[_TS, _
 
 
 @dataclasses.dataclass(frozen=True)
-class SensorBinding(Sensor[_TS, _TP, _TC, _PS, _PC]):
-    schema: Schema[_TS, _TP, _TC] = None  # type: ignore
-    sweep_spec: type[BoundSweep[_TS, _TP, _TC]] = specs.Sweep  # type: ignore
+class SensorBinding(Sensor[TS, TP, TC, PS, PC]):
+    schema: Schema[TS, TP, TC] = None  # type: ignore
+    sweep_spec: type[BoundSweep[TS, TP, TC]] = specs.Sweep  # type: ignore
 
     def __post_init__(self):
         super().__post_init__()
@@ -88,10 +85,10 @@ class SensorBinding(Sensor[_TS, _TP, _TC, _PS, _PC]):
 
 def bind_sensor(
     key: str,
-    sensor: Sensor[_TS2, _TP2, _TC2, _PS2, _PC2],
-    schema: Schema[_TS, _TP, _TC, _PS, _PC],
+    sensor: Sensor[TS2, TP2, TC2, PS2, PC2],
+    schema: Schema[TS, TP, TC, PS, PC],
     register: bool = True,
-) -> SensorBinding[_TS, _TP, _TC, _PS, _PC]:
+) -> SensorBinding[TS, TP, TC, PS, PC]:
     """register a binding between specifications and controller classes.
 
     Args:
@@ -118,7 +115,7 @@ def bind_sensor(
     class BoundSweep(sensor.sweep_spec, frozen=True, kw_only=True):
         _bindings__ = binding
 
-        mock_source: typing.Optional[str] = None
+        mock_source: Optional[str] = None
         source: _bindings__.schema.source = msgspec.field(
             default_factory=_bindings__.schema.source
         )
@@ -147,7 +144,7 @@ def bind_sensor(
     if tagged_sweeps is None:
         tagged_sweeps = BoundSweep
     else:
-        tagged_sweeps = typing.Union[tagged_sweeps, BoundSweep]  # type: ignore
+        tagged_sweeps = Union[tagged_sweeps, BoundSweep]  # type: ignore
 
     return binding
 

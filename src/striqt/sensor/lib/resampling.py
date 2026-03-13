@@ -1,17 +1,16 @@
 from __future__ import annotations as __
 
-
 import dataclasses
-import typing
+from typing import TYPE_CHECKING
 
 from . import sources, util
 from .. import specs
 
 
-if typing.TYPE_CHECKING:
+if TYPE_CHECKING:
     import numpy as np
     import striqt.waveform as sw
-    from striqt.waveform._typing import ArrayType
+    from .typing import Array
 
 else:
     array_api_compat = util.lazy_import('array_api_compat')
@@ -24,23 +23,9 @@ else:
 USE_OARESAMPLE = False
 
 
-def synchronize(x: ArrayType, shifts: ArrayType, size_out: int) -> ArrayType:
-    if x.shape[1] < shifts.max() + size_out:
-        raise ValueError('waveform is too short to align')
-
-    if shifts.shape[0] == 1 or len(set(shifts.tolist())) == 1:
-        # fast path: a simple view, if there is only one offset
-        return x[:, shifts[0] : shifts[0] + size_out]
-
-    else:
-        xp = sw.util.array_namespace(x)
-        out = xp.empty((x.shape[0], size_out), dtype=x.dtype)
-        for i in range(x.shape[0]):
-            out[i, :] = x[i, shifts[i] : shifts[i] + size_out]
-        return out
-
-
-def resampling_correction(iq: sources.base.AcquiredIQ, overwrite_x=False, axis=1) -> sources.base.AcquiredIQ:
+def resampling_correction(
+    iq: sources.AcquiredIQ, *, axis=1, overwrite_x=False
+) -> sources.AcquiredIQ:
     """resample, filter, and apply calibration corrections.
 
     Args:
@@ -53,89 +38,39 @@ def resampling_correction(iq: sources.base.AcquiredIQ, overwrite_x=False, axis=1
     """
 
     x = iq.pre_align
-    source_spec = iq.source_spec
+    capture = iq.capture
     xp = sw.util.array_namespace(x)
 
-    if not isinstance(iq.capture, specs.SensorCapture):
+    if not isinstance(capture, specs.SensorCapture):
         raise TypeError('iq.capture must be a capture specification')
-    else:
-        capture = iq.capture
 
-    fs = iq.resampler['fs_sdr']
-    needs_resample = sources.base.needs_resample(iq.resampler, capture)
+    needs_resample = sources.buffers.needs_resample(iq.resampler, capture)
     needs_filter = np.isfinite(capture.analysis_bandwidth)
-    vscale = iq.voltage_scale
 
     if not needs_resample:
-        if not isinstance(vscale, (int, float)):
-            if vscale.ndim == 1:
-                vscale = vscale[:, None]
-        elif vscale == 1:
-            vscale = None
-
-        if vscale is not None:
-            x = xp.multiply(x, vscale, out=x if overwrite_x else None)
-        pad = sources.base.get_fft_resample_pad(source_spec, capture, iq.analysis)[0]
-
+        x_pre_filter, offs = _scale_only(iq, overwrite_x=overwrite_x, axis=axis)
     elif USE_OARESAMPLE:
-        # this is broken. don't use it yet.
-        x = sw.fourier.oaresample(
-            x,
-            up=iq.resampler['nfft_out'],
-            down=iq.resampler['nfft'],
-            fs=fs,
-            window=iq.resampler['window'],
-            overwrite_x=overwrite_x,
-            axis=axis,
-            frequency_shift=iq.resampler['lo_offset'],
-            filter_bandwidth=capture.analysis_bandwidth,
-            transition_bandwidth=250e3,
-            scale=1 if vscale is None else vscale,
-        )
-        scale = iq.resampler['nfft_out'] / iq.resampler['nfft']
-        oapad = sources.base._get_oaresample_pad(source_spec.master_clock_rate, capture)
-        lag_pad = sources.base._get_trigger_pad_size(source_spec, capture, iq.trigger)
-        size_out = round(capture.duration * capture.sample_rate) + round(
-            (oapad[1] + lag_pad) * scale
-        )
-        offset = iq.resampler['nfft_out']
-
-        assert size_out + offset <= x.shape[axis]
-        x = sw.util.axis_slice(x, offset, offset + size_out, axis=axis)
-        assert x.shape[axis] == size_out
+        x_pre_filter, offs = _oaresample(iq, overwrite_x=overwrite_x, axis=axis)
         needs_filter = False
-        pad = None
-
     else:
-        assert sw.util.isroundmod(x.shape[1] * capture.sample_rate, fs)
-        resample_size_out = round(x.shape[1] * capture.sample_rate / fs)
-        pad_in = sources.base.get_fft_resample_pad(source_spec, capture, iq.analysis)[0]
-        pad = round(pad_in * capture.sample_rate / fs)
-
-        x = sw.fourier.resample(
-            x,
-            resample_size_out,
-            overwrite_x=overwrite_x,
-            axis=axis,
-            scale=1 if vscale is None else vscale,
-        )
-
-    x_pre_filter = x
+        x_pre_filter, offs = _resample(iq, overwrite_x=overwrite_x, axis=axis)
 
     # apply the filter here and ensure we're working with a copy if needed
     if needs_filter:
         h = sw.design_fir_lpf(
-            bandwidth=capture.analysis_bandwidth,
-            sample_rate=capture.sample_rate,
-            transition_bandwidth=250e3,
-            numtaps=sources.base.FILTER_SIZE,
+            bw=capture.analysis_bandwidth,
+            fs=capture.sample_rate,
+            transition_bw=250e3,
+            numtaps=sources.buffers.FILTER_SIZE,
             xp=xp,
         )
-        x = sw.oaconvolve(x, h[xp.newaxis, :], 'same', axes=axis)
+        x = sw.oaconvolve(x_pre_filter, h[xp.newaxis, :], 'same', axes=axis)
+    else:
+        x = x_pre_filter
 
-    if pad is not None:
-        x = sw.util.axis_slice(x, pad, None, axis=axis)
-        x_pre_filter = sw.util.axis_slice(x_pre_filter, pad, None, axis=axis)
+    if offs is not None:
+        x = sw.util.axis_slice(x, offs, None, axis=axis)
+        x_pre_filter = sw.util.axis_slice(x_pre_filter, offs, None, axis=axis)
 
     size_out = round(capture.duration * capture.sample_rate)
 
@@ -143,8 +78,8 @@ def resampling_correction(iq: sources.base.AcquiredIQ, overwrite_x=False, axis=1
     if iq.trigger is not None:
         lags = iq.trigger(x[:, :size_out], capture)
         shifts = xp.rint(lags * capture.sample_rate).astype('int')
-        out = synchronize(x, shifts, size_out)
-        x_pre_filter = synchronize(x_pre_filter, shifts, size_out)
+        out = _synchronize(x, shifts, size_out)
+        x_pre_filter = _synchronize(x_pre_filter, shifts, size_out)
     else:
         out = None
 
@@ -161,3 +96,110 @@ def resampling_correction(iq: sources.base.AcquiredIQ, overwrite_x=False, axis=1
         capture=capture,
         extra_data=iq.extra_data,
     )
+
+
+def _synchronize(x: Array, shifts: Array, size_out: int) -> Array:
+    if x.shape[1] < shifts.max() + size_out:
+        raise ValueError('waveform is too short to align')
+
+    if shifts.shape[0] == 1 or len(set(shifts.tolist())) == 1:
+        # fast path: a simple view, if there is only one offset
+        return x[:, shifts[0] : shifts[0] + size_out]
+
+    else:
+        xp = sw.util.array_namespace(x)
+        out = xp.empty((x.shape[0], size_out), dtype=x.dtype)
+        for i in range(x.shape[0]):
+            out[i, :] = x[i, shifts[i] : shifts[i] + size_out]
+        return out
+
+
+def _scale_only(
+    iq: sources.AcquiredIQ, overwrite_x: bool, axis: int
+) -> tuple[Array, int | None]:
+    x = iq.pre_align
+    xp = sw.util.array_namespace(x)
+    source_spec = iq.source_spec
+    capture = iq.capture
+
+    if not isinstance(capture, specs.SensorCapture):
+        raise TypeError('iq.capture must be a capture specification')
+
+    vscale = iq.voltage_scale
+    if not isinstance(iq.voltage_scale, (int, float)):
+        if iq.voltage_scale.ndim == 1:
+            vscale = iq.voltage_scale[:, None]
+    elif iq.voltage_scale == 1:
+        vscale = None
+
+    if vscale is not None:
+        x = xp.multiply(x, vscale, out=x if overwrite_x else None)
+    pad = sources.buffers.get_fft_resample_pad(capture, source_spec, iq.analysis)[0]
+
+    return x, pad
+
+
+def _resample(
+    iq: sources.AcquiredIQ, overwrite_x: bool, axis: int
+) -> tuple[Array, int | None]:
+    x = iq.pre_align
+    source_spec = iq.source_spec
+    capture = iq.capture
+    fs = iq.resampler['fs_sdr']
+
+    if not isinstance(capture, specs.SensorCapture):
+        raise TypeError('iq.capture must be a capture specification')
+
+    assert sw.util.isroundmod(x.shape[1] * capture.sample_rate, fs)
+    resample_size_out = round(x.shape[1] * capture.sample_rate / fs)
+    pad_in = sources.buffers.get_fft_resample_pad(capture, source_spec, iq.analysis)[0]
+    pad_out = round(pad_in * capture.sample_rate / fs)
+
+    x = sw.fourier.resample(
+        x,
+        resample_size_out,
+        overwrite_x=overwrite_x,
+        axis=axis,
+        scale=1 if iq.voltage_scale is None else iq.voltage_scale,
+    )
+
+    return x, pad_out
+
+
+def _oaresample(
+    iq: sources.AcquiredIQ, overwrite_x: bool, axis: int
+) -> tuple[Array, int | None]:
+    x = iq.pre_align
+    source_spec = iq.source_spec
+    capture = iq.capture
+    fs = iq.resampler['fs_sdr']
+
+    if not isinstance(capture, specs.SensorCapture):
+        raise TypeError('iq.capture must be a capture specification')
+
+    x = sw.fourier.oaresample(
+        x,
+        up=iq.resampler['nfft_out'],
+        down=iq.resampler['nfft'],
+        fs=fs,
+        window=iq.resampler['window'],
+        overwrite_x=overwrite_x,
+        axis=axis,
+        frequency_shift=iq.resampler['lo_offset'],
+        filter_bandwidth=capture.analysis_bandwidth,
+        transition_bandwidth=250e3,
+        scale=1 if iq.voltage_scale is None else iq.voltage_scale,
+    )
+    scale = iq.resampler['nfft_out'] / iq.resampler['nfft']
+    oapad = sources.buffers.get_oaresample_pad(capture, source_spec.master_clock_rate)
+    lag_pad = sources.buffers.get_trigger_pad_size(source_spec, capture, iq.trigger)
+    size_out = round(capture.duration * capture.sample_rate) + round(
+        (oapad[1] + lag_pad) * scale
+    )
+    offset = iq.resampler['nfft_out']
+
+    assert size_out + offset <= x.shape[axis]
+    x = sw.util.axis_slice(x, offset, None, axis=axis)
+    assert x.shape[axis] == size_out
+
+    return x, None

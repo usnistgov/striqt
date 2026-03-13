@@ -72,7 +72,7 @@ def apply_mask(
     flex_as=None,
     normal_cp=True,
     xp=np,
-) -> util.ArrayType:
+) -> util.Array:
     """splits the spectrogram into TDD downlink and uplink components that are masked
     with `float('nan')`.
 
@@ -130,7 +130,7 @@ def build_tdd_link_symbol_masks(
     normal_cp=True,
     flex_as=None,
     xp=np,
-) -> util.ArrayType:
+) -> util.Array:
     """generate a symbol-by-symbol sequence of masking arrays for uplink and downlink.
 
     The number of slots given in the frame match the appropriate number for a given
@@ -291,7 +291,8 @@ def cellular_resource_power_histogram(
     )
     del metadata['units']
 
-    freqs = shared.spectrogram_baseband_frequency(capture, spg_spec, xp=xp)
+    freqs = shared.spectrogram_freqs(capture, spg_spec)
+    freqs = xp.asarray(freqs)
 
     masked_spgs = apply_mask(
         spg,

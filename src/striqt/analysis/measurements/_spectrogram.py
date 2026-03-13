@@ -60,7 +60,7 @@ def spectrogram_time(capture: specs.Capture, spec: specs.Spectrogram) -> np.ndar
     # typed_kwargs=shared.SpectrogramKeywords,
     attrs={'standard_name': 'PSD', 'long_name': 'Power Spectral Density'},
 )
-def spectrogram(iq: 'sw.util.ArrayType', capture: specs.Capture, **kwargs):
+def spectrogram(iq: 'sw.util.Array', capture: specs.Capture, **kwargs):
     """Evaluate a spectrogram based on an STFT.
 
     The analysis parameters are in physical time and frequency units

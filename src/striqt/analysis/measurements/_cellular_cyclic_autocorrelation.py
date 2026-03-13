@@ -250,7 +250,7 @@ def _get_spec_range(
     attrs={'units': 'mW', 'standard_name': 'Cyclic Autocovariance'},
 )
 def cellular_cyclic_autocorrelation(
-    iq: 'sw.util.ArrayType',
+    iq: 'sw.util.Array',
     capture: specs.Capture,
     **kwargs,
 ):

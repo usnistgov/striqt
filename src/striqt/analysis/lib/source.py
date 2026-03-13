@@ -10,19 +10,19 @@ if typing.TYPE_CHECKING:
     import numpy as np
 
     import striqt.waveform as sw
-    from striqt.waveform._typing import ArrayType
+    from striqt.waveform._typing import Array
 else:
     np = util.lazy_import('numpy')
     sw = util.lazy_import('striqt.waveform')
 
 
 def filter_iq_capture(
-    iq: ArrayType,
+    iq: Array,
     capture: specs.FilteredCapture,
     *,
     axis=0,
     out=None,
-) -> ArrayType:
+) -> Array:
     """apply a bandpass filter implemented through STFT overlap-and-add.
 
     Args:
@@ -102,7 +102,7 @@ def simulated_awgn(
     pinned_cuda=False,
     seed=None,
     out=None,
-) -> ArrayType:
+) -> Array:
     # use the slower RandomState for maximum compatibility
     # across array module namespaces
     gen = xp.random.RandomState(seed=seed)

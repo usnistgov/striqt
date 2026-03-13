@@ -7,15 +7,14 @@ import typing
 
 from ... import specs
 from .. import calibration, util
-from . import base
+from .. import typing as _t
+from . import base, buffers
 
 import striqt.analysis as sa
 import striqt.waveform as sw
 
 if typing.TYPE_CHECKING:
     import SoapySDR  # type: ignore
-    from striqt.waveform.util import ArrayType
-    from typing_extensions import Self as _Self
 else:
     try:
         SoapySDR = util.lazy_import('SoapySDR')
@@ -25,8 +24,12 @@ else:
     pd = util.lazy_import('pandas')
 
 
-_TS = typing.TypeVar('_TS', bound='specs.SoapySource')
-_TC = typing.TypeVar('_TC', bound='specs.SoapyCapture')
+class ReceiveStreamError(IOError):
+    pass
+
+
+TS = typing.TypeVar('TS', bound='specs.SoapySource')
+TC = typing.TypeVar('TC', bound='specs.SoapyCapture')
 
 
 class _SoapyRange(specs.SpecBase, frozen=True, cache_hash=True):
@@ -37,11 +40,11 @@ class _SoapyRange(specs.SpecBase, frozen=True, cache_hash=True):
     step: float | None = None
 
     @classmethod
-    def from_soapy(cls, r: 'SoapySDR.Range') -> _Self:
+    def from_soapy(cls, r: 'SoapySDR.Range') -> _t.Self:
         return cls(minimum=r.minimum(), maximum=r.maximum(), step=r.step())
 
     @classmethod
-    def from_soapy_tuple(cls, seq: tuple['SoapySDR.Range']) -> tuple[_Self, ...]:
+    def from_soapy_tuple(cls, seq: tuple['SoapySDR.Range']) -> tuple[_t.Self, ...]:
         return tuple([cls.from_soapy(r) for r in seq])
 
 
@@ -57,7 +60,7 @@ class _SoapyArgInfo(specs.SpecBase, kw_only=True, frozen=True, cache_hash=True):
     options: tuple[str, ...]
 
     @classmethod
-    def from_soapy(cls, arg: 'SoapySDR.ArgInfo') -> _Self:
+    def from_soapy(cls, arg: 'SoapySDR.ArgInfo') -> _t.Self:
         return cls(
             name=arg.name,
             description=arg.description,
@@ -69,7 +72,7 @@ class _SoapyArgInfo(specs.SpecBase, kw_only=True, frozen=True, cache_hash=True):
         )
 
     @classmethod
-    def from_soapy_map(cls, soapy_args: list[SoapySDR.ArgInfo]) -> dict[str, _Self]:
+    def from_soapy_map(cls, soapy_args: list[SoapySDR.ArgInfo]) -> dict[str, _t.Self]:
         return {arg.key: cls.from_soapy(arg) for arg in soapy_args}
 
 
@@ -131,11 +134,11 @@ class SoapySourceInfo(specs.BaseSourceInfo, kw_only=True, frozen=True, cache_has
 
 
 def _get_adc_peak(
-    x: 'ArrayType', capture: specs.SoapyCapture, source: specs.SoapySource
+    x: '_t.Array', capture: specs.SoapyCapture, source: specs.SoapySource
 ):
     xp = sw.util.array_namespace(x)
 
-    adc_scale = base._get_dtype_scale(source.transport_dtype)
+    adc_scale = buffers.get_dtype_scale(source.transport_dtype)
 
     peak_counts = xp.abs(x).max(axis=-1)
     unscaled_peak = 20 * xp.log10(peak_counts * adc_scale) - 3
@@ -258,7 +261,7 @@ def probe_soapy_info(device: SoapySDR.Device) -> SoapySourceInfo:
 
 
 def compute_overload_info(
-    samples: ArrayType, setup: specs.SoapySource, capture: specs.SoapyCapture
+    samples: _t.Array, setup: specs.SoapySource, capture: specs.SoapyCapture
 ):
     adc_limit = setup.adc_overload_limit
     if_limit = setup.if_overload_limit
@@ -286,7 +289,7 @@ def compute_overload_info(
 def read_retries(source: SoapySourceBase) -> typing.Generator[None]:
     """in this context, retry source.read_iq on stream errors"""
 
-    EXC_TYPES = (base.ReceiveStreamError, OverflowError)
+    EXC_TYPES = (ReceiveStreamError, OverflowError)
 
     max_count = source.setup_spec.receive_retries
 
@@ -320,7 +323,7 @@ class RxStream:
         info: SoapySourceInfo,
         *,
         ports: tuple[int, ...] = (),
-        on_overflow: base.OnOverflowType = 'except',
+        on_overflow: specs.types.OnOverflow = 'except',
     ):
         self.setup = setup
         self.info = info
@@ -328,7 +331,7 @@ class RxStream:
         self.checked_timestamp = False
         self.stream = None
         self._enabled: bool = False
-        self._on_overflow: base.OnOverflowType = on_overflow
+        self._on_overflow: specs.types.OnOverflow = on_overflow
         self.ports = ports
 
     @sa.util.stopwatch('stream initialization', 'source')
@@ -431,7 +434,7 @@ class RxStream:
         timeout_sec,
         *,
         last_sync_time: int | None,
-        on_overflow: base.OnOverflowType | None = None,
+        on_overflow: specs.types.OnOverflow | None = None,
     ) -> tuple[int, int]:
         total_timeout = self.setup.rx_enable_delay + timeout_sec + 0.5
 
@@ -460,7 +463,7 @@ class RxStream:
     @staticmethod
     def validate_stream_read(
         sr: SoapySDR.StreamResult,
-        on_overflow: base.OnOverflowType,
+        on_overflow: specs.types.OnOverflow,
         sync_time_ns: int | None = None,
     ) -> tuple[int, int]:
         """track the number of samples received and remaining in a read stream.
@@ -484,12 +487,12 @@ class RxStream:
             result = 0, sr.timeNs
         else:
             err_str = SoapySDR.errToStr(sr.ret)
-            raise base.ReceiveStreamError(f'{err_str} (error code {sr.ret})')
+            raise ReceiveStreamError(f'{err_str} (error code {sr.ret})')
 
         if sync_time_ns is None or sr.timeNs == 0:
             pass
         elif sync_time_ns > sr.timeNs:
-            raise base.ReceiveStreamError(f'invalid timestamp from before last sync')
+            raise ReceiveStreamError(f'invalid timestamp from before last sync')
 
         return result
 
@@ -586,7 +589,7 @@ def device_time_source(spec: specs.SoapySource):
 
 
 @base.bind_schema_types(specs.SoapySource, specs.SoapyCapture)
-class SoapySourceBase(base.SourceBase[_TS, _TC, base._PS, base._PC]):
+class SoapySourceBase(base.SourceBase[TS, TC, _t.PS, _t.PC]):
     """Applies SoapySDR for device control and acquisition"""
 
     _device: 'SoapySDR.Device'
@@ -622,7 +625,7 @@ class SoapySourceBase(base.SourceBase[_TS, _TC, base._PS, base._PC]):
         super().close()
 
     @sa.util.stopwatch('open soapy radio', 'source', threshold=1)
-    def _connect(self, spec: _TS, **device_kwargs):
+    def _connect(self, spec: TS, **device_kwargs):
         if SoapySDR is None:
             raise ImportError('could not import SoapySDR')
 
@@ -672,7 +675,7 @@ class SoapySourceBase(base.SourceBase[_TS, _TC, base._PS, base._PC]):
         if len(ports) > 0:
             self._rx_stream.open(self._device)
 
-    def _prepare_capture(self, capture: _TC) -> _TC | None:
+    def _prepare_capture(self, capture: TC) -> TC | None:
         if (
             capture == self._capture and self.setup_spec.gapless
         ) or self._rx_stream is None:
@@ -703,7 +706,7 @@ class SoapySourceBase(base.SourceBase[_TS, _TC, base._PS, base._PC]):
         count,
         timeout_sec,
         *,
-        on_overflow: base.OnOverflowType = 'except',
+        on_overflow: specs.types.OnOverflow = 'except',
     ) -> tuple[int, int]:
         return self._rx_stream.read(
             self._device,
@@ -717,13 +720,13 @@ class SoapySourceBase(base.SourceBase[_TS, _TC, base._PS, base._PC]):
 
     def _package_acquisition(
         self,
-        samples: ArrayType,
+        samples: _t.Array,
         time_ns: int | None,
         *,
         analysis=None,
         correction=True,
         alias_func: specs.helpers.PathAliasFormatter | None = None,
-    ) -> base.AcquiredIQ:
+    ) -> buffers.AcquiredIQ:
         iq = super()._package_acquisition(
             samples,
             time_ns,

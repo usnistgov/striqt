@@ -7,7 +7,7 @@ import functools
 import importlib
 import os
 import sys
-import typing
+from typing import Any, cast, ContextManager, Generic, TYPE_CHECKING
 from pathlib import Path
 
 import typing_extensions
@@ -15,44 +15,42 @@ import typing_extensions
 from . import bindings, io, sources, util
 from .peripherals import PeripheralsBase
 from .sinks import SinkBase
+from .typing import TS, TP, TC, PS, PC
 from .. import specs
-from .sources import _PS, _PC
-from ..specs import _TC, _TP, _TS
+
+# from .sources import PS, PC
+# from ..specs import TC, _TP, TS
 import striqt.analysis as sa
 
-
-if typing.TYPE_CHECKING:
+if TYPE_CHECKING:
+    from .typing import GenericWrapper, SourceOpenCallback
     import xarray as xr
 
     # typing workarounds for python < 3.10
-    _P = typing_extensions.ParamSpec('_P')
-    _R = typing.TypeVar('_R')
 
-    class Resources(
-        typing_extensions.TypedDict, typing.Generic[_TS, _TP, _TC, _PS, _PC]
-    ):
+    class Resources(typing_extensions.TypedDict, Generic[TS, TP, TC, PS, PC]):
         """Sensor resources needed to run a sweep"""
 
-        source: sources.SourceBase[_TS, _TC, _PS, _PC]
+        source: sources.SourceBase[TS, TC, PS, PC]
         sink: SinkBase
-        peripherals: PeripheralsBase[_TP, _TC]
-        except_context: typing_extensions.NotRequired[typing.ContextManager]
-        sweep_spec: specs.Sweep[_TS, _TP, _TC]
+        peripherals: PeripheralsBase[TP, TC]
+        except_context: typing_extensions.NotRequired[ContextManager]
+        sweep_spec: specs.Sweep[TS, TP, TC]
         calibration: 'xr.Dataset|None'
         alias_func: specs.helpers.PathAliasFormatter | None
 
     class AnyResources(
         typing_extensions.TypedDict,
-        typing.Generic[_TS, _TP, _TC, _PS, _PC],
+        Generic[TS, TP, TC, PS, PC],
         total=False,
     ):
         """Sensor resources needed to run a sweep"""
 
-        source: sources.SourceBase[_TS, _TC, _PS, _PC]
+        source: sources.SourceBase[TS, TC, PS, PC]
         sink: SinkBase
-        peripherals: PeripheralsBase[_TP, _TC]
-        except_context: typing_extensions.NotRequired[typing.ContextManager]
-        sweep_spec: specs.Sweep[_TS, _TP, _TC]
+        peripherals: PeripheralsBase[TP, TC]
+        except_context: typing_extensions.NotRequired[ContextManager]
+        sweep_spec: specs.Sweep[TS, TP, TC]
         calibration: 'xr.Dataset|None'
         alias_func: specs.helpers.PathAliasFormatter | None
 
@@ -64,7 +62,7 @@ else:
         source: sources.SourceBase
         sink: SinkBase
         peripherals: typing_extensions.NotRequired[PeripheralsBase]
-        except_context: typing_extensions.NotRequired[typing.ContextManager]
+        except_context: typing_extensions.NotRequired[ContextManager]
         sweep_spec: specs.Sweep
         calibration: 'xr.Dataset|None'
         alias_func: specs.helpers.PathAliasFormatter | None
@@ -75,23 +73,23 @@ else:
         source: sources.SourceBase
         sink: SinkBase
         peripherals: typing_extensions.NotRequired[PeripheralsBase]
-        except_context: typing_extensions.NotRequired[typing.ContextManager]
+        except_context: typing_extensions.NotRequired[ContextManager]
         sweep_spec: specs.Sweep
         calibration: 'xr.Dataset|None'
         alias_func: specs.helpers.PathAliasFormatter | None
 
 
-def _timeit(desc: str = '') -> typing.Callable[[util._Tfunc], util._Tfunc]:
+def _timeit(desc: str = '') -> GenericWrapper:
     return sa.util.stopwatch(
         desc, 'sweep', threshold=0.5, logger_level=util.logging.INFO
     )
 
 
 def _open_sink(
-    spec: specs.Sweep[typing.Any, typing.Any, specs._TC],
+    spec: specs.Sweep[Any, Any, TC],
     default_cls: type[SinkBase] | None,
     alias_func: specs.helpers.PathAliasFormatter | None = None,
-) -> SinkBase[specs._TC]:
+) -> SinkBase[TC]:
     with sa.util.stopwatch('open sink', 'sweep', 0.5, util.logging.INFO):
         if spec.extensions.sink is not None:
             mod_name, *sub_names, obj_name = spec.extensions.sink.rsplit('.')
@@ -109,11 +107,11 @@ def _open_sink(
 
 class ConnectionManager(
     contextlib.ExitStack,
-    typing.Generic[_TS, _TP, _TC, _PS, _PC],
+    Generic[TS, TP, TC, PS, PC],
 ):
-    _resources: AnyResources[_TS, _TP, _TC, _PS, _PC]
+    _resources: AnyResources[TS, TP, TC, PS, PC]
 
-    def __init__(self, sweep_spec: specs.Sweep[_TS, _TP, _TC]):
+    def __init__(self, sweep_spec: specs.Sweep[TS, TP, TC]):
         super().__init__()
         self._resources = AnyResources(sweep_spec=sweep_spec)
 
@@ -121,13 +119,13 @@ class ConnectionManager(
         return self.resources
 
     @functools.cached_property
-    def resources(self) -> Resources[_TS, _TP, _TC, _PS, _PC]:
+    def resources(self) -> Resources[TS, TP, TC, PS, PC]:
         missing = Resources.__required_keys__ - set(self._resources.keys())
 
         # TODO: troubleshoot why runtime __required_keys__ includes NotRequired fields
         missing = missing - {'peripherals', 'except_context'}
         if len(missing) == 0:
-            return typing.cast(Resources[_TS, _TP, _TC, _PS, _PC], self._resources)
+            return cast(Resources[TS, TP, TC, PS, PC], self._resources)
         else:
             raise TypeError(f'connections {missing!r} are incomplete')
 
@@ -137,16 +135,12 @@ def _setup_logging(sink: specs.Sink, formatter):
     util.log_to_file(log_path, sink.log_level)
 
 
-class _SourceOpenCallback(typing.Protocol):
-    def __call__(self, sweep: specs.Sweep, source_id: str) -> None: ...
-
-
 def _open_devices(
     conn: ConnectionManager,
     binding: bindings.SensorBinding,
     spec: specs.Sweep,
     skip_peripherals: bool = False,
-    on_source_opened: _SourceOpenCallback | None = None,
+    on_source_opened: SourceOpenCallback | None = None,
 ):
     """open source and any peripherals"""
 
@@ -193,13 +187,13 @@ def _open_devices(
 
 @sa.util.stopwatch('open resources', 'sweep', 1.0, sa.util.INFO)
 def open_resources(
-    spec: specs.Sweep[_TS, _TP, _TC],
+    spec: specs.Sweep[TS, TP, TC],
     spec_path: str | Path | None = None,
-    except_context: typing.ContextManager | None = None,
+    except_context: ContextManager | None = None,
     *,
     test_only: bool = False,
-    on_source_opened: _SourceOpenCallback | None = None,
-) -> ConnectionManager[_TS, _TP, _TC, _PS, _PC]:
+    on_source_opened: SourceOpenCallback | None = None,
+) -> ConnectionManager[TS, TP, TC, PS, PC]:
     """open the sensor hardware and software contexts needed to run the given sweep.
 
     The returned Connections object contains the resulting context. All of its resources
@@ -294,10 +288,10 @@ def open_resources(
 def open_sensor_from_yaml(
     yaml_path: Path,
     *,
-    except_context: typing.ContextManager | None = None,
+    except_context: ContextManager | None = None,
     output_path: str | None = None,
     store_backend: str | None = None,
-) -> ConnectionManager[typing.Any, typing.Any, typing.Any, typing.Any, typing.Any]:
+) -> ConnectionManager[Any, Any, Any, Any, Any]:
     spec = io.read_yaml_spec(yaml_path)
 
     sink = spec.sink

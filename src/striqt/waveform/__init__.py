@@ -10,7 +10,6 @@ from .fourier import (
     istft,
     oaconvolve,
     oaresample,
-    power_spectral_density,
     resample,
     set_max_cupy_fft_chunk,
     stft,

@@ -1,12 +1,11 @@
 from __future__ import annotations as __
 
 import decimal
-import functools
 import typing
-from math import ceil, inf
+from math import inf
 from os import cpu_count
 
-from . import power_analysis
+from . import power_analysis, _typing
 from .util import (
     array_namespace,
     axis_index,
@@ -19,9 +18,11 @@ from .util import (
     isroundmod,
     lazy_import,
     lru_cache,
+    persistent_lru_cache,
     pad_along_axis,
     sliding_window_view,
     to_blocks,
+    compute_xp_from_np,
 )
 from .windows import register_extra_windows
 
@@ -31,7 +32,7 @@ if typing.TYPE_CHECKING:
     import numpy as np
     import scipy
 
-    from ._typing import ArrayType, _AT, WindowSpecType, WindowType
+    from ._typing import Array, _AT, WindowSpecType, WindowType
 
 else:
     np = lazy_import('numpy')
@@ -56,16 +57,11 @@ _COLA_WINDOW_SIZE_DIVISOR = {
 }
 
 
-def set_max_cupy_fft_chunk(count: int | None):
-    global MAX_CUPY_FFT_SAMPLES
-    MAX_CUPY_FFT_SAMPLES = count
-
-
-def get_max_cupy_fft_chunk():
-    return MAX_CUPY_FFT_SAMPLES
-
-
-def _get_window_uncached(
+# %% Windowing
+@compute_xp_from_np
+@lru_cache(1024)
+@persistent_lru_cache()
+def get_window(
     name_or_tuple: WindowType,
     nwindow: int,
     nzero: int = 0,
@@ -75,8 +71,8 @@ def _get_window_uncached(
     fftbins=True,
     norm=True,
     dtype='float32',
-    xp=None,
-) -> ArrayType:
+    xp: _typing.XpType = None,
+) -> Array:
     """build an window function with optional zero-padding or parameter finding.
 
     Arguments:
@@ -89,34 +85,8 @@ def _get_window_uncached(
 
     register_extra_windows()
 
-    if xp is not None:
-        w = _get_window_uncached(
-            name_or_tuple,
-            nwindow,
-            nzero=nzero,
-            fftbins=fftbins,
-            norm=norm,
-            fftshift=fftshift,
-            dtype=dtype,
-        )
-
-        if hasattr(xp, 'asarray'):
-            w = xp.asarray(w)
-        else:
-            w = xp.array(w)
-
-        return w
-
-    if isinstance(name_or_tuple, tuple):
-        # maybe evaluate the window argument needed to realize the specified ENBW
-        window_name, *suffix = name_or_tuple[0].rsplit('_by_enbw', 1)
-
-        if len(suffix) > 0:
-            enbw = name_or_tuple[1]
-            param = find_window_param_from_enbw(window_name, enbw, nfft=nwindow)
-            name_or_tuple = (window_name, param)
-
     ws = signal.windows.get_window(name_or_tuple, nwindow, fftbins=fftbins)
+    ws = typing.cast(Array, ws)
 
     ntotal = nwindow + nzero
 
@@ -152,12 +122,69 @@ def _get_window_uncached(
     return w
 
 
-get_window = functools.wraps(_get_window_uncached)(
-    lru_cache(1024)(_get_window_uncached)
-)
+@lru_cache()
+def equivalent_noise_bandwidth(window: WindowSpecType, N, fftbins=True, cached=True):
+    """return the equivalent noise bandwidth (ENBW) of a window, in bins"""
+    if cached:
+        w = get_window(window, N, fftbins=fftbins)
+    else:
+        w = get_window.__wrapped__(window, N, fftbins=fftbins)
+    return len(w) * np.sum(w**2) / np.sum(w) ** 2
 
 
-def _truncated_buffer(x: ArrayType, shape, dtype=None):
+@lru_cache()
+def find_window_param_from_enbw(
+    window_name: str, target: float, *, nfft: int = 4096, atol=1e-6
+) -> float:
+    """find the parameter that satistifes the specified equivalent-noise bandwidth (ENBW)
+    for a given single-parameter window.
+
+    The estimate is performed for the given `nfft`; when it is
+    larger, the result will tend to converge toward a central value.
+
+    Typically, where enbw is at least 1.1:
+        * when `window_name == 'dpss'`: the result will be slightly smaller than `(enbw)**2`
+        * when `window_name == 'kaiser'`: the result will be slightly smaller than `pi * (enbw)**2`
+
+    Arguments:
+        window_name: one of 'kaiser', 'dpss', or 'chebwin'
+        enbw: the desired equivalent noise bandwidth (in FFT bins)
+        nfft: the window size used to estimate ENBW
+        atol: the absolute error tolerance in the estimated NW
+
+    Returns:
+        result parameter suited for `get_window((window_name, result), ...)`
+    """
+    from scipy.optimize import bisect
+
+    if target < 1 + 1 / nfft:
+        raise ValueError('enbw must be greater than 1')
+
+    def err(x):
+        enbw = equivalent_noise_bandwidth.__wrapped__(
+            (window_name, x), nfft, cached=False
+        )
+        return enbw - target
+
+    if window_name == 'kaiser':
+        a = np.pi * 1e-2
+        b = min(target**2, nfft // 2 - 1) * np.pi
+    elif window_name == 'dpss':
+        a = 1e-2
+        b = min(target**2, nfft // 2 - 1)
+    elif window_name == 'chebwin':
+        a = 45
+        b = 1000
+    else:
+        raise ValueError('window_name must be one of ("kaiser", "dpss", "chebwin")')
+
+    result = bisect(err, a, b, xtol=atol)
+    assert isinstance(result, float)
+
+    return result
+
+
+def _truncated_buffer(x: Array, shape, dtype=None):
     if dtype is not None:
         x = x.view(dtype)
     out_size = np.prod(shape)
@@ -165,37 +192,40 @@ def _truncated_buffer(x: ArrayType, shape, dtype=None):
     return x.flatten()[:out_size].reshape(shape)
 
 
-def _cupy_fftn_helper(
-    x,
-    axis,
-    direction,
-    out=None,
-    overwrite_x=False,
-    plan=None,
+# %% FFTs
+def set_max_cupy_fft_chunk(count: int | None):
+    global MAX_CUPY_FFT_SAMPLES
+    MAX_CUPY_FFT_SAMPLES = count
+
+
+def get_max_cupy_fft_chunk():
+    return MAX_CUPY_FFT_SAMPLES
+
+
+def truncate_freqs(
+    x, nfft: int, fs: float, bandwidth: float, *, offset: float = 0.0, axis: int = 0
 ):
-    assert cp is not None, ImportError('cupy is not installed')
-    from cupy.fft import _fft  # type: ignore
+    """trim an array outside of the specified bandwidth on a frequency axis"""
 
-    kws = dict(overwrite_x=overwrite_x, plan=plan, order='C')
-    args = (None,), (axis,), None, direction
+    s = _slice_freqs(nfft, fs, bandwidth, offset=offset)
+    return axis_slice(x, s.start, s.stop, axis=axis)
 
-    # TODO: see about upstream question on this
-    if out is None:
-        args = (None,), (axis,), None, direction
-        return _fft._fftn(x, out=out, *args, **kws)
-    else:
-        out = out.reshape(x.shape)
 
-    if MAX_CUPY_FFT_SAMPLES is None:
-        return _fft._fftn(x, out=out, *args, **kws)
-
-    x_views = grouped_views_along_axis(x, MAX_CUPY_FFT_SAMPLES, axis=axis)
-    out_views = grouped_views_along_axis(out, MAX_CUPY_FFT_SAMPLES, axis=axis)
-
-    for x_view, out_view in zip(x_views, out_views):
-        out_view[:] = _fft._fftn(x_view, out=out_view, *args, **kws)
-
-    return out
+def null_lo(
+    x: Array,
+    nfft: int,
+    fs: float,
+    bandwidth: float,
+    *,
+    offset: float = 0,
+    axis: int = 0,
+):
+    """sets samples within the specified bandwidth on a frequency axis to nan in-place"""
+    # to make the top bound inclusive
+    nfft = x.shape[axis]
+    s = _slice_freqs(nfft, fs, bandwidth, offset=offset)
+    view = axis_slice(x, s.start, s.stop, axis=axis)
+    view[:] = float('nan')
 
 
 def fft(x, axis=-1, out=None, overwrite_x=False, plan=None, workers: int | None = None):
@@ -246,96 +276,105 @@ def ifft(
         )
 
 
-def _enbw(window: WindowSpecType, N, fftbins=True, cached=True, xp=None):
-    """return the equivalent noise bandwidth (ENBW) of a window, in bins"""
-    if xp is None:
-        xp = np
-
-    if cached:
-        w = get_window(window, N, fftbins=fftbins, xp=xp)
-    else:
-        w = _get_window_uncached(window, N, fftbins=fftbins, xp=xp or None)
-    return len(w) * xp.sum(w**2) / xp.sum(w) ** 2
-
-
-# allow access to the uncached version for find_window_param_from_enbw
-equivalent_noise_bandwidth = functools.wraps(_enbw)(lru_cache()(_enbw))
-
-
 @lru_cache()
-def find_window_param_from_enbw(
-    window_name: str, enbw: float, *, nfft: int = 4096, atol=1e-6, xp=None
-) -> float:
-    """find the parameter that satistifes the specified equivalent-noise bandwidth (ENBW)
-    for a given single-parameter window.
+def fftfreq(
+    nfft: int, fs: float, dtype='float64', as_index: bool = True, xp=np
+) -> Array:
+    """compute fftfreq for a specified sample rate.
 
-    The estimate is performed for the given `nfft`; when it is
-    larger, the result will tend to converge toward a central value.
-
-    Typically, where enbw is at least 1.1:
-        * when `window_name == 'dpss'`: the result will be slightly smaller than `(enbw)**2`
-        * when `window_name == 'kaiser'`: the result will be slightly smaller than `pi * (enbw)**2`
-
-    Arguments:
-        window_name: one of 'kaiser', 'dpss', or 'chebwin'
-        enbw: the desired equivalent noise bandwidth (in FFT bins)
-        nfft: the window size used to estimate ENBW
-        atol: the absolute error tolerance in the estimated NW
-
-    Returns:
-        result parameter suited for `get_window((window_name, result), ...)`
+    This supports varying levels of accuracy:
+    - with as_index=True, the result is accurate to full supported
+      floating point precision using fixed-point evaluation
+    - with as_index=False, the result is at least as accurate as
+      `scipy.fft.fftfreq`, which includes rounding error relative
+      to floating point precision
     """
-    from scipy.optimize import bisect
 
-    if enbw < 1 + 1 / nfft:
-        raise ValueError('enbw must be greater than 1')
+    if not as_index:
+        dtype = np.dtype(dtype)
+        fnyq = fs / 2
+        if nfft % 2 == 0:
+            return xp.linspace(-fnyq, fnyq - 2 * fnyq / nfft, nfft, dtype=dtype)
+        else:
+            return xp.linspace(
+                -fnyq + fnyq / nfft, fnyq - fnyq / nfft, nfft, dtype=dtype
+            )
 
-    def err(x):
-        return _enbw((window_name, x), nfft, cached=False, xp=xp or np) - enbw
+    if not array_api_compat.is_numpy_namespace(np):  # type: ignore
+        return xp.asarray(fftfreq(nfft, fs, dtype, as_index=as_index))
 
-    if window_name == 'kaiser':
-        a = np.pi * 1e-2
-        b = min(enbw**2, nfft // 2 - 1) * np.pi
-    elif window_name == 'dpss':
-        a = 1e-2
-        b = min(enbw**2, nfft // 2 - 1)
-    elif window_name == 'chebwin':
-        a = 45
-        b = 1000
+    # high resolution rational representation of frequency resolution
+    fres = decimal.Decimal(fs) / nfft
+    span = range(-nfft // 2, -nfft // 2 + nfft)
+    if nfft % 2 == 0:
+        values = [fres * n for n in span]
     else:
-        raise ValueError('window_name must be one of ("kaiser", "dpss", "chebwin")')
-
-    result = bisect(err, a, b, xtol=atol)
-    assert isinstance(result, float)
-
-    return result
+        values = [fres * (n + 1) for n in span]
+    return np.array(values, dtype=dtype)
 
 
-def broadcast_onto(a: _AT, other: _AT, *, axis: int) -> _AT:
-    """reshape a 1-D array to support broadcasting onto a specified axis of `other`"""
+def time_fftshift(x, scale: Array | float | None = None, overwrite_x=False, axis=0):
+    if scale is None:
+        if overwrite_x:
+            # short path: no scale and write directly to x
+            xview = axis_slice(x, start=1, step=2, axis=axis)
+            xview *= -1
+            return x
+        else:
+            scale = 1
 
-    if a.ndim != 1:
-        raise ValueError('input array a must be 1-D')
+    xp = array_namespace(x)
 
-    xp = array_namespace(a)
+    if overwrite_x:
+        out = x
+    else:
+        out = xp.empty_like(x)
 
-    slices = [xp.newaxis] * int(other.ndim)
-    slices[axis] = slice(None, None)
-    return a[tuple(slices)]  # type: ignore
+    if np.ndim(scale) > 1:
+        raise ValueError('scale must be 1-D or scalar')
+
+    xview = to_blocks(x, 2, axis=axis)
+    outview = to_blocks(out, 2, axis=axis)
+    scale = _broadcast_onto(xp.atleast_1d(scale), outview, axis=max(axis - 1, 0))
+    shift = _broadcast_onto(xp.array([1, -1]), outview, axis=axis + 1)
+    xp.multiply(xview, scale * shift, out=outview)
+    return out
 
 
-@lru_cache(16)
-def _get_stft_axes(
-    fs: float, nfft: int, time_size: int, overlap_frac: float = 0, *, xp=None
-) -> tuple[ArrayType, ArrayType]:
-    """returns stft (freqs, times) array tuple appropriate to the array module xp"""
-    if xp is None:
-        xp = np
+time_ifftshift = time_fftshift
 
-    freqs = fftfreq(nfft, fs, xp=xp)
-    times = xp.arange(time_size) * ((1 - overlap_frac) * nfft / fs)
 
-    return freqs, times
+def _cupy_fftn_helper(
+    x,
+    axis,
+    direction,
+    out=None,
+    overwrite_x=False,
+    plan=None,
+):
+    assert cp is not None, ImportError('cupy is not installed')
+    from cupy.fft import _fft  # type: ignore
+
+    kws = dict(overwrite_x=overwrite_x, plan=plan, order='C')
+    args = (None,), (axis,), None, direction
+
+    # TODO: see about upstream question on this
+    if out is None:
+        args = (None,), (axis,), None, direction
+        return _fft._fftn(x, out=out, *args, **kws)
+    else:
+        out = out.reshape(x.shape)
+
+    if MAX_CUPY_FFT_SAMPLES is None:
+        return _fft._fftn(x, out=out, *args, **kws)
+
+    x_views = grouped_views_along_axis(x, MAX_CUPY_FFT_SAMPLES, axis=axis)
+    out_views = grouped_views_along_axis(out, MAX_CUPY_FFT_SAMPLES, axis=axis)
+
+    for x_view, out_view in zip(x_views, out_views):
+        out_view[:] = _fft._fftn(x_view, out=out_view, *args, **kws)
+
+    return out
 
 
 @lru_cache()
@@ -349,18 +388,669 @@ def _prime_fft_sizes(min=2, max=OLA_MAX_FFT_SIZE):
     return s[(s > min)]
 
 
+@lru_cache()
+def _slice_freqs(
+    nfft: int, fs: float, bandwidth: float, *, offset: float = 0.0
+) -> slice:
+    """trim an array outside of the specified bandwidth on a frequency axis"""
+    if bandwidth < 0:
+        raise ValueError('invalid negative bandwidth')
+
+    ic = nfft * (0.5 + offset / fs)
+    if isroundmod(ic, 1):
+        ic = round(ic)
+    else:
+        raise ValueError('offset center frequency is not a multiple of fs/nfft')
+
+    count = round(nfft * (bandwidth / fs))
+
+    start = ic - count // 2
+    stop = start + count
+    if start < 0:
+        raise ValueError(f'offset - bandwidth/2 < fs/2')
+    if stop > nfft:
+        raise ValueError(f'offset + bandwidth/2 > fs/2')
+
+    return slice(start, stop)
+
+
+@lru_cache()
+def _freq_band_edges(n, d, cutoff_low, cutoff_hi, *, xp=None):
+    if xp is None:
+        xp = np
+    freqs = fftfreq(n, d, xp=xp)
+
+    if cutoff_low is None:
+        ilo = None
+    else:
+        ilo = xp.where(freqs >= cutoff_low)[0][0]
+
+    if cutoff_hi is None:
+        ihi = None
+    elif cutoff_hi >= freqs[-1]:
+        ihi = freqs.size
+    else:
+        ihi = xp.where(freqs <= cutoff_hi)[0][-1]
+
+    return ilo, ihi
+
+
+# %% STFT and spectrogram
+@lru_cache(16)
+def _get_stft_axes(
+    fs: float, nfft: int, time_size: int, overlap_frac: float = 0, *, xp=None
+) -> tuple[Array, Array]:
+    """returns stft (freqs, times) array tuple appropriate to the array module xp"""
+    if xp is None:
+        xp = np
+
+    freqs = fftfreq(nfft, fs, xp=xp)
+    times = xp.arange(time_size) * ((1 - overlap_frac) * nfft / fs)
+
+    return freqs, times
+
+
+def stft(
+    x: _AT,
+    *,
+    fs: float,
+    window: Array | str | tuple[str, float],
+    nperseg: int = 256,
+    noverlap: int = 0,
+    nzero: int = 0,
+    axis: int = 0,
+    truncate: bool = True,
+    norm: str | None = None,
+    overwrite_x=False,
+    return_axis_arrays=True,
+    out=None,
+) -> tuple[_AT, _AT, _AT]:
+    """Implements a stripped-down subset of scipy.fft.stft in order to avoid
+    some overhead that comes with its generality and allow use of the generic
+    python array-api for interchangable numpy/cupy support.
+
+    For additional information, see help for scipy.fft.
+
+    Args:
+        x: input array
+
+        fs: sampling rate
+
+        window: a window array, or a name or (name, parameter) pair as in `scipy.signal.get_window`
+
+        nperseg: the size of the FFT (= segment size used if overlapping)
+
+        noverlap: if nonzero, compute windowed FFTs that overlap by this many bins (only 0 and nperseg//2 supported)
+
+        axis: the axis on which to compute the STFT
+
+        truncate: whether to allow truncation of `x` to enforce full fft block sizes
+
+    Raises:
+        NotImplementedError: if axis != 0
+
+        ValueError: if truncate == False and x.shape[axis] % nperseg != 0
+
+    Returns:
+        stft (see scipy.fft.stft)
+
+    """
+
+    xp = array_namespace(x)
+
+    # # For reference: this is probably the same
+    # freqs, times, X = signal.spectral._spectral_helper(
+    #     x,
+    #     x,
+    #     fs,
+    #     window,
+    #     nperseg,
+    #     noverlap,
+    #     nperseg,
+    #     scaling="spectrum",
+    #     axis=axis,
+    #     mode="stft",
+    #     padded=True,
+    # )
+
+    nfft = nperseg
+    dtype = typing.cast(str, x.dtype)
+
+    if norm not in ('power', None):
+        raise TypeError('norm must be "power" or None')
+
+    if window is None:
+        window = 'rect'
+
+    if isinstance(window, str) or isinstance(window, tuple):
+        should_norm = norm == 'power'
+        w = get_window(
+            window,
+            nfft - nzero,
+            nzero=nzero,
+            xp=xp,
+            dtype=dtype,
+            norm=should_norm,
+            fftshift=True,
+        )
+    else:
+        w = window * get_window(
+            'rect', nfft - nzero, nzero=nzero, xp=xp, dtype=dtype, fftshift=True
+        )
+
+    if noverlap == 0:
+        # special case for speed
+        xstack = to_blocks(x, nfft, axis=axis, truncate=truncate)
+        wstack = _broadcast_onto(w / nfft, xstack, axis=axis + 1)
+
+        if out is None and overwrite_x:
+            out = xstack
+
+        xstack = xp.multiply(
+            xstack,
+            wstack.astype(xstack.dtype),
+            out=xstack if overwrite_x else out,
+        )
+
+    else:
+        xstack = _stack_stft_windows(
+            x,
+            window=w / nfft,
+            nperseg=nperseg,
+            noverlap=noverlap,
+            axis=axis,
+            norm=norm,
+            out=out,
+        )
+    assert xstack.dtype == x.dtype
+    del x
+
+    # no fftshift needed since it was baked into the window
+    y = fft(xstack, axis=axis + 1, overwrite_x=True, out=xstack)
+
+    if not return_axis_arrays:
+        return y
+
+    freqs, times = _get_stft_axes(
+        fs,
+        nfft=nfft,
+        time_size=y.shape[axis],
+        overlap_frac=noverlap / nfft,
+        xp=np,
+    )
+
+    return typing.cast(tuple[_AT, _AT, _AT], (freqs, times, y))
+
+
+def istft(
+    y: Array,
+    size=None,
+    *,
+    nfft: int,
+    noverlap: int,
+    out=None,
+    overwrite_x=False,
+    axis=0,
+) -> Array:
+    """reconstruct and return a waveform given its STFT and associated parameters"""
+
+    xp = array_namespace(y)
+    dtype = typing.cast(str, y.dtype)
+
+    # give the stacked NFFT-sized time domain vectors in axis + 1
+    xstack = ifft(
+        y,
+        axis=axis + 1,
+        overwrite_x=overwrite_x,
+        out=y if overwrite_x else None,
+    )
+
+    # correct the fft shift in the time domain, since the
+    # multiply operation can be applied in-place
+    w = get_window('rect', nfft, xp=xp, dtype=dtype, fftshift=True)
+    wstack = _broadcast_onto(w, xstack, axis=axis + 1)
+    xstack = xp.multiply(
+        xstack,
+        wstack,
+        out=xstack,
+        dtype=xstack.dtype,
+    )
+    assert xstack.dtype == dtype
+
+    x = _unstack_stft_windows(
+        xstack, noverlap=noverlap, nperseg=nfft, axis=axis, out=out
+    )
+    assert x.dtype == dtype
+
+    if size is not None:
+        trim = x.shape[axis] - size
+        if trim > 0:
+            x = axis_slice(x, start=trim // 2, stop=-trim // 2, axis=axis)
+
+    return x
+
+
+@typing.overload
+def spectrogram(
+    x: _AT,
+    *,
+    fs: float,
+    window: WindowType,
+    nperseg: int,
+    noverlap: int = 0,
+    nzero: int = 0,
+    axis: int = 0,
+    truncate: bool = True,
+    return_axis_arrays: typing.Literal[False],
+) -> _AT: ...
+
+
+@typing.overload
+def spectrogram(
+    x: _AT,
+    *,
+    fs: float,
+    window: WindowType,
+    nperseg: int,
+    noverlap: int = 0,
+    nzero: int = 0,
+    axis: int = 0,
+    truncate: bool = True,
+    return_axis_arrays: typing.Literal[True] = True,
+) -> tuple[_AT, _AT, _AT]: ...
+
+
+@typing.overload
+def spectrogram(
+    x: _AT,
+    *,
+    fs: float,
+    window: WindowType,
+    nperseg: int,
+    noverlap: int = 0,
+    nzero: int = 0,
+    axis: int = 0,
+    truncate: bool = True,
+    return_axis_arrays: bool,
+) -> _AT | tuple[_AT, _AT, _AT]: ...
+
+
+def spectrogram(
+    x: _AT,
+    *,
+    fs: float,
+    window: WindowType,
+    nperseg: int,
+    noverlap: int = 0,
+    nzero: int = 0,
+    axis: int = 0,
+    truncate: bool = True,
+    return_axis_arrays: bool = True,
+) -> _AT | tuple[_AT, _AT, _AT]:
+    """evaluate the power spectrogram of x with the given arguments.
+
+    The output is scaled such that the noise bandwidth is equal to the
+    frequency resolution.
+    """
+    ret = stft(norm='power', **dict(locals()))
+    if return_axis_arrays:
+        freqs, times, X = ret
+        return freqs, times, power_analysis.envtopow(X)
+    else:
+        return power_analysis.envtopow(ret)
+
+
+def _stack_stft_windows(
+    x: Array,
+    window: Array,
+    nperseg: int,
+    noverlap: int,
+    norm: typing.Literal['power'] | None = None,
+    axis: int = 0,
+    out=None,
+) -> Array:
+    """add overlapping windows at appropriate offset _to_overlapping_windows, returning a waveform.
+
+    Compared to the underlying stft implementations in scipy and cupyx.scipy, this has been simplified
+    to a reduced set of parameters for speed.
+
+    Args:
+        x: the 1-D waveform (or N-D tensor of waveforms)
+        axis: the waveform axis; stft will be evaluated across all other axes
+    """
+
+    xp = array_namespace(x)
+
+    hop_size = nperseg - noverlap
+
+    strided = sliding_window_view(x, nperseg, axis=axis)
+    xstacked = axis_slice(strided, start=0, step=hop_size, axis=axis)
+
+    if norm is None:
+        scale = xp.abs(window[::hop_size]).sum()
+    elif norm == 'power':
+        scale = 1
+    else:
+        raise ValueError(
+            f"invalid normalization argument '{norm}' (should be 'cola' or 'psd')"
+        )
+
+    w = _broadcast_onto(window / scale, xstacked, axis=axis + 1)
+    return xp.multiply(xstacked, w.astype(xstacked.dtype), out=out)
+
+
+def _unstack_stft_windows(
+    y: Array, noverlap: int, nperseg: int, axis=0, out=None, extra=0
+) -> Array:
+    """reconstruct the time-domain waveform from its STFT representation.
+
+    Compared to the underlying istft implementations in scipy and cupyx.scipy, this has been simplified
+    for speed at the expense of memory consumption.
+
+    Args:
+        y: the stft output, containing at least 2 dimensions
+        noverlap: the overlap size that was used to generate the STFT (see scipy.signal.stft)
+        axis: the axis of the first dimension of the STFT (the second is at axis+1)
+        out: if specified, the output array that will receive the result. it must have at least the same allocated size as y
+        extra: total number of extra samples to include at the edges
+    """
+
+    xp = array_namespace(y)
+
+    nfft = nperseg
+    hop_size = nperseg - noverlap
+
+    waveform_size = y.shape[axis] * y.shape[axis + 1] * hop_size // nfft + noverlap
+    target_shape = y.shape[:axis] + (waveform_size,) + y.shape[axis + 2 :]
+
+    if out is None:
+        xr = xp.empty(target_shape, dtype=y.dtype)
+    else:
+        xr = _truncated_buffer(out, target_shape)
+
+    xr_slice = axis_slice(
+        xr,
+        start=0,
+        stop=noverlap,
+        axis=axis,
+    )
+    xp.copyto(xr_slice, 0)
+
+    xr_slice = axis_slice(
+        xr,
+        start=-noverlap,
+        stop=None,
+        axis=axis,
+    )
+    xp.copyto(xr_slice, 0)
+
+    # for speed, sum up in groups of non-overlapping windows
+    for offs in range(nfft // hop_size):
+        yslice = axis_slice(y, start=offs, step=nfft // hop_size, axis=axis)
+        yshape = yslice.shape
+
+        yslice = yslice.reshape(
+            yshape[:axis] + (yshape[axis] * yshape[axis + 1],) + yshape[axis + 2 :]
+        )
+        xr_slice = axis_slice(
+            xr,
+            start=offs * hop_size,
+            stop=offs * hop_size + yslice.shape[axis],
+            axis=axis,
+        )
+
+        if offs == 0:
+            xp.copyto(xr_slice, yslice[: xr_slice.size])
+        else:
+            xr_slice += yslice[: xr_slice.size]
+
+    return xr  # axis_slice(xr, start=noverlap-extra//2, stop=(-noverlap+extra//2) or None, axis=axis)
+
+
+# %% Filters
+@compute_xp_from_np
+@lru_cache()
+@persistent_lru_cache()
+def design_fir_lpf(
+    bw, fs, *, numtaps=4001, transition_bw=250e3, dtype='float32', xp=None
+):
+    from scipy import signal
+
+    edges = [
+        0,
+        bw / 2 - transition_bw / 2,
+        bw / 2 + transition_bw / 2,
+        fs / 2,
+    ]
+    bands = list(zip(edges[:-1], edges[1:]))
+    desired = [1, 1, 1, 0, 0, 0]
+
+    b = signal.firls(numtaps, bands=bands, desired=desired, fs=fs)
+
+    return b.astype(dtype)
+
+
+def ola_filter(
+    x: Array,
+    *,
+    fs: float,
+    nfft: int,
+    window: str | tuple = 'hamming',
+    passband: tuple[float, float],
+    nfft_out: int | None = None,
+    frequency_shift=False,
+    axis=0,
+    extend=False,
+    overwrite_x=False,
+):
+    """apply a bandpass filter implemented through STFT overlap-and-add.
+
+    Args:
+        x: the input waveform
+        fs: the sample rate of the input waveform, in Hz
+        noverlap: the size of overlap between adjacent FFT windows, in samples
+        window: the type of COLA window to apply, 'hamming', 'blackman', or 'blackmanharris'
+        passband: a tuple of low-pass cutoff and high-pass cutoff frequency (or None to skip either)
+        nfft_out: implement downsampling by adjusting the size of overlap between adjacent FFT windows
+        frequency_shift: the direction to shift the downsampled frequencies ('left' or 'right', or False to center)
+        axis: the axis of `x` along which to compute the filter
+        extend: if True, allow use of zero-padded samples at the edges to accommodate a non-integer number of overlapping windows in x
+        out: None, 'shared', or an array object to receive the output data
+
+
+    Returns:
+        an Array of the same shape as X
+    """
+
+    nfft_out, noverlap, overlap_scale, _ = _ola_filter_parameters(
+        x.size,
+        window=window,
+        nfft_out=nfft_out or nfft,
+        nfft=nfft,
+        extend=extend,
+    )
+
+    enbw = equivalent_noise_bandwidth(window, nfft_out, fftbins=False)
+
+    freqs, _, y = stft(
+        x,
+        fs=fs,
+        window=window,
+        nperseg=nfft,
+        noverlap=round(nfft * overlap_scale),
+        axis=axis,
+        truncate=False,
+        overwrite_x=overwrite_x,
+    )
+
+    zero_stft_by_freq(
+        freqs, y, passband=(passband[0] + enbw, passband[1] - enbw), axis=axis
+    )
+
+    if nfft_out != nfft or frequency_shift:
+        freqs, y = downsample_stft(
+            freqs,
+            y,
+            nfft_out=nfft_out or nfft,
+            passband=passband,
+            axis=axis,
+            out=y,
+        )
+
+    return istft(
+        y,
+        round(x.shape[axis] * nfft_out / nfft),
+        nfft=nfft_out or nfft,
+        noverlap=noverlap,
+        overwrite_x=True,
+        axis=axis,
+    )
+
+
+def _stft_fir_lowpass(
+    xstft: _AT,
+    *,
+    sample_rate: float,
+    bandwidth: float,
+    transition_bandwidth: float,
+    axis: int = 0,
+    out=None,
+) -> _AT:
+    xp = array_namespace(xstft)
+
+    H = _fir_lowpass_fft(
+        xstft.shape[axis + 1],
+        sample_rate=sample_rate,
+        cutoff=bandwidth / 2,
+        transition=transition_bandwidth,
+        dtype=typing.cast(str, xstft.dtype),
+        window='rect',
+        xp=xp,
+    )
+
+    H = _broadcast_onto(H, xstft, axis=axis + 1)
+
+    return xp.multiply(xstft, H, out=out)
+
+
+def zero_stft_by_freq(
+    freqs: Array, xstft: Array, *, passband: tuple[float, float], axis=0
+) -> Array:
+    """apply a bandpass filter in the STFT domain by zeroing frequency indices"""
+    xp = array_namespace(xstft)
+
+    freq_step = float(freqs[1] - freqs[0])
+    fs = xstft.shape[axis] * freq_step
+    ilo, ihi = _freq_band_edges(freqs.size, fs, *passband, xp=xp)
+
+    xp.copyto(axis_slice(xstft, 0, ilo, axis=axis + 1), 0)
+    xp.copyto(axis_slice(xstft, ihi, None, axis=axis + 1), 0)
+    return xstft
+
+
+@lru_cache()
+def _fir_lowpass_fft(
+    size: int,
+    sample_rate: float,
+    *,
+    cutoff: float,
+    transition: float,
+    window='hamming',
+    xp=None,
+    dtype='complex64',
+):
+    """returns the complex frequency response of an FIR filter suited for filtering in the frequency domain
+
+    Arguments:
+        size: window size
+        sample_rate: sample rate (in Hz)
+        cutoff: filter cutoff (in Hz)
+        transition: bandwidth of the transition (in Hz)
+
+    Returns:
+        a frequency-domain window
+    """
+
+    if xp is None:
+        xp = np
+
+    from scipy import signal
+
+    if cutoff == float('inf'):
+        h = np.ones(size, dtype=dtype)
+    else:
+        freqs = [
+            0,
+            # cutoff - transition / 2,
+            cutoff,
+            cutoff + transition,
+            sample_rate / 2,
+        ]
+        h = signal.firwin2(
+            size, freqs, [1.0, 1, 0.0, 0.0], window=window, fs=sample_rate
+        )
+
+    taps = xp.array(h).astype(dtype)
+    w = get_window('rect', size, xp=xp, dtype=dtype, fftshift=True)
+    H = xp.fft.fft(taps * w)
+    return H * w
+
+
+@lru_cache()
+def _ola_filter_parameters(
+    array_size: int, *, window, nfft_out: int, nfft: int, extend: bool
+) -> tuple:
+    if nfft_out is None:
+        nfft_out = nfft
+
+    try:
+        divisor = _COLA_WINDOW_SIZE_DIVISOR[window]
+    except KeyError:
+        raise TypeError(
+            'ola_filter argument "window" must be one of ("hamming", "blackman", or "blackmanharris")'
+        )
+
+    if nfft_out % divisor != 0:
+        raise ValueError(
+            f'{window!r} window COLA requires output nfft_out % {divisor} == 0'
+        )
+
+    if window is None or window == 'rect':
+        overlap_scale = 1
+    if window == 'hamming':
+        overlap_scale = 1 / 2
+    elif window == 'blackman':
+        overlap_scale = 2 / 3
+    elif window == 'blackmanharris':
+        overlap_scale = 4 / 5
+    else:
+        raise ValueError('unexpected matching error')
+
+    noverlap = round(nfft_out * overlap_scale)
+
+    if array_size % noverlap != 0:
+        if extend:
+            pad_out = array_size % noverlap
+        else:
+            raise ValueError(
+                f'x.size ({array_size}) is not an integer multiple of noverlap ({noverlap})'
+            )
+    else:
+        pad_out = 0
+
+    return nfft_out, noverlap, overlap_scale, pad_out
+
+
+# %% Resamplers
 class ResamplerDesign(typing.TypedDict):
     fs_sdr: float
     lo_offset: float
     window: str | tuple[str, float]
     nfft: int
     nfft_out: int
-    frequency_shift: ShiftType
+    frequency_shift: _typing.ShiftType
     passband: tuple[float | None, float | None]
     fs: float
-
-
-ShiftType = typing.Literal['left', 'right', 'none', False]
 
 
 @lru_cache()
@@ -371,7 +1061,7 @@ def design_cola_resampler(
     bw_lo: float = 0,
     min_oversampling: float = 1.1,
     min_fft_size=2 * 4096 - 1,
-    shift: ShiftType = False,
+    shift: _typing.ShiftType = False,
     avoid_primes=True,
     window=None,
     fs_sdr: typing.Optional[float] = None,
@@ -524,346 +1214,15 @@ def design_fir_resampler(
     return design['fs'], fir_params
 
 
-def _stack_stft_windows(
-    x: ArrayType,
-    window: ArrayType,
-    nperseg: int,
-    noverlap: int,
-    norm=None,
-    axis=0,
-    out=None,
-) -> ArrayType:
-    """add overlapping windows at appropriate offset _to_overlapping_windows, returning a waveform.
-
-    Compared to the underlying stft implementations in scipy and cupyx.scipy, this has been simplified
-    to a reduced set of parameters for speed.
-
-    Args:
-        x: the 1-D waveform (or N-D tensor of waveforms)
-        axis: the waveform axis; stft will be evaluated across all other axes
-    """
-
-    xp = array_namespace(x)
-
-    hop_size = nperseg - noverlap
-
-    strided = sliding_window_view(x, nperseg, axis=axis)
-    xstacked = axis_slice(strided, start=0, step=hop_size, axis=axis)
-
-    if norm is None:
-        scale = xp.abs(window[::hop_size]).sum()
-    elif norm == 'power':
-        scale = 1
-    else:
-        raise ValueError(
-            f"invalid normalization argument '{norm}' (should be 'cola' or 'psd')"
-        )
-
-    w = broadcast_onto(window / scale, xstacked, axis=axis + 1)
-    return xp.multiply(xstacked, w.astype(xstacked.dtype), out=out)
-
-
-def _unstack_stft_windows(
-    y: ArrayType, noverlap: int, nperseg: int, axis=0, out=None, extra=0
-) -> ArrayType:
-    """reconstruct the time-domain waveform from its STFT representation.
-
-    Compared to the underlying istft implementations in scipy and cupyx.scipy, this has been simplified
-    for speed at the expense of memory consumption.
-
-    Args:
-        y: the stft output, containing at least 2 dimensions
-        noverlap: the overlap size that was used to generate the STFT (see scipy.signal.stft)
-        axis: the axis of the first dimension of the STFT (the second is at axis+1)
-        out: if specified, the output array that will receive the result. it must have at least the same allocated size as y
-        extra: total number of extra samples to include at the edges
-    """
-
-    xp = array_namespace(y)
-
-    nfft = nperseg
-    hop_size = nperseg - noverlap
-
-    waveform_size = y.shape[axis] * y.shape[axis + 1] * hop_size // nfft + noverlap
-    target_shape = y.shape[:axis] + (waveform_size,) + y.shape[axis + 2 :]
-
-    if out is None:
-        xr = xp.empty(target_shape, dtype=y.dtype)
-    else:
-        xr = _truncated_buffer(out, target_shape)
-
-    xr_slice = axis_slice(
-        xr,
-        start=0,
-        stop=noverlap,
-        axis=axis,
-    )
-    xp.copyto(xr_slice, 0)
-
-    xr_slice = axis_slice(
-        xr,
-        start=-noverlap,
-        stop=None,
-        axis=axis,
-    )
-    xp.copyto(xr_slice, 0)
-
-    # for speed, sum up in groups of non-overlapping windows
-    for offs in range(nfft // hop_size):
-        yslice = axis_slice(y, start=offs, step=nfft // hop_size, axis=axis)
-        yshape = yslice.shape
-
-        yslice = yslice.reshape(
-            yshape[:axis] + (yshape[axis] * yshape[axis + 1],) + yshape[axis + 2 :]
-        )
-        xr_slice = axis_slice(
-            xr,
-            start=offs * hop_size,
-            stop=offs * hop_size + yslice.shape[axis],
-            axis=axis,
-        )
-
-        if offs == 0:
-            xp.copyto(xr_slice, yslice[: xr_slice.size])
-        else:
-            xr_slice += yslice[: xr_slice.size]
-
-    return xr  # axis_slice(xr, start=noverlap-extra//2, stop=(-noverlap+extra//2) or None, axis=axis)
-
-
-@lru_cache()
-def _ola_filter_parameters(
-    array_size: int, *, window, nfft_out: int, nfft: int, extend: bool
-) -> tuple:
-    if nfft_out is None:
-        nfft_out = nfft
-
-    try:
-        divisor = _COLA_WINDOW_SIZE_DIVISOR[window]
-    except KeyError:
-        raise TypeError(
-            'ola_filter argument "window" must be one of ("hamming", "blackman", or "blackmanharris")'
-        )
-
-    if nfft_out % divisor != 0:
-        raise ValueError(
-            f'{window!r} window COLA requires output nfft_out % {divisor} == 0'
-        )
-
-    if window is None or window == 'rect':
-        overlap_scale = 1
-    if window == 'hamming':
-        overlap_scale = 1 / 2
-    elif window == 'blackman':
-        overlap_scale = 2 / 3
-    elif window == 'blackmanharris':
-        overlap_scale = 4 / 5
-    else:
-        raise ValueError('unexpected matching error')
-
-    noverlap = round(nfft_out * overlap_scale)
-
-    if array_size % noverlap != 0:
-        if extend:
-            pad_out = array_size % noverlap
-        else:
-            raise ValueError(
-                f'x.size ({array_size}) is not an integer multiple of noverlap ({noverlap})'
-            )
-    else:
-        pad_out = 0
-
-    return nfft_out, noverlap, overlap_scale, pad_out
-
-
-def _istft_buffer_size(
-    array_size: int, *, window, nfft_out: int, nfft: int, extend: bool
-):
-    nfft_out, _, overlap_scale, pad_out = _ola_filter_parameters(**locals())
-    nfft_max = max(nfft_out, nfft)
-    fft_count = 2 + ((array_size + pad_out) / nfft_max) / overlap_scale
-    size = ceil(fft_count * nfft_max)
-    return size
-
-
-def zero_stft_by_freq(
-    freqs: ArrayType, xstft: ArrayType, *, passband: tuple[float, float], axis=0
-) -> ArrayType:
-    """apply a bandpass filter in the STFT domain by zeroing frequency indices"""
-    xp = array_namespace(xstft)
-
-    freq_step = float(freqs[1] - freqs[0])
-    fs = xstft.shape[axis] * freq_step
-    ilo, ihi = _freq_band_edges(freqs.size, fs, *passband, xp=xp)
-
-    xp.copyto(axis_slice(xstft, 0, ilo, axis=axis + 1), 0)
-    xp.copyto(axis_slice(xstft, ihi, None, axis=axis + 1), 0)
-    return xstft
-
-
-@lru_cache()
-def design_fir_lpf(
-    bandwidth,
-    sample_rate,
-    *,
-    numtaps=4001,
-    transition_bandwidth=250e3,
-    dtype='float32',
-    xp=None,
-):
-    if xp is None:
-        xp = np
-
-    from scipy import signal
-
-    edges = [
-        0,
-        bandwidth / 2 - transition_bandwidth / 2,
-        bandwidth / 2 + transition_bandwidth / 2,
-        sample_rate / 2,
-    ]
-    bands = list(zip(edges[:-1], edges[1:]))
-    desired = [1, 1, 1, 0, 0, 0]
-
-    b = signal.firls(numtaps, bands=bands, desired=desired, fs=sample_rate)
-
-    return xp.asarray(b.astype(dtype))
-
-
-@lru_cache()
-def _fir_lowpass_fft(
-    size: int,
-    sample_rate: float,
-    *,
-    cutoff: float,
-    transition: float,
-    window='hamming',
-    xp=None,
-    dtype='complex64',
-):
-    """returns the complex frequency response of an FIR filter suited for filtering in the frequency domain
-
-    Arguments:
-        size: window size
-        sample_rate: sample rate (in Hz)
-        cutoff: filter cutoff (in Hz)
-        transition: bandwidth of the transition (in Hz)
-
-    Returns:
-        a frequency-domain window
-    """
-
-    if xp is None:
-        xp = np
-
-    from scipy import signal
-
-    if cutoff == float('inf'):
-        h = np.ones(size, dtype=dtype)
-    else:
-        freqs = [
-            0,
-            # cutoff - transition / 2,
-            cutoff,
-            cutoff + transition,
-            sample_rate / 2,
-        ]
-        h = signal.firwin2(
-            size, freqs, [1.0, 1, 0.0, 0.0], window=window, fs=sample_rate
-        )
-
-    taps = xp.array(h).astype(dtype)
-    w = get_window('rect', size, xp=xp, dtype=dtype, fftshift=True)
-    H = xp.fft.fft(taps * w)
-    return H * w
-
-
-def stft_fir_lowpass(
-    xstft: _AT,
-    *,
-    sample_rate: float,
-    bandwidth: float,
-    transition_bandwidth: float,
-    axis: int = 0,
-    out=None,
-) -> _AT:
-    xp = array_namespace(xstft)
-
-    H = _fir_lowpass_fft(
-        xstft.shape[axis + 1],
-        sample_rate=sample_rate,
-        cutoff=bandwidth / 2,
-        transition=transition_bandwidth,
-        dtype=typing.cast(str, xstft.dtype),
-        window='rect',
-        xp=xp,
-    )
-
-    H = broadcast_onto(H, xstft, axis=axis + 1)
-
-    return xp.multiply(xstft, H, out=out)
-
-
-@lru_cache(100)
-def _find_downsample_copy_range(
-    nfft_in: int, nfft_out: int, edge_in_start: int | None, edge_in_end: int | None
-):
-    if edge_in_start is None:
-        edge_in_start = 0
-    if edge_in_end is None:
-        edge_in_end = nfft_in
-    passband_size = edge_in_end - edge_in_start
-    passband_center = (edge_in_end + edge_in_start) // 2
-
-    # passband_center_error = (passband_end - passband_start) % 2
-
-    # copy input indexes, taken from the passband
-    max_copy_size = min(passband_size, nfft_out)
-    copy_in_start = max(passband_center - max_copy_size // 2, 0)
-    copy_in_end = min(passband_center - max_copy_size // 2 + max_copy_size, nfft_in)
-    copy_size = copy_in_end - copy_in_start
-
-    assert copy_size <= nfft_out, (copy_size, nfft_out)
-    assert copy_size >= 0, copy_size
-    assert copy_in_end - copy_in_start == copy_size
-
-    # copy output indexes
-    output_zeros_size = max(nfft_out - copy_size, 0)
-    copy_out_start = output_zeros_size // 2
-    copy_out_end = copy_out_start + copy_size
-
-    assert copy_out_end - copy_out_start == copy_size
-    assert copy_out_start >= 0
-    assert copy_out_end <= nfft_out
-
-    return (copy_out_start, copy_out_end), (copy_in_start, copy_in_end), passband_center
-
-
-@lru_cache(16)
-def _find_downsampled_freqs(nfft_out, freq_step, xp=None):
-    return fftfreq(nfft_out, 1.0 / (freq_step * nfft_out), xp=xp or np)
-
-
-def _same_base_memory(a: ArrayType, b: ArrayType) -> bool:
-    if b is None:
-        return False
-    elif a is b:
-        return True
-    elif getattr(b, 'base', None) is a:
-        return True
-    else:
-        return False
-
-
 def downsample_stft(
-    freqs: ArrayType,
-    y: ArrayType,
+    freqs: Array,
+    y: Array,
     nfft_out: int,
     *,
     passband: tuple[float | None, float | None] = (None, None),
     axis=0,
     out=None,
-) -> tuple[ArrayType, ArrayType]:
+) -> tuple[Array, Array]:
     """downsample and filter an STFT representation of a filter in the frequency domain.
 
     * This is rational downsampling by a factor of `nout/xstft.shape[axis+1]`,
@@ -916,476 +1275,39 @@ def downsample_stft(
     return freqs_out, xout
 
 
-def stft(
-    x: _AT,
-    *,
-    fs: float,
-    window: ArrayType | str | tuple[str, float],
-    nperseg: int = 256,
-    noverlap: int = 0,
-    nzero: int = 0,
-    axis: int = 0,
-    truncate: bool = True,
-    norm: str | None = None,
-    overwrite_x=False,
-    return_axis_arrays=True,
-    out=None,
-) -> tuple[_AT, _AT, _AT]:
-    """Implements a stripped-down subset of scipy.fft.stft in order to avoid
-    some overhead that comes with its generality and allow use of the generic
-    python array-api for interchangable numpy/cupy support.
-
-    For additional information, see help for scipy.fft.
-
-    Args:
-        x: input array
-
-        fs: sampling rate
-
-        window: a window array, or a name or (name, parameter) pair as in `scipy.signal.get_window`
-
-        nperseg: the size of the FFT (= segment size used if overlapping)
-
-        noverlap: if nonzero, compute windowed FFTs that overlap by this many bins (only 0 and nperseg//2 supported)
-
-        axis: the axis on which to compute the STFT
-
-        truncate: whether to allow truncation of `x` to enforce full fft block sizes
-
-    Raises:
-        NotImplementedError: if axis != 0
-
-        ValueError: if truncate == False and x.shape[axis] % nperseg != 0
-
-    Returns:
-        stft (see scipy.fft.stft)
-
-    """
-
-    xp = array_namespace(x)
-
-    # # For reference: this is probably the same
-    # freqs, times, X = signal.spectral._spectral_helper(
-    #     x,
-    #     x,
-    #     fs,
-    #     window,
-    #     nperseg,
-    #     noverlap,
-    #     nperseg,
-    #     scaling="spectrum",
-    #     axis=axis,
-    #     mode="stft",
-    #     padded=True,
-    # )
-
-    nfft = nperseg
-    dtype = typing.cast(str, x.dtype)
-
-    if norm not in ('power', None):
-        raise TypeError('norm must be "power" or None')
-
-    if window is None:
-        window = 'rect'
-
-    if isinstance(window, str) or isinstance(window, tuple):
-        should_norm = norm == 'power'
-        w = get_window(
-            window,
-            nfft - nzero,
-            nzero=nzero,
-            xp=xp,
-            dtype=dtype,
-            norm=should_norm,
-            fftshift=True,
-        )
-    else:
-        w = window * get_window(
-            'rect', nfft - nzero, nzero=nzero, xp=xp, dtype=dtype, fftshift=True
-        )
-
-    if noverlap == 0:
-        # special case for speed
-        xstack = to_blocks(x, nfft, axis=axis, truncate=truncate)
-        wstack = broadcast_onto(w / nfft, xstack, axis=axis + 1)
-
-        if out is None and overwrite_x:
-            out = xstack
-
-        xstack = xp.multiply(
-            xstack,
-            wstack.astype(xstack.dtype),
-            out=xstack if overwrite_x else out,
-        )
-
-    else:
-        xstack = _stack_stft_windows(
-            x,
-            window=w / nfft,
-            nperseg=nperseg,
-            noverlap=noverlap,
-            axis=axis,
-            norm=norm,
-            out=out,
-        )
-    assert xstack.dtype == x.dtype
-    del x
-
-    # no fftshift needed since it was baked into the window
-    y = fft(xstack, axis=axis + 1, overwrite_x=True, out=xstack)
-
-    if not return_axis_arrays:
-        return y
-
-    freqs, times = _get_stft_axes(
-        fs,
-        nfft=nfft,
-        time_size=y.shape[axis],
-        overlap_frac=noverlap / nfft,
-        xp=np,
-    )
-
-    return typing.cast(tuple[_AT, _AT, _AT], (freqs, times, y))
-
-
-def istft(
-    y: ArrayType,
-    size=None,
-    *,
-    nfft: int,
-    noverlap: int,
-    out=None,
-    overwrite_x=False,
-    axis=0,
-) -> ArrayType:
-    """reconstruct and return a waveform given its STFT and associated parameters"""
-
-    xp = array_namespace(y)
-    dtype = typing.cast(str, y.dtype)
-
-    # give the stacked NFFT-sized time domain vectors in axis + 1
-    xstack = ifft(
-        y,
-        axis=axis + 1,
-        overwrite_x=overwrite_x,
-        out=y if overwrite_x else None,
-    )
-
-    # correct the fft shift in the time domain, since the
-    # multiply operation can be applied in-place
-    w = get_window('rect', nfft, xp=xp, dtype=dtype, fftshift=True)
-    wstack = broadcast_onto(w, xstack, axis=axis + 1)
-    xstack = xp.multiply(
-        xstack,
-        wstack,
-        out=xstack,
-        dtype=xstack.dtype,
-    )
-    assert xstack.dtype == dtype
-
-    x = _unstack_stft_windows(
-        xstack, noverlap=noverlap, nperseg=nfft, axis=axis, out=out
-    )
-    assert x.dtype == dtype
-
-    if size is not None:
-        trim = x.shape[axis] - size
-        if trim > 0:
-            x = axis_slice(x, start=trim // 2, stop=-trim // 2, axis=axis)
-
-    return x
-
-
-def ola_filter(
-    x: ArrayType,
-    *,
-    fs: float,
-    nfft: int,
-    window: str | tuple = 'hamming',
-    passband: tuple[float, float],
-    nfft_out: int | None = None,
-    frequency_shift=False,
-    axis=0,
-    extend=False,
-    out=None,
-    overwrite_x=False,
+@lru_cache(100)
+def _find_downsample_copy_range(
+    nfft_in: int, nfft_out: int, edge_in_start: int | None, edge_in_end: int | None
 ):
-    """apply a bandpass filter implemented through STFT overlap-and-add.
+    if edge_in_start is None:
+        edge_in_start = 0
+    if edge_in_end is None:
+        edge_in_end = nfft_in
+    passband_size = edge_in_end - edge_in_start
+    passband_center = (edge_in_end + edge_in_start) // 2
 
-    Args:
-        x: the input waveform
-        fs: the sample rate of the input waveform, in Hz
-        noverlap: the size of overlap between adjacent FFT windows, in samples
-        window: the type of COLA window to apply, 'hamming', 'blackman', or 'blackmanharris'
-        passband: a tuple of low-pass cutoff and high-pass cutoff frequency (or None to skip either)
-        nfft_out: implement downsampling by adjusting the size of overlap between adjacent FFT windows
-        frequency_shift: the direction to shift the downsampled frequencies ('left' or 'right', or False to center)
-        axis: the axis of `x` along which to compute the filter
-        extend: if True, allow use of zero-padded samples at the edges to accommodate a non-integer number of overlapping windows in x
-        out: None, 'shared', or an array object to receive the output data
+    # passband_center_error = (passband_end - passband_start) % 2
 
-    Returns:
-        an Array of the same shape as X
-    """
+    # copy input indexes, taken from the passband
+    max_copy_size = min(passband_size, nfft_out)
+    copy_in_start = max(passband_center - max_copy_size // 2, 0)
+    copy_in_end = min(passband_center - max_copy_size // 2 + max_copy_size, nfft_in)
+    copy_size = copy_in_end - copy_in_start
 
-    nfft_out, noverlap, overlap_scale, _ = _ola_filter_parameters(
-        x.size,
-        window=window,
-        nfft_out=nfft_out or nfft,
-        nfft=nfft,
-        extend=extend,
-    )
+    assert copy_size <= nfft_out, (copy_size, nfft_out)
+    assert copy_size >= 0, copy_size
+    assert copy_in_end - copy_in_start == copy_size
 
-    enbw = equivalent_noise_bandwidth(window, nfft_out, fftbins=False)
+    # copy output indexes
+    output_zeros_size = max(nfft_out - copy_size, 0)
+    copy_out_start = output_zeros_size // 2
+    copy_out_end = copy_out_start + copy_size
 
-    freqs, _, y = stft(
-        x,
-        fs=fs,
-        window=window,
-        nperseg=nfft,
-        noverlap=round(nfft * overlap_scale),
-        axis=axis,
-        truncate=False,
-        overwrite_x=overwrite_x,
-    )
+    assert copy_out_end - copy_out_start == copy_size
+    assert copy_out_start >= 0
+    assert copy_out_end <= nfft_out
 
-    zero_stft_by_freq(
-        freqs, y, passband=(passband[0] + enbw, passband[1] - enbw), axis=axis
-    )
-
-    if nfft_out != nfft or frequency_shift:
-        freqs, y = downsample_stft(
-            freqs,
-            y,
-            nfft_out=nfft_out or nfft,
-            passband=passband,
-            axis=axis,
-            out=y,
-        )
-
-    return istft(
-        y,
-        round(x.shape[axis] * nfft_out / nfft),
-        nfft=nfft_out or nfft,
-        noverlap=noverlap,
-        overwrite_x=True,
-        axis=axis,
-    )
-
-
-@lru_cache()
-def _freq_band_edges(n, d, cutoff_low, cutoff_hi, *, xp=None):
-    if xp is None:
-        xp = np
-    freqs = fftfreq(n, d, xp=xp)
-
-    if cutoff_low is None:
-        ilo = None
-    else:
-        ilo = xp.where(freqs >= cutoff_low)[0][0]
-
-    if cutoff_hi is None:
-        ihi = None
-    elif cutoff_hi >= freqs[-1]:
-        ihi = freqs.size
-    else:
-        ihi = xp.where(freqs <= cutoff_hi)[0][-1]
-
-    return ilo, ihi
-
-
-@lru_cache()
-def frequency_axis_slice(
-    nfft: int, fs: float, bandwidth: float, *, offset: float = 0.0
-) -> slice:
-    """trim an array outside of the specified bandwidth on a frequency axis"""
-    if bandwidth < 0:
-        raise ValueError('invalid negative bandwidth')
-
-    ic = nfft * (0.5 + offset / fs)
-    if isroundmod(ic, 1):
-        ic = round(ic)
-    else:
-        raise ValueError('offset center frequency is not a multiple of fs/nfft')
-
-    count = round(nfft * (bandwidth / fs))
-
-    start = ic - count // 2
-    stop = start + count
-    if start < 0:
-        raise ValueError(f'offset - bandwidth/2 < fs/2')
-    if stop > nfft:
-        raise ValueError(f'offset + bandwidth/2 > fs/2')
-
-    return slice(start, stop)
-
-
-def truncate_frequency_axis(
-    x, nfft: int, fs: float, bandwidth: float, *, offset: float = 0.0, axis: int = 0
-):
-    """trim an array outside of the specified bandwidth on a frequency axis"""
-
-    s = frequency_axis_slice(nfft, fs, bandwidth, offset=offset)
-    return axis_slice(x, s.start, s.stop, axis=axis)
-
-
-def null_lo(
-    x: ArrayType,
-    nfft: int,
-    fs: float,
-    bandwidth: float,
-    *,
-    offset: float = 0,
-    axis: int = 0,
-):
-    """sets samples within the specified bandwidth on a frequency axis to nan in-place"""
-    # to make the top bound inclusive
-    nfft = x.shape[axis]
-    s = frequency_axis_slice(nfft, fs, bandwidth, offset=offset)
-    view = axis_slice(x, s.start, s.stop, axis=axis)
-    view[:] = float('nan')
-
-
-@typing.overload
-def spectrogram(
-    x: _AT,
-    *,
-    fs: float,
-    window: WindowType,
-    nperseg: int,
-    noverlap: int = 0,
-    nzero: int = 0,
-    axis: int = 0,
-    truncate: bool = True,
-    return_axis_arrays: typing.Literal[False],
-) -> _AT: ...
-
-
-@typing.overload
-def spectrogram(
-    x: _AT,
-    *,
-    fs: float,
-    window: WindowType,
-    nperseg: int,
-    noverlap: int = 0,
-    nzero: int = 0,
-    axis: int = 0,
-    truncate: bool = True,
-    return_axis_arrays: typing.Literal[True] = True,
-) -> tuple[_AT, _AT, _AT]: ...
-
-
-@typing.overload
-def spectrogram(
-    x: _AT,
-    *,
-    fs: float,
-    window: WindowType,
-    nperseg: int,
-    noverlap: int = 0,
-    nzero: int = 0,
-    axis: int = 0,
-    truncate: bool = True,
-    return_axis_arrays: bool,
-) -> _AT | tuple[_AT, _AT, _AT]: ...
-
-
-def spectrogram(
-    x: _AT,
-    *,
-    fs: float,
-    window: WindowType,
-    nperseg: int,
-    noverlap: int = 0,
-    nzero: int = 0,
-    axis: int = 0,
-    truncate: bool = True,
-    return_axis_arrays: bool = True,
-) -> _AT | tuple[_AT, _AT, _AT]:
-    """evaluate the power spectrogram of x with the given arguments.
-
-    The output is scaled such that the noise bandwidth is equal to the
-    frequency resolution.
-    """
-    ret = stft(norm='power', **dict(locals()))
-    if return_axis_arrays:
-        freqs, times, X = ret
-        return freqs, times, power_analysis.envtopow(X)
-    else:
-        return power_analysis.envtopow(ret)
-
-
-def power_spectral_density(
-    x: ArrayType,
-    *,
-    fs: float,
-    bandwidth=inf,
-    window: WindowType,
-    resolution: float,
-    fractional_overlap=0,
-    fractional_window: float = 1,
-    statistics: list[float],
-    truncate: bool = True,
-    dB: bool = True,
-    axis: int = 0,
-) -> ArrayType:
-    if isroundmod(fs, resolution):
-        nfft = round(fs / resolution)
-        noverlap = round(fractional_overlap * nfft)
-    else:
-        # need sample_rate_Hz/resolution to give us a counting number
-        raise ValueError('sample_rate_Hz/resolution must be a counting number')
-
-    if isroundmod((1 - fractional_window) * nfft, 1):
-        nzero = round((1 - fractional_window) * nfft)
-    else:
-        raise ValueError(
-            '(1-fractional_window) * (sample_rate/frequency_resolution) must be a counting number'
-        )
-
-    xp = array_namespace(x)
-
-    freqs, _, X = spectrogram(
-        x,
-        window=window,
-        fs=fs,
-        nperseg=nfft,
-        nzero=nzero,
-        noverlap=noverlap,
-        axis=axis,
-    )
-
-    if truncate:
-        if bandwidth == inf:
-            bw_args = (None, None)
-        else:
-            bw_args = (-bandwidth / 2, +bandwidth / 2)
-        ilo, ihi = _freq_band_edges(freqs.size, 1.0 / fs, *bw_args)
-        X = axis_slice(X, ilo, ihi, axis=axis + 1)
-
-    if dB:
-        spg = power_analysis.powtodB(X, eps=1e-25, out=X)
-    else:
-        spg = X.astype('float32')
-
-    isquantile = find_float_inds(tuple(statistics))
-
-    shape = list(spg.shape)
-    shape[axis] = len(statistics)
-    out = xp.empty(tuple(shape), dtype='float32')
-
-    quantiles = list(np.asarray(statistics)[isquantile].astype('float32'))
-
-    out_quantiles = axis_index(out, isquantile, axis=axis).swapaxes(0, 1)
-    out_quantiles[:] = xp.quantile(spg, xp.array(quantiles), axis=axis)
-
-    for i, isquantile in enumerate(isquantile):
-        if not isquantile:
-            ufunc = power_analysis.stat_ufunc_from_shorthand(statistics[i], xp=xp)
-            axis_index(out, i, axis=axis)[...] = ufunc(spg, axis=axis)
-
-    return out
+    return (copy_out_start, copy_out_end), (copy_in_start, copy_in_end), passband_center
 
 
 def upfirdn(h, x, up=1, down=1, axis=-1, mode='constant', cval=0, overwrite_x=False):
@@ -1418,37 +1340,6 @@ def oaconvolve(x1, x2, mode='full', axes=-1):
     return func(x1, x2, mode=mode, axes=axes)
 
 
-def time_fftshift(x, scale: ArrayType | float | None = None, overwrite_x=False, axis=0):
-    if scale is None:
-        if overwrite_x:
-            # short path: no scale and write directly to x
-            xview = axis_slice(x, start=1, step=2, axis=axis)
-            xview *= -1
-            return x
-        else:
-            scale = 1
-
-    xp = array_namespace(x)
-
-    if overwrite_x:
-        out = x
-    else:
-        out = xp.empty_like(x)
-
-    if np.ndim(scale) > 1:
-        raise ValueError('scale must be 1-D or scalar')
-
-    xview = to_blocks(x, 2, axis=axis)
-    outview = to_blocks(out, 2, axis=axis)
-    scale = broadcast_onto(xp.atleast_1d(scale), outview, axis=max(axis - 1, 0))
-    shift = broadcast_onto(xp.array([1, -1]), outview, axis=axis + 1)
-    xp.multiply(xview, scale * shift, out=outview)
-    return out
-
-
-time_ifftshift = time_fftshift
-
-
 def resample(
     x: _AT,
     num: int,
@@ -1456,7 +1347,7 @@ def resample(
     window: WindowType = None,
     domain: typing.Literal['time', 'frequency'] = 'time',
     overwrite_x=False,
-    scale: ArrayType | float = 1,
+    scale: Array | float = 1,
     shift: float = 0,
 ) -> _AT:
     """limited reimplementation of scipy.signal.resample optimized for reduced memory.
@@ -1537,7 +1428,7 @@ def resample(
 
 
 def oaresample(
-    x: ArrayType,
+    x: Array,
     up,
     down,
     fs,
@@ -1549,7 +1440,7 @@ def oaresample(
     frequency_shift: float = 0,
     filter_bandwidth: float | None = None,
     transition_bandwidth: float = 250e3,
-    scale: ArrayType | float = 1.0,
+    scale: Array | float = 1.0,
 ):
     """apply resampler implemented through STFT overlap-and-add.
 
@@ -1613,7 +1504,7 @@ def oaresample(
     del x
 
     if filter_bandwidth is not None and np.isfinite(filter_bandwidth):
-        y = stft_fir_lowpass(
+        y = _stft_fir_lowpass(
             y,
             sample_rate=fs * up / down,
             bandwidth=filter_bandwidth,
@@ -1630,38 +1521,31 @@ def oaresample(
     return x
 
 
-@lru_cache()
-def fftfreq(
-    nfft: int, fs: float, dtype='float64', as_index: bool = True, xp=np
-) -> ArrayType:
-    """compute fftfreq for a specified sample rate.
+@lru_cache(16)
+def _find_downsampled_freqs(nfft_out, freq_step, xp=None):
+    return fftfreq(nfft_out, 1.0 / (freq_step * nfft_out), xp=xp or np)
 
-    This supports varying levels of accuracy:
-    - with as_index=True, the result is accurate to full supported
-      floating point precision using fixed-point evaluation
-    - with as_index=False, the result is at least as accurate as
-      `scipy.fft.fftfreq`, which includes rounding error relative
-      to floating point precision
-    """
 
-    if not as_index:
-        dtype = np.dtype(dtype)
-        fnyq = fs / 2
-        if nfft % 2 == 0:
-            return xp.linspace(-fnyq, fnyq - 2 * fnyq / nfft, nfft, dtype=dtype)
-        else:
-            return xp.linspace(
-                -fnyq + fnyq / nfft, fnyq - fnyq / nfft, nfft, dtype=dtype
-            )
+# %% Helpers
+def _broadcast_onto(a: _AT, other: _AT, *, axis: int) -> _AT:
+    """reshape a 1-D array to support broadcasting onto a specified axis of `other`"""
 
-    if not array_api_compat.is_numpy_namespace(np):  # type: ignore
-        return xp.asarray(fftfreq(nfft, fs, dtype, as_index=as_index))
+    if a.ndim != 1:
+        raise ValueError('input array a must be 1-D')
 
-    # high resolution rational representation of frequency resolution
-    fres = decimal.Decimal(fs) / nfft
-    span = range(-nfft // 2, -nfft // 2 + nfft)
-    if nfft % 2 == 0:
-        values = [fres * n for n in span]
+    xp = array_namespace(a)
+
+    slices = [xp.newaxis] * int(other.ndim)
+    slices[axis] = slice(None, None)
+    return a[tuple(slices)]  # type: ignore
+
+
+def _same_base_memory(a: Array, b: Array) -> bool:
+    if b is None:
+        return False
+    elif a is b:
+        return True
+    elif getattr(b, 'base', None) is a:
+        return True
     else:
-        values = [fres * (n + 1) for n in span]
-    return np.array(values, dtype=dtype)
+        return False

@@ -13,7 +13,7 @@ if typing.TYPE_CHECKING:
     import array_api_compat
     import numpy as np
 
-    from ._typing import ArrayType
+    from ._typing import Array
 else:
     np = lazy_import('numpy')
     array_api_compat = lazy_import('array_api_compat')
@@ -486,7 +486,7 @@ class _PhyOFDM:
         channel_bandwidth: float,
         sample_rate: float,
         nfft: float,
-        cp_sizes: ArrayType,
+        cp_sizes: Array,
         frame_duration: float | None = None,
         contiguous_size: int | None = None,
     ):
@@ -527,7 +527,7 @@ class _PhyOFDM:
         # indices in the contiguous range that are not CP
         self.symbol_idx = np.setdiff1d(idx_range, self.cp_idx)
 
-    def index_cyclic_prefix(self) -> ArrayType:
+    def index_cyclic_prefix(self) -> Array:
         raise NotImplementedError
 
 
@@ -846,7 +846,7 @@ class _Phy802_16(_PhyOFDM):
         *,
         frames=(0,),
         symbols='all',
-    ) -> ArrayType:
+    ) -> Array:
         """build an indexing tensor for performing cyclic prefix correlation across various axes"""
 
         return _802_16_index_cyclic_prefix(self, frames=frames, symbols=symbols)
@@ -858,7 +858,7 @@ def _802_16_index_cyclic_prefix(
     *,
     frames=(0,),
     symbols='all',
-) -> ArrayType:
+) -> Array:
     """build an indexing tensor for performing cyclic prefix correlation across various axes"""
 
     xp = array_namespace(phy.cp_sizes)
