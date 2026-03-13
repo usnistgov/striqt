@@ -5,18 +5,17 @@ from typing import (
     Literal,
     overload,
     Protocol,
-    TypeAlias,
     TypeVar,
     TYPE_CHECKING,
 )
 
 
 # %% dataarrays.py
-AnalysisReturnFlag: TypeAlias = Literal[True, False, 'delayed']
+AnalysisReturnFlag = Literal[True, False, 'delayed']
 TAR = TypeVar('TAR', bound=AnalysisReturnFlag)
 
 if TYPE_CHECKING:
-    from typing_extensions import Callable, ParamSpec, Self
+    from typing_extensions import Callable, ParamSpec, Self, TypeAlias
 
     from . import dataarrays
     from striqt.waveform.lib.typing import Array

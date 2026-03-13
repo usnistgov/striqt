@@ -1,10 +1,9 @@
 import typing
-from typing_extensions import ParamSpec, Self, TypeVar, Unpack
+from typing_extensions import ParamSpec, Self, TypeAlias, TypeVar, Unpack
 from typing import (
     Callable,
     Protocol,
     Sequence,
-    TypeAlias,
     TypedDict,
     TypeVar,
     TYPE_CHECKING,

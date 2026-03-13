@@ -131,7 +131,7 @@ class CoordInfo(NamedTuple):
     attrs: dict = {}
 
 
-class CoordRegistry(collections.UserDict['CoordFunc', 'CoordInfo']):
+class CoordRegistry(dict['CoordFunc', 'CoordInfo']):
     def __call__(
         self,
         dtype,
@@ -192,7 +192,7 @@ class SyncInfo(NamedTuple):
     meas_spec_type: type[specs.Analysis]
 
 
-class AlignmentSourceRegistry(collections.UserDict[str | Callable, SyncInfo]):
+class AlignmentSourceRegistry(dict['str | Callable', 'SyncInfo']):
     def __call__(
         self,
         meas_spec_type: type[specs.Analysis],
@@ -253,7 +253,7 @@ class AnalysisInfo(NamedTuple):
     dims: tuple[str, ...] | None = None
 
 
-class AnalysisRegistry(collections.UserDict[type[specs.Analysis], AnalysisInfo]):
+class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
     """a registry of keyword-only arguments for decorated functions"""
 
     caches: dict[AnalysisFunc, list[KwArgCache]]
