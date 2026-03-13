@@ -5,8 +5,7 @@ import typing
 from math import inf, isfinite
 from os import cpu_count
 
-from . import util
-from .. import power_analysis
+from . import power_analysis, util
 
 
 from .arrays import (

@@ -5,12 +5,12 @@ import typing
 from .. import specs
 
 from ..lib import util
-from ..lib.typing import Array
 from . import _channel_power_histogram, _spectrogram, shared
 from .shared import registry, hint_keywords
 import striqt.waveform as sw
 
 if typing.TYPE_CHECKING:
+    from ..lib.typing import Array
     import numpy as np
 else:
     np = util.lazy_import('numpy')

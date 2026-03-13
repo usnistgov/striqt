@@ -1,7 +1,5 @@
-from . import fourier, ofdm, windows
+from . import arrays, fourier, ofdm
 from .lib import typing, util
-
-from . import arrays, ofdm, power_analysis
 
 from .fourier import (
     design_cola_resampler,
