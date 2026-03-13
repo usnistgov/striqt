@@ -1,3 +1,5 @@
+from __future__ import annotations as __
+
 import typing
 from typing_extensions import ParamSpec, Self, TypeAlias, TypeVar, Unpack
 from typing import (
