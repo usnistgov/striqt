@@ -12,6 +12,7 @@ import striqt.waveform as sw
 if typing.TYPE_CHECKING:
     import numpy as np
     import pandas as pd
+    from ..lib.typing import Array
 else:
     np = util.lazy_import('numpy')
     pd = util.lazy_import('pandas')
@@ -249,11 +250,7 @@ def _get_spec_range(
     spec_type=specs.CellularCyclicAutocorrelator,
     attrs={'units': 'mW', 'standard_name': 'Cyclic Autocovariance'},
 )
-def cellular_cyclic_autocorrelation(
-    iq: 'sw.util.Array',
-    capture: specs.Capture,
-    **kwargs,
-):
+def cellular_cyclic_autocorrelation(iq: 'Array', capture: specs.Capture, **kwargs):
     """evaluate the cyclic autocorrelation of the IQ sequence based on 4G or 5G cellular
     cyclic prefix sample lag offsets.
 
@@ -277,7 +274,7 @@ def cellular_cyclic_autocorrelation(
 
     spec = specs.CellularCyclicAutocorrelator.from_dict(kwargs)
 
-    xp = sw.util.array_namespace(iq)
+    xp = sw.array_namespace(iq)
     if isinstance(spec.subcarrier_spacings, tuple):
         scs = spec.subcarrier_spacings
     else:

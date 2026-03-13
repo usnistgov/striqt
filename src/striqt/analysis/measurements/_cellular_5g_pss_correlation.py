@@ -13,7 +13,7 @@ import striqt.waveform as sw
 
 if typing.TYPE_CHECKING:
     import numpy as np
-    from striqt.waveform._typing import Array
+    from striqt.waveform.typing import Array
 else:
     np = util.lazy_import('numpy')
 
@@ -36,7 +36,7 @@ def correlate_5g_pss(
     capture: specs.Capture,
     spec: specs.Cellular5GNRPSSCorrelator,
 ) -> Array:
-    xp = sw.util.array_namespace(iq)
+    xp = sw.array_namespace(iq)
 
     ssb_iq = shared.get_5g_ssb_iq(iq, capture=capture, spec=spec)
 
@@ -65,7 +65,7 @@ pss_weighted_cache = register.KwArgCache(
 
 
 def weight_correlation_locally(R, spec: specs.Cellular5GNPSSSync):
-    xp = sw.util.array_namespace(R)
+    xp = sw.array_namespace(R)
 
     if R.ndim == 4:
         R = R[np.newaxis, ...]
@@ -73,7 +73,7 @@ def weight_correlation_locally(R, spec: specs.Cellular5GNPSSSync):
     # R.shape -> (..., port index, cell Nid2, symbol start index, IQ sample index)
     R = R.mean(axis=-3)
 
-    if util.is_cupy_array(R):
+    if sw.is_cupy_array(R):
         from cupyx.scipy import ndimage  # type: ignore
     else:
         from scipy import ndimage
@@ -114,7 +114,7 @@ def weight_correlation_locally(R, spec: specs.Cellular5GNPSSSync):
     weight_shift = Ragg.shape[1] // 2 - round((Ragg.shape[1] - fill_count) / 2)
     weights = xp.roll(weights, weight_shift)
 
-    if util.is_cupy_array(Ragg):
+    if sw.is_cupy_array(Ragg):
         from cupyx.scipy import ndimage  # type: ignore
     else:
         from scipy import ndimage

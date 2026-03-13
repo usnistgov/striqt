@@ -282,7 +282,7 @@ def _log_cache_info(
 
     spg, attrs = result
 
-    xp = sw.util.array_namespace(spg)
+    xp = sw.array_namespace(spg)
 
     if isinstance(capture, specs.SoapyCapture):
         info_fields = ('center_frequency', 'port', 'gain')
@@ -310,7 +310,7 @@ def _log_cache_info(
     capture_splits = specs.helpers.split_capture_ports(capture)
 
     for c, snr in zip(capture_splits, sw.powtodB(peaks) - noise):
-        if sa.util.is_cupy_array(snr.data):
+        if sw.is_cupy_array(snr.data):
             snr = float(snr.data.get())
         else:
             snr = float(snr.values)

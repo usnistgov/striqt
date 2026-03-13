@@ -13,7 +13,7 @@ from pathlib import Path
 
 import striqt.analysis as sa
 
-from striqt.waveform.util import lazy_import
+from striqt.waveform.lib.util import lazy_import
 
 
 if TYPE_CHECKING:
@@ -341,10 +341,10 @@ _LOG_LEVEL_NAMES = {
 }
 
 
-sa.util._StriqtLogger('sweep')
-sa.util._StriqtLogger('source')
-sa.util._StriqtLogger('sink')
-sa.util._StriqtLogger('periph')
+sa.util.StriqtLogger('sweep')
+sa.util.StriqtLogger('source')
+sa.util.StriqtLogger('sink')
+sa.util.StriqtLogger('periph')
 sa.util.show_messages(logging.INFO)
 
 

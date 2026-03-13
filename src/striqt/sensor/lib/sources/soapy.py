@@ -136,7 +136,7 @@ class SoapySourceInfo(specs.BaseSourceInfo, kw_only=True, frozen=True, cache_has
 def _get_adc_peak(
     x: '_t.Array', capture: specs.SoapyCapture, source: specs.SoapySource
 ):
-    xp = sw.util.array_namespace(x)
+    xp = sw.array_namespace(x)
 
     adc_scale = buffers.get_dtype_scale(source.transport_dtype)
 
@@ -270,13 +270,13 @@ def compute_overload_info(
 
     info = {}
     peak = _get_adc_peak(samples, capture, setup)
-    xp = sw.util.array_namespace(peak)
+    xp = sw.array_namespace(peak)
 
     if adc_limit is not None:
         adc_headroom = xp.floor(adc_limit - peak)
         info['adc_headroom'] = xp.clip(adc_headroom, -100, 100).astype('int8')
     if if_limit is not None:
-        xp = sw.util.array_namespace(samples)
+        xp = sw.array_namespace(samples)
         gains = [c.gain for c in specs.helpers.split_capture_ports(capture)]
         peak_im3 = peak + (2 / 3) * xp.array(gains)  # 2/3 arises from intermod
         if_headroom = xp.floor(if_limit - peak_im3)
@@ -760,7 +760,7 @@ class SoapySourceBase(base.SourceBase[TS, TC, _t.PS, _t.PC]):
             self.capture_spec,
             self.setup_spec.master_clock_rate,
             alias_func=alias_func,
-            xp=sw.util.array_namespace(samples),
+            xp=sw.array_namespace(samples),
         )
         if power_scale is not None:
             iq.voltage_scale = iq.voltage_scale * (power_scale**0.5)

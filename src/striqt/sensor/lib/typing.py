@@ -102,9 +102,8 @@ class HasCapture(typing.Protocol[TC, PC]):
 
 if typing.TYPE_CHECKING:
     from . import sources
-    from striqt.analysis.lib.typing import FileStream, TAR, ZarrStore
+    from striqt.analysis.lib.typing import Array, FileStream, TAR, ZarrStore
     from striqt.waveform.fourier import ResamplerDesign
-    from striqt.waveform._typing import Array
 
     GenericWrapper: TypeAlias = typing.Callable[[Callable[P, R]], Callable[P, R]]
 

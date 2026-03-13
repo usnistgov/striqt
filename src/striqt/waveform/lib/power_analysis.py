@@ -11,16 +11,10 @@ from functools import partial
 from numbers import Number
 from types import ModuleType
 from typing import Any, Optional
+from . import util
 
-
-from .util import (
-    array_namespace,
-    float_dtype_like,
-    is_cupy_array,
-    isroundmod,
-    lazy_import,
-    lru_cache,
-    to_blocks,
+from .arrays import (
+    array_namespace, float_dtype_like, is_cupy_array, isroundmod, axis_to_blocks
 )
 
 if typing.TYPE_CHECKING:
@@ -29,15 +23,13 @@ if typing.TYPE_CHECKING:
     import pandas as pd
     import xarray as xr
 
-    from ._typing import ArrayLike, Array, _AL, _ALN, _AT
-
-    _T = typing.TypeVar('_T')
+    from .typing import ArrayLike, Array, _AL, _ALN, _AT
 
 else:
-    pd = lazy_import('pandas')
-    ne = lazy_import('numexpr')
-    xr = lazy_import('xarray')
-    np = lazy_import('numpy')
+    pd = util.lazy_import('pandas')
+    ne = util.lazy_import('numexpr')
+    xr = util.lazy_import('xarray')
+    np = util.lazy_import('numpy')
 
 warnings.filterwarnings('ignore', message='.*divide by zero.*')
 warnings.filterwarnings('ignore', message='.*invalid value encountered.*')
@@ -76,7 +68,7 @@ def unit_wave_to_linear(s: str):
     return s
 
 
-@lru_cache()
+@util.lru_cache()
 def stat_ufunc_from_shorthand(kind, xp=None, axis=0) -> typing.Callable:
     if xp is None:
         xp = np
@@ -189,7 +181,7 @@ def powtodB(x: _ALN, abs: bool = True, eps: float = 0, out=None) -> _ALN:
             expr = f'real(10*log10(values+eps){eps_str})'
         values = ne.evaluate(expr, out=out, casting='unsafe')
     elif is_cupy_array(xp):
-        from ._jit import cuda
+        from .jit import cuda
 
         if eps == 0:
             if abs:
@@ -227,7 +219,7 @@ def dBtopow(x: _ALN, out=None) -> _ALN:
         expr = '10**(values/10.)'
         values = ne.evaluate(expr, out=out, casting='unsafe')
     elif is_cupy_array(xp):
-        from ._jit import cuda
+        from .jit import cuda
 
         values = cuda.dBtopow(x, out)
     else:
@@ -253,7 +245,7 @@ def envtopow(x: _ALN, out=None) -> _ALN:
         if xp.iscomplexobj(values):
             values = values.real  # type: ignore
     elif is_cupy_array(xp):
-        from ._jit import cuda
+        from .jit import cuda
 
         values = cuda.envtopow(x, out)
     else:
@@ -279,7 +271,7 @@ def envtodB(x: _ALN, abs: bool = True, eps: float = 0, out=None) -> _ALN:
             expr = f'real(20*log10(values+eps){eps_str})'
         values = ne.evaluate(expr, out=out, casting='unsafe')
     elif is_cupy_array(xp):
-        from ._jit import cuda
+        from .jit import cuda
 
         if eps == 0:
             if abs:
@@ -383,7 +375,7 @@ def iq_to_bin_power(
         offsets = xp.arange(N)
         iq_blocks = iq[starts[:, np.newaxis] + offsets[np.newaxis, :]]
     else:
-        iq_blocks = to_blocks(iq, N, axis=axis, truncate=truncate)
+        iq_blocks = axis_to_blocks(iq, N, axis=axis, truncate=truncate)
 
     detector = stat_ufunc_from_shorthand(kind, xp=xp, axis=axis + 1)
     power_bins = envtopow(iq_blocks)

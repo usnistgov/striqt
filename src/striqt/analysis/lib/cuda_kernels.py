@@ -2,10 +2,10 @@
 
 from itertools import product
 
-import cupy
-from cupy._core._scalar import get_typename
-from cupy._core.internal import _normalize_axis_index
-from cupy_backends.cuda.api import runtime
+import cupy # type: ignore
+from cupy._core._scalar import get_typename # type: ignore
+from cupy._core.internal import _normalize_axis_index # type: ignore
+from cupy_backends.cuda.api import runtime # type: ignore
 
 IIR_SOS_KERNEL = r"""
 #include <cupy/math_constants.h>

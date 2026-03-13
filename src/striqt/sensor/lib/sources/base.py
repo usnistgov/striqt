@@ -131,7 +131,7 @@ class SourceBase(
             open_event.set()
 
         if _spec.array_backend == 'cupy':
-            sa.util.configure_cupy()
+            sw.arrays.configure_cupy()
 
         try:
             util.propagate_thread_interrupts()
@@ -427,7 +427,7 @@ class SourceBase(
 
         return self._capture
 
-    def get_resampler(self, capture=None) -> sw.fourier.ResamplerDesign:
+    def get_resampler(self, capture=None) -> sw.ResamplerDesign:
         if capture is None:
             capture = self.capture_spec
 

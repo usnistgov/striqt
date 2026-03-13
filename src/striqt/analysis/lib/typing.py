@@ -19,12 +19,13 @@ if TYPE_CHECKING:
     from typing_extensions import Callable, ParamSpec, Self
 
     from . import dataarrays
-    from striqt.waveform._typing import Array
+    import striqt.waveform as sw
     from .. import specs
 
     import xarray as xr
     import zarr
 
+    Array = sw.typing.Array
     P = ParamSpec('P')
     R = TypeVar('R', infer_variance=True)
     TC = TypeVar('TC', bound=specs.Capture, infer_variance=True)

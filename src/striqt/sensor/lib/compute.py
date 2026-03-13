@@ -194,7 +194,7 @@ def analyze(
 
     if iq.source_spec.array_backend == 'cupy':
         for name, value in list(iq.extra_data.items()):
-            if sw.util.is_cupy_array(value):
+            if sw.is_cupy_array(value):
                 iq.extra_data[name] = value.get()
 
     if not options.as_xarray:
@@ -390,7 +390,7 @@ def prepare_compute(input_spec: specs.Sweep, skip_warmup: bool = False):
             import cupy  # type: ignore
 
         with sa.util.stopwatch('configure cupy', 'sweep', 1):
-            sa.util.configure_cupy()
+            sw.arrays.configure_cupy()
 
     warnings.filterwarnings(
         'ignore',

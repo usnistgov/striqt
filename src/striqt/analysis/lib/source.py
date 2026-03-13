@@ -10,7 +10,7 @@ if typing.TYPE_CHECKING:
     import numpy as np
 
     import striqt.waveform as sw
-    from striqt.waveform._typing import Array
+    from striqt.waveform.typing import Array
 else:
     np = util.lazy_import('numpy')
     sw = util.lazy_import('striqt.waveform')
@@ -35,7 +35,7 @@ def filter_iq_capture(
         the filtered IQ capture
     """
 
-    xp = sw.util.array_namespace(iq)
+    xp = sw.array_namespace(iq)
 
     nfft = capture.analysis_filter.nfft
     nfft_out = capture.analysis_filter.nfft_out or nfft
@@ -48,10 +48,8 @@ def filter_iq_capture(
         extend=True,
     )
 
-    w = sw.fourier.get_window(
-        capture.analysis_filter.window, nfft, fftbins=False, xp=xp
-    )
-    freqs, _, xstft = sw.fourier.stft(
+    w = sw.get_window(capture.analysis_filter.window, nfft, fftbins=False, xp=xp)
+    freqs, _, xstft = sw.stft(
         iq,
         fs=capture.sample_rate,
         window=w,
@@ -84,7 +82,7 @@ def filter_iq_capture(
 
     sw.fourier.zero_stft_by_freq(freqs, xstft, passband=passband, axis=axis)
 
-    return sw.fourier.istft(
+    return sw.istft(
         xstft,
         iq.shape[axis],
         nfft=nfft_out,

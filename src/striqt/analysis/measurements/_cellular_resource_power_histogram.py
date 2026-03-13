@@ -15,6 +15,7 @@ from .shared import registry, hint_keywords
 import striqt.waveform as sw
 
 if typing.TYPE_CHECKING:
+    from ..lib.typing import Array
     import numpy as np
 else:
     np = util.lazy_import('numpy')
@@ -72,7 +73,7 @@ def apply_mask(
     flex_as=None,
     normal_cp=True,
     xp=np,
-) -> util.Array:
+) -> 'Array':
     """splits the spectrogram into TDD downlink and uplink components that are masked
     with `float('nan')`.
 
@@ -98,8 +99,8 @@ def apply_mask(
     eps = 1e-6
     ilo = xp.searchsorted(freqs, xp.asarray(-channel_bandwidth / 2 + guard_left + eps))
     ihi = xp.searchsorted(freqs, xp.asarray(channel_bandwidth / 2 - guard_right - eps))
-    spg_left = sw.util.axis_slice(spectrogram, 0, ilo, axis=-1)
-    spg_right = sw.util.axis_slice(spectrogram, ihi, None, axis=-1)
+    spg_left = sw.axis_slice(spectrogram, 0, ilo, axis=-1)
+    spg_right = sw.axis_slice(spectrogram, ihi, None, axis=-1)
     xp.copyto(spg_left, float('nan'))
     xp.copyto(spg_right, float('nan'))
 
@@ -130,7 +131,7 @@ def build_tdd_link_symbol_masks(
     normal_cp=True,
     flex_as=None,
     xp=np,
-) -> util.Array:
+) -> 'Array':
     """generate a symbol-by-symbol sequence of masking arrays for uplink and downlink.
 
     The number of slots given in the frame match the appropriate number for a given
@@ -197,11 +198,7 @@ def _struct_defaults(spec_type: type[specs.SpecBase]) -> dict[str, typing.Any]:
     prefer_iq_source='pre_filter',
     attrs={'standard_name': 'Fraction of resource grid'},
 )
-def cellular_resource_power_histogram(
-    iq: 'sw.util.ArrayLike',
-    capture: specs.Capture,
-    **kwargs,
-):
+def cellular_resource_power_histogram(iq: 'Array', capture: specs.Capture, **kwargs):
     """
 
     Args:
@@ -231,7 +228,7 @@ def cellular_resource_power_histogram(
     spec = specs.CellularResourcePowerHistogram.from_dict(kwargs)
     spec_defaults = _struct_defaults(specs.CellularResourcePowerHistogram)
 
-    xp = sw.util.array_namespace(iq)
+    xp = sw.array_namespace(iq)
 
     link_direction = 'downlink', 'uplink'
 
@@ -310,9 +307,7 @@ def cellular_resource_power_histogram(
     # apply the time binning only now, to allow for averaging
     # across mask boundaries
     if time_bin_averaging is not None:
-        masked_spgs = sw.util.binned_mean(
-            masked_spgs, time_bin_averaging, axis=2, fft=False
-        )
+        masked_spgs = sw.binned_mean(masked_spgs, time_bin_averaging, axis=2, fft=False)
 
     masked_spgs = sw.powtodB(masked_spgs, out=masked_spgs)
     bin_edges = _channel_power_histogram.make_power_histogram_bin_edges(

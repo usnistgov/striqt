@@ -1,21 +1,26 @@
-from . import fourier, ofdm, power_analysis, util, windows
+from . import fourier, ofdm, windows
+from .lib import typing, util
+
+from . import arrays, ofdm, power_analysis
+
 from .fourier import (
     design_cola_resampler,
     design_fir_lpf,
     equivalent_noise_bandwidth,
     fftfreq,
-    find_window_param_from_enbw,
+    fft,
     get_max_cupy_fft_chunk,
     get_window,
+    ifft,
     istft,
     oaconvolve,
     oaresample,
     resample,
-    set_max_cupy_fft_chunk,
+    ResamplerDesign,
+    spectrogram,
     stft,
-    to_blocks,
 )
-from .power_analysis import (
+from .lib.power_analysis import (
     dBlinmean,
     dBlinsum,
     dBtopow,
@@ -26,4 +31,4 @@ from .power_analysis import (
     powtodB,
     sample_ccdf,
 )
-from .util import histogram_last_axis, isroundmod
+from .lib.arrays import *

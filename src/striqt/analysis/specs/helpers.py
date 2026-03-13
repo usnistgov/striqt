@@ -7,7 +7,7 @@ import fractions
 import typing
 import warnings
 import msgspec
-from striqt.waveform import util
+from striqt.waveform.lib import util
 
 _T = typing.TypeVar('_T')
 _K = typing.TypeVar('_K')

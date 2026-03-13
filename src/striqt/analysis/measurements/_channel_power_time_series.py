@@ -52,7 +52,7 @@ def evaluate_channel_power_time_series(
         )
         results.append(power)
 
-    xp = sw.util.array_namespace(iq)
+    xp = sw.array_namespace(iq)
     results = xp.array(results)
     results = xp.moveaxis(results, 0, 1)
     results = sw.powtodB(results).astype('float32')

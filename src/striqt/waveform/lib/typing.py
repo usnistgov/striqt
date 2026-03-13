@@ -3,7 +3,7 @@ from __future__ import annotations as __
 import typing
 
 if typing.TYPE_CHECKING:
-    from typing_extensions import TypeAlias, ParamSpec
+    from typing_extensions import TypeAlias, ParamSpec, TypeIs
     from typing import Any, Callable, Protocol, TypeVar, Union
     from numbers import Number
     from types import ModuleType
@@ -12,6 +12,8 @@ if typing.TYPE_CHECKING:
     # if cupy isn't installed
     try:
         import cupy as cp  # type: ignore
+
+        TypeIsCupy = TypeIs[cp.ndarray]
     except ModuleNotFoundError:
         import numpy as cp
 

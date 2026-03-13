@@ -9,20 +9,9 @@ import threading
 import time
 from typing import Any, Iterable, Literal, TYPE_CHECKING
 
-from striqt.waveform.util import (
-    configure_cupy,
-    except_on_low_memory,
-    free_cupy_mempool,
-    is_cupy_array,
-    lru_cache,
-    lazy_import,
-    pinned_array_as_cupy,
-    cp,
-)
+import striqt.waveform as sw
 
-
-if TYPE_CHECKING:
-    from .typing import Array
+from striqt.waveform.lib.util import lru_cache, lazy_import
 
 
 _compute_lock = threading.RLock()
@@ -36,7 +25,7 @@ PERFORMANCE_INFO = 15
 PERFORMANCE_DETAIL = 12
 
 
-class _StriqtLogger(logging.LoggerAdapter):
+class StriqtLogger(logging.LoggerAdapter):
     EXTRA_DEFAULTS = {
         'capture_index': 0,
         'capture_progress': 'control',
@@ -50,7 +39,7 @@ class _StriqtLogger(logging.LoggerAdapter):
         _logger_adapters[name_suffix] = self
 
 
-def get_logger(name_suffix) -> _StriqtLogger:
+def get_logger(name_suffix) -> StriqtLogger:
     return _logger_adapters[name_suffix]
 
 
@@ -64,7 +53,7 @@ def isroundmod(value: float, div, atol=1e-6) -> bool:
         return np.abs(np.rint(ratio) - ratio) <= atol
 
 
-_StriqtLogger('analysis')
+StriqtLogger('analysis')
 
 
 def show_messages(
@@ -161,7 +150,7 @@ def stopwatch(
 
 @contextlib.contextmanager
 def compute_lock(array=None):
-    is_cupy = is_cupy_array(array)
+    is_cupy = sw.is_cupy_array(array)
     get_lock = array is None or is_cupy
     if get_lock:
         _compute_lock.acquire()

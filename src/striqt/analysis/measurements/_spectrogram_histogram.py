@@ -5,6 +5,7 @@ import typing
 from .. import specs
 
 from ..lib import util
+from ..lib.typing import Array
 from . import _channel_power_histogram, _spectrogram, shared
 from .shared import registry, hint_keywords
 import striqt.waveform as sw
@@ -52,7 +53,7 @@ def spectrogram_power_bin(
     prefer_iq_source='pre_filter',
     attrs={'standard_name': 'Fraction of counts'},
 )
-def spectrogram_histogram(iq: 'sw.util.Array', capture: specs.Capture, **kwargs):
+def spectrogram_histogram(iq: 'Array', capture: specs.Capture, **kwargs):
     spec = specs.SpectrogramHistogram.from_dict(kwargs)
     spg_spec = specs.Spectrogram.from_spec(spec)
 
@@ -66,7 +67,7 @@ def spectrogram_histogram(iq: 'sw.util.Array', capture: specs.Capture, **kwargs)
     metadata = dict(metadata)
     metadata.pop('units')
 
-    xp = sw.util.array_namespace(iq)
+    xp = sw.array_namespace(iq)
     bin_edges = _channel_power_histogram.make_power_histogram_bin_edges(
         power_low=spec.power_low,
         power_high=spec.power_high,

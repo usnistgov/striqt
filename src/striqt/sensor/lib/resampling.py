@@ -1,6 +1,7 @@
 from __future__ import annotations as __
 
 import dataclasses
+from math import isfinite
 from typing import TYPE_CHECKING
 
 from . import sources, util
@@ -8,14 +9,12 @@ from .. import specs
 
 
 if TYPE_CHECKING:
-    import numpy as np
     import striqt.waveform as sw
     from .typing import Array
 
 else:
     array_api_compat = util.lazy_import('array_api_compat')
     sw = util.lazy_import('striqt.waveform')
-    np = util.lazy_import('numpy')
 
 
 # this is experimental, and currently leaves some residual
@@ -39,13 +38,13 @@ def resampling_correction(
 
     x = iq.pre_align
     capture = iq.capture
-    xp = sw.util.array_namespace(x)
+    xp = sw.array_namespace(x)
 
     if not isinstance(capture, specs.SensorCapture):
         raise TypeError('iq.capture must be a capture specification')
 
     needs_resample = sources.buffers.needs_resample(iq.resampler, capture)
-    needs_filter = np.isfinite(capture.analysis_bandwidth)
+    needs_filter = isfinite(capture.analysis_bandwidth)
 
     if not needs_resample:
         x_pre_filter, offs = _scale_only(iq, overwrite_x=overwrite_x, axis=axis)
@@ -69,8 +68,8 @@ def resampling_correction(
         x = x_pre_filter
 
     if offs is not None:
-        x = sw.util.axis_slice(x, offs, None, axis=axis)
-        x_pre_filter = sw.util.axis_slice(x_pre_filter, offs, None, axis=axis)
+        x = sw.axis_slice(x, offs, None, axis=axis)
+        x_pre_filter = sw.axis_slice(x_pre_filter, offs, None, axis=axis)
 
     size_out = round(capture.duration * capture.sample_rate)
 
@@ -107,7 +106,7 @@ def _synchronize(x: Array, shifts: Array, size_out: int) -> Array:
         return x[:, shifts[0] : shifts[0] + size_out]
 
     else:
-        xp = sw.util.array_namespace(x)
+        xp = sw.array_namespace(x)
         out = xp.empty((x.shape[0], size_out), dtype=x.dtype)
         for i in range(x.shape[0]):
             out[i, :] = x[i, shifts[i] : shifts[i] + size_out]
@@ -118,7 +117,7 @@ def _scale_only(
     iq: sources.AcquiredIQ, overwrite_x: bool, axis: int
 ) -> tuple[Array, int | None]:
     x = iq.pre_align
-    xp = sw.util.array_namespace(x)
+    xp = sw.array_namespace(x)
     source_spec = iq.source_spec
     capture = iq.capture
 
@@ -150,12 +149,12 @@ def _resample(
     if not isinstance(capture, specs.SensorCapture):
         raise TypeError('iq.capture must be a capture specification')
 
-    assert sw.util.isroundmod(x.shape[1] * capture.sample_rate, fs)
+    assert sw.isroundmod(x.shape[1] * capture.sample_rate, fs)
     resample_size_out = round(x.shape[1] * capture.sample_rate / fs)
     pad_in = sources.buffers.get_fft_resample_pad(capture, source_spec, iq.analysis)[0]
     pad_out = round(pad_in * capture.sample_rate / fs)
 
-    x = sw.fourier.resample(
+    x = sw.resample(
         x,
         resample_size_out,
         overwrite_x=overwrite_x,
@@ -177,7 +176,7 @@ def _oaresample(
     if not isinstance(capture, specs.SensorCapture):
         raise TypeError('iq.capture must be a capture specification')
 
-    x = sw.fourier.oaresample(
+    x = sw.oaresample(
         x,
         up=iq.resampler['nfft_out'],
         down=iq.resampler['nfft'],
@@ -199,7 +198,7 @@ def _oaresample(
     offset = iq.resampler['nfft_out']
 
     assert size_out + offset <= x.shape[axis]
-    x = sw.util.axis_slice(x, offset, None, axis=axis)
+    x = sw.axis_slice(x, offset, None, axis=axis)
     assert x.shape[axis] == size_out
 
     return x, None

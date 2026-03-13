@@ -35,7 +35,7 @@ class AcquiredIQ(sa.dataarrays.AcquiredIQ):
     extra_data: dict[str, Any]
     alias_func: specs.helpers.PathAliasFormatter | None
     source_spec: specs.Source
-    resampler: sw.fourier.ResamplerDesign
+    resampler: sw.ResamplerDesign
     trigger: sa.Trigger | None
     analysis: specs.AnalysisGroup | None = None
     voltage_scale: Array | float = 1
@@ -111,7 +111,7 @@ class ReceiveBuffers:
 
 def get_array_namespace(array_backend: specs.types.ArrayBackend) -> types.ModuleType:
     if array_backend == 'cupy':
-        return sa.util.cp
+        return sw.arrays.cp
     elif array_backend == 'numpy':
         return np
     else:
@@ -157,7 +157,7 @@ def design_resampler(
     master_clock_rate: float,
     backend_sample_rate: float | None = None,
     **kwargs: Unpack[ResamplerKws],
-) -> sw.fourier.ResamplerDesign:
+) -> sw.ResamplerDesign:
     """design a filter specified by the capture for a radio with the specified MCR.
 
     For the return value, see `striqt.waveform.fourier.design_cola_resampler`
@@ -234,7 +234,7 @@ def design_resampler(
 
 
 def needs_resample(
-    analysis_filter: sw.fourier.ResamplerDesign, capture: specs.SensorCapture
+    analysis_filter: sw.ResamplerDesign, capture: specs.SensorCapture
 ) -> bool:
     """determine whether host resampling will be needed to filter or resample"""
     if not capture.host_resample:
@@ -258,7 +258,7 @@ def get_fft_resample_pad(
 
     # treat the block size as the minimum number of samples needed for the resampler
     # output to have an integral number of samples
-    if np.isfinite(capture.analysis_bandwidth):
+    if isfinite(capture.analysis_bandwidth):
         filter_pad = get_filter_pad(capture)
         min_filter_blocks = sw.util.ceildiv(design['nfft'], filter_pad)
         block_size = design['nfft'] * min_filter_blocks
@@ -512,9 +512,9 @@ def cast_iq(spec: specs.Source, buffer: 'Array', acquired_count: int) -> 'Array'
     dtype_in = np.dtype(spec.transport_dtype)
 
     if spec.array_backend == 'cupy':
-        xp = sa.util.cp
+        xp = sw.arrays.cp
         assert xp is not None, ImportError('cupy is not installed')
-        buffer = sa.util.pinned_array_as_cupy(buffer)
+        buffer = sw.arrays.pinned_array_as_cupy(buffer)
     else:
         xp = np
         buffer = xp.array(buffer)

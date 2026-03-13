@@ -98,7 +98,7 @@ def empty_5g_ssb_correlation(
     coord_factories: list[Callable],
     dtype='complex64',
 ):
-    xp = sw.util.array_namespace(iq)
+    xp = sw.array_namespace(iq)
     meas_ax_shape = [len(f(capture, spec)) for f in coord_factories]
     new_shape = iq.shape[:-1] + tuple(meas_ax_shape)
     return xp.full(new_shape, 0, dtype=dtype)
@@ -121,7 +121,7 @@ def correlate_sync_sequence(
         params: The cell synchronization parameters (e.g. from `striqt.waveform.ofdm.pss_params` or `striqt.waveform.ofdm.sss_params`)
         cell_id_split: if not None, operate on groups of this size along the cell id axis (to reduce memory usage)
     """
-    xp = sw.util.array_namespace(ssb_iq)
+    xp = sw.array_namespace(ssb_iq)
 
     slot_count = params.slot_count
     corr_size = params.corr_size
@@ -183,7 +183,7 @@ def get_5g_ssb_iq(
     """return a sync block waveform, which returns IQ that is recentered
     at baseband frequency spec.frequency_offset and downsampled to spec.sample_rate."""
 
-    xp = sw.util.array_namespace(iq)
+    xp = sw.array_namespace(iq)
 
     if oaresample:
         down = round(capture.sample_rate / spec.subcarrier_spacing / 8)
@@ -207,7 +207,7 @@ def get_5g_ssb_iq(
         out = xp.empty((iq.shape[0], size_out), dtype=iq.dtype)
 
         for i in range(out.shape[0]):
-            out[i] = sw.fourier.oaresample(
+            out[i] = sw.oaresample(
                 iq[i],
                 fs=capture.sample_rate,
                 up=up,
@@ -231,7 +231,7 @@ def get_5g_ssb_iq(
         shift = round(iq.shape[1] * spec.frequency_offset / capture.sample_rate)
 
         for i in range(out.shape[0]):
-            out[i] = sw.fourier.resample(
+            out[i] = sw.resample(
                 iq[i], num=size_out, axis=0, overwrite_x=False, shift=shift
             )
 
@@ -248,7 +248,7 @@ def evaluate_spectrogram(
     dB=True,
 ) -> tuple[Array, dict]:
     spg, attrs = _cached_spectrogram(iq=iq, capture=capture, spec=spec)
-    xp = sw.util.array_namespace(iq)
+    xp = sw.array_namespace(iq)
 
     copied = False
     if dB:
@@ -318,7 +318,7 @@ def _cached_spectrogram(
             'when specified, time_aperture must be a multiple of (1-fractional_overlap)/frequency_resolution'
         )
 
-    spg = sw.fourier.spectrogram(
+    spg = sw.spectrogram(
         iq,
         window=spec.window,
         fs=capture.sample_rate,
@@ -340,13 +340,13 @@ def _cached_spectrogram(
         )
 
     if frequency_bin_averaging is not None:
-        spg = sw.util.binned_mean(spg, frequency_bin_averaging, axis=2, fft=True)
+        spg = sw.binned_mean(spg, frequency_bin_averaging, axis=2, fft=True)
 
         # mean -> sum
         spg *= frequency_bin_averaging
 
     if time_bin_averaging is not None:
-        spg = sw.util.binned_mean(spg, time_bin_averaging, axis=1, fft=False)
+        spg = sw.binned_mean(spg, time_bin_averaging, axis=1, fft=False)
 
     if spec.integration_bandwidth is None:
         enbw = spec.frequency_resolution
@@ -382,7 +382,7 @@ def spectrogram_freqs(capture: specs.Capture, spec: specs.Spectrogram) -> np.nda
     # use the striqt.waveform.fourier fftfreq for higher precision, which avoids
     # headaches when merging spectra with different sampling parameters due
     # to rounding errors.
-    freqs = sw.fourier.fftfreq(nfft, capture.sample_rate)
+    freqs = sw.fftfreq(nfft, capture.sample_rate)
 
     if spec.trim_stopband and np.isfinite(capture.analysis_bandwidth):
         # stick with python arithmetic here for numpy/cupy consistency
@@ -391,7 +391,7 @@ def spectrogram_freqs(capture: specs.Capture, spec: specs.Spectrogram) -> np.nda
         )
 
     if spec.integration_bandwidth is not None:
-        freqs = sw.util.binned_mean(freqs, frequency_bin_averaging, fft=True)
+        freqs = sw.binned_mean(freqs, frequency_bin_averaging, fft=True)
 
     # only now downconvert. round to a still-large number of digits
     return freqs.astype('float64').round(16)

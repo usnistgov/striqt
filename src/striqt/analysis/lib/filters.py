@@ -7,14 +7,14 @@ import typing
 from .. import specs
 
 from . import dataarrays, util
+import striqt.waveform as sw
 
 if typing.TYPE_CHECKING:
-    import array_api_compat
     import numpy as np
     import scipy
 
     import striqt.waveform as sw
-    from striqt.waveform._typing import Array
+    from striqt.waveform.typing import Array
 else:
     np = util.lazy_import('numpy')
     scipy = util.lazy_import('scipy')
@@ -88,9 +88,9 @@ def iir_filter(
     filter_kws = select_parameter_kws(locals())
     sos = _generate_iir_lpf(capture, **filter_kws)
 
-    xp = sw.util.array_namespace(iq)
+    xp = sw.array_namespace(iq)
 
-    if util.is_cupy_array(iq):
+    if sw.is_cupy_array(iq):
         from . import cuda_kernels
 
         sos = xp.asarray(sos)

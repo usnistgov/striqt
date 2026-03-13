@@ -9,9 +9,11 @@ import typing
 
 from .. import specs
 from . import register, util
+from .typing import TAR
+
+import striqt.waveform as sw
 
 import msgspec
-from .typing import TAR
 
 if typing.TYPE_CHECKING:
     import array_api_compat
@@ -132,7 +134,7 @@ def _results_as_arrays(
 
     if array_api_compat.is_torch_array(obj):
         array = obj.cpu()
-    elif util.is_cupy_array(obj):
+    elif sw.is_cupy_array(obj):
         array = obj.get()
     elif array_api_compat.is_numpy_array(obj):
         return obj
@@ -375,8 +377,8 @@ def evaluate_by_spec(
     results: dict[str, DelayedDataArray] | dict[str, Array] = {}
     as_xarray = 'delayed' if options.as_xarray else False
 
-    if util.is_cupy_array(getattr(iq, 'pre_align', iq)):
-        util.configure_cupy()
+    if sw.is_cupy_array(getattr(iq, 'pre_align', iq)):
+        sw.arrays.configure_cupy()
 
     for name in spec_dict.keys():
         meas = options.registry[type(getattr(spec, name))]
@@ -417,8 +419,8 @@ def evaluate_by_spec(
             assert isinstance(res, DelayedDataArray)
             results[name] = res.to_xarray()
 
-    if util.is_cupy_array(getattr(iq, 'pre_align', iq)):
-        util.free_cupy_mempool()
+    if sw.is_cupy_array(getattr(iq, 'pre_align', iq)):
+        sw.arrays.free_cupy_mempool()
 
     return results
 

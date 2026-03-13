@@ -56,11 +56,10 @@ def power_spectral_density(iq, capture, **kwargs):
     spg_spec = specs.Spectrogram.from_spec(spec)
 
     from striqt.waveform.power_analysis import stat_ufunc_from_shorthand
-    from striqt.waveform.util import array_namespace, axis_index
 
     working_dtype = 'float32'
 
-    xp = array_namespace(iq)
+    xp = sw.array_namespace(iq)
     axis = 1
 
     spg, metadata = shared.evaluate_spectrogram(
@@ -89,7 +88,7 @@ def power_spectral_density(iq, capture, **kwargs):
     i_isnt_quantile = np.where(~np.array(findquantile))[0]
     for i in i_isnt_quantile:
         ufunc = stat_ufunc_from_shorthand(spec.time_statistic[i], xp=xp)
-        axis_index(psd, i, axis=axis)[:] = ufunc(spg, axis=axis)
+        sw.axis_index(psd, i, axis=axis)[:] = ufunc(spg, axis=axis)
 
     psd = sw.powtodB(psd).astype('float16')
 
