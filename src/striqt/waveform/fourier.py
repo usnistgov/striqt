@@ -11,6 +11,7 @@ from .lib.fourier import (
     null_lo,
     oaconvolve,
     oaresample,
+    ola_filter_parameters,
     resample,
     ResamplerDesign,
     spectrogram,
