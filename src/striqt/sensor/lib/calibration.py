@@ -1,16 +1,16 @@
 from __future__ import annotations as __
 
-import typing
+from typing import Any, Sequence, TYPE_CHECKING
 from pathlib import Path
-
-import msgspec
-from typing_extensions import ParamSpec
 
 from .. import specs as specs
 from . import compute, io, peripherals, sinks, sources, util
+from .typing import TypeVar, TC, TP, TPC, PS, PC
 import striqt.analysis as sa
 
-if typing.TYPE_CHECKING:
+import msgspec
+
+if TYPE_CHECKING:
     import numpy as np
     import pandas as pd
     import xarray as xr
@@ -21,11 +21,7 @@ else:
     xr = sa.util.lazy_import('xarray')
 
 
-_TC = typing.TypeVar('_TC', bound='specs.SoapyCapture')
-_TP = typing.TypeVar('_TP', bound=specs.Peripherals)
-_TS = typing.TypeVar('_TS', bound='specs.SoapySource')
-_PS = ParamSpec('_PS')
-_PC = ParamSpec('_PC')
+TS = TypeVar('TS', bound='specs.SoapySource')
 
 
 def compute_y_factor_corrections(dataset: 'xr.Dataset', Tref=290.0) -> 'xr.Dataset':
@@ -200,9 +196,7 @@ class YFactorSink(sinks.SinkBase):
 
 
 class ManualYFactorPeripheral(
-    peripherals.CalibrationPeripheralsBase[
-        typing.Any, typing.Any, specs.ManualYFactorPeripheral
-    ]
+    peripherals.CalibrationPeripheralsBase[Any, Any, specs.ManualYFactorPeripheral]
 ):
     _last_state = (None, None)
 
@@ -238,18 +232,16 @@ class ManualYFactorPeripheral(
 
     def setup(
         self,
-        captures: typing.Sequence[_TC],
-        loops: typing.Sequence[specs.LoopSpec],
+        captures: Sequence[TC],
+        loops: Sequence[specs.LoopSpec],
     ):
         pass
 
 
 def _calibration_peripherals_cls(
-    ext: type[peripherals.PeripheralsBase[_TP, _TC]],
-    cal: type[
-        peripherals.CalibrationPeripheralsBase[typing.Any, typing.Any, specs._TPC]
-    ],
-) -> type[peripherals.CalibrationPeripheralsBase[_TP, _TC, specs._TPC]]:
+    ext: type[peripherals.PeripheralsBase[TP, TC]],
+    cal: type[peripherals.CalibrationPeripheralsBase[Any, Any, TPC]],
+) -> type[peripherals.CalibrationPeripheralsBase[TP, TC, TPC]]:
     """return a peripheral type for external hardware and calibration"""
 
     class cls(peripherals.CalibrationPeripheralsBase):
@@ -268,8 +260,8 @@ def _calibration_peripherals_cls(
 
         def setup(
             self,
-            captures: typing.Sequence[_TC],
-            loops: typing.Sequence[specs.LoopSpec],
+            captures: Sequence[TC],
+            loops: Sequence[specs.LoopSpec],
         ):
             self.ext.setup(captures, loops)
             self.cal.setup(captures, loops)
@@ -303,8 +295,8 @@ def _calibration_peripherals_cls(
 
 
 def bind_manual_yfactor_calibration(
-    name: str, sensor: 'bindings.SensorBinding[_TS, _TP, _TC, _PS, _PC]'
-) -> 'bindings.SensorBinding[_TS, _TP, _TC, _PS, _PC]':
+    name: str, sensor: 'bindings.SensorBinding[TS, TP, TC, PS, PC]'
+) -> 'bindings.SensorBinding[TS, TP, TC, PS, PC]':
     """extend an existing binding with a y-factor calibration"""
 
     from . import bindings
@@ -511,7 +503,7 @@ def _lookup_calibration_var(
     for c in specs.helpers.split_capture_ports(capture):
         assert not isinstance(c.center_frequency, tuple)
 
-        fs = sources.base.design_capture_resampler(master_clock_rate, c)['fs_sdr']
+        fs = sources.buffers.design_resampler(c, master_clock_rate)['fs_sdr']
         port_key = _get_port_variable(cal_var)
 
         # these capture fields must match the calibration conditions exactly

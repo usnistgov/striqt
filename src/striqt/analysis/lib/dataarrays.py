@@ -7,29 +7,24 @@ import dataclasses
 import math
 import typing
 
-import msgspec
-
 from .. import specs
-
-
 from . import register, util
+from .typing import TAR
+
+import striqt.waveform as sw
+
+import msgspec
 
 if typing.TYPE_CHECKING:
     import array_api_compat
     import numpy as np
     import xarray as xr
-
-    from striqt.waveform._typing import ArrayType
-
+    from .typing import Array, CoordFunc
 
 else:
     np = util.lazy_import('numpy')
     xr = util.lazy_import('xarray')
     array_api_compat = util.lazy_import('array_api_compat')
-
-
-AnalysisReturnFlag = typing.Literal[True, False, 'delayed']
-_TA = typing.TypeVar('_TA', bound=AnalysisReturnFlag)
 
 
 CAPTURE_DIM = 'capture'
@@ -38,9 +33,9 @@ PORT_DIM = 'port'
 
 @dataclasses.dataclass
 class AcquiredIQ:
-    pre_align: ArrayType
-    pre_filter: ArrayType | None
-    aligned: ArrayType | None
+    pre_align: Array
+    pre_filter: Array | None
+    aligned: Array | None
     capture: specs.Capture | None
 
 
@@ -133,13 +128,13 @@ def describe_value(value, attrs: dict, unit_prefix=None):
 
 
 def _results_as_arrays(
-    obj: tuple | list | dict | ArrayType,
-) -> ArrayType | dict[str, ArrayType] | xr.Dataset | dict[str, DelayedDataArray]:
+    obj: tuple | list | dict | Array,
+) -> Array | dict[str, Array] | xr.Dataset | dict[str, DelayedDataArray]:
     """convert an array, or a container of arrays, into a numpy array (or container of numpy arrays)"""
 
     if array_api_compat.is_torch_array(obj):
         array = obj.cpu()
-    elif util.is_cupy_array(obj):
+    elif sw.is_cupy_array(obj):
         array = obj.get()
     elif array_api_compat.is_numpy_array(obj):
         return obj
@@ -157,7 +152,7 @@ def _empty_stub(dims, dtype, attrs={}):
 @util.lru_cache()
 def dataarray_stub(
     dims: tuple[str, ...] | None,
-    coord_factories: tuple[register.CallableCoordinateFactory, ...],
+    coord_factories: tuple[CoordFunc, ...],
     dtype: str,
     expand_dims: tuple[str, ...] | None = None,
 ) -> 'xr.DataArray':
@@ -270,9 +265,7 @@ def build_dataarray(
 
 
 @util.lru_cache()
-def _infer_coord_dims(
-    coord_factories: tuple[register.CallableCoordinateFactory, ...],
-) -> tuple[str, ...]:
+def _infer_coord_dims(coord_factories: tuple[CoordFunc, ...]) -> tuple[str, ...]:
     """guess dimensions of a dataarray based on its coordinates.
 
     This orders the dimensions according to (1) first appearance in each
@@ -322,7 +315,7 @@ class DelayedDataArray(collections.UserDict):
 
     capture: specs.Capture
     spec: specs.Analysis
-    result: ArrayType | dict[str, ArrayType] | xr.Dataset | dict[str, DelayedDataArray]
+    result: Array | dict[str, Array] | xr.Dataset | dict[str, DelayedDataArray]
     info: register.AnalysisInfo
     attrs: dict
 
@@ -347,8 +340,8 @@ def select_parameter_kws(locals_: dict, omit=(PORT_DIM, 'out')) -> dict:
     return {k: v for k, v in items[1:] if k not in omit}
 
 
-class EvaluationOptions(msgspec.Struct, typing.Generic[_TA]):
-    as_xarray: _TA
+class EvaluationOptions(msgspec.Struct, typing.Generic[TAR]):
+    as_xarray: TAR
     registry: register.AnalysisRegistry
     block_each: bool = True
     expand_dims: typing.Sequence[str] = ()
@@ -360,11 +353,11 @@ class EvaluationOptions(msgspec.Struct, typing.Generic[_TA]):
 
 
 def evaluate_by_spec(
-    iq: ArrayType | AcquiredIQ,
+    iq: Array | AcquiredIQ,
     spec: dict[str, specs.Analysis] | specs.AnalysisGroup,
     capture: specs.Capture,
     options: EvaluationOptions,
-) -> dict[str, DelayedDataArray] | dict[str, ArrayType]:
+) -> dict[str, DelayedDataArray] | dict[str, Array]:
     """evaluate each analysis for the given IQ waveform"""
 
     if isinstance(spec, specs.AnalysisGroup):
@@ -381,11 +374,11 @@ def evaluate_by_spec(
         spec_dict = spec
     else:
         spec_dict = spec.to_dict()
-    results: dict[str, DelayedDataArray] | dict[str, ArrayType] = {}
+    results: dict[str, DelayedDataArray] | dict[str, Array] = {}
     as_xarray = 'delayed' if options.as_xarray else False
 
-    if util.is_cupy_array(getattr(iq, 'pre_align', iq)):
-        util.configure_cupy()
+    if sw.is_cupy_array(getattr(iq, 'pre_align', iq)):
+        sw.arrays.configure_cupy()
 
     for name in spec_dict.keys():
         meas = options.registry[type(getattr(spec, name))]
@@ -426,15 +419,15 @@ def evaluate_by_spec(
             assert isinstance(res, DelayedDataArray)
             results[name] = res.to_xarray()
 
-    if util.is_cupy_array(getattr(iq, 'pre_align', iq)):
-        util.free_cupy_mempool()
+    if sw.is_cupy_array(getattr(iq, 'pre_align', iq)):
+        sw.arrays.free_cupy_mempool()
 
     return results
 
 
 def package_analysis(
     capture: specs.Capture,
-    results: dict[str, DelayedDataArray] | dict[str, ArrayType],
+    results: dict[str, DelayedDataArray] | dict[str, Array],
     expand_dims=None,
 ) -> 'xr.Dataset':
     # materialize as xarrays
@@ -454,7 +447,7 @@ def package_analysis(
 
 @typing.overload
 def analyze_by_spec(
-    iq: ArrayType | AcquiredIQ,
+    iq: Array | AcquiredIQ,
     spec: dict[str, specs.Analysis] | specs.AnalysisGroup,
     capture: specs.Capture,
     options: EvaluationOptions[typing.Literal[True]],
@@ -463,7 +456,7 @@ def analyze_by_spec(
 
 @typing.overload
 def analyze_by_spec(
-    iq: ArrayType | AcquiredIQ,
+    iq: Array | AcquiredIQ,
     spec: dict[str, specs.Analysis] | specs.AnalysisGroup,
     capture: specs.Capture,
     options: EvaluationOptions[typing.Literal['delayed']],
@@ -472,19 +465,19 @@ def analyze_by_spec(
 
 @typing.overload
 def analyze_by_spec(
-    iq: ArrayType | AcquiredIQ,
+    iq: Array | AcquiredIQ,
     spec: dict[str, specs.Analysis] | specs.AnalysisGroup,
     capture: specs.Capture,
     options: EvaluationOptions[typing.Literal[False]],
-) -> 'dict[str, ArrayType]': ...
+) -> 'dict[str, Array]': ...
 
 
 def analyze_by_spec(
-    iq: ArrayType | AcquiredIQ,
+    iq: Array | AcquiredIQ,
     spec: dict[str, specs.Analysis] | specs.AnalysisGroup,
     capture: specs.Capture,
     options: EvaluationOptions,
-) -> ArrayType | dict[str, ArrayType] | xr.Dataset | dict[str, DelayedDataArray]:
+) -> Array | dict[str, Array] | xr.Dataset | dict[str, DelayedDataArray]:
     """evaluate a set of different channel analyses on the iq waveform as specified by spec"""
 
     results = evaluate_by_spec(iq, spec, capture, options)

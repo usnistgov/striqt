@@ -3,7 +3,7 @@
 from __future__ import annotations as __
 
 import functools
-import typing
+from typing import Any, Literal, overload, TYPE_CHECKING
 
 from ... import specs
 from .. import util
@@ -11,19 +11,19 @@ from .. import util
 import striqt.analysis as sa
 import striqt.waveform as sw
 
-from . import base
+from . import base, buffers
+from ..typing import PS, PC
 
-if typing.TYPE_CHECKING:
+if TYPE_CHECKING:
     import numpy as np
     import xarray as xr
+    from ..typing import FileStream
 else:
     np = util.lazy_import('numpy')
 
 
 @base.bind_schema_types(specs.TDMSSource, specs.FileCapture)
-class TDMSSource(
-    base.VirtualSourceBase[specs.TDMSSource, specs.FileCapture, base._PS, base._PC]
-):
+class TDMSSource(base.VirtualSource[specs.TDMSSource, specs.FileCapture, PS, PC]):
     """a source of IQ waveforms from a TDMS file"""
 
     _file_info: specs.FileAcquisitionInfo
@@ -70,24 +70,22 @@ class TDMSSource(
 
     def get_resampler(
         self, capture: specs.FileCapture | None = None
-    ) -> sw.fourier.ResamplerDesign:
+    ) -> sw.ResamplerDesign:
         if capture is None:
             capture = self.capture_spec
 
         mcr = self.setup_spec.master_clock_rate
-        return base.design_capture_resampler(
-            mcr, capture, backend_sample_rate=self._file_info.backend_sample_rate
+        return buffers.design_resampler(
+            capture, mcr, backend_sample_rate=self._file_info.backend_sample_rate
         )
 
 
 @base.bind_schema_types(specs.MATSource, specs.FileCapture)
-class MATSource(
-    base.VirtualSourceBase[specs.MATSource, specs.FileCapture, base._PS, base._PC]
-):
+class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture, PS, PC]):
     """returns IQ waveforms from a .mat file"""
 
     _file_info: specs.FileAcquisitionInfo
-    _file_stream: sa.io._FileStreamBase
+    _file_stream: FileStream
 
     def _connect(self, spec):
         meta = spec.file_metadata
@@ -96,7 +94,7 @@ class MATSource(
             spec.path,
             format=spec.file_format,
             dtype='complex64',
-            xp=base.get_array_namespace(self.setup_spec.array_backend),
+            xp=buffers.get_array_namespace(self.setup_spec.array_backend),
             loop=spec.loop,
             backend_sample_rate=spec.master_clock_rate,
             **meta,
@@ -131,12 +129,12 @@ class MATSource(
 
     def get_resampler(
         self, capture: specs.FileCapture | None = None
-    ) -> sw.fourier.ResamplerDesign:
+    ) -> sw.ResamplerDesign:
         if capture is None:
             capture = self.capture_spec
         mcr = self._file_info.backend_sample_rate
         fs_sdr = self._file_info.backend_sample_rate
-        return base.design_capture_resampler(mcr, capture, backend_sample_rate=fs_sdr)
+        return buffers.design_resampler(capture, mcr, backend_sample_rate=fs_sdr)
 
     @functools.cached_property
     def info(self):
@@ -148,22 +146,18 @@ class MATSource(
 
 
 @base.bind_schema_types(specs.ZarrIQSource, specs.FileCapture)
-class ZarrIQSource(
-    base.VirtualSourceBase[specs.ZarrIQSource, specs.FileCapture, base._PS, base._PC]
-):
+class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture, PS, PC]):
     """a sources of IQ samples from iq_waveform variables in a zarr store"""
 
     _waveform: 'xr.DataArray'
     _capture_info: specs.FileAcquisitionInfo
 
-    @typing.overload
-    def _read_coord(self, name: str, single: typing.Literal[True] = True) -> typing.Any:
+    @overload
+    def _read_coord(self, name: str, single: Literal[True] = True) -> Any:
         pass
 
-    @typing.overload
-    def _read_coord(
-        self, name: str, single: typing.Literal[False] = False
-    ) -> tuple[typing.Any, ...]:
+    @overload
+    def _read_coord(self, name: str, single: Literal[False] = False) -> tuple[Any, ...]:
         pass
 
     def _read_coord(self, name: str, single: bool = True):
@@ -208,11 +202,11 @@ class ZarrIQSource(
             backend_sample_rate=self._read_coord('sample_rate'),
         )
 
-    def get_resampler(self, capture=None) -> sw.fourier.ResamplerDesign:
+    def get_resampler(self, capture=None) -> sw.ResamplerDesign:
         if capture is None:
             capture = self.capture_spec
         fs = self._read_coord('sample_rate')
-        return base.design_capture_resampler(fs, capture, fs)
+        return buffers.design_resampler(capture, fs)
 
     def _read_stream(
         self,
@@ -221,7 +215,7 @@ class ZarrIQSource(
         count,
         timeout_sec=None,
         *,
-        on_overflow: specs.types.OnOverflowType = 'except',
+        on_overflow: specs.types.OnOverflow = 'except',
     ) -> tuple[int, int]:
         assert self._waveform is not None
         iq, _ = super()._read_stream(

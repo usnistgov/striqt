@@ -5,7 +5,7 @@ from __future__ import annotations as __
 import contextlib
 import math
 import itertools
-import typing
+from typing import Any, Generator, TYPE_CHECKING
 
 import striqt.waveform as sw
 import striqt.analysis as sa
@@ -14,11 +14,9 @@ from . import compute, sources, util
 from .. import specs
 from .resources import Resources, AnyResources
 from .calibration import lookup_system_noise_power
-from .sources import _PS, _PC
-from ..specs import _TC, _TP, _TS
+from .typing import PC, PS, TC, TP, TS, Unpack
 
-if typing.TYPE_CHECKING:
-    from typing_extensions import Unpack
+if TYPE_CHECKING:
     import xarray as xr
     import pandas as pd
 else:
@@ -26,13 +24,13 @@ else:
 
 
 def iterate_sweep(
-    resources: Resources[_TS, _TP, _TC, _PS, _PC],
+    resources: Resources[TS, TP, TC, PS, PC],
     *,
     always_yield: bool = False,
     yield_values: bool = True,
     loop: bool = False,
-    **replace: 'Unpack[AnyResources[_TS, _TP, _TC, _PS, _PC]]',
-) -> typing.Generator['xr.Dataset|compute.DelayedDataset|None']:
+    **replace: 'Unpack[AnyResources[TS, TP, TC, PS, PC]]',
+) -> Generator['xr.Dataset|compute.DelayedDataset|None']:
     """an iterator that steps through the execution of a sensor sweep.
 
     Data acquisition, analysis, and sink operations each run in parallel in
@@ -88,7 +86,7 @@ def iterate_sweep(
         correction=True,
         cache_callback=log,
         as_xarray='delayed',
-        block_each=True, # important: data corruption observed otherwise
+        block_each=True,  # important: data corruption observed otherwise
     )
 
     iq = None
@@ -214,9 +212,9 @@ class _AcquisitionIndexer:
 
 @sa.util.stopwatch('acquire', 'sweep', threshold=0.25)
 def _acquire_both(
-    res: Resources[typing.Any, typing.Any, _TC, _PS, _PC],
-    this: _TC,
-    next_: _TC | None,
+    res: Resources[Any, Any, TC, PS, PC],
+    this: TC,
+    next_: TC | None,
     indexer: _AcquisitionIndexer,
 ) -> sources.AcquiredIQ:
     """arm and acquire from the source and peripherals.
@@ -227,7 +225,7 @@ def _acquire_both(
 
     assert this is not None
 
-    def arm_both(c: _TC | None):
+    def arm_both(c: TC | None):
         if c is None:
             return
 
@@ -271,7 +269,12 @@ def _acquire_both(
 
 
 def _log_cache_info(
-    resources: Resources[_TS, _TP, _TC, _PS, _PC], cache, capture: _TC, result, *_, **__
+    resources: Resources[TS, TP, TC, PS, PC],
+    cache,
+    capture: TC,
+    result,
+    *_,
+    **__,
 ):
     cal = resources['sweep_spec'].source.calibration
     if cal is None or 'spectrogram' not in cache.name:
@@ -279,7 +282,7 @@ def _log_cache_info(
 
     spg, attrs = result
 
-    xp = sw.util.array_namespace(spg)
+    xp = sw.array_namespace(spg)
 
     if isinstance(capture, specs.SoapyCapture):
         info_fields = ('center_frequency', 'port', 'gain')
@@ -307,7 +310,7 @@ def _log_cache_info(
     capture_splits = specs.helpers.split_capture_ports(capture)
 
     for c, snr in zip(capture_splits, sw.powtodB(peaks) - noise):
-        if sa.util.is_cupy_array(snr.data):
+        if sw.is_cupy_array(snr.data):
             snr = float(snr.data.get())
         else:
             snr = float(snr.values)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations as __
 
-import typing
+from typing import Any, cast, ClassVar, Generic, Literal, Optional, TYPE_CHECKING, Union
 
 import msgspec
 
@@ -10,11 +10,12 @@ from striqt import analysis as sa
 from striqt.analysis.specs import AnalysisGroup, SpecBase, Capture, frozendict
 
 from ..lib import util
+from ..lib.typing import TypeVar, TS, TP, TC, TPC
 from . import types
 
 
-if typing.TYPE_CHECKING:
-    _T = typing.TypeVar('_T')
+if TYPE_CHECKING:
+    _T = TypeVar('_T')
     from typing_extensions import Self as _Self
 
     # pd imports need to be here for msgspec to resolve timestamp types
@@ -44,7 +45,7 @@ class SensorCapture(Capture, frozen=True, kw_only=True):
     port: types.Port
     lo_shift: types.LOShift = 'none'
     host_resample: bool = True
-    backend_sample_rate: typing.Optional[types.BackendSampleRate] = None
+    backend_sample_rate: Optional[types.BackendSampleRate] = None
     adjust_analysis: types.AnalysisAdjustments = msgspec.field(default_factory=dict)
 
 
@@ -59,7 +60,7 @@ class SoapyCapture(SensorCapture, frozen=True, kw_only=True):
 
 class SingleToneCapture(SensorCapture, frozen=True, kw_only=True):
     frequency_offset: types.FrequencyOffset = 0
-    snr: typing.Optional[types.SNR] = None
+    snr: Optional[types.SNR] = None
 
 
 class DiracDeltaCapture(SensorCapture, frozen=True, kw_only=True):
@@ -92,8 +93,8 @@ class Source(SpecBase, frozen=True, kw_only=True):
     master_clock_rate: types.MasterClockRate
 
     # synchronization and triggering
-    trigger_strobe: typing.Optional[float] = None
-    signal_trigger: typing.Optional[str | AnalysisGroup] = None  # type: ignore
+    trigger_strobe: Optional[float] = None
+    signal_trigger: Optional[str | AnalysisGroup] = None  # type: ignore
 
     # in the future, these should probably move to an analysis config
     array_backend: types.ArrayBackend = 'numpy'
@@ -104,13 +105,13 @@ class Source(SpecBase, frozen=True, kw_only=True):
     calibration = None
 
     # validation data
-    transient_holdoff_time: typing.ClassVar[float] = 0
-    stream_all_rx_ports: typing.ClassVar[bool | None] = False
-    transport_dtype: typing.ClassVar[types.TransportDType] = 'float32'
+    transient_holdoff_time: ClassVar[float] = 0
+    stream_all_rx_ports: ClassVar[bool | None] = False
+    transport_dtype: ClassVar[types.TransportDType] = 'float32'
 
 
 class SoapySource(Source, frozen=True, kw_only=True):
-    calibration: typing.Optional[str] = None
+    calibration: Optional[str] = None
     time_source: types.TimeSource = 'host'
     time_sync_at: types.TimeSyncOn = 'acquire'
     clock_source: types.ClockSource = 'internal'
@@ -146,14 +147,14 @@ class SoapySource(Source, frozen=True, kw_only=True):
 class FunctionSource(Source, kw_only=True, frozen=True):
     # make these configurable, to support matching hardware for warmup sweeps
     num_rx_ports: int
-    stream_all_rx_ports: typing.ClassVar[bool] = False
-    transport_dtype: typing.ClassVar[types.TransportDType] = 'complex64'
+    stream_all_rx_ports: ClassVar[bool] = False
+    transport_dtype: ClassVar[types.TransportDType] = 'complex64'
 
 
 class NoSource(Source, frozen=True, kw_only=True):
     # make these configurable, to support matching hardware for warmup sweeps
     num_rx_ports: int
-    stream_all_rx_ports: typing.ClassVar[bool] = False
+    stream_all_rx_ports: ClassVar[bool] = False
 
 
 class MATSource(Source, kw_only=True, frozen=True, dict=True):
@@ -161,7 +162,7 @@ class MATSource(Source, kw_only=True, frozen=True, dict=True):
     file_format: types.Format = 'auto'
     file_metadata: types.FileMetadata = msgspec.field(default_factory=frozendict)
     loop: types.FileLoop = False
-    transport_dtype: typing.ClassVar[types.TransportDType] = 'complex64'
+    transport_dtype: ClassVar[types.TransportDType] = 'complex64'
 
 
 class TDMSSource(Source, frozen=True, kw_only=True):
@@ -172,11 +173,11 @@ class ZarrIQSource(Source, frozen=True, kw_only=True):
     path: types.WaveformInputPath
     center_frequency: types.CenterFrequency
     select: types.ZarrSelect = dict()
-    transport_dtype: typing.ClassVar[types.TransportDType] = 'complex64'
+    transport_dtype: ClassVar[types.TransportDType] = 'complex64'
 
 
 class Description(SpecBase, frozen=True, kw_only=True):
-    summary: typing.Optional[str] = None
+    summary: Optional[str] = None
     version: str = 'unversioned'
 
 
@@ -213,7 +214,7 @@ class Repeat(LoopBase, frozen=True, kw_only=True):
 
 class List(LoopBase, frozen=True, kw_only=True):
     field: str
-    values: tuple[typing.Any, ...]
+    values: tuple[Any, ...]
 
     def get_points(self) -> list:
         return list(self.values)
@@ -240,24 +241,24 @@ class FrequencyBinRange(LoopBase, frozen=True, kw_only=True):
         return points.tolist()
 
 
-LoopSpec = typing.Union[Repeat, List, Range, FrequencyBinRange]
+LoopSpec = Union[Repeat, List, Range, FrequencyBinRange]
 
 
 class Sink(SpecBase, frozen=True, kw_only=True):
     path: str = '{yaml_name}-{start_time}'
-    log_path: typing.Optional[str] = None
+    log_path: Optional[str] = None
     log_level: str = 'info'
     store: types.StoreFormat = 'directory'
 
     # zarr store tuning parameters
-    max_threads: typing.Optional[int] = None
+    max_threads: Optional[int] = None
     batched_write_count: int = 1
     max_chunk_bytes: int = 50000000
 
 
 class Extension(SpecBase, frozen=True, kw_only=True):
     sink: types.SinkClass | None = None
-    import_path: typing.Optional[types.ExtensionPath] = None
+    import_path: Optional[types.ExtensionPath] = None
     import_name: types.ModuleName = None
 
 
@@ -284,30 +285,22 @@ class SweepOptions(SpecBase, frozen=True, kw_only=True):
     skip_warmup: types.SkipWarmup = False
 
 
-# forward references break msgspec when used with bindings, so this
-# needs to be here after the bound classes have been defined
-_TC = typing.TypeVar('_TC', bound=SensorCapture)
-_TP = typing.TypeVar('_TP', bound=Peripherals)
-_TPC = typing.TypeVar('_TPC', bound=Peripherals)
-_TS = typing.TypeVar('_TS', bound=Source)
-
-
 SWEEP_TAG_FIELD = 'sensor_binding'
 
 
 class CaptureRemap(SpecBase, frozen=True, kw_only=True):
     key: str | tuple[str, ...]
-    lookup: dict[tuple[typing.Any, ...] | typing.Any, typing.Any]
+    lookup: dict[tuple[Any, ...] | Any, Any]
     required: bool = True
-    default: typing.Any = msgspec.UNSET
+    default: Any = msgspec.UNSET
 
 
-_CaptureMapScalarType = typing.Union[float, int, str, bool, None]
-_AdjustSourceCapturesMap = dict[str, typing.Union[CaptureRemap, _CaptureMapScalarType]]
-_AdjustSourceCapturesTup = tuple[str, typing.Union[CaptureRemap, _CaptureMapScalarType]]
+_CaptureMapScalarType = Union[float, int, str, bool, None]
+_AdjustSourceCapturesMap = dict[str, Union[CaptureRemap, _CaptureMapScalarType]]
+_AdjustSourceCapturesTup = tuple[str, Union[CaptureRemap, _CaptureMapScalarType]]
 AdjustCapturesType = dict[
-    typing.Union[types.SourceID, typing.Literal['defaults']],
-    typing.Union[_AdjustSourceCapturesMap, _AdjustSourceCapturesTup],
+    Union[types.SourceID, Literal['defaults']],
+    Union[_AdjustSourceCapturesMap, _AdjustSourceCapturesTup],
 ]
 
 
@@ -340,7 +333,7 @@ def _validate_loops(loops: tuple[LoopSpec, ...]):
         )
 
 
-class Sweep(SpecBase, typing.Generic[_TS, _TP, _TC], frozen=True, kw_only=True):
+class Sweep(SpecBase, Generic[TS, TP, TC], frozen=True, kw_only=True):
     # sweep bindings also accept the following tag field in input files, which
     # msgspec uses to determine the Sweep subclass to instantiate from e.g.
     # yaml files.
@@ -349,18 +342,18 @@ class Sweep(SpecBase, typing.Generic[_TS, _TP, _TC], frozen=True, kw_only=True):
     #
     # sensor_binding: str
 
-    source: _TS
-    captures: tuple[_TC, ...] = tuple()
+    source: TS
+    captures: tuple[TC, ...] = tuple()
     loops: tuple[LoopSpec, ...] = ()
     analysis: BundledAnalysis = BundledAnalysis()  # type: ignore
     description: Description = Description()
     adjust_captures: AdjustCapturesType = msgspec.field(default_factory=dict)
     extensions: Extension = Extension()
     sink: Sink = Sink()
-    peripherals: _TP = typing.cast(_TP, Peripherals())
+    peripherals: TP = cast(TP, Peripherals())
 
     options: SweepOptions = SweepOptions(reuse_iq=False, loop_only_nyquist=False)
-    _bindings__: typing.ClassVar[typing.Any] = None
+    _bindings__: ClassVar[Any] = None
 
     def __post_init__(self):
         from . import helpers
@@ -374,8 +367,8 @@ class Sweep(SpecBase, typing.Generic[_TS, _TP, _TC], frozen=True, kw_only=True):
 
 
 class CalibrationSweep(
-    Sweep[_TS, _TP, _TC],
-    typing.Generic[_TS, _TP, _TC, _TPC],
+    Sweep[TS, TP, TC],
+    Generic[TS, TP, TC, TPC],
     frozen=True,
     kw_only=True,
 ):
@@ -385,7 +378,7 @@ class CalibrationSweep(
     options: SweepOptions = SweepOptions(
         skip_warmup=True, reuse_iq=True, loop_only_nyquist=True
     )
-    calibration: _TPC | None = None
+    calibration: TPC | None = None
 
     def __post_init__(self):
         super().__post_init__()
@@ -435,7 +428,7 @@ class SoapyAcquisitionInfo(AcquisitionInfo, kw_only=True, frozen=True):
 
     sweep_start_time: types.SweepStartTime | None = None
     start_time: types.StartTime | None
-    backend_sample_rate: typing.Optional[types.BackendSampleRate]
+    backend_sample_rate: Optional[types.BackendSampleRate]
     source_id: types.SourceID = ''
 
 

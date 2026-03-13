@@ -10,19 +10,19 @@ if typing.TYPE_CHECKING:
     import numpy as np
 
     import striqt.waveform as sw
-    from striqt.waveform._typing import ArrayType
+    from striqt.waveform.typing import Array
 else:
     np = util.lazy_import('numpy')
     sw = util.lazy_import('striqt.waveform')
 
 
 def filter_iq_capture(
-    iq: ArrayType,
+    iq: Array,
     capture: specs.FilteredCapture,
     *,
     axis=0,
     out=None,
-) -> ArrayType:
+) -> Array:
     """apply a bandpass filter implemented through STFT overlap-and-add.
 
     Args:
@@ -35,12 +35,12 @@ def filter_iq_capture(
         the filtered IQ capture
     """
 
-    xp = sw.util.array_namespace(iq)
+    xp = sw.array_namespace(iq)
 
     nfft = capture.analysis_filter.nfft
     nfft_out = capture.analysis_filter.nfft_out or nfft
 
-    nfft_out, noverlap, overlap_scale, _ = sw.fourier._ola_filter_parameters(
+    nfft_out, noverlap, overlap_scale, _ = sw.fourier.ola_filter_parameters(
         iq.size,
         window=capture.analysis_filter.window,
         nfft_out=nfft_out,
@@ -48,10 +48,8 @@ def filter_iq_capture(
         extend=True,
     )
 
-    w = sw.fourier.get_window(
-        capture.analysis_filter.window, nfft, fftbins=False, xp=xp
-    )
-    freqs, _, xstft = sw.fourier.stft(
+    w = sw.get_window(capture.analysis_filter.window, nfft, fftbins=False, xp=xp)
+    freqs, _, xstft = sw.stft(
         iq,
         fs=capture.sample_rate,
         window=w,
@@ -84,7 +82,7 @@ def filter_iq_capture(
 
     sw.fourier.zero_stft_by_freq(freqs, xstft, passband=passband, axis=axis)
 
-    return sw.fourier.istft(
+    return sw.istft(
         xstft,
         iq.shape[axis],
         nfft=nfft_out,
@@ -102,7 +100,7 @@ def simulated_awgn(
     pinned_cuda=False,
     seed=None,
     out=None,
-) -> ArrayType:
+) -> Array:
     # use the slower RandomState for maximum compatibility
     # across array module namespaces
     gen = xp.random.RandomState(seed=seed)

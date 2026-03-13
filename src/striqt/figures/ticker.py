@@ -7,7 +7,7 @@ import numpy as np
 
 import striqt.waveform as sw
 
-from ..waveform.util import lru_cache
+from ..waveform.lib.util import lru_cache
 
 import pandas as pd
 from matplotlib import axis as _axis

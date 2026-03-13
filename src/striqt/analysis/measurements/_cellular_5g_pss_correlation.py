@@ -13,7 +13,7 @@ import striqt.waveform as sw
 
 if typing.TYPE_CHECKING:
     import numpy as np
-    from striqt.waveform._typing import ArrayType
+    from striqt.waveform.typing import Array
 else:
     np = util.lazy_import('numpy')
 
@@ -27,16 +27,16 @@ _coord_factories = [
 dtype = 'complex64'
 
 
-pss_cache = register.KeywordArgumentCache([CAPTURE_DIM, 'spec'])
+pss_cache = register.KwArgCache([CAPTURE_DIM, 'spec'])
 
 
 @pss_cache.apply
 def correlate_5g_pss(
-    iq: ArrayType,
+    iq: Array,
     capture: specs.Capture,
     spec: specs.Cellular5GNRPSSCorrelator,
-) -> ArrayType:
-    xp = sw.util.array_namespace(iq)
+) -> Array:
+    xp = sw.array_namespace(iq)
 
     ssb_iq = shared.get_5g_ssb_iq(iq, capture=capture, spec=spec)
 
@@ -59,13 +59,13 @@ def correlate_5g_pss(
     )
 
 
-pss_weighted_cache = register.KeywordArgumentCache(
+pss_weighted_cache = register.KwArgCache(
     [CAPTURE_DIM, 'spec', 'window_fill', 'snr_window_fill']
 )
 
 
 def weight_correlation_locally(R, spec: specs.Cellular5GNPSSSync):
-    xp = sw.util.array_namespace(R)
+    xp = sw.array_namespace(R)
 
     if R.ndim == 4:
         R = R[np.newaxis, ...]
@@ -73,7 +73,7 @@ def weight_correlation_locally(R, spec: specs.Cellular5GNPSSSync):
     # R.shape -> (..., port index, cell Nid2, symbol start index, IQ sample index)
     R = R.mean(axis=-3)
 
-    if util.is_cupy_array(R):
+    if sw.is_cupy_array(R):
         from cupyx.scipy import ndimage  # type: ignore
     else:
         from scipy import ndimage
@@ -114,7 +114,7 @@ def weight_correlation_locally(R, spec: specs.Cellular5GNPSSSync):
     weight_shift = Ragg.shape[1] // 2 - round((Ragg.shape[1] - fill_count) / 2)
     weights = xp.roll(weights, weight_shift)
 
-    if util.is_cupy_array(Ragg):
+    if sw.is_cupy_array(Ragg):
         from cupyx.scipy import ndimage  # type: ignore
     else:
         from scipy import ndimage
@@ -125,11 +125,11 @@ def weight_correlation_locally(R, spec: specs.Cellular5GNPSSSync):
 
 @pss_weighted_cache.apply
 def pss_local_weighted_correlator(
-    iq: ArrayType,
+    iq: Array,
     capture: specs.Capture,
     *,
     spec: specs.Cellular5GNPSSSync,
-) -> ArrayType:
+) -> Array:
     # R.shape -> (..., port index, cell Nid2, SSB index, symbol start index, IQ sample index)
 
     corr_spec = specs.Cellular5GNRPSSCorrelator.from_spec(spec).validate()
@@ -186,7 +186,9 @@ def cellular_5g_pss_sync(iq, capture: specs.Capture, **kwargs):
     store_compressed=False,
     attrs={'standard_name': 'PSS Cross-Covariance'},
 )
-def cellular_5g_pss_correlation(iq, capture: specs.Capture, **kwargs):
+def cellular_5g_pss_correlation(
+    iq, capture: specs.Capture, **kwargs
+) -> tuple[Array, dict]:
     """correlate each channel of the IQ against the cellular primary synchronization signal (PSS) waveform.
 
     Returns a DataArray containing the time-lag for each combination of NID2, symbol, and SSB start time.

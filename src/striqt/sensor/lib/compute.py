@@ -5,7 +5,7 @@ from __future__ import annotations as __
 from collections import defaultdict
 import dataclasses
 import logging
-import typing
+from typing import Any, Callable, cast, Literal, overload, Sequence, TYPE_CHECKING
 import warnings
 
 from .. import specs
@@ -14,19 +14,16 @@ from . import sources, util
 import striqt.analysis as sa
 import striqt.waveform as sw
 from striqt.analysis.lib.dataarrays import CAPTURE_DIM, PORT_DIM  # noqa: F401
+from .typing import TAR
 
 import msgspec
 
-if typing.TYPE_CHECKING:
+if TYPE_CHECKING:
+    from .typing import Array, TC, TS, TP, WarmupSweep
+
     import numpy as np
     import pandas as pd
     import xarray as xr
-    from typing_extensions import TypeAlias
-
-    from striqt.waveform._typing import ArrayType
-    from ..specs import _TS, _TC, _TP
-
-    WarmupSweep: TypeAlias = specs.Sweep[specs.NoSource, specs.NoPeripherals, _TC]
 
 else:
     np = util.lazy_import('numpy')
@@ -37,12 +34,12 @@ else:
 SOURCE_ID_NAME = 'source_id'
 
 
-class EvaluationOptions(sa.EvaluationOptions[sa.dataarrays._TA], kw_only=True):
+class EvaluationOptions(sa.EvaluationOptions[TAR], kw_only=True):
     sweep_spec: specs.Sweep
-    extra_attrs: dict[str, typing.Any] = dataclasses.field(default_factory=dict)
+    extra_attrs: dict[str, Any] = dataclasses.field(default_factory=dict)
     correction: bool = False
-    cache_callback: typing.Callable | None = None
-    expand_dims: typing.Sequence[str] = (CAPTURE_DIM,)
+    cache_callback: Callable | None = None
+    expand_dims: Sequence[str] = (CAPTURE_DIM,)
 
     def __post_init__(self):
         super().__post_init__()
@@ -53,7 +50,7 @@ class DelayedDataset:
     delayed: dict[str, sa.dataarrays.DelayedDataArray]
     capture: specs.SensorCapture
     extra_coords: specs.AcquisitionInfo
-    extra_data: dict[str, typing.Any]
+    extra_data: dict[str, Any]
     config: EvaluationOptions
 
 
@@ -92,7 +89,7 @@ def concat_time_dim(datasets: list['xr.Dataset'], time_dim: str) -> 'xr.Dataset'
 
 
 def build_dataset_attrs(sweep: specs.Sweep):
-    attrs: dict[str, typing.Any] = {}
+    attrs: dict[str, Any] = {}
     as_dict = sweep.to_dict(unfreeze=True)
 
     if isinstance(sweep.description, str):
@@ -141,32 +138,32 @@ def build_capture_coords(
     return coords
 
 
-@typing.overload
+@overload
 def analyze(
     iq: sources.AcquiredIQ,
-    options: EvaluationOptions[typing.Literal[True]],
+    options: EvaluationOptions[Literal[True]],
 ) -> 'xr.Dataset': ...
 
 
-@typing.overload
+@overload
 def analyze(
     iq: sources.AcquiredIQ,
-    options: EvaluationOptions[typing.Literal['delayed']],
+    options: EvaluationOptions[Literal['delayed']],
 ) -> DelayedDataset: ...
 
 
-@typing.overload
+@overload
 def analyze(
     iq: sources.AcquiredIQ,
-    options: EvaluationOptions[typing.Literal[False]],
-) -> 'dict[str, ArrayType]': ...
+    options: EvaluationOptions[Literal[False]],
+) -> 'dict[str, Array]': ...
 
 
 @sa.util.stopwatch('', 'analysis')
 def analyze(
     iq: sources.AcquiredIQ,
     options: EvaluationOptions,
-) -> 'dict[str, ArrayType] | xr.Dataset | DelayedDataset':
+) -> 'dict[str, Array] | xr.Dataset | DelayedDataset':
     """convenience function to analyze a waveform from a specification.
 
     The waveform may be transformed with resampling and calibration
@@ -189,7 +186,7 @@ def analyze(
                 iq = resampling.resampling_correction(iq, overwrite_x=overwrite_x)
 
         opts = msgspec.structs.replace(options, as_xarray='delayed')
-        opts = typing.cast(sa.EvaluationOptions[typing.Literal['delayed']], opts)
+        opts = cast(sa.EvaluationOptions[Literal['delayed']], opts)
         analysis = specs.helpers.adjust_analysis(
             options.sweep_spec.analysis, capture.adjust_analysis
         )
@@ -197,7 +194,7 @@ def analyze(
 
     if iq.source_spec.array_backend == 'cupy':
         for name, value in list(iq.extra_data.items()):
-            if sw.util.is_cupy_array(value):
+            if sw.is_cupy_array(value):
                 iq.extra_data[name] = value.get()
 
     if not options.as_xarray:
@@ -323,7 +320,7 @@ def sweep_touches_gpu(sweep: specs.Sweep) -> bool:
     return False
 
 
-def build_warmup_sweep(sweep: specs.Sweep[_TS, _TP, _TC]) -> WarmupSweep:
+def build_warmup_sweep(sweep: specs.Sweep[TS, TP, TC]) -> WarmupSweep:
     """derive a warmup sweep specification derived from sweep.
 
     This is meant to trigger expensive python imports and warm up JIT caches. The goal
@@ -393,7 +390,7 @@ def prepare_compute(input_spec: specs.Sweep, skip_warmup: bool = False):
             import cupy  # type: ignore
 
         with sa.util.stopwatch('configure cupy', 'sweep', 1):
-            sa.util.configure_cupy()
+            sw.arrays.configure_cupy()
 
     warnings.filterwarnings(
         'ignore',
@@ -443,7 +440,7 @@ def index_dataset(
     ds: 'xr.Dataset',
     index_coords: list[str] = ['start_time', 'port'],
     *,
-    chunks: int | typing.Literal['auto'] | None = None,
+    chunks: int | Literal['auto'] | None = None,
 ) -> 'xr.Dataset':
     """Return an dataset with indexes applied across multiple axes. Apply multiple-coordinate indexing to the dataset.
 
@@ -470,7 +467,7 @@ def unstack_dataset(
     ds: 'xr.Dataset',
     dim_coords: list[str] = ['start_time', 'port'],
     *,
-    chunks: int | typing.Literal['auto'] | None = None,
+    chunks: int | Literal['auto'] | None = None,
 ) -> 'xr.Dataset':
     """Unstack a dataset from a flat list of captures into multiple dimensions.
 
@@ -543,7 +540,7 @@ def _coord_template(
 
 
 def _adc_overload_message(
-    extra_data: dict[str, typing.Sequence[float]], capture: specs.SensorCapture
+    extra_data: dict[str, Sequence[float]], capture: specs.SensorCapture
 ) -> str | None:
     if 'adc_headroom' in extra_data and isinstance(capture, specs.SoapyCapture):
         headroom = extra_data['adc_headroom']
@@ -601,9 +598,9 @@ def _check_coord_indexes(ds, index_coords: list[str]):
 
 
 def _if_overload_message(
-    extra_data: dict[str, typing.Sequence[float]],
-    capture: _TC,
-    sweep_spec: specs.Sweep[_TS, _TP, _TC],
+    extra_data: dict[str, Sequence[float]],
+    capture: TC,
+    sweep_spec: specs.Sweep[TS, TP, TC],
 ) -> str | None:
     if 'if_headroom' in extra_data:
         if_headroom = extra_data['if_headroom']
@@ -613,7 +610,7 @@ def _if_overload_message(
     if not isinstance(capture, specs.SoapyCapture):
         return None
     else:
-        captures = typing.cast(tuple[specs.SoapyCapture, ...], sweep_spec.captures)
+        captures = cast(tuple[specs.SoapyCapture, ...], sweep_spec.captures)
 
     gains = specs.helpers.max_by_frequency('gain', captures, sweep_spec.loops)
     caps = specs.helpers.split_capture_ports(capture)

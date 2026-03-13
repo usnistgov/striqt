@@ -1,7 +1,6 @@
 from __future__ import annotations as __
 
-import decimal
-import typing
+from typing import Any, Callable, Literal, Optional, TYPE_CHECKING, Union
 
 from .. import specs
 
@@ -10,29 +9,10 @@ from ..lib.register import registry
 
 import striqt.waveform as sw
 
-if typing.TYPE_CHECKING:
-    from types import ModuleType
-    from typing_extensions import ParamSpec
+if TYPE_CHECKING:
     from ..specs.structs import _Cellular5GNRSSBSync, _Cellular5GNRSSBCorrelator
-    import array_api_compat
     import numpy as np
-    from striqt.waveform._typing import ArrayType
-
-    _P = ParamSpec('_P')
-    _R = typing.TypeVar('_R', covariant=True)
-
-    class _AnalysisProtocol(typing.Protocol[_P, _R]):
-        def __call__(
-            self,
-            iq: 'sw.util.ArrayType',
-            capture: specs.Capture,
-            as_xarray: specs.types.AsXArray = True,
-            *args: _P.args,
-            **kwargs: _P.kwargs,
-        ) -> _R: ...
-
-        __name__: str
-
+    from ..lib.typing import Array, P, R, WrappedAnalysis
 
 else:
     np = util.lazy_import('numpy')
@@ -40,8 +20,8 @@ else:
 
 
 def hint_keywords(
-    func: typing.Callable[_P, typing.Any],
-) -> typing.Callable[[typing.Callable[..., _R]], '_AnalysisProtocol[_P, _R]']:
+    func: Callable[P, Any],
+) -> Callable[[WrappedAnalysis[..., R]], WrappedAnalysis[P, R]]:
     """fill in type hints for the analysis parameters"""
     return lambda f: f  # type: ignore
 
@@ -50,7 +30,7 @@ def hint_keywords(
     dtype='uint16', attrs={'standard_name': r'Cell Sector ID ($N_{ID}^\text{(2)}$)'}
 )
 @util.lru_cache()
-def cellular_cell_id2(capture: specs.Capture, spec: typing.Any):
+def cellular_cell_id2(capture: specs.Capture, spec: Any):
     values = np.array([0, 1, 2], dtype='uint16')
     return values
 
@@ -115,10 +95,10 @@ def empty_5g_ssb_correlation(
     *,
     capture: specs.Capture,
     spec: _Cellular5GNRSSBCorrelator,
-    coord_factories: list[typing.Callable],
+    coord_factories: list[Callable],
     dtype='complex64',
 ):
-    xp = sw.util.array_namespace(iq)
+    xp = sw.array_namespace(iq)
     meas_ax_shape = [len(f(capture, spec)) for f in coord_factories]
     new_shape = iq.shape[:-1] + tuple(meas_ax_shape)
     return xp.full(new_shape, 0, dtype=dtype)
@@ -141,7 +121,7 @@ def correlate_sync_sequence(
         params: The cell synchronization parameters (e.g. from `striqt.waveform.ofdm.pss_params` or `striqt.waveform.ofdm.sss_params`)
         cell_id_split: if not None, operate on groups of this size along the cell id axis (to reduce memory usage)
     """
-    xp = sw.util.array_namespace(ssb_iq)
+    xp = sw.array_namespace(ssb_iq)
 
     slot_count = params.slot_count
     corr_size = params.corr_size
@@ -190,20 +170,20 @@ def correlate_sync_sequence(
     return R
 
 
-ssb_iq_cache = register.KeywordArgumentCache([dataarrays.CAPTURE_DIM, 'spec'])
+ssb_iq_cache = register.KwArgCache([dataarrays.CAPTURE_DIM, 'spec'])
 
 
 @ssb_iq_cache.apply
 def get_5g_ssb_iq(
-    iq: ArrayType,
+    iq: Array,
     capture: specs.Capture,
     spec: _Cellular5GNRSSBCorrelator,
     oaresample=False,
-) -> ArrayType:
+) -> Array:
     """return a sync block waveform, which returns IQ that is recentered
     at baseband frequency spec.frequency_offset and downsampled to spec.sample_rate."""
 
-    xp = sw.util.array_namespace(iq)
+    xp = sw.array_namespace(iq)
 
     if oaresample:
         down = round(capture.sample_rate / spec.subcarrier_spacing / 8)
@@ -227,7 +207,7 @@ def get_5g_ssb_iq(
         out = xp.empty((iq.shape[0], size_out), dtype=iq.dtype)
 
         for i in range(out.shape[0]):
-            out[i] = sw.fourier.oaresample(
+            out[i] = sw.oaresample(
                 iq[i],
                 fs=capture.sample_rate,
                 up=up,
@@ -251,7 +231,7 @@ def get_5g_ssb_iq(
         shift = round(iq.shape[1] * spec.frequency_offset / capture.sample_rate)
 
         for i in range(out.shape[0]):
-            out[i] = sw.fourier.resample(
+            out[i] = sw.resample(
                 iq[i], num=size_out, axis=0, overwrite_x=False, shift=shift
             )
 
@@ -259,18 +239,16 @@ def get_5g_ssb_iq(
 
 
 def evaluate_spectrogram(
-    iq: ArrayType,
+    iq: Array,
     capture: specs.Capture,
     spec: specs.Spectrogram,
     *,
-    dtype: typing.Union[
-        typing.Literal['float16'], typing.Literal['float32']
-    ] = 'float32',
-    limit_digits: typing.Optional[int] = None,
+    dtype: Union[Literal['float16'], Literal['float32']] = 'float32',
+    limit_digits: Optional[int] = None,
     dB=True,
-) -> tuple[ArrayType, dict]:
+) -> tuple[Array, dict]:
     spg, attrs = _cached_spectrogram(iq=iq, capture=capture, spec=spec)
-    xp = sw.util.array_namespace(iq)
+    xp = sw.array_namespace(iq)
 
     copied = False
     if dB:
@@ -289,15 +267,15 @@ def evaluate_spectrogram(
     return spg, attrs
 
 
-spectrogram_cache = register.KeywordArgumentCache([dataarrays.CAPTURE_DIM, 'spec'])
+spectrogram_cache = register.KwArgCache([dataarrays.CAPTURE_DIM, 'spec'])
 
 
 @spectrogram_cache.apply
 def _cached_spectrogram(
-    iq: ArrayType,
+    iq: Array,
     capture: specs.Capture,
     spec: specs.Spectrogram,
-) -> tuple[ArrayType, dict]:
+) -> tuple[Array, dict]:
     spec = spec.validate()
 
     if sw.isroundmod(capture.sample_rate, spec.frequency_resolution):
@@ -340,7 +318,7 @@ def _cached_spectrogram(
             'when specified, time_aperture must be a multiple of (1-fractional_overlap)/frequency_resolution'
         )
 
-    spg = sw.fourier.spectrogram(
+    spg = sw.spectrogram(
         iq,
         window=spec.window,
         fs=capture.sample_rate,
@@ -357,18 +335,18 @@ def _cached_spectrogram(
     # truncate to the analysis bandwidth
     if spec.trim_stopband and np.isfinite(capture.analysis_bandwidth):
         # stick with python arithmetic to ensure consistency with axis bounds calculations
-        spg = sw.fourier.truncate_frequency_axis(
+        spg = sw.fourier.truncate_freqs(
             spg, nfft, capture.sample_rate, bandwidth=capture.analysis_bandwidth, axis=2
         )
 
     if frequency_bin_averaging is not None:
-        spg = sw.util.binned_mean(spg, frequency_bin_averaging, axis=2, fft=True)
+        spg = sw.binned_mean(spg, frequency_bin_averaging, axis=2, fft=True)
 
         # mean -> sum
         spg *= frequency_bin_averaging
 
     if time_bin_averaging is not None:
-        spg = sw.util.binned_mean(spg, time_bin_averaging, axis=1, fft=False)
+        spg = sw.binned_mean(spg, time_bin_averaging, axis=1, fft=False)
 
     if spec.integration_bandwidth is None:
         enbw = spec.frequency_resolution
@@ -384,37 +362,7 @@ def _cached_spectrogram(
 
 
 @util.lru_cache()
-def fftfreq(nfft: int, fs: float, dtype='float64', xp: ModuleType = np) -> ArrayType:
-    """compute fftfreq for a specified sample rate.
-
-    This is meant to produce higher-precision results for
-    rational sample rates in order to avoid rounding errors
-    when merging captures with different sample rates.
-    """
-
-    if not array_api_compat.is_numpy_namespace(np):  # type: ignore
-        return xp.asarray(fftfreq(nfft, fs, dtype))
-
-    # high resolution rational representation of frequency resolution
-    fres = decimal.Decimal(fs) / nfft
-    span = range(-nfft // 2, -nfft // 2 + nfft)
-    if nfft % 2 == 0:
-        values = [fres * n for n in span]
-    else:
-        values = [fres * (n + 1) for n in span]
-    return np.array(values, dtype=dtype)
-
-
-@registry.coordinates(
-    dtype='float64', attrs={'standard_name': 'Baseband Frequency', 'units': 'Hz'}
-)
-@util.lru_cache()
-def spectrogram_baseband_frequency(
-    capture: specs.Capture, spec: specs.Spectrogram, xp=np
-) -> np.ndarray:
-    if xp is not np:
-        return xp.array(spectrogram_baseband_frequency(capture, spec))
-
+def spectrogram_freqs(capture: specs.Capture, spec: specs.Spectrogram) -> np.ndarray:
     if sw.isroundmod(capture.sample_rate, spec.frequency_resolution):
         nfft = round(capture.sample_rate / spec.frequency_resolution)
     else:
@@ -434,16 +382,25 @@ def spectrogram_baseband_frequency(
     # use the striqt.waveform.fourier fftfreq for higher precision, which avoids
     # headaches when merging spectra with different sampling parameters due
     # to rounding errors.
-    freqs = sw.fourier.fftfreq(nfft, capture.sample_rate)
+    freqs = sw.fftfreq(nfft, capture.sample_rate)
 
     if spec.trim_stopband and np.isfinite(capture.analysis_bandwidth):
         # stick with python arithmetic here for numpy/cupy consistency
-        freqs = sw.fourier.truncate_frequency_axis(
+        freqs = sw.fourier.truncate_freqs(
             freqs, nfft, capture.sample_rate, capture.analysis_bandwidth, axis=0
         )
 
     if spec.integration_bandwidth is not None:
-        freqs = sw.util.binned_mean(freqs, frequency_bin_averaging, fft=True)
+        freqs = sw.binned_mean(freqs, frequency_bin_averaging, fft=True)
 
     # only now downconvert. round to a still-large number of digits
     return freqs.astype('float64').round(16)
+
+
+@registry.coordinates(
+    dtype='float64', attrs={'standard_name': 'Baseband Frequency', 'units': 'Hz'}
+)
+def spectrogram_baseband_frequency(
+    capture: specs.Capture, spec: specs.Spectrogram
+) -> np.ndarray:
+    return spectrogram_freqs(capture, spec)

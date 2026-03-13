@@ -13,7 +13,7 @@ import striqt.waveform as sw
 if typing.TYPE_CHECKING:
     import array_api_compat
     import numpy as np
-    import striqt.waveform._typing
+    import striqt.waveform.typing
 else:
     np = util.lazy_import('numpy')
     array_api_compat = util.lazy_import('array_api_compat')
@@ -42,17 +42,17 @@ _coord_factories = [
 dtype = 'complex64'
 
 
-sss_correlation_cache = register.KeywordArgumentCache(['capture', 'spec'])
+sss_correlation_cache = register.KwArgCache(['capture', 'spec'])
 
 
 @sss_correlation_cache.apply
 def correlate_5g_sss(
-    iq: 'striqt.waveform._typing.ArrayType',
+    iq: 'striqt.waveform.typing.Array',
     capture: specs.Capture,
     *,
     spec: specs.Cellular5GNRSSSCorrelator,
-) -> 'striqt.waveform._typing.ArrayType':
-    xp = sw.util.array_namespace(iq)
+) -> 'striqt.waveform.typing.Array':
+    xp = sw.array_namespace(iq)
 
     ssb_iq = shared.get_5g_ssb_iq(iq, capture=capture, spec=spec)
     if ssb_iq is None:
@@ -74,7 +74,7 @@ def correlate_5g_sss(
     )
 
     # split Nid into (Nid1, Nid2)
-    return sw.util.to_blocks(meas, 3, axis=-4)
+    return sw.axis_to_blocks(meas, 3, axis=-4)
 
 
 @shared.hint_keywords(specs.Cellular5GNSSSSync)
@@ -96,7 +96,7 @@ def cellular_5g_sss_sync(iq, capture: specs.Capture, window_fill=0.5, **kwargs):
 
     spec = specs.Cellular5GNSSSSync.from_dict(kwargs).validate()
 
-    xp = sw.util.array_namespace(iq)
+    xp = sw.array_namespace(iq)
 
     kwargs['as_xarray'] = False
 

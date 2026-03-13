@@ -11,6 +11,7 @@ import striqt.waveform as sw
 
 if typing.TYPE_CHECKING:
     import numpy as np
+    from ..lib.typing import Array
 else:
     np = util.lazy_import('numpy')
 
@@ -40,11 +41,7 @@ def spectrogram_ratio_power_bin(
     prefer_iq_source='pre_filter',
     attrs={'standard_name': 'Fraction of counts'},
 )
-def spectrogram_ratio_histogram(
-    iq: 'sw.util.ArrayType',
-    capture: specs.Capture,
-    **kwargs,
-):
+def spectrogram_ratio_histogram(iq: 'Array', capture: specs.Capture, **kwargs):
     spec = specs.SpectrogramHistogramRatio.from_dict(kwargs)
     spg_spec = specs.Spectrogram.from_spec(spec)
 
@@ -65,7 +62,7 @@ def spectrogram_ratio_histogram(
     metadata = dict(metadata)
     metadata.pop('units')
 
-    xp = sw.util.array_namespace(iq)
+    xp = sw.array_namespace(iq)
     bin_edges = _channel_power_histogram.make_power_histogram_bin_edges(
         power_low=spec.power_low,
         power_high=spec.power_high,

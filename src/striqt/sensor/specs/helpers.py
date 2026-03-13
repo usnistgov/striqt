@@ -3,12 +3,22 @@
 from __future__ import annotations as __
 
 from collections import Counter, defaultdict, ChainMap
-from fractions import Fraction
 import functools
 import itertools
 import numbers
 import string
-import typing
+from typing import (
+    Any,
+    Callable,
+    cast,
+    get_args,
+    get_type_hints,
+    Literal,
+    Mapping,
+    Tuple,
+    TYPE_CHECKING,
+    Union,
+)
 from datetime import datetime
 from pathlib import Path
 
@@ -19,12 +29,28 @@ from striqt.analysis.specs.helpers import _dec_hook, frozendict
 
 from . import structs as specs
 from . import types
-from .structs import _TS, _TC, _TP, _AdjustSourceCapturesMap, Sweep
-from ..lib import util
+from .structs import _AdjustSourceCapturesMap
 
 
-if typing.TYPE_CHECKING:
-    _T = typing.TypeVar('_T')
+if TYPE_CHECKING:
+    from ..lib.typing import CaptureConverterWrapper, TC, TypeVar
+
+    _T = TypeVar('_T')
+
+
+def convert_capture_arg(
+    capture_cls: type[specs.SensorCapture],
+) -> CaptureConverterWrapper:
+    """convert the first arg of the decorated function to capture_cls, then call"""
+
+    def wrapper(func):
+        @functools.wraps(func)
+        def wrapped(capture: specs.Capture, *args, **kwargs):
+            return func(capture_cls.from_spec(capture), *args, **kwargs)
+
+        return wrapped
+
+    return wrapper
 
 
 @sa.util.lru_cache()
@@ -46,9 +72,7 @@ def _check_fields(
 
 
 @sa.util.lru_cache()
-def pairwise_by_port(
-    c1: _TC, c2: _TC | None, is_new: bool
-) -> list[tuple[_TC, _TC | None]]:
+def pairwise_by_port(c1: TC, c2: TC | None, is_new: bool) -> list[tuple[TC, TC | None]]:
     # a list with 1 capture per port
     c1_split = split_capture_ports(c1)
 
@@ -64,15 +88,15 @@ def pairwise_by_port(
 
 @sa.util.lru_cache()
 def _expand_capture_loops(
-    captures: tuple[_TC, ...],
+    captures: tuple[TC, ...],
     loops: tuple[specs.LoopSpec, ...],
     adjust: specs.AdjustCapturesType | None = None,
     *,
     source_id: types.SourceID | None = None,
-    cls: type[_TC] | None = None,
+    cls: type[TC] | None = None,
     only_fields: tuple[str, ...] | None = None,
     loop_only_nyquist: bool = False,
-) -> tuple[_TC, ...]:
+) -> tuple[TC, ...]:
     """evaluate the loop specification, and flatten into one list of loops"""
 
     if only_fields is not None:
@@ -92,7 +116,7 @@ def _expand_capture_loops(
     defaults = {k: v[0] for k, v in loop_points.items() if len(v) > 0}
     combinations = itertools.product(*loop_points.values())
 
-    cdicts = typing.cast(tuple[dict, ...], to_builtins(captures))
+    cdicts = cast(tuple[dict, ...], to_builtins(captures))
 
     result = []
     for values in combinations:
@@ -124,11 +148,11 @@ def _expand_capture_loops(
 
 
 def loop_captures(
-    sweep: specs.Sweep[typing.Any, typing.Any, _TC],
+    sweep: specs.Sweep[Any, Any, TC],
     source_id: types.SourceID | None = None,
     *,
     only_fields: tuple[str, ...] | None = None,
-) -> tuple[_TC, ...]:
+) -> tuple[TC, ...]:
     """evaluate the loop specification, and flatten into one list of loops"""
 
     if len(sweep.captures) > 0:
@@ -158,7 +182,7 @@ def loop_captures(
 @sa.util.lru_cache()
 def adjust_analysis(
     analyses: specs.AnalysisGroup,
-    adjust_analysis: typing.Mapping[str, typing.Any] | None,
+    adjust_analysis: Mapping[str, Any] | None,
 ) -> specs.AnalysisGroup:
     if adjust_analysis is None or len(adjust_analysis) == 0:
         return analyses
@@ -205,15 +229,12 @@ def get_capture_type(sweep_cls: type[specs.Sweep]) -> type[specs.SensorCapture]:
     if sweep_cls._bindings__ is not None:
         return sweep_cls._bindings__.schema.capture
     else:
-        captures_type = typing.get_type_hints(sweep_cls)['captures']
-        return typing.get_args(captures_type)[0]
-
-
-Capture = typing.TypeVar('Capture', bound=specs.SensorCapture)
+        captures_type = get_type_hints(sweep_cls)['captures']
+        return get_args(captures_type)[0]
 
 
 @sa.util.lru_cache()
-def split_capture_ports(capture: Capture) -> list[Capture]:
+def split_capture_ports(capture: TC) -> list[TC]:
     """split a multi-channel capture into a list of single-channel captures.
 
     If capture is not a multi-channel capture (its channel field is just a number),
@@ -243,7 +264,7 @@ def max_by_frequency(
     field: str,
     captures: tuple[specs.SoapyCapture, ...],
     loops: tuple[specs.LoopSpec, ...] = (),
-) -> dict[types.Port, dict[types.CenterFrequency, typing.Any]]:
+) -> dict[types.Port, dict[types.CenterFrequency, Any]]:
     """get the maximum value of a field across looped captures by center frequency"""
 
     map = {}
@@ -263,7 +284,7 @@ def max_by_frequency(
 
 
 _AdjustCaptureMap = dict[
-    typing.Union[types.SourceID, typing.Literal['defaults']], _AdjustSourceCapturesMap
+    Union[types.SourceID, Literal['defaults']], _AdjustSourceCapturesMap
 ]
 
 
@@ -359,10 +380,10 @@ def _list_capture_adjustments(
 
 
 def adjust_captures(
-    capture: typing.Mapping[str, typing.Any],
+    capture: Mapping[str, Any],
     adjust_spec: specs.AdjustCapturesType,
     source_id: types.SourceID | None,
-) -> dict[str, typing.Any]:
+) -> dict[str, Any]:
     """evaluate the field values"""
 
     if not isinstance(capture, (dict, frozendict)):
@@ -442,7 +463,7 @@ def adjust_captures(
 def _get_source_capture_adjustments(
     spec: specs.AdjustCapturesType,
     source_id: str | None,
-) -> dict[str, typing.Any]:
+) -> dict[str, Any]:
     """get a map of capture adjustments that do not require lookups"""
 
     ret = {}
@@ -459,7 +480,7 @@ def _get_source_capture_adjustments(
 def get_path_fields(
     sweep: specs.Sweep,
     *,
-    source_id: str | typing.Callable[[], str],
+    source_id: str | Callable[[], str],
     spec_path: Path | str | None = None,
 ) -> dict[str, str]:
     """return a mapping for string `'{field_name}'.format()` style mapping values"""
@@ -499,7 +520,7 @@ def ensure_tuple(obj: _T | tuple[_T, ...], size: int | None = None) -> tuple[_T,
 
 @sa.util.lru_cache()
 def get_unique_ports(
-    captures: tuple[_TC, ...],
+    captures: tuple[TC, ...],
     loops: tuple[specs.LoopSpec, ...] | None = None,
 ) -> tuple[int, ...]:
     ports = set()
@@ -508,7 +529,7 @@ def get_unique_ports(
         for l in loops:
             if l.field != 'port':
                 continue
-            looped_ports = typing.cast(list[specs.types.Port], l.get_points())
+            looped_ports = cast(list[specs.types.Port], l.get_points())
             for p in looped_ports:
                 ports |= set(ensure_tuple(p))
 
@@ -580,7 +601,7 @@ def _convert_label_lookup_keys(sweep: specs.Sweep) -> specs.AdjustCapturesType:
             elif len(v.key) == 1:
                 key_type = lookup_types[v.key[0]]
             elif all(kc in lookup_types for kc in v.key):
-                key_type = typing.Tuple[tuple(lookup_types[kc] for kc in v.key)]
+                key_type = Tuple[tuple(lookup_types[kc] for kc in v.key)]
             else:
                 # prune refs with invalid lookups
                 continue
@@ -609,19 +630,19 @@ def _convert_label_lookup_keys(sweep: specs.Sweep) -> specs.AdjustCapturesType:
     return sa.specs.helpers.freeze(fixed, depth)  # type: ignore
 
 
-def to_builtins(obj: typing.Any) -> typing.Any:
+def to_builtins(obj: Any) -> Any:
     return msgspec.to_builtins(obj, enc_hook=sa.specs.helpers._enc_hook)
 
 
 @sa.util.lru_cache()
 def list_capture_adjustments(
-    sweep: specs.Sweep[typing.Any, typing.Any, _TC], source_id: str
+    sweep: specs.Sweep[Any, Any, TC], source_id: str
 ) -> dict[str, tuple[str, ...]]:
     lookup_fields = _list_capture_adjustments(
         sweep.adjust_captures, source_id=source_id
     )
     captures = loop_captures(sweep, only_fields=lookup_fields, source_id=source_id)
-    cdicts = typing.cast(tuple[dict[str, typing.Any], ...], to_builtins(captures))
+    cdicts = cast(tuple[dict[str, Any], ...], to_builtins(captures))
     result = defaultdict(dict)
 
     for c in cdicts:
@@ -715,7 +736,7 @@ def concat_group_sizes(
 
 
 # %% msgspec field type introspection
-def _infer_field_template(type_: msgspec.inspect.Type) -> tuple[dict, typing.Any]:
+def _infer_field_template(type_: msgspec.inspect.Type) -> tuple[dict, Any]:
     """returns an (attrs, default_value) pair for the given msgspec field type"""
     from msgspec import inspect as mi
     import pandas as pd
@@ -764,7 +785,7 @@ def _infer_field_template(type_: msgspec.inspect.Type) -> tuple[dict, typing.Any
 @sa.util.lru_cache()
 def field_template_values(
     spec_cls: type[msgspec.Struct],
-) -> tuple[dict[str, typing.Any], dict[str, typing.Any]]:
+) -> tuple[dict[str, Any], dict[str, Any]]:
     """returns a cached xr.Coordinates object to use as a template for data results"""
 
     attrs = {}
@@ -782,7 +803,7 @@ def field_template_values(
 @sa.util.lru_cache()
 def get_field_metadata(struct: type[specs.SpecBase], field: str) -> dict[str, str]:
     """introspect an attrs dict for xarray from the specified field in `struct`"""
-    hints = typing.get_type_hints(struct, include_extras=True)
+    hints = get_type_hints(struct, include_extras=True)
 
     try:
         metas = hints[field].__metadata__

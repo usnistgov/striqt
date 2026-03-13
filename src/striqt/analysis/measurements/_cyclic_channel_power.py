@@ -43,7 +43,7 @@ def cyclic_lag(capture: specs.Capture, spec: specs.CyclicChannelPower):
 def cyclic_channel_power(iq, capture: specs.Capture, **kwargs):
     spec = specs.CyclicChannelPower.from_dict(kwargs)
 
-    xp = sw.util.array_namespace(iq)
+    xp = sw.array_namespace(iq)
 
     nested_ret = sw.iq_to_cyclic_power(
         iq,

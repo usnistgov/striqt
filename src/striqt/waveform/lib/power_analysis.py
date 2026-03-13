@@ -11,16 +11,10 @@ from functools import partial
 from numbers import Number
 from types import ModuleType
 from typing import Any, Optional
+from . import util
 
-
-from .util import (
-    array_namespace,
-    float_dtype_like,
-    is_cupy_array,
-    isroundmod,
-    lazy_import,
-    lru_cache,
-    to_blocks,
+from .arrays import (
+    array_namespace, float_dtype_like, is_cupy_array, isroundmod, axis_to_blocks
 )
 
 if typing.TYPE_CHECKING:
@@ -29,15 +23,13 @@ if typing.TYPE_CHECKING:
     import pandas as pd
     import xarray as xr
 
-    from ._typing import ArrayLike, ArrayType, _AL, _ALN, _AT
-
-    _T = typing.TypeVar('_T')
+    from .typing import ArrayLike, Array, _AL, _ALN, _AT
 
 else:
-    pd = lazy_import('pandas')
-    ne = lazy_import('numexpr')
-    xr = lazy_import('xarray')
-    np = lazy_import('numpy')
+    pd = util.lazy_import('pandas')
+    ne = util.lazy_import('numexpr')
+    xr = util.lazy_import('xarray')
+    np = util.lazy_import('numpy')
 
 warnings.filterwarnings('ignore', message='.*divide by zero.*')
 warnings.filterwarnings('ignore', message='.*invalid value encountered.*')
@@ -76,7 +68,7 @@ def unit_wave_to_linear(s: str):
     return s
 
 
-@lru_cache()
+@util.lru_cache()
 def stat_ufunc_from_shorthand(kind, xp=None, axis=0) -> typing.Callable:
     if xp is None:
         xp = np
@@ -112,11 +104,11 @@ def stat_ufunc_from_shorthand(kind, xp=None, axis=0) -> typing.Callable:
 
 def _arraylike_with_buffer(
     x: ArrayLike | Number, out: ArrayLike | None = None, min_dtype: Any = None
-) -> tuple[ArrayType, ArrayType, ModuleType]:
+) -> tuple[Array, Array, ModuleType]:
     """interpret the array-like input and output buffer arguments.
 
     Returns:
-        ArrayType objects pointing to the underlying array-type objects,
+        Array objects pointing to the underlying array-type objects,
         and the module to work with them
     """
     try:
@@ -148,7 +140,7 @@ def _arraylike_with_buffer(
 
 
 def _repackage_arraylike(
-    values: ArrayType,
+    values: Array,
     obj: _ALN,
     *,
     unit_transform: Optional[typing.Callable] = None,
@@ -189,7 +181,7 @@ def powtodB(x: _ALN, abs: bool = True, eps: float = 0, out=None) -> _ALN:
             expr = f'real(10*log10(values+eps){eps_str})'
         values = ne.evaluate(expr, out=out, casting='unsafe')
     elif is_cupy_array(xp):
-        from ._jit import cuda
+        from .jit import cuda
 
         if eps == 0:
             if abs:
@@ -227,7 +219,7 @@ def dBtopow(x: _ALN, out=None) -> _ALN:
         expr = '10**(values/10.)'
         values = ne.evaluate(expr, out=out, casting='unsafe')
     elif is_cupy_array(xp):
-        from ._jit import cuda
+        from .jit import cuda
 
         values = cuda.dBtopow(x, out)
     else:
@@ -253,7 +245,7 @@ def envtopow(x: _ALN, out=None) -> _ALN:
         if xp.iscomplexobj(values):
             values = values.real  # type: ignore
     elif is_cupy_array(xp):
-        from ._jit import cuda
+        from .jit import cuda
 
         values = cuda.envtopow(x, out)
     else:
@@ -279,7 +271,7 @@ def envtodB(x: _ALN, abs: bool = True, eps: float = 0, out=None) -> _ALN:
             expr = f'real(20*log10(values+eps){eps_str})'
         values = ne.evaluate(expr, out=out, casting='unsafe')
     elif is_cupy_array(xp):
-        from ._jit import cuda
+        from .jit import cuda
 
         if eps == 0:
             if abs:
@@ -345,7 +337,7 @@ def dBlinsum(x_dB: _AL, axis=None, overwrite_x=False) -> _AL:
 
 
 def iq_to_bin_power(
-    iq: ArrayType,
+    iq: Array,
     Ts: float,
     Tbin: float,
     randomize: bool = False,
@@ -383,7 +375,7 @@ def iq_to_bin_power(
         offsets = xp.arange(N)
         iq_blocks = iq[starts[:, np.newaxis] + offsets[np.newaxis, :]]
     else:
-        iq_blocks = to_blocks(iq, N, axis=axis, truncate=truncate)
+        iq_blocks = axis_to_blocks(iq, N, axis=axis, truncate=truncate)
 
     detector = stat_ufunc_from_shorthand(kind, xp=xp, axis=axis + 1)
     power_bins = envtopow(iq_blocks)
@@ -392,7 +384,7 @@ def iq_to_bin_power(
 
 
 def iq_to_cyclic_power(
-    x: ArrayType,
+    x: Array,
     Ts: float,
     detector_period: float,
     cyclic_period: float,
@@ -400,7 +392,7 @@ def iq_to_cyclic_power(
     detectors=('rms', 'peak'),
     cycle_stats=('min', 'mean', 'max'),
     axis=0,
-) -> dict[str, dict[str, ArrayType]]:
+) -> dict[str, dict[str, Array]]:
     """computes a time series of periodic frame power statistics.
 
     The time axis on the cyclic time lag [0, cyclic_period) is binned with step size

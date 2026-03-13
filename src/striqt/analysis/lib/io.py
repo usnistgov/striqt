@@ -14,6 +14,7 @@ from .. import specs
 
 from . import dataarrays, register, util
 
+
 if typing.TYPE_CHECKING:
     import numcodecs
     import numpy as np
@@ -21,19 +22,8 @@ if typing.TYPE_CHECKING:
     import xarray as xr
     import yaml
     import zarr
-    import zarr.storage
-    from typing_extensions import TypeAlias
 
-    from striqt.waveform._typing import ArrayType
-
-    _ChunksType = str | int | typing.Literal['auto'] | tuple[int, ...] | None
-
-    if hasattr(zarr.storage, 'Store'):
-        # zarr 2.x
-        StoreType: TypeAlias = zarr.storage.Store  # type: ignore
-    else:
-        # zarr 3.x
-        StoreType: TypeAlias = zarr.abc.store.Store  # type: ignore
+    from .typing import Array, ChunksSize, FileStream, ZarrFormat, ZarrStore
 
 else:
     numcodecs = util.lazy_import('numcodecs')
@@ -44,133 +34,15 @@ else:
     yaml = util.lazy_import('yaml')
 
 warnings.filterwarnings(
-    'ignore',
-    category=FutureWarning,
-    message='.*is deprecated and will be removed in a Zarr-Python version 3.*',
+    'ignore', '.*removed in a Zarr-Python version 3.*', FutureWarning
 )
 
 warnings.filterwarnings(
-    'ignore', category=UserWarning, module='.*zipfile.*', message='.*Duplicate name.*'
+    'ignore', '.*Duplicate name.*', UserWarning, module='.*zipfile.*'
 )
 
 
-@functools.cache
-def _zarr_version() -> tuple[int, ...]:
-    return tuple(int(n) for n in zarr.__version__.split('.'))
-
-
-@functools.cache
-def _xarray_version() -> tuple[int, ...]:
-    return tuple(int(n) for n in xr.__version__.split('.'))
-
-
-def _get_store_info(
-    store, zarr_format: str | typing.Literal[2, 3] = 'auto'
-) -> tuple[bool, dict]:
-    path = store.path if hasattr(store, 'path') else store.root
-
-    if isinstance(zarr_format, str):
-        zarr_format = zarr_format.lower()
-
-    if zarr_format in (2, 3):
-        pass
-    elif zarr_format == 'auto':
-        if _zarr_version() < (3, 0, 0):
-            zarr_format = 2
-        else:
-            zarr_format = 3
-    else:
-        raise TypeError('zarr_format must be one of (2,3,"auto")')
-
-    if zarr_format == 2:
-        exists = len(store) > 0
-        kws = {'zarr_version': 2}
-    else:
-        exists = Path(path).exists()
-        kws = {'zarr_format': 3}
-
-    return exists, kws
-
-
-def _choose_chunk_sizes(
-    ds: 'xr.Dataset|xr.DataArray', data_bytes=100_000_000, dim: str = 'capture'
-) -> dict[str, int]:
-    """pick chunk and chunk sizing for each data variable in data"""
-    chunks = {dim: ds.sizes[dim]}
-
-    if data_bytes is None:
-        return chunks
-
-    for da in ds.data_vars.values():
-        if da.nbytes < data_bytes:
-            continue
-        else:
-            reduction = math.ceil(da.nbytes / data_bytes)
-
-        reduce_dim = str(da.dims[-1])
-        if reduce_dim == dim:
-            continue
-
-        chunk_size = max(1, da.sizes[reduce_dim] // reduction)
-
-        if reduce_dim not in chunks or chunk_size < chunks[reduce_dim]:
-            chunks[reduce_dim] = chunk_size
-
-    return chunks
-
-
-def _build_encodings_zarr_v3(
-    data, registry: register.AnalysisRegistry, compression=True
-):
-    if isinstance(compression, zarr.core.codec_pipeline.Codec):  # type: ignore
-        compressors = [compression]
-    elif compression:
-        from zarr import codecs  # type: ignore
-
-        shuffle = codecs.BloscShuffle.shuffle
-        compressors = [codecs.BloscCodec(cname='zstd', clevel=1, shuffle=shuffle)]
-    else:
-        compressors = None
-
-    encodings = defaultdict(dict)
-    info_map = {info.name: info for info in registry.values()}
-
-    for name, var in data.variables.items():
-        meas_info = info_map.get(name, None)
-        if meas_info is None or not meas_info.store_compressed:
-            encodings[name]['compressors'] = None
-        elif issubclass(var.dtype.type, np.str_):
-            encodings[name]['compressors'] = None
-        else:
-            encodings[name]['compressors'] = compressors
-
-    return encodings
-
-
-def _build_encodings_zarr_v2(
-    data, registry: register.AnalysisRegistry, compression=True
-):
-    if isinstance(compression, numcodecs.abc.Codec):  # type: ignore
-        compressor = compression
-    elif compression:
-        compressor = numcodecs.Blosc('zstd', clevel=1)
-    else:
-        compressor = None
-
-    encodings = defaultdict(dict)
-    info_map = {info.name: info for info in registry.values()}
-
-    for name in data.data_vars.keys():
-        meas_info = info_map.get(name, None)
-        if meas_info is None or not meas_info.store_compressed:
-            encodings[name]['compressor'] = None
-        else:
-            encodings[name]['compressor'] = compressor
-
-    return encodings
-
-
-def open_store(target: str | Path, *, mode: str) -> StoreType:
+def open_store(target: str | Path, *, mode: str) -> ZarrStore:
     import zarr.storage
 
     if _zarr_version() < (3, 0, 0):
@@ -208,17 +80,17 @@ def open_store(target: str | Path, *, mode: str) -> StoreType:
 
 
 def dump(
-    store: 'StoreType',
+    store: 'ZarrStore',
     data: 'xr.DataArray | xr.Dataset',
     *,
     append_dim: str = 'capture',
     compression: bool = True,
-    zarr_format: str | typing.Literal[2, 3] = 'auto',
+    zarr_format: ZarrFormat = 'auto',
     compute: bool = True,
-    chunk_bytes: int | typing.Literal['auto'] = 50_000_000,
+    chunk_bytes: ChunksSize = 50_000_000,
     max_threads: int | None = None,
     **kwargs,
-) -> 'StoreType':
+) -> 'ZarrStore':
     """serialize a dataset into a zarr directory or zipfile"""
 
     if max_threads is not None:
@@ -279,7 +151,7 @@ def dump(
         return data.to_zarr(store, **kws, **kwargs)
 
 
-def load(path: str | Path, chunks: _ChunksType = None, **kwargs) -> 'xr.Dataset':
+def load(path: str | Path, chunks: ChunksSize = None, **kwargs) -> 'xr.Dataset':
     """load a dataset or data array.
 
     Args:
@@ -296,116 +168,6 @@ def load(path: str | Path, chunks: _ChunksType = None, **kwargs) -> 'xr.Dataset'
         return result
     else:
         return result.unify_chunks()
-
-
-def _deep_update(dict1, dict2):
-    """nested merge of two dictionaries"""
-    for key, value in dict2.items():
-        if key not in dict1:
-            continue
-        if isinstance(dict1[key], dict) and isinstance(value, dict):
-            # If both values are dicts, merge them recursively
-            _deep_update(dict1[key], value)
-        else:
-            # Otherwise, the value from dict2 overwrites the one from dict1
-            dict1[key] = value
-
-
-class _YAMLFrozenLoader(yaml.SafeLoader):
-    def _construct_sequence(
-        self, node: SequenceNode, deep: bool = False
-    ) -> tuple[typing.Any, ...]:
-        return tuple(super().construct_sequence(node, deep))
-
-
-_YAMLFrozenLoader.add_constructor(
-    yaml.resolver.BaseResolver.DEFAULT_SEQUENCE_TAG,
-    _YAMLFrozenLoader._construct_sequence,
-)
-
-
-def _expand_paths(node: yaml.Node, root_dir: Path) -> list[str]:
-    def glob_path(s: str):
-        p = Path(s)
-        if p.is_absolute():
-            rel = p.parent
-            s = p.name
-        else:
-            rel = root_dir
-        paths = list(str(g.relative_to(root_dir)) for g in rel.glob(s))
-        if len(paths) == 0:
-            raise FileNotFoundError(s)
-        return paths
-
-    if isinstance(node.value, str):
-        values = glob_path(node.value)
-    elif isinstance(node.value, (list, tuple)):
-        values = []
-        for n in node.value:
-            values.extend(glob_path(n.value))
-    else:
-        raise TypeError(f'invalid tag type {type(node.value)!r} in !import')
-
-    return sorted(values)
-
-
-class _YAMLIncludeConstructor(yaml.Loader):
-    _lock = threading.RLock()
-
-    def __init__(self, path):
-        self.nested_paths: list[Path] = [Path(path)]
-
-    def __enter__(self):
-        self._lock.acquire()
-        yaml.add_constructor('!include', self, Loader=_YAMLFrozenLoader)  # type: ignore
-
-    def __exit__(self, *args):
-        self._lock.release()
-
-    def get_include_path(self, s: str):
-        p = Path(s)
-        if p.is_absolute():
-            pass
-        else:
-            p = self.nested_paths[-1].parent / p
-        self.nested_paths.append(p)
-
-        return p
-
-    def pop_include_path(self):
-        self.nested_paths.pop()
-
-    def __call__(self, loader: yaml.Loader, node: yaml.Node):
-        if not node.tag.startswith('!include'):
-            raise ValueError(f'unknown tag {node.tag!r}')
-
-        values = _expand_paths(node, root_dir=self.nested_paths[0].parent)
-
-        content = []
-        for v in values:
-            path = self.get_include_path(v)
-            with open(path, 'rb') as stream:
-                content.append(yaml.load(stream, _YAMLFrozenLoader))
-            self.pop_include_path()
-
-        if len(content) == 1:
-            return content[0]
-
-        if all(isinstance(c, dict) for c in content):
-            result = dict(content[0])
-            for d in content[1:]:
-                result.update(d)
-        elif all(isinstance(c, (tuple, list)) for c in content):
-            result = list(content[0])
-            for l in content[1:]:
-                result.extend(l)
-        else:
-            raise TypeError(
-                'contents of multiple !include files be '
-                'either all mappings or all sequences'
-            )
-
-        return result
 
 
 def decode_from_yaml_file(
@@ -444,15 +206,7 @@ def decode_from_yaml_file(
         raise TypeError(f'unsupported type {repr(type)}')
 
 
-class _FileStreamProtocol(typing.Protocol):
-    def close(self):
-        pass
-
-    def read(self, count: int) -> ArrayType:
-        pass
-
-
-class _FileStreamBase(_FileStreamProtocol):
+class _FileStreamBase:
     def __init__(
         self,
         path,
@@ -469,6 +223,12 @@ class _FileStreamBase(_FileStreamProtocol):
         self._xp = xp
         self._capture_dict = capture_dict
         self.seek(0)
+
+    def close(self):
+        pass
+
+    def read(self, count: int) -> Array:
+        raise NotImplementedError
 
     def seek(self, pos):
         self._leftover = None
@@ -821,7 +581,7 @@ def open_bare_iq(
     loop: bool = False,
     xp=np,
     **kws,
-) -> _FileStreamBase:
+) -> FileStream:
     if format in ('auto', None):
         format = Path(path).suffix
 
@@ -858,3 +618,227 @@ def _is_fsspec_url(url_string: Path | str) -> typing.TypeIs[str]:
 
     protocol, _ = fsspec.core.split_protocol(url_string)
     return protocol is not None
+
+
+@functools.cache
+def _zarr_version() -> tuple[int, ...]:
+    return tuple(int(n) for n in zarr.__version__.split('.'))
+
+
+@functools.cache
+def _xarray_version() -> tuple[int, ...]:
+    return tuple(int(n) for n in xr.__version__.split('.'))
+
+
+def _get_store_info(store, zarr_format: ZarrFormat = 'auto') -> tuple[bool, dict]:
+    path = store.path if hasattr(store, 'path') else store.root
+
+    if isinstance(zarr_format, str):
+        zarr_format = zarr_format.lower()
+
+    if zarr_format in (2, 3):
+        pass
+    elif zarr_format == 'auto':
+        if _zarr_version() < (3, 0, 0):
+            zarr_format = 2
+        else:
+            zarr_format = 3
+    else:
+        raise TypeError('zarr_format must be one of (2,3,"auto")')
+
+    if zarr_format == 2:
+        exists = len(store) > 0
+        kws = {'zarr_version': 2}
+    else:
+        exists = Path(path).exists()
+        kws = {'zarr_format': 3}
+
+    return exists, kws
+
+
+def _choose_chunk_sizes(
+    ds: 'xr.Dataset|xr.DataArray', data_bytes=100_000_000, dim: str = 'capture'
+) -> dict[str, int]:
+    """pick chunk and chunk sizing for each data variable in data"""
+    chunks = {dim: ds.sizes[dim]}
+
+    if data_bytes is None:
+        return chunks
+
+    for da in ds.data_vars.values():
+        if da.nbytes < data_bytes:
+            continue
+        else:
+            reduction = math.ceil(da.nbytes / data_bytes)
+
+        reduce_dim = str(da.dims[-1])
+        if reduce_dim == dim:
+            continue
+
+        chunk_size = max(1, da.sizes[reduce_dim] // reduction)
+
+        if reduce_dim not in chunks or chunk_size < chunks[reduce_dim]:
+            chunks[reduce_dim] = chunk_size
+
+    return chunks
+
+
+def _build_encodings_zarr_v3(
+    data, registry: register.AnalysisRegistry, compression=True
+):
+    if isinstance(compression, zarr.core.codec_pipeline.Codec):  # type: ignore
+        compressors = [compression]
+    elif compression:
+        from zarr import codecs  # type: ignore
+
+        shuffle = codecs.BloscShuffle.shuffle
+        compressors = [codecs.BloscCodec(cname='zstd', clevel=1, shuffle=shuffle)]
+    else:
+        compressors = None
+
+    encodings = defaultdict(dict)
+    info_map = {info.name: info for info in registry.values()}
+
+    for name, var in data.variables.items():
+        meas_info = info_map.get(name, None)
+        if meas_info is None or not meas_info.store_compressed:
+            encodings[name]['compressors'] = None
+        elif issubclass(var.dtype.type, np.str_):
+            encodings[name]['compressors'] = None
+        else:
+            encodings[name]['compressors'] = compressors
+
+    return encodings
+
+
+def _build_encodings_zarr_v2(
+    data, registry: register.AnalysisRegistry, compression=True
+):
+    if isinstance(compression, numcodecs.abc.Codec):  # type: ignore
+        compressor = compression
+    elif compression:
+        compressor = numcodecs.Blosc('zstd', clevel=1)
+    else:
+        compressor = None
+
+    encodings = defaultdict(dict)
+    info_map = {info.name: info for info in registry.values()}
+
+    for name in data.data_vars.keys():
+        meas_info = info_map.get(name, None)
+        if meas_info is None or not meas_info.store_compressed:
+            encodings[name]['compressor'] = None
+        else:
+            encodings[name]['compressor'] = compressor
+
+    return encodings
+
+
+def _deep_update(dict1, dict2):
+    """nested merge of two dictionaries"""
+    for key, value in dict2.items():
+        if key not in dict1:
+            continue
+        if isinstance(dict1[key], dict) and isinstance(value, dict):
+            # If both values are dicts, merge them recursively
+            _deep_update(dict1[key], value)
+        else:
+            # Otherwise, the value from dict2 overwrites the one from dict1
+            dict1[key] = value
+
+
+class _YAMLFrozenLoader(yaml.SafeLoader):
+    def _construct_sequence(
+        self, node: SequenceNode, deep: bool = False
+    ) -> tuple[typing.Any, ...]:
+        return tuple(super().construct_sequence(node, deep))
+
+
+_YAMLFrozenLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_SEQUENCE_TAG,
+    _YAMLFrozenLoader._construct_sequence,
+)
+
+
+def _expand_paths(node: yaml.Node, root_dir: Path) -> list[str]:
+    def glob_path(s: str):
+        p = Path(s)
+        if p.is_absolute():
+            rel = p.parent
+            s = p.name
+        else:
+            rel = root_dir
+        paths = list(str(g.relative_to(root_dir)) for g in rel.glob(s))
+        if len(paths) == 0:
+            raise FileNotFoundError(s)
+        return paths
+
+    if isinstance(node.value, str):
+        values = glob_path(node.value)
+    elif isinstance(node.value, (list, tuple)):
+        values = []
+        for n in node.value:
+            values.extend(glob_path(n.value))
+    else:
+        raise TypeError(f'invalid tag type {type(node.value)!r} in !import')
+
+    return sorted(values)
+
+
+class _YAMLIncludeConstructor(yaml.Loader):
+    _lock = threading.RLock()
+
+    def __init__(self, path):
+        self.nested_paths: list[Path] = [Path(path)]
+
+    def __enter__(self):
+        self._lock.acquire()
+        yaml.add_constructor('!include', self, Loader=_YAMLFrozenLoader)  # type: ignore
+
+    def __exit__(self, *args):
+        self._lock.release()
+
+    def get_include_path(self, s: str):
+        p = Path(s)
+        if p.is_absolute():
+            pass
+        else:
+            p = self.nested_paths[-1].parent / p
+        self.nested_paths.append(p)
+
+        return p
+
+    def pop_include_path(self):
+        self.nested_paths.pop()
+
+    def __call__(self, loader: yaml.Loader, node: yaml.Node):
+        if not node.tag.startswith('!include'):
+            raise ValueError(f'unknown tag {node.tag!r}')
+
+        values = _expand_paths(node, root_dir=self.nested_paths[0].parent)
+
+        content = []
+        for v in values:
+            path = self.get_include_path(v)
+            with open(path, 'rb') as stream:
+                content.append(yaml.load(stream, _YAMLFrozenLoader))
+            self.pop_include_path()
+
+        if len(content) == 1:
+            return content[0]
+
+        if all(isinstance(c, dict) for c in content):
+            result = dict(content[0])
+            for d in content[1:]:
+                result.update(d)
+        elif all(isinstance(c, (tuple, list)) for c in content):
+            result = list(content[0])
+            for l in content[1:]:
+                result.extend(l)
+        else:
+            raise TypeError(
+                'contents of multiple !include files be '
+                'either all mappings or all sequences'
+            )
+
+        return result

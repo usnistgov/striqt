@@ -8,39 +8,35 @@ import logging
 import sys
 import threading
 import time
-import typing
+from typing import Any, Generator, Iterable, TYPE_CHECKING
 from pathlib import Path
 
 import striqt.analysis as sa
 
-from striqt.waveform.util import lazy_import
+from striqt.waveform.lib.util import lazy_import
 
-if typing.TYPE_CHECKING:
-    import typing_extensions
+
+if TYPE_CHECKING:
     import exceptiongroup
     import concurrent.futures
+    from .typing import GenericWrapper, TypeVar
 
-    _P = typing_extensions.ParamSpec('_P')
-    _R = typing_extensions.TypeVar('_R', covariant=True)
-    _T = typing.TypeVar('_T')
-    _Tfunc = typing.Callable[..., typing.Any]
+    _T = TypeVar('_T')
 
 else:
     exceptiongroup = sa.util.lazy_import('exceptiongroup')
-    _P = typing.TypeVar('_P')
-    _R = typing.TypeVar('_R')
 
 
 # %% Miscellaneous
 
 
 def zip_offsets(
-    seq: typing.Iterable[_T],
+    seq: Iterable[_T],
     shifts: tuple[int, ...] | list[int],
-    fill: typing.Any,
+    fill: Any,
     *,
-    squeeze=True,
-) -> typing.Generator[tuple[_T, ...]]:
+    squeeze: bool = True,
+) -> Generator[tuple[_T, ...]]:
     """a generator that yields from `seq` at multiple index shifts.
 
     Shifts that would yield an invalid index (i.e., before or beyond the end of `seq`) are
@@ -185,7 +181,7 @@ class ExceptionStack:
 
 
 def await_and_ignore(
-    futures: 'typing.Iterable[concurrent.futures.Future]', except_msg: str | None = None
+    futures: 'Iterable[concurrent.futures.Future]', except_msg: str | None = None
 ):
     exc = ExceptionStack(except_msg)
     try:
@@ -261,14 +257,14 @@ class DebugOnException:
 
 
 def retry(
-    excs: type[BaseException] | typing.Iterable[type[BaseException]],
+    excs: type[BaseException] | Iterable[type[BaseException]],
     tries: int,
     *,
     delay: float = 0,
     backoff: float = 0,
     exception_func=lambda *args, **kws: None,
     logger: logging.Logger | logging.LoggerAdapter | None = None,
-) -> typing.Callable[[_Tfunc], _Tfunc]:
+) -> 'GenericWrapper':
     """calls to the decorated function are repeated, suppressing specified exception(s), until a
     maximum number of retries has been attempted.
 
@@ -345,10 +341,10 @@ _LOG_LEVEL_NAMES = {
 }
 
 
-sa.util._StriqtLogger('sweep')
-sa.util._StriqtLogger('source')
-sa.util._StriqtLogger('sink')
-sa.util._StriqtLogger('periph')
+sa.util.StriqtLogger('sweep')
+sa.util.StriqtLogger('source')
+sa.util.StriqtLogger('sink')
+sa.util.StriqtLogger('periph')
 sa.util.show_messages(logging.INFO)
 
 

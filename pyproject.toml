@@ -17,6 +17,7 @@ dependencies = [
     "numexpr~=2.8",
     "numpy>=1.21,<3",
     "pandas>=1.5",
+    "platformdirs>=4.2.0",
     "psutil>=7.0.0",
     "requests>=2.32",
     "scipy>=1.13",

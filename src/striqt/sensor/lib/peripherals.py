@@ -1,41 +1,20 @@
 from __future__ import annotations as __
 
-import typing
-
+from typing import Any, Generic, Iterable
 from .. import specs
+from .typing import PeripheralsProtocol, TP, TC, TPC
 
 
-_TC = typing.TypeVar('_TC', bound='specs.SensorCapture', contravariant=True)
-_TP = typing.TypeVar('_TP', bound='specs.Peripherals')
-_TPC = typing.TypeVar('_TPC', bound='specs.Peripherals')
-
-
-class PeripheralsProtocol(typing.Protocol[_TC]):
-    """a peripherals extension class must implement these"""
-
-    def open(self): ...
-
-    def close(self): ...
-
-    def setup(
-        self, captures: typing.Sequence[_TC], loops: typing.Sequence[specs.LoopSpec]
-    ): ...
-
-    def arm(self, capture: _TC): ...
-
-    def acquire(self, capture: _TC) -> dict[str, typing.Any]: ...
-
-
-class PeripheralsBase(typing.Generic[_TP, _TC], PeripheralsProtocol[_TC]):
+class PeripheralsBase(Generic[TP, TC], PeripheralsProtocol[TC]):
     """base class defining the object protocol peripheral hardware support.
 
     This is implemented primarily through connection management and callback
     methods for arming and acquisition.
     """
 
-    spec: _TP
+    spec: TP
 
-    def __init__(self, spec: specs.Sweep[typing.Any, _TP, _TC]):
+    def __init__(self, spec: specs.Sweep[Any, TP, TC]):
         self.spec = spec.peripherals
         self.open()
 
@@ -46,33 +25,28 @@ class PeripheralsBase(typing.Generic[_TP, _TC], PeripheralsProtocol[_TC]):
         self.close()
 
 
-class CalibrationPeripheralsBase(
-    PeripheralsBase[_TP, _TC],
-    typing.Generic[_TP, _TC, _TPC],
-):
+class CalibrationPeripheralsBase(PeripheralsBase[TP, TC], Generic[TP, TC, TPC]):
     """base class defining the object protocol peripheral hardware support.
 
     This is implemented primarily through connection management and callback
     methods for arming and acquisition.
     """
 
-    calibration_spec: specs._TPC | None
+    calibration_spec: TPC | None
 
-    def __init__(self, spec: specs.CalibrationSweep[typing.Any, _TP, _TC, _TPC]):
+    def __init__(self, spec: specs.CalibrationSweep[Any, TP, TC, TPC]):
         self.calibration_spec = spec.calibration
         self.open()
 
 
-class NoPeripherals(PeripheralsBase[_TP, _TC]):
+class NoPeripherals(PeripheralsBase[TP, TC]):
     def open(self):
         return
 
     def close(self):
         return
 
-    def setup(
-        self, captures: typing.Iterable[_TC], loops: typing.Iterable[specs.LoopBase]
-    ):
+    def setup(self, captures: Iterable[TC], loops: Iterable[specs.LoopBase]):
         return
 
     def arm(self, capture):

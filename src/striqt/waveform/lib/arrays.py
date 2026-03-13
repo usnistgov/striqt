@@ -1,84 +1,119 @@
 from __future__ import annotations as __
 
-import collections
 import functools
-import importlib.util
 import itertools
 import math
-import sys
-import threading
-import typing
-from numbers import Number
-from types import ModuleType
+from typing import Any, Callable, cast, Generator, TypeVar, TYPE_CHECKING
+
 import array_api_compat
 
-_TC = typing.TypeVar('_TC', bound=typing.Callable)
+from . import util
+
+_TC = TypeVar('_TC', bound=Callable)
 
 
-_lazy_import_locks = collections.defaultdict(threading.RLock)
-
-
-def lazy_import(module_name: str, package=None):
-    """postponed import of the module with the specified name.
-
-    The import is not performed until the module is accessed in the code. This
-    reduces the total time to import labbench by waiting to import the module
-    until it is used.
-    """
-    # see https://docs.python.org/3/library/importlib.html#implementing-lazy-imports
-
-    # in case the lazy_import call itself happens in a thread
-    with _lazy_import_locks[module_name]:
-        try:
-            ret = sys.modules[module_name]
-            return ret
-        except KeyError:
-            pass
-
-        spec = importlib.util.find_spec(module_name, package=package)
-        if spec is None or spec.loader is None:
-            raise ImportError(f'no module found named "{module_name}"')
-        spec.loader = importlib.util.LazyLoader(spec.loader)
-        # spec.loader = _LazyLoader(spec.loader)
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[module_name] = module
-        spec.loader.exec_module(module)
-        spec.loader_state['lock'] = _lazy_import_locks[module_name]
-
-    return module
-
-
-if typing.TYPE_CHECKING:
-    import typing_extensions
+if TYPE_CHECKING:
+    from types import ModuleType
+    from .typing import ArrayLike, Array, TypeIsCupy
+    import numpy as np
 
     try:
         import cupy as cp  # pyright: ignore[reportMissingImports]
-
-        TypeIsCupy = typing_extensions.TypeIs[cp.ndarray]
     except ModuleNotFoundError:
         cp = None
 
-    import numpy as np
-
-    from ._typing import ArrayLike, ArrayType
-
 else:
-    np = lazy_import('numpy')
+    np = util.lazy_import('numpy')
     try:
-        cp = lazy_import('cupy')
+        cp = util.lazy_import('cupy')
     except ImportError:
         cp = None
 
 
+#%% rounding
+
+def isroundmod(value: float | np.ndarray, div, atol=1e-6) -> bool:
+    ratio = value / div
+    try:
+        return abs(math.remainder(ratio, 1)) <= atol
+    except TypeError:
+        return np.abs(np.rint(ratio) - ratio) <= atol
+
+
+#%% dtype tricks
+@util.lru_cache()
+def dtype_change_float(
+    dtype, float_basis_dtype
+) -> type[np.complexfloating] | type[np.floating]:
+    """return a complex or float dtype similar to `dtype`, but
+    with a float backing with size matching `float_basis_dtype`.
+
+    Examples:
+        dtype_change_float(np.complex128, np.float32) -> np.complex64
+        dtype_change_float(np.float64, np.float32) -> np.float32
+    """
+
+    np_input_type = np.dtype(dtype).type
+    np_float_type = np.finfo(np.dtype(float_basis_dtype)).dtype.type
+
+    if np_input_type in (np.complex128, np.complex64):
+        if np_float_type is np.float32:
+            return np.complex64
+        elif np_float_type is np.float64:
+            return np.complex128
+    elif np_input_type in (np.float16, np.float32, np.float64):
+        return np_float_type
+
+    raise ValueError(
+        f'unable to identify output dtype similar to {dtype} matching floating point {float_basis_dtype}'
+    )
+
+
+def float_dtype_like(x: Array, min_dtype: Any | None = None):
+    """returns a floating-point dtype corresponding to x.
+
+    `x` may be complex, in which case the returned data type corresponds to
+    that of the `x.real` or `x.imag`.
+
+    Args:
+        min_dtype: dtype with the minimum acceptable float size, or None for no minimum
+
+    Returns:
+    * If x.dtype is float16/float32/float64: x.dtype.
+    * If x.dtype is complex64/complex128: float32/float64
+    """
+
+    if isinstance(x, (int, float)):
+        x = np.asarray(x)
+        xp = np
+    else:
+        xp = array_namespace(x)
+
+    try:
+        dtype = np.finfo(xp.asarray(x).dtype).dtype
+    except ValueError:
+        dtype = np.dtype('float32')
+
+    if min_dtype is None:
+        pass
+    else:
+        min_dtype = np.dtype(min_dtype)
+        if min_dtype.itemsize > dtype.itemsize:
+            dtype = min_dtype
+
+    return dtype
+
+
+#%% sliding or binned window operations
 def binned_mean(
-    x: ArrayType,
+    x: Array,
     count,
     *,
     axis=0,
     truncate=True,
     reject_extrema=False,
     fft=True,
-) -> ArrayType:
+) -> Array:
     """reduce an array by averaging into bins on the specified axis.
 
     Arguments:
@@ -111,128 +146,17 @@ def binned_mean(
             dimsize = (x.shape[axis] // count) * count
             x = axis_slice(x, 0, dimsize, axis=axis)
 
-    x = to_blocks(x, count, axis=axis)
+    x = axis_to_blocks(x, count, axis=axis)
     stat_axis = axis + 1 if axis >= 0 else axis
     if reject_extrema:
         x = np.sort(x, axis=stat_axis)
         x = axis_slice(x, 1, -1, axis=stat_axis)
     ret = xp.nanmean(x, axis=stat_axis)
+
     return ret
 
 
-_caches = {}
-
-
-@functools.wraps(functools.lru_cache)
-def lru_cache(
-    maxsize: int | None = 128, typed: bool = False
-) -> typing.Callable[[_TC], _TC]:
-    # presuming that the API is designed to accept only hashable types, set
-    # the type hint to match the wrapped function
-    func = functools.lru_cache(maxsize, typed)
-
-    @functools.wraps(func)
-    def wrap(wrapee):
-        wrapped = func(wrapee)
-        _caches[wrapee] = wrapped
-        return wrapped
-
-    return typing.cast(typing.Callable[[_TC], _TC], wrap)
-
-
-def clear_caches():
-    for cache in _caches.values():
-        cache.cache_clear()
-
-
-def cache_info() -> dict[str, typing.Any]:
-    return {f'{f.__module__}.{f.__name__}': c.cache_info() for f, c in _caches.items()}
-
-
-@lru_cache()
-def find_float_inds(seq: tuple[str | float, ...]) -> list[bool]:
-    """return a list to flag whether each element can be converted to float"""
-
-    ret = []
-    for s in seq:
-        try:
-            float(s)
-        except ValueError:
-            ret.append(False)
-        else:
-            ret.append(True)
-    return ret
-
-
-def isroundmod(value: float | np.ndarray, div, atol=1e-6) -> bool:
-    ratio = value / div
-    try:
-        return abs(math.remainder(ratio, 1)) <= atol
-    except TypeError:
-        return np.abs(np.rint(ratio) - ratio) <= atol
-
-
-def is_cupy_array(x: object) -> TypeIsCupy:
-    return array_api_compat.is_cupy_array(x)
-
-
-class NonStreamContext:
-    """a do-nothing cupy.Stream duck type stand-in for array types that do not support synchronization"""
-
-    def __init__(self, *args, **kws):
-        pass
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *args):
-        pass
-
-    def synchronize(self):
-        pass
-
-    def use(self):
-        pass
-
-
-def array_stream(obj: ArrayType, null=False, non_blocking=False, ptds=False):
-    """returns a cupy.Stream (or a do-nothing stand in) object as appropriate for obj"""
-    if is_cupy_array(obj) and cp is not None:
-        return cp.cuda.Stream(null=null, non_blocking=non_blocking, ptds=ptds)  # type: ignore
-    else:
-        return NonStreamContext()
-
-
-def array_namespace(a, use_compat=False) -> ModuleType:
-    try:
-        return array_api_compat.array_namespace(a, use_compat=use_compat)
-    except TypeError:
-        pass
-
-    try:
-        import mlx.core as mx  # type: ignore
-
-        if isinstance(a, mx.array):
-            return mx
-        else:
-            raise TypeError
-    except (ImportError, TypeError):
-        pass
-
-    raise TypeError('unrecognized object type')
-
-
-def pad_along_axis(a, pad_width: list, axis=0, *args, **kws):
-    if axis >= 0:
-        pre_pad = [[0, 0]] * axis
-    else:
-        pre_pad = [[0, 0]] * (axis + a.ndim - 1)
-
-    xp = array_namespace(a)
-    return xp.pad(a, pre_pad + pad_width, *args, **kws)
-
-
-@lru_cache()
+@util.lru_cache()
 def sliding_window_output_shape(
     array_shape: tuple[int, ...] | int, window_shape: tuple, axis
 ):
@@ -367,42 +291,7 @@ def sliding_window_view(x, window_shape, axis=None, *, subok=False, writeable=Fa
     return xp.lib.stride_tricks.as_strided(x, strides=out_strides, shape=out_shape)
 
 
-def float_dtype_like(x: ArrayType, min_dtype: typing.Any | None = None):
-    """returns a floating-point dtype corresponding to x.
-
-    `x` may be complex, in which case the returned data type corresponds to
-    that of the `x.real` or `x.imag`.
-
-    Args:
-        min_dtype: dtype with the minimum acceptable float size, or None for no minimum
-
-    Returns:
-    * If x.dtype is float16/float32/float64: x.dtype.
-    * If x.dtype is complex64/complex128: float32/float64
-    """
-
-    if isinstance(x, Number):
-        x = np.asarray(x)
-        xp = np
-    else:
-        xp = array_namespace(x)
-
-    try:
-        dtype = np.finfo(xp.asarray(x).dtype).dtype
-    except ValueError:
-        dtype = np.dtype('float32')
-
-    if min_dtype is None:
-        pass
-    else:
-        min_dtype = np.dtype(min_dtype)
-        if min_dtype.itemsize > dtype.itemsize:
-            dtype = min_dtype
-
-    return dtype
-
-
-def to_blocks(y: ArrayType, size: int, truncate=False, axis=0) -> ArrayType:
+def axis_to_blocks(y: Array, size: int, truncate=False, axis=0) -> Array:
     """Returns a view on y reshaped into blocks along axis `axis`.
 
     Args:
@@ -445,61 +334,11 @@ def to_blocks(y: ArrayType, size: int, truncate=False, axis=0) -> ArrayType:
     return y.reshape(newshape)
 
 
-@functools.cache
-def _pad_slices_to_dim(ndim: int, axis: int, /):
-    if not isinstance(axis, int):
-        raise TypeError('axis argument must be integer')
-
-    if axis < 0:
-        axis = ndim + axis
-
-        if axis < 0:
-            raise ValueError(f'axis {axis} exceeds the number of dimensions')
-
-    if axis <= ndim // 2:
-        before = (slice(None),) * (axis)
-        after = ()
-    else:
-        before = (Ellipsis,)
-        after = (slice(None),) * (ndim - axis - 1)
-
-    return before, after
-
-
-def axis_index(a, index, axis=-1):
-    """Return a boolean-indexed selection on axis `axis' from `a'.
-
-    Arguments:
-    a: numpy.ndarray
-        The array to be sliced.
-    mask: boolean index array of size a.shape[axis]
-    axis : int, optional
-        The axis of `a` to be sliced.
-    """
-    before, after = _pad_slices_to_dim(a.ndim, axis)
-    return a[before + (index,) + after]
-
-
-def axis_slice(a, start, stop=None, step=None, axis=-1):
-    """Return a slice on the array `a` on the axis index `axis`.
-
-    Arguments:
-    a: numpy.ndarray
-        The array to be sliced.
-    start, stop=None, step:
-        The arguments to `slice` on that axis.
-    axis : int, optional
-        The axis of `a` to be sliced.
-    """
-
-    before, after = _pad_slices_to_dim(a.ndim, axis)
-    sl = slice(start, stop, step)
-    return a[before + (sl,) + after]
 
 
 def histogram_last_axis(
-    x: ArrayType, bins: int | ArrayType, range: tuple | None = None
-) -> ArrayType:
+    x: Array, bins: int | Array, range: tuple | None = None
+) -> Array:
     """computes a histogram along the last axis of an input array.
 
     For reference see https://stackoverflow.com/questions/44152436/calculate-histograms-along-axis
@@ -547,40 +386,39 @@ def histogram_last_axis(
     return counts[..., :-1], bins
 
 
-@lru_cache()
-def dtype_change_float(
-    dtype, float_basis_dtype
-) -> type[np.complexfloating] | type[np.floating]:
-    """return a complex or float dtype similar to `dtype`, but
-    with a float backing with size matching `float_basis_dtype`.
+#%% slicing and indexing
+def axis_index(a, index, axis=-1):
+    """Return a boolean-indexed selection on axis `axis' from `a'.
 
-    Examples:
-        dtype_change_float(np.complex128, np.float32) -> np.complex64
-        dtype_change_float(np.float64, np.float32) -> np.float32
+    Arguments:
+    a: numpy.ndarray
+        The array to be sliced.
+    mask: boolean index array of size a.shape[axis]
+    axis : int, optional
+        The axis of `a` to be sliced.
+    """
+    before, after = _pad_slices_to_dim(a.ndim, axis)
+    return a[before + (index,) + after]
+
+
+def axis_slice(a, start, stop=None, step=None, axis=-1):
+    """Return a slice on the array `a` on the axis index `axis`.
+
+    Arguments:
+    a: numpy.ndarray
+        The array to be sliced.
+    start, stop=None, step:
+        The arguments to `slice` on that axis.
+    axis : int, optional
+        The axis of `a` to be sliced.
     """
 
-    np_input_type = np.dtype(dtype).type
-    np_float_type = np.finfo(np.dtype(float_basis_dtype)).dtype.type
-
-    if np_input_type in (np.complex128, np.complex64):
-        if np_float_type is np.float32:
-            return np.complex64
-        elif np_float_type is np.float64:
-            return np.complex128
-    elif np_input_type in (np.float16, np.float32, np.float64):
-        return np_float_type
-
-    raise ValueError(
-        f'unable to identify output dtype similar to {dtype} matching floating point {float_basis_dtype}'
-    )
+    before, after = _pad_slices_to_dim(a.ndim, axis)
+    sl = slice(start, stop, step)
+    return a[before + (sl,) + after]
 
 
-def ceildiv(a: int, b: int) -> int:
-    """Returns ceil(a/b)."""
-    return -(-a // b)
-
-
-@lru_cache()
+@util.lru_cache()
 def grouped_slices_along_axis(shape: tuple[int, ...], max_size: int, axis: int):
     if axis < 0:
         axis = len(shape) + axis
@@ -594,7 +432,7 @@ def grouped_slices_along_axis(shape: tuple[int, ...], max_size: int, axis: int):
             slices_per_ax.append((slice(None, None),))
             continue
 
-        want_count = max(ceildiv(size_rest, max_size), 1)
+        want_count = max(util.ceildiv(size_rest, max_size), 1)
         count = min(want_count, n)
         step = n // count
 
@@ -607,8 +445,8 @@ def grouped_slices_along_axis(shape: tuple[int, ...], max_size: int, axis: int):
 
 
 def grouped_views_along_axis(
-    x: ArrayType, max_size: int, axis: int = 0
-) -> typing.Generator[ArrayLike]:
+    x: Array, max_size: int, axis: int = 0
+) -> Generator[ArrayLike]:
     if x.size < max_size:
         yield x
         return
@@ -626,7 +464,47 @@ def grouped_views_along_axis(
         yield x
 
 
-def sync_if_cupy(x: ArrayType):
+#%% padding
+@functools.cache
+def _pad_slices_to_dim(ndim: int, axis: int, /):
+    if not isinstance(axis, int):
+        raise TypeError('axis argument must be integer')
+
+    if axis < 0:
+        axis = ndim + axis
+
+        if axis < 0:
+            raise ValueError(f'axis {axis} exceeds the number of dimensions')
+
+    if axis <= ndim // 2:
+        before = (slice(None),) * (axis)
+        after = ()
+    else:
+        before = (Ellipsis,)
+        after = (slice(None),) * (ndim - axis - 1)
+
+    return before, after
+
+
+def pad_along_axis(a, pad_width: list, axis=0, *args, **kws):
+    if axis >= 0:
+        pre_pad = [[0, 0]] * axis
+    else:
+        pre_pad = [[0, 0]] * (axis + a.ndim - 1)
+
+    xp = array_namespace(a)
+    return xp.pad(a, pre_pad + pad_width, *args, **kws)
+
+
+#%% cupy configuration and memory management
+def pinned_array_as_cupy(x, stream=None):
+    assert cp is not None
+    out = cp.empty_like(x)
+    out.data.copy_from_host_async(x.ctypes.data, x.data.nbytes, stream=stream)
+    return out
+
+
+def sync_if_cupy(x: Array):
     if is_cupy_array(x) and cp is not None:
         stream = cp.cuda.get_current_stream()  # type: ignore
         stream.synchronize()
@@ -642,13 +520,6 @@ def configure_cupy():
         cp.cuda.set_pinned_memory_allocator(None)  # type: ignore
 
 
-def pinned_array_as_cupy(x, stream=None):
-    assert cp is not None
-    out = cp.empty_like(x)
-    out.data.copy_from_host_async(x.ctypes.data, x.data.nbytes, stream=stream)
-    return out
-
-
 def free_cupy_mempool():
     if cp is not None:
         mempool = cp.get_default_memory_pool()  # type: ignore
@@ -656,16 +527,7 @@ def free_cupy_mempool():
             mempool.free_all_blocks()
 
 
-def except_on_low_memory(threshold_bytes=500_000_000):
-    import psutil
-
-    if psutil.virtual_memory().available >= threshold_bytes:
-        return
-
-    raise MemoryError('too little memory to proceed')
-
-
-@lru_cache()
+@util.lru_cache()
 def set_cuda_mem_limit(fraction=0.75):
     if cp is None:
         return
@@ -676,3 +538,82 @@ def set_cuda_mem_limit(fraction=0.75):
     #
     # import psutil
     # available = psutil.virtual_memory().available
+
+
+def is_cupy_array(x: object) -> TypeIsCupy:
+    return array_api_compat.is_cupy_array(x)
+
+
+#%% Compatibility shims between array APIs
+class NonStreamContext:
+    """a do-nothing cupy.Stream duck type stand-in for array types that do not support synchronization"""
+
+    def __init__(self, *args, **kws):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        pass
+
+    def synchronize(self):
+        pass
+
+    def use(self):
+        pass
+
+
+def array_stream(obj: Array, null=False, non_blocking=False, ptds=False):
+    """returns a cupy.Stream (or a do-nothing stand in) object as appropriate for obj"""
+    if is_cupy_array(obj) and cp is not None:
+        return cp.cuda.Stream(null=null, non_blocking=non_blocking, ptds=ptds)  # type: ignore
+    else:
+        return NonStreamContext()
+
+
+def array_namespace(a, use_compat=False) -> ModuleType:
+    try:
+        return array_api_compat.array_namespace(a, use_compat=use_compat)
+    except TypeError:
+        pass
+
+    try:
+        import mlx.core as mx  # type: ignore
+
+        if isinstance(a, mx.array):
+            return mx
+        else:
+            raise TypeError
+    except (ImportError, TypeError):
+        pass
+
+    raise TypeError('unrecognized object type')
+
+
+def convert_np_to_xp(func: _TC) -> _TC:
+    @functools.wraps(func)
+    def wrapped(*args, **kwargs):
+        import array_api_compat.numpy as anp
+
+        xp = kwargs.get('xp', anp)
+        if xp is None or xp is np:
+            xp = anp
+
+        if xp is anp:
+            return func(*args, **kwargs)
+
+        kwargs_with_np = dict(kwargs, xp=anp)
+        x = func(*args, **kwargs_with_np)
+        if hasattr(xp, 'asarray'):
+            x = xp.asarray(x)
+        elif hasattr(xp, 'array'):
+            x = xp.array(x)  # type: ignore
+        else:
+            raise AttributeError(f'invalid array module {xp}')
+
+        return xp.asarray(x)
+
+    return cast(_TC, wrapped)
+
+

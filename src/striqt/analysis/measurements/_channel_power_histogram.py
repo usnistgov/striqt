@@ -77,7 +77,7 @@ def channel_power_histogram(iq, capture: specs.Capture, **kwargs):
 
     spec = specs.ChannelPowerHistogram.from_dict(kwargs)
 
-    xp = sw.util.array_namespace(iq)
+    xp = sw.array_namespace(iq)
 
     bin_edges = make_power_histogram_bin_edges(
         power_low=spec.power_low,

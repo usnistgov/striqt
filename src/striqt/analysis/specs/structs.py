@@ -9,7 +9,7 @@ import typing
 import msgspec
 
 from . import helpers, types
-from striqt.waveform import util
+from striqt.waveform.lib import util
 
 _T = typing.TypeVar('_T')
 _TS = typing.TypeVar('_TS', bound='SpecBase')
