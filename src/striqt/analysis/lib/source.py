@@ -40,7 +40,7 @@ def filter_iq_capture(
     nfft = capture.analysis_filter.nfft
     nfft_out = capture.analysis_filter.nfft_out or nfft
 
-    nfft_out, noverlap, overlap_scale, _ = sw.fourier._ola_filter_parameters(
+    nfft_out, noverlap, overlap_scale, _ = sw.fourier.ola_filter_parameters(
         iq.size,
         window=capture.analysis_filter.window,
         nfft_out=nfft_out,
