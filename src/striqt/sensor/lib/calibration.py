@@ -1,6 +1,6 @@
 from __future__ import annotations as __
 
-from typing import Any, cast, Sequence, TYPE_CHECKING
+from typing import Any, Sequence, TYPE_CHECKING
 from pathlib import Path
 
 from .. import specs as specs
