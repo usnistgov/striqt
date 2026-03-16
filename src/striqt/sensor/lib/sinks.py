@@ -30,12 +30,12 @@ class _BatchTracker:
         return self.size
 
 
-class SinkBase(Generic[specs.TC]):
+class SinkBase(Generic[specs.SC]):
     """intake acquisitions one at a time, and parcel data store"""
 
     def __init__(
         self,
-        sweep_spec: specs.Sweep[Any, Any, specs.TC],
+        sweep_spec: specs.Sweep[Any, Any, specs.SC],
         alias_func: specs.helpers.PathAliasFormatter | None = None,
         *,
         force: bool = False,

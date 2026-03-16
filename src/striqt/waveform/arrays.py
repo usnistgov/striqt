@@ -6,8 +6,9 @@ from .lib.arrays import (
     binned_mean,
     configure_cupy,
     cp,
+    free_cupy_mempool,
     histogram_last_axis,
     isroundmod,
     is_cupy_array,
-    pinned_array_as_cupy
+    pinned_array_as_cupy,
 )

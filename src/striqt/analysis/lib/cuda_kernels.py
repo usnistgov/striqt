@@ -1,11 +1,13 @@
+# type: ignore
+
 """cupyx.scipy IIR filter functions backported from cupy 13.x"""
 
 from itertools import product
 
-import cupy # type: ignore
-from cupy._core._scalar import get_typename # type: ignore
-from cupy._core.internal import _normalize_axis_index # type: ignore
-from cupy_backends.cuda.api import runtime # type: ignore
+import cupy  # type: ignore
+from cupy._core._scalar import get_typename  # type: ignore
+from cupy._core.internal import _normalize_axis_index  # type: ignore
+from cupy_backends.cuda.api import runtime  # type: ignore
 
 IIR_SOS_KERNEL = r"""
 #include <cupy/math_constants.h>

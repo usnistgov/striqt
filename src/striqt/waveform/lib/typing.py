@@ -21,6 +21,7 @@ if typing.TYPE_CHECKING:
     import numpy as np
     import pandas as pd
     import xarray as xr
+    from xarray.core.types import Dims
 
     # union of supported array types
     Array: TypeAlias = 'cp.ndarray|np.ndarray'

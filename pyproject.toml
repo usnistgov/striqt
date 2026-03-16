@@ -92,3 +92,8 @@ packages = [ "src/striqt", ]
 
 [tool.hatch.build.targets.sdist]
 packages = [ "src/striqt", ]
+
+
+[tool.ty.rules]
+call-top-callable = "ignore"
+invalid-type-form = "ignore"

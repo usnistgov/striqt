@@ -19,7 +19,7 @@ from .typing import TAR
 import msgspec
 
 if TYPE_CHECKING:
-    from .typing import Array, TC, TS, TP, WarmupSweep
+    from .typing import Array, SC, SS, SP, WarmupSweep
 
     import numpy as np
     import pandas as pd
@@ -198,7 +198,7 @@ def analyze(
                 iq.extra_data[name] = value.get()
 
     if not options.as_xarray:
-        return da_delayed
+        return cast('dict[str, Array]', da_delayed)
 
     assert isinstance(iq.capture, specs.SensorCapture)
 
@@ -320,7 +320,7 @@ def sweep_touches_gpu(sweep: specs.Sweep) -> bool:
     return False
 
 
-def build_warmup_sweep(sweep: specs.Sweep[TS, TP, TC]) -> WarmupSweep:
+def build_warmup_sweep(sweep: specs.Sweep[SS, SP, SC]) -> WarmupSweep:
     """derive a warmup sweep specification derived from sweep.
 
     This is meant to trigger expensive python imports and warm up JIT caches. The goal
@@ -386,7 +386,7 @@ def prepare_compute(input_spec: specs.Sweep, skip_warmup: bool = False):
             # this order is important on some versions/platforms!
             # https://github.com/numba/numba/issues/6131
             np.__version__  # reify
-            import numba.cuda  # type: ignore
+            import numba.cuda  # pyright: ignore
             import cupy  # type: ignore
 
         with sa.util.stopwatch('configure cupy', 'sweep', 1):
@@ -599,8 +599,8 @@ def _check_coord_indexes(ds, index_coords: list[str]):
 
 def _if_overload_message(
     extra_data: dict[str, Sequence[float]],
-    capture: TC,
-    sweep_spec: specs.Sweep[TS, TP, TC],
+    capture: SC,
+    sweep_spec: specs.Sweep[SS, SP, SC],
 ) -> str | None:
     if 'if_headroom' in extra_data:
         if_headroom = extra_data['if_headroom']
@@ -641,6 +641,5 @@ def _if_overload_message(
 
 
 def _xarray_version() -> tuple[int, int, int]:
-    version = tuple(int(v) for v in xr.__version__.split('.'))
-    assert len(version) == 3
-    return version
+    maj, min, rel = tuple(int(v) for v in xr.__version__.split('.'))
+    return maj, min, rel

@@ -1,4 +1,5 @@
 from __future__ import annotations as __
+import functools
 from pathlib import Path
 import typing
 
@@ -138,15 +139,15 @@ class PlotBackend:
         if self.output_dir is not None:
             self.output_dir.mkdir(parents=True, exist_ok=True)
 
-    @sw.util.lru_cache()
-    def _coord_kws(self, **base: typing.Unpack[_DimKws]) -> _LayoutKwArgs:
+    @functools.lru_cache()
+    def _coord_kws(self, **kwargs: typing.Unpack[_DimKws]) -> _LayoutKwArgs:
         if self.opts.col is None and self.opts.row is None:
             col = '_view'
         else:
             col = self.opts.col
 
         return {
-            **base,
+            **kwargs,
             'figsize': mpl.rcParams['figure.figsize'],
             'col_wrap': self.opts.col_wrap,
             'row': self.opts.row,

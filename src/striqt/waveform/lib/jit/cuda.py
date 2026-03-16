@@ -1,5 +1,6 @@
-import math
+# type: ignore
 
+import math
 import numba.cuda
 import cupy  # type: ignore
 import numba as nb

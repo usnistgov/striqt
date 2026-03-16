@@ -19,7 +19,7 @@ from striqt.waveform.lib.util import lazy_import
 if TYPE_CHECKING:
     import exceptiongroup
     import concurrent.futures
-    from .typing import GenericWrapper, TypeVar
+    from .typing import PassThroughWrapper, TypeVar
 
     _T = TypeVar('_T')
 
@@ -264,7 +264,7 @@ def retry(
     backoff: float = 0,
     exception_func=lambda *args, **kws: None,
     logger: logging.Logger | logging.LoggerAdapter | None = None,
-) -> 'GenericWrapper':
+) -> 'PassThroughWrapper':
     """calls to the decorated function are repeated, suppressing specified exception(s), until a
     maximum number of retries has been attempted.
 
@@ -322,7 +322,7 @@ def retry(
                 else:
                     break
             else:
-                raise ex  # type: ignore
+                raise ex  # pyright: ignore # pyrefly: ignore
 
             return ret
 
@@ -365,21 +365,24 @@ def log_capture_context(name_suffix, /, capture_index=0, capture_count=None):
     extra = {'capture_index': capture_index}
     logger = sa.util.get_logger(name_suffix)
 
-    assert isinstance(logger.extra, dict)
+    if isinstance(logger.extra, dict):
+        extra: dict[str, object] = dict(logger.extra)
+    else:
+        extra = {}
 
     if capture_count is not None:
-        logger.extra['capture_count'] = capture_count
+        extra['capture_count'] = capture_count
 
     if capture_count is None:
-        capture_count = logger.extra.get('capture_count', 'unknown')
-        extra['capture_count'] = capture_count  # type: ignore
+        capture_count = extra.get('capture_count', 'unknown')
+        extra['capture_count'] = capture_count  # pyright: ignore
 
-    extra['capture_progress'] = f'{capture_index + 1}/{capture_count}'  # type: ignore
+    extra['capture_progress'] = f'{capture_index + 1}/{capture_count}'  # pyright: ignore
 
-    start_extra = logger.extra
-    logger.extra = start_extra | extra
+    unchanged = logger.extra
+    logger.extra = extra
     yield
-    logger.extra = start_extra
+    logger.extra = unchanged
 
 
 class _JSONFormatter(logging.Formatter):
@@ -448,14 +451,17 @@ def log_to_file(log_path: str | Path, level_name: str):
 
             super().__init__(path, *args, **kws)
 
-            self.stream.write('[\n')
+            if self.stream:
+                self.stream.write('[\n')
 
         def emit(self, record: logging.LogRecord):
             super().emit(record)
-            self.stream.write(',\n')
+            if self.stream:
+                self.stream.write(',\n')
 
         def close(self):
-            self.stream.write('\n]')
+            if self.stream:
+                self.stream.write('\n]')
             super().close()
 
     Path(log_path).parent.mkdir(exist_ok=True, parents=True)

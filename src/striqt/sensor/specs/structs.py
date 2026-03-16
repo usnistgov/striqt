@@ -10,7 +10,7 @@ from striqt import analysis as sa
 from striqt.analysis.specs import AnalysisGroup, SpecBase, Capture, frozendict
 
 from ..lib import util
-from ..lib.typing import TypeVar, TS, TP, TC, TPC
+from ..lib.typing import TypeVar, SS, SP, SC, SPC
 from . import types
 
 
@@ -94,7 +94,7 @@ class Source(SpecBase, frozen=True, kw_only=True):
 
     # synchronization and triggering
     trigger_strobe: Optional[float] = None
-    signal_trigger: Optional[str | AnalysisGroup] = None  # type: ignore
+    signal_trigger: Optional[str | AnalysisGroup] = None
 
     # in the future, these should probably move to an analysis config
     array_backend: types.ArrayBackend = 'numpy'
@@ -333,7 +333,7 @@ def _validate_loops(loops: tuple[LoopSpec, ...]):
         )
 
 
-class Sweep(SpecBase, Generic[TS, TP, TC], frozen=True, kw_only=True):
+class Sweep(SpecBase, Generic[SS, SP, SC], frozen=True, kw_only=True):
     # sweep bindings also accept the following tag field in input files, which
     # msgspec uses to determine the Sweep subclass to instantiate from e.g.
     # yaml files.
@@ -342,15 +342,15 @@ class Sweep(SpecBase, Generic[TS, TP, TC], frozen=True, kw_only=True):
     #
     # sensor_binding: str
 
-    source: TS
-    captures: tuple[TC, ...] = tuple()
+    source: SS
+    captures: tuple[SC, ...] = tuple()
     loops: tuple[LoopSpec, ...] = ()
-    analysis: BundledAnalysis = BundledAnalysis()  # type: ignore
+    analysis: BundledAnalysis = BundledAnalysis()  # pyright: ignore
     description: Description = Description()
     adjust_captures: AdjustCapturesType = msgspec.field(default_factory=dict)
     extensions: Extension = Extension()
     sink: Sink = Sink()
-    peripherals: TP = cast(TP, Peripherals())
+    peripherals: SP = cast(SP, Peripherals())
 
     options: SweepOptions = SweepOptions(reuse_iq=False, loop_only_nyquist=False)
     _bindings__: ClassVar[Any] = None
@@ -367,8 +367,8 @@ class Sweep(SpecBase, Generic[TS, TP, TC], frozen=True, kw_only=True):
 
 
 class CalibrationSweep(
-    Sweep[TS, TP, TC],
-    Generic[TS, TP, TC, TPC],
+    Sweep[SS, SP, SC],
+    Generic[SS, SP, SC, SPC],
     frozen=True,
     kw_only=True,
 ):
@@ -378,7 +378,7 @@ class CalibrationSweep(
     options: SweepOptions = SweepOptions(
         skip_warmup=True, reuse_iq=True, loop_only_nyquist=True
     )
-    calibration: TPC | None = None
+    calibration: SPC | None = None
 
     def __post_init__(self):
         super().__post_init__()

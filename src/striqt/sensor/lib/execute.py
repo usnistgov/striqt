@@ -14,7 +14,7 @@ from . import compute, sources, util
 from .. import specs
 from .resources import Resources, AnyResources
 from .calibration import lookup_system_noise_power
-from .typing import PC, PS, TC, TP, TS, Unpack
+from .typing import PC, PS, SC, SP, SS, Unpack
 
 if TYPE_CHECKING:
     import xarray as xr
@@ -24,12 +24,12 @@ else:
 
 
 def iterate_sweep(
-    resources: Resources[TS, TP, TC, PS, PC],
+    resources: Resources[SS, SP, SC, PS, PC],
     *,
     always_yield: bool = False,
     yield_values: bool = True,
     loop: bool = False,
-    **replace: 'Unpack[AnyResources[TS, TP, TC, PS, PC]]',
+    **replace: 'Unpack[AnyResources[SS, SP, SC, PS, PC]]',
 ) -> Generator['xr.Dataset|compute.DelayedDataset|None']:
     """an iterator that steps through the execution of a sensor sweep.
 
@@ -212,9 +212,9 @@ class _AcquisitionIndexer:
 
 @sa.util.stopwatch('acquire', 'sweep', threshold=0.25)
 def _acquire_both(
-    res: Resources[Any, Any, TC, PS, PC],
-    this: TC,
-    next_: TC | None,
+    res: Resources[Any, Any, SC, PS, PC],
+    this: SC,
+    next_: SC | None,
     indexer: _AcquisitionIndexer,
 ) -> sources.AcquiredIQ:
     """arm and acquire from the source and peripherals.
@@ -225,7 +225,7 @@ def _acquire_both(
 
     assert this is not None
 
-    def arm_both(c: TC | None):
+    def arm_both(c: SC | None):
         if c is None:
             return
 
@@ -269,9 +269,9 @@ def _acquire_both(
 
 
 def _log_cache_info(
-    resources: Resources[TS, TP, TC, PS, PC],
+    resources: Resources[SS, SP, SC, PS, PC],
     cache,
-    capture: TC,
+    capture: SC,
     result,
     *_,
     **__,

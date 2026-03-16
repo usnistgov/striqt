@@ -1,11 +1,11 @@
 from __future__ import annotations as __
 
-from typing import Any, Sequence, TYPE_CHECKING
+from typing import Any, cast, Sequence, TYPE_CHECKING
 from pathlib import Path
 
 from .. import specs as specs
 from . import compute, io, peripherals, sinks, sources, util
-from .typing import TypeVar, TC, TP, TPC, PS, PC
+from .typing import Peripherals, TypeVar, SC, SP, SPC, PS, PC
 import striqt.analysis as sa
 
 import msgspec
@@ -21,7 +21,7 @@ else:
     xr = sa.util.lazy_import('xarray')
 
 
-TS = TypeVar('TS', bound='specs.SoapySource')
+SS = TypeVar('SS', bound='specs.SoapySource')
 
 
 def compute_y_factor_corrections(dataset: 'xr.Dataset', Tref=290.0) -> 'xr.Dataset':
@@ -232,16 +232,16 @@ class ManualYFactorPeripheral(
 
     def setup(
         self,
-        captures: Sequence[TC],
+        captures: Sequence[SC],
         loops: Sequence[specs.LoopSpec],
     ):
         pass
 
 
 def _calibration_peripherals_cls(
-    ext: type[peripherals.PeripheralsBase[TP, TC]],
-    cal: type[peripherals.CalibrationPeripheralsBase[Any, Any, TPC]],
-) -> type[peripherals.CalibrationPeripheralsBase[TP, TC, TPC]]:
+    ext: type[Peripherals[SP, SC]],
+    cal: type[peripherals.CalibrationPeripheralsBase[Any, Any, SPC]],
+) -> type[peripherals.CalibrationPeripheralsBase[SP, SC, SPC]]:
     """return a peripheral type for external hardware and calibration"""
 
     class cls(peripherals.CalibrationPeripheralsBase):
@@ -260,7 +260,7 @@ def _calibration_peripherals_cls(
 
         def setup(
             self,
-            captures: Sequence[TC],
+            captures: Sequence[SC],
             loops: Sequence[specs.LoopSpec],
         ):
             self.ext.setup(captures, loops)
@@ -295,8 +295,8 @@ def _calibration_peripherals_cls(
 
 
 def bind_manual_yfactor_calibration(
-    name: str, sensor: 'bindings.SensorBinding[TS, TP, TC, PS, PC]'
-) -> 'bindings.SensorBinding[TS, TP, TC, PS, PC]':
+    name: str, sensor: 'bindings.SensorBinding[SS, SP, SC, PS, PC]'
+) -> 'bindings.SensorBinding[SS, SP, SC, PS, PC]':
     """extend an existing binding with a y-factor calibration"""
 
     from . import bindings
@@ -318,6 +318,21 @@ def bind_manual_yfactor_calibration(
         sensor.peripherals, ManualYFactorPeripheral
     )
 
+    b = bindings.Sensor(
+        source=sensor.source,
+        peripherals=peripherals_cls,
+        sweep_spec=sweep_spec_cls,
+        sink=YFactorSink,
+    )
+
+    s = bindings.Schema(
+        source=sensor.schema.source,
+        capture=capture_spec_cls,
+        peripherals=sensor.schema.peripherals,
+        init_like=sensor.schema.init_like,
+        arm_like=sensor.schema.arm_like,
+    )
+
     return bindings.bind_sensor(
         name,
         bindings.Sensor(
@@ -325,7 +340,7 @@ def bind_manual_yfactor_calibration(
             peripherals=peripherals_cls,
             sweep_spec=sweep_spec_cls,
             sink=YFactorSink,
-        ),
+        ),  # pyright: ignore
         bindings.Schema(
             source=sensor.schema.source,
             capture=capture_spec_cls,

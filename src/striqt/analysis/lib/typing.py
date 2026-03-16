@@ -1,13 +1,5 @@
 from __future__ import annotations as __
-from typing import (
-    Any,
-    Iterable,
-    Literal,
-    overload,
-    Protocol,
-    TypeVar,
-    TYPE_CHECKING,
-)
+from typing import Any, Iterable, Literal, overload, TypeVar, TYPE_CHECKING
 
 
 # %% dataarrays.py
@@ -15,7 +7,14 @@ AnalysisReturnFlag = Literal[True, False, 'delayed']
 TAR = TypeVar('TAR', bound=AnalysisReturnFlag)
 
 if TYPE_CHECKING:
-    from typing_extensions import Callable, ParamSpec, Self, TypeAlias
+    from typing_extensions import (
+        Callable,
+        ParamSpec,
+        Protocol,
+        Self,
+        TypeAlias,
+        TypeVar,
+    )
 
     from . import dataarrays
     from striqt.waveform.lib.typing import Array
@@ -40,7 +39,7 @@ if TYPE_CHECKING:
 
         def get_capture_fields(self) -> dict: ...
 
-    ChunksSize = int | Literal['auto'] | tuple[int, ...] | None
+    ChunksSize = int | Literal['auto'] | tuple[int, ...] | None  # ty: ignore
 
     if hasattr(zarr.storage, 'Store'):  # type: ignore
         # zarr 2.x
@@ -52,7 +51,7 @@ if TYPE_CHECKING:
     ZarrFormat: TypeAlias = str | Literal[2, 3]
 
     # %% register.py
-    Measurement = Array | tuple[Array, dict[str, Any]]
+    Measurement: TypeAlias = Array | tuple[Array, dict[str, Any]]
     RM = TypeVar('RM', bound=Measurement)
 
     class AnalysisFunc(Protocol[P, R]):

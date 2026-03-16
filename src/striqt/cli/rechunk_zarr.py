@@ -8,7 +8,7 @@ import functools
 @functools.cache
 def try_zarrs_input():
     try:
-        import zarrs
+        import zarrs  # type: ignore
     except ImportError:
         print('not accelerating with zarrs because it could not be imported')
     else:
@@ -89,7 +89,12 @@ def run(zarr_input: str, zarr_output: str | None, chunk_size, compression):
     else:
         c = compression
 
-    sa.dump(store, data, chunk_bytes=1_000_000 * chunk_size, compression=c)
+    sa.dump(
+        store,
+        data,
+        chunk_bytes=1_000_000 * chunk_size,
+        compression=c,  # type: ignore
+    )
 
 
 if __name__ == '__main__':

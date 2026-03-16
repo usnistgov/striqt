@@ -1,7 +1,9 @@
 from .lib.fourier import (
     design_cola_resampler,
     design_fir_lpf,
+    design_oafilter,
     equivalent_noise_bandwidth,
+    downsample_stft,
     fftfreq,
     fft,
     get_max_cupy_fft_chunk,
@@ -10,11 +12,12 @@ from .lib.fourier import (
     istft,
     null_lo,
     oaconvolve,
+    oafilter,
     oaresample,
-    ola_filter_parameters,
     resample,
     ResamplerDesign,
     spectrogram,
     stft,
-    truncate_freqs
+    truncate_freqs,
+    zero_stft_by_freq,
 )

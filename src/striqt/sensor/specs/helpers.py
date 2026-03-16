@@ -33,7 +33,7 @@ from .structs import _AdjustSourceCapturesMap
 
 
 if TYPE_CHECKING:
-    from ..lib.typing import CaptureConverterWrapper, TC, TypeVar
+    from ..lib.typing import CaptureConverterWrapper, SC, TypeVar
 
     _T = TypeVar('_T')
 
@@ -72,7 +72,7 @@ def _check_fields(
 
 
 @sa.util.lru_cache()
-def pairwise_by_port(c1: TC, c2: TC | None, is_new: bool) -> list[tuple[TC, TC | None]]:
+def pairwise_by_port(c1: SC, c2: SC | None, is_new: bool) -> list[tuple[SC, SC | None]]:
     # a list with 1 capture per port
     c1_split = split_capture_ports(c1)
 
@@ -88,15 +88,15 @@ def pairwise_by_port(c1: TC, c2: TC | None, is_new: bool) -> list[tuple[TC, TC |
 
 @sa.util.lru_cache()
 def _expand_capture_loops(
-    captures: tuple[TC, ...],
+    captures: tuple[SC, ...],
     loops: tuple[specs.LoopSpec, ...],
     adjust: specs.AdjustCapturesType | None = None,
     *,
     source_id: types.SourceID | None = None,
-    cls: type[TC] | None = None,
+    cls: type[SC] | None = None,
     only_fields: tuple[str, ...] | None = None,
     loop_only_nyquist: bool = False,
-) -> tuple[TC, ...]:
+) -> tuple[SC, ...]:
     """evaluate the loop specification, and flatten into one list of loops"""
 
     if only_fields is not None:
@@ -148,11 +148,11 @@ def _expand_capture_loops(
 
 
 def loop_captures(
-    sweep: specs.Sweep[Any, Any, TC],
+    sweep: specs.Sweep[Any, Any, SC],
     source_id: types.SourceID | None = None,
     *,
     only_fields: tuple[str, ...] | None = None,
-) -> tuple[TC, ...]:
+) -> tuple[SC, ...]:
     """evaluate the loop specification, and flatten into one list of loops"""
 
     if len(sweep.captures) > 0:
@@ -234,7 +234,7 @@ def get_capture_type(sweep_cls: type[specs.Sweep]) -> type[specs.SensorCapture]:
 
 
 @sa.util.lru_cache()
-def split_capture_ports(capture: TC) -> list[TC]:
+def split_capture_ports(capture: SC) -> list[SC]:
     """split a multi-channel capture into a list of single-channel captures.
 
     If capture is not a multi-channel capture (its channel field is just a number),
@@ -427,14 +427,21 @@ def adjust_captures(
         try:
             return lookup_spec.lookup[k]
         except KeyError:
-            has_default = isinstance(field_default, specs.CaptureRemap)
             if lookup_spec.default != msgspec.UNSET:
                 return lookup_spec.default
-            elif has_default and field_default.default != msgspec.UNSET:
-                return field_default.default
+
+            if isinstance(field_default, specs.CaptureRemap):
+                default = field_default.default
+                required = field_default.required
+            else:
+                default = msgspec.UNSET
+                required = False
+
+            if default != msgspec.UNSET:
+                return default
             elif not lookup_spec.required:
                 return msgspec.UNSET
-            elif has_default and not field_default.required:
+            elif required:
                 return msgspec.UNSET
             else:
                 raise KeyError(
@@ -509,9 +516,9 @@ def get_path_fields(
 def ensure_tuple(obj: _T | tuple[_T, ...], size: int | None = None) -> tuple[_T, ...]:
     if isinstance(obj, tuple):
         if size is not None and len(obj) == 1:
-            return obj * size
+            return obj * size  # ty: ignore
         else:
-            return obj
+            return obj  # ty: ignore
     elif size is None:
         return (obj,)
     else:
@@ -520,7 +527,7 @@ def ensure_tuple(obj: _T | tuple[_T, ...], size: int | None = None) -> tuple[_T,
 
 @sa.util.lru_cache()
 def get_unique_ports(
-    captures: tuple[TC, ...],
+    captures: tuple[SC, ...],
     loops: tuple[specs.LoopSpec, ...] | None = None,
 ) -> tuple[int, ...]:
     ports = set()
@@ -636,7 +643,7 @@ def to_builtins(obj: Any) -> Any:
 
 @sa.util.lru_cache()
 def list_capture_adjustments(
-    sweep: specs.Sweep[Any, Any, TC], source_id: str
+    sweep: specs.Sweep[Any, Any, SC], source_id: str
 ) -> dict[str, tuple[str, ...]]:
     lookup_fields = _list_capture_adjustments(
         sweep.adjust_captures, source_id=source_id
@@ -741,7 +748,7 @@ def _infer_field_template(type_: msgspec.inspect.Type) -> tuple[dict, Any]:
     from msgspec import inspect as mi
     import pandas as pd
 
-    BUILTINS = {
+    BUILTINS: dict[type[mi.Type], Any] = {
         mi.FloatType: 0.0,
         mi.BoolType: False,
         mi.IntType: 0,
@@ -749,28 +756,30 @@ def _infer_field_template(type_: msgspec.inspect.Type) -> tuple[dict, Any]:
         mi.DictType: {},
     }
 
-    if not isinstance(type_, mi.Type):
-        type_ = mi.type_info(type_)
+    if isinstance(type_, mi.Type):
+        type_key = type_
+    else:
+        type_key = mi.type_info(type_key)
 
-    if isinstance(type_, tuple(BUILTINS.keys())):
+    if isinstance(type_key, tuple(BUILTINS.keys())):
         # dicey if subclasses show up
-        return {}, BUILTINS[type(type_)]
-    elif isinstance(type_, mi.CustomType):
-        if issubclass(type_.cls, pd.Timestamp):
+        return {}, BUILTINS[type(type_key)]
+    elif isinstance(type_key, mi.CustomType):
+        if issubclass(type_key.cls, pd.Timestamp):
             return {}, pd.Timestamp(0)
         else:
             try:
-                return {}, type_.cls()
+                return {}, type_key.cls()
             except Exception as ex:
-                name = type_.cls.__qualname__
+                name = type_key.cls.__qualname__
                 raise TypeError(f'failed to make default for type {name!r}') from ex
-    elif isinstance(type_, mi.Metadata):
-        return type_.extra or {}, _infer_field_template(type_.type)[1]
-    elif isinstance(type_, mi.LiteralType):
-        return {}, type(type_.values[0])
-    elif isinstance(type_, mi.UnionType):
+    elif isinstance(type_key, mi.Metadata):
+        return type_key.extra or {}, _infer_field_template(type_key.type)[1]
+    elif isinstance(type_key, mi.LiteralType):
+        return {}, type(type_key.values[0])
+    elif isinstance(type_key, mi.UnionType):
         UNION_SKIP = (mi.NoneType, mi.VarTupleType)
-        types = [t for t in type_.types if not isinstance(t, UNION_SKIP)]
+        types = [t for t in type_key.types if not isinstance(t, UNION_SKIP)]
         if len(types) == 1:
             return _infer_field_template(types[0])
         else:
@@ -779,7 +788,7 @@ def _infer_field_template(type_: msgspec.inspect.Type) -> tuple[dict, Any]:
                 f'cannot determine xarray type for union of msgspec types {names!r}'
             )
     else:
-        raise TypeError(f'unsupported msgspec field type {type_!r}')
+        raise TypeError(f'unsupported msgspec field type {type_key!r}')
 
 
 @sa.util.lru_cache()

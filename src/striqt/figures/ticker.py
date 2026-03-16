@@ -378,7 +378,9 @@ def contiguous_segments(df, index_level, threshold=7, relative=True):
     delta = pd.Series(df.index.get_level_values(index_level)).diff()
     if relative:
         threshold = threshold * delta.median()
-    i_gaps = delta[delta > threshold].index.values
+    sel = delta[delta > threshold]
+    assert isinstance(sel, (pd.Series, pd.DataFrame))
+    i_gaps = sel.index.values
     i_segments = [[0] + list(i_gaps), list(i_gaps) + [None]]
 
     return [df.iloc[i0:i1] for i0, i1 in zip(*i_segments)]

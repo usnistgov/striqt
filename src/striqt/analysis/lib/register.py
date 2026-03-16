@@ -81,7 +81,7 @@ class KwArgCache:
         self._key = self.kw_key(kws)
         self._value = value
 
-    def apply(self, func: AnalysisFunc[P, RM]) -> AnalysisFunc[P, RM]:
+    def apply(self, func: 'AnalysisFunc[P, RM]') -> 'AnalysisFunc[P, RM]':
         @functools.wraps(func)
         def wrapped(
             iq: Array,
@@ -89,7 +89,7 @@ class KwArgCache:
             *args: P.args,
             **kwargs: P.kwargs,
         ) -> RM:
-            all_kws = dict(kwargs, capture=capture)
+            all_kws = dict(kwargs, capture=capture)  # ty: ignore
             match = self.lookup(all_kws)
             if match is not None:
                 return match
@@ -181,7 +181,7 @@ class CoordRegistry(dict['CoordFunc', 'CoordInfo']):
 
         return wrapper
 
-    def __hash__(self):
+    def __hash__(self):  # pyright: ignore
         return hash(frozenset(self.items()))
 
 

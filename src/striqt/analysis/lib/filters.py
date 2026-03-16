@@ -14,7 +14,7 @@ if typing.TYPE_CHECKING:
     import scipy
 
     import striqt.waveform as sw
-    from striqt.waveform.typing import Array
+    from .typing import Array
 else:
     np = util.lazy_import('numpy')
     scipy = util.lazy_import('scipy')
@@ -111,7 +111,7 @@ def ola_filter(
 ):
     kwargs = select_parameter_kws(locals())
 
-    return sw.fourier.ola_filter(
+    return sw.fourier.oafilter(
         iq,
         fs=capture.sample_rate,
         passband=(-capture.analysis_bandwidth / 2, capture.analysis_bandwidth / 2),

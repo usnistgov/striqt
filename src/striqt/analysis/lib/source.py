@@ -10,7 +10,7 @@ if typing.TYPE_CHECKING:
     import numpy as np
 
     import striqt.waveform as sw
-    from striqt.waveform.typing import Array
+    from .typing import Array
 else:
     np = util.lazy_import('numpy')
     sw = util.lazy_import('striqt.waveform')
@@ -40,7 +40,7 @@ def filter_iq_capture(
     nfft = capture.analysis_filter.nfft
     nfft_out = capture.analysis_filter.nfft_out or nfft
 
-    nfft_out, noverlap, overlap_scale, _ = sw.fourier.ola_filter_parameters(
+    nfft_out, noverlap, overlap_scale, _ = sw.fourier.design_oafilter(
         iq.size,
         window=capture.analysis_filter.window,
         nfft_out=nfft_out,

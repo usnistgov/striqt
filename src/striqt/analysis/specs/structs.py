@@ -108,7 +108,7 @@ class FilteredCapture(Capture, kw_only=True, frozen=True):
 
 
 class AnalysisKeywords(typing.TypedDict):
-    as_xarray: typing.NotRequired[bool | typing.Literal['delayed']]
+    as_xarray: typing.NotRequired[typing.Union[bool, typing.Literal['delayed']]]
 
 
 class Analysis(SpecBase, kw_only=True, frozen=True):

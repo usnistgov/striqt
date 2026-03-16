@@ -111,7 +111,7 @@ def correlate_sync_sequence(
     spec: _Cellular5GNRSSBCorrelator,
     params: sw.ofdm.SyncParams,
     cell_id_split: int | None = None,
-):
+) -> Array:
     """correlate the IQ of a synchronization block against a synchronization sequence.
 
     Arguments:
@@ -247,7 +247,7 @@ def evaluate_spectrogram(
     limit_digits: Optional[int] = None,
     dB=True,
 ) -> tuple[Array, dict]:
-    spg, attrs = _cached_spectrogram(iq=iq, capture=capture, spec=spec)
+    spg, attrs = _cached_spectrogram(iq, capture, spec=spec)
     xp = sw.array_namespace(iq)
 
     copied = False

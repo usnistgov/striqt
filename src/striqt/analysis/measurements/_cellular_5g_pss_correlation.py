@@ -13,7 +13,7 @@ import striqt.waveform as sw
 
 if typing.TYPE_CHECKING:
     import numpy as np
-    from striqt.waveform.typing import Array
+    from ..lib.typing import Array
 else:
     np = util.lazy_import('numpy')
 
@@ -32,10 +32,10 @@ pss_cache = register.KwArgCache([CAPTURE_DIM, 'spec'])
 
 @pss_cache.apply
 def correlate_5g_pss(
-    iq: Array,
+    iq: 'Array',
     capture: specs.Capture,
     spec: specs.Cellular5GNRPSSCorrelator,
-) -> Array:
+) -> 'Array':
     xp = sw.array_namespace(iq)
 
     ssb_iq = shared.get_5g_ssb_iq(iq, capture=capture, spec=spec)
@@ -82,7 +82,7 @@ def weight_correlation_locally(R, spec: specs.Cellular5GNPSSSync):
 
     # estimate an SNR
     window_size = round(spec.snr_window_fill * R.shape[-1])
-    Rpow_median = ndimage.median_filter(
+    Rpow_median = ndimage.median_filter(  # pyrefly: ignore
         Rpow, size=(Rpow.ndim - 1) * (1,) + (window_size,)
     )
     Rsnr = Rpow / Rpow_median
