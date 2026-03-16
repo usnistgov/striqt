@@ -158,9 +158,9 @@ def _repackage_arraylike(
     elif not hasattr(obj, 'values'):
         return typing.cast('_ALN', values)
     elif isinstance(obj, pd.Series):
-        return pd.Series(values, index=obj.index) # pyright: ignore
+        return pd.Series(values, index=obj.index)  # pyright: ignore
     elif isinstance(obj, pd.DataFrame):
-        return pd.DataFrame(values, index=obj.index, columns=obj.columns) # pyright: ignore
+        return pd.DataFrame(values, index=obj.index, columns=obj.columns)  # pyright: ignore
     elif isinstance(obj, xr.DataArray):
         ret = obj.copy(deep=False, data=values)
         units = ret.attrs.get('units', None)
@@ -299,22 +299,40 @@ def envtodB(x: _ALN, abs: bool = True, eps: float = 0, out=None) -> _ALN:
 
     return _repackage_arraylike(values, x, unit_transform=unit_wave_to_dB)
 
-@overload
-def dBlinmean(x_dB: 'xr.Dataset', axis:'Dims|None'=None, overwrite_x=...) -> 'xr.Dataset': ...
 
 @overload
-def dBlinmean(x_dB: 'xr.DataArray', axis:'Dims|None'=None, overwrite_x=...) -> 'xr.DataArray': ...
+def dBlinmean(
+    x_dB: 'xr.Dataset', axis: 'Dims|None' = None, overwrite_x=...
+) -> 'xr.Dataset': ...
+
 
 @overload
-def dBlinmean(x_dB: 'np.ndarray', axis:'int|Sequence[int]|None'=None, overwrite_x=...) -> 'np.ndarray': ...
+def dBlinmean(
+    x_dB: 'xr.DataArray', axis: 'Dims|None' = None, overwrite_x=...
+) -> 'xr.DataArray': ...
+
 
 @overload
-def dBlinmean(x_dB: 'pd.Series', axis:'int|Sequence[int]|None'=None, overwrite_x=...) -> 'pd.Series': ...
+def dBlinmean(
+    x_dB: 'np.ndarray', axis: 'int|Sequence[int]|None' = None, overwrite_x=...
+) -> 'np.ndarray': ...
+
 
 @overload
-def dBlinmean(x_dB: 'pd.DataFrame', axis:'int|Sequence[int]|None'=None, overwrite_x=...) -> 'pd.DataFrame': ...
+def dBlinmean(
+    x_dB: 'pd.Series', axis: 'int|Sequence[int]|None' = None, overwrite_x=...
+) -> 'pd.Series': ...
 
-def dBlinmean(x_dB: _AL, axis:'Dims|int|Sequence[int]|None'=None, overwrite_x=False) -> _AL:
+
+@overload
+def dBlinmean(
+    x_dB: 'pd.DataFrame', axis: 'int|Sequence[int]|None' = None, overwrite_x=...
+) -> 'pd.DataFrame': ...
+
+
+def dBlinmean(
+    x_dB: _AL, axis: 'Dims|int|Sequence[int]|None' = None, overwrite_x=False
+) -> _AL:
     """evaluate the mean in linear power space given power in dB.
 
     This is equivalent to:
@@ -331,24 +349,39 @@ def dBlinmean(x_dB: _AL, axis:'Dims|int|Sequence[int]|None'=None, overwrite_x=Fa
         out = None
 
     x = dBtopow(x_dB, out=out)
-    linmean = x.mean(axis) # type: ignore
+    linmean = x.mean(axis)  # type: ignore
     return powtodB(linmean, out=linmean)  # type: ignore
 
 
 @overload
-def dBlinsum(x_dB: 'xr.Dataset', axis:'Dims|None'=None, overwrite_x=...) -> 'xr.Dataset': ...
+def dBlinsum(
+    x_dB: 'xr.Dataset', axis: 'Dims|None' = None, overwrite_x=...
+) -> 'xr.Dataset': ...
+
 
 @overload
-def dBlinsum(x_dB: 'xr.DataArray', axis:'Dims|None'=None, overwrite_x=...) -> 'xr.DataArray': ...
+def dBlinsum(
+    x_dB: 'xr.DataArray', axis: 'Dims|None' = None, overwrite_x=...
+) -> 'xr.DataArray': ...
+
 
 @overload
-def dBlinsum(x_dB: 'np.ndarray', axis:'int|Sequence[int]|None'=None, overwrite_x=...) -> 'np.ndarray': ...
+def dBlinsum(
+    x_dB: 'np.ndarray', axis: 'int|Sequence[int]|None' = None, overwrite_x=...
+) -> 'np.ndarray': ...
+
 
 @overload
-def dBlinsum(x_dB: 'pd.Series', axis:'int|Sequence[int]|None'=None, overwrite_x=...) -> 'pd.Series': ...
+def dBlinsum(
+    x_dB: 'pd.Series', axis: 'int|Sequence[int]|None' = None, overwrite_x=...
+) -> 'pd.Series': ...
+
 
 @overload
-def dBlinsum(x_dB: 'pd.DataFrame', axis:'int|Sequence[int]|None'=None, overwrite_x=...) -> 'pd.DataFrame': ...
+def dBlinsum(
+    x_dB: 'pd.DataFrame', axis: 'int|Sequence[int]|None' = None, overwrite_x=...
+) -> 'pd.DataFrame': ...
+
 
 def dBlinsum(x_dB: _AL, axis=None, overwrite_x=False) -> _AL:
     """evaluate the sum in linear power space given power in dB.
