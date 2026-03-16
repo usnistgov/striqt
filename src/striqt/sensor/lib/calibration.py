@@ -318,21 +318,6 @@ def bind_manual_yfactor_calibration(
         sensor.peripherals, ManualYFactorPeripheral
     )
 
-    b = bindings.Sensor(
-        source=sensor.source,
-        peripherals=peripherals_cls,
-        sweep_spec=sweep_spec_cls,
-        sink=YFactorSink,
-    )
-
-    s = bindings.Schema(
-        source=sensor.schema.source,
-        capture=capture_spec_cls,
-        peripherals=sensor.schema.peripherals,
-        init_like=sensor.schema.init_like,
-        arm_like=sensor.schema.arm_like,
-    )
-
     return bindings.bind_sensor(
         name,
         bindings.Sensor(
