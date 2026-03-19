@@ -127,14 +127,23 @@ def build_capture_coords(
 
     for c in captures:
         capture_entries = c.to_dict() | extra_coords
+        adjust_analysis = capture_entries.pop('adjust_analysis', {})
 
         for name, value in capture_entries.items():
-            if name == 'adjust_analysis':
-                name = 'analysis_' + name
             changes[name].append(value)
+        for name, value in adjust_analysis.items():
+            changes['analysis_' + name].append(value)
 
     for name, values in changes.items():
-        coords[name].data[:] = np.array(values)
+        if name in coords:
+            coords[name].data[:] = np.array(values)
+        else:
+            coords[name] = xr.Variable(
+                (CAPTURE_DIM,),
+                data=np.array(values),
+                fastpath=True,
+            #    attrs=attrs[name],
+            )
 
     return coords
 
@@ -528,8 +537,6 @@ def _coord_template(
         for name in attrs.keys():
             if name.startswith('_'):
                 continue
-            if name == 'adjust_analysis':
-                name = 'analysis_' + name
 
             vars[name] = xr.Variable(
                 (CAPTURE_DIM,),
