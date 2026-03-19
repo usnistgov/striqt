@@ -378,8 +378,8 @@ def build_warmup_sweep(sweep: specs.Sweep[SS, SP, SC], count: int = 1) -> Warmup
     return sweep_spec.replace(captures=captures, loops=())
 
 
-def prepare_compute(input_spec: specs.Sweep, skip_warmup: bool = False):
-    if input_spec.source.array_backend == 'cupy':
+def prepare_compute(spec: specs.Sweep, skip_warmup: bool = False):
+    if spec.source.array_backend == 'cupy':
         with sa.util.stopwatch('import cuda computing packages', 'sweep', 2):
             # this order is important on some versions/platforms!
             # https://github.com/numba/numba/issues/6131
@@ -398,15 +398,15 @@ def prepare_compute(input_spec: specs.Sweep, skip_warmup: bool = False):
 
     if (
         skip_warmup
-        or input_spec.options.skip_warmup
-        or not sweep_touches_gpu(input_spec)
+        or spec.options.skip_warmup
+        or not sweep_touches_gpu(spec)
     ):
         yield from (None,)
 
     from .. import bindings
     from . import execute, resources, sinks
 
-    spec = build_warmup_sweep(input_spec)
+    spec = build_warmup_sweep(spec)
 
     if len(spec.captures) == 0:
         return
