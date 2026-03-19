@@ -183,6 +183,7 @@ class Description(SpecBase, frozen=True, kw_only=True):
 
 class LoopBase(SpecBase, tag=str.lower, tag_field='kind', frozen=True, kw_only=True):
     field: str | None
+    isin: types.IsIn = 'capture'
 
     def get_points(self) -> list:
         raise NotImplementedError
@@ -214,7 +215,7 @@ class Repeat(LoopBase, frozen=True, kw_only=True):
 
 class List(LoopBase, frozen=True, kw_only=True):
     field: str
-    values: tuple[Any, ...]
+    values: tuple[AdjustCapturesType | str | float | int | bool | None, ...]
 
     def get_points(self) -> list:
         return list(self.values)

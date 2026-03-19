@@ -297,6 +297,9 @@ def from_delayed(dd: DelayedDataset):
 def sweep_touches_gpu(sweep: specs.Sweep) -> bool:
     """returns True if the sweep would benefit from the GPU"""
 
+    if sweep.source.array_backend == 'numpy':
+        return False
+
     if sweep.source.calibration is not None:
         return True
 
@@ -312,6 +315,8 @@ def sweep_touches_gpu(sweep: specs.Sweep) -> bool:
 
     # check any values specified in outer loops
     for loop in sweep.loops:
+        if loop.isin == 'analysis':
+            continue
         if loop.field == 'host_resample' and True in loop.get_points():
             return True
         elif loop.field == 'analysis_bandwidth' and not all(loop.get_points()):
@@ -320,7 +325,7 @@ def sweep_touches_gpu(sweep: specs.Sweep) -> bool:
     return False
 
 
-def build_warmup_sweep(sweep: specs.Sweep[SS, SP, SC]) -> WarmupSweep:
+def build_warmup_sweep(sweep: specs.Sweep[SS, SP, SC], count: int = 1) -> WarmupSweep:
     """derive a warmup sweep specification derived from sweep.
 
     This is meant to trigger expensive python imports and warm up JIT caches. The goal
@@ -334,50 +339,43 @@ def build_warmup_sweep(sweep: specs.Sweep[SS, SP, SC]) -> WarmupSweep:
     from .bindings import mock_binding
     from ..bindings import warmup
 
-    # check loops to select an easy case for warmup
-    updates = {}
-    ports = []
+    # introspect the maximum number of ports used in the sweep
+    ports: list[Any] = [c.port for c in sweep.captures]
+    max_rx_ports = 0
     for loop in sweep.loops:
-        if loop.field in ('duration', 'sample_rate', 'backend_sample_rate'):
-            updates[loop.field] = min(loop.get_points())
-        if loop.field == 'host_resample':
-            updates[loop.field] = any(loop.get_points())
-        if loop.field == 'port':
+        if loop.isin == 'capture' and loop.field == 'port':
             ports.extend(loop.get_points())
-
-    captures = [c.replace(**updates) for c in sweep.captures]
-    by_size = {round(c.sample_rate * c.duration): c for c in captures}
-
-    num_rx_ports = 0
-    for port in ports + [c.port for c in captures]:
+    for port in ports:
         if port is None:
             continue
         if isinstance(port, tuple):
             n = max(port)
         else:
             n = port
-        if n > num_rx_ports:
-            num_rx_ports = n
+        if n > max_rx_ports:
+            max_rx_ports = n
 
-    if len(captures) > 1:
-        captures = [by_size[min(by_size.keys())]]
-
+    # then build up the warmup sweep
     b = mock_binding(sweep._bindings__, 'warmup', register=False)
 
     source = warmup.schema.source(
-        num_rx_ports=num_rx_ports,
+        num_rx_ports=max_rx_ports,
         master_clock_rate=sweep.source.master_clock_rate,
         trigger_strobe=None,
         signal_trigger=sweep.source.signal_trigger,
     )
 
-    return b.sweep_spec(
+    sweep_spec = b.sweep_spec(
         source=source,
-        captures=tuple(captures),
-        loops=(),
+        captures=sweep.captures,
+        loops=sweep.loops,
         analysis=sweep.analysis,
         sink=sweep.sink,
     )
+
+    captures = specs.helpers.loop_captures(sweep_spec, limit=count)
+
+    return sweep_spec.replace(captures=captures, loops=())
 
 
 def prepare_compute(input_spec: specs.Sweep, skip_warmup: bool = False):
@@ -398,7 +396,11 @@ def prepare_compute(input_spec: specs.Sweep, skip_warmup: bool = False):
         message='Mean of empty slice.*',
     )
 
-    if skip_warmup or input_spec.options.skip_warmup:
+    if (
+        skip_warmup
+        or input_spec.options.skip_warmup
+        or not sweep_touches_gpu(input_spec)
+    ):
         yield from (None,)
 
     from .. import bindings

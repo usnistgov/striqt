@@ -33,9 +33,10 @@ from .structs import _AdjustSourceCapturesMap
 
 
 if TYPE_CHECKING:
-    from ..lib.typing import CaptureConverterWrapper, SC, TypeVar
+    from ..lib.typing import CaptureConverterWrapper, SC, TypeAlias, TypeVar
 
     _T = TypeVar('_T')
+    _LoopPointsDict: TypeAlias = dict[tuple[specs.types.IsIn, str], list]
 
 
 def convert_capture_arg(
@@ -51,6 +52,21 @@ def convert_capture_arg(
         return wrapped
 
     return wrapper
+
+
+@sa.util.lru_cache()
+def pairwise_by_port(c1: SC, c2: SC | None, is_new: bool) -> list[tuple[SC, SC | None]]:
+    # a list with 1 capture per port
+    c1_split = split_capture_ports(c1)
+
+    # any changes to the port index
+    if c2 is None or is_new:
+        c2_split = len(c1_split) * [None]
+    else:
+        c2_split = split_capture_ports(c2)
+
+    pairwise = zip(*(c1_split, c2_split))
+    return list(pairwise)
 
 
 @sa.util.lru_cache()
@@ -72,18 +88,60 @@ def _check_fields(
 
 
 @sa.util.lru_cache()
-def pairwise_by_port(c1: SC, c2: SC | None, is_new: bool) -> list[tuple[SC, SC | None]]:
-    # a list with 1 capture per port
-    c1_split = split_capture_ports(c1)
+def _build_loop_points_dict(
+    loops: tuple[specs.LoopBase, ...], capture_cls: type[SC], new_instance: bool = False
+) -> _LoopPointsDict:
+    loop_points: _LoopPointsDict = {
+        (l.isin, l.field): l.get_points() for l in loops if l.field is not None
+    }
 
-    # any changes to the port index
-    if c2 is None or is_new:
-        c2_split = len(c1_split) * [None]
-    else:
-        c2_split = split_capture_ports(c2)
+    fields = msgspec.structs.fields(capture_cls)
 
-    pairwise = zip(*(c1_split, c2_split))
-    return list(pairwise)
+    available = set(n for owner, n in loop_points.keys() if owner == 'capture')
+
+    if new_instance:
+        required = {f.name for f in fields if f.required}
+        missing = required - available
+        if len(missing) > 0:
+            raise TypeError(f'missing required loop fields {missing!r}')
+
+    extra = available - {f.name for f in fields}
+    if len(extra) > 0:
+        raise TypeError(f'invalid capture fields {extra!r} specified in loops')
+
+    return loop_points
+
+
+def _merge_loop_analysis(points: _LoopPointsDict) -> dict[str, Any]:
+    """apply any loops where isin == 'analysis' into capture.adjust_captures"""
+
+    updates = {}
+    analysis_updates = {}
+    for (target, field), value in points.items():
+        if target == 'capture':
+            updates[field] = value
+        else:
+            analysis_updates[field] = value
+    if analysis_updates:
+        updates['adjust_analysis'] = analysis_updates
+
+    return updates
+
+
+def _merge_capture_updates(*dicts: dict[str, Any]) -> dict[str, Any]:
+    """merge the given dicts as `dicts[0] | dicts[1] | ... | dicts[len(dicts)]`.
+
+    Handles 'adjust_analysis' field similarly across dicts, if present, is
+    is merged separately and set in the return.
+    """
+    capture = {}
+    adjust_analysis = {}
+    for d in dicts:
+        adjust_analysis.update(d.get('adjust_analysis', {}))
+        capture.update(d)
+    if adjust_analysis:
+        capture['adjust_analysis'] = adjust_analysis
+    return capture
 
 
 @sa.util.lru_cache()
@@ -96,11 +154,13 @@ def _expand_capture_loops(
     cls: type[SC] | None = None,
     only_fields: tuple[str, ...] | None = None,
     loop_only_nyquist: bool = False,
+    limit: int | None = None,
 ) -> tuple[SC, ...]:
     """evaluate the loop specification, and flatten into one list of loops"""
-
     if only_fields is not None:
-        loops = tuple(l for l in loops if l.field in only_fields)
+        loops = tuple(
+            l for l in loops if l.isin == 'analysis' or l.field in only_fields
+        )
 
     if len(captures) == 0 and len(loops) == 0:
         return ()
@@ -109,24 +169,26 @@ def _expand_capture_loops(
         cls = type(captures[0])
     assert issubclass(cls, specs.Capture)
 
-    loop_points = {
-        loop.field: loop.get_points() for loop in loops if loop.field is not None
-    }
-    _check_fields(cls, tuple(loop_points.keys()), False)
-    defaults = {k: v[0] for k, v in loop_points.items() if len(v) > 0}
+    loop_points = _build_loop_points_dict(loops, cls, False)
+    loop_starts = {k: v[0] for k, v in loop_points.items() if len(v) > 0}
+    defaults = _merge_loop_analysis(loop_starts)
     combinations = itertools.product(*loop_points.values())
 
     cdicts = cast(tuple[dict, ...], to_builtins(captures))
 
     result = []
-    for values in combinations:
-        updates = dict(zip(loop_points.keys(), values))
+    for i, values in enumerate(combinations):
+        if limit is not None and i >= limit:
+            break
+
+        updates = _merge_loop_analysis(dict(zip(loop_points.keys(), values)))
+
         if len(cdicts) > 0:
-            # iterate specified captures if available
-            new = (defaults | c | updates for c in cdicts)
+            # merge into the specified captures, if any
+            new = (_merge_capture_updates(defaults, c, updates) for c in cdicts)
         else:
             # otherwise, instances are new captures
-            new = [defaults | updates]
+            new = [_merge_capture_updates(defaults, updates)]
 
         if adjust is not None:
             new = (c | adjust_captures(c, adjust, source_id) for c in new)
@@ -152,6 +214,7 @@ def loop_captures(
     source_id: types.SourceID | None = None,
     *,
     only_fields: tuple[str, ...] | None = None,
+    limit: int | None = None,
 ) -> tuple[SC, ...]:
     """evaluate the loop specification, and flatten into one list of loops"""
 
@@ -176,6 +239,7 @@ def loop_captures(
         cls=cls,
         loop_only_nyquist=sweep.options.loop_only_nyquist,
         only_fields=only_fields,
+        limit=limit,
     )
 
 
@@ -759,7 +823,7 @@ def _infer_field_template(type_: msgspec.inspect.Type) -> tuple[dict, Any]:
     if isinstance(type_, mi.Type):
         type_key = type_
     else:
-        type_key = mi.type_info(type_key)
+        type_key = mi.type_info(type_)
 
     if isinstance(type_key, tuple(BUILTINS.keys())):
         # dicey if subclasses show up
