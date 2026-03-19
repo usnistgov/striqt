@@ -127,13 +127,14 @@ def build_capture_coords(
 
     for c in captures:
         capture_entries = c.to_dict() | extra_coords
-        del capture_entries['adjust_analysis']
 
-        for field, value in capture_entries.items():
-            changes[field].append(value)
+        for name, value in capture_entries.items():
+            if name == 'adjust_analysis':
+                name = 'analysis_' + name
+            changes[name].append(value)
 
-    for field, values in changes.items():
-        coords[field].data[:] = np.array(values)
+    for name, values in changes.items():
+        coords[name].data[:] = np.array(values)
 
     return coords
 
@@ -525,8 +526,10 @@ def _coord_template(
         attrs, defaults = specs.helpers.field_template_values(spec_cls)
 
         for name in attrs.keys():
-            if name.startswith('_') or name == 'adjust_analysis':
+            if name.startswith('_'):
                 continue
+            if name == 'adjust_analysis':
+                name = 'analysis_' + name
 
             vars[name] = xr.Variable(
                 (CAPTURE_DIM,),
