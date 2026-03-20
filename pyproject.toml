@@ -29,7 +29,7 @@ dependencies = [
 
     # compatibility shims for older python that might be removed
     # in the future
-    "eval_type_backport; python < '3.11'",
+    "eval_type_backport",
     "exceptiongroup>=1.2",
     "typing-extensions",
 ]
