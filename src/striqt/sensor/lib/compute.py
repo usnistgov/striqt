@@ -113,13 +113,16 @@ def build_dataset_attrs(sweep: specs.Sweep):
 def build_capture_coords(
     capture: specs.SensorCapture,
     extras: specs.AcquisitionInfo,
+    loops: tuple[specs.LoopBase, ...],
 ) -> 'xr.Coordinates|None':
     captures = specs.helpers.split_capture_ports(capture)
 
     if len(captures) == 0:
         return None
 
-    coords = _coord_template(type(captures[0]), type(extras), len(captures))
+    coords = _coords_template(
+        type(captures[0]), type(extras), loops, port_count=len(captures)
+    )
     coords = coords.copy(deep=True)
     changes = defaultdict(list)
 
@@ -127,24 +130,17 @@ def build_capture_coords(
 
     for c in captures:
         capture_entries = c.to_dict() | extra_coords
-        adjust_analysis = capture_entries.pop('adjust_analysis', {})
 
         for name, value in capture_entries.items():
+            if name not in coords:
+                continue
             changes[name].append(value)
-        for name, value in adjust_analysis.items():
-            changes['analysis_' + name].append(value)
 
     for name, values in changes.items():
         if name in coords:
             coords[name].data[:] = np.array(values)
         else:
-            coords[name] = xr.Variable(
-                (CAPTURE_DIM,),
-                data=np.array(values),
-                fastpath=True,
-            #    attrs=attrs[name],
-            )
-
+            raise KeyError(f'unsupported field name {name!r}')
     return coords
 
 
@@ -259,7 +255,9 @@ def from_delayed(dd: DelayedDataset):
         threshold=10e-3,
         logger_level=logging.DEBUG,
     ):
-        coords = build_capture_coords(dd.capture, dd.extra_coords)
+        coords = build_capture_coords(
+            dd.capture, dd.extra_coords, dd.config.sweep_spec.loops
+        )
         analysis = analysis.assign_coords(coords)
 
     # don't duplicate coords as attrs
@@ -406,11 +404,7 @@ def prepare_compute(spec: specs.Sweep, skip_warmup: bool = False):
         message='Mean of empty slice.*',
     )
 
-    if (
-        skip_warmup
-        or spec.options.skip_warmup
-        or not sweep_touches_gpu(spec)
-    ):
+    if skip_warmup or spec.options.skip_warmup or not sweep_touches_gpu(spec):
         yield from (None,)
 
     from .. import bindings
@@ -522,33 +516,49 @@ def unstack_dataset(
 
 
 @sa.util.lru_cache()
-def _coord_template(
+def _coords_template(
     capture_cls: type[specs.SensorCapture],
     info_cls: type[specs.AcquisitionInfo],
+    loops: tuple[specs.LoopBase, ...],
+    *,
     port_count: int,
 ) -> 'xr.Coordinates':
     """returns a cached xr.Coordinates object to use as a template for data results"""
 
-    vars = {}
+    coord_vars = {}
 
+    def make_var(field) -> xr.Variable:
+        attrs, default = sa.specs.helpers.infer_coord_info(field.type)
+
+        v = xr.Variable(
+            (CAPTURE_DIM,), data=port_count * [default], attrs=attrs, fastpath=True
+        )
+
+        if isinstance(default, str):
+            return v.astype(object)
+        else:
+            return v
+
+    # templates for the capture and acquisition info type fields
     for spec_cls in (capture_cls, info_cls):
-        attrs, defaults = specs.helpers.field_template_values(spec_cls)
-
-        for name in attrs.keys():
-            if name.startswith('_'):
+        for field in msgspec.structs.fields(spec_cls):
+            if field.name.startswith('_') or field.name == 'adjust_analysis':
                 continue
 
-            vars[name] = xr.Variable(
-                (CAPTURE_DIM,),
-                data=port_count * [defaults[name]],
-                fastpath=True,
-                attrs=attrs[name],
-            )
+            coord_vars[field.name] = make_var(field)
 
-            if isinstance(defaults[name], str):
-                vars[name] = vars[name].astype(object)
+    # templates for analysis loops
+    for loop in loops:
+        if loop.isin != 'analysis':
+            continue
+        if loop.field not in sa.registry.parameter_fields:
+            raise KeyError(f'loop field {loop.field!r} is not supported')
+        if loop.field in coord_vars:
+            msg = f'analysis loop on {loop.field!r} would override capture/acquisition'
+            raise KeyError(msg)
+        coord_vars[loop.field] = make_var(sa.registry.parameter_fields[loop.field])
 
-    return xr.Coordinates(vars)
+    return xr.Coordinates(coord_vars)
 
 
 def _adc_overload_message(

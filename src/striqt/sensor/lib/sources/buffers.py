@@ -595,7 +595,7 @@ def is_reusable(
     downstream_kws = {
         'host_resample': False,
         'backend_sample_rate': None,
-        'adjust_analysis': specs.helpers.frozendict()
+        'adjust_analysis': specs.helpers.frozendict(),
     }
 
     c1_compare = c1.replace(**downstream_kws)

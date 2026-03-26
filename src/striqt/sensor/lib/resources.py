@@ -198,7 +198,7 @@ def open_resources(
     """
 
     from .compute import prepare_compute
-    import numpy as np # python < 3.15 workaround import concurrency bugs
+    import numpy as np  # python < 3.15 workaround import concurrency bugs
 
     logger = sa.util.get_logger('sweep')
     logger.log(sa.util.INFO, 'opening sensor resources')
