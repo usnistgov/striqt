@@ -130,11 +130,16 @@ def build_capture_coords(
 
     for c in captures:
         capture_entries = c.to_dict() | extra_coords
+        adjust_analysis = capture_entries.pop('adjust_analysis', {})
 
         for name, value in capture_entries.items():
             if name not in coords:
                 continue
             changes[name].append(value)
+
+        for loop in loops:
+            if loop.isin == 'analysis':
+                changes[loop.field].append(adjust_analysis[loop.field])
 
     for name, values in changes.items():
         if name in coords:
@@ -544,7 +549,6 @@ def _coords_template(
         for field in msgspec.structs.fields(spec_cls):
             if field.name.startswith('_') or field.name == 'adjust_analysis':
                 continue
-
             coord_vars[field.name] = make_var(field)
 
     # templates for analysis loops
