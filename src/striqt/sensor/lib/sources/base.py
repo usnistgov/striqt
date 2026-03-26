@@ -12,7 +12,7 @@ import striqt.waveform as sw
 from . import buffers
 from ... import specs
 from .. import util
-from ..typing import TS, TC, TB, PC, PS, HasSetup, HasCapture, TypeVar
+from ..typing import SS, SC, S, PC, PS, Source, TypeVar
 
 if TYPE_CHECKING:
     from ..typing import Array, Self
@@ -52,13 +52,13 @@ def get_source_id(spec: specs.Source, timeout=0.5) -> str:
 
 
 @dataclasses.dataclass(frozen=True)
-class Schema(Generic[TS, TC]):
-    source: type[TS]
-    capture: type[TC]
+class Schema(Generic[SS, SC]):
+    source: type[SS]
+    capture: type[SC]
 
 
 def bind_schema_types(
-    source: type[TS], capture: type[TC]
+    source: type[SS], capture: type[SC]
 ) -> Callable[[type[T]], type[T]]:
     """set the default to a SourceBase subclass"""
 
@@ -69,10 +69,10 @@ def bind_schema_types(
     return decorator
 
 
-def get_bound_spec(spec: specs.SpecBase | None, cls: type[TB] | None, **kws) -> TB:
+def get_bound_spec(spec: specs.SpecBase | None, cls: type[S] | None, **kws) -> S:
     if isinstance(spec, specs.SpecBase):
-        if cls is not None:
-            spec = cast(TB, cls.from_spec(spec))
+        # if cls is not None:
+        #     spec = cast(TB, cls.from_spec(spec))
         capture = spec.replace(**kws)
     elif spec is not None:
         raise TypeError(f'spec must be an instance of {cls.__qualname__!r} or None')
@@ -81,14 +81,10 @@ def get_bound_spec(spec: specs.SpecBase | None, cls: type[TB] | None, **kws) -> 
     else:
         capture = cls(**kws)
 
-    return cast(TB, capture)
+    return cast(S, capture)
 
 
-class SourceBase(
-    Generic[TS, TC, PS, PC],
-    HasSetup[TS, PS],
-    HasCapture[TC, PC],
-):
+class SourceBase(Source[SS, SC, PS, PC]):
     _bindings__: ClassVar[Schema | None] = None
 
     _buffers: buffers.ReceiveBuffers
@@ -103,12 +99,12 @@ class SourceBase(
         _spec = _extra_specs.pop('source', None)
 
         if _spec is not None:
-            _spec = cast(TS, _spec)
+            _spec = cast(SS, _spec)
 
         if self._bindings__ is None:
             spec_cls = None
         else:
-            spec_cls = cast(type[TS], self._bindings__.source)
+            spec_cls = cast(type[SS], self._bindings__.source)
 
         _spec = get_bound_spec(_spec, spec_cls, **kwargs)
 
@@ -142,14 +138,14 @@ class SourceBase(
         self._apply_setup(_spec, **_extra_specs)
 
     @classmethod
-    def from_spec(cls, spec: TS, *, captures=None, loops=None, reuse_iq=False) -> Self:
+    def from_spec(cls, spec: SS, *, captures=None, loops=None, reuse_iq=False) -> Self:
         kwargs = spec.to_dict()
         kwargs['__specs'] = {'source': spec, 'captures': captures, 'loops': loops}
 
         if captures is not None and len(captures) > 0 and cls._bindings__ is None:
             raise TypeError('can only hint captures for source class bindings')
 
-        return cls(reuse_iq=reuse_iq, **kwargs)  # type: ignore
+        return cls(reuse_iq=reuse_iq, **kwargs)  # pyright: ignore
 
     @functools.cached_property
     def info(self) -> specs.BaseSourceInfo:
@@ -186,7 +182,7 @@ class SourceBase(
             self.close()
 
     @functools.cached_property
-    def setup_spec(self) -> TS:
+    def setup_spec(self) -> SS:
         return self.__setup__
 
     @sa.util.stopwatch('arm', 'source', threshold=10e-3)
@@ -205,7 +201,7 @@ class SourceBase(
 
         return self.arm_spec(capture)
 
-    def arm_spec(self, spec: TC):
+    def arm_spec(self, spec: SC):
         if not self.is_open():
             raise RuntimeError('open the radio before arming')
 
@@ -415,7 +411,7 @@ class SourceBase(
         raise NotImplementedError
 
     @property
-    def capture_spec(self) -> TC:
+    def capture_spec(self) -> SC:
         """generate the currently armed capture configuration for the specified channel.
 
         If the truth of realized evaluates as False, only the requested value
@@ -434,7 +430,7 @@ class SourceBase(
         return buffers.design_resampler(capture, self.setup_spec.master_clock_rate)
 
 
-class VirtualSource(SourceBase[TS, TC, PS, PC]):
+class VirtualSource(SourceBase[SS, SC, PS, PC]):
     _samples_elapsed = 0
 
     def reset_sample_counter(self, value=0):

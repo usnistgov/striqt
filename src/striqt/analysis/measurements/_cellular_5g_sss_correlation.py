@@ -1,6 +1,6 @@
 from __future__ import annotations as __
 
-import typing
+from typing import Any, Literal, TYPE_CHECKING
 
 from .. import specs
 
@@ -10,10 +10,10 @@ from .shared import registry
 
 import striqt.waveform as sw
 
-if typing.TYPE_CHECKING:
+if TYPE_CHECKING:
     import array_api_compat
     import numpy as np
-    import striqt.waveform.typing
+    from ..lib.typing import Array
 else:
     np = util.lazy_import('numpy')
     array_api_compat = util.lazy_import('array_api_compat')
@@ -23,13 +23,13 @@ else:
     dtype='uint16', attrs={'standard_name': r'Cell gNodeB ID ($N_\text{ID}^{(1)}$)'}
 )
 @util.lru_cache()
-def cellular_cell_id1(capture: specs.Capture, spec: typing.Any):
+def cellular_cell_id1(capture: specs.Capture, spec: Any):
     values = np.arange(336, dtype='uint16')
     return values
 
 
 ### Subcarrier spacing label axis
-CellularSSBStartTimeElapsedAxis = typing.Literal['cellular_ssb_start_time']
+CellularSSBStartTimeElapsedAxis = Literal['cellular_ssb_start_time']
 
 
 _coord_factories = [
@@ -47,11 +47,8 @@ sss_correlation_cache = register.KwArgCache(['capture', 'spec'])
 
 @sss_correlation_cache.apply
 def correlate_5g_sss(
-    iq: 'striqt.waveform.typing.Array',
-    capture: specs.Capture,
-    *,
-    spec: specs.Cellular5GNRSSSCorrelator,
-) -> 'striqt.waveform.typing.Array':
+    iq: 'Array', capture: specs.Capture, *, spec: specs.Cellular5GNRSSSCorrelator
+) -> 'Array':
     xp = sw.array_namespace(iq)
 
     ssb_iq = shared.get_5g_ssb_iq(iq, capture=capture, spec=spec)

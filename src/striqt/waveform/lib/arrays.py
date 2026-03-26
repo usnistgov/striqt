@@ -30,7 +30,8 @@ else:
         cp = None
 
 
-#%% rounding
+# %% rounding
+
 
 def isroundmod(value: float | np.ndarray, div, atol=1e-6) -> bool:
     ratio = value / div
@@ -40,7 +41,7 @@ def isroundmod(value: float | np.ndarray, div, atol=1e-6) -> bool:
         return np.abs(np.rint(ratio) - ratio) <= atol
 
 
-#%% dtype tricks
+# %% dtype tricks
 @util.lru_cache()
 def dtype_change_float(
     dtype, float_basis_dtype
@@ -104,7 +105,7 @@ def float_dtype_like(x: Array, min_dtype: Any | None = None):
     return dtype
 
 
-#%% sliding or binned window operations
+# %% sliding or binned window operations
 def binned_mean(
     x: Array,
     count,
@@ -334,8 +335,6 @@ def axis_to_blocks(y: Array, size: int, truncate=False, axis=0) -> Array:
     return y.reshape(newshape)
 
 
-
-
 def histogram_last_axis(
     x: Array, bins: int | Array, range: tuple | None = None
 ) -> Array:
@@ -386,7 +385,7 @@ def histogram_last_axis(
     return counts[..., :-1], bins
 
 
-#%% slicing and indexing
+# %% slicing and indexing
 def axis_index(a, index, axis=-1):
     """Return a boolean-indexed selection on axis `axis' from `a'.
 
@@ -464,7 +463,7 @@ def grouped_views_along_axis(
         yield x
 
 
-#%% padding
+# %% padding
 @functools.cache
 def _pad_slices_to_dim(ndim: int, axis: int, /):
     if not isinstance(axis, int):
@@ -496,7 +495,7 @@ def pad_along_axis(a, pad_width: list, axis=0, *args, **kws):
     return xp.pad(a, pre_pad + pad_width, *args, **kws)
 
 
-#%% cupy configuration and memory management
+# %% cupy configuration and memory management
 def pinned_array_as_cupy(x, stream=None):
     assert cp is not None
     out = cp.empty_like(x)
@@ -544,7 +543,7 @@ def is_cupy_array(x: object) -> TypeIsCupy:
     return array_api_compat.is_cupy_array(x)
 
 
-#%% Compatibility shims between array APIs
+# %% Compatibility shims between array APIs
 class NonStreamContext:
     """a do-nothing cupy.Stream duck type stand-in for array types that do not support synchronization"""
 
@@ -615,5 +614,3 @@ def convert_np_to_xp(func: _TC) -> _TC:
         return xp.asarray(x)
 
     return cast(_TC, wrapped)
-
-

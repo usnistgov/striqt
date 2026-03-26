@@ -19,7 +19,7 @@ from .typing import TAR
 import msgspec
 
 if TYPE_CHECKING:
-    from .typing import Array, TC, TS, TP, WarmupSweep
+    from .typing import Array, SC, SS, SP, WarmupSweep
 
     import numpy as np
     import pandas as pd
@@ -113,13 +113,16 @@ def build_dataset_attrs(sweep: specs.Sweep):
 def build_capture_coords(
     capture: specs.SensorCapture,
     extras: specs.AcquisitionInfo,
+    loops: tuple[specs.LoopBase, ...],
 ) -> 'xr.Coordinates|None':
     captures = specs.helpers.split_capture_ports(capture)
 
     if len(captures) == 0:
         return None
 
-    coords = _coord_template(type(captures[0]), type(extras), len(captures))
+    coords = _coords_template(
+        type(captures[0]), type(extras), loops, port_count=len(captures)
+    )
     coords = coords.copy(deep=True)
     changes = defaultdict(list)
 
@@ -127,14 +130,22 @@ def build_capture_coords(
 
     for c in captures:
         capture_entries = c.to_dict() | extra_coords
-        del capture_entries['adjust_analysis']
+        adjust_analysis = capture_entries.pop('adjust_analysis', {})
 
-        for field, value in capture_entries.items():
-            changes[field].append(value)
+        for name, value in capture_entries.items():
+            if name not in coords:
+                continue
+            changes[name].append(value)
 
-    for field, values in changes.items():
-        coords[field].data[:] = np.array(values)
+        for loop in loops:
+            if loop.isin == 'analysis':
+                changes[loop.field].append(adjust_analysis[loop.field])
 
+    for name, values in changes.items():
+        if name in coords:
+            coords[name].data[:] = np.array(values)
+        else:
+            raise KeyError(f'unsupported field name {name!r}')
     return coords
 
 
@@ -198,7 +209,7 @@ def analyze(
                 iq.extra_data[name] = value.get()
 
     if not options.as_xarray:
-        return da_delayed
+        return cast('dict[str, Array]', da_delayed)
 
     assert isinstance(iq.capture, specs.SensorCapture)
 
@@ -249,7 +260,9 @@ def from_delayed(dd: DelayedDataset):
         threshold=10e-3,
         logger_level=logging.DEBUG,
     ):
-        coords = build_capture_coords(dd.capture, dd.extra_coords)
+        coords = build_capture_coords(
+            dd.capture, dd.extra_coords, dd.config.sweep_spec.loops
+        )
         analysis = analysis.assign_coords(coords)
 
     # don't duplicate coords as attrs
@@ -297,6 +310,9 @@ def from_delayed(dd: DelayedDataset):
 def sweep_touches_gpu(sweep: specs.Sweep) -> bool:
     """returns True if the sweep would benefit from the GPU"""
 
+    if sweep.source.array_backend == 'numpy':
+        return False
+
     if sweep.source.calibration is not None:
         return True
 
@@ -312,6 +328,8 @@ def sweep_touches_gpu(sweep: specs.Sweep) -> bool:
 
     # check any values specified in outer loops
     for loop in sweep.loops:
+        if loop.isin == 'analysis':
+            continue
         if loop.field == 'host_resample' and True in loop.get_points():
             return True
         elif loop.field == 'analysis_bandwidth' and not all(loop.get_points()):
@@ -320,7 +338,7 @@ def sweep_touches_gpu(sweep: specs.Sweep) -> bool:
     return False
 
 
-def build_warmup_sweep(sweep: specs.Sweep[TS, TP, TC]) -> WarmupSweep:
+def build_warmup_sweep(sweep: specs.Sweep[SS, SP, SC], count: int = 1) -> WarmupSweep:
     """derive a warmup sweep specification derived from sweep.
 
     This is meant to trigger expensive python imports and warm up JIT caches. The goal
@@ -334,59 +352,52 @@ def build_warmup_sweep(sweep: specs.Sweep[TS, TP, TC]) -> WarmupSweep:
     from .bindings import mock_binding
     from ..bindings import warmup
 
-    # check loops to select an easy case for warmup
-    updates = {}
-    ports = []
+    # introspect the maximum number of ports used in the sweep
+    ports: list[Any] = [c.port for c in sweep.captures]
+    max_rx_ports = 0
     for loop in sweep.loops:
-        if loop.field in ('duration', 'sample_rate', 'backend_sample_rate'):
-            updates[loop.field] = min(loop.get_points())
-        if loop.field == 'host_resample':
-            updates[loop.field] = any(loop.get_points())
-        if loop.field == 'port':
+        if loop.isin == 'capture' and loop.field == 'port':
             ports.extend(loop.get_points())
-
-    captures = [c.replace(**updates) for c in sweep.captures]
-    by_size = {round(c.sample_rate * c.duration): c for c in captures}
-
-    num_rx_ports = 0
-    for port in ports + [c.port for c in captures]:
+    for port in ports:
         if port is None:
             continue
         if isinstance(port, tuple):
             n = max(port)
         else:
             n = port
-        if n > num_rx_ports:
-            num_rx_ports = n
+        if n > max_rx_ports:
+            max_rx_ports = n
 
-    if len(captures) > 1:
-        captures = [by_size[min(by_size.keys())]]
-
+    # then build up the warmup sweep
     b = mock_binding(sweep._bindings__, 'warmup', register=False)
 
     source = warmup.schema.source(
-        num_rx_ports=num_rx_ports,
+        num_rx_ports=max_rx_ports,
         master_clock_rate=sweep.source.master_clock_rate,
         trigger_strobe=None,
         signal_trigger=sweep.source.signal_trigger,
     )
 
-    return b.sweep_spec(
+    sweep_spec = b.sweep_spec(
         source=source,
-        captures=tuple(captures),
-        loops=(),
+        captures=sweep.captures,
+        loops=sweep.loops,
         analysis=sweep.analysis,
         sink=sweep.sink,
     )
 
+    captures = specs.helpers.loop_captures(sweep_spec, limit=count)
 
-def prepare_compute(input_spec: specs.Sweep, skip_warmup: bool = False):
-    if input_spec.source.array_backend == 'cupy':
+    return sweep_spec.replace(captures=captures, loops=())
+
+
+def prepare_compute(spec: specs.Sweep, skip_warmup: bool = False):
+    if spec.source.array_backend == 'cupy':
         with sa.util.stopwatch('import cuda computing packages', 'sweep', 2):
             # this order is important on some versions/platforms!
             # https://github.com/numba/numba/issues/6131
             np.__version__  # reify
-            import numba.cuda  # type: ignore
+            import numba.cuda  # pyright: ignore
             import cupy  # type: ignore
 
         with sa.util.stopwatch('configure cupy', 'sweep', 1):
@@ -398,13 +409,13 @@ def prepare_compute(input_spec: specs.Sweep, skip_warmup: bool = False):
         message='Mean of empty slice.*',
     )
 
-    if skip_warmup or input_spec.options.skip_warmup:
+    if skip_warmup or spec.options.skip_warmup or not sweep_touches_gpu(spec):
         yield from (None,)
 
     from .. import bindings
     from . import execute, resources, sinks
 
-    spec = build_warmup_sweep(input_spec)
+    spec = build_warmup_sweep(spec)
 
     if len(spec.captures) == 0:
         return
@@ -510,33 +521,48 @@ def unstack_dataset(
 
 
 @sa.util.lru_cache()
-def _coord_template(
+def _coords_template(
     capture_cls: type[specs.SensorCapture],
     info_cls: type[specs.AcquisitionInfo],
+    loops: tuple[specs.LoopBase, ...],
+    *,
     port_count: int,
 ) -> 'xr.Coordinates':
     """returns a cached xr.Coordinates object to use as a template for data results"""
 
-    vars = {}
+    coord_vars = {}
 
+    def make_var(field) -> xr.Variable:
+        attrs, default = sa.specs.helpers.infer_coord_info(field.type)
+
+        v = xr.Variable(
+            (CAPTURE_DIM,), data=port_count * [default], attrs=attrs, fastpath=True
+        )
+
+        if isinstance(default, str):
+            return v.astype(object)
+        else:
+            return v
+
+    # templates for the capture and acquisition info type fields
     for spec_cls in (capture_cls, info_cls):
-        attrs, defaults = specs.helpers.field_template_values(spec_cls)
-
-        for name in attrs.keys():
-            if name.startswith('_') or name == 'adjust_analysis':
+        for field in msgspec.structs.fields(spec_cls):
+            if field.name.startswith('_') or field.name == 'adjust_analysis':
                 continue
+            coord_vars[field.name] = make_var(field)
 
-            vars[name] = xr.Variable(
-                (CAPTURE_DIM,),
-                data=port_count * [defaults[name]],
-                fastpath=True,
-                attrs=attrs[name],
-            )
+    # templates for analysis loops
+    for loop in loops:
+        if loop.isin != 'analysis':
+            continue
+        if loop.field not in sa.registry.parameter_fields:
+            raise KeyError(f'loop field {loop.field!r} is not supported')
+        if loop.field in coord_vars:
+            msg = f'analysis loop on {loop.field!r} would override capture/acquisition'
+            raise KeyError(msg)
+        coord_vars[loop.field] = make_var(sa.registry.parameter_fields[loop.field])
 
-            if isinstance(defaults[name], str):
-                vars[name] = vars[name].astype(object)
-
-    return xr.Coordinates(vars)
+    return xr.Coordinates(coord_vars)
 
 
 def _adc_overload_message(
@@ -599,8 +625,8 @@ def _check_coord_indexes(ds, index_coords: list[str]):
 
 def _if_overload_message(
     extra_data: dict[str, Sequence[float]],
-    capture: TC,
-    sweep_spec: specs.Sweep[TS, TP, TC],
+    capture: SC,
+    sweep_spec: specs.Sweep[SS, SP, SC],
 ) -> str | None:
     if 'if_headroom' in extra_data:
         if_headroom = extra_data['if_headroom']
@@ -641,6 +667,5 @@ def _if_overload_message(
 
 
 def _xarray_version() -> tuple[int, int, int]:
-    version = tuple(int(v) for v in xr.__version__.split('.'))
-    assert len(version) == 3
-    return version
+    maj, min, rel = tuple(int(v) for v in xr.__version__.split('.'))
+    return maj, min, rel

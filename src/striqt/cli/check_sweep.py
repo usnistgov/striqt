@@ -9,15 +9,14 @@ from striqt.sensor.lib import calibration, resources
 @click.argument('yaml_path', type=click.Path(exists=True, dir_okay=False))
 def run(yaml_path):
     # instantiate sweep objects
-    from striqt.sensor import util, specs
-    from striqt import sensor as ss
-    from pprint import pprint, pformat
-    from striqt.sensor.specs.helpers import get_path_fields
+    import striqt.sensor as ss
+    import striqt.analysis as sa
+    from pprint import pformat
     from pathlib import Path
     import pandas as pd
     import itertools
 
-    util.show_messages(util.logging.WARNING)
+    sa.util.show_messages(sa.util.logging.WARNING)
 
     spec = ss.read_yaml_spec(yaml_path)
     print(f'Opened a bound specification for {type(spec).__name__!r} bindings')
@@ -49,7 +48,7 @@ def run(yaml_path):
             'sink.path': spec.sink.path,
             'extensions.import_path': spec.extensions.import_path,
         }
-        if isinstance(spec.source, specs.SoapySource):
+        if isinstance(spec.source, ss.specs.SoapySource):
             expanded_paths['source.calibration'] = spec.source.calibration
         for name, p in expanded_paths.items():
             print(f'{name}:')
@@ -70,8 +69,8 @@ def run(yaml_path):
         }
         field_sets = {}
         splits = (
-            specs.helpers.split_capture_ports(c)
-            for c in specs.helpers.loop_captures(spec, source_id=res['source'].id)
+            ss.specs.helpers.split_capture_ports(c)
+            for c in ss.specs.helpers.loop_captures(spec, source_id=res['source'].id)
         )
         for c in itertools.chain(*splits):
             items = kws | c.to_dict()
@@ -80,7 +79,7 @@ def run(yaml_path):
 
         print('\n\nFormat fields available for use in paths:')
         print(80 * '▀')
-        afields = specs.helpers.get_path_fields(
+        afields = ss.specs.helpers.get_path_fields(
             spec, source_id=res['source'].id, spec_path=yaml_path
         )
         afields = {f'{{{k}}}': v for k, v in afields.items()}

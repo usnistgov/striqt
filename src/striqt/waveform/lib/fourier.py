@@ -828,7 +828,7 @@ def design_fir_lpf(
     return b.astype(dtype)
 
 
-def ola_filter(
+def oafilter(
     x: Array,
     *,
     fs: float,
@@ -860,7 +860,7 @@ def ola_filter(
         an Array of the same shape as X
     """
 
-    nfft_out, noverlap, overlap_scale, _ = ola_filter_parameters(
+    nfft_out, noverlap, overlap_scale, _ = design_oafilter(
         x.size,
         window=window,
         nfft_out=nfft_out or nfft,
@@ -995,7 +995,7 @@ def _fir_lowpass_fft(
 
 
 @util.lru_cache()
-def ola_filter_parameters(
+def design_oafilter(
     array_size: int, *, window, nfft_out: int, nfft: int, extend: bool
 ) -> tuple:
     if nfft_out is None:
@@ -1450,7 +1450,7 @@ def oaresample(
     nfft_out = up
     size_in = x.size
 
-    nfft_out, noverlap, overlap_scale, _ = ola_filter_parameters(
+    nfft_out, noverlap, overlap_scale, _ = design_oafilter(
         x.size,
         window=window,
         nfft_out=nfft_out,

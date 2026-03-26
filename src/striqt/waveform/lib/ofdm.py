@@ -132,7 +132,7 @@ def corr_at_indices(inds, x, nfft, norm=True, out=None):
         tpb = 32
         bpg = max((x.size + (tpb - 1)) // tpb, 1)
 
-        func = _corr_at_indices[bpg, tpb]  # type: ignore
+        func = _corr_at_indices[bpg, tpb]  # pyright: ignore
 
     func(flat_inds, x, int(nfft), int(ncp), bool(norm), out)
 
@@ -481,7 +481,7 @@ def sss_params(
     )
 
 
-class _PhyOFDM:
+class PhyOFDM:
     def __init__(
         self,
         *,
@@ -540,13 +540,13 @@ def get_3gpp_phy(
     generation: typing.Literal['4G', '5G'] = '4G',
     sample_rate=None,
     xp=None,
-) -> _Phy3GPP:
-    return _Phy3GPP(**locals())
+) -> Phy3GPP:
+    return Phy3GPP(**locals())
 
 
 @util.lru_cache(4)
 def _get_3gpp_index_cyclic_prefix(
-    phy: _Phy3GPP,
+    phy: Phy3GPP,
     *,
     frames: tuple[int, ...] = (0,),
     symbols: tuple[int, ...] | typing.Literal['all'] = 'all',
@@ -564,7 +564,9 @@ def _get_3gpp_index_cyclic_prefix(
         size=phy.SCS_TO_SLOTS_PER_FRAME[phy.subcarrier_spacing],
         xp=xp,
     )
-    symbol_inds = _index_or_all(symbols, '"symbols" argument', size=phy.FFT_PER_SLOT, xp=xp)
+    symbol_inds = _index_or_all(
+        symbols, '"symbols" argument', size=phy.FFT_PER_SLOT, xp=xp
+    )
 
     # first build each grid axis separately
     grid = []
@@ -593,7 +595,7 @@ def _get_3gpp_index_cyclic_prefix(
     return inds
 
 
-class _Phy3GPP(_PhyOFDM):
+class Phy3GPP(PhyOFDM):
     """Sampling and index parameters and lookup tables for 3GPP 5G-NR.
 
     These are equivalent to LTE if subcarrier_spacing is fixed to 15 kHz
@@ -725,11 +727,11 @@ def get_802_16_phy(
     nfft: float = 2048,
     cp_ratio: float = 1 / 8,
     xp=None,
-) -> _Phy802_16:
-    return _Phy802_16(**locals())
+) -> Phy802_16:
+    return Phy802_16(**locals())
 
 
-class _Phy802_16(_PhyOFDM):
+class Phy802_16(PhyOFDM):
     """Sampling and index parameters and lookup tables for IEEE 802.16-2017 OFDMA"""
 
     VALID_CP_RATIOS = {1 / 32, 1 / 16, 1 / 8, 1 / 4}
@@ -844,10 +846,7 @@ class _Phy802_16(_PhyOFDM):
         )
 
     def index_cyclic_prefix(
-        self,
-        *,
-        frames=(0,),
-        symbols: tuple[int, ...] | typing.Literal['all'] = 'all'
+        self, *, frames=(0,), symbols: tuple[int, ...] | typing.Literal['all'] = 'all'
     ) -> Array:
         """build an indexing tensor for performing cyclic prefix correlation across various axes"""
         return _802_16_index_cyclic_prefix(self, frames=frames, symbols=symbols)
@@ -855,7 +854,7 @@ class _Phy802_16(_PhyOFDM):
 
 @util.lru_cache(4)
 def _802_16_index_cyclic_prefix(
-    phy: _Phy802_16,
+    phy: Phy802_16,
     *,
     frames=(0,),
     symbols: tuple[int, ...] | typing.Literal['all'] = 'all',

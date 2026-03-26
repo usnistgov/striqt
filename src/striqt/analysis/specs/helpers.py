@@ -4,21 +4,35 @@ from __future__ import annotations as __
 
 import functools
 import fractions
-import typing
+from typing import (
+    Any,
+    Callable,
+    Iterator,
+    ItemsView,
+    Iterable,
+    KeysView,
+    Mapping,
+    TYPE_CHECKING,
+    TypeVar,
+    ValuesView,
+    get_origin,
+    overload,
+)
 import warnings
 import msgspec
 from striqt.waveform.lib import util
 
-_T = typing.TypeVar('_T')
-_K = typing.TypeVar('_K')
-_V = typing.TypeVar('_V')
+_T = TypeVar('_T')
+_K = TypeVar('_K')
+_V = TypeVar('_V')
 
 
-if typing.TYPE_CHECKING:
+if TYPE_CHECKING:
     import typing_extensions
+    import xarray as xr
 
     _P = typing_extensions.ParamSpec('_P')
-    _R = typing.TypeVar('_R', covariant=True)
+    _R = TypeVar('_R', covariant=True)
 
     class _MetaP(typing_extensions.Protocol[_P, _R]):
         def __call__(
@@ -30,8 +44,8 @@ if typing.TYPE_CHECKING:
         ) -> _R: ...
 
     def _like_meta(
-        _: typing.Callable[_P, _R], /
-    ) -> typing.Callable[[_MetaP[_P, _R]], _MetaP[_P, _R]]:
+        _: Callable[_P, _R], /
+    ) -> Callable[[_MetaP[_P, _R]], _MetaP[_P, _R]]:
         def impl(x: _MetaP[_P, _R]) -> _MetaP[_P, _R]:
             return x
 
@@ -45,7 +59,7 @@ else:
         return impl
 
 
-class frozendict(typing.Mapping[_K, _V]):
+class frozendict(Mapping[_K, _V]):
     """
     An immutable dictionary that supports hashing
     """
@@ -55,18 +69,16 @@ class frozendict(typing.Mapping[_K, _V]):
     _hash: int | None
 
     @classmethod
-    def fromkeys(
-        cls, seq: typing.Iterable[_K], value: typing.Optional[_V] = None
-    ) -> frozendict[_K, _V]:
+    def fromkeys(cls, seq: Iterable[_K], value: _V | None = None) -> frozendict[_K, _V]:
         return cls(dict.fromkeys(seq, value))
 
-    def __new__(cls, *args: typing.Any, **kwargs: typing.Any) -> frozendict[_K, _V]:
+    def __new__(cls, *args: Any, **kwargs: Any) -> frozendict[_K, _V]:
         inst = super().__new__(cls)
         inst._dict = dict(*args, **kwargs)  # type: ignore
         inst._hash = None
         return inst
 
-    def __reduce__(self) -> tuple[typing.Any, ...]:
+    def __reduce__(self) -> tuple[Any, ...]:
         return (self.__class__, (self._dict,))
 
     def __getitem__(self, key: _K) -> _V:
@@ -78,7 +90,7 @@ class frozendict(typing.Mapping[_K, _V]):
     def copy(self) -> frozendict[_K, _V]:
         return self.__class__(self)
 
-    def __iter__(self) -> typing.Iterator[_K]:
+    def __iter__(self) -> Iterator[_K]:
         return iter(self._dict)
 
     def __len__(self) -> int:
@@ -101,14 +113,14 @@ class frozendict(typing.Mapping[_K, _V]):
 
         return self._hash
 
-    def __or__(self, other: typing.Any) -> frozendict[_K, _V]:
+    def __or__(self, other: Any) -> frozendict[_K, _V]:
         if not isinstance(other, (dict, self.__class__)):
             return NotImplemented
         new = dict(self)
         new.update(other)
         return self.__class__(new)
 
-    def __ror__(self, other: typing.Any) -> dict[typing.Any, typing.Any]:
+    def __ror__(self, other: Any) -> dict[Any, Any]:
         if isinstance(other, dict):
             return other | self._dict
         elif isinstance(other, frozendict):
@@ -118,16 +130,16 @@ class frozendict(typing.Mapping[_K, _V]):
         else:
             raise TypeError('unsupported mapping')
 
-    def __ior__(self, other: typing.Any) -> frozendict[_K, _V]:
+    def __ior__(self, other: Any) -> frozendict[_K, _V]:
         raise TypeError(f"'{self.__class__.__name__}' object is frozen")
 
-    def items(self) -> typing.ItemsView[_K, _V]:  # noqa: D102
+    def items(self) -> ItemsView[_K, _V]:  # noqa: D102
         return self._dict.items()
 
-    def keys(self) -> typing.KeysView[_K]:  # noqa: D102
+    def keys(self) -> KeysView[_K]:  # noqa: D102
         return self._dict.keys()
 
-    def values(self) -> typing.ValuesView[_V]:  # noqa: D102
+    def values(self) -> ValuesView[_V]:  # noqa: D102
         return self._dict.values()
 
     def update(self, other: dict[_K, _V], /):
@@ -146,7 +158,7 @@ def Meta(standard_name: str, units: str | None = None, **kws) -> msgspec.Meta:
 
 
 @util.lru_cache()
-def get_capture_type_attrs(capture_cls: type[msgspec.Struct]) -> dict[str, typing.Any]:
+def get_capture_type_attrs(capture_cls: type[msgspec.Struct]) -> dict[str, Any]:
     """return attrs metadata for each field in `capture`"""
     attrs = {}
 
@@ -187,7 +199,7 @@ def _enc_hook(obj):
 
 
 def _dec_hook(type_, obj):
-    schema_cls = typing.get_origin(type_) or type_
+    schema_cls = get_origin(type_) or type_
 
     if issubclass(schema_cls, (int, float)) and hasattr(obj, '__float__'):
         return float(obj)
@@ -197,25 +209,25 @@ def _dec_hook(type_, obj):
         return obj
 
 
-@typing.overload
+@overload
 def freeze(obj: dict[_K, _V], max_depth: int | None = None) -> 'frozendict[_K, _V]':
     pass
 
 
-@typing.overload
+@overload
 def freeze(
     obj: tuple[_V, ...] | list[_V], max_depth: int | None = None
 ) -> tuple[_V, ...]:
     pass
 
 
-@typing.overload
+@overload
 def freeze(obj: _T, max_depth: int | None = None) -> _T:
     pass
 
 
 def freeze(
-    obj: typing.Mapping[_K, _V] | tuple[_V, ...] | list[_V] | _T,
+    obj: Mapping[_K, _V] | tuple[_V, ...] | list[_V] | _T,
     max_depth: int | None = None,
 ) -> 'frozendict[_K, _V]|tuple[_V, ...]|_T':
     """recursively transform list and dict into tuple and frozendict"""
@@ -236,25 +248,23 @@ def freeze(
         return obj  # type: ignore
 
 
-@typing.overload
-def unfreeze(
-    obj: typing.Mapping[_K, _V], max_depth: int | None = None
-) -> 'dict[_K, _V]':
+@overload
+def unfreeze(obj: Mapping[_K, _V], max_depth: int | None = None) -> 'dict[_K, _V]':
     pass
 
 
-@typing.overload
+@overload
 def unfreeze(obj: tuple[_V, ...] | list[_V], max_depth: int | None = None) -> list[_V]:
     pass
 
 
-@typing.overload
+@overload
 def unfreeze(obj: _T, max_depth: int | None = None) -> _T:
     pass
 
 
 def unfreeze(
-    obj: typing.Mapping[_K, _V] | tuple[_V, ...] | list[_V] | _T,
+    obj: Mapping[_K, _V] | tuple[_V, ...] | list[_V] | _T,
     max_depth: int | None = None,
 ) -> 'dict[_K, _V]|list[_V]|_T':
     """Recursively transform dict into frozendict"""
@@ -276,11 +286,11 @@ def unfreeze(
         return obj  # type: ignore
 
 
-def convert_dict(obj: typing.Any, type: type[_T]) -> _T:
+def convert_dict(obj: Any, type: type[_T]) -> _T:
     return msgspec.convert(obj, type=type, strict=False, dec_hook=_dec_hook)
 
 
-def convert_spec(other: typing.Any, type: type[_T]) -> _T:
+def convert_spec(other: Any, type: type[_T]) -> _T:
     return msgspec.convert(
         other, type=type, strict=False, from_attributes=True, dec_hook=_dec_hook
     )
@@ -318,3 +328,52 @@ def inspect_freeze_depths(spec_cls: type[msgspec.Struct]) -> dict[str, int]:
         if n > 0:
             depths[field.name] = n
     return depths
+
+
+# %% msgspec field type introspection
+def infer_coord_info(type_: msgspec.inspect.Type) -> tuple[dict, Any]:
+    """returns an (attrs, default_value) pair for the given msgspec field type"""
+    from msgspec import inspect as mi
+    import pandas as pd
+
+    BUILTINS: dict[type[mi.Type], Any] = {
+        mi.FloatType: 0.0,
+        mi.BoolType: False,
+        mi.IntType: 0,
+        mi.StrType: '',
+        mi.DictType: {},
+    }
+
+    if isinstance(type_, mi.Type):
+        type_key = type_
+    else:
+        type_key = mi.type_info(type_)
+
+    if isinstance(type_key, tuple(BUILTINS.keys())):
+        # dicey if subclasses show up
+        return {}, BUILTINS[type(type_key)]
+    elif isinstance(type_key, mi.CustomType):
+        if issubclass(type_key.cls, pd.Timestamp):
+            return {}, pd.Timestamp(0)
+        else:
+            try:
+                return {}, type_key.cls()
+            except Exception as ex:
+                name = type_key.cls.__qualname__
+                raise TypeError(f'failed to make default for type {name!r}') from ex
+    elif isinstance(type_key, mi.Metadata):
+        return type_key.extra or {}, infer_coord_info(type_key.type)[1]
+    elif isinstance(type_key, mi.LiteralType):
+        return {}, type(type_key.values[0])
+    elif isinstance(type_key, mi.UnionType):
+        UNION_SKIP = (mi.NoneType, mi.VarTupleType)
+        types = [t for t in type_key.types if not isinstance(t, UNION_SKIP)]
+        if len(types) == 1:
+            return infer_coord_info(types[0])
+        else:
+            names = tuple(type(t).__qualname__ for t in types)
+            raise TypeError(
+                f'cannot determine xarray type for union of msgspec types {names!r}'
+            )
+    else:
+        raise TypeError(f'unsupported msgspec field type {type_key!r}')

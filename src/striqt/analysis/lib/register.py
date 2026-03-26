@@ -81,7 +81,7 @@ class KwArgCache:
         self._key = self.kw_key(kws)
         self._value = value
 
-    def apply(self, func: AnalysisFunc[P, RM]) -> AnalysisFunc[P, RM]:
+    def apply(self, func: 'AnalysisFunc[P, RM]') -> 'AnalysisFunc[P, RM]':
         @functools.wraps(func)
         def wrapped(
             iq: Array,
@@ -89,7 +89,7 @@ class KwArgCache:
             *args: P.args,
             **kwargs: P.kwargs,
         ) -> RM:
-            all_kws = dict(kwargs, capture=capture)
+            all_kws = dict(kwargs, capture=capture)  # ty: ignore
             match = self.lookup(all_kws)
             if match is not None:
                 return match
@@ -181,7 +181,7 @@ class CoordRegistry(dict['CoordFunc', 'CoordInfo']):
 
         return wrapper
 
-    def __hash__(self):
+    def __hash__(self):  # pyright: ignore
         return hash(frozenset(self.items()))
 
 
@@ -257,6 +257,8 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
     """a registry of keyword-only arguments for decorated functions"""
 
     caches: dict[AnalysisFunc, list[KwArgCache]]
+    parameter_fields: dict[str, 'msgspec.structs.FieldInfo|None']
+    parameter_defaults: dict[str, Any]
 
     def __init__(self):
         super().__init__()
@@ -266,6 +268,8 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
         self.use_unaligned_input: set[Callable] = set()
         self.coordinates = CoordRegistry()
         self.signal_trigger = AlignmentSourceRegistry()
+        self.parameter_defaults = {}
+        self.parameter_fields = {}
 
     def __or__(self, other):
         result = super().__or__(other)
@@ -371,15 +375,36 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
                     return data.to_xarray(expand_dims=('port',))
 
             if info_kws['name'] is None:
-                info_kws['name'] = func.__name__
+                name = info_kws['name'] = func.__name__
 
             elif info_kws['name'] in self.names:
                 raise TypeError(
                     f'a measurement named {info_kws["name"]!r} was already registered'
                 )
             else:
-                assert isinstance(info_kws['name'], str)
+                name = info_kws['name']
+                assert isinstance(name, str)
                 self.names.add(info_kws['name'])
+
+            for field in msgspec.structs.fields(spec_type):
+                if field.name is None:
+                    continue
+                try:
+                    _, coord_default = specs.helpers.infer_coord_info(field.type)
+                except TypeError:
+                    # TODO: this should
+                    self.parameter_fields[field.name] = None
+                    self.parameter_defaults[field.name] = None
+                    continue
+                else:
+                    if coord_default in self.parameter_defaults:
+                        if type(coord_default) != type(self.parameter_defaults):
+                            raise TypeError(
+                                f'another measurement already has parameter {field.name} with a different type'
+                            )
+                    else:
+                        self.parameter_fields[field.name] = field
+                        self.parameter_defaults[field.name] = coord_default
 
             self.depends_on[wrapped] = set()
             for dep in info_kws['depends']:

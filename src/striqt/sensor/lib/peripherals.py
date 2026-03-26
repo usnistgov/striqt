@@ -2,51 +2,53 @@ from __future__ import annotations as __
 
 from typing import Any, Generic, Iterable
 from .. import specs
-from .typing import PeripheralsProtocol, TP, TC, TPC
+from .typing import Peripherals, SP, SC, SPC
 
 
-class PeripheralsBase(Generic[TP, TC], PeripheralsProtocol[TC]):
-    """base class defining the object protocol peripheral hardware support.
+class PeripheralsBase(Peripherals[SP, SC]):
+    """dunder-method convenience implementation for the Peripherals protocol"""
 
-    This is implemented primarily through connection management and callback
-    methods for arming and acquisition.
-    """
+    spec: SP
 
-    spec: TP
-
-    def __init__(self, spec: specs.Sweep[Any, TP, TC]):
+    def __init__(self, spec: specs.Sweep[Any, SP, SC]):
         self.spec = spec.peripherals
         self.open()
 
     def __enter__(self):
         return self
 
-    def __exit__(self, *_):
+    def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
 
 
-class CalibrationPeripheralsBase(PeripheralsBase[TP, TC], Generic[TP, TC, TPC]):
+class CalibrationPeripheralsBase(Peripherals[SP, SC], Generic[SP, SC, SPC]):
     """base class defining the object protocol peripheral hardware support.
 
     This is implemented primarily through connection management and callback
     methods for arming and acquisition.
     """
 
-    calibration_spec: TPC | None
+    calibration_spec: SPC | None
 
-    def __init__(self, spec: specs.CalibrationSweep[Any, TP, TC, TPC]):
+    def __init__(self, spec: specs.CalibrationSweep[Any, SP, SC, SPC]):
         self.calibration_spec = spec.calibration
         self.open()
 
+    def __enter__(self):
+        return self
 
-class NoPeripherals(PeripheralsBase[TP, TC]):
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
+
+class NoPeripherals(PeripheralsBase[SP, SC]):
     def open(self):
         return
 
     def close(self):
         return
 
-    def setup(self, captures: Iterable[TC], loops: Iterable[specs.LoopBase]):
+    def setup(self, captures: Iterable[SC], loops: Iterable[specs.LoopBase]):
         return
 
     def arm(self, capture):

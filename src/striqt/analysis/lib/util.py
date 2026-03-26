@@ -7,7 +7,7 @@ import math
 import sys
 import threading
 import time
-from typing import Any, Iterable, Literal, TYPE_CHECKING
+from typing import Any, Generator, Iterable, Literal, TYPE_CHECKING
 
 import striqt.waveform as sw
 
@@ -109,7 +109,7 @@ def stopwatch(
     logger_suffix: str = 'analysis',
     threshold: float = 0,
     logger_level: int = PERFORMANCE_INFO,
-):
+) -> Generator[None, None, None]:
     """Time a block of code using a with statement like this:
 
     >>> with stopwatch('sleep statement'):

@@ -76,6 +76,10 @@ GaplessRepeat = Annotated[
     bool,
     Meta('whether to raise an exception on overflows between identical captures'),
 ]
+IsIn = Annotated[
+    Literal['capture', 'analysis'],
+    Meta('selects whether to loop a capture or analysis parameters'),
+]
 LOShift = Annotated[Literal['left', 'right', 'none'], Meta('LO shift direction')]
 MockSensor = Annotated[
     Optional[str],

@@ -173,7 +173,7 @@ def _get_phy_mapping(
     subcarrier_spacings: float | tuple[float, ...],
     generation: typing.Literal['4G', '5G'] = '4G',
     xp=np,
-) -> dict[float, sw.ofdm._Phy3GPP]:
+) -> dict[float, sw.ofdm.Phy3GPP]:
     seq = (
         subcarrier_spacings
         if isinstance(subcarrier_spacings, tuple)

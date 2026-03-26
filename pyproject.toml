@@ -4,26 +4,34 @@ version = "0.2"
 description = "tooling to support precision gpu-accelerated radio signal analysis and software radio automation"
 requires-python = ">=3.9"
 dependencies = [
-    "aiohttp>=3.13",
+    # numerical stack
     "array-api-compat>=1.6",
     "dask",
-    "eval_type_backport",
-    "exceptiongroup>=1.2",
-    "ipython>=8.18.1",
     "matplotlib~=3.7",
-    "msgspec~=0.19",
     "netCDF4",
     "numba",
     "numexpr~=2.8",
     "numpy>=1.21,<3",
     "pandas>=1.5",
-    "platformdirs>=4.2.0",
-    "psutil>=7.0.0",
-    "requests>=2.32",
     "scipy>=1.13",
-    "typing-extensions",
     "xarray>=2024.3",
     "zarr>=2.18,<4",
+
+    # schemas for the yaml specs and validation
+    "msgspec>=0.19.0",
+
+    # for built-in debugging
+    "ipython>=8.18.1",
+
+    # platform introspection tooling
+    "platformdirs>=4.2.0",
+    "psutil>=7.0.0",
+
+    # compatibility shims for older python that might be removed
+    # in the future
+    "eval_type_backport",
+    "exceptiongroup>=1.2",
+    "typing-extensions",
 ]
 
 [[project.authors]]
@@ -92,3 +100,8 @@ packages = [ "src/striqt", ]
 
 [tool.hatch.build.targets.sdist]
 packages = [ "src/striqt", ]
+
+
+[tool.ty.rules]
+call-top-callable = "ignore"
+invalid-type-form = "ignore"

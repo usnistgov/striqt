@@ -5,4 +5,4 @@ from .buffers import AcquiredIQ
 from .null import NoSource
 from .file import MATSource, TDMSSource, ZarrIQSource
 from .function import DiracDeltaSource, NoiseSource, SawtoothSource, SingleToneSource
-from .soapy import SoapySourceBase
+from .soapy import SoapySource

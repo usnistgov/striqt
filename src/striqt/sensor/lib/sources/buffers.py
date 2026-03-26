@@ -493,7 +493,7 @@ def get_oaresample_pad(capture: specs.SensorCapture, master_clock_rate: float):
     # round up to an integral number of FFT windows
     samples_in = ceil(min_samples_in / nfft) * nfft + nfft
 
-    noverlap_out = sw.fourier.ola_filter_parameters(
+    noverlap_out = sw.fourier.design_oafilter(
         samples_in,
         window=resampler_design['window'],
         nfft_out=nfft_out,
@@ -595,6 +595,7 @@ def is_reusable(
     downstream_kws = {
         'host_resample': False,
         'backend_sample_rate': None,
+        'adjust_analysis': specs.helpers.frozendict(),
     }
 
     c1_compare = c1.replace(**downstream_kws)

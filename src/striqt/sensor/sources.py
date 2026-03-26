@@ -9,4 +9,4 @@ from .lib.sources.function import (
     SawtoothSource,
     SingleToneSource,
 )
-from .lib.sources.soapy import SoapySourceBase
+from .lib.sources.soapy import SoapySource

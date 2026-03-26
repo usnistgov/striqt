@@ -67,7 +67,7 @@ else:
     pickle = lazy_import('pickle')
 
 
-#%% function call caching
+# %% function call caching
 
 _caches = {}
 
@@ -103,7 +103,7 @@ def _get_cache_shelf():
 
     dir = Path(platformdirs.user_cache_dir('striqt'))
     dir.mkdir(parents=True, exist_ok=True)
-    filename = str(dir/'calls.db') # python 3.9 shelve wants str
+    filename = str(dir / 'calls.db')  # python 3.9 shelve wants str
 
     cache_lock = Lock()
     shelf = shelve.open(filename, writeback=True)
@@ -122,11 +122,13 @@ def _make_lru_key(func, args, kwargs) -> str:
         else:
             return obj
 
-    p = pickle.dumps((
-        (func.__name__,),
-        tuple(fix_arg(v) for v in args),
-        tuple((k, fix_arg(v)) for k, v in kwargs.items())
-    ))
+    p = pickle.dumps(
+        (
+            (func.__name__,),
+            tuple(fix_arg(v) for v in args),
+            tuple((k, fix_arg(v)) for k, v in kwargs.items()),
+        )
+    )
 
     return p.decode(errors='replace')
 
@@ -135,6 +137,7 @@ def persistent_lru_cache(
     maxsize=128,
 ) -> Callable[[Callable[P, R]], CachedCallable[P, R]]:
     """caches a decorated function persistently on disk"""
+
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
@@ -181,7 +184,7 @@ def cache_info() -> dict[str, Any]:
     return {f'{f.__module__}.{f.__name__}': c.cache_info() for f, c in _caches.items()}
 
 
-#%% memory management
+# %% memory management
 def except_on_low_memory(threshold_bytes=500_000_000):
     import psutil
 
@@ -191,10 +194,11 @@ def except_on_low_memory(threshold_bytes=500_000_000):
     raise MemoryError('too little memory to proceed')
 
 
-#%% numbers
+# %% numbers
 def ceildiv(a: int, b: int) -> int:
     """Returns ceil(a/b)."""
     return -(-a // b)
+
 
 @lru_cache()
 def find_float_inds(seq: tuple[str | float, ...]) -> list[bool]:

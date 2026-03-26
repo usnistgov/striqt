@@ -10,6 +10,7 @@ from typing import (
     TypedDict,
     TypeVar,
     TYPE_CHECKING,
+    runtime_checkable,
 )
 
 if TYPE_CHECKING:
@@ -22,42 +23,50 @@ PS = ParamSpec('PS')
 PC = ParamSpec('PC')
 R = TypeVar('R')
 
-TS = TypeVar('TS', bound='specs.Source')
-TC = TypeVar('TC', bound='specs.SensorCapture')
-TB = TypeVar('TB', bound='specs.SpecBase')
-TP = TypeVar('TP', bound='specs.Peripherals')
-TPC = TypeVar('TPC', bound='specs.Peripherals')
+SS = TypeVar('SS', bound='specs.Source')
+SC = TypeVar('SC', bound='specs.SensorCapture')
+S = TypeVar('S', bound='specs.SpecBase')
+SP = TypeVar('SP', bound='specs.Peripherals')
+SPC = TypeVar('SPC', bound='specs.Peripherals')
 
 
 # %% compute.py
 from striqt.analysis.lib.typing import TAR
 
 
-_TC = TypeVar('_TC', bound='specs.SensorCapture', contravariant=True)
+_SC = TypeVar('_SC', bound='specs.SensorCapture', contravariant=True)
+_SP = TypeVar('_SP', bound='specs.Peripherals', covariant=True)
 
 
 # %% peripherals.py
-class PeripheralsProtocol(Protocol[_TC]):
-    def __init__(self, spec: 'specs.Sweep[Any, TP, TC]'): ...
+@runtime_checkable
+class Peripherals(Protocol[_SP, _SC]):
+    def __init__(self, spec: 'specs.Sweep[Any, _SP, _SC]'): ...
 
     def open(self): ...
 
     def close(self): ...
 
-    def setup(self, captures: 'Sequence[_TC]', loops: 'Sequence[specs.LoopSpec]'): ...
+    def setup(self, captures: 'Sequence[_SC]', loops: 'Sequence[specs.LoopSpec]'): ...
 
-    def arm(self, capture: _TC): ...
+    def arm(self, capture: _SC): ...
 
-    def acquire(self, capture: _TC) -> dict[str, typing.Any]: ...
+    def acquire(self, capture: _SC) -> dict[str, typing.Any]: ...
+
+    def __enter__(self) -> Self: ...
+
+    def __exit__(self, exc_type, exc_val, exc_tb): ...
 
 
 # %% sources/base.py
-class HasSetup(Protocol[TS, PS]):
-    __setup__: TS
+@runtime_checkable
+class Source(Protocol[SS, SC, PS, PC]):
+    __setup__: SS
+    _capture: typing.Optional[SC]
 
     def __init__(
         self,
-        _setup: TS | None = None,
+        _setup: SS | None = None,
         /,
         reuse_iq=False,
         *args: PS.args,
@@ -67,30 +76,30 @@ class HasSetup(Protocol[TS, PS]):
     @classmethod
     def from_spec(
         cls,
-        spec: TS,
+        spec: SS,
         *,
-        captures: tuple[TC, ...] | None = None,
+        captures: tuple[SC, ...] | None = None,
         loops: tuple[specs.LoopSpec, ...] | None = None,
         reuse_iq: bool = False,
     ) -> Self: ...
 
-    def _connect(self, spec: TS) -> None: ...
+    def read_iq(
+        self, analysis: specs.AnalysisGroup | None = None
+    ) -> 'tuple[Array, int|None]': ...
+
+    def _connect(self, spec: SS) -> None: ...
 
     def _apply_setup(
         self,
-        spec: TS,
+        spec: SS,
         *,
-        captures: tuple[TC, ...] | None = None,
+        captures: tuple[SC, ...] | None = None,
         loops: 'tuple[specs.LoopSpec, ...] | None' = None,
     ) -> None: ...
 
-
-class HasCapture(typing.Protocol[TC, PC]):
-    _capture: typing.Optional[TC]
-
     def arm(self, *args: PC.args, **kwargs: PC.kwargs): ...
 
-    def arm_spec(self, spec: TC): ...
+    def arm_spec(self, spec: SC): ...
 
     def acquire(
         self,
@@ -100,11 +109,11 @@ class HasCapture(typing.Protocol[TC, PC]):
     ) -> sources.AcquiredIQ: ...
 
     @property
-    def capture_spec(self) -> TC: ...
+    def capture_spec(self) -> SC: ...
 
-    def _prepare_capture(self, capture: TC) -> TC | None: ...
+    def _prepare_capture(self, capture: SC) -> SC | None: ...
 
-    def get_resampler(self, capture: 'TC | None' = None) -> ResamplerDesign: ...
+    def get_resampler(self, capture: 'SC | None' = None) -> ResamplerDesign: ...
 
 
 if typing.TYPE_CHECKING:
@@ -112,7 +121,7 @@ if typing.TYPE_CHECKING:
     from striqt.analysis.lib.typing import Array, FileStream, TAR, ZarrStore
     from striqt.waveform.fourier import ResamplerDesign
 
-    GenericWrapper: TypeAlias = typing.Callable[[Callable[P, R]], Callable[P, R]]
+    PassThroughWrapper: TypeAlias = typing.Callable[[Callable[P, R]], Callable[P, R]]
 
     # %% base.py
 
@@ -131,7 +140,7 @@ if typing.TYPE_CHECKING:
     CaptureConverterWrapper = Callable[[_TAC], _TAC]
 
     # %% compute.py
-    WarmupSweep: TypeAlias = specs.Sweep[specs.NoSource, specs.NoPeripherals, TC]
+    WarmupSweep: TypeAlias = specs.Sweep[specs.NoSource, specs.NoPeripherals, SC]
 
     # %% resources.py
     class SourceOpenCallback(Protocol):

@@ -7,7 +7,7 @@ from typing_extensions import ParamSpec
 from .peripherals import NoPeripherals, PeripheralsBase
 from . import sinks, sources
 from .. import specs
-from .typing import PC, PS, TC, TS, TP, TypeVar
+from .typing import Peripherals, PC, PS, SC, SS, SP, TypeVar
 
 import msgspec
 
@@ -46,22 +46,22 @@ def tagged_subclass(
 
 
 @dataclasses.dataclass(frozen=True)
-class Sensor(Generic[TS, TP, TC, PS, PC]):
-    source: type[sources.SourceBase[TS, TC, PS, PC]]
-    sweep_spec: type[specs.Sweep[TS, TP, TC]] = specs.Sweep
-    peripherals: type[PeripheralsBase[TP, TC]] = NoPeripherals
-    sink: type[sinks.SinkBase[TC]] = sinks.ZarrCaptureSink
+class Sensor(Generic[SS, SP, SC, PS, PC]):
+    source: type[sources.SourceBase[SS, SC, PS, PC]]
+    sweep_spec: type[specs.Sweep[SS, SP, SC]] = specs.Sweep
+    peripherals: type[Peripherals[SP, SC]] = NoPeripherals
+    sink: type[sinks.SinkBase[SC]] = sinks.ZarrCaptureSink
 
     def __post_init__(self):
         assert issubclass(self.source, sources.SourceBase)
         assert issubclass(self.sweep_spec, specs.Sweep)
-        assert issubclass(self.peripherals, PeripheralsBase)
+        assert issubclass(self.peripherals, Peripherals)
         assert issubclass(self.sink, sinks.SinkBase)
 
 
 @dataclasses.dataclass(frozen=True)
-class Schema(Generic[TS, TP, TC, PS, PC], sources.base.Schema[TS, TC]):
-    peripherals: type[TP]
+class Schema(Generic[SS, SP, SC, PS, PC], sources.base.Schema[SS, SC]):
+    peripherals: type[SP]
 
     # these aren't actually used; they just set up the type hinting properly
     init_like: Callable[PS, Any]
@@ -74,9 +74,9 @@ class Schema(Generic[TS, TP, TC, PS, PC], sources.base.Schema[TS, TC]):
 
 
 @dataclasses.dataclass(frozen=True)
-class SensorBinding(Sensor[TS, TP, TC, PS, PC]):
-    schema: Schema[TS, TP, TC] = None  # type: ignore
-    sweep_spec: type[BoundSweep[TS, TP, TC]] = specs.Sweep  # type: ignore
+class SensorBinding(Sensor[SS, SP, SC, PS, PC]):
+    schema: Schema[SS, SP, SC] = None  # type: ignore
+    sweep_spec: type[BoundSweep[SS, SP, SC]] = specs.Sweep  # pyright: ignore
 
     def __post_init__(self):
         super().__post_init__()
@@ -86,9 +86,9 @@ class SensorBinding(Sensor[TS, TP, TC, PS, PC]):
 def bind_sensor(
     key: str,
     sensor: Sensor[TS2, TP2, TC2, PS2, PC2],
-    schema: Schema[TS, TP, TC, PS, PC],
+    schema: Schema[SS, SP, SC, PS, PC],
     register: bool = True,
-) -> SensorBinding[TS, TP, TC, PS, PC]:
+) -> SensorBinding[SS, SP, SC, PS, PC]:
     """register a binding between specifications and controller classes.
 
     Args:
@@ -105,14 +105,14 @@ def bind_sensor(
         raise TypeError(f'a sensor binding named {key!r} was already registered')
 
     # bind the schema to the source
-    class BoundSource(sensor.source):
+    class BoundSource(sensor.source):  # ty: ignore
         _bindings__ = schema
 
     BoundSource.__name__ = sensor.source.__name__
     sensor = dataclasses.replace(sensor, source=BoundSource)
     binding = SensorBinding(**dataclasses.asdict(sensor), schema=schema)
 
-    class BoundSweep(sensor.sweep_spec, frozen=True, kw_only=True):
+    class BoundSweep(sensor.sweep_spec, frozen=True, kw_only=True):  # ty: ignore
         _bindings__ = binding
 
         mock_source: Optional[str] = None
@@ -144,7 +144,7 @@ def bind_sensor(
     if tagged_sweeps is None:
         tagged_sweeps = BoundSweep
     else:
-        tagged_sweeps = Union[tagged_sweeps, BoundSweep]  # type: ignore
+        tagged_sweeps = Union[tagged_sweeps, BoundSweep]  # pyright: ignore
 
     return binding
 
@@ -203,4 +203,4 @@ def get_tagged_sweep_type() -> type[specs.Sweep]:
     """return a tagged union type that msgspec can decode"""
     if tagged_sweeps is None:
         raise TypeError('no bindings have been defined')
-    return tagged_sweeps  # type: ignore
+    return tagged_sweeps  # pyright: ignore
