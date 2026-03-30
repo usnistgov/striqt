@@ -411,6 +411,7 @@ def prepare_compute(spec: specs.Sweep, skip_warmup: bool = False):
 
     if skip_warmup or spec.options.skip_warmup or not sweep_touches_gpu(spec):
         yield from (None,)
+        return
 
     from .. import bindings
     from . import execute, resources, sinks
