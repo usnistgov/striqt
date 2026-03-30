@@ -308,7 +308,7 @@ def from_delayed(dd: DelayedDataset):
 
 
 def sweep_touches_gpu(sweep: specs.Sweep) -> bool:
-    """returns True if the sweep would benefit from the GPU"""
+    """returns True if the specified sweep uses the GPU"""
 
     if sweep.source.array_backend == 'numpy':
         return False

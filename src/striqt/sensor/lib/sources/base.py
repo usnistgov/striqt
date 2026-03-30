@@ -220,19 +220,18 @@ class SourceBase(Source[SS, SC, PS, PC]):
 
         self._capture = self._prepare_capture(spec) or spec
 
-    def read_iq(
-        self, analysis: specs.AnalysisGroup | None = None
-    ) -> 'tuple[Array, int|None]':
+    def read_iq(self, overlaps=(0, 0)) -> 'tuple[Array, int|None]':
         """read IQ for the armed capture"""
         assert self._capture is not None, 'soapy source must be armed to read IQ'
 
+        if not isinstance(overlaps, (tuple, list)) or len(overlaps) != 2:
+            raise ValueError('overlaps must be a sequence of 2 integers')
+        for ol in overlaps:
+            if ol % 2 == 1 or ol < 0 or not isinstance(ol, (np.integer, int)):
+                raise ValueError('overlaps must be non-negative even integers')
+
         # the return buffer
         samples, stream_bufs = self._buffers.get_next(self._capture)
-
-        # holdoff parameters, valid when we already have a clock reading
-        dsp_pad_before, _ = buffers.get_dsp_pad_size(
-            self._capture, self.setup_spec, analysis=analysis
-        )
 
         # carryover from the previous acquisition
         missing_start_time = True
@@ -241,7 +240,7 @@ class SourceBase(Source[SS, SC, PS, PC]):
 
         # the number of holdoff samples from the end of the holdoff period
         # to include with the returned waveform
-        included_holdoff = dsp_pad_before
+        included_holdoff = overlaps[0]
 
         fs = self.get_resampler()['fs_sdr']
 
@@ -297,9 +296,9 @@ class SourceBase(Source[SS, SC, PS, PC]):
                     self.capture_spec,
                     self._buffers,
                     stream_time_ns,
-                    dsp_pad_before=dsp_pad_before,
+                    start_overlap=overlaps[0],
                 )
-                remaining = remaining + included_holdoff - dsp_pad_before
+                remaining = remaining + included_holdoff - overlaps[0]
 
                 start_ns = stream_time_ns + round(included_holdoff * 1e9 / fs)
                 missing_start_time = False
@@ -308,7 +307,7 @@ class SourceBase(Source[SS, SC, PS, PC]):
             received_count += this_count
 
         samples = samples.view('complex64')
-        sample_offs = included_holdoff - dsp_pad_before
+        sample_offs = included_holdoff - overlaps[0]
         sample_span = slice(sample_offs, sample_offs + output_count)
 
         unused_count = output_count - round(self._capture.duration * fs)
@@ -327,61 +326,36 @@ class SourceBase(Source[SS, SC, PS, PC]):
         return samples[:, sample_span], start_ns
 
     @sa.util.stopwatch('acquire', 'source')
-    def acquire(
-        self, *, analysis=None, correction=True, alias_func=None
-    ) -> buffers.AcquiredIQ:
+    def acquire(self, overlaps=(0, 0)) -> buffers.AcquiredIQ:
         """arm a capture and enable the channel (if necessary), read the resulting IQ waveform.
 
         Optionally, calibration corrections can be applied, and the radio can be left ready for the next capture.
         """
-        from .. import resampling
 
         self.capture_spec  # ensure we are armed
 
-        trigger = buffers.get_trigger_from_spec(self.setup_spec, analysis)
-
         if self._prev_iq is None:
-            samples, time_ns = self.read_iq(analysis)
-            iq = self._package_acquisition(
-                samples,
-                time_ns,
-                analysis=analysis,
-                correction=correction,
-                alias_func=alias_func,
-            )
+            samples, time_ns = self.read_iq(overlaps)
+            iq = self._package_acquisition(samples, time_ns)
 
         else:
             iq = dataclasses.replace(
                 self._prev_iq,
                 capture=self.capture_spec,
                 info=self._prev_iq.info.replace(start_time=None),
-                trigger=trigger,
-                analysis=analysis,
             )
 
         if self._reuse_iq:
             self._prev_iq = iq
 
-        if not correction:
-            return iq
-        else:
-            util.propagate_thread_interrupts()
-            tmin = self.capture_spec.duration / 2
-            with sa.util.stopwatch('resampling filter', threshold=tmin):
-                return resampling.resampling_correction(iq, overwrite_x=True)
+        return iq
 
     def _package_acquisition(
         self,
         samples: Array,
         time_ns: int | None,
-        *,
-        analysis=None,
-        correction=True,
-        alias_func: specs.helpers.PathAliasFormatter | None = None,
     ) -> buffers.AcquiredIQ:
         info = specs.AcquisitionInfo(source_id=self.id)
-
-        trigger = buffers.get_trigger_from_spec(self.setup_spec, analysis)
 
         return buffers.AcquiredIQ(
             pre_align=samples,
@@ -390,11 +364,8 @@ class SourceBase(Source[SS, SC, PS, PC]):
             capture=self.capture_spec,
             info=info,
             extra_data={},
-            alias_func=alias_func,
             source_spec=self.setup_spec,
             resampler=self.get_resampler(),
-            trigger=trigger,
-            analysis=analysis,
             voltage_scale=buffers.get_dtype_scale(self.setup_spec.transport_dtype),
         )
 
@@ -424,10 +395,12 @@ class SourceBase(Source[SS, SC, PS, PC]):
         return self._capture
 
     def get_resampler(self, capture=None) -> sw.ResamplerDesign:
+        from .. import resampling
+
         if capture is None:
             capture = self.capture_spec
 
-        return buffers.design_resampler(capture, self.setup_spec.master_clock_rate)
+        return resampling.design_resampler(capture, self.setup_spec.master_clock_rate)
 
 
 class VirtualSource(SourceBase[SS, SC, PS, PC]):

@@ -54,8 +54,10 @@ class NoSource(base.SourceBase[TS, TC, PS, PC]):
         return count, round(timestamp_ns)
 
     def get_resampler(self, capture: TC | None = None) -> sw.ResamplerDesign:
+        from ..resampling import design_resampler
+
         if capture is None:
             capture = self.capture_spec
 
         mcr = self.setup_spec.master_clock_rate
-        return buffers.design_resampler(capture, mcr)
+        return design_resampler(capture, mcr)

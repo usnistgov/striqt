@@ -498,12 +498,14 @@ def _lookup_calibration_var(
     *,
     xp,
 ):
+    from . import resampling
+
     results = []
 
     for c in specs.helpers.split_capture_ports(capture):
         assert not isinstance(c.center_frequency, tuple)
 
-        fs = sources.buffers.design_resampler(c, master_clock_rate)['fs_sdr']
+        fs = resampling.design_resampler(c, master_clock_rate)['fs_sdr']
         port_key = _get_port_variable(cal_var)
 
         # these capture fields must match the calibration conditions exactly
