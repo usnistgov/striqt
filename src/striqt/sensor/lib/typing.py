@@ -23,9 +23,9 @@ PS = ParamSpec('PS')
 PC = ParamSpec('PC')
 R = TypeVar('R')
 
+S = TypeVar('S', bound='specs.SpecBase')
 SS = TypeVar('SS', bound='specs.Source')
 SC = TypeVar('SC', bound='specs.SensorCapture')
-S = TypeVar('S', bound='specs.SpecBase')
 SP = TypeVar('SP', bound='specs.Peripherals')
 SPC = TypeVar('SPC', bound='specs.Peripherals')
 

@@ -108,6 +108,25 @@ def lookup_system_noise_power(
     )
 
 
+def set_iq_calibration(iq: sources.AcquiredIQ, alias_func: specs.helpers.PathAliasFormatter | None = None):
+    assert isinstance(iq.capture, specs.SoapyCapture)
+
+    xp = sources.buffers.get_array_namespace(iq.source_spec.array_backend)
+    kwargs = {
+        'cal_data': iq.source_spec.calibration,
+        'capture': iq.capture,
+        'master_clock_rate': iq.source_spec.master_clock_rate,
+        'alias_func': alias_func,
+    }
+
+    # calibration data
+    power_scale = lookup_power_correction(**kwargs, xp=xp)
+    if power_scale is not None:
+        voltage_scale = sources.buffers.get_dtype_scale(iq.source_spec.transport_dtype)
+        iq.voltage_scale = voltage_scale * (power_scale**0.5)
+        iq.extra_data['system_noise'] = lookup_system_noise_power(**kwargs)
+
+
 class YFactorSink(sinks.SinkBase):
     _DROP_FIELDS = (
         'sweep_start_time',

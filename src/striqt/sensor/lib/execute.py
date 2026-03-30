@@ -242,7 +242,7 @@ def _acquire_both(
         res['sweep_spec'].analysis, this.adjust_analysis
     )
 
-    overlaps = resampling.get_dsp_overlaps(this, res['source'].setup_spec, analysis)
+    overlaps = resampling.get_overlaps(this, res['source'].setup_spec, analysis)
     iq = util.threadpool.submit(res['source'].acquire, overlaps)
     ext_data = util.threadpool.submit(res['peripherals'].acquire, this)
 

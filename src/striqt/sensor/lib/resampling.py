@@ -30,7 +30,12 @@ FILTER_DOMAIN = 'time'
 
 
 def resampling_correction(
-    iq: sources.AcquiredIQ, *, axis=1, overwrite_x=False
+    iq: sources.AcquiredIQ,
+    *,
+    alias_func: specs.helpers.PathAliasFormatter | None = None,
+    analysis: specs.AnalysisGroup | None = None,
+    axis=1,
+    overwrite_x=False
 ) -> sources.AcquiredIQ:
     """resample, filter, and apply calibration corrections.
 
@@ -50,8 +55,16 @@ def resampling_correction(
     if not isinstance(capture, specs.SensorCapture):
         raise TypeError('iq.capture must be a capture specification')
 
-    needs_filter = isfinite(capture.analysis_bandwidth)
+    signal_trigger = get_trigger_from_spec(iq.source_spec, analysis)
 
+    iq = dataclasses.replace(
+        iq,
+        trigger=signal_trigger,
+        alias_func=alias_func,
+        analysis=analysis
+    )
+
+    needs_filter = isfinite(capture.analysis_bandwidth)
     if not needs_resample(iq.resampler, capture):
         x_pre_filter, offs = _scale_only(iq, overwrite_x=overwrite_x, axis=axis)
     elif USE_OARESAMPLE:
@@ -139,9 +152,9 @@ def _scale_only(
 
     if vscale is not None:
         x = xp.multiply(x, vscale, out=x if overwrite_x else None)
-    pad = get_fft_resample_pad(capture, source_spec, iq.analysis)[0]
+    overlap = _get_fft_resample_overlap(capture, source_spec, iq.analysis)[0]
 
-    return x, pad
+    return x, overlap
 
 
 def _resample(
@@ -157,7 +170,7 @@ def _resample(
 
     assert sw.isroundmod(x.shape[1] * capture.sample_rate, fs)
     resample_size_out = round(x.shape[1] * capture.sample_rate / fs)
-    pad_in = get_fft_resample_pad(capture, source_spec, iq.analysis)[0]
+    pad_in = _get_fft_resample_overlap(capture, source_spec, iq.analysis)[0]
     pad_out = round(pad_in * capture.sample_rate / fs)
 
     x = sw.resample(
@@ -197,7 +210,7 @@ def _oaresample(
     )
     scale = iq.resampler['nfft_out'] / iq.resampler['nfft']
     oapad = get_oaresample_pad(capture, source_spec.master_clock_rate)
-    lag_pad = get_trigger_pad_size(source_spec, capture, iq.trigger)
+    lag_pad = _get_trigger_holdoff_size(source_spec, capture, iq.trigger)
     size_out = round(capture.duration * capture.sample_rate) + round(
         (oapad[1] + lag_pad) * scale
     )
@@ -247,32 +260,31 @@ def needs_resample(
     return is_resample and capture.host_resample
 
 
+#%% Compute overlaps 
 @specs.helpers.convert_capture_arg(specs.SensorCapture)
 @sa.util.lru_cache(30000)
-def get_dsp_overlaps(
+def get_overlaps(
     capture: specs.SensorCapture,
     setup: specs.Source,
     analysis: specs.AnalysisGroup | None = None,
 ) -> tuple[int, int]:
-    """returns the padding before and after a waveform to achieve an integral number of FFT windows"""
+    """returns the number of extra overlap acquisition samples to acquire"""
 
-    from . import resampling
-
-    if resampling.USE_OARESAMPLE:
-        min_lag_pad = get_trigger_pad_size(setup, capture, analysis)
+    if USE_OARESAMPLE:
+        min_lag_pad = _get_trigger_holdoff_size(setup, capture, analysis)
         oa_pad_low, oa_pad_high = get_oaresample_pad(capture, setup.master_clock_rate)
         return (oa_pad_low, oa_pad_high + min_lag_pad)
     else:
         # this is removed before the FFT, so no need to micromanage its size
-        fft_pad = get_fft_resample_pad(capture, setup, analysis)
+        fft_pad = _get_fft_resample_overlap(capture, setup, analysis)
 
-        filter_pad = get_filter_pad(capture)
+        filter_pad = _get_filter_overlap(capture)
         assert fft_pad[0] > filter_pad and fft_pad[1] > filter_pad
 
         return (fft_pad[0], fft_pad[1])
 
 
-def get_filter_pad(capture: specs.SensorCapture):
+def _get_filter_overlap(capture: specs.SensorCapture):
     if isfinite(capture.analysis_bandwidth):
         return FILTER_SIZE // 2 + 1
     else:
@@ -281,20 +293,20 @@ def get_filter_pad(capture: specs.SensorCapture):
 
 @specs.helpers.convert_capture_arg(specs.SensorCapture)
 @sa.util.lru_cache(30000)
-def get_fft_resample_pad(
+def _get_fft_resample_overlap(
     capture: specs.SensorCapture,
     setup: specs.Source,
     analysis: specs.AnalysisGroup | None = None,
 ) -> tuple[int, int]:
     # accommodate the large fft by padding to a fast size that includes at least lag_pad
-    min_lag_pad = get_trigger_pad_size(setup, capture, analysis)
+    min_lag_pad = _get_trigger_holdoff_size(setup, capture, analysis)
     design = design_resampler(capture, setup.master_clock_rate)
     analysis_size = round(capture.duration * design['fs_sdr'])
 
     # treat the block size as the minimum number of samples needed for the resampler
     # output to have an integral number of samples
     if isfinite(capture.analysis_bandwidth):
-        filter_pad = get_filter_pad(capture)
+        filter_pad = _get_filter_overlap(capture)
         min_filter_blocks = sw.util.ceildiv(design['nfft'], filter_pad)
         block_size = design['nfft'] * min_filter_blocks
     else:
@@ -313,6 +325,21 @@ def get_fft_resample_pad(
     return (pad_end // 2, pad_end // 2)
 
 
+@sa.util.lru_cache()
+def _get_next_fast_len(n, array_backend: specs.types.ArrayBackend) -> int:
+    if array_backend == 'cupy':
+        import cupyx.scipy.fft as fft  # type: ignore
+    elif array_backend == 'numpy':
+        import scipy.fft as fft
+    else:
+        raise TypeError(f'invalid array_backend {array_backend}')
+
+    size = fft.next_fast_len(n)
+    assert size is not None, ValueError('failed to determine fft size')
+    return size
+
+
+#%% compute resampling parameters based on a given capture and MCR
 @specs.helpers.convert_capture_arg(specs.SensorCapture)
 @sa.util.lru_cache(30000)
 def design_resampler(
@@ -394,20 +421,8 @@ def design_resampler(
         )
 
 
-def _get_next_fast_len(n, array_backend: specs.types.ArrayBackend) -> int:
-    if array_backend == 'cupy':
-        import cupyx.scipy.fft as fft  # type: ignore
-    elif array_backend == 'numpy':
-        import scipy.fft as fft
-    else:
-        raise TypeError(f'invalid array_backend {array_backend}')
-
-    size = fft.next_fast_len(n)
-    assert size is not None, ValueError('failed to determine fft size')
-    return size
-
-
-def get_trigger_pad_size(
+#%% evaluation of trigger evaluation
+def _get_trigger_holdoff_size(
     setup: specs.Source,
     capture: specs.SensorCapture,
     trigger_info: sa.Trigger | specs.AnalysisGroup | None = None,

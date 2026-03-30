@@ -185,6 +185,12 @@ def analyze(
     # wait to import until here to avoid a circular import
     from . import resampling
 
+    capture = cast(specs.SensorCapture, iq.capture)
+
+    analysis = specs.helpers.adjust_analysis(
+        options.sweep_spec.analysis, capture.adjust_analysis
+    )
+
     overwrite_x = not options.sweep_spec.options.reuse_iq
 
     capture = iq.capture
