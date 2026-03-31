@@ -11,6 +11,13 @@ import msgspec
 from . import helpers, types
 from striqt.waveform.lib import util
 
+
+if typing.TYPE_CHECKING:
+    from typing_extensions import Self
+else:
+    from typing import Self
+
+
 _T = typing.TypeVar('_T')
 _TS = typing.TypeVar('_TS', bound='SpecBase')
 
@@ -29,7 +36,7 @@ class SpecBase(
     methods that fix encoding and decoding hooks for extra types.
     """
 
-    def replace(self, **attrs) -> typing.Self:
+    def replace(self, **attrs) -> Self:
         """returns a copy of self with changed attributes.
 
         See also:
@@ -58,7 +65,7 @@ class SpecBase(
     def from_spec(cls: type[_T], other: SpecBase) -> _T:
         return helpers.convert_spec(other, type=cls)
 
-    def validate(self) -> typing.Self:
+    def validate(self) -> Self:
         return _validate(self)
 
     def __post_init__(self):
@@ -107,8 +114,8 @@ class FilteredCapture(Capture, kw_only=True, frozen=True):
     # )
 
 
-class AnalysisKeywords(typing.TypedDict):
-    as_xarray: typing.NotRequired[typing.Union[bool, typing.Literal['delayed']]]
+class AnalysisKeywords(typing.TypedDict, total=False):
+    as_xarray: typing.Union[bool, typing.Literal['delayed']]
 
 
 class Analysis(SpecBase, kw_only=True, frozen=True):

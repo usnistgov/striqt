@@ -15,6 +15,7 @@ from typing import (
     TYPE_CHECKING,
     TypeVar,
     ValuesView,
+    cast,
     get_origin,
     overload,
 )
@@ -29,7 +30,6 @@ _V = TypeVar('_V')
 
 if TYPE_CHECKING:
     import typing_extensions
-    import xarray as xr
 
     _P = typing_extensions.ParamSpec('_P')
     _R = TypeVar('_R', covariant=True)
@@ -74,7 +74,7 @@ class frozendict(Mapping[_K, _V]):
 
     def __new__(cls, *args: Any, **kwargs: Any) -> frozendict[_K, _V]:
         inst = super().__new__(cls)
-        inst._dict = dict(*args, **kwargs)  # type: ignore
+        inst._dict = dict(*args, **kwargs)  # pyright: ignore
         inst._hash = None
         return inst
 
@@ -234,9 +234,10 @@ def freeze(
     if isinstance(obj, (list, tuple)):
         nd = None if max_depth is None else max_depth - 1
         if nd is None or nd > 0:
-            return tuple([freeze(v, nd) for v in obj])
+            ret = tuple([freeze(v, nd) for v in obj])
+            return ret  # type: ignore
         else:
-            return tuple(obj)
+            return tuple(obj) # type: ignore
     elif isinstance(obj, dict):
         nd = None if max_depth is None else max_depth - 1
         if nd is None or nd > 0:
@@ -259,27 +260,28 @@ def unfreeze(obj: tuple[_V, ...] | list[_V], max_depth: int | None = None) -> li
 
 
 @overload
-def unfreeze(obj: _T, max_depth: int | None = None) -> _T:
+def unfreeze(obj: _V, max_depth: int | None = None) -> _V:
     pass
 
 
 def unfreeze(
-    obj: Mapping[_K, _V] | tuple[_V, ...] | list[_V] | _T,
+    obj: Mapping[_K, _V] | tuple[_V, ...] | list[_V] | _V,
     max_depth: int | None = None,
-) -> 'dict[_K, _V]|list[_V]|_T':
+) -> 'dict[_K, _V]|list[_V]|_V':
     """Recursively transform dict into frozendict"""
     if isinstance(obj, (list, tuple)):
         nd = None if max_depth is None else max_depth - 1
         if nd is None or nd > 0:
-            return [unfreeze(v, nd) for v in obj]
+            ret = [unfreeze(v, nd) for v in obj]
+            return ret # type: ignore
         else:
             return list(obj)
 
     if isinstance(obj, (dict, frozendict)):
         nd = None if max_depth is None else max_depth - 1
         if nd is None or nd > 0:
-            mapping = {k: unfreeze(v, nd) for k, v in obj.items()}
-            return dict(mapping)
+            ret = {k: unfreeze(v, nd) for k, v in obj.items()}
+            return ret # type: ignore
         else:
             return dict(obj)
     else:
@@ -319,7 +321,7 @@ def _inspect_container_depth(type_: msgspec.inspect.Type) -> int:
 
 @functools.cache
 def inspect_freeze_depths(spec_cls: type[msgspec.Struct]) -> dict[str, int]:
-    """returns a cached xr.Coordinates object to use as a template for data results"""
+    """returns the maximum depth to freeze the given msgspec Struct"""
 
     fields = msgspec.structs.fields(spec_cls)
     depths = {}
@@ -360,7 +362,7 @@ def infer_coord_info(
         # dicey if subclasses show up
         return {}, BUILTINS[type(type_key)]
     elif isinstance(type_key, mi.CustomType):
-        if allow_timestamps and issubclass(type_key.cls, Timestamp):
+        if Timestamp is not None:
             return {}, Timestamp(0)
         else:
             try:
