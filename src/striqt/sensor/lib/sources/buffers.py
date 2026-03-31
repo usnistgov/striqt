@@ -66,15 +66,14 @@ class ReceiveBuffers:
             )
 
         if self.carryover_samples is None:
-            carryover_count = 0
+            carryover = 0
         else:
             # note: carryover.samples.dtype is np.complex64, samples.dtype is np.float32
-            carryover_count = self.carryover_samples.shape[1]
-            samples[:, : 2 * carryover_count] = self.carryover_samples.view(
-                samples.dtype
-            )
+            carryover = self.carryover_samples.shape[1]
+            stride = samples.itemsize // self.carryover_samples.itemsize
+            samples[:, : stride*carryover] = self.carryover_samples.view(samples.dtype)
 
-        return self.start_time_ns, carryover_count
+        return self.start_time_ns, carryover
 
     def get_next(self, capture) -> 'tuple[np.ndarray, list[np.ndarray]]':
         """swap the buffers, and reallocate if needed"""
