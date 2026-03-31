@@ -3,8 +3,8 @@ from __future__ import annotations as __
 import dataclasses
 import logging
 import types
-from typing import Any, cast, overload, TYPE_CHECKING
-from math import ceil, isfinite
+from typing import Any, cast, TYPE_CHECKING
+from math import ceil
 
 import striqt.analysis as sa
 import striqt.waveform as sw
@@ -14,7 +14,7 @@ from .. import util
 
 if TYPE_CHECKING:
     import numpy as np
-    from ..typing import Array, ResamplerKws, Unpack
+    from ..typing import Array
     from .base import SourceBase
 
 else:
@@ -30,8 +30,7 @@ class AcquiredIQ(sa.dataarrays.AcquiredIQ):
     source_spec: specs.Source
     resampler: sw.ResamplerDesign
     alias_func: specs.helpers.PathAliasFormatter | None = None
-    trigger: sa.Trigger | None = None
-    analysis: specs.AnalysisGroup | None = None
+    # analysis: specs.AnalysisGroup | None = None
     voltage_scale: Array | float = 1
 
 
@@ -129,15 +128,15 @@ def get_read_count(
         msg = f'duration must be an integer multiple of the sample period (1/{capture.sample_rate} s)'
         raise ValueError(msg)
 
-    from .. import resampling
+    from .. import compute
 
-    resampler_design = resampling.design_resampler(capture, setup.master_clock_rate)
+    resampler_design = compute.design_resampler(capture, setup.master_clock_rate)
     if capture.host_resample:
         sample_rate = resampler_design['fs']
     else:
         sample_rate = capture.sample_rate
 
-    if resampling.needs_resample(resampler_design, capture):
+    if compute.needs_resample(resampler_design, capture):
         nfft = resampler_design['nfft']
         min_samples_in = ceil(samples_out * nfft / resampler_design['nfft_out'])
         samples_in = min_samples_in + overlap
@@ -231,7 +230,7 @@ def find_trigger_holdoff(
     start_time_ns: int,
     start_overlap: int = 0,
 ):
-    from ..resampling import design_resampler
+    from ..compute import design_resampler
 
     resampler = design_resampler(capture_spec, source_spec.master_clock_rate)
     sample_rate = resampler['fs_sdr']
@@ -311,10 +310,10 @@ def is_reusable(
     if c1 is None or c2 is None:
         return False
 
-    from .. import resampling
+    from .. import compute
 
-    fsb1 = resampling.design_resampler(c1, mcr)['fs_sdr']
-    fsb2 = resampling.design_resampler(c2, mcr)['fs_sdr']
+    fsb1 = compute.design_resampler(c1, mcr)['fs_sdr']
+    fsb2 = compute.design_resampler(c2, mcr)['fs_sdr']
 
     if fsb1 != fsb2:
         # the realized backend sample rates need to be the same

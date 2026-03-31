@@ -69,12 +69,12 @@ class TDMSSource(base.VirtualSource[specs.TDMSSource, specs.FileCapture, PS, PC]
     def get_resampler(
         self, capture: specs.FileCapture | None = None
     ) -> sw.ResamplerDesign:
-        from .. import resampling
+        from ..compute import design_resampler
 
         if capture is None:
             capture = self.capture_spec
 
-        return resampling.design_resampler(
+        return design_resampler(
             capture,
             master_clock_rate=self.setup_spec.master_clock_rate,
             backend_sample_rate=self._file_info.backend_sample_rate,
@@ -129,7 +129,7 @@ class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture, PS, PC]):
     def get_resampler(
         self, capture: specs.FileCapture | None = None
     ) -> sw.ResamplerDesign:
-        from ..resampling import design_resampler
+        from ..compute import design_resampler
 
         if capture is None:
             capture = self.capture_spec
@@ -206,7 +206,7 @@ class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture, PS,
         )
 
     def get_resampler(self, capture=None) -> sw.ResamplerDesign:
-        from ..resampling import design_resampler
+        from ..compute import design_resampler
 
         if capture is None:
             capture = self.capture_spec

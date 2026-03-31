@@ -395,12 +395,12 @@ class SourceBase(Source[SS, SC, PS, PC]):
         return self._capture
 
     def get_resampler(self, capture=None) -> sw.ResamplerDesign:
-        from .. import resampling
+        from ..compute import design_resampler
 
         if capture is None:
             capture = self.capture_spec
 
-        return resampling.design_resampler(capture, self.setup_spec.master_clock_rate)
+        return design_resampler(capture, self.setup_spec.master_clock_rate)
 
 
 class VirtualSource(SourceBase[SS, SC, PS, PC]):

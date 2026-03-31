@@ -108,7 +108,9 @@ def lookup_system_noise_power(
     )
 
 
-def set_iq_calibration(iq: sources.AcquiredIQ, alias_func: specs.helpers.PathAliasFormatter | None = None):
+def set_iq_calibration(
+    iq: sources.AcquiredIQ, alias_func: specs.helpers.PathAliasFormatter | None = None
+):
     assert isinstance(iq.capture, specs.SoapyCapture)
 
     xp = sources.buffers.get_array_namespace(iq.source_spec.array_backend)
@@ -517,14 +519,14 @@ def _lookup_calibration_var(
     *,
     xp,
 ):
-    from . import resampling
+    from . import compute
 
     results = []
 
     for c in specs.helpers.split_capture_ports(capture):
         assert not isinstance(c.center_frequency, tuple)
 
-        fs = resampling.design_resampler(c, master_clock_rate)['fs_sdr']
+        fs = compute.design_resampler(c, master_clock_rate)['fs_sdr']
         port_key = _get_port_variable(cal_var)
 
         # these capture fields must match the calibration conditions exactly
