@@ -331,10 +331,17 @@ def inspect_freeze_depths(spec_cls: type[msgspec.Struct]) -> dict[str, int]:
 
 
 # %% msgspec field type introspection
-def infer_coord_info(type_: msgspec.inspect.Type) -> tuple[dict, Any]:
+def infer_coord_info(
+    type_: msgspec.inspect.Type, allow_timestamps=True
+) -> tuple[dict, Any]:
     """returns an (attrs, default_value) pair for the given msgspec field type"""
     from msgspec import inspect as mi
-    import pandas as pd
+
+    if allow_timestamps or TYPE_CHECKING:
+        # don't force pandas imports, for lazy import support
+        from pandas import Timestamp
+    else:
+        Timestamp = None
 
     BUILTINS: dict[type[mi.Type], Any] = {
         mi.FloatType: 0.0,
@@ -353,8 +360,8 @@ def infer_coord_info(type_: msgspec.inspect.Type) -> tuple[dict, Any]:
         # dicey if subclasses show up
         return {}, BUILTINS[type(type_key)]
     elif isinstance(type_key, mi.CustomType):
-        if issubclass(type_key.cls, pd.Timestamp):
-            return {}, pd.Timestamp(0)
+        if allow_timestamps and issubclass(type_key.cls, Timestamp):
+            return {}, Timestamp(0)
         else:
             try:
                 return {}, type_key.cls()
@@ -362,14 +369,16 @@ def infer_coord_info(type_: msgspec.inspect.Type) -> tuple[dict, Any]:
                 name = type_key.cls.__qualname__
                 raise TypeError(f'failed to make default for type {name!r}') from ex
     elif isinstance(type_key, mi.Metadata):
-        return type_key.extra or {}, infer_coord_info(type_key.type)[1]
+        return type_key.extra or {}, infer_coord_info(type_key.type, allow_timestamps)[
+            1
+        ]
     elif isinstance(type_key, mi.LiteralType):
         return {}, type(type_key.values[0])
     elif isinstance(type_key, mi.UnionType):
         UNION_SKIP = (mi.NoneType, mi.VarTupleType)
         types = [t for t in type_key.types if not isinstance(t, UNION_SKIP)]
         if len(types) == 1:
-            return infer_coord_info(types[0])
+            return infer_coord_info(types[0], allow_timestamps)
         else:
             names = tuple(type(t).__qualname__ for t in types)
             raise TypeError(

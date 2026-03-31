@@ -10,7 +10,7 @@ from typing import Any, Generator, TYPE_CHECKING
 import striqt.waveform as sw
 import striqt.analysis as sa
 
-from . import compute, resampling, sources, util
+from . import compute, sources, util
 from .. import specs
 from .resources import Resources, AnyResources
 from .calibration import lookup_system_noise_power
@@ -242,7 +242,7 @@ def _acquire_both(
         res['sweep_spec'].analysis, this.adjust_analysis
     )
 
-    overlaps = resampling.get_overlaps(this, res['source'].setup_spec, analysis)
+    overlaps = compute.get_correction_overlaps(this, res['source'].setup_spec, analysis)
     iq = util.threadpool.submit(res['source'].acquire, overlaps)
     ext_data = util.threadpool.submit(res['peripherals'].acquire, this)
 
