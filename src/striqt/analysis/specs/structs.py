@@ -263,7 +263,7 @@ class CellularCyclicAutocorrelator(
     subcarrier_spacings: typing.Union[float, tuple[float, ...]] = (15e3, 30e3, 60e3)
     frame_range: typing.Union[int, tuple[int, int]] = (0, 1)
     frame_slots: typing.Union[str, None] = None
-    symbol_range: typing.Union[int, tuple[int, typing.Optional[int]]] = (0, None)
+    symbol_range: typing.Union[int, tuple[int, int], tuple[int, None]] = (0, None)
     generation: typing.Literal['4G', '5G'] = '5G'
 
     def __post_init__(self):

@@ -9,6 +9,7 @@ import striqt.analysis as sa
 import striqt.waveform as sw
 
 if typing.TYPE_CHECKING:
+    from typing_extensions import NotRequired, Unpack
     import matplotlib as mpl
     import numpy as np
     import xarray as xr
@@ -53,15 +54,16 @@ def coerce_column(data: '_T', plotter: 'PlotBackend') -> '_T':
 
 class _DimKws(typing.TypedDict):
     x: str
-    y: typing.NotRequired[str]
-    hue: typing.NotRequired[str]
+    y: NotRequired[str]
+    hue: NotRequired[str]
+
 
 
 class _LayoutKwArgs(_DimKws):
     col: str | None
-    col_wrap: typing.NotRequired[int | None]
-    row: typing.NotRequired[str | None]
-    figsize: typing.NotRequired[list[float]]
+    col_wrap: NotRequired[int | None]
+    row: NotRequired[str | None]
+    figsize: NotRequired[list[float]]
 
 
 def plot_cyclic_channel_power(
@@ -100,7 +102,7 @@ def plot_cyclic_channel_power(
             time,
             (a.sel(cyclic_statistic=center_statistic)),
             color=f'C{i}' if colors is None else colors[i],
-            **plot_kws,
+            **plot_kws # ty: ignore
         )
 
     for i, detector in enumerate(cyclic_channel_power.power_detector.data):
@@ -140,13 +142,13 @@ class PlotBackend:
             self.output_dir.mkdir(parents=True, exist_ok=True)
 
     @functools.lru_cache()
-    def _coord_kws(self, **kwargs: typing.Unpack[_DimKws]) -> _LayoutKwArgs:
+    def _coord_kws(self, **kwargs: Unpack[_DimKws]) -> _LayoutKwArgs:
         if self.opts.col is None and self.opts.row is None:
             col = '_view'
         else:
             col = self.opts.col
 
-        return {
+        return { # ty: ignore
             **kwargs,
             'figsize': mpl.rcParams['figure.figsize'],
             'col_wrap': self.opts.col_wrap,
@@ -162,7 +164,7 @@ class PlotBackend:
         vmin: float | None = None,
         vmax: float | None = None,
         vstep: float | None = None,
-        **kwargs: typing.Unpack[_DimKws],
+        **kwargs: Unpack[_DimKws],
     ):
         from matplotlib import colors
 
@@ -177,8 +179,8 @@ class PlotBackend:
             _cmap = mpl.colormaps.get_cmap(cmap).resampled(len(levels) - 1)
             norm = colors.BoundaryNorm(levels, ncolors=_cmap.N)
 
-        grid = data.plot.imshow(
-            **coords,
+        grid = data.plot.imshow( # ty: ignore
+            **coords, 
             cmap=_cmap,
             norm=norm,
             rasterized=rasterized,
@@ -191,10 +193,10 @@ class PlotBackend:
         if grid.cbar is not None and grid.cbar.solids is not None:
             grid.cbar.solids.set_rasterized(rasterized)
 
-        x = grid._x_var = kwargs['x']  # type: ignore
-        y = grid._y_var = kwargs.get('y', None)  # type: ignore
+        x = grid._x_var = kwargs['x']  # pyright: ignore
+        y = grid._y_var = kwargs.get('y', None)  # pyright: ignore
         ydata = data if y is None else data[y]
-        grid._dpi = _select_dpi(grid, data[x], ydata, min_=120, max_=300)  # type: ignore
+        grid._dpi = _select_dpi(grid, data[x], ydata, min_=120, max_=300)  # pyright: ignore
 
         return grid
 
@@ -202,16 +204,16 @@ class PlotBackend:
         self,
         data: 'xr.DataArray',
         yscale: 'xarray.core.types.ScaleOptions' = 'linear',
-        **kwargs: typing.Unpack[_DimKws],
+        **kwargs: Unpack[_DimKws],
     ):
         coords = self._coord_kws(**kwargs)
         rasterized = data.size > 10000
 
-        grid = data.plot.line(**coords, yscale=yscale, rasterized=rasterized)
+        grid = data.plot.line(**coords, yscale=yscale, rasterized=rasterized) # ty: ignore
 
-        grid._x_var = kwargs['x']  # type: ignore
+        grid._x_var = kwargs['x']  # pyright: ignore
         grid._y_var = None
-        grid._dpi = _select_dpi(grid, data[grid._x_var], None, min_=120, max_=300)  # type: ignore
+        grid._dpi = _select_dpi(grid, data[grid._x_var], None, min_=120, max_=300)  # pyright: ignore
 
         return grid
 
@@ -320,17 +322,17 @@ class PlotBackend:
 
                 if hasattr(cbar, 'long_axis'):
                     # newer matplotlib
-                    long_axis = cbar.long_axis  # type: ignore
+                    long_axis = cbar.long_axis  # pyright: ignore
                 else:
                     # older matplotlib
-                    long_axis = cbar.yaxis  # type: ignore
+                    long_axis = cbar.yaxis  # pyright: ignore
 
                 meanloc = noise.values.mean()
                 for i, n in enumerate(noise.values.tolist()):
                     labels: list[typing.Any] = long_axis.get_ticklabels()
                     long_axis.set_ticks(
                         cbar.get_ticks().tolist() + [n],
-                        labels + ['$k T B$' if i == 0 else ''],
+                        labels + ['$k T B$' if i == 0 else ''], # ty: ignore
                     )
                     label = long_axis.get_ticklabels()[-1]
                     label.set_color('#eec009')

@@ -115,7 +115,7 @@ def tdd_config_from_str(
     uplink_slots = [i for i, s in enumerate(frame_slots) if s == 'u']
 
     if 's' not in frame_slots or special_symbols is not None:
-        frame_by_symbol = ''.join([slot_by_symbol[k] for k in frame_slots])
+        frame_by_symbol = ''.join([slot_by_symbol[k] for k in frame_slots]) # ty: ignore
     else:
         frame_by_symbol = 'd' * len(frame_slots)
 

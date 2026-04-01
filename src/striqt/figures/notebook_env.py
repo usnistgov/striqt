@@ -66,7 +66,7 @@ def set_matplotlib_formats(formats, *args, **kws):
 
     from IPython.core import pylabtools as pltt
 
-    pltt = reload(pltt)
+    pltt = reload(pltt) # ty: ignore
 
     def guess_title(fig):
         if fig._suptitle is not None:

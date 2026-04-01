@@ -179,7 +179,7 @@ class GammaMaxNLocator(_ticker.MaxNLocator):
     """The ticker locator for linearized gamma-distributed survival functions"""
 
     _nbins: int
-    axis: _axis.Axis  # type: ignore
+    axis: _axis.Axis  # pyright: ignore
 
     # avoid removing these quantiles when selecting ticks
     PREFER_TICKS = [
@@ -243,7 +243,7 @@ class GammaMaxNLocator(_ticker.MaxNLocator):
         )
         tr_ticks = _prune_ticks(tuple(tr_ticks), self._nbins, tuple(tr_prefer))
         ticks = self._transform.inverted().transform(tr_ticks)
-        return np.sort(ticks)  # type: ignore
+        return np.sort(ticks)  # pyright: ignore
 
     def get_transform(self):
         return self._transform
