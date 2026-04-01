@@ -281,7 +281,7 @@ BundledTriggers = sa.registry.signal_trigger.to_spec()
 
 
 class SweepOptions(SpecBase, frozen=True, kw_only=True):
-    reuse_iq: bool
+    reuse_iq: bool = False
     loop_only_nyquist: bool = False
     skip_warmup: types.SkipWarmup = False
 
