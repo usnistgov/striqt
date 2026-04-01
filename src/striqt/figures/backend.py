@@ -58,7 +58,6 @@ class _DimKws(typing.TypedDict):
     hue: NotRequired[str]
 
 
-
 class _LayoutKwArgs(_DimKws):
     col: str | None
     col_wrap: NotRequired[int | None]
@@ -102,7 +101,7 @@ def plot_cyclic_channel_power(
             time,
             (a.sel(cyclic_statistic=center_statistic)),
             color=f'C{i}' if colors is None else colors[i],
-            **plot_kws # ty: ignore
+            **plot_kws,  # ty: ignore
         )
 
     for i, detector in enumerate(cyclic_channel_power.power_detector.data):
@@ -148,7 +147,7 @@ class PlotBackend:
         else:
             col = self.opts.col
 
-        return { # ty: ignore
+        return {  # ty: ignore
             **kwargs,
             'figsize': mpl.rcParams['figure.figsize'],
             'col_wrap': self.opts.col_wrap,
@@ -179,8 +178,8 @@ class PlotBackend:
             _cmap = mpl.colormaps.get_cmap(cmap).resampled(len(levels) - 1)
             norm = colors.BoundaryNorm(levels, ncolors=_cmap.N)
 
-        grid = data.plot.imshow( # ty: ignore
-            **coords, 
+        grid = data.plot.imshow(  # ty: ignore
+            **coords,
             cmap=_cmap,
             norm=norm,
             rasterized=rasterized,
@@ -209,7 +208,7 @@ class PlotBackend:
         coords = self._coord_kws(**kwargs)
         rasterized = data.size > 10000
 
-        grid = data.plot.line(**coords, yscale=yscale, rasterized=rasterized) # ty: ignore
+        grid = data.plot.line(**coords, yscale=yscale, rasterized=rasterized)  # ty: ignore
 
         grid._x_var = kwargs['x']  # pyright: ignore
         grid._y_var = None
@@ -332,7 +331,7 @@ class PlotBackend:
                     labels: list[typing.Any] = long_axis.get_ticklabels()
                     long_axis.set_ticks(
                         cbar.get_ticks().tolist() + [n],
-                        labels + ['$k T B$' if i == 0 else ''], # ty: ignore
+                        labels + ['$k T B$' if i == 0 else ''],  # ty: ignore
                     )
                     label = long_axis.get_ticklabels()[-1]
                     label.set_color('#eec009')

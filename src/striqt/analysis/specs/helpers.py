@@ -237,7 +237,7 @@ def freeze(
             ret = tuple([freeze(v, nd) for v in obj])
             return ret  # type: ignore
         else:
-            return tuple(obj) # type: ignore
+            return tuple(obj)  # type: ignore
     elif isinstance(obj, dict):
         nd = None if max_depth is None else max_depth - 1
         if nd is None or nd > 0:
@@ -273,7 +273,7 @@ def unfreeze(
         nd = None if max_depth is None else max_depth - 1
         if nd is None or nd > 0:
             ret = [unfreeze(v, nd) for v in obj]
-            return ret # type: ignore
+            return ret  # type: ignore
         else:
             return list(obj)
 
@@ -281,7 +281,7 @@ def unfreeze(
         nd = None if max_depth is None else max_depth - 1
         if nd is None or nd > 0:
             ret = {k: unfreeze(v, nd) for k, v in obj.items()}
-            return ret # type: ignore
+            return ret  # type: ignore
         else:
             return dict(obj)
     else:
