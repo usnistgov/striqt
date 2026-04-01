@@ -295,9 +295,9 @@ class CellularResourcePowerHistogram(
     frame_slots: Union[str, None] = None
     special_symbols: Union[str, None] = None
 
-    cyclic_prefix: Union[
-        typing.Literal['normal'], typing.Literal['extended']
-    ] = 'normal'
+    cyclic_prefix: Union[typing.Literal['normal'], typing.Literal['extended']] = (
+        'normal'
+    )
 
     lo_bandstop: typing.Optional[float] = None
 

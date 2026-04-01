@@ -293,7 +293,7 @@ def cellular_cyclic_autocorrelation(iq: 'Array', capture: specs.Capture, **kwarg
     metadata['symbols'] = spec.symbol_range
 
     frame_range = _get_spec_range(spec.frame_range, 'frame_range')
-    symbol_range = _get_spec_range(spec.symbol_range, 'symbol_range') # ty: ignore
+    symbol_range = _get_spec_range(spec.symbol_range, 'symbol_range')  # ty: ignore
 
     def index_cp_for_slot(slots):
         return phy.index_cyclic_prefix(
