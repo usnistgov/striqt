@@ -65,13 +65,14 @@ class ReceiveBuffers:
                 'carryover time information present, but missing timestamp'
             )
 
-        if self.carryover_samples is None:
-            carryover = 0
-        else:
-            # note: carryover.samples.dtype is np.complex64, samples.dtype is np.float32
-            carryover = self.carryover_samples.shape[1]
-            stride = samples.itemsize // self.carryover_samples.itemsize
-            samples[:, : stride*carryover] = self.carryover_samples.view(samples.dtype)
+        if not self.source.setup_spec.gapless:
+            return None, 0
+        elif self.carryover_samples is None:
+            return self.start_time_ns, 0
+
+        carryover = self.carryover_samples.shape[1]
+        stride = samples.itemsize // self.carryover_samples.itemsize
+        samples[:, : stride*carryover] = self.carryover_samples.view(samples.dtype)
 
         return self.start_time_ns, carryover
 
@@ -95,6 +96,8 @@ class ReceiveBuffers:
         capture: specs.SensorCapture,
     ):
         """stash data needed to carry over extra samples into the next capture"""
+        if not self.source.setup_spec.gapless:
+            return
         carryover_count = unused_sample_count
         self.carryover_samples = samples[:, -carryover_count:].copy()
         self.start_time_ns = sample_start_ns + round(1e9 * capture.duration)
