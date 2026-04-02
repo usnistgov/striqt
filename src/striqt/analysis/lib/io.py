@@ -68,10 +68,8 @@ def open_store(target: str | Path, *, mode: str) -> ZarrStore:
         fs, _ = fsspec.url_to_fs(target, asynchronous=True, **kws)
         return fs.get_mapper('')
     elif str(target).endswith('.zip'):
-        if mode == 'a' and Path(target).exists():
-            raise IOError('zip store does support appends')
-        else:
-            assert mode in ('r', 'w', 'a')
+        if mode != 'r':
+            raise IOError('only read mode is supported with zip stores')
         store = zarr.storage.ZipStore(target, mode=mode, compression=0)
     else:
         store = DirectoryStore(target)

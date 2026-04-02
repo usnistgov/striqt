@@ -65,7 +65,7 @@ class ReceiveBuffers:
 
         carryover = self.carryover_samples.shape[1]
         stride = samples.itemsize // self.carryover_samples.itemsize
-        samples[:, : stride*carryover] = self.carryover_samples.view(samples.dtype)
+        samples[:, : stride * carryover] = self.carryover_samples.view(samples.dtype)
 
         return self.start_time_ns, carryover
 
