@@ -1,17 +1,35 @@
 from __future__ import annotations as __
 
 import itertools as itertools
+from pathlib import Path
 from typing import Any, cast, Generic, TYPE_CHECKING
 
 from . import compute, io, sources, util
 from .. import specs as specs
 
+import os
+
 import striqt.analysis as sa
 
 if TYPE_CHECKING:
     import xarray as xr
+    import zipfile
+    import shutil
 else:
     xr = sa.util.lazy_import('xarray')
+    shutil = sa.util.lazy_import('shutil')
+    zipfile = sa.util.lazy_import('zipfile')
+
+
+def _archive_to_zip(zip_path, source_dir):
+    with zipfile.ZipFile(zip_path, 'w', compression=zipfile.ZIP_STORED) as zip_ref:
+        for root, _, files in os.walk(source_dir):
+            for file in files:
+                file_path = os.path.join(root, file)
+                arcname = os.path.relpath(file_path, source_dir)
+                zip_ref.write(file_path, arcname)
+
+    shutil.rmtree(source_dir)
 
 
 class _BatchTracker:
@@ -131,10 +149,18 @@ class NoSink(SinkBase):
 
 
 class ZarrSinkBase(SinkBase):
+    _zip_path: Path | None = None
+
     def open(self):
-        self.store = io.open_store(
-            self._spec, alias_func=self._alias_func, force=self.force
-        )
+        path = Path(self._spec.path)
+
+        if path.name.lower().endswith('.zarr.zip'):
+            self._zip_path = path
+            spec = self._spec.replace(path=str(path.with_suffix('')))
+        else:
+            spec = self._spec
+
+        self.store = io.open_store(spec, alias_func=self._alias_func, force=self.force)
 
     def close(self, *exc_info):
         super().close(*exc_info)
@@ -142,9 +168,22 @@ class ZarrSinkBase(SinkBase):
         if getattr(self.store, '_is_open', True):
             self.store.close()
 
-        path = self.get_root_path()
+        if self._zip_path is not None:
+            if self._alias_func is not None:
+                path = self._alias_func(self._zip_path)
+            else:
+                path = self._zip_path
+            dir_path = str(self.get_root_path())
+            if Path(dir_path).exists():
+                with sa.util.stopwatch(f'zip {dir_path!r}', 'sink'):
+                    _archive_to_zip(path, dir_path)
+        else:
+            path = self.get_root_path()
 
-        sa.util.get_logger('sink').info(f'closed "{str(path)}"')
+        if Path(path).exists():
+            sa.util.get_logger('sink').info(f'wrote "{str(path)}"')
+        else:
+            sa.util.get_logger('sink').info(f'no data was written')
 
     def get_root_path(self):
         if hasattr(self.store, 'path'):

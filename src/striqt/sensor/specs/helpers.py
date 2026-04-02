@@ -178,7 +178,7 @@ def _expand_capture_loops(
 
     result = []
     for i, values in enumerate(combinations):
-        if limit is not None and i*len(captures) >= limit:
+        if limit is not None and i * len(captures) >= limit:
             break
 
         updates = _merge_loop_analysis(dict(zip(loop_points.keys(), values)))
