@@ -21,17 +21,6 @@ else:
     zipfile = sa.util.lazy_import('zipfile')
 
 
-def _archive_to_zip(zip_path, source_dir):
-    with zipfile.ZipFile(zip_path, 'w', compression=zipfile.ZIP_STORED) as zip_ref:
-        for root, _, files in os.walk(source_dir):
-            for file in files:
-                file_path = os.path.join(root, file)
-                arcname = os.path.relpath(file_path, source_dir)
-                zip_ref.write(file_path, arcname)
-
-    shutil.rmtree(source_dir)
-
-
 class _BatchTracker:
     size: int
 
@@ -46,6 +35,46 @@ class _BatchTracker:
         """step to the next batch size in the cycle"""
         self.size = next(self._cycler)
         return self.size
+
+
+class _Zipper:
+    temp_dir: str
+    temp_spec: specs.Sink
+
+    def __init__(self, zip_path, sink: SinkBase):
+        if sink._alias_func is not None:
+            self.zip_path = Path(sink._alias_func(zip_path))
+        else:
+            self.zip_path = Path(zip_path)
+
+        if self.zip_path.exists() and not sink.force:
+            raise IOError(f'a zip archive already exists at "{self.zip_path!s}"')
+        elif sink.force:
+            logger = sa.util.get_logger('sink')
+            logger.warning(f'will overwrite existing "{self.zip_path!s}"')
+
+        self.temp_dir = str(self.zip_path.with_suffix(''))
+        self.temp_spec = sink._spec.replace(path=self.temp_dir)
+
+    def archive(self) -> str|None:
+        """archive the .zarr directory and return the path to the zipfile"""
+        if not Path(self.temp_dir).exists():
+            return
+
+        stopwatch = sa.util.stopwatch(f'zip {self.temp_dir!r}', 'sink')
+        zf = zipfile.ZipFile(self.zip_path, 'w', compression=zipfile.ZIP_STORED)
+
+        with stopwatch, zf:
+            for root, _, files in os.walk(self.temp_dir):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    arcname = os.path.relpath(file_path, self.temp_dir)
+                    zf.write(file_path, arcname)
+
+        shutil.rmtree(self.temp_dir)
+
+        return str(self.zip_path)
+
 
 
 class SinkBase(Generic[specs.SC]):
@@ -149,14 +178,14 @@ class NoSink(SinkBase):
 
 
 class ZarrSinkBase(SinkBase):
-    _zip_path: Path | None = None
+    _zipper: _Zipper | None = None
 
     def open(self):
         path = Path(self._spec.path)
 
         if path.name.lower().endswith('.zarr.zip'):
-            self._zip_path = path
-            spec = self._spec.replace(path=str(path.with_suffix('')))
+            self._zipper = _Zipper(path, self)
+            spec = self._zipper.temp_spec
         else:
             spec = self._spec
 
@@ -168,24 +197,17 @@ class ZarrSinkBase(SinkBase):
         if getattr(self.store, '_is_open', True):
             self.store.close()
 
-        if self._zip_path is not None:
-            if self._alias_func is not None:
-                path = self._alias_func(self._zip_path)
-            else:
-                path = self._zip_path
-            dir_path = str(self.get_root_path())
-            if Path(dir_path).exists():
-                with sa.util.stopwatch(f'zip {dir_path!r}', 'sink'):
-                    _archive_to_zip(path, dir_path)
+        if self._zipper is not None:
+            path = self._zipper.archive()
         else:
             path = self.get_root_path()
 
-        if Path(path).exists():
+        if path is not None and Path(path).exists():
             sa.util.get_logger('sink').info(f'wrote "{str(path)}"')
         else:
             sa.util.get_logger('sink').info(f'no data was written')
 
-    def get_root_path(self):
+    def get_root_path(self) -> str:
         if hasattr(self.store, 'path'):
             return self.store.path
         else:
