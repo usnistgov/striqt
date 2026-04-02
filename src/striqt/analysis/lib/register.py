@@ -390,7 +390,7 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
                 if field.name is None:
                     continue
                 try:
-                    _, coord_default = specs.helpers.infer_coord_info(field.type)
+                    _, coord_default = specs.helpers.infer_coord_info(field.type, allow_timestamps=False)
                 except TypeError:
                     # TODO: this should
                     self.parameter_fields[field.name] = None
