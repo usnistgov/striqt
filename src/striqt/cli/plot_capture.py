@@ -179,4 +179,4 @@ def worker_plot(variable: str, sel: dict[str, typing.Any]):
 
 
 if __name__ == '__main__':
-    run()  # type: ignore
+    run()  # pyright: ignore

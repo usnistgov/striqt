@@ -61,22 +61,23 @@ class TDMSSource(base.VirtualSource[specs.TDMSSource, specs.FileCapture, PS, PC]
 
         return (iq * float_dtype(scale)).view(dtype).copy()  # type: ignore
 
-    def acquire(self, *, analysis=None, correction=True, alias_func=None):
-        iq = super().acquire(
-            analysis=analysis, correction=correction, alias_func=alias_func
-        )
+    def acquire(self, overlaps=(0, 0)):
+        iq = super().acquire(overlaps)
         iq.info = self._file_info
         return iq
 
     def get_resampler(
         self, capture: specs.FileCapture | None = None
     ) -> sw.ResamplerDesign:
+        from ..compute import design_resampler
+
         if capture is None:
             capture = self.capture_spec
 
-        mcr = self.setup_spec.master_clock_rate
-        return buffers.design_resampler(
-            capture, mcr, backend_sample_rate=self._file_info.backend_sample_rate
+        return design_resampler(
+            capture,
+            master_clock_rate=self.setup_spec.master_clock_rate,
+            backend_sample_rate=self._file_info.backend_sample_rate,
         )
 
 
@@ -120,21 +121,23 @@ class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture, PS, PC]):
         assert ret.shape[1] == count
         return ret.copy()
 
-    def acquire(self, *, analysis=None, correction=True, alias_func=None):
-        iq = super().acquire(
-            analysis=analysis, correction=correction, alias_func=alias_func
-        )
+    def acquire(self, overlaps=(0, 0)):
+        iq = super().acquire(overlaps)
         iq.info = self._file_info
         return iq
 
     def get_resampler(
         self, capture: specs.FileCapture | None = None
     ) -> sw.ResamplerDesign:
+        from ..compute import design_resampler
+
         if capture is None:
             capture = self.capture_spec
-        mcr = self._file_info.backend_sample_rate
-        fs_sdr = self._file_info.backend_sample_rate
-        return buffers.design_resampler(capture, mcr, backend_sample_rate=fs_sdr)
+        return design_resampler(
+            capture,
+            master_clock_rate=self._file_info.backend_sample_rate,
+            backend_sample_rate=self._file_info.backend_sample_rate,
+        )
 
     @functools.cached_property
     def info(self):
@@ -203,10 +206,12 @@ class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture, PS,
         )
 
     def get_resampler(self, capture=None) -> sw.ResamplerDesign:
+        from ..compute import design_resampler
+
         if capture is None:
             capture = self.capture_spec
-        fs = self._read_coord('sample_rate')
-        return buffers.design_resampler(capture, fs)
+
+        return design_resampler(capture, self._read_coord('sample_rate'))
 
     def _read_stream(
         self,
@@ -254,10 +259,8 @@ class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture, PS,
         else:
             return iq.astype(dtype)
 
-    def acquire(self, *, analysis=None, correction=True, alias_func=None):
-        iq = super().acquire(
-            analysis=analysis, correction=correction, alias_func=alias_func
-        )
+    def acquire(self, overlaps=(0, 0)):
+        iq = super().acquire(overlaps)
         iq.info = self._capture_info
         return iq
 

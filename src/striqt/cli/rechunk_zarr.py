@@ -76,7 +76,7 @@ def run(zarr_input: str, zarr_output: str | None, chunk_size, compression):
 
     if compression > 1:
         try:
-            from zarr import codecs  # type: ignore
+            from zarr import codecs  # pyright: ignore
 
             # zarr v3
             shuffle = codecs.BloscShuffle.shuffle
@@ -98,4 +98,4 @@ def run(zarr_input: str, zarr_output: str | None, chunk_size, compression):
 
 
 if __name__ == '__main__':
-    run()  # type: ignore
+    run()  # pyright: ignore

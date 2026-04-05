@@ -23,7 +23,7 @@ def hint_keywords(
     func: Callable[P, Any],
 ) -> Callable[[WrappedAnalysis[..., R]], WrappedAnalysis[P, R]]:
     """fill in type hints for the analysis parameters"""
-    return lambda f: f  # type: ignore
+    return lambda f: f  # pyright: ignore
 
 
 @registry.coordinates(
