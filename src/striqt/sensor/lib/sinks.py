@@ -1,20 +1,19 @@
 from __future__ import annotations as __
 
 import itertools as itertools
+import os
 from pathlib import Path
 from typing import Any, cast, Generic, TYPE_CHECKING
 
 from . import compute, io, sources, util
 from .. import specs as specs
 
-import os
-
 import striqt.analysis as sa
 
 if TYPE_CHECKING:
     import xarray as xr
-    import zipfile
     import shutil
+    import zipfile
 else:
     xr = sa.util.lazy_import('xarray')
     shutil = sa.util.lazy_import('shutil')
@@ -38,6 +37,7 @@ class _BatchTracker:
 
 
 class _Zipper:
+    BUFFER_SIZE = 10*1024*1024
     temp_dir: str
     temp_spec: specs.Sink
 
@@ -56,25 +56,27 @@ class _Zipper:
         self.temp_dir = str(self.zip_path.with_suffix(''))
         self.temp_spec = sink._spec.replace(path=self.temp_dir)
 
-    def archive(self) -> str|None:
+    def archive(self):
         """archive the .zarr directory and return the path to the zipfile"""
         if not Path(self.temp_dir).exists():
             return
 
         stopwatch = sa.util.stopwatch(f'zip {self.temp_dir!r}', 'sink')
-        zf = zipfile.ZipFile(self.zip_path, 'w', compression=zipfile.ZIP_STORED)
 
-        with stopwatch, zf:
+        stream = open(self.zip_path, 'wb', self.BUFFER_SIZE)
+        zf = zipfile.ZipFile(stream, 'w', compression=zipfile.ZIP_STORED)
+
+        with stopwatch, stream, zf:
             for root, _, files in os.walk(self.temp_dir):
                 for file in files:
                     file_path = os.path.join(root, file)
                     arcname = os.path.relpath(file_path, self.temp_dir)
-                    zf.write(file_path, arcname)
+                    with open(file_path, 'rb', buffering=self.BUFFER_SIZE) as zstream:
+                        zf.writestr(arcname, zstream.read())
 
         shutil.rmtree(self.temp_dir)
 
         return str(self.zip_path)
-
 
 
 class SinkBase(Generic[specs.SC]):
@@ -133,8 +135,9 @@ class SinkBase(Generic[specs.SC]):
             self._executor.__exit__(*exc_info)
 
     def append(
-        self, capture_result: compute.DelayedDataset
+        self, capture_result: 'compute.DelayedDataset'
     ) -> 'xr.Dataset|compute.DelayedDataset':
+        from . import compute
         if capture_result is None:
             return
 
@@ -322,3 +325,4 @@ class ZarrTimeAppendSink(ZarrSinkBase):
             for i in range(count - len(data_list), count):
                 with util.log_capture_context('sink', capture_index=i):
                     logger.info('💾')
+
