@@ -196,7 +196,7 @@ def _expand_capture_loops(
             new = (c | adjust_captures(c, adjust, source_id) for c in new)
 
             # ...but then make sure that the specified loops override everything else
-            new = (c.replace(**loop_point) for c in new)
+            new = (c.update(loop_point) for c in new)
 
         result += list(new)
 
@@ -226,7 +226,7 @@ def loop_captures(
 ) -> tuple[SC, ...]:
     """evaluate the loop specification, and flatten into one list of loops"""
 
-    if len(sweep.captures) > 0:
+    if len(sweep.captu  res) > 0:
         cls = type(sweep.captures[0])
     elif sweep._bindings__ is None:
         raise TypeError(
