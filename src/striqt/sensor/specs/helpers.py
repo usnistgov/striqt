@@ -192,11 +192,9 @@ def _expand_capture_loops(
 
         if adjust is not None:
             # we needed to get a first cut at the loops so that adjust_captures
-            # can work on the looped capture. here we adjust the captures
-            new = (c | adjust_captures(c, adjust, source_id) for c in new)
-
-            # ...but then make sure that the specified loops override everything else
-            new = (c.update(loop_point) for c in new)
+            # can work on the looped capture. here we adjust the captures, but
+            # make sure loops have the highest priority at the end
+            new = (c | adjust_captures(c, adjust, source_id) | loop_point for c in new)
 
         result += list(new)
 
