@@ -193,7 +193,7 @@ def analyze(
 
     with options.registry.cache_context(capture, options.cache_callback):
         if options.correction:
-            with sa.util.stopwatch('resampling filter', logger_level=logging.DEBUG):
+            with sa.util.stopwatch('resampling filter', threshold=capture.duration/3, logger_level=sa.util.PERFORMANCE_INFO):
                 iq = resampling.resampling_correction(iq, overwrite_x=overwrite_x)
 
         opts = msgspec.structs.replace(options, as_xarray='delayed')
