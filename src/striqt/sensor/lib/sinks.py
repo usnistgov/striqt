@@ -64,7 +64,7 @@ class _Zipper:
         stopwatch = sa.util.stopwatch(f'zip {self.temp_dir!r}', 'sink')
 
         stream = open(self.zip_path, 'wb', self.BUFFER_SIZE)
-        zf = zipfile.ZipFile(stream, 'w', compression=zipfile.ZIP_STORED)
+        zf = zipfile.ZipFile(stream, 'w', compression=zipfile.ZIP_STORED, allowZip64=True)
 
         with stopwatch, stream, zf:
             for root, _, files in os.walk(self.temp_dir):
@@ -73,6 +73,8 @@ class _Zipper:
                     arcname = os.path.relpath(file_path, self.temp_dir)
                     with open(file_path, 'rb', buffering=self.BUFFER_SIZE) as zstream:
                         zf.writestr(arcname, zstream.read())
+            stream.flush()
+            os.fsync(stream.fileno())
 
         shutil.rmtree(self.temp_dir)
 
