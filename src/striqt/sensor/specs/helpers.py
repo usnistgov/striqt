@@ -226,7 +226,7 @@ def loop_captures(
 ) -> tuple[SC, ...]:
     """evaluate the loop specification, and flatten into one list of loops"""
 
-    if len(sweep.captu  res) > 0:
+    if len(sweep.captures) > 0:
         cls = type(sweep.captures[0])
     elif sweep._bindings__ is None:
         raise TypeError(
