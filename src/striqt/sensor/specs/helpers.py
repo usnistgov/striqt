@@ -112,7 +112,7 @@ def _build_loop_points_dict(
     return loop_points
 
 
-def _merge_loop_analysis(points: _LoopPointsDict) -> dict[str, Any]:
+def _merge_analysis_loops(points: _LoopPointsDict) -> dict[str, Any]:
     """apply any loops where isin == 'analysis' into capture.adjust_captures"""
 
     updates = {}
@@ -171,27 +171,30 @@ def _expand_capture_loops(
 
     loop_points = _build_loop_points_dict(loops, cls, False)
     loop_starts = {k: v[0] for k, v in loop_points.items() if len(v) > 0}
-    defaults = _merge_loop_analysis(loop_starts)
-    combinations = itertools.product(*loop_points.values())
+    defaults = _merge_analysis_loops(loop_starts)
+    loop_combos = itertools.product(*loop_points.values())
 
     cdicts = cast(tuple[dict, ...], to_builtins(captures))
 
     result = []
-    for i, values in enumerate(combinations):
+    for i, values in enumerate(loop_combos):
         if limit is not None and i * len(captures) >= limit:
             break
 
-        updates = _merge_loop_analysis(dict(zip(loop_points.keys(), values)))
+        loop_point = _merge_analysis_loops(dict(zip(loop_points.keys(), values)))
 
         if len(cdicts) > 0:
             # merge into the specified captures, if any
-            new = (_merge_capture_updates(defaults, c, updates) for c in cdicts)
+            new = (_merge_capture_updates(defaults, c, loop_point) for c in cdicts)
         else:
             # otherwise, instances are new captures
-            new = [_merge_capture_updates(defaults, updates)]
+            new = [_merge_capture_updates(defaults, loop_point)]
 
         if adjust is not None:
-            new = (c | adjust_captures(c, adjust, source_id) for c in new)
+            # we needed to get a first cut at the loops so that adjust_captures
+            # can work on the looped capture. here we adjust the captures, but
+            # make sure loops have the highest priority at the end
+            new = (c | adjust_captures(c, adjust, source_id) | loop_point for c in new)
 
         result += list(new)
 
