@@ -173,7 +173,7 @@ def cellular_5g_pss_sync(iq, capture: specs.Capture, **kwargs):
 
     i = est.argmax(axis=1)
 
-    return spec.delay + i / spec.sample_rate  # shared.cellular_ssb_lag(capture, spec)[i]
+    return spec.delay + i / spec.sample_rate
 
 
 @shared.hint_keywords(specs.Cellular5GNRPSSCorrelator)

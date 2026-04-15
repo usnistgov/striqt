@@ -90,7 +90,7 @@ def cellular_ssb_lag(capture: specs.Capture, spec: _Cellular5GNRSSBCorrelator):
     # snap onto the grid
     # TODO: there should be an exception if the delay isn't an integer factor of sample rate
     offs = round(spec.sample_rate * spec.delay)
-    return np.arange(offs, offs+max_len) / spec.sample_rate
+    return np.arange(offs, offs + max_len) / spec.sample_rate
 
 
 def empty_5g_ssb_correlation(
@@ -203,7 +203,7 @@ def get_5g_ssb_iq(
             size_in = round(
                 spec.max_block_count * spec.discovery_periodicity * capture.sample_rate
             )
-            iq = iq[..., offs:offs+size_in]
+            iq = iq[..., offs : offs + size_in]
         else:
             size_in = iq.shape[-1]
 
@@ -227,7 +227,7 @@ def get_5g_ssb_iq(
             size_in = round(
                 spec.max_block_count * spec.discovery_periodicity * capture.sample_rate
             )
-            iq = iq[..., offs:offs+size_in]
+            iq = iq[..., offs : offs + size_in]
         else:
             size_in = iq.shape[-1]
 
