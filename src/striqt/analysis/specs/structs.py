@@ -200,6 +200,7 @@ class _Cellular5GNRSSBCorrelator(Analysis, kw_only=True, frozen=True):
         whether to follow the 3GPP "shared spectrum" synchronizatio block layout
     max_block_count: number of synchronization blocks to evaluate
     trim_cp: whether to trim the cyclic prefix duration from the output
+    delay: minimum time delay (in s) to start of SSB set
     """
 
     subcarrier_spacing: float
@@ -209,6 +210,7 @@ class _Cellular5GNRSSBCorrelator(Analysis, kw_only=True, frozen=True):
     shared_spectrum: bool = False
     max_block_count: typing.Optional[int] = 1
     trim_cp: bool = True
+    delay: float = 0
 
 
 class Cellular5GNRPSSCorrelator(_Cellular5GNRSSBCorrelator, kw_only=True, frozen=True):
