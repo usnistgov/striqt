@@ -79,6 +79,7 @@ def from_delayed(dd: DelayedDataset) -> 'xr.Dataset':
         coords = build_capture_coords(
             dd.capture, dd.extra_coords, dd.config.sweep_spec.loops
         )
+
         analysis = analysis.assign_coords(coords)
 
     # don't duplicate coords as attrs

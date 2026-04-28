@@ -231,7 +231,7 @@ class SourceBase(Source[SS, SC, PS, PC]):
                 raise ValueError('overlaps must be non-negative even integers')
 
         # the return buffer
-        samples, stream_bufs = self._buffers.get_next(self._capture)
+        samples, stream_bufs = self._buffers.get_next(self._capture, overlaps=overlaps)
 
         # carryover from the previous acquisition
         missing_start_time = True
@@ -246,12 +246,12 @@ class SourceBase(Source[SS, SC, PS, PC]):
 
         # the number of valid samples to return per channel
         output_count = buffers.get_read_count(
-            self.capture_spec, self.setup_spec, include_holdoff=False
+            self.capture_spec, self.setup_spec, include_holdoff=False, overlap=sum(overlaps)
         )
 
         # the total number of samples to acquire per channel
         buffer_count = buffers.get_read_count(
-            self.capture_spec, self.setup_spec, include_holdoff=True
+            self.capture_spec, self.setup_spec, include_holdoff=True, overlap=sum(overlaps)
         )
 
         received_count = 0
@@ -344,6 +344,8 @@ class SourceBase(Source[SS, SC, PS, PC]):
                 capture=self.capture_spec,
                 info=self._prev_iq.info.replace(start_time=None),
             )
+
+        
 
         if self._reuse_iq:
             self._prev_iq = iq

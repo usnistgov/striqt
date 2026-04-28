@@ -22,7 +22,9 @@ def time_statistic(
     capture: specs.Capture, spec: specs.PowerSpectralDensity
 ) -> np.ndarray:
     time_statistic = [str(s) for s in spec.time_statistic]
-    return np.asarray(time_statistic, dtype=object)
+    t = np.asarray(time_statistic, dtype=object)
+    print('time: ', t.shape)
+    return t
 
 
 @registry.coordinates(
@@ -33,7 +35,9 @@ def baseband_frequency(
     capture: specs.Capture, spec: specs.PowerSpectralDensity
 ) -> np.ndarray:
     spg_spec = specs.Spectrogram.from_spec(spec)
-    return shared.spectrogram_baseband_frequency(capture, spg_spec)
+    f = shared.spectrogram_baseband_frequency(capture, spg_spec)
+    print('freq: ', f.shape)
+    return f
 
 
 @hint_keywords(specs.PowerSpectralDensity)
@@ -91,5 +95,7 @@ def power_spectral_density(iq, capture, **kwargs):
         sw.axis_index(psd, i, axis=axis)[:] = ufunc(spg, axis=axis)
 
     psd = sw.powtodB(psd).astype('float16')
+
+    print('psd: ', psd.shape)
 
     return psd, metadata

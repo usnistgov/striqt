@@ -5,6 +5,7 @@ from __future__ import annotations as __
 from typing import Any, cast, ClassVar, Generic, Literal, Optional, TYPE_CHECKING, Union
 
 import msgspec
+from pandas.core.ops import invalid
 
 from striqt import analysis as sa
 from striqt.analysis.specs import AnalysisGroup, SpecBase, Capture, frozendict
@@ -365,6 +366,18 @@ class Sweep(SpecBase, Generic[SS, SP, SC], frozen=True, kw_only=True):
 
         super().__post_init__()
         _validate_loops(self.loops)
+
+        if len(self.captures) > 0:
+            coord_fields = set(self.captures[0].__struct_fields__)
+        elif self._bindings__ is not None:
+            coord_fields = set(self._bindings__.capture.__struct_fields__)
+        else:
+            coord_fields = None
+
+        if coord_fields is not None:
+            invalid = set(self.analysis.__struct_fields__) & coord_fields
+            if len(invalid) > 0:
+                raise AttributeError(f'capture fields {tuple(invalid)} conflict with measurements of the same name')
 
 
 class CalibrationSweep(
