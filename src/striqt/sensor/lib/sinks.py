@@ -37,7 +37,7 @@ class _BatchTracker:
 
 
 class _Zipper:
-    BUFFER_SIZE = 10*1024*1024
+    BUFFER_SIZE = 10 * 1024 * 1024
     temp_dir: str
     temp_spec: specs.Sink
 
@@ -64,7 +64,9 @@ class _Zipper:
         stopwatch = sa.util.stopwatch(f'zip {self.temp_dir!r}', 'sink')
 
         stream = open(self.zip_path, 'wb', self.BUFFER_SIZE)
-        zf = zipfile.ZipFile(stream, 'w', compression=zipfile.ZIP_STORED, allowZip64=True)
+        zf = zipfile.ZipFile(
+            stream, 'w', compression=zipfile.ZIP_STORED, allowZip64=True
+        )
 
         with stopwatch, stream, zf:
             for root, _, files in os.walk(self.temp_dir):
@@ -140,6 +142,7 @@ class SinkBase(Generic[specs.SC]):
         self, capture_result: 'compute.DelayedDataset'
     ) -> 'xr.Dataset|compute.DelayedDataset':
         from . import compute
+
         if capture_result is None:
             return
 
@@ -327,4 +330,3 @@ class ZarrTimeAppendSink(ZarrSinkBase):
             for i in range(count - len(data_list), count):
                 with util.log_capture_context('sink', capture_index=i):
                     logger.info('💾')
-

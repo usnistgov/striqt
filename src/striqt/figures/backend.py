@@ -321,9 +321,14 @@ class PlotBackend:
                 if hasattr(cbar, 'long_axis'):
                     # newer matplotlib
                     long_axis = cbar.long_axis  # type: ignore
-                else:
+                elif hasattr(cbar, '_long_axis'):
+                    # older matplotlib
+                    long_axis = cbar._long_axis  # type: ignore
+                elif hasattr(cbar, 'yaxis'):
                     # older matplotlib
                     long_axis = cbar.yaxis  # type: ignore
+                else:
+                    raise TypeError('could not determine colorbar axis attribute')
 
                 meanloc = noise.values.mean()
                 for i, n in enumerate(noise.values.tolist()):
