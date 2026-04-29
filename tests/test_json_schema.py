@@ -1,4 +1,3 @@
-import pytest
 import striqt.sensor as ss
 import striqt.analysis as sa
 
