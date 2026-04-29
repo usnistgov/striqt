@@ -209,6 +209,19 @@ def _dec_hook(type_, obj):
         return obj
 
 
+def _schema_hook(cls):
+    if issubclass(cls, fractions.Fraction):
+        return {'type': ['string', 'number']}
+    elif issubclass(cls, frozendict):
+        return {'type': 'object'}
+    else:
+        raise TypeError(f'no schema handler available for type {cls!r}')
+
+
+def json_schema(cls: type[msgspec.Struct]) -> dict:
+    return msgspec.json.schema(cls, schema_hook=_schema_hook)
+
+
 @overload
 def freeze(obj: dict[_K, _V], max_depth: int | None = None) -> 'frozendict[_K, _V]':
     pass

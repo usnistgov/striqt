@@ -5,7 +5,6 @@ from __future__ import annotations as __
 from typing import Any, cast, ClassVar, Generic, Literal, Optional, TYPE_CHECKING, Union
 
 import msgspec
-from pandas.core.ops import invalid
 
 from striqt import analysis as sa
 from striqt.analysis.specs import AnalysisGroup, SpecBase, Capture, frozendict
