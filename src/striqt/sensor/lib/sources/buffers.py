@@ -69,12 +69,16 @@ class ReceiveBuffers:
 
         return self.start_time_ns, carryover
 
-    def get_next(self, capture, overlaps: tuple[int, int]=(0,0)) -> 'tuple[np.ndarray, list[np.ndarray]]':
+    def get_next(
+        self, capture, overlaps: tuple[int, int] = (0, 0)
+    ) -> 'tuple[np.ndarray, list[np.ndarray]]':
         """swap the buffers, and reallocate if needed"""
 
         if not self._hold_buffer_swap:
             self.buffers = [self.buffers[1], self.buffers[0]]
-        self.buffers[0], ret = _alloc_empty_iq(self.source, capture, self.buffers[0], overlaps=overlaps)
+        self.buffers[0], ret = _alloc_empty_iq(
+            self.source, capture, self.buffers[0], overlaps=overlaps
+        )
         self._hold_buffer_swap = False
         return ret
 
@@ -162,14 +166,19 @@ def _alloc_empty_iq(
     source: 'SourceBase',
     capture: specs.SensorCapture,
     prior: 'np.ndarray|None' = None,
-    overlaps: tuple[int, int] = (0,0)
+    overlaps: tuple[int, int] = (0, 0),
 ) -> 'tuple[np.ndarray, tuple[np.ndarray, list[np.ndarray]]]':
     """allocate a buffer of IQ return values.
 
     Returns:
         The buffer and the list of buffer references for streaming.
     """
-    count = get_read_count(source.capture_spec, source.setup_spec, include_holdoff=True, overlap=sum(overlaps))
+    count = get_read_count(
+        source.capture_spec,
+        source.setup_spec,
+        include_holdoff=True,
+        overlap=sum(overlaps),
+    )
 
     if source.setup_spec.array_backend == 'cupy':
         try:

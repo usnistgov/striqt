@@ -20,6 +20,13 @@ else:
 worker_ctx: WorkerData | None = None
 
 
+def _listify(values):
+    if isinstance(values, (tuple, list)):
+        return values
+    else:
+        return [values]
+
+
 @click.command('plot signal analysis from .zarr or .zarr.zip files')
 @click.argument('zarr_path', type=click.Path(exists=True, dir_okay=True))
 @click.argument('yaml_path', type=click.Path(exists=True, dir_okay=False))
@@ -69,13 +76,15 @@ def run(zarr_path: str, yaml_path: str, interactive=False, no_save=False):
     import itertools
 
     gb_fields = sf.util.get_groupby_fields(dataset, opts)
-    indexed = dataset.reset_index(list(dataset.indexes.keys())).set_xindex(
-        gb_fields
-    )  # .unstack(gb_fields)
-    idx_values = list(dict.fromkeys(indexed.indexes['capture']))
-    group_sel = [dict(zip(gb_fields, v)) for v in idx_values]
+    if len(gb_fields) > 0:
+        groups = dataset.groupby(gb_fields)
+        selects = [
+            {k: v for k, v in zip(gb_fields, _listify(values))} for values, _ in groups
+        ]
+    else:
+        selects = [{}]
 
-    combos = list(itertools.product(opts.variables.keys(), group_sel))
+    combos = list(itertools.product(opts.variables.keys(), selects))
 
     for _ in executor.map(worker_plot, *zip(*combos)):
         pass
@@ -107,7 +116,7 @@ def load_data(zarr_path: str, opts: 'sf.specs.PlotOptions', index=True) -> 'xr.D
         dataset = dataset.rename_vars({'channel': 'port'})
 
     dataset = sf.util.query_match_at_index(
-        dataset, 'capture', 'sweep_start_time', opts.data.sweep_index
+        dataset, 'capture', 'sweep_index', opts.data.sweep_index
     )
 
     if opts.data.query is not None:

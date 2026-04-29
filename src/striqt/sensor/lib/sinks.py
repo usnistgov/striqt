@@ -254,7 +254,6 @@ class ZarrCaptureSink(ZarrSinkBase):
                 join='outer',
                 combine_attrs='drop_conflicts',
             )
-            1//0
             dataset = cast(xr.Dataset, dataset)
 
         path = self.get_root_path()

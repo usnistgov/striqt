@@ -83,6 +83,7 @@ def correct_iq(
     x_pre_align = x_pre_filter[:, :size_out]
     if signal_trigger is None:
         out = None
+        x_pre_filter = x_pre_filter[:, :size_out]
     else:
         lags = signal_trigger(x[:, :size_out], capture)
         shifts = xp.rint(lags * capture.sample_rate).astype('int')

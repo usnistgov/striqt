@@ -246,12 +246,18 @@ class SourceBase(Source[SS, SC, PS, PC]):
 
         # the number of valid samples to return per channel
         output_count = buffers.get_read_count(
-            self.capture_spec, self.setup_spec, include_holdoff=False, overlap=sum(overlaps)
+            self.capture_spec,
+            self.setup_spec,
+            include_holdoff=False,
+            overlap=sum(overlaps),
         )
 
         # the total number of samples to acquire per channel
         buffer_count = buffers.get_read_count(
-            self.capture_spec, self.setup_spec, include_holdoff=True, overlap=sum(overlaps)
+            self.capture_spec,
+            self.setup_spec,
+            include_holdoff=True,
+            overlap=sum(overlaps),
         )
 
         received_count = 0
@@ -345,8 +351,6 @@ class SourceBase(Source[SS, SC, PS, PC]):
                 info=self._prev_iq.info.replace(start_time=None),
             )
 
-        
-
         if self._reuse_iq:
             self._prev_iq = iq
 
@@ -407,6 +411,7 @@ class SourceBase(Source[SS, SC, PS, PC]):
 
 class VirtualSource(SourceBase[SS, SC, PS, PC]):
     _samples_elapsed = 0
+    _overlaps: tuple[int, int] = (0, 0)
 
     def reset_sample_counter(self, value=0):
         self._sync_time_source()
@@ -418,6 +423,10 @@ class VirtualSource(SourceBase[SS, SC, PS, PC]):
 
     def _prepare_capture(self, capture):
         self.reset_sample_counter()
+
+    def read_iq(self, overlaps=(0, 0)):
+        self._overlaps = overlaps
+        return super().read_iq(overlaps)
 
     def _read_stream(
         self,
@@ -438,7 +447,8 @@ class VirtualSource(SourceBase[SS, SC, PS, PC]):
         for port, buf in zip(ports, buffers):
             values = self.get_waveform(
                 count,
-                self._samples_elapsed,
+                start=self._overlaps[0],
+                offset=self._samples_elapsed,
                 port=port,
                 xp=getattr(self, 'xp', np),
             )
@@ -453,7 +463,14 @@ class VirtualSource(SourceBase[SS, SC, PS, PC]):
         return count, round(timestamp_ns)
 
     def get_waveform(
-        self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
+        self,
+        count: int,
+        start: int,
+        offset: int,
+        *,
+        port: int = 0,
+        xp,
+        dtype='complex64',
     ) -> Array:
         raise NotImplementedError
 

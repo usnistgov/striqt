@@ -1,0 +1,36 @@
+data:
+  # query: "switch_input == 0"
+  sweep_index: -1
+  # groupby_dims: []
+  select:
+    spectrogram_power_bin: slice(-130, -50)
+    spectrogram_time: slice(0, 20e-3)
+    channel_power_bin: slice(-100, -15)
+
+plotter:
+  col: 'port'
+  # row: 'analysis_bandwidth'
+  suptitle_fmt: '{name}'
+  filename_fmt: '{name} {analysis_bandwidth}.svg'
+  style: 'striqt.figures.presentation_full_width'
+  col_label_format: 'Port {port}'
+  # row_label_format: 'Analysis bandwidth {analysis_bandwidth}' 
+
+variables:
+  spectrogram: {}    
+  cellular_5g_pss_correlation:
+    dB: True
+  cellular_5g_ssb_spectrogram: {}
+  # cellular_cyclic_autocorrelation:
+  #   dB: True
+  cellular_resource_power_histogram:
+    yscale: 'log'
+  channel_power_histogram:
+    yscale: 'log'
+  channel_power_time_series: {}
+  cyclic_channel_power: {}
+  power_spectral_density: {}
+  spectrogram_histogram:
+    yscale: 'log'
+  spectrogram_ratio_histogram:
+    yscale: 'log'

@@ -71,11 +71,11 @@ class DiracDeltaCapture(SensorCapture, frozen=True, kw_only=True):
 
 class SawtoothCapture(SensorCapture, kw_only=True, frozen=True, dict=True):
     period: types.Period = 0.01
-    power: types.Power = 1
+    power: types.Power = 0
 
 
 class NoiseCapture(SensorCapture, kw_only=True, frozen=True, dict=True):
-    power_spectral_density: types.PSD = 1e-17
+    noise_psd: types.PSD = 1e-17
 
 
 class FileCapture(SensorCapture, frozen=True, kw_only=True):
@@ -377,7 +377,9 @@ class Sweep(SpecBase, Generic[SS, SP, SC], frozen=True, kw_only=True):
         if coord_fields is not None:
             invalid = set(self.analysis.__struct_fields__) & coord_fields
             if len(invalid) > 0:
-                raise AttributeError(f'capture fields {tuple(invalid)} conflict with measurements of the same name')
+                raise AttributeError(
+                    f'capture fields {tuple(invalid)} conflict with measurements of the same name'
+                )
 
 
 class CalibrationSweep(

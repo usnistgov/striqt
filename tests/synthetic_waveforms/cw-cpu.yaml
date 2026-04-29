@@ -1,0 +1,176 @@
+# Configuration Reference:
+# https://github.com/usnistgov/flex-spectrum-sensor/blob/main/doc/reference-sweep.yaml
+
+# Run DSP filter response checks using noise input
+
+sensor_binding: "single_tone"
+source:
+  master_clock_rate: 125e6 # Hz
+  num_rx_ports: 2
+  array_backend: "numpy"
+  signal_trigger: "cellular_5g_pss_sync"
+
+loops:
+  - kind: repeat
+    count: 1
+
+captures:
+  - analysis_bandwidth: 100e6 # Hz
+    sample_rate: 107.52e6 # Hz
+    port: [0, 1]
+    duration: 0.1
+    frequency_offset: -3e6
+    snr: 80
+    adjust_analysis:
+      frequency_offset: -19920000
+      guard_bandwidths: [875e3, 575e3]
+      frame_slots: "dddsuudddddddsuudddd"
+      special_symbols: "ddddddfffffffu"
+  - analysis_bandwidth: 60e6 # Hz
+    sample_rate: 107.52e6 # Hz
+    port: [0, 1]
+    duration: 0.1
+    frequency_offset: -3e6
+    snr: 80
+    adjust_analysis:
+      frequency_offset: -20520000
+      guard_bandwidths: [875e3, 875e3]
+      frame_slots: "dddsuudddddddsuudddd"
+      special_symbols: "ddddddfffffffu"
+  - analysis_bandwidth: 80e6 # Hz
+    sample_rate: 107.52e6 # Hz
+    port: [0, 1]
+    duration: 0.1
+    frequency_offset: -3e6
+    snr: 80
+    adjust_analysis:
+      frequency_offset: -28800000
+      guard_bandwidths: [875e3, 875e3]
+      frame_slots: "dddsuudddddddsuudddd"
+      special_symbols: "ddddddfffffffu"
+  - sample_rate: 53.76e6 # Hz
+    analysis_bandwidth: 40e6 # Hz
+    port: [0, 1]
+    duration: 0.1
+    frequency_offset: -3e6
+    snr: 80
+    adjust_analysis:
+      frequency_offset: 0
+      guard_bandwidths: [0, 0]
+      frame_slots: "dddsuudddddddsuudddd"
+      special_symbols: "ddddddfffffffu"
+# analysis:
+#     power_spectral_density:
+#         time_statistic:
+#         - mean
+#         - max
+#         frequency_resolution: 15000 # SCS/2
+#         fractional_overlap: 13/28
+#         window_fill: 15/28
+#         window: ['kaiser', 11.884] # gives ENBW = 2
+#         trim_stopband: false
+analysis:
+  spectrogram: &spectrogram
+    frequency_resolution: 15000 # SCS/2
+    fractional_overlap: 13/28
+    window_fill: 15/28 
+    integration_bandwidth: 360e3 # 1 RB
+    window: &window ['kaiser', 11.884] # gives ENBW = 2
+    lo_bandstop: &lo_bandstop 120e3
+
+  cellular_resource_power_histogram:
+    subcarrier_spacing: &scs 30000
+    window: *window
+    power_low: -150
+    power_high: 0
+    power_resolution: 0.1
+    average_rbs: true
+    average_slots: false
+    cyclic_prefix: normal
+    lo_bandstop: *lo_bandstop
+
+    # adjust per-channel in the capture 'adjust_analysis' field
+    frame_slots: &tdd_slots dddsuudddddddsuudddd
+    special_symbols: &special_symbols ddddddfffffffu
+    guard_bandwidths: &guard_bandwidths [875e3, 875e3]
+
+  cellular_5g_pss_correlation:
+    subcarrier_spacing: *scs
+    delay: &delay 50e-6
+
+    # adjusted per-channel in the capture 'adjust_analysis' field
+    frequency_offset: &frequency_offset 0
+
+  cellular_5g_pss_sync:
+    subcarrier_spacing: *scs
+    frequency_offset: *frequency_offset
+    delay: *delay
+    per_port: true
+
+  cellular_5g_ssb_spectrogram:
+    lo_bandstop: *lo_bandstop
+    window: *window
+    subcarrier_spacing: *scs
+    frequency_offset: *frequency_offset
+
+  power_spectral_density:
+    <<: *spectrogram
+    time_statistic:
+    - mean
+    - 0.5
+    - 0.9
+    - 0.95
+    - 0.99
+    - max
+
+  spectrogram_ratio_histogram:
+    <<: *spectrogram
+    power_low: -50
+    power_high: 50
+    power_resolution: 0.1
+
+  spectrogram_histogram:
+    <<: *spectrogram
+    power_low: -150
+    power_high: 0
+    power_resolution: 0.1
+
+  cellular_cyclic_autocorrelation:
+    subcarrier_spacings: [*scs]
+    frame_slots: *tdd_slots
+    frame_range: [0, 1]
+
+  cyclic_channel_power:
+    cyclic_period: &frame_period .01 # 10 ms in cell standards
+    cyclic_statistics:
+    - min
+    - mean
+    - max
+    detector_period: &symbol_period 1/28000 # 1 symbol for (30 kHz SCS, normal CP)
+    power_detectors: &power_detectors
+    - rms
+    - peak
+
+  channel_power_histogram:
+    detector_period: *symbol_period
+    power_detectors: *power_detectors
+    power_low: -100 # dBm
+    power_high: 5 # dBm
+    power_resolution: 0.1
+
+  channel_power_time_series:
+    detector_period: *frame_period
+    power_detectors: *power_detectors
+
+# power_spectral_density:
+#     time_statistic:
+#     - mean
+#     - max
+#     frequency_resolution: 15000 # SCS/2
+#     fractional_overlap: 13/28
+#     window_fill: 15/28
+#     window: ['kaiser', 11.884] # gives ENBW = 2
+#     trim_stopband: false
+
+sink:
+  path: "outputs/{spec_name}-{start_time}.zarr.zip"

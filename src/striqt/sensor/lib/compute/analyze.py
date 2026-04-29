@@ -126,7 +126,11 @@ def analyze(
 
     with options.registry.cache_context(capture, options.cache_callback):
         if options.correction:
-            with sa.util.stopwatch('resampling filter', threshold=capture.duration/3, logger_level=sa.util.PERFORMANCE_INFO):
+            with sa.util.stopwatch(
+                'resampling filter',
+                threshold=capture.duration / 3,
+                logger_level=sa.util.PERFORMANCE_INFO,
+            ):
                 iq = corrections.correct_iq(
                     iq, signal_trigger=trigger, overwrite_x=overwrite_x
                 )
