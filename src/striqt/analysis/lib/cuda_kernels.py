@@ -4,10 +4,10 @@
 
 from itertools import product
 
-import cupy  # type: ignore
-from cupy._core._scalar import get_typename  # type: ignore
-from cupy._core.internal import _normalize_axis_index  # type: ignore
-from cupy_backends.cuda.api import runtime  # type: ignore
+import cupy
+from cupy._core._scalar import get_typename
+from cupy._core.internal import _normalize_axis_index
+from cupy_backends.cuda.api import runtime
 
 IIR_SOS_KERNEL = r"""
 #include <cupy/math_constants.h>
@@ -352,7 +352,7 @@ FLOAT_TYPES = [cupy.float16, cupy.float32, cupy.float64]
 INT_TYPES = [cupy.int8, cupy.int16, cupy.int32, cupy.int64]
 COMPLEX_TYPES = [cupy.complex64, cupy.complex128]
 UNSIGNED_TYPES = [cupy.uint8, cupy.uint16, cupy.uint32, cupy.uint64]
-TYPES = FLOAT_TYPES + INT_TYPES + UNSIGNED_TYPES + COMPLEX_TYPES  # type: ignore  # NOQA
+TYPES = FLOAT_TYPES + INT_TYPES + UNSIGNED_TYPES + COMPLEX_TYPES
 
 TYPE_PAIRS = [
     (x, y)

@@ -605,12 +605,12 @@ def convert_np_to_xp(func: _TC) -> _TC:
         kwargs_with_np = dict(kwargs, xp=anp)
         x = func(*args, **kwargs_with_np)
         if hasattr(xp, 'asarray'):
-            x = xp.asarray(x)
+            x = xp.asarray(x) # pyright: ignore
         elif hasattr(xp, 'array'):
             x = xp.array(x)  # type: ignore
         else:
             raise AttributeError(f'invalid array module {xp}')
 
-        return xp.asarray(x)
+        return xp.asarray(x) # pyright: ignore
 
     return cast(_TC, wrapped)

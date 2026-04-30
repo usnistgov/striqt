@@ -14,9 +14,9 @@ from striqt.waveform.lib import util
 
 
 if typing.TYPE_CHECKING:
-    from typing_extensions import Self
-else:
     from typing import Self
+else:
+    from typing_extensions import Self
 
 
 _T = typing.TypeVar('_T')
