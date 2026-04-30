@@ -1,3 +1,4 @@
+from __future__ import annotations as __
 from typing import cast, Sequence
 import striqt.analysis as sa
 from . import datasets
