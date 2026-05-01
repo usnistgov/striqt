@@ -108,9 +108,7 @@ def lookup_system_noise_power(
     )
 
 
-def set_iq_calibration(
-    iq: sources.AcquiredIQ, alias_func: specs.helpers.PathAliasFormatter | None = None
-):
+def set_iq_calibration(iq: sources.AcquiredIQ):
     assert isinstance(iq.capture, specs.SoapyCapture)
 
     xp = sources.buffers.get_array_namespace(iq.source_spec.array_backend)
@@ -118,7 +116,7 @@ def set_iq_calibration(
         'cal_data': iq.source_spec.calibration,
         'capture': iq.capture,
         'master_clock_rate': iq.source_spec.master_clock_rate,
-        'alias_func': alias_func,
+        'alias_func': iq.alias_func,
     }
 
     # calibration data
