@@ -48,7 +48,7 @@ if TYPE_CHECKING:
     from .typing import CachedCallable, P, R
 
     try:
-        import cupy as cp  # pyright: ignore[reportMissingImports]
+        import cupy as cp  # pyright: ignore
 
         TypeIsCupy = typing_extensions.TypeIs[cp.ndarray]
     except ModuleNotFoundError:
@@ -109,7 +109,7 @@ def _get_cache_shelf():
     shelf = shelve.open(filename, writeback=True)
 
     # sync is forced on each operation already
-    shelf.__del__ = lambda: None
+    shelf.__del__ = lambda: None # ty: ignore
     return shelf, cache_lock
 
 

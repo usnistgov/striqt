@@ -97,7 +97,7 @@ Port = Annotated[
     Meta('Input port indices'),
 ]
 PSD = Annotated[float, Meta('noise total channel power', 'mW/Hz', ge=0)]
-Power = Annotated[float, Meta('peak power level', 'dB', gt=0)]
+Power = Annotated[float, Meta('peak power level', 'dB')]
 Period = Annotated[float, Meta('waveform period', 's', ge=0)]
 ReceiveRetries = Annotated[
     int, Meta('number of acquisition retry attempts on stream error', ge=0)

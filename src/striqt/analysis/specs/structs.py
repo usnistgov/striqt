@@ -5,11 +5,19 @@ from __future__ import annotations as __
 import fractions
 from math import inf
 import typing
+from typing import Union
 
 import msgspec
 
 from . import helpers, types
 from striqt.waveform.lib import util
+
+
+if typing.TYPE_CHECKING:
+    from typing import Self
+else:
+    from typing_extensions import Self
+
 
 _T = typing.TypeVar('_T')
 _TS = typing.TypeVar('_TS', bound='SpecBase')
@@ -29,7 +37,7 @@ class SpecBase(
     methods that fix encoding and decoding hooks for extra types.
     """
 
-    def replace(self, **attrs) -> typing.Self:
+    def replace(self, **attrs) -> Self:
         """returns a copy of self with changed attributes.
 
         See also:
@@ -58,7 +66,7 @@ class SpecBase(
     def from_spec(cls: type[_T], other: SpecBase) -> _T:
         return helpers.convert_spec(other, type=cls)
 
-    def validate(self) -> typing.Self:
+    def validate(self) -> Self:
         return _validate(self)
 
     def __post_init__(self):
@@ -107,8 +115,8 @@ class FilteredCapture(Capture, kw_only=True, frozen=True):
     # )
 
 
-class AnalysisKeywords(typing.TypedDict):
-    as_xarray: typing.NotRequired[typing.Union[bool, typing.Literal['delayed']]]
+class AnalysisKeywords(typing.TypedDict, total=False):
+    as_xarray: Union[bool, typing.Literal['delayed']]
 
 
 class Analysis(SpecBase, kw_only=True, frozen=True):
@@ -151,8 +159,8 @@ class FrequencyAnalysisSpecBase(
 
     window: types.WindowType
     frequency_resolution: float
-    fractional_overlap: fractions.Fraction = fractions.Fraction(0)
-    window_fill: fractions.Fraction = fractions.Fraction(1)
+    fractional_overlap: fractions.Fraction = 0  # type: ignore
+    window_fill: fractions.Fraction = 1  # type: ignore
     integration_bandwidth: typing.Optional[float] = None
     trim_stopband: bool = True
     lo_bandstop: typing.Optional[float] = None
@@ -255,10 +263,10 @@ class CellularCyclicAutocorrelator(
     frozen=True,
     dict=True,
 ):
-    subcarrier_spacings: typing.Union[float, tuple[float, ...]] = (15e3, 30e3, 60e3)
-    frame_range: typing.Union[int, tuple[int, int]] = (0, 1)
-    frame_slots: typing.Union[str, None] = None
-    symbol_range: typing.Union[int, tuple[int, typing.Optional[int]]] = (0, None)
+    subcarrier_spacings: Union[float, tuple[float, ...]] = (15e3, 30e3, 60e3)
+    frame_range: Union[int, tuple[int, int]] = (0, 1)
+    frame_slots: Union[str, None] = None
+    symbol_range: Union[int, tuple[int, Union[int, None]]] = (0, None)
     generation: typing.Literal['4G', '5G'] = '5G'
 
     def __post_init__(self):
@@ -283,15 +291,15 @@ class CellularResourcePowerHistogram(
     power_low: float
     power_high: float
     power_resolution: float
-    average_rbs: typing.Union[bool, typing.Literal['half']] = False
+    average_rbs: Union[bool, typing.Literal['half']] = False
     average_slots: bool = False
     guard_bandwidths: tuple[float, float] = (0, 0)
-    frame_slots: typing.Union[str, None] = None
-    special_symbols: typing.Union[str, None] = None
+    frame_slots: Union[str, None] = None
+    special_symbols: Union[str, None] = None
 
-    cyclic_prefix: typing.Union[
-        typing.Literal['normal'], typing.Literal['extended']
-    ] = 'normal'
+    cyclic_prefix: Union[typing.Literal['normal'], typing.Literal['extended']] = (
+        'normal'
+    )
 
     lo_bandstop: typing.Optional[float] = None
 
@@ -319,7 +327,7 @@ class CyclicChannelPower(Analysis, kw_only=True, frozen=True):
     cyclic_period: float
     detector_period: fractions.Fraction
     power_detectors: tuple[str, ...] = ('rms', 'peak')
-    cyclic_statistics: tuple[typing.Union[str, float], ...] = ('min', 'mean', 'max')
+    cyclic_statistics: tuple[Union[str, float], ...] = ('min', 'mean', 'max')
 
 
 class IQWaveform(
@@ -332,7 +340,7 @@ class IQWaveform(
 
 
 class PowerSpectralDensity(FrequencyAnalysisSpecBase, kw_only=True, frozen=True):
-    time_statistic: tuple[typing.Union[str, float], ...] = ('mean',)
+    time_statistic: tuple[Union[str, float], ...] = ('mean',)
 
 
 class SpectrogramHistogram(

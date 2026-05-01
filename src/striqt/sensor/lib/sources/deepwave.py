@@ -38,7 +38,7 @@ class Air8201BSourceSpec(specs.SoapySource, kw_only=True, frozen=True):
     array_backend: specs.types.ArrayBackend = 'cupy'
     receive_retries: specs.types.ReceiveRetries = 3
 
-    rx_enable_delay = 0.5
+    rx_enable_delay = 1.2
     transient_holdoff_time = 2e-3
     stream_all_rx_ports = True
 

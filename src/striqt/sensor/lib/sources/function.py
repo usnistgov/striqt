@@ -50,7 +50,8 @@ class TestSourceBase(base.VirtualSource[TS, TC, PS, PC]):
         for port, buf in zip(ports, buffers):
             values = self.get_waveform(
                 count,
-                self._samples_elapsed,
+                start=self._overlaps[0],
+                offset=self._samples_elapsed,
                 port=port,
                 xp=getattr(self, 'xp', np),
             )
@@ -76,46 +77,59 @@ class SingleToneSource(
     TestSourceBase[specs.FunctionSource, specs.SingleToneCapture, PS, PC]
 ):
     def get_waveform(
-        self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
+        self,
+        count: int,
+        start: int,
+        offset: int,
+        *,
+        port: int = 0,
+        xp,
+        dtype='complex64',
     ):
         capture = self.capture_spec
 
         fs = self.get_resampler()['fs_sdr']
-        i = xp.arange(offset, count + offset, dtype='int64')
+        i = xp.arange(start + offset, start + count + offset, dtype='int64')
 
         lo = _lo_shift_tone(i, self, xp)
 
         phi = (2 * np.pi * capture.frequency_offset) / fs * i + np.pi / 2
-        ret = lo * xp.exp(1j * phi)
-        ret = ret.astype(self.__setup__.transport_dtype)
+        x = lo * xp.exp(1j * phi)
+        x = x.astype(self.__setup__.transport_dtype)
 
         if capture.snr is not None:
             power = 10 ** (-capture.snr / 10)
             noise = source.simulated_awgn(
-                capture.replace(sample_rate=fs),
+                capture.replace(duration=x.shape[-1], sample_rate=1),
                 xp=xp,
                 seed=0,
                 power_spectral_density=power,
             )
             noise = noise[i % noise.size]
-            ret += noise
+            x += noise
 
-        return ret
+        return x
 
 
 class DiracDeltaSource(
     TestSourceBase[specs.FunctionSource, specs.DiracDeltaCapture, PS, PC]
 ):
     def get_waveform(
-        self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
+        self,
+        count: int,
+        start: int,
+        offset: int,
+        *,
+        port: int = 0,
+        xp,
+        dtype='complex64',
     ):
         fs = self.get_resampler()['fs_sdr']
         capture = self.capture_spec
 
-        abs_pulse_index = round(capture.time * fs)
+        abs_pulse_index = round(capture.time * fs) + start
         rel_pulse_index = abs_pulse_index - offset
-
-        ret = xp.zeros(count, dtype=self.__setup__.transport_dtype)
+        ret = xp.full(count, 1e-20, dtype=self.__setup__.transport_dtype)
 
         if rel_pulse_index >= 0 and rel_pulse_index < count:
             ret[rel_pulse_index] = 10 ** (capture.power / 20)
@@ -127,14 +141,22 @@ class SawtoothSource(
     TestSourceBase[specs.FunctionSource, specs.SawtoothCapture, PS, PC]
 ):
     def get_waveform(
-        self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
+        self,
+        count: int,
+        start: int,
+        offset: int,
+        *,
+        port: int = 0,
+        xp,
+        dtype='complex64',
     ):
+        fs = self.get_resampler()['fs_sdr']
         capture = self.capture_spec
 
         ret = xp.empty(count, dtype='complex64')
-        ii = xp.arange(offset, count + offset, dtype='uint64')
-        t = ii / capture.backend_sample_rate
-        magnitude = 2 * np.sqrt(capture.power)
+        ii = xp.arange(start + offset, start + count + offset, dtype='uint64')
+        t = ii / fs
+        magnitude = 10 ** (capture.power / 20)
         ret.real[:] = (t % capture.period) * (magnitude / capture.period)
         ret.imag[:] = 0
         return ret
@@ -142,7 +164,14 @@ class SawtoothSource(
 
 class NoiseSource(TestSourceBase[specs.FunctionSource, specs.NoiseCapture, PS, PC]):
     def get_waveform(
-        self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
+        self,
+        count: int,
+        start: int,
+        offset: int,
+        *,
+        port: int = 0,
+        xp,
+        dtype='complex64',
     ):
         capture = self.capture_spec
         fs = self.get_resampler()['fs_sdr']
@@ -157,7 +186,7 @@ class NoiseSource(TestSourceBase[specs.FunctionSource, specs.NoiseCapture, PS, P
             backend_capture,
             xp=xp,
             seed=0,
-            power_spectral_density=capture.power_spectral_density,
+            power_spectral_density=capture.noise_psd,
         )
         # x /= np.sqrt(self._capture.backend_sample_rate / self.sample_rate())
 

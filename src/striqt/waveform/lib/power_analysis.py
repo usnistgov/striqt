@@ -247,7 +247,7 @@ def envtopow(x: _ALN, out=None) -> _ALN:
         )
 
         if xp.iscomplexobj(values):
-            values = values.real  # type: ignore
+            values = values.real  # pyright: ignore
     elif is_cupy_array(xp):
         from .jit import cuda
 
@@ -349,8 +349,8 @@ def dBlinmean(
         out = None
 
     x = dBtopow(x_dB, out=out)
-    linmean = x.mean(axis)  # type: ignore
-    return powtodB(linmean, out=linmean)  # type: ignore
+    linmean = x.mean(axis)  # pyright: ignore
+    return powtodB(linmean, out=linmean)  # pyright: ignore
 
 
 @overload

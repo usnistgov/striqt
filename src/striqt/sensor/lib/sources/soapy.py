@@ -207,6 +207,26 @@ def _probe_channel(
     )
 
 
+def _assign_iq_calibration(iq: buffers.AcquiredIQ):
+    from ..calibration import lookup_power_correction, lookup_system_noise_power
+    assert isinstance(iq.capture, specs.SoapyCapture)
+
+    xp = buffers.get_array_namespace(iq.source_spec.array_backend)
+    kwargs = {
+        'cal_data': iq.source_spec.calibration,
+        'capture': iq.capture,
+        'master_clock_rate': iq.source_spec.master_clock_rate,
+        'alias_func': iq.alias_func,
+    }
+
+    # calibration data
+    power_scale = lookup_power_correction(**kwargs, xp=xp)
+    if power_scale is not None:
+        voltage_scale = buffers.get_dtype_scale(iq.source_spec.transport_dtype)
+        iq.voltage_scale = voltage_scale * (power_scale**0.5)
+        iq.extra_data['system_noise'] = lookup_system_noise_power(**kwargs)
+
+
 def probe_soapy_info(device: SoapySDR.Device) -> SoapySourceInfo:
     """
     Probes a SoapySDR device and returns its capabilities as a nested NamedTuple.
@@ -719,18 +739,9 @@ class SoapySource(base.SourceBase[TS, TC, PS, PC]):
         self,
         samples: Array,
         time_ns: int | None,
-        *,
-        analysis=None,
-        correction=True,
-        alias_func: specs.helpers.PathAliasFormatter | None = None,
+        alias_func: specs.helpers.PathAliasFormatter | None = None
     ) -> buffers.AcquiredIQ:
-        iq = super()._package_acquisition(
-            samples,
-            time_ns,
-            analysis=analysis,
-            correction=correction,
-            alias_func=alias_func,
-        )
+        iq = super()._package_acquisition(samples, time_ns, alias_func)
 
         capture = self.capture_spec
 
@@ -750,24 +761,7 @@ class SoapySource(base.SourceBase[TS, TC, PS, PC]):
 
         iq.extra_data.update(compute_overload_info(samples, self.setup_spec, capture))
         iq.extra_data.update(self.read_peripherals())
-
-        # calibration data
-        power_scale = calibration.lookup_power_correction(
-            self.setup_spec.calibration,
-            self.capture_spec,
-            self.setup_spec.master_clock_rate,
-            alias_func=alias_func,
-            xp=sw.array_namespace(samples),
-        )
-        if power_scale is not None:
-            iq.voltage_scale = iq.voltage_scale * (power_scale**0.5)
-
-            iq.extra_data['system_noise'] = calibration.lookup_system_noise_power(
-                self.setup_spec.calibration,
-                self.capture_spec,
-                self.setup_spec.master_clock_rate,
-                alias_func=alias_func,
-            )
+        _assign_iq_calibration(iq)
 
         return iq
 
@@ -786,7 +780,7 @@ class SoapySource(base.SourceBase[TS, TC, PS, PC]):
         return probe_soapy_info(self._device)
 
     @sa.util.stopwatch('read_iq', 'source')
-    def read_iq(self, analysis=None) -> 'tuple[Array, int|None]':
+    def read_iq(self, overlaps=(0, 0)) -> 'tuple[Array, int|None]':
         assert self._rx_stream is not None, 'soapy device is not open'
         assert self._device is not None, 'soapy device is not open'
 
@@ -801,10 +795,8 @@ class SoapySource(base.SourceBase[TS, TC, PS, PC]):
 
         util.propagate_thread_interrupts()
 
-        return super().read_iq(analysis)
+        return super().read_iq(overlaps)
 
-    def acquire(self, *, analysis=None, correction=True, alias_func=None):
+    def acquire(self, overlaps=(0, 0), alias_func=None):
         with read_retries(self):
-            return super().acquire(
-                analysis=analysis, correction=correction, alias_func=alias_func
-            )
+            return super().acquire(overlaps, alias_func)
