@@ -43,6 +43,9 @@ def correct_iq(
         the filtered IQ waveform
     """
 
+    from ..calibration import set_iq_calibration
+    set_iq_calibration(iq)
+
     x = iq.pre_align
     capture = iq.capture
     xp = sw.array_namespace(x)
@@ -277,18 +280,6 @@ def _scale_only(
     return x, overlap
 
 
-def _get_max_trigger_lag(
-    setup: specs.Source, capture: specs.SensorCapture, trigger: sa.Trigger | None = None
-) -> int:
-    if trigger is None:
-        return 0
-
-    max_lag = trigger.max_lag(capture)
-    lag_pad = ceil(setup.master_clock_rate * max_lag)
-
-    return lag_pad
-
-
 def _resample(
     iq: sources.AcquiredIQ, overwrite_x: bool, min_overlap: int, axis: int
 ) -> tuple[Array, int | None]:
@@ -359,6 +350,18 @@ def _get_filter_overlap(capture: specs.SensorCapture):
         return FILTER_SIZE // 2 + 1
     else:
         return 0
+
+
+def _get_max_trigger_lag(
+    setup: specs.Source, capture: specs.SensorCapture, trigger: sa.Trigger | None = None
+) -> int:
+    if trigger is None:
+        return 0
+
+    max_lag = trigger.max_lag(capture)
+    lag_pad = ceil(setup.master_clock_rate * max_lag)
+
+    return lag_pad
 
 
 @sa.util.lru_cache()
