@@ -153,6 +153,7 @@ def _open_devices(
         spec.source,
         captures=spec.captures,
         loops=spec.loops,
+        alias_func=conn.resources['alias_func'],
         reuse_iq=spec.options.reuse_iq,
     )
 

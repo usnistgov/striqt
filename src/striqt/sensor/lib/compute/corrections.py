@@ -43,9 +43,6 @@ def correct_iq(
         the filtered IQ waveform
     """
 
-    from ..calibration import set_iq_calibration
-    set_iq_calibration(iq)
-
     x = iq.pre_align
     capture = iq.capture
     xp = sw.array_namespace(x)

@@ -207,6 +207,26 @@ def _probe_channel(
     )
 
 
+def _assign_iq_calibration(iq: buffers.AcquiredIQ):
+    from ..calibration import lookup_power_correction, lookup_system_noise_power
+    assert isinstance(iq.capture, specs.SoapyCapture)
+
+    xp = buffers.get_array_namespace(iq.source_spec.array_backend)
+    kwargs = {
+        'cal_data': iq.source_spec.calibration,
+        'capture': iq.capture,
+        'master_clock_rate': iq.source_spec.master_clock_rate,
+        'alias_func': iq.alias_func,
+    }
+
+    # calibration data
+    power_scale = lookup_power_correction(**kwargs, xp=xp)
+    if power_scale is not None:
+        voltage_scale = buffers.get_dtype_scale(iq.source_spec.transport_dtype)
+        iq.voltage_scale = voltage_scale * (power_scale**0.5)
+        iq.extra_data['system_noise'] = lookup_system_noise_power(**kwargs)
+
+
 def probe_soapy_info(device: SoapySDR.Device) -> SoapySourceInfo:
     """
     Probes a SoapySDR device and returns its capabilities as a nested NamedTuple.
@@ -740,6 +760,7 @@ class SoapySource(base.SourceBase[TS, TC, PS, PC]):
 
         iq.extra_data.update(compute_overload_info(samples, self.setup_spec, capture))
         iq.extra_data.update(self.read_peripherals())
+        _assign_iq_calibration(iq)
 
         return iq
 

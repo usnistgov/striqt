@@ -90,13 +90,15 @@ class SourceBase(Source[SS, SC, PS, PC]):
     _buffers: buffers.ReceiveBuffers
     _is_open: bool | Event = False
     _timeout: float = 10
+    _alias_func: specs.helpers.PathAliasFormatter | None = None
 
-    def __init__(self, reuse_iq=False, *args: PS.args, **kwargs: PS.kwargs):
+    def __init__(self, alias_func: specs.helpers.PathAliasFormatter | None = None, reuse_iq=False, *args: PS.args, **kwargs: PS.kwargs):
         open_event = self._is_open = Event()  # first, to serve other threads
 
         # back door from .from_spec
         _extra_specs = cast(dict, kwargs.pop('__specs', {}))
         _spec = _extra_specs.pop('source', None)
+        self._alias_func = alias_func
 
         if _spec is not None:
             _spec = cast(SS, _spec)
@@ -138,14 +140,14 @@ class SourceBase(Source[SS, SC, PS, PC]):
         self._apply_setup(_spec, **_extra_specs)
 
     @classmethod
-    def from_spec(cls, spec: SS, *, captures=None, loops=None, reuse_iq=False) -> Self:
+    def from_spec(cls, spec: SS, *, captures=None, loops=None, alias_func: specs.helpers.PathAliasFormatter | None = None, reuse_iq=False) -> Self:
         kwargs = spec.to_dict()
         kwargs['__specs'] = {'source': spec, 'captures': captures, 'loops': loops}
 
         if captures is not None and len(captures) > 0 and cls._bindings__ is None:
             raise TypeError('can only hint captures for source class bindings')
 
-        return cls(reuse_iq=reuse_iq, **kwargs)  # pyright: ignore
+        return cls(alias_func=alias_func, reuse_iq=reuse_iq, **kwargs)  # pyright: ignore
 
     @functools.cached_property
     def info(self) -> specs.BaseSourceInfo:
@@ -364,6 +366,7 @@ class SourceBase(Source[SS, SC, PS, PC]):
         info = specs.AcquisitionInfo(source_id=self.id)
 
         return buffers.AcquiredIQ(
+            alias_func=self._alias_func,
             pre_align=samples,
             pre_filter=None,
             aligned=None,
