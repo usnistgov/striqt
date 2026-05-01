@@ -243,7 +243,7 @@ def _acquire_both(
     )
 
     overlaps = compute.get_correction_overlaps(this, res['source'].setup_spec, analysis)
-    iq = util.threadpool.submit(res['source'].acquire, overlaps)
+    iq = util.threadpool.submit(res['source'].acquire, overlaps, res['alias_func'])
     ext_data = util.threadpool.submit(res['peripherals'].acquire, this)
 
     with util.ExceptionStack('failed to acquire data') as exc:

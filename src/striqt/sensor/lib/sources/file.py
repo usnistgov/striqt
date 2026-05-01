@@ -61,8 +61,8 @@ class TDMSSource(base.VirtualSource[specs.TDMSSource, specs.FileCapture, PS, PC]
 
         return (iq * float_dtype(scale)).view(dtype).copy()  # type: ignore
 
-    def acquire(self, overlaps=(0, 0)):
-        iq = super().acquire(overlaps)
+    def acquire(self, overlaps=(0, 0), alias_func=None):
+        iq = super().acquire(overlaps, alias_func)
         iq.info = self._file_info
         return iq
 
@@ -121,8 +121,8 @@ class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture, PS, PC]):
         assert ret.shape[1] == count
         return ret.copy()
 
-    def acquire(self, overlaps=(0, 0)):
-        iq = super().acquire(overlaps)
+    def acquire(self, overlaps=(0, 0), alias_func=None):
+        iq = super().acquire(overlaps, alias_func)
         iq.info = self._file_info
         return iq
 
@@ -259,8 +259,8 @@ class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture, PS,
         else:
             return iq.astype(dtype)
 
-    def acquire(self, overlaps=(0, 0)):
-        iq = super().acquire(overlaps)
+    def acquire(self, overlaps=(0, 0), alias_func=None):
+        iq = super().acquire(overlaps, alias_func)
         iq.info = self._capture_info
         return iq
 

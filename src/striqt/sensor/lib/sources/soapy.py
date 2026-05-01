@@ -739,8 +739,9 @@ class SoapySource(base.SourceBase[TS, TC, PS, PC]):
         self,
         samples: Array,
         time_ns: int | None,
+        alias_func: specs.helpers.PathAliasFormatter | None = None
     ) -> buffers.AcquiredIQ:
-        iq = super()._package_acquisition(samples, time_ns)
+        iq = super()._package_acquisition(samples, time_ns, alias_func)
 
         capture = self.capture_spec
 
@@ -796,6 +797,6 @@ class SoapySource(base.SourceBase[TS, TC, PS, PC]):
 
         return super().read_iq(overlaps)
 
-    def acquire(self, overlaps=(0, 0)):
+    def acquire(self, overlaps=(0, 0), alias_func=None):
         with read_retries(self):
-            return super().acquire(overlaps)
+            return super().acquire(overlaps, alias_func)
