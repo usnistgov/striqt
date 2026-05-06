@@ -25,6 +25,7 @@ else:
 
 
 _source_id_map: dict[specs.Source, SourceBase | Event] = defaultdict(Event)
+_exception: BaseException | None = None
 
 
 def get_source_id(spec: specs.Source, timeout=0.5) -> str:
@@ -41,6 +42,8 @@ def get_source_id(spec: specs.Source, timeout=0.5) -> str:
 
     if not obj.wait(timeout=timeout):
         util.propagate_thread_interrupts()
+        if _exception:
+            raise util.ThreadInterruptRequest()
         raise TimeoutError('timeout while waiting for a source ID')
 
     source = _source_id_map[spec]
@@ -106,9 +109,14 @@ class SourceBase(Source[SS, SC, PS, PC]):
         else:
             spec_cls = cast(type[SS], self._bindings__.source)
 
-        _spec = get_bound_spec(_spec, spec_cls, **kwargs)
-
-        _map_source(_spec, self)
+        try:
+            _spec = get_bound_spec(_spec, spec_cls, **kwargs)
+        except BaseException as ex:
+            global _exception
+            _exception = ex
+            raise
+        else:
+            _map_source(_spec, self)
 
         self.__setup__ = _spec
         self._capture = None
@@ -332,7 +340,11 @@ class SourceBase(Source[SS, SC, PS, PC]):
         return samples[:, sample_span], start_ns
 
     @sa.util.stopwatch('acquire', 'source')
-    def acquire(self, overlaps=(0, 0), alias_func: specs.helpers.PathAliasFormatter | None = None) -> buffers.AcquiredIQ:
+    def acquire(
+        self,
+        overlaps=(0, 0),
+        alias_func: specs.helpers.PathAliasFormatter | None = None,
+    ) -> buffers.AcquiredIQ:
         """arm a capture and enable the channel (if necessary), read the resulting IQ waveform.
 
         Optionally, calibration corrections can be applied, and the radio can be left ready for the next capture.
@@ -360,7 +372,7 @@ class SourceBase(Source[SS, SC, PS, PC]):
         self,
         samples: Array,
         time_ns: int | None,
-        alias_func: specs.helpers.PathAliasFormatter | None = None
+        alias_func: specs.helpers.PathAliasFormatter | None = None,
     ) -> buffers.AcquiredIQ:
         info = specs.AcquisitionInfo(source_id=self.id)
 
@@ -480,7 +492,7 @@ class VirtualSource(SourceBase[SS, SC, PS, PC]):
         self._sync_time_ns = round(1_000_000_000 * self._samples_elapsed)
 
 
-def _map_source(spec: specs.Source, source: SourceBase):
+def _map_source(spec: specs.Source, source: SourceBase | BaseException):
     maybe_event = _source_id_map[spec]
     _source_id_map[spec] = source
 

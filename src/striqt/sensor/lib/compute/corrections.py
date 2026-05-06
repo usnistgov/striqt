@@ -80,12 +80,12 @@ def correct_iq(
 
     size_out = round(capture.duration * capture.sample_rate)
 
-    x_pre_align = x_pre_filter[:, :size_out]
+    x_pre_align = x[:, :size_out]
     if signal_trigger is None:
         out = None
         x_pre_filter = x_pre_filter[:, :size_out]
     else:
-        lags = signal_trigger(x[:, :size_out], capture)
+        lags = signal_trigger(x_pre_align[:, :size_out], capture)
         shifts = xp.rint(lags * capture.sample_rate).astype('int')
         out = _apply_trigger_shifts(x, shifts, size_out)
         x_pre_filter = _apply_trigger_shifts(x_pre_filter, shifts, size_out)
@@ -289,19 +289,13 @@ def _resample(
         raise TypeError('iq.capture must be a capture specification')
 
     assert sw.isroundmod(x.shape[1] * capture.sample_rate, fs)
-    resample_size_out = round(x.shape[1] * capture.sample_rate / fs)
-    pad_in = _get_resample_overlap(capture, source_spec, min_overlap)[0]
-    pad_out = round(pad_in * capture.sample_rate / fs)
+    ny = round(x.shape[1] * capture.sample_rate / fs)
+    padx = _get_resample_overlap(capture, source_spec, min_overlap)[0]
+    pady = round(padx * capture.sample_rate / fs)
+    scale = iq.voltage_scale or 1
+    y = sw.resample(x, ny, overwrite_x=overwrite_x, axis=axis, scale=scale)
 
-    x = sw.resample(
-        x,
-        resample_size_out,
-        overwrite_x=overwrite_x,
-        axis=axis,
-        scale=1 if iq.voltage_scale is None else iq.voltage_scale,
-    )
-
-    return x, pad_out
+    return y, pady
 
 
 def _oaresample(

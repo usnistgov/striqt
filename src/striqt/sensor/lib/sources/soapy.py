@@ -209,6 +209,7 @@ def _probe_channel(
 
 def _assign_iq_calibration(iq: buffers.AcquiredIQ):
     from ..calibration import lookup_power_correction, lookup_system_noise_power
+
     assert isinstance(iq.capture, specs.SoapyCapture)
 
     xp = buffers.get_array_namespace(iq.source_spec.array_backend)
@@ -739,7 +740,7 @@ class SoapySource(base.SourceBase[TS, TC, PS, PC]):
         self,
         samples: Array,
         time_ns: int | None,
-        alias_func: specs.helpers.PathAliasFormatter | None = None
+        alias_func: specs.helpers.PathAliasFormatter | None = None,
     ) -> buffers.AcquiredIQ:
         iq = super()._package_acquisition(samples, time_ns, alias_func)
 

@@ -157,10 +157,10 @@ class NoSource(Source, frozen=True, kw_only=True):
     stream_all_rx_ports: ClassVar[bool] = False
 
 
-class MATSource(Source, kw_only=True, frozen=True, dict=True):
+class MATSource(Source, kw_only=True, frozen=True):
     path: types.WaveformInputPath
     file_format: types.Format = 'auto'
-    file_metadata: types.FileMetadata = msgspec.field(default_factory=frozendict)
+    file_metadata: types.FileMetadata | None = None
     loop: types.FileLoop = False
     transport_dtype: ClassVar[types.TransportDType] = 'complex64'
 

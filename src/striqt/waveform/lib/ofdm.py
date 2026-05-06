@@ -1,4 +1,5 @@
 from __future__ import annotations as __
+from dask.bag.random import sample
 
 import dataclasses
 from fractions import Fraction
@@ -149,6 +150,8 @@ class SyncParams:
     frames_per_sync: int
     duration: float
     symbol_indexes: list[int]
+    short_symbol_size: int
+    lag_count: int
 
 
 def _pss_m_sequence(N_id2: int) -> list[int]:
@@ -361,6 +364,8 @@ def pss_params(
     subcarrier_spacing: float,
     discovery_periodicity: float = 20e-3,
     shared_spectrum: bool = False,
+    max_lag_symbols: int = 2,
+    symbol_indexes: typing.Literal['auto'] | tuple[int, ...] = 'auto',
 ) -> SyncParams:
     if not isroundmod(subcarrier_spacing, 15e3):
         raise ValueError('subcarrier_spacing must be multiple of 15000')
@@ -414,15 +419,18 @@ def pss_params(
             'only 15 kHz and 30 kHz SCS (Case A, C) are currently supported (Case A,B,C)'
         )
 
-    symbol_indexes = []
-    for n in nrange:
-        for offset in offsets:
-            symbol_indexes.append(offset + mult * n)
+    if symbol_indexes == 'auto':
+        inds = []
+        for n in nrange:
+            for offset in offsets:
+                inds.append(offset + mult * n)
+        symbol_indexes = tuple(inds)
 
-    slot_count = ceil(symbol_indexes[-1] / 14)
+    slot_count = ceil((symbol_indexes[-1] + max_lag_symbols + 1) / 14)
     slot_duration = 10e-3 / (10 * subcarrier_spacing / 15e3)
     duration = slot_count * slot_duration
     corr_size = round(duration * sample_rate)
+    short_symbol_size = round(slot_duration * sample_rate) // 14
 
     if isroundmod(discovery_periodicity, 10e-3):
         frames_per_sync = round(discovery_periodicity / 10e-3)
@@ -437,6 +445,7 @@ def pss_params(
     )
     min_cp_size = min(phy.cp_sizes)
     cp_offsets = list(np.cumsum([n - min_cp_size for n in phy.cp_sizes]))
+    lag_count = short_symbol_size * max_lag_symbols - min_cp_size
 
     return SyncParams(
         min_cp_size=min_cp_size,
@@ -445,8 +454,10 @@ def pss_params(
         slot_count=slot_count,
         corr_size=corr_size,
         frames_per_sync=frames_per_sync,
-        symbol_indexes=symbol_indexes,
+        symbol_indexes=list(symbol_indexes),
         duration=duration,
+        short_symbol_size=short_symbol_size,
+        lag_count=lag_count,
     )
 
 
@@ -457,27 +468,28 @@ def sss_params(
     subcarrier_spacing: float,
     discovery_periodicity: float = 20e-3,
     shared_spectrum: bool = False,
+    max_lag_symbols: int = 2,
+    symbol_indexes: typing.Literal['auto'] | tuple[int, ...] = 'auto',
 ) -> SyncParams:
     # Match PSS except that the symbol indexes are incremented by 2
 
-    template = pss_params(
+    if symbol_indexes == 'auto':
+        template = pss_params(
+            sample_rate=sample_rate,
+            subcarrier_spacing=subcarrier_spacing,
+            discovery_periodicity=discovery_periodicity,
+            shared_spectrum=shared_spectrum,
+            max_lag_symbols=max_lag_symbols,
+        )
+        symbol_indexes = tuple(i + 2 for i in template.symbol_indexes)
+
+    return pss_params(
         sample_rate=sample_rate,
         subcarrier_spacing=subcarrier_spacing,
         discovery_periodicity=discovery_periodicity,
         shared_spectrum=shared_spectrum,
-    )
-
-    indexes = [i + 2 for i in template.symbol_indexes]
-
-    return SyncParams(
-        min_cp_size=template.min_cp_size,
-        cp_offsets=template.cp_offsets,
-        frame_size=template.frame_size,
-        slot_count=template.slot_count,
-        corr_size=template.corr_size,
-        frames_per_sync=template.frames_per_sync,
-        symbol_indexes=indexes,
-        duration=template.duration,
+        max_lag_symbols=max_lag_symbols,
+        symbol_indexes=symbol_indexes,
     )
 
 

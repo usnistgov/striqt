@@ -109,7 +109,7 @@ def _get_cache_shelf():
     shelf = shelve.open(filename, writeback=True)
 
     # sync is forced on each operation already
-    shelf.__del__ = lambda: None # ty: ignore
+    shelf.__del__ = lambda: None  # ty: ignore
     return shelf, cache_lock
 
 

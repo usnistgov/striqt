@@ -151,10 +151,9 @@ def get_read_count(
 
     if include_holdoff:
         # pad the buffer for triggering and transient holdoff
-        extra_time = (setup.transient_holdoff_time or 0) + 2 * (
-            setup.trigger_strobe or 0
-        )
-        samples_in += ceil(sample_rate * extra_time)
+        tholdoff = setup.transient_holdoff_time or 0
+        tstrobe = 2 * (setup.trigger_strobe or 0)
+        samples_in += ceil(sample_rate * (tholdoff + tstrobe))
 
     return samples_in
 
