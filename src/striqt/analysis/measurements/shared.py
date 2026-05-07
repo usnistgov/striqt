@@ -75,7 +75,7 @@ def cellular_ssb_start_time(capture: specs.Capture, spec: _Cellular5GNRSSBSync):
 
 
 @registry.coordinates(
-    dtype='float32', attrs={'standard_name': 'Symbol lag', 'units': 's'}
+    dtype='float32', attrs={'standard_name': 'Lag', 'units': 's'}
 )
 @util.lru_cache()
 def cellular_ssb_lag(capture: specs.Capture, spec: _Cellular5GNRSSBCorrelator):
