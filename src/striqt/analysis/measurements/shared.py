@@ -163,11 +163,6 @@ def correlate_sync_sequence(
     if len(set(excess_cp)) != 1:
         raise ValueError('expect all 5G sync symbols to have the same excess CP')
 
-    import pickle
-
-    with open('R.p', 'wb') as stream:
-        pickle.dump(R, stream)
-
     Rperslot = R.reshape(R.shape[:-1] + (slot_count, -1))[..., excess_cp[0] :]
     R = Rperslot.reshape(R.shape[:-1] + (-1,))
 

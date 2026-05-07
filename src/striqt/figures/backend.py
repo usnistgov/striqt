@@ -221,7 +221,7 @@ class PlotBackend:
         grid: 'xarray.plot.FacetGrid',
         # coords: _LayoutKwArgs,
         xticklabelunits: bool | typing.Literal['auto'] = 'auto',
-    ):
+    ) -> Path|None:
         from . import labels
         import matplotlib.pyplot as plt
 
@@ -293,9 +293,14 @@ class PlotBackend:
             )
             path = Path(self.output_dir) / filename[0]
             grid.fig.savefig(path, dpi=dpi)
+            sa.util.get_logger('analysis').info(f'💾 \'{str(path)}\'')
+        else:
+            path = None
 
         if not self.interactive:
             plt.close(grid.fig)
+
+        return path
 
     def mark_noise_level(
         self,
