@@ -292,7 +292,7 @@ def _resample(
     ny = round(x.shape[1] * capture.sample_rate / fs)
     padx = _get_resample_overlap(capture, source_spec, min_overlap)[0]
     pady = round(padx * capture.sample_rate / fs)
-    scale = iq.voltage_scale or 1
+    scale = 1 if iq.voltage_scale is None else iq.voltage_scale
     y = sw.resample(x, ny, overwrite_x=overwrite_x, axis=axis, scale=scale)
 
     return y, pady
