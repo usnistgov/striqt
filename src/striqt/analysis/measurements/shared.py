@@ -23,7 +23,7 @@ def hint_keywords(
     func: Callable[P, Any],
 ) -> Callable[[WrappedAnalysis[..., R]], WrappedAnalysis[P, R]]:
     """fill in type hints for the analysis parameters"""
-    return lambda f: f  # type: ignore
+    return lambda f: f  # pyright: ignore
 
 
 @registry.coordinates(
@@ -44,6 +44,8 @@ def cellular_ssb_beam_index(capture: specs.Capture, spec: _Cellular5GNRSSBSync):
         subcarrier_spacing=spec.subcarrier_spacing,
         discovery_periodicity=spec.discovery_periodicity,
         shared_spectrum=spec.shared_spectrum,
+        max_lag_symbols=spec.max_lag_symbols,
+        symbol_indexes=spec.symbol_indexes,
     )
 
     return list(range(len(params.symbol_indexes)))
@@ -60,6 +62,8 @@ def cellular_ssb_start_time(capture: specs.Capture, spec: _Cellular5GNRSSBSync):
         subcarrier_spacing=spec.subcarrier_spacing,
         discovery_periodicity=spec.discovery_periodicity,
         shared_spectrum=spec.shared_spectrum,
+        max_lag_symbols=spec.max_lag_symbols,
+        symbol_indexes=spec.symbol_indexes,
     )
     total_blocks = round(params.duration / spec.discovery_periodicity)
     if spec.max_block_count is None:
@@ -71,26 +75,23 @@ def cellular_ssb_start_time(capture: specs.Capture, spec: _Cellular5GNRSSBSync):
 
 
 @registry.coordinates(
-    dtype='float32', attrs={'standard_name': 'Symbol lag', 'units': 's'}
+    dtype='float32', attrs={'standard_name': 'Lag', 'units': 's'}
 )
 @util.lru_cache()
 def cellular_ssb_lag(capture: specs.Capture, spec: _Cellular5GNRSSBCorrelator):
-    params = sw.ofdm.sss_params(
+    params = sw.ofdm.pss_params(
         sample_rate=spec.sample_rate,
         subcarrier_spacing=spec.subcarrier_spacing,
         discovery_periodicity=spec.discovery_periodicity,
         shared_spectrum=spec.shared_spectrum,
+        max_lag_symbols=spec.max_lag_symbols,
+        symbol_indexes=spec.symbol_indexes,
     )
-
-    max_len = 2 * round(spec.sample_rate / spec.subcarrier_spacing + params.min_cp_size)
-
-    if spec.trim_cp:
-        max_len = max_len - params.min_cp_size
 
     # snap onto the grid
     # TODO: there should be an exception if the delay isn't an integer factor of sample rate
     offs = round(spec.sample_rate * spec.delay)
-    return np.arange(offs, offs + max_len) / spec.sample_rate
+    return np.arange(offs, offs + params.lag_count) / spec.sample_rate
 
 
 def empty_5g_ssb_correlation(
@@ -130,10 +131,11 @@ def correlate_sync_sequence(
     corr_size = params.corr_size
     frames_per_sync = params.frames_per_sync
 
-    # set up broadcasting to new dimensions:
+    # set up broadcasting on dimensions:
     # (port index, cell Nid, sync block index, IQ sample index)
     iq_bcast = ssb_iq.reshape((ssb_iq.shape[0], -1, params.frame_size))
     iq_bcast = iq_bcast[:, xp.newaxis, ::frames_per_sync, :corr_size]
+
     template_bcast = sync_seq[xp.newaxis, :, xp.newaxis, :]
     # pad_size = template_bcast.shape[-1]
     # template_bcast  = iqwaveform.util.pad_along_axis(template_bcast, [[0,pad_size]], axis=3)
@@ -160,17 +162,16 @@ def correlate_sync_sequence(
     excess_cp = [params.cp_offsets[i % 14] for i in params.symbol_indexes]
     if len(set(excess_cp)) != 1:
         raise ValueError('expect all 5G sync symbols to have the same excess CP')
-    R = R.reshape(R.shape[:-1] + (slot_count, -1))[..., excess_cp[0] :]
 
-    # dims -> (port index, cell Nid, sync block index, symbol pair index, IQ sample index)
-    paired_symbol_shape = R.shape[:-2] + (7 * slot_count, -1)
-    paired_symbol_indexes = xp.array(params.symbol_indexes, dtype='uint32') // 2
-    R = R.reshape(paired_symbol_shape)[..., paired_symbol_indexes, :]
+    Rperslot = R.reshape(R.shape[:-1] + (slot_count, -1))[..., excess_cp[0] :]
+    R = Rperslot.reshape(R.shape[:-1] + (-1,))
 
-    if spec.trim_cp:
-        R = R[..., : -params.min_cp_size]
+    # take the desired symbol indexes from a sliding window views on the correlation sequence
+    # final dims (port index, cell Nid, sync block index, beam index, IQ sample index)
+    start_inds = xp.array(params.symbol_indexes) * params.short_symbol_size
 
-    return R
+    Rwins = sw.lib.arrays.sliding_window_view(R, params.lag_count, axis=-1)
+    return Rwins[..., start_inds, :]
 
 
 ssb_iq_cache = register.KwArgCache([dataarrays.CAPTURE_DIM, 'spec'])

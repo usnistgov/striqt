@@ -3,6 +3,7 @@
 from __future__ import annotations as __
 
 import functools
+from pathlib import Path
 from typing import Any, Literal, overload, TYPE_CHECKING
 
 from ... import specs
@@ -41,12 +42,19 @@ class TDMSSource(base.VirtualSource[specs.TDMSSource, specs.FileCapture, PS, PC]
         )
 
     def get_waveform(
-        self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
+        self,
+        count: int,
+        start: int,
+        offset: int,
+        *,
+        port: int = 0,
+        xp,
+        dtype='complex64',
     ):
         size = int(self._handle['header_fd']['total_samples'][0])
         ref_level = self._handle['header_fd']['reference_level_dBm'][0]
 
-        if size < count:
+        if size < start + count + offset:
             raise ValueError(
                 f'requested {count} samples but file capture length is {size} samples'
             )
@@ -61,22 +69,23 @@ class TDMSSource(base.VirtualSource[specs.TDMSSource, specs.FileCapture, PS, PC]
 
         return (iq * float_dtype(scale)).view(dtype).copy()  # type: ignore
 
-    def acquire(self, *, analysis=None, correction=True, alias_func=None):
-        iq = super().acquire(
-            analysis=analysis, correction=correction, alias_func=alias_func
-        )
+    def acquire(self, overlaps=(0, 0), alias_func=None):
+        iq = super().acquire(overlaps, alias_func)
         iq.info = self._file_info
         return iq
 
     def get_resampler(
         self, capture: specs.FileCapture | None = None
     ) -> sw.ResamplerDesign:
+        from ..compute import design_resampler
+
         if capture is None:
             capture = self.capture_spec
 
-        mcr = self.setup_spec.master_clock_rate
-        return buffers.design_resampler(
-            capture, mcr, backend_sample_rate=self._file_info.backend_sample_rate
+        return design_resampler(
+            capture,
+            master_clock_rate=self.setup_spec.master_clock_rate,
+            backend_sample_rate=self._file_info.backend_sample_rate,
         )
 
 
@@ -88,7 +97,10 @@ class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture, PS, PC]):
     _file_stream: FileStream
 
     def _connect(self, spec):
-        meta = spec.file_metadata
+        meta = spec.file_metadata or {}
+
+        if not Path(spec.path).exists():
+            raise IOError(f'file {str(spec.path)!r} does not exist')
 
         self._file_stream = sa.io.open_bare_iq(
             spec.path,
@@ -113,28 +125,37 @@ class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture, PS, PC]):
             self._file_stream.close()
 
     def get_waveform(
-        self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
+        self,
+        count: int,
+        start: int,
+        offset: int,
+        *,
+        port: int = 0,
+        xp,
+        dtype='complex64',
     ):
         self._file_stream.seek(offset - self._sample_start_index)
         ret = self._file_stream.read(count)
         assert ret.shape[1] == count
         return ret.copy()
 
-    def acquire(self, *, analysis=None, correction=True, alias_func=None):
-        iq = super().acquire(
-            analysis=analysis, correction=correction, alias_func=alias_func
-        )
+    def acquire(self, overlaps=(0, 0), alias_func=None):
+        iq = super().acquire(overlaps, alias_func)
         iq.info = self._file_info
         return iq
 
     def get_resampler(
         self, capture: specs.FileCapture | None = None
     ) -> sw.ResamplerDesign:
+        from ..compute import design_resampler
+
         if capture is None:
             capture = self.capture_spec
-        mcr = self._file_info.backend_sample_rate
-        fs_sdr = self._file_info.backend_sample_rate
-        return buffers.design_resampler(capture, mcr, backend_sample_rate=fs_sdr)
+        return design_resampler(
+            capture,
+            master_clock_rate=self._file_info.backend_sample_rate,
+            backend_sample_rate=self._file_info.backend_sample_rate,
+        )
 
     @functools.cached_property
     def info(self):
@@ -203,10 +224,12 @@ class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture, PS,
         )
 
     def get_resampler(self, capture=None) -> sw.ResamplerDesign:
+        from ..compute import design_resampler
+
         if capture is None:
             capture = self.capture_spec
-        fs = self._read_coord('sample_rate')
-        return buffers.design_resampler(capture, fs)
+
+        return design_resampler(capture, self._read_coord('sample_rate'))
 
     def _read_stream(
         self,
@@ -230,12 +253,19 @@ class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture, PS,
         return iq, time_ns
 
     def get_waveform(
-        self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
+        self,
+        count: int,
+        start: int,
+        offset: int,
+        *,
+        port: int = 0,
+        xp,
+        dtype='complex64',
     ):
         assert self._waveform is not None
         iq_size = self._waveform.shape[1]
 
-        if iq_size < count + offset:
+        if iq_size < start + count + offset:
             raise ValueError(
                 f'requested {count + offset} samples but file capture length is {iq_size} samples'
             )
@@ -254,10 +284,8 @@ class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture, PS,
         else:
             return iq.astype(dtype)
 
-    def acquire(self, *, analysis=None, correction=True, alias_func=None):
-        iq = super().acquire(
-            analysis=analysis, correction=correction, alias_func=alias_func
-        )
+    def acquire(self, overlaps=(0, 0), alias_func=None):
+        iq = super().acquire(overlaps, alias_func)
         iq.info = self._capture_info
         return iq
 

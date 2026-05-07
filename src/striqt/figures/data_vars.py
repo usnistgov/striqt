@@ -29,7 +29,7 @@ _data_plots: dict[str, _DataVariablePlotter] = {}
 
 def _register_data_var_plot(func: '_TVP') -> '_TVP':
     name = func.__name__
-    func = sa.util.stopwatch(name, 'analysis', logger_level=sa.util.WARNING)(func)
+    func = sa.util.stopwatch(name, 'analysis', logger_level=sa.util.PERFORMANCE_INFO)(func)
     _data_plots[name] = func
     return func
 
@@ -48,7 +48,7 @@ def cellular_cyclic_autocorrelation(
     sub = backend.coerce_column(data[name], plotter)
     if hue == 'link_direction':
         scs_peaks = sub.max([n for n in sub.dims if n != 'subcarrier_spacing'])
-        iscs = int(scs_peaks.argmax())  # type: ignore
+        iscs = int(scs_peaks.argmax())  # pyright: ignore
         sub = sub.isel(subcarrier_spacing=iscs)
     elif hue == 'subcarrier_spacing':
         sub = sub.sel(link_direction='downlink')

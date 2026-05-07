@@ -46,6 +46,7 @@ build-backend = "hatchling.build"
 dev = [
     "jupyter",
     "ruff",
+    "ty"
 ]
 gpu = [
     "cupy >= 12.2",
@@ -100,7 +101,6 @@ packages = [ "src/striqt", ]
 
 [tool.hatch.build.targets.sdist]
 packages = [ "src/striqt", ]
-
 
 [tool.ty.rules]
 call-top-callable = "ignore"

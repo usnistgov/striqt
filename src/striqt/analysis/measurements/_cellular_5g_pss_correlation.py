@@ -50,6 +50,8 @@ def correlate_5g_pss(
         subcarrier_spacing=spec.subcarrier_spacing,
         discovery_periodicity=spec.discovery_periodicity,
         shared_spectrum=spec.shared_spectrum,
+        max_lag_symbols=spec.max_lag_symbols,
+        symbol_indexes=spec.symbol_indexes,
     )
 
     pss_seq = sw.ofdm.pss_5g_nr(spec.sample_rate, spec.subcarrier_spacing, xp=xp)
