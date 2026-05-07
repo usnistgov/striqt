@@ -23,9 +23,9 @@ else:
     array_api_compat = util.lazy_import('array_api_compat')
 
 
-def _min_diff(x: typing.Sequence[int]) -> int|None:
+def _min_diff(x: typing.Sequence[int]) -> int | None:
     """return the minimum difference between neighbors in x"""
-    
+
     if len(x) <= 1:
         return None
 
@@ -367,15 +367,19 @@ def sss_5g_nr(
     )
 
 
-def _index_pss_symbols(subcarrier_spacing: float, shared_spectrum: bool = False, symbol_indexes: CellSSBIndexes = 'auto') -> tuple[int, ...]:
+def _index_pss_symbols(
+    subcarrier_spacing: float,
+    shared_spectrum: bool = False,
+    symbol_indexes: CellSSBIndexes = 'auto',
+) -> tuple[int, ...]:
     """returns indexes of PSS symbols relative to frame start.
 
-    Optionally, symbol_indexes may be determined by specifying one of the 
+    Optionally, symbol_indexes may be determined by specifying one of the
     standardized cell search cases in 3GPP TS 138 213: Section 4.1. If
-    symbol_indexes is 'auto', then a case 
+    symbol_indexes is 'auto', then a case
     """
     if isinstance(symbol_indexes, str):
-        symbol_indexes = symbol_indexes.lower() # pyright: ignore
+        symbol_indexes = symbol_indexes.lower()  # pyright: ignore
     elif isinstance(symbol_indexes, (tuple, list)):
         return symbol_indexes
     else:
@@ -388,9 +392,7 @@ def _index_pss_symbols(subcarrier_spacing: float, shared_spectrum: bool = False,
             if shared_spectrum:
                 case = 'c'
             else:
-                raise ValueError(
-                    'choose case "b" or "c" for 30 kHz subcarrier spacing'
-                )
+                raise ValueError('choose case "b" or "c" for 30 kHz subcarrier spacing')
         elif isclose(subcarrier_spacing, 120e3):
             case = 'd'
         elif isclose(subcarrier_spacing, 240e3):
@@ -400,11 +402,11 @@ def _index_pss_symbols(subcarrier_spacing: float, shared_spectrum: bool = False,
         elif isclose(subcarrier_spacing, 960e3):
             case = 'g'
         else:
-            scs_khz = round(subcarrier_spacing/1e3)
+            scs_khz = round(subcarrier_spacing / 1e3)
             raise ValueError(
                 f'standard cell search parameters do not exist for SCS {scs_khz} kHz'
             )
-    elif symbol_indexes in ('a','b','c'):
+    elif symbol_indexes in ('a', 'b', 'c'):
         case = symbol_indexes
     else:
         raise ValueError('symbol_indexes is an invalid str')
@@ -423,7 +425,7 @@ def _index_pss_symbols(subcarrier_spacing: float, shared_spectrum: bool = False,
             # the upper 2 can be ignored
             nrange = range(4)
     elif case == 'b':
-        offsets = [4,8,16,20]
+        offsets = [4, 8, 16, 20]
         mult = 28
         # for center frequencies < 3 GHz, n=1 can be ignored
         # TODO: input center frequency and handle this automatically?
@@ -440,11 +442,11 @@ def _index_pss_symbols(subcarrier_spacing: float, shared_spectrum: bool = False,
 
     # Below here FR-2
     elif case == 'd':
-        offsets = [4,8,16,20]
+        offsets = [4, 8, 16, 20]
         mult = 28
         nrange = range(19)
     elif case == 'e':
-        offsets = [8,12,16,20,32,36,40,44]
+        offsets = [8, 12, 16, 20, 32, 36, 40, 44]
         mult = 56
         nrange = range(9)
     elif case == 'f' or case == 'g':
@@ -489,7 +491,9 @@ def pss_params(
     #         f'duration must be a multiple of 1/2 slot duration, {slot_duration / 2}'
     #     )
 
-    symbol_indexes = _index_pss_symbols(subcarrier_spacing, shared_spectrum, symbol_indexes)
+    symbol_indexes = _index_pss_symbols(
+        subcarrier_spacing, shared_spectrum, symbol_indexes
+    )
 
     if max_lag_symbols is None:
         # 4 === minimum possible separation between any 2 PSS or SSS symbols
