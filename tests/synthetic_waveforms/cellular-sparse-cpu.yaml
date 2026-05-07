@@ -62,7 +62,6 @@ analysis:
     # adjusted per-channel in the capture 'adjust_analysis' field
     frequency_offset: &frequency_offset 0
     symbol_indexes: [4,8,16,20]
-    max_lag_symbols: 4
 
   cellular_5g_pss_sync:
     subcarrier_spacing: *scs

@@ -216,7 +216,7 @@ class _Cellular5GNRSSBCorrelator(Analysis, kw_only=True, frozen=True):
     max_block_count: typing.Optional[int] = 1
     delay: float = 0
     symbol_indexes: Union[tuple[int, ...], typing.Literal['auto']] = 'auto'
-    max_lag_symbols: int = 2
+    max_lag_symbols: Union[int, None] = None
 
 
 class Cellular5GNRPSSCorrelator(_Cellular5GNRSSBCorrelator, kw_only=True, frozen=True):

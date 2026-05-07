@@ -173,7 +173,6 @@ def correlate_sync_sequence(
 
     # take the desired symbol indexes from a sliding window views on the correlation sequence
     # final dims (port index, cell Nid, sync block index, beam index, IQ sample index)
-    window_size = params.short_symbol_size * spec.max_lag_symbols - params.min_cp_size
     start_inds = xp.array(params.symbol_indexes) * params.short_symbol_size
 
     Rwins = sw.lib.arrays.sliding_window_view(R, params.lag_count, axis=-1)

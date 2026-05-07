@@ -22,6 +22,15 @@ else:
     array_api_compat = util.lazy_import('array_api_compat')
 
 
+def _min_diff(x: typing.Sequence[int]) -> int|None:
+    """return the minimum difference between neighbors in x"""
+    
+    if len(x) <= 1:
+        return None
+
+    return min(b - a for a, b in zip(x, x[1:]))
+
+
 def _isclosetoint(v, atol=1e-6):
     xp = array_namespace(v)
     return xp.isclose(v % 1, (0, 1), atol=atol).any()
@@ -364,7 +373,7 @@ def pss_params(
     subcarrier_spacing: float,
     discovery_periodicity: float = 20e-3,
     shared_spectrum: bool = False,
-    max_lag_symbols: int = 2,
+    max_lag_symbols: int | None = None,
     symbol_indexes: typing.Literal['auto'] | tuple[int, ...] = 'auto',
 ) -> SyncParams:
     if not isroundmod(subcarrier_spacing, 15e3):
@@ -425,6 +434,10 @@ def pss_params(
             for offset in offsets:
                 inds.append(offset + mult * n)
         symbol_indexes = tuple(inds)
+
+    if max_lag_symbols is None:
+        # 4 === minimum possible separation between any 2 PSS or SSS symbols
+        max_lag_symbols = _min_diff(sorted(symbol_indexes)) or 4
 
     slot_count = ceil((symbol_indexes[-1] + max_lag_symbols + 1) / 14)
     slot_duration = 10e-3 / (10 * subcarrier_spacing / 15e3)
