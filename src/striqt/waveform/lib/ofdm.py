@@ -870,7 +870,7 @@ class Phy802_16(PhyOFDM):
             raise ValueError(
                 'standardized values for channel_bandwidth not supported yet'
             )
-        elif not np.isclose(channel_bandwidth % 125e3, 0, atol=1e-6):
+        elif not isclose(channel_bandwidth % 125e3, 0, abs_tol=1e-6):
             raise ValueError('channel bandwidth must be set in increments of 125 kHz')
 
         if nfft not in self.VALID_FFT_SIZES:
@@ -887,7 +887,7 @@ class Phy802_16(PhyOFDM):
             )
 
         for freq_divisor, n in self.SAMPLING_FACTOR_BY_FREQUENCY_DIV.items():
-            if np.isclose(channel_bandwidth % freq_divisor, 0, atol=1e-6):
+            if isclose(channel_bandwidth % freq_divisor, 0, abs_tol=1e-6):
                 sampling_factor = self.sampling_factor = n
                 break
         else:
