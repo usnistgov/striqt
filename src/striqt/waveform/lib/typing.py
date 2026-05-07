@@ -2,6 +2,8 @@ from __future__ import annotations as __
 
 import typing
 
+CellSSBIndexes: typing.TypeAlias = typing.Literal['auto', 'a', 'b', 'c', 'd', 'e', 'f', 'g'] | tuple[int, ...]
+
 if typing.TYPE_CHECKING:
     from typing_extensions import TypeAlias, ParamSpec, TypeIs
     from typing import Any, Callable, Protocol, TypeVar, Union

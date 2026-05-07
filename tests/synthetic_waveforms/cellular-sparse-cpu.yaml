@@ -61,16 +61,15 @@ analysis:
 
     # adjusted per-channel in the capture 'adjust_analysis' field
     frequency_offset: &frequency_offset 0
-    symbol_indexes: [4,8,16,20]
+    symbol_indexes: 'b'
 
   cellular_5g_pss_sync:
     subcarrier_spacing: *scs
     frequency_offset: *frequency_offset
     discovery_periodicity: 10e-3
     delay: *delay
-    symbol_indexes: [4,8,16,20]
+    symbol_indexes: 'b'
     per_port: true
-    max_lag_symbols: 4
 
   cellular_5g_ssb_spectrogram:
     lo_bandstop: *lo_bandstop

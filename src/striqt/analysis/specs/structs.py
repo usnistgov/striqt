@@ -10,8 +10,7 @@ from typing import Union
 import msgspec
 
 from . import helpers, types
-from striqt.waveform.lib import util
-
+import striqt.waveform as sw
 
 if typing.TYPE_CHECKING:
     from typing import Self
@@ -77,7 +76,7 @@ class SpecBase(
                 msgspec.structs.force_setattr(self, name, frozen)
 
 
-@util.lru_cache(1024)
+@sw.util.lru_cache(1024)
 def _validate(spec: _TS) -> _TS:
     return spec.from_dict(spec.to_dict())
 
@@ -215,7 +214,7 @@ class _Cellular5GNRSSBCorrelator(Analysis, kw_only=True, frozen=True):
     shared_spectrum: bool = False
     max_block_count: typing.Optional[int] = 1
     delay: float = 0
-    symbol_indexes: Union[tuple[int, ...], typing.Literal['auto']] = 'auto'
+    symbol_indexes: types.CellSSBSymbolIndexes = 'auto'
     max_lag_symbols: Union[int, None] = None
 
 

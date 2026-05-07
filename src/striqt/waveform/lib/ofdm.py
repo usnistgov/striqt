@@ -3,13 +3,14 @@ from dask.bag.random import sample
 
 import dataclasses
 from fractions import Fraction
-from math import ceil
+from math import ceil, isclose
 from numbers import Number
 import typing
 
 from . import fourier
 
 from . import util
+from .typing import CellSSBIndexes
 from .arrays import array_namespace, isroundmod, pad_along_axis
 
 if typing.TYPE_CHECKING:
@@ -366,6 +367,101 @@ def sss_5g_nr(
     )
 
 
+def _index_pss_symbols(subcarrier_spacing: float, shared_spectrum: bool = False, symbol_indexes: CellSSBIndexes = 'auto') -> tuple[int, ...]:
+    """returns indexes of PSS symbols relative to frame start.
+
+    Optionally, symbol_indexes may be determined by specifying one of the 
+    standardized cell search cases in 3GPP TS 138 213: Section 4.1. If
+    symbol_indexes is 'auto', then a case 
+    """
+    if isinstance(symbol_indexes, str):
+        symbol_indexes = symbol_indexes.lower() # pyright: ignore
+    elif isinstance(symbol_indexes, (tuple, list)):
+        return symbol_indexes
+    else:
+        raise TypeError('symbol_index has valid type')
+
+    if symbol_indexes == 'auto':
+        if isclose(subcarrier_spacing, 15e3):
+            case = 'a'
+        elif isclose(subcarrier_spacing, 30e3):
+            if shared_spectrum:
+                case = 'c'
+            else:
+                raise ValueError(
+                    'choose case "b" or "c" for 30 kHz subcarrier spacing'
+                )
+        elif isclose(subcarrier_spacing, 120e3):
+            case = 'd'
+        elif isclose(subcarrier_spacing, 240e3):
+            case = 'e'
+        elif isclose(subcarrier_spacing, 480e3):
+            case = 'f'
+        elif isclose(subcarrier_spacing, 960e3):
+            case = 'g'
+        else:
+            scs_khz = round(subcarrier_spacing/1e3)
+            raise ValueError(
+                f'standard cell search parameters do not exist for SCS {scs_khz} kHz'
+            )
+    elif symbol_indexes in ('a','b','c'):
+        case = symbol_indexes
+    else:
+        raise ValueError('symbol_indexes is an invalid str')
+
+    if shared_spectrum and case not in ('a', 'c'):
+        raise ValueError(f'shared_spectrum unsupported by cell search case {case}')
+
+    # The standardized cell search cases in 3GPP TS 138 213: Section 4.1
+    if case == 'a':
+        offsets = [2, 8]
+        mult = 14
+        if shared_spectrum:
+            nrange = range(5)
+        else:
+            # for center frequencies < 3 GHz (or 1.88 GHz in unpaired operation)
+            # the upper 2 can be ignored
+            nrange = range(4)
+    elif case == 'b':
+        offsets = [4,8,16,20]
+        mult = 28
+        # for center frequencies < 3 GHz, n=1 can be ignored
+        # TODO: input center frequency and handle this automatically?
+        nrange = range(2)
+    elif case == 'c':
+        offsets = [2, 8]
+        mult = 14
+        if shared_spectrum:
+            nrange = range(10)
+        else:
+            # for center frequencies < 3 GHz (or 1.88 GHz in unpaired
+            # operation) the upper 2 can be ignored
+            nrange = range(4)
+
+    # Below here FR-2
+    elif case == 'd':
+        offsets = [4,8,16,20]
+        mult = 28
+        nrange = range(19)
+    elif case == 'e':
+        offsets = [8,12,16,20,32,36,40,44]
+        mult = 56
+        nrange = range(9)
+    elif case == 'f' or case == 'g':
+        offsets = [2, 9]
+        mult = 14
+        nrange = range(32)
+    else:
+        raise TypeError
+
+    inds = []
+    for n in nrange:
+        for offset in offsets:
+            inds.append(offset + mult * n)
+
+    return tuple(inds)
+
+
 @util.lru_cache()
 def pss_params(
     *,
@@ -374,7 +470,7 @@ def pss_params(
     discovery_periodicity: float = 20e-3,
     shared_spectrum: bool = False,
     max_lag_symbols: int | None = None,
-    symbol_indexes: typing.Literal['auto'] | tuple[int, ...] = 'auto',
+    symbol_indexes: CellSSBIndexes = 'auto',
 ) -> SyncParams:
     if not isroundmod(subcarrier_spacing, 15e3):
         raise ValueError('subcarrier_spacing must be multiple of 15000')
@@ -393,47 +489,7 @@ def pss_params(
     #         f'duration must be a multiple of 1/2 slot duration, {slot_duration / 2}'
     #     )
 
-    # The following cases are defined in 3GPP TS 138 213: Section 4.1
-    if np.isclose(subcarrier_spacing, 15e3):
-        # Case A
-        offsets = [2, 8]
-        mult = 14
-        if shared_spectrum:
-            nrange = range(5)
-        else:
-            # for center frequencies < 3 GHz (or 1.88 GHz in unpaired operation)
-            # the upper 2 can be ignored
-            nrange = range(4)
-    # TODO: Implement Case B
-    # elif np.isclose(subcarrier_spacing, 30e3):
-    #     # Case B
-    #     offsets = [2,8]
-    #     if shared_spectrum:
-    #         n = np.arange(10)
-    #     else:
-    #         # for center frequencies < 3 GHz, the upper 2 can be ignored
-    #         n = np.arange(4)
-    elif np.isclose(subcarrier_spacing, 30e3):
-        # For now, all 30 kHz SCS is assumed to be "Case C"
-        offsets = [2, 8]
-        mult = 14
-        if shared_spectrum:
-            nrange = range(10)
-        else:
-            # for center frequencies < 3 GHz (or 1.88 GHz in unpaired
-            # operation) the upper 2 can be ignored
-            nrange = range(4)
-    else:
-        raise ValueError(
-            'only 15 kHz and 30 kHz SCS (Case A, C) are currently supported (Case A,B,C)'
-        )
-
-    if symbol_indexes == 'auto':
-        inds = []
-        for n in nrange:
-            for offset in offsets:
-                inds.append(offset + mult * n)
-        symbol_indexes = tuple(inds)
+    symbol_indexes = _index_pss_symbols(subcarrier_spacing, shared_spectrum, symbol_indexes)
 
     if max_lag_symbols is None:
         # 4 === minimum possible separation between any 2 PSS or SSS symbols
@@ -482,7 +538,7 @@ def sss_params(
     discovery_periodicity: float = 20e-3,
     shared_spectrum: bool = False,
     max_lag_symbols: int = 2,
-    symbol_indexes: typing.Literal['auto'] | tuple[int, ...] = 'auto',
+    symbol_indexes: CellSSBIndexes = 'auto',
 ) -> SyncParams:
     # Match PSS except that the symbol indexes are incremented by 2
 
