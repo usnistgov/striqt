@@ -43,6 +43,11 @@ def _select_dpi(grid, x_data, y_data: 'xr.DataArray | None', min_=0, max_=300):
         return dpi
 
 
+@functools.cache
+def _matplotlib_version():
+    return tuple(int(n) for n in mpl.__version__.split('.', 2))
+
+
 def coerce_column(data: '_T', plotter: 'PlotBackend') -> '_T':
     """xarray plot routines only return FacetGrid objects"""
     opts = plotter.opts
@@ -324,17 +329,10 @@ class PlotBackend:
                 if cbar is None:
                     raise TypeError('no colorbar on facet grid')
 
-                if hasattr(cbar, 'long_axis'):
-                    # newer matplotlib
+                if _matplotlib_version() >= (3,10):
                     long_axis = cbar.long_axis  # pyright: ignore
-                elif hasattr(cbar, '_long_axis'):
-                    # older matplotlib
-                    long_axis = cbar._long_axis  # pyright: ignore
-                elif hasattr(cbar, 'yaxis'):
-                    # older matplotlib
-                    long_axis = cbar.yaxis  # pyright: ignore
                 else:
-                    raise TypeError('could not determine colorbar axis attribute')
+                    long_axis = cbar.ax.yaxis  # pyright: ignore
 
                 meanloc = noise.values.mean()
                 for i, n in enumerate(noise.values.tolist()):

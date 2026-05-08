@@ -3,6 +3,8 @@
 from __future__ import annotations
 import click
 import typing
+import xarray as xr
+import dask.array
 
 if typing.TYPE_CHECKING:
     import striqt.figures as sf
@@ -77,7 +79,8 @@ def run(zarr_path: str, yaml_path: str, interactive=False, no_save=False):
 
     gb_fields = sf.util.get_groupby_fields(dataset, opts)
     if len(gb_fields) > 0:
-        groups = dataset.groupby(gb_fields)
+        # the .set_index(...) is for compatibility with xarray < 2024.9.0
+        groups = dataset.set_index(capture=gb_fields).groupby('capture')
         selects = [
             {k: v for k, v in zip(gb_fields, _listify(values))} for values, _ in groups
         ]
@@ -99,6 +102,7 @@ def load_data(zarr_path: str, opts: 'sf.specs.PlotOptions', index=True) -> 'xr.D
     import striqt.analysis as sa
     import striqt.figures as sf
     import xarray as xr
+    import dask.array
 
     dataset = sa.load(zarr_path)
 
