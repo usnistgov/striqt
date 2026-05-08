@@ -393,21 +393,25 @@ def _limit_nyquist_bandwidth(data: 'xr.DataArray') -> 'xr.DataArray':
 
 
 def _y_factor_power_corrections(dataset: 'xr.Dataset', Tref=290.0) -> 'xr.Dataset':
-    # TODO: check that this works for xr.DataArray inputs in (enr_dB, Tamb)
-
     from scipy.constants import Boltzmann
 
     k = Boltzmann * 1000  # W/K -> mW/K
     enr_dB = dataset.enr.sel(noise_diode_enabled=True, drop=True)
     enr = 10 ** (enr_dB / 10.0)
 
+    pvt = dataset.channel_power_time_series
     power = (
-        dataset.channel_power_time_series
+        pvt
         .sel(power_detector='rms', drop=True)
-        .pipe(lambda x: 10 ** (x / 10.0))
+        .pipe(sa.dBtopow)
         .mean(dim='time_elapsed')
     )
     power.name = 'RMS power'
+
+    papr_dB = (
+        pvt.sel(power_detector='peak', drop=True).max('time_elapsed')
+         - pvt.sel(power_detector='rms', drop=True).pipe(sa.dBlinmean, 'time_elapsed')
+    )
 
     Pon = power.sel(noise_diode_enabled=True, drop=True)
     Poff = power.sel(noise_diode_enabled=False, drop=True)
@@ -432,8 +436,10 @@ def _y_factor_power_corrections(dataset: 'xr.Dataset', Tref=290.0) -> 'xr.Datase
             'temperature': Te,
             'noise_figure': noise_figure,
             'power_correction': power_correction,
-            'pon': Pon,
-            'poff': Poff
+            'p_on': Pon,
+            'p_off': Poff,
+            'papr_on': papr_dB.sel(noise_diode_enabled=True, drop=True),
+            'papr_off': papr_dB.sel(noise_diode_enabled=False, drop=True),
         },
     )
 
