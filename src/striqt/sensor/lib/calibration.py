@@ -387,8 +387,8 @@ def _limit_nyquist_bandwidth(data: 'xr.DataArray') -> 'xr.DataArray':
     # return bandwidth with same shape as dataset.channel_power_time_series
     bw = data.analysis_bandwidth.broadcast_like(data).copy().squeeze()
     sample_rate = data.backend_sample_rate.broadcast_like(data).squeeze()
-    where = bw.data == float('inf')
-    bw.data[where] = sample_rate.data[where]
+    where = ~np.isfinite(bw.values == float('inf'))
+    bw.values[where] = sample_rate.values[where]
     return bw
 
 
@@ -417,19 +417,19 @@ def _y_factor_power_corrections(dataset: 'xr.Dataset', Tref=290.0) -> 'xr.Datase
     noise_figure.name = 'Noise figure'
     noise_figure.attrs = {'units': 'dB'}
 
-    T = Tref * (10 ** (noise_figure / 10) - 1)
-    T.name = 'Noise temperature'
-    T.attrs = {'units': 'K'}
+    Te = Tref * (10 ** (noise_figure / 10) - 1)
+    Te.name = 'Effective noise temperature'
+    Te.attrs = {'units': 'K'}
 
-    B = _limit_nyquist_bandwidth(T)
+    B = _limit_nyquist_bandwidth(Te)
 
-    power_correction = (k * (T + enr * Tref) * B) / Pon
+    power_correction = (k * (enr * Tref) * B) / (Pon - Poff)
     power_correction.name = 'Input power scaling correction'
     power_correction.attrs = {'units': 'mW/fs'}
 
     return xr.Dataset(
         {
-            'temperature': T,
+            'temperature': Te,
             'noise_figure': noise_figure,
             'power_correction': power_correction,
         },
