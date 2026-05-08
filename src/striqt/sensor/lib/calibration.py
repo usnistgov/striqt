@@ -34,8 +34,8 @@ def compute_y_factor_corrections(dataset: 'xr.Dataset', Tref=290.0) -> 'xr.Datas
 
 def summarize_calibration(corrections: 'xr.Dataset', **sel) -> 'pd.DataFrame':
     summaries = {
-        'noise_figure': _summarize_calibration_field(corrections, 'noise_figure', **sel),
-        'power_correction': _summarize_calibration_field(corrections, 'power_correction', **sel)
+        'NF (dB)': _summarize_calibration_field(corrections, 'noise_figure', **sel),
+        'Power Corr (dB)': _summarize_calibration_field(corrections, 'power_correction', **sel)
     }
 
     return pd.DataFrame(summaries, index=summaries['noise_figure'].index)
