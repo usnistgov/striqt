@@ -33,10 +33,12 @@ def compute_y_factor_corrections(dataset: 'xr.Dataset', Tref=290.0) -> 'xr.Datas
 
 
 def summarize_calibration(corrections: 'xr.Dataset', **sel) -> 'pd.DataFrame':
-    nf_summary = _summarize_calibration_field(corrections, 'noise_figure', **sel)
-    corr_summary = _summarize_calibration_field(corrections, 'power_correction', **sel)
+    summaries = {
+        'noise_figure': _summarize_calibration_field(corrections, 'noise_figure', **sel),
+        'power_correction': _summarize_calibration_field(corrections, 'power_correction', **sel)
+    }
 
-    return pd.concat([nf_summary, corr_summary], axis=1)
+    return pd.DataFrame(summaries, index=summaries['noise_figure'].index)
 
 
 @sa.util.lru_cache()
@@ -469,11 +471,11 @@ def _y_factor_frequency_response_correction(
 
 def _summarize_calibration_field(
     corrections: 'xr.Dataset', field_name, **sel
-) -> 'pd.DataFrame':
+) -> 'pd.Series':
     max_gain = float(corrections.gain.max())
     corr = corrections[field_name].sel(gain=max_gain, **sel, drop=True).squeeze()
     stacked = corr.stack(condition=corr.dims).dropna('condition')
-    return stacked.to_dataframe()[[field_name]]
+    return stacked.to_dataframe()[field_name]
 
 
 def _describe_missing_data(cal_data: 'xr.DataArray', exact_matches: dict):
