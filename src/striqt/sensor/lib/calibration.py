@@ -424,7 +424,7 @@ def _y_factor_power_corrections(dataset: 'xr.Dataset', Tref=290.0) -> 'xr.Datase
     B = _limit_nyquist_bandwidth(Te)
 
     power_correction = (k * (enr * Tref) * B) / (Pon - Poff)
-    power_correction.name = 'Input power scaling correction'
+    power_correction.name = 'Power scaling correction'
     power_correction.attrs = {'units': 'mW/fs'}
 
     return xr.Dataset(
@@ -432,6 +432,8 @@ def _y_factor_power_corrections(dataset: 'xr.Dataset', Tref=290.0) -> 'xr.Datase
             'temperature': Te,
             'noise_figure': noise_figure,
             'power_correction': power_correction,
+            'pon': Pon,
+            'poff': Poff
         },
     )
 
