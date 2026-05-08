@@ -170,7 +170,8 @@ class YFactorSink(sinks.SinkBase):
             'calibration_fields': fields,
         }
         capture_data = (
-            xr.concat(data, compute.CAPTURE_DIM)
+            xr
+            .concat(data, compute.CAPTURE_DIM)
             .assign_attrs(attrs)
             .drop_vars(self._DROP_FIELDS, errors='ignore')
             .set_xindex(fields)
@@ -401,7 +402,8 @@ def _y_factor_power_corrections(dataset: 'xr.Dataset', Tref=290.0) -> 'xr.Datase
     enr = 10 ** (enr_dB / 10.0)
 
     power = (
-        dataset.channel_power_time_series.sel(power_detector='rms', drop=True)
+        dataset.channel_power_time_series
+        .sel(power_detector='rms', drop=True)
         .pipe(lambda x: 10 ** (x / 10.0))
         .mean(dim='time_elapsed')
     )

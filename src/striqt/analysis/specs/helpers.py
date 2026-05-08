@@ -50,6 +50,7 @@ if TYPE_CHECKING:
             return x
 
         return impl
+
 else:
 
     def _like_meta(_):

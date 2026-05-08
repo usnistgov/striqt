@@ -3,9 +3,9 @@ from __future__ import annotations as __
 import typing
 from typing import Literal, Union
 
-CellSSBIndexes = (
-    Union[Literal['auto', 'a', 'b', 'c', 'd', 'e', 'f', 'g'], tuple[int, ...]]
-)
+CellSSBIndexes = Union[
+    Literal['auto', 'a', 'b', 'c', 'd', 'e', 'f', 'g'], tuple[int, ...]
+]
 
 if typing.TYPE_CHECKING:
     from typing_extensions import TypeAlias, ParamSpec, TypeIs

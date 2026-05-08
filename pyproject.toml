@@ -83,6 +83,7 @@ rechunk-zarr = "striqt.cli.rechunk_zarr:run"
 target-version = "py39"
 extend-include = [ "*.ipynb", ]
 line-length = 88
+preview = true
 
 [tool.ruff.format]
 quote-style = "single"

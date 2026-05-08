@@ -122,13 +122,11 @@ def _make_lru_key(func, args, kwargs) -> str:
         else:
             return obj
 
-    p = pickle.dumps(
-        (
-            (func.__name__,),
-            tuple(fix_arg(v) for v in args),
-            tuple((k, fix_arg(v)) for k, v in kwargs.items()),
-        )
-    )
+    p = pickle.dumps((
+        (func.__name__,),
+        tuple(fix_arg(v) for v in args),
+        tuple((k, fix_arg(v)) for k, v in kwargs.items()),
+    ))
 
     return p.decode(errors='replace')
 

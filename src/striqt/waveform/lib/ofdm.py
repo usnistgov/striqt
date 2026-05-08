@@ -607,9 +607,9 @@ class PhyOFDM:
         idx_range = xp.arange(self.contiguous_size).astype(int)
 
         # indices in the contiguous range that are CP
-        self.cp_idx = xp.concatenate(
-            [idx_range[start : start + size] for start, size in start_and_size]
-        )
+        self.cp_idx = xp.concatenate([
+            idx_range[start : start + size] for start, size in start_and_size
+        ])
 
         # indices in the contiguous range that are not CP
         self.symbol_idx = np.setdiff1d(idx_range, self.cp_idx)

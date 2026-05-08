@@ -74,9 +74,7 @@ def cellular_ssb_start_time(capture: specs.Capture, spec: _Cellular5GNRSSBSync):
     return np.arange(max(count, 1)) * spec.discovery_periodicity
 
 
-@registry.coordinates(
-    dtype='float32', attrs={'standard_name': 'Lag', 'units': 's'}
-)
+@registry.coordinates(dtype='float32', attrs={'standard_name': 'Lag', 'units': 's'})
 @util.lru_cache()
 def cellular_ssb_lag(capture: specs.Capture, spec: _Cellular5GNRSSBCorrelator):
     params = sw.ofdm.pss_params(

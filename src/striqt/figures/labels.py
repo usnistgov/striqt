@@ -56,13 +56,11 @@ def summarize_metadata(
     }
 
     if array is not None:
-        meta.update(
-            {
-                name: coord.item()
-                for name, coord in array.coords.items()
-                if coord.size == 1
-            }
-        )
+        meta.update({
+            name: coord.item()
+            for name, coord in array.coords.items()
+            if coord.size == 1
+        })
 
     if as_str:
         return '\n'.join([f'{k}: {v}' for k, v in meta.items()])
@@ -324,13 +322,11 @@ def label_selection(
     coord_title = ', '.join(f'{k}: {v}' for k, v in coord_names.items())
 
     if attrs:
-        attr_title = ', '.join(
-            [
-                f'{k}: {v}'
-                for k, v in sel.attrs.items()
-                if k not in ('units', 'name', 'standard_name')
-            ]
-        )
+        attr_title = ', '.join([
+            f'{k}: {v}'
+            for k, v in sel.attrs.items()
+            if k not in ('units', 'name', 'standard_name')
+        ])
     else:
         attr_title = ''
 
