@@ -191,7 +191,7 @@ class YFactorSink(sinks.SinkBase):
         for port, _ in corrections.groupby('port', squeeze=False):
             print(f'calibration results on port {port} (shown for max gain)')
             summary = summarize_calibration(corrections, port=port)
-            with pd.option_context('display.max_rows', None):
+            with pd.option_context('display.max_rows', None, 'display.precision', 2):
                 print(summary.sort_index(axis=1).sort_index(axis=0))
 
         io.save_calibration(path, corrections)
