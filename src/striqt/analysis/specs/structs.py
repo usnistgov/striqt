@@ -258,12 +258,7 @@ class Spectrogram(FrequencyAnalysisSpecBase, kw_only=True, frozen=True):
     dB = True
 
 
-class CellularCyclicAutocorrelator(
-    Analysis,
-    kw_only=True,
-    frozen=True,
-    dict=True,
-):
+class CellularCyclicAutocorrelator(Analysis, kw_only=True, frozen=True):
     subcarrier_spacings: Union[float, tuple[float, ...]] = (15e3, 30e3, 60e3)
     frame_range: Union[int, tuple[int, int]] = (0, 1)
     frame_slots: Union[str, None] = None
