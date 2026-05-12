@@ -1,4 +1,5 @@
 from __future__ import annotations as __
+from numpy.char import center
 from dask.bag.random import sample
 
 import dataclasses
@@ -232,7 +233,7 @@ def _generate_5g_nr_sync_sequence(
     max_id: int,
     sample_rate: float,
     subcarrier_spacing: float,
-    center_frequency: float = 0,
+    center_frequency: float|None=None,
     *,
     xp=None,
     dtype='complex64',
@@ -259,7 +260,7 @@ def _generate_5g_nr_sync_sequence(
     else:
         raise ValueError('sample_rate must be a multiple of subcarrier spacing')
 
-    if center_frequency == 0:
+    if center_frequency is None or center_frequency == 0:
         frequency_offset = 0
     elif isroundmod(center_frequency, subcarrier_spacing):
         # check frequency bounds later via pad_*
@@ -342,7 +343,7 @@ def pss_5g_nr(
 def sss_5g_nr(
     sample_rate: float,
     subcarrier_spacing: float,
-    center_frequency=0,
+    center_frequency: float|None=None,
     *,
     xp=None,
     dtype='complex64',
@@ -376,6 +377,7 @@ def _index_pss_symbols(
     subcarrier_spacing: float,
     shared_spectrum: bool = False,
     symbol_indexes: CellSSBIndexes = 'auto',
+    center_frequency: float|None=None
 ) -> tuple[int, ...]:
     """returns indexes of PSS symbols relative to frame start.
 
@@ -428,23 +430,28 @@ def _index_pss_symbols(
         else:
             # for center frequencies < 3 GHz (or 1.88 GHz in unpaired operation)
             # the upper 2 can be ignored
-            nrange = range(4)
+            if center_frequency is None or center_frequency > 3e9:
+                nrange = range(4)
+            else:
+                nrange = range(2)
     elif case == 'b':
         offsets = [4, 8, 16, 20]
         mult = 28
-        # for center frequencies < 3 GHz, n=1 can be ignored
-        # TODO: input center frequency and handle this automatically?
-        nrange = range(2)
+        if center_frequency is None or center_frequency > 3e9:
+            nrange = range(2)
+        else:
+            nrange = range(1)
     elif case == 'c':
         offsets = [2, 8]
         mult = 14
         if shared_spectrum:
             nrange = range(10)
         else:
-            # for center frequencies < 3 GHz (or 1.88 GHz in unpaired
-            # operation) the upper 2 can be ignored
-            nrange = range(4)
-
+            if center_frequency is None or center_frequency > 1.88e9:
+                nrange = range(4)
+            else:
+                # NOTE: In theory, TDD between 1.88 - 3 GHz should also go here                
+                nrange = range(2)
     # Below here FR-2
     elif case == 'd':
         offsets = [4, 8, 16, 20]
@@ -478,6 +485,7 @@ def pss_params(
     shared_spectrum: bool = False,
     max_lag_symbols: int | None = None,
     symbol_indexes: CellSSBIndexes = 'auto',
+    center_frequency: float|None=None
 ) -> SyncParams:
     if not isroundmod(subcarrier_spacing, 15e3):
         raise ValueError('subcarrier_spacing must be multiple of 15000')
@@ -490,7 +498,7 @@ def pss_params(
         )
 
     symbol_indexes = _index_pss_symbols(
-        subcarrier_spacing, shared_spectrum, symbol_indexes
+        subcarrier_spacing, shared_spectrum, symbol_indexes, center_frequency
     )
 
     if max_lag_symbols is None:
@@ -546,6 +554,7 @@ def sss_params(
     shared_spectrum: bool = False,
     max_lag_symbols: int|None = 2,
     symbol_indexes: CellSSBIndexes = 'auto',
+    center_frequency: float|None=None
 ) -> SyncParams:
     # Match PSS except that the symbol indexes are incremented by 2
 
@@ -556,6 +565,7 @@ def sss_params(
             discovery_periodicity=discovery_periodicity,
             shared_spectrum=shared_spectrum,
             max_lag_symbols=max_lag_symbols,
+            center_frequency=center_frequency
         )
         symbol_indexes = tuple(i + 2 for i in template.symbol_indexes)
 
@@ -566,6 +576,7 @@ def sss_params(
         shared_spectrum=shared_spectrum,
         max_lag_symbols=max_lag_symbols,
         symbol_indexes=symbol_indexes,
+        center_frequency=center_frequency
     )
 
 

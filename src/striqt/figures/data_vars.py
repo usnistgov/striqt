@@ -81,10 +81,14 @@ def cellular_5g_pss_correlation(
     else:
         raise KeyError('invalid hue coordinate')
 
+    low_median = pow.median(set(pow.dims) - {'cellular_ssb_beam_index'}).min()
+    ymin = float(low_median/5)
+
     if dB:
         pow = _sw.powtodB(pow)
+        ymin = _sw.powtodB(ymin)
 
-    grid = plotter.line(pow, x='cellular_ssb_lag', hue=hue)
+    grid = plotter.line(pow, x='cellular_ssb_lag', hue=hue, ylim=(ymin, None))
     return plotter.finish(grid)
 
 

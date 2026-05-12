@@ -19,7 +19,7 @@ else:
 
 
 @util.lru_cache()
-def _spec_to_params(spec: specs.Cellular5GNSSSSync | specs.Cellular5GNRSSSCorrelator):
+def _spec_to_params(capture: specs.Capture, spec: specs.Cellular5GNSSSSync | specs.Cellular5GNRSSSCorrelator):
     return sw.ofdm.sss_params(
         sample_rate=spec.sample_rate,
         subcarrier_spacing=spec.subcarrier_spacing,
@@ -27,6 +27,7 @@ def _spec_to_params(spec: specs.Cellular5GNSSSSync | specs.Cellular5GNRSSSCorrel
         shared_spectrum=spec.shared_spectrum,
         max_lag_symbols=spec.max_lag_symbols,
         symbol_indexes=spec.symbol_indexes,
+        center_frequency=getattr(capture, 'center_frequency', None)
     )
 
 
@@ -34,7 +35,7 @@ def _spec_to_params(spec: specs.Cellular5GNSSSSync | specs.Cellular5GNRSSSCorrel
 @util.lru_cache()
 def cellular_ssb_lag(capture: specs.Capture, spec: specs.Cellular5GNRSSSCorrelator):
     # TODO: this now needs to account for SSS vs SSS
-    params = _spec_to_params(spec)
+    params = _spec_to_params(capture, spec)
     offs = round(spec.sample_rate * spec.delay)
     return np.arange(offs, offs + params.lag_count) / spec.sample_rate
 
@@ -66,7 +67,7 @@ def correlate_5g_sss(
             iq, capture=capture, spec=spec, coord_factories=_coord_factories
         )
 
-    params = _spec_to_params(spec)
+    params = _spec_to_params(capture, spec)
     sss_seq = sw.ofdm.sss_5g_nr(spec.sample_rate, spec.subcarrier_spacing, xp=xp)
 
     return sw.ofdm.correlate_sync_sequence(
@@ -89,7 +90,7 @@ def choose_sync_offsets(
     corr_spec = specs.Cellular5GNRSSSCorrelator.from_spec(spec).validate()
 
     r = correlate_5g_sss(iq, capture=capture, spec=corr_spec)
-    params = _spec_to_params(spec)
+    params = _spec_to_params(capture, spec)
     return sw.ofdm.choose_ssb_offset(
         r, params, per_port=spec.per_port, window_fill=spec.window_fill
     )
