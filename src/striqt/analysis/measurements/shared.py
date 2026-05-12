@@ -12,7 +12,8 @@ import striqt.waveform as sw
 if TYPE_CHECKING:
     from ..specs.structs import _Cellular5GNRSSBSync, _Cellular5GNRSSBCorrelator
     import numpy as np
-    from ..lib.typing import Array, P, R, WrappedAnalysis
+    from ..lib.typing import Array, CoordFunc, P, R, WrappedAnalysis, WrappedCoord
+    from typing import Sequence
 
 else:
     np = util.lazy_import('numpy')
@@ -77,6 +78,7 @@ def cellular_ssb_start_time(capture: specs.Capture, spec: _Cellular5GNRSSBSync):
 @registry.coordinates(dtype='float32', attrs={'standard_name': 'Lag', 'units': 's'})
 @util.lru_cache()
 def cellular_ssb_lag(capture: specs.Capture, spec: _Cellular5GNRSSBCorrelator):
+    # TODO: this now needs to account for PSS vs SSS
     params = sw.ofdm.pss_params(
         sample_rate=spec.sample_rate,
         subcarrier_spacing=spec.subcarrier_spacing,
@@ -97,79 +99,13 @@ def empty_5g_ssb_correlation(
     *,
     capture: specs.Capture,
     spec: _Cellular5GNRSSBCorrelator,
-    coord_factories: list[Callable],
+    coord_factories: Sequence[CoordFunc | WrappedCoord],
     dtype='complex64',
 ):
     xp = sw.array_namespace(iq)
     meas_ax_shape = [len(f(capture, spec)) for f in coord_factories]
     new_shape = iq.shape[:-1] + tuple(meas_ax_shape)
     return xp.full(new_shape, 0, dtype=dtype)
-
-
-def correlate_sync_sequence(
-    ssb_iq,
-    sync_seq,
-    *,
-    spec: _Cellular5GNRSSBCorrelator,
-    params: sw.ofdm.SyncParams,
-    cell_id_split: int | None = None,
-) -> Array:
-    """correlate the IQ of a synchronization block against a synchronization sequence.
-
-    Arguments:
-        ssb_iq: The synchronization block IQ waveform (e.g., from `get_5g_ssb_iq`)
-        sync_seq: The reference sequence (e.g. from `striqt.waveform.ofdm.pss_5g_nr` or `striqt.waveform.ofdm.sss_5g_nr`)
-        spec: The measurement specification
-        params: The cell synchronization parameters (e.g. from `striqt.waveform.ofdm.pss_params` or `striqt.waveform.ofdm.sss_params`)
-        cell_id_split: if not None, operate on groups of this size along the cell id axis (to reduce memory usage)
-    """
-    xp = sw.array_namespace(ssb_iq)
-
-    slot_count = params.slot_count
-    corr_size = params.corr_size
-    frames_per_sync = params.frames_per_sync
-
-    # set up broadcasting on dimensions:
-    # (port index, cell Nid, sync block index, IQ sample index)
-    iq_bcast = ssb_iq.reshape((ssb_iq.shape[0], -1, params.frame_size))
-    iq_bcast = iq_bcast[:, xp.newaxis, ::frames_per_sync, :corr_size]
-
-    template_bcast = sync_seq[xp.newaxis, :, xp.newaxis, :]
-    # pad_size = template_bcast.shape[-1]
-    # template_bcast  = iqwaveform.util.pad_along_axis(template_bcast, [[0,pad_size]], axis=3)
-
-    # TODO: this would need to support multiple different prefixes for 4G LTE
-    offs = round(spec.sample_rate / spec.subcarrier_spacing) + 2 * params.min_cp_size
-
-    # cp_samples = round(9 / 128 * spec.sample_rate / spec.subcarrier_spacing)
-    # offs = round(spec.sample_rate / spec.subcarrier_spacing + 2 * cp_samples)
-
-    R_shape = list(max(a, b) for a, b in zip(iq_bcast.shape, template_bcast.shape))
-    R_shape[-1] = iq_bcast.shape[-1] + template_bcast.shape[-1] - 1
-    R = xp.empty(tuple(R_shape), dtype='complex64')
-
-    # TODO: cell_id_split wasn't implemented restore it here
-    for cell_id in range(template_bcast.shape[1]):
-        R[:, cell_id] = sw.oaconvolve(
-            iq_bcast[:, 0], template_bcast[:, cell_id], axes=2, mode='full'
-        )
-    R = xp.roll(R, -offs, axis=-1)[..., :corr_size]
-    R = R[..., :corr_size]
-
-    # add slot index dimension: -> (port index, cell Nid, sync block index, slot index, IQ sample index)
-    excess_cp = [params.cp_offsets[i % 14] for i in params.symbol_indexes]
-    if len(set(excess_cp)) != 1:
-        raise ValueError('expect all 5G sync symbols to have the same excess CP')
-
-    Rperslot = R.reshape(R.shape[:-1] + (slot_count, -1))[..., excess_cp[0] :]
-    R = Rperslot.reshape(R.shape[:-1] + (-1,))
-
-    # take the desired symbol indexes from a sliding window views on the correlation sequence
-    # final dims (port index, cell Nid, sync block index, beam index, IQ sample index)
-    start_inds = xp.array(params.symbol_indexes) * params.short_symbol_size
-
-    Rwins = sw.lib.arrays.sliding_window_view(R, params.lag_count, axis=-1)
-    return Rwins[..., start_inds, :]
 
 
 ssb_iq_cache = register.KwArgCache([dataarrays.CAPTURE_DIM, 'spec'])
@@ -185,61 +121,17 @@ def get_5g_ssb_iq(
     """return a sync block waveform, which returns IQ that is recentered
     at baseband frequency spec.frequency_offset and downsampled to spec.sample_rate."""
 
-    xp = sw.array_namespace(iq)
-
-    offs = round(spec.delay * capture.sample_rate)
-
-    if oaresample:
-        down = round(capture.sample_rate / spec.subcarrier_spacing / 8)
-        up = round(down * (spec.sample_rate / capture.sample_rate))
-
-        if up % 3 > 0:
-            # ensure compatibility with the blackman window overlap of 2/3
-            down = down * 3
-            up = up * 3
-
-        if spec.max_block_count is not None:
-            size_in = round(
-                spec.max_block_count * spec.discovery_periodicity * capture.sample_rate
-            )
-            iq = iq[..., offs : offs + size_in]
-        else:
-            size_in = iq.shape[-1]
-
-        size_out = round(up / down * size_in)
-
-        out = xp.empty((iq.shape[0], size_out), dtype=iq.dtype)
-
-        for i in range(out.shape[0]):
-            out[i] = sw.oaresample(
-                iq[i],
-                fs=capture.sample_rate,
-                up=up,
-                down=down,
-                axis=0,
-                window='blackman',
-                frequency_shift=spec.frequency_offset,
-            )
-
-    else:
-        if spec.max_block_count is not None:
-            size_in = round(
-                spec.max_block_count * spec.discovery_periodicity * capture.sample_rate
-            )
-            iq = iq[..., offs : offs + size_in]
-        else:
-            size_in = iq.shape[-1]
-
-        size_out = round(size_in * spec.sample_rate / capture.sample_rate)
-        out = xp.empty((iq.shape[0], size_out), dtype=iq.dtype)
-        shift = round(iq.shape[1] * spec.frequency_offset / capture.sample_rate)
-
-        for i in range(out.shape[0]):
-            out[i] = sw.resample(
-                iq[i], num=size_out, axis=0, overwrite_x=False, shift=shift
-            )
-
-    return out
+    return sw.ofdm.get_5g_ssb_iq(
+        iq,
+        discovery_periodicity=spec.discovery_periodicity,
+        fs_out=spec.sample_rate,
+        fs_in=capture.sample_rate,
+        subcarrier_spacing=spec.subcarrier_spacing,
+        frequency_offset=spec.frequency_offset,
+        delay=spec.delay,
+        max_block_count=spec.max_block_count,
+        oaresample=oaresample,
+    )
 
 
 def evaluate_spectrogram(

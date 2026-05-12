@@ -13,7 +13,7 @@ from . import helpers, types
 import striqt.waveform as sw
 
 if typing.TYPE_CHECKING:
-    from typing import Self
+    from typing_extensions import Self
 else:
     from typing_extensions import Self
 

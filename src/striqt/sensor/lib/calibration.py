@@ -35,7 +35,9 @@ def compute_y_factor_corrections(dataset: 'xr.Dataset', Tref=290.0) -> 'xr.Datas
 def summarize_calibration(corrections: 'xr.Dataset', **sel) -> 'pd.DataFrame':
     summaries = {
         'NF (dB)': _summarize_calibration_field(corrections, 'noise_figure', **sel),
-        'Power Corr (dB)': _summarize_calibration_field(corrections, 'power_correction', **sel)
+        'Power Corr (dB)': _summarize_calibration_field(
+            corrections, 'power_correction', **sel
+        ),
     }
 
     return pd.DataFrame(summaries, index=summaries['noise_figure'].index)
@@ -189,7 +191,7 @@ class YFactorSink(sinks.SinkBase):
         path = self._get_path()
 
         for port, _ in corrections.groupby('port', squeeze=False):
-            print(f'{30*"▀"} Port {port} at max gain {30*"▀"}')
+            print(f'{30 * "▀"} Port {port} at max gain {30 * "▀"}')
             summary = summarize_calibration(corrections, port=port)
             with pd.option_context('display.max_rows', None, 'display.precision', 2):
                 print(summary.sort_index(axis=1).sort_index(axis=0))
