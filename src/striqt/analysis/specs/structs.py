@@ -218,6 +218,7 @@ class _Cellular5GNRSSBCorrelator(Analysis, kw_only=True, frozen=True):
     max_lag_symbols: Union[int, None] = None
 
     def __post_init__(self):
+        super().__post_init__()
         if not sw.arrays.isroundmod(self.delay * self.sample_rate, 1):
             raise msgspec.ValidationError('delay * sample_rate must be an integer')
 
