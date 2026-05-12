@@ -24,7 +24,9 @@ else:
     np = util.lazy_import('numpy')
 
 
-_source_id_map: dict[specs.Source, SourceBase | Event | BaseException] = defaultdict(Event)
+_source_id_map: dict[specs.Source, SourceBase | Event | BaseException] = defaultdict(
+    Event
+)
 _exception: BaseException | None = None
 
 

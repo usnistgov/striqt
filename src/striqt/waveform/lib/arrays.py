@@ -22,7 +22,7 @@ if TYPE_CHECKING:
         import cupy as cp  # type: ignore
     except ModuleNotFoundError:
         cp = None
-    cp = cast(ModuleType|None, cp)
+    cp = cast(ModuleType | None, cp)
 
 else:
     np = util.lazy_import('numpy')

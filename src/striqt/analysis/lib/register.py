@@ -158,7 +158,7 @@ class CoordRegistry(dict['CoordFunc', 'CoordInfo']):
 
             if kws['name'] is None:
                 try:
-                    name = func.__name__ # ty: ignore
+                    name = func.__name__  # ty: ignore
                 except AttributeError as ex:
                     raise TypeError(
                         'specify the coordinate name with coordinates(name, ...)'
@@ -180,7 +180,7 @@ class CoordRegistry(dict['CoordFunc', 'CoordInfo']):
                 name=name, func=func, dims=dims, dtype=dtype, attrs=attrs
             )
 
-            return func # ty: ignore
+            return func  # ty: ignore
 
         return cast(CoordFuncWrapper, wrapper)
 
@@ -228,7 +228,7 @@ class AlignmentSourceRegistry(dict['str | Callable', 'SyncInfo']):
                     f'a signal_trigger named {info_kws["name"]} was already registered'
                 )
 
-            self[func] = self[info_kws['name']] = SyncInfo(func=func, **info_kws) # ty: ignore
+            self[func] = self[info_kws['name']] = SyncInfo(func=func, **info_kws)  # ty: ignore
 
             return func  # type: ignore
 

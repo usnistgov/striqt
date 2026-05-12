@@ -113,7 +113,7 @@ def get_array_namespace(array_backend: specs.types.ArrayBackend) -> types.Module
     if array_backend == 'cupy':
         if sw.arrays.cp is None:
             # trigger the import error
-            import cupy # type: ignore
+            import cupy  # type: ignore
         else:
             mod = sw.arrays.cp
     elif array_backend == 'numpy':
@@ -122,6 +122,7 @@ def get_array_namespace(array_backend: specs.types.ArrayBackend) -> types.Module
         raise TypeError('invalid array_backend argument')
 
     return cast(types.ModuleType, mod)
+
 
 @specs.helpers.convert_capture_arg(specs.SensorCapture)
 @sa.util.lru_cache()

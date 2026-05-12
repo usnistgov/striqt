@@ -557,7 +557,7 @@ def stft(
             nperseg=nperseg,
             noverlap=noverlap,
             axis=axis,
-            norm=norm, # ty: ignore
+            norm=norm,  # ty: ignore
             out=out,
         )
     assert xstack.dtype == x.dtype
