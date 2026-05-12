@@ -217,6 +217,10 @@ class _Cellular5GNRSSBCorrelator(Analysis, kw_only=True, frozen=True):
     symbol_indexes: types.CellSSBSymbolIndexes = 'auto'
     max_lag_symbols: Union[int, None] = None
 
+    def __post_init__(self):
+        if not sw.arrays.isroundmod(self.delay * self.sample_rate, 1):
+            raise msgspec.ValidationError('delay * sample_rate must be an integer')
+
 
 class Cellular5GNRPSSCorrelator(_Cellular5GNRSSBCorrelator, kw_only=True, frozen=True):
     # same as SSS, but the registry requires unique spec types
@@ -228,8 +232,7 @@ class Cellular5GNRSSSCorrelator(_Cellular5GNRSSBCorrelator, kw_only=True, frozen
 
 
 class _Cellular5GNRSSBSync(_Cellular5GNRSSBCorrelator, frozen=True, kw_only=True):
-    window_fill: float = 0.5
-    snr_window_fill: float = 0.08
+    window_fill: float = 1
     per_port: bool = False
 
 

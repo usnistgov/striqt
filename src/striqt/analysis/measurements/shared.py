@@ -75,25 +75,6 @@ def cellular_ssb_start_time(capture: specs.Capture, spec: _Cellular5GNRSSBSync):
     return np.arange(max(count, 1)) * spec.discovery_periodicity
 
 
-@registry.coordinates(dtype='float32', attrs={'standard_name': 'Lag', 'units': 's'})
-@util.lru_cache()
-def cellular_ssb_lag(capture: specs.Capture, spec: _Cellular5GNRSSBCorrelator):
-    # TODO: this now needs to account for PSS vs SSS
-    params = sw.ofdm.pss_params(
-        sample_rate=spec.sample_rate,
-        subcarrier_spacing=spec.subcarrier_spacing,
-        discovery_periodicity=spec.discovery_periodicity,
-        shared_spectrum=spec.shared_spectrum,
-        max_lag_symbols=spec.max_lag_symbols,
-        symbol_indexes=spec.symbol_indexes,
-    )
-
-    # snap onto the grid
-    # TODO: there should be an exception if the delay isn't an integer factor of sample rate
-    offs = round(spec.sample_rate * spec.delay)
-    return np.arange(offs, offs + params.lag_count) / spec.sample_rate
-
-
 def empty_5g_ssb_correlation(
     iq,
     *,

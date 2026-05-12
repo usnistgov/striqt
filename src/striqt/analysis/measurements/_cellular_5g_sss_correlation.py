@@ -1,127 +1,120 @@
 from __future__ import annotations as __
 
-from typing import Any, Literal, TYPE_CHECKING
+import typing
 
 from .. import specs
 
 from ..lib import register, util
+from ..lib.dataarrays import CAPTURE_DIM
 from . import shared
 from .shared import registry
 
 import striqt.waveform as sw
 
-if TYPE_CHECKING:
-    import array_api_compat
+if typing.TYPE_CHECKING:
     import numpy as np
     from ..lib.typing import Array
 else:
     np = util.lazy_import('numpy')
-    array_api_compat = util.lazy_import('array_api_compat')
 
 
-@registry.coordinates(
-    dtype='uint16', attrs={'standard_name': r'Cell gNodeB ID ($N_\text{ID}^{(1)}$)'}
-)
 @util.lru_cache()
-def cellular_cell_id1(capture: specs.Capture, spec: Any):
-    values = np.arange(336, dtype='uint16')
-    return values
+def _spec_to_params(spec: specs.Cellular5GNSSSSync | specs.Cellular5GNRSSSCorrelator):
+    return sw.ofdm.sss_params(
+        sample_rate=spec.sample_rate,
+        subcarrier_spacing=spec.subcarrier_spacing,
+        discovery_periodicity=spec.discovery_periodicity,
+        shared_spectrum=spec.shared_spectrum,
+        max_lag_symbols=spec.max_lag_symbols,
+        symbol_indexes=spec.symbol_indexes,
+    )
 
 
-### Subcarrier spacing label axis
-CellularSSBStartTimeElapsedAxis = Literal['cellular_ssb_start_time']
+@registry.coordinates(dtype='float32', attrs={'standard_name': 'Lag', 'units': 's'})
+@util.lru_cache()
+def cellular_ssb_lag(capture: specs.Capture, spec: specs.Cellular5GNRSSSCorrelator):
+    # TODO: this now needs to account for SSS vs SSS
+    params = _spec_to_params(spec)
+    offs = round(spec.sample_rate * spec.delay)
+    return np.arange(offs, offs + params.lag_count) / spec.sample_rate
 
 
 _coord_factories = [
-    cellular_cell_id1,
     shared.cellular_cell_id2,
     shared.cellular_ssb_start_time,
     shared.cellular_ssb_beam_index,
-    shared.cellular_ssb_lag,
+    cellular_ssb_lag,
 ]
 dtype = 'complex64'
 
 
-sss_correlation_cache = register.KwArgCache(['capture', 'spec'])
+correlator_cache = register.KwArgCache([CAPTURE_DIM, 'spec'])
 
 
-@sss_correlation_cache.apply
+@correlator_cache.apply
 def correlate_5g_sss(
-    iq: 'Array', capture: specs.Capture, *, spec: specs.Cellular5GNRSSSCorrelator
+    iq: 'Array',
+    capture: specs.Capture,
+    spec: specs.Cellular5GNRSSSCorrelator,
 ) -> 'Array':
     xp = sw.array_namespace(iq)
 
     ssb_iq = shared.get_5g_ssb_iq(iq, capture=capture, spec=spec)
+
     if ssb_iq is None:
         return shared.empty_5g_ssb_correlation(
             iq, capture=capture, spec=spec, coord_factories=_coord_factories
         )
 
-    params = sw.ofdm.sss_params(
-        sample_rate=spec.sample_rate,
-        subcarrier_spacing=spec.subcarrier_spacing,
-        discovery_periodicity=spec.discovery_periodicity,
-        shared_spectrum=spec.shared_spectrum,
-    )
-
+    params = _spec_to_params(spec)
     sss_seq = sw.ofdm.sss_5g_nr(spec.sample_rate, spec.subcarrier_spacing, xp=xp)
 
-    meas = shared.correlate_sync_sequence(
-        ssb_iq, sss_seq, spec=spec, params=params, cell_id_split=None
+    return sw.ofdm.correlate_sync_sequence(
+        ssb_iq, sss_seq, params=params, cell_id_split=None
     )
 
-    # split Nid into (Nid1, Nid2)
-    return sw.axis_to_blocks(meas, 3, axis=-4)
+
+sync_cache = register.KwArgCache([CAPTURE_DIM, 'spec'])
+
+
+@sync_cache.apply
+def choose_sync_offsets(
+    iq: Array,
+    capture: specs.Capture,
+    *,
+    spec: specs.Cellular5GNSSSSync,
+) -> Array:
+    # R.shape -> (..., port index, cell Nid2, SSB index, symbol start index, IQ sample index)
+
+    corr_spec = specs.Cellular5GNRSSSCorrelator.from_spec(spec).validate()
+
+    r = correlate_5g_sss(iq, capture=capture, spec=corr_spec)
+    params = _spec_to_params(spec)
+    return sw.ofdm.choose_ssb_offset(
+        r, params, per_port=spec.per_port, window_fill=spec.window_fill
+    )
 
 
 @shared.hint_keywords(specs.Cellular5GNSSSSync)
 @registry.signal_trigger(
-    specs.Cellular5GNSSSSync, lag_coord_func=shared.cellular_ssb_lag
+    specs.Cellular5GNSSSSync, lag_coord_func=cellular_ssb_lag
 )
-def cellular_5g_sss_sync(iq, capture: specs.Capture, window_fill=0.5, **kwargs):
-    """compute sync index offsets based on correlate_5g_sss.
-
-    This approach is meant to account for a weighted average of nearby peaks
-    to reduce mis-alignment errors in measurements of aggregate interference.
-
-    The underlying heuristic is a triangular weighting function to include energy
-    within +/- 1/4 symbol of each peak. Outside of this range, spectrogram errors
-    due to "ISI" begin to increase quickly.
-    """
-
-    from scipy import ndimage
+@registry.measurement(
+    specs.Cellular5GNSSSSync,
+    coord_factories=[],
+    dtype='float32',
+    caches=(correlator_cache, shared.ssb_iq_cache, sync_cache),
+    prefer_iq_source='pre_align',
+    store_compressed=False,
+    attrs={'standard_name': 'SSS Synchronization Delay', 'units': 's'},
+)
+def cellular_5g_sss_sync(iq, capture: specs.Capture, **kwargs):
+    """compute sync index offsets based on correlate_5g_sss"""
 
     spec = specs.Cellular5GNSSSSync.from_dict(kwargs).validate()
-
-    xp = sw.array_namespace(iq)
-
-    kwargs['as_xarray'] = False
-
-    R, _ = cellular_5g_sss_correlation(iq, capture, **kwargs)
-
-    # start dimensions: (..., port index, cell Nid2, sync block index, symbol pair index, IQ sample index)
-    Ragg = sw.envtopow(R.sum(axis=(-4, -2)))
-
-    # reduce port index, etc in power space
-    Ragg = Ragg.mean(axis=tuple(range(Ragg.ndim - 1)))
-    Ragg = Ragg - xp.median(Ragg)
-    assert Ragg.ndim == 1
-
-    weights = sw.get_window(
-        'triang',
-        nwindow=round(window_fill * Ragg.size),
-        nzero=round((1 - window_fill) * Ragg.size),
-        norm=False,
-    )
-    weights = np.roll(weights, round((1 - window_fill) * Ragg.size / 2))
-
-    if not array_api_compat.is_numpy_array(Ragg):
-        Ragg = Ragg.get()
-
-    est = ndimage.correlate1d(Ragg, weights, mode='wrap')
-    i = est.argmax()
-
-    return shared.cellular_ssb_lag(capture, spec)[i]
+    offs = choose_sync_offsets(iq, capture=capture, spec=spec)
+    delay = round(spec.delay * spec.sample_rate) / spec.sample_rate
+    return delay + offs / spec.sample_rate
 
 
 @shared.hint_keywords(specs.Cellular5GNRSSSCorrelator)
@@ -129,13 +122,15 @@ def cellular_5g_sss_sync(iq, capture: specs.Capture, window_fill=0.5, **kwargs):
     specs.Cellular5GNRSSSCorrelator,
     coord_factories=_coord_factories,
     dtype=dtype,
-    caches=(sss_correlation_cache, shared.ssb_iq_cache),
+    caches=(correlator_cache, shared.ssb_iq_cache),
     prefer_iq_source='pre_align',
     store_compressed=False,
     attrs={'standard_name': 'SSS Cross-Covariance'},
 )
-def cellular_5g_sss_correlation(iq, capture: specs.Capture, **kwargs):
-    """correlate each channel of the IQ against the cellular primary synchronization signal (PSS) waveform.
+def cellular_5g_sss_correlation(
+    iq, capture: specs.Capture, **kwargs
+) -> tuple[Array, dict]:
+    """correlate each channel of the IQ against the cellular primary synchronization signal (SSS) waveform.
 
     Returns a DataArray containing the time-lag for each combination of NID2, symbol, and SSB start time.
 

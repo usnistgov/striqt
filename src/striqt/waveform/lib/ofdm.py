@@ -544,7 +544,7 @@ def sss_params(
     subcarrier_spacing: float,
     discovery_periodicity: float = 20e-3,
     shared_spectrum: bool = False,
-    max_lag_symbols: int = 2,
+    max_lag_symbols: int|None = 2,
     symbol_indexes: CellSSBIndexes = 'auto',
 ) -> SyncParams:
     # Match PSS except that the symbol indexes are incremented by 2
@@ -638,7 +638,7 @@ def get_5g_ssb_iq(
 
 
 def correlate_sync_sequence(
-    ssb_iq: Array, sync_seq: Array, *, params: SyncParams, cell_id_split: int = 1
+    ssb_iq: Array, sync_seq: Array, *, params: SyncParams, cell_id_split: int|None = 1
 ) -> Array:
     """correlate the IQ of a synchronization block against a synchronization sequence.
 

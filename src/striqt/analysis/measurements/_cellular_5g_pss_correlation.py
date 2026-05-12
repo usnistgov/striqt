@@ -18,18 +18,6 @@ else:
     np = util.lazy_import('numpy')
 
 
-_coord_factories = [
-    shared.cellular_cell_id2,
-    shared.cellular_ssb_start_time,
-    shared.cellular_ssb_beam_index,
-    shared.cellular_ssb_lag,
-]
-dtype = 'complex64'
-
-
-correlator_cache = register.KwArgCache([CAPTURE_DIM, 'spec'])
-
-
 @util.lru_cache()
 def _spec_to_params(spec: specs.Cellular5GNPSSSync | specs.Cellular5GNRPSSCorrelator):
     return sw.ofdm.pss_params(
@@ -40,6 +28,27 @@ def _spec_to_params(spec: specs.Cellular5GNPSSSync | specs.Cellular5GNRPSSCorrel
         max_lag_symbols=spec.max_lag_symbols,
         symbol_indexes=spec.symbol_indexes,
     )
+
+
+@registry.coordinates(dtype='float32', attrs={'standard_name': 'Lag', 'units': 's'})
+@util.lru_cache()
+def cellular_ssb_lag(capture: specs.Capture, spec: specs.Cellular5GNRPSSCorrelator):
+    # TODO: this now needs to account for PSS vs SSS
+    params = _spec_to_params(spec)
+    offs = round(spec.sample_rate * spec.delay)
+    return np.arange(offs, offs + params.lag_count) / spec.sample_rate
+
+
+_coord_factories = [
+    shared.cellular_cell_id2,
+    shared.cellular_ssb_start_time,
+    shared.cellular_ssb_beam_index,
+    cellular_ssb_lag,
+]
+dtype = 'complex64'
+
+
+correlator_cache = register.KwArgCache([CAPTURE_DIM, 'spec'])
 
 
 @correlator_cache.apply
@@ -65,12 +74,7 @@ def correlate_5g_pss(
     )
 
 
-sync_cache = register.KwArgCache([
-    CAPTURE_DIM,
-    'spec',
-    'window_fill',
-    'snr_window_fill',
-])
+sync_cache = register.KwArgCache([CAPTURE_DIM, 'spec'])
 
 
 @sync_cache.apply
@@ -93,7 +97,7 @@ def choose_sync_offsets(
 
 @shared.hint_keywords(specs.Cellular5GNPSSSync)
 @registry.signal_trigger(
-    specs.Cellular5GNPSSSync, lag_coord_func=shared.cellular_ssb_lag
+    specs.Cellular5GNPSSSync, lag_coord_func=cellular_ssb_lag
 )
 @registry.measurement(
     specs.Cellular5GNPSSSync,
