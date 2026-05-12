@@ -47,7 +47,7 @@ def cellular_ssb_beam_index(capture: specs.Capture, spec: _Cellular5GNRSSBSync):
         shared_spectrum=spec.shared_spectrum,
         max_lag_symbols=spec.max_lag_symbols,
         symbol_indexes=spec.symbol_indexes,
-        center_frequency=getattr(capture, 'center_frequency', None)
+        center_frequency=getattr(capture, 'center_frequency', None),
     )
 
     return list(range(len(params.symbol_indexes)))

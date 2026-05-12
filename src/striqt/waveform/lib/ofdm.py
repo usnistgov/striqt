@@ -233,7 +233,7 @@ def _generate_5g_nr_sync_sequence(
     max_id: int,
     sample_rate: float,
     subcarrier_spacing: float,
-    center_frequency: float|None=None,
+    center_frequency: float | None = None,
     *,
     xp=None,
     dtype='complex64',
@@ -343,7 +343,7 @@ def pss_5g_nr(
 def sss_5g_nr(
     sample_rate: float,
     subcarrier_spacing: float,
-    center_frequency: float|None=None,
+    center_frequency: float | None = None,
     *,
     xp=None,
     dtype='complex64',
@@ -377,7 +377,7 @@ def _index_pss_symbols(
     subcarrier_spacing: float,
     shared_spectrum: bool = False,
     symbol_indexes: CellSSBIndexes = 'auto',
-    center_frequency: float|None=None
+    center_frequency: float | None = None,
 ) -> tuple[int, ...]:
     """returns indexes of PSS symbols relative to frame start.
 
@@ -450,7 +450,7 @@ def _index_pss_symbols(
             if center_frequency is None or center_frequency > 1.88e9:
                 nrange = range(4)
             else:
-                # NOTE: In theory, TDD between 1.88 - 3 GHz should also go here                
+                # NOTE: In theory, TDD between 1.88 - 3 GHz should also go here
                 nrange = range(2)
     # Below here FR-2
     elif case == 'd':
@@ -485,7 +485,7 @@ def pss_params(
     shared_spectrum: bool = False,
     max_lag_symbols: int | None = None,
     symbol_indexes: CellSSBIndexes = 'auto',
-    center_frequency: float|None=None
+    center_frequency: float | None = None,
 ) -> SyncParams:
     if not isroundmod(subcarrier_spacing, 15e3):
         raise ValueError('subcarrier_spacing must be multiple of 15000')
@@ -552,9 +552,9 @@ def sss_params(
     subcarrier_spacing: float,
     discovery_periodicity: float = 20e-3,
     shared_spectrum: bool = False,
-    max_lag_symbols: int|None = 2,
+    max_lag_symbols: int | None = 2,
     symbol_indexes: CellSSBIndexes = 'auto',
-    center_frequency: float|None=None
+    center_frequency: float | None = None,
 ) -> SyncParams:
     # Match PSS except that the symbol indexes are incremented by 2
 
@@ -565,7 +565,7 @@ def sss_params(
             discovery_periodicity=discovery_periodicity,
             shared_spectrum=shared_spectrum,
             max_lag_symbols=max_lag_symbols,
-            center_frequency=center_frequency
+            center_frequency=center_frequency,
         )
         symbol_indexes = tuple(i + 2 for i in template.symbol_indexes)
 
@@ -576,7 +576,7 @@ def sss_params(
         shared_spectrum=shared_spectrum,
         max_lag_symbols=max_lag_symbols,
         symbol_indexes=symbol_indexes,
-        center_frequency=center_frequency
+        center_frequency=center_frequency,
     )
 
 
@@ -649,7 +649,7 @@ def get_5g_ssb_iq(
 
 
 def correlate_sync_sequence(
-    ssb_iq: Array, sync_seq: Array, *, params: SyncParams, cell_id_split: int|None = 1
+    ssb_iq: Array, sync_seq: Array, *, params: SyncParams, cell_id_split: int | None = 1
 ) -> Array:
     """correlate the IQ of a synchronization block against a synchronization sequence.
 

@@ -19,7 +19,10 @@ else:
 
 
 @util.lru_cache()
-def _spec_to_params(capture: specs.Capture, spec: specs.Cellular5GNSSSSync | specs.Cellular5GNRSSSCorrelator):
+def _spec_to_params(
+    capture: specs.Capture,
+    spec: specs.Cellular5GNSSSSync | specs.Cellular5GNRSSSCorrelator,
+):
     return sw.ofdm.sss_params(
         sample_rate=spec.sample_rate,
         subcarrier_spacing=spec.subcarrier_spacing,
@@ -27,7 +30,7 @@ def _spec_to_params(capture: specs.Capture, spec: specs.Cellular5GNSSSSync | spe
         shared_spectrum=spec.shared_spectrum,
         max_lag_symbols=spec.max_lag_symbols,
         symbol_indexes=spec.symbol_indexes,
-        center_frequency=getattr(capture, 'center_frequency', None)
+        center_frequency=getattr(capture, 'center_frequency', None),
     )
 
 
@@ -97,9 +100,7 @@ def choose_sync_offsets(
 
 
 @shared.hint_keywords(specs.Cellular5GNSSSSync)
-@registry.signal_trigger(
-    specs.Cellular5GNSSSSync, lag_coord_func=cellular_ssb_lag
-)
+@registry.signal_trigger(specs.Cellular5GNSSSSync, lag_coord_func=cellular_ssb_lag)
 @registry.measurement(
     specs.Cellular5GNSSSSync,
     coord_factories=[],
