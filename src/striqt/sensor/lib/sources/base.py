@@ -24,7 +24,7 @@ else:
     np = util.lazy_import('numpy')
 
 
-_source_id_map: dict[specs.Source, SourceBase | Event] = defaultdict(Event)
+_source_id_map: dict[specs.Source, SourceBase | Event | BaseException] = defaultdict(Event)
 _exception: BaseException | None = None
 
 
@@ -36,7 +36,9 @@ def get_source_id(spec: specs.Source, timeout=0.5) -> str:
     """
     obj = _source_id_map[spec]
 
-    if not isinstance(obj, Event):
+    if isinstance(obj, BaseException):
+        raise util.ThreadInterruptRequest()
+    elif not isinstance(obj, Event):
         # already have this source!
         return obj.id
 

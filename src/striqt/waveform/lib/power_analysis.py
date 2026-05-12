@@ -131,7 +131,7 @@ def _arraylike_with_buffer(
 
     if out is None:
         out_dtype = float_dtype_like(values, min_dtype=min_dtype)
-        out_shape = xp.shape(x)  # type: ignore
+        out_shape = xp.shape(x)  # pyright: ignore
         out = xp.zeros(out_shape, dtype=out_dtype)
     elif isinstance(x, Number):
         # for a scalar, skip buffer allocation entirely
@@ -158,9 +158,9 @@ def _repackage_arraylike(
     elif not hasattr(obj, 'values'):
         return typing.cast('_ALN', values)
     elif isinstance(obj, pd.Series):
-        return pd.Series(values, index=obj.index)  # pyright: ignore
+        return pd.Series(values, index=obj.index)  # type: ignore
     elif isinstance(obj, pd.DataFrame):
-        return pd.DataFrame(values, index=obj.index, columns=obj.columns)  # pyright: ignore
+        return pd.DataFrame(values, index=obj.index, columns=obj.columns)  # type: ignore
     elif isinstance(obj, xr.DataArray):
         ret = obj.copy(deep=False, data=values)
         units = ret.attrs.get('units', None)
@@ -349,7 +349,7 @@ def dBlinmean(
         out = None
 
     x = dBtopow(x_dB, out=out)
-    linmean = x.mean(axis)  # pyright: ignore
+    linmean = x.mean(axis)  # type: ignore
     return powtodB(linmean, out=linmean)  # pyright: ignore
 
 

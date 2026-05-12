@@ -48,7 +48,7 @@ if TYPE_CHECKING:
     from .typing import CachedCallable, P, R
 
     try:
-        import cupy as cp  # pyright: ignore
+        import cupy as cp  # ty: ignore
 
         TypeIsCupy = typing_extensions.TypeIs[cp.ndarray]
     except ModuleNotFoundError:
@@ -84,15 +84,12 @@ def lru_cache(
     func = functools.lru_cache(maxsize, typed)
 
     @functools.wraps(func)
-    def wrap(wrapee):
+    def wrap(wrapee: Callable[P, R]) -> CachedCallable[P, R]:
         wrapped = func(wrapee)
         _caches[wrapee] = wrapped
         return wrapped
 
-    return cast(
-        'Callable[[Callable[P, R]], CachedCallable[P, R]]',
-        wrap,
-    )
+    return wrap
 
 
 @functools.cache

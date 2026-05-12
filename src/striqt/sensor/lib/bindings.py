@@ -11,9 +11,9 @@ from .typing import Peripherals, PC, PS, SC, SS, SP, TypeVar
 
 import msgspec
 
-TC2 = TypeVar('TC2', bound=specs.SensorCapture)
-TP2 = TypeVar('TP2', bound=specs.Peripherals)
-TS2 = TypeVar('TS2', bound=specs.Source)
+SC2 = TypeVar('SC2', bound=specs.SensorCapture)
+SP2 = TypeVar('SP2', bound=specs.Peripherals)
+SS2 = TypeVar('SS2', bound=specs.Source)
 PS2 = ParamSpec('PS2')
 PC2 = ParamSpec('PC2')
 
@@ -85,7 +85,7 @@ class SensorBinding(Sensor[SS, SP, SC, PS, PC]):
 
 def bind_sensor(
     key: str,
-    sensor: Sensor[TS2, TP2, TC2, PS2, PC2],
+    sensor: Sensor[SS2, SP2, SC2, PS2, PC2],
     schema: Schema[SS, SP, SC, PS, PC],
     register: bool = True,
 ) -> SensorBinding[SS, SP, SC, PS, PC]:

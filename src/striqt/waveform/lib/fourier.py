@@ -298,7 +298,7 @@ def fftfreq(
                 -fnyq + fnyq / nfft, fnyq - fnyq / nfft, nfft, dtype=dtype
             )
 
-    if not array_api_compat.is_numpy_namespace(np):  # type: ignore
+    if not array_api_compat.is_numpy_namespace(np):  # pyright: ignore
         return xp.asarray(fftfreq(nfft, fs, dtype, as_index=as_index))
 
     # high resolution rational representation of frequency resolution
@@ -514,7 +514,7 @@ def stft(
     nfft = nperseg
     dtype = typing.cast(str, x.dtype)
 
-    if norm not in ('power', None):
+    if norm is not None and norm != 'power':
         raise TypeError('norm must be "power" or None')
 
     if window is None:
@@ -557,7 +557,7 @@ def stft(
             nperseg=nperseg,
             noverlap=noverlap,
             axis=axis,
-            norm=norm,
+            norm=norm, # ty: ignore
             out=out,
         )
     assert xstack.dtype == x.dtype
