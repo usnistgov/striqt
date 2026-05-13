@@ -78,16 +78,7 @@ def correlate_5g_pss(
     )
 
 
-<<<<<<< HEAD
-pss_weighted_cache = register.KwArgCache([
-    CAPTURE_DIM,
-    'spec',
-    'window_fill',
-    'snr_window_fill',
-])
-=======
 sync_cache = register.KwArgCache([CAPTURE_DIM, 'spec'])
->>>>>>> fix-pss-offsets
 
 
 @sync_cache.apply

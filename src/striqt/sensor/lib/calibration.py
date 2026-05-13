@@ -420,15 +420,9 @@ def _y_factor_power_corrections(dataset: 'xr.Dataset', Tref=290.0) -> 'xr.Datase
 
     pvt = dataset.channel_power_time_series.drop('capture_index')
     power = (
-<<<<<<< HEAD
-        dataset.channel_power_time_series
-        .sel(power_detector='rms', drop=True)
-        .pipe(lambda x: 10 ** (x / 10.0))
-=======
         pvt
         .sel(power_detector='rms', drop=True)
         .pipe(sa.dBtopow)
->>>>>>> fix-pss-offsets
         .mean(dim='time_elapsed')
     )
     power.name = 'RMS power'
