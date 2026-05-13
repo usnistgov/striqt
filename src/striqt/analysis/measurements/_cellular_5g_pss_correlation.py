@@ -59,9 +59,12 @@ def correlate_5g_pss(
     )
 
 
-pss_weighted_cache = register.KwArgCache(
-    [CAPTURE_DIM, 'spec', 'window_fill', 'snr_window_fill']
-)
+pss_weighted_cache = register.KwArgCache([
+    CAPTURE_DIM,
+    'spec',
+    'window_fill',
+    'snr_window_fill',
+])
 
 
 def weight_correlation_locally(R, spec: specs.Cellular5GNPSSSync):

@@ -79,6 +79,7 @@ plot-capture = "striqt.cli.plot_capture:run"
 rechunk-zarr = "striqt.cli.rechunk_zarr:run"
 
 [tool.ruff]
+preview = true
 target-version = "py39"
 extend-include = [ "*.ipynb", ]
 line-length = 88

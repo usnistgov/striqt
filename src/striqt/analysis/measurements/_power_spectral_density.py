@@ -79,7 +79,8 @@ def power_spectral_density(iq, capture, **kwargs):
     # all of the quantiles, evaluated together
     q = [spec.time_statistic[i] for i, flag in enumerate(findquantile) if flag]
     psd[:, findquantile] = (
-        xp.quantile(spg, q, axis=axis)
+        xp
+        .quantile(spg, q, axis=axis)
         .swapaxes(0, axis)  # quantile bumps the output result to axis 0
         .astype(working_dtype)  #
     )
