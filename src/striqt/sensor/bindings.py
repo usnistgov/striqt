@@ -40,6 +40,15 @@ mat_file = bind_sensor(
 )
 
 
+schema = Schema(
+    source=specs.MATSource,
+    init_like=specs.MATSource,
+    capture=specs.FileCapture,
+    arm_like=specs.FileCapture,
+    peripherals=specs.NoPeripherals,
+)
+
+
 tdms_file = bind_sensor(
     'tdms_file',
     Sensor(source=sources.TDMSSource),

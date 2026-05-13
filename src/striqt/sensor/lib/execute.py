@@ -285,12 +285,6 @@ def _log_cache_info(
     else:
         info_fields = ('port',)
 
-    desc_kws = {
-        'fields': info_fields,
-        'source_id': resources['source'].id,
-        'adjust_spec': resources['sweep_spec'].adjust_captures,
-    }
-
     # convert to dB after this function
     peaks = spg.max(axis=tuple(range(1, spg.ndim)))
     noise = lookup_system_noise_power(
@@ -314,5 +308,10 @@ def _log_cache_info(
             continue
 
         snr_desc = f'{round(snr)} dB max SNR'
-        capture_desc = specs.helpers.describe_capture(c, **desc_kws)
+        capture_desc = specs.helpers.describe_capture(
+            c,
+            fields=info_fields,
+            source_id=resources['source'].id,
+            adjust_spec=resources['sweep_spec'].adjust_captures,
+        )
         logger.info(f'spectrogram ▮ {snr_desc:<14} ▮ {capture_desc}')

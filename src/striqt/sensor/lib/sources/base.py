@@ -70,7 +70,7 @@ def bind_schema_types(
     """set the default to a SourceBase subclass"""
 
     def decorator(cls: type[T]) -> type[T]:
-        cls._bindings__ = Schema(source=source, capture=capture)
+        cls.__bindings__ = Schema(source=source, capture=capture)
         return cls
 
     return decorator
@@ -92,7 +92,7 @@ def get_bound_spec(spec: specs.SpecBase | None, cls: type[S] | None, **kws) -> S
 
 
 class SourceBase(Source[SS, SC, PS, PC]):
-    _bindings__: ClassVar[Schema | None] = None
+    __bindings__: ClassVar[Schema | None] = None
 
     _buffers: buffers.ReceiveBuffers
     _is_open: bool | Event = False
@@ -108,10 +108,10 @@ class SourceBase(Source[SS, SC, PS, PC]):
         if _spec is not None:
             _spec = cast(SS, _spec)
 
-        if self._bindings__ is None:
+        if self.__bindings__ is None:
             spec_cls = None
         else:
-            spec_cls = cast(type[SS], self._bindings__.source)
+            spec_cls = cast(type[SS], self.__bindings__.source)
 
         try:
             _spec = get_bound_spec(_spec, spec_cls, **kwargs)
@@ -154,7 +154,7 @@ class SourceBase(Source[SS, SC, PS, PC]):
         kwargs = spec.to_dict()
         kwargs['__specs'] = {'source': spec, 'captures': captures, 'loops': loops}
 
-        if captures is not None and len(captures) > 0 and cls._bindings__ is None:
+        if captures is not None and len(captures) > 0 and cls.__bindings__ is None:
             raise TypeError('can only hint captures for source class bindings')
 
         return cls(reuse_iq=reuse_iq, **kwargs)  # pyright: ignore
@@ -202,8 +202,8 @@ class SourceBase(Source[SS, SC, PS, PC]):
         """stop the stream, apply a capture configuration, and start it"""
         assert self._buffers is not None
 
-        if self._bindings__ is not None:
-            capture_cls = self._bindings__.capture
+        if self.__bindings__ is not None:
+            capture_cls = self.__bindings__.capture
         elif self._capture is not None:
             capture_cls = type(self._capture)
         else:

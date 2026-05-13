@@ -88,7 +88,7 @@ def cellular_5g_pss_correlation(
         pow = _sw.powtodB(pow)
         ymin = _sw.powtodB(ymin)
 
-    grid = plotter.line(pow, x='cellular_ssb_lag', hue=hue, ylim=(ymin, None))
+    grid = plotter.line(pow, x='cellular_ssb_lag', hue=hue, ylim=(ymin, None)) # pyright: ignore
     return plotter.finish(grid)
 
 

@@ -45,10 +45,10 @@ def lazy_import(module_name: str, package=None):
 
 if TYPE_CHECKING:
     import typing_extensions
-    from .typing import CachedCallable, P, R
+    from .typing import LRUWrapped, P, R
 
     try:
-        import cupy as cp  # ty: ignore
+        import cupy as cp  # type: ignore
 
         TypeIsCupy = typing_extensions.TypeIs[cp.ndarray]
     except ModuleNotFoundError:
@@ -75,19 +75,16 @@ _caches = {}
 @functools.wraps(functools.lru_cache)
 def lru_cache(
     maxsize: int | None = 128, typed: bool = False
-) -> Callable[
-    [Callable[P, R]],
-    CachedCallable[P, R],
-]:
+) -> 'Callable[[Callable[P, R]], LRUWrapped[P, R]]':
     # presuming that the API is designed to accept only hashable types, set
     # the type hint to match the wrapped function
     func = functools.lru_cache(maxsize, typed)
 
     @functools.wraps(func)
-    def wrap(wrapee: Callable[P, R]) -> CachedCallable[P, R]:
+    def wrap(wrapee: Callable[P, R]) -> LRUWrapped[P, R]:
         wrapped = func(wrapee)
         _caches[wrapee] = wrapped
-        return wrapped
+        return wrapped # pyright: ignore
 
     return wrap
 
@@ -130,7 +127,7 @@ def _make_lru_key(func, args, kwargs) -> str:
 
 def persistent_lru_cache(
     maxsize=128,
-) -> Callable[[Callable[P, R]], CachedCallable[P, R]]:
+) -> Callable[[Callable[P, R]], LRUWrapped[P, R]]:
     """caches a decorated function persistently on disk"""
 
     def decorator(func):
@@ -167,7 +164,7 @@ def persistent_lru_cache(
         wrapper.__wrapped__ = func
         return wrapper
 
-    return decorator
+    return decorator # pyright: ignore
 
 
 def clear_caches():

@@ -11,13 +11,6 @@ from .typing import Peripherals, PC, PS, SC, SS, SP, TypeVar
 
 import msgspec
 
-SC2 = TypeVar('SC2', bound=specs.SensorCapture)
-SP2 = TypeVar('SP2', bound=specs.Peripherals)
-SS2 = TypeVar('SS2', bound=specs.Source)
-PS2 = ParamSpec('PS2')
-PC2 = ParamSpec('PC2')
-
-
 if TYPE_CHECKING:
 
     class BoundSweep(specs.Sweep, frozen=True, kw_only=True):
@@ -75,7 +68,7 @@ class Schema(Generic[SS, SP, SC, PS, PC], sources.base.Schema[SS, SC]):
 
 @dataclasses.dataclass(frozen=True)
 class SensorBinding(Sensor[SS, SP, SC, PS, PC]):
-    schema: Schema[SS, SP, SC] = None  # type: ignore
+    schema: Schema[SS, SP, SC, PS, PC] = None  # type: ignore
     sweep_spec: type[BoundSweep[SS, SP, SC]] = specs.Sweep  # pyright: ignore
 
     def __post_init__(self):
@@ -85,7 +78,7 @@ class SensorBinding(Sensor[SS, SP, SC, PS, PC]):
 
 def bind_sensor(
     key: str,
-    sensor: Sensor[SS2, SP2, SC2, PS2, PC2],
+    sensor: Sensor,
     schema: Schema[SS, SP, SC, PS, PC],
     register: bool = True,
 ) -> SensorBinding[SS, SP, SC, PS, PC]:
@@ -106,22 +99,30 @@ def bind_sensor(
 
     # bind the schema to the source
     class BoundSource(sensor.source):  # ty: ignore
-        _bindings__ = schema
+        __bindings__ = schema
 
     BoundSource.__name__ = sensor.source.__name__
+
     sensor = dataclasses.replace(sensor, source=BoundSource)
-    binding = SensorBinding(**dataclasses.asdict(sensor), schema=schema)
+
+    b = SensorBinding(
+        source=sensor.source,
+        sweep_spec=sensor.sweep_spec, # pyright: ignore
+        peripherals=sensor.peripherals,
+        sink=sensor.sink,
+        schema=schema, # pyright: ignore
+    )
 
     class BoundSweep(sensor.sweep_spec, frozen=True, kw_only=True):  # ty: ignore
-        _bindings__ = binding
+        __bindings__ = b
 
         mock_source: Optional[str] = None
-        source: _bindings__.schema.source = msgspec.field(
-            default_factory=_bindings__.schema.source
+        source: __bindings__.schema.source = msgspec.field(
+            default_factory=schema.source # type: ignore
         )
-        captures: tuple[_bindings__.schema.capture, ...] = ()
-        peripherals: _bindings__.schema.peripherals = msgspec.field(
-            default_factory=_bindings__.schema.peripherals
+        captures: tuple[__bindings__.schema.capture, ...] = ()
+        peripherals: __bindings__.schema.peripherals = msgspec.field(
+            default_factory=schema.peripherals
         )
 
         def __post_init__(self):
@@ -135,10 +136,15 @@ def bind_sensor(
             super().__post_init__()
 
     BoundSweep = tagged_subclass(key, BoundSweep, specs.SWEEP_TAG_FIELD)  # type: ignore
-    binding = dataclasses.replace(binding, sweep_spec=BoundSweep)
 
     if register:
-        registry[key] = binding
+        registry[key] = SensorBinding(
+            source=sensor.source,
+            sweep_spec=BoundSweep, # pyright: ignore
+            peripherals=sensor.peripherals,
+            sink=sensor.sink,
+            schema=schema, # pyright: ignore
+        )
 
     global tagged_sweeps
     if tagged_sweeps is None:
@@ -146,7 +152,7 @@ def bind_sensor(
     else:
         tagged_sweeps = Union[tagged_sweeps, BoundSweep]  # pyright: ignore
 
-    return binding
+    return b
 
 
 def get_registry() -> dict[str, SensorBinding]:

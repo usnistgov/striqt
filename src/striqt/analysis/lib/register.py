@@ -158,7 +158,7 @@ class CoordRegistry(dict['CoordFunc', 'CoordInfo']):
 
             if kws['name'] is None:
                 try:
-                    name = func.__name__  # ty: ignore
+                    name = func.__name__  # type: ignore
                 except AttributeError as ex:
                     raise TypeError(
                         'specify the coordinate name with coordinates(name, ...)'
@@ -180,9 +180,9 @@ class CoordRegistry(dict['CoordFunc', 'CoordInfo']):
                 name=name, func=func, dims=dims, dtype=dtype, attrs=attrs
             )
 
-            return func  # ty: ignore
+            return func  # type: ignore
 
-        return cast(CoordFuncWrapper, wrapper)
+        return cast('CoordFuncWrapper', wrapper)
 
     def __hash__(self):  # pyright: ignore
         return hash(frozenset(self.items()))

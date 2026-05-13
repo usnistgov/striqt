@@ -1,6 +1,6 @@
 from __future__ import annotations as __
 
-from typing import Any, Sequence, TYPE_CHECKING
+from typing import cast, Any, Sequence, TYPE_CHECKING
 from pathlib import Path
 
 from .. import specs as specs
@@ -59,6 +59,9 @@ def lookup_power_correction(
     else:
         raise TypeError('invalid cal_data input type')
 
+    if corrections is None:
+        return None
+
     return _lookup_calibration_var(
         corrections.power_correction,
         capture=capture,
@@ -90,6 +93,9 @@ def lookup_system_noise_power(
         corrections = io.read_calibration(cal_data, alias_func)
     else:
         raise TypeError('invalid cal_data input type')
+
+    if corrections is None:
+        return None
 
     noise_figure = _lookup_calibration_var(
         corrections.noise_figure,
@@ -300,11 +306,14 @@ def _calibration_peripherals_cls(
 
 
 def bind_manual_yfactor_calibration(
-    name: str, sensor: 'bindings.SensorBinding[SS, SP, SC, PS, PC]'
+    name: str, sensor: 'bindings.SensorBinding[SS, SP, Any, PS, PC]'
 ) -> 'bindings.SensorBinding[SS, SP, SC, PS, PC]':
     """extend an existing binding with a y-factor calibration"""
 
     from . import bindings
+
+    assert sensor.schema is not None
+    assert issubclass(sensor.schema.capture, specs.Capture)
 
     class capture_spec_cls(sensor.schema.capture, frozen=True, kw_only=True):
         noise_diode_enabled: specs.types.NoiseDiodeEnabled = False
@@ -323,21 +332,25 @@ def bind_manual_yfactor_calibration(
         sensor.peripherals, ManualYFactorPeripheral
     )
 
+    cal_sensor = bindings.Sensor(
+        source=sensor.source,
+        peripherals=peripherals_cls,
+        sweep_spec=sweep_spec_cls,
+        sink=YFactorSink,
+    )
+
+    cal_schema = bindings.Schema(
+        source=sensor.schema.source,
+        capture=capture_spec_cls, # pyright: ignore
+        peripherals=sensor.schema.peripherals,
+        init_like=sensor.schema.init_like,
+        arm_like=sensor.schema.arm_like,
+    )
+
     return bindings.bind_sensor(
         name,
-        bindings.Sensor(
-            source=sensor.source,
-            peripherals=peripherals_cls,
-            sweep_spec=sweep_spec_cls,
-            sink=YFactorSink,
-        ),  # pyright: ignore
-        bindings.Schema(
-            source=sensor.schema.source,
-            capture=capture_spec_cls,
-            peripherals=sensor.schema.peripherals,
-            init_like=sensor.schema.init_like,
-            arm_like=sensor.schema.arm_like,
-        ),
+        cast(bindings.Sensor[SS, SP, SC, PS, PC], cal_sensor),
+        cast(bindings.Schema[SS, SP, SC, PS, PC], cal_schema),
     )
 
 
@@ -531,11 +544,8 @@ def _lookup_calibration_var(
         }
 
         try:
-            sel = (
-                cal_var.sel(
-                    **exact_matches, drop=True
-                )  # there is still one more dim to drop
-            )
+            # there is still one more dim to drop
+            sel = cal_var.sel(**exact_matches, drop=True)  # ty: ignore
         except KeyError:
             misses = _describe_missing_data(cal_var, exact_matches)
             exc = KeyError(f'calibration is not available for this capture: {misses}')
