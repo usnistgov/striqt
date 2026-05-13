@@ -117,7 +117,7 @@ def bind_sensor(
 
         mock_source: Optional[str] = None
         source: _bindings.schema.source = msgspec.field(
-            default_factory=_bindings.schema.source
+            default_factory=_bindings.schema.source # type: ignore
         )
         captures: tuple[_bindings.schema.capture, ...] = ()
         peripherals: _bindings.schema.peripherals = msgspec.field(
