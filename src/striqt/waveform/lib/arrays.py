@@ -14,13 +14,15 @@ _TC = TypeVar('_TC', bound=Callable)
 
 if TYPE_CHECKING:
     from types import ModuleType
+    from typing import cast
     from .typing import ArrayLike, Array, TypeIsCupy
     import numpy as np
 
     try:
-        import cupy as cp  # pyright: ignore[reportMissingImports]
+        import cupy as cp  # type: ignore
     except ModuleNotFoundError:
         cp = None
+    cp = cast(ModuleType | None, cp)
 
 else:
     np = util.lazy_import('numpy')
@@ -363,7 +365,7 @@ def histogram_last_axis(
     else:
         bins = xp.asarray(bins)
 
-    size = bins.size  # type: ignore
+    size = bins.size  # pyright: ignore
     flat = x.reshape(-1, hist_size)
     idx = xp.searchsorted(bins, flat, 'right') - 1
 
@@ -505,7 +507,7 @@ def pinned_array_as_cupy(x, stream=None):
 
 def sync_if_cupy(x: Array):
     if is_cupy_array(x) and cp is not None:
-        stream = cp.cuda.get_current_stream()  # type: ignore
+        stream = cp.cuda.get_current_stream()  # pyright: ignore
         stream.synchronize()
 
 
@@ -515,13 +517,13 @@ def configure_cupy():
         import cupy.fft as fft  # type: ignore
 
         # the FFT plan sets up large caches that don't help us
-        fft.config.get_plan_cache().set_size(0)  # type: ignore
-        cp.cuda.set_pinned_memory_allocator(None)  # type: ignore
+        fft.config.get_plan_cache().set_size(0)  # pyright: ignore
+        cp.cuda.set_pinned_memory_allocator(None)  # pyright: ignore
 
 
 def free_cupy_mempool():
     if cp is not None:
-        mempool = cp.get_default_memory_pool()  # type: ignore
+        mempool = cp.get_default_memory_pool()  # pyright: ignore
         if mempool is not None:
             mempool.free_all_blocks()
 
@@ -531,7 +533,7 @@ def set_cuda_mem_limit(fraction=0.75):
     if cp is None:
         return
 
-    cp.get_default_memory_pool().set_limit(fraction=fraction)  # type: ignore
+    cp.get_default_memory_pool().set_limit(fraction=fraction)  # pyright: ignore
 
     # Alternative: select an absolute amount of memory
     #
@@ -566,7 +568,7 @@ class NonStreamContext:
 def array_stream(obj: Array, null=False, non_blocking=False, ptds=False):
     """returns a cupy.Stream (or a do-nothing stand in) object as appropriate for obj"""
     if is_cupy_array(obj) and cp is not None:
-        return cp.cuda.Stream(null=null, non_blocking=non_blocking, ptds=ptds)  # type: ignore
+        return cp.cuda.Stream(null=null, non_blocking=non_blocking, ptds=ptds)  # pyright: ignore
     else:
         return NonStreamContext()
 
@@ -607,7 +609,7 @@ def convert_np_to_xp(func: _TC) -> _TC:
         if hasattr(xp, 'asarray'):
             x = xp.asarray(x)  # pyright: ignore
         elif hasattr(xp, 'array'):
-            x = xp.array(x)  # type: ignore
+            x = xp.array(x)  # pyright: ignore
         else:
             raise AttributeError(f'invalid array module {xp}')
 

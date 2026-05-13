@@ -57,7 +57,7 @@ def get_trigger_from_spec(
         )
     elif isinstance(analysis, specs.AnalysisGroup):
         return sa.Trigger.from_spec(name, analysis, registry=sa.registry)
-    elif isinstance(analysis, Analysis):
+    elif isinstance(analysis, sa.specs.Analysis):
         return sa.Trigger(setup.signal_trigger, analysis, registry=sa.registry)
 
 

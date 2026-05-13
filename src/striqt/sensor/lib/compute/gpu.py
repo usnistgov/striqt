@@ -72,7 +72,7 @@ def build_warmup_sweep(sweep: specs.Sweep[SS, SP, SC], count: int = 1) -> Warmup
             max_rx_ports = n
 
     # then build up the warmup sweep
-    b = mock_binding(sweep._bindings__, 'warmup', register=False)
+    b = mock_binding(sweep._bindings, 'warmup', register=False)
 
     source = warmup.schema.source(
         num_rx_ports=max_rx_ports,

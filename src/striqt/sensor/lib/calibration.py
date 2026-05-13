@@ -1,6 +1,6 @@
 from __future__ import annotations as __
 
-from typing import Any, Sequence, TYPE_CHECKING
+from typing import cast, Any, Sequence, TYPE_CHECKING
 from pathlib import Path
 
 from .. import specs as specs
@@ -33,10 +33,14 @@ def compute_y_factor_corrections(dataset: 'xr.Dataset', Tref=290.0) -> 'xr.Datas
 
 
 def summarize_calibration(corrections: 'xr.Dataset', **sel) -> 'pd.DataFrame':
-    nf_summary = _summarize_calibration_field(corrections, 'noise_figure', **sel)
-    corr_summary = _summarize_calibration_field(corrections, 'power_correction', **sel)
+    summaries = {
+        'NF (dB)': _summarize_calibration_field(corrections, 'noise_figure', **sel),
+        'Power Corr (dB)': _summarize_calibration_field(
+            corrections, 'power_correction', **sel
+        ),
+    }
 
-    return pd.concat([nf_summary, corr_summary], axis=1)
+    return pd.DataFrame(summaries, index=summaries['noise_figure'].index)
 
 
 @sa.util.lru_cache()
@@ -54,6 +58,9 @@ def lookup_power_correction(
         corrections = io.read_calibration(cal_data, alias_func)
     else:
         raise TypeError('invalid cal_data input type')
+
+    if corrections is None:
+        return None
 
     return _lookup_calibration_var(
         corrections.power_correction,
@@ -86,6 +93,9 @@ def lookup_system_noise_power(
         corrections = io.read_calibration(cal_data, alias_func)
     else:
         raise TypeError('invalid cal_data input type')
+
+    if corrections is None:
+        return None
 
     noise_figure = _lookup_calibration_var(
         corrections.noise_figure,
@@ -187,9 +197,9 @@ class YFactorSink(sinks.SinkBase):
         path = self._get_path()
 
         for port, _ in corrections.groupby('port', squeeze=False):
-            print(f'calibration results on port {port} (shown for max gain)')
+            print(f'{30 * "▀"} Port {port} at max gain {30 * "▀"}')
             summary = summarize_calibration(corrections, port=port)
-            with pd.option_context('display.max_rows', None):
+            with pd.option_context('display.max_rows', None, 'display.precision', 2):
                 print(summary.sort_index(axis=1).sort_index(axis=0))
 
         io.save_calibration(path, corrections)
@@ -296,11 +306,14 @@ def _calibration_peripherals_cls(
 
 
 def bind_manual_yfactor_calibration(
-    name: str, sensor: 'bindings.SensorBinding[SS, SP, SC, PS, PC]'
+    name: str, sensor: 'bindings.SensorBinding[SS, SP, Any, PS, PC]'
 ) -> 'bindings.SensorBinding[SS, SP, SC, PS, PC]':
     """extend an existing binding with a y-factor calibration"""
 
     from . import bindings
+
+    assert sensor.schema is not None
+    assert issubclass(sensor.schema.capture, specs.Capture)
 
     class capture_spec_cls(sensor.schema.capture, frozen=True, kw_only=True):
         noise_diode_enabled: specs.types.NoiseDiodeEnabled = False
@@ -319,21 +332,25 @@ def bind_manual_yfactor_calibration(
         sensor.peripherals, ManualYFactorPeripheral
     )
 
+    cal_sensor = bindings.Sensor(
+        source=sensor.source,
+        peripherals=peripherals_cls,
+        sweep_spec=sweep_spec_cls,
+        sink=YFactorSink,
+    )
+
+    cal_schema = bindings.Schema(
+        source=sensor.schema.source,
+        capture=capture_spec_cls,  # pyright: ignore
+        peripherals=sensor.schema.peripherals,
+        init_like=sensor.schema.init_like,
+        arm_like=sensor.schema.arm_like,
+    )
+
     return bindings.bind_sensor(
         name,
-        bindings.Sensor(
-            source=sensor.source,
-            peripherals=peripherals_cls,
-            sweep_spec=sweep_spec_cls,
-            sink=YFactorSink,
-        ),  # pyright: ignore
-        bindings.Schema(
-            source=sensor.schema.source,
-            capture=capture_spec_cls,
-            peripherals=sensor.schema.peripherals,
-            init_like=sensor.schema.init_like,
-            arm_like=sensor.schema.arm_like,
-        ),
+        cast(bindings.Sensor[SS, SP, SC, PS, PC], cal_sensor),
+        cast(bindings.Schema[SS, SP, SC, PS, PC], cal_schema),
     )
 
 
@@ -387,8 +404,8 @@ def _limit_nyquist_bandwidth(data: 'xr.DataArray') -> 'xr.DataArray':
     # return bandwidth with same shape as dataset.channel_power_time_series
     bw = data.analysis_bandwidth.broadcast_like(data).copy().squeeze()
     sample_rate = data.backend_sample_rate.broadcast_like(data).squeeze()
-    where = bw.data == float('inf')
-    bw.data[where] = sample_rate.data[where]
+    where = ~np.isfinite(bw.values == float('inf'))
+    bw.values[where] = sample_rate.values[where]
     return bw
 
 
@@ -401,13 +418,18 @@ def _y_factor_power_corrections(dataset: 'xr.Dataset', Tref=290.0) -> 'xr.Datase
     enr_dB = dataset.enr.sel(noise_diode_enabled=True, drop=True)
     enr = 10 ** (enr_dB / 10.0)
 
+    pvt = dataset.channel_power_time_series.drop('capture_index')
     power = (
-        dataset.channel_power_time_series
+        pvt
         .sel(power_detector='rms', drop=True)
-        .pipe(lambda x: 10 ** (x / 10.0))
+        .pipe(sa.dBtopow)
         .mean(dim='time_elapsed')
     )
     power.name = 'RMS power'
+
+    peak = pvt.sel(power_detector='peak', drop=True).max('time_elapsed')
+    avg = pvt.sel(power_detector='rms', drop=True).pipe(sa.dBlinmean, 'time_elapsed')
+    papr = (peak - avg).assign_attrs(units='dB')
 
     Pon = power.sel(noise_diode_enabled=True, drop=True)
     Poff = power.sel(noise_diode_enabled=False, drop=True)
@@ -417,23 +439,25 @@ def _y_factor_power_corrections(dataset: 'xr.Dataset', Tref=290.0) -> 'xr.Datase
     noise_figure.name = 'Noise figure'
     noise_figure.attrs = {'units': 'dB'}
 
-    T = Tref * (10 ** (noise_figure / 10) - 1)
-    T.name = 'Noise temperature'
-    T.attrs = {'units': 'K'}
+    Te = Tref * (10 ** (noise_figure / 10) - 1)
+    Te.name = 'Effective noise temperature'
+    Te.attrs = {'units': 'K'}
 
-    B = _limit_nyquist_bandwidth(T)
+    B = _limit_nyquist_bandwidth(Te)
 
-    power_correction = (k * (T + enr * Tref) * B) / Pon
-    power_correction.name = 'Input power scaling correction'
+    power_correction = (k * (enr * Tref) * B) / (Pon - Poff)
+    power_correction.name = 'Power scaling correction'
     power_correction.attrs = {'units': 'mW/fs'}
 
-    return xr.Dataset(
-        {
-            'temperature': T,
-            'noise_figure': noise_figure,
-            'power_correction': power_correction,
-        },
-    )
+    return xr.Dataset({
+        'temperature': Te,
+        'noise_figure': noise_figure,
+        'power_correction': power_correction,
+        'p_on': Pon,
+        'p_off': Poff,
+        'papr_on': papr.sel(noise_diode_enabled=True, drop=True),
+        'papr_off': papr.sel(noise_diode_enabled=False, drop=True),
+    })
 
 
 def _y_factor_frequency_response_correction(
@@ -462,11 +486,11 @@ def _y_factor_frequency_response_correction(
 
 def _summarize_calibration_field(
     corrections: 'xr.Dataset', field_name, **sel
-) -> 'pd.DataFrame':
+) -> 'pd.Series':
     max_gain = float(corrections.gain.max())
     corr = corrections[field_name].sel(gain=max_gain, **sel, drop=True).squeeze()
     stacked = corr.stack(condition=corr.dims).dropna('condition')
-    return stacked.to_dataframe()[[field_name]]
+    return stacked.to_dataframe()[field_name]
 
 
 def _describe_missing_data(cal_data: 'xr.DataArray', exact_matches: dict):
@@ -520,11 +544,8 @@ def _lookup_calibration_var(
         }
 
         try:
-            sel = (
-                cal_var.sel(
-                    **exact_matches, drop=True
-                )  # there is still one more dim to drop
-            )
+            # there is still one more dim to drop
+            sel = cal_var.sel(**exact_matches, drop=True)  # ty: ignore
         except KeyError:
             misses = _describe_missing_data(cal_var, exact_matches)
             exc = KeyError(f'calibration is not available for this capture: {misses}')

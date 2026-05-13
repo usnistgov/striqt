@@ -24,7 +24,9 @@ else:
     np = util.lazy_import('numpy')
 
 
-_source_id_map: dict[specs.Source, SourceBase | Event] = defaultdict(Event)
+_source_id_map: dict[specs.Source, SourceBase | Event | BaseException] = defaultdict(
+    Event
+)
 _exception: BaseException | None = None
 
 
@@ -36,7 +38,9 @@ def get_source_id(spec: specs.Source, timeout=0.5) -> str:
     """
     obj = _source_id_map[spec]
 
-    if not isinstance(obj, Event):
+    if isinstance(obj, BaseException):
+        raise util.ThreadInterruptRequest()
+    elif not isinstance(obj, Event):
         # already have this source!
         return obj.id
 
@@ -66,7 +70,7 @@ def bind_schema_types(
     """set the default to a SourceBase subclass"""
 
     def decorator(cls: type[T]) -> type[T]:
-        cls._bindings__ = Schema(source=source, capture=capture)
+        cls._bindings = Schema(source=source, capture=capture)
         return cls
 
     return decorator
@@ -88,7 +92,7 @@ def get_bound_spec(spec: specs.SpecBase | None, cls: type[S] | None, **kws) -> S
 
 
 class SourceBase(Source[SS, SC, PS, PC]):
-    _bindings__: ClassVar[Schema | None] = None
+    _bindings: ClassVar[Schema | None] = None
 
     _buffers: buffers.ReceiveBuffers
     _is_open: bool | Event = False
@@ -104,10 +108,10 @@ class SourceBase(Source[SS, SC, PS, PC]):
         if _spec is not None:
             _spec = cast(SS, _spec)
 
-        if self._bindings__ is None:
+        if self._bindings is None:
             spec_cls = None
         else:
-            spec_cls = cast(type[SS], self._bindings__.source)
+            spec_cls = cast(type[SS], self._bindings.source)
 
         try:
             _spec = get_bound_spec(_spec, spec_cls, **kwargs)
@@ -150,7 +154,7 @@ class SourceBase(Source[SS, SC, PS, PC]):
         kwargs = spec.to_dict()
         kwargs['__specs'] = {'source': spec, 'captures': captures, 'loops': loops}
 
-        if captures is not None and len(captures) > 0 and cls._bindings__ is None:
+        if captures is not None and len(captures) > 0 and cls._bindings is None:
             raise TypeError('can only hint captures for source class bindings')
 
         return cls(reuse_iq=reuse_iq, **kwargs)  # pyright: ignore
@@ -198,8 +202,8 @@ class SourceBase(Source[SS, SC, PS, PC]):
         """stop the stream, apply a capture configuration, and start it"""
         assert self._buffers is not None
 
-        if self._bindings__ is not None:
-            capture_cls = self._bindings__.capture
+        if self._bindings is not None:
+            capture_cls = self._bindings.capture
         elif self._capture is not None:
             capture_cls = type(self._capture)
         else:

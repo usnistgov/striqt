@@ -329,7 +329,7 @@ class PlotBackend:
                 if cbar is None:
                     raise TypeError('no colorbar on facet grid')
 
-                if _matplotlib_version() >= (3,10):
+                if _matplotlib_version() >= (3, 10):
                     long_axis = cbar.long_axis  # pyright: ignore
                 else:
                     long_axis = cbar.ax.yaxis  # pyright: ignore

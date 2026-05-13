@@ -3,6 +3,7 @@ from __future__ import annotations as __
 import dataclasses
 import logging
 import types
+import typing
 from typing import Any, cast, TYPE_CHECKING
 from math import ceil
 
@@ -110,11 +111,19 @@ class ReceiveBuffers:
 
 def get_array_namespace(array_backend: specs.types.ArrayBackend) -> types.ModuleType:
     if array_backend == 'cupy':
-        return sw.arrays.cp
+        if sw.arrays.cp is None:
+            # trigger the import error
+            import cupy  # type: ignore
+
+            raise ImportError
+        else:
+            mod = sw.arrays.cp
     elif array_backend == 'numpy':
-        return np
+        mod = np
     else:
         raise TypeError('invalid array_backend argument')
+
+    return cast(types.ModuleType, mod)
 
 
 @specs.helpers.convert_capture_arg(specs.SensorCapture)

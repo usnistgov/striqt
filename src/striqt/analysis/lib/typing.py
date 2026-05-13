@@ -39,7 +39,7 @@ if TYPE_CHECKING:
 
         def get_capture_fields(self) -> dict: ...
 
-    ChunksSize = int | Literal['auto'] | tuple[int, ...] | None  # ty: ignore
+    ChunksSize = int | Literal['auto'] | tuple[int, ...] | None  # pyright: ignore
 
     if hasattr(zarr.storage, 'Store'):  # type: ignore
         # zarr 2.x

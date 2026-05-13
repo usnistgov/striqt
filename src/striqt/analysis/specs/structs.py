@@ -13,7 +13,7 @@ from . import helpers, types
 import striqt.waveform as sw
 
 if typing.TYPE_CHECKING:
-    from typing import Self
+    from typing_extensions import Self
 else:
     from typing_extensions import Self
 
@@ -217,6 +217,11 @@ class _Cellular5GNRSSBCorrelator(Analysis, kw_only=True, frozen=True):
     symbol_indexes: types.CellSSBSymbolIndexes = 'auto'
     max_lag_symbols: Union[int, None] = None
 
+    def __post_init__(self):
+        super().__post_init__()
+        if not sw.arrays.isroundmod(self.delay * self.sample_rate, 1):
+            raise msgspec.ValidationError('delay * sample_rate must be an integer')
+
 
 class Cellular5GNRPSSCorrelator(_Cellular5GNRSSBCorrelator, kw_only=True, frozen=True):
     # same as SSS, but the registry requires unique spec types
@@ -228,8 +233,7 @@ class Cellular5GNRSSSCorrelator(_Cellular5GNRSSBCorrelator, kw_only=True, frozen
 
 
 class _Cellular5GNRSSBSync(_Cellular5GNRSSBCorrelator, frozen=True, kw_only=True):
-    window_fill: float = 0.5
-    snr_window_fill: float = 0.08
+    window_fill: float = 1
     per_port: bool = False
 
 
@@ -254,12 +258,7 @@ class Spectrogram(FrequencyAnalysisSpecBase, kw_only=True, frozen=True):
     dB = True
 
 
-class CellularCyclicAutocorrelator(
-    Analysis,
-    kw_only=True,
-    frozen=True,
-    dict=True,
-):
+class CellularCyclicAutocorrelator(Analysis, kw_only=True, frozen=True):
     subcarrier_spacings: Union[float, tuple[float, ...]] = (15e3, 30e3, 60e3)
     frame_range: Union[int, tuple[int, int]] = (0, 1)
     frame_slots: Union[str, None] = None
