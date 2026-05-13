@@ -11,6 +11,13 @@ from .typing import Peripherals, PC, PS, SC, SS, SP, TypeVar
 
 import msgspec
 
+TC2 = TypeVar('TC2', bound=specs.SensorCapture)
+TP2 = TypeVar('TP2', bound=specs.Peripherals)
+TS2 = TypeVar('TS2', bound=specs.Source)
+PS2 = ParamSpec('PS2')
+PC2 = ParamSpec('PC2')
+
+
 if TYPE_CHECKING:
 
     class BoundSweep(specs.Sweep, frozen=True, kw_only=True):
@@ -78,7 +85,7 @@ class SensorBinding(Sensor[SS, SP, SC, PS, PC]):
 
 def bind_sensor(
     key: str,
-    sensor: Sensor,
+    sensor: Sensor[TS2, TP2, TC2, PS2, PC2],
     schema: Schema[SS, SP, SC, PS, PC],
     register: bool = True,
 ) -> SensorBinding[SS, SP, SC, PS, PC]:
@@ -102,9 +109,7 @@ def bind_sensor(
         _bindings = schema
 
     BoundSource.__name__ = sensor.source.__name__
-
     sensor = dataclasses.replace(sensor, source=BoundSource)
-
     binding = SensorBinding(**dataclasses.asdict(sensor), schema=schema)
 
     class BoundSweep(sensor.sweep_spec, frozen=True, kw_only=True):  # ty: ignore
@@ -112,7 +117,7 @@ def bind_sensor(
 
         mock_source: Optional[str] = None
         source: _bindings.schema.source = msgspec.field(
-            default_factory=_bindings.schema.source  # type: ignore
+            default_factory=_bindings.schema.source
         )
         captures: tuple[_bindings.schema.capture, ...] = ()
         peripherals: _bindings.schema.peripherals = msgspec.field(
@@ -130,9 +135,10 @@ def bind_sensor(
             super().__post_init__()
 
     BoundSweep = tagged_subclass(key, BoundSweep, specs.SWEEP_TAG_FIELD)  # type: ignore
+    binding = dataclasses.replace(binding, sweep_spec=BoundSweep)
 
     if register:
-        registry[key] = dataclasses.replace(binding, sweep_spec=BoundSweep)
+        registry[key] = binding
 
     global tagged_sweeps
     if tagged_sweeps is None:
