@@ -1,6 +1,6 @@
 [project]
 name = "striqt"
-version = "0.4.0"
+version = "0.5.0"
 description = "tooling to support precision gpu-accelerated radio signal analysis and software radio automation"
 requires-python = ">=3.9"
 dependencies = [
@@ -46,6 +46,7 @@ build-backend = "hatchling.build"
 dev = [
     "jupyter",
     "ruff",
+    "ty"
 ]
 gpu = [
     "cupy >= 12.2",
@@ -83,6 +84,7 @@ preview = true
 target-version = "py39"
 extend-include = [ "*.ipynb", ]
 line-length = 88
+preview = true
 
 [tool.ruff.format]
 quote-style = "single"
@@ -101,7 +103,6 @@ packages = [ "src/striqt", ]
 
 [tool.hatch.build.targets.sdist]
 packages = [ "src/striqt", ]
-
 
 [tool.ty.rules]
 call-top-callable = "ignore"

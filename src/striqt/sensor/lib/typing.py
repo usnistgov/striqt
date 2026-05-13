@@ -23,9 +23,9 @@ PS = ParamSpec('PS')
 PC = ParamSpec('PC')
 R = TypeVar('R')
 
+S = TypeVar('S', bound='specs.SpecBase')
 SS = TypeVar('SS', bound='specs.Source')
 SC = TypeVar('SC', bound='specs.SensorCapture')
-S = TypeVar('S', bound='specs.SpecBase')
 SP = TypeVar('SP', bound='specs.Peripherals')
 SPC = TypeVar('SPC', bound='specs.Peripherals')
 
@@ -84,7 +84,7 @@ class Source(Protocol[SS, SC, PS, PC]):
     ) -> Self: ...
 
     def read_iq(
-        self, analysis: specs.AnalysisGroup | None = None
+        self, overlaps: tuple[int, int] = (0, 0)
     ) -> 'tuple[Array, int|None]': ...
 
     def _connect(self, spec: SS) -> None: ...
@@ -101,12 +101,7 @@ class Source(Protocol[SS, SC, PS, PC]):
 
     def arm_spec(self, spec: SC): ...
 
-    def acquire(
-        self,
-        *,
-        correction: bool = True,
-        alias_func: 'specs.helpers.PathAliasFormatter | None' = None,
-    ) -> sources.AcquiredIQ: ...
+    def acquire(self, overlaps: tuple[int, int] = (0, 0)) -> sources.AcquiredIQ: ...
 
     @property
     def capture_spec(self) -> SC: ...

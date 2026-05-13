@@ -3,6 +3,8 @@
 from __future__ import annotations
 import click
 import typing
+import xarray as xr
+import dask.array
 
 if typing.TYPE_CHECKING:
     import striqt.figures as sf
@@ -18,6 +20,13 @@ else:
 
 
 worker_ctx: WorkerData | None = None
+
+
+def _listify(values):
+    if isinstance(values, (tuple, list)):
+        return values
+    else:
+        return [values]
 
 
 @click.command('plot signal analysis from .zarr or .zarr.zip files')
@@ -69,13 +78,16 @@ def run(zarr_path: str, yaml_path: str, interactive=False, no_save=False):
     import itertools
 
     gb_fields = sf.util.get_groupby_fields(dataset, opts)
-    indexed = dataset.reset_index(list(dataset.indexes.keys())).set_xindex(
-        gb_fields
-    )  # .unstack(gb_fields)
-    idx_values = list(dict.fromkeys(indexed.indexes['capture']))
-    group_sel = [dict(zip(gb_fields, v)) for v in idx_values]
+    if len(gb_fields) > 0:
+        # the .set_index(...) is for compatibility with xarray < 2024.9.0
+        groups = dataset.set_index(capture=gb_fields).groupby('capture')
+        selects = [
+            {k: v for k, v in zip(gb_fields, _listify(values))} for values, _ in groups
+        ]
+    else:
+        selects = [{}]
 
-    combos = list(itertools.product(opts.variables.keys(), group_sel))
+    combos = list(itertools.product(opts.variables.keys(), selects))
 
     for _ in executor.map(worker_plot, *zip(*combos)):
         pass
@@ -90,6 +102,7 @@ def load_data(zarr_path: str, opts: 'sf.specs.PlotOptions', index=True) -> 'xr.D
     import striqt.analysis as sa
     import striqt.figures as sf
     import xarray as xr
+    import dask.array
 
     dataset = sa.load(zarr_path)
 
@@ -107,7 +120,7 @@ def load_data(zarr_path: str, opts: 'sf.specs.PlotOptions', index=True) -> 'xr.D
         dataset = dataset.rename_vars({'channel': 'port'})
 
     dataset = sf.util.query_match_at_index(
-        dataset, 'capture', 'sweep_start_time', opts.data.sweep_index
+        dataset, 'capture', 'sweep_index', opts.data.sweep_index
     )
 
     if opts.data.query is not None:
@@ -179,4 +192,4 @@ def worker_plot(variable: str, sel: dict[str, typing.Any]):
 
 
 if __name__ == '__main__':
-    run()  # type: ignore
+    run()  # pyright: ignore

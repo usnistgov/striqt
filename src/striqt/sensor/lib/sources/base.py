@@ -24,7 +24,10 @@ else:
     np = util.lazy_import('numpy')
 
 
-_source_id_map: dict[specs.Source, SourceBase | Event] = defaultdict(Event)
+_source_id_map: dict[specs.Source, SourceBase | Event | BaseException] = defaultdict(
+    Event
+)
+_exception: BaseException | None = None
 
 
 def get_source_id(spec: specs.Source, timeout=0.5) -> str:
@@ -35,12 +38,16 @@ def get_source_id(spec: specs.Source, timeout=0.5) -> str:
     """
     obj = _source_id_map[spec]
 
-    if not isinstance(obj, Event):
+    if isinstance(obj, BaseException):
+        raise util.ThreadInterruptRequest()
+    elif not isinstance(obj, Event):
         # already have this source!
         return obj.id
 
     if not obj.wait(timeout=timeout):
         util.propagate_thread_interrupts()
+        if _exception:
+            raise util.ThreadInterruptRequest()
         raise TimeoutError('timeout while waiting for a source ID')
 
     source = _source_id_map[spec]
@@ -63,7 +70,7 @@ def bind_schema_types(
     """set the default to a SourceBase subclass"""
 
     def decorator(cls: type[T]) -> type[T]:
-        cls._bindings__ = Schema(source=source, capture=capture)
+        cls._bindings = Schema(source=source, capture=capture)
         return cls
 
     return decorator
@@ -85,7 +92,7 @@ def get_bound_spec(spec: specs.SpecBase | None, cls: type[S] | None, **kws) -> S
 
 
 class SourceBase(Source[SS, SC, PS, PC]):
-    _bindings__: ClassVar[Schema | None] = None
+    _bindings: ClassVar[Schema | None] = None
 
     _buffers: buffers.ReceiveBuffers
     _is_open: bool | Event = False
@@ -101,14 +108,19 @@ class SourceBase(Source[SS, SC, PS, PC]):
         if _spec is not None:
             _spec = cast(SS, _spec)
 
-        if self._bindings__ is None:
+        if self._bindings is None:
             spec_cls = None
         else:
-            spec_cls = cast(type[SS], self._bindings__.source)
+            spec_cls = cast(type[SS], self._bindings.source)
 
-        _spec = get_bound_spec(_spec, spec_cls, **kwargs)
-
-        _map_source(_spec, self)
+        try:
+            _spec = get_bound_spec(_spec, spec_cls, **kwargs)
+        except BaseException as ex:
+            global _exception
+            _exception = ex
+            raise
+        else:
+            _map_source(_spec, self)
 
         self.__setup__ = _spec
         self._capture = None
@@ -142,7 +154,7 @@ class SourceBase(Source[SS, SC, PS, PC]):
         kwargs = spec.to_dict()
         kwargs['__specs'] = {'source': spec, 'captures': captures, 'loops': loops}
 
-        if captures is not None and len(captures) > 0 and cls._bindings__ is None:
+        if captures is not None and len(captures) > 0 and cls._bindings is None:
             raise TypeError('can only hint captures for source class bindings')
 
         return cls(reuse_iq=reuse_iq, **kwargs)  # pyright: ignore
@@ -190,8 +202,8 @@ class SourceBase(Source[SS, SC, PS, PC]):
         """stop the stream, apply a capture configuration, and start it"""
         assert self._buffers is not None
 
-        if self._bindings__ is not None:
-            capture_cls = self._bindings__.capture
+        if self._bindings is not None:
+            capture_cls = self._bindings.capture
         elif self._capture is not None:
             capture_cls = type(self._capture)
         else:
@@ -220,19 +232,18 @@ class SourceBase(Source[SS, SC, PS, PC]):
 
         self._capture = self._prepare_capture(spec) or spec
 
-    def read_iq(
-        self, analysis: specs.AnalysisGroup | None = None
-    ) -> 'tuple[Array, int|None]':
+    def read_iq(self, overlaps=(0, 0)) -> 'tuple[Array, int|None]':
         """read IQ for the armed capture"""
         assert self._capture is not None, 'soapy source must be armed to read IQ'
 
-        # the return buffer
-        samples, stream_bufs = self._buffers.get_next(self._capture)
+        if not isinstance(overlaps, (tuple, list)) or len(overlaps) != 2:
+            raise ValueError('overlaps must be a sequence of 2 integers')
+        for ol in overlaps:
+            if ol % 2 == 1 or ol < 0 or not isinstance(ol, (np.integer, int)):
+                raise ValueError('overlaps must be non-negative even integers')
 
-        # holdoff parameters, valid when we already have a clock reading
-        dsp_pad_before, _ = buffers.get_dsp_pad_size(
-            self._capture, self.setup_spec, analysis=analysis
-        )
+        # the return buffer
+        samples, stream_bufs = self._buffers.get_next(self._capture, overlaps=overlaps)
 
         # carryover from the previous acquisition
         missing_start_time = True
@@ -241,18 +252,24 @@ class SourceBase(Source[SS, SC, PS, PC]):
 
         # the number of holdoff samples from the end of the holdoff period
         # to include with the returned waveform
-        included_holdoff = dsp_pad_before
+        included_holdoff = overlaps[0]
 
         fs = self.get_resampler()['fs_sdr']
 
         # the number of valid samples to return per channel
         output_count = buffers.get_read_count(
-            self.capture_spec, self.setup_spec, include_holdoff=False
+            self.capture_spec,
+            self.setup_spec,
+            include_holdoff=False,
+            overlap=sum(overlaps),
         )
 
         # the total number of samples to acquire per channel
         buffer_count = buffers.get_read_count(
-            self.capture_spec, self.setup_spec, include_holdoff=True
+            self.capture_spec,
+            self.setup_spec,
+            include_holdoff=True,
+            overlap=sum(overlaps),
         )
 
         received_count = 0
@@ -297,9 +314,9 @@ class SourceBase(Source[SS, SC, PS, PC]):
                     self.capture_spec,
                     self._buffers,
                     stream_time_ns,
-                    dsp_pad_before=dsp_pad_before,
+                    start_overlap=overlaps[0],
                 )
-                remaining = remaining + included_holdoff - dsp_pad_before
+                remaining = remaining + included_holdoff - overlaps[0]
 
                 start_ns = stream_time_ns + round(included_holdoff * 1e9 / fs)
                 missing_start_time = False
@@ -308,7 +325,7 @@ class SourceBase(Source[SS, SC, PS, PC]):
             received_count += this_count
 
         samples = samples.view('complex64')
-        sample_offs = included_holdoff - dsp_pad_before
+        sample_offs = included_holdoff - overlaps[0]
         sample_span = slice(sample_offs, sample_offs + output_count)
 
         unused_count = output_count - round(self._capture.duration * fs)
@@ -328,73 +345,51 @@ class SourceBase(Source[SS, SC, PS, PC]):
 
     @sa.util.stopwatch('acquire', 'source')
     def acquire(
-        self, *, analysis=None, correction=True, alias_func=None
+        self,
+        overlaps=(0, 0),
+        alias_func: specs.helpers.PathAliasFormatter | None = None,
     ) -> buffers.AcquiredIQ:
         """arm a capture and enable the channel (if necessary), read the resulting IQ waveform.
 
         Optionally, calibration corrections can be applied, and the radio can be left ready for the next capture.
         """
-        from .. import resampling
 
         self.capture_spec  # ensure we are armed
 
-        trigger = buffers.get_trigger_from_spec(self.setup_spec, analysis)
-
         if self._prev_iq is None:
-            samples, time_ns = self.read_iq(analysis)
-            iq = self._package_acquisition(
-                samples,
-                time_ns,
-                analysis=analysis,
-                correction=correction,
-                alias_func=alias_func,
-            )
+            samples, time_ns = self.read_iq(overlaps)
+            iq = self._package_acquisition(samples, time_ns, alias_func)
 
         else:
             iq = dataclasses.replace(
                 self._prev_iq,
                 capture=self.capture_spec,
                 info=self._prev_iq.info.replace(start_time=None),
-                trigger=trigger,
-                analysis=analysis,
             )
 
         if self._reuse_iq:
             self._prev_iq = iq
 
-        if not correction:
-            return iq
-        else:
-            util.propagate_thread_interrupts()
-            tmin = self.capture_spec.duration / 2
-            with sa.util.stopwatch('resampling filter', threshold=tmin):
-                return resampling.resampling_correction(iq, overwrite_x=True)
+        return iq
 
     def _package_acquisition(
         self,
         samples: Array,
         time_ns: int | None,
-        *,
-        analysis=None,
-        correction=True,
         alias_func: specs.helpers.PathAliasFormatter | None = None,
     ) -> buffers.AcquiredIQ:
         info = specs.AcquisitionInfo(source_id=self.id)
 
-        trigger = buffers.get_trigger_from_spec(self.setup_spec, analysis)
-
         return buffers.AcquiredIQ(
+            alias_func=alias_func,
             pre_align=samples,
             pre_filter=None,
             aligned=None,
             capture=self.capture_spec,
             info=info,
             extra_data={},
-            alias_func=alias_func,
             source_spec=self.setup_spec,
             resampler=self.get_resampler(),
-            trigger=trigger,
-            analysis=analysis,
             voltage_scale=buffers.get_dtype_scale(self.setup_spec.transport_dtype),
         )
 
@@ -424,14 +419,17 @@ class SourceBase(Source[SS, SC, PS, PC]):
         return self._capture
 
     def get_resampler(self, capture=None) -> sw.ResamplerDesign:
+        from ..compute import design_resampler
+
         if capture is None:
             capture = self.capture_spec
 
-        return buffers.design_resampler(capture, self.setup_spec.master_clock_rate)
+        return design_resampler(capture, self.setup_spec.master_clock_rate)
 
 
 class VirtualSource(SourceBase[SS, SC, PS, PC]):
     _samples_elapsed = 0
+    _overlaps: tuple[int, int] = (0, 0)
 
     def reset_sample_counter(self, value=0):
         self._sync_time_source()
@@ -443,6 +441,10 @@ class VirtualSource(SourceBase[SS, SC, PS, PC]):
 
     def _prepare_capture(self, capture):
         self.reset_sample_counter()
+
+    def read_iq(self, overlaps=(0, 0)):
+        self._overlaps = overlaps
+        return super().read_iq(overlaps)
 
     def _read_stream(
         self,
@@ -463,7 +465,8 @@ class VirtualSource(SourceBase[SS, SC, PS, PC]):
         for port, buf in zip(ports, buffers):
             values = self.get_waveform(
                 count,
-                self._samples_elapsed,
+                start=self._overlaps[0],
+                offset=self._samples_elapsed,
                 port=port,
                 xp=getattr(self, 'xp', np),
             )
@@ -478,7 +481,14 @@ class VirtualSource(SourceBase[SS, SC, PS, PC]):
         return count, round(timestamp_ns)
 
     def get_waveform(
-        self, count: int, offset: int, *, port: int = 0, xp, dtype='complex64'
+        self,
+        count: int,
+        start: int,
+        offset: int,
+        *,
+        port: int = 0,
+        xp,
+        dtype='complex64',
     ) -> Array:
         raise NotImplementedError
 
@@ -486,7 +496,7 @@ class VirtualSource(SourceBase[SS, SC, PS, PC]):
         self._sync_time_ns = round(1_000_000_000 * self._samples_elapsed)
 
 
-def _map_source(spec: specs.Source, source: SourceBase):
+def _map_source(spec: specs.Source, source: SourceBase | BaseException):
     maybe_event = _source_id_map[spec]
     _source_id_map[spec] = source
 

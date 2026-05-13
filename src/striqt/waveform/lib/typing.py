@@ -1,6 +1,11 @@
 from __future__ import annotations as __
 
 import typing
+from typing import Literal, Union
+
+CellSSBIndexes = Union[
+    Literal['auto', 'a', 'b', 'c', 'd', 'e', 'f', 'g'], tuple[int, ...]
+]
 
 if typing.TYPE_CHECKING:
     from typing_extensions import TypeAlias, ParamSpec, TypeIs
@@ -49,7 +54,9 @@ if typing.TYPE_CHECKING:
     P = ParamSpec('P')
     R = TypeVar('R')
 
-    class CachedCallable(Protocol[P, R]):
+    class LRUWrapped(Protocol[P, R]):
         __wrapped__: Callable[P, R]
 
         def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R: ...
+        def cache_clear(self) -> None: ...
+        def cache_info(self) -> Any: ...

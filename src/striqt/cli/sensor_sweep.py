@@ -84,4 +84,4 @@ def run(*, yaml_path, debug, verbose, port, **kws):
 
 
 if __name__ == '__main__':
-    run()  # type: ignore
+    run()  # pyright: ignore

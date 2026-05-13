@@ -278,7 +278,7 @@ def cellular_resource_power_histogram(iq: 'Array', capture: specs.Capture, **kwa
         nfft = capture.sample_rate / spg_spec.frequency_resolution
         noverlap = fractional_overlap * nfft
         hop_size = nfft - noverlap
-        hop_period = hop_size / capture.sample_rate
+        hop_period = float(hop_size / capture.sample_rate)
         time_bin_averaging = round(time_aperture / hop_period)
 
         assert sw.isroundmod(time_aperture / hop_period, 1)

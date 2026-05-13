@@ -3,6 +3,7 @@ from __future__ import annotations as __
 from pathlib import Path
 from typing import TYPE_CHECKING as _TYPE_CHECKING
 from typing import Annotated, Any, Literal, Mapping, Optional, Union
+from striqt.analysis.specs import frozendict
 from striqt.analysis.specs.types import *
 
 if _TYPE_CHECKING:
@@ -58,7 +59,9 @@ ExtensionPath = Annotated[
     str,
     Meta('path to append to sys.path before extension imports'),
 ]
-FileMetadata = Annotated[Mapping, Meta('any capture fields not included in the file')]
+FileMetadata = Annotated[
+    dict[str, Any], Meta('any capture fields not included in the file')
+]
 FileLoop = Annotated[
     bool, Meta('whether to loop the file to create longer IQ waveforms')
 ]
@@ -97,7 +100,7 @@ Port = Annotated[
     Meta('Input port indices'),
 ]
 PSD = Annotated[float, Meta('noise total channel power', 'mW/Hz', ge=0)]
-Power = Annotated[float, Meta('peak power level', 'dB', gt=0)]
+Power = Annotated[float, Meta('peak power level', 'dB')]
 Period = Annotated[float, Meta('waveform period', 's', ge=0)]
 ReceiveRetries = Annotated[
     int, Meta('number of acquisition retry attempts on stream error', ge=0)

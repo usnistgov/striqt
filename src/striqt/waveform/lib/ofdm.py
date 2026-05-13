@@ -2,23 +2,33 @@ from __future__ import annotations as __
 
 import dataclasses
 from fractions import Fraction
-from math import ceil
+from math import ceil, isclose
 from numbers import Number
 import typing
 
 from . import fourier
 
-from . import util
-from .arrays import array_namespace, isroundmod, pad_along_axis
+from . import arrays, power_analysis, util
+from .typing import CellSSBIndexes
+from .arrays import array_namespace, is_cupy_array, isroundmod, pad_along_axis
 
 if typing.TYPE_CHECKING:
     import array_api_compat
     import numpy as np
 
-    from .typing import Array
+    from .typing import Array, WindowSpecType
 else:
     np = util.lazy_import('numpy')
     array_api_compat = util.lazy_import('array_api_compat')
+
+
+def _min_diff(x: typing.Sequence[int]) -> int | None:
+    """return the minimum difference between neighbors in x"""
+
+    if len(x) <= 1:
+        return None
+
+    return min(b - a for a, b in zip(x, x[1:]))
 
 
 def _isclosetoint(v, atol=1e-6):
@@ -149,6 +159,13 @@ class SyncParams:
     frames_per_sync: int
     duration: float
     symbol_indexes: list[int]
+    short_symbol_size: int
+    lag_count: int
+    subcarrier_spacing: float
+    sample_rate: float = 2 * 7.68e6
+    discovery_periodicity: float = 20e-3
+    shared_spectrum: bool = False
+    max_lag_symbols: int | None = None
 
 
 def _pss_m_sequence(N_id2: int) -> list[int]:
@@ -214,7 +231,7 @@ def _generate_5g_nr_sync_sequence(
     max_id: int,
     sample_rate: float,
     subcarrier_spacing: float,
-    center_frequency=0,
+    center_frequency: float | None = None,
     *,
     xp=None,
     dtype='complex64',
@@ -241,7 +258,7 @@ def _generate_5g_nr_sync_sequence(
     else:
         raise ValueError('sample_rate must be a multiple of subcarrier spacing')
 
-    if center_frequency == 0:
+    if center_frequency is None or center_frequency == 0:
         frequency_offset = 0
     elif isroundmod(center_frequency, subcarrier_spacing):
         # check frequency bounds later via pad_*
@@ -324,7 +341,7 @@ def pss_5g_nr(
 def sss_5g_nr(
     sample_rate: float,
     subcarrier_spacing: float,
-    center_frequency=0,
+    center_frequency: float | None = None,
     *,
     xp=None,
     dtype='complex64',
@@ -354,6 +371,109 @@ def sss_5g_nr(
     )
 
 
+def _index_pss_symbols(
+    subcarrier_spacing: float,
+    shared_spectrum: bool = False,
+    symbol_indexes: CellSSBIndexes = 'auto',
+    center_frequency: float | None = None,
+) -> tuple[int, ...]:
+    """returns indexes of PSS symbols relative to frame start.
+
+    Optionally, symbol_indexes may be determined by specifying one of the
+    standardized cell search cases in 3GPP TS 138 213: Section 4.1. If
+    symbol_indexes is 'auto', then a case
+    """
+    if isinstance(symbol_indexes, str):
+        symbol_indexes = symbol_indexes.lower()  # type: ignore
+    elif isinstance(symbol_indexes, (tuple, list)):
+        return symbol_indexes
+    else:
+        raise TypeError('symbol_index has valid type')
+
+    if symbol_indexes == 'auto':
+        if isclose(subcarrier_spacing, 15e3):
+            case = 'a'
+        elif isclose(subcarrier_spacing, 30e3):
+            if shared_spectrum:
+                case = 'c'
+            else:
+                raise ValueError('choose case "b" or "c" for 30 kHz subcarrier spacing')
+        elif isclose(subcarrier_spacing, 120e3):
+            case = 'd'
+        elif isclose(subcarrier_spacing, 240e3):
+            case = 'e'
+        elif isclose(subcarrier_spacing, 480e3):
+            case = 'f'
+        elif isclose(subcarrier_spacing, 960e3):
+            case = 'g'
+        else:
+            scs_khz = round(subcarrier_spacing / 1e3)
+            raise ValueError(
+                f'standard cell search parameters do not exist for SCS {scs_khz} kHz'
+            )
+    elif symbol_indexes in ('a', 'b', 'c'):
+        case = symbol_indexes
+    else:
+        raise ValueError('symbol_indexes is an invalid str')
+
+    if shared_spectrum and case not in ('a', 'c'):
+        raise ValueError(f'shared_spectrum unsupported by cell search case {case}')
+
+    # The standardized cell search cases in 3GPP TS 138 213: Section 4.1
+    if case == 'a':
+        offsets = [2, 8]
+        mult = 14
+        if shared_spectrum:
+            nrange = range(5)
+        else:
+            # for center frequencies < 3 GHz (or 1.88 GHz in unpaired operation)
+            # the upper 2 can be ignored
+            if center_frequency is None or center_frequency > 3e9:
+                nrange = range(4)
+            else:
+                nrange = range(2)
+    elif case == 'b':
+        offsets = [4, 8, 16, 20]
+        mult = 28
+        if center_frequency is None or center_frequency > 3e9:
+            nrange = range(2)
+        else:
+            nrange = range(1)
+    elif case == 'c':
+        offsets = [2, 8]
+        mult = 14
+        if shared_spectrum:
+            nrange = range(10)
+        else:
+            if center_frequency is None or center_frequency > 1.88e9:
+                nrange = range(4)
+            else:
+                # NOTE: In theory, TDD between 1.88 - 3 GHz should also go here
+                nrange = range(2)
+    # Below here FR-2
+    elif case == 'd':
+        offsets = [4, 8, 16, 20]
+        mult = 28
+        nrange = range(19)
+    elif case == 'e':
+        offsets = [8, 12, 16, 20, 32, 36, 40, 44]
+        mult = 56
+        nrange = range(9)
+    elif case == 'f' or case == 'g':
+        offsets = [2, 9]
+        mult = 14
+        nrange = range(32)
+    else:
+        raise TypeError
+
+    inds = []
+    for n in nrange:
+        for offset in offsets:
+            inds.append(offset + mult * n)
+
+    return tuple(inds)
+
+
 @util.lru_cache()
 def pss_params(
     *,
@@ -361,6 +481,9 @@ def pss_params(
     subcarrier_spacing: float,
     discovery_periodicity: float = 20e-3,
     shared_spectrum: bool = False,
+    max_lag_symbols: int | None = None,
+    symbol_indexes: CellSSBIndexes = 'auto',
+    center_frequency: float | None = None,
 ) -> SyncParams:
     if not isroundmod(subcarrier_spacing, 15e3):
         raise ValueError('subcarrier_spacing must be multiple of 15000')
@@ -372,57 +495,19 @@ def pss_params(
             f'sample_rate must be a multiple of {128 * subcarrier_spacing}'
         )
 
-    # if duration is None:
-    #     duration = 2 * slot_duration
-    # elif not iqwaveform.util.isroundmod(duration, slot_duration / 2):
-    #     raise ValueError(
-    #         f'duration must be a multiple of 1/2 slot duration, {slot_duration / 2}'
-    #     )
+    symbol_indexes = _index_pss_symbols(
+        subcarrier_spacing, shared_spectrum, symbol_indexes, center_frequency
+    )
 
-    # The following cases are defined in 3GPP TS 138 213: Section 4.1
-    if np.isclose(subcarrier_spacing, 15e3):
-        # Case A
-        offsets = [2, 8]
-        mult = 14
-        if shared_spectrum:
-            nrange = range(5)
-        else:
-            # for center frequencies < 3 GHz (or 1.88 GHz in unpaired operation)
-            # the upper 2 can be ignored
-            nrange = range(4)
-    # TODO: Implement Case B
-    # elif np.isclose(subcarrier_spacing, 30e3):
-    #     # Case B
-    #     offsets = [2,8]
-    #     if shared_spectrum:
-    #         n = np.arange(10)
-    #     else:
-    #         # for center frequencies < 3 GHz, the upper 2 can be ignored
-    #         n = np.arange(4)
-    elif np.isclose(subcarrier_spacing, 30e3):
-        # For now, all 30 kHz SCS is assumed to be "Case C"
-        offsets = [2, 8]
-        mult = 14
-        if shared_spectrum:
-            nrange = range(10)
-        else:
-            # for center frequencies < 3 GHz (or 1.88 GHz in unpaired
-            # operation) the upper 2 can be ignored
-            nrange = range(4)
-    else:
-        raise ValueError(
-            'only 15 kHz and 30 kHz SCS (Case A, C) are currently supported (Case A,B,C)'
-        )
+    if max_lag_symbols is None:
+        # 4 === minimum possible separation between any 2 PSS or SSS symbols
+        max_lag_symbols = _min_diff(sorted(symbol_indexes)) or 4
 
-    symbol_indexes = []
-    for n in nrange:
-        for offset in offsets:
-            symbol_indexes.append(offset + mult * n)
-
-    slot_count = ceil(symbol_indexes[-1] / 14)
+    slot_count = ceil((symbol_indexes[-1] + max_lag_symbols + 1) / 14)
     slot_duration = 10e-3 / (10 * subcarrier_spacing / 15e3)
     duration = slot_count * slot_duration
     corr_size = round(duration * sample_rate)
+    short_symbol_size = round(slot_duration * sample_rate) // 14
 
     if isroundmod(discovery_periodicity, 10e-3):
         frames_per_sync = round(discovery_periodicity / 10e-3)
@@ -437,6 +522,7 @@ def pss_params(
     )
     min_cp_size = min(phy.cp_sizes)
     cp_offsets = list(np.cumsum([n - min_cp_size for n in phy.cp_sizes]))
+    lag_count = short_symbol_size * max_lag_symbols
 
     return SyncParams(
         min_cp_size=min_cp_size,
@@ -445,8 +531,15 @@ def pss_params(
         slot_count=slot_count,
         corr_size=corr_size,
         frames_per_sync=frames_per_sync,
-        symbol_indexes=symbol_indexes,
+        symbol_indexes=list(symbol_indexes),
         duration=duration,
+        short_symbol_size=short_symbol_size,
+        lag_count=lag_count,
+        sample_rate=sample_rate,
+        subcarrier_spacing=subcarrier_spacing,
+        discovery_periodicity=discovery_periodicity,
+        shared_spectrum=shared_spectrum,
+        max_lag_symbols=max_lag_symbols,
     )
 
 
@@ -457,28 +550,248 @@ def sss_params(
     subcarrier_spacing: float,
     discovery_periodicity: float = 20e-3,
     shared_spectrum: bool = False,
+    max_lag_symbols: int | None = 2,
+    symbol_indexes: CellSSBIndexes = 'auto',
+    center_frequency: float | None = None,
 ) -> SyncParams:
     # Match PSS except that the symbol indexes are incremented by 2
 
-    template = pss_params(
+    if symbol_indexes == 'auto':
+        template = pss_params(
+            sample_rate=sample_rate,
+            subcarrier_spacing=subcarrier_spacing,
+            discovery_periodicity=discovery_periodicity,
+            shared_spectrum=shared_spectrum,
+            max_lag_symbols=max_lag_symbols,
+            center_frequency=center_frequency,
+        )
+        symbol_indexes = tuple(i + 2 for i in template.symbol_indexes)
+
+    return pss_params(
         sample_rate=sample_rate,
         subcarrier_spacing=subcarrier_spacing,
         discovery_periodicity=discovery_periodicity,
         shared_spectrum=shared_spectrum,
+        max_lag_symbols=max_lag_symbols,
+        symbol_indexes=symbol_indexes,
+        center_frequency=center_frequency,
     )
 
-    indexes = [i + 2 for i in template.symbol_indexes]
 
-    return SyncParams(
-        min_cp_size=template.min_cp_size,
-        cp_offsets=template.cp_offsets,
-        frame_size=template.frame_size,
-        slot_count=template.slot_count,
-        corr_size=template.corr_size,
-        frames_per_sync=template.frames_per_sync,
-        symbol_indexes=indexes,
-        duration=template.duration,
+def get_5g_ssb_iq(
+    iq: Array,
+    *,
+    discovery_periodicity: float,
+    fs_out: float,
+    fs_in: float,
+    subcarrier_spacing: float,
+    frequency_offset: float = 0,
+    delay: float = 0,
+    max_block_count: int | None = None,
+    oaresample: bool = False,
+) -> Array:
+    """return a sync block waveform, which returns IQ that is recentered
+    at baseband frequency spec.frequency_offset and downsampled to spec.sample_rate."""
+
+    xp = arrays.array_namespace(iq)
+
+    offs = round(delay * fs_in)
+
+    if oaresample:
+        down = round(fs_in / subcarrier_spacing / 8)
+        up = round(down * (fs_out / fs_in))
+
+        if up % 3 > 0:
+            # ensure compatibility with the blackman window overlap of 2/3
+            down = down * 3
+            up = up * 3
+
+        if max_block_count is not None:
+            size_in = round(max_block_count * discovery_periodicity * fs_in)
+            iq = iq[..., offs : offs + size_in]
+        else:
+            size_in = iq.shape[-1]
+
+        size_out = round(up / down * size_in)
+
+        out = xp.empty((iq.shape[0], size_out), dtype=iq.dtype)
+
+        for i in range(out.shape[0]):
+            out[i] = fourier.oaresample(
+                iq[i],
+                fs=fs_in,
+                up=up,
+                down=down,
+                axis=0,
+                window='blackman',
+                frequency_shift=frequency_offset,
+            )
+
+    else:
+        if max_block_count is not None:
+            size_in = round(max_block_count * discovery_periodicity * fs_in)
+            iq = iq[..., offs : offs + size_in]
+        else:
+            size_in = iq.shape[-1]
+
+        size_out = round(size_in * fs_out / fs_in)
+        out = xp.empty((iq.shape[0], size_out), dtype=iq.dtype)
+        shift = round(iq.shape[1] * frequency_offset / fs_in)
+
+        for i in range(out.shape[0]):
+            out[i] = fourier.resample(
+                iq[i], num=size_out, axis=0, overwrite_x=False, shift=shift
+            )
+
+    return out
+
+
+def correlate_sync_sequence(
+    ssb_iq: Array, sync_seq: Array, *, params: SyncParams, cell_id_split: int | None = 1
+) -> Array:
+    """correlate the IQ of a synchronization block against a synchronization sequence.
+
+    Arguments:
+        ssb_iq: The synchronization block IQ waveform (e.g., from `get_5g_ssb_iq`)
+        sync_seq: The reference sequence (e.g. from `striqt.waveform.ofdm.pss_5g_nr` or `striqt.waveform.ofdm.sss_5g_nr`)
+        params: The cell synchronization parameters (e.g. from `striqt.waveform.ofdm.pss_params` or `striqt.waveform.ofdm.sss_params`)
+    """
+    xp = array_namespace(ssb_iq)
+
+    slot_count = params.slot_count
+    corr_size = params.corr_size
+    frames_per_sync = params.frames_per_sync
+
+    # set up broadcasting on dimensions:
+    # (port index, cell Nid, sync block index, IQ sample index)
+    iq_bcast = ssb_iq.reshape((ssb_iq.shape[0], -1, params.frame_size))
+    iq_bcast = iq_bcast[:, xp.newaxis, ::frames_per_sync, :corr_size]
+
+    template_bcast = sync_seq[xp.newaxis, :, xp.newaxis, :]
+    # pad_size = template_bcast.shape[-1]
+    # template_bcast  = iqwaveform.util.pad_along_axis(template_bcast, [[0,pad_size]], axis=3)
+
+    # TODO: this would need to support multiple different prefixes for 4G LTE
+    offs = (
+        round(params.sample_rate / params.subcarrier_spacing) + 2 * params.min_cp_size
     )
+
+    R_shape = list(max(a, b) for a, b in zip(iq_bcast.shape, template_bcast.shape))
+    R_shape[-1] = iq_bcast.shape[-1] + template_bcast.shape[-1] - 1
+    R = xp.empty(tuple(R_shape), dtype='complex64')
+
+    for cell_id in range(template_bcast.shape[1]):
+        R[:, cell_id] = fourier.oaconvolve(
+            iq_bcast[:, 0], template_bcast[:, cell_id], axes=2, mode='full'
+        )
+    R = xp.roll(R, -offs, axis=-1)[..., :corr_size]
+    R = R[..., :corr_size]
+
+    # add slot index dimension: -> (port index, cell Nid, sync block index, slot index, IQ sample index)
+    excess_cp = [params.cp_offsets[i % 14] for i in params.symbol_indexes]
+    if len(set(excess_cp)) != 1:
+        raise ValueError('expect all 5G sync symbols to have the same excess CP')
+
+    Rperslot = R.reshape(R.shape[:-1] + (slot_count, -1))[..., excess_cp[0] :]
+    R = Rperslot.reshape(R.shape[:-1] + (-1,))
+
+    # take the desired symbol indexes from a sliding window views on the correlation sequence
+    # final dims (port index, cell Nid, sync block index, beam index, IQ sample index)
+    start_inds = xp.array(params.symbol_indexes) * params.short_symbol_size
+
+    Rwins = arrays.sliding_window_view(R, params.lag_count, axis=-1)
+    result = Rwins[..., start_inds, :]
+    if params.min_cp_size:
+        result[..., -params.min_cp_size :] = 0
+    return result
+
+
+def choose_ssb_offset(
+    rssb: Array,
+    params: SyncParams,
+    *,
+    per_port: bool = True,
+    window: WindowSpecType = 'triang',
+    window_fill: float | Fraction = 1,
+) -> Array:
+    """Given correlator output, apply averaging reductions to {NID2, SSB, beam} indexes
+    and a weighting function to the lag.
+
+    The approach is to use a weighted average of nearby peaks across lag
+    in order to reduce mis-alignment errors in measurements of aggregate interference.
+
+    The underlying heuristic is a triangular weighting function to include energy
+    within +/- 1/4 symbol of each peak. Outside of this range, spectrogram errors
+    due to "ISI" begin to increase quickly.
+
+    Args:
+        rssb: output from
+        window: the window function to use for weighting
+        per_port: whether to return a weighted correlation separately per port
+        window_fill: the fraction of the window to apply
+
+    Returns:
+        an array with dimensions (port index, symbol lag, iq lag)
+    """
+    # input dims: (port index, cell Nid, sync block index, beam index, IQ sample index)
+    # transform to these dimensions
+    PORT_DIM = -6
+    NID2_DIM = -5
+    SYNC_DIM = -4
+    BEAM_DIM = -3
+    COARSE_LAG_DIM = -2
+    FINE_LAG_DIM = -1
+
+    xp = arrays.array_namespace(rssb)
+
+    if rssb.ndim == 4:
+        # assume a missing dimension is the port index
+        rssb = rssb[np.newaxis, ...]
+    elif rssb.ndim != 5:
+        raise TypeError('input array must have 5 dimensions')
+    symbol_count = round(params.lag_count / params.short_symbol_size)
+    rssb = rssb.reshape(rssb.shape[:-1] + (symbol_count, -1))
+
+    r = power_analysis.envtopow(rssb)
+
+    if is_cupy_array(rssb):
+        from cupyx.scipy import ndimage  # type: ignore
+    else:
+        from scipy import ndimage
+
+    if not per_port:
+        r = r.mean(axis=PORT_DIM, keepdims=True)
+
+    r = r.mean(axis=(NID2_DIM, SYNC_DIM, BEAM_DIM))
+    rmed = np.median(r, axis=(FINE_LAG_DIM), keepdims=True)
+    assert r.ndim == 3
+
+    # to avoid spectral bleeding from individual strong sources,
+    # consider only obvious peaks with at least 3 dB prominence
+    rpeak = r.copy()
+    threshold = np.clip(2 * rmed, min=r.max() / 2)
+    rpeak[np.where(rpeak < threshold)] = 0
+
+    # evaluate the sub-symbol IQ offset
+    nfill = round(window_fill * rpeak.shape[FINE_LAG_DIM])
+    nfine = rpeak.shape[FINE_LAG_DIM]
+    w = fourier.get_window(
+        window,
+        nwindow=nfill,
+        nzero=nfine - nfill,
+        norm=False,
+        center_zeros=True,
+        fftbins=False,
+        xp=xp,
+    )
+    offsets = ndimage.correlate1d(rpeak, w, mode='wrap', axis=-1)
+    weighted_fine = offsets.mean(axis=COARSE_LAG_DIM)
+    ifine = weighted_fine.argmax(-1)
+
+    # evaluate the symbol index offset
+    isymbol = nfine * offsets.max(FINE_LAG_DIM).argmax(-1)  # the peakiest symbol or 0
+
+    return ifine + isymbol
 
 
 class PhyOFDM:
@@ -785,7 +1098,7 @@ class Phy802_16(PhyOFDM):
             raise ValueError(
                 'standardized values for channel_bandwidth not supported yet'
             )
-        elif not np.isclose(channel_bandwidth % 125e3, 0, atol=1e-6):
+        elif not isclose(channel_bandwidth % 125e3, 0, abs_tol=1e-6):
             raise ValueError('channel bandwidth must be set in increments of 125 kHz')
 
         if nfft not in self.VALID_FFT_SIZES:
@@ -802,7 +1115,7 @@ class Phy802_16(PhyOFDM):
             )
 
         for freq_divisor, n in self.SAMPLING_FACTOR_BY_FREQUENCY_DIV.items():
-            if np.isclose(channel_bandwidth % freq_divisor, 0, atol=1e-6):
+            if isclose(channel_bandwidth % freq_divisor, 0, abs_tol=1e-6):
                 sampling_factor = self.sampling_factor = n
                 break
         else:

@@ -115,7 +115,7 @@ def tdd_config_from_str(
     uplink_slots = [i for i, s in enumerate(frame_slots) if s == 'u']
 
     if 's' not in frame_slots or special_symbols is not None:
-        frame_by_symbol = ''.join([slot_by_symbol[k] for k in frame_slots])
+        frame_by_symbol = ''.join([slot_by_symbol[k] for k in frame_slots])  # ty: ignore
     else:
         frame_by_symbol = 'd' * len(frame_slots)
 
@@ -293,7 +293,7 @@ def cellular_cyclic_autocorrelation(iq: 'Array', capture: specs.Capture, **kwarg
     metadata['symbols'] = spec.symbol_range
 
     frame_range = _get_spec_range(spec.frame_range, 'frame_range')
-    symbol_range = _get_spec_range(spec.symbol_range, 'symbol_range')
+    symbol_range = _get_spec_range(spec.symbol_range, 'symbol_range')  # ty: ignore
 
     def index_cp_for_slot(slots):
         return phy.index_cyclic_prefix(

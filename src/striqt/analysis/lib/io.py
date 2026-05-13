@@ -22,7 +22,7 @@ if typing.TYPE_CHECKING:
     import xarray as xr
     import yaml
     import zarr
-
+    from typing_extensions import TypeIs
     from .typing import Array, ChunksSize, FileStream, ZarrFormat, ZarrStore
 
 else:
@@ -42,7 +42,7 @@ warnings.filterwarnings(
 )
 
 
-def open_store(target: str | Path, *, mode: str) -> ZarrStore:
+def open_store(target: str | Path, *, mode: typing.Literal['r', 'w', 'a']) -> ZarrStore:
     import zarr.storage
 
     if _zarr_version() < (3, 0, 0):
@@ -50,7 +50,7 @@ def open_store(target: str | Path, *, mode: str) -> ZarrStore:
         DirectoryStore = zarr.storage.DirectoryStore  # type: ignore
     else:
         StoreBase = zarr.abc.store.Store  # type: ignore
-        DirectoryStore = zarr.storage.LocalStore  # type: ignore
+        DirectoryStore = zarr.storage.LocalStore  # pyright: ignore
 
     if isinstance(target, StoreBase):
         store = target
@@ -453,7 +453,7 @@ class NPYFileStream(_FileStreamBase):
     def close(self):
         pass
 
-    def read(self, count=None):
+    def read(self, count: int = 0):
         if count == 0:
             return
 
@@ -519,7 +519,6 @@ class TDMSFileStream(_FileStreamBase):
 
         self._fd = TdmsFile.read(path)
         self._header_fd, self._iq_fd = self._fd.groups()
-        self._position = 0
 
         super().__init__(
             path,
@@ -529,16 +528,21 @@ class TDMSFileStream(_FileStreamBase):
             **meta,
         )
 
+        self._position = 0
+
     def close(self):
         self._fd.close()
 
-    def read(self, count=None):
+    def read(self, count: int | None = None):
         xp = self._xp
 
-        offset = self._position
+        offset = self._position or 0
 
         size = int(self._fd['header_fd']['total_samples'][0])
         ref_level = self._fd['header_fd']['reference_level_dBm'][0]
+
+        if count is None:
+            count = size
 
         if size < count:
             raise ValueError(
@@ -551,7 +555,7 @@ class TDMSFileStream(_FileStreamBase):
         iq[offset * 2 :: 2] = xp.asarray(i[offset : count + offset])
         iq[1 + offset * 2 :: 2] = xp.asarray(q[offset : count + offset])
 
-        self._position += count
+        self._position = (self._position or 0) + count
 
         iq = (iq * float_dtype(scale)).view(self.dtype)  # type: ignore
 
@@ -608,7 +612,7 @@ def open_bare_iq(
     )
 
 
-def _is_fsspec_url(url_string: Path | str) -> typing.TypeIs[str]:
+def _is_fsspec_url(url_string: Path | str) -> 'TypeIs[str]':
     if isinstance(url_string, Path):
         return False
 
@@ -684,10 +688,10 @@ def _choose_chunk_sizes(
 def _build_encodings_zarr_v3(
     data, registry: register.AnalysisRegistry, compression=True
 ):
-    if isinstance(compression, zarr.core.codec_pipeline.Codec):  # type: ignore
+    if isinstance(compression, zarr.core.codec_pipeline.Codec):  # pyright: ignore
         compressors = [compression]
     elif compression:
-        from zarr import codecs  # type: ignore
+        from zarr import codecs  # pyright: ignore
 
         shuffle = codecs.BloscShuffle.shuffle
         compressors = [codecs.BloscCodec(cname='zstd', clevel=1, shuffle=shuffle)]
@@ -753,7 +757,7 @@ class _YAMLFrozenLoader(yaml.SafeLoader):
 
 
 _YAMLFrozenLoader.add_constructor(
-    yaml.resolver.BaseResolver.DEFAULT_SEQUENCE_TAG,
+    yaml.resolver.BaseResolver.DEFAULT_SEQUENCE_TAG,  # ty: ignore
     _YAMLFrozenLoader._construct_sequence,
 )
 
@@ -791,7 +795,7 @@ class _YAMLIncludeConstructor(yaml.Loader):
 
     def __enter__(self):
         self._lock.acquire()
-        yaml.add_constructor('!include', self, Loader=_YAMLFrozenLoader)  # type: ignore
+        yaml.add_constructor('!include', self, Loader=_YAMLFrozenLoader)  # pyright: ignore
 
     def __exit__(self, *args):
         self._lock.release()

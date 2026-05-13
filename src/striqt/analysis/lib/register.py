@@ -27,8 +27,11 @@ if TYPE_CHECKING:
         Iterable,
         Measurement,
         P,
+        R,
         RM,
         Self,
+        TC,
+        TM,
         WrappedAnalysis,
         WrappedCoord,
     )
@@ -147,7 +150,7 @@ class CoordRegistry(dict['CoordFunc', 'CoordInfo']):
         """
         kws = locals()
 
-        def wrapper(func):
+        def wrapper(func: CoordFunc[TC, TM, R]) -> WrappedCoord[TC, TM, R]:
             if isinstance(kws['dims'], str):
                 dims = tuple((kws['dims'],))
             else:
@@ -155,7 +158,7 @@ class CoordRegistry(dict['CoordFunc', 'CoordInfo']):
 
             if kws['name'] is None:
                 try:
-                    name = func.__name__
+                    name = func.__name__  # type: ignore
                 except AttributeError as ex:
                     raise TypeError(
                         'specify the coordinate name with coordinates(name, ...)'
@@ -177,9 +180,9 @@ class CoordRegistry(dict['CoordFunc', 'CoordInfo']):
                 name=name, func=func, dims=dims, dtype=dtype, attrs=attrs
             )
 
-            return func
+            return func  # type: ignore
 
-        return wrapper
+        return cast('CoordFuncWrapper', wrapper)
 
     def __hash__(self):  # pyright: ignore
         return hash(frozenset(self.items()))
@@ -225,7 +228,7 @@ class AlignmentSourceRegistry(dict['str | Callable', 'SyncInfo']):
                     f'a signal_trigger named {info_kws["name"]} was already registered'
                 )
 
-            self[func] = self[info_kws['name']] = SyncInfo(func=func, **info_kws)
+            self[func] = self[info_kws['name']] = SyncInfo(func=func, **info_kws)  # ty: ignore
 
             return func  # type: ignore
 
@@ -390,7 +393,9 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
                 if field.name is None:
                     continue
                 try:
-                    _, coord_default = specs.helpers.infer_coord_info(field.type)
+                    _, coord_default = specs.helpers.infer_coord_info(
+                        field.type, allow_timestamps=False
+                    )
                 except TypeError:
                     # TODO: this should
                     self.parameter_fields[field.name] = None

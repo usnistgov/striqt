@@ -1,8 +1,10 @@
 from .lib.ofdm import (
+    choose_ssb_offset,
     corr_at_indices,
-    correlate_along_axis,
+    correlate_sync_sequence,
     get_3gpp_phy,
     get_802_16_phy,
+    get_5g_ssb_iq,
     pss_5g_nr,
     pss_params,
     sss_params,

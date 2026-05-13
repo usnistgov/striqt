@@ -18,19 +18,44 @@ else:
     np = util.lazy_import('numpy')
 
 
+@util.lru_cache()
+def _spec_to_params(
+    capture: specs.Capture,
+    spec: specs.Cellular5GNPSSSync | specs.Cellular5GNRPSSCorrelator,
+):
+    return sw.ofdm.pss_params(
+        sample_rate=spec.sample_rate,
+        subcarrier_spacing=spec.subcarrier_spacing,
+        discovery_periodicity=spec.discovery_periodicity,
+        shared_spectrum=spec.shared_spectrum,
+        max_lag_symbols=spec.max_lag_symbols,
+        symbol_indexes=spec.symbol_indexes,
+        center_frequency=getattr(capture, 'center_frequency', None),
+    )
+
+
+@registry.coordinates(dtype='float32', attrs={'standard_name': 'Lag', 'units': 's'})
+@util.lru_cache()
+def cellular_ssb_lag(capture: specs.Capture, spec: specs.Cellular5GNRPSSCorrelator):
+    # TODO: this now needs to account for PSS vs SSS
+    params = _spec_to_params(capture, spec)
+    offs = round(spec.sample_rate * spec.delay)
+    return np.arange(offs, offs + params.lag_count) / spec.sample_rate
+
+
 _coord_factories = [
     shared.cellular_cell_id2,
     shared.cellular_ssb_start_time,
     shared.cellular_ssb_beam_index,
-    shared.cellular_ssb_lag,
+    cellular_ssb_lag,
 ]
 dtype = 'complex64'
 
 
-pss_cache = register.KwArgCache([CAPTURE_DIM, 'spec'])
+correlator_cache = register.KwArgCache([CAPTURE_DIM, 'spec'])
 
 
-@pss_cache.apply
+@correlator_cache.apply
 def correlate_5g_pss(
     iq: 'Array',
     capture: specs.Capture,
@@ -45,89 +70,28 @@ def correlate_5g_pss(
             iq, capture=capture, spec=spec, coord_factories=_coord_factories
         )
 
-    params = sw.ofdm.pss_params(
-        sample_rate=spec.sample_rate,
-        subcarrier_spacing=spec.subcarrier_spacing,
-        discovery_periodicity=spec.discovery_periodicity,
-        shared_spectrum=spec.shared_spectrum,
-    )
-
+    params = _spec_to_params(capture, spec)
     pss_seq = sw.ofdm.pss_5g_nr(spec.sample_rate, spec.subcarrier_spacing, xp=xp)
 
-    return shared.correlate_sync_sequence(
-        ssb_iq, pss_seq, spec=spec, params=params, cell_id_split=1
+    return sw.ofdm.correlate_sync_sequence(
+        ssb_iq, pss_seq, params=params, cell_id_split=1
     )
 
 
+<<<<<<< HEAD
 pss_weighted_cache = register.KwArgCache([
     CAPTURE_DIM,
     'spec',
     'window_fill',
     'snr_window_fill',
 ])
+=======
+sync_cache = register.KwArgCache([CAPTURE_DIM, 'spec'])
+>>>>>>> fix-pss-offsets
 
 
-def weight_correlation_locally(R, spec: specs.Cellular5GNPSSSync):
-    xp = sw.array_namespace(R)
-
-    if R.ndim == 4:
-        R = R[np.newaxis, ...]
-
-    # R.shape -> (..., port index, cell Nid2, symbol start index, IQ sample index)
-    R = R.mean(axis=-3)
-
-    if sw.is_cupy_array(R):
-        from cupyx.scipy import ndimage  # type: ignore
-    else:
-        from scipy import ndimage
-
-    Rpow = sw.envtopow(R)
-
-    # estimate an SNR
-    window_size = round(spec.snr_window_fill * R.shape[-1])
-    Rpow_median = ndimage.median_filter(  # pyrefly: ignore
-        Rpow, size=(Rpow.ndim - 1) * (1,) + (window_size,)
-    )
-    Rsnr = Rpow / Rpow_median
-
-    # scale by the
-    ipeak = xp.argmax(Rsnr, axis=-1, keepdims=True)
-
-    Rpow_corr = Rsnr * (
-        np.take_along_axis(Rpow, ipeak, axis=-1)
-        / np.take_along_axis(Rsnr, ipeak, axis=-1)
-    )
-
-    # Ragg.shape: (IQ sample index,)
-    if not spec.per_port:
-        Rpow_corr = Rpow_corr.mean(axis=-4, keepdims=True)
-    Ragg = Rpow_corr.max(axis=(-3, -2))
-    assert Ragg.ndim == 2
-
-    fill_count = round(spec.window_fill * Ragg.shape[1])
-
-    weights = sw.get_window(
-        'triang',
-        nwindow=fill_count,
-        nzero=Ragg.shape[1] - fill_count,
-        norm=False,
-        xp=xp,
-    )
-
-    weight_shift = Ragg.shape[1] // 2 - round((Ragg.shape[1] - fill_count) / 2)
-    weights = xp.roll(weights, weight_shift)
-
-    if sw.is_cupy_array(Ragg):
-        from cupyx.scipy import ndimage  # type: ignore
-    else:
-        from scipy import ndimage
-
-    offs = ndimage.correlate1d(Ragg, weights, mode='wrap', axis=1)
-    return offs
-
-
-@pss_weighted_cache.apply
-def pss_local_weighted_correlator(
+@sync_cache.apply
+def choose_sync_offsets(
     iq: Array,
     capture: specs.Capture,
     *,
@@ -137,46 +101,31 @@ def pss_local_weighted_correlator(
 
     corr_spec = specs.Cellular5GNRPSSCorrelator.from_spec(spec).validate()
 
-    R = correlate_5g_pss(iq, capture=capture, spec=corr_spec)
-
-    return weight_correlation_locally(R, spec)
+    r = correlate_5g_pss(iq, capture=capture, spec=corr_spec)
+    params = _spec_to_params(capture, spec)
+    return sw.ofdm.choose_ssb_offset(
+        r, params, per_port=spec.per_port, window_fill=spec.window_fill
+    )
 
 
 @shared.hint_keywords(specs.Cellular5GNPSSSync)
-@registry.signal_trigger(
-    specs.Cellular5GNPSSSync, lag_coord_func=shared.cellular_ssb_lag
-)
+@registry.signal_trigger(specs.Cellular5GNPSSSync, lag_coord_func=cellular_ssb_lag)
 @registry.measurement(
     specs.Cellular5GNPSSSync,
     coord_factories=[],
     dtype='float32',
-    caches=(pss_cache, shared.ssb_iq_cache, pss_weighted_cache),
+    caches=(correlator_cache, shared.ssb_iq_cache, sync_cache),
     prefer_iq_source='pre_align',
     store_compressed=False,
     attrs={'standard_name': 'PSS Synchronization Delay', 'units': 's'},
 )
 def cellular_5g_pss_sync(iq, capture: specs.Capture, **kwargs):
-    """compute sync index offsets based on correlate_5g_pss.
-
-    This approach is meant to account for a weighted average of nearby peaks
-    to reduce mis-alignment errors in measurements of aggregate interference.
-
-    The underlying heuristic is a triangular weighting function to include energy
-    within +/- 1/4 symbol of each peak. Outside of this range, spectrogram errors
-    due to "ISI" begin to increase quickly.
-    """
+    """compute sync index offsets based on correlate_5g_pss"""
 
     spec = specs.Cellular5GNPSSSync.from_dict(kwargs).validate()
-
-    est = pss_local_weighted_correlator(
-        iq,
-        capture=capture,
-        spec=spec,
-    )
-
-    i = est.argmax(axis=1)
-
-    return i / spec.sample_rate  # shared.cellular_ssb_lag(capture, spec)[i]
+    offs = choose_sync_offsets(iq, capture=capture, spec=spec)
+    delay = round(spec.delay * spec.sample_rate) / spec.sample_rate
+    return delay + offs / spec.sample_rate
 
 
 @shared.hint_keywords(specs.Cellular5GNRPSSCorrelator)
@@ -184,7 +133,7 @@ def cellular_5g_pss_sync(iq, capture: specs.Capture, **kwargs):
     specs.Cellular5GNRPSSCorrelator,
     coord_factories=_coord_factories,
     dtype=dtype,
-    caches=(pss_cache, shared.ssb_iq_cache),
+    caches=(correlator_cache, shared.ssb_iq_cache),
     prefer_iq_source='pre_align',
     store_compressed=False,
     attrs={'standard_name': 'PSS Cross-Covariance'},

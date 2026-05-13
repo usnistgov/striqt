@@ -202,7 +202,7 @@ class ZarrSinkBase(SinkBase):
     def close(self, *exc_info):
         super().close(*exc_info)
 
-        if getattr(self.store, '_is_open', True):
+        if self.store is not None and getattr(self.store, '_is_open', True):
             self.store.close()
 
         if self._zipper is not None:
@@ -216,6 +216,9 @@ class ZarrSinkBase(SinkBase):
             sa.util.get_logger('sink').info(f'no data was written')
 
     def get_root_path(self) -> str:
+        if self.store is None:
+            raise IOError('store is not open')
+
         if hasattr(self.store, 'path'):
             return self.store.path
         else:
