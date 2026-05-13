@@ -133,7 +133,7 @@ def _results_as_arrays(
     """convert an array, or a container of arrays, into a numpy array (or container of numpy arrays)"""
 
     if array_api_compat.is_torch_array(obj):
-        array = obj.cpu() # ty: ignore
+        array = obj.cpu()  # ty: ignore
     elif sw.is_cupy_array(obj):
         array = obj.get()
     elif array_api_compat.is_numpy_array(obj):
@@ -374,7 +374,7 @@ def evaluate_by_spec(
         iq = AcquiredIQ(pre_align=iq, pre_filter=None, aligned=None, capture=None)
 
     if isinstance(spec, dict):
-        spec_dict = spec # ty: ignore
+        spec_dict = spec  # ty: ignore
     else:
         spec_dict = spec.to_dict()
     results = {}
@@ -420,7 +420,7 @@ def evaluate_by_spec(
             results[name] = res
         else:
             assert isinstance(res, DelayedDataArray)
-            results[name] = res.to_xarray() # ty: ignore
+            results[name] = res.to_xarray()  # ty: ignore
 
     if sw.is_cupy_array(getattr(iq, 'pre_align', iq)):
         sw.arrays.free_cupy_mempool()

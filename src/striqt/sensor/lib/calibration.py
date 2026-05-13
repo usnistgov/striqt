@@ -341,7 +341,7 @@ def bind_manual_yfactor_calibration(
 
     cal_schema = bindings.Schema(
         source=sensor.schema.source,
-        capture=capture_spec_cls, # pyright: ignore
+        capture=capture_spec_cls,  # pyright: ignore
         peripherals=sensor.schema.peripherals,
         init_like=sensor.schema.init_like,
         arm_like=sensor.schema.arm_like,

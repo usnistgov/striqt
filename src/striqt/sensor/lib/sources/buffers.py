@@ -114,6 +114,7 @@ def get_array_namespace(array_backend: specs.types.ArrayBackend) -> types.Module
         if sw.arrays.cp is None:
             # trigger the import error
             import cupy  # type: ignore
+
             raise ImportError
         else:
             mod = sw.arrays.cp

@@ -42,7 +42,7 @@ warnings.filterwarnings(
 )
 
 
-def open_store(target: str | Path, *, mode: typing.Literal["r", "w", "a"]) -> ZarrStore:
+def open_store(target: str | Path, *, mode: typing.Literal['r', 'w', 'a']) -> ZarrStore:
     import zarr.storage
 
     if _zarr_version() < (3, 0, 0):
@@ -453,7 +453,7 @@ class NPYFileStream(_FileStreamBase):
     def close(self):
         pass
 
-    def read(self, count: int =0):
+    def read(self, count: int = 0):
         if count == 0:
             return
 
@@ -533,7 +533,7 @@ class TDMSFileStream(_FileStreamBase):
     def close(self):
         self._fd.close()
 
-    def read(self, count: int|None =None):
+    def read(self, count: int | None = None):
         xp = self._xp
 
         offset = self._position or 0
@@ -757,7 +757,7 @@ class _YAMLFrozenLoader(yaml.SafeLoader):
 
 
 _YAMLFrozenLoader.add_constructor(
-    yaml.resolver.BaseResolver.DEFAULT_SEQUENCE_TAG, # ty: ignore
+    yaml.resolver.BaseResolver.DEFAULT_SEQUENCE_TAG,  # ty: ignore
     _YAMLFrozenLoader._construct_sequence,
 )
 
