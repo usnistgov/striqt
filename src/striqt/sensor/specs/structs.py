@@ -354,7 +354,7 @@ class Sweep(SpecBase, Generic[SS, SP, SC], frozen=True, kw_only=True):
     peripherals: SP = cast(SP, Peripherals())
 
     options: SweepOptions = SweepOptions(reuse_iq=False, loop_only_nyquist=False)
-    __bindings__: ClassVar[Any] = None
+    _bindings: ClassVar[Any] = None
 
     def __post_init__(self):
         from . import helpers
@@ -368,8 +368,8 @@ class Sweep(SpecBase, Generic[SS, SP, SC], frozen=True, kw_only=True):
 
         if len(self.captures) > 0:
             coord_fields = set(self.captures[0].__struct_fields__)
-        elif self.__bindings__ is not None:
-            coord_fields = set(self.__bindings__.capture.__struct_fields__)
+        elif self._bindings is not None:
+            coord_fields = set(self._bindings.capture.__struct_fields__)
         else:
             coord_fields = None
 

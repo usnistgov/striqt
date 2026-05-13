@@ -99,24 +99,24 @@ def bind_sensor(
 
     # bind the schema to the source
     class BoundSource(sensor.source):  # ty: ignore
-        __bindings__ = schema
+        _bindings = schema
 
     BoundSource.__name__ = sensor.source.__name__
 
     sensor = dataclasses.replace(sensor, source=BoundSource)
 
-    b = SensorBinding(**dataclasses.asdict(sensor), schema=schema)
+    binding = SensorBinding(**dataclasses.asdict(sensor), schema=schema)
 
     class BoundSweep(sensor.sweep_spec, frozen=True, kw_only=True):  # ty: ignore
-        __bindings__ = b
+        _bindings = binding
 
         mock_source: Optional[str] = None
-        source: __bindings__.schema.source = msgspec.field(
-            default_factory=__bindings__.schema.source  # type: ignore
+        source: _bindings.schema.source = msgspec.field(
+            default_factory=_bindings.schema.source  # type: ignore
         )
-        captures: tuple[__bindings__.schema.capture, ...] = ()
-        peripherals: __bindings__.schema.peripherals = msgspec.field(
-            default_factory=__bindings__.schema.peripherals
+        captures: tuple[_bindings.schema.capture, ...] = ()
+        peripherals: _bindings.schema.peripherals = msgspec.field(
+            default_factory=_bindings.schema.peripherals
         )
 
         def __post_init__(self):
@@ -132,7 +132,7 @@ def bind_sensor(
     BoundSweep = tagged_subclass(key, BoundSweep, specs.SWEEP_TAG_FIELD)  # type: ignore
 
     if register:
-        registry[key] = dataclasses.replace(b, sweep_spec=BoundSweep)
+        registry[key] = dataclasses.replace(binding, sweep_spec=BoundSweep)
 
     global tagged_sweeps
     if tagged_sweeps is None:
@@ -140,7 +140,7 @@ def bind_sensor(
     else:
         tagged_sweeps = Union[tagged_sweeps, BoundSweep]  # pyright: ignore
 
-    return b
+    return binding
 
 
 def get_registry() -> dict[str, SensorBinding]:
