@@ -1,6 +1,6 @@
 [project]
 name = "striqt"
-version = "0.5.0"
+version = "0.6.0"
 description = "tooling to support precision gpu-accelerated radio signal analysis and software radio automation"
 requires-python = ">=3.9"
 dependencies = [
@@ -80,7 +80,6 @@ plot-capture = "striqt.cli.plot_capture:run"
 rechunk-zarr = "striqt.cli.rechunk_zarr:run"
 
 [tool.ruff]
-preview = true
 target-version = "py39"
 extend-include = [ "*.ipynb", ]
 line-length = 88
