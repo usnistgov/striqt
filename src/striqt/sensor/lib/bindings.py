@@ -105,13 +105,7 @@ def bind_sensor(
 
     sensor = dataclasses.replace(sensor, source=BoundSource)
 
-    b = SensorBinding(
-        source=sensor.source,
-        sweep_spec=sensor.sweep_spec, # pyright: ignore
-        peripherals=sensor.peripherals,
-        sink=sensor.sink,
-        schema=schema, # pyright: ignore
-    )
+    b = SensorBinding(**dataclasses.asdict(sensor), schema=schema)
 
     class BoundSweep(sensor.sweep_spec, frozen=True, kw_only=True):  # ty: ignore
         __bindings__ = b
@@ -138,13 +132,7 @@ def bind_sensor(
     BoundSweep = tagged_subclass(key, BoundSweep, specs.SWEEP_TAG_FIELD)  # type: ignore
 
     if register:
-        registry[key] = SensorBinding(
-            source=sensor.source,
-            sweep_spec=BoundSweep, # pyright: ignore
-            peripherals=sensor.peripherals,
-            sink=sensor.sink,
-            schema=schema, # pyright: ignore
-        )
+        registry[key] = dataclasses.replace(b, sweep_spec=BoundSweep)
 
     global tagged_sweeps
     if tagged_sweeps is None:
