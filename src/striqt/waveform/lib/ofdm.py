@@ -769,7 +769,7 @@ def choose_ssb_offset(
     # to avoid spectral bleeding from individual strong sources,
     # consider only obvious peaks with at least 3 dB prominence
     rpeak = r.copy()
-    threshold = np.clip(2 * rmed, min=r.max() / 2)
+    threshold = np.clip(2 * rmed, a_min=r.max() / 2, a_max=None)
     rpeak[np.where(rpeak < threshold)] = 0
 
     # evaluate the sub-symbol IQ offset
