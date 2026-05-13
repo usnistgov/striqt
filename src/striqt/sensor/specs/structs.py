@@ -283,7 +283,7 @@ BundledTriggers = sa.registry.signal_trigger.to_spec()
 class SweepOptions(SpecBase, frozen=True, kw_only=True):
     reuse_iq: bool = False
     loop_only_nyquist: bool = False
-    skip_warmup: types.SkipWarmup = False
+    skip_warmup: types.SkipWarmup = True
 
 
 SWEEP_TAG_FIELD = 'sensor_binding'
