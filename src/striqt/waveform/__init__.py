@@ -29,4 +29,4 @@ from .lib.power_analysis import (
     powtodB,
     sample_ccdf,
 )
-from .lib.arrays import *
+from .arrays import *
