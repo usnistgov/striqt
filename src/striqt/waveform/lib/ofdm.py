@@ -729,6 +729,7 @@ def weighted_ssb_detect(
     rssb: Array,
     params: SyncParams,
     *,
+    max_beams: int | None = None,
     per_port: bool = True,
     window: WindowSpecType = 'triang',
     window_fill: float | Fraction = 1,
@@ -743,6 +744,11 @@ def weighted_ssb_detect(
         rssb = rssb[np.newaxis, ...]
     elif rssb.ndim != 5:
         raise TypeError('input array must have 5 dimensions')
+
+    if max_beams is None or max_beams >= rssb.shape[BEAM_DIM]:
+        pass
+    else:
+        rssb = arrays.axis_slice(rssb, 0, max_beams, axis=BEAM_DIM)
 
     symbol_count = round(params.lag_count / params.short_symbol_size)
     rssb = rssb.reshape(rssb.shape[:-1] + (symbol_count, -1))
@@ -788,6 +794,7 @@ def choose_ssb_offset(
     params: SyncParams,
     *,
     per_port: bool = True,
+    max_beams: int | None = None,
     window: WindowSpecType = 'triang',
     window_fill: float | Fraction = 1,
 ) -> Array:

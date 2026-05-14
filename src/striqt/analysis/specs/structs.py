@@ -85,9 +85,9 @@ class Capture(SpecBase, kw_only=True, frozen=True):
     """bare minimum information about an IQ acquisition"""
 
     # acquisition
-    duration: types.DurationType = 0.1
-    sample_rate: types.SampleRateType = 15.36e6
-    analysis_bandwidth: types.AnalysisBandwidthType = inf
+    duration: types.Duration = 0.1
+    sample_rate: types.SampleRate = 15.36e6
+    analysis_bandwidth: types.AnalysisBandwidth = inf
 
     def __post_init__(self):
         from ..lib import util
@@ -233,8 +233,9 @@ class Cellular5GNRSSSCorrelator(_Cellular5GNRSSBCorrelator, kw_only=True, frozen
 
 
 class _Cellular5GNRSSBSync(_Cellular5GNRSSBCorrelator, frozen=True, kw_only=True):
-    window_fill: float = 1
-    per_port: bool = False
+    window_fill: types.WindowFill = 1
+    per_port: types.PerPort = False
+    max_beams: Union[types.MaxBeams, None] = None
 
 
 class Cellular5GNPSSSync(_Cellular5GNRSSBSync, kw_only=True, frozen=True):

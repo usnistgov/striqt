@@ -95,7 +95,11 @@ def choose_sync_offsets(
     r = correlate_5g_sss(iq, capture=capture, spec=corr_spec)
     params = _spec_to_params(capture, spec)
     return sw.ofdm.choose_ssb_offset(
-        r, params, per_port=spec.per_port, window_fill=spec.window_fill
+        r,
+        params,
+        max_beams=spec.max_beams,
+        per_port=spec.per_port,
+        window_fill=spec.window_fill,
     )
 
 
