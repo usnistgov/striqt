@@ -70,6 +70,7 @@ analysis:
     delay: *delay
     symbol_indexes: 'b'
     per_port: true
+    max_beams: 4
 
   cellular_5g_ssb_spectrogram:
     lo_bandstop: *lo_bandstop
