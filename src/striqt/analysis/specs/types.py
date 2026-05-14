@@ -12,8 +12,12 @@ CellSSBSymbolIndexes = Annotated[
 ]
 Duration = Annotated[float, Meta('Duration of the analysis waveform', 's')]
 MaxBeams = Annotated[
-    int, Meta('maximum number of beams to use in evaluating sync', gt=0)
+    int, Meta('limit the beam count in 5G sync evaluation', gt=0)
 ]
+MaxLagSymbols = Annotated[
+    int, Meta('limit the number of symbols of lag in the 5G sync correlator', ge=1, le=6)
+]
+
 PerPort = Annotated[
     bool, Meta('whether to evaluate signal synchronization separately on each port')
 ]

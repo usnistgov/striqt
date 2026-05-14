@@ -212,10 +212,10 @@ class _Cellular5GNRSSBCorrelator(Analysis, kw_only=True, frozen=True):
     discovery_periodicity: float = 20e-3
     frequency_offset: float = 0
     shared_spectrum: bool = False
-    max_block_count: typing.Optional[int] = 1
+    max_block_count: typing.Optional[int] = None
     delay: float = 0
     symbol_indexes: types.CellSSBSymbolIndexes = 'auto'
-    max_lag_symbols: Union[int, None] = None
+    max_lag_symbols: Union[types.MaxLagSymbols, None] = None
 
     def __post_init__(self):
         super().__post_init__()
