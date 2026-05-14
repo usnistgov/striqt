@@ -226,7 +226,15 @@ def null_lo(
     view[:] = float('nan')
 
 
-def fft(x, n=None, axis=-1, out=None, overwrite_x=False, plan=None, workers: int | None = None):
+def fft(
+    x,
+    n=None,
+    axis=-1,
+    out=None,
+    overwrite_x=False,
+    plan=None,
+    workers: int | None = None,
+):
     if is_cupy_array(x):
         assert cp is not None, ImportError('cupy is not installed')
 

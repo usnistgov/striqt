@@ -801,7 +801,7 @@ def choose_ssb_offset(
 
     offsets = weighted_ssb_detect(**locals())
     nfine = offsets.shape[FINE_LAG_DIM]
-    
+
     weighted_fine = offsets.mean(axis=COARSE_LAG_DIM)
     ifine = weighted_fine.argmax(-1)
 
