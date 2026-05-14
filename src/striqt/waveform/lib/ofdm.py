@@ -1,4 +1,5 @@
 from __future__ import annotations as __
+from ast import Assert
 
 import dataclasses
 from fractions import Fraction
@@ -500,8 +501,18 @@ def pss_params(
     )
 
     if max_lag_symbols is None:
-        # 4 === minimum possible separation between any 2 PSS or SSS symbols
-        max_lag_symbols = _min_diff(sorted(symbol_indexes)) or 4
+        ssb_spacing = _min_diff(sorted(symbol_indexes))
+
+        if ssb_spacing is None or ssb_spacing == 4:
+            # at least 4 symbols per PSS or SSS
+            max_lag_symbols = 4
+        elif ssb_spacing >= 5:
+            # interference observed in 6th symbol (Case C)
+            max_lag_symbols = 5
+        else:
+            raise AssertionError(
+                'file an issue; this max_lag_symbol case should never happen'
+            )
 
     slot_count = ceil((symbol_indexes[-1] + max_lag_symbols + 1) / 14)
     slot_duration = 10e-3 / (10 * subcarrier_spacing / 15e3)
@@ -732,6 +743,7 @@ def weighted_ssb_detect(
         rssb = rssb[np.newaxis, ...]
     elif rssb.ndim != 5:
         raise TypeError('input array must have 5 dimensions')
+
     symbol_count = round(params.lag_count / params.short_symbol_size)
     rssb = rssb.reshape(rssb.shape[:-1] + (symbol_count, -1))
 
