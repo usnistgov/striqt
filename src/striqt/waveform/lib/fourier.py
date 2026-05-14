@@ -226,12 +226,21 @@ def null_lo(
     view[:] = float('nan')
 
 
-def fft(x, axis=-1, out=None, overwrite_x=False, plan=None, workers: int | None = None):
+def fft(
+    x,
+    n=None,
+    axis=-1,
+    out=None,
+    overwrite_x=False,
+    plan=None,
+    workers: int | None = None,
+):
     if is_cupy_array(x):
         assert cp is not None, ImportError('cupy is not installed')
 
         return _cupy_fftn_helper(
             x,
+            n=n,
             axis=axis,
             direction=cp.cuda.cufft.CUFFT_FORWARD,
             out=out,
@@ -243,12 +252,13 @@ def fft(x, axis=-1, out=None, overwrite_x=False, plan=None, workers: int | None 
         if workers is None:
             workers = CPU_COUNT // 2
         return scipy.fft.fft(
-            x, axis=axis, workers=workers, overwrite_x=overwrite_x, plan=plan
+            x, n=n, axis=axis, workers=workers, overwrite_x=overwrite_x, plan=plan
         )
 
 
 def ifft(
     x,
+    n=None,
     axis=-1,
     out=None,
     overwrite_x=False,
@@ -260,6 +270,7 @@ def ifft(
 
         return _cupy_fftn_helper(
             x,
+            n=n,
             axis=axis,
             direction=cp.cuda.cufft.CUFFT_INVERSE,
             out=out,
@@ -270,7 +281,7 @@ def ifft(
         if workers is None:
             workers = CPU_COUNT // 2
         return scipy.fft.ifft(
-            x, axis=axis, workers=workers, overwrite_x=overwrite_x, plan=plan
+            x, n=n, axis=axis, workers=workers, overwrite_x=overwrite_x, plan=plan
         )
 
 
@@ -344,6 +355,7 @@ time_ifftshift = time_fftshift
 
 def _cupy_fftn_helper(
     x,
+    n,
     axis,
     direction,
     out=None,
@@ -352,6 +364,9 @@ def _cupy_fftn_helper(
 ):
     assert cp is not None, ImportError('cupy is not installed')
     from cupy.fft import _fft  # type: ignore
+
+    if n is not None:
+        raise Exception('implement n here')
 
     kws = dict(overwrite_x=overwrite_x, plan=plan, order='C')
     args = (None,), (axis,), None, direction

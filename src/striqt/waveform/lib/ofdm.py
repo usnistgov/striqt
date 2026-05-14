@@ -706,7 +706,15 @@ def correlate_sync_sequence(
     return result
 
 
-def choose_ssb_offset(
+PORT_DIM = -6
+NID2_DIM = -5
+SYNC_DIM = -4
+BEAM_DIM = -3
+COARSE_LAG_DIM = -2
+FINE_LAG_DIM = -1
+
+
+def weighted_ssb_detect(
     rssb: Array,
     params: SyncParams,
     *,
@@ -714,33 +722,8 @@ def choose_ssb_offset(
     window: WindowSpecType = 'triang',
     window_fill: float | Fraction = 1,
 ) -> Array:
-    """Given correlator output, apply averaging reductions to {NID2, SSB, beam} indexes
-    and a weighting function to the lag.
-
-    The approach is to use a weighted average of nearby peaks across lag
-    in order to reduce mis-alignment errors in measurements of aggregate interference.
-
-    The underlying heuristic is a triangular weighting function to include energy
-    within +/- 1/4 symbol of each peak. Outside of this range, spectrogram errors
-    due to "ISI" begin to increase quickly.
-
-    Args:
-        rssb: output from
-        window: the window function to use for weighting
-        per_port: whether to return a weighted correlation separately per port
-        window_fill: the fraction of the window to apply
-
-    Returns:
-        an array with dimensions (port index, symbol lag, iq lag)
-    """
     # input dims: (port index, cell Nid, sync block index, beam index, IQ sample index)
     # transform to these dimensions
-    PORT_DIM = -6
-    NID2_DIM = -5
-    SYNC_DIM = -4
-    BEAM_DIM = -3
-    COARSE_LAG_DIM = -2
-    FINE_LAG_DIM = -1
 
     xp = arrays.array_namespace(rssb)
 
@@ -784,7 +767,41 @@ def choose_ssb_offset(
         fftbins=False,
         xp=xp,
     )
-    offsets = ndimage.correlate1d(rpeak, w, mode='wrap', axis=-1)
+
+    return ndimage.correlate1d(rpeak, w, mode='wrap', axis=-1)
+
+
+def choose_ssb_offset(
+    rssb: Array,
+    params: SyncParams,
+    *,
+    per_port: bool = True,
+    window: WindowSpecType = 'triang',
+    window_fill: float | Fraction = 1,
+) -> Array:
+    """Given correlator output, apply averaging reductions to {NID2, SSB, beam} indexes
+    and a weighting function to the lag.
+
+    The approach is to use a weighted average of nearby peaks across lag
+    in order to reduce mis-alignment errors in measurements of aggregate interference.
+
+    The underlying heuristic is a triangular weighting function to include energy
+    within +/- 1/4 symbol of each peak. Outside of this range, spectrogram errors
+    due to "ISI" begin to increase quickly.
+
+    Args:
+        rssb: output from
+        window: the window function to use for weighting
+        per_port: whether to return a weighted correlation separately per port
+        window_fill: the fraction of the window to apply
+
+    Returns:
+        an array with dimensions (port index, symbol lag, iq lag)
+    """
+
+    offsets = weighted_ssb_detect(**locals())
+    nfine = offsets.shape[FINE_LAG_DIM]
+
     weighted_fine = offsets.mean(axis=COARSE_LAG_DIM)
     ifine = weighted_fine.argmax(-1)
 
