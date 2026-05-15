@@ -739,19 +739,20 @@ def weighted_ssb_detect(
 
     xp = arrays.array_namespace(rssb)
 
+    # first, establish the needed dimensions
     if rssb.ndim == 4:
         # assume a missing dimension is the port index
         rssb = rssb[np.newaxis, ...]
     elif rssb.ndim != 5:
         raise TypeError('input array must have 5 dimensions')
+    symbol_count = round(params.lag_count / params.short_symbol_size)
+    rssb = rssb.reshape(rssb.shape[:-1] + (symbol_count, -1))
 
+    # then, select beams
     if max_beams is None or max_beams >= rssb.shape[BEAM_DIM]:
         pass
     else:
         rssb = arrays.axis_slice(rssb, 0, max_beams, axis=BEAM_DIM)
-
-    symbol_count = round(params.lag_count / params.short_symbol_size)
-    rssb = rssb.reshape(rssb.shape[:-1] + (symbol_count, -1))
 
     r = power_analysis.envtopow(rssb)
 
