@@ -771,7 +771,8 @@ def weighted_ssb_detect(
     # to avoid spectral bleeding from individual strong sources,
     # consider only obvious peaks with at least 3 dB prominence
     rpeak = r.copy()
-    threshold = np.clip(2 * rmed, a_min=r.max() / 2, a_max=None)
+    limits = r.max((FINE_LAG_DIM, COARSE_LAG_DIM), keepdims=True)
+    threshold = np.clip(2 * rmed, a_min=limits / 2, a_max=None)
     rpeak[np.where(rpeak < threshold)] = 0
 
     # evaluate the sub-symbol IQ offset
