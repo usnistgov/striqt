@@ -743,7 +743,7 @@ def weighted_ssb_detect(
     if rssb.ndim == 4:
         # assume a missing dimension is the port index
         rssb = rssb[np.newaxis, ...]
-    elif rssb.ndim != 5:
+    elif rssb.ndim < 5:
         raise TypeError('input array must have 5 dimensions')
     symbol_count = round(params.lag_count / params.short_symbol_size)
     rssb = rssb.reshape(rssb.shape[:-1] + (symbol_count, -1))
@@ -765,15 +765,15 @@ def weighted_ssb_detect(
         r = r.mean(axis=PORT_DIM, keepdims=True)
 
     r = r.mean(axis=(NID2_DIM, SYNC_DIM, BEAM_DIM))
-    rmed = np.median(r, axis=(FINE_LAG_DIM), keepdims=True)
-    assert r.ndim == 3
+    rmed = xp.median(r, axis=(FINE_LAG_DIM), keepdims=True)
+    assert r.ndim >= 3
 
     # to avoid spectral bleeding from individual strong sources,
     # consider only obvious peaks with at least 3 dB prominence
     rpeak = r.copy()
     limits = r.max((FINE_LAG_DIM, COARSE_LAG_DIM), keepdims=True)
-    threshold = np.clip(2 * rmed, a_min=limits / 2, a_max=None)
-    rpeak[np.where(rpeak < threshold)] = 0
+    threshold = xp.clip(2 * rmed, a_min=limits / 2, a_max=None)
+    rpeak[xp.where(rpeak < threshold)] = 0
 
     # evaluate the sub-symbol IQ offset
     nfill = round(window_fill * rpeak.shape[FINE_LAG_DIM])
