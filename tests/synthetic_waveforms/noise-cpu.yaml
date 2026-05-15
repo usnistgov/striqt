@@ -93,6 +93,7 @@ analysis:
   cellular_5g_pss_correlation:
     subcarrier_spacing: *scs
     delay: &delay 50e-6
+    symbol_indexes: 'b'
 
     # adjusted per-channel in the capture 'adjust_analysis' field
     frequency_offset: &frequency_offset 0
@@ -100,6 +101,7 @@ analysis:
   cellular_5g_pss_sync:
     subcarrier_spacing: *scs
     frequency_offset: *frequency_offset
+    symbol_indexes: 'b'
     delay: *delay
     per_port: true
 
