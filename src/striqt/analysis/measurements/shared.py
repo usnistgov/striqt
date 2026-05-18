@@ -73,7 +73,7 @@ def cellular_ssb_start_time(capture: specs.Capture, spec: _Cellular5GNRSSBSync):
     else:
         count = min(spec.max_block_count, total_blocks)
 
-    return np.arange(max(count, 1)) * spec.discovery_periodicity
+    return np.arange(max(count, 1)).astype('float32') * spec.discovery_periodicity
 
 
 def empty_5g_ssb_correlation(
@@ -111,7 +111,7 @@ def get_5g_ssb_iq(
         subcarrier_spacing=spec.subcarrier_spacing,
         frequency_offset=spec.frequency_offset,
         delay=spec.delay,
-        max_block_count=spec.max_block_count,
+        # max_block_count=spec.max_block_count,
         oaresample=oaresample,
     )
 

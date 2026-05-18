@@ -666,6 +666,10 @@ def correlate_sync_sequence(
         ssb_iq: The synchronization block IQ waveform (e.g., from `get_5g_ssb_iq`)
         sync_seq: The reference sequence (e.g. from `striqt.waveform.ofdm.pss_5g_nr` or `striqt.waveform.ofdm.sss_5g_nr`)
         params: The cell synchronization parameters (e.g. from `striqt.waveform.ofdm.pss_params` or `striqt.waveform.ofdm.sss_params`)
+
+    Returns:
+        correlator across parameters:
+            (..., port index, cell Nid, sync block index, beam index, IQ sample index)
     """
     xp = array_namespace(ssb_iq)
 
@@ -768,7 +772,11 @@ def weighted_ssb_detect(
     if not per_port:
         r = r.mean(axis=PORT_DIM, keepdims=True)
 
-    r = r.mean(axis=(NID2_DIM, SYNC_DIM, BEAM_DIM), keepdims=True)
+    r = (
+        r
+        .min(axis=(SYNC_DIM), keepdims=True)
+        .mean(axis=(NID2_DIM, BEAM_DIM), keepdims=True)
+    )
     rmed = xp.median(r, axis=(FINE_LAG_DIM), keepdims=True)
 
     # to avoid spectral bleeding from individual strong sources,

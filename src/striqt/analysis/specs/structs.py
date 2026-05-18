@@ -212,7 +212,6 @@ class _Cellular5GNRSSBCorrelator(Analysis, kw_only=True, frozen=True):
     discovery_periodicity: float = 20e-3
     frequency_offset: float = 0
     shared_spectrum: bool = False
-    max_block_count: typing.Optional[int] = None
     delay: float = 0
     symbol_indexes: types.CellSSBSymbolIndexes = 'auto'
     max_lag_symbols: Union[types.MaxLagSymbols, None] = None
@@ -225,11 +224,11 @@ class _Cellular5GNRSSBCorrelator(Analysis, kw_only=True, frozen=True):
 
 class Cellular5GNRPSSCorrelator(_Cellular5GNRSSBCorrelator, kw_only=True, frozen=True):
     # same as SSS, but the registry requires unique spec types
-    pass
+    max_block_count: typing.Optional[int] = 1
 
 
 class Cellular5GNRSSSCorrelator(_Cellular5GNRSSBCorrelator, kw_only=True, frozen=True):
-    pass
+    max_block_count: typing.Optional[int] = 1
 
 
 class _Cellular5GNRSSBSync(_Cellular5GNRSSBCorrelator, frozen=True, kw_only=True):

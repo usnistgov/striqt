@@ -161,6 +161,9 @@ def cellular_5g_pss_correlation(
 
     R = correlate_5g_pss(iq, capture=capture, spec=spec)
 
+    if spec.max_block_count is not None:
+        R = sw.arrays.axis_slice(R, 0, spec.max_block_count, axis=-3)
+
     enbw = spec.sample_rate
     metadata = {'units': f'√mW/{enbw / 1e6:0.2f} MHz', 'noise_bandwidth': enbw}
 
