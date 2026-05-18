@@ -772,10 +772,8 @@ def weighted_ssb_detect(
     if not per_port:
         r = r.mean(axis=PORT_DIM, keepdims=True)
 
-    r = (
-        r
-        .min(axis=(SYNC_DIM), keepdims=True)
-        .mean(axis=(NID2_DIM, BEAM_DIM), keepdims=True)
+    r = r.min(axis=(SYNC_DIM), keepdims=True).mean(
+        axis=(NID2_DIM, BEAM_DIM), keepdims=True
     )
     rmed = xp.median(r, axis=(FINE_LAG_DIM), keepdims=True)
 
@@ -799,10 +797,11 @@ def weighted_ssb_detect(
         xp=xp,
     )
 
-    return (
-        ndimage.correlate1d(rpeak, w, mode='wrap', axis=-1)
-        .squeeze((NID2_DIM, SYNC_DIM, BEAM_DIM))
-    )
+    return ndimage.correlate1d(rpeak, w, mode='wrap', axis=-1).squeeze((
+        NID2_DIM,
+        SYNC_DIM,
+        BEAM_DIM,
+    ))
 
 
 def choose_ssb_offset(

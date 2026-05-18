@@ -203,7 +203,6 @@ class _Cellular5GNRSSBCorrelator(Analysis, kw_only=True, frozen=True):
         center frequency offset (see notes)
     shared_spectrum:
         whether to follow the 3GPP "shared spectrum" synchronizatio block layout
-    max_block_count: number of synchronization blocks to evaluate
     delay: minimum time delay (in s) to start of SSB set
     """
 
