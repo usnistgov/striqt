@@ -717,10 +717,6 @@ def correlate_sync_sequence(
     return result
 
 
-PORT_DIM = -6
-NID2_DIM = -5
-SYNC_DIM = -4
-BEAM_DIM = -3
 COARSE_LAG_DIM = -2
 FINE_LAG_DIM = -1
 
@@ -734,8 +730,16 @@ def weighted_ssb_detect(
     window: WindowSpecType = 'triang',
     window_fill: float | Fraction = 1,
 ) -> Array:
-    # input dims: (port index, cell Nid, sync block index, beam index, IQ sample index)
-    # transform to these dimensions
+    """apply weighted reductions to the SSB correlator output.
+
+    Returns:
+        Correlator output power with dims (..., symbol lag index, sample lag index)
+    """
+
+    PORT_DIM = -6
+    NID2_DIM = -5
+    SYNC_DIM = -4
+    BEAM_DIM = -3
 
     xp = arrays.array_namespace(rssb)
 
@@ -764,9 +768,8 @@ def weighted_ssb_detect(
     if not per_port:
         r = r.mean(axis=PORT_DIM, keepdims=True)
 
-    r = r.mean(axis=(NID2_DIM, SYNC_DIM, BEAM_DIM))
+    r = r.mean(axis=(NID2_DIM, SYNC_DIM, BEAM_DIM), keepdims=True)
     rmed = xp.median(r, axis=(FINE_LAG_DIM), keepdims=True)
-    assert r.ndim >= 3
 
     # to avoid spectral bleeding from individual strong sources,
     # consider only obvious peaks with at least 3 dB prominence
@@ -788,7 +791,10 @@ def weighted_ssb_detect(
         xp=xp,
     )
 
-    return ndimage.correlate1d(rpeak, w, mode='wrap', axis=-1)
+    return (
+        ndimage.correlate1d(rpeak, w, mode='wrap', axis=-1)
+        .squeeze((NID2_DIM, SYNC_DIM, BEAM_DIM))
+    )
 
 
 def choose_ssb_offset(
