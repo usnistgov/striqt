@@ -57,7 +57,10 @@ def cellular_ssb_beam_index(capture: specs.Capture, spec: _Cellular5GNRSSBSync):
     dtype='float32', attrs={'standard_name': 'Time Elapsed', 'units': 's'}
 )
 @util.lru_cache()
-def cellular_ssb_start_time(capture: specs.Capture, spec: _Cellular5GNRSSBSync):
+def cellular_ssb_start_time(
+    capture: specs.Capture,
+    spec: specs.Cellular5GNRPSSCorrelator | specs.Cellular5GNRSSSCorrelator,
+):
     # pss_params and sss_params return the same number of symbol indexes
     params = sw.ofdm.pss_params(
         sample_rate=spec.sample_rate,

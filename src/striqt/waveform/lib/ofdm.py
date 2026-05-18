@@ -773,7 +773,7 @@ def weighted_ssb_detect(
         r = r.mean(axis=PORT_DIM, keepdims=True)
 
     # it's tempting to use .min on SYNC_DIM to reduce thermal noise impacts.
-    # however, this relies on fairly close sample clock alignment with the 
+    # however, this relies on fairly close sample clock alignment with the
     # base station.
     r = r.mean(axis=(NID2_DIM, BEAM_DIM), keepdims=True)
     r = xp.median(r, axis=SYNC_DIM, keepdims=True)
