@@ -15,7 +15,7 @@ TS = typing.TypeVar('TS', bound=specs.NoSource)
 TC = typing.TypeVar('TC', bound=specs.SensorCapture)
 
 
-class NoSource(base.SourceBase[TS, TC, PS, PC]):
+class NoSource(base.SourceController[TS, TC, PS, PC]):
     """fast paths to acquire empty buffers"""
 
     _samples_elapsed = 0

@@ -136,7 +136,7 @@ def iterate_sweep(
             with exc.defer():
                 if acquire is not None:
                     iq = acquire.result()
-                    assert isinstance(iq, sources.AcquiredIQ)
+                    assert isinstance(iq, specs.AcquiredIQ)
                 else:
                     iq = None
 
@@ -216,7 +216,7 @@ def _acquire_both(
     this: SC,
     next_: SC | None,
     indexer: _AcquisitionIndexer,
-) -> sources.AcquiredIQ:
+) -> specs.AcquiredIQ:
     """arm and acquire from the source and peripherals.
 
     Any acquired data returned from the peripherals is merged
@@ -254,7 +254,7 @@ def _acquire_both(
 
     if not isinstance(ext_data, dict):
         raise TypeError(f'peripheral acquire() returned {type(ext_data)!r}, not dict')
-    if not isinstance(iq, sources.AcquiredIQ):
+    if not isinstance(iq, specs.AcquiredIQ):
         raise TypeError(f'source acquire() returned {type(iq)!r}, not AcquiredIQ')
 
     arm_both(next_)

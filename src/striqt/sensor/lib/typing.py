@@ -1,5 +1,6 @@
 from __future__ import annotations as __
 
+import dataclasses
 import typing
 from typing_extensions import ParamSpec, Self, TypeAlias, TypeVar, Unpack
 from typing import (
@@ -12,6 +13,9 @@ from typing import (
     TYPE_CHECKING,
     runtime_checkable,
 )
+
+import striqt.analysis as sa
+import striqt.waveform as sw
 
 if TYPE_CHECKING:
     from .. import specs
@@ -60,55 +64,54 @@ class Peripherals(Protocol[_SP, _SC]):
 
 # %% sources/base.py
 @runtime_checkable
-class Source(Protocol[SS, SC, PS, PC]):
+class SourceBackend(Protocol[SS, SC]):
     __setup__: SS
     _capture: typing.Optional[SC]
 
-    def __init__(
-        self,
-        _setup: SS | None = None,
-        /,
-        reuse_iq=False,
-        *args: PS.args,
-        **kwargs: PS.kwargs,
-    ): ...
-
-    @classmethod
-    def from_spec(
-        cls,
-        spec: SS,
-        *,
-        captures: tuple[SC, ...] | None = None,
-        loops: tuple[specs.LoopSpec, ...] | None = None,
-        reuse_iq: bool = False,
-    ) -> Self: ...
-
-    def read_iq(
-        self, overlaps: tuple[int, int] = (0, 0)
-    ) -> 'tuple[Array, int|None]': ...
-
-    def _connect(self, spec: SS) -> None: ...
+    def __init__(self, spec: SS, capture_cls: type[SC]): ...
 
     def _apply_setup(
         self,
-        spec: SS,
         *,
         captures: tuple[SC, ...] | None = None,
         loops: 'tuple[specs.LoopSpec, ...] | None' = None,
     ) -> None: ...
 
-    def arm(self, *args: PC.args, **kwargs: PC.kwargs): ...
-
-    def arm_spec(self, spec: SC): ...
-
-    def acquire(self, overlaps: tuple[int, int] = (0, 0)) -> sources.AcquiredIQ: ...
+    def close(self): ...
 
     @property
     def capture_spec(self) -> SC: ...
 
+    @property
+    def info(self) -> specs.BaseSourceInfo: ...
+
     def _prepare_capture(self, capture: SC) -> SC | None: ...
 
     def get_resampler(self, capture: 'SC | None' = None) -> ResamplerDesign: ...
+
+    def id(self) -> str: ...
+
+    def _read_stream(
+        self,
+        buffers: list[Array],
+        offset: int,
+        count: int,
+        timeout_sec: float,
+        *,
+        on_overflow: specs.types.OnOverflow = 'except',
+    ) -> tuple[int, int]: ...
+
+    def _trigger_stream(self, overlaps: tuple[int, int]=(0, 0)) -> None: ...
+
+    def _package_acquisition(
+        self,
+        iq: 'specs.AcquiredIQ',
+        samples: Array,
+        time_ns: int | None,
+    ) -> 'specs.AcquiredIQ': ...
+
+    def _prepare_retry(self): ...
+
 
 
 if typing.TYPE_CHECKING:

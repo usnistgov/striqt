@@ -2,11 +2,12 @@
 
 from __future__ import annotations as __
 
+import dataclasses
 from typing import Any, cast, ClassVar, Generic, Literal, Optional, TYPE_CHECKING, Union
 
 import msgspec
 
-from striqt import analysis as sa
+import striqt.analysis as sa
 from striqt.analysis.specs import AnalysisGroup, SpecBase, Capture, frozendict
 
 from ..lib import util
@@ -457,6 +458,7 @@ class FileAcquisitionInfo(AcquisitionInfo, kw_only=True, frozen=True):
 
 class BaseSourceInfo(SpecBase, kw_only=True, frozen=True, cache_hash=True):
     num_rx_ports: int | None
+    retries: int | None = None
 
     def min_port_count(self, tuple_size: int):
         if self.num_rx_ports is None:

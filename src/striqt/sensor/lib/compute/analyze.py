@@ -81,28 +81,28 @@ def _get_signal_trigger_name(setup: specs.Source) -> str | None:
 
 @overload
 def analyze(
-    iq: sources.AcquiredIQ,
+    iq: specs.AcquiredIQ,
     options: datasets.EvaluationOptions[Literal[True]],
 ) -> 'xr.Dataset': ...
 
 
 @overload
 def analyze(
-    iq: sources.AcquiredIQ,
+    iq: specs.AcquiredIQ,
     options: datasets.EvaluationOptions[Literal['delayed']],
 ) -> datasets.DelayedDataset: ...
 
 
 @overload
 def analyze(
-    iq: sources.AcquiredIQ,
+    iq: specs.AcquiredIQ,
     options: datasets.EvaluationOptions[Literal[False]],
 ) -> 'dict[str, Array]': ...
 
 
 @sa.util.stopwatch('', 'analysis')
 def analyze(
-    iq: sources.AcquiredIQ,
+    iq: specs.AcquiredIQ,
     options: datasets.EvaluationOptions,
 ) -> 'dict[str, Array] | xr.Dataset | datasets.DelayedDataset':
     """convenience function to analyze a waveform from a specification.

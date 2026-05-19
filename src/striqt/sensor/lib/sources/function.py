@@ -22,7 +22,7 @@ TS = TypeVar('TS', bound=specs.FunctionSource)
 TC = TypeVar('TC', bound=specs.SensorCapture)
 
 
-def _lo_shift_tone(inds, source: base.SourceBase, xp, lo_offset=None):
+def _lo_shift_tone(inds, source: base.SourceController, xp, lo_offset=None):
     design = source.get_resampler()
     if lo_offset is None:
         lo_offset = design['lo_offset']

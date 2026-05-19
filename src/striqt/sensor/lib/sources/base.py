@@ -1,5 +1,6 @@
 from __future__ import annotations as __
 
+import contextlib
 import dataclasses
 import functools
 from typing import Callable, cast, ClassVar, Generic, TYPE_CHECKING
@@ -12,22 +13,26 @@ import striqt.waveform as sw
 from . import buffers
 from ... import specs
 from .. import util
-from ..typing import SS, SC, S, PC, PS, Source, TypeVar
+from ..typing import SS, SC, S, PC, PS, SourceBackend, TypeVar
 
 if TYPE_CHECKING:
     from ..typing import Array, Self
     import numpy as np
 
-    T = TypeVar('T', bound='SourceBase')
+    T = TypeVar('T', bound='SourceController')
 
 else:
     np = util.lazy_import('numpy')
 
 
-_source_id_map: dict[specs.Source, SourceBase | Event | BaseException] = defaultdict(
+_source_id_map: dict[specs.Source, SourceController | Event | BaseException] = defaultdict(
     Event
 )
 _exception: BaseException | None = None
+
+
+class ReceiveStreamError(IOError):
+    pass
 
 
 def get_source_id(spec: specs.Source, timeout=0.5) -> str:
@@ -51,7 +56,7 @@ def get_source_id(spec: specs.Source, timeout=0.5) -> str:
         raise TimeoutError('timeout while waiting for a source ID')
 
     source = _source_id_map[spec]
-    assert isinstance(source, SourceBase)
+    assert isinstance(source, SourceController)
 
     # this triggers a property access that may have its own
     # blocking wait
@@ -91,14 +96,41 @@ def get_bound_spec(spec: specs.SpecBase | None, cls: type[S] | None, **kws) -> S
     return cast(S, capture)
 
 
-class SourceBase(Source[SS, SC, PS, PC]):
-    _bindings: ClassVar[Schema | None] = None
+@contextlib.contextmanager
+def read_retries(source: SourceController) -> typing.Generator[None]:
+    """in this context, retry source.read_iq on stream errors"""
 
+    EXC_TYPES = (ReceiveStreamError, OverflowError)
+
+    max_count = source.info.retries
+
+    if max_count == 0:
+        yield
+        return
+
+    def prepare_retry(*args, **kws):
+        source._rx_stream.enable(source._device, False)
+        source._buffers.clear()
+        source._buffers.skip_next_buffer_swap()
+
+    initial = source.read_iq
+    retry = util.retry(EXC_TYPES, tries=max_count + 1, exception_func=prepare_retry)
+    source.read_iq = retry(source.read_iq)  # ty: ignore
+
+    try:
+        yield
+    finally:
+        source.read_iq = initial  # ty: ignore
+
+
+class SourceController(Generic[SS, SC, PS, PC]):
+    backend: SourceBackend[SS, SC]
+    _bindings: ClassVar[Schema | None] = None
     _buffers: buffers.ReceiveBuffers
     _is_open: bool | Event = False
     _timeout: float = 10
 
-    def __init__(self, reuse_iq=False, *args: PS.args, **kwargs: PS.kwargs):
+    def __init__(self, backend_cls: type[SourceBackend[SS, SC]], reuse_iq=False, *args: PS.args, **kwargs: PS.kwargs):
         open_event = self._is_open = Event()  # first, to serve other threads
 
         # back door from .from_spec
@@ -110,8 +142,10 @@ class SourceBase(Source[SS, SC, PS, PC]):
 
         if self._bindings is None:
             spec_cls = None
+            capture_cls = specs.Capture
         else:
             spec_cls = cast(type[SS], self._bindings.source)
+            capture_cls = self._bindings.capture
 
         try:
             _spec = get_bound_spec(_spec, spec_cls, **kwargs)
@@ -125,11 +159,11 @@ class SourceBase(Source[SS, SC, PS, PC]):
         self.__setup__ = _spec
         self._capture = None
         self._buffers = buffers.ReceiveBuffers(self)
-        self._prev_iq: buffers.AcquiredIQ | None = None
+        self._prev_iq: specs.AcquiredIQ | None = None
         self._reuse_iq = reuse_iq
 
         try:
-            self._connect(_spec)
+            self.backend = self._connect(_spec, capture_cls)
         except:
             self._is_open = False
             raise
@@ -147,10 +181,16 @@ class SourceBase(Source[SS, SC, PS, PC]):
             self.close()
             raise
 
-        self._apply_setup(_spec, **_extra_specs)
+        self.backend._apply_setup(_spec, **_extra_specs)
 
     @classmethod
-    def from_spec(cls, spec: SS, *, captures=None, loops=None, reuse_iq=False) -> Self:
+    def from_spec(cls,    
+        spec: SS,
+        *,
+        captures: tuple[SC, ...] | None = None,
+        loops: tuple[specs.LoopSpec, ...] | None = None,
+        reuse_iq: bool = False,
+    ) -> Self:
         kwargs = spec.to_dict()
         kwargs['__specs'] = {'source': spec, 'captures': captures, 'loops': loops}
 
@@ -179,9 +219,13 @@ class SourceBase(Source[SS, SC, PS, PC]):
             return obj
 
     def close(self):
-        self._is_open = False
-        if hasattr(self, '_buffers'):
-            self._buffers.clear()
+        try:
+            if self.backend is not None:
+                self.backend.close()
+        finally:
+            self._is_open = False
+            if hasattr(self, '_buffers'):
+                self._buffers.clear()
 
     def __del__(self):
         self.close()
@@ -198,7 +242,7 @@ class SourceBase(Source[SS, SC, PS, PC]):
         return self.__setup__
 
     @sa.util.stopwatch('arm', 'source', threshold=10e-3)
-    def arm(self, *args, **kwargs):
+    def arm(self, *args: PC.args, **kwargs: PC.kwargs):
         """stop the stream, apply a capture configuration, and start it"""
         assert self._buffers is not None
 
@@ -230,17 +274,19 @@ class SourceBase(Source[SS, SC, PS, PC]):
         if not self.setup_spec.gapless or spec != self._capture:
             self._buffers.clear()
 
-        self._capture = self._prepare_capture(spec) or spec
+        self._capture = self.backend._prepare_capture(spec) or spec
 
-    def read_iq(self, overlaps=(0, 0)) -> 'tuple[Array, int|None]':
+    def read_iq(self, overlaps: tuple[int, int] = (0, 0)) -> 'tuple[Array, int|None]':
         """read IQ for the armed capture"""
-        assert self._capture is not None, 'soapy source must be armed to read IQ'
+        assert self._capture is not None, 'source must be armed to read IQ'
 
         if not isinstance(overlaps, (tuple, list)) or len(overlaps) != 2:
             raise ValueError('overlaps must be a sequence of 2 integers')
         for ol in overlaps:
             if ol % 2 == 1 or ol < 0 or not isinstance(ol, (np.integer, int)):
                 raise ValueError('overlaps must be non-negative even integers')
+
+        self.backend._trigger_stream(overlaps)
 
         # the return buffer
         samples, stream_bufs = self._buffers.get_next(self._capture, overlaps=overlaps)
@@ -289,7 +335,7 @@ class SourceBase(Source[SS, SC, PS, PC]):
                 break
 
             # Read the samples from the data buffer
-            this_count, ret_time_ns = self._read_stream(
+            this_count, ret_time_ns = self.backend._read_stream(
                 stream_bufs,
                 offset=carryover_count + received_count,
                 count=request_count,
@@ -346,9 +392,9 @@ class SourceBase(Source[SS, SC, PS, PC]):
     @sa.util.stopwatch('acquire', 'source')
     def acquire(
         self,
-        overlaps=(0, 0),
+        overlaps: tuple[int, int]=(0, 0),
         alias_func: specs.helpers.PathAliasFormatter | None = None,
-    ) -> buffers.AcquiredIQ:
+    ) -> specs.AcquiredIQ:
         """arm a capture and enable the channel (if necessary), read the resulting IQ waveform.
 
         Optionally, calibration corrections can be applied, and the radio can be left ready for the next capture.
@@ -357,8 +403,25 @@ class SourceBase(Source[SS, SC, PS, PC]):
         self.capture_spec  # ensure we are armed
 
         if self._prev_iq is None:
-            samples, time_ns = self.read_iq(overlaps)
-            iq = self._package_acquisition(samples, time_ns, alias_func)
+            with read_retries(self):
+                samples, time_ns = self.read_iq(overlaps)
+
+            info = specs.AcquisitionInfo(source_id=self.id)
+
+            iq = specs.AcquiredIQ(
+                alias_func=alias_func,
+                pre_align=samples,
+                pre_filter=None,
+                aligned=None,
+                capture=self.capture_spec,
+                info=info,
+                extra_data={},
+                source_spec=self.setup_spec,
+                resampler=self.get_resampler(),
+                voltage_scale=buffers.get_dtype_scale(self.setup_spec.transport_dtype),
+            )
+
+            iq = self.backend._package_acquisition(iq, samples, time_ns)
 
         else:
             iq = dataclasses.replace(
@@ -372,38 +435,38 @@ class SourceBase(Source[SS, SC, PS, PC]):
 
         return iq
 
-    def _package_acquisition(
-        self,
-        samples: Array,
-        time_ns: int | None,
-        alias_func: specs.helpers.PathAliasFormatter | None = None,
-    ) -> buffers.AcquiredIQ:
-        info = specs.AcquisitionInfo(source_id=self.id)
+    # def _package_acquisition(
+    #     self,
+    #     samples: Array,
+    #     time_ns: int | None,
+    #     alias_func: specs.helpers.PathAliasFormatter | None = None,
+    # ) -> specs.AcquiredIQ:
+    #     info = specs.AcquisitionInfo(source_id=self.id)
 
-        return buffers.AcquiredIQ(
-            alias_func=alias_func,
-            pre_align=samples,
-            pre_filter=None,
-            aligned=None,
-            capture=self.capture_spec,
-            info=info,
-            extra_data={},
-            source_spec=self.setup_spec,
-            resampler=self.get_resampler(),
-            voltage_scale=buffers.get_dtype_scale(self.setup_spec.transport_dtype),
-        )
+    #     return specs.AcquiredIQ(
+    #         alias_func=alias_func,
+    #         pre_align=samples,
+    #         pre_filter=None,
+    #         aligned=None,
+    #         capture=self.capture_spec,
+    #         info=info,
+    #         extra_data={},
+    #         source_spec=self.setup_spec,
+    #         resampler=self.get_resampler(),
+    #         voltage_scale=buffers.get_dtype_scale(self.setup_spec.transport_dtype),
+    #     )
 
-    def _read_stream(
-        self,
-        buffers,
-        offset,
-        count,
-        timeout_sec,
-        *,
-        on_overflow: specs.types.OnOverflow = 'except',
-    ) -> tuple[int, int]:
-        """to be implemented in subclasses"""
-        raise NotImplementedError
+    # def _read_stream(
+    #     self,
+    #     buffers,
+    #     offset,
+    #     count,
+    #     timeout_sec,
+    #     *,
+    #     on_overflow: specs.types.OnOverflow = 'except',
+    # ) -> tuple[int, int]:
+    #     """to be implemented in subclasses"""
+    #     raise NotImplementedError
 
     @property
     def capture_spec(self) -> SC:
@@ -427,24 +490,26 @@ class SourceBase(Source[SS, SC, PS, PC]):
         return design_resampler(capture, self.setup_spec.master_clock_rate)
 
 
-class VirtualSource(SourceBase[SS, SC, PS, PC]):
+class VirtualSource(SourceBackend[SS, SC]):
     _samples_elapsed = 0
     _overlaps: tuple[int, int] = (0, 0)
+
+    def __init__(self, spec: SS, capture_cls: type[SC]):
+        self.setup_spec = spec
 
     def reset_sample_counter(self, value=0):
         self._sync_time_source()
         self._samples_elapsed = value
         self._sample_start_index = value
 
-    def _apply_setup(self, spec, *, captures=None, loops=None):
+    def _apply_setup(self, captures=None, loops=None):
         self.reset_sample_counter()
 
     def _prepare_capture(self, capture):
         self.reset_sample_counter()
 
-    def read_iq(self, overlaps=(0, 0)):
+    def _start_acquisition(self, overlaps=(0, 0)):
         self._overlaps = overlaps
-        return super().read_iq(overlaps)
 
     def _read_stream(
         self,
@@ -496,7 +561,7 @@ class VirtualSource(SourceBase[SS, SC, PS, PC]):
         self._sync_time_ns = round(1_000_000_000 * self._samples_elapsed)
 
 
-def _map_source(spec: specs.Source, source: SourceBase | BaseException):
+def _map_source(spec: specs.Source, source: SourceController | BaseException):
     maybe_event = _source_id_map[spec]
     _source_id_map[spec] = source
 

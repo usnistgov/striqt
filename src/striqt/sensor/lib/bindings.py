@@ -47,13 +47,13 @@ def tagged_subclass(
 
 @dataclasses.dataclass(frozen=True)
 class Sensor(Generic[SS, SP, SC, PS, PC]):
-    source: type[sources.SourceBase[SS, SC, PS, PC]]
+    source: type[sources.SourceController[SS, SC, PS, PC]]
     sweep_spec: type[specs.Sweep[SS, SP, SC]] = specs.Sweep
     peripherals: type[Peripherals[SP, SC]] = NoPeripherals
     sink: type[sinks.SinkBase[SC]] = sinks.ZarrCaptureSink
 
     def __post_init__(self):
-        assert issubclass(self.source, sources.SourceBase)
+        assert issubclass(self.source, sources.SourceController)
         assert issubclass(self.sweep_spec, specs.Sweep)
         assert issubclass(self.peripherals, Peripherals)
         assert issubclass(self.sink, sinks.SinkBase)

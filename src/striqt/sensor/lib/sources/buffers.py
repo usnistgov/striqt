@@ -16,23 +16,10 @@ from .. import util
 if TYPE_CHECKING:
     import numpy as np
     from ..typing import Array
-    from .base import SourceBase
+    from .base import SourceController
 
 else:
     np = util.lazy_import('numpy')
-
-
-@dataclasses.dataclass
-class AcquiredIQ(sa.dataarrays.AcquiredIQ):
-    """extra metadata needed for downstream analysis"""
-
-    info: specs.AcquisitionInfo
-    extra_data: dict[str, Any]
-    source_spec: specs.Source
-    resampler: sw.ResamplerDesign
-    alias_func: specs.helpers.PathAliasFormatter | None = None
-    # analysis: specs.AnalysisGroup | None = None
-    voltage_scale: Array | float = 1
 
 
 class ReceiveBuffers:
@@ -43,7 +30,7 @@ class ReceiveBuffers:
     buffers: list = [None, None]
     _hold_buffer_swap = False
 
-    def __init__(self, source: 'SourceBase'):
+    def __init__(self, source: 'SourceController'):
         self.source = source
         self.buffers = [None, None]
         self.clear()
@@ -171,7 +158,7 @@ def get_read_count(
     'allocate buffers', 'source', threshold=5e-3, logger_level=logging.DEBUG
 )
 def _alloc_empty_iq(
-    source: 'SourceBase',
+    source: 'SourceController',
     capture: specs.SensorCapture,
     prior: 'np.ndarray|None' = None,
     overlaps: tuple[int, int] = (0, 0),
