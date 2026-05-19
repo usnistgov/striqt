@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     class Resources(typing_extensions.TypedDict, Generic[SS, SP, SC, PS, PC]):
         """Sensor resources needed to run a sweep"""
 
-        source: sources.SourceController[SS, SC, PS, PC]
+        source: sources.SourceControllerBySpec[SS, SC, PS, PC]
         sink: SinkBase
         peripherals: Peripherals[SP, SC]
         except_context: typing_extensions.NotRequired[ContextManager]
@@ -43,7 +43,7 @@ if TYPE_CHECKING:
     ):
         """Sensor resources needed to run a sweep"""
 
-        source: sources.SourceController[SS, SC, PS, PC]
+        source: sources.SourceControllerBySpec[SS, SC, PS, PC]
         sink: SinkBase
         peripherals: Peripherals[SP, SC]
         except_context: typing_extensions.NotRequired[ContextManager]
@@ -56,7 +56,7 @@ else:
     class Resources(typing_extensions.TypedDict):
         """Sensor resources needed to run a sweep"""
 
-        source: sources.SourceController
+        source: sources.SourceControllerBySpec
         sink: SinkBase
         peripherals: typing_extensions.NotRequired[Peripherals]
         except_context: typing_extensions.NotRequired[ContextManager]
@@ -67,7 +67,7 @@ else:
     class AnyResources(typing_extensions.TypedDict, total=False):
         """Sensor resources needed to run a sweep"""
 
-        source: sources.SourceController
+        source: sources.SourceControllerBySpec
         sink: SinkBase
         peripherals: typing_extensions.NotRequired[Peripherals]
         except_context: typing_extensions.NotRequired[ContextManager]
@@ -142,20 +142,15 @@ def _open_devices(
     """open source and any peripherals"""
 
     def _post_source_open():
+        # blocks until the source is open
         source_id = sources.get_source_id(spec.source)
         specs.helpers.list_capture_adjustments(spec, source_id=source_id)
 
         if on_source_opened is not None:
             on_source_opened(spec, source_id)
 
-    source = util.threadpool.submit(
-        _timeit('open sensor source')(binding.source.from_spec),
-        spec.source,
-        captures=spec.captures,
-        loops=spec.loops,
-        reuse_iq=spec.options.reuse_iq,
-    )
-
+    open_ = _timeit('open sensor source')(binding.opener(False))
+    source = util.threadpool.submit(open_, spec.source, reuse_iq=spec.options.reuse_iq)
     source_callback = util.threadpool.submit(_post_source_open)
 
     if not skip_peripherals:

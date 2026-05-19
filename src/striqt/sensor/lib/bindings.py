@@ -1,13 +1,23 @@
 from __future__ import annotations as __
 import functools
-from typing import Any, Callable, cast, Generic, Optional, TYPE_CHECKING, Union
+from typing import (
+    overload,
+    Any,
+    Callable,
+    cast,
+    Generic,
+    Literal,
+    Optional,
+    TYPE_CHECKING,
+    Union,
+)
 import dataclasses
 from typing_extensions import ParamSpec
 
 from .peripherals import NoPeripherals, PeripheralsBase
 from . import sinks, sources
 from .. import specs
-from .typing import Peripherals, PC, PS, SC, SS, SP, TypeVar
+from .typing import Peripherals, PC, PS, SC, SS, SP, SourceBackend, TypeVar
 
 import msgspec
 
@@ -46,47 +56,65 @@ def tagged_subclass(
 
 
 @dataclasses.dataclass(frozen=True)
-class Sensor(Generic[SS, SP, SC, PS, PC]):
-    source: type[sources.SourceController[SS, SC, PS, PC]]
+class Sensor(Generic[SS, SP, SC]):
+    source: type[SourceBackend[SS, SC]]
     sweep_spec: type[specs.Sweep[SS, SP, SC]] = specs.Sweep
     peripherals: type[Peripherals[SP, SC]] = NoPeripherals
     sink: type[sinks.SinkBase[SC]] = sinks.ZarrCaptureSink
 
     def __post_init__(self):
-        assert issubclass(self.source, sources.SourceController)
+        assert issubclass(
+            self.source,
+            (sources.SourceControllerByKwArg, sources.SourceControllerBySpec),
+        )
         assert issubclass(self.sweep_spec, specs.Sweep)
         assert issubclass(self.peripherals, Peripherals)
         assert issubclass(self.sink, sinks.SinkBase)
 
 
 @dataclasses.dataclass(frozen=True)
-class Schema(Generic[SS, SP, SC, PS, PC], sources.base.Schema[SS, SC]):
-    peripherals: type[SP]
-
-    # these aren't actually used; they just set up the type hinting properly
-    init_like: Callable[PS, Any]
-    arm_like: Callable[PC, Any]
-
-    def __post_init__(self):
-        assert issubclass(self.source, specs.Source)
-        assert issubclass(self.capture, specs.SensorCapture)
-        assert issubclass(self.peripherals, specs.Peripherals)
-
-
-@dataclasses.dataclass(frozen=True)
-class SensorBinding(Sensor[SS, SP, SC, PS, PC]):
-    schema: Schema[SS, SP, SC, PS, PC] = None  # type: ignore
+class SensorBinding(Sensor[SS, SP, SC], Generic[SS, SP, SC, PS, PC]):
+    schema: specs.Schema[SS, SP, SC, PS, PC] = None  # type: ignore
     sweep_spec: type[BoundSweep[SS, SP, SC]] = specs.Sweep  # pyright: ignore
 
     def __post_init__(self):
         super().__post_init__()
-        assert isinstance(self.schema, Schema)
+        assert isinstance(self.schema, specs.Schema)
+
+    @overload
+    def opener(
+        self, kwargs: Literal[False]
+    ) -> type[sources.SourceControllerBySpec[SS, SC, PS, PC]]: ...
+
+    @overload
+    def opener(
+        self, kwargs: Literal[True]
+    ) -> type[sources.SourceControllerByKwArg[SS, SC, PS, PC]]: ...
+
+    def opener(
+        self, kwargs: bool = True
+    ) -> type[
+        sources.SourceControllerBySpec[SS, SC, PS, PC]
+        | sources.SourceControllerByKwArg[SS, SC, PS, PC]
+    ]:
+        if kwargs:
+
+            class SourceController(sources.SourceControllerByKwArg):
+                _binding = self
+
+            return SourceController[SS, SC, PS, PC]
+        else:
+
+            class SourceController(sources.SourceControllerBySpec):
+                _binding = self
+
+            return SourceController[SS, SC, PS, PC]
 
 
 def bind_sensor(
     key: str,
-    sensor: Sensor[TS2, TP2, TC2, PS2, PC2],
-    schema: Schema[SS, SP, SC, PS, PC],
+    sensor: Sensor[TS2, TP2, TC2],
+    schema: specs.Schema[SS, SP, SC, PS, PC],
     register: bool = True,
 ) -> SensorBinding[SS, SP, SC, PS, PC]:
     """register a binding between specifications and controller classes.
@@ -105,7 +133,7 @@ def bind_sensor(
         raise TypeError(f'a sensor binding named {key!r} was already registered')
 
     # bind the schema to the source
-    class BoundSource(sensor.source):  # ty: ignore
+    class BoundSource(sensor.source):
         _bindings = schema
 
     BoundSource.__name__ = sensor.source.__name__
@@ -172,7 +200,7 @@ def mock_binding(
             sweep_spec=origin.sweep_spec,
             sink=mock_binding.sink,
         ),
-        Schema(
+        specs.Schema(
             source=mock_binding.schema.source,
             capture=origin.schema.capture,
             peripherals=origin.schema.peripherals,

@@ -8,21 +8,25 @@ import striqt.waveform as sw
 
 from ... import specs
 from . import base, buffers
-from ..typing import PS, PC
+from ..typing import SourceBackend, PS, PC
 
 
-TS = typing.TypeVar('TS', bound=specs.NoSource)
-TC = typing.TypeVar('TC', bound=specs.SensorCapture)
+SS = typing.TypeVar('SS', bound=specs.NoSource)
+SC = typing.TypeVar('SC', bound=specs.SensorCapture)
 
 
-class NoSource(base.SourceController[TS, TC, PS, PC]):
+class NoSource(SourceBackend[SS, specs.SensorCapture]):
     """fast paths to acquire empty buffers"""
 
     _samples_elapsed = 0
+    _capture: specs.SensorCapture
+
+    def __init__(self, spec: SS):
+        self.spec = spec
 
     @functools.cached_property
     def info(self):
-        return specs.structs.BaseSourceInfo(num_rx_ports=self.setup_spec.num_rx_ports)
+        return specs.structs.BaseSourceInfo(num_rx_ports=self.spec.num_rx_ports)
 
     @functools.cached_property
     def id(self) -> str:
@@ -36,16 +40,17 @@ class NoSource(base.SourceController[TS, TC, PS, PC]):
     def _sync_time_source(self):
         self._sync_time_ns = time.time_ns()
 
-    def _apply_setup(self, spec, *, captures=None, loops=None):
+    def setup(self, *, captures=None, loops=None):
         self.reset_sample_counter()
 
-    def _prepare_capture(self, capture) -> TC | None:
+    def arm(self, capture) -> SC | None:
+        self._capture = capture
         self.reset_sample_counter()
 
-    def _read_stream(
+    def read_buffer(
         self, buffers, offset, count, timeout_sec=None, *, on_overflow='except'
     ) -> tuple[int, int]:
-        fs = float(self.get_resampler()['fs_sdr'])
+        fs = float(self.get_resampler(self._capture)['fs_sdr'])
         sample_period_ns = 1_000_000_000 / fs
         timestamp_ns = self._sync_time_ns + self._samples_elapsed * sample_period_ns
 
@@ -53,11 +58,8 @@ class NoSource(base.SourceController[TS, TC, PS, PC]):
 
         return count, round(timestamp_ns)
 
-    def get_resampler(self, capture: TC | None = None) -> sw.ResamplerDesign:
+    def get_resampler(self, capture: SC) -> sw.ResamplerDesign:
         from ..compute import design_resampler
 
-        if capture is None:
-            capture = self.capture_spec
-
-        mcr = self.setup_spec.master_clock_rate
+        mcr = self.spec.master_clock_rate
         return design_resampler(capture, mcr)

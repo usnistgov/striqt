@@ -7,7 +7,8 @@ peripherals and expanded data fields elsewhere.
 from . import specs
 from .lib import sources, peripherals, sinks
 from .lib.sources import deepwave
-from .lib.bindings import Sensor, Schema, bind_sensor
+from .lib.bindings import Sensor, bind_sensor
+from .specs import Schema
 from .lib.calibration import bind_manual_yfactor_calibration
 
 # %% Synthetic data sources for testing/warmup/post-analysis

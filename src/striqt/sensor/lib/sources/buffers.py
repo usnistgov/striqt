@@ -15,14 +15,14 @@ from .. import util
 
 if TYPE_CHECKING:
     import numpy as np
-    from ..typing import Array
-    from .base import SourceController
+    from ..typing import Array, SC
+    from .controller import SourceController
 
 else:
     np = util.lazy_import('numpy')
 
 
-class ReceiveBuffers:
+class ReceiveBuffers(typing.Generic[SC]):
     """remember unused samples from the previous IQ capture"""
 
     carryover_samples: 'np.ndarray | None'
@@ -58,7 +58,7 @@ class ReceiveBuffers:
         return self.start_time_ns, carryover
 
     def get_next(
-        self, capture, overlaps: tuple[int, int] = (0, 0)
+        self, capture: SC, overlaps: tuple[int, int] = (0, 0)
     ) -> 'tuple[np.ndarray, list[np.ndarray]]':
         """swap the buffers, and reallocate if needed"""
 
@@ -203,7 +203,7 @@ def _alloc_empty_iq(
     # build the list of channel buffers that will actuall be filled with data,
     # including references to the throwaway buffer of extras in case of
     # source.setup_spec.stream_all_rx_ports
-    num_rx_ports = source.info.min_port_count(len(ports))
+    num_rx_ports = source.backend.info.min_port_count(len(ports))
     if source.setup_spec.stream_all_rx_ports and len(ports) != num_rx_ports:
         if source.setup_spec.transport_dtype == 'complex64':
             # a throwaway buffer for samples that won't be returned

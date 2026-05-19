@@ -44,7 +44,7 @@ class Air8201BSourceSpec(specs.SoapySource, kw_only=True, frozen=True):
 
 
 class Airstack1Source(soapy.SoapySource):
-    def _connect(self, spec: specs.SoapySource, **kwargs):
+    def __init__(self, spec: specs.SoapySource, **kwargs):
         # trim script startup time by setting these here
         air_kwargs = dict(
             kwargs,
@@ -53,7 +53,7 @@ class Airstack1Source(soapy.SoapySource):
             clk_src=spec.clock_source,
         )
 
-        super()._connect(spec, **air_kwargs)
+        super().__init__(spec, **air_kwargs)
 
         self._set_jesd_sysref_delay(0)
 

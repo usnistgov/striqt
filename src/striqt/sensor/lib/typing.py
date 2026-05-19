@@ -65,12 +65,12 @@ class Peripherals(Protocol[_SP, _SC]):
 # %% sources/base.py
 @runtime_checkable
 class SourceBackend(Protocol[SS, SC]):
-    __setup__: SS
+    spec: SS
     _capture: typing.Optional[SC]
 
-    def __init__(self, spec: SS, capture_cls: type[SC]): ...
+    def __init__(self, spec): ...
 
-    def _apply_setup(
+    def setup(
         self,
         *,
         captures: tuple[SC, ...] | None = None,
@@ -80,18 +80,16 @@ class SourceBackend(Protocol[SS, SC]):
     def close(self): ...
 
     @property
-    def capture_spec(self) -> SC: ...
-
-    @property
     def info(self) -> specs.BaseSourceInfo: ...
 
-    def _prepare_capture(self, capture: SC) -> SC | None: ...
+    def arm(self, capture: SC) -> SC | None: ...
 
-    def get_resampler(self, capture: 'SC | None' = None) -> ResamplerDesign: ...
+    def get_resampler(self, capture: SC) -> ResamplerDesign: ...
 
+    @property
     def id(self) -> str: ...
 
-    def _read_stream(
+    def read_buffer(
         self,
         buffers: list[Array],
         offset: int,
@@ -101,17 +99,16 @@ class SourceBackend(Protocol[SS, SC]):
         on_overflow: specs.types.OnOverflow = 'except',
     ) -> tuple[int, int]: ...
 
-    def _trigger_stream(self, overlaps: tuple[int, int]=(0, 0)) -> None: ...
+    def trigger(self, overlaps: tuple[int, int] = (0, 0)) -> None: ...
 
-    def _package_acquisition(
+    def package_iq(
         self,
         iq: 'specs.AcquiredIQ',
         samples: Array,
         time_ns: int | None,
     ) -> 'specs.AcquiredIQ': ...
 
-    def _prepare_retry(self): ...
-
+    def _prepare_retrigger(self): ...
 
 
 if typing.TYPE_CHECKING:

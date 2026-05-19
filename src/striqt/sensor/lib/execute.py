@@ -91,7 +91,9 @@ def iterate_sweep(
 
     iq = None
     analysis = None
-    captures = specs.helpers.loop_captures(spec, source_id=resources['source'].id)
+    captures = specs.helpers.loop_captures(
+        spec, source_id=resources['source'].backend.id
+    )
     indexer = _AcquisitionIndexer(len(captures))
 
     if len(spec.loops) > 0 and isinstance(spec.loops[0], specs.Repeat):
@@ -229,7 +231,7 @@ def _acquire_both(
         if c is None:
             return
 
-        source = util.threadpool.submit(res['source'].arm_spec, c)
+        source = util.threadpool.submit(res['source'].arm, c)
         peripherals = util.threadpool.submit(res['peripherals'].arm, c)
         util.await_and_ignore([source, peripherals], 'arm sensor')
 
@@ -311,7 +313,7 @@ def _log_cache_info(
         capture_desc = specs.helpers.describe_capture(
             c,
             fields=info_fields,
-            source_id=resources['source'].id,
+            source_id=resources['source'].backend.id,
             adjust_spec=resources['sweep_spec'].adjust_captures,
         )
         logger.info(f'spectrogram ▮ {snr_desc:<14} ▮ {capture_desc}')

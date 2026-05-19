@@ -339,7 +339,7 @@ def bind_manual_yfactor_calibration(
         sink=YFactorSink,
     )
 
-    cal_schema = bindings.Schema(
+    cal_schema = specs.Schema(
         source=sensor.schema.source,
         capture=capture_spec_cls,  # pyright: ignore
         peripherals=sensor.schema.peripherals,
@@ -349,8 +349,8 @@ def bind_manual_yfactor_calibration(
 
     return bindings.bind_sensor(
         name,
-        cast(bindings.Sensor[SS, SP, SC, PS, PC], cal_sensor),
-        cast(bindings.Schema[SS, SP, SC, PS, PC], cal_schema),
+        cast(bindings.Sensor[SS, SP, SC], cal_sensor),
+        cast(specs.Schema[SS, SP, SC, PS, PC], cal_schema),
     )
 
 

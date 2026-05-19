@@ -4,7 +4,7 @@ from __future__ import annotations as __
 
 from . import helpers, types
 from .structs import *
-from .dataclasses import AcquiredIQ
+from .dataclasses import AcquiredIQ, Schema
 from .structs import SS, SP, SC, SPC
 from .types import Annotated, Meta
 from striqt.analysis.specs import frozendict

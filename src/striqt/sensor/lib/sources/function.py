@@ -6,32 +6,33 @@ import functools
 from typing import TYPE_CHECKING
 
 from striqt.analysis import Capture, source
+
 from ... import specs
 from .. import util
 from . import base
 
-from ..typing import PS, PC, TypeVar
+from ..typing import PS, PC, SourceBackend, TypeVar
 
 if TYPE_CHECKING:
     import numpy as np
+    import striqt.waveform as sw
 else:
     np = util.lazy_import('numpy')
 
 
-TS = TypeVar('TS', bound=specs.FunctionSource)
-TC = TypeVar('TC', bound=specs.SensorCapture)
+SS = TypeVar('SS', bound=specs.FunctionSource)
+SC = TypeVar('SC', bound=specs.SensorCapture)
 
 
-def _lo_shift_tone(inds, source: base.SourceController, xp, lo_offset=None):
-    design = source.get_resampler()
+def _lo_shift_tone(inds, resampler: 'sw.ResamplerDesign', xp, lo_offset=None):
     if lo_offset is None:
-        lo_offset = design['lo_offset']
-    phase_scale = (2j * np.pi * lo_offset) / design['fs_sdr']
+        lo_offset = resampler['lo_offset']
+    phase_scale = (2j * np.pi * lo_offset) / resampler['fs_sdr']
     return xp.exp(phase_scale * inds).astype('complex64')
 
 
-class TestSourceBase(base.VirtualSource[TS, TC, PS, PC]):
-    def _read_stream(
+class TestSourceBase(base.VirtualSource[SS, SC]):
+    def read_buffer(
         self,
         buffers,
         offset,
@@ -57,7 +58,7 @@ class TestSourceBase(base.VirtualSource[TS, TC, PS, PC]):
             )
             buf[offset : (offset + count)] = values
 
-        return super()._read_stream(
+        return super().read_buffer(
             buffers, offset, count, timeout_sec=timeout_sec, on_overflow=on_overflow
         )
 
@@ -73,9 +74,7 @@ class TestSourceBase(base.VirtualSource[TS, TC, PS, PC]):
         return specs.BaseSourceInfo(num_rx_ports=self.setup_spec.num_rx_ports)
 
 
-class SingleToneSource(
-    TestSourceBase[specs.FunctionSource, specs.SingleToneCapture, PS, PC]
-):
+class SingleToneSource(TestSourceBase[specs.FunctionSource, specs.SingleToneCapture]):
     def get_waveform(
         self,
         count: int,
@@ -86,16 +85,16 @@ class SingleToneSource(
         xp,
         dtype='complex64',
     ):
-        capture = self.capture_spec
-
-        fs = self.get_resampler()['fs_sdr']
+        capture = self._capture
+        resampler = self.get_resampler(self._capture)
+        fs = resampler['fs_sdr']
         i = xp.arange(start + offset, start + count + offset, dtype='int64')
 
-        lo = _lo_shift_tone(i, self, xp)
+        lo = _lo_shift_tone(i, resampler, xp)
 
         phi = (2 * np.pi * capture.frequency_offset) / fs * i + np.pi / 2
         x = lo * xp.exp(1j * phi)
-        x = x.astype(self.__setup__.transport_dtype)
+        x = x.astype(self.spec.transport_dtype)
 
         if capture.snr is not None:
             power = 10 ** (-capture.snr / 10)
@@ -111,9 +110,7 @@ class SingleToneSource(
         return x
 
 
-class DiracDeltaSource(
-    TestSourceBase[specs.FunctionSource, specs.DiracDeltaCapture, PS, PC]
-):
+class DiracDeltaSource(TestSourceBase[specs.FunctionSource, specs.DiracDeltaCapture]):
     def get_waveform(
         self,
         count: int,
@@ -124,12 +121,12 @@ class DiracDeltaSource(
         xp,
         dtype='complex64',
     ):
-        fs = self.get_resampler()['fs_sdr']
-        capture = self.capture_spec
+        capture = self._capture
+        fs = self.get_resampler(capture)['fs_sdr']
 
         abs_pulse_index = round(capture.time * fs) + start
         rel_pulse_index = abs_pulse_index - offset
-        ret = xp.full(count, 1e-20, dtype=self.__setup__.transport_dtype)
+        ret = xp.full(count, 1e-20, dtype=self.spec.transport_dtype)
 
         if rel_pulse_index >= 0 and rel_pulse_index < count:
             ret[rel_pulse_index] = 10 ** (capture.power / 20)
@@ -137,9 +134,7 @@ class DiracDeltaSource(
         return ret[np.newaxis,]
 
 
-class SawtoothSource(
-    TestSourceBase[specs.FunctionSource, specs.SawtoothCapture, PS, PC]
-):
+class SawtoothSource(TestSourceBase[specs.FunctionSource, specs.SawtoothCapture]):
     def get_waveform(
         self,
         count: int,
@@ -150,8 +145,8 @@ class SawtoothSource(
         xp,
         dtype='complex64',
     ):
-        fs = self.get_resampler()['fs_sdr']
-        capture = self.capture_spec
+        capture = self._capture
+        fs = self.get_resampler(capture)['fs_sdr']
 
         ret = xp.empty(count, dtype='complex64')
         ii = xp.arange(start + offset, start + count + offset, dtype='uint64')
@@ -162,7 +157,7 @@ class SawtoothSource(
         return ret
 
 
-class NoiseSource(TestSourceBase[specs.FunctionSource, specs.NoiseCapture, PS, PC]):
+class NoiseSource(TestSourceBase[specs.FunctionSource, specs.NoiseCapture]):
     def get_waveform(
         self,
         count: int,
@@ -173,8 +168,8 @@ class NoiseSource(TestSourceBase[specs.FunctionSource, specs.NoiseCapture, PS, P
         xp,
         dtype='complex64',
     ):
-        capture = self.capture_spec
-        fs = self.get_resampler()['fs_sdr']
+        capture = self._capture
+        fs = self.get_resampler(capture)['fs_sdr']
 
         backend_capture = Capture(
             duration=(count + offset) / fs,
