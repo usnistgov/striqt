@@ -34,7 +34,7 @@ if TYPE_CHECKING:
         except_context: typing_extensions.NotRequired[ContextManager]
         sweep_spec: specs.Sweep[SS, SP, SC]
         calibration: 'xr.Dataset|None'
-        alias_func: specs.helpers.PathAliasFormatter | None
+        format_path: specs.helpers.PathFormatter | None
 
     class AnyResources(
         typing_extensions.TypedDict,
@@ -49,7 +49,7 @@ if TYPE_CHECKING:
         except_context: typing_extensions.NotRequired[ContextManager]
         sweep_spec: specs.Sweep[SS, SP, SC]
         calibration: 'xr.Dataset|None'
-        alias_func: specs.helpers.PathAliasFormatter | None
+        format_path: specs.helpers.PathFormatter | None
 
 else:
     # python < 3.10 workaround
@@ -62,7 +62,7 @@ else:
         except_context: typing_extensions.NotRequired[ContextManager]
         sweep_spec: specs.Sweep
         calibration: 'xr.Dataset|None'
-        alias_func: specs.helpers.PathAliasFormatter | None
+        format_path: specs.helpers.PathFormatter | None
 
     class AnyResources(typing_extensions.TypedDict, total=False):
         """Sensor resources needed to run a sweep"""
@@ -73,7 +73,7 @@ else:
         except_context: typing_extensions.NotRequired[ContextManager]
         sweep_spec: specs.Sweep
         calibration: 'xr.Dataset|None'
-        alias_func: specs.helpers.PathAliasFormatter | None
+        format_path: specs.helpers.PathFormatter | None
 
 
 def _timeit(desc: str = '') -> PassThroughWrapper:
@@ -85,7 +85,7 @@ def _timeit(desc: str = '') -> PassThroughWrapper:
 def _open_sink(
     spec: specs.Sweep[Any, Any, SC],
     default_cls: type[SinkBase] | None,
-    alias_func: specs.helpers.PathAliasFormatter | None = None,
+    format_path: specs.helpers.PathFormatter | None = None,
 ) -> SinkBase[SC]:
     with sa.util.stopwatch('open sink', 'sweep', 0.5, util.logging.INFO):
         if spec.extensions.sink is not None:
@@ -99,7 +99,7 @@ def _open_sink(
         else:
             raise TypeError('no sink class in sensor binding or spec .extensions.sink')
 
-        return sink_cls(spec, alias_func)
+        return sink_cls(spec, format_path)
 
 
 class ConnectionManager(
@@ -198,7 +198,7 @@ def open_resources(
     logger = sa.util.get_logger('sweep')
     logger.log(sa.util.INFO, 'opening sensor resources')
 
-    formatter = specs.helpers.PathAliasFormatter(spec, spec_path=spec_path)
+    formatter = specs.helpers.PathFormatter(spec, spec_path=spec_path)
 
     if spec_path is not None:
         os.chdir(str(Path(spec_path).parent))
@@ -273,7 +273,7 @@ def open_resources(
         raise
 
     conn._resources['sweep_spec'] = spec
-    conn._resources['alias_func'] = formatter
+    conn._resources['format_path'] = formatter
 
     return conn
 

@@ -730,7 +730,7 @@ def list_capture_adjustments(
     return {name: tuple(v.keys()) for name, v in result.items()}
 
 
-class PathAliasFormatter:
+class PathFormatter:
     def __init__(
         self,
         sweep: specs.Sweep,

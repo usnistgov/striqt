@@ -33,5 +33,5 @@ class AcquiredIQ(sa.dataarrays.AcquiredIQ):
     extra_data: dict[str, Any]
     source_spec: structs.Source
     resampler: sw.ResamplerDesign
-    alias_func: helpers.PathAliasFormatter | None = None
+    format_path: helpers.PathFormatter | None = None
     voltage_scale: sw.typing.Array | float = 1

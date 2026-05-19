@@ -48,14 +48,14 @@ def lookup_power_correction(
     cal_data: 'str | Path | None',
     capture: specs.SoapyCapture,
     master_clock_rate: float,
-    alias_func: specs.helpers.PathAliasFormatter | None = None,
+    format_path: specs.helpers.PathFormatter | None = None,
     *,
     xp=None,
 ):
     if cal_data is None:
         return None
     elif isinstance(cal_data, (str, Path)):
-        corrections = io.read_calibration(cal_data, alias_func)
+        corrections = io.read_calibration(cal_data, format_path)
     else:
         raise TypeError('invalid cal_data input type')
 
@@ -75,7 +75,7 @@ def lookup_system_noise_power(
     cal_data: 'Path | str | None',
     capture: specs.SoapyCapture,
     master_clock_rate: float,
-    alias_func: specs.helpers.PathAliasFormatter | None = None,
+    format_path: specs.helpers.PathFormatter | None = None,
     *,
     T=290.0,
     B=1.0,
@@ -90,7 +90,7 @@ def lookup_system_noise_power(
     if cal_data is None:
         return None
     elif isinstance(cal_data, (str, Path)):
-        corrections = io.read_calibration(cal_data, alias_func)
+        corrections = io.read_calibration(cal_data, format_path)
     else:
         raise TypeError('invalid cal_data input type')
 
@@ -131,8 +131,8 @@ class YFactorSink(sinks.SinkBase):
     def _get_path(self) -> Path | None:
         path = self._spec.path
 
-        if self._alias_func is not None:
-            path = self._alias_func(path)
+        if self._format_path is not None:
+            path = self._format_path(path)
 
         if path is not None:
             return Path(path)

@@ -43,7 +43,7 @@ def run(yaml_path):
 
         print('\nPaths')
         print(80 * '▀')
-        alias_func = res['alias_func']
+        format_path = res['format_path']
         expanded_paths = {
             'sink.path': spec.sink.path,
             'extensions.import_path': spec.extensions.import_path,
@@ -55,8 +55,8 @@ def run(yaml_path):
             print(f'  Input: ', repr(p))
             if p is None:
                 continue
-            if alias_func is not None:
-                pf = alias_func(p)
+            if format_path is not None:
+                pf = format_path(p)
                 print(f'  Formatted: ', repr(pf))
             else:
                 pf = p

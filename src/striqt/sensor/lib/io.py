@@ -24,13 +24,13 @@ else:
 def open_store(
     spec: specs.Sink,
     *,
-    alias_func: specs.helpers.PathAliasFormatter | None = None,
+    format_path: specs.helpers.PathFormatter | None = None,
     force=False,
 ) -> ZarrStore:
     spec_path = spec.path
 
-    if alias_func is not None:
-        spec_path = alias_func(spec_path)
+    if format_path is not None:
+        spec_path = format_path(spec_path)
 
     spec_path = Path(spec_path)
 
@@ -109,7 +109,9 @@ def read_tdms_iq(
     from ..bindings import tdms_file
     from .sources.file import TDMSSource
 
-    source_spec = tdms_file.schema.source(master_clock_rate=master_clock_rate, path=str(path))
+    source_spec = tdms_file.schema.source(
+        master_clock_rate=master_clock_rate, path=str(path)
+    )
     opener = tdms_file.opener(False)
     source = opener(source_spec)
     capture = source.capture_spec
@@ -122,25 +124,25 @@ def read_tdms_iq(
 
 @overload
 def read_calibration(
-    path: None, alias_func: specs.helpers.PathAliasFormatter | None = None
+    path: None, format_path: specs.helpers.PathFormatter | None = None
 ) -> None: ...
 
 
 @overload
 def read_calibration(
-    path: str | Path, alias_func: specs.helpers.PathAliasFormatter | None = None
+    path: str | Path, format_path: specs.helpers.PathFormatter | None = None
 ) -> 'xr.Dataset': ...
 
 
 @sa.util.lru_cache()
 def read_calibration(
-    path: str | Path | None, alias_func: specs.helpers.PathAliasFormatter | None = None
+    path: str | Path | None, format_path: specs.helpers.PathFormatter | None = None
 ) -> 'xr.Dataset|None':
     if path is None:
         return None
 
-    if alias_func is not None:
-        path = alias_func(path)
+    if format_path is not None:
+        path = format_path(path)
 
     return xr.open_dataset(path)
 
@@ -152,14 +154,14 @@ def save_calibration(path, corrections: 'xr.Dataset'):
 
 def _import_extensions_from_spec(
     spec: specs.Extension,
-    alias_func: specs.helpers.PathAliasFormatter | None = None,
+    format_path: specs.helpers.PathFormatter | None = None,
     root_dir: Path | str = '.',
 ) -> None:
     """import an extension class from a dict representation of structs.Extensions
 
     Arguments:
         spec: specification structure for the extension imports
-        alias_func: formatter to fill aliases in the import path
+        format_path: formatter to fill aliases in the import path
     """
 
     import importlib
@@ -168,10 +170,10 @@ def _import_extensions_from_spec(
     if spec.import_path is None:
         pass
     else:
-        if alias_func is None:
+        if format_path is None:
             p = Path(spec.import_path)
         else:
-            p = Path(alias_func(spec.import_path))
+            p = Path(format_path(spec.import_path))
 
         if not p.is_absolute():
             root = Path(root_dir)

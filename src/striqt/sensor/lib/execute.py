@@ -245,7 +245,7 @@ def _acquire_both(
     )
 
     overlaps = compute.get_correction_overlaps(this, res['source'].setup_spec, analysis)
-    iq = util.threadpool.submit(res['source'].acquire, overlaps, res['alias_func'])
+    iq = util.threadpool.submit(res['source'].acquire, overlaps, res['format_path'])
     ext_data = util.threadpool.submit(res['peripherals'].acquire, this)
 
     with util.ExceptionStack('failed to acquire data') as exc:
@@ -293,7 +293,7 @@ def _log_cache_info(
         cal,
         specs.SoapyCapture.from_spec(capture),
         master_clock_rate=resources['sweep_spec'].source.master_clock_rate,
-        alias_func=resources['alias_func'],
+        format_path=resources['format_path'],
         B=attrs['noise_bandwidth'],
         xp=xp,
     )

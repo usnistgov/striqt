@@ -214,7 +214,7 @@ def _assign_iq_calibration(iq: specs.AcquiredIQ):
         'cal_data': iq.source_spec.calibration,
         'capture': iq.capture,
         'master_clock_rate': iq.source_spec.master_clock_rate,
-        'alias_func': iq.alias_func,
+        'format_path': iq.format_path,
     }
 
     # calibration data

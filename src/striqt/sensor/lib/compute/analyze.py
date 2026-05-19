@@ -199,7 +199,7 @@ def prepare_compute(spec: specs.Sweep, skip_warmup: bool = False):
         peripherals=bindings.warmup.peripherals(spec),
         sink=sinks.NoSink(spec),
         calibration=None,
-        alias_func=None,
+        format_path=None,
     )
 
     with res['source']:
