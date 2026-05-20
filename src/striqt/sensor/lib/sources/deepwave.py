@@ -90,7 +90,7 @@ class Airstack1Source(soapy.SoapySource):
         # Write reg back
         self._device.writeRegister('FPGA', addr, reg)
 
-    @functools.cached_property
+    @util.cached_property
     def id(self) -> str:
         # as of 1.0.0, AirStack doesn't seem to return a serial through Soapy
         # instead, take the Jetson ethernet MAC address as the radio id.

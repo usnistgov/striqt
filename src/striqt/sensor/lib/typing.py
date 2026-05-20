@@ -1,11 +1,15 @@
 from __future__ import annotations as __
+from numba.cuda.cudadrv.runtime import runtime
+from abc import abstractmethod
 
 import dataclasses
+import functools
 import typing
 from typing_extensions import ParamSpec, Self, TypeAlias, TypeVar, Unpack
 from typing import (
     Any,
     Callable,
+    Generic,    
     Protocol,
     Sequence,
     TypedDict,
@@ -63,52 +67,56 @@ class Peripherals(Protocol[_SP, _SC]):
 
 
 # %% sources/base.py
-@runtime_checkable
-class SourceBackend(Protocol[SS, SC]):
-    spec: SS
-    _capture: typing.Optional[SC]
 
+
+class SourceBackend(Generic[SS, SC]):
+    @abstractmethod
     def __init__(self, spec): ...
 
-    def setup(
-        self,
-        *,
-        captures: tuple[SC, ...] | None = None,
-        loops: 'tuple[specs.LoopSpec, ...] | None' = None,
-    ) -> None: ...
-
-    def close(self): ...
+    @property
+    def about(self) -> specs.AboutSource:
+        raise NotImplementedError
 
     @property
-    def info(self) -> specs.BaseSourceInfo: ...
+    def id(self) -> str:
+        raise NotImplementedError
 
-    def arm(self, capture: SC) -> SC | None: ...
-
+    @abstractmethod
     def get_resampler(self, capture: SC) -> ResamplerDesign: ...
 
-    @property
-    def id(self) -> str: ...
+    @abstractmethod
+    def setup(self) -> None: ...
 
-    def read_buffer(
+    @abstractmethod
+    def arm(self, capture: SC) -> SC | None: ...
+
+    @abstractmethod
+    def trigger(self, overlaps: tuple[int, int] = (0, 0)) -> None: ...
+
+    @abstractmethod
+    def read(
         self,
         buffers: list[Array],
         offset: int,
         count: int,
-        timeout_sec: float,
+        timeout_sec: float|None,
         *,
         on_overflow: specs.types.OnOverflow = 'except',
     ) -> tuple[int, int]: ...
 
-    def trigger(self, overlaps: tuple[int, int] = (0, 0)) -> None: ...
+    def prepare_retrigger(self):
+        pass
 
     def package_iq(
         self,
         iq: 'specs.AcquiredIQ',
         samples: Array,
         time_ns: int | None,
-    ) -> 'specs.AcquiredIQ': ...
+    ) -> 'specs.AcquiredIQ':
+        return iq
 
-    def _prepare_retrigger(self): ...
+    def close(self):
+        pass
 
 
 if typing.TYPE_CHECKING:

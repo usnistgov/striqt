@@ -28,9 +28,10 @@ def run(yaml_path):
     manager = ss.open_resources(spec, spec_path=yaml_path, test_only=True)
 
     with manager as res:
-        assert isinstance(spec._bindings, ss.lib.bindings.SensorBinding)
+        assert isinstance(spec._binding, ss.lib.bindings.SensorBinding)
+        source_id = res['source'].backend.id
 
-        print(f'source_id: {res["source"].id!r}')
+        print(f'source_id: {source_id!r}')
 
         print('\nCalibration info')
         print(80 * '▀')
@@ -64,13 +65,13 @@ def run(yaml_path):
 
         kws = {
             'sweep': spec,
-            'source_id': res['source'].id,
+            'source_id': source_id,
             'spec_name': Path(yaml_path).stem,
         }
         field_sets = {}
         splits = (
             ss.specs.helpers.split_capture_ports(c)
-            for c in ss.specs.helpers.loop_captures(spec, source_id=res['source'].id)
+            for c in ss.specs.helpers.loop_captures(spec, source_id=source_id)
         )
         for c in itertools.chain(*splits):
             items = kws | c.to_dict()
@@ -80,14 +81,14 @@ def run(yaml_path):
         print('\n\nFormat fields available for use in paths:')
         print(80 * '▀')
         afields = ss.specs.helpers.get_path_fields(
-            spec, source_id=res['source'].id, spec_path=yaml_path
+            spec, source_id=source_id, spec_path=yaml_path
         )
         afields = {f'{{{k}}}': v for k, v in afields.items()}
         afields_repr = pformat(afields, indent=2, sort_dicts=False)
         print(f' {afields_repr[1:-1]}')
 
         print('\n\nUnique capture field coordinates in output:')
-        labels = ss.specs.helpers.list_capture_adjustments(spec, res['source'].id)
+        labels = ss.specs.helpers.list_capture_adjustments(spec, source_id)
 
         if len(labels) == 0:
             return

@@ -12,11 +12,12 @@ import striqt.waveform as sw
 
 from ... import specs
 from .. import util
+from ..typing import SC
 
 if TYPE_CHECKING:
     import numpy as np
-    from ..typing import Array, SC
-    from .controller import SourceController
+    from ..typing import Array
+    from .controller import ControllerBase
 
 else:
     np = util.lazy_import('numpy')
@@ -30,7 +31,7 @@ class ReceiveBuffers(typing.Generic[SC]):
     buffers: list = [None, None]
     _hold_buffer_swap = False
 
-    def __init__(self, source: 'SourceController'):
+    def __init__(self, source: 'ControllerBase'):
         self.source = source
         self.buffers = [None, None]
         self.clear()
@@ -158,7 +159,7 @@ def get_read_count(
     'allocate buffers', 'source', threshold=5e-3, logger_level=logging.DEBUG
 )
 def _alloc_empty_iq(
-    source: 'SourceController',
+    source: 'ControllerBase',
     capture: specs.SensorCapture,
     prior: 'np.ndarray|None' = None,
     overlaps: tuple[int, int] = (0, 0),
@@ -203,7 +204,7 @@ def _alloc_empty_iq(
     # build the list of channel buffers that will actuall be filled with data,
     # including references to the throwaway buffer of extras in case of
     # source.setup_spec.stream_all_rx_ports
-    num_rx_ports = source.backend.info.min_port_count(len(ports))
+    num_rx_ports = source.backend.about.min_port_count(len(ports))
     if source.setup_spec.stream_all_rx_ports and len(ports) != num_rx_ports:
         if source.setup_spec.transport_dtype == 'complex64':
             # a throwaway buffer for samples that won't be returned

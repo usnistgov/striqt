@@ -355,7 +355,7 @@ class Sweep(SpecBase, Generic[SS, SP, SC], frozen=True, kw_only=True):
     peripherals: SP = cast(SP, Peripherals())
 
     options: SweepOptions = SweepOptions(reuse_iq=False, loop_only_nyquist=False)
-    _bindings: ClassVar[Any] = None
+    _binding: ClassVar[Any] = None
 
     def __post_init__(self):
         from . import helpers
@@ -369,8 +369,8 @@ class Sweep(SpecBase, Generic[SS, SP, SC], frozen=True, kw_only=True):
 
         if len(self.captures) > 0:
             coord_fields = set(self.captures[0].__struct_fields__)
-        elif self._bindings is not None:
-            coord_fields = set(self._bindings.capture.__struct_fields__)
+        elif self._binding is not None:
+            coord_fields = set(self._binding.capture.__struct_fields__)
         else:
             coord_fields = None
 
@@ -456,7 +456,7 @@ class FileAcquisitionInfo(AcquisitionInfo, kw_only=True, frozen=True):
     source_id: types.SourceID = ''
 
 
-class BaseSourceInfo(SpecBase, kw_only=True, frozen=True, cache_hash=True):
+class AboutSource(SpecBase, kw_only=True, frozen=True, cache_hash=True):
     num_rx_ports: int | None
     retries: int | None = None
 

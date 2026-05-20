@@ -111,7 +111,7 @@ class _SoapyPortInfo(specs.SpecBase, kw_only=True, frozen=True, cache_hash=True)
     settings: dict[str, _SoapyArgInfo]
 
 
-class SoapySourceInfo(specs.BaseSourceInfo, kw_only=True, frozen=True, cache_hash=True):
+class AboutSoapySource(specs.AboutSource, kw_only=True, frozen=True, cache_hash=True):
     """Top-level container for all device capabilities metadata."""
 
     driver: str
@@ -225,7 +225,7 @@ def _assign_iq_calibration(iq: specs.AcquiredIQ):
         iq.extra_data['system_noise'] = lookup_system_noise_power(**kwargs)
 
 
-def probe_soapy_info(device: SoapySDR.Device) -> SoapySourceInfo:
+def probe_soapy_info(device: SoapySDR.Device) -> AboutSoapySource:
     """
     Probes a SoapySDR device and returns its capabilities as a nested NamedTuple.
 
@@ -258,7 +258,7 @@ def probe_soapy_info(device: SoapySDR.Device) -> SoapySourceInfo:
         _probe_channel(device, SoapySDR.SOAPY_SDR_TX, i) for i in range(num_tx)
     )
 
-    return SoapySourceInfo(
+    return AboutSoapySource(
         driver=device.getDriverKey(),
         hardware=device.getHardwareKey(),
         hardware_info=device.getHardwareInfo(),
@@ -310,7 +310,7 @@ class RxStream:
     def __init__(
         self,
         setup: specs.SoapySource,
-        info: SoapySourceInfo,
+        info: AboutSoapySource,
         *,
         ports: tuple[int, ...] = (),
         on_overflow: specs.types.OnOverflow = 'except',
@@ -583,6 +583,7 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
 
     _device: 'SoapySDR.Device'
     _rx_stream: RxStream
+    _capture: specs.SoapyCapture
 
     # %% connection
     @sa.util.stopwatch('open soapy radio', 'source', threshold=1)
@@ -601,9 +602,17 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
         else:
             raise RuntimeError('SoapySDR instantiated an unexpected type')
 
+    @util.cached_property
+    def id(self) -> str: # pyright: ignore
+        raise self._device.getHardwareKey()
+
+    @util.cached_property
+    def about(self) -> AboutSoapySource: # pyright: ignore
+        return probe_soapy_info(self._device).replace(retries=self.spec.receive_retries)
+
     @sa.util.stopwatch('setup radio', 'source', threshold=1)
     def setup(self, *, captures=None, loops=None):
-        for p in range(self.info.num_rx_ports):
+        for p in range(self.about.num_rx_ports):
             self._device.setGainMode(SoapySDR.SOAPY_SDR_RX, p, False)
 
         self._sync_time_source: HardwareTimeSync = HardwareTimeSync(
@@ -628,7 +637,7 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
             ports = ()
 
         self._rx_stream = RxStream(
-            self.spec, self.info, ports=ports, on_overflow=on_overflow
+            self.spec, self.about, ports=ports, on_overflow=on_overflow
         )
 
         self._device.setClockSource(self.spec.clock_source)
@@ -696,14 +705,6 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
     def read_peripherals(self) -> dict[str, typing.Any]:
         return {}
 
-    @functools.cached_property
-    def id(self) -> str:
-        raise self._device.getHardwareKey()
-
-    @functools.cached_property
-    def info(self) -> SoapySourceInfo:
-        return probe_soapy_info(self._device).replace(retries=self.spec.receive_retries)
-
     # %% triggering
     def prepare_retrigger(self):
         self._rx_stream.enable(self._device, False)
@@ -725,7 +726,7 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
         util.propagate_thread_interrupts()
 
     # %% data acquisition
-    def read_buffer(
+    def read(
         self,
         buffers,
         offset,

@@ -153,12 +153,12 @@ class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture]):
             backend_sample_rate=self._file_info.backend_sample_rate,
         )
 
-    @functools.cached_property
-    def info(self):
-        return specs.structs.BaseSourceInfo(num_rx_ports=None)
+    @util.cached_property
+    def about(self):
+        return specs.structs.AboutSource(num_rx_ports=None)
 
-    @functools.cached_property
-    def id(self):
+    @util.cached_property
+    def id(self):  # pyright: ignore
         return str(self.setup_spec.path)
 
 
@@ -198,9 +198,9 @@ class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture]):
 
         self._waveform = waveform
 
-    @functools.cached_property
-    def info(self):
-        return specs.structs.BaseSourceInfo(num_rx_ports=self._waveform.shape[0])
+    @util.cached_property
+    def about(self):  # pyright: ignore
+        return specs.structs.AboutSource(num_rx_ports=self._waveform.shape[0])
 
     def arm(self, capture):
         super().arm(capture)
@@ -223,7 +223,7 @@ class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture]):
 
         return design_resampler(capture, self._read_coord('sample_rate'))
 
-    def read_buffer(
+    def read(
         self,
         buffers,
         offset,
@@ -233,7 +233,7 @@ class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture]):
         on_overflow: specs.types.OnOverflow = 'except',
     ) -> tuple[int, int]:
         assert self._waveform is not None
-        iq, _ = super().read_buffer(
+        iq, _ = super().read(
             buffers, offset, count, timeout_sec=timeout_sec, on_overflow=on_overflow
         )
 
@@ -285,6 +285,6 @@ class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture]):
         iq.info = self._capture_info
         return iq
 
-    @functools.cached_property
-    def id(self):
+    @util.cached_property
+    def id(self):  # pyright: ignore
         return str(self.setup_spec.path)

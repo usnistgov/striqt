@@ -32,7 +32,7 @@ def _lo_shift_tone(inds, resampler: 'sw.ResamplerDesign', xp, lo_offset=None):
 
 
 class TestSourceBase(base.VirtualSource[SS, SC]):
-    def read_buffer(
+    def read(
         self,
         buffers,
         offset,
@@ -58,20 +58,20 @@ class TestSourceBase(base.VirtualSource[SS, SC]):
             )
             buf[offset : (offset + count)] = values
 
-        return super().read_buffer(
+        return super().read(
             buffers, offset, count, timeout_sec=timeout_sec, on_overflow=on_overflow
         )
 
     def _sync_time_source(self):
         self._sync_time_ns = round(1_000_000_000 * self._samples_elapsed)
 
-    @functools.cached_property
-    def id(self):
+    @util.cached_property
+    def id(self):  # pyright: ignore
         return '00'
 
-    @functools.cached_property
-    def info(self) -> specs.BaseSourceInfo:
-        return specs.BaseSourceInfo(num_rx_ports=self.setup_spec.num_rx_ports)
+    @util.cached_property
+    def about(self) -> specs.AboutSource: # pyright: ignore
+        return specs.AboutSource(num_rx_ports=self.setup_spec.num_rx_ports)
 
 
 class SingleToneSource(TestSourceBase[specs.FunctionSource, specs.SingleToneCapture]):

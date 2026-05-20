@@ -307,7 +307,7 @@ def _calibration_peripherals_cls(
 
 def bind_manual_yfactor_calibration(
     name: str, sensor: 'bindings.SensorBinding[SS, SP, Any, PS, PC]'
-) -> 'bindings.SensorBinding[SS, SP, SC, PS, PC]':
+) -> 'bindings.SensorBinding[SS, SP, Any, PS, PC]':
     """extend an existing binding with a y-factor calibration"""
 
     from . import bindings
@@ -349,8 +349,8 @@ def bind_manual_yfactor_calibration(
 
     return bindings.bind_sensor(
         name,
-        cast(bindings.Sensor[SS, SP, SC], cal_sensor),
-        cast(specs.Schema[SS, SP, SC, PS, PC], cal_schema),
+        cast(bindings.Sensor[SS, SP, Any], cal_sensor),
+        cast(specs.Schema[SS, SP, Any, PS, PC], cal_schema),
     )
 
 

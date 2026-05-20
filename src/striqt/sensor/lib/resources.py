@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     class Resources(typing_extensions.TypedDict, Generic[SS, SP, SC, PS, PC]):
         """Sensor resources needed to run a sweep"""
 
-        source: sources.SourceControllerBySpec[SS, SC, PS, PC]
+        source: sources.RawController[SS, SC, PS, PC]
         sink: SinkBase
         peripherals: Peripherals[SP, SC]
         except_context: typing_extensions.NotRequired[ContextManager]
@@ -43,7 +43,7 @@ if TYPE_CHECKING:
     ):
         """Sensor resources needed to run a sweep"""
 
-        source: sources.SourceControllerBySpec[SS, SC, PS, PC]
+        source: sources.RawController[SS, SC, PS, PC]
         sink: SinkBase
         peripherals: Peripherals[SP, SC]
         except_context: typing_extensions.NotRequired[ContextManager]
@@ -56,7 +56,7 @@ else:
     class Resources(typing_extensions.TypedDict):
         """Sensor resources needed to run a sweep"""
 
-        source: sources.SourceControllerBySpec
+        source: sources.RawController
         sink: SinkBase
         peripherals: typing_extensions.NotRequired[Peripherals]
         except_context: typing_extensions.NotRequired[ContextManager]
@@ -67,7 +67,7 @@ else:
     class AnyResources(typing_extensions.TypedDict, total=False):
         """Sensor resources needed to run a sweep"""
 
-        source: sources.SourceControllerBySpec
+        source: sources.RawController
         sink: SinkBase
         peripherals: typing_extensions.NotRequired[Peripherals]
         except_context: typing_extensions.NotRequired[ContextManager]
@@ -115,7 +115,7 @@ class ConnectionManager(
     def __enter__(self):  # pyright: ignore
         return self.resources
 
-    @functools.cached_property
+    @util.cached_property
     def resources(self) -> Resources[SS, SP, SC, PS, PC]:
         missing = Resources.__required_keys__ - set(self._resources.keys())
 
@@ -149,8 +149,8 @@ def _open_devices(
         if on_source_opened is not None:
             on_source_opened(spec, source_id)
 
-    open_ = _timeit('open sensor source')(binding.opener(False))
-    source = util.threadpool.submit(open_, spec.source, reuse_iq=spec.options.reuse_iq)
+    controller = _timeit('open sensor source')(binding._raw_controller)
+    source = util.threadpool.submit(controller, spec.source, reuse_iq=spec.options.reuse_iq)
     source_callback = util.threadpool.submit(_post_source_open)
 
     if not skip_peripherals:
