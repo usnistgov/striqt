@@ -19,7 +19,7 @@ from .peripherals import NoPeripherals, PeripheralsBase
 from . import sinks, sources, util
 from .. import specs
 from .typing import Peripherals, PC, PS, SC, SS, SP, SourceBackend, TypeVar
-
+import striqt.waveform as sw
 import msgspec
 
 TC2 = TypeVar('TC2', bound=specs.SensorCapture)
@@ -29,10 +29,8 @@ PS2 = ParamSpec('PS2')
 PC2 = ParamSpec('PC2')
 
 
-if TYPE_CHECKING:
-
-    class BoundSweep(specs.Sweep, frozen=True, kw_only=True):
-        mock_sensor: specs.types.MockSensor = None
+class BoundSweep(specs.Sweep[SS, SP, SC], frozen=True, kw_only=True):
+    mock_sensor: specs.types.MockSensor = None
 
 
 registry: dict[str, 'SensorBinding[Any, Any, Any, Any, Any]'] = {}
@@ -56,12 +54,12 @@ def tagged_subclass(
     return cast(type[specs.Sweep], kls)
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass()
 class Sensor(Generic[SS, SP, SC]):
     source: type[SourceBackend[SS, SC]]
-    sweep_spec: type[specs.Sweep[SS, SP, SC]] = specs.Sweep
-    peripherals: type[Peripherals[SP, SC]] = NoPeripherals
-    sink: type[sinks.SinkBase[SC]] = sinks.ZarrCaptureSink
+    sweep_spec: type[specs.Sweep[SS, SP, SC]]
+    peripherals: type[Peripherals[SP, SC]]
+    sink: type[sinks.SinkBase[SC]]
 
     def __post_init__(self):
         assert issubclass(self.source, SourceBackend)
@@ -70,10 +68,14 @@ class Sensor(Generic[SS, SP, SC]):
         assert issubclass(self.sink, sinks.SinkBase)
 
 
-@dataclasses.dataclass(frozen=True)
+def sensor(*, source: type[SourceBackend[SS, SC]], sweep_spec: type[specs.Sweep[SS, SP, SC]] = specs.Sweep, peripherals: type[Peripherals[SP, SC]] = NoPeripherals, sink: type[sinks.SinkBase[SC]] = sinks.ZarrCaptureSink) -> Sensor[SS, SP, SC]:
+    return Sensor(**locals())
+
+
+@dataclasses.dataclass()
 class SensorBinding(Sensor[SS, SP, SC], Generic[SS, SP, SC, PS, PC]):
-    schema: specs.Schema[SS, SP, SC, PS, PC] # pyright: ignore
-    sweep_spec: type[BoundSweep[SS, SP, SC]] = specs.Sweep  # pyright: ignore
+    schema: specs.Schema[SS, SP, SC, PS, PC]
+    sweep_spec: type[BoundSweep[SS, SP, SC]] # pyright: ignore
 
     def __post_init__(self):
         super().__post_init__()
@@ -123,18 +125,18 @@ def bind_sensor(
 
     binding = SensorBinding(
         source=cast(type[SourceBackend[SS, SC]], sensor.source),
-        sweep_spec=sensor.sweep_spec, # pyright: ignore
+        sweep_spec=sensor.sweep_spec, # type: ignore
         peripherals=sensor.peripherals, # pyright: ignore
         sink=cast(type[sinks.SinkBase[SC]], sensor.sink),
         schema=schema # pyright: ignore
     )
 
-    class BoundSweep(sensor.sweep_spec, frozen=True, kw_only=True): #ty: ignore
+    class BoundSweep(sensor.sweep_spec, frozen=True, kw_only=True): # ty: ignore
         _binding = binding
 
         mock_source: Optional[str] = None
         source: _binding.schema.source = msgspec.field(
-            default_factory=_binding.schema.source  # type: ignore
+            default_factory=_binding.schema.source # ty: ignore
         )
         captures: tuple[_binding.schema.capture, ...] = ()
         peripherals: _binding.schema.peripherals = msgspec.field(
@@ -163,14 +165,14 @@ def bind_sensor(
     else:
         tagged_sweeps = Union[tagged_sweeps, BoundSweep]  # pyright: ignore
 
-    return binding # pyright: ignore
+    return binding # type: ignore
 
 
 def get_registry() -> dict[str, SensorBinding]:
     return dict(registry)
 
 
-@functools.cache
+@sw.util.lru_cache()
 def mock_binding(
     origin: SensorBinding, target: str | SensorBinding, register: bool = True
 ) -> SensorBinding:

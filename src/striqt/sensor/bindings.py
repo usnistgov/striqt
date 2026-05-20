@@ -7,14 +7,14 @@ peripherals and expanded data fields elsewhere.
 from . import specs
 from .lib import sources, peripherals, sinks
 from .lib.sources import deepwave
-from .lib.bindings import Sensor, bind_sensor
+from .lib.bindings import sensor, bind_sensor
 from .specs import Schema
 from .lib.calibration import bind_manual_yfactor_calibration
 
 # %% Synthetic data sources for testing/warmup/post-analysis
 warmup = bind_sensor(
     'warmup',
-    Sensor(
+    sensor(
         source=sources.NoSource,
         sink=sinks.NoSink,
     ),
@@ -30,7 +30,7 @@ warmup = bind_sensor(
 
 mat_file = bind_sensor(
     'mat_file',
-    Sensor(source=sources.MATSource),
+    sensor(source=sources.MATSource),
     Schema(
         source=specs.MATSource,
         init_like=specs.MATSource,
@@ -52,7 +52,7 @@ schema = Schema(
 
 tdms_file = bind_sensor(
     'tdms_file',
-    Sensor(source=sources.TDMSSource),
+    sensor(source=sources.TDMSSource),
     Schema(
         source=specs.TDMSSource,
         init_like=specs.TDMSSource,
@@ -65,7 +65,7 @@ tdms_file = bind_sensor(
 
 zarr_iq = bind_sensor(
     'zarr_iq',
-    Sensor(source=sources.ZarrIQSource),
+    sensor(source=sources.ZarrIQSource),
     Schema(
         source=specs.ZarrIQSource,
         init_like=specs.ZarrIQSource,
@@ -79,7 +79,7 @@ zarr_iq = bind_sensor(
 # %% Function generator sources
 noise = bind_sensor(
     'noise',
-    Sensor(source=sources.NoiseSource),
+    sensor(source=sources.NoiseSource),
     Schema(
         source=specs.FunctionSource,
         init_like=specs.FunctionSource,
@@ -91,7 +91,7 @@ noise = bind_sensor(
 
 dirac_delta = bind_sensor(
     'dirac_delta',
-    Sensor(source=sources.DiracDeltaSource),
+    sensor(source=sources.DiracDeltaSource),
     Schema(
         source=specs.FunctionSource,
         init_like=specs.FunctionSource,
@@ -103,7 +103,7 @@ dirac_delta = bind_sensor(
 
 single_tone = bind_sensor(
     'single_tone',
-    Sensor(source=sources.SingleToneSource),
+    sensor(source=sources.SingleToneSource),
     Schema(
         source=specs.FunctionSource,
         init_like=specs.FunctionSource,
@@ -115,7 +115,7 @@ single_tone = bind_sensor(
 
 sawtooth = bind_sensor(
     'sawtooth',
-    Sensor(source=sources.SawtoothSource),
+    sensor(source=sources.SawtoothSource),
     Schema(
         source=specs.FunctionSource,
         init_like=specs.FunctionSource,
@@ -129,7 +129,7 @@ sawtooth = bind_sensor(
 # %% Hardware data sources
 air7101b = bind_sensor(
     'air7101b',
-    Sensor(source=deepwave.Airstack1Source),
+    sensor(source=deepwave.Airstack1Source),
     Schema(
         source=deepwave.Air7101BSourceSpec,
         init_like=deepwave.Air7101BSourceSpec,
@@ -143,7 +143,7 @@ air7101b_calibration = bind_manual_yfactor_calibration('air7101b_calibration', a
 
 air7201b = bind_sensor(
     'air7201b',
-    Sensor(source=deepwave.Airstack1Source),
+    sensor(source=deepwave.Airstack1Source),
     Schema(
         source=deepwave.Air7201BSourceSpec,
         init_like=deepwave.Air7101BSourceSpec,
@@ -157,7 +157,7 @@ air7201b_calibration = bind_manual_yfactor_calibration('air7201b_calibration', a
 
 air8201b = bind_sensor(
     'air8201b',
-    Sensor(source=deepwave.Airstack1Source),
+    sensor(source=deepwave.Airstack1Source),
     Schema(
         source=deepwave.Air8201BSourceSpec,
         init_like=deepwave.Air8201BSourceSpec,

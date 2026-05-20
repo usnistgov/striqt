@@ -1,5 +1,4 @@
 from __future__ import annotations as __
-from numba.cuda.cudadrv.runtime import runtime
 from abc import abstractmethod
 
 import dataclasses
