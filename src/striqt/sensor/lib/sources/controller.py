@@ -40,36 +40,36 @@ def get_source_id(spec: specs.Source, timeout=0.5) -> str:
     This assumes that a source is either instantiated, or will be
     within `timeout` seconds; otherwise `TimeoutError` is raised.
     """
+
+    def cancel_thread():
+        util.propagate_thread_interrupts()
+        raise util.ThreadInterruptRequest()
+
     obj = _source_id_map[spec]
 
     if isinstance(obj, BaseException):
-        raise util.ThreadInterruptRequest()
+        cancel_thread()
     elif not isinstance(obj, Event):
         # already have this source!
         return obj.backend.id
 
+        irint('getter event id ', id(obj))
+    # check first for a quick failure
     finished_early = obj.wait(timeout=timeout)
-    source = _source_id_map[spec]
+    obj = _source_id_map[spec]
+    if isinstance(obj, BaseException):
+        cancel_thread()
+    elif isinstance(obj, Event):
+        obj.wait()
 
-    if isinstance(_source_id_map[spec], BaseException):
-        util.propagate_thread_interrupts()
-        raise util.ThreadInterruptRequest()
+    # after the wait, we should be done now
+    obj = _source_id_map[spec]
+    if isinstance(obj, BaseException):
+        cancel_thread()
+    assert not isinstance(obj, Event)
 
-    elif not isinstance(source, ControllerBase):
-        util.propagate_thread_interrupts()
-        raise TimeoutError('timeout while waiting for a source ID')
-
-    # this triggers a property access that may have its own
-    # blocking wait
-    return source.backend.id
-
-
-def _map_source(spec: specs.Source, source: ControllerBase):
-    maybe_event = _source_id_map[spec]
-    _source_id_map[spec] = source
-
-    if isinstance(maybe_event, Event):
-        maybe_event.set()
+    # this should be cached by now
+    return obj.backend.id
 
 
 @contextlib.contextmanager
@@ -104,7 +104,6 @@ class ControllerBase(Generic[SS, SC, PS, PC]):
     _capture: SC | None
     _binding: bindings.SensorBinding[SS, Any, SC, PS, PC]
     _buffers: buffers.ReceiveBuffers
-    _is_open: bool | Event = False
     _timeout: float = 10
     _prev_iq: specs.AcquiredIQ | None = None
     _reuse_iq: bool
@@ -116,17 +115,10 @@ class ControllerBase(Generic[SS, SC, PS, PC]):
         raise NotImplementedError
 
     def is_open(self, wait=True) -> bool:
-        obj = self._is_open
-        if isinstance(obj, Event):
-            if wait:
-                obj.wait(self._timeout + 0.2)
-                return cast(bool, self._is_open)
-            else:
-                return False
-        else:
-            return obj
+        return _source_id_map[self.__setup__] is self
 
     def close(self):
+        del _source_id_map[self.__setup__]
         try:
             backend = self.backend
             if backend is not None:
@@ -328,8 +320,12 @@ class ControllerBase(Generic[SS, SC, PS, PC]):
 
 class RawController(ControllerBase[SS, SC, PS, PC]):
     def __init__(self, spec: SS, reuse_iq: bool = False):
-        open_event = self._is_open = Event()  # first, to serve other threads
-        _map_source(spec, self)
+        open_event = _source_id_map[spec]  # first, to serve other threads
+
+        if isinstance(open_event, BaseException):
+            open_event = _source_id_map[self] = Event()
+        elif not isinstance(open_event, Event):
+            raise RuntimeError('another controller has already opened this source')
 
         self.__setup__ = spec
         self._capture = None
@@ -339,14 +335,14 @@ class RawController(ControllerBase[SS, SC, PS, PC]):
             if not hasattr(self, '_binding'):
                 raise TypeError('bind a source controller')
             self._buffers = buffers.ReceiveBuffers(self)
-
             self.backend = self._binding.source(spec)
+            self.backend.id
+
         except BaseException as ex:
             _source_id_map[spec] = ex
-            self._is_open = False
             raise
         else:
-            self._is_open = True
+            _source_id_map[spec] = self
         finally:
             open_event.set()
 

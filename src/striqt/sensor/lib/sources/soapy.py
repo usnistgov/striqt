@@ -603,11 +603,11 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
             raise RuntimeError('SoapySDR instantiated an unexpected type')
 
     @util.cached_property
-    def id(self) -> str: # pyright: ignore
+    def id(self) -> str:  # pyright: ignore
         raise self._device.getHardwareKey()
 
     @util.cached_property
-    def about(self) -> AboutSoapySource: # pyright: ignore
+    def about(self) -> AboutSoapySource:  # pyright: ignore
         return probe_soapy_info(self._device).replace(retries=self.spec.receive_retries)
 
     @sa.util.stopwatch('setup radio', 'source', threshold=1)

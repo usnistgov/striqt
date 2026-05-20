@@ -70,7 +70,7 @@ class TestSourceBase(base.VirtualSource[SS, SC]):
         return '00'
 
     @util.cached_property
-    def about(self) -> specs.AboutSource: # pyright: ignore
+    def about(self) -> specs.AboutSource:  # pyright: ignore
         return specs.AboutSource(num_rx_ports=self.setup_spec.num_rx_ports)
 
 

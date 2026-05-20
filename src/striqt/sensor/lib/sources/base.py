@@ -30,7 +30,7 @@ class NoSource(SourceBackend[specs.NoSource, specs.SensorCapture]):
         return specs.structs.AboutSource(num_rx_ports=self.spec.num_rx_ports)
 
     @util.cached_property
-    def id(self) -> str: # pyright: ignore
+    def id(self) -> str:  # pyright: ignore
         return 'null'
 
     def reset_sample_counter(self, value=0):
