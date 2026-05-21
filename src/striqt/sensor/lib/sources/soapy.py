@@ -584,7 +584,7 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
 
     _device: 'SoapySDR.Device'
     _rx_stream: RxStream
-    _capture: specs.SoapyCapture
+    _capture: specs.SoapyCapture | None = None
 
     # %% connection
     @sa.util.stopwatch('open soapy radio', 'source', threshold=1)
