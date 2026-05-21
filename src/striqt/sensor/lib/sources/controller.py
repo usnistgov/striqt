@@ -31,7 +31,7 @@ class ReceiveStreamError(IOError):
 
 
 class lookup:
-    """asynchronous lookup of controller objects, status, or source ID.
+    """asynchronous lookup of controller objects, connection status, or source ID.
     
     This assumes that a source instantiation is in progress or will be
     within `timeout` seconds. Otherwise, `TimeoutError` is raised.
@@ -160,7 +160,7 @@ def read_retries(source: ControllerBase) -> Generator[None]:
 
     EXC_TYPES = (ReceiveStreamError, OverflowError)
 
-    max_count = source.backend.about.retries
+    max_count = source.source_info.retries
 
     if max_count is None or max_count == 0:
         yield
@@ -222,6 +222,19 @@ class ControllerBase(Generic[SS, SC, PS, PC]):
     @util.cached_property
     def setup_spec(self) -> SS:
         return self.__setup__
+
+
+    @functools.cached_property
+    def source_id(self) -> str:
+        if not self.is_open():
+            raise ConnectionError('backend is closed')
+        return self.backend.get_id()
+
+    @functools.cached_property
+    def source_info(self) -> specs.SourceInfo:
+        if not self.is_open():
+            raise ConnectionError('backend is closed')
+        return self.backend.get_about()
 
     def read_iq(self, overlaps: tuple[int, int] = (0, 0)) -> 'tuple[Array, int|None]':
         """read IQ for the armed capture"""
@@ -353,7 +366,7 @@ class ControllerBase(Generic[SS, SC, PS, PC]):
             with read_retries(self):
                 samples, time_ns = self.read_iq(overlaps)
 
-            info = specs.AcquisitionInfo(source_id=self.backend.id)
+            info = specs.AcquisitionInfo(source_id=self.source_id)
 
             iq = specs.AcquiredIQ(
                 format_path=format_path,
@@ -412,7 +425,7 @@ class RawController(ControllerBase[SS, SC, PS, PC]):
                 raise TypeError('bind a source controller')
             self._buffers = buffers.ReceiveBuffers(self)
             self.backend = self._binding.source(spec)
-            lookup._set_id(spec, self.backend.id)
+            lookup._set_id(spec, self.source_id)
         except BaseException as ex:
             lookup._raise(spec, ex)
         else:

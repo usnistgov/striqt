@@ -92,7 +92,7 @@ def iterate_sweep(
     iq = None
     analysis = None
     captures = specs.helpers.loop_captures(
-        spec, source_id=resources['source'].backend.id
+        spec, source_id=resources['source'].source_id
     )
     indexer = _AcquisitionIndexer(len(captures))
 
@@ -313,7 +313,7 @@ def _log_cache_info(
         capture_desc = specs.helpers.describe_capture(
             c,
             fields=info_fields,
-            source_id=resources['source'].backend.id,
+            source_id=resources['source'].source_id,
             adjust_spec=resources['sweep_spec'].adjust_captures,
         )
         logger.info(f'spectrogram ▮ {snr_desc:<14} ▮ {capture_desc}')

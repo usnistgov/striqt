@@ -66,19 +66,16 @@ class Peripherals(Protocol[_SP, _SC]):
 
 
 # %% sources/base.py
-
-
+@runtime_checkable
 class SourceBackend(Generic[SS, SC]):
     @abstractmethod
     def __init__(self, spec): ...
 
-    @property
-    def about(self) -> specs.AboutSource:
-        raise NotImplementedError
+    @abstractmethod
+    def get_about(self) -> specs.SourceInfo: ...
 
-    @property
-    def id(self) -> str:
-        raise NotImplementedError
+    @abstractmethod
+    def get_id(self) -> str: ...
 
     @abstractmethod
     def get_resampler(self, capture: SC) -> ResamplerDesign: ...

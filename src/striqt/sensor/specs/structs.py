@@ -456,7 +456,7 @@ class FileAcquisitionInfo(AcquisitionInfo, kw_only=True, frozen=True):
     source_id: types.SourceID = ''
 
 
-class AboutSource(SpecBase, kw_only=True, frozen=True, cache_hash=True):
+class SourceInfo(SpecBase, kw_only=True, frozen=True, cache_hash=True):
     num_rx_ports: int | None
     retries: int | None = None
 

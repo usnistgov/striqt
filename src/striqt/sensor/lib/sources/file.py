@@ -155,7 +155,7 @@ class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture]):
 
     @util.cached_property
     def about(self):
-        return specs.structs.AboutSource(num_rx_ports=None)
+        return specs.structs.SourceInfo(num_rx_ports=None)
 
     @util.cached_property
     def id(self):  # pyright: ignore
@@ -200,7 +200,7 @@ class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture]):
 
     @util.cached_property
     def about(self):  # pyright: ignore
-        return specs.structs.AboutSource(num_rx_ports=self._waveform.shape[0])
+        return specs.structs.SourceInfo(num_rx_ports=self._waveform.shape[0])
 
     def arm(self, capture):
         super().arm(capture)

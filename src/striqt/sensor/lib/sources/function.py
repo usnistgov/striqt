@@ -70,8 +70,8 @@ class TestSourceBase(base.VirtualSource[SS, SC]):
         return '00'
 
     @util.cached_property
-    def about(self) -> specs.AboutSource:  # pyright: ignore
-        return specs.AboutSource(num_rx_ports=self.setup_spec.num_rx_ports)
+    def about(self) -> specs.SourceInfo:  # pyright: ignore
+        return specs.SourceInfo(num_rx_ports=self.setup_spec.num_rx_ports)
 
 
 class SingleToneSource(TestSourceBase[specs.FunctionSource, specs.SingleToneCapture]):

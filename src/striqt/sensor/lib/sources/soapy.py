@@ -111,7 +111,7 @@ class _SoapyPortInfo(specs.SpecBase, kw_only=True, frozen=True, cache_hash=True)
     settings: dict[str, _SoapyArgInfo]
 
 
-class AboutSoapySource(specs.AboutSource, kw_only=True, frozen=True, cache_hash=True):
+class SoapyInfo(specs.SourceInfo, kw_only=True, frozen=True, cache_hash=True):
     """Top-level container for all device capabilities metadata."""
 
     driver: str
@@ -225,7 +225,7 @@ def _assign_iq_calibration(iq: specs.AcquiredIQ):
         iq.extra_data['system_noise'] = lookup_system_noise_power(**kwargs)
 
 
-def probe_soapy_info(device: SoapySDR.Device, retries:int|None = None) -> AboutSoapySource:
+def probe_soapy_info(device: SoapySDR.Device, retries:int|None = None) -> SoapyInfo:
     """
     Probes a SoapySDR device and returns its capabilities as a nested NamedTuple.
 
@@ -258,7 +258,7 @@ def probe_soapy_info(device: SoapySDR.Device, retries:int|None = None) -> AboutS
         _probe_channel(device, SoapySDR.SOAPY_SDR_TX, i) for i in range(num_tx)
     )
 
-    return AboutSoapySource(
+    return SoapyInfo(
         driver=device.getDriverKey(),
         hardware=device.getHardwareKey(),
         hardware_info=device.getHardwareInfo(),
@@ -311,7 +311,7 @@ class RxStream:
     def __init__(
         self,
         setup: specs.SoapySource,
-        info: AboutSoapySource,
+        info: SoapyInfo,
         *,
         ports: tuple[int, ...] = (),
         on_overflow: specs.types.OnOverflow = 'except',
@@ -608,7 +608,7 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
         raise self._device.getHardwareKey()
 
     @util.cached_property
-    def about(self) -> AboutSoapySource:  # pyright: ignore
+    def about(self) -> SoapyInfo:  # pyright: ignore
         return probe_soapy_info(self._device, retries=self.spec.receive_retries)
 
     @sa.util.stopwatch('setup radio', 'source', threshold=1)

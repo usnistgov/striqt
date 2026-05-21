@@ -27,7 +27,7 @@ class NoSource(SourceBackend[specs.NoSource, specs.SensorCapture]):
 
     @util.cached_property
     def about(self):
-        return specs.structs.AboutSource(num_rx_ports=self.spec.num_rx_ports)
+        return specs.structs.SourceInfo(num_rx_ports=self.spec.num_rx_ports)
 
     @util.cached_property
     def id(self) -> str:  # pyright: ignore
