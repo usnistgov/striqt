@@ -230,7 +230,7 @@ class ControllerBase(Generic[SS, SC, PS, PC]):
     def source_info(self) -> specs.SourceInfo:
         if not self.is_open():
             raise ConnectionError('backend is closed')
-        return self.backend.get_about()
+        return self.backend.get_info()
 
     def read_iq(self, overlaps: tuple[int, int] = (0, 0)) -> 'tuple[Array, int|None]':
         """read IQ for the armed capture"""
