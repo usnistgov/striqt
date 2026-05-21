@@ -95,7 +95,6 @@ class lookup:
             cls.id(spec, 0.5)
         elif not isinstance(cls._id[spec], str):
             return False
-
         obj = cls._ready[spec]
         if isinstance(obj, Event):
             if wait:
@@ -147,6 +146,8 @@ class lookup:
     @classmethod
     def _raise(cls, spec: specs.Source, exc: BaseException):
         cls._obj[spec] = exc
+        cls._id[spec] = exc
+        cls._ready[spec] = exc
         cls._set_ready(spec, False)
         raise exc
 
@@ -222,8 +223,6 @@ class ControllerBase(Generic[SS, SC, PS, PC]):
 
     @functools.cached_property
     def source_id(self) -> str:
-        if not self.is_open():
-            raise ConnectionError('backend is closed')
         return self.backend.get_id()
 
     @functools.cached_property
@@ -426,7 +425,6 @@ class RawController(ControllerBase[SS, SC, PS, PC]):
             lookup._raise(spec, ex)
         else:
             lookup._set_open(spec, self)
-
         try:
             if spec.array_backend == 'cupy':
                 sw.arrays.configure_cupy()
