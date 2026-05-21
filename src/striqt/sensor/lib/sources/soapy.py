@@ -225,7 +225,7 @@ def _assign_iq_calibration(iq: specs.AcquiredIQ):
         iq.extra_data['system_noise'] = lookup_system_noise_power(**kwargs)
 
 
-def probe_soapy_info(device: SoapySDR.Device) -> AboutSoapySource:
+def probe_soapy_info(device: SoapySDR.Device, retries:int|None = None) -> AboutSoapySource:
     """
     Probes a SoapySDR device and returns its capabilities as a nested NamedTuple.
 
@@ -274,6 +274,7 @@ def probe_soapy_info(device: SoapySDR.Device) -> AboutSoapySource:
         uarts=tuple(device.listUARTs()),
         rx_ports=rx_channels,
         tx_ports=tx_channels,
+        retries=retries
     )
 
 
@@ -608,7 +609,7 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
 
     @util.cached_property
     def about(self) -> AboutSoapySource:  # pyright: ignore
-        return probe_soapy_info(self._device)#.replace(retries=self.spec.receive_retries)
+        return probe_soapy_info(self._device, retries=self.spec.receive_retries)
 
     @sa.util.stopwatch('setup radio', 'source', threshold=1)
     def setup(self, *, captures=None, loops=None):

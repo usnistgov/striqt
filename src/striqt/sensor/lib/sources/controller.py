@@ -49,13 +49,14 @@ def get_source_id(spec: specs.Source, timeout=0.5) -> str:
 
     if isinstance(obj, BaseException):
         cancel_thread()
-    elif not isinstance(obj, Event):
+    elif isinstance(obj, ControllerBase):
         # already have this source!
         return obj.backend.id
-
-        irint('getter event id ', id(obj))
-    # check first for a quick failure
-    finished_early = obj.wait(timeout=timeout)
+    else:
+        # check first for a quick failure
+        assert isinstance(obj, Event)
+        obj.wait(timeout=timeout)
+    
     obj = _source_id_map[spec]
     if isinstance(obj, BaseException):
         cancel_thread()
@@ -66,10 +67,11 @@ def get_source_id(spec: specs.Source, timeout=0.5) -> str:
     obj = _source_id_map[spec]
     if isinstance(obj, BaseException):
         cancel_thread()
-    assert not isinstance(obj, Event)
-
-    # this should be cached by now
-    return obj.backend.id
+    elif isinstance(obj, ControllerBase):
+        # already have this source!
+        return obj.backend.id
+    else:
+        raise TypeError('invalid type')
 
 
 @contextlib.contextmanager
