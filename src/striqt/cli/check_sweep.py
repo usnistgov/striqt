@@ -25,7 +25,7 @@ def run(yaml_path):
     import sys
 
     sys.stdout.flush()
-    manager = ss.open_resources(spec, spec_path=yaml_path, test_only=True)
+    manager = ss.open_resources(spec, yaml_path, test_only=True)
 
     with manager as res:
         assert isinstance(spec._binding, ss.lib.bindings.SensorBinding)
