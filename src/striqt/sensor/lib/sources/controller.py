@@ -32,7 +32,7 @@ class ReceiveStreamError(IOError):
 
 class lookup:
     """asynchronous lookup of controller objects, connection status, or source ID.
-    
+
     This assumes that a source instantiation is in progress or will be
     within `timeout` seconds. Otherwise, `TimeoutError` is raised.
     """
@@ -44,6 +44,7 @@ class lookup:
     @classmethod
     def instance(cls, spec: specs.Source, timeout=0.5) -> ControllerBase:
         import threading
+
         name = threading.current_thread().name
 
         obj = cls._obj[spec]
@@ -67,8 +68,7 @@ class lookup:
 
     @classmethod
     def id(cls, spec: specs.Source, timeout=0.5) -> str:
-        """lookup a source ID from a source specification.
-        """
+        """lookup a source ID from a source specification."""
         controller = cls.instance(spec, timeout)
 
         obj = cls._id[spec]
@@ -88,7 +88,7 @@ class lookup:
             raise TypeError
         elif isinstance(obj, str):
             return obj
-    
+
     @classmethod
     def is_ready(cls, spec: specs.Source, timeout: float, wait: bool = True) -> bool:
         if wait:
@@ -99,7 +99,7 @@ class lookup:
         obj = cls._ready[spec]
         if isinstance(obj, Event):
             if wait:
-                obj.wait(max(0,timeout - 0.3))
+                obj.wait(max(0, timeout - 0.3))
                 return cast(bool, cls._ready[spec])
             else:
                 return False
@@ -122,7 +122,6 @@ class lookup:
         else:
             raise TypeError('controller object was already registered for this spec')
 
-
     @classmethod
     def _set_ready(cls, spec: specs.Source, is_ready: bool):
         obj = cls._ready[spec]
@@ -141,7 +140,6 @@ class lookup:
         else:
             raise TypeError('id was already setup')
 
-
     @classmethod
     def _set_open(cls, spec: specs.Source, controller: ControllerBase):
         cls._obj[spec] = controller
@@ -151,7 +149,6 @@ class lookup:
         cls._obj[spec] = exc
         cls._set_ready(spec, False)
         raise exc
-
 
 
 @contextlib.contextmanager
@@ -222,7 +219,6 @@ class ControllerBase(Generic[SS, SC, PS, PC]):
     @util.cached_property
     def setup_spec(self) -> SS:
         return self.__setup__
-
 
     @functools.cached_property
     def source_id(self) -> str:
@@ -443,7 +439,6 @@ class RawController(ControllerBase[SS, SC, PS, PC]):
             lookup._set_ready(spec, False)
             self.close()
             raise
-
 
     @sa.util.stopwatch('arm', 'source', threshold=10e-3)
     def arm(self, spec: SC):

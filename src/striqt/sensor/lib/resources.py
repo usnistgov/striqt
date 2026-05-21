@@ -150,7 +150,9 @@ def _open_devices(
             on_source_opened(spec, source_id)
 
     controller = _timeit('open sensor source')(binding._raw_controller)
-    source = util.threadpool.submit(controller, spec.source, reuse_iq=spec.options.reuse_iq)
+    source = util.threadpool.submit(
+        controller, spec.source, reuse_iq=spec.options.reuse_iq
+    )
     source_callback = util.threadpool.submit(_post_source_open)
 
     if not skip_peripherals:

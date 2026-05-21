@@ -8,7 +8,7 @@ from typing_extensions import ParamSpec, Self, TypeAlias, TypeVar, Unpack
 from typing import (
     Any,
     Callable,
-    Generic,    
+    Generic,
     Protocol,
     Sequence,
     TypedDict,
@@ -95,7 +95,7 @@ class SourceBackend(Protocol[SS, SC]):
         buffers: list[Array],
         offset: int,
         count: int,
-        timeout_sec: float|None,
+        timeout_sec: float | None,
         *,
         on_overflow: specs.types.OnOverflow = 'except',
     ) -> tuple[int, int]: ...

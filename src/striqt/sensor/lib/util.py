@@ -20,12 +20,14 @@ if TYPE_CHECKING:
     import exceptiongroup
     import concurrent.futures
     from .typing import PassThroughWrapper, TypeVar
+
     cached_property = property
 
     _T = TypeVar('_T')
 
 else:
     from functools import cached_property
+
     exceptiongroup = sa.util.lazy_import('exceptiongroup')
 
 

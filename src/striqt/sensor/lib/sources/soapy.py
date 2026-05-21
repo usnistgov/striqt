@@ -225,7 +225,7 @@ def _assign_iq_calibration(iq: specs.AcquiredIQ):
         iq.extra_data['system_noise'] = lookup_system_noise_power(**kwargs)
 
 
-def probe_soapy_info(device: SoapySDR.Device, retries:int|None = None) -> SoapyInfo:
+def probe_soapy_info(device: SoapySDR.Device, retries: int | None = None) -> SoapyInfo:
     """
     Probes a SoapySDR device and returns its capabilities as a nested NamedTuple.
 
@@ -274,7 +274,7 @@ def probe_soapy_info(device: SoapySDR.Device, retries:int|None = None) -> SoapyI
         uarts=tuple(device.listUARTs()),
         rx_ports=rx_channels,
         tx_ports=tx_channels,
-        retries=retries
+        retries=retries,
     )
 
 
@@ -585,6 +585,8 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
     _device: 'SoapySDR.Device'
     _rx_stream: RxStream
     _capture: specs.SoapyCapture | None = None
+    _sync_time_source: HardwareTimeSync
+    _info: SoapyInfo | None = None
 
     # %% connection
     @sa.util.stopwatch('open soapy radio', 'source', threshold=1)
@@ -603,22 +605,21 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
         else:
             raise RuntimeError('SoapySDR instantiated an unexpected type')
 
-    @util.cached_property
-    def id(self) -> str:  # pyright: ignore
+    def get_id(self) -> str:
         raise self._device.getHardwareKey()
 
-    @util.cached_property
-    def about(self) -> SoapyInfo:  # pyright: ignore
-        return probe_soapy_info(self._device, retries=self.spec.receive_retries)
+    def get_info(self) -> SoapyInfo:
+        if self._info is not None:
+            return self._info
+        self._info = probe_soapy_info(self._device, retries=self.spec.receive_retries)
+        return self._info
 
     @sa.util.stopwatch('setup radio', 'source', threshold=1)
     def setup(self, *, captures=None, loops=None):
-        for p in range(self.about.num_rx_ports):
+        for p in range(self.get_info().num_rx_ports):
             self._device.setGainMode(SoapySDR.SOAPY_SDR_RX, p, False)
 
-        self._sync_time_source: HardwareTimeSync = HardwareTimeSync(
-            self.spec.time_source
-        )
+        self._sync_time_source = HardwareTimeSync(self.spec.time_source)
 
         if self.spec.time_source == 'host':
             self._device.setTimeSource('internal')
@@ -638,7 +639,7 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
             ports = ()
 
         self._rx_stream = RxStream(
-            self.spec, self.about, ports=ports, on_overflow=on_overflow
+            self.spec, self.get_info(), ports=ports, on_overflow=on_overflow
         )
 
         self._device.setClockSource(self.spec.clock_source)
