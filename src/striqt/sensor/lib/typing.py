@@ -67,7 +67,7 @@ class Peripherals(Protocol[_SP, _SC]):
 
 # %% sources/base.py
 @runtime_checkable
-class SourceBackend(Generic[SS, SC]):
+class SourceBackend(Protocol[SS, SC]):
     @abstractmethod
     def __init__(self, spec): ...
 
