@@ -615,7 +615,7 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
         return self._info
 
     @sa.util.stopwatch('setup radio', 'source', threshold=1)
-    def setup(self, *, captures=None, loops=None):
+    def setup(self, *, rx_ports: tuple[int, ...]|None = None):
         for p in range(self.get_info().num_rx_ports):
             self._device.setGainMode(SoapySDR.SOAPY_SDR_RX, p, False)
 
@@ -633,13 +633,8 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
             self._device.setTimeSource(self.spec.time_source)
             on_overflow = 'except'
 
-        if captures is not None:
-            ports = specs.helpers.get_unique_ports(captures, loops)
-        else:
-            ports = ()
-
         self._rx_stream = RxStream(
-            self.spec, self.get_info(), ports=ports, on_overflow=on_overflow
+            self.spec, self.get_info(), ports=rx_ports or (), on_overflow=on_overflow
         )
 
         self._device.setClockSource(self.spec.clock_source)
@@ -648,7 +643,7 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
         if self.spec.time_sync_at == 'open':
             self._sync_time_source(self._device)
 
-        if len(ports) > 0:
+        if rx_ports is not None and len(rx_ports) > 0:
             self._rx_stream.open(self._device)
 
     def close(self):

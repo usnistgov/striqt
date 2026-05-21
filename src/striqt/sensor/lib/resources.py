@@ -149,9 +149,10 @@ def _open_devices(
         if on_source_opened is not None:
             on_source_opened(spec, source_id)
 
+    ports = specs.helpers.get_unique_ports(spec.captures, spec.loops)
     controller = _timeit('open sensor source')(binding._raw_controller)
     source = util.threadpool.submit(
-        controller, spec.source, reuse_iq=spec.options.reuse_iq
+        controller, spec.source, reuse_iq=spec.options.reuse_iq, rx_ports=ports
     )
     source_callback = util.threadpool.submit(_post_source_open)
 

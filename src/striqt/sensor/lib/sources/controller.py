@@ -146,8 +146,6 @@ class lookup:
     @classmethod
     def _raise(cls, spec: specs.Source, exc: BaseException):
         cls._obj[spec] = exc
-        cls._id[spec] = exc
-        cls._ready[spec] = exc
         cls._set_ready(spec, False)
         raise exc
 
@@ -408,7 +406,7 @@ class ControllerBase(Generic[SS, SC, PS, PC]):
 
 
 class RawController(ControllerBase[SS, SC, PS, PC]):
-    def __init__(self, spec: SS, reuse_iq: bool = False):
+    def __init__(self, spec: SS, reuse_iq: bool = False, rx_ports: tuple[int, ...]|None = None):
         lookup._register(spec, self)
 
         self.__setup__ = spec
@@ -431,7 +429,7 @@ class RawController(ControllerBase[SS, SC, PS, PC]):
 
             util.propagate_thread_interrupts()
 
-            self.backend.setup()
+            self.backend.setup(rx_ports=rx_ports)
             lookup._set_ready(spec, True)
         except:
             lookup._set_ready(spec, False)
@@ -462,13 +460,13 @@ class RawController(ControllerBase[SS, SC, PS, PC]):
 
 
 class Controller(ControllerBase[SS, SC, PS, PC]):
-    def __init__(self, reuse_iq=False, *args: PS.args, **kwargs: PS.kwargs):
+    def __init__(self, reuse_iq=False, rx_ports: tuple[int, ...]|None = None, *args: PS.args, **kwargs: PS.kwargs):
         if not hasattr(self, '_binding'):
             raise TypeError('bind a source controller')
 
         spec = self._binding.schema.source(*args, **kwargs)  # type: ignore
         cast_self = cast(RawController, self)
-        RawController.__init__(cast_self, spec, reuse_iq=reuse_iq)
+        RawController.__init__(cast_self, spec, reuse_iq=reuse_iq, rx_ports=rx_ports)
 
     def arm(self, *args: PC.args, **kwargs: PC.kwargs):
         """stop the stream, apply a capture configuration, and start it"""
