@@ -35,7 +35,7 @@ def adjust_port(spec, port):
     type=click.IntRange(min=0),
     help='limit the acquisition the specified input port index',
 )
-def run(*, yaml_path, debug, verbose, port, **kws):
+def run(*, yaml_path, debug, skip_confirm, verbose, port, **kws):
     import striqt.sensor as ss
     import striqt.analysis as sa
 
@@ -56,7 +56,7 @@ def run(*, yaml_path, debug, verbose, port, **kws):
             '▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀\n'
         )
 
-        while True:
+        while not skip_confirm:
             response = sa.util.blocking_input(
                 f'{info}\nconfirm: are these correct? (y/n) '
             )
