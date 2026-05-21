@@ -14,7 +14,7 @@ class FormattedTB(ultratb.FormattedTB):
         tb_offset=None,
         context: int = 5,
     ) -> list[str]:
-        tbs = super().structured_traceback(etype, evalue, etb, tb_offset, context)
+        tbs = super().structured_traceback(type(evalue), evalue, etb, tb_offset, context)
         return [tb for tb in tbs if not any(m in tb for m in MATCH)]
 
 
@@ -27,5 +27,6 @@ class VerboseTB(ultratb.VerboseTB):
         tb_offset=None,
         context: int = 5,
     ) -> list[str]:
-        tbs = super().structured_traceback(etype, evalue, etb, tb_offset, context)
+        print('verbose traceback', etype, evalue)
+        tbs = super().structured_traceback(type(evalue), evalue, etb, tb_offset, context)
         return [tb for tb in tbs if not any(m in tb for m in MATCH)]
