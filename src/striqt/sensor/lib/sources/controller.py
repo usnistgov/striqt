@@ -57,6 +57,7 @@ class lookup:
             return obj
         else:
             # check first for a quick failure
+            print('waiting for instantiation')
             assert isinstance(obj, Event)
             obj.wait(timeout=timeout)
 
@@ -65,7 +66,9 @@ class lookup:
             util.propagate_thread_interrupts()
             raise util.ThreadInterruptRequest()
         elif isinstance(obj, Event):
+            print('waiting for open')
             obj.wait()
+            print('...done')
 
         # after the wait, we should be done now
         obj = cls._objs[spec]
@@ -74,6 +77,7 @@ class lookup:
             raise util.ThreadInterruptRequest()
         elif isinstance(obj, ControllerBase):
             # already have this source!
+            print('got the object')
             return obj
         else:
             raise TypeError('invalid type')
@@ -128,8 +132,10 @@ class lookup:
     def id(cls, spec: specs.Source, timeout=0.5) -> str:
         """lookup a source ID from a source specification.
         """
-
-        return cls.instance(spec, timeout).backend.id
+        print('get id')
+        id = cls.instance(spec, timeout).backend.id
+        print('done')
+        return id
 
 
 @contextlib.contextmanager
