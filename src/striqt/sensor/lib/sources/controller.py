@@ -41,14 +41,11 @@ def get_source_id(spec: specs.Source, timeout=0.5) -> str:
     within `timeout` seconds; otherwise `TimeoutError` is raised.
     """
 
-    def cancel_thread():
-        util.propagate_thread_interrupts()
-        raise util.ThreadInterruptRequest()
-
     obj = _source_id_map[spec]
 
     if isinstance(obj, BaseException):
-        cancel_thread()
+        util.propagate_thread_interrupts()
+        raise util.ThreadInterruptRequest()
     elif isinstance(obj, ControllerBase):
         # already have this source!
         return obj.backend.id
@@ -59,14 +56,16 @@ def get_source_id(spec: specs.Source, timeout=0.5) -> str:
     
     obj = _source_id_map[spec]
     if isinstance(obj, BaseException):
-        cancel_thread()
+        util.propagate_thread_interrupts()
+        raise util.ThreadInterruptRequest()
     elif isinstance(obj, Event):
         obj.wait()
 
     # after the wait, we should be done now
     obj = _source_id_map[spec]
     if isinstance(obj, BaseException):
-        cancel_thread()
+        util.propagate_thread_interrupts()
+        raise util.ThreadInterruptRequest()
     elif isinstance(obj, ControllerBase):
         # already have this source!
         return obj.backend.id
@@ -325,7 +324,7 @@ class RawController(ControllerBase[SS, SC, PS, PC]):
         open_event = _source_id_map[spec]  # first, to serve other threads
 
         if isinstance(open_event, BaseException):
-            open_event = _source_id_map[self] = Event()
+            open_event = _source_id_map[spec] = Event()
         elif not isinstance(open_event, Event):
             raise RuntimeError('another controller has already opened this source')
 
