@@ -134,31 +134,23 @@ def _setup_logging(sink: specs.Sink, formatter):
 
 def _open_devices(
     conn: ConnectionManager,
-    binding: bindings.SensorBinding,
+    bind: bindings.SensorBinding,
     spec: specs.Sweep,
     skip_peripherals: bool = False,
-    on_source_opened: SourceOpenCallback | None = None,
 ):
-    """open source and any peripherals"""
-
-    def _post_source_open():
-        # blocks until the source is open
-        source_id = sources.lookup.id(spec.source)
-        specs.helpers.list_capture_adjustments(spec, source_id=source_id)
-
-        if on_source_opened is not None:
-            on_source_opened(spec, source_id)
+    """open source and optionally peripherals"""
 
     ports = specs.helpers.get_unique_ports(spec.captures, spec.loops)
-    controller = _timeit('open sensor source')(binding._raw_controller)
     source = util.threadpool.submit(
-        controller, spec.source, reuse_iq=spec.options.reuse_iq, rx_ports=ports
+        bind._raw_controller,
+        spec.source,
+        reuse_iq=spec.options.reuse_iq,
+        rx_ports=ports,
     )
-    source_callback = util.threadpool.submit(_post_source_open)
 
     if not skip_peripherals:
         peripherals = util.threadpool.submit(
-            _timeit('open peripherals')(binding.peripherals), spec
+            _timeit('open peripherals')(bind.peripherals), spec
         )
     else:
         peripherals = None
@@ -169,22 +161,28 @@ def _open_devices(
             conn.enter_context(source)
 
         with exc.defer():
-            source_callback.result()
-
-        with exc.defer():
             if peripherals is not None:
                 peripherals = conn._resources['peripherals'] = peripherals.result()
                 conn.enter_context(peripherals)
 
+    # the peripherals wait until both the source and the
     if peripherals is not None:
         peripherals.setup(spec.captures, spec.loops)
+
+
+def _prepare_sweep(spec: specs.Sweep, callback: SourceOpenCallback | None = None):
+    """after the source opens, enumerate the sweep and invoke callback"""
+    source_id = sources.lookup.id(spec.source)
+    specs.helpers.list_capture_adjustments(spec, source_id=source_id)
+
+    if callback is not None:
+        callback(spec, source_id)
 
 
 @sa.util.stopwatch('open resources', 'sweep', 1.0, sa.util.INFO)
 def open_resources(
     spec: specs.Sweep[SS, SP, SC],
     spec_path: str | Path | None = None,
-    except_context: ContextManager | None = None,
     *,
     test_only: bool = False,
     on_source_opened: SourceOpenCallback | None = None,
@@ -192,7 +190,7 @@ def open_resources(
     """open the sensor hardware and software contexts needed to run the given sweep.
 
     The returned Connections object contains the resulting context. All of its resources
-    have been opened and set up as needed to run the specified sweep.
+    are then open and ready to run the sweep.
     """
 
     from .compute import prepare_compute
@@ -211,20 +209,12 @@ def open_resources(
 
     exc = util.ExceptionStack('failed to open resources', cancel_on_except=True)
     with util.share_thread_interrupts():
-        # background threads
-        devices = util.threadpool.submit(
-            _open_devices,
-            conn,
-            bind,
-            spec,
-            skip_peripherals=test_only,
-            on_source_opened=on_source_opened,
-        )
-
+        devices = util.threadpool.submit(_open_devices, conn, bind, spec, test_only)
+        prep_sweep = util.threadpool.submit(_prepare_sweep, spec, on_source_opened)
         sink = util.threadpool.submit(_open_sink, spec, bind.sink, formatter)
 
         with exc.defer():
-            # foreground thread part 1: initialize warmup sweeps
+            # foreground thread 1: initialize warmup sweeps
             try:
                 # prioritize compute as we get started; load up buffers
                 compute_iter = prepare_compute(spec, skip_warmup=test_only)
@@ -268,6 +258,8 @@ def open_resources(
         with exc.defer():
             if log_setup is not None:
                 log_setup.result()
+        with exc.defer():
+            prep_sweep.result()
 
     try:
         exc.handle()
@@ -279,22 +271,3 @@ def open_resources(
     conn._resources['format_path'] = formatter
 
     return conn
-
-
-def open_sensor_from_yaml(
-    yaml_path: Path,
-    *,
-    except_context: ContextManager | None = None,
-    output_path: str | None = None,
-    store_backend: str | None = None,
-) -> ConnectionManager[Any, Any, Any, Any, Any]:
-    spec = io.read_yaml_spec(yaml_path)
-
-    sink = spec.sink
-    if output_path is not None:
-        sink = sink.replace(path=output_path)
-    if store_backend is not None:
-        sink = sink.replace(store=store_backend)
-    spec = spec.replace(output=sink)
-
-    return open_resources(spec, yaml_path, except_context)

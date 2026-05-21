@@ -495,15 +495,7 @@ class RxStream:
         return specs.helpers.ensure_tuple(capture.port) == self.ports
 
     def set_ports(self, device: 'SoapySDR.Device', ports: specs.types.Port):
-        if self.setup.stream_all_rx_ports:
-            assert self.stream is not None, (
-                'expected open stream since stream_all_rx_ports=True'
-            )
-
-            # the stream is controlled on self.open(...)
-            return
-
-        elif getattr(self, 'stream', None) is not None:
+        if getattr(self, 'stream', None) is not None:
             if self.ports == ports:
                 # already set up
                 return
@@ -615,7 +607,7 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
         return self._info
 
     @sa.util.stopwatch('setup radio', 'source', threshold=1)
-    def setup(self, *, rx_ports: tuple[int, ...]|None = None):
+    def setup(self, *, rx_ports: tuple[int, ...] | None = None):
         for p in range(self.get_info().num_rx_ports):
             self._device.setGainMode(SoapySDR.SOAPY_SDR_RX, p, False)
 

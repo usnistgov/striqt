@@ -406,7 +406,16 @@ class ControllerBase(Generic[SS, SC, PS, PC]):
 
 
 class RawController(ControllerBase[SS, SC, PS, PC]):
-    def __init__(self, spec: SS, reuse_iq: bool = False, rx_ports: tuple[int, ...]|None = None):
+    @sa.util.stopwatch(
+        'open IQ source', 'sweep', threshold=0.5, logger_level=util.logging.INFO
+    )
+    def __init__(
+        self,
+        spec: SS,
+        *,
+        reuse_iq: bool = False,
+        rx_ports: tuple[int, ...] | None = None,
+    ):
         lookup._register(spec, self)
 
         self.__setup__ = spec
@@ -460,7 +469,13 @@ class RawController(ControllerBase[SS, SC, PS, PC]):
 
 
 class Controller(ControllerBase[SS, SC, PS, PC]):
-    def __init__(self, reuse_iq=False, rx_ports: tuple[int, ...]|None = None, *args: PS.args, **kwargs: PS.kwargs):
+    def __init__(
+        self,
+        reuse_iq=False,
+        rx_ports: tuple[int, ...] | None = None,
+        *args: PS.args,
+        **kwargs: PS.kwargs,
+    ):
         if not hasattr(self, '_binding'):
             raise TypeError('bind a source controller')
 
