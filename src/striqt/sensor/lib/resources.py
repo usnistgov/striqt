@@ -143,7 +143,7 @@ def _open_devices(
 
     def _post_source_open():
         # blocks until the source is open
-        source_id = sources.get_source_id(spec.source)
+        source_id = sources.lookup.id(spec.source)
         specs.helpers.list_capture_adjustments(spec, source_id=source_id)
 
         if on_source_opened is not None:

@@ -20,57 +20,116 @@ if TYPE_CHECKING:
     import numpy as np
 
     T = TypeVar('T', bound='ControllerBase')
+    PendingController = 'ControllerBase | Event | BaseException'
 
 else:
     np = util.lazy_import('numpy')
-
-
-_source_id_map: dict[specs.Source, ControllerBase | Event | BaseException] = (
-    defaultdict(Event)
-)
 
 
 class ReceiveStreamError(IOError):
     pass
 
 
-def get_source_id(spec: specs.Source, timeout=0.5) -> str:
-    """lookup a source ID from a source specification.
-
-    This assumes that a source is either instantiated, or will be
-    within `timeout` seconds; otherwise `TimeoutError` is raised.
+class lookup:
+    """lookup controller instance, status, or source ID by source spec.
+    
+    This assumes that a source instantiation is in progress or will be
+    within `timeout` seconds. Otherwise, `TimeoutError` is raised.
     """
 
-    obj = _source_id_map[spec]
+    _objs: dict[specs.Source, 'PendingController'] = defaultdict(Event)
+    _ready: dict[specs.Source, Event | bool] = defaultdict(Event)
 
-    if isinstance(obj, BaseException):
-        util.propagate_thread_interrupts()
-        raise util.ThreadInterruptRequest()
-    elif isinstance(obj, ControllerBase):
-        # already have this source!
-        return obj.backend.id
-    else:
-        # check first for a quick failure
-        assert isinstance(obj, Event)
-        obj.wait(timeout=timeout)
-    
-    obj = _source_id_map[spec]
-    if isinstance(obj, BaseException):
-        util.propagate_thread_interrupts()
-        raise util.ThreadInterruptRequest()
-    elif isinstance(obj, Event):
-        obj.wait()
+    @classmethod
+    def _clear(cls, spec: specs.Source):
+        cls._objs[spec] = Event()
+        cls._ready[spec] = Event()
 
-    # after the wait, we should be done now
-    obj = _source_id_map[spec]
-    if isinstance(obj, BaseException):
-        util.propagate_thread_interrupts()
-        raise util.ThreadInterruptRequest()
-    elif isinstance(obj, ControllerBase):
-        # already have this source!
-        return obj.backend.id
-    else:
-        raise TypeError('invalid type')
+    @classmethod
+    def instance(cls, spec: specs.Source, timeout=0.5) -> ControllerBase:
+        obj = cls._objs[spec]
+
+        if isinstance(obj, BaseException):
+            util.propagate_thread_interrupts()
+            raise util.ThreadInterruptRequest()
+        elif isinstance(obj, ControllerBase):
+            # already have this source!
+            return obj
+        else:
+            # check first for a quick failure
+            assert isinstance(obj, Event)
+            obj.wait(timeout=timeout)
+
+        obj = cls._objs[spec]
+        if isinstance(obj, BaseException):
+            util.propagate_thread_interrupts()
+            raise util.ThreadInterruptRequest()
+        elif isinstance(obj, Event):
+            obj.wait()
+
+        # after the wait, we should be done now
+        obj = cls._objs[spec]
+        if isinstance(obj, BaseException):
+            util.propagate_thread_interrupts()
+            raise util.ThreadInterruptRequest()
+        elif isinstance(obj, ControllerBase):
+            # already have this source!
+            return obj
+        else:
+            raise TypeError('invalid type')
+
+    @classmethod
+    def _set_ready(cls, spec: specs.Source, is_ready: bool):
+        obj = cls._ready[spec]
+        if isinstance(obj, Event):
+            cls._ready[spec] = is_ready
+            obj.set()
+        else:
+            raise TypeError('source was already setup')
+
+    @classmethod
+    def _prepare(cls, spec: specs.Source):
+        obj = cls._objs[spec]
+        if isinstance(obj, BaseException):
+            cls._clear(spec)
+        elif not isinstance(obj, Event):
+            raise RuntimeError('another controller has already opened this source')
+
+    @classmethod
+    def _set_open(cls, spec: specs.Source, controller: ControllerBase):
+        cls._objs[spec] = controller
+
+    @classmethod
+    def _raise(cls, spec: specs.Source, exc: BaseException):
+        cls._objs[spec] = exc
+        cls._set_ready(spec, False)
+        raise exc
+
+    @classmethod
+    def is_ready(cls, spec: specs.Source, timeout: float, wait: bool = True) -> bool:
+        if wait:
+            cls.instance(spec, 0.5)
+        elif not isinstance(cls._objs[spec], ControllerBase):
+            return False
+
+        obj = cls._ready[spec]
+        if isinstance(obj, Event):
+            if wait:
+                obj.wait(max(0,timeout - 0.3))
+                return cast(bool, cls._ready[spec])
+            else:
+                return False
+        elif isinstance(obj, bool):
+            return obj
+        else:
+            raise TypeError
+
+    @classmethod
+    def id(cls, spec: specs.Source, timeout=0.5) -> str:
+        """lookup a source ID from a source specification.
+        """
+
+        return cls.instance(spec, timeout).backend.id
 
 
 @contextlib.contextmanager
@@ -116,16 +175,15 @@ class ControllerBase(Generic[SS, SC, PS, PC]):
         raise NotImplementedError
 
     def is_open(self, wait=True) -> bool:
-        return _source_id_map[self.__setup__] is self
+        return lookup.is_ready(self.__setup__, self._timeout, wait=wait)
 
     def close(self):
-        del _source_id_map[self.__setup__]
+        lookup._clear(self.__setup__)
         try:
             backend = self.backend
             if backend is not None:
                 backend.close()
         finally:
-            self._is_open = False
             if hasattr(self, '_buffers'):
                 self._buffers.clear()
 
@@ -321,12 +379,7 @@ class ControllerBase(Generic[SS, SC, PS, PC]):
 
 class RawController(ControllerBase[SS, SC, PS, PC]):
     def __init__(self, spec: SS, reuse_iq: bool = False):
-        open_event = _source_id_map[spec]  # first, to serve other threads
-
-        if isinstance(open_event, BaseException):
-            open_event = _source_id_map[spec] = Event()
-        elif not isinstance(open_event, Event):
-            raise RuntimeError('another controller has already opened this source')
+        lookup._prepare(spec)
 
         self.__setup__ = spec
         self._capture = None
@@ -338,25 +391,25 @@ class RawController(ControllerBase[SS, SC, PS, PC]):
             self._buffers = buffers.ReceiveBuffers(self)
             self.backend = self._binding.source(spec)
             self.backend.id
-
         except BaseException as ex:
-            _source_id_map[spec] = ex
-            raise
+            lookup._raise(spec, ex)
         else:
-            _source_id_map[spec] = self
-        finally:
-            open_event.set()
-
-        if spec.array_backend == 'cupy':
-            sw.arrays.configure_cupy()
+            lookup._set_open(spec, self)
 
         try:
+            if spec.array_backend == 'cupy':
+                sw.arrays.configure_cupy()
+
             util.propagate_thread_interrupts()
+
+            self.backend.setup()
         except:
+            lookup._set_ready(spec, False)
             self.close()
             raise
+        else:
+            lookup._set_ready(spec, True)
 
-        self.backend.setup()
 
     @sa.util.stopwatch('arm', 'source', threshold=10e-3)
     def arm(self, spec: SC):
