@@ -52,7 +52,15 @@ def click_sensor_sweep(description: typing.Optional[str] = None):
             is_flag=True,
             show_default=True,
             default=False,
-            help='if set, drop to an IPython debug on exception',
+            help='invoke an IPython debug prompt on exception',
+        ),
+        click.option(
+            '--skip-confirm/',
+            '-s',
+            is_flag=True,
+            show_default=True,
+            default=False,
+            help='skip y/n confirmation before start',
         ),
         click.option(
             '--verbose/',

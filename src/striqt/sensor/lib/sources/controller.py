@@ -31,7 +31,7 @@ class ReceiveStreamError(IOError):
 
 
 class lookup:
-    """lookup controller instance, status, or source ID by source spec.
+    """asynchronous lookup of controller objects, status, or source ID.
     
     This assumes that a source instantiation is in progress or will be
     within `timeout` seconds. Otherwise, `TimeoutError` is raised.
