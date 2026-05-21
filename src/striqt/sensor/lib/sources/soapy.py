@@ -608,7 +608,7 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
 
     @util.cached_property
     def about(self) -> AboutSoapySource:  # pyright: ignore
-        return probe_soapy_info(self._device).replace(retries=self.spec.receive_retries)
+        return probe_soapy_info(self._device)#.replace(retries=self.spec.receive_retries)
 
     @sa.util.stopwatch('setup radio', 'source', threshold=1)
     def setup(self, *, captures=None, loops=None):
