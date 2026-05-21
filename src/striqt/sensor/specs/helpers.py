@@ -735,20 +735,20 @@ class PathFormatter:
         self,
         sweep: specs.Sweep,
         spec_path: Path | str | None = None,
-        alias_timeout: float = 5,
+        id_timeout: float = 5,
     ):
         self.sweep_spec = sweep
         self.spec_path = spec_path
-        self.alias_timeout = alias_timeout
+        self.id_timeout = id_timeout
 
     def __call__(self, path: str | Path) -> str:
         path_fields = _get_format_fields(str(path))
         if len(path_fields) == 0:
             return str(path)
 
-        from ..sources import get_source_id
+        from ..sources import lookup
 
-        id_ = get_source_id(self.sweep_spec.source, timeout=self.alias_timeout)
+        id_ = lookup.id(self.sweep_spec.source, timeout=self.id_timeout)
         path = Path(path).expanduser()
 
         fields = get_path_fields(
