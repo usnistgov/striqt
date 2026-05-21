@@ -37,18 +37,16 @@ class lookup:
     within `timeout` seconds. Otherwise, `TimeoutError` is raised.
     """
 
-    _objs: dict[specs.Source, 'PendingController'] = defaultdict(Event)
+    _obj: dict[specs.Source, 'PendingController'] = defaultdict(Event)
+    _id: dict[specs.Source, Event | str] = defaultdict(Event)
     _ready: dict[specs.Source, Event | bool] = defaultdict(Event)
 
     @classmethod
-    def _clear(cls, spec: specs.Source):
-        cls._objs[spec] = Event()
-        cls._ready[spec] = Event()
-
-    @classmethod
     def instance(cls, spec: specs.Source, timeout=0.5) -> ControllerBase:
-        obj = cls._objs[spec]
+        import threading
+        name = threading.current_thread().name
 
+        obj = cls._obj[spec]
         if isinstance(obj, BaseException):
             util.propagate_thread_interrupts()
             raise util.ThreadInterruptRequest()
@@ -56,64 +54,46 @@ class lookup:
             # already have this source!
             return obj
         else:
-            # check first for a quick failure
-            print('waiting for instantiation')
-            assert isinstance(obj, Event)
-            obj.wait(timeout=timeout)
+            obj.wait(timeout)
 
-        obj = cls._objs[spec]
+        obj = cls._obj[spec]
+        if isinstance(obj, BaseException):
+            util.propagate_thread_interrupts()
+            raise util.ThreadInterruptRequest()
+        elif isinstance(obj, ControllerBase):
+            return obj
+        else:
+            raise TimeoutError('no controller instance initializing given spec')
+
+    @classmethod
+    def id(cls, spec: specs.Source, timeout=0.5) -> str:
+        """lookup a source ID from a source specification.
+        """
+        controller = cls.instance(spec, timeout)
+
+        obj = cls._id[spec]
         if isinstance(obj, BaseException):
             util.propagate_thread_interrupts()
             raise util.ThreadInterruptRequest()
         elif isinstance(obj, Event):
-            print('waiting for open')
             obj.wait()
-            print('...done')
+        else:
+            return obj
 
-        # after the wait, we should be done now
-        obj = cls._objs[spec]
+        obj = cls._id[spec]
         if isinstance(obj, BaseException):
             util.propagate_thread_interrupts()
             raise util.ThreadInterruptRequest()
-        elif isinstance(obj, ControllerBase):
-            # already have this source!
-            print('got the object')
+        elif isinstance(obj, Event):
+            raise TypeError
+        elif isinstance(obj, str):
             return obj
-        else:
-            raise TypeError('invalid type')
-
-    @classmethod
-    def _set_ready(cls, spec: specs.Source, is_ready: bool):
-        obj = cls._ready[spec]
-        if isinstance(obj, Event):
-            cls._ready[spec] = is_ready
-            obj.set()
-        else:
-            raise TypeError('source was already setup')
-
-    @classmethod
-    def _prepare(cls, spec: specs.Source):
-        obj = cls._objs[spec]
-        if isinstance(obj, BaseException):
-            cls._clear(spec)
-        elif not isinstance(obj, Event):
-            raise RuntimeError('another controller has already opened this source')
-
-    @classmethod
-    def _set_open(cls, spec: specs.Source, controller: ControllerBase):
-        cls._objs[spec] = controller
-
-    @classmethod
-    def _raise(cls, spec: specs.Source, exc: BaseException):
-        cls._objs[spec] = exc
-        cls._set_ready(spec, False)
-        raise exc
-
+    
     @classmethod
     def is_ready(cls, spec: specs.Source, timeout: float, wait: bool = True) -> bool:
         if wait:
-            cls.instance(spec, 0.5)
-        elif not isinstance(cls._objs[spec], ControllerBase):
+            cls.id(spec, 0.5)
+        elif not isinstance(cls._id[spec], str):
             return False
 
         obj = cls._ready[spec]
@@ -129,13 +109,49 @@ class lookup:
             raise TypeError
 
     @classmethod
-    def id(cls, spec: specs.Source, timeout=0.5) -> str:
-        """lookup a source ID from a source specification.
-        """
-        print('get id')
-        id = cls.instance(spec, timeout).backend.id
-        print('done')
-        return id
+    def _clear(cls, spec: specs.Source):
+        cls._obj[spec] = Event()
+        cls._ready[spec] = Event()
+
+    @classmethod
+    def _register(cls, spec: specs.Source, controller: ControllerBase):
+        obj = cls._obj[spec]
+        if isinstance(obj, Event):
+            cls._obj[spec] = controller
+            obj.set()
+        else:
+            raise TypeError('controller object was already registered for this spec')
+
+
+    @classmethod
+    def _set_ready(cls, spec: specs.Source, is_ready: bool):
+        obj = cls._ready[spec]
+        if isinstance(obj, Event):
+            cls._ready[spec] = is_ready
+            obj.set()
+        else:
+            raise TypeError('source was already setup')
+
+    @classmethod
+    def _set_id(cls, spec: specs.Source, id: str):
+        obj = cls._id[spec]
+        if isinstance(obj, Event):
+            cls._id[spec] = id
+            obj.set()
+        else:
+            raise TypeError('id was already setup')
+
+
+    @classmethod
+    def _set_open(cls, spec: specs.Source, controller: ControllerBase):
+        cls._obj[spec] = controller
+
+    @classmethod
+    def _raise(cls, spec: specs.Source, exc: BaseException):
+        cls._obj[spec] = exc
+        cls._set_ready(spec, False)
+        raise exc
+
 
 
 @contextlib.contextmanager
@@ -385,7 +401,7 @@ class ControllerBase(Generic[SS, SC, PS, PC]):
 
 class RawController(ControllerBase[SS, SC, PS, PC]):
     def __init__(self, spec: SS, reuse_iq: bool = False):
-        lookup._prepare(spec)
+        lookup._register(spec, self)
 
         self.__setup__ = spec
         self._capture = None
@@ -396,7 +412,7 @@ class RawController(ControllerBase[SS, SC, PS, PC]):
                 raise TypeError('bind a source controller')
             self._buffers = buffers.ReceiveBuffers(self)
             self.backend = self._binding.source(spec)
-            self.backend.id
+            lookup._set_id(spec, self.backend.id)
         except BaseException as ex:
             lookup._raise(spec, ex)
         else:
@@ -409,12 +425,11 @@ class RawController(ControllerBase[SS, SC, PS, PC]):
             util.propagate_thread_interrupts()
 
             self.backend.setup()
+            lookup._set_ready(spec, True)
         except:
             lookup._set_ready(spec, False)
             self.close()
             raise
-        else:
-            lookup._set_ready(spec, True)
 
 
     @sa.util.stopwatch('arm', 'source', threshold=10e-3)
