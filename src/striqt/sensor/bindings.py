@@ -6,7 +6,6 @@ peripherals and expanded data fields elsewhere.
 
 from . import specs
 from .lib import sources, peripherals, sinks
-from .lib.sources import deepwave
 from .lib.bindings import sensor, bind_sensor
 from .specs import Schema
 from .lib.calibration import bind_manual_yfactor_calibration
@@ -129,10 +128,10 @@ sawtooth = bind_sensor(
 # %% Hardware data sources
 air7101b = bind_sensor(
     'air7101b',
-    sensor(source=deepwave.Airstack1Source),
+    sensor(source=sources.deepwave.Airstack1Source),
     Schema(
-        source=deepwave.Air7101BSourceSpec,
-        init_like=deepwave.Air7101BSourceSpec,
+        source=sources.deepwave.Air7101BSourceSpec,
+        init_like=sources.deepwave.Air7101BSourceSpec,
         capture=specs.SoapyCapture,
         arm_like=specs.SoapyCapture,
         peripherals=specs.NoPeripherals,
@@ -143,10 +142,10 @@ air7101b_calibration = bind_manual_yfactor_calibration('air7101b_calibration', a
 
 air7201b = bind_sensor(
     'air7201b',
-    sensor(source=deepwave.Airstack1Source),
+    sensor(source=sources.deepwave.Airstack1Source),
     Schema(
-        source=deepwave.Air7201BSourceSpec,
-        init_like=deepwave.Air7101BSourceSpec,
+        source=sources.deepwave.Air7201BSourceSpec,
+        init_like=sources.deepwave.Air7101BSourceSpec,
         capture=specs.SoapyCapture,
         arm_like=specs.SoapyCapture,
         peripherals=specs.NoPeripherals,
@@ -157,10 +156,10 @@ air7201b_calibration = bind_manual_yfactor_calibration('air7201b_calibration', a
 
 air8201b = bind_sensor(
     'air8201b',
-    sensor(source=deepwave.Airstack1Source),
+    sensor(source=sources.deepwave.Airstack1Source),
     Schema(
-        source=deepwave.Air8201BSourceSpec,
-        init_like=deepwave.Air8201BSourceSpec,
+        source=sources.deepwave.Air8201BSourceSpec,
+        init_like=sources.deepwave.Air8201BSourceSpec,
         capture=specs.SoapyCapture,
         arm_like=specs.SoapyCapture,
         peripherals=specs.NoPeripherals,

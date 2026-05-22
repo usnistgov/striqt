@@ -8,3 +8,8 @@ from .dataclasses import AcquiredIQ, Schema
 from .structs import SS, SP, SC, SPC
 from .types import Annotated, Meta
 from striqt.analysis.specs import frozendict
+
+for obj in list(locals().values()):
+    if getattr(obj, '__module__', '').startswith(__name__):
+        obj.__module__ = __name__
+del obj

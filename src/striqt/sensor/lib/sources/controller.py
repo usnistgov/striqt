@@ -389,7 +389,7 @@ class ControllerBase(Generic[SS, SC, PS, PC]):
         """
 
         if self._capture is None:
-            raise AttributeError('arm to set the capture spec')
+            raise AttributeError('no capture has been armed')
 
         return self._capture
 

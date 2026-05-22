@@ -1,6 +1,7 @@
 [project]
 name = "striqt"
-version = "0.7.0"
+# version = "0.7.0"
+dynamic = ["version"]
 description = "tooling to support precision gpu-accelerated radio signal analysis and software radio automation"
 requires-python = ">=3.9"
 dependencies = [
@@ -102,6 +103,9 @@ packages = [ "src/striqt", ]
 
 [tool.hatch.build.targets.sdist]
 packages = [ "src/striqt", ]
+
+[tool.hatch.version]
+path = "src/striqt/sensor/__about__.py"
 
 [tool.ty.rules]
 call-top-callable = "ignore"
