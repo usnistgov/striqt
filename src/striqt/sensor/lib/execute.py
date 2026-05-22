@@ -236,7 +236,7 @@ def _acquire_both(
         util.await_and_ignore([source, peripherals], 'arm sensor')
 
     try:
-        res['source'].capture_spec
+        res['source'].armed_capture
     except AttributeError:
         arm_both(this)
 
@@ -244,7 +244,7 @@ def _acquire_both(
         res['sweep_spec'].analysis, this.adjust_analysis
     )
 
-    overlaps = compute.get_correction_overlaps(this, res['source'].setup_spec, analysis)
+    overlaps = compute.get_correction_overlaps(this, res['source'].spec, analysis)
     iq = util.threadpool.submit(res['source'].acquire, overlaps, res['format_path'])
     ext_data = util.threadpool.submit(res['peripherals'].acquire, this)
 

@@ -9,7 +9,6 @@ from ... import specs
 from .. import calibration, util
 from ..typing import PS, PC, SourceBackend
 from . import base, buffers
-from .controller import ReceiveStreamError
 
 import striqt.analysis as sa
 import striqt.waveform as sw
@@ -478,12 +477,12 @@ class RxStream:
             result = 0, sr.timeNs
         else:
             err_str = SoapySDR.errToStr(sr.ret)
-            raise ReceiveStreamError(f'{err_str} (error code {sr.ret})')
+            raise base.ReceiveStreamError(f'{err_str} (error code {sr.ret})')
 
         if sync_time_ns is None or sr.timeNs == 0:
             pass
         elif sync_time_ns > sr.timeNs:
-            raise ReceiveStreamError(f'invalid timestamp from before last sync')
+            raise base.ReceiveStreamError(f'invalid timestamp from before last sync')
 
         return result
 

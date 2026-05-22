@@ -10,7 +10,7 @@ from threading import Event
 import striqt.analysis as sa
 import striqt.waveform as sw
 
-from . import buffers
+from . import base, buffers
 from ... import specs
 from .. import bindings, util
 from ..typing import SS, SC, S, PC, PS, SourceBackend, TypeVar
@@ -26,10 +26,6 @@ else:
     np = util.lazy_import('numpy')
 
 
-class ReceiveStreamError(IOError):
-    pass
-
-
 class lookup:
     """asynchronous lookup of controller objects, connection status, or source ID.
 
@@ -43,10 +39,6 @@ class lookup:
 
     @classmethod
     def instance(cls, spec: specs.Source, timeout=0.5) -> ControllerBase:
-        import threading
-
-        name = threading.current_thread().name
-
         obj = cls._obj[spec]
         if isinstance(obj, BaseException):
             util.propagate_thread_interrupts()
@@ -154,7 +146,7 @@ class lookup:
 def read_retries(source: ControllerBase) -> Generator[None]:
     """in this context, retry source.read_iq on stream errors"""
 
-    EXC_TYPES = (ReceiveStreamError, OverflowError)
+    EXC_TYPES = (base.ReceiveStreamError, OverflowError)
 
     max_count = source.source_info.retries
 
@@ -216,7 +208,7 @@ class ControllerBase(Generic[SS, SC, PS, PC]):
             self.close()
 
     @util.cached_property
-    def setup_spec(self) -> SS:
+    def spec(self) -> SS:
         return self.__setup__
 
     @functools.cached_property
@@ -257,16 +249,16 @@ class ControllerBase(Generic[SS, SC, PS, PC]):
 
         # the number of valid samples to return per channel
         output_count = buffers.get_read_count(
-            self.capture_spec,
-            self.setup_spec,
+            self.armed_capture,
+            self.spec,
             include_holdoff=False,
             overlap=sum(overlaps),
         )
 
         # the total number of samples to acquire per channel
         buffer_count = buffers.get_read_count(
-            self.capture_spec,
-            self.setup_spec,
+            self.armed_capture,
+            self.spec,
             include_holdoff=True,
             overlap=sum(overlaps),
         )
@@ -275,7 +267,7 @@ class ControllerBase(Generic[SS, SC, PS, PC]):
         chunk_count = remaining = output_count - carryover_count
 
         while remaining > 0:
-            if received_count > 0 or self.setup_spec.gapless:
+            if received_count > 0 or self.spec.gapless:
                 on_overflow = 'except'
             else:
                 on_overflow = 'ignore'
@@ -309,8 +301,8 @@ class ControllerBase(Generic[SS, SC, PS, PC]):
 
             if missing_start_time:
                 included_holdoff = buffers.find_trigger_holdoff(
-                    self.setup_spec,
-                    self.capture_spec,
+                    self.spec,
+                    self.armed_capture,
                     self._buffers,
                     stream_time_ns,
                     start_overlap=overlaps[0],
@@ -338,7 +330,7 @@ class ControllerBase(Generic[SS, SC, PS, PC]):
         # it seems to be important to convert to cupy here in order
         # to get a full view of the underlying pinned memory. cuda
         # memory corruption has been observed when waiting until after
-        samples = buffers.cast_iq(self.setup_spec, samples, buffer_count)
+        samples = buffers.cast_iq(self.spec, samples, buffer_count)
 
         return samples[:, sample_span], start_ns
 
@@ -353,7 +345,7 @@ class ControllerBase(Generic[SS, SC, PS, PC]):
         Optionally, calibration corrections can be applied, and the radio can be left ready for the next capture.
         """
 
-        self.capture_spec  # ensure we are armed
+        self.armed_capture  # ensure we are armed
 
         if self._prev_iq is None:
             with read_retries(self):
@@ -366,12 +358,12 @@ class ControllerBase(Generic[SS, SC, PS, PC]):
                 pre_align=samples,
                 pre_filter=None,
                 aligned=None,
-                capture=self.capture_spec,
+                capture=self.armed_capture,
                 info=info,
                 extra_data={},
-                source_spec=self.setup_spec,
+                source_spec=self.spec,
                 resampler=self.get_resampler(),
-                voltage_scale=buffers.get_dtype_scale(self.setup_spec.transport_dtype),
+                voltage_scale=buffers.get_dtype_scale(self.spec.transport_dtype),
             )
 
             iq = self.backend.package_iq(iq, samples, time_ns)
@@ -379,7 +371,7 @@ class ControllerBase(Generic[SS, SC, PS, PC]):
         else:
             iq = dataclasses.replace(
                 self._prev_iq,
-                capture=self.capture_spec,
+                capture=self.armed_capture,
                 info=self._prev_iq.info.replace(start_time=None),
             )
 
@@ -389,8 +381,8 @@ class ControllerBase(Generic[SS, SC, PS, PC]):
         return iq
 
     @property
-    def capture_spec(self) -> SC:
-        """generate the currently armed capture configuration for the specified channel.
+    def armed_capture(self) -> SC:
+        """Return the specification of the currently armed capture.
 
         If the truth of realized evaluates as False, only the requested value
         of backend_sample_rate is returned in the given radio capture.
@@ -402,7 +394,7 @@ class ControllerBase(Generic[SS, SC, PS, PC]):
         return self._capture
 
     def get_resampler(self) -> sw.ResamplerDesign:
-        return self.backend.get_resampler(self.capture_spec)
+        return self.backend.get_resampler(self.armed_capture)
 
 
 class RawController(ControllerBase[SS, SC, PS, PC]):
@@ -453,8 +445,8 @@ class RawController(ControllerBase[SS, SC, PS, PC]):
             raise RuntimeError('open the radio before arming')
 
         if self._capture is not None:
-            mcr = self.setup_spec.master_clock_rate
-            if self._reuse_iq and buffers.is_reusable(self.capture_spec, spec, mcr):
+            mcr = self.spec.master_clock_rate
+            if self._reuse_iq and buffers.is_reusable(self.armed_capture, spec, mcr):
                 pass
             else:
                 self._prev_iq = None
@@ -462,7 +454,7 @@ class RawController(ControllerBase[SS, SC, PS, PC]):
         if spec == self._capture and self._capture is not None:
             return
 
-        if not self.setup_spec.gapless or spec != self._capture:
+        if not self.spec.gapless or spec != self._capture:
             self._buffers.clear()
 
         self._capture = self.backend.arm(spec) or spec

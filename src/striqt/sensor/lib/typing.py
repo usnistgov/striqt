@@ -112,6 +112,7 @@ class SourceBackend(Protocol[SS, SC]):
     ) -> 'specs.AcquiredIQ':
         return iq
 
+    @abstractmethod
     def close(self):
         pass
 

@@ -17,6 +17,10 @@ else:
     np = util.lazy_import('numpy')
 
 
+class ReceiveStreamError(IOError):
+    pass
+
+
 class NoSource(SourceBackend[specs.NoSource, specs.SensorCapture]):
     """fast paths to acquire empty buffers"""
 
@@ -41,7 +45,7 @@ class NoSource(SourceBackend[specs.NoSource, specs.SensorCapture]):
     def _sync_time_source(self):
         self._sync_time_ns = time.time_ns()
 
-    def setup(self, *, captures=None, loops=None):
+    def setup(self, rx_ports: tuple[int, ...] | None = None):
         self.reset_sample_counter()
 
     def arm(self, capture):
@@ -94,7 +98,7 @@ class VirtualSource(SourceBackend[SS, SC]):
     ) -> Array:
         raise NotImplementedError
 
-    def setup(self, captures=None, loops=None):
+    def setup(self, rx_ports: tuple[int, ...] | None = None):
         self.reset_sample_counter()
 
     def arm(self, capture: SC):
