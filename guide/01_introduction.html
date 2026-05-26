@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Introduction &#8212; striqt</title>
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+    <link rel="stylesheet" type="text/css" href="../_static/pyramid.css?v=63f5dc7c" />
+    <link rel="stylesheet" type="text/css" href="../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css?v=8cd3d715" />
+    <script src="../_static/documentation_options.js?v=fe7df9b0"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="API Reference" href="../api_reference.html" />
+    <link rel="prev" title="Contents" href="../index.html" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Neuton&amp;subset=latin" type="text/css" media="screen" charset="utf-8" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Nobile:regular,italic,bold,bolditalic&amp;subset=latin" type="text/css" media="screen" charset="utf-8" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+  </head><body>
+<header class="nist-header">
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>NIST Pages Template</title>
+  <meta name="viewport" content="width=device-width">
+  <meta name="description" content="striqt">
+  <link rel="canonical" href="../">
+  <link rel="shortcut icon" href="/favicon.ico">
+
+  <!-- Google Analytics -->
+  <!--<script type="text/javascript" id="_fed_an_js_tag" src="http://www.nist.gov/js/federated-analytics.all.min.js?agency=NIST&subagency=mml&pua=UA-66610693-1&yt=true&exts=ppsx,pps,f90,sch,rtf,wrl,txz,m1v,xlsm,msi,xsd,f,tif,eps,mpg,xml,pl,xlt,c"></script> -->
+  <!-- DAP Analytics -->
+  <script type="text/javascript" id="_fed_an_ua_tag" src="https://dap.digitalgov.gov/Universal-Federated-Analytics-Min.js?agency=DOC&subagefncy=NIST&pua=UA-66610693-1&yt=true&exts=ppsx,pps,f90,sch,rtf,wrl,txz,m1v,xlsm,msi,xsd,f,tif,eps,mpg,xml,pl,xlt,c"></script>
+
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="..//_static/NISTStyle.css">
+  <link rel="stylesheet" href="..//_static/NISTPages.css">
+
+  <h1>
+    <a class="nist-logo" target="_blank" href="http://www.nist.gov/" title="Go to nist.gov">National Institute of Standards and Technology</a>
+  </h1>
+  <div class="nist-links">
+    <a class="nist-links-button" target="_blank" href="http://www.nist.gov">NIST Website</a>
+    <a class="nist-links-button mobile-hide" target="_blank" href="http://www.nist.gov/public_affairs/nandyou.cfm">About NIST</a>
+    <a class="nist-links-button mobile-hide" target="_blank" href="https://github.com/usnistgov">usnistgov on GitHub</a>
+  </div>
+  
+  <!-- HTML5 shim and Respond.js IE8 support of HTML5 elements and media queries -->
+  <!--[if lt IE 9]>
+  <script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
+    <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+  <script src="https://oss.maxcdn.com/libs/respond.js/1.4.2/respond.min.js"></script>
+  <![endif]-->
+</header>
+
+    <div class="related" role="navigation" aria-label="Related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../py-modindex.html" title="Python Module Index"
+             >modules</a></li>
+        <li class="right" >
+          <a href="../api_reference.html" title="API Reference"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="../index.html" title="Contents"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../index.html">striqt</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">Introduction</a></li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <section id="introduction">
+<h1>Introduction<a class="headerlink" href="#introduction" title="Link to this heading">¶</a></h1>
+<p><code class="docutils literal notranslate"><span class="pre">striqt</span></code> is a set of open-source python packages for batched real-time signal analysis on CPU or GPU, and rapid prototyping of bespoke radio environment sensors.</p>
+<section id="basic-cli-usage">
+<h2>Basic CLI usage<a class="headerlink" href="#basic-cli-usage" title="Link to this heading">¶</a></h2>
+<p>🏃 Run a batched acquisition and analysis for measurement or calibration, given a path to a YAML input specification:</p>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>sensor-sweep<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span><span class="w"> </span>YAML_PATH
+
+<span class="c1">#  Selected options:</span>
+<span class="c1">#  -d, --debug                if set, drop to IPython debug prompt on exception</span>
+<span class="c1">#  -v, --verbose              verbosity (or -vv, or -vvv)</span>
+</pre></div>
+</div>
+<p>📈 Plot the data variables in captures contained in one sweep of a zarr archive, given a YAML plotting configuration specification:</p>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>plot-capture<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span><span class="w"> </span>ZARR_PATH<span class="w"> </span>YAML_PATH
+
+<span class="c1"># Selected options:</span>
+<span class="c1">#  -i, --interactive</span>
+<span class="c1">#  --no-save          don&#39;t save the resulting plots</span>
+</pre></div>
+</div>
+<p>More detailed usage instructions for these tools can be discovered with the <code class="docutils literal notranslate"><span class="pre">--help</span></code> flag.</p>
+</section>
+<section id="python-module-apis">
+<h2>Python module APIs<a class="headerlink" href="#python-module-apis" title="Link to this heading">¶</a></h2>
+<p>The API is organized into python packages:</p>
+<section id="striqt-analysis">
+<h3><code class="docutils literal notranslate"><span class="pre">striqt.analysis</span></code><a class="headerlink" href="#striqt-analysis" title="Link to this heading">¶</a></h3>
+<p>Provides optimized and validated real-time signal analysis of complex-valued IQ baseband:</p>
+<ul class="simple">
+<li><p>Power spectral density and spectrogram evaluation</p></li>
+<li><p>Power detectors in various time-domain representation</p></li>
+<li><p>Empirical statistical distributions</p></li>
+<li><p>Cellular cyclic prefix and synchronization correlators</p></li>
+<li><p>Extensible with custom analyses based on custom</p></li>
+</ul>
+<p>Interoperability within the modern python data ecosystem:</p>
+<ul class="simple">
+<li><p>Interchangable across CPU (numpy) and GPU (cupy) based on full-precision (32-bit) floating point</p></li>
+<li><p>Fast <code class="docutils literal notranslate"><span class="pre">numba</span></code> numerical kernels for speed and portability across operating systems</p></li>
+<li><p>Package as multi-dimensional <a class="reference external" href="https://docs.xarray.dev/en/stable/generated/xarray.Dataset.html"><code class="docutils literal notranslate"><span class="pre">xarray.Dataset</span></code> objects</a></p>
+<ul>
+<li><p>Detailed coordinates, units, and metadata across all axes</p></li>
+</ul>
+</li>
+<li><p>Load and save <a class="reference external" href="https://zarr.dev/"><code class="docutils literal notranslate"><span class="pre">zarr</span></code></a> dataset archive format for easy aggregation and dissemination local or cloud storage</p></li>
+</ul>
+</section>
+<section id="striqt-sensor">
+<h3><code class="docutils literal notranslate"><span class="pre">striqt.sensor</span></code><a class="headerlink" href="#striqt-sensor" title="Link to this heading">¶</a></h3>
+<p>Implements batch IQ data acquisition and resampling oriented toward test and measurement</p>
+<ul class="simple">
+<li><p>Input power level calibration based on the Y-factor technique</p></li>
+<li><p>Support for exact rational Fourier resampling on CPU/GPU</p></li>
+<li><p>Multi-threaded acquisition, analysis, and archival to maximize throughput</p></li>
+<li><p>Software-defined radio interoperability via <code class="docutils literal notranslate"><span class="pre">SoapySDR</span></code></p></li>
+<li><p>Acquisition and analysis input specification schema (and yaml input decode support)</p></li>
+</ul>
+</section>
+<section id="striqt-figures">
+<h3><code class="docutils literal notranslate"><span class="pre">striqt.figures</span></code><a class="headerlink" href="#striqt-figures" title="Link to this heading">¶</a></h3>
+<p>Implements visualization for the data variables produced by <code class="docutils literal notranslate"><span class="pre">striqt.analysis</span></code></p>
+<ul class="simple">
+<li><p>Provides a plot function for each type of data variable</p></li>
+<li><p>Uses the labeled coordinates and metadata to display proper units</p></li>
+<li><p>Generates plots in <code class="docutils literal notranslate"><span class="pre">matplotlib</span></code> for publication-ready in selectable output formats</p></li>
+</ul>
+</section>
+</section>
+<section id="installation">
+<h2>Installation<a class="headerlink" href="#installation" title="Link to this heading">¶</a></h2>
+<p>The following assume access to the open internet.</p>
+<section id="option-1-conda-environment">
+<h3>Option 1: Conda Environment<a class="headerlink" href="#option-1-conda-environment" title="Link to this heading">¶</a></h3>
+<p>Installation with radio hardware and GPU support is provided via conda environments. Several variants of a <code class="docutils literal notranslate"><span class="pre">striqt</span></code> environment are provided here, targeted at different host computing environments.</p>
+<ol class="arabic">
+<li><p>Ensure that <code class="docutils literal notranslate"><span class="pre">conda</span></code> is installed (or <code class="docutils literal notranslate"><span class="pre">mamba</span></code>/<code class="docutils literal notranslate"><span class="pre">micromamba</span></code> substituted in what follows)</p></li>
+<li><p>Clone this repository</p></li>
+<li><p>Download a predefined environment based on needed capabilities:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="https://github.com/usnistgov/striqt/blob/main/environments/cpu.yml"><code class="docutils literal notranslate"><span class="pre">cpu.yml</span></code></a>: acquire radio data, perform CPU-only IQ signal analysis, load/save <code class="docutils literal notranslate"><span class="pre">zarr</span></code> archives, and plot data</p></li>
+<li><p><a class="reference external" href="https://github.com/usnistgov/striqt/blob/main/environments/gpu-cpu.yml"><code class="docutils literal notranslate"><span class="pre">gpu-cpu.yml</span></code></a>: support the above, and analyze IQ on CUDA GPUs</p></li>
+</ul>
+</li>
+<li><p>Create the chosen environment:</p>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span><span class="w">    </span>conda<span class="w"> </span>env<span class="w"> </span>create<span class="w"> </span>-f<span class="w"> </span><span class="o">[</span>path-to-environment-here.yml<span class="o">]</span>
+</pre></div>
+</div>
+</li>
+<li><p>To activate the environment, select the <code class="docutils literal notranslate"><span class="pre">striqt</span></code> conda environment in your IDE, or run</p>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span><span class="w">    </span>conda<span class="w"> </span>activate<span class="w"> </span>striqt
+</pre></div>
+</div>
+</li>
+</ol>
+</section>
+<section id="option-2-pip-installation">
+<h3>Option 2: pip installation<a class="headerlink" href="#option-2-pip-installation" title="Link to this heading">¶</a></h3>
+<p>A limited environment that supports the latest APIs and CLIs for post-analysis, plotting, testing, etc. can be installed via the python package index (<code class="docutils literal notranslate"><span class="pre">pypi</span></code>):</p>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;striqt @ git+https://github.com/usnistgov/striqt&quot;</span>
+</pre></div>
+</div>
+<p>It is encouraged to use a lockfile (through <code class="docutils literal notranslate"><span class="pre">pipenv</span></code>, <code class="docutils literal notranslate"><span class="pre">uv</span></code>, <code class="docutils literal notranslate"><span class="pre">pixi</span></code>, etc. in lieu of <code class="docutils literal notranslate"><span class="pre">pip</span></code> above) to enforce a fully reproducable install.</p>
+<blockquote>
+<div><p><strong><em>NOTE:</em></strong> In order to create an environment that is reproducible environment and to isolate the install from dependency versioning conflicts, it is <em>highly</em> recommended to install `striqt`` into a container or virtual environment.</p>
+</div></blockquote>
+<blockquote>
+<div><p><strong><em>NOTE:</em></strong> <code class="docutils literal notranslate"><span class="pre">SoapySDR</span></code> is required to to acquire radio captures, but it is not distributed on <code class="docutils literal notranslate"><span class="pre">pypi</span></code></p>
+</div></blockquote>
+</section>
+</section>
+<section id="development-status">
+<h2>Development status<a class="headerlink" href="#development-status" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">striqt</span></code> is in early beta. The pace of change has slowed</p>
+<ul class="simple">
+<li><p>The API in the base of each module is expected not to change, but internals (<code class="docutils literal notranslate"><span class="pre">.lib</span></code>, etc.) may change without warning</p></li>
+<li><p>Incompatible changes to yaml schemas in <code class="docutils literal notranslate"><span class="pre">striqt.sensor</span></code> and <code class="docutils literal notranslate"><span class="pre">striqt.figure</span></code> (and the CLIs) may still change slightly</p></li>
+<li><p>The data variable, coordinate, and metadata field names in <code class="docutils literal notranslate"><span class="pre">.zarr</span></code> files follow the names in the yaml schemas</p></li>
+</ul>
+</section>
+<section id="documentation">
+<h2>Documentation<a class="headerlink" href="#documentation" title="Link to this heading">¶</a></h2>
+<p>In keeping with the early beta development status of this codebase, documentation is limited.</p>
+<ul class="simple">
+<li><p><a class="reference external" href="https://github.com/usnistgov/striqt/blob/main/doc/reference-sweep.yaml">reference</a> for the <code class="docutils literal notranslate"><span class="pre">yaml</span></code> configuration files that drive <code class="docutils literal notranslate"><span class="pre">edge_sensor</span></code></p></li>
+<li><p>Docstrings in the source code are the most up-to-date API documentation</p></li>
+<li><p>A few examples are located in <a class="reference external" href="https://github.com/usnistgov/striqt/tree/main/tests">tests</a> and <a class="reference external" href="https://github.com/usnistgov/striqt/tree/main/notebooks">notebooks</a>. Some of these may not be up to date.</p></li>
+</ul>
+<!-- 
+### See Also
+* [Validation and calibration with hardware](https://github.com/usnistgov/striqt-tests) -->
+</section>
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+  <div>
+    <h3><a href="../index.html">Table of Contents</a></h3>
+    <ul>
+<li><a class="reference internal" href="#">Introduction</a><ul>
+<li><a class="reference internal" href="#basic-cli-usage">Basic CLI usage</a></li>
+<li><a class="reference internal" href="#python-module-apis">Python module APIs</a><ul>
+<li><a class="reference internal" href="#striqt-analysis"><code class="docutils literal notranslate"><span class="pre">striqt.analysis</span></code></a></li>
+<li><a class="reference internal" href="#striqt-sensor"><code class="docutils literal notranslate"><span class="pre">striqt.sensor</span></code></a></li>
+<li><a class="reference internal" href="#striqt-figures"><code class="docutils literal notranslate"><span class="pre">striqt.figures</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#installation">Installation</a><ul>
+<li><a class="reference internal" href="#option-1-conda-environment">Option 1: Conda Environment</a></li>
+<li><a class="reference internal" href="#option-2-pip-installation">Option 2: pip installation</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#development-status">Development status</a></li>
+<li><a class="reference internal" href="#documentation">Documentation</a></li>
+</ul>
+</li>
+</ul>
+
+  </div>
+  <div>
+    <h4>Previous topic</h4>
+    <p class="topless"><a href="../index.html"
+                          title="previous chapter">Contents</a></p>
+  </div>
+  <div>
+    <h4>Next topic</h4>
+    <p class="topless"><a href="../api_reference.html"
+                          title="next chapter">API Reference</a></p>
+  </div>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="../_sources/guide/01_introduction.md.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="Related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../py-modindex.html" title="Python Module Index"
+             >modules</a></li>
+        <li class="right" >
+          <a href="../api_reference.html" title="API Reference"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="../index.html" title="Contents"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../index.html">striqt</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">Introduction</a></li> 
+      </ul>
+    </div>
+<hr \>
+<section class="footer">
+<br><a target="_blank" href="http://www.nist.gov/public_affairs/privacy.cfm#privpolicy">Privacy Policy</a> | <a target="_blank" href="http://www.nist.gov/public_affairs/privacy.cfm#secnot">Security Notice</a> | <a href="http://www.nist.gov/public_affairs/privacy.cfm#accesstate">Accessibility Statement</a>
+<br><em>United States government work, not subject to copyright in the United States</em>
+</section>
+
+  </body>
+</html>

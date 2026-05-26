@@ -13,7 +13,7 @@
     <script src="_static/doctools.js?v=fd6eb6e6"></script>
     <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="API Reference" href="api_reference.html" />
+    <link rel="next" title="Introduction" href="guide/01_introduction.html" />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Neuton&amp;subset=latin" type="text/css" media="screen" charset="utf-8" />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Nobile:regular,italic,bold,bolditalic&amp;subset=latin" type="text/css" media="screen" charset="utf-8" />
 <!--[if lte IE 6]>
@@ -63,7 +63,7 @@
           <a href="py-modindex.html" title="Python Module Index"
              >modules</a></li>
         <li class="right" >
-          <a href="api_reference.html" title="API Reference"
+          <a href="guide/01_introduction.html" title="Introduction"
              accesskey="N">next</a> |</li>
         <li class="nav-item nav-item-0"><a href="#">striqt</a> &#187;</li>
         <li class="nav-item nav-item-this"><a href="">Contents</a></li> 
@@ -79,6 +79,23 @@
 <h1>Contents<a class="headerlink" href="#contents" title="Link to this heading">¶</a></h1>
 <div class="toctree-wrapper compound">
 <ul>
+<li class="toctree-l1"><a class="reference internal" href="guide/01_introduction.html">Introduction</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="guide/01_introduction.html#basic-cli-usage">Basic CLI usage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="guide/01_introduction.html#python-module-apis">Python module APIs</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="guide/01_introduction.html#striqt-analysis"><code class="docutils literal notranslate"><span class="pre">striqt.analysis</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="guide/01_introduction.html#striqt-sensor"><code class="docutils literal notranslate"><span class="pre">striqt.sensor</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="guide/01_introduction.html#striqt-figures"><code class="docutils literal notranslate"><span class="pre">striqt.figures</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="guide/01_introduction.html#installation">Installation</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="guide/01_introduction.html#option-1-conda-environment">Option 1: Conda Environment</a></li>
+<li class="toctree-l3"><a class="reference internal" href="guide/01_introduction.html#option-2-pip-installation">Option 2: pip installation</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="guide/01_introduction.html#development-status">Development status</a></li>
+<li class="toctree-l2"><a class="reference internal" href="guide/01_introduction.html#documentation">Documentation</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="api_reference.html">API Reference</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="striqt.analysis.html">striqt.analysis</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="striqt.analysis.html#striqt.analysis.AnalysisRegistry"><code class="docutils literal notranslate"><span class="pre">AnalysisRegistry</span></code></a></li>
@@ -240,16 +257,8 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="striqt.sensor.typing.html">striqt.sensor.typing</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="striqt.sensor.typing.html#striqt.sensor.typing.Any"><code class="docutils literal notranslate"><span class="pre">Any</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="striqt.sensor.typing.html#striqt.sensor.typing.Generic"><code class="docutils literal notranslate"><span class="pre">Generic</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="striqt.sensor.typing.html#striqt.sensor.typing.ParamSpec"><code class="docutils literal notranslate"><span class="pre">ParamSpec</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="striqt.sensor.typing.html#striqt.sensor.typing.Peripherals"><code class="docutils literal notranslate"><span class="pre">Peripherals</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="striqt.sensor.typing.html#striqt.sensor.typing.Protocol"><code class="docutils literal notranslate"><span class="pre">Protocol</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="striqt.sensor.typing.html#striqt.sensor.typing.SourceBackend"><code class="docutils literal notranslate"><span class="pre">SourceBackend</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="striqt.sensor.typing.html#striqt.sensor.typing.TypeVar"><code class="docutils literal notranslate"><span class="pre">TypeVar</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="striqt.sensor.typing.html#striqt.sensor.typing.TypedDict"><code class="docutils literal notranslate"><span class="pre">TypedDict()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="striqt.sensor.typing.html#striqt.sensor.typing.abstractmethod"><code class="docutils literal notranslate"><span class="pre">abstractmethod()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="striqt.sensor.typing.html#striqt.sensor.typing.runtime_checkable"><code class="docutils literal notranslate"><span class="pre">runtime_checkable()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="striqt.sensor.typing.html#striqt.sensor.lib.typing.PassThroughWrapper"><code class="docutils literal notranslate"><span class="pre">PassThroughWrapper</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="striqt.sensor.typing.html#striqt.sensor.lib.typing.WarmupSweep"><code class="docutils literal notranslate"><span class="pre">WarmupSweep</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="striqt.sensor.util.html">striqt.sensor.util</a><ul>
@@ -282,8 +291,8 @@
         <div class="sphinxsidebarwrapper">
   <div>
     <h4>Next topic</h4>
-    <p class="topless"><a href="api_reference.html"
-                          title="next chapter">API Reference</a></p>
+    <p class="topless"><a href="guide/01_introduction.html"
+                          title="next chapter">Introduction</a></p>
   </div>
   <div role="note" aria-label="source link">
     <h3>This Page</h3>
@@ -313,7 +322,7 @@
           <a href="py-modindex.html" title="Python Module Index"
              >modules</a></li>
         <li class="right" >
-          <a href="api_reference.html" title="API Reference"
+          <a href="guide/01_introduction.html" title="Introduction"
              >next</a> |</li>
         <li class="nav-item nav-item-0"><a href="#">striqt</a> &#187;</li>
         <li class="nav-item nav-item-this"><a href="">Contents</a></li> 
