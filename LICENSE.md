@@ -17,21 +17,3 @@ OR NOT LOSS WAS SUSTAINED FROM, OR AROSE OUT OF THE RESULTS OF, OR USE OF, THE S
 
 Distributions of NIST software should also include copyright and licensing statements of any third-party software
 that are legally bundled with the code in compliance with the conditions of those licenses.
-
-## Dependency licenses
-Recently available license information for functional dependencies of this source
-code is summarized below. These dependencies are not redistributed here and
-must be installed separately.
-
-|Package|License|
-|-------|-------|
-|coloredlogs 7.x|[MIT](https://github.com/xolox/python-coloredlogs/blob/master/LICENSE.txt)|
-|ipywidgets 7.0|[BSD](https://github.com/jupyter-widgets/ipywidgets/blob/master/LICENSE)|
-|notebook 5.x|[BSD](https://github.com/jupyter/jupyter/blob/master/LICENSE)|
-|numpy 1.10.x|[BSD](https://docs.scipy.org/doc/numpy-1.10.0/license.html)|
-|pandas 0.21|[BSD](https://pandas.pydata.org/pandas-docs/stable/overview.html#license)|
-|pyserial 3.x|[BSD](https://pythonhosted.org/pyserial/appendix.html#license)|
-|python 3.x (and standard libraries)|[PSF/BeOpen.org](https://docs.python.org/3/license.html)|
-|pyvisa 1.8|[MIT](https://github.com/pyvisa/pyvisa/blob/master/LICENSE)|
-|pythonnet|[MIT](https://github.com/pythonnet/pythonnet/blob/master/LICENSE)|
-|sphinx 1.6.x|[BSD,MIT,PSF/Beopen.org](https://github.com/sphinx-doc/sphinx/blob/master/LICENSE)|
