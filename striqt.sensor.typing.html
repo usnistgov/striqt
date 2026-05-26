@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="./">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>striqt.sensor.typing &#8212; striqt</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+    <link rel="stylesheet" type="text/css" href="_static/pyramid.css?v=63f5dc7c" />
+    <link rel="stylesheet" type="text/css" href="_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css?v=8cd3d715" />
+    <script src="_static/documentation_options.js?v=fe7df9b0"></script>
+    <script src="_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="striqt.sensor.util" href="striqt.sensor.util.html" />
+    <link rel="prev" title="striqt.sensor.specs" href="striqt.sensor.specs.html" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Neuton&amp;subset=latin" type="text/css" media="screen" charset="utf-8" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Nobile:regular,italic,bold,bolditalic&amp;subset=latin" type="text/css" media="screen" charset="utf-8" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+  </head><body>
+<header class="nist-header">
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>NIST Pages Template</title>
+  <meta name="viewport" content="width=device-width">
+  <meta name="description" content="striqt">
+  <link rel="canonical" href="./">
+  <link rel="shortcut icon" href="/favicon.ico">
+
+  <!-- Google Analytics -->
+  <!--<script type="text/javascript" id="_fed_an_js_tag" src="http://www.nist.gov/js/federated-analytics.all.min.js?agency=NIST&subagency=mml&pua=UA-66610693-1&yt=true&exts=ppsx,pps,f90,sch,rtf,wrl,txz,m1v,xlsm,msi,xsd,f,tif,eps,mpg,xml,pl,xlt,c"></script> -->
+  <!-- DAP Analytics -->
+  <script type="text/javascript" id="_fed_an_ua_tag" src="https://dap.digitalgov.gov/Universal-Federated-Analytics-Min.js?agency=DOC&subagefncy=NIST&pua=UA-66610693-1&yt=true&exts=ppsx,pps,f90,sch,rtf,wrl,txz,m1v,xlsm,msi,xsd,f,tif,eps,mpg,xml,pl,xlt,c"></script>
+
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href=".//_static/NISTStyle.css">
+  <link rel="stylesheet" href=".//_static/NISTPages.css">
+
+  <h1>
+    <a class="nist-logo" target="_blank" href="http://www.nist.gov/" title="Go to nist.gov">National Institute of Standards and Technology</a>
+  </h1>
+  <div class="nist-links">
+    <a class="nist-links-button" target="_blank" href="http://www.nist.gov">NIST Website</a>
+    <a class="nist-links-button mobile-hide" target="_blank" href="http://www.nist.gov/public_affairs/nandyou.cfm">About NIST</a>
+    <a class="nist-links-button mobile-hide" target="_blank" href="https://github.com/usnistgov">usnistgov on GitHub</a>
+  </div>
+  
+  <!-- HTML5 shim and Respond.js IE8 support of HTML5 elements and media queries -->
+  <!--[if lt IE 9]>
+  <script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
+    <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+  <script src="https://oss.maxcdn.com/libs/respond.js/1.4.2/respond.min.js"></script>
+  <![endif]-->
+</header>
+
+    <div class="related" role="navigation" aria-label="Related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a></li>
+        <li class="right" >
+          <a href="striqt.sensor.util.html" title="striqt.sensor.util"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="striqt.sensor.specs.html" title="striqt.sensor.specs"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">striqt</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="api_reference.html" accesskey="U">API Reference</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">striqt.sensor.typing</a></li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <section id="module-striqt.sensor.typing">
+<span id="striqt-sensor-typing"></span><h1>striqt.sensor.typing<a class="headerlink" href="#module-striqt.sensor.typing" title="Link to this heading">¶</a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.sensor.typing.Any">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.sensor.typing.</span></span><span class="sig-name descname"><span class="pre">Any</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.typing.Any" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Special type indicating an unconstrained type.</p>
+<ul class="simple">
+<li><p>Any is compatible with every type.</p></li>
+<li><p>Any assumed to have all methods.</p></li>
+<li><p>All values assumed to be instances of Any.</p></li>
+</ul>
+<p>Note that all the above statements are true from the point of view of
+static type checkers. At runtime, Any should not be used with instance
+checks.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.sensor.typing.Generic">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.sensor.typing.</span></span><span class="sig-name descname"><span class="pre">Generic</span></span><a class="headerlink" href="#striqt.sensor.typing.Generic" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Abstract base class for generic types.</p>
+<p>On Python 3.12 and newer, generic classes implicitly inherit from
+Generic when they declare a parameter list after the class’s name:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">Mapping</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">]:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="n">KT</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VT</span><span class="p">:</span>
+        <span class="o">...</span>
+    <span class="c1"># Etc.</span>
+</pre></div>
+</div>
+<p>On older versions of Python, however, generic classes have to
+explicitly inherit from Generic.</p>
+<p>After a class has been declared to be generic, it can then be used as
+follows:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">lookup_name</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">](</span><span class="n">mapping</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">],</span> <span class="n">key</span><span class="p">:</span> <span class="n">KT</span><span class="p">,</span> <span class="n">default</span><span class="p">:</span> <span class="n">VT</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VT</span><span class="p">:</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">mapping</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+    <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">default</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.sensor.typing.ParamSpec">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.sensor.typing.</span></span><span class="sig-name descname"><span class="pre">ParamSpec</span></span><a class="headerlink" href="#striqt.sensor.typing.ParamSpec" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Parameter specification variable.</p>
+<p>The preferred way to construct a parameter specification is via the
+dedicated syntax for generic functions, classes, and type aliases,
+where the use of ‘**’ creates a parameter specification:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nb">type</span> <span class="n">IntFunc</span><span class="p">[</span><span class="o">**</span><span class="n">P</span><span class="p">]</span> <span class="o">=</span> <span class="n">Callable</span><span class="p">[</span><span class="n">P</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>The following syntax creates a parameter specification that defaults
+to a callable accepting two positional-only arguments of types int
+and str:</p>
+<blockquote>
+<div><p>type IntFuncDefault[<a href="#id1"><span class="problematic" id="id2">**</span></a>P = [int, str]] = Callable[P, int]</p>
+</div></blockquote>
+<p>For compatibility with Python 3.11 and earlier, ParamSpec objects
+can also be created as follows:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">P</span> <span class="o">=</span> <span class="n">ParamSpec</span><span class="p">(</span><span class="s1">&#39;P&#39;</span><span class="p">)</span>
+<span class="n">DefaultP</span> <span class="o">=</span> <span class="n">ParamSpec</span><span class="p">(</span><span class="s1">&#39;DefaultP&#39;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">])</span>
+</pre></div>
+</div>
+<p>Parameter specification variables exist primarily for the benefit of
+static type checkers.  They are used to forward the parameter types of
+one callable to another callable, a pattern commonly found in
+higher-order functions and decorators.  They are only valid when used
+in <code class="docutils literal notranslate"><span class="pre">Concatenate</span></code>, or as the first argument to <code class="docutils literal notranslate"><span class="pre">Callable</span></code>, or as
+parameters for user-defined Generics. See class Generic for more
+information on generic types.</p>
+<p>An example for annotating a decorator:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">add_logging</span><span class="p">[</span><span class="o">**</span><span class="n">P</span><span class="p">,</span> <span class="n">T</span><span class="p">](</span><span class="n">f</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="n">P</span><span class="p">,</span> <span class="n">T</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">[</span><span class="n">P</span><span class="p">,</span> <span class="n">T</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&#39;&#39;&#39;A type-safe decorator to add logging to a function.&#39;&#39;&#39;</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">inner</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">P</span><span class="o">.</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">P</span><span class="o">.</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">T</span><span class="p">:</span>
+        <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">f</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s1"> was called&#39;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">f</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">inner</span>
+
+<span class="nd">@add_logging</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">add_two</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&#39;&#39;&#39;Add two numbers together.&#39;&#39;&#39;</span>
+    <span class="k">return</span> <span class="n">x</span> <span class="o">+</span> <span class="n">y</span>
+</pre></div>
+</div>
+<p>Parameter specification variables can be introspected. e.g.:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">P</span> <span class="o">=</span> <span class="n">ParamSpec</span><span class="p">(</span><span class="s2">&quot;P&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">P</span><span class="o">.</span><span class="vm">__name__</span>
+<span class="go">&#39;P&#39;</span>
+</pre></div>
+</div>
+<p>Note that only parameter specification variables defined in the global
+scope can be pickled.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="striqt.sensor.typing.ParamSpec.args">
+<span class="sig-name descname"><span class="pre">args</span></span><a class="headerlink" href="#striqt.sensor.typing.ParamSpec.args" title="Link to this definition">¶</a></dt>
+<dd><p>Represents positional arguments.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="striqt.sensor.typing.ParamSpec.evaluate_default">
+<span class="sig-name descname"><span class="pre">evaluate_default</span></span><a class="headerlink" href="#striqt.sensor.typing.ParamSpec.evaluate_default" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.sensor.typing.ParamSpec.has_default">
+<span class="sig-name descname"><span class="pre">has_default</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.typing.ParamSpec.has_default" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="striqt.sensor.typing.ParamSpec.kwargs">
+<span class="sig-name descname"><span class="pre">kwargs</span></span><a class="headerlink" href="#striqt.sensor.typing.ParamSpec.kwargs" title="Link to this definition">¶</a></dt>
+<dd><p>Represents keyword arguments.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.sensor.typing.Peripherals">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.sensor.typing.</span></span><span class="sig-name descname"><span class="pre">Peripherals</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.Sweep" title="striqt.sensor.specs.Sweep"><span class="pre">specs.Sweep</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#striqt.sensor.typing.Any" title="striqt.sensor.typing.Any"><span class="pre">Any</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">_SP</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">_SC</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.typing.Peripherals" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#striqt.sensor.typing.Protocol" title="typing.Protocol"><code class="xref py py-class docutils literal notranslate"><span class="pre">Protocol</span></code></a>[<code class="xref py py-obj docutils literal notranslate"><span class="pre">_SP</span></code>, <code class="xref py py-obj docutils literal notranslate"><span class="pre">_SC</span></code>]</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.sensor.typing.Peripherals.acquire">
+<span class="sig-name descname"><span class="pre">acquire</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">capture</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">_SC</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#striqt.sensor.typing.Any" title="typing.Any"><span class="pre">Any</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#striqt.sensor.typing.Peripherals.acquire" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.sensor.typing.Peripherals.arm">
+<span class="sig-name descname"><span class="pre">arm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">capture</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">_SC</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.typing.Peripherals.arm" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.sensor.typing.Peripherals.close">
+<span class="sig-name descname"><span class="pre">close</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.typing.Peripherals.close" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.sensor.typing.Peripherals.open">
+<span class="sig-name descname"><span class="pre">open</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.typing.Peripherals.open" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.sensor.typing.Peripherals.setup">
+<span class="sig-name descname"><span class="pre">setup</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">captures</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">_SC</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">loops</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">specs.LoopSpec</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.typing.Peripherals.setup" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.sensor.typing.Protocol">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.sensor.typing.</span></span><span class="sig-name descname"><span class="pre">Protocol</span></span><a class="headerlink" href="#striqt.sensor.typing.Protocol" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#striqt.sensor.typing.Generic" title="typing.Generic"><code class="xref py py-class docutils literal notranslate"><span class="pre">Generic</span></code></a></p>
+<p>Base class for protocol classes.</p>
+<p>Protocol classes are defined as:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">Proto</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">meth</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="o">...</span>
+</pre></div>
+</div>
+<p>Such classes are primarily used with static type checkers that recognize
+structural subtyping (static duck-typing).</p>
+<p>For example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">C</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">meth</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">return</span> <span class="mi">0</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">func</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="n">Proto</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">x</span><span class="o">.</span><span class="n">meth</span><span class="p">()</span>
+
+<span class="n">func</span><span class="p">(</span><span class="n">C</span><span class="p">())</span>  <span class="c1"># Passes static type check</span>
+</pre></div>
+</div>
+<p>See PEP 544 for details. Protocol classes decorated with
+&#64;typing.runtime_checkable act as simple-minded runtime protocols that check
+only the presence of given attributes, ignoring their type signatures.
+Protocol classes can be generic, they are defined as:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">GenProto</span><span class="p">[</span><span class="n">T</span><span class="p">](</span><span class="n">Protocol</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">meth</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">T</span><span class="p">:</span>
+        <span class="o">...</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.sensor.typing.SourceBackend">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.sensor.typing.</span></span><span class="sig-name descname"><span class="pre">SourceBackend</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">spec</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.typing.SourceBackend" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#striqt.sensor.typing.Protocol" title="typing.Protocol"><code class="xref py py-class docutils literal notranslate"><span class="pre">Protocol</span></code></a>[<code class="xref py py-obj docutils literal notranslate"><span class="pre">SS</span></code>, <code class="xref py py-obj docutils literal notranslate"><span class="pre">SC</span></code>]</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.sensor.typing.SourceBackend.arm">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">arm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">capture</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">SC</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">SC</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#striqt.sensor.typing.SourceBackend.arm" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.sensor.typing.SourceBackend.close">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">close</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.typing.SourceBackend.close" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.sensor.typing.SourceBackend.get_id">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">get_id</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#striqt.sensor.typing.SourceBackend.get_id" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.sensor.typing.SourceBackend.get_info">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">get_info</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.SourceInfo" title="striqt.sensor.specs.SourceInfo"><span class="pre">specs.SourceInfo</span></a></span></span><a class="headerlink" href="#striqt.sensor.typing.SourceBackend.get_info" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.sensor.typing.SourceBackend.get_resampler">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">get_resampler</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">capture</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">SC</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ResamplerDesign</span></span></span><a class="headerlink" href="#striqt.sensor.typing.SourceBackend.get_resampler" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.sensor.typing.SourceBackend.package_iq">
+<span class="sig-name descname"><span class="pre">package_iq</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">iq</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.AcquiredIQ" title="striqt.sensor.specs.AcquiredIQ"><span class="pre">specs.AcquiredIQ</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">samples</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Array</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_ns</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.AcquiredIQ" title="striqt.sensor.specs.AcquiredIQ"><span class="pre">specs.AcquiredIQ</span></a></span></span><a class="headerlink" href="#striqt.sensor.typing.SourceBackend.package_iq" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.sensor.typing.SourceBackend.prepare_retrigger">
+<span class="sig-name descname"><span class="pre">prepare_retrigger</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.typing.SourceBackend.prepare_retrigger" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.sensor.typing.SourceBackend.read">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">read</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">buffers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">Array</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">offset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">count</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeout_sec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">on_overflow</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">specs.types.OnOverflow</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'except'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#striqt.sensor.typing.SourceBackend.read" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.sensor.typing.SourceBackend.setup">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">setup</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">rx_ports</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#striqt.sensor.typing.SourceBackend.setup" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.sensor.typing.SourceBackend.trigger">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">trigger</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">overlaps</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">(0,</span> <span class="pre">0)</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#striqt.sensor.typing.SourceBackend.trigger" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.sensor.typing.TypeVar">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.sensor.typing.</span></span><span class="sig-name descname"><span class="pre">TypeVar</span></span><a class="headerlink" href="#striqt.sensor.typing.TypeVar" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Type variable.</p>
+<p>The preferred way to construct a type variable is via the dedicated
+syntax for generic functions, classes, and type aliases:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">Sequence</span><span class="p">[</span><span class="n">T</span><span class="p">]:</span>  <span class="c1"># T is a TypeVar</span>
+    <span class="o">...</span>
+</pre></div>
+</div>
+<p>This syntax can also be used to create bound and constrained type
+variables:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># S is a TypeVar bound to str</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">StrSequence</span><span class="p">[</span><span class="n">S</span><span class="p">:</span> <span class="nb">str</span><span class="p">]:</span>
+    <span class="o">...</span>
+
+<span class="c1"># A is a TypeVar constrained to str or bytes</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">StrOrBytesSequence</span><span class="p">[</span><span class="n">A</span><span class="p">:</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bytes</span><span class="p">)]:</span>
+    <span class="o">...</span>
+</pre></div>
+</div>
+<p>Type variables can also have defaults:</p>
+<blockquote>
+<div><dl class="simple">
+<dt>class IntDefault[T = int]:</dt><dd><p>…</p>
+</dd>
+</dl>
+</div></blockquote>
+<p>However, if desired, reusable type variables can also be constructed
+manually, like so:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">T</span> <span class="o">=</span> <span class="n">TypeVar</span><span class="p">(</span><span class="s1">&#39;T&#39;</span><span class="p">)</span>  <span class="c1"># Can be anything</span>
+<span class="n">S</span> <span class="o">=</span> <span class="n">TypeVar</span><span class="p">(</span><span class="s1">&#39;S&#39;</span><span class="p">,</span> <span class="n">bound</span><span class="o">=</span><span class="nb">str</span><span class="p">)</span>  <span class="c1"># Can be any subtype of str</span>
+<span class="n">A</span> <span class="o">=</span> <span class="n">TypeVar</span><span class="p">(</span><span class="s1">&#39;A&#39;</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">bytes</span><span class="p">)</span>  <span class="c1"># Must be exactly str or bytes</span>
+<span class="n">D</span> <span class="o">=</span> <span class="n">TypeVar</span><span class="p">(</span><span class="s1">&#39;D&#39;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="nb">int</span><span class="p">)</span>  <span class="c1"># Defaults to int</span>
+</pre></div>
+</div>
+<p>Type variables exist primarily for the benefit of static type
+checkers.  They serve as the parameters for generic types as well
+as for generic function and type alias definitions.</p>
+<p>The variance of type variables is inferred by type checkers when they
+are created through the type parameter syntax and when
+<code class="docutils literal notranslate"><span class="pre">infer_variance=True</span></code> is passed. Manually created type variables may
+be explicitly marked covariant or contravariant by passing
+<code class="docutils literal notranslate"><span class="pre">covariant=True</span></code> or <code class="docutils literal notranslate"><span class="pre">contravariant=True</span></code>. By default, manually
+created type variables are invariant. See PEP 484 and PEP 695 for more
+details.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="striqt.sensor.typing.TypeVar.evaluate_bound">
+<span class="sig-name descname"><span class="pre">evaluate_bound</span></span><a class="headerlink" href="#striqt.sensor.typing.TypeVar.evaluate_bound" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="striqt.sensor.typing.TypeVar.evaluate_constraints">
+<span class="sig-name descname"><span class="pre">evaluate_constraints</span></span><a class="headerlink" href="#striqt.sensor.typing.TypeVar.evaluate_constraints" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="striqt.sensor.typing.TypeVar.evaluate_default">
+<span class="sig-name descname"><span class="pre">evaluate_default</span></span><a class="headerlink" href="#striqt.sensor.typing.TypeVar.evaluate_default" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.sensor.typing.TypeVar.has_default">
+<span class="sig-name descname"><span class="pre">has_default</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.typing.TypeVar.has_default" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="striqt.sensor.typing.TypedDict">
+<span class="sig-prename descclassname"><span class="pre">striqt.sensor.typing.</span></span><span class="sig-name descname"><span class="pre">TypedDict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">typename</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fields</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">&lt;sentinel&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">total</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.typing.TypedDict" title="Link to this definition">¶</a></dt>
+<dd><p>A simple typed namespace. At runtime it is equivalent to a plain dict.</p>
+<p>TypedDict creates a dictionary type such that a type checker will expect all
+instances to have a certain set of keys, where each key is
+associated with a value of a consistent type. This expectation
+is not checked at runtime.</p>
+<p>Usage:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Point2D</span><span class="p">(</span><span class="n">TypedDict</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">x</span><span class="p">:</span> <span class="nb">int</span>
+<span class="gp">... </span>    <span class="n">y</span><span class="p">:</span> <span class="nb">int</span>
+<span class="gp">... </span>    <span class="n">label</span><span class="p">:</span> <span class="nb">str</span>
+<span class="gp">...</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">a</span><span class="p">:</span> <span class="n">Point2D</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;x&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s1">&#39;y&#39;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span> <span class="s1">&#39;label&#39;</span><span class="p">:</span> <span class="s1">&#39;good&#39;</span><span class="p">}</span>  <span class="c1"># OK</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">b</span><span class="p">:</span> <span class="n">Point2D</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;z&#39;</span><span class="p">:</span> <span class="mi">3</span><span class="p">,</span> <span class="s1">&#39;label&#39;</span><span class="p">:</span> <span class="s1">&#39;bad&#39;</span><span class="p">}</span>           <span class="c1"># Fails type check</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">Point2D</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;first&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="nb">dict</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;first&#39;</span><span class="p">)</span>
+<span class="go">True</span>
+</pre></div>
+</div>
+<p>The type info can be accessed via the Point2D.__annotations__ dict, and
+the Point2D.__required_keys__ and Point2D.__optional_keys__ frozensets.
+TypedDict supports an additional equivalent form:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Point2D</span> <span class="o">=</span> <span class="n">TypedDict</span><span class="p">(</span><span class="s1">&#39;Point2D&#39;</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;x&#39;</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="s1">&#39;y&#39;</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="s1">&#39;label&#39;</span><span class="p">:</span> <span class="nb">str</span><span class="p">})</span>
+</pre></div>
+</div>
+<p>By default, all keys must be present in a TypedDict. It is possible
+to override this by specifying totality:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">Point2D</span><span class="p">(</span><span class="n">TypedDict</span><span class="p">,</span> <span class="n">total</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="n">x</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">y</span><span class="p">:</span> <span class="nb">int</span>
+</pre></div>
+</div>
+<p>This means that a Point2D TypedDict can have any of the keys omitted. A type
+checker is only expected to support a literal False or True as the value of
+the total argument. True is the default, and makes all items defined in the
+class body be required.</p>
+<p>The Required and NotRequired special forms can also be used to mark
+individual keys as being required or not required:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">Point2D</span><span class="p">(</span><span class="n">TypedDict</span><span class="p">):</span>
+    <span class="n">x</span><span class="p">:</span> <span class="nb">int</span>               <span class="c1"># the &quot;x&quot; key must always be present (Required is the default)</span>
+    <span class="n">y</span><span class="p">:</span> <span class="n">NotRequired</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span>  <span class="c1"># the &quot;y&quot; key can be omitted</span>
+</pre></div>
+</div>
+<p>See PEP 655 for more details on Required and NotRequired.</p>
+<p>The ReadOnly special form can be used
+to mark individual keys as immutable for type checkers:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">DatabaseUser</span><span class="p">(</span><span class="n">TypedDict</span><span class="p">):</span>
+    <span class="nb">id</span><span class="p">:</span> <span class="n">ReadOnly</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span>  <span class="c1"># the &quot;id&quot; key must not be modified</span>
+    <span class="n">username</span><span class="p">:</span> <span class="nb">str</span>      <span class="c1"># the &quot;username&quot; key can be changed</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="striqt.sensor.typing.abstractmethod">
+<span class="sig-prename descclassname"><span class="pre">striqt.sensor.typing.</span></span><span class="sig-name descname"><span class="pre">abstractmethod</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">funcobj</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.typing.abstractmethod" title="Link to this definition">¶</a></dt>
+<dd><p>A decorator indicating abstract methods.</p>
+<p>Requires that the metaclass is ABCMeta or derived from it.  A
+class that has a metaclass derived from ABCMeta cannot be
+instantiated unless all of its abstract methods are overridden.
+The abstract methods can be called using any of the normal
+‘super’ call mechanisms.  abstractmethod() may be used to declare
+abstract methods for properties and descriptors.</p>
+<p>Usage:</p>
+<blockquote>
+<div><dl>
+<dt>class C(metaclass=ABCMeta):</dt><dd><p>&#64;abstractmethod
+def my_abstract_method(self, arg1, arg2, argN):</p>
+<blockquote>
+<div><p>…</p>
+</div></blockquote>
+</dd>
+</dl>
+</div></blockquote>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="striqt.sensor.typing.runtime_checkable">
+<span class="sig-prename descclassname"><span class="pre">striqt.sensor.typing.</span></span><span class="sig-name descname"><span class="pre">runtime_checkable</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cls</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.typing.runtime_checkable" title="Link to this definition">¶</a></dt>
+<dd><p>Mark a protocol class as a runtime protocol.</p>
+<p>Such protocol can be used with isinstance() and issubclass().
+Raise TypeError if applied to a non-protocol class.
+This allows a simple-minded structural check very similar to
+one trick ponies in collections.abc such as Iterable.</p>
+<p>For example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nd">@runtime_checkable</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Closable</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span> <span class="o">...</span>
+
+<span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="nb">open</span><span class="p">(</span><span class="s1">&#39;/some/file&#39;</span><span class="p">),</span> <span class="n">Closable</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Warning: this will check only the presence of the required methods,
+not their type signatures!</p>
+</dd></dl>
+
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+  <div>
+    <h3><a href="index.html">Table of Contents</a></h3>
+    <ul>
+<li><a class="reference internal" href="#">striqt.sensor.typing</a><ul>
+<li><a class="reference internal" href="#striqt.sensor.typing.Any"><code class="docutils literal notranslate"><span class="pre">Any</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.typing.Generic"><code class="docutils literal notranslate"><span class="pre">Generic</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.typing.ParamSpec"><code class="docutils literal notranslate"><span class="pre">ParamSpec</span></code></a><ul>
+<li><a class="reference internal" href="#striqt.sensor.typing.ParamSpec.args"><code class="docutils literal notranslate"><span class="pre">ParamSpec.args</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.typing.ParamSpec.evaluate_default"><code class="docutils literal notranslate"><span class="pre">ParamSpec.evaluate_default</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.typing.ParamSpec.has_default"><code class="docutils literal notranslate"><span class="pre">ParamSpec.has_default()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.typing.ParamSpec.kwargs"><code class="docutils literal notranslate"><span class="pre">ParamSpec.kwargs</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#striqt.sensor.typing.Peripherals"><code class="docutils literal notranslate"><span class="pre">Peripherals</span></code></a><ul>
+<li><a class="reference internal" href="#striqt.sensor.typing.Peripherals.acquire"><code class="docutils literal notranslate"><span class="pre">Peripherals.acquire()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.typing.Peripherals.arm"><code class="docutils literal notranslate"><span class="pre">Peripherals.arm()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.typing.Peripherals.close"><code class="docutils literal notranslate"><span class="pre">Peripherals.close()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.typing.Peripherals.open"><code class="docutils literal notranslate"><span class="pre">Peripherals.open()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.typing.Peripherals.setup"><code class="docutils literal notranslate"><span class="pre">Peripherals.setup()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#striqt.sensor.typing.Protocol"><code class="docutils literal notranslate"><span class="pre">Protocol</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.typing.SourceBackend"><code class="docutils literal notranslate"><span class="pre">SourceBackend</span></code></a><ul>
+<li><a class="reference internal" href="#striqt.sensor.typing.SourceBackend.arm"><code class="docutils literal notranslate"><span class="pre">SourceBackend.arm()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.typing.SourceBackend.close"><code class="docutils literal notranslate"><span class="pre">SourceBackend.close()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.typing.SourceBackend.get_id"><code class="docutils literal notranslate"><span class="pre">SourceBackend.get_id()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.typing.SourceBackend.get_info"><code class="docutils literal notranslate"><span class="pre">SourceBackend.get_info()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.typing.SourceBackend.get_resampler"><code class="docutils literal notranslate"><span class="pre">SourceBackend.get_resampler()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.typing.SourceBackend.package_iq"><code class="docutils literal notranslate"><span class="pre">SourceBackend.package_iq()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.typing.SourceBackend.prepare_retrigger"><code class="docutils literal notranslate"><span class="pre">SourceBackend.prepare_retrigger()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.typing.SourceBackend.read"><code class="docutils literal notranslate"><span class="pre">SourceBackend.read()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.typing.SourceBackend.setup"><code class="docutils literal notranslate"><span class="pre">SourceBackend.setup()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.typing.SourceBackend.trigger"><code class="docutils literal notranslate"><span class="pre">SourceBackend.trigger()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#striqt.sensor.typing.TypeVar"><code class="docutils literal notranslate"><span class="pre">TypeVar</span></code></a><ul>
+<li><a class="reference internal" href="#striqt.sensor.typing.TypeVar.evaluate_bound"><code class="docutils literal notranslate"><span class="pre">TypeVar.evaluate_bound</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.typing.TypeVar.evaluate_constraints"><code class="docutils literal notranslate"><span class="pre">TypeVar.evaluate_constraints</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.typing.TypeVar.evaluate_default"><code class="docutils literal notranslate"><span class="pre">TypeVar.evaluate_default</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.typing.TypeVar.has_default"><code class="docutils literal notranslate"><span class="pre">TypeVar.has_default()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#striqt.sensor.typing.TypedDict"><code class="docutils literal notranslate"><span class="pre">TypedDict()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.typing.abstractmethod"><code class="docutils literal notranslate"><span class="pre">abstractmethod()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.typing.runtime_checkable"><code class="docutils literal notranslate"><span class="pre">runtime_checkable()</span></code></a></li>
+</ul>
+</li>
+</ul>
+
+  </div>
+  <div>
+    <h4>Previous topic</h4>
+    <p class="topless"><a href="striqt.sensor.specs.html"
+                          title="previous chapter">striqt.sensor.specs</a></p>
+  </div>
+  <div>
+    <h4>Next topic</h4>
+    <p class="topless"><a href="striqt.sensor.util.html"
+                          title="next chapter">striqt.sensor.util</a></p>
+  </div>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/striqt.sensor.typing.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="Related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a></li>
+        <li class="right" >
+          <a href="striqt.sensor.util.html" title="striqt.sensor.util"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="striqt.sensor.specs.html" title="striqt.sensor.specs"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">striqt</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="api_reference.html" >API Reference</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">striqt.sensor.typing</a></li> 
+      </ul>
+    </div>
+<hr \>
+<section class="footer">
+<br><a target="_blank" href="http://www.nist.gov/public_affairs/privacy.cfm#privpolicy">Privacy Policy</a> | <a target="_blank" href="http://www.nist.gov/public_affairs/privacy.cfm#secnot">Security Notice</a> | <a href="http://www.nist.gov/public_affairs/privacy.cfm#accesstate">Accessibility Statement</a>
+<br><em>United States government work, not subject to copyright in the United States</em>
+</section>
+
+  </body>
+</html>

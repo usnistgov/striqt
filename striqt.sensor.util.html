@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="./">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>striqt.sensor.util &#8212; striqt</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+    <link rel="stylesheet" type="text/css" href="_static/pyramid.css?v=63f5dc7c" />
+    <link rel="stylesheet" type="text/css" href="_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css?v=8cd3d715" />
+    <script src="_static/documentation_options.js?v=fe7df9b0"></script>
+    <script src="_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="striqt.sensor.typing" href="striqt.sensor.typing.html" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Neuton&amp;subset=latin" type="text/css" media="screen" charset="utf-8" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Nobile:regular,italic,bold,bolditalic&amp;subset=latin" type="text/css" media="screen" charset="utf-8" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+  </head><body>
+<header class="nist-header">
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>NIST Pages Template</title>
+  <meta name="viewport" content="width=device-width">
+  <meta name="description" content="striqt">
+  <link rel="canonical" href="./">
+  <link rel="shortcut icon" href="/favicon.ico">
+
+  <!-- Google Analytics -->
+  <!--<script type="text/javascript" id="_fed_an_js_tag" src="http://www.nist.gov/js/federated-analytics.all.min.js?agency=NIST&subagency=mml&pua=UA-66610693-1&yt=true&exts=ppsx,pps,f90,sch,rtf,wrl,txz,m1v,xlsm,msi,xsd,f,tif,eps,mpg,xml,pl,xlt,c"></script> -->
+  <!-- DAP Analytics -->
+  <script type="text/javascript" id="_fed_an_ua_tag" src="https://dap.digitalgov.gov/Universal-Federated-Analytics-Min.js?agency=DOC&subagefncy=NIST&pua=UA-66610693-1&yt=true&exts=ppsx,pps,f90,sch,rtf,wrl,txz,m1v,xlsm,msi,xsd,f,tif,eps,mpg,xml,pl,xlt,c"></script>
+
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href=".//_static/NISTStyle.css">
+  <link rel="stylesheet" href=".//_static/NISTPages.css">
+
+  <h1>
+    <a class="nist-logo" target="_blank" href="http://www.nist.gov/" title="Go to nist.gov">National Institute of Standards and Technology</a>
+  </h1>
+  <div class="nist-links">
+    <a class="nist-links-button" target="_blank" href="http://www.nist.gov">NIST Website</a>
+    <a class="nist-links-button mobile-hide" target="_blank" href="http://www.nist.gov/public_affairs/nandyou.cfm">About NIST</a>
+    <a class="nist-links-button mobile-hide" target="_blank" href="https://github.com/usnistgov">usnistgov on GitHub</a>
+  </div>
+  
+  <!-- HTML5 shim and Respond.js IE8 support of HTML5 elements and media queries -->
+  <!--[if lt IE 9]>
+  <script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
+    <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+  <script src="https://oss.maxcdn.com/libs/respond.js/1.4.2/respond.min.js"></script>
+  <![endif]-->
+</header>
+
+    <div class="related" role="navigation" aria-label="Related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a></li>
+        <li class="right" >
+          <a href="striqt.sensor.typing.html" title="striqt.sensor.typing"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">striqt</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="api_reference.html" accesskey="U">API Reference</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">striqt.sensor.util</a></li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <section id="module-striqt.sensor.util">
+<span id="striqt-sensor-util"></span><h1>striqt.sensor.util<a class="headerlink" href="#module-striqt.sensor.util" title="Link to this heading">¶</a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.sensor.util.DebugOnException">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.sensor.util.</span></span><span class="sig-name descname"><span class="pre">DebugOnException</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">enable</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.util.DebugOnException" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.sensor.util.DebugOnException.run">
+<span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">etype</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exc</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tb</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.util.DebugOnException.run" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.sensor.util.ExceptionStack">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.sensor.util.</span></span><span class="sig-name descname"><span class="pre">ExceptionStack</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">group_label</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cancel_on_except</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.util.ExceptionStack" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Creates a context manager object that accumulates exceptions.</p>
+<p>Any exception raised within a <cite>defer()</cite> context is stashed to be raised later.
+An exception (possibly an ExceptionGroup) is raised when the ExceptionDeferral
+context exits, or on a call to <cite>handle()</cite>.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.sensor.util.ExceptionStack.defer">
+<span class="sig-name descname"><span class="pre">defer</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.util.ExceptionStack.defer" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.sensor.util.ExceptionStack.handle">
+<span class="sig-name descname"><span class="pre">handle</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.util.ExceptionStack.handle" title="Link to this definition">¶</a></dt>
+<dd><p>raise an exception based on any deferred exceptions.</p>
+<p>The raised exception type follows these rules:
+- No exceptions: no exception is raised
+- Exactly one exception: raise that exception
+- More than one exception: raise an ExceptionGroup</p>
+<p>A ThreadInterruptRequest will only be raised if it was the only
+deferred exception. ThreadInterruptRequest is never included in an
+ExceptionGroup.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py exception">
+<dt class="sig sig-object py" id="striqt.sensor.util.ThreadInterruptRequest">
+<span class="property"><span class="k"><span class="pre">exception</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.sensor.util.</span></span><span class="sig-name descname"><span class="pre">ThreadInterruptRequest</span></span><a class="headerlink" href="#striqt.sensor.util.ThreadInterruptRequest" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Exception</span></code></p>
+<p>Raised in a thread to indicate the owning thread requested termination</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="striqt.sensor.util.await_and_ignore">
+<span class="sig-prename descclassname"><span class="pre">striqt.sensor.util.</span></span><span class="sig-name descname"><span class="pre">await_and_ignore</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">futures</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><span class="pre">concurrent.futures.Future</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">except_msg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.util.await_and_ignore" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="striqt.sensor.util.cancel_threads">
+<span class="sig-prename descclassname"><span class="pre">striqt.sensor.util.</span></span><span class="sig-name descname"><span class="pre">cancel_threads</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.util.cancel_threads" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="striqt.sensor.util.log_capture_context">
+<span class="sig-prename descclassname"><span class="pre">striqt.sensor.util.</span></span><span class="sig-name descname"><span class="pre">log_capture_context</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name_suffix</span></span></em>, <em class="sig-param"><span class="positional-only-separator o"><abbr title="Positional-only parameter separator (PEP 570)"><span class="pre">/</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">capture_index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">capture_count</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.util.log_capture_context" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="striqt.sensor.util.log_to_file">
+<span class="sig-prename descclassname"><span class="pre">striqt.sensor.util.</span></span><span class="sig-name descname"><span class="pre">log_to_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">log_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">level_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.util.log_to_file" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="striqt.sensor.util.log_verbosity">
+<span class="sig-prename descclassname"><span class="pre">striqt.sensor.util.</span></span><span class="sig-name descname"><span class="pre">log_verbosity</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.util.log_verbosity" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="striqt.sensor.util.propagate_thread_interrupts">
+<span class="sig-prename descclassname"><span class="pre">striqt.sensor.util.</span></span><span class="sig-name descname"><span class="pre">propagate_thread_interrupts</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.util.propagate_thread_interrupts" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="striqt.sensor.util.retry">
+<span class="sig-prename descclassname"><span class="pre">striqt.sensor.util.</span></span><span class="sig-name descname"><span class="pre">retry</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">excs:</span> <span class="pre">type[BaseException]</span> <span class="pre">|</span> <span class="pre">Iterable[type[BaseException]],</span> <span class="pre">tries:</span> <span class="pre">int,</span> <span class="pre">*,</span> <span class="pre">delay:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">0,</span> <span class="pre">backoff:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">0,</span> <span class="pre">exception_func=&lt;function</span> <span class="pre">&lt;lambda&gt;&gt;,</span> <span class="pre">logger:</span> <span class="pre">logging.Logger</span> <span class="pre">|</span> <span class="pre">logging.LoggerAdapter</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None</span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">PassThroughWrapper</span></span></span><a class="headerlink" href="#striqt.sensor.util.retry" title="Link to this definition">¶</a></dt>
+<dd><p>calls to the decorated function are repeated, suppressing specified exception(s), until a
+maximum number of retries has been attempted.</p>
+<p>If the function raises the exception the specified number of times, the underlying exception is raised.
+Otherwise, return the result of the function call.</p>
+<p class="rubric">Example</p>
+<p>The following retries the telnet connection 5 times on ConnectionRefusedError:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">telnetlib</span>
+
+
+<span class="c1"># Retry a telnet connection 5 times if the telnet library raises ConnectionRefusedError</span>
+<span class="nd">@retry</span><span class="p">(</span><span class="ne">ConnectionRefusedError</span><span class="p">,</span> <span class="n">tries</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">open</span><span class="p">(</span><span class="n">host</span><span class="p">,</span> <span class="n">port</span><span class="p">):</span>
+    <span class="n">t</span> <span class="o">=</span> <span class="n">telnetlib</span><span class="o">.</span><span class="n">Telnet</span><span class="p">()</span>
+    <span class="n">t</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">host</span><span class="p">,</span> <span class="n">port</span><span class="p">,</span> <span class="mi">5</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">t</span>
+</pre></div>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>exception_or_exceptions</strong> – Exception (sub)class (or tuple of exception classes) to watch for</p></li>
+<li><p><strong>tries</strong> – number of times to try before giving up</p></li>
+<li><p><strong>delay</strong> – initial delay between retries in seconds</p></li>
+<li><p><strong>backoff</strong> – backoff to multiply to the delay for each retry</p></li>
+<li><p><strong>exception_func</strong> – function to call on exception before the next retry</p></li>
+<li><p><strong>logger</strong> – if specified, a log info message is emitted on the first retry</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="striqt.sensor.util.share_thread_interrupts">
+<span class="sig-prename descclassname"><span class="pre">striqt.sensor.util.</span></span><span class="sig-name descname"><span class="pre">share_thread_interrupts</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.util.share_thread_interrupts" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="striqt.sensor.util.zip_offsets">
+<span class="sig-prename descclassname"><span class="pre">striqt.sensor.util.</span></span><span class="sig-name descname"><span class="pre">zip_offsets</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">seq</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><span class="pre">_T</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shifts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fill</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="striqt.sensor.typing.html#striqt.sensor.typing.Any" title="striqt.sensor.typing.Any"><span class="pre">Any</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">squeeze</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Generator</span><span class="p"><span class="pre">[</span></span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">_T</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#striqt.sensor.util.zip_offsets" title="Link to this definition">¶</a></dt>
+<dd><p>a generator that yields from <cite>seq</cite> at multiple index shifts.</p>
+<p>Shifts that would yield an invalid index (i.e., before or beyond the end of <cite>seq</cite>) are
+replaced with <cite>fill</cite>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>seq</strong> – iterable of values to shift</p></li>
+<li><p><strong>shifts</strong> – a sequence of integers indicating the index shifts to apply</p></li>
+<li><p><strong>fill</strong> – the value to yield before or after <cite>seq</cite> yields values</p></li>
+</ul>
+</dd>
+<dt class="field-even">Yields<span class="colon">:</span></dt>
+<dd class="field-even"><p>tuples of length <cite>shifts</cite> composed of delayed/advanced values from <cite>seq</cite></p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+  <div>
+    <h3><a href="index.html">Table of Contents</a></h3>
+    <ul>
+<li><a class="reference internal" href="#">striqt.sensor.util</a><ul>
+<li><a class="reference internal" href="#striqt.sensor.util.DebugOnException"><code class="docutils literal notranslate"><span class="pre">DebugOnException</span></code></a><ul>
+<li><a class="reference internal" href="#striqt.sensor.util.DebugOnException.run"><code class="docutils literal notranslate"><span class="pre">DebugOnException.run()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#striqt.sensor.util.ExceptionStack"><code class="docutils literal notranslate"><span class="pre">ExceptionStack</span></code></a><ul>
+<li><a class="reference internal" href="#striqt.sensor.util.ExceptionStack.defer"><code class="docutils literal notranslate"><span class="pre">ExceptionStack.defer()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.util.ExceptionStack.handle"><code class="docutils literal notranslate"><span class="pre">ExceptionStack.handle()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#striqt.sensor.util.ThreadInterruptRequest"><code class="docutils literal notranslate"><span class="pre">ThreadInterruptRequest</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.util.await_and_ignore"><code class="docutils literal notranslate"><span class="pre">await_and_ignore()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.util.cancel_threads"><code class="docutils literal notranslate"><span class="pre">cancel_threads()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.util.log_capture_context"><code class="docutils literal notranslate"><span class="pre">log_capture_context()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.util.log_to_file"><code class="docutils literal notranslate"><span class="pre">log_to_file()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.util.log_verbosity"><code class="docutils literal notranslate"><span class="pre">log_verbosity()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.util.propagate_thread_interrupts"><code class="docutils literal notranslate"><span class="pre">propagate_thread_interrupts()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.util.retry"><code class="docutils literal notranslate"><span class="pre">retry()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.util.share_thread_interrupts"><code class="docutils literal notranslate"><span class="pre">share_thread_interrupts()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.util.zip_offsets"><code class="docutils literal notranslate"><span class="pre">zip_offsets()</span></code></a></li>
+</ul>
+</li>
+</ul>
+
+  </div>
+  <div>
+    <h4>Previous topic</h4>
+    <p class="topless"><a href="striqt.sensor.typing.html"
+                          title="previous chapter">striqt.sensor.typing</a></p>
+  </div>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/striqt.sensor.util.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="Related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a></li>
+        <li class="right" >
+          <a href="striqt.sensor.typing.html" title="striqt.sensor.typing"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">striqt</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="api_reference.html" >API Reference</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">striqt.sensor.util</a></li> 
+      </ul>
+    </div>
+<hr \>
+<section class="footer">
+<br><a target="_blank" href="http://www.nist.gov/public_affairs/privacy.cfm#privpolicy">Privacy Policy</a> | <a target="_blank" href="http://www.nist.gov/public_affairs/privacy.cfm#secnot">Security Notice</a> | <a href="http://www.nist.gov/public_affairs/privacy.cfm#accesstate">Accessibility Statement</a>
+<br><em>United States government work, not subject to copyright in the United States</em>
+</section>
+
+  </body>
+</html>
