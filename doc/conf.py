@@ -13,7 +13,7 @@ from sphinx.domains.python import PythonDomain
 from sphinx.ext import autodoc
 from sphinx.util.inspect import stringify_signature, stringify_annotation
 
-import striqt.sensor as module
+import striqt.sensor as ss
 import sys
 import importlib.util
 
@@ -60,7 +60,7 @@ else:
 copyright = (
     'United States government work, not subject to copyright in the United States'
 )
-version = release = module.__version__
+version = release = ss.__version__
 language = 'en'
 
 # ------------- base sphinx setup -------------------------------
@@ -99,6 +99,12 @@ source_suffix = {
 }
 
 autodoc_mock_imports = []
+
+autodoc_default_options = {
+    'imported-members': True,
+    'members': True,
+    'undoc-members': True, # Ensures instances without docstrings are still evaluated
+}
 
 # The master toctree document.
 master_doc = 'index'
@@ -168,10 +174,14 @@ class PatchedPythonDomain(PythonDomain):
 
 class ClassDocumenter(autodoc.ClassDocumenter):
     def get_object_members(self, want_all: bool):
-        _, members = super().get_object_members(True)
+        # Capture BOTH the success boolean and the members list
+        success, members = super().get_object_members(True)
+        
+        # Filter the members
         members = self.filter_members(members, want_all)
 
-        return members
+        # Return the expected tuple back to Sphinx
+        return success, members
 
 def parse_type_and_meta(hint):
     """
@@ -358,6 +368,7 @@ def simplify_msgspec_signature(app, what, name, obj, options, signature, return_
         except (ValueError, TypeError):
             pass
 
+
 def skip_msgspec_struct_fields(app, what, name, obj, skip, options):
     """
     Forces Sphinx to skip documenting msgspec fields as standalone attributes,
@@ -368,63 +379,181 @@ def skip_msgspec_struct_fields(app, what, name, obj, skip, options):
         cls_name = app.env.temp_data.get('autodoc:class')
 
         if mod_name and cls_name:
-            try:
-                mod = sys.modules.get(mod_name)
-                if not mod:
-                    return skip
+            mod = sys.modules.get(mod_name)
+            if not mod:
+                return skip
 
-                cls = mod
-                for part in cls_name.split('.'):
-                    cls = getattr(cls, part)
+            cls = mod
+            for part in cls_name.split('.'):
+                cls = getattr(cls, part)
 
-                if isinstance(cls, type):
-                    # 1. NEW: Universally skip ClassVar attributes
-                    try:
-                        hints = typing.get_type_hints(cls, include_extras=True)
-                        if name in hints:
-                            hint = hints[name]
-                            # Handle both parameterized (ClassVar[int]) and bare (ClassVar)
-                            if hint is typing.ClassVar or typing.get_origin(hint) is typing.ClassVar:
-                                return True
-                    except Exception:
-                        pass
-
-                    # 2. EXISTING: Skip msgspec.Struct instance fields
-                    if issubclass(cls, msgspec.Struct):
-                        struct_fields = {f.name for f in msgspec.structs.fields(cls)}
-
-                        if name in struct_fields:
+            if isinstance(cls, type):
+                # 1. NEW: Universally skip ClassVar attributes
+                try:
+                    hints = typing.get_type_hints(cls, include_extras=True)
+                    if name in hints:
+                        hint = hints[name]
+                        # Handle both parameterized (ClassVar[int]) and bare (ClassVar)
+                        if hint is typing.ClassVar or typing.get_origin(hint) is typing.ClassVar:
                             return True
+                except Exception:
+                    pass
 
-                if "rx_enable_delay" in name:
-                    print(f"\n--- SPHINX DIAGNOSTIC START ---")
-                    print(mod_name, cls_name)
-                    print(f"Target Name : {name}")
-                    print(f"Target What : {what}")
-                    print(f"Mod : {mod!r}")
-                    print(f"Target Obj  : {type(obj)}")
-                    print(f'What: {what!r}')
+                # 2. EXISTING: Skip msgspec.Struct instance fields
+                if issubclass(cls, msgspec.Struct):
+                    struct_fields = {f.name for f in msgspec.structs.fields(cls)}
+
+                    if name in struct_fields:
+                        return True
+
+
+def skip_external_imports(app, what, name, obj, skip, options):
+    """
+    Forces Sphinx to skip objects imported from outside the current module hierarchy.
+    Bypasses Sphinx sentinels to evaluate the true underlying Python object.
+    """
+    # 1. Do not interfere with class members
+    if app.env.temp_data.get('autodoc:class'):
+        return None
+
+    current_module_name = app.env.temp_data.get('autodoc:module')
+    if not current_module_name:
+        return None
+
+    # 2. Fetch the live module to bypass Sphinx sentinels
+    import sys
+    mod = sys.modules.get(current_module_name)
+    if not mod:
+        return None
+        
+    short_name = name.split('.')[-1]
+    
+    # 3. Extract the REAL object directly from the module
+    real_obj = getattr(mod, short_name, obj)
+
+    if real_obj is getattr(typing, short_name, None):
+        # skip typing objects that sometimes have their
+        # __module__ renamed
+        return True
+
+    # 4. Check the real object's native module
+    obj_module_name = getattr(real_obj, '__module__', None)
+    type_module_name = getattr(type(real_obj), '__module__', None)
+    
+    # # If it genuinely originated from outside our current module tree, nuke it
+    # if obj_module_name and not obj_module_name.startswith(current_module_name):
+    #     return True
+
+    # Typing module objects are weird; catch them by their origin or their type
+    if obj_module_name == 'typing' or type_module_name == 'typing':
+        return True
+
+    # Absolute last resort for uncooperative typing singletons
+    if short_name in {"Union", "Optional", "Any", "Literal", "Annotated", "ClassVar"}:
+        return True
+
+    return None
+
+
+def list_sensor_bindings_in_module(app, what, name, obj, options, lines):
+    """
+    Dynamically injects a list of SensorBinding instances into the module's docstring,
+    recursively unpacking their dataclass/struct fields and cross-referencing types.
+    """
+    if what == "module":
+        try:
+            mod = sys.modules.get(name)
+            if not mod:
+                return
+            
+            bindings = {}
+            for attr_name, attr_val in vars(mod).items():
+                if isinstance(attr_val, ss.lib.bindings.SensorBinding) and not isinstance(attr_val, type):
+                    bindings[attr_name] = attr_val
                     
-                    cls = app.env.temp_data.get('autodoc:class')
-                    print(f"Temp Class  : {cls!r}")
-                    # print(f"cls fields: ", repr(cls))
-                    if cls:
-                        is_struct = isinstance(cls, type) and issubclass(cls, msgspec.Struct)
-                        print(f"Is Struct?  : {is_struct}")
-                    else:
-                        print(f"Is Struct?  : N/A (cls is None)")
+            if bindings:
+                if lines and lines[-1] != "":
+                    lines.append("")
+                
+                lines.append("**Available Sensor Bindings:**")
+                lines.append("")
+                
+                def _unpack_fields(target_obj, indent="  "):
+                    try:
+                        if hasattr(target_obj, '__dataclass_fields__'):
+                            fields = {f: getattr(target_obj, f) for f in target_obj.__dataclass_fields__}
+                        elif hasattr(msgspec, 'Struct') and isinstance(target_obj, msgspec.Struct):
+                            fields = {f.name: getattr(target_obj, f.name) for f in msgspec.structs.fields(target_obj)}
+                        else:
+                            fields = vars(target_obj)
+                    except Exception:
+                        return
+                        
+                    for f_name, f_val in fields.items():
+                        if f_name.startswith('_'):
+                            continue
+                            
+                        # 2. If it's a class reference, create a Sphinx cross-reference link!
+                        if isinstance(f_val, type):
+                            # Build the full module path so Sphinx knows exactly where to look
+                            full_path = f"{f_val.__module__}.{f_val.__name__}"
 
-                    print(f"Current Skip: {skip}")
-                    print(f"--- SPHINX DIAGNOSTIC END ---\n")
+                            # The tilde (~) tells Sphinx to link the full path but only render the short name
+                            lines.append(f"{indent}* **{f_name}**: :class:`~{full_path}`")
 
-            except Exception:
-                raise
+                        # 3. If it's a nested dataclass or struct, RECURSE!
+                        elif hasattr(f_val, '__dataclass_fields__') or (hasattr(msgspec, 'Struct') and isinstance(f_val, msgspec.Struct)):
+                            lines.append(f"{indent}* **{f_name}**:")
+                            lines.append("") 
+                            _unpack_fields(f_val, indent + "  ")
+                            
+                        # 4. Otherwise, print the standard value
+                        else:
+                            lines.append(f"{indent}* **{f_name}**: ``{repr(f_val)}``")
+                    
+                    lines.append("") 
+                
+                for b_name, b_val in sorted(bindings.items()):
+                    lines.append(f"* **{b_name}**")
+                    lines.append("")
+                    _unpack_fields(b_val, indent="  ")
+                    
+        except Exception:
+            pass
 
-    return skip
+
+def skip_inherited_methods(app, what, name, obj, skip, options):
+    """
+    Forces Sphinx to skip methods on specific subclasses if those methods 
+    are simply inherited from the parent and not overridden.
+    """
+    if what == 'class':
+        if name.startswith('_') or not hasattr(obj, '__qualname__') or not hasattr(obj, '__module__'):
+            return
+        full_name = obj.__module__ + '.' + obj.__qualname__.rsplit('.')[0]
+        parts = full_name.split('.')
+        cls = sys.modules.get(parts[0])
+        for part in parts[1:]:
+            cls = getattr(cls, part)
+
+        if not isinstance(cls, type):
+            pass
+        elif not issubclass(cls, ss.lib.typing.SourceBackend):
+            pass
+        elif cls is ss.lib.typing.SourceBackend:
+            pass
+        elif hasattr(ss.lib.typing.SourceBackend, name):
+            return True
+               
+    return None
 
 def setup(app):
     app.add_domain(PatchedPythonDomain, override=True)
     app.add_autodocumenter(ClassDocumenter, override=True)
+    app.connect('autodoc-process-docstring', list_sensor_bindings_in_module)    
     app.connect('autodoc-process-docstring', extract_msgspec_meta)
     app.connect('autodoc-process-signature', simplify_msgspec_signature)
+    app.connect('autodoc-skip-member', skip_inherited_methods)
     app.connect('autodoc-skip-member', skip_msgspec_struct_fields)
+    app.connect('autodoc-skip-member', skip_external_imports)
+

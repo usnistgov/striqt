@@ -331,6 +331,7 @@ def bind_manual_yfactor_calibration(
     peripherals_cls = _calibration_peripherals_cls(
         sensor.peripherals, ManualYFactorPeripheral
     )
+    peripherals_cls.__name__ = ManualYFactorPeripheral.__name__
 
     cal_sensor = bindings.Sensor(
         source=sensor.source,

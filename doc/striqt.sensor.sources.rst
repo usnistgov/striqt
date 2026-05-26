@@ -1,7 +1,7 @@
-striqt.sensor.bindings
+striqt.sensor.sources
 ==========================
 
-.. automodule:: striqt.sensor.bindings
+.. automodule:: striqt.sensor.sources
    :members:
    :imported-members:
    :show-inheritance:

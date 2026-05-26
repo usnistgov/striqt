@@ -1,7 +1,7 @@
-striqt.sensor.bindings
+striqt.sensor.sinks
 ==========================
 
-.. automodule:: striqt.sensor.bindings
+.. automodule:: striqt.sensor.sinks
    :members:
    :imported-members:
    :show-inheritance:

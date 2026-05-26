@@ -6,7 +6,7 @@ peripherals and expanded data fields elsewhere.
 
 from . import specs
 from .lib import sources, peripherals, sinks
-from .lib.bindings import sensor, bind_sensor
+from .lib.bindings import sensor, bind_sensor, SensorBinding
 from .specs import Schema
 from .lib.calibration import bind_manual_yfactor_calibration
 
@@ -27,6 +27,7 @@ warmup = bind_sensor(
 )
 
 
+#: the .mat file source
 mat_file = bind_sensor(
     'mat_file',
     sensor(source=sources.MATSource),
@@ -154,7 +155,7 @@ air7201b = bind_sensor(
 
 air7201b_calibration = bind_manual_yfactor_calibration('air7201b_calibration', air7201b)
 
-air8201b = bind_sensor(
+air8201b: SensorBinding = bind_sensor(
     'air8201b',
     sensor(source=sources.deepwave.Airstack1Source),
     Schema(
@@ -168,6 +169,3 @@ air8201b = bind_sensor(
 
 
 air8201b_calibration = bind_manual_yfactor_calibration('air8201b_calibration', air8201b)
-
-
-del peripherals, sinks, sources, specs

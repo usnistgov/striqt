@@ -1,7 +1,8 @@
-striqt.sensor.bindings
+striqt.sensor.typing
 ==========================
 
-.. automodule:: striqt.sensor.bindings
+.. automodule:: striqt.sensor.typing
    :members:
    :imported-members:
    :show-inheritance:
+   :undoc-members:
