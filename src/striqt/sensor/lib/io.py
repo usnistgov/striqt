@@ -3,6 +3,7 @@
 from __future__ import annotations as __
 
 import sys
+import msgspec
 from pathlib import Path
 from typing import Any, Optional, overload, TYPE_CHECKING
 
@@ -52,7 +53,7 @@ def read_yaml_spec(
     output_path: Optional[str] = None,
     store_backend: Optional[str] = None,
 ) -> specs.Sweep:
-    """build a Sweep specification object from the specified yaml file.
+    """Build a Sweep specification object from the specified yaml file.
 
     Args:
         path: path to the yaml file
@@ -60,7 +61,7 @@ def read_yaml_spec(
         store_backend: optional override for the specification's output store backend
 
     Returns:
-        an instance of structs.SweepSpec (or subclass)
+        an instance of specs.Sweep
     """
 
     from .bindings import get_tagged_sweep_type
@@ -85,6 +86,48 @@ def read_yaml_spec(
         _import_extensions_from_spec(ext, root_dir=Path(path).parent)
 
     spec = sa.specs.helpers.convert_dict(tree, type=get_tagged_sweep_type())
+
+    sink = spec.sink
+    if store_backend is not None:
+        sink = sink.replace(store=store_backend)
+
+    replace: dict[str, Any] = dict(sink=sink)
+    if output_path is not None:
+        replace['path'] = output_path
+
+    return spec.replace(**replace)
+
+
+def read_json_spec(
+    path: str | Path,
+    *,
+    type:type[specs.Sweep]|None=None,
+    output_path: Optional[str] = None,
+    store_backend: Optional[str] = None,
+) -> specs.Sweep:
+    """Build a specs.Sweep specification object from a json file at the given path.
+    
+    This supports the same specifications as a yaml file, but without !include
+    directives.
+
+    Args:
+        path: path to the yaml file
+        output_path: optional override for the specification's output path
+        store_backend: optional override for the specification's output store backend
+
+    Returns:
+        an instance of specs.Sweep
+    """
+    with open(path, 'rb') as buf:
+        s = buf.read()
+
+    if type is None:
+        from .bindings import get_tagged_sweep_type
+        sweep_cls = get_tagged_sweep_type()
+    else:
+        sweep_cls = type
+
+    spec = msgspec.json.decode(s, type=sweep_cls, dec_hook=specs.helpers._dec_hook)
 
     sink = spec.sink
     if store_backend is not None:

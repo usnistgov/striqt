@@ -1,3 +1,6 @@
+[![License](https://img.shields.io/badge/license-NIST-brightgreen)](https://github.com/usnistgov/striqt/blob/master/LICENSE.md)
+[![Documentation](https://img.shields.io/badge/Docs-purple)](https://pages.nist.gov/striqt/)
+
 `striqt` is a set of open-source python packages for batched real-time signal analysis on CPU or GPU, and rapid prototyping of bespoke radio environment sensors.
 
 ### Basic CLI usage

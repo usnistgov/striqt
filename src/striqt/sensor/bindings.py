@@ -27,7 +27,6 @@ warmup = bind_sensor(
 )
 
 
-#: the .mat file source
 mat_file = bind_sensor(
     'mat_file',
     sensor(source=sources.MATSource),
