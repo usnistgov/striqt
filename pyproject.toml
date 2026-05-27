@@ -16,17 +16,13 @@ dependencies = [
     "scipy>=1.13",
     "xarray>=2024.3",
     "zarr>=2.18,<4",
-
     # schemas for the yaml specs and validation
     "msgspec>=0.19.0",
-
     # for built-in debugging
     "ipython>=8.18.1",
-
     # platform introspection tooling
     "platformdirs>=4.2.0",
     "psutil>=7.0.0",
-
     # compatibility shims for older python that might be removed
     # in the future
     "eval_type_backport",
@@ -55,6 +51,9 @@ gpu = [
 test = [
     "pytest",
     "nptdms",
+]
+kitcat = [
+     "kitcat >= 1.3.0",
 ]
 
 # this will still require external SoapySDR
