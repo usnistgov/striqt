@@ -205,7 +205,9 @@ def decode_from_yaml_file(
         raise TypeError(f'unsupported type {repr(type)}')
 
 
-def decode_from_json_file(path: str | Path, *, type: type[specs.SpecBase] | type[dict] = dict):
+def decode_from_json_file(
+    path: str | Path, *, type: type[specs.SpecBase] | type[dict] = dict
+):
     with open(path, 'rb') as buf:
         s = buf.read()
     return msgspec.json.decode(s, type=type, dec_hook=specs.helpers._dec_hook)

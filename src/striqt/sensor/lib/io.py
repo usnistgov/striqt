@@ -103,12 +103,12 @@ def read_yaml_spec(
 def read_json_spec(
     path: str | Path,
     *,
-    type:type[specs.Sweep]|None=None,
+    type: type[specs.Sweep] | None = None,
     output_path: Optional[str] = None,
     store_backend: Optional[str] = None,
 ) -> specs.Sweep:
     """Build a specs.Sweep specification object from a json file at the given path.
-    
+
     This supports the same specifications as a yaml file, but without !include
     directives.
 
@@ -125,6 +125,7 @@ def read_json_spec(
 
     if type is None:
         from .bindings import get_tagged_sweep_type
+
         sweep_cls = get_tagged_sweep_type()
     else:
         sweep_cls = type
