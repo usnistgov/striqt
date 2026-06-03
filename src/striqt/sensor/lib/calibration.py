@@ -196,14 +196,14 @@ class YFactorSink(sinks.SinkBase):
 
         path = self._get_path()
 
+        io.save_calibration(path, corrections)
+        print(f'saved to {str(path)!r}')
         for port, _ in corrections.groupby('port', squeeze=False):
             print(f'{30 * "▀"} Port {port} at max gain {30 * "▀"}')
             summary = summarize_calibration(corrections, port=port)
             with pd.option_context('display.max_rows', None, 'display.precision', 2):
                 print(summary.sort_index(axis=1).sort_index(axis=0))
 
-        io.save_calibration(path, corrections)
-        print(f'saved to {str(path)!r}')
 
 
 class ManualYFactorPeripheral(
