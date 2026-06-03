@@ -35,7 +35,7 @@ def adjust_port(spec, port):
     type=click.IntRange(min=0),
     help='limit the acquisition the specified input port index',
 )
-def run(*, path, debug, verbose, port, **kws):
+def run(*, path, debug, skip_confirm, verbose, port, **kws):
     import striqt.sensor as ss
     import striqt.analysis as sa
 
