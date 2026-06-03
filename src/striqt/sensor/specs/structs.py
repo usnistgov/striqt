@@ -295,6 +295,19 @@ class CaptureRemap(SpecBase, frozen=True, kw_only=True):
     required: bool = True
     default: Any = msgspec.UNSET
 
+    def __post_init__(self):
+        if isinstance(self.key, str):
+            return
+
+        # convert any stringified json array keys into tuples 
+        lookup = {}
+        for k,v in dict(self.lookup.items()):
+            if isinstance(k, str):
+                msgspec.json.decode(k, type=tuple)
+            lookup[k] = v
+        lookup = sa.specs.helpers.freeze(lookup)
+        msgspec.structs.force_setattr(self, 'lookup', lookup)
+
 
 _CaptureMapScalarType = Union[float, int, str, bool, None]
 _AdjustSourceCapturesMap = dict[str, Union[CaptureRemap, _CaptureMapScalarType]]

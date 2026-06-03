@@ -42,7 +42,7 @@ def run(path):
 
     out_path = Path(path).with_suffix('.json')
     spec = ss.read_yaml_spec(path)
-    s = msgspec.json.encode(spec, enc_hook=sa.specs.helpers._enc_hook)
+    s = msgspec.json.encode(spec, enc_hook=sa.specs.helpers._enc_hook_json)
     d = json.loads(s)
 
     with open(out_path, 'w') as stream:
