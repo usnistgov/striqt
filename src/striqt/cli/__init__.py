@@ -22,7 +22,7 @@ def click_sensor_sweep(description: typing.Optional[str] = None):
 
     click_decorators = (
         click.command(description),
-        click.argument('yaml_path', type=click.Path(exists=True, dir_okay=False)),
+        click.argument('path', type=click.Path(exists=True, dir_okay=False)),
         click.option(
             '--output-path/',
             '-o',

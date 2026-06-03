@@ -52,6 +52,7 @@ def open_store(
 def read_yaml_spec(
     path: str | Path,
     *,
+    type: type[specs.Sweep] | None = None,
     output_path: Optional[str] = None,
     store_backend: Optional[str] = None,
 ) -> specs.Sweep:
@@ -60,44 +61,21 @@ def read_yaml_spec(
     Args:
         path: path to the yaml file
         output_path: optional override for the specification's output path
+        type: the type of sweep specification to load, or None to use specs.Sweep
         store_backend: optional override for the specification's output store backend
 
     Returns:
         an instance of specs.Sweep
     """
 
-    from .bindings import get_tagged_sweep_type
-
     tree = sa.lib.io.decode_from_yaml_file(path)
-
-    if not isinstance(tree, dict):
-        raise TypeError('yaml file does not specify a dict structure')
-
-    mock_source = tree.get('mock_source', None)
-    if mock_source is not None:
-        assert 'sensor_binding' in tree, TypeError('missing "sensor_binding"')
-        from .bindings import get_binding
-
-        mock_name = get_binding(tree['sensor_binding'], mock_source).sweep_spec.__name__
-        tree['sensor_binding'] = mock_name
-
-    if 'extensions' in tree:
-        # import now, so that sensor_binding keys can use definitions
-        # in extension modules
-        ext = specs.Extension.from_dict(tree['extensions'])
-        _import_extensions_from_spec(ext, root_dir=Path(path).parent)
-
-    spec = sa.specs.helpers.convert_dict(tree, type=get_tagged_sweep_type())
-
-    sink = spec.sink
-    if store_backend is not None:
-        sink = sink.replace(store=store_backend)
-
-    replace: dict[str, Any] = dict(sink=sink)
-    if output_path is not None:
-        replace['path'] = output_path
-
-    return spec.replace(**replace)
+    return _convert_dict_spec(
+        tree,
+        Path(path).resolve().parent,
+        type=type,
+        output_path=output_path,
+        store_backend=store_backend,
+    )
 
 
 def read_json_spec(
@@ -114,6 +92,7 @@ def read_json_spec(
 
     Args:
         path: path to the yaml file
+        type: the type of sweep specification to load, or None to use specs.Sweep
         output_path: optional override for the specification's output path
         store_backend: optional override for the specification's output store backend
 
@@ -121,7 +100,38 @@ def read_json_spec(
         an instance of specs.Sweep
     """
     with open(path, 'rb') as buf:
-        s = buf.read()
+        tree = msgspec.json.decode(buf.read(), type=dict)
+
+    return _convert_dict_spec(
+        tree,
+        Path(path).resolve().parent,
+        type=type,
+        output_path=output_path,
+        store_backend=store_backend,
+    )
+
+
+def _convert_dict_spec(
+    tree: dict,
+    extension_root: str | Path,
+    *,
+    type: type[specs.Sweep] | None = None,
+    output_path: Optional[str] = None,
+    store_backend: Optional[str] = None,
+) -> specs.Sweep:
+    mock_source = tree.get('mock_source', None)
+    if mock_source is not None:
+        assert 'sensor_binding' in tree, TypeError('missing "sensor_binding"')
+        from .bindings import get_binding
+
+        type = get_binding(tree['sensor_binding'], mock_source).sweep_spec
+        tree['sensor_binding'] = type.__name__
+
+    if 'extensions' in tree:
+        # import now, so that sensor_binding keys can use definitions
+        # in extension modules
+        ext = specs.Extension.from_dict(tree['extensions'])
+        _import_extensions_from_spec(ext, root_dir=extension_root)
 
     if type is None:
         from .bindings import get_tagged_sweep_type
@@ -130,7 +140,7 @@ def read_json_spec(
     else:
         sweep_cls = type
 
-    spec = msgspec.json.decode(s, type=sweep_cls, dec_hook=specs.helpers._dec_hook)
+    spec = sa.specs.helpers.convert_dict(tree, type=sweep_cls)
 
     sink = spec.sink
     if store_backend is not None:

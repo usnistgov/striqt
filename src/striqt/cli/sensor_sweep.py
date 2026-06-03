@@ -35,7 +35,7 @@ def adjust_port(spec, port):
     type=click.IntRange(min=0),
     help='limit the acquisition the specified input port index',
 )
-def run(*, yaml_path, debug, skip_confirm, verbose, port, **kws):
+def run(*, path, debug, verbose, port, **kws):
     import striqt.sensor as ss
     import striqt.analysis as sa
 
@@ -70,12 +70,17 @@ def run(*, yaml_path, debug, skip_confirm, verbose, port, **kws):
     sys.excepthook = except_handler.run
 
     ss.util.log_verbosity(verbose)
-    spec = ss.read_yaml_spec(yaml_path, output_path=kws['output_path'])
+    if path.endswith('yaml'):
+        spec = ss.read_yaml_spec(path, output_path=kws['output_path'])
+    elif path.endswith('json'):
+        spec = ss.read_json_spec(path, output_path=kws['output_path'])
+    else:
+        raise click.ClickException('expected file to have .json or .yaml suffix')
 
     if port is not None:
         spec = adjust_port(spec, port)
 
-    ctx = ss.open_resources(spec, yaml_path, on_source_opened=confirm_labels)
+    ctx = ss.open_resources(spec, path, on_source_opened=confirm_labels)
     with ctx as resources:
         sweep = ss.iterate_sweep(resources, yield_values=False, always_yield=True)
         for _ in sweep:
