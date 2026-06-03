@@ -302,13 +302,8 @@ class CaptureRemap(SpecBase, frozen=True, kw_only=True):
             return
 
         # convert any stringified json array keys into tuples
-<<<<<<< HEAD
-        lookup = {}
-        for k, v in dict(self.lookup).items():
-=======
         lookup = dict(self.lookup)
         for k in self.lookup.keys():
->>>>>>> 1dca181ece3ed8c0b290176d32f533f485eb9b64
             if not isinstance(k, tuple):
                 new_key = msgspec.json.decode(k, type=tuple)
                 lookup[new_key] = lookup.pop(k)
