@@ -382,11 +382,7 @@ class ControllerBase(Generic[SS, SC, PS, PC]):
 
     @property
     def armed_capture(self) -> SC:
-        """Return the specification of the currently armed capture.
-
-        If the truth of realized evaluates as False, only the requested value
-        of backend_sample_rate is returned in the given radio capture.
-        """
+        """return the specification of the currently armed capture"""
 
         if self._capture is None:
             raise AttributeError('no capture has been armed')
@@ -427,9 +423,7 @@ class RawController(ControllerBase[SS, SC, PS, PC]):
         try:
             if spec.array_backend == 'cupy':
                 sw.arrays.configure_cupy()
-
             util.propagate_thread_interrupts()
-
             self.backend.setup(rx_ports=rx_ports)
             lookup._set_ready(spec, True)
         except:
