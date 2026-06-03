@@ -298,19 +298,18 @@ class CaptureRemap(SpecBase, frozen=True, kw_only=True):
     def __post_init__(self):
         super().__post_init__()
         if not isinstance(self.key, tuple) or len(self.key) == 1:
+            super().__post_init__()
             return
-        
 
-        # convert any stringified json array keys into tuples 
-        lookup = {}
-        for k,v in dict(self.lookup).items():
+        # convert any stringified json array keys into tuples
+        lookup = dict(self.lookup)
+        for k in self.lookup.keys():
             if not isinstance(k, tuple):
-                print(self, repr(k))
-                msgspec.json.decode(k, type=tuple)
-            lookup[k] = v
+                new_key = msgspec.json.decode(k, type=tuple)
+                lookup[new_key] = lookup.pop(k)
         lookup = sa.specs.helpers.freeze(lookup)
-        print('lookup: ', lookup)
         msgspec.structs.force_setattr(self, 'lookup', lookup)
+        super().__post_init__()
 
 
 _CaptureMapScalarType = Union[float, int, str, bool, None]

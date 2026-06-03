@@ -145,7 +145,6 @@ def read_json_spec(
 
     spec = sa.specs.helpers.convert_dict(tree, type=get_tagged_sweep_type())
 
-
     sink = spec.sink
     if store_backend is not None:
         sink = sink.replace(store=store_backend)
