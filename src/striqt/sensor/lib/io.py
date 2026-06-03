@@ -70,7 +70,7 @@ def read_yaml_spec(
     tree = sa.lib.io.decode_from_yaml_file(path)
     return _convert_dict_spec(
         tree,
-        Path(path).parent,
+        Path(path).resolve().parent,
         type=type,
         output_path=output_path,
         store_backend=store_backend,
@@ -103,7 +103,7 @@ def read_json_spec(
 
     return _convert_dict_spec(
         tree,
-        Path(path).parent,
+        Path(path).resolve().parent,
         type=type,
         output_path=output_path,
         store_backend=store_backend,
@@ -123,8 +123,8 @@ def _convert_dict_spec(
         assert 'sensor_binding' in tree, TypeError('missing "sensor_binding"')
         from .bindings import get_binding
 
-        mock_name = get_binding(tree['sensor_binding'], mock_source).sweep_spec.__name__
-        tree['sensor_binding'] = mock_name
+        type = get_binding(tree['sensor_binding'], mock_source).sweep_spec
+        tree['sensor_binding'] = type.__name__
 
     if 'extensions' in tree:
         # import now, so that sensor_binding keys can use definitions
