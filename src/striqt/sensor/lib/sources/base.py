@@ -361,10 +361,13 @@ class SourceBase(Source[SS, SC, PS, PC]):
             iq = self._package_acquisition(samples, time_ns, alias_func)
 
         else:
+            info = self._prev_iq.info
+            if hasattr(info, 'start_time'):
+                info = info.replace(start_time=None)
             iq = dataclasses.replace(
                 self._prev_iq,
                 capture=self.capture_spec,
-                info=self._prev_iq.info.replace(start_time=None),
+                info=info,
             )
 
         if self._reuse_iq:
