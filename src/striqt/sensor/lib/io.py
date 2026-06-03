@@ -12,6 +12,8 @@ import striqt.analysis as sa
 from .. import specs
 from . import util
 
+import msgspec
+
 if TYPE_CHECKING:
     from .typing import ZarrStore
 
