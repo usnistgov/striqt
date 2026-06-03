@@ -205,7 +205,6 @@ class YFactorSink(sinks.SinkBase):
                 print(summary.sort_index(axis=1).sort_index(axis=0))
 
 
-
 class ManualYFactorPeripheral(
     peripherals.CalibrationPeripheralsBase[Any, Any, specs.ManualYFactorPeripheral]
 ):

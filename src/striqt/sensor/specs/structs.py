@@ -299,11 +299,10 @@ class CaptureRemap(SpecBase, frozen=True, kw_only=True):
         super().__post_init__()
         if not isinstance(self.key, tuple) or len(self.key) == 1:
             return
-        
 
-        # convert any stringified json array keys into tuples 
+        # convert any stringified json array keys into tuples
         lookup = {}
-        for k,v in dict(self.lookup).items():
+        for k, v in dict(self.lookup).items():
             if not isinstance(k, tuple):
                 print(self, repr(k))
                 msgspec.json.decode(k, type=tuple)
