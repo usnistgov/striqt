@@ -40,7 +40,7 @@ def summarize_calibration(corrections: 'xr.Dataset', **sel) -> 'pd.DataFrame':
         ),
     }
 
-    return pd.DataFrame(summaries, index=summaries['noise_figure'].index)
+    return pd.DataFrame(summaries, index=summaries['NF (dB)'].index)
 
 
 @sa.util.lru_cache()
