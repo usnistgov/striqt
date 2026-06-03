@@ -118,13 +118,6 @@ def _convert_dict_spec(
     output_path: Optional[str] = None,
     store_backend: Optional[str] = None,
 ) -> specs.Sweep:
-    if type is None:
-        from .bindings import get_tagged_sweep_type
-
-        sweep_cls = get_tagged_sweep_type()
-    else:
-        sweep_cls = type
-
     mock_source = tree.get('mock_source', None)
     if mock_source is not None:
         assert 'sensor_binding' in tree, TypeError('missing "sensor_binding"')
@@ -138,6 +131,13 @@ def _convert_dict_spec(
         # in extension modules
         ext = specs.Extension.from_dict(tree['extensions'])
         _import_extensions_from_spec(ext, root_dir=extension_root)
+
+    if type is None:
+        from .bindings import get_tagged_sweep_type
+
+        sweep_cls = get_tagged_sweep_type()
+    else:
+        sweep_cls = type
 
     spec = sa.specs.helpers.convert_dict(tree, type=sweep_cls)
 
