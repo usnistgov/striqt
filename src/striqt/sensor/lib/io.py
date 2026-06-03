@@ -112,7 +112,7 @@ def read_json_spec(
 
 def _convert_dict_spec(
     tree: dict,
-    extension_path: str | Path,
+    extension_root: str | Path,
     *,
     type: type[specs.Sweep] | None = None,
     output_path: Optional[str] = None,
@@ -137,7 +137,7 @@ def _convert_dict_spec(
         # import now, so that sensor_binding keys can use definitions
         # in extension modules
         ext = specs.Extension.from_dict(tree['extensions'])
-        _import_extensions_from_spec(ext, root_dir=extension_path)
+        _import_extensions_from_spec(ext, root_dir=extension_root)
 
     spec = sa.specs.helpers.convert_dict(tree, type=sweep_cls)
 
