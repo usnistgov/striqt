@@ -72,7 +72,7 @@ class SpecBase(
         for name, depth in helpers.inspect_freeze_depths(type(self)).items():
             v = getattr(self, name)
             if isinstance(v, (tuple, dict, list)):
-                frozen = helpers.freeze(v, depth+1)
+                frozen = helpers.freeze(v, depth + 1)
                 msgspec.structs.force_setattr(self, name, frozen)
 
 
