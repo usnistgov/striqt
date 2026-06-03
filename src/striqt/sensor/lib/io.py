@@ -119,9 +119,6 @@ def read_json_spec(
     Returns:
         an instance of specs.Sweep
     """
-    with open(path, 'rb') as buf:
-        s = buf.read()
-
     if type is None:
         from .bindings import get_tagged_sweep_type
 
@@ -129,7 +126,25 @@ def read_json_spec(
     else:
         sweep_cls = type
 
-    spec = msgspec.json.decode(s, type=sweep_cls, dec_hook=specs.helpers._dec_hook)
+    with open(path, 'rb') as buf:
+        tree = msgspec.json.decode(buf.read(), type=dict)
+
+    mock_source = tree.get('mock_source', None)
+    if mock_source is not None:
+        assert 'sensor_binding' in tree, TypeError('missing "sensor_binding"')
+        from .bindings import get_binding
+
+        mock_name = get_binding(tree['sensor_binding'], mock_source).sweep_spec.__name__
+        tree['sensor_binding'] = mock_name
+
+    if 'extensions' in tree:
+        # import now, so that sensor_binding keys can use definitions
+        # in extension modules
+        ext = specs.Extension.from_dict(tree['extensions'])
+        _import_extensions_from_spec(ext, root_dir=Path(path).parent)
+
+    spec = sa.specs.helpers.convert_dict(tree, type=get_tagged_sweep_type())
+
 
     sink = spec.sink
     if store_backend is not None:
