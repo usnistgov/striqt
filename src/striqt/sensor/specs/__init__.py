@@ -1,5 +1,8 @@
 """schema for the specification of calibration and sweeps"""
 
+# note: 'pd' special cases can be removed in the future
+# with python 3.15 lazy imports
+
 from __future__ import annotations as __
 
 from .structs import *
