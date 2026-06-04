@@ -38,9 +38,9 @@ def confirm_labels(spec: 'ss.specs.Sweep', source_id: str):
 def run(path: str, *, output_path=None, check_func: Union[Callable, None]=None):
     import striqt.sensor as ss
 
-    if path.endswith('yaml'):
+    if path.endswith('.yaml') or path.endswith('.yml'):
         spec = ss.read_yaml_spec(path, output_path=output_path)
-    elif path.endswith('json'):
+    elif path.endswith('.json'):
         spec = ss.read_json_spec(path, output_path=output_path)
     else:
         raise click.ClickException('expected file to have .json or .yaml suffix')
