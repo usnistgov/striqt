@@ -57,7 +57,7 @@ def run(path, yaml: bool):
 
     if yaml:
         out_path = Path(path).with_suffix('.yaml')
-        if str(out_path) == path:
+        if out_path == Path(path):
             out_path = out_path.with_name(out_path.name + '-flat')
         s = msgspec.yaml.encode(spec, enc_hook=sa.specs.helpers._enc_hook)
         with open(out_path, 'wb') as stream:
