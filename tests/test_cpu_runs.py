@@ -5,4 +5,4 @@ import sys
 
 def test_run(cpu_sweep_file):
     ss.util.log_verbosity(-1)
-    sensor_sweep.execute(cpu_sweep_file)
+    sensor_sweep.run(cpu_sweep_file)
