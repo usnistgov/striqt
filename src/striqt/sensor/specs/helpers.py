@@ -746,7 +746,7 @@ class PathFormatter:
         if len(path_fields) == 0:
             return str(path)
 
-        from ..sources import lookup
+        from ..lib.sources import lookup
 
         id_ = lookup.id(self.sweep_spec.source, timeout=self.id_timeout)
         path = Path(path).expanduser()
