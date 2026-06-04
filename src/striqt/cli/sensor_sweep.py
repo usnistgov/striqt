@@ -34,7 +34,7 @@ def confirm_labels(spec: 'ss.specs.Sweep', source_id: str):
             raise KeyboardInterrupt
 
 
-def run(path: str, *, output_path=None, check_func: Union[Callable, None] = None):
+def execute(path: str, *, output_path=None, check_func: Union[Callable, None] = None):
     import striqt.sensor as ss
     from pathlib import Path
 
@@ -88,7 +88,7 @@ def run(path: str, *, output_path=None, check_func: Union[Callable, None] = None
     type=click.Path(),
     help='override the output file path in the yaml specification',
 )
-def cli(path: str, output_path, debug: bool, verbose: bool, skip_confirm: bool):
+def cli(*, path: str, debug: bool, verbose: bool, skip_confirm: bool, output_path):
     import striqt.sensor as ss
     import sys
 
@@ -96,11 +96,9 @@ def cli(path: str, output_path, debug: bool, verbose: bool, skip_confirm: bool):
     sys.excepthook = except_handler.run
     ss.util.log_verbosity(verbose)
 
-    run(
-        path,
-        output_path=output_path,
-        check_func=None if skip_confirm else confirm_labels,
-    )
+    func = None if skip_confirm else confirm_labels
+
+    execute(path, output_path=output_path, check_func=func)
 
 
 if __name__ == '__main__':
