@@ -32,6 +32,15 @@ def _lo_shift_tone(inds, resampler: 'sw.ResamplerDesign', xp, lo_offset=None):
 
 
 class TestSourceBase(base.VirtualSource[SS, SC]):
+    def close(self):
+        pass
+
+    def get_id(self):
+        return ''
+
+    def get_info(self):
+        return specs.SourceInfo(num_rx_ports=self.setup_spec.num_rx_ports)
+
     def read(
         self,
         buffers,
@@ -94,7 +103,7 @@ class SingleToneSource(TestSourceBase[specs.FunctionSource, specs.SingleToneCapt
 
         phi = (2 * np.pi * capture.frequency_offset) / fs * i + np.pi / 2
         x = lo * xp.exp(1j * phi)
-        x = x.astype(self.spec.transport_dtype)
+        x = x.astype(self.setup_spec.transport_dtype)
 
         if capture.snr is not None:
             power = 10 ** (-capture.snr / 10)
@@ -126,7 +135,7 @@ class DiracDeltaSource(TestSourceBase[specs.FunctionSource, specs.DiracDeltaCapt
 
         abs_pulse_index = round(capture.time * fs) + start
         rel_pulse_index = abs_pulse_index - offset
-        ret = xp.full(count, 1e-20, dtype=self.spec.transport_dtype)
+        ret = xp.full(count, 1e-20, dtype=self.setup_spec.transport_dtype)
 
         if rel_pulse_index >= 0 and rel_pulse_index < count:
             ret[rel_pulse_index] = 10 ** (capture.power / 20)

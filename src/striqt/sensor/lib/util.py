@@ -354,7 +354,9 @@ sa.util.show_messages(logging.INFO)
 
 def log_verbosity(verbose: int = 0):
     names = ('sweep', 'source', 'analysis', 'sink', 'periph')
-    if verbose == 0:
+    if verbose == -1:
+        sa.util.show_messages(logging.WARNING, logger_names=names)
+    elif verbose == 0:
         sa.util.show_messages(logging.INFO, logger_names=names)
     elif verbose == 1:
         sa.util.show_messages(sa.util.PERFORMANCE_INFO, logger_names=names)

@@ -103,6 +103,7 @@ class lookup:
     def _clear(cls, spec: specs.Source):
         cls._obj[spec] = Event()
         cls._ready[spec] = Event()
+        cls._id[spec] = Event()
 
     @classmethod
     def _register(cls, spec: specs.Source, controller: ControllerBase):
@@ -206,6 +207,8 @@ class ControllerBase(Generic[SS, SC, PS, PC]):
     def __exit__(self, *exc_info):
         if self.is_open():
             self.close()
+        else:
+            lookup._clear(self.__setup__)
 
     @util.cached_property
     def spec(self) -> SS:

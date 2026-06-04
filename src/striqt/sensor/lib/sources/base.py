@@ -73,7 +73,7 @@ class NoSource(SourceBackend[specs.NoSource, specs.SensorCapture]):
 
 
 class VirtualSource(SourceBackend[SS, SC]):
-    spec: SS
+    setup_spec: SS
     _samples_elapsed = 0
     _overlaps: tuple[int, int] = (0, 0)
     _capture: SC

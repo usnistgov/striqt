@@ -19,7 +19,7 @@ captures:
   - analysis_bandwidth: 100e6 # Hz
     sample_rate: 107.52e6 # Hz
     port: [0, 1]
-    duration: 0.1
+    duration: 10e-3
     power: 0
     period: 10e-3
     adjust_analysis:
@@ -30,7 +30,7 @@ captures:
   - analysis_bandwidth: 60e6 # Hz
     sample_rate: 107.52e6 # Hz
     port: [0, 1]
-    duration: 0.1
+    duration: 10e-3
     power: 0
     period: 10e-3
     adjust_analysis:
@@ -41,7 +41,7 @@ captures:
   - analysis_bandwidth: 80e6 # Hz
     sample_rate: 107.52e6 # Hz
     port: [0, 1]
-    duration: 0.1
+    duration: 10e-3
     power: 0
     period: 10e-3
     adjust_analysis:
@@ -52,7 +52,7 @@ captures:
   - sample_rate: 53.76e6 # Hz
     analysis_bandwidth: 40e6 # Hz
     port: [0, 1]
-    duration: 0.1
+    duration: 10e-3
     power: 0
     period: 10e-3
     adjust_analysis:
@@ -88,7 +88,8 @@ analysis:
   cellular_5g_pss_correlation:
     subcarrier_spacing: *scs
     delay: &delay 50e-6
-
+    symbol_indexes: 'b'
+  
     # adjusted per-channel in the capture 'adjust_analysis' field
     frequency_offset: &frequency_offset 0
 
@@ -97,6 +98,7 @@ analysis:
     frequency_offset: *frequency_offset
     delay: *delay
     per_port: true
+    symbol_indexes: 'b'
 
   cellular_5g_ssb_spectrogram:
     lo_bandstop: *lo_bandstop

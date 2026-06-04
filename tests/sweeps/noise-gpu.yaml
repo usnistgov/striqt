@@ -18,7 +18,7 @@ captures:
   - analysis_bandwidth: 100e6 # Hz
     sample_rate: 107.52e6 # Hz
     port: [0, 1]
-    duration: 0.1
+    duration: 10e-3
     noise_psd: 1e-17
     adjust_analysis:
       frequency_offset: -19920000
@@ -28,7 +28,7 @@ captures:
   - analysis_bandwidth: 60e6 # Hz
     sample_rate: 107.52e6 # Hz
     port: [0, 1]
-    duration: 0.1
+    duration: 10e-3
     noise_psd: 1e-17
     adjust_analysis:
       frequency_offset: -20520000
@@ -38,7 +38,7 @@ captures:
   - analysis_bandwidth: 80e6 # Hz
     sample_rate: 107.52e6 # Hz
     port: [0, 1]
-    duration: 0.1
+    duration: 10e-3
     noise_psd: 1e-17
     adjust_analysis:
       frequency_offset: -28800000
@@ -48,7 +48,7 @@ captures:
   - sample_rate: 53.76e6 # Hz
     analysis_bandwidth: 40e6 # Hz
     port: [0, 1]
-    duration: 0.1
+    duration: 10e-3
     noise_psd: 1e-17
     adjust_analysis:
       frequency_offset: 0

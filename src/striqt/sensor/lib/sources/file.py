@@ -93,7 +93,7 @@ class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture]):
     _file_info: specs.FileAcquisitionInfo
     _file_stream: FileStream
 
-    def _connect(self, spec):
+    def __init__(self, spec):
         meta = spec.file_metadata or {}
 
         if not Path(spec.path).exists():
@@ -112,6 +112,12 @@ class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture]):
         fields = self._file_stream.get_capture_fields()
         self._file_info = specs.FileAcquisitionInfo.from_dict(fields)
         self._file_stream.seek(0)
+
+    def get_info(self):
+        return specs.structs.SourceInfo(num_rx_ports=None)
+
+    def get_id(self):  # pyright: ignore
+        return str(self.setup_spec.path)
 
     def arm(self, capture):
         if self.setup_spec.loop:
@@ -153,38 +159,13 @@ class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture]):
             backend_sample_rate=self._file_info.backend_sample_rate,
         )
 
-    @util.cached_property
-    def about(self):
-        return specs.structs.SourceInfo(num_rx_ports=None)
-
-    @util.cached_property
-    def id(self):  # pyright: ignore
-        return str(self.setup_spec.path)
-
-
 class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture]):
     """a sources of IQ samples from iq_waveform variables in a zarr store"""
 
     _waveform: 'xr.DataArray'
     _capture_info: specs.FileAcquisitionInfo
 
-    @overload
-    def _read_coord(self, name: str, single: Literal[True] = True) -> Any:
-        pass
-
-    @overload
-    def _read_coord(self, name: str, single: Literal[False] = False) -> tuple[Any, ...]:
-        pass
-
-    def _read_coord(self, name: str, single: bool = True):
-        assert self._waveform is not None
-        result = np.atleast_1d(self._waveform[name])
-        if single:
-            return result[0]
-        else:
-            return tuple(result.tolist())
-
-    def _connect(self, spec):
+    def __init__(self, spec):
         """set the waveform from an xarray.DataArray containing a single capture of IQ samples"""
 
         waveform = sa.io.load(spec.path).iq_waveform
@@ -198,9 +179,16 @@ class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture]):
 
         self._waveform = waveform
 
-    @util.cached_property
-    def about(self):  # pyright: ignore
+    def get_id(self):  # pyright: ignore
+        return str(self.setup_spec.path)
+
+    def get_info(self):  # pyright: ignore
         return specs.structs.SourceInfo(num_rx_ports=self._waveform.shape[0])
+
+    def get_resampler(self, capture) -> sw.ResamplerDesign:
+        from ..compute import design_resampler
+
+        return design_resampler(capture, self._read_coord('sample_rate'))
 
     def arm(self, capture):
         super().arm(capture)
@@ -217,11 +205,6 @@ class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture]):
             port=port,
             backend_sample_rate=self._read_coord('sample_rate'),
         )
-
-    def get_resampler(self, capture) -> sw.ResamplerDesign:
-        from ..compute import design_resampler
-
-        return design_resampler(capture, self._read_coord('sample_rate'))
 
     def read(
         self,
@@ -285,6 +268,18 @@ class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture]):
         iq.info = self._capture_info
         return iq
 
-    @util.cached_property
-    def id(self):  # pyright: ignore
-        return str(self.setup_spec.path)
+    @overload
+    def _read_coord(self, name: str, single: Literal[True] = True) -> Any:
+        pass
+
+    @overload
+    def _read_coord(self, name: str, single: Literal[False] = False) -> tuple[Any, ...]:
+        pass
+
+    def _read_coord(self, name: str, single: bool = True):
+        assert self._waveform is not None
+        result = np.atleast_1d(self._waveform[name])
+        if single:
+            return result[0]
+        else:
+            return tuple(result.tolist())
