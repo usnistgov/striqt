@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 """this is installed into the shell PATH environment as configured by pyproject.toml"""
-from prompt_toolkit.shortcuts import confirm
 
 import click
 from typing import Callable, Union, TYPE_CHECKING
@@ -35,8 +34,12 @@ def confirm_labels(spec: 'ss.specs.Sweep', source_id: str):
             raise KeyboardInterrupt
 
 
-def run(path: str, *, output_path=None, check_func: Union[Callable, None]=None):
+def run(path: str, *, output_path=None, check_func: Union[Callable, None] = None):
     import striqt.sensor as ss
+    from pathlib import Path
+
+    if isinstance(path, Path):
+        path = str(path)
 
     if path.endswith('.yaml') or path.endswith('.yml'):
         spec = ss.read_yaml_spec(path, output_path=output_path)
@@ -93,7 +96,11 @@ def cli(path: str, output_path, debug: bool, verbose: bool, skip_confirm: bool):
     sys.excepthook = except_handler.run
     ss.util.log_verbosity(verbose)
 
-    run(path, output_path=output_path, check_func=None if skip_confirm else confirm_labels)
+    run(
+        path,
+        output_path=output_path,
+        check_func=None if skip_confirm else confirm_labels,
+    )
 
 
 if __name__ == '__main__':

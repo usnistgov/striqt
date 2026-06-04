@@ -23,12 +23,13 @@ def reify_all_lazy_modules():
     # We use list(sys.modules.items()) to avoid "dictionary changed size during iteration"
     # because reifying a module might trigger further imports.
     for name, module in list(sys.modules.items()):
-        # Check if the module is a lazy proxy. 
+        # Check if the module is a lazy proxy.
         # LazyLoader modules typically have a __spec__ with a LazyLoader loader.
         spec = getattr(module, '__spec__', None)
         if spec and isinstance(spec.loader, importlib.util.LazyLoader):
             # Accessing any attribute (like __name__) triggers the actual load.
             _ = module.__name__
+
 
 reify_all_lazy_modules()
 
@@ -103,7 +104,7 @@ autodoc_mock_imports = []
 autodoc_default_options = {
     'imported-members': True,
     'members': True,
-    'undoc-members': True, # Ensures instances without docstrings are still evaluated
+    'undoc-members': True,  # Ensures instances without docstrings are still evaluated
 }
 
 # The master toctree document.
@@ -176,12 +177,13 @@ class ClassDocumenter(autodoc.ClassDocumenter):
     def get_object_members(self, want_all: bool):
         # Capture BOTH the success boolean and the members list
         success, members = super().get_object_members(True)
-        
+
         # Filter the members
         members = self.filter_members(members, want_all)
 
         # Return the expected tuple back to Sphinx
         return success, members
+
 
 def parse_type_and_meta(hint):
     """
@@ -190,19 +192,19 @@ def parse_type_and_meta(hint):
     """
     origin = typing.get_origin(hint)
     args = typing.get_args(hint)
-    
+
     if origin is typing.Annotated:
         clean_base, metas = parse_type_and_meta(args[0])
         msgspec_metas = [m for m in args[1:] if isinstance(m, msgspec.Meta)]
         return clean_base, msgspec_metas + metas
-        
+
     if origin is typing.Literal:
         return hint, []
-        
+
     if args:
         cleaned_args = []
         all_metas = []
-        
+
         for arg in args:
             if arg is Ellipsis:
                 cleaned_args.append(Ellipsis)
@@ -210,86 +212,94 @@ def parse_type_and_meta(hint):
                 clean_arg, metas = parse_type_and_meta(arg)
                 cleaned_args.append(clean_arg)
                 all_metas.extend(metas)
-        
+
         try:
-            if hasattr(types, "UnionType") and origin is types.UnionType:
+            if hasattr(types, 'UnionType') and origin is types.UnionType:
                 import operator
                 from functools import reduce
+
                 clean_type = reduce(operator.or_, cleaned_args)
             else:
                 clean_type = origin[tuple(cleaned_args)]
         except Exception:
             clean_type = hint
-            
+
         return clean_type, all_metas
-        
+
     return hint, []
 
 
 def clean_type_string(type_str):
     """Applies string replacements to clean up Literal and module paths."""
     # 1. Clean up Literal
-    type_str = re.sub(r"\bLiteral\[", "one of [", type_str)
-    
+    type_str = re.sub(r'\bLiteral\[', 'one of [', type_str)
+
     # # 2. Remap nested module paths to top-level paths
     # for old_path, new_path in MODULE_REMAPS.items():
     #     type_str = type_str.replace(old_path, new_path)
-        
+
     return type_str
 
 
 def extract_msgspec_meta(app, what, name, obj, options, lines):
     """
-    Injects dynamic parameters for struct fields and a separate list 
+    Injects dynamic parameters for struct fields and a separate list
     for ClassVar constants into the class docstring, extracting Meta descriptions for both.
     """
-    if what == "class" and isinstance(obj, type) and issubclass(obj, msgspec.Struct):
+    if what == 'class' and isinstance(obj, type) and issubclass(obj, msgspec.Struct):
         try:
             hints = typing.get_type_hints(obj, include_extras=True)
             struct_fields = {f.name for f in msgspec.structs.fields(obj)}
         except Exception:
             return
 
-        if lines and lines[-1] != "":
-            lines.append("")
+        if lines and lines[-1] != '':
+            lines.append('')
 
         for field_name, field_type in hints.items():
-            
             # --- 1. HANDLE MSGSPEC STRUCT FIELDS ---
             if field_name in struct_fields:
                 clean_type, metas = parse_type_and_meta(field_type)
-                
-                description = ""
+
+                description = ''
                 constraints = []
-                
+
                 for meta in metas:
                     if meta.description and not description:
                         description = meta.description
-                    
-                    if getattr(meta, 'gt', None) is not None: constraints.append(f"> {meta.gt}")
-                    if getattr(meta, 'ge', None) is not None: constraints.append(f">= {meta.ge}")
-                    if getattr(meta, 'lt', None) is not None: constraints.append(f"< {meta.lt}")
-                    if getattr(meta, 'le', None) is not None: constraints.append(f"<= {meta.le}")
-                    if getattr(meta, 'multiple_of', None) is not None: constraints.append(f"multiple of {meta.multiple_of}")
-                    if getattr(meta, 'min_length', None) is not None: constraints.append(f"min_length={meta.min_length}")
-                    if getattr(meta, 'max_length', None) is not None: constraints.append(f"max_length={meta.max_length}")
-                    if getattr(meta, 'pattern', None) is not None: constraints.append(f"pattern='{meta.pattern}'")
-                    
+
+                    if getattr(meta, 'gt', None) is not None:
+                        constraints.append(f'> {meta.gt}')
+                    if getattr(meta, 'ge', None) is not None:
+                        constraints.append(f'>= {meta.ge}')
+                    if getattr(meta, 'lt', None) is not None:
+                        constraints.append(f'< {meta.lt}')
+                    if getattr(meta, 'le', None) is not None:
+                        constraints.append(f'<= {meta.le}')
+                    if getattr(meta, 'multiple_of', None) is not None:
+                        constraints.append(f'multiple of {meta.multiple_of}')
+                    if getattr(meta, 'min_length', None) is not None:
+                        constraints.append(f'min_length={meta.min_length}')
+                    if getattr(meta, 'max_length', None) is not None:
+                        constraints.append(f'max_length={meta.max_length}')
+                    if getattr(meta, 'pattern', None) is not None:
+                        constraints.append(f"pattern='{meta.pattern}'")
+
                     if meta.extra and 'units' in meta.extra:
-                        constraints.append(f"units: {meta.extra['units']}")
+                        constraints.append(f'units: {meta.extra["units"]}')
 
                 if constraints:
-                    constraint_str = f" *(Constraints: {', '.join(constraints)})*"
+                    constraint_str = f' *(Constraints: {", ".join(constraints)})*'
                     if description:
                         description += constraint_str
                     else:
                         description = constraint_str.strip()
-                
+
                 raw_type_str = stringify_annotation(clean_type)
                 final_type_str = clean_type_string(raw_type_str)
 
-                lines.append(f":param {field_name}: {description}")
-                lines.append(f":type {field_name}: {final_type_str}")
+                lines.append(f':param {field_name}: {description}')
+                lines.append(f':type {field_name}: {final_type_str}')
 
             # --- 2. HANDLE CLASSVAR CONSTANTS ---
             else:
@@ -301,68 +311,71 @@ def extract_msgspec_meta(app, what, name, obj, options, lines):
                         inner_type = args[0] if args else typing.Any
                     else:
                         inner_type = typing.Any
-                    
+
                     # NEW: Run it through our parser to strip Annotated and grab Meta
                     clean_type, metas = parse_type_and_meta(inner_type)
-                    
+
                     # Extract description from Meta
-                    description = ""
+                    description = ''
                     for meta in metas:
                         if meta.description and not description:
                             description = meta.description
-                    
+
                     # Fetch the actual constant value from the class object
                     val = getattr(obj, field_name, None)
-                    val_str = f"*(Value: {val})*" if val is not None else ""
-                    
+                    val_str = f'*(Value: {val})*' if val is not None else ''
+
                     # Combine description and value cleanly
                     if description and val_str:
-                        final_desc = f"{description} {val_str}"
+                        final_desc = f'{description} {val_str}'
                     elif description:
                         final_desc = description
                     else:
                         final_desc = val_str
-                    
+
                     # Stringify the stripped, clean type
                     raw_type_str = stringify_annotation(clean_type)
                     final_type_str = clean_type_string(raw_type_str)
-                    
-                    lines.append(f":cvar {field_name}: {final_desc}")
-                    lines.append(f":vartype {field_name}: {final_type_str}")
-                    
-def simplify_msgspec_signature(app, what, name, obj, options, signature, return_annotation):
+
+                    lines.append(f':cvar {field_name}: {final_desc}')
+                    lines.append(f':vartype {field_name}: {final_type_str}')
+
+
+def simplify_msgspec_signature(
+    app, what, name, obj, options, signature, return_annotation
+):
     """
-    Strips type annotations from the class __init__ signature AND 
+    Strips type annotations from the class __init__ signature AND
     evaluates default_factory functions to show the actual default values.
     """
-    if what == "class" and isinstance(obj, type) and issubclass(obj, msgspec.Struct):
+    if what == 'class' and isinstance(obj, type) and issubclass(obj, msgspec.Struct):
         try:
             sig = inspect.signature(obj)
-            
+
             # Map field names to their FieldInfo objects to access default_factory
             struct_fields = {f.name: f for f in msgspec.structs.fields(obj)}
-            
+
             new_parameters = []
             for param_name, param in sig.parameters.items():
                 # 1. Strip the type annotation to keep the signature clean
                 clean_param = param.replace(annotation=inspect.Parameter.empty)
-                
+
                 # 2. Check for and execute default_factory
                 field_info = struct_fields.get(param_name)
                 if field_info and field_info.default_factory is not msgspec.NODEFAULT:
                     try:
                         # Run the factory function to get the generated default value
                         generated_default = field_info.default_factory()
-                        
+
                         # Replace the default in the signature with the generated value
                         clean_param = clean_param.replace(default=generated_default)
                     except Exception:
-                        # If the factory requires arguments or fails dynamically, 
+                        # If the factory requires arguments or fails dynamically,
                         # safely fallback to Sphinx's default rendering
                         pass
-                        
+
                 new_parameters.append(clean_param)
-            
+
             new_sig = sig.replace(parameters=new_parameters)
             return stringify_signature(new_sig), return_annotation
         except (ValueError, TypeError):
@@ -374,7 +387,7 @@ def skip_msgspec_struct_fields(app, what, name, obj, skip, options):
     Forces Sphinx to skip documenting msgspec fields as standalone attributes,
     and universally skips any attributes type-hinted as typing.ClassVar.
     """
-    if what == "class":
+    if what == 'class':
         mod_name = app.env.temp_data.get('autodoc:module')
         cls_name = app.env.temp_data.get('autodoc:class')
 
@@ -394,7 +407,10 @@ def skip_msgspec_struct_fields(app, what, name, obj, skip, options):
                     if name in hints:
                         hint = hints[name]
                         # Handle both parameterized (ClassVar[int]) and bare (ClassVar)
-                        if hint is typing.ClassVar or typing.get_origin(hint) is typing.ClassVar:
+                        if (
+                            hint is typing.ClassVar
+                            or typing.get_origin(hint) is typing.ClassVar
+                        ):
                             return True
                 except Exception:
                     pass
@@ -422,12 +438,13 @@ def skip_external_imports(app, what, name, obj, skip, options):
 
     # 2. Fetch the live module to bypass Sphinx sentinels
     import sys
+
     mod = sys.modules.get(current_module_name)
     if not mod:
         return None
-        
+
     short_name = name.split('.')[-1]
-    
+
     # 3. Extract the REAL object directly from the module
     real_obj = getattr(mod, short_name, obj)
 
@@ -439,7 +456,7 @@ def skip_external_imports(app, what, name, obj, skip, options):
     # 4. Check the real object's native module
     obj_module_name = getattr(real_obj, '__module__', None)
     type_module_name = getattr(type(real_obj), '__module__', None)
-    
+
     # # If it genuinely originated from outside our current module tree, nuke it
     # if obj_module_name and not obj_module_name.startswith(current_module_name):
     #     return True
@@ -449,7 +466,7 @@ def skip_external_imports(app, what, name, obj, skip, options):
         return True
 
     # Absolute last resort for uncooperative typing singletons
-    if short_name in {"Union", "Optional", "Any", "Literal", "Annotated", "ClassVar"}:
+    if short_name in {'Union', 'Optional', 'Any', 'Literal', 'Annotated', 'ClassVar'}:
         return True
 
     return None
@@ -460,75 +477,94 @@ def list_sensor_bindings_in_module(app, what, name, obj, options, lines):
     Dynamically injects a list of SensorBinding instances into the module's docstring,
     recursively unpacking their dataclass/struct fields and cross-referencing types.
     """
-    if what == "module":
+    if what == 'module':
         try:
             mod = sys.modules.get(name)
             if not mod:
                 return
-            
+
             bindings = {}
             for attr_name, attr_val in vars(mod).items():
-                if isinstance(attr_val, ss.lib.bindings.SensorBinding) and not isinstance(attr_val, type):
+                if isinstance(
+                    attr_val, ss.lib.bindings.SensorBinding
+                ) and not isinstance(attr_val, type):
                     bindings[attr_name] = attr_val
-                    
+
             if bindings:
-                if lines and lines[-1] != "":
-                    lines.append("")
-                
-                lines.append("**Available Sensor Bindings:**")
-                lines.append("")
-                
-                def _unpack_fields(target_obj, indent="  "):
+                if lines and lines[-1] != '':
+                    lines.append('')
+
+                lines.append('**Available Sensor Bindings:**')
+                lines.append('')
+
+                def _unpack_fields(target_obj, indent='  '):
                     try:
                         if hasattr(target_obj, '__dataclass_fields__'):
-                            fields = {f: getattr(target_obj, f) for f in target_obj.__dataclass_fields__}
-                        elif hasattr(msgspec, 'Struct') and isinstance(target_obj, msgspec.Struct):
-                            fields = {f.name: getattr(target_obj, f.name) for f in msgspec.structs.fields(target_obj)}
+                            fields = {
+                                f: getattr(target_obj, f)
+                                for f in target_obj.__dataclass_fields__
+                            }
+                        elif hasattr(msgspec, 'Struct') and isinstance(
+                            target_obj, msgspec.Struct
+                        ):
+                            fields = {
+                                f.name: getattr(target_obj, f.name)
+                                for f in msgspec.structs.fields(target_obj)
+                            }
                         else:
                             fields = vars(target_obj)
                     except Exception:
                         return
-                        
+
                     for f_name, f_val in fields.items():
                         if f_name.startswith('_'):
                             continue
-                            
+
                         # 2. If it's a class reference, create a Sphinx cross-reference link!
                         if isinstance(f_val, type):
                             # Build the full module path so Sphinx knows exactly where to look
-                            full_path = f"{f_val.__module__}.{f_val.__name__}"
+                            full_path = f'{f_val.__module__}.{f_val.__name__}'
 
                             # The tilde (~) tells Sphinx to link the full path but only render the short name
-                            lines.append(f"{indent}* **{f_name}**: :class:`~{full_path}`")
+                            lines.append(
+                                f'{indent}* **{f_name}**: :class:`~{full_path}`'
+                            )
 
                         # 3. If it's a nested dataclass or struct, RECURSE!
-                        elif hasattr(f_val, '__dataclass_fields__') or (hasattr(msgspec, 'Struct') and isinstance(f_val, msgspec.Struct)):
-                            lines.append(f"{indent}* **{f_name}**:")
-                            lines.append("") 
-                            _unpack_fields(f_val, indent + "  ")
-                            
+                        elif hasattr(f_val, '__dataclass_fields__') or (
+                            hasattr(msgspec, 'Struct')
+                            and isinstance(f_val, msgspec.Struct)
+                        ):
+                            lines.append(f'{indent}* **{f_name}**:')
+                            lines.append('')
+                            _unpack_fields(f_val, indent + '  ')
+
                         # 4. Otherwise, print the standard value
                         else:
-                            lines.append(f"{indent}* **{f_name}**: ``{repr(f_val)}``")
-                    
-                    lines.append("") 
-                
+                            lines.append(f'{indent}* **{f_name}**: ``{repr(f_val)}``')
+
+                    lines.append('')
+
                 for b_name, b_val in sorted(bindings.items()):
-                    lines.append(f"* **{b_name}**")
-                    lines.append("")
-                    _unpack_fields(b_val, indent="  ")
-                    
+                    lines.append(f'* **{b_name}**')
+                    lines.append('')
+                    _unpack_fields(b_val, indent='  ')
+
         except Exception:
             pass
 
 
 def skip_inherited_methods(app, what, name, obj, skip, options):
     """
-    Forces Sphinx to skip methods on specific subclasses if those methods 
+    Forces Sphinx to skip methods on specific subclasses if those methods
     are simply inherited from the parent and not overridden.
     """
     if what == 'class':
-        if name.startswith('_') or not hasattr(obj, '__qualname__') or not hasattr(obj, '__module__'):
+        if (
+            name.startswith('_')
+            or not hasattr(obj, '__qualname__')
+            or not hasattr(obj, '__module__')
+        ):
             return
         full_name = obj.__module__ + '.' + obj.__qualname__.rsplit('.')[0]
         parts = full_name.split('.')
@@ -544,16 +580,16 @@ def skip_inherited_methods(app, what, name, obj, skip, options):
             pass
         elif hasattr(ss.lib.typing.SourceBackend, name):
             return True
-               
+
     return None
+
 
 def setup(app):
     app.add_domain(PatchedPythonDomain, override=True)
     app.add_autodocumenter(ClassDocumenter, override=True)
-    app.connect('autodoc-process-docstring', list_sensor_bindings_in_module)    
+    app.connect('autodoc-process-docstring', list_sensor_bindings_in_module)
     app.connect('autodoc-process-docstring', extract_msgspec_meta)
     app.connect('autodoc-process-signature', simplify_msgspec_signature)
     app.connect('autodoc-skip-member', skip_inherited_methods)
     app.connect('autodoc-skip-member', skip_msgspec_struct_fields)
     app.connect('autodoc-skip-member', skip_external_imports)
-

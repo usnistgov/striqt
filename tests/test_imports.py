@@ -15,6 +15,7 @@ def test_striqt_cli():
 
 
 def test_lazy_import():
+    import striqt.cli
     import striqt.waveform
     import striqt.analysis
     import striqt.sensor
