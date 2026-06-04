@@ -6,6 +6,8 @@ from .structs import *
 
 # only classes, not modules
 for k in list(locals().keys()):
+    if k == 'pd':
+        continue
     if not k[0].upper() == k[0]:
         locals().pop(k)
 del k
@@ -16,8 +18,10 @@ from .structs import SS, SP, SC, SPC
 from .types import Annotated, Meta
 from striqt.analysis.specs import frozendict
 
-for obj in list(locals().values()):
+for k, obj in list(locals().items()):
+    if k == 'pd':
+        continue
     if getattr(obj, '__module__', '').startswith(__name__):
         obj.__module__ = __name__
 
-del obj
+del k,obj
