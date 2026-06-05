@@ -185,17 +185,17 @@ to specify the change in expected capture structure.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>source</strong> (<em>striqt.sensor.lib.typing.SS</em>)</p></li>
-<li><p><strong>captures</strong> (<em>tuple</em><em>[</em><em>striqt.sensor.lib.typing.SC</em><em>, </em><em>...</em><em>]</em>)</p></li>
-<li><p><strong>loops</strong> (<em>tuple</em><em>[</em><a class="reference internal" href="#striqt.sensor.specs.Repeat" title="striqt.sensor.specs.Repeat"><em>striqt.sensor.specs.Repeat</em></a><em> | </em><a class="reference internal" href="#striqt.sensor.specs.List" title="striqt.sensor.specs.List"><em>striqt.sensor.specs.List</em></a><em> | </em><a class="reference internal" href="#striqt.sensor.specs.Range" title="striqt.sensor.specs.Range"><em>striqt.sensor.specs.Range</em></a><em> | </em><a class="reference internal" href="#striqt.sensor.specs.FrequencyBinRange" title="striqt.sensor.specs.FrequencyBinRange"><em>striqt.sensor.specs.FrequencyBinRange</em></a><em>, </em><em>...</em><em>]</em>)</p></li>
-<li><p><strong>analysis</strong> (<em>striqt.analysis.lib.register.Analysis</em>)</p></li>
-<li><p><strong>description</strong> (<a class="reference internal" href="#striqt.sensor.specs.Description" title="striqt.sensor.specs.Description"><em>striqt.sensor.specs.Description</em></a>)</p></li>
-<li><p><strong>adjust_captures</strong> (<em>dict</em><em>[</em><em>str</em><em> | </em><em>one</em><em> of </em><em>[</em><em>'defaults'</em><em>]</em><em>, </em><em>dict</em><em>[</em><em>str</em><em>, </em><a class="reference internal" href="#striqt.sensor.specs.CaptureRemap" title="striqt.sensor.specs.CaptureRemap"><em>striqt.sensor.specs.CaptureRemap</em></a><em> | </em><em>float</em><em> | </em><em>int</em><em> | </em><em>str</em><em> | </em><em>bool</em><em> | </em><em>None</em><em>] </em><em>| </em><em>tuple</em><em>[</em><em>str</em><em>, </em><a class="reference internal" href="#striqt.sensor.specs.CaptureRemap" title="striqt.sensor.specs.CaptureRemap"><em>striqt.sensor.specs.CaptureRemap</em></a><em> | </em><em>float</em><em> | </em><em>int</em><em> | </em><em>str</em><em> | </em><em>bool</em><em> | </em><em>None</em><em>]</em><em>]</em>) – Source UUID string</p></li>
-<li><p><strong>extensions</strong> (<a class="reference internal" href="#striqt.sensor.specs.Extension" title="striqt.sensor.specs.Extension"><em>striqt.sensor.specs.Extension</em></a>)</p></li>
-<li><p><strong>sink</strong> (<a class="reference internal" href="#striqt.sensor.specs.Sink" title="striqt.sensor.specs.Sink"><em>striqt.sensor.specs.Sink</em></a>)</p></li>
-<li><p><strong>peripherals</strong> (<em>striqt.sensor.lib.typing.SP</em>)</p></li>
-<li><p><strong>options</strong> (<a class="reference internal" href="#striqt.sensor.specs.SweepOptions" title="striqt.sensor.specs.SweepOptions"><em>striqt.sensor.specs.SweepOptions</em></a>)</p></li>
-<li><p><strong>calibration</strong> (<em>striqt.sensor.lib.typing.SPC</em><em> | </em><em>None</em>)</p></li>
+<li><p><strong>source</strong> (<em>SS</em>)</p></li>
+<li><p><strong>captures</strong> (<em>tuple</em><em>[</em><em>SC</em><em>, </em><em>...</em><em>]</em>)</p></li>
+<li><p><strong>loops</strong> (<em>tuple</em><em>[</em><a class="reference internal" href="#striqt.sensor.specs.Repeat" title="striqt.sensor.specs.Repeat"><em>Repeat</em></a><em> | </em><a class="reference internal" href="#striqt.sensor.specs.List" title="striqt.sensor.specs.List"><em>List</em></a><em> | </em><a class="reference internal" href="#striqt.sensor.specs.Range" title="striqt.sensor.specs.Range"><em>Range</em></a><em> | </em><a class="reference internal" href="#striqt.sensor.specs.FrequencyBinRange" title="striqt.sensor.specs.FrequencyBinRange"><em>FrequencyBinRange</em></a><em>, </em><em>...</em><em>]</em>)</p></li>
+<li><p><strong>analysis</strong> (<a class="reference internal" href="striqt.analysis.specs.html#striqt.analysis.specs.Analysis" title="striqt.analysis.specs.Analysis"><em>Analysis</em></a>)</p></li>
+<li><p><strong>description</strong> (<a class="reference internal" href="#striqt.sensor.specs.Description" title="striqt.sensor.specs.Description"><em>Description</em></a>)</p></li>
+<li><p><strong>adjust_captures</strong> (<em>dict</em><em>[</em><em>str</em><em> | </em><em>one</em><em> of </em><em>[</em><em>'defaults'</em><em>]</em><em>, </em><em>dict</em><em>[</em><em>str</em><em>, </em><a class="reference internal" href="#striqt.sensor.specs.CaptureRemap" title="striqt.sensor.specs.CaptureRemap"><em>CaptureRemap</em></a><em> | </em><em>float</em><em> | </em><em>int</em><em> | </em><em>str</em><em> | </em><em>bool</em><em> | </em><em>None</em><em>] </em><em>| </em><em>tuple</em><em>[</em><em>str</em><em>, </em><a class="reference internal" href="#striqt.sensor.specs.CaptureRemap" title="striqt.sensor.specs.CaptureRemap"><em>CaptureRemap</em></a><em> | </em><em>float</em><em> | </em><em>int</em><em> | </em><em>str</em><em> | </em><em>bool</em><em> | </em><em>None</em><em>]</em><em>]</em>) – Source UUID string</p></li>
+<li><p><strong>extensions</strong> (<a class="reference internal" href="#striqt.sensor.specs.Extension" title="striqt.sensor.specs.Extension"><em>Extension</em></a>)</p></li>
+<li><p><strong>sink</strong> (<a class="reference internal" href="#striqt.sensor.specs.Sink" title="striqt.sensor.specs.Sink"><em>Sink</em></a>)</p></li>
+<li><p><strong>peripherals</strong> (<em>SP</em>)</p></li>
+<li><p><strong>options</strong> (<a class="reference internal" href="#striqt.sensor.specs.SweepOptions" title="striqt.sensor.specs.SweepOptions"><em>SweepOptions</em></a>)</p></li>
+<li><p><strong>calibration</strong> (<em>SPC</em><em> | </em><em>None</em>)</p></li>
 </ul>
 </dd>
 <dt class="field-even">Variables<span class="colon">:</span></dt>
@@ -358,7 +358,7 @@ to specify the change in expected capture structure.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>master_clock_rate</strong> (<em>float</em>) – Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em></p></li>
 <li><p><strong>trigger_strobe</strong> (<em>float</em><em> | </em><em>None</em>)</p></li>
-<li><p><strong>signal_trigger</strong> (<em>str</em><em> | </em><a class="reference internal" href="striqt.analysis.specs.html#striqt.analysis.specs.AnalysisGroup" title="striqt.analysis.specs.AnalysisGroup"><em>striqt.analysis.specs.AnalysisGroup</em></a><em> | </em><em>None</em>)</p></li>
+<li><p><strong>signal_trigger</strong> (<em>str</em><em> | </em><a class="reference internal" href="#striqt.sensor.specs.AnalysisGroup" title="striqt.sensor.specs.AnalysisGroup"><em>AnalysisGroup</em></a><em> | </em><em>None</em>)</p></li>
 <li><p><strong>array_backend</strong> (<em>one</em><em> of </em><em>[</em><em>'numpy'</em><em>, </em><em>'cupy'</em><em>]</em>) – array module to use to set compute device: numpy = cpu, cupy = gpu</p></li>
 <li><p><strong>num_rx_ports</strong> (<em>int</em>)</p></li>
 </ul>
@@ -382,7 +382,7 @@ to specify the change in expected capture structure.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>field</strong> (<em>str</em>)</p></li>
 <li><p><strong>isin</strong> (<em>one</em><em> of </em><em>[</em><em>'capture'</em><em>, </em><em>'analysis'</em><em>]</em>) – selects whether to loop a capture or analysis parameters</p></li>
-<li><p><strong>values</strong> (<em>tuple</em><em>[</em><em>dict</em><em>[</em><em>str</em><em> | </em><em>one</em><em> of </em><em>[</em><em>'defaults'</em><em>]</em><em>, </em><em>dict</em><em>[</em><em>str</em><em>, </em><a class="reference internal" href="#striqt.sensor.specs.CaptureRemap" title="striqt.sensor.specs.CaptureRemap"><em>striqt.sensor.specs.CaptureRemap</em></a><em> | </em><em>float</em><em> | </em><em>int</em><em> | </em><em>str</em><em> | </em><em>bool</em><em> | </em><em>None</em><em>] </em><em>| </em><em>tuple</em><em>[</em><em>str</em><em>, </em><a class="reference internal" href="#striqt.sensor.specs.CaptureRemap" title="striqt.sensor.specs.CaptureRemap"><em>striqt.sensor.specs.CaptureRemap</em></a><em> | </em><em>float</em><em> | </em><em>int</em><em> | </em><em>str</em><em> | </em><em>bool</em><em> | </em><em>None</em><em>]</em><em>] </em><em>| </em><em>str</em><em> | </em><em>float</em><em> | </em><em>int</em><em> | </em><em>bool</em><em> | </em><em>None</em><em>, </em><em>...</em><em>]</em>) – Source UUID string</p></li>
+<li><p><strong>values</strong> (<em>tuple</em><em>[</em><em>dict</em><em>[</em><em>str</em><em> | </em><em>one</em><em> of </em><em>[</em><em>'defaults'</em><em>]</em><em>, </em><em>dict</em><em>[</em><em>str</em><em>, </em><a class="reference internal" href="#striqt.sensor.specs.CaptureRemap" title="striqt.sensor.specs.CaptureRemap"><em>CaptureRemap</em></a><em> | </em><em>float</em><em> | </em><em>int</em><em> | </em><em>str</em><em> | </em><em>bool</em><em> | </em><em>None</em><em>] </em><em>| </em><em>tuple</em><em>[</em><em>str</em><em>, </em><a class="reference internal" href="#striqt.sensor.specs.CaptureRemap" title="striqt.sensor.specs.CaptureRemap"><em>CaptureRemap</em></a><em> | </em><em>float</em><em> | </em><em>int</em><em> | </em><em>str</em><em> | </em><em>bool</em><em> | </em><em>None</em><em>]</em><em>] </em><em>| </em><em>str</em><em> | </em><em>float</em><em> | </em><em>int</em><em> | </em><em>bool</em><em> | </em><em>None</em><em>, </em><em>...</em><em>]</em>) – Source UUID string</p></li>
 </ul>
 </dd>
 </dl>
@@ -421,7 +421,7 @@ to specify the change in expected capture structure.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>master_clock_rate</strong> (<em>float</em>) – Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em></p></li>
 <li><p><strong>trigger_strobe</strong> (<em>float</em><em> | </em><em>None</em>)</p></li>
-<li><p><strong>signal_trigger</strong> (<em>str</em><em> | </em><a class="reference internal" href="striqt.analysis.specs.html#striqt.analysis.specs.AnalysisGroup" title="striqt.analysis.specs.AnalysisGroup"><em>striqt.analysis.specs.AnalysisGroup</em></a><em> | </em><em>None</em>)</p></li>
+<li><p><strong>signal_trigger</strong> (<em>str</em><em> | </em><a class="reference internal" href="#striqt.sensor.specs.AnalysisGroup" title="striqt.sensor.specs.AnalysisGroup"><em>AnalysisGroup</em></a><em> | </em><em>None</em>)</p></li>
 <li><p><strong>array_backend</strong> (<em>one</em><em> of </em><em>[</em><em>'numpy'</em><em>, </em><em>'cupy'</em><em>]</em>) – array module to use to set compute device: numpy = cpu, cupy = gpu</p></li>
 <li><p><strong>path</strong> (<em>str</em>) – path to the waveform data file</p></li>
 <li><p><strong>file_format</strong> (<em>one</em><em> of </em><em>[</em><em>'auto'</em><em>, </em><em>'mat'</em><em>, </em><em>'tdms'</em><em>]</em>) – data format or auto to guess by extension</p></li>
@@ -474,7 +474,7 @@ to specify the change in expected capture structure.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>master_clock_rate</strong> (<em>float</em>) – Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em></p></li>
 <li><p><strong>trigger_strobe</strong> (<em>float</em><em> | </em><em>None</em>)</p></li>
-<li><p><strong>signal_trigger</strong> (<em>str</em><em> | </em><a class="reference internal" href="striqt.analysis.specs.html#striqt.analysis.specs.AnalysisGroup" title="striqt.analysis.specs.AnalysisGroup"><em>striqt.analysis.specs.AnalysisGroup</em></a><em> | </em><em>None</em>)</p></li>
+<li><p><strong>signal_trigger</strong> (<em>str</em><em> | </em><a class="reference internal" href="#striqt.sensor.specs.AnalysisGroup" title="striqt.sensor.specs.AnalysisGroup"><em>AnalysisGroup</em></a><em> | </em><em>None</em>)</p></li>
 <li><p><strong>array_backend</strong> (<em>one</em><em> of </em><em>[</em><em>'numpy'</em><em>, </em><em>'cupy'</em><em>]</em>) – array module to use to set compute device: numpy = cpu, cupy = gpu</p></li>
 <li><p><strong>num_rx_ports</strong> (<em>int</em>)</p></li>
 </ul>
@@ -684,8 +684,8 @@ to specify the change in expected capture structure.</p>
 <li><p><strong>source_id</strong> (<em>str</em>) – Source UUID string</p></li>
 <li><p><strong>sweep_index</strong> (<em>int</em><em> | </em><em>None</em>)</p></li>
 <li><p><strong>capture_index</strong> (<em>int</em>)</p></li>
-<li><p><strong>sweep_start_time</strong> (<em>pandas.Timestamp</em><em> | </em><em>None</em>) – Capture acquisition start time</p></li>
-<li><p><strong>start_time</strong> (<em>pandas.Timestamp</em><em> | </em><em>None</em>) – Acquisition start time of the first capture</p></li>
+<li><p><strong>sweep_start_time</strong> (<em>Timestamp</em><em> | </em><em>None</em>) – Capture acquisition start time</p></li>
+<li><p><strong>start_time</strong> (<em>Timestamp</em><em> | </em><em>None</em>) – Acquisition start time of the first capture</p></li>
 <li><p><strong>backend_sample_rate</strong> (<em>float</em><em> | </em><em>None</em>) – Source sample rate <em>(Constraints: &gt; 0, units: Hz)</em></p></li>
 </ul>
 </dd>
@@ -723,7 +723,7 @@ to specify the change in expected capture structure.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>master_clock_rate</strong> (<em>float</em>) – Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em></p></li>
 <li><p><strong>trigger_strobe</strong> (<em>float</em><em> | </em><em>None</em>)</p></li>
-<li><p><strong>signal_trigger</strong> (<em>str</em><em> | </em><a class="reference internal" href="striqt.analysis.specs.html#striqt.analysis.specs.AnalysisGroup" title="striqt.analysis.specs.AnalysisGroup"><em>striqt.analysis.specs.AnalysisGroup</em></a><em> | </em><em>None</em>)</p></li>
+<li><p><strong>signal_trigger</strong> (<em>str</em><em> | </em><a class="reference internal" href="#striqt.sensor.specs.AnalysisGroup" title="striqt.sensor.specs.AnalysisGroup"><em>AnalysisGroup</em></a><em> | </em><em>None</em>)</p></li>
 <li><p><strong>array_backend</strong> (<em>one</em><em> of </em><em>[</em><em>'numpy'</em><em>, </em><em>'cupy'</em><em>]</em>) – array module to use to set compute device: numpy = cpu, cupy = gpu</p></li>
 <li><p><strong>calibration</strong> (<em>str</em><em> | </em><em>None</em>)</p></li>
 <li><p><strong>time_source</strong> (<em>one</em><em> of </em><em>[</em><em>'host'</em><em>, </em><em>'internal'</em><em>, </em><em>'external'</em><em>, </em><em>'gps'</em><em>]</em>) – Hardware source for timestamps</p></li>
@@ -765,7 +765,7 @@ to specify the change in expected capture structure.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>master_clock_rate</strong> (<em>float</em>) – Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em></p></li>
 <li><p><strong>trigger_strobe</strong> (<em>float</em><em> | </em><em>None</em>)</p></li>
-<li><p><strong>signal_trigger</strong> (<em>str</em><em> | </em><a class="reference internal" href="striqt.analysis.specs.html#striqt.analysis.specs.AnalysisGroup" title="striqt.analysis.specs.AnalysisGroup"><em>striqt.analysis.specs.AnalysisGroup</em></a><em> | </em><em>None</em>)</p></li>
+<li><p><strong>signal_trigger</strong> (<em>str</em><em> | </em><a class="reference internal" href="#striqt.sensor.specs.AnalysisGroup" title="striqt.sensor.specs.AnalysisGroup"><em>AnalysisGroup</em></a><em> | </em><em>None</em>)</p></li>
 <li><p><strong>array_backend</strong> (<em>one</em><em> of </em><em>[</em><em>'numpy'</em><em>, </em><em>'cupy'</em><em>]</em>) – array module to use to set compute device: numpy = cpu, cupy = gpu</p></li>
 </ul>
 </dd>
@@ -856,16 +856,16 @@ methods that fix encoding and decoding hooks for extra types.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>source</strong> (<em>striqt.sensor.lib.typing.SS</em>)</p></li>
-<li><p><strong>captures</strong> (<em>tuple</em><em>[</em><em>striqt.sensor.lib.typing.SC</em><em>, </em><em>...</em><em>]</em>)</p></li>
-<li><p><strong>loops</strong> (<em>tuple</em><em>[</em><a class="reference internal" href="#striqt.sensor.specs.Repeat" title="striqt.sensor.specs.Repeat"><em>striqt.sensor.specs.Repeat</em></a><em> | </em><a class="reference internal" href="#striqt.sensor.specs.List" title="striqt.sensor.specs.List"><em>striqt.sensor.specs.List</em></a><em> | </em><a class="reference internal" href="#striqt.sensor.specs.Range" title="striqt.sensor.specs.Range"><em>striqt.sensor.specs.Range</em></a><em> | </em><a class="reference internal" href="#striqt.sensor.specs.FrequencyBinRange" title="striqt.sensor.specs.FrequencyBinRange"><em>striqt.sensor.specs.FrequencyBinRange</em></a><em>, </em><em>...</em><em>]</em>)</p></li>
-<li><p><strong>analysis</strong> (<em>striqt.analysis.lib.register.Analysis</em>)</p></li>
-<li><p><strong>description</strong> (<a class="reference internal" href="#striqt.sensor.specs.Description" title="striqt.sensor.specs.Description"><em>striqt.sensor.specs.Description</em></a>)</p></li>
-<li><p><strong>adjust_captures</strong> (<em>dict</em><em>[</em><em>str</em><em> | </em><em>one</em><em> of </em><em>[</em><em>'defaults'</em><em>]</em><em>, </em><em>dict</em><em>[</em><em>str</em><em>, </em><a class="reference internal" href="#striqt.sensor.specs.CaptureRemap" title="striqt.sensor.specs.CaptureRemap"><em>striqt.sensor.specs.CaptureRemap</em></a><em> | </em><em>float</em><em> | </em><em>int</em><em> | </em><em>str</em><em> | </em><em>bool</em><em> | </em><em>None</em><em>] </em><em>| </em><em>tuple</em><em>[</em><em>str</em><em>, </em><a class="reference internal" href="#striqt.sensor.specs.CaptureRemap" title="striqt.sensor.specs.CaptureRemap"><em>striqt.sensor.specs.CaptureRemap</em></a><em> | </em><em>float</em><em> | </em><em>int</em><em> | </em><em>str</em><em> | </em><em>bool</em><em> | </em><em>None</em><em>]</em><em>]</em>) – Source UUID string</p></li>
-<li><p><strong>extensions</strong> (<a class="reference internal" href="#striqt.sensor.specs.Extension" title="striqt.sensor.specs.Extension"><em>striqt.sensor.specs.Extension</em></a>)</p></li>
-<li><p><strong>sink</strong> (<a class="reference internal" href="#striqt.sensor.specs.Sink" title="striqt.sensor.specs.Sink"><em>striqt.sensor.specs.Sink</em></a>)</p></li>
-<li><p><strong>peripherals</strong> (<em>striqt.sensor.lib.typing.SP</em>)</p></li>
-<li><p><strong>options</strong> (<a class="reference internal" href="#striqt.sensor.specs.SweepOptions" title="striqt.sensor.specs.SweepOptions"><em>striqt.sensor.specs.SweepOptions</em></a>)</p></li>
+<li><p><strong>source</strong> (<em>SS</em>)</p></li>
+<li><p><strong>captures</strong> (<em>tuple</em><em>[</em><em>SC</em><em>, </em><em>...</em><em>]</em>)</p></li>
+<li><p><strong>loops</strong> (<em>tuple</em><em>[</em><a class="reference internal" href="#striqt.sensor.specs.Repeat" title="striqt.sensor.specs.Repeat"><em>Repeat</em></a><em> | </em><a class="reference internal" href="#striqt.sensor.specs.List" title="striqt.sensor.specs.List"><em>List</em></a><em> | </em><a class="reference internal" href="#striqt.sensor.specs.Range" title="striqt.sensor.specs.Range"><em>Range</em></a><em> | </em><a class="reference internal" href="#striqt.sensor.specs.FrequencyBinRange" title="striqt.sensor.specs.FrequencyBinRange"><em>FrequencyBinRange</em></a><em>, </em><em>...</em><em>]</em>)</p></li>
+<li><p><strong>analysis</strong> (<a class="reference internal" href="striqt.analysis.specs.html#striqt.analysis.specs.Analysis" title="striqt.analysis.specs.Analysis"><em>Analysis</em></a>)</p></li>
+<li><p><strong>description</strong> (<a class="reference internal" href="#striqt.sensor.specs.Description" title="striqt.sensor.specs.Description"><em>Description</em></a>)</p></li>
+<li><p><strong>adjust_captures</strong> (<em>dict</em><em>[</em><em>str</em><em> | </em><em>one</em><em> of </em><em>[</em><em>'defaults'</em><em>]</em><em>, </em><em>dict</em><em>[</em><em>str</em><em>, </em><a class="reference internal" href="#striqt.sensor.specs.CaptureRemap" title="striqt.sensor.specs.CaptureRemap"><em>CaptureRemap</em></a><em> | </em><em>float</em><em> | </em><em>int</em><em> | </em><em>str</em><em> | </em><em>bool</em><em> | </em><em>None</em><em>] </em><em>| </em><em>tuple</em><em>[</em><em>str</em><em>, </em><a class="reference internal" href="#striqt.sensor.specs.CaptureRemap" title="striqt.sensor.specs.CaptureRemap"><em>CaptureRemap</em></a><em> | </em><em>float</em><em> | </em><em>int</em><em> | </em><em>str</em><em> | </em><em>bool</em><em> | </em><em>None</em><em>]</em><em>]</em>) – Source UUID string</p></li>
+<li><p><strong>extensions</strong> (<a class="reference internal" href="#striqt.sensor.specs.Extension" title="striqt.sensor.specs.Extension"><em>Extension</em></a>)</p></li>
+<li><p><strong>sink</strong> (<a class="reference internal" href="#striqt.sensor.specs.Sink" title="striqt.sensor.specs.Sink"><em>Sink</em></a>)</p></li>
+<li><p><strong>peripherals</strong> (<em>SP</em>)</p></li>
+<li><p><strong>options</strong> (<a class="reference internal" href="#striqt.sensor.specs.SweepOptions" title="striqt.sensor.specs.SweepOptions"><em>SweepOptions</em></a>)</p></li>
 </ul>
 </dd>
 <dt class="field-even">Variables<span class="colon">:</span></dt>
@@ -898,7 +898,7 @@ methods that fix encoding and decoding hooks for extra types.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>master_clock_rate</strong> (<em>float</em>) – Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em></p></li>
 <li><p><strong>trigger_strobe</strong> (<em>float</em><em> | </em><em>None</em>)</p></li>
-<li><p><strong>signal_trigger</strong> (<em>str</em><em> | </em><a class="reference internal" href="striqt.analysis.specs.html#striqt.analysis.specs.AnalysisGroup" title="striqt.analysis.specs.AnalysisGroup"><em>striqt.analysis.specs.AnalysisGroup</em></a><em> | </em><em>None</em>)</p></li>
+<li><p><strong>signal_trigger</strong> (<em>str</em><em> | </em><a class="reference internal" href="#striqt.sensor.specs.AnalysisGroup" title="striqt.sensor.specs.AnalysisGroup"><em>AnalysisGroup</em></a><em> | </em><em>None</em>)</p></li>
 <li><p><strong>array_backend</strong> (<em>one</em><em> of </em><em>[</em><em>'numpy'</em><em>, </em><em>'cupy'</em><em>]</em>) – array module to use to set compute device: numpy = cpu, cupy = gpu</p></li>
 <li><p><strong>path</strong> (<em>str</em>) – path to the waveform data file</p></li>
 </ul>
@@ -922,7 +922,7 @@ methods that fix encoding and decoding hooks for extra types.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>master_clock_rate</strong> (<em>float</em>) – Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em></p></li>
 <li><p><strong>trigger_strobe</strong> (<em>float</em><em> | </em><em>None</em>)</p></li>
-<li><p><strong>signal_trigger</strong> (<em>str</em><em> | </em><a class="reference internal" href="striqt.analysis.specs.html#striqt.analysis.specs.AnalysisGroup" title="striqt.analysis.specs.AnalysisGroup"><em>striqt.analysis.specs.AnalysisGroup</em></a><em> | </em><em>None</em>)</p></li>
+<li><p><strong>signal_trigger</strong> (<em>str</em><em> | </em><a class="reference internal" href="#striqt.sensor.specs.AnalysisGroup" title="striqt.sensor.specs.AnalysisGroup"><em>AnalysisGroup</em></a><em> | </em><em>None</em>)</p></li>
 <li><p><strong>array_backend</strong> (<em>one</em><em> of </em><em>[</em><em>'numpy'</em><em>, </em><em>'cupy'</em><em>]</em>) – array module to use to set compute device: numpy = cpu, cupy = gpu</p></li>
 <li><p><strong>path</strong> (<em>str</em>) – path to the waveform data file</p></li>
 <li><p><strong>center_frequency</strong> (<em>float</em><em> | </em><em>tuple</em><em>[</em><em>float</em><em>, </em><em>...</em><em>]</em>) – Center frequency for each port <em>(Constraints: units: Hz, &gt; 0, units: Hz, &gt; 0, units: Hz)</em></p></li>

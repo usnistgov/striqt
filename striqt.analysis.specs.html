@@ -108,7 +108,7 @@
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>nfft</strong> (<em>int</em>)</p></li>
-<li><p><strong>window</strong> (<em>str</em><em> | </em><em>tuple</em><em>[</em><em>str</em><em>, </em><em>float</em><em>]</em>)</p></li>
+<li><p><strong>window</strong> (<em>str</em><em> | </em><em>tuple</em><em>[</em><em>str</em><em>, </em><em>float</em><em>]</em>) – window function specification following <cite>scipy.signal.get_window</cite></p></li>
 <li><p><strong>nfft_out</strong> (<em>int</em><em> | </em><em>None</em>)</p></li>
 </ul>
 </dd>
@@ -145,7 +145,7 @@
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>subcarrier_spacing</strong> (<em>float</em>)</p></li>
+<li><p><strong>subcarrier_spacing</strong> (<em>float</em>) – Subcarrier spacing (15e3, 30e3, 60e3, etc) <em>(Constraints: units: Hz)</em></p></li>
 <li><p><strong>sample_rate</strong> (<em>float</em>)</p></li>
 <li><p><strong>discovery_periodicity</strong> (<em>float</em>)</p></li>
 <li><p><strong>frequency_offset</strong> (<em>float</em>)</p></li>
@@ -168,7 +168,7 @@
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>subcarrier_spacing</strong> (<em>float</em>)</p></li>
+<li><p><strong>subcarrier_spacing</strong> (<em>float</em>) – Subcarrier spacing (15e3, 30e3, 60e3, etc) <em>(Constraints: units: Hz)</em></p></li>
 <li><p><strong>sample_rate</strong> (<em>float</em>)</p></li>
 <li><p><strong>discovery_periodicity</strong> (<em>float</em>)</p></li>
 <li><p><strong>frequency_offset</strong> (<em>float</em>)</p></li>
@@ -186,8 +186,7 @@
 <dt class="sig sig-object py" id="striqt.analysis.specs.Cellular5GNRSSBSpectrogram">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.analysis.specs.</span></span><span class="sig-name descname"><span class="pre">Cellular5GNRSSBSpectrogram</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">subcarrier_spacing</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">7680000.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">discovery_periodicity</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.02</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frequency_offset</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_block_count</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">window</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">('kaiser_by_enbw',</span> <span class="pre">2)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lo_bandstop</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.analysis.specs.Cellular5GNRSSBSpectrogram" title="Link to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="#striqt.analysis.specs.Analysis" title="striqt.analysis.specs.Analysis"><code class="xref py py-class docutils literal notranslate"><span class="pre">Analysis</span></code></a></p>
-<p>subcarrier_spacing (float): 3GPP channel subcarrier spacing (Hz)
-sample_rate (float): output sample rate for the resampled synchronization waveform (samples/s)
+<p>sample_rate (float): output sample rate for the resampled synchronization waveform (samples/s)
 discovery_periodicity (float): time period between synchronization blocks (s)
 frequency_offset (float or dict[float, float]):</p>
 <blockquote>
@@ -201,12 +200,12 @@ frequency_offset (float or dict[float, float]):</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>subcarrier_spacing</strong> (<em>float</em>)</p></li>
+<li><p><strong>subcarrier_spacing</strong> (<em>float</em>) – Subcarrier spacing (15e3, 30e3, 60e3, etc) <em>(Constraints: units: Hz)</em></p></li>
 <li><p><strong>sample_rate</strong> (<em>float</em>)</p></li>
 <li><p><strong>discovery_periodicity</strong> (<em>float</em>)</p></li>
 <li><p><strong>frequency_offset</strong> (<em>float</em>)</p></li>
 <li><p><strong>max_block_count</strong> (<em>int</em><em> | </em><em>None</em>)</p></li>
-<li><p><strong>window</strong> (<em>str</em><em> | </em><em>tuple</em><em>[</em><em>str</em><em>, </em><em>float</em><em>]</em>)</p></li>
+<li><p><strong>window</strong> (<em>str</em><em> | </em><em>tuple</em><em>[</em><em>str</em><em>, </em><em>float</em><em>]</em>) – window function specification following <cite>scipy.signal.get_window</cite></p></li>
 <li><p><strong>lo_bandstop</strong> (<em>float</em><em> | </em><em>None</em>)</p></li>
 </ul>
 </dd>
@@ -225,7 +224,7 @@ frequency_offset (float or dict[float, float]):</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>subcarrier_spacing</strong> (<em>float</em>)</p></li>
+<li><p><strong>subcarrier_spacing</strong> (<em>float</em>) – Subcarrier spacing (15e3, 30e3, 60e3, etc) <em>(Constraints: units: Hz)</em></p></li>
 <li><p><strong>sample_rate</strong> (<em>float</em>)</p></li>
 <li><p><strong>discovery_periodicity</strong> (<em>float</em>)</p></li>
 <li><p><strong>frequency_offset</strong> (<em>float</em>)</p></li>
@@ -246,7 +245,7 @@ frequency_offset (float or dict[float, float]):</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>subcarrier_spacing</strong> (<em>float</em>)</p></li>
+<li><p><strong>subcarrier_spacing</strong> (<em>float</em>) – Subcarrier spacing (15e3, 30e3, 60e3, etc) <em>(Constraints: units: Hz)</em></p></li>
 <li><p><strong>sample_rate</strong> (<em>float</em>)</p></li>
 <li><p><strong>discovery_periodicity</strong> (<em>float</em>)</p></li>
 <li><p><strong>frequency_offset</strong> (<em>float</em>)</p></li>
@@ -269,9 +268,9 @@ frequency_offset (float or dict[float, float]):</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>subcarrier_spacings</strong> (<em>float</em><em> | </em><em>tuple</em><em>[</em><em>float</em><em>, </em><em>...</em><em>]</em>)</p></li>
+<li><p><strong>subcarrier_spacings</strong> (<em>float</em><em> | </em><em>tuple</em><em>[</em><em>float</em><em>, </em><em>...</em><em>]</em>) – One or more subcarrier spacings (15e3, 30e3, 60e3, etc) <em>(Constraints: units: Hz)</em></p></li>
 <li><p><strong>frame_range</strong> (<em>int</em><em> | </em><em>tuple</em><em>[</em><em>int</em><em>, </em><em>int</em><em>]</em>)</p></li>
-<li><p><strong>frame_slots</strong> (<em>str</em><em> | </em><em>None</em>)</p></li>
+<li><p><strong>frame_slots</strong> (<em>str</em><em> | </em><em>None</em>) – string composed of (‘d’, ‘u’, ‘s’) specifying the sequence of slots in 1 TDD cellular frame, or None to fill with downlink</p></li>
 <li><p><strong>symbol_range</strong> (<em>int</em><em> | </em><em>tuple</em><em>[</em><em>int</em><em>, </em><em>int</em><em> | </em><em>None</em><em>]</em>)</p></li>
 <li><p><strong>generation</strong> (<em>one</em><em> of </em><em>[</em><em>'4G'</em><em>, </em><em>'5G'</em><em>]</em>)</p></li>
 </ul>
@@ -286,18 +285,18 @@ frequency_offset (float or dict[float, float]):</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>window</strong> (<em>str</em><em> | </em><em>tuple</em><em>[</em><em>str</em><em>, </em><em>float</em><em>]</em>)</p></li>
-<li><p><strong>subcarrier_spacing</strong> (<em>float</em>)</p></li>
-<li><p><strong>power_low</strong> (<em>float</em>)</p></li>
-<li><p><strong>power_high</strong> (<em>float</em>)</p></li>
-<li><p><strong>power_resolution</strong> (<em>float</em>)</p></li>
-<li><p><strong>average_rbs</strong> (<em>bool</em><em> | </em><em>one</em><em> of </em><em>[</em><em>'half'</em><em>]</em>)</p></li>
-<li><p><strong>average_slots</strong> (<em>bool</em>)</p></li>
-<li><p><strong>guard_bandwidths</strong> (<em>tuple</em><em>[</em><em>float</em><em>, </em><em>float</em><em>]</em>)</p></li>
-<li><p><strong>frame_slots</strong> (<em>str</em><em> | </em><em>None</em>)</p></li>
-<li><p><strong>special_symbols</strong> (<em>str</em><em> | </em><em>None</em>)</p></li>
-<li><p><strong>cyclic_prefix</strong> (<em>one</em><em> of </em><em>[</em><em>'normal'</em><em>, </em><em>'extended'</em><em>]</em>)</p></li>
-<li><p><strong>lo_bandstop</strong> (<em>float</em><em> | </em><em>None</em>)</p></li>
+<li><p><strong>window</strong> (<em>str</em><em> | </em><em>tuple</em><em>[</em><em>str</em><em>, </em><em>float</em><em>]</em>) – window function specification following <cite>scipy.signal.get_window</cite></p></li>
+<li><p><strong>subcarrier_spacing</strong> (<em>float</em>) – Subcarrier spacing (15e3, 30e3, 60e3, etc) <em>(Constraints: units: Hz)</em></p></li>
+<li><p><strong>power_low</strong> (<em>float</em>) – Minimum power bin <em>(Constraints: units: dB power)</em></p></li>
+<li><p><strong>power_high</strong> (<em>float</em>) – Maximum power bin <em>(Constraints: units: dB power)</em></p></li>
+<li><p><strong>power_resolution</strong> (<em>float</em>) – Power bin resolution <em>(Constraints: units: dB)</em></p></li>
+<li><p><strong>average_rbs</strong> (<em>bool</em><em> | </em><em>one</em><em> of </em><em>[</em><em>'half'</em><em>]</em>) – True (or “half”) to coarsen spectrogram bins by integrating 1-subcarrier frequency resolution into 1- (or 1/2)-resource block</p></li>
+<li><p><strong>average_slots</strong> (<em>bool</em>) – True to coarsen spectrogram bins by averaging 1-symbol time resolution</p></li>
+<li><p><strong>guard_bandwidths</strong> (<em>tuple</em><em>[</em><em>float</em><em>, </em><em>float</em><em>]</em>) – Channel guard bandwidths to ignore on the left and right sides <em>(Constraints: units: Hz)</em></p></li>
+<li><p><strong>frame_slots</strong> (<em>str</em><em> | </em><em>None</em>) – string composed of (‘d’, ‘u’, ‘s’) specifying the sequence of slots in 1 TDD cellular frame, or None to fill with downlink</p></li>
+<li><p><strong>special_symbols</strong> (<em>str</em><em> | </em><em>None</em>) – string composed of the characters (‘d’, ‘u’, ‘f’) indicating the sequence of symbol types (when ‘s’ is in frame_slots)</p></li>
+<li><p><strong>cyclic_prefix</strong> (<em>one</em><em> of </em><em>[</em><em>'normal'</em><em>] </em><em>| </em><em>one</em><em> of </em><em>[</em><em>'extended'</em><em>]</em>) – the 3GPP cyclic prefix type</p></li>
+<li><p><strong>lo_bandstop</strong> (<em>float</em><em> | </em><em>None</em>) – mask with float(“nan”) at this bandwidth centered at baseband DC <em>(Constraints: units: Hz)</em></p></li>
 </ul>
 </dd>
 </dl>
@@ -310,11 +309,11 @@ frequency_offset (float or dict[float, float]):</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>detector_period</strong> (<em>fractions.Fraction</em>)</p></li>
+<li><p><strong>detector_period</strong> (<em>Fraction</em>)</p></li>
 <li><p><strong>power_detectors</strong> (<em>tuple</em><em>[</em><em>str</em><em>, </em><em>...</em><em>]</em>)</p></li>
-<li><p><strong>power_low</strong> (<em>float</em>)</p></li>
-<li><p><strong>power_high</strong> (<em>float</em>)</p></li>
-<li><p><strong>power_resolution</strong> (<em>float</em>)</p></li>
+<li><p><strong>power_low</strong> (<em>float</em>) – Minimum power bin <em>(Constraints: units: dB power)</em></p></li>
+<li><p><strong>power_high</strong> (<em>float</em>) – Maximum power bin <em>(Constraints: units: dB power)</em></p></li>
+<li><p><strong>power_resolution</strong> (<em>float</em>) – Power bin resolution <em>(Constraints: units: dB)</em></p></li>
 </ul>
 </dd>
 </dl>
@@ -327,7 +326,7 @@ frequency_offset (float or dict[float, float]):</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>detector_period</strong> (<em>fractions.Fraction</em>)</p></li>
+<li><p><strong>detector_period</strong> (<em>Fraction</em>)</p></li>
 <li><p><strong>power_detectors</strong> (<em>tuple</em><em>[</em><em>str</em><em>, </em><em>...</em><em>]</em>)</p></li>
 </ul>
 </dd>
@@ -342,7 +341,7 @@ frequency_offset (float or dict[float, float]):</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>cyclic_period</strong> (<em>float</em>)</p></li>
-<li><p><strong>detector_period</strong> (<em>fractions.Fraction</em>)</p></li>
+<li><p><strong>detector_period</strong> (<em>Fraction</em>)</p></li>
 <li><p><strong>power_detectors</strong> (<em>tuple</em><em>[</em><em>str</em><em>, </em><em>...</em><em>]</em>)</p></li>
 <li><p><strong>cyclic_statistics</strong> (<em>tuple</em><em>[</em><em>str</em><em> | </em><em>float</em><em>, </em><em>...</em><em>]</em>)</p></li>
 </ul>
@@ -360,7 +359,7 @@ frequency_offset (float or dict[float, float]):</p>
 <li><p><strong>duration</strong> (<em>float</em>) – Duration of the analysis waveform <em>(Constraints: units: s)</em></p></li>
 <li><p><strong>sample_rate</strong> (<em>float</em>) – Analysis sample rate <em>(Constraints: units: S/s)</em></p></li>
 <li><p><strong>analysis_bandwidth</strong> (<em>float</em>) – Analysis bandwidth <em>(Constraints: units: Hz)</em></p></li>
-<li><p><strong>analysis_filter</strong> (<a class="reference internal" href="#striqt.analysis.specs.AnalysisFilter" title="striqt.analysis.specs.AnalysisFilter"><em>striqt.analysis.specs.AnalysisFilter</em></a>)</p></li>
+<li><p><strong>analysis_filter</strong> (<a class="reference internal" href="#striqt.analysis.specs.AnalysisFilter" title="striqt.analysis.specs.AnalysisFilter"><em>AnalysisFilter</em></a>)</p></li>
 </ul>
 </dd>
 </dl>
@@ -389,13 +388,13 @@ trim_stopband (bool):</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>window</strong> (<em>str</em><em> | </em><em>tuple</em><em>[</em><em>str</em><em>, </em><em>float</em><em>]</em>)</p></li>
+<li><p><strong>window</strong> (<em>str</em><em> | </em><em>tuple</em><em>[</em><em>str</em><em>, </em><em>float</em><em>]</em>) – window function specification following <cite>scipy.signal.get_window</cite></p></li>
 <li><p><strong>frequency_resolution</strong> (<em>float</em>)</p></li>
-<li><p><strong>fractional_overlap</strong> (<em>fractions.Fraction</em>)</p></li>
-<li><p><strong>window_fill</strong> (<em>fractions.Fraction</em>)</p></li>
+<li><p><strong>fractional_overlap</strong> (<em>Fraction</em>)</p></li>
+<li><p><strong>window_fill</strong> (<em>Fraction</em>)</p></li>
 <li><p><strong>integration_bandwidth</strong> (<em>float</em><em> | </em><em>None</em>)</p></li>
 <li><p><strong>trim_stopband</strong> (<em>bool</em>)</p></li>
-<li><p><strong>lo_bandstop</strong> (<em>float</em><em> | </em><em>None</em>)</p></li>
+<li><p><strong>lo_bandstop</strong> (<em>float</em><em> | </em><em>None</em>) – mask with float(“nan”) at this bandwidth centered at baseband DC <em>(Constraints: units: Hz)</em></p></li>
 </ul>
 </dd>
 </dl>
@@ -428,13 +427,13 @@ trim_stopband (bool):</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>window</strong> (<em>str</em><em> | </em><em>tuple</em><em>[</em><em>str</em><em>, </em><em>float</em><em>]</em>)</p></li>
+<li><p><strong>window</strong> (<em>str</em><em> | </em><em>tuple</em><em>[</em><em>str</em><em>, </em><em>float</em><em>]</em>) – window function specification following <cite>scipy.signal.get_window</cite></p></li>
 <li><p><strong>frequency_resolution</strong> (<em>float</em>)</p></li>
-<li><p><strong>fractional_overlap</strong> (<em>fractions.Fraction</em>)</p></li>
-<li><p><strong>window_fill</strong> (<em>fractions.Fraction</em>)</p></li>
+<li><p><strong>fractional_overlap</strong> (<em>Fraction</em>)</p></li>
+<li><p><strong>window_fill</strong> (<em>Fraction</em>)</p></li>
 <li><p><strong>integration_bandwidth</strong> (<em>float</em><em> | </em><em>None</em>)</p></li>
 <li><p><strong>trim_stopband</strong> (<em>bool</em>)</p></li>
-<li><p><strong>lo_bandstop</strong> (<em>float</em><em> | </em><em>None</em>)</p></li>
+<li><p><strong>lo_bandstop</strong> (<em>float</em><em> | </em><em>None</em>) – mask with float(“nan”) at this bandwidth centered at baseband DC <em>(Constraints: units: Hz)</em></p></li>
 <li><p><strong>time_statistic</strong> (<em>tuple</em><em>[</em><em>str</em><em> | </em><em>float</em><em>, </em><em>...</em><em>]</em>)</p></li>
 </ul>
 </dd>
@@ -495,13 +494,13 @@ spectrogram to yield this coarser resolution (s)</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>window</strong> (<em>str</em><em> | </em><em>tuple</em><em>[</em><em>str</em><em>, </em><em>float</em><em>]</em>)</p></li>
+<li><p><strong>window</strong> (<em>str</em><em> | </em><em>tuple</em><em>[</em><em>str</em><em>, </em><em>float</em><em>]</em>) – window function specification following <cite>scipy.signal.get_window</cite></p></li>
 <li><p><strong>frequency_resolution</strong> (<em>float</em>)</p></li>
-<li><p><strong>fractional_overlap</strong> (<em>fractions.Fraction</em>)</p></li>
-<li><p><strong>window_fill</strong> (<em>fractions.Fraction</em>)</p></li>
+<li><p><strong>fractional_overlap</strong> (<em>Fraction</em>)</p></li>
+<li><p><strong>window_fill</strong> (<em>Fraction</em>)</p></li>
 <li><p><strong>integration_bandwidth</strong> (<em>float</em><em> | </em><em>None</em>)</p></li>
 <li><p><strong>trim_stopband</strong> (<em>bool</em>)</p></li>
-<li><p><strong>lo_bandstop</strong> (<em>float</em><em> | </em><em>None</em>)</p></li>
+<li><p><strong>lo_bandstop</strong> (<em>float</em><em> | </em><em>None</em>) – mask with float(“nan”) at this bandwidth centered at baseband DC <em>(Constraints: units: Hz)</em></p></li>
 <li><p><strong>time_aperture</strong> (<em>float</em><em> | </em><em>None</em>)</p></li>
 </ul>
 </dd>
@@ -520,17 +519,17 @@ spectrogram to yield this coarser resolution (s)</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>window</strong> (<em>str</em><em> | </em><em>tuple</em><em>[</em><em>str</em><em>, </em><em>float</em><em>]</em>)</p></li>
+<li><p><strong>window</strong> (<em>str</em><em> | </em><em>tuple</em><em>[</em><em>str</em><em>, </em><em>float</em><em>]</em>) – window function specification following <cite>scipy.signal.get_window</cite></p></li>
 <li><p><strong>frequency_resolution</strong> (<em>float</em>)</p></li>
-<li><p><strong>fractional_overlap</strong> (<em>fractions.Fraction</em>)</p></li>
-<li><p><strong>window_fill</strong> (<em>fractions.Fraction</em>)</p></li>
+<li><p><strong>fractional_overlap</strong> (<em>Fraction</em>)</p></li>
+<li><p><strong>window_fill</strong> (<em>Fraction</em>)</p></li>
 <li><p><strong>integration_bandwidth</strong> (<em>float</em><em> | </em><em>None</em>)</p></li>
 <li><p><strong>trim_stopband</strong> (<em>bool</em>)</p></li>
-<li><p><strong>lo_bandstop</strong> (<em>float</em><em> | </em><em>None</em>)</p></li>
+<li><p><strong>lo_bandstop</strong> (<em>float</em><em> | </em><em>None</em>) – mask with float(“nan”) at this bandwidth centered at baseband DC <em>(Constraints: units: Hz)</em></p></li>
 <li><p><strong>time_aperture</strong> (<em>float</em><em> | </em><em>None</em>)</p></li>
-<li><p><strong>power_low</strong> (<em>float</em>)</p></li>
-<li><p><strong>power_high</strong> (<em>float</em>)</p></li>
-<li><p><strong>power_resolution</strong> (<em>float</em>)</p></li>
+<li><p><strong>power_low</strong> (<em>float</em>) – Minimum power bin <em>(Constraints: units: dB power)</em></p></li>
+<li><p><strong>power_high</strong> (<em>float</em>) – Maximum power bin <em>(Constraints: units: dB power)</em></p></li>
+<li><p><strong>power_resolution</strong> (<em>float</em>) – Power bin resolution <em>(Constraints: units: dB)</em></p></li>
 </ul>
 </dd>
 </dl>
@@ -543,17 +542,17 @@ spectrogram to yield this coarser resolution (s)</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>window</strong> (<em>str</em><em> | </em><em>tuple</em><em>[</em><em>str</em><em>, </em><em>float</em><em>]</em>)</p></li>
+<li><p><strong>window</strong> (<em>str</em><em> | </em><em>tuple</em><em>[</em><em>str</em><em>, </em><em>float</em><em>]</em>) – window function specification following <cite>scipy.signal.get_window</cite></p></li>
 <li><p><strong>frequency_resolution</strong> (<em>float</em>)</p></li>
-<li><p><strong>fractional_overlap</strong> (<em>fractions.Fraction</em>)</p></li>
-<li><p><strong>window_fill</strong> (<em>fractions.Fraction</em>)</p></li>
+<li><p><strong>fractional_overlap</strong> (<em>Fraction</em>)</p></li>
+<li><p><strong>window_fill</strong> (<em>Fraction</em>)</p></li>
 <li><p><strong>integration_bandwidth</strong> (<em>float</em><em> | </em><em>None</em>)</p></li>
 <li><p><strong>trim_stopband</strong> (<em>bool</em>)</p></li>
-<li><p><strong>lo_bandstop</strong> (<em>float</em><em> | </em><em>None</em>)</p></li>
+<li><p><strong>lo_bandstop</strong> (<em>float</em><em> | </em><em>None</em>) – mask with float(“nan”) at this bandwidth centered at baseband DC <em>(Constraints: units: Hz)</em></p></li>
 <li><p><strong>time_aperture</strong> (<em>float</em><em> | </em><em>None</em>)</p></li>
-<li><p><strong>power_low</strong> (<em>float</em>)</p></li>
-<li><p><strong>power_high</strong> (<em>float</em>)</p></li>
-<li><p><strong>power_resolution</strong> (<em>float</em>)</p></li>
+<li><p><strong>power_low</strong> (<em>float</em>) – Minimum power bin <em>(Constraints: units: dB power)</em></p></li>
+<li><p><strong>power_high</strong> (<em>float</em>) – Maximum power bin <em>(Constraints: units: dB power)</em></p></li>
+<li><p><strong>power_resolution</strong> (<em>float</em>) – Power bin resolution <em>(Constraints: units: dB)</em></p></li>
 </ul>
 </dd>
 </dl>
