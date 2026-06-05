@@ -110,26 +110,7 @@ peripherals and expanded data fields elsewhere.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="striqt.sensor.bindings.air7101b.controller">
 <span class="sig-name descname"><span class="pre">controller</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">PS.args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">PS.kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.bindings.Controller"><span class="pre">striqt.sensor.bindings.Controller</span></a></span></span><a class="headerlink" href="#striqt.sensor.bindings.air7101b.controller" title="Link to this definition">¶</a></dt>
-<dd><p>Abstract base class for generic types.</p>
-<p>On Python 3.12 and newer, generic classes implicitly inherit from
-Generic when they declare a parameter list after the class’s name:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">Mapping</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">]:</span>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="n">KT</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VT</span><span class="p">:</span>
-        <span class="o">...</span>
-    <span class="c1"># Etc.</span>
-</pre></div>
-</div>
-<p>On older versions of Python, however, generic classes have to
-explicitly inherit from Generic.</p>
-<p>After a class has been declared to be generic, it can then be used as
-follows:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">lookup_name</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">](</span><span class="n">mapping</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">],</span> <span class="n">key</span><span class="p">:</span> <span class="n">KT</span><span class="p">,</span> <span class="n">default</span><span class="p">:</span> <span class="n">VT</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VT</span><span class="p">:</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">mapping</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
-    <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">default</span>
-</pre></div>
-</div>
+<dd><p><em>(No documentation provided)</em></p>
 </dd></dl>
 
 </dd></dl>
@@ -158,26 +139,7 @@ follows:</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="striqt.sensor.bindings.air7101b_calibration.controller">
 <span class="sig-name descname"><span class="pre">controller</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">PS.args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">PS.kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.bindings.Controller"><span class="pre">striqt.sensor.bindings.Controller</span></a></span></span><a class="headerlink" href="#striqt.sensor.bindings.air7101b_calibration.controller" title="Link to this definition">¶</a></dt>
-<dd><p>Abstract base class for generic types.</p>
-<p>On Python 3.12 and newer, generic classes implicitly inherit from
-Generic when they declare a parameter list after the class’s name:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">Mapping</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">]:</span>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="n">KT</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VT</span><span class="p">:</span>
-        <span class="o">...</span>
-    <span class="c1"># Etc.</span>
-</pre></div>
-</div>
-<p>On older versions of Python, however, generic classes have to
-explicitly inherit from Generic.</p>
-<p>After a class has been declared to be generic, it can then be used as
-follows:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">lookup_name</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">](</span><span class="n">mapping</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">],</span> <span class="n">key</span><span class="p">:</span> <span class="n">KT</span><span class="p">,</span> <span class="n">default</span><span class="p">:</span> <span class="n">VT</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VT</span><span class="p">:</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">mapping</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
-    <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">default</span>
-</pre></div>
-</div>
+<dd><p><em>(No documentation provided)</em></p>
 </dd></dl>
 
 </dd></dl>
@@ -206,26 +168,7 @@ follows:</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="striqt.sensor.bindings.air7201b.controller">
 <span class="sig-name descname"><span class="pre">controller</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">PS.args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">PS.kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.bindings.Controller"><span class="pre">striqt.sensor.bindings.Controller</span></a></span></span><a class="headerlink" href="#striqt.sensor.bindings.air7201b.controller" title="Link to this definition">¶</a></dt>
-<dd><p>Abstract base class for generic types.</p>
-<p>On Python 3.12 and newer, generic classes implicitly inherit from
-Generic when they declare a parameter list after the class’s name:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">Mapping</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">]:</span>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="n">KT</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VT</span><span class="p">:</span>
-        <span class="o">...</span>
-    <span class="c1"># Etc.</span>
-</pre></div>
-</div>
-<p>On older versions of Python, however, generic classes have to
-explicitly inherit from Generic.</p>
-<p>After a class has been declared to be generic, it can then be used as
-follows:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">lookup_name</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">](</span><span class="n">mapping</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">],</span> <span class="n">key</span><span class="p">:</span> <span class="n">KT</span><span class="p">,</span> <span class="n">default</span><span class="p">:</span> <span class="n">VT</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VT</span><span class="p">:</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">mapping</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
-    <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">default</span>
-</pre></div>
-</div>
+<dd><p><em>(No documentation provided)</em></p>
 </dd></dl>
 
 </dd></dl>
@@ -254,26 +197,7 @@ follows:</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="striqt.sensor.bindings.air7201b_calibration.controller">
 <span class="sig-name descname"><span class="pre">controller</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">PS.args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">PS.kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.bindings.Controller"><span class="pre">striqt.sensor.bindings.Controller</span></a></span></span><a class="headerlink" href="#striqt.sensor.bindings.air7201b_calibration.controller" title="Link to this definition">¶</a></dt>
-<dd><p>Abstract base class for generic types.</p>
-<p>On Python 3.12 and newer, generic classes implicitly inherit from
-Generic when they declare a parameter list after the class’s name:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">Mapping</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">]:</span>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="n">KT</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VT</span><span class="p">:</span>
-        <span class="o">...</span>
-    <span class="c1"># Etc.</span>
-</pre></div>
-</div>
-<p>On older versions of Python, however, generic classes have to
-explicitly inherit from Generic.</p>
-<p>After a class has been declared to be generic, it can then be used as
-follows:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">lookup_name</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">](</span><span class="n">mapping</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">],</span> <span class="n">key</span><span class="p">:</span> <span class="n">KT</span><span class="p">,</span> <span class="n">default</span><span class="p">:</span> <span class="n">VT</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VT</span><span class="p">:</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">mapping</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
-    <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">default</span>
-</pre></div>
-</div>
+<dd><p><em>(No documentation provided)</em></p>
 </dd></dl>
 
 </dd></dl>
@@ -302,26 +226,7 @@ follows:</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="striqt.sensor.bindings.air8201b.controller">
 <span class="sig-name descname"><span class="pre">controller</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">PS.args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">PS.kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.bindings.Controller"><span class="pre">striqt.sensor.bindings.Controller</span></a></span></span><a class="headerlink" href="#striqt.sensor.bindings.air8201b.controller" title="Link to this definition">¶</a></dt>
-<dd><p>Abstract base class for generic types.</p>
-<p>On Python 3.12 and newer, generic classes implicitly inherit from
-Generic when they declare a parameter list after the class’s name:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">Mapping</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">]:</span>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="n">KT</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VT</span><span class="p">:</span>
-        <span class="o">...</span>
-    <span class="c1"># Etc.</span>
-</pre></div>
-</div>
-<p>On older versions of Python, however, generic classes have to
-explicitly inherit from Generic.</p>
-<p>After a class has been declared to be generic, it can then be used as
-follows:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">lookup_name</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">](</span><span class="n">mapping</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">],</span> <span class="n">key</span><span class="p">:</span> <span class="n">KT</span><span class="p">,</span> <span class="n">default</span><span class="p">:</span> <span class="n">VT</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VT</span><span class="p">:</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">mapping</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
-    <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">default</span>
-</pre></div>
-</div>
+<dd><p><em>(No documentation provided)</em></p>
 </dd></dl>
 
 </dd></dl>
@@ -350,26 +255,7 @@ follows:</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="striqt.sensor.bindings.air8201b_calibration.controller">
 <span class="sig-name descname"><span class="pre">controller</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">PS.args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">PS.kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.bindings.Controller"><span class="pre">striqt.sensor.bindings.Controller</span></a></span></span><a class="headerlink" href="#striqt.sensor.bindings.air8201b_calibration.controller" title="Link to this definition">¶</a></dt>
-<dd><p>Abstract base class for generic types.</p>
-<p>On Python 3.12 and newer, generic classes implicitly inherit from
-Generic when they declare a parameter list after the class’s name:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">Mapping</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">]:</span>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="n">KT</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VT</span><span class="p">:</span>
-        <span class="o">...</span>
-    <span class="c1"># Etc.</span>
-</pre></div>
-</div>
-<p>On older versions of Python, however, generic classes have to
-explicitly inherit from Generic.</p>
-<p>After a class has been declared to be generic, it can then be used as
-follows:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">lookup_name</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">](</span><span class="n">mapping</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">],</span> <span class="n">key</span><span class="p">:</span> <span class="n">KT</span><span class="p">,</span> <span class="n">default</span><span class="p">:</span> <span class="n">VT</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VT</span><span class="p">:</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">mapping</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
-    <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">default</span>
-</pre></div>
-</div>
+<dd><p><em>(No documentation provided)</em></p>
 </dd></dl>
 
 </dd></dl>
@@ -398,26 +284,7 @@ follows:</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="striqt.sensor.bindings.dirac_delta.controller">
 <span class="sig-name descname"><span class="pre">controller</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">PS.args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">PS.kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.bindings.Controller"><span class="pre">striqt.sensor.bindings.Controller</span></a></span></span><a class="headerlink" href="#striqt.sensor.bindings.dirac_delta.controller" title="Link to this definition">¶</a></dt>
-<dd><p>Abstract base class for generic types.</p>
-<p>On Python 3.12 and newer, generic classes implicitly inherit from
-Generic when they declare a parameter list after the class’s name:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">Mapping</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">]:</span>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="n">KT</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VT</span><span class="p">:</span>
-        <span class="o">...</span>
-    <span class="c1"># Etc.</span>
-</pre></div>
-</div>
-<p>On older versions of Python, however, generic classes have to
-explicitly inherit from Generic.</p>
-<p>After a class has been declared to be generic, it can then be used as
-follows:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">lookup_name</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">](</span><span class="n">mapping</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">],</span> <span class="n">key</span><span class="p">:</span> <span class="n">KT</span><span class="p">,</span> <span class="n">default</span><span class="p">:</span> <span class="n">VT</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VT</span><span class="p">:</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">mapping</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
-    <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">default</span>
-</pre></div>
-</div>
+<dd><p><em>(No documentation provided)</em></p>
 </dd></dl>
 
 </dd></dl>
@@ -446,26 +313,7 @@ follows:</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="striqt.sensor.bindings.mat_file.controller">
 <span class="sig-name descname"><span class="pre">controller</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">PS.args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">PS.kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.bindings.Controller"><span class="pre">striqt.sensor.bindings.Controller</span></a></span></span><a class="headerlink" href="#striqt.sensor.bindings.mat_file.controller" title="Link to this definition">¶</a></dt>
-<dd><p>Abstract base class for generic types.</p>
-<p>On Python 3.12 and newer, generic classes implicitly inherit from
-Generic when they declare a parameter list after the class’s name:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">Mapping</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">]:</span>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="n">KT</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VT</span><span class="p">:</span>
-        <span class="o">...</span>
-    <span class="c1"># Etc.</span>
-</pre></div>
-</div>
-<p>On older versions of Python, however, generic classes have to
-explicitly inherit from Generic.</p>
-<p>After a class has been declared to be generic, it can then be used as
-follows:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">lookup_name</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">](</span><span class="n">mapping</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">],</span> <span class="n">key</span><span class="p">:</span> <span class="n">KT</span><span class="p">,</span> <span class="n">default</span><span class="p">:</span> <span class="n">VT</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VT</span><span class="p">:</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">mapping</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
-    <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">default</span>
-</pre></div>
-</div>
+<dd><p><em>(No documentation provided)</em></p>
 </dd></dl>
 
 </dd></dl>
@@ -494,26 +342,7 @@ follows:</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="striqt.sensor.bindings.noise.controller">
 <span class="sig-name descname"><span class="pre">controller</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">PS.args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">PS.kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.bindings.Controller"><span class="pre">striqt.sensor.bindings.Controller</span></a></span></span><a class="headerlink" href="#striqt.sensor.bindings.noise.controller" title="Link to this definition">¶</a></dt>
-<dd><p>Abstract base class for generic types.</p>
-<p>On Python 3.12 and newer, generic classes implicitly inherit from
-Generic when they declare a parameter list after the class’s name:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">Mapping</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">]:</span>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="n">KT</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VT</span><span class="p">:</span>
-        <span class="o">...</span>
-    <span class="c1"># Etc.</span>
-</pre></div>
-</div>
-<p>On older versions of Python, however, generic classes have to
-explicitly inherit from Generic.</p>
-<p>After a class has been declared to be generic, it can then be used as
-follows:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">lookup_name</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">](</span><span class="n">mapping</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">],</span> <span class="n">key</span><span class="p">:</span> <span class="n">KT</span><span class="p">,</span> <span class="n">default</span><span class="p">:</span> <span class="n">VT</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VT</span><span class="p">:</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">mapping</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
-    <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">default</span>
-</pre></div>
-</div>
+<dd><p><em>(No documentation provided)</em></p>
 </dd></dl>
 
 </dd></dl>
@@ -542,26 +371,7 @@ follows:</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="striqt.sensor.bindings.sawtooth.controller">
 <span class="sig-name descname"><span class="pre">controller</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">PS.args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">PS.kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.bindings.Controller"><span class="pre">striqt.sensor.bindings.Controller</span></a></span></span><a class="headerlink" href="#striqt.sensor.bindings.sawtooth.controller" title="Link to this definition">¶</a></dt>
-<dd><p>Abstract base class for generic types.</p>
-<p>On Python 3.12 and newer, generic classes implicitly inherit from
-Generic when they declare a parameter list after the class’s name:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">Mapping</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">]:</span>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="n">KT</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VT</span><span class="p">:</span>
-        <span class="o">...</span>
-    <span class="c1"># Etc.</span>
-</pre></div>
-</div>
-<p>On older versions of Python, however, generic classes have to
-explicitly inherit from Generic.</p>
-<p>After a class has been declared to be generic, it can then be used as
-follows:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">lookup_name</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">](</span><span class="n">mapping</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">],</span> <span class="n">key</span><span class="p">:</span> <span class="n">KT</span><span class="p">,</span> <span class="n">default</span><span class="p">:</span> <span class="n">VT</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VT</span><span class="p">:</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">mapping</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
-    <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">default</span>
-</pre></div>
-</div>
+<dd><p><em>(No documentation provided)</em></p>
 </dd></dl>
 
 </dd></dl>
@@ -590,26 +400,7 @@ follows:</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="striqt.sensor.bindings.single_tone.controller">
 <span class="sig-name descname"><span class="pre">controller</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">PS.args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">PS.kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.bindings.Controller"><span class="pre">striqt.sensor.bindings.Controller</span></a></span></span><a class="headerlink" href="#striqt.sensor.bindings.single_tone.controller" title="Link to this definition">¶</a></dt>
-<dd><p>Abstract base class for generic types.</p>
-<p>On Python 3.12 and newer, generic classes implicitly inherit from
-Generic when they declare a parameter list after the class’s name:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">Mapping</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">]:</span>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="n">KT</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VT</span><span class="p">:</span>
-        <span class="o">...</span>
-    <span class="c1"># Etc.</span>
-</pre></div>
-</div>
-<p>On older versions of Python, however, generic classes have to
-explicitly inherit from Generic.</p>
-<p>After a class has been declared to be generic, it can then be used as
-follows:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">lookup_name</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">](</span><span class="n">mapping</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">],</span> <span class="n">key</span><span class="p">:</span> <span class="n">KT</span><span class="p">,</span> <span class="n">default</span><span class="p">:</span> <span class="n">VT</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VT</span><span class="p">:</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">mapping</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
-    <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">default</span>
-</pre></div>
-</div>
+<dd><p><em>(No documentation provided)</em></p>
 </dd></dl>
 
 </dd></dl>
@@ -638,26 +429,7 @@ follows:</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="striqt.sensor.bindings.tdms_file.controller">
 <span class="sig-name descname"><span class="pre">controller</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">PS.args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">PS.kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.bindings.Controller"><span class="pre">striqt.sensor.bindings.Controller</span></a></span></span><a class="headerlink" href="#striqt.sensor.bindings.tdms_file.controller" title="Link to this definition">¶</a></dt>
-<dd><p>Abstract base class for generic types.</p>
-<p>On Python 3.12 and newer, generic classes implicitly inherit from
-Generic when they declare a parameter list after the class’s name:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">Mapping</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">]:</span>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="n">KT</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VT</span><span class="p">:</span>
-        <span class="o">...</span>
-    <span class="c1"># Etc.</span>
-</pre></div>
-</div>
-<p>On older versions of Python, however, generic classes have to
-explicitly inherit from Generic.</p>
-<p>After a class has been declared to be generic, it can then be used as
-follows:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">lookup_name</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">](</span><span class="n">mapping</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">],</span> <span class="n">key</span><span class="p">:</span> <span class="n">KT</span><span class="p">,</span> <span class="n">default</span><span class="p">:</span> <span class="n">VT</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VT</span><span class="p">:</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">mapping</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
-    <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">default</span>
-</pre></div>
-</div>
+<dd><p><em>(No documentation provided)</em></p>
 </dd></dl>
 
 </dd></dl>
@@ -686,26 +458,7 @@ follows:</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="striqt.sensor.bindings.warmup.controller">
 <span class="sig-name descname"><span class="pre">controller</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">PS.args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">PS.kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.bindings.Controller"><span class="pre">striqt.sensor.bindings.Controller</span></a></span></span><a class="headerlink" href="#striqt.sensor.bindings.warmup.controller" title="Link to this definition">¶</a></dt>
-<dd><p>Abstract base class for generic types.</p>
-<p>On Python 3.12 and newer, generic classes implicitly inherit from
-Generic when they declare a parameter list after the class’s name:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">Mapping</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">]:</span>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="n">KT</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VT</span><span class="p">:</span>
-        <span class="o">...</span>
-    <span class="c1"># Etc.</span>
-</pre></div>
-</div>
-<p>On older versions of Python, however, generic classes have to
-explicitly inherit from Generic.</p>
-<p>After a class has been declared to be generic, it can then be used as
-follows:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">lookup_name</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">](</span><span class="n">mapping</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">],</span> <span class="n">key</span><span class="p">:</span> <span class="n">KT</span><span class="p">,</span> <span class="n">default</span><span class="p">:</span> <span class="n">VT</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VT</span><span class="p">:</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">mapping</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
-    <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">default</span>
-</pre></div>
-</div>
+<dd><p><em>(No documentation provided)</em></p>
 </dd></dl>
 
 </dd></dl>
@@ -734,26 +487,7 @@ follows:</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="striqt.sensor.bindings.zarr_iq.controller">
 <span class="sig-name descname"><span class="pre">controller</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">PS.args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">PS.kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.bindings.Controller"><span class="pre">striqt.sensor.bindings.Controller</span></a></span></span><a class="headerlink" href="#striqt.sensor.bindings.zarr_iq.controller" title="Link to this definition">¶</a></dt>
-<dd><p>Abstract base class for generic types.</p>
-<p>On Python 3.12 and newer, generic classes implicitly inherit from
-Generic when they declare a parameter list after the class’s name:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">Mapping</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">]:</span>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="n">KT</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VT</span><span class="p">:</span>
-        <span class="o">...</span>
-    <span class="c1"># Etc.</span>
-</pre></div>
-</div>
-<p>On older versions of Python, however, generic classes have to
-explicitly inherit from Generic.</p>
-<p>After a class has been declared to be generic, it can then be used as
-follows:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">lookup_name</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">](</span><span class="n">mapping</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">KT</span><span class="p">,</span> <span class="n">VT</span><span class="p">],</span> <span class="n">key</span><span class="p">:</span> <span class="n">KT</span><span class="p">,</span> <span class="n">default</span><span class="p">:</span> <span class="n">VT</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VT</span><span class="p">:</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">mapping</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
-    <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">default</span>
-</pre></div>
-</div>
+<dd><p><em>(No documentation provided)</em></p>
 </dd></dl>
 
 </dd></dl>
