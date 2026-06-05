@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from typing import Any, cast, Generic, TYPE_CHECKING
 
-from . import compute, io, sources, util
+from . import compute, controller, io, util
 from .. import specs as specs
 
 import striqt.analysis as sa
@@ -106,7 +106,7 @@ class SinkBase(Generic[specs.SC]):
         self._executor = ThreadPoolExecutor(1)
 
         # decide group sizes
-        source_id = sources.lookup.id(sweep_spec.source)
+        source_id = controller.lookup.id(sweep_spec.source)
         captures = specs.helpers.loop_captures(sweep_spec, source_id)
         if len(sweep_spec.loops) > 0 and isinstance(sweep_spec.loops[0], specs.Repeat):
             captures = sweep_spec.loops[0].count * captures

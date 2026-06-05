@@ -195,7 +195,7 @@ def prepare_compute(spec: specs.Sweep, skip_warmup: bool = False):
 
     res = resources.Resources(
         sweep_spec=spec,
-        source=bindings.warmup._raw_controller(spec.source),
+        source=bindings.warmup.controller.from_source_spec(spec.source),
         peripherals=bindings.warmup.peripherals(spec),
         sink=sinks.NoSink(spec),
         calibration=None,

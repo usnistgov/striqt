@@ -15,6 +15,7 @@ from typing import (
 import dataclasses
 from typing_extensions import ParamSpec
 
+from .controller import Controller
 from .peripherals import NoPeripherals, PeripheralsBase
 from . import sinks, sources, util
 from .. import specs
@@ -88,15 +89,15 @@ class SensorBinding(Sensor[SS, SP, SC], Generic[SS, SP, SC, PS, PC]):
         assert isinstance(self.schema, specs.Schema)
 
     @util.cached_property
-    def controller(self) -> type[sources.Controller[SS, SC, PS, PC]]:
-        class Controller(sources.Controller):
+    def controller(self) -> type[Controller[SS, SC, PS, PC]]:
+        class C(Controller):
             _binding = self
 
         self_cls = type(self)
-        Controller.__module__ = self_cls.__module__
-        Controller.__name__ = f'{self_cls.__name__}.controller'
-        Controller.__qualname__ = f'{self_cls.__qualname__}.controller'
-        return Controller
+        C.__module__ = self_cls.__module__
+        C.__name__ = f'{self_cls.__name__}.controller'
+        C.__qualname__ = f'{self_cls.__qualname__}.controller'
+        return C
 
 
 def bind_sensor(

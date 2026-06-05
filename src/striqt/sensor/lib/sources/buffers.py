@@ -17,7 +17,7 @@ from ..typing import SC
 if TYPE_CHECKING:
     import numpy as np
     from ..typing import Array
-    from .controller import Controller
+    from ..controller import Controller
 
 else:
     np = util.lazy_import('numpy')

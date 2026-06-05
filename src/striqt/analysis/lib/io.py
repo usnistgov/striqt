@@ -524,7 +524,10 @@ class TDMSFileStream(_FileStreamBase):
         xp=np,
         **meta,
     ):
-        from nptdms import TdmsFile  # type: ignore
+        try:
+            from nptdms import TdmsFile
+        except ImportError:
+            raise ImportError('install nptdms to open TDMS file streams')
 
         self._fd = TdmsFile.read(path)
         self._header_fd, self._iq_fd = self._fd.groups()

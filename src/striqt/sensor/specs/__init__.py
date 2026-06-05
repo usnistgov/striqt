@@ -27,4 +27,4 @@ for k, obj in list(locals().items()):
     if getattr(obj, '__module__', '').startswith(__name__):
         obj.__module__ = __name__
 
-del k,obj
+del k, obj

@@ -29,7 +29,10 @@ class TDMSSource(base.VirtualSource[specs.TDMSSource, specs.FileCapture]):
     _file_info: specs.FileAcquisitionInfo
 
     def _connect(self, spec):
-        from nptdms import TdmsFile  # type: ignore
+        try:
+            from nptdms import TdmsFile
+        except ImportError:
+            raise ImportError('install nptdms to open TDMS files')
 
         fd = TdmsFile.read(spec.path)
         header_fd, iq_fd = fd.groups()
@@ -158,6 +161,7 @@ class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture]):
             master_clock_rate=self._file_info.backend_sample_rate,
             backend_sample_rate=self._file_info.backend_sample_rate,
         )
+
 
 class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture]):
     """a sources of IQ samples from iq_waveform variables in a zarr store"""

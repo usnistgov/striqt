@@ -748,6 +748,7 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
             from pandas._libs import tslibs
 
             ts = tslibs.Timestamp(time_ns, unit='ns')
+            ts = typing.cast(tslibs.Timestamp, ts)
 
         iq.info = specs.SoapyAcquisitionInfo(
             start_time=ts,

@@ -12,7 +12,7 @@ from pathlib import Path
 
 import typing_extensions
 
-from . import bindings, io, sources, util
+from . import bindings, controller, io, sources, util
 from .sinks import SinkBase
 from .typing import Peripherals, SS, SP, SC, PS, PC
 from .. import specs
@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     class Resources(typing_extensions.TypedDict, Generic[SS, SP, SC, PS, PC]):
         """Sensor resources needed to run a sweep"""
 
-        source: sources.Controller[SS, SC, PS, PC]
+        source: controller.Controller[SS, SC, PS, PC]
         sink: SinkBase
         peripherals: Peripherals[SP, SC]
         except_context: typing_extensions.NotRequired[ContextManager]
@@ -43,7 +43,7 @@ if TYPE_CHECKING:
     ):
         """Sensor resources needed to run a sweep"""
 
-        source: sources.Controller[SS, SC, PS, PC]
+        source: controller.Controller[SS, SC, PS, PC]
         sink: SinkBase
         peripherals: Peripherals[SP, SC]
         except_context: typing_extensions.NotRequired[ContextManager]
@@ -137,7 +137,7 @@ def _open_devices(
     bind: bindings.SensorBinding,
     spec: specs.Sweep,
     skip_peripherals: bool = False,
-    format_path: specs.helpers.PathFormatter|None = None
+    format_path: specs.helpers.PathFormatter | None = None,
 ):
     """open source and optionally peripherals"""
 
@@ -167,7 +167,7 @@ def _open_devices(
 
 def _prepare_sweep(spec: specs.Sweep, callback: SourceOpenCallback | None = None):
     """after the source opens, enumerate the sweep and invoke callback"""
-    source_id = sources.lookup.id(spec.source)
+    source_id = controller.lookup.id(spec.source)
     specs.helpers.list_capture_adjustments(spec, source_id=source_id)
 
     if callback is not None:
@@ -204,7 +204,9 @@ def open_resources(
 
     exc = util.ExceptionStack('failed to open resources', cancel_on_except=True)
     with util.share_thread_interrupts():
-        devices = util.threadpool.submit(_open_devices, conn, bind, spec, test_only, fmt)
+        devices = util.threadpool.submit(
+            _open_devices, conn, bind, spec, test_only, fmt
+        )
         prep_sweep = util.threadpool.submit(_prepare_sweep, spec, on_source_opened)
         sink = util.threadpool.submit(_open_sink, spec, bind.sink, fmt)
 

@@ -168,8 +168,8 @@ def read_tdms_iq(
     source_spec = tdms_file.schema.source(
         master_clock_rate=master_clock_rate, path=str(path)
     )
-    source = tdms_file._raw_controller(source_spec)
-    source.arm(source.capture_spec)
+    source = tdms_file.controller.from_source_spec(source_spec)
+    source.arm(**source.capture_spec.to_dict())
     iq, _ = source.read_iq()
 
     return iq, source.capture_spec
