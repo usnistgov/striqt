@@ -1,6 +1,6 @@
 from . import buffers, deepwave
 
-from .base import NoSource
+from .base import NoSource, VirtualSource
 from .deepwave import (
     Airstack1Source,
     Air7101BSourceSpec,

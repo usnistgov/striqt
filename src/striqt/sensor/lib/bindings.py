@@ -17,7 +17,7 @@ from typing_extensions import ParamSpec
 
 from .controller import Controller
 from .peripherals import NoPeripherals, PeripheralsBase
-from . import sinks, sources, util
+from . import sinks, util
 from .. import specs
 from .typing import Peripherals, PC, PS, SC, SS, SP, SourceBackend, TypeVar
 import striqt.waveform as sw

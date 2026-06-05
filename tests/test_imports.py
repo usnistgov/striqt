@@ -1,19 +1,26 @@
+"""these tests run first, before other tests reify lazy imports"""
+import pytest
+
+@pytest.mark.order(0)
 def test_striqt_waveform():
     import striqt.waveform
 
 
+@pytest.mark.order(1)
 def test_striqt_analysis():
     import striqt.analysis
 
 
+@pytest.mark.order(2)
 def test_striqt_sensor():
     import striqt.sensor
 
 
+@pytest.mark.order(3)
 def test_striqt_cli():
     import striqt.cli
 
-
+@pytest.mark.order(4)
 def test_lazy_import():
     import striqt.cli
     import striqt.waveform

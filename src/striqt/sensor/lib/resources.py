@@ -12,7 +12,7 @@ from pathlib import Path
 
 import typing_extensions
 
-from . import bindings, controller, io, sources, util
+from . import bindings, controller, io, util
 from .sinks import SinkBase
 from .typing import Peripherals, SS, SP, SC, PS, PC
 from .. import specs
@@ -56,7 +56,7 @@ else:
     class Resources(typing_extensions.TypedDict):
         """Sensor resources needed to run a sweep"""
 
-        source: sources.Controller
+        source: controller.Controller
         sink: SinkBase
         peripherals: typing_extensions.NotRequired[Peripherals]
         except_context: typing_extensions.NotRequired[ContextManager]
@@ -67,7 +67,7 @@ else:
     class AnyResources(typing_extensions.TypedDict, total=False):
         """Sensor resources needed to run a sweep"""
 
-        source: sources.Controller
+        source: controller.Controller
         sink: SinkBase
         peripherals: typing_extensions.NotRequired[Peripherals]
         except_context: typing_extensions.NotRequired[ContextManager]

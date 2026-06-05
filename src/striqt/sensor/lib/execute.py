@@ -10,7 +10,7 @@ from typing import Any, Generator, TYPE_CHECKING
 import striqt.waveform as sw
 import striqt.analysis as sa
 
-from . import compute, sources, util
+from . import compute, util
 from .. import specs
 from .resources import Resources, AnyResources
 from .calibration import lookup_system_noise_power

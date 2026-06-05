@@ -4,7 +4,7 @@ from typing import cast, Any, Sequence, TYPE_CHECKING
 from pathlib import Path
 
 from .. import specs as specs
-from . import compute, io, peripherals, sinks, sources, util
+from . import compute, io, peripherals, sinks, util
 from .typing import Peripherals, TypeVar, SC, SP, SPC, PS, PC
 import striqt.analysis as sa
 
