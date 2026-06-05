@@ -186,6 +186,143 @@ class ClassDocumenter(autodoc.ClassDocumenter):
         return success, members
 
 
+def inject_bindings_as_classes(app, what, name, obj, options, lines):
+    """
+    Dynamically injects .. py:class:: directives, formatting all top-level attributes 
+    and the controller as native Sphinx class members (.. py:attribute:: and .. py:method::).
+    """
+    if what == "module":
+        try:
+            mod = sys.modules.get(name)
+            if not mod:
+                return
+            
+            bindings = {}
+            for attr_name, attr_val in vars(mod).items():
+                if isinstance(attr_val, ss.lib.bindings.SensorBinding) and not isinstance(attr_val, type):
+                    bindings[attr_name] = attr_val
+                    
+            if not bindings:
+                return
+                
+            if lines and lines[-1] != "":
+                lines.append("")
+                
+            lines.append("---")
+            lines.append("")
+            
+            for b_name, b_val in sorted(bindings.items()):
+                lines.append(f".. py:class:: {b_name}")
+                lines.append("")
+                
+                base_indent = "   "
+                lines.append(f"{base_indent}Pre-configured sensor binding for **{b_name}**.")
+                lines.append("")
+                
+                def _unpack_fields(target_obj, current_indent="", is_top_level=False):
+                    try:
+                        if hasattr(target_obj, '__dataclass_fields__'):
+                            fields = {f: getattr(target_obj, f) for f in target_obj.__dataclass_fields__}
+                        elif hasattr(msgspec, 'Struct') and isinstance(target_obj, msgspec.Struct):
+                            fields = {f.name: getattr(target_obj, f.name) for f in msgspec.structs.fields(target_obj)}
+                        else:
+                            fields = vars(target_obj)
+                    except Exception:
+                        return
+                        
+                    for f_name, f_val in fields.items():
+                        if f_name.startswith('_'):
+                            continue
+                            
+                        # Skip 'controller' at the top level to document it below
+                        if is_top_level and f_name == 'controller':
+                            continue
+                            
+                        # --- TOP LEVEL ATTRIBUTES (Rendered as Sphinx Attributes) ---
+                        if is_top_level:
+                            lines.append(f"{current_indent}.. py:attribute:: {f_name}")
+                            
+                            # Automatically generate the type hint for the attribute
+                            if isinstance(f_val, type):
+                                type_str = "type"
+                            else:
+                                type_str = f"~{f_val.__class__.__module__}.{f_val.__class__.__name__}"
+                                
+                            lines.append(f"{current_indent}   :type: {type_str}")
+                            lines.append("")
+                            
+                            attr_indent = current_indent + "   "
+                            
+                            if isinstance(f_val, type):
+                                full_path = f"{f_val.__module__}.{f_val.__name__}"
+                                lines.append(f"{attr_indent}Value: :class:`~{full_path}`")
+                            elif hasattr(f_val, '__dataclass_fields__') or (hasattr(msgspec, 'Struct') and isinstance(f_val, msgspec.Struct)):
+                                # Recurse into nested struct/dataclass fields using bullets
+                                _unpack_fields(f_val, attr_indent, is_top_level=False)
+                            else:
+                                lines.append(f"{attr_indent}Value: ``{repr(f_val)}``")
+                            
+                            lines.append("")
+                            
+                        # --- NESTED ATTRIBUTES (Rendered as Bulleted Lists) ---
+                        else:
+                            if isinstance(f_val, type):
+                                full_path = f"{f_val.__module__}.{f_val.__name__}"
+                                lines.append(f"{current_indent}* **{f_name}**: :class:`~{full_path}`")
+                            elif hasattr(f_val, '__dataclass_fields__') or (hasattr(msgspec, 'Struct') and isinstance(f_val, msgspec.Struct)):
+                                lines.append(f"{current_indent}* **{f_name}**:")
+                                lines.append("") 
+                                _unpack_fields(f_val, current_indent + "  ", is_top_level=False)
+                            else:
+                                lines.append(f"{current_indent}* **{f_name}**: ``{repr(f_val)}``")
+                    
+                    if not is_top_level:
+                        lines.append("") 
+                
+                # Unpack the standard attributes as `.. py:attribute::`
+                _unpack_fields(b_val, current_indent=base_indent, is_top_level=True)
+                
+                # Document the 'controller' as `.. py:method::`
+                controller_obj = getattr(b_val, 'controller', None)
+                if controller_obj and callable(controller_obj):
+                    try:
+                        sig = inspect.signature(controller_obj)
+                        clean_params = []
+                        for name, param in sig.parameters.items():
+                            if name == 'self':
+                                continue
+                            clean_params.append(param.replace(annotation=inspect.Parameter.empty))
+                            
+                        sig = sig.replace(parameters=clean_params, return_annotation=inspect.Signature.empty)
+                        sig_str = stringify_signature(sig)
+                        sig_str += " -> striqt.sensor.bindings.Controller"
+                    except Exception:
+                        sig_str = "(...) -> striqt.sensor.bindings.Controller"
+                        
+                    lines.append(f"{base_indent}.. py:method:: controller{sig_str}")
+                    lines.append("")
+                    
+                    # Safely try to get the docstring directly
+                    doc = inspect.getdoc(controller_obj)
+                    
+                    # If it's an instance (not a function, method, or class itself), fallback to its class docstring
+                    if not doc and not inspect.isroutine(controller_obj) and not inspect.isclass(controller_obj):
+                        doc = inspect.getdoc(controller_obj.__class__)
+                        
+                    # Filter out Python's useless built-in docstrings
+                    if doc and (doc.startswith("type(object)") or "Initialize self" in doc):
+                        doc = None
+                        
+                    if doc:
+                        for doc_line in doc.split('\n'):
+                            lines.append(f"{base_indent}   {doc_line}")
+                    else:
+                        lines.append(f"{base_indent}   *(No documentation provided)*")
+                    
+                    lines.append("")                    
+        except Exception:
+            pass
+
 def clean_type_string(type_str):
     """Applies string replacements to clean up Literal and module paths."""
     # 1. Clean up Literal
@@ -509,6 +646,7 @@ def skip_inherited_methods(app, what, name, obj, skip, options):
 def setup(app):
     app.add_domain(PatchedPythonDomain, override=True)
     app.add_autodocumenter(ClassDocumenter, override=True)
+    app.connect('autodoc-process-docstring', inject_bindings_as_classes)    
     app.connect('autodoc-process-docstring', list_sensor_bindings_in_module)
     app.connect('autodoc-process-docstring', extract_msgspec_meta)
     app.connect('autodoc-process-signature', simplify_msgspec_signature)

@@ -7,6 +7,7 @@ peripherals and expanded data fields elsewhere.
 from . import specs
 from .lib import sources, peripherals, sinks
 from .lib.bindings import sensor, bind_sensor, SensorBinding
+from .lib.controller import Controller
 from .specs import Schema
 from .lib.calibration import bind_manual_yfactor_calibration
 

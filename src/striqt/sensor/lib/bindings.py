@@ -14,6 +14,7 @@ from typing import (
 )
 import dataclasses
 from typing_extensions import ParamSpec
+import inspect
 
 from .controller import Controller
 from .peripherals import NoPeripherals, PeripheralsBase
@@ -97,8 +98,17 @@ class SensorBinding(Sensor[SS, SP, SC], Generic[SS, SP, SC, PS, PC]):
         C.__module__ = self_cls.__module__
         C.__name__ = f'{self_cls.__name__}.controller'
         C.__qualname__ = f'{self_cls.__qualname__}.controller'
-        return C
+        source_spec = self.schema.source
+        spec_longname = f'{source_spec.__module__}.{source_spec.__qualname__}'
+        C.__doc__ = '\n\n'.join((
+            Controller.__doc__ or '',
+            self.source.__doc__ or '',
+            f"Parameters:\n   See :class:`{spec_longname}`"
+        ))
 
+        C.__signature__ = inspect.signature(self.schema.source) # ty: ignore
+
+        return C
 
 def bind_sensor(
     key: str,

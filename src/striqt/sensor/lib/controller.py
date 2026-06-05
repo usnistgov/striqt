@@ -179,6 +179,9 @@ class ControllerConfig:
 
 
 class Controller(Generic[SS, SC, PS, PC]):
+    """Opens a source backend and controls it with the binding's setup
+    and capture specifications a binding.
+    """
     backend: SourceBackend[SS, SC]
     __setup__: SS
     _capture: SC | None
