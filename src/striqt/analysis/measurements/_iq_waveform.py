@@ -54,9 +54,9 @@ def iq_index(capture: specs.Capture, spec: specs.IQWaveform) -> typing.Iterable[
 )
 def iq_waveform(iq, capture, **kwargs):
     """package the IQ waveform as a measurement result.
-    
+
     Args:
-    {args}    
+    {args}
     """
 
     spec = specs.IQWaveform.from_dict(kwargs)

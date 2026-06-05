@@ -611,12 +611,12 @@ def _make_measurement_docstring(spec_cls):
     extra_prepend = {
         'iq': 'input waveform array',
         'capture': 'acquisition specification',
-        'ax_xarray': "whether to return an xarray object (True), an array (False), or a delayed xarray object ('delayed')"
+        'ax_xarray': "whether to return an xarray object (True), an array (False), or a delayed xarray object ('delayed')",
     }
     extra_types = {
         'iq': 'Array',
         'capture': 'striqt.analysis.specs.Capture',
-        'as_xarray': "(bool or 'delayed')"
+        'as_xarray': "(bool or 'delayed')",
     }
     return specs.doc.struct_args_docstring(
         spec_cls, extra_prepend=extra_prepend, extra_types=extra_types

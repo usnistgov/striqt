@@ -45,7 +45,7 @@ def cyclic_channel_power(iq, capture: specs.Capture, **kwargs):
 
     Args:
     {args}
-    """    
+    """
     spec = specs.CyclicChannelPower.from_dict(kwargs)
 
     xp = sw.array_namespace(iq)

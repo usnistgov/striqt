@@ -134,6 +134,7 @@ def cellular_5g_pss_sync(iq, capture: specs.Capture, **kwargs):
     #     max_block_count: if not None, the number of synchronization blocks to analyze
     #     as_xarray: if True (default), return an xarray.DataArray, otherwise a ChannelAnalysisResult object
 
+
 @shared.hint_keywords(specs.Cellular5GNRPSSCorrelator)
 @registry.measurement(
     specs.Cellular5GNRPSSCorrelator,

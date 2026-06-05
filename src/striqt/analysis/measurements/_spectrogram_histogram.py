@@ -61,7 +61,7 @@ def spectrogram_histogram(iq: 'Array', capture: specs.Capture, **kwargs):
 
     Args:
     {args}
-    """    
+    """
     spec = specs.SpectrogramHistogram.from_dict(kwargs)
     spg_spec = specs.Spectrogram.from_spec(spec)
 

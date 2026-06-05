@@ -168,7 +168,9 @@ def describe_msgspec_fields(obj: msgspec.Struct):
     return descriptions, types
 
 
-def struct_args_docstring(obj, indent_spaces: int = 4, extra_prepend={}, extra_append={}, extra_types={}) -> str:
+def struct_args_docstring(
+    obj, indent_spaces: int = 4, extra_prepend={}, extra_append={}, extra_types={}
+) -> str:
     """
     Generates a 'Args:' docstring block from parsed field metadata.
 
@@ -184,22 +186,22 @@ def struct_args_docstring(obj, indent_spaces: int = 4, extra_prepend={}, extra_a
     types = types | extra_types
 
     if not descriptions and not types:
-        return ""
+        return ''
 
     lines = []
-    base_indent = " " * indent_spaces
+    base_indent = ' ' * indent_spaces
 
-    # We iterate over descriptions.keys() assuming describe_msgspec_fields 
+    # We iterate over descriptions.keys() assuming describe_msgspec_fields
     # populates both dictionaries with the exact same keys in the same order.
     for field_name in descriptions.keys():
-        type_str = types.get(field_name, "Any")
-        desc = descriptions.get(field_name, "")
-        
+        type_str = types.get(field_name, 'Any')
+        desc = descriptions.get(field_name, '')
+
         if desc:
             # Google style: param_name (type): description
-            lines.append(f"{base_indent}{field_name} ({type_str}): {desc}")
+            lines.append(f'{base_indent}{field_name} ({type_str}): {desc}')
         else:
             # Fallback if there is no description provided
-            lines.append(f"{base_indent}{field_name} ({type_str}):")
-            
-    return "\n".join(lines)
+            lines.append(f'{base_indent}{field_name} ({type_str}):')
+
+    return '\n'.join(lines)
