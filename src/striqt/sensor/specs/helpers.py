@@ -617,7 +617,7 @@ def get_unique_ports(
 
 
 @sa.util.lru_cache()
-def _get_format_fields(s: str):
+def get_format_fields(s: str):
     """
     Extracts and returns a list of formatting field names from a given format string.
     """
@@ -742,7 +742,7 @@ class PathFormatter:
         self.id_timeout = id_timeout
 
     def __call__(self, path: str | Path) -> str:
-        path_fields = _get_format_fields(str(path))
+        path_fields = get_format_fields(str(path))
         if len(path_fields) == 0:
             return str(path)
 

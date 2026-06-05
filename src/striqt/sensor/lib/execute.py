@@ -231,21 +231,16 @@ def _acquire_both(
         if c is None:
             return
 
-        source = util.threadpool.submit(res['source'].arm, c)
+        source = util.threadpool.submit(res['source']._arm_spec, c)
         peripherals = util.threadpool.submit(res['peripherals'].arm, c)
         util.await_and_ignore([source, peripherals], 'arm sensor')
 
     try:
-        res['source'].armed_capture
+        res['source'].capture_spec
     except AttributeError:
         arm_both(this)
 
-    analysis = specs.helpers.adjust_analysis(
-        res['sweep_spec'].analysis, this.adjust_analysis
-    )
-
-    overlaps = compute.get_correction_overlaps(this, res['source'].spec, analysis)
-    iq = util.threadpool.submit(res['source'].acquire, overlaps, res['format_path'])
+    iq = util.threadpool.submit(res['source'].acquire)
     ext_data = util.threadpool.submit(res['peripherals'].acquire, this)
 
     with util.ExceptionStack('failed to acquire data') as exc:

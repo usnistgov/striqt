@@ -17,7 +17,7 @@ from ..typing import SC
 if TYPE_CHECKING:
     import numpy as np
     from ..typing import Array
-    from .controller import ControllerBase
+    from .controller import Controller
 
 else:
     np = util.lazy_import('numpy')
@@ -31,8 +31,8 @@ class ReceiveBuffers(typing.Generic[SC]):
     buffers: list = [None, None]
     _hold_buffer_swap = False
 
-    def __init__(self, source: 'ControllerBase'):
-        self.source = source
+    def __init__(self, controller: 'Controller'):
+        self.controller = controller
         self.buffers = [None, None]
         self.clear()
 
@@ -47,7 +47,7 @@ class ReceiveBuffers(typing.Generic[SC]):
                 'carryover time information present, but missing timestamp'
             )
 
-        if not self.source.spec.gapless:
+        if not self.controller.source_spec.gapless:
             return None, 0
         elif self.carryover_samples is None:
             return self.start_time_ns, 0
@@ -66,7 +66,7 @@ class ReceiveBuffers(typing.Generic[SC]):
         if not self._hold_buffer_swap:
             self.buffers = [self.buffers[1], self.buffers[0]]
         self.buffers[0], ret = _alloc_empty_iq(
-            self.source, capture, self.buffers[0], overlaps=overlaps
+            self.controller, capture, self.buffers[0], overlaps=overlaps
         )
         self._hold_buffer_swap = False
         return ret
@@ -82,7 +82,7 @@ class ReceiveBuffers(typing.Generic[SC]):
         capture: specs.SensorCapture,
     ):
         """stash data needed to carry over extra samples into the next capture"""
-        if not self.source.spec.gapless:
+        if not self.controller.source_spec.gapless:
             return
         carryover_count = unused_sample_count
         self.carryover_samples = samples[:, -carryover_count:].copy()
@@ -159,7 +159,7 @@ def get_read_count(
     'allocate buffers', 'source', threshold=5e-3, logger_level=logging.DEBUG
 )
 def _alloc_empty_iq(
-    source: 'ControllerBase',
+    controller: 'Controller',
     capture: specs.SensorCapture,
     prior: 'np.ndarray|None' = None,
     overlaps: tuple[int, int] = (0, 0),
@@ -170,13 +170,13 @@ def _alloc_empty_iq(
         The buffer and the list of buffer references for streaming.
     """
     count = get_read_count(
-        source.armed_capture,
-        source.spec,
+        controller.capture_spec,
+        controller.source_spec,
         include_holdoff=True,
         overlap=sum(overlaps),
     )
 
-    if source.spec.array_backend == 'cupy':
+    if controller.source_spec.array_backend == 'cupy':
         try:
             from cupyx import empty_pinned as empty  # type: ignore
         except ModuleNotFoundError as ex:
@@ -186,7 +186,7 @@ def _alloc_empty_iq(
     else:
         empty = np.empty
 
-    buf_dtype = np.dtype(source.spec.transport_dtype)
+    buf_dtype = np.dtype(controller.source_spec.transport_dtype)
 
     # fast reinterpretation between dtypes requires the waveform to be in the last axis
     # ports = capture.port
@@ -204,9 +204,9 @@ def _alloc_empty_iq(
     # build the list of channel buffers that will actuall be filled with data,
     # including references to the throwaway buffer of extras in case of
     # source.setup_spec.stream_all_rx_ports
-    num_rx_ports = source.source_info.min_port_count(len(ports))
-    if source.spec.stream_all_rx_ports and len(ports) != num_rx_ports:
-        if source.spec.transport_dtype == 'complex64':
+    num_rx_ports = controller.source_info.min_port_count(len(ports))
+    if controller.source_spec.stream_all_rx_ports and len(ports) != num_rx_ports:
+        if controller.source_spec.transport_dtype == 'complex64':
             # a throwaway buffer for samples that won't be returned
             extra_count = count
         else:
@@ -224,7 +224,7 @@ def _alloc_empty_iq(
         if channel in ports:
             buffers.append(cast(np.ndarray, samples[i].view(buf_dtype)))
             i += 1
-        elif source.spec.stream_all_rx_ports:
+        elif controller.source_spec.stream_all_rx_ports:
             assert extra is not None
             buffers.append(extra)
 

@@ -19,8 +19,8 @@ if TYPE_CHECKING:
     from ..typing import Array, Self
     import numpy as np
 
-    T = TypeVar('T', bound='ControllerBase')
-    PendingController = 'ControllerBase | Event | BaseException'
+    T = TypeVar('T', bound='Controller')
+    PendingController = 'Controller | Event | BaseException'
 
 else:
     np = util.lazy_import('numpy')
@@ -38,12 +38,12 @@ class lookup:
     _ready: dict[specs.Source, Event | bool] = defaultdict(Event)
 
     @classmethod
-    def instance(cls, spec: specs.Source, timeout=0.5) -> ControllerBase:
+    def instance(cls, spec: specs.Source, timeout=0.5) -> Controller:
         obj = cls._obj[spec]
         if isinstance(obj, BaseException):
             util.propagate_thread_interrupts()
             raise util.ThreadInterruptRequest()
-        elif isinstance(obj, ControllerBase):
+        elif isinstance(obj, Controller):
             # already have this source!
             return obj
         else:
@@ -53,7 +53,7 @@ class lookup:
         if isinstance(obj, BaseException):
             util.propagate_thread_interrupts()
             raise util.ThreadInterruptRequest()
-        elif isinstance(obj, ControllerBase):
+        elif isinstance(obj, Controller):
             return obj
         else:
             raise TimeoutError('no controller instance initializing given spec')
@@ -106,7 +106,7 @@ class lookup:
         cls._id[spec] = Event()
 
     @classmethod
-    def _register(cls, spec: specs.Source, controller: ControllerBase):
+    def _register(cls, spec: specs.Source, controller: Controller):
         obj = cls._obj[spec]
         if isinstance(obj, Event):
             cls._obj[spec] = controller
@@ -133,7 +133,7 @@ class lookup:
             raise TypeError('id was already setup')
 
     @classmethod
-    def _set_open(cls, spec: specs.Source, controller: ControllerBase):
+    def _set_open(cls, spec: specs.Source, controller: Controller):
         cls._obj[spec] = controller
 
     @classmethod
@@ -144,7 +144,7 @@ class lookup:
 
 
 @contextlib.contextmanager
-def read_retries(source: ControllerBase) -> Generator[None]:
+def read_retries(source: Controller) -> Generator[None]:
     """in this context, retry source.read_iq on stream errors"""
 
     EXC_TYPES = (base.ReceiveStreamError, OverflowError)
@@ -169,7 +169,15 @@ def read_retries(source: ControllerBase) -> Generator[None]:
         source.read_iq = initial  # ty: ignore
 
 
-class ControllerBase(Generic[SS, SC, PS, PC]):
+@dataclasses.dataclass
+class ControllerConfig:
+    reuse_iq: bool
+    format_path: specs.helpers.PathFormatter|None
+    analysis: specs.AnalysisGroup|None
+    init_rx_ports: tuple[int, ...] | None
+
+
+class Controller(Generic[SS, SC, PS, PC]):
     backend: SourceBackend[SS, SC]
     __setup__: SS
     _capture: SC | None
@@ -177,13 +185,106 @@ class ControllerBase(Generic[SS, SC, PS, PC]):
     _buffers: buffers.ReceiveBuffers
     _timeout: float = 10
     _prev_iq: specs.AcquiredIQ | None = None
-    _reuse_iq: bool
+    _config: ControllerConfig
 
-    def __init__(self, *args, **kwargs):
-        raise NotImplementedError
+    @sa.util.stopwatch(
+        'open IQ source', 'sweep', threshold=0.5, logger_level=util.logging.INFO
+    )
+    def __init__(
+        self,
+        *args: PS.args,
+        **kwargs: PS.kwargs
+    ):
+        if not hasattr(self, '_binding'):
+            raise TypeError('use this after binding a source controller')
 
-    def arm(self, *args, **kwargs) -> SC | None:
-        raise NotImplementedError
+        config = ControllerConfig(
+            init_rx_ports=None, reuse_iq=False, analysis=None, format_path=None
+        )
+        spec = self._binding.schema.source(*args, **kwargs)  # type: ignore
+        self._setup(spec, config)
+
+    def _setup(self, spec: SS, config: ControllerConfig) -> 'Self':
+        self._config = config
+        self.__setup__ = spec
+        self._capture = None
+
+        lookup._register(spec, self)
+
+        try:
+            if not hasattr(self, '_binding'):
+                raise TypeError('access controller from a binding')
+            self._buffers = buffers.ReceiveBuffers(self)
+            self.backend = self._binding.source(spec)
+            lookup._set_id(spec, self.source_id)
+        except BaseException as ex:
+            lookup._raise(spec, ex)
+        else:
+            lookup._set_open(spec, self)
+        try:
+            if spec.array_backend == 'cupy':
+                sw.arrays.configure_cupy()
+            util.propagate_thread_interrupts()
+            self.backend.setup(rx_ports=config.init_rx_ports)
+            lookup._set_ready(spec, True)
+        except:
+            lookup._set_ready(spec, False)
+            self.close()
+            raise
+        return self
+
+    @classmethod
+    def from_sweep_spec(cls, spec: specs.Sweep[SS, Any, SC], format_path: specs.helpers.PathFormatter | None=None) -> Controller[SS, SC, PS, PC]:
+        self = cast(Controller[SS, SC, PS, PC], object.__new__(cls))
+
+        config = ControllerConfig(
+            init_rx_ports = specs.helpers.get_unique_ports(spec.captures, spec.loops),
+            reuse_iq = spec.options.reuse_iq,
+            analysis=spec.analysis,
+            format_path=format_path
+        )
+        return self._setup(spec.source, config)
+
+    @classmethod
+    def from_source_spec(cls, spec: SS, reuse_iq: bool=False, rx_ports: tuple[int, ...] | None=None, format_path: specs.helpers.PathFormatter | None=None) -> Controller[SS, SC, PS, PC]:
+        self = cast(Controller[SS, SC, PS, PC], object.__new__(cls))
+        config = ControllerConfig(
+            init_rx_ports = rx_ports, reuse_iq = reuse_iq, analysis=None, format_path=format_path
+        )
+        return self._setup(spec, config)
+
+    def arm(self, *args: PC.args, **kwargs: PC.kwargs) -> SC | None:
+        assert self._buffers is not None
+        spec = self._binding.schema.capture(*args, **kwargs)  # type: ignore
+        return self._arm_spec(spec)
+
+    @sa.util.stopwatch('arm', 'source', threshold=10e-3)
+    def _arm_spec(self, spec: SC) -> SC | None:
+        if not self.is_open():
+            raise RuntimeError('open the radio before arming')
+
+        cal = self.source_spec.calibration
+        if cal and specs.helpers.get_format_fields(cal):
+            if not self._config.format_path:
+                raise TypeError(
+                    'calibration is specified with path formatter fields - '
+                    'set a formatter with set_path_formatter before arming'
+                )
+
+        if self._capture is not None:
+            mcr = self.source_spec.master_clock_rate
+            if self._config.reuse_iq and buffers.is_reusable(self.capture_spec, spec, mcr):
+                pass
+            else:
+                self._prev_iq = None
+
+        if spec == self._capture and self._capture is not None:
+            return
+
+        if not self.source_spec.gapless or spec != self._capture:
+            self._buffers.clear()
+
+        self._capture = self.backend.arm(spec) or spec
 
     def is_open(self, wait=True) -> bool:
         return lookup.is_ready(self.__setup__, self._timeout, wait=wait)
@@ -210,8 +311,29 @@ class ControllerBase(Generic[SS, SC, PS, PC]):
         else:
             lookup._clear(self.__setup__)
 
+    def target_analysis(self, analysis: specs.AnalysisGroup|None):
+        """sets or disables an analysis target to auto-select acquisition overlap"""
+
+        if analysis is None:
+            pass
+        elif not isinstance(analysis, specs.AnalysisGroup):
+            raise TypeError('analysis argument must be None or an AnalysisGroup spec')
+
+        self._config.analysis = analysis
+
+    def set_calibration_formatter(self, format_path: specs.helpers.PathFormatter | None=None):
+        """set the formatter to use to expand calibration file formatting fields.
+
+        This is needed if calibration is defined in the source spec with format fields
+        like `{name}`.
+        """
+        if format_path is None or isinstance(format_path, specs.helpers.PathFormatter):
+            self._config.format_path = format_path
+        else:
+            raise TypeError('format_path must be a PathFormatter or None')
+
     @util.cached_property
-    def spec(self) -> SS:
+    def source_spec(self) -> SS:
         return self.__setup__
 
     @functools.cached_property
@@ -252,16 +374,16 @@ class ControllerBase(Generic[SS, SC, PS, PC]):
 
         # the number of valid samples to return per channel
         output_count = buffers.get_read_count(
-            self.armed_capture,
-            self.spec,
+            self.capture_spec,
+            self.source_spec,
             include_holdoff=False,
             overlap=sum(overlaps),
         )
 
         # the total number of samples to acquire per channel
         buffer_count = buffers.get_read_count(
-            self.armed_capture,
-            self.spec,
+            self.capture_spec,
+            self.source_spec,
             include_holdoff=True,
             overlap=sum(overlaps),
         )
@@ -270,7 +392,7 @@ class ControllerBase(Generic[SS, SC, PS, PC]):
         chunk_count = remaining = output_count - carryover_count
 
         while remaining > 0:
-            if received_count > 0 or self.spec.gapless:
+            if received_count > 0 or self.source_spec.gapless:
                 on_overflow = 'except'
             else:
                 on_overflow = 'ignore'
@@ -304,8 +426,8 @@ class ControllerBase(Generic[SS, SC, PS, PC]):
 
             if missing_start_time:
                 included_holdoff = buffers.find_trigger_holdoff(
-                    self.spec,
-                    self.armed_capture,
+                    self.source_spec,
+                    self.capture_spec,
                     self._buffers,
                     stream_time_ns,
                     start_overlap=overlaps[0],
@@ -333,22 +455,35 @@ class ControllerBase(Generic[SS, SC, PS, PC]):
         # it seems to be important to convert to cupy here in order
         # to get a full view of the underlying pinned memory. cuda
         # memory corruption has been observed when waiting until after
-        samples = buffers.cast_iq(self.spec, samples, buffer_count)
+        samples = buffers.cast_iq(self.source_spec, samples, buffer_count)
 
         return samples[:, sample_span], start_ns
 
     @sa.util.stopwatch('acquire', 'source')
-    def acquire(
-        self,
-        overlaps: tuple[int, int] = (0, 0),
-        format_path: specs.helpers.PathFormatter | None = None,
-    ) -> specs.AcquiredIQ:
-        """arm a capture and enable the channel (if necessary), read the resulting IQ waveform.
+    def acquire(self, overlaps: tuple[int, int]|None = None) -> specs.AcquiredIQ:
+        """acquire IQ samples needed for the armed capture.
 
-        Optionally, calibration corrections can be applied, and the radio can be left ready for the next capture.
+
         """
 
-        self.armed_capture  # ensure we are armed
+        self.capture_spec  # ensure we are armed
+
+        if isinstance(overlaps, tuple):
+            pass
+        elif overlaps is not None:
+            raise ValueError('overlaps must be a tuple or None')
+        elif self._config.analysis is None:
+            raise ValueError(
+                'call .target_analysis() or pass overlap (start, stop) samples'
+            )
+        else:
+            from .. import compute
+            analysis = specs.helpers.adjust_analysis(
+                self._config.analysis, self.capture_spec.adjust_analysis
+            )
+            overlaps = compute.get_correction_overlaps(
+                self.capture_spec, self.source_spec, analysis
+            )
 
         if self._prev_iq is None:
             with read_retries(self):
@@ -357,16 +492,16 @@ class ControllerBase(Generic[SS, SC, PS, PC]):
             info = specs.AcquisitionInfo(source_id=self.source_id)
 
             iq = specs.AcquiredIQ(
-                format_path=format_path,
+                format_path=self._config.format_path,
                 pre_align=samples,
                 pre_filter=None,
                 aligned=None,
-                capture=self.armed_capture,
+                capture=self.capture_spec,
                 info=info,
                 extra_data={},
-                source_spec=self.spec,
+                source_spec=self.source_spec,
                 resampler=self.get_resampler(),
-                voltage_scale=buffers.get_dtype_scale(self.spec.transport_dtype),
+                voltage_scale=buffers.get_dtype_scale(self.source_spec.transport_dtype),
             )
 
             iq = self.backend.package_iq(iq, samples, time_ns)
@@ -374,17 +509,17 @@ class ControllerBase(Generic[SS, SC, PS, PC]):
         else:
             iq = dataclasses.replace(
                 self._prev_iq,
-                capture=self.armed_capture,
+                capture=self.capture_spec,
                 info=self._prev_iq.info.replace(start_time=None),
             )
 
-        if self._reuse_iq:
+        if self._config.reuse_iq:
             self._prev_iq = iq
 
         return iq
 
     @property
-    def armed_capture(self) -> SC:
+    def capture_spec(self) -> SC:
         """return the specification of the currently armed capture"""
 
         if self._capture is None:
@@ -393,88 +528,4 @@ class ControllerBase(Generic[SS, SC, PS, PC]):
         return self._capture
 
     def get_resampler(self) -> sw.ResamplerDesign:
-        return self.backend.get_resampler(self.armed_capture)
-
-
-class RawController(ControllerBase[SS, SC, PS, PC]):
-    @sa.util.stopwatch(
-        'open IQ source', 'sweep', threshold=0.5, logger_level=util.logging.INFO
-    )
-    def __init__(
-        self,
-        spec: SS,
-        *,
-        reuse_iq: bool = False,
-        rx_ports: tuple[int, ...] | None = None,
-    ):
-        lookup._register(spec, self)
-
-        self.__setup__ = spec
-        self._capture = None
-        self._reuse_iq = reuse_iq
-
-        try:
-            if not hasattr(self, '_binding'):
-                raise TypeError('bind a source controller')
-            self._buffers = buffers.ReceiveBuffers(self)
-            self.backend = self._binding.source(spec)
-            lookup._set_id(spec, self.source_id)
-        except BaseException as ex:
-            lookup._raise(spec, ex)
-        else:
-            lookup._set_open(spec, self)
-        try:
-            if spec.array_backend == 'cupy':
-                sw.arrays.configure_cupy()
-            util.propagate_thread_interrupts()
-            self.backend.setup(rx_ports=rx_ports)
-            lookup._set_ready(spec, True)
-        except:
-            lookup._set_ready(spec, False)
-            self.close()
-            raise
-
-    @sa.util.stopwatch('arm', 'source', threshold=10e-3)
-    def arm(self, spec: SC):
-        assert self._buffers is not None
-
-        if not self.is_open():
-            raise RuntimeError('open the radio before arming')
-
-        if self._capture is not None:
-            mcr = self.spec.master_clock_rate
-            if self._reuse_iq and buffers.is_reusable(self.armed_capture, spec, mcr):
-                pass
-            else:
-                self._prev_iq = None
-
-        if spec == self._capture and self._capture is not None:
-            return
-
-        if not self.spec.gapless or spec != self._capture:
-            self._buffers.clear()
-
-        self._capture = self.backend.arm(spec) or spec
-
-
-class Controller(ControllerBase[SS, SC, PS, PC]):
-    def __init__(
-        self,
-        reuse_iq=False,
-        rx_ports: tuple[int, ...] | None = None,
-        *args: PS.args,
-        **kwargs: PS.kwargs,
-    ):
-        if not hasattr(self, '_binding'):
-            raise TypeError('bind a source controller')
-
-        spec = self._binding.schema.source(*args, **kwargs)  # type: ignore
-        cast_self = cast(RawController, self)
-        RawController.__init__(cast_self, spec, reuse_iq=reuse_iq, rx_ports=rx_ports)
-
-    def arm(self, *args: PC.args, **kwargs: PC.kwargs):
-        """stop the stream, apply a capture configuration, and start it"""
-
-        capture = self._binding.schema.capture(*args, **kwargs)  # type: ignore
-        cast_self = cast(RawController, self)
-        return RawController.arm(cast_self, capture)
+        return self.backend.get_resampler(self.capture_spec)

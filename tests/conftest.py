@@ -3,7 +3,6 @@
 import pytest
 from pathlib import Path
 
-
 def get_sweep_dir() -> Path:
     """absolute path to the data directory"""
     return Path(__file__).parent / 'sweeps'

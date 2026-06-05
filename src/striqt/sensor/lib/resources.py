@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     class Resources(typing_extensions.TypedDict, Generic[SS, SP, SC, PS, PC]):
         """Sensor resources needed to run a sweep"""
 
-        source: sources.RawController[SS, SC, PS, PC]
+        source: sources.Controller[SS, SC, PS, PC]
         sink: SinkBase
         peripherals: Peripherals[SP, SC]
         except_context: typing_extensions.NotRequired[ContextManager]
@@ -43,7 +43,7 @@ if TYPE_CHECKING:
     ):
         """Sensor resources needed to run a sweep"""
 
-        source: sources.RawController[SS, SC, PS, PC]
+        source: sources.Controller[SS, SC, PS, PC]
         sink: SinkBase
         peripherals: Peripherals[SP, SC]
         except_context: typing_extensions.NotRequired[ContextManager]
@@ -56,7 +56,7 @@ else:
     class Resources(typing_extensions.TypedDict):
         """Sensor resources needed to run a sweep"""
 
-        source: sources.RawController
+        source: sources.Controller
         sink: SinkBase
         peripherals: typing_extensions.NotRequired[Peripherals]
         except_context: typing_extensions.NotRequired[ContextManager]
@@ -67,7 +67,7 @@ else:
     class AnyResources(typing_extensions.TypedDict, total=False):
         """Sensor resources needed to run a sweep"""
 
-        source: sources.RawController
+        source: sources.Controller
         sink: SinkBase
         peripherals: typing_extensions.NotRequired[Peripherals]
         except_context: typing_extensions.NotRequired[ContextManager]
@@ -137,16 +137,11 @@ def _open_devices(
     bind: bindings.SensorBinding,
     spec: specs.Sweep,
     skip_peripherals: bool = False,
+    format_path: specs.helpers.PathFormatter|None = None
 ):
     """open source and optionally peripherals"""
 
-    ports = specs.helpers.get_unique_ports(spec.captures, spec.loops)
-    source = util.threadpool.submit(
-        bind._raw_controller,
-        spec.source,
-        reuse_iq=spec.options.reuse_iq,
-        rx_ports=ports,
-    )
+    source = util.threadpool.submit(bind.controller.from_sweep_spec, spec, format_path)
 
     if not skip_peripherals:
         peripherals = util.threadpool.submit(
@@ -199,7 +194,7 @@ def open_resources(
     logger = sa.util.get_logger('sweep')
     logger.log(sa.util.INFO, 'opening sensor resources')
 
-    formatter = specs.helpers.PathFormatter(spec, spec_path=spec_path)
+    fmt = specs.helpers.PathFormatter(spec, spec_path=spec_path)
 
     if spec_path is not None:
         os.chdir(str(Path(spec_path).parent))
@@ -209,9 +204,9 @@ def open_resources(
 
     exc = util.ExceptionStack('failed to open resources', cancel_on_except=True)
     with util.share_thread_interrupts():
-        devices = util.threadpool.submit(_open_devices, conn, bind, spec, test_only)
+        devices = util.threadpool.submit(_open_devices, conn, bind, spec, test_only, fmt)
         prep_sweep = util.threadpool.submit(_prepare_sweep, spec, on_source_opened)
-        sink = util.threadpool.submit(_open_sink, spec, bind.sink, formatter)
+        sink = util.threadpool.submit(_open_sink, spec, bind.sink, fmt)
 
         with exc.defer():
             # foreground thread 1: initialize warmup sweeps
@@ -227,12 +222,12 @@ def open_resources(
             cal = util.threadpool.submit(
                 _timeit('read calibration')(io.read_calibration),
                 spec.source.calibration,
-                formatter,
+                fmt,
             )
         else:
             cal = None
         if spec.sink.log_path is not None:
-            log_setup = util.threadpool.submit(_setup_logging, spec.sink, formatter)
+            log_setup = util.threadpool.submit(_setup_logging, spec.sink, fmt)
         else:
             log_setup = None
 
@@ -268,6 +263,6 @@ def open_resources(
         raise
 
     conn._resources['sweep_spec'] = spec
-    conn._resources['format_path'] = formatter
+    conn._resources['format_path'] = fmt
 
     return conn

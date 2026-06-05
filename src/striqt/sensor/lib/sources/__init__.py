@@ -1,7 +1,7 @@
 from . import buffers, controller, deepwave
 
 from .base import NoSource
-from .controller import lookup, Controller, RawController
+from .controller import lookup, Controller
 from .deepwave import (
     Airstack1Source,
     Air7101BSourceSpec,

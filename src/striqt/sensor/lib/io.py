@@ -169,10 +169,10 @@ def read_tdms_iq(
         master_clock_rate=master_clock_rate, path=str(path)
     )
     source = tdms_file._raw_controller(source_spec)
-    source.arm(source.armed_capture)
+    source.arm(source.capture_spec)
     iq, _ = source.read_iq()
 
-    return iq, source.armed_capture
+    return iq, source.capture_spec
 
 
 @overload

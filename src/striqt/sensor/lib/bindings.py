@@ -98,17 +98,6 @@ class SensorBinding(Sensor[SS, SP, SC], Generic[SS, SP, SC, PS, PC]):
         Controller.__qualname__ = f'{self_cls.__qualname__}.controller'
         return Controller
 
-    @util.cached_property
-    def _raw_controller(self) -> type[sources.RawController[SS, SC, PS, PC]]:
-        class Controller(sources.RawController):
-            _binding = self
-
-        self_cls = type(self)
-        Controller.__module__ = self_cls.__module__
-        Controller.__name__ = f'{self_cls.__name__}.controller'
-        Controller.__qualname__ = f'{self_cls.__qualname__}.controller'
-        return Controller
-
 
 def bind_sensor(
     key: str,
