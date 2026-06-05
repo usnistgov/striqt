@@ -106,14 +106,10 @@ peripherals and expanded data fields elsewhere.</p>
 </ul>
 </li>
 </ul>
-<p>—</p>
-<dl class="py method">
-<dt class="sig sig-object py" id="striqt.sensor.bindings.air7101b.controller">
-<span class="sig-name descname"><span class="pre">controller</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">master_clock_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">125000000.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">trigger_strobe</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">signal_trigger</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">array_backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'cupy'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">calibration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_source</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'host'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_sync_at</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'acquire'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">clock_source</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'internal'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">receive_retries</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adc_overload_limit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">-1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">if_overload_limit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gapless</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.bindings.Controller"><span class="pre">striqt.sensor.bindings.Controller</span></a></span></span><a class="headerlink" href="#striqt.sensor.bindings.air7101b.controller" title="Link to this definition">¶</a></dt>
-<dd><p>type(object) -&gt; the object’s type
+<p><strong>Controller:</strong></p>
+<p><code class="docutils literal notranslate"><span class="pre">controller(*,</span> <span class="pre">master_clock_rate=125000000.0,</span> <span class="pre">trigger_strobe=None,</span> <span class="pre">signal_trigger=None,</span> <span class="pre">array_backend='cupy',</span> <span class="pre">calibration=None,</span> <span class="pre">time_source='host',</span> <span class="pre">time_sync_at='acquire',</span> <span class="pre">clock_source='internal',</span> <span class="pre">receive_retries=3,</span> <span class="pre">adc_overload_limit=-1,</span> <span class="pre">if_overload_limit=None,</span> <span class="pre">gapless=False)</span> <span class="pre">-&gt;</span> <span class="pre">striqt.sensor.bindings.Controller</span></code></p>
+<p>type(object) -&gt; the object’s type
 type(name, bases, dict, <a href="#id1"><span class="problematic" id="id2">**</span></a>kwds) -&gt; a new type</p>
-</dd></dl>
-
 </dd></dl>
 
 <dl class="py class">
@@ -136,14 +132,10 @@ type(name, bases, dict, <a href="#id1"><span class="problematic" id="id2">**</sp
 </ul>
 </li>
 </ul>
-<p>—</p>
-<dl class="py method">
-<dt class="sig sig-object py" id="striqt.sensor.bindings.air7101b_calibration.controller">
-<span class="sig-name descname"><span class="pre">controller</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">master_clock_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">125000000.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">trigger_strobe</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">signal_trigger</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">array_backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'cupy'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">calibration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_source</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'host'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_sync_at</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'acquire'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">clock_source</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'internal'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">receive_retries</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adc_overload_limit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">-1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">if_overload_limit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gapless</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.bindings.Controller"><span class="pre">striqt.sensor.bindings.Controller</span></a></span></span><a class="headerlink" href="#striqt.sensor.bindings.air7101b_calibration.controller" title="Link to this definition">¶</a></dt>
-<dd><p>type(object) -&gt; the object’s type
+<p><strong>Controller:</strong></p>
+<p><code class="docutils literal notranslate"><span class="pre">controller(*,</span> <span class="pre">master_clock_rate=125000000.0,</span> <span class="pre">trigger_strobe=None,</span> <span class="pre">signal_trigger=None,</span> <span class="pre">array_backend='cupy',</span> <span class="pre">calibration=None,</span> <span class="pre">time_source='host',</span> <span class="pre">time_sync_at='acquire',</span> <span class="pre">clock_source='internal',</span> <span class="pre">receive_retries=3,</span> <span class="pre">adc_overload_limit=-1,</span> <span class="pre">if_overload_limit=None,</span> <span class="pre">gapless=False)</span> <span class="pre">-&gt;</span> <span class="pre">striqt.sensor.bindings.Controller</span></code></p>
+<p>type(object) -&gt; the object’s type
 type(name, bases, dict, <a href="#id3"><span class="problematic" id="id4">**</span></a>kwds) -&gt; a new type</p>
-</dd></dl>
-
 </dd></dl>
 
 <dl class="py class">
@@ -166,14 +158,10 @@ type(name, bases, dict, <a href="#id3"><span class="problematic" id="id4">**</sp
 </ul>
 </li>
 </ul>
-<p>—</p>
-<dl class="py method">
-<dt class="sig sig-object py" id="striqt.sensor.bindings.air7201b.controller">
-<span class="sig-name descname"><span class="pre">controller</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">master_clock_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">125000000.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">trigger_strobe</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">signal_trigger</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">array_backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'cupy'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">calibration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_source</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'host'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_sync_at</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'acquire'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">clock_source</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'internal'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">receive_retries</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adc_overload_limit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">-1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">if_overload_limit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gapless</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.bindings.Controller"><span class="pre">striqt.sensor.bindings.Controller</span></a></span></span><a class="headerlink" href="#striqt.sensor.bindings.air7201b.controller" title="Link to this definition">¶</a></dt>
-<dd><p>type(object) -&gt; the object’s type
+<p><strong>Controller:</strong></p>
+<p><code class="docutils literal notranslate"><span class="pre">controller(*,</span> <span class="pre">master_clock_rate=125000000.0,</span> <span class="pre">trigger_strobe=None,</span> <span class="pre">signal_trigger=None,</span> <span class="pre">array_backend='cupy',</span> <span class="pre">calibration=None,</span> <span class="pre">time_source='host',</span> <span class="pre">time_sync_at='acquire',</span> <span class="pre">clock_source='internal',</span> <span class="pre">receive_retries=3,</span> <span class="pre">adc_overload_limit=-1,</span> <span class="pre">if_overload_limit=None,</span> <span class="pre">gapless=False)</span> <span class="pre">-&gt;</span> <span class="pre">striqt.sensor.bindings.Controller</span></code></p>
+<p>type(object) -&gt; the object’s type
 type(name, bases, dict, <a href="#id5"><span class="problematic" id="id6">**</span></a>kwds) -&gt; a new type</p>
-</dd></dl>
-
 </dd></dl>
 
 <dl class="py class">
@@ -196,14 +184,10 @@ type(name, bases, dict, <a href="#id5"><span class="problematic" id="id6">**</sp
 </ul>
 </li>
 </ul>
-<p>—</p>
-<dl class="py method">
-<dt class="sig sig-object py" id="striqt.sensor.bindings.air7201b_calibration.controller">
-<span class="sig-name descname"><span class="pre">controller</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">master_clock_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">125000000.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">trigger_strobe</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">signal_trigger</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">array_backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'cupy'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">calibration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_source</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'host'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_sync_at</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'acquire'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">clock_source</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'internal'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">receive_retries</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adc_overload_limit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">-1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">if_overload_limit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gapless</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.bindings.Controller"><span class="pre">striqt.sensor.bindings.Controller</span></a></span></span><a class="headerlink" href="#striqt.sensor.bindings.air7201b_calibration.controller" title="Link to this definition">¶</a></dt>
-<dd><p>type(object) -&gt; the object’s type
+<p><strong>Controller:</strong></p>
+<p><code class="docutils literal notranslate"><span class="pre">controller(*,</span> <span class="pre">master_clock_rate=125000000.0,</span> <span class="pre">trigger_strobe=None,</span> <span class="pre">signal_trigger=None,</span> <span class="pre">array_backend='cupy',</span> <span class="pre">calibration=None,</span> <span class="pre">time_source='host',</span> <span class="pre">time_sync_at='acquire',</span> <span class="pre">clock_source='internal',</span> <span class="pre">receive_retries=3,</span> <span class="pre">adc_overload_limit=-1,</span> <span class="pre">if_overload_limit=None,</span> <span class="pre">gapless=False)</span> <span class="pre">-&gt;</span> <span class="pre">striqt.sensor.bindings.Controller</span></code></p>
+<p>type(object) -&gt; the object’s type
 type(name, bases, dict, <a href="#id7"><span class="problematic" id="id8">**</span></a>kwds) -&gt; a new type</p>
-</dd></dl>
-
 </dd></dl>
 
 <dl class="py class">
@@ -226,14 +210,10 @@ type(name, bases, dict, <a href="#id7"><span class="problematic" id="id8">**</sp
 </ul>
 </li>
 </ul>
-<p>—</p>
-<dl class="py method">
-<dt class="sig sig-object py" id="striqt.sensor.bindings.air8201b.controller">
-<span class="sig-name descname"><span class="pre">controller</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">master_clock_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">125000000.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">trigger_strobe</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">signal_trigger</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">array_backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'cupy'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">calibration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_source</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'host'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_sync_at</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'acquire'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">clock_source</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'internal'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">receive_retries</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adc_overload_limit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">-1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">if_overload_limit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gapless</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.bindings.Controller"><span class="pre">striqt.sensor.bindings.Controller</span></a></span></span><a class="headerlink" href="#striqt.sensor.bindings.air8201b.controller" title="Link to this definition">¶</a></dt>
-<dd><p>type(object) -&gt; the object’s type
+<p><strong>Controller:</strong></p>
+<p><code class="docutils literal notranslate"><span class="pre">controller(*,</span> <span class="pre">master_clock_rate=125000000.0,</span> <span class="pre">trigger_strobe=None,</span> <span class="pre">signal_trigger=None,</span> <span class="pre">array_backend='cupy',</span> <span class="pre">calibration=None,</span> <span class="pre">time_source='host',</span> <span class="pre">time_sync_at='acquire',</span> <span class="pre">clock_source='internal',</span> <span class="pre">receive_retries=3,</span> <span class="pre">adc_overload_limit=-1,</span> <span class="pre">if_overload_limit=None,</span> <span class="pre">gapless=False)</span> <span class="pre">-&gt;</span> <span class="pre">striqt.sensor.bindings.Controller</span></code></p>
+<p>type(object) -&gt; the object’s type
 type(name, bases, dict, <a href="#id9"><span class="problematic" id="id10">**</span></a>kwds) -&gt; a new type</p>
-</dd></dl>
-
 </dd></dl>
 
 <dl class="py class">
@@ -256,14 +236,10 @@ type(name, bases, dict, <a href="#id9"><span class="problematic" id="id10">**</s
 </ul>
 </li>
 </ul>
-<p>—</p>
-<dl class="py method">
-<dt class="sig sig-object py" id="striqt.sensor.bindings.air8201b_calibration.controller">
-<span class="sig-name descname"><span class="pre">controller</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">master_clock_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">125000000.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">trigger_strobe</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">signal_trigger</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">array_backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'cupy'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">calibration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_source</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'host'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_sync_at</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'acquire'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">clock_source</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'internal'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">receive_retries</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adc_overload_limit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">-1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">if_overload_limit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gapless</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.bindings.Controller"><span class="pre">striqt.sensor.bindings.Controller</span></a></span></span><a class="headerlink" href="#striqt.sensor.bindings.air8201b_calibration.controller" title="Link to this definition">¶</a></dt>
-<dd><p>type(object) -&gt; the object’s type
+<p><strong>Controller:</strong></p>
+<p><code class="docutils literal notranslate"><span class="pre">controller(*,</span> <span class="pre">master_clock_rate=125000000.0,</span> <span class="pre">trigger_strobe=None,</span> <span class="pre">signal_trigger=None,</span> <span class="pre">array_backend='cupy',</span> <span class="pre">calibration=None,</span> <span class="pre">time_source='host',</span> <span class="pre">time_sync_at='acquire',</span> <span class="pre">clock_source='internal',</span> <span class="pre">receive_retries=3,</span> <span class="pre">adc_overload_limit=-1,</span> <span class="pre">if_overload_limit=None,</span> <span class="pre">gapless=False)</span> <span class="pre">-&gt;</span> <span class="pre">striqt.sensor.bindings.Controller</span></code></p>
+<p>type(object) -&gt; the object’s type
 type(name, bases, dict, <a href="#id11"><span class="problematic" id="id12">**</span></a>kwds) -&gt; a new type</p>
-</dd></dl>
-
 </dd></dl>
 
 <dl class="py class">
@@ -286,14 +262,10 @@ type(name, bases, dict, <a href="#id11"><span class="problematic" id="id12">**</
 </ul>
 </li>
 </ul>
-<p>—</p>
-<dl class="py method">
-<dt class="sig sig-object py" id="striqt.sensor.bindings.dirac_delta.controller">
-<span class="sig-name descname"><span class="pre">controller</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">master_clock_rate</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">trigger_strobe</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">signal_trigger</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">array_backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'numpy'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_rx_ports</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.bindings.Controller"><span class="pre">striqt.sensor.bindings.Controller</span></a></span></span><a class="headerlink" href="#striqt.sensor.bindings.dirac_delta.controller" title="Link to this definition">¶</a></dt>
-<dd><p>type(object) -&gt; the object’s type
+<p><strong>Controller:</strong></p>
+<p><code class="docutils literal notranslate"><span class="pre">controller(*,</span> <span class="pre">master_clock_rate,</span> <span class="pre">trigger_strobe=None,</span> <span class="pre">signal_trigger=None,</span> <span class="pre">array_backend='numpy',</span> <span class="pre">num_rx_ports)</span> <span class="pre">-&gt;</span> <span class="pre">striqt.sensor.bindings.Controller</span></code></p>
+<p>type(object) -&gt; the object’s type
 type(name, bases, dict, <a href="#id13"><span class="problematic" id="id14">**</span></a>kwds) -&gt; a new type</p>
-</dd></dl>
-
 </dd></dl>
 
 <dl class="py class">
@@ -316,14 +288,10 @@ type(name, bases, dict, <a href="#id13"><span class="problematic" id="id14">**</
 </ul>
 </li>
 </ul>
-<p>—</p>
-<dl class="py method">
-<dt class="sig sig-object py" id="striqt.sensor.bindings.mat_file.controller">
-<span class="sig-name descname"><span class="pre">controller</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">master_clock_rate</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">trigger_strobe</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">signal_trigger</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">array_backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'numpy'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">file_format</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'auto'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">file_metadata</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">loop</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.bindings.Controller"><span class="pre">striqt.sensor.bindings.Controller</span></a></span></span><a class="headerlink" href="#striqt.sensor.bindings.mat_file.controller" title="Link to this definition">¶</a></dt>
-<dd><p>type(object) -&gt; the object’s type
+<p><strong>Controller:</strong></p>
+<p><code class="docutils literal notranslate"><span class="pre">controller(*,</span> <span class="pre">master_clock_rate,</span> <span class="pre">trigger_strobe=None,</span> <span class="pre">signal_trigger=None,</span> <span class="pre">array_backend='numpy',</span> <span class="pre">path,</span> <span class="pre">file_format='auto',</span> <span class="pre">file_metadata=None,</span> <span class="pre">loop=False)</span> <span class="pre">-&gt;</span> <span class="pre">striqt.sensor.bindings.Controller</span></code></p>
+<p>type(object) -&gt; the object’s type
 type(name, bases, dict, <a href="#id15"><span class="problematic" id="id16">**</span></a>kwds) -&gt; a new type</p>
-</dd></dl>
-
 </dd></dl>
 
 <dl class="py class">
@@ -346,14 +314,10 @@ type(name, bases, dict, <a href="#id15"><span class="problematic" id="id16">**</
 </ul>
 </li>
 </ul>
-<p>—</p>
-<dl class="py method">
-<dt class="sig sig-object py" id="striqt.sensor.bindings.noise.controller">
-<span class="sig-name descname"><span class="pre">controller</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">master_clock_rate</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">trigger_strobe</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">signal_trigger</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">array_backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'numpy'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_rx_ports</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.bindings.Controller"><span class="pre">striqt.sensor.bindings.Controller</span></a></span></span><a class="headerlink" href="#striqt.sensor.bindings.noise.controller" title="Link to this definition">¶</a></dt>
-<dd><p>type(object) -&gt; the object’s type
+<p><strong>Controller:</strong></p>
+<p><code class="docutils literal notranslate"><span class="pre">controller(*,</span> <span class="pre">master_clock_rate,</span> <span class="pre">trigger_strobe=None,</span> <span class="pre">signal_trigger=None,</span> <span class="pre">array_backend='numpy',</span> <span class="pre">num_rx_ports)</span> <span class="pre">-&gt;</span> <span class="pre">striqt.sensor.bindings.Controller</span></code></p>
+<p>type(object) -&gt; the object’s type
 type(name, bases, dict, <a href="#id17"><span class="problematic" id="id18">**</span></a>kwds) -&gt; a new type</p>
-</dd></dl>
-
 </dd></dl>
 
 <dl class="py class">
@@ -376,14 +340,10 @@ type(name, bases, dict, <a href="#id17"><span class="problematic" id="id18">**</
 </ul>
 </li>
 </ul>
-<p>—</p>
-<dl class="py method">
-<dt class="sig sig-object py" id="striqt.sensor.bindings.sawtooth.controller">
-<span class="sig-name descname"><span class="pre">controller</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">master_clock_rate</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">trigger_strobe</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">signal_trigger</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">array_backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'numpy'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_rx_ports</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.bindings.Controller"><span class="pre">striqt.sensor.bindings.Controller</span></a></span></span><a class="headerlink" href="#striqt.sensor.bindings.sawtooth.controller" title="Link to this definition">¶</a></dt>
-<dd><p>type(object) -&gt; the object’s type
+<p><strong>Controller:</strong></p>
+<p><code class="docutils literal notranslate"><span class="pre">controller(*,</span> <span class="pre">master_clock_rate,</span> <span class="pre">trigger_strobe=None,</span> <span class="pre">signal_trigger=None,</span> <span class="pre">array_backend='numpy',</span> <span class="pre">num_rx_ports)</span> <span class="pre">-&gt;</span> <span class="pre">striqt.sensor.bindings.Controller</span></code></p>
+<p>type(object) -&gt; the object’s type
 type(name, bases, dict, <a href="#id19"><span class="problematic" id="id20">**</span></a>kwds) -&gt; a new type</p>
-</dd></dl>
-
 </dd></dl>
 
 <dl class="py class">
@@ -406,14 +366,10 @@ type(name, bases, dict, <a href="#id19"><span class="problematic" id="id20">**</
 </ul>
 </li>
 </ul>
-<p>—</p>
-<dl class="py method">
-<dt class="sig sig-object py" id="striqt.sensor.bindings.single_tone.controller">
-<span class="sig-name descname"><span class="pre">controller</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">master_clock_rate</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">trigger_strobe</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">signal_trigger</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">array_backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'numpy'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_rx_ports</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.bindings.Controller"><span class="pre">striqt.sensor.bindings.Controller</span></a></span></span><a class="headerlink" href="#striqt.sensor.bindings.single_tone.controller" title="Link to this definition">¶</a></dt>
-<dd><p>type(object) -&gt; the object’s type
+<p><strong>Controller:</strong></p>
+<p><code class="docutils literal notranslate"><span class="pre">controller(*,</span> <span class="pre">master_clock_rate,</span> <span class="pre">trigger_strobe=None,</span> <span class="pre">signal_trigger=None,</span> <span class="pre">array_backend='numpy',</span> <span class="pre">num_rx_ports)</span> <span class="pre">-&gt;</span> <span class="pre">striqt.sensor.bindings.Controller</span></code></p>
+<p>type(object) -&gt; the object’s type
 type(name, bases, dict, <a href="#id21"><span class="problematic" id="id22">**</span></a>kwds) -&gt; a new type</p>
-</dd></dl>
-
 </dd></dl>
 
 <dl class="py class">
@@ -436,14 +392,10 @@ type(name, bases, dict, <a href="#id21"><span class="problematic" id="id22">**</
 </ul>
 </li>
 </ul>
-<p>—</p>
-<dl class="py method">
-<dt class="sig sig-object py" id="striqt.sensor.bindings.tdms_file.controller">
-<span class="sig-name descname"><span class="pre">controller</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">master_clock_rate</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">trigger_strobe</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">signal_trigger</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">array_backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'numpy'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.bindings.Controller"><span class="pre">striqt.sensor.bindings.Controller</span></a></span></span><a class="headerlink" href="#striqt.sensor.bindings.tdms_file.controller" title="Link to this definition">¶</a></dt>
-<dd><p>type(object) -&gt; the object’s type
+<p><strong>Controller:</strong></p>
+<p><code class="docutils literal notranslate"><span class="pre">controller(*,</span> <span class="pre">master_clock_rate,</span> <span class="pre">trigger_strobe=None,</span> <span class="pre">signal_trigger=None,</span> <span class="pre">array_backend='numpy',</span> <span class="pre">path)</span> <span class="pre">-&gt;</span> <span class="pre">striqt.sensor.bindings.Controller</span></code></p>
+<p>type(object) -&gt; the object’s type
 type(name, bases, dict, <a href="#id23"><span class="problematic" id="id24">**</span></a>kwds) -&gt; a new type</p>
-</dd></dl>
-
 </dd></dl>
 
 <dl class="py class">
@@ -466,14 +418,10 @@ type(name, bases, dict, <a href="#id23"><span class="problematic" id="id24">**</
 </ul>
 </li>
 </ul>
-<p>—</p>
-<dl class="py method">
-<dt class="sig sig-object py" id="striqt.sensor.bindings.warmup.controller">
-<span class="sig-name descname"><span class="pre">controller</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">master_clock_rate</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">trigger_strobe</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">signal_trigger</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">array_backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'numpy'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_rx_ports</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.bindings.Controller"><span class="pre">striqt.sensor.bindings.Controller</span></a></span></span><a class="headerlink" href="#striqt.sensor.bindings.warmup.controller" title="Link to this definition">¶</a></dt>
-<dd><p>type(object) -&gt; the object’s type
+<p><strong>Controller:</strong></p>
+<p><code class="docutils literal notranslate"><span class="pre">controller(*,</span> <span class="pre">master_clock_rate,</span> <span class="pre">trigger_strobe=None,</span> <span class="pre">signal_trigger=None,</span> <span class="pre">array_backend='numpy',</span> <span class="pre">num_rx_ports)</span> <span class="pre">-&gt;</span> <span class="pre">striqt.sensor.bindings.Controller</span></code></p>
+<p>type(object) -&gt; the object’s type
 type(name, bases, dict, <a href="#id25"><span class="problematic" id="id26">**</span></a>kwds) -&gt; a new type</p>
-</dd></dl>
-
 </dd></dl>
 
 <dl class="py class">
@@ -496,14 +444,10 @@ type(name, bases, dict, <a href="#id25"><span class="problematic" id="id26">**</
 </ul>
 </li>
 </ul>
-<p>—</p>
-<dl class="py method">
-<dt class="sig sig-object py" id="striqt.sensor.bindings.zarr_iq.controller">
-<span class="sig-name descname"><span class="pre">controller</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">master_clock_rate</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">trigger_strobe</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">signal_trigger</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">array_backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'numpy'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">center_frequency</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">select</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">&lt;factory&gt;</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.bindings.Controller"><span class="pre">striqt.sensor.bindings.Controller</span></a></span></span><a class="headerlink" href="#striqt.sensor.bindings.zarr_iq.controller" title="Link to this definition">¶</a></dt>
-<dd><p>type(object) -&gt; the object’s type
+<p><strong>Controller:</strong></p>
+<p><code class="docutils literal notranslate"><span class="pre">controller(*,</span> <span class="pre">master_clock_rate,</span> <span class="pre">trigger_strobe=None,</span> <span class="pre">signal_trigger=None,</span> <span class="pre">array_backend='numpy',</span> <span class="pre">path,</span> <span class="pre">center_frequency,</span> <span class="pre">select=&lt;factory&gt;)</span> <span class="pre">-&gt;</span> <span class="pre">striqt.sensor.bindings.Controller</span></code></p>
+<p>type(object) -&gt; the object’s type
 type(name, bases, dict, <a href="#id27"><span class="problematic" id="id28">**</span></a>kwds) -&gt; a new type</p>
-</dd></dl>
-
 </dd></dl>
 
 <p><strong>Available Sensor Bindings:</strong></p>
@@ -925,62 +869,20 @@ like <cite>{name}</cite>.</p>
     <h3><a href="index.html">Table of Contents</a></h3>
     <ul>
 <li><a class="reference internal" href="#">striqt.sensor.bindings</a><ul>
-<li><a class="reference internal" href="#striqt.sensor.bindings.air7101b"><code class="docutils literal notranslate"><span class="pre">air7101b</span></code></a><ul>
-<li><a class="reference internal" href="#striqt.sensor.bindings.air7101b.controller"><code class="docutils literal notranslate"><span class="pre">air7101b.controller()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#striqt.sensor.bindings.air7101b_calibration"><code class="docutils literal notranslate"><span class="pre">air7101b_calibration</span></code></a><ul>
-<li><a class="reference internal" href="#striqt.sensor.bindings.air7101b_calibration.controller"><code class="docutils literal notranslate"><span class="pre">air7101b_calibration.controller()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#striqt.sensor.bindings.air7201b"><code class="docutils literal notranslate"><span class="pre">air7201b</span></code></a><ul>
-<li><a class="reference internal" href="#striqt.sensor.bindings.air7201b.controller"><code class="docutils literal notranslate"><span class="pre">air7201b.controller()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#striqt.sensor.bindings.air7201b_calibration"><code class="docutils literal notranslate"><span class="pre">air7201b_calibration</span></code></a><ul>
-<li><a class="reference internal" href="#striqt.sensor.bindings.air7201b_calibration.controller"><code class="docutils literal notranslate"><span class="pre">air7201b_calibration.controller()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#striqt.sensor.bindings.air8201b"><code class="docutils literal notranslate"><span class="pre">air8201b</span></code></a><ul>
-<li><a class="reference internal" href="#striqt.sensor.bindings.air8201b.controller"><code class="docutils literal notranslate"><span class="pre">air8201b.controller()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#striqt.sensor.bindings.air8201b_calibration"><code class="docutils literal notranslate"><span class="pre">air8201b_calibration</span></code></a><ul>
-<li><a class="reference internal" href="#striqt.sensor.bindings.air8201b_calibration.controller"><code class="docutils literal notranslate"><span class="pre">air8201b_calibration.controller()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#striqt.sensor.bindings.dirac_delta"><code class="docutils literal notranslate"><span class="pre">dirac_delta</span></code></a><ul>
-<li><a class="reference internal" href="#striqt.sensor.bindings.dirac_delta.controller"><code class="docutils literal notranslate"><span class="pre">dirac_delta.controller()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#striqt.sensor.bindings.mat_file"><code class="docutils literal notranslate"><span class="pre">mat_file</span></code></a><ul>
-<li><a class="reference internal" href="#striqt.sensor.bindings.mat_file.controller"><code class="docutils literal notranslate"><span class="pre">mat_file.controller()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#striqt.sensor.bindings.noise"><code class="docutils literal notranslate"><span class="pre">noise</span></code></a><ul>
-<li><a class="reference internal" href="#striqt.sensor.bindings.noise.controller"><code class="docutils literal notranslate"><span class="pre">noise.controller()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#striqt.sensor.bindings.sawtooth"><code class="docutils literal notranslate"><span class="pre">sawtooth</span></code></a><ul>
-<li><a class="reference internal" href="#striqt.sensor.bindings.sawtooth.controller"><code class="docutils literal notranslate"><span class="pre">sawtooth.controller()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#striqt.sensor.bindings.single_tone"><code class="docutils literal notranslate"><span class="pre">single_tone</span></code></a><ul>
-<li><a class="reference internal" href="#striqt.sensor.bindings.single_tone.controller"><code class="docutils literal notranslate"><span class="pre">single_tone.controller()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#striqt.sensor.bindings.tdms_file"><code class="docutils literal notranslate"><span class="pre">tdms_file</span></code></a><ul>
-<li><a class="reference internal" href="#striqt.sensor.bindings.tdms_file.controller"><code class="docutils literal notranslate"><span class="pre">tdms_file.controller()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#striqt.sensor.bindings.warmup"><code class="docutils literal notranslate"><span class="pre">warmup</span></code></a><ul>
-<li><a class="reference internal" href="#striqt.sensor.bindings.warmup.controller"><code class="docutils literal notranslate"><span class="pre">warmup.controller()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#striqt.sensor.bindings.zarr_iq"><code class="docutils literal notranslate"><span class="pre">zarr_iq</span></code></a><ul>
-<li><a class="reference internal" href="#striqt.sensor.bindings.zarr_iq.controller"><code class="docutils literal notranslate"><span class="pre">zarr_iq.controller()</span></code></a></li>
-</ul>
-</li>
+<li><a class="reference internal" href="#striqt.sensor.bindings.air7101b"><code class="docutils literal notranslate"><span class="pre">air7101b</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.bindings.air7101b_calibration"><code class="docutils literal notranslate"><span class="pre">air7101b_calibration</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.bindings.air7201b"><code class="docutils literal notranslate"><span class="pre">air7201b</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.bindings.air7201b_calibration"><code class="docutils literal notranslate"><span class="pre">air7201b_calibration</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.bindings.air8201b"><code class="docutils literal notranslate"><span class="pre">air8201b</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.bindings.air8201b_calibration"><code class="docutils literal notranslate"><span class="pre">air8201b_calibration</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.bindings.dirac_delta"><code class="docutils literal notranslate"><span class="pre">dirac_delta</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.bindings.mat_file"><code class="docutils literal notranslate"><span class="pre">mat_file</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.bindings.noise"><code class="docutils literal notranslate"><span class="pre">noise</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.bindings.sawtooth"><code class="docutils literal notranslate"><span class="pre">sawtooth</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.bindings.single_tone"><code class="docutils literal notranslate"><span class="pre">single_tone</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.bindings.tdms_file"><code class="docutils literal notranslate"><span class="pre">tdms_file</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.bindings.warmup"><code class="docutils literal notranslate"><span class="pre">warmup</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.bindings.zarr_iq"><code class="docutils literal notranslate"><span class="pre">zarr_iq</span></code></a></li>
 <li><a class="reference internal" href="#striqt.sensor.bindings.Controller"><code class="docutils literal notranslate"><span class="pre">Controller</span></code></a><ul>
 <li><a class="reference internal" href="#striqt.sensor.bindings.Controller.acquire"><code class="docutils literal notranslate"><span class="pre">Controller.acquire()</span></code></a></li>
 <li><a class="reference internal" href="#striqt.sensor.bindings.Controller.arm"><code class="docutils literal notranslate"><span class="pre">Controller.arm()</span></code></a></li>
