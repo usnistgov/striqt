@@ -45,6 +45,11 @@ dev = [
     "ruff",
     "ty"
 ]
+doc = [
+    "sphinx",
+    "toml",
+    "myst_nb"
+]
 gpu = [
     "cupy >= 12.2",
     "cython",

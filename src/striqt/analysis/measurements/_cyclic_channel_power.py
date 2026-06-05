@@ -41,6 +41,11 @@ def cyclic_lag(capture: specs.Capture, spec: specs.CyclicChannelPower):
     attrs={'standard_name': 'Cyclic channel power', 'units': 'dBm'},
 )
 def cyclic_channel_power(iq, capture: specs.Capture, **kwargs):
+    """Compute cyclic measurements of channel power.
+
+    Args:
+    {args}
+    """    
     spec = specs.CyclicChannelPower.from_dict(kwargs)
 
     xp = sw.array_namespace(iq)

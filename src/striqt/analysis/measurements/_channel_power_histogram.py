@@ -74,6 +74,9 @@ def channel_power_histogram(iq, capture: specs.Capture, **kwargs):
     """evaluate the fraction of channel power readings binned on a uniform grid spacing.
 
     The outputs correspond to bin centers.
+
+    Args:
+    {args}
     """
 
     spec = specs.ChannelPowerHistogram.from_dict(kwargs)

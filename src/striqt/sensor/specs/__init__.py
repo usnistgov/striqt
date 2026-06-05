@@ -13,9 +13,9 @@ for k in list(locals().keys()):
         continue
     if not k[0].upper() == k[0]:
         locals().pop(k)
-del k # pyright: ignore
+del k  # pyright: ignore
 
-from . import helpers, types
+from . import helpers, structs, types
 from .dataclasses import AcquiredIQ, Schema
 from .structs import SS, SP, SC, SPC
 from .types import Annotated, Meta
@@ -27,4 +27,4 @@ for k, obj in list(locals().items()):
     if getattr(obj, '__module__', '').startswith(__name__):
         obj.__module__ = __name__
 
-del k, obj # pyright: ignore
+del k, obj  # pyright: ignore

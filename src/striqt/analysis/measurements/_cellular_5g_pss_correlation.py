@@ -122,6 +122,17 @@ def cellular_5g_pss_sync(iq, capture: specs.Capture, **kwargs):
     delay = round(spec.delay * spec.sample_rate) / spec.sample_rate
     return delay + offs / spec.sample_rate
 
+    # Args:
+    #     iq: the vector of size (N, M) for N channels and M IQ waveform samples
+    #     capture: capture structure that describes the iq acquisition parameters
+    #     sample_rate (samples/s): downsample to this rate before analysis (or None to follow capture.sample_rate)
+    #     subcarrier_spacing (Hz): OFDM subcarrier spacing
+    #     discovery_periodicity (s): interval between synchronization blocks
+    #     frequency_offset (Hz): baseband center frequency of the synchronization block
+    #     shared_spectrum: whether to assume "shared_spectrum" symbol layout in the SSB
+    #         according to 3GPP TS 138 213: Section 4.1)
+    #     max_block_count: if not None, the number of synchronization blocks to analyze
+    #     as_xarray: if True (default), return an xarray.DataArray, otherwise a ChannelAnalysisResult object
 
 @shared.hint_keywords(specs.Cellular5GNRPSSCorrelator)
 @registry.measurement(
@@ -141,16 +152,7 @@ def cellular_5g_pss_correlation(
     Returns a DataArray containing the time-lag for each combination of NID2, symbol, and SSB start time.
 
     Args:
-        iq: the vector of size (N, M) for N channels and M IQ waveform samples
-        capture: capture structure that describes the iq acquisition parameters
-        sample_rate (samples/s): downsample to this rate before analysis (or None to follow capture.sample_rate)
-        subcarrier_spacing (Hz): OFDM subcarrier spacing
-        discovery_periodicity (s): interval between synchronization blocks
-        frequency_offset (Hz): baseband center frequency of the synchronization block
-        shared_spectrum: whether to assume "shared_spectrum" symbol layout in the SSB
-            according to 3GPP TS 138 213: Section 4.1)
-        max_block_count: if not None, the number of synchronization blocks to analyze
-        as_xarray: if True (default), return an xarray.DataArray, otherwise a ChannelAnalysisResult object
+    {args}
 
     References:
         3GPP TS 138 211: Table 7.4.3.1-1, Section 7.4.2.2

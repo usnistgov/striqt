@@ -54,6 +54,14 @@ def spectrogram_power_bin(
     attrs={'standard_name': 'Fraction of counts'},
 )
 def spectrogram_histogram(iq: 'Array', capture: specs.Capture, **kwargs):
+    """Compute a histogram of the power readings on a spectrogram.
+
+    The histogram is evaluated on the flattened array of all pixels on
+    each spectrogram.
+
+    Args:
+    {args}
+    """    
     spec = specs.SpectrogramHistogram.from_dict(kwargs)
     spg_spec = specs.Spectrogram.from_spec(spec)
 

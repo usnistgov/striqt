@@ -260,13 +260,7 @@ def cellular_cyclic_autocorrelation(iq: 'Array', capture: specs.Capture, **kwarg
     tuple that is passed to the python builtin `range`.
 
     Args:
-        iq: the input waveform
-        capture: the waveform capture specification
-        subcarrier_spacings: cellular SCS to evaluate (currently supports 15e3, 30e3, or 60e3)
-        frame_range: the frame indices to evaluate
-        frame_slots: string composed of {'d', 'u', 's'} that specify the sequence
-            of link direction of each slot in 1 TDD cellular frame (or None to fill with downlink)
-        symbol_range: the symbols to evaluate within all indexed slots
+    {args}
 
     Returns:
         an float32-valued array with matching the array type of `iq`

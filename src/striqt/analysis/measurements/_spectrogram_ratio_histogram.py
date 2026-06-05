@@ -42,6 +42,12 @@ def spectrogram_ratio_power_bin(
     attrs={'standard_name': 'Fraction of counts'},
 )
 def spectrogram_ratio_histogram(iq: 'Array', capture: specs.Capture, **kwargs):
+    """Compute the ratio of spectrogram readings across two channels, and return its
+    its histogram.
+
+    Args:
+    {args}
+    """
     spec = specs.SpectrogramHistogramRatio.from_dict(kwargs)
     spg_spec = specs.Spectrogram.from_spec(spec)
 

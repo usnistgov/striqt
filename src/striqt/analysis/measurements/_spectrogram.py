@@ -71,6 +71,9 @@ def spectrogram(iq: 'sw.util.Array', capture: specs.Capture, **kwargs):
     As a result this accepts `cupy` or `numpy` arrays interchangably and
     implements speed optimizations specific to complex-valued IQ waveforms.
 
+    Args:
+    {args}
+
     See also:
         `striqt.waveform.spectrogram`
         `scipy.signal.spectrogram`

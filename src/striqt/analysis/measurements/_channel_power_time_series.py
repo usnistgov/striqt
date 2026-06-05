@@ -70,6 +70,11 @@ def evaluate_channel_power_time_series(
     attrs={'standard_name': 'Channel Power', 'units': 'dBm'},
 )
 def channel_power_time_series(iq, capture: specs.Capture, **kwargs):
+    """Compute a binned time series of channel power detector measurements.
+
+    Args:
+    {args}
+    """
     spec = specs.ChannelPowerTimeSeries.from_dict(kwargs)
 
     results = evaluate_channel_power_time_series(iq, capture=capture, spec=spec)

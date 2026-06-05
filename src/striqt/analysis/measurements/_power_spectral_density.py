@@ -50,6 +50,9 @@ def power_spectral_density(iq, capture, **kwargs):
 
     A list of statistics can be supplied to evaluate across the frequency axis,
     including 'mean' as applied in the original method.
+
+    Args:
+    {args}
     """
 
     spec = specs.PowerSpectralDensity.from_dict(kwargs)

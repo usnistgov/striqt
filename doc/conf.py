@@ -14,6 +14,7 @@ from sphinx.ext import autodoc
 from sphinx.util.inspect import stringify_signature, stringify_annotation
 
 import striqt.sensor as ss
+from striqt.analysis.specs import doc as spec_doc
 import sys
 import importlib.util
 
@@ -160,7 +161,7 @@ mathjax_config = {
 class PatchedPythonDomain(PythonDomain):
     """avoid clobbering references to builtins"""
 
-    def resolve_xref(self, env, fromdocname, builder, typ, target, node, contnode):
+    def resolve_xref(self, env, fromdocname, builder, typ, target, node, contnode): # type: ignore
         # ref: https://github.com/sphinx-doc/sphinx/issues/3866#issuecomment-311181219
         exclude_targets = set(dir(builtins))
 
@@ -183,50 +184,6 @@ class ClassDocumenter(autodoc.ClassDocumenter):
 
         # Return the expected tuple back to Sphinx
         return success, members
-
-
-def parse_type_and_meta(hint):
-    """
-    Recursively walks a type hint to extract msgspec.Meta objects.
-    Safely handles Literal values, Ellipsis, Unions, and generic containers.
-    """
-    origin = typing.get_origin(hint)
-    args = typing.get_args(hint)
-
-    if origin is typing.Annotated:
-        clean_base, metas = parse_type_and_meta(args[0])
-        msgspec_metas = [m for m in args[1:] if isinstance(m, msgspec.Meta)]
-        return clean_base, msgspec_metas + metas
-
-    if origin is typing.Literal:
-        return hint, []
-
-    if args:
-        cleaned_args = []
-        all_metas = []
-
-        for arg in args:
-            if arg is Ellipsis:
-                cleaned_args.append(Ellipsis)
-            else:
-                clean_arg, metas = parse_type_and_meta(arg)
-                cleaned_args.append(clean_arg)
-                all_metas.extend(metas)
-
-        try:
-            if hasattr(types, 'UnionType') and origin is types.UnionType:
-                import operator
-                from functools import reduce
-
-                clean_type = reduce(operator.or_, cleaned_args)
-            else:
-                clean_type = origin[tuple(cleaned_args)]
-        except Exception:
-            clean_type = hint
-
-        return clean_type, all_metas
-
-    return hint, []
 
 
 def clean_type_string(type_str):
@@ -256,52 +213,16 @@ def extract_msgspec_meta(app, what, name, obj, options, lines):
         if lines and lines[-1] != '':
             lines.append('')
 
+        field_descriptions, field_types = spec_doc.describe_msgspec_fields(obj)
+
         for field_name, field_type in hints.items():
-            # --- 1. HANDLE MSGSPEC STRUCT FIELDS ---
             if field_name in struct_fields:
-                clean_type, metas = parse_type_and_meta(field_type)
+                desc = field_descriptions.get(field_name, "")
+                type_str = field_types.get(field_name, "Any")
 
-                description = ''
-                constraints = []
+                lines.append(f":param {field_name}: {desc}")
+                lines.append(f":type {field_name}: {type_str}")
 
-                for meta in metas:
-                    if meta.description and not description:
-                        description = meta.description
-
-                    if getattr(meta, 'gt', None) is not None:
-                        constraints.append(f'> {meta.gt}')
-                    if getattr(meta, 'ge', None) is not None:
-                        constraints.append(f'>= {meta.ge}')
-                    if getattr(meta, 'lt', None) is not None:
-                        constraints.append(f'< {meta.lt}')
-                    if getattr(meta, 'le', None) is not None:
-                        constraints.append(f'<= {meta.le}')
-                    if getattr(meta, 'multiple_of', None) is not None:
-                        constraints.append(f'multiple of {meta.multiple_of}')
-                    if getattr(meta, 'min_length', None) is not None:
-                        constraints.append(f'min_length={meta.min_length}')
-                    if getattr(meta, 'max_length', None) is not None:
-                        constraints.append(f'max_length={meta.max_length}')
-                    if getattr(meta, 'pattern', None) is not None:
-                        constraints.append(f"pattern='{meta.pattern}'")
-
-                    if meta.extra and 'units' in meta.extra:
-                        constraints.append(f'units: {meta.extra["units"]}')
-
-                if constraints:
-                    constraint_str = f' *(Constraints: {", ".join(constraints)})*'
-                    if description:
-                        description += constraint_str
-                    else:
-                        description = constraint_str.strip()
-
-                raw_type_str = stringify_annotation(clean_type)
-                final_type_str = clean_type_string(raw_type_str)
-
-                lines.append(f':param {field_name}: {description}')
-                lines.append(f':type {field_name}: {final_type_str}')
-
-            # --- 2. HANDLE CLASSVAR CONSTANTS ---
             else:
                 origin = typing.get_origin(field_type)
                 if field_type is typing.ClassVar or origin is typing.ClassVar:
@@ -313,7 +234,7 @@ def extract_msgspec_meta(app, what, name, obj, options, lines):
                         inner_type = typing.Any
 
                     # NEW: Run it through our parser to strip Annotated and grab Meta
-                    clean_type, metas = parse_type_and_meta(inner_type)
+                    clean_type, metas = spec_doc.parse_type_and_meta(inner_type)
 
                     # Extract description from Meta
                     description = ''
@@ -401,7 +322,6 @@ def skip_msgspec_struct_fields(app, what, name, obj, skip, options):
                 cls = getattr(cls, part)
 
             if isinstance(cls, type):
-                # 1. NEW: Universally skip ClassVar attributes
                 try:
                     hints = typing.get_type_hints(cls, include_extras=True)
                     if name in hints:
@@ -415,7 +335,6 @@ def skip_msgspec_struct_fields(app, what, name, obj, skip, options):
                 except Exception:
                     pass
 
-                # 2. EXISTING: Skip msgspec.Struct instance fields
                 if issubclass(cls, msgspec.Struct):
                     struct_fields = {f.name for f in msgspec.structs.fields(cls)}
 
@@ -559,6 +478,9 @@ def skip_inherited_methods(app, what, name, obj, skip, options):
     Forces Sphinx to skip methods on specific subclasses if those methods
     are simply inherited from the parent and not overridden.
     """
+    from striqt.sensor.lib.typing import SourceBackend
+    from striqt.sensor.specs import structs
+
     if what == 'class':
         if (
             name.startswith('_')
@@ -574,11 +496,11 @@ def skip_inherited_methods(app, what, name, obj, skip, options):
 
         if not isinstance(cls, type):
             pass
-        elif not issubclass(cls, ss.lib.typing.SourceBackend):
+        elif not issubclass(cls, SourceBackend):
             pass
-        elif cls is ss.lib.typing.SourceBackend:
+        elif cls is SourceBackend:
             pass
-        elif hasattr(ss.lib.typing.SourceBackend, name):
+        elif hasattr(SourceBackend, name):
             return True
 
     return None
