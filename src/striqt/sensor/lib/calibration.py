@@ -312,12 +312,12 @@ def bind_manual_yfactor_calibration(
 
     from . import bindings
 
-    binding = ctrl_cls.sensor
+    # binding = ctrl_cls.sensor
 
     assert ctrl_cls.schema is not None
-    assert issubclass(binding.schema.capture, specs.Capture)
+    assert issubclass(ctrl_cls.schema.capture, specs.Capture)
 
-    class capture_spec_cls(binding.schema.capture, frozen=True, kw_only=True):
+    class capture_spec_cls(ctrl_cls.schema.capture, frozen=True, kw_only=True):
         noise_diode_enabled: specs.types.NoiseDiodeEnabled = False
 
     class sweep_spec_cls(specs.CalibrationSweep, frozen=True, kw_only=True):
@@ -331,23 +331,23 @@ def bind_manual_yfactor_calibration(
             super().__post_init__()
 
     peripherals_cls = _calibration_peripherals_cls(
-        binding.peripherals_cls, ManualYFactorPeripheral
+        ctrl_cls.sensor.peripherals_cls, ManualYFactorPeripheral
     )
     peripherals_cls.__name__ = ManualYFactorPeripheral.__name__
 
     cal_sensor = bindings.Sensor(
-        source_cls=binding.source_cls,
+        source_cls=ctrl_cls.sensor.source_cls,
         peripherals_cls=peripherals_cls,
         sweep_spec_cls=sweep_spec_cls,
         sink_cls=YFactorSink,
     )
 
     cal_schema = specs.Schema(
-        source=binding.schema.source,
+        source=ctrl_cls.schema.source,
         capture=capture_spec_cls,  # pyright: ignore
-        peripherals=binding.schema.peripherals,
-        init_like=binding.schema.init_like,
-        arm_like=binding.schema.arm_like,
+        peripherals=ctrl_cls.schema.peripherals,
+        init_like=ctrl_cls.schema.init_like,
+        arm_like=ctrl_cls.schema.arm_like,
     )
 
     return bindings.bind_sensor(

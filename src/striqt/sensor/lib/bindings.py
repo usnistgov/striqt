@@ -37,7 +37,7 @@ class BoundSweep(specs.Sweep[SS, SP, SC], frozen=True, kw_only=True):
     mock_sensor: specs.types.MockSensor = None
 
 
-registry: dict[str, 'SensorBinding[Any, Any, Any, Any, Any]'] = {}
+registry: dict[str, 'type[Controller[Any, Any, Any, Any, Any]]'] = {}
 tagged_sweeps: type[specs.Sweep] | None = None
 
 
@@ -83,35 +83,37 @@ def sensor(
 
 
 @dataclasses.dataclass()
-class SensorBinding(Sensor[SS, SP, SC], Generic[SS, SP, SC, PS, PC]):
-    schema: specs.Schema[SS, SP, SC, PS, PC]
+class SensorBinding(Sensor[SS, SP, SC]):
+    # schema: specs.Schema[SS, SP, SC, PS, PC]
     sweep_spec_cls: type[BoundSweep[SS, SP, SC]]  # pyright: ignore
 
     def __post_init__(self):
         super().__post_init__()
-        assert isinstance(self.schema, specs.Schema)
+        assert isinstance(self.sweep_spec_cls, type) and (self.sweep_spec_cls, BoundSweep)
 
-    @util.cached_property
-    def controller(self) -> type[Controller[SS, SP, SC, PS, PC]]:
-        class C(Controller):
-            sensor = self
-            schema = self.schema
 
-        self_cls = type(self)
-        C.__module__ = self_cls.__module__
-        C.__name__ = f'{self_cls.__name__}.controller'
-        C.__qualname__ = f'{self_cls.__qualname__}.controller'
-        source_spec = self.schema.source
-        spec_longname = f'{source_spec.__module__}.{source_spec.__qualname__}'
-        C.__doc__ = '\n\n'.join((
-            Controller.__doc__ or '',
-            self.source_cls.__doc__ or '',
-            f"Parameters:\n   See :class:`{spec_longname}`"
-        ))
+def _bind_controller(binding: SensorBinding[SS, SP, SC], schema_: specs.Schema[SS, SP, SC, PS, PC]) -> type[Controller[SS, SP, SC, PS, PC]]:
+    class C(Controller):
+        sensor = binding
+        schema = schema_
 
-        C.__signature__ = inspect.signature(self.schema.source) # ty: ignore
+    self_cls = type(binding)
+    C.__module__ = self_cls.__module__
+    C.__name__ = f'{self_cls.__name__}.controller'
+    C.__qualname__ = f'{self_cls.__qualname__}.controller'
+    source_spec = schema_.source
+    spec_longname = f'{source_spec.__module__}.{source_spec.__qualname__}'
+    C.__doc__ = '\n\n'.join((
+        Controller.__doc__ or '',
+        binding.source_cls.__doc__ or '',
+        f"Parameters:\n   See :class:`{spec_longname}`"
+    ))
 
-        return C
+    C.__signature__ = inspect.signature(schema_.source) # ty: ignore
+
+    return C
+
+
 
 def bind_sensor(
     key: str,
@@ -139,22 +141,21 @@ def bind_sensor(
         sweep_spec_cls=sensor.sweep_spec_cls,  # type: ignore
         peripherals_cls=sensor.peripherals_cls,  # pyright: ignore
         sink_cls=cast(type[sinks.SinkBase[SC]], sensor.sink_cls),
-        schema=schema,  # pyright: ignore
     )
 
     schema_ = schema
 
     class BoundSweep(sensor.sweep_spec_cls, frozen=True, kw_only=True):  # ty: ignore
-        _binding = binding
+        sensor = binding
         schema = schema_
 
         mock_source: Optional[str] = None
-        source: _binding.schema.source = msgspec.field(
-            default_factory=_binding.schema.source  # ty: ignore
+        source: schema.source = msgspec.field(
+            default_factory=schema.source  # ty: ignore
         )
-        captures: tuple[_binding.schema.capture, ...] = ()
-        peripherals: _binding.schema.peripherals = msgspec.field(
-            default_factory=_binding.schema.peripherals
+        captures: tuple[schema.capture, ...] = ()
+        peripherals: schema.peripherals = msgspec.field(
+            default_factory=schema.peripherals
         )
 
         def __post_init__(self):
@@ -170,68 +171,70 @@ def bind_sensor(
     BoundSweep = tagged_subclass(key, BoundSweep, specs.SWEEP_TAG_FIELD)  # type: ignore
     binding = dataclasses.replace(binding, sweep_spec_cls=BoundSweep)
 
-    if register:
-        registry[key] = binding
-
     global tagged_sweeps
     if tagged_sweeps is None:
         tagged_sweeps = BoundSweep
     else:
         tagged_sweeps = Union[tagged_sweeps, BoundSweep]  # pyright: ignore
 
-    cls = binding.controller
+    cls = _bind_controller(cast(SensorBinding[SS, SP, SC], binding), schema)
     cls.__module__ = sys._getframe(1).f_globals.get('__name__') or schema.__module__
-    return cls  # type: ignore
 
 
-def get_registry() -> dict[str, SensorBinding]:
+    if register:
+        registry[key] = cls
+
+    return cls
+
+
+def get_registry() -> dict[str, 'type[Controller[Any, Any, Any, Any, Any]]']:
     return dict(registry)
 
 
 @sw.util.lru_cache()
 def mock_binding(
-    origin: SensorBinding, target: str | SensorBinding, register: bool = True
+    origin: type[Controller], target: str | type[Controller], register: bool = True
 ) -> type[Controller[SS, SP, SC, PS, PC]]:
-    mock_name = f'mock_{target}_{origin.sweep_spec_cls.__name__}'
+    mock_name = f'mock_{target}_{origin.sensor.sweep_spec_cls.__name__}'
 
     if isinstance(target, str):
-        mock_binding = get_binding(target)
+        ctrl_cls = get_controller(target)
     else:
-        mock_binding = target
+        ctrl_cls = target
 
     return bind_sensor(
         mock_name,
         Sensor(
-            source_cls=mock_binding.source_cls,
-            peripherals_cls=mock_binding.peripherals_cls,
-            sweep_spec_cls=origin.sweep_spec_cls,
-            sink_cls=mock_binding.sink_cls,
+            source_cls=ctrl_cls.sensor.source_cls,
+            peripherals_cls=ctrl_cls.sensor.peripherals_cls,
+            sweep_spec_cls=origin.sensor.sweep_spec_cls,
+            sink_cls=ctrl_cls.sensor.sink_cls,
         ),
         specs.Schema(
-            source=mock_binding.schema.source,
+            source=ctrl_cls.schema.source,
             capture=origin.schema.capture,
             peripherals=origin.schema.peripherals,
             arm_like=origin.schema.arm_like,
-            init_like=mock_binding.schema.init_like,
+            init_like=ctrl_cls.schema.init_like,
         ),
         register=register,
     )
 
 
-def get_binding(
+def get_controller(
     key: str | specs.Sweep, mock_source: str | None = None
-) -> SensorBinding:
+) -> type[Controller]:
     if isinstance(key, specs.Sweep):
-        binding = registry[type(key).__name__]
+        ctrl_cls = registry[type(key).__name__]
     elif isinstance(key, str):
-        binding = registry[key]
+        ctrl_cls = registry[key]
     else:
         raise TypeError('key must be a string')
 
     if mock_source is not None:
-        return mock_binding(binding, mock_source).sensor
+        return mock_binding(ctrl_cls, mock_source)
     else:
-        return binding
+        return ctrl_cls
 
 
 def get_tagged_sweep_type() -> type[specs.Sweep]:

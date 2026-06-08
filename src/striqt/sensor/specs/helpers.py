@@ -226,7 +226,7 @@ def loop_captures(
 
     if len(sweep.captures) > 0:
         cls = type(sweep.captures[0])
-    elif sweep._binding is None:
+    elif sweep.sensor is None:
         raise TypeError(
             'loops may apply only to explicit capture lists unless the sweep '
             'is bound to a sensor with striqt.sensor.bind_sensor'
@@ -296,7 +296,7 @@ def varied_capture_fields(
 
 @sa.util.lru_cache()
 def get_capture_type(sweep_cls: type[specs.Sweep]) -> type[specs.SensorCapture]:
-    if sweep_cls._binding is not None:
+    if sweep_cls.sensor is not None:
         return sweep_cls.schema.capture
     else:
         captures_type = get_type_hints(sweep_cls)['captures']

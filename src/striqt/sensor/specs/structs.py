@@ -372,7 +372,7 @@ class Sweep(SpecBase, Generic[SS, SP, SC], frozen=True, kw_only=True):
 
     options: SweepOptions = SweepOptions(reuse_iq=False, loop_only_nyquist=False)
     schema: ClassVar[Any] = None
-    _binding: ClassVar[Any] = None
+    sensor: ClassVar[Any] = None
 
     def __post_init__(self):
         from . import helpers

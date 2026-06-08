@@ -122,9 +122,10 @@ def _convert_dict_spec(
     mock_source = tree.get('mock_source', None)
     if mock_source is not None:
         assert 'sensor_binding' in tree, TypeError('missing "sensor_binding"')
-        from .bindings import get_binding
+        from .bindings import get_controller
 
-        type = get_binding(tree['sensor_binding'], mock_source).sweep_spec_cls
+        ctrl_cls = get_controller(tree['sensor_binding'], mock_source)
+        type = ctrl_cls.sensor.sweep_spec_cls
         tree['sensor_binding'] = type.__name__
 
     if 'extensions' in tree:

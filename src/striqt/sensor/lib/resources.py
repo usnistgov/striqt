@@ -134,18 +134,18 @@ def _setup_logging(sink: specs.Sink, formatter):
 
 def _open_devices(
     conn: ConnectionManager,
-    bind: bindings.SensorBinding,
+    ctrl_cls: type[controller.Controller],
     spec: specs.Sweep,
     skip_peripherals: bool = False,
     format_path: specs.helpers.PathFormatter | None = None,
 ):
     """open source and optionally peripherals"""
 
-    source = util.threadpool.submit(bind.controller.from_sweep_spec, spec, format_path)
+    source = util.threadpool.submit(ctrl_cls.from_sweep_spec, spec, format_path)
 
     if not skip_peripherals:
         peripherals = util.threadpool.submit(
-            _timeit('open peripherals')(bind.peripherals_cls), spec
+            _timeit('open peripherals')(ctrl_cls.sensor.peripherals_cls), spec
         )
     else:
         peripherals = None
@@ -199,16 +199,16 @@ def open_resources(
     if spec_path is not None:
         os.chdir(str(Path(spec_path).parent))
 
-    bind = bindings.get_binding(spec)
+    ctrl_cls = bindings.get_controller(spec)
     conn = ConnectionManager(sweep_spec=spec)
 
     exc = util.ExceptionStack('failed to open resources', cancel_on_except=True)
     with util.share_thread_interrupts():
         devices = util.threadpool.submit(
-            _open_devices, conn, bind, spec, test_only, fmt
+            _open_devices, conn, ctrl_cls, spec, test_only, fmt
         )
         prep_sweep = util.threadpool.submit(_prepare_sweep, spec, on_source_opened)
-        sink = util.threadpool.submit(_open_sink, spec, bind.sink_cls, fmt)
+        sink = util.threadpool.submit(_open_sink, spec, ctrl_cls.sensor.sink_cls, fmt)
 
         with exc.defer():
             # foreground thread 1: initialize warmup sweeps

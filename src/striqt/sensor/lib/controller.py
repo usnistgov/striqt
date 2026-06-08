@@ -190,7 +190,7 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
     _prev_iq: specs.AcquiredIQ | None = None
     _config: ControllerConfig
     schema: 'specs.Schema[SS, SP, SC, PS, PC]'
-    sensor: 'bindings.SensorBinding[SS, SP, SC, PS, PC]'
+    sensor: 'bindings.SensorBinding[SS, SP, SC]'
 
     @sa.util.stopwatch(
         'open IQ source', 'sweep', threshold=0.5, logger_level=util.logging.INFO
