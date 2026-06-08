@@ -8,13 +8,13 @@ def test_read(spec_dir):
 
 def test_yaml_schema_binding(spec_dir):
     spec = ss.read_yaml_spec(spec_dir / 'air7101b.yaml')
-    binding = ss.bindings.air7101b
-    schema = binding.schema
+    ctrl_cls = ss.bindings.air7101b
+    schema = ctrl_cls._binding.schema
 
     assert isinstance(spec.captures[0], schema.capture), 'capture binding mismatch'
     assert isinstance(spec.peripherals, schema.peripherals), 'periph binding mismatch'
     assert isinstance(spec.source, schema.source), 'source binding mismatch'
-    assert isinstance(spec, binding.sweep_spec), 'sweep spec binding mismatch'
+    assert isinstance(spec, ctrl_cls._binding.sweep_spec), 'sweep spec binding mismatch'
 
 
 def test_binding_args():

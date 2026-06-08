@@ -11,7 +11,7 @@ import striqt.analysis as sa
 import striqt.waveform as sw
 
 from .sources import base, buffers
-from .typing import SS, SC, S, PC, PS, SourceBackend, TypeVar
+from .typing import SS, SP, SC, S, PC, PS, SourceBackend, TypeVar
 from . import compute, util
 from .. import specs
 
@@ -178,14 +178,14 @@ class ControllerConfig:
     init_rx_ports: tuple[int, ...] | None
 
 
-class Controller(Generic[SS, SC, PS, PC]):
+class Controller(Generic[SS, SP, SC, PS, PC]):
     """Opens a source backend and controls it with the binding's setup
     and capture specifications a binding.
     """
     backend: SourceBackend[SS, SC]
     __setup__: SS
     _capture: SC | None
-    _binding: 'bindings.SensorBinding[SS, Any, SC, PS, PC]'
+    _binding: 'bindings.SensorBinding[SS, SP, SC, PS, PC]'
     _buffers: buffers.ReceiveBuffers
     _timeout: float = 10
     _prev_iq: specs.AcquiredIQ | None = None
@@ -238,8 +238,8 @@ class Controller(Generic[SS, SC, PS, PC]):
         cls,
         spec: specs.Sweep[SS, Any, SC],
         format_path: specs.helpers.PathFormatter | None = None,
-    ) -> Controller[SS, SC, PS, PC]:
-        self = cast(Controller[SS, SC, PS, PC], object.__new__(cls))
+    ) -> Controller[SS, SP, SC, PS, PC]:
+        self = cast(Controller[SS, SP, SC, PS, PC], object.__new__(cls))
 
         config = ControllerConfig(
             init_rx_ports=specs.helpers.get_unique_ports(spec.captures, spec.loops),
@@ -256,8 +256,8 @@ class Controller(Generic[SS, SC, PS, PC]):
         reuse_iq: bool = False,
         rx_ports: tuple[int, ...] | None = None,
         format_path: specs.helpers.PathFormatter | None = None,
-    ) -> Controller[SS, SC, PS, PC]:
-        self = cast(Controller[SS, SC, PS, PC], object.__new__(cls))
+    ) -> Controller[SS, SP, SC, PS, PC]:
+        self = cast(Controller[SS, SP, SC, PS, PC], object.__new__(cls))
         config = ControllerConfig(
             init_rx_ports=rx_ports,
             reuse_iq=reuse_iq,

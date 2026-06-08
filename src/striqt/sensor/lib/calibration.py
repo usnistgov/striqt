@@ -5,6 +5,7 @@ from pathlib import Path
 
 from .. import specs as specs
 from . import compute, io, peripherals, sinks, util
+from .controller import Controller
 from .typing import Peripherals, TypeVar, SC, SP, SPC, PS, PC
 import striqt.analysis as sa
 
@@ -305,16 +306,18 @@ def _calibration_peripherals_cls(
 
 
 def bind_manual_yfactor_calibration(
-    name: str, sensor: 'bindings.SensorBinding[SS, SP, Any, PS, PC]'
-) -> 'bindings.SensorBinding[SS, SP, Any, PS, PC]':
+    name: str, ctrl_cls: 'type[Controller[SS, SP, Any, PS, PC]]'
+) -> 'type[Controller[SS, SP, Any, PS, PC]]':
     """extend an existing binding with a y-factor calibration"""
 
     from . import bindings
 
-    assert sensor.schema is not None
-    assert issubclass(sensor.schema.capture, specs.Capture)
+    binding = ctrl_cls._binding
 
-    class capture_spec_cls(sensor.schema.capture, frozen=True, kw_only=True):
+    assert binding.schema is not None
+    assert issubclass(binding.schema.capture, specs.Capture)
+
+    class capture_spec_cls(binding.schema.capture, frozen=True, kw_only=True):
         noise_diode_enabled: specs.types.NoiseDiodeEnabled = False
 
     class sweep_spec_cls(specs.CalibrationSweep, frozen=True, kw_only=True):
@@ -328,23 +331,23 @@ def bind_manual_yfactor_calibration(
             super().__post_init__()
 
     peripherals_cls = _calibration_peripherals_cls(
-        sensor.peripherals, ManualYFactorPeripheral
+        binding.peripherals, ManualYFactorPeripheral
     )
     peripherals_cls.__name__ = ManualYFactorPeripheral.__name__
 
     cal_sensor = bindings.Sensor(
-        source=sensor.source,
+        source=binding.source,
         peripherals=peripherals_cls,
         sweep_spec=sweep_spec_cls,
         sink=YFactorSink,
     )
 
     cal_schema = specs.Schema(
-        source=sensor.schema.source,
+        source=binding.schema.source,
         capture=capture_spec_cls,  # pyright: ignore
-        peripherals=sensor.schema.peripherals,
-        init_like=sensor.schema.init_like,
-        arm_like=sensor.schema.arm_like,
+        peripherals=binding.schema.peripherals,
+        init_like=binding.schema.init_like,
+        arm_like=binding.schema.arm_like,
     )
 
     return bindings.bind_sensor(

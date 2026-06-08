@@ -155,7 +155,7 @@ air7201b = bind_sensor(
 
 air7201b_calibration = bind_manual_yfactor_calibration('air7201b_calibration', air7201b)
 
-air8201b: SensorBinding = bind_sensor(
+air8201b = bind_sensor(
     'air8201b',
     sensor(source=sources.deepwave.Airstack1Source),
     Schema(

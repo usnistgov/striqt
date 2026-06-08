@@ -90,7 +90,7 @@ class SensorBinding(Sensor[SS, SP, SC], Generic[SS, SP, SC, PS, PC]):
         assert isinstance(self.schema, specs.Schema)
 
     @util.cached_property
-    def controller(self) -> type[Controller[SS, SC, PS, PC]]:
+    def controller(self) -> type[Controller[SS, SP, SC, PS, PC]]:
         class C(Controller):
             _binding = self
 
@@ -115,7 +115,7 @@ def bind_sensor(
     sensor: Sensor[TS2, TP2, TC2],
     schema: specs.Schema[SS, SP, SC, PS, PC],
     register: bool = True,
-) -> SensorBinding[SS, SP, SC, PS, PC]:
+) -> type[Controller[SS, SP, SC, PS, PC]]:
     """register a binding between specifications and controller classes.
 
     Args:
@@ -173,7 +173,7 @@ def bind_sensor(
     else:
         tagged_sweeps = Union[tagged_sweeps, BoundSweep]  # pyright: ignore
 
-    return binding  # type: ignore
+    return binding.controller  # type: ignore
 
 
 def get_registry() -> dict[str, SensorBinding]:
@@ -183,7 +183,7 @@ def get_registry() -> dict[str, SensorBinding]:
 @sw.util.lru_cache()
 def mock_binding(
     origin: SensorBinding, target: str | SensorBinding, register: bool = True
-) -> SensorBinding:
+) -> type[Controller[SS, SP, SC, PS, PC]]:
     mock_name = f'mock_{target}_{origin.sweep_spec.__name__}'
 
     if isinstance(target, str):
@@ -221,7 +221,7 @@ def get_binding(
         raise TypeError('key must be a string')
 
     if mock_source is not None:
-        return mock_binding(binding, mock_source)
+        return mock_binding(binding, mock_source)._binding
     else:
         return binding
 

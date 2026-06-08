@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     class Resources(typing_extensions.TypedDict, Generic[SS, SP, SC, PS, PC]):
         """Sensor resources needed to run a sweep"""
 
-        source: controller.Controller[SS, SC, PS, PC]
+        source: controller.Controller[SS, SP, SC, PS, PC]
         sink: SinkBase
         peripherals: Peripherals[SP, SC]
         except_context: typing_extensions.NotRequired[ContextManager]
@@ -43,7 +43,7 @@ if TYPE_CHECKING:
     ):
         """Sensor resources needed to run a sweep"""
 
-        source: controller.Controller[SS, SC, PS, PC]
+        source: controller.Controller[SS, SP, SC, PS, PC]
         sink: SinkBase
         peripherals: Peripherals[SP, SC]
         except_context: typing_extensions.NotRequired[ContextManager]
