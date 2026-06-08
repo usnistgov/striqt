@@ -1,3 +1,6 @@
+from __future__ import annotations as __
+from IPython.utils.text import indent
+import functools
 import msgspec
 import typing
 import types
@@ -107,7 +110,8 @@ def parse_type_and_meta(hint):
     return hint, []
 
 
-def describe_msgspec_fields(obj: msgspec.Struct):
+@functools.cache
+def describe_msgspec_fields(obj: type[msgspec.Struct]):
     """
     Extracts descriptions, constraints, and clean type strings from a msgspec.Struct.
     Returns a tuple of two dictionaries: (descriptions, types).
@@ -181,6 +185,9 @@ def struct_args_docstring(
     Returns:
         str: A fully formatted Google-style docstring segment.
     """
+    if not isinstance(obj, type):
+        obj = type(obj)
+        return struct_args_docstring(**locals())
     descriptions, types = describe_msgspec_fields(obj)
     descriptions = extra_prepend | descriptions | extra_append
     types = types | extra_types
@@ -204,4 +211,4 @@ def struct_args_docstring(
             # Fallback if there is no description provided
             lines.append(f'{base_indent}{field_name} ({type_str}):')
 
-    return '\n'.join(lines)
+    return '\n\n'.join(lines)

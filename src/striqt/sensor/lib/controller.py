@@ -242,17 +242,20 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
 
         # document cls.__init__()
         source_spec = cls.schema.source
-        source_spec_longname = f'{source_spec.__module__}.{source_spec.__qualname__}'
         cls.__doc__ = '\n\n'.join((
             f"Open and control the backend `{backend_name}`.",
             source_cls.__doc__ or '',
         ))
-        cls.__init__.__doc__ = f'Arguments:\n   See :class:`{source_spec_longname}`'
+        
+        descs, types = sa.specs.doc.describe_msgspec_fields(source_spec)
+        arg_descs = [f'    - **{n}** (*{t}*): {d}\n' for n, t, d in zip(descs, types.values(), descs.values())]
+        cls.__doc__ += '\n\n'+'\n'.join(['Parameters:'] + arg_descs)
 
         # document cls.arm()
         capture_spec = cls.schema.capture
-        capture_spec_longname = f'{capture_spec.__module__}.{capture_spec.__qualname__}'
-        cls.arm.__doc__ = f'Arguments:\n   See :class:`{capture_spec_longname}`'
+        descs, types = sa.specs.doc.describe_msgspec_fields(capture_spec)
+        arg_descs = [f'    - **{n}** (*{t}*): {d}\n' for n, t, d in zip(descs, types.values(), descs.values())]
+        cls.arm.__doc__ = '\n\n'+'\n'.join(['Parameters:'] + arg_descs)
         cls.__signature__ = inspect.signature(cls.schema.source)
         sig = inspect.signature(cls.schema.capture).replace(return_annotation=cls.schema.capture)
         cls.arm.__signature__ = sig # ty: ignore
