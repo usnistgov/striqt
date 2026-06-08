@@ -92,18 +92,18 @@ peripherals and expanded data fields elsewhere.</p>
 <dd><p><strong>Bases:</strong> <a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.lib.controller.Controller"><code class="xref py py-class docutils literal notranslate"><span class="pre">Controller</span></code></a></p>
 <p>Open and control the backend <cite>striqt.sensor.lib.sources.deepwave.Airstack1Source</cite>.</p>
 <dl class="simple">
-<dt>Args:</dt><dd><p>master_clock_rate (float): Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em>.
-trigger_strobe (float | None): .
-signal_trigger (str | AnalysisGroup | None): .
-array_backend (one of [‘numpy’, ‘cupy’]): array module to use to set compute device: numpy = cpu, cupy = gpu.
-calibration (str | None): .
-time_source (one of [‘host’, ‘internal’, ‘external’, ‘gps’]): Hardware source for timestamps.
-time_sync_at (one of [‘open’, ‘acquire’]): when to sync the hardware clock: on connection, or before each capture.
-clock_source (one of [‘internal’, ‘external’, ‘gps’]): Hardware source for the frequency reference.
-receive_retries (int): number of acquisition retry attempts on stream error <em>(Constraints: &gt;= 0)</em>.
-adc_overload_limit (float | None): dataset adc_overload=True when the peak ADC level exceeds this threshold <em>(Constraints: &lt;= 0, units: dBfs)</em>.
-if_overload_limit (float | None): the maximum level at maximum gain before IF/baseband overload <em>(Constraints: units: dBfs)</em>.
-gapless (bool): whether to raise an exception on overflows between identical captures.</p>
+<dt>Args:</dt><dd><p>master_clock_rate: Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em>.
+trigger_strobe: .
+signal_trigger: .
+array_backend: array module to use to set compute device: numpy = cpu, cupy = gpu.
+calibration: .
+time_source: Hardware source for timestamps.
+time_sync_at: when to sync the hardware clock: on connection, or before each capture.
+clock_source: Hardware source for the frequency reference.
+receive_retries: number of acquisition retry attempts on stream error <em>(Constraints: &gt;= 0)</em>.
+adc_overload_limit: dataset adc_overload=True when the peak ADC level exceeds this threshold <em>(Constraints: &lt;= 0, units: dBfs)</em>.
+if_overload_limit: the maximum level at maximum gain before IF/baseband overload <em>(Constraints: units: dBfs)</em>.
+gapless: whether to raise an exception on overflows between identical captures.</p>
 </dd>
 </dl>
 <dl class="py method">
@@ -128,18 +128,18 @@ See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.s
 <dd><p><strong>Bases:</strong> <a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.lib.controller.Controller"><code class="xref py py-class docutils literal notranslate"><span class="pre">Controller</span></code></a></p>
 <p>Open and control the backend <cite>striqt.sensor.lib.sources.deepwave.Airstack1Source</cite>.</p>
 <dl class="simple">
-<dt>Args:</dt><dd><p>master_clock_rate (float): Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em>.
-trigger_strobe (float | None): .
-signal_trigger (str | AnalysisGroup | None): .
-array_backend (one of [‘numpy’, ‘cupy’]): array module to use to set compute device: numpy = cpu, cupy = gpu.
-calibration (str | None): .
-time_source (one of [‘host’, ‘internal’, ‘external’, ‘gps’]): Hardware source for timestamps.
-time_sync_at (one of [‘open’, ‘acquire’]): when to sync the hardware clock: on connection, or before each capture.
-clock_source (one of [‘internal’, ‘external’, ‘gps’]): Hardware source for the frequency reference.
-receive_retries (int): number of acquisition retry attempts on stream error <em>(Constraints: &gt;= 0)</em>.
-adc_overload_limit (float | None): dataset adc_overload=True when the peak ADC level exceeds this threshold <em>(Constraints: &lt;= 0, units: dBfs)</em>.
-if_overload_limit (float | None): the maximum level at maximum gain before IF/baseband overload <em>(Constraints: units: dBfs)</em>.
-gapless (bool): whether to raise an exception on overflows between identical captures.</p>
+<dt>Args:</dt><dd><p>master_clock_rate: Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em>.
+trigger_strobe: .
+signal_trigger: .
+array_backend: array module to use to set compute device: numpy = cpu, cupy = gpu.
+calibration: .
+time_source: Hardware source for timestamps.
+time_sync_at: when to sync the hardware clock: on connection, or before each capture.
+clock_source: Hardware source for the frequency reference.
+receive_retries: number of acquisition retry attempts on stream error <em>(Constraints: &gt;= 0)</em>.
+adc_overload_limit: dataset adc_overload=True when the peak ADC level exceeds this threshold <em>(Constraints: &lt;= 0, units: dBfs)</em>.
+if_overload_limit: the maximum level at maximum gain before IF/baseband overload <em>(Constraints: units: dBfs)</em>.
+gapless: whether to raise an exception on overflows between identical captures.</p>
 </dd>
 </dl>
 <dl class="py method">
@@ -164,18 +164,18 @@ See <code class="xref py py-class docutils literal notranslate"><span class="pre
 <dd><p><strong>Bases:</strong> <a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.lib.controller.Controller"><code class="xref py py-class docutils literal notranslate"><span class="pre">Controller</span></code></a></p>
 <p>Open and control the backend <cite>striqt.sensor.lib.sources.deepwave.Airstack1Source</cite>.</p>
 <dl class="simple">
-<dt>Args:</dt><dd><p>master_clock_rate (float): Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em>.
-trigger_strobe (float | None): .
-signal_trigger (str | AnalysisGroup | None): .
-array_backend (one of [‘numpy’, ‘cupy’]): array module to use to set compute device: numpy = cpu, cupy = gpu.
-calibration (str | None): .
-time_source (one of [‘host’, ‘internal’, ‘external’, ‘gps’]): Hardware source for timestamps.
-time_sync_at (one of [‘open’, ‘acquire’]): when to sync the hardware clock: on connection, or before each capture.
-clock_source (one of [‘internal’, ‘external’, ‘gps’]): Hardware source for the frequency reference.
-receive_retries (int): number of acquisition retry attempts on stream error <em>(Constraints: &gt;= 0)</em>.
-adc_overload_limit (float | None): dataset adc_overload=True when the peak ADC level exceeds this threshold <em>(Constraints: &lt;= 0, units: dBfs)</em>.
-if_overload_limit (float | None): the maximum level at maximum gain before IF/baseband overload <em>(Constraints: units: dBfs)</em>.
-gapless (bool): whether to raise an exception on overflows between identical captures.</p>
+<dt>Args:</dt><dd><p>master_clock_rate: Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em>.
+trigger_strobe: .
+signal_trigger: .
+array_backend: array module to use to set compute device: numpy = cpu, cupy = gpu.
+calibration: .
+time_source: Hardware source for timestamps.
+time_sync_at: when to sync the hardware clock: on connection, or before each capture.
+clock_source: Hardware source for the frequency reference.
+receive_retries: number of acquisition retry attempts on stream error <em>(Constraints: &gt;= 0)</em>.
+adc_overload_limit: dataset adc_overload=True when the peak ADC level exceeds this threshold <em>(Constraints: &lt;= 0, units: dBfs)</em>.
+if_overload_limit: the maximum level at maximum gain before IF/baseband overload <em>(Constraints: units: dBfs)</em>.
+gapless: whether to raise an exception on overflows between identical captures.</p>
 </dd>
 </dl>
 <dl class="py method">
@@ -200,18 +200,18 @@ See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.s
 <dd><p><strong>Bases:</strong> <a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.lib.controller.Controller"><code class="xref py py-class docutils literal notranslate"><span class="pre">Controller</span></code></a></p>
 <p>Open and control the backend <cite>striqt.sensor.lib.sources.deepwave.Airstack1Source</cite>.</p>
 <dl class="simple">
-<dt>Args:</dt><dd><p>master_clock_rate (float): Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em>.
-trigger_strobe (float | None): .
-signal_trigger (str | AnalysisGroup | None): .
-array_backend (one of [‘numpy’, ‘cupy’]): array module to use to set compute device: numpy = cpu, cupy = gpu.
-calibration (str | None): .
-time_source (one of [‘host’, ‘internal’, ‘external’, ‘gps’]): Hardware source for timestamps.
-time_sync_at (one of [‘open’, ‘acquire’]): when to sync the hardware clock: on connection, or before each capture.
-clock_source (one of [‘internal’, ‘external’, ‘gps’]): Hardware source for the frequency reference.
-receive_retries (int): number of acquisition retry attempts on stream error <em>(Constraints: &gt;= 0)</em>.
-adc_overload_limit (float | None): dataset adc_overload=True when the peak ADC level exceeds this threshold <em>(Constraints: &lt;= 0, units: dBfs)</em>.
-if_overload_limit (float | None): the maximum level at maximum gain before IF/baseband overload <em>(Constraints: units: dBfs)</em>.
-gapless (bool): whether to raise an exception on overflows between identical captures.</p>
+<dt>Args:</dt><dd><p>master_clock_rate: Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em>.
+trigger_strobe: .
+signal_trigger: .
+array_backend: array module to use to set compute device: numpy = cpu, cupy = gpu.
+calibration: .
+time_source: Hardware source for timestamps.
+time_sync_at: when to sync the hardware clock: on connection, or before each capture.
+clock_source: Hardware source for the frequency reference.
+receive_retries: number of acquisition retry attempts on stream error <em>(Constraints: &gt;= 0)</em>.
+adc_overload_limit: dataset adc_overload=True when the peak ADC level exceeds this threshold <em>(Constraints: &lt;= 0, units: dBfs)</em>.
+if_overload_limit: the maximum level at maximum gain before IF/baseband overload <em>(Constraints: units: dBfs)</em>.
+gapless: whether to raise an exception on overflows between identical captures.</p>
 </dd>
 </dl>
 <dl class="py method">
@@ -236,18 +236,18 @@ See <code class="xref py py-class docutils literal notranslate"><span class="pre
 <dd><p><strong>Bases:</strong> <a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.lib.controller.Controller"><code class="xref py py-class docutils literal notranslate"><span class="pre">Controller</span></code></a></p>
 <p>Open and control the backend <cite>striqt.sensor.lib.sources.deepwave.Airstack1Source</cite>.</p>
 <dl class="simple">
-<dt>Args:</dt><dd><p>master_clock_rate (float): Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em>.
-trigger_strobe (float | None): .
-signal_trigger (str | AnalysisGroup | None): .
-array_backend (one of [‘numpy’, ‘cupy’]): array module to use to set compute device: numpy = cpu, cupy = gpu.
-calibration (str | None): .
-time_source (one of [‘host’, ‘internal’, ‘external’, ‘gps’]): Hardware source for timestamps.
-time_sync_at (one of [‘open’, ‘acquire’]): when to sync the hardware clock: on connection, or before each capture.
-clock_source (one of [‘internal’, ‘external’, ‘gps’]): Hardware source for the frequency reference.
-receive_retries (int): number of acquisition retry attempts on stream error <em>(Constraints: &gt;= 0)</em>.
-adc_overload_limit (float | None): dataset adc_overload=True when the peak ADC level exceeds this threshold <em>(Constraints: &lt;= 0, units: dBfs)</em>.
-if_overload_limit (float | None): the maximum level at maximum gain before IF/baseband overload <em>(Constraints: units: dBfs)</em>.
-gapless (bool): whether to raise an exception on overflows between identical captures.</p>
+<dt>Args:</dt><dd><p>master_clock_rate: Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em>.
+trigger_strobe: .
+signal_trigger: .
+array_backend: array module to use to set compute device: numpy = cpu, cupy = gpu.
+calibration: .
+time_source: Hardware source for timestamps.
+time_sync_at: when to sync the hardware clock: on connection, or before each capture.
+clock_source: Hardware source for the frequency reference.
+receive_retries: number of acquisition retry attempts on stream error <em>(Constraints: &gt;= 0)</em>.
+adc_overload_limit: dataset adc_overload=True when the peak ADC level exceeds this threshold <em>(Constraints: &lt;= 0, units: dBfs)</em>.
+if_overload_limit: the maximum level at maximum gain before IF/baseband overload <em>(Constraints: units: dBfs)</em>.
+gapless: whether to raise an exception on overflows between identical captures.</p>
 </dd>
 </dl>
 <dl class="py method">
@@ -272,18 +272,18 @@ See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.s
 <dd><p><strong>Bases:</strong> <a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.lib.controller.Controller"><code class="xref py py-class docutils literal notranslate"><span class="pre">Controller</span></code></a></p>
 <p>Open and control the backend <cite>striqt.sensor.lib.sources.deepwave.Airstack1Source</cite>.</p>
 <dl class="simple">
-<dt>Args:</dt><dd><p>master_clock_rate (float): Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em>.
-trigger_strobe (float | None): .
-signal_trigger (str | AnalysisGroup | None): .
-array_backend (one of [‘numpy’, ‘cupy’]): array module to use to set compute device: numpy = cpu, cupy = gpu.
-calibration (str | None): .
-time_source (one of [‘host’, ‘internal’, ‘external’, ‘gps’]): Hardware source for timestamps.
-time_sync_at (one of [‘open’, ‘acquire’]): when to sync the hardware clock: on connection, or before each capture.
-clock_source (one of [‘internal’, ‘external’, ‘gps’]): Hardware source for the frequency reference.
-receive_retries (int): number of acquisition retry attempts on stream error <em>(Constraints: &gt;= 0)</em>.
-adc_overload_limit (float | None): dataset adc_overload=True when the peak ADC level exceeds this threshold <em>(Constraints: &lt;= 0, units: dBfs)</em>.
-if_overload_limit (float | None): the maximum level at maximum gain before IF/baseband overload <em>(Constraints: units: dBfs)</em>.
-gapless (bool): whether to raise an exception on overflows between identical captures.</p>
+<dt>Args:</dt><dd><p>master_clock_rate: Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em>.
+trigger_strobe: .
+signal_trigger: .
+array_backend: array module to use to set compute device: numpy = cpu, cupy = gpu.
+calibration: .
+time_source: Hardware source for timestamps.
+time_sync_at: when to sync the hardware clock: on connection, or before each capture.
+clock_source: Hardware source for the frequency reference.
+receive_retries: number of acquisition retry attempts on stream error <em>(Constraints: &gt;= 0)</em>.
+adc_overload_limit: dataset adc_overload=True when the peak ADC level exceeds this threshold <em>(Constraints: &lt;= 0, units: dBfs)</em>.
+if_overload_limit: the maximum level at maximum gain before IF/baseband overload <em>(Constraints: units: dBfs)</em>.
+gapless: whether to raise an exception on overflows between identical captures.</p>
 </dd>
 </dl>
 <dl class="py method">
@@ -308,11 +308,11 @@ See <code class="xref py py-class docutils literal notranslate"><span class="pre
 <dd><p><strong>Bases:</strong> <a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.lib.controller.Controller"><code class="xref py py-class docutils literal notranslate"><span class="pre">Controller</span></code></a></p>
 <p>Open and control the backend <cite>striqt.sensor.lib.sources.function.DiracDeltaSource</cite>.</p>
 <dl class="simple">
-<dt>Args:</dt><dd><p>master_clock_rate (float): Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em>.
-trigger_strobe (float | None): .
-signal_trigger (str | AnalysisGroup | None): .
-array_backend (one of [‘numpy’, ‘cupy’]): array module to use to set compute device: numpy = cpu, cupy = gpu.
-num_rx_ports (int): .</p>
+<dt>Args:</dt><dd><p>master_clock_rate: Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em>.
+trigger_strobe: .
+signal_trigger: .
+array_backend: array module to use to set compute device: numpy = cpu, cupy = gpu.
+num_rx_ports: .</p>
 </dd>
 </dl>
 <dl class="py method">
@@ -338,14 +338,14 @@ See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.s
 <p>Open and control the backend <cite>striqt.sensor.lib.sources.file.MATSource</cite>.</p>
 <p>returns IQ waveforms from a .mat file</p>
 <dl class="simple">
-<dt>Args:</dt><dd><p>master_clock_rate (float): Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em>.
-trigger_strobe (float | None): .
-signal_trigger (str | AnalysisGroup | None): .
-array_backend (one of [‘numpy’, ‘cupy’]): array module to use to set compute device: numpy = cpu, cupy = gpu.
-path (str): path to the waveform data file.
-file_format (one of [‘auto’, ‘mat’, ‘tdms’]): data format or auto to guess by extension.
-file_metadata (dict[str, Any] | None): any capture fields not included in the file.
-loop (bool): whether to loop the file to create longer IQ waveforms.</p>
+<dt>Args:</dt><dd><p>master_clock_rate: Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em>.
+trigger_strobe: .
+signal_trigger: .
+array_backend: array module to use to set compute device: numpy = cpu, cupy = gpu.
+path: path to the waveform data file.
+file_format: data format or auto to guess by extension.
+file_metadata: any capture fields not included in the file.
+loop: whether to loop the file to create longer IQ waveforms.</p>
 </dd>
 </dl>
 <dl class="py method">
@@ -370,11 +370,11 @@ See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.s
 <dd><p><strong>Bases:</strong> <a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.lib.controller.Controller"><code class="xref py py-class docutils literal notranslate"><span class="pre">Controller</span></code></a></p>
 <p>Open and control the backend <cite>striqt.sensor.lib.sources.function.NoiseSource</cite>.</p>
 <dl class="simple">
-<dt>Args:</dt><dd><p>master_clock_rate (float): Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em>.
-trigger_strobe (float | None): .
-signal_trigger (str | AnalysisGroup | None): .
-array_backend (one of [‘numpy’, ‘cupy’]): array module to use to set compute device: numpy = cpu, cupy = gpu.
-num_rx_ports (int): .</p>
+<dt>Args:</dt><dd><p>master_clock_rate: Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em>.
+trigger_strobe: .
+signal_trigger: .
+array_backend: array module to use to set compute device: numpy = cpu, cupy = gpu.
+num_rx_ports: .</p>
 </dd>
 </dl>
 <dl class="py method">
@@ -399,11 +399,11 @@ See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.s
 <dd><p><strong>Bases:</strong> <a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.lib.controller.Controller"><code class="xref py py-class docutils literal notranslate"><span class="pre">Controller</span></code></a></p>
 <p>Open and control the backend <cite>striqt.sensor.lib.sources.function.SawtoothSource</cite>.</p>
 <dl class="simple">
-<dt>Args:</dt><dd><p>master_clock_rate (float): Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em>.
-trigger_strobe (float | None): .
-signal_trigger (str | AnalysisGroup | None): .
-array_backend (one of [‘numpy’, ‘cupy’]): array module to use to set compute device: numpy = cpu, cupy = gpu.
-num_rx_ports (int): .</p>
+<dt>Args:</dt><dd><p>master_clock_rate: Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em>.
+trigger_strobe: .
+signal_trigger: .
+array_backend: array module to use to set compute device: numpy = cpu, cupy = gpu.
+num_rx_ports: .</p>
 </dd>
 </dl>
 <dl class="py method">
@@ -428,11 +428,11 @@ See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.s
 <dd><p><strong>Bases:</strong> <a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.lib.controller.Controller"><code class="xref py py-class docutils literal notranslate"><span class="pre">Controller</span></code></a></p>
 <p>Open and control the backend <cite>striqt.sensor.lib.sources.function.SingleToneSource</cite>.</p>
 <dl class="simple">
-<dt>Args:</dt><dd><p>master_clock_rate (float): Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em>.
-trigger_strobe (float | None): .
-signal_trigger (str | AnalysisGroup | None): .
-array_backend (one of [‘numpy’, ‘cupy’]): array module to use to set compute device: numpy = cpu, cupy = gpu.
-num_rx_ports (int): .</p>
+<dt>Args:</dt><dd><p>master_clock_rate: Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em>.
+trigger_strobe: .
+signal_trigger: .
+array_backend: array module to use to set compute device: numpy = cpu, cupy = gpu.
+num_rx_ports: .</p>
 </dd>
 </dl>
 <dl class="py method">
@@ -458,11 +458,11 @@ See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.s
 <p>Open and control the backend <cite>striqt.sensor.lib.sources.file.TDMSSource</cite>.</p>
 <p>a source of IQ waveforms from a TDMS file</p>
 <dl class="simple">
-<dt>Args:</dt><dd><p>master_clock_rate (float): Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em>.
-trigger_strobe (float | None): .
-signal_trigger (str | AnalysisGroup | None): .
-array_backend (one of [‘numpy’, ‘cupy’]): array module to use to set compute device: numpy = cpu, cupy = gpu.
-path (str): path to the waveform data file.</p>
+<dt>Args:</dt><dd><p>master_clock_rate: Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em>.
+trigger_strobe: .
+signal_trigger: .
+array_backend: array module to use to set compute device: numpy = cpu, cupy = gpu.
+path: path to the waveform data file.</p>
 </dd>
 </dl>
 <dl class="py method">
@@ -488,11 +488,11 @@ See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.s
 <p>Open and control the backend <cite>striqt.sensor.lib.sources.base.NoSource</cite>.</p>
 <p>fast paths to acquire empty buffers</p>
 <dl class="simple">
-<dt>Args:</dt><dd><p>master_clock_rate (float): Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em>.
-trigger_strobe (float | None): .
-signal_trigger (str | AnalysisGroup | None): .
-array_backend (one of [‘numpy’, ‘cupy’]): array module to use to set compute device: numpy = cpu, cupy = gpu.
-num_rx_ports (int): .</p>
+<dt>Args:</dt><dd><p>master_clock_rate: Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em>.
+trigger_strobe: .
+signal_trigger: .
+array_backend: array module to use to set compute device: numpy = cpu, cupy = gpu.
+num_rx_ports: .</p>
 </dd>
 </dl>
 <dl class="py method">
@@ -518,13 +518,13 @@ See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.s
 <p>Open and control the backend <cite>striqt.sensor.lib.sources.file.ZarrIQSource</cite>.</p>
 <p>a sources of IQ samples from iq_waveform variables in a zarr store</p>
 <dl class="simple">
-<dt>Args:</dt><dd><p>master_clock_rate (float): Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em>.
-trigger_strobe (float | None): .
-signal_trigger (str | AnalysisGroup | None): .
-array_backend (one of [‘numpy’, ‘cupy’]): array module to use to set compute device: numpy = cpu, cupy = gpu.
-path (str): path to the waveform data file.
-center_frequency (float | tuple[float, …]): Center frequency for each port <em>(Constraints: units: Hz, &gt; 0, units: Hz, &gt; 0, units: Hz)</em>.
-select (dict): dictionary to select in the data as .sel(<a href="#id1"><span class="problematic" id="id2">**</span></a>select).</p>
+<dt>Args:</dt><dd><p>master_clock_rate: Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em>.
+trigger_strobe: .
+signal_trigger: .
+array_backend: array module to use to set compute device: numpy = cpu, cupy = gpu.
+path: path to the waveform data file.
+center_frequency: Center frequency for each port <em>(Constraints: units: Hz, &gt; 0, units: Hz, &gt; 0, units: Hz)</em>.
+select: dictionary to select in the data as .sel(<a href="#id1"><span class="problematic" id="id2">**</span></a>select).</p>
 </dd>
 </dl>
 <dl class="py method">
