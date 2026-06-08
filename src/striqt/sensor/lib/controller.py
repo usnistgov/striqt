@@ -3,6 +3,7 @@ from __future__ import annotations as __
 import contextlib
 import dataclasses
 import functools
+import inspect
 from typing import Any, Callable, cast, ClassVar, Generic, Generator, TYPE_CHECKING
 from collections import defaultdict
 from threading import Event
@@ -178,10 +179,30 @@ class ControllerConfig:
     init_rx_ports: tuple[int, ...] | None
 
 
+
+def bind_controller(
+    binding: 'bindings.SensorBinding[SS, SP, SC]', schema: specs.Schema[SS, SP, SC, PS, PC]
+) -> type[Controller[SS, SP, SC, PS, PC]]:
+    class cls(Controller, sensor=binding, schema=schema):
+        # wrapper shims for customized docstrings
+        def __init__(self, *args: PS.args, **kwargs: PS.kwargs):
+            return super().__init__(*args, **kwargs)
+
+        def arm(self, *args: PC.args, **kwargs: PC.kwargs) -> SC | None:
+            return super().arm(*args, **kwargs)
+
+    sensor = cls.sensor
+    sensor_cls = type(sensor)
+    cls.__module__ = sensor_cls.__module__
+    cls.__name__ = f'{sensor_cls.__name__}.controller'
+    cls.__qualname__ = f'{sensor_cls.__qualname__}.controller'
+
+    return cls
+
+
 class Controller(Generic[SS, SP, SC, PS, PC]):
-    """Opens a source backend and controls it with the binding's setup
-    and capture specifications a binding.
-    """
+    """Open the source backend for control and acquisition."""
+
     backend: SourceBackend[SS, SC]
     __setup__: SS
     _capture: SC | None
@@ -197,13 +218,46 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
     )
     def __init__(self, *args: PS.args, **kwargs: PS.kwargs):
         if not hasattr(self, 'sensor'):
-            raise TypeError('use a subclass of Controller that has been bound with bind_sensor')
+            raise TypeError(
+                'use a subclass of Controller that has been bound with bind_sensor'
+            )
 
         config = ControllerConfig(
             init_rx_ports=None, reuse_iq=False, analysis=None, format_path=None
         )
         spec = self.schema.source(*args, **kwargs)  # type: ignore
         self._setup(spec, config)
+
+
+    def __init_subclass__(cls, *, sensor: 'bindings.SensorBinding[SS, SP, SC]', schema: specs.Schema[SS, SP, SC, PS, PC]):
+        """customize documentation on subclassing"""
+
+        if not isinstance(schema, specs.Schema):
+            raise TypeError('schema argment is not a striqt.sensor.specs.Schema instance')
+        cls.schema = schema
+        cls.sensor = sensor
+        super().__init_subclass__()
+        source_cls = cls.sensor.source_cls
+        backend_name = f'{source_cls.__module__}.{source_cls.__name__}'
+
+        # document cls.__init__()
+        source_spec = cls.schema.source
+        source_spec_longname = f'{source_spec.__module__}.{source_spec.__qualname__}'
+        cls.__doc__ = '\n\n'.join((
+            f"Open and control the backend `{backend_name}`.",
+            source_cls.__doc__ or '',
+        ))
+        cls.__init__.__doc__ = f'Arguments:\n   See :class:`{source_spec_longname}`'
+
+        # document cls.arm()
+        capture_spec = cls.schema.capture
+        capture_spec_longname = f'{capture_spec.__module__}.{capture_spec.__qualname__}'
+        cls.arm.__doc__ = f'Arguments:\n   See :class:`{capture_spec_longname}`'
+        cls.__signature__ = inspect.signature(cls.schema.source)
+        sig = inspect.signature(cls.schema.capture).replace(return_annotation=cls.schema.capture)
+        cls.arm.__signature__ = sig # ty: ignore
+        return cls
+        
 
     def _setup(self, spec: SS, config: ControllerConfig) -> 'Self':
         self._config = config

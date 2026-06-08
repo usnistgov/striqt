@@ -18,7 +18,7 @@ import sys
 
 from typing_extensions import ParamSpec
 
-from .controller import Controller
+from .controller import Controller, bind_controller
 from .peripherals import NoPeripherals, PeripheralsBase
 from . import sinks, util
 from .. import specs
@@ -89,30 +89,10 @@ class SensorBinding(Sensor[SS, SP, SC]):
 
     def __post_init__(self):
         super().__post_init__()
-        assert isinstance(self.sweep_spec_cls, type) and (self.sweep_spec_cls, BoundSweep)
-
-
-def _bind_controller(binding: SensorBinding[SS, SP, SC], schema_: specs.Schema[SS, SP, SC, PS, PC]) -> type[Controller[SS, SP, SC, PS, PC]]:
-    class C(Controller):
-        sensor = binding
-        schema = schema_
-
-    self_cls = type(binding)
-    C.__module__ = self_cls.__module__
-    C.__name__ = f'{self_cls.__name__}.controller'
-    C.__qualname__ = f'{self_cls.__qualname__}.controller'
-    source_spec = schema_.source
-    spec_longname = f'{source_spec.__module__}.{source_spec.__qualname__}'
-    C.__doc__ = '\n\n'.join((
-        Controller.__doc__ or '',
-        binding.source_cls.__doc__ or '',
-        f"Parameters:\n   See :class:`{spec_longname}`"
-    ))
-
-    C.__signature__ = inspect.signature(schema_.source) # ty: ignore
-
-    return C
-
+        assert isinstance(self.sweep_spec_cls, type) and (
+            self.sweep_spec_cls,
+            BoundSweep,
+        )
 
 
 def bind_sensor(
@@ -177,9 +157,8 @@ def bind_sensor(
     else:
         tagged_sweeps = Union[tagged_sweeps, BoundSweep]  # pyright: ignore
 
-    cls = _bind_controller(cast(SensorBinding[SS, SP, SC], binding), schema)
+    cls = bind_controller(cast(SensorBinding[SS, SP, SC], binding), schema)
     cls.__module__ = sys._getframe(1).f_globals.get('__name__') or schema.__module__
-
 
     if register:
         registry[key] = cls

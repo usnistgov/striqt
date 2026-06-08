@@ -14,6 +14,7 @@ from sphinx.ext import autodoc
 from sphinx.util.inspect import stringify_signature, stringify_annotation
 
 import striqt.sensor as ss
+from striqt.sensor.lib.controller import Controller
 from striqt.analysis.specs import doc as spec_doc
 import sys
 import importlib.util
@@ -643,13 +644,132 @@ def skip_inherited_methods(app, what, name, obj, skip, options):
     return None
 
 
+def document_dynamic_controllers(app, what, name, obj, options, lines):
+    """
+    Finds dynamic subclasses of Controller in a module and injects them as fully 
+    documented classes, conventionally appending the __init__ signature to the class header.
+    """
+    if what == "module":
+        try:
+            mod = sys.modules.get(name)
+            if not mod:
+                return
+            
+            dynamic_controllers = {}
+            for attr_name, attr_val in vars(mod).items():
+                if (isinstance(attr_val, type) and 
+                    issubclass(attr_val, Controller) and 
+                    attr_val is not Controller):
+                    
+                    dynamic_controllers[attr_name] = attr_val
+                    
+            if not dynamic_controllers:
+                return
+                
+            if lines and lines[-1] != "":
+                lines.append("")
+                
+            for c_name, c_cls in sorted(dynamic_controllers.items()):
+                lines.append("---")
+                lines.append("")
+                
+                # --- 1. Extract the constructor signature ---
+                try:
+                    # Inspect the class object to get the dynamic __init__ signature
+                    sig = inspect.signature(c_cls)
+                    clean_params = []
+                    for p_name, param in sig.parameters.items():
+                        if p_name == 'self':
+                            continue
+                        clean_params.append(param.replace(annotation=inspect.Parameter.empty))
+                        
+                    sig = sig.replace(parameters=clean_params, return_annotation=inspect.Signature.empty)
+                    init_sig_str = stringify_signature(sig)
+                except Exception:
+                    init_sig_str = "(...)"
+                
+                # --- 2. Inject the Class directive WITH the signature ---
+                lines.append(f".. py:class:: {c_name}{init_sig_str}")
+                lines.append("")
+                
+                base_indent = "   "
+                
+                # --- 3. Add Bases and combined docstrings ---
+                lines.append(f"{base_indent}**Bases:** :class:`~striqt.sensor.lib.controller.Controller`")
+                lines.append("")
+                
+                # Fetch both the class docstring and the __init__ docstring
+                c_doc = inspect.getdoc(c_cls)
+                init_doc = inspect.getdoc(getattr(c_cls, '__init__', None))
+                
+                # Intelligently combine them (if __init__ has a unique docstring)
+                combined_docs = []
+                if c_doc:
+                    combined_docs.append(c_doc)
+                if init_doc and "Initialize self" not in init_doc and init_doc != c_doc:
+                    combined_docs.append(init_doc)
+                    
+                for doc in combined_docs:
+                    for doc_line in doc.split('\n'):
+                        lines.append(f"{base_indent}{doc_line}")
+                    lines.append("")
+                    
+                # --- 4. Extract and document ONLY the remaining methods ---
+                target_methods = ['arm', 'acquire'] # __init__ is handled!
+                
+                for method_name in target_methods:
+                    method_obj = getattr(c_cls, method_name, None)
+                    if not method_obj:
+                        continue
+                        
+                    try:
+                        sig = inspect.signature(method_obj)
+                        clean_params = []
+                        for p_name, param in sig.parameters.items():
+                            if p_name == 'self':
+                                continue
+                            clean_params.append(param.replace(annotation=inspect.Parameter.empty))
+                            
+                        sig = sig.replace(parameters=clean_params, return_annotation=inspect.Signature.empty)
+                        sig_str = stringify_signature(sig)
+                    except Exception:
+                        sig_str = "(...)"
+                        
+                    # Inject the method directive
+                    lines.append(f"{base_indent}.. py:method:: {method_name}{sig_str}")
+                    lines.append("")
+                    
+                    m_doc = inspect.getdoc(method_obj)
+                    if m_doc and "Initialize self" not in m_doc:
+                        for doc_line in m_doc.split('\n'):
+                            lines.append(f"{base_indent}   {doc_line}")
+                    else:
+                        lines.append(f"{base_indent}   *(No documentation provided)*")
+                        
+                    lines.append("")
+                                        
+        except Exception:
+            pass
+
+def skip_dynamic_controller_aliases(app, what, name, obj, skip, options):
+    """
+    Forces Sphinx to skip the default data alias output for dynamic controllers,
+    since we are handling them natively in the module docstring hook.
+    """
+    if isinstance(obj, type) and issubclass(obj, Controller) and obj is not Controller:
+        return True
+    return None
+
+
 def setup(app):
     app.add_domain(PatchedPythonDomain, override=True)
     app.add_autodocumenter(ClassDocumenter, override=True)
-    # app.connect('autodoc-process-docstring', inject_bindings_as_classes)    
+    # app.connect('autodoc-process-docstring', inject_bindings_as_classes)   
+    app.connect('autodoc-process-docstring', document_dynamic_controllers) 
     app.connect('autodoc-process-docstring', list_sensor_bindings_in_module)
     app.connect('autodoc-process-docstring', extract_msgspec_meta)
     app.connect('autodoc-process-signature', simplify_msgspec_signature)
     app.connect('autodoc-skip-member', skip_inherited_methods)
     app.connect('autodoc-skip-member', skip_msgspec_struct_fields)
     app.connect('autodoc-skip-member', skip_external_imports)
+    app.connect('autodoc-skip-member', skip_dynamic_controller_aliases)
