@@ -331,15 +331,15 @@ def bind_manual_yfactor_calibration(
             super().__post_init__()
 
     peripherals_cls = _calibration_peripherals_cls(
-        binding.peripherals, ManualYFactorPeripheral
+        binding.peripherals_cls, ManualYFactorPeripheral
     )
     peripherals_cls.__name__ = ManualYFactorPeripheral.__name__
 
     cal_sensor = bindings.Sensor(
-        source=binding.source,
-        peripherals=peripherals_cls,
-        sweep_spec=sweep_spec_cls,
-        sink=YFactorSink,
+        source_cls=binding.source_cls,
+        peripherals_cls=peripherals_cls,
+        sweep_spec_cls=sweep_spec_cls,
+        sink_cls=YFactorSink,
     )
 
     cal_schema = specs.Schema(

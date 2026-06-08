@@ -145,7 +145,7 @@ def _open_devices(
 
     if not skip_peripherals:
         peripherals = util.threadpool.submit(
-            _timeit('open peripherals')(bind.peripherals), spec
+            _timeit('open peripherals')(bind.peripherals_cls), spec
         )
     else:
         peripherals = None
@@ -208,7 +208,7 @@ def open_resources(
             _open_devices, conn, bind, spec, test_only, fmt
         )
         prep_sweep = util.threadpool.submit(_prepare_sweep, spec, on_source_opened)
-        sink = util.threadpool.submit(_open_sink, spec, bind.sink, fmt)
+        sink = util.threadpool.submit(_open_sink, spec, bind.sink_cls, fmt)
 
         with exc.defer():
             # foreground thread 1: initialize warmup sweeps

@@ -74,14 +74,14 @@ def build_warmup_sweep(sweep: specs.Sweep[SS, SP, SC], count: int = 1) -> Warmup
     # then build up the warmup sweep
     b = mock_binding(sweep._binding, 'warmup', register=False)
 
-    source = warmup._binding.schema.source(
+    source = warmup.schema.source(
         num_rx_ports=max_rx_ports,
         master_clock_rate=sweep.source.master_clock_rate,
         trigger_strobe=None,
         signal_trigger=sweep.source.signal_trigger,
     )
 
-    sweep_spec = b._binding.sweep_spec(
+    sweep_spec = b._binding.sweep_spec_cls(
         source=source,
         captures=sweep.captures,
         loops=sweep.loops,

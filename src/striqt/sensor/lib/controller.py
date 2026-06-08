@@ -190,6 +190,8 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
     _timeout: float = 10
     _prev_iq: specs.AcquiredIQ | None = None
     _config: ControllerConfig
+    schema: 'specs.Schema[SS, SP, SC, PS, PC]'
+    types: 'bindings.Sensor[SS, SP, SC]'
 
     @sa.util.stopwatch(
         'open IQ source', 'sweep', threshold=0.5, logger_level=util.logging.INFO
@@ -201,7 +203,7 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
         config = ControllerConfig(
             init_rx_ports=None, reuse_iq=False, analysis=None, format_path=None
         )
-        spec = self._binding.schema.source(*args, **kwargs)  # type: ignore
+        spec = self.schema.source(*args, **kwargs)  # type: ignore
         self._setup(spec, config)
 
     def _setup(self, spec: SS, config: ControllerConfig) -> 'Self':
@@ -215,7 +217,7 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
             if not hasattr(self, '_binding'):
                 raise TypeError('access controller from a binding')
             self._buffers = buffers.ReceiveBuffers(self)
-            self.backend = self._binding.source(spec)
+            self.backend = self._binding.source_cls(spec)
             lookup._set_id(spec, self.source_id)
         except BaseException as ex:
             lookup._raise(spec, ex)
@@ -268,7 +270,7 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
 
     def arm(self, *args: PC.args, **kwargs: PC.kwargs) -> SC | None:
         assert self._buffers is not None
-        spec = self._binding.schema.capture(*args, **kwargs)  # type: ignore
+        spec = self.schema.capture(*args, **kwargs)  # type: ignore
         return self._arm_spec(spec)
 
     @sa.util.stopwatch('arm', 'source', threshold=10e-3)

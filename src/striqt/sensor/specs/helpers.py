@@ -235,7 +235,7 @@ def loop_captures(
         from ..lib import bindings
 
         assert isinstance(sweep._binding, bindings.SensorBinding)
-        cls = sweep._binding.schema.capture
+        cls = sweep.schema.capture
 
     return _expand_capture_loops(
         sweep.captures,

@@ -124,7 +124,7 @@ def _convert_dict_spec(
         assert 'sensor_binding' in tree, TypeError('missing "sensor_binding"')
         from .bindings import get_binding
 
-        type = get_binding(tree['sensor_binding'], mock_source).sweep_spec
+        type = get_binding(tree['sensor_binding'], mock_source).sweep_spec_cls
         tree['sensor_binding'] = type.__name__
 
     if 'extensions' in tree:
@@ -165,7 +165,7 @@ def read_tdms_iq(
     from ..bindings import tdms_file
     from .sources.file import TDMSSource
 
-    source_spec = tdms_file._binding.schema.source(
+    source_spec = tdms_file.schema.source(
         master_clock_rate=master_clock_rate, path=str(path)
     )
     source = tdms_file.from_source_spec(source_spec)

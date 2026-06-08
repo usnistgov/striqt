@@ -646,7 +646,7 @@ def skip_inherited_methods(app, what, name, obj, skip, options):
 def setup(app):
     app.add_domain(PatchedPythonDomain, override=True)
     app.add_autodocumenter(ClassDocumenter, override=True)
-    app.connect('autodoc-process-docstring', inject_bindings_as_classes)    
+    # app.connect('autodoc-process-docstring', inject_bindings_as_classes)    
     app.connect('autodoc-process-docstring', list_sensor_bindings_in_module)
     app.connect('autodoc-process-docstring', extract_msgspec_meta)
     app.connect('autodoc-process-signature', simplify_msgspec_signature)
