@@ -185,20 +185,19 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
     backend: SourceBackend[SS, SC]
     __setup__: SS
     _capture: SC | None
-    _binding: 'bindings.SensorBinding[SS, SP, SC, PS, PC]'
     _buffers: buffers.ReceiveBuffers
     _timeout: float = 10
     _prev_iq: specs.AcquiredIQ | None = None
     _config: ControllerConfig
     schema: 'specs.Schema[SS, SP, SC, PS, PC]'
-    types: 'bindings.Sensor[SS, SP, SC]'
+    sensor: 'bindings.SensorBinding[SS, SP, SC, PS, PC]'
 
     @sa.util.stopwatch(
         'open IQ source', 'sweep', threshold=0.5, logger_level=util.logging.INFO
     )
     def __init__(self, *args: PS.args, **kwargs: PS.kwargs):
-        if not hasattr(self, '_binding'):
-            raise TypeError('use this after binding a source controller')
+        if not hasattr(self, 'sensor'):
+            raise TypeError('use a subclass of Controller that has been bound with bind_sensor')
 
         config = ControllerConfig(
             init_rx_ports=None, reuse_iq=False, analysis=None, format_path=None
@@ -214,10 +213,10 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
         lookup._register(spec, self)
 
         try:
-            if not hasattr(self, '_binding'):
+            if not hasattr(self, 'sensor'):
                 raise TypeError('access controller from a binding')
             self._buffers = buffers.ReceiveBuffers(self)
-            self.backend = self._binding.source_cls(spec)
+            self.backend = self.sensor.source_cls(spec)
             lookup._set_id(spec, self.source_id)
         except BaseException as ex:
             lookup._raise(spec, ex)

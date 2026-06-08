@@ -312,9 +312,9 @@ def bind_manual_yfactor_calibration(
 
     from . import bindings
 
-    binding = ctrl_cls._binding
+    binding = ctrl_cls.sensor
 
-    assert binding.schema is not None
+    assert ctrl_cls.schema is not None
     assert issubclass(binding.schema.capture, specs.Capture)
 
     class capture_spec_cls(binding.schema.capture, frozen=True, kw_only=True):

@@ -232,9 +232,9 @@ def loop_captures(
             'is bound to a sensor with striqt.sensor.bind_sensor'
         )
     else:
-        from ..lib import bindings
+        from .dataclasses import Schema
 
-        assert isinstance(sweep._binding, bindings.SensorBinding)
+        assert isinstance(sweep.schema, Schema)
         cls = sweep.schema.capture
 
     return _expand_capture_loops(
@@ -297,7 +297,7 @@ def varied_capture_fields(
 @sa.util.lru_cache()
 def get_capture_type(sweep_cls: type[specs.Sweep]) -> type[specs.SensorCapture]:
     if sweep_cls._binding is not None:
-        return sweep_cls._binding.schema.capture
+        return sweep_cls.schema.capture
     else:
         captures_type = get_type_hints(sweep_cls)['captures']
         return get_args(captures_type)[0]

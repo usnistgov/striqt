@@ -81,7 +81,7 @@ def build_warmup_sweep(sweep: specs.Sweep[SS, SP, SC], count: int = 1) -> Warmup
         signal_trigger=sweep.source.signal_trigger,
     )
 
-    sweep_spec = b._binding.sweep_spec_cls(
+    sweep_spec = b.sensor.sweep_spec_cls(
         source=source,
         captures=sweep.captures,
         loops=sweep.loops,

@@ -94,7 +94,7 @@ class SensorBinding(Sensor[SS, SP, SC], Generic[SS, SP, SC, PS, PC]):
     @util.cached_property
     def controller(self) -> type[Controller[SS, SP, SC, PS, PC]]:
         class C(Controller):
-            _binding = self
+            sensor = self
             schema = self.schema
 
         self_cls = type(self)
@@ -142,8 +142,11 @@ def bind_sensor(
         schema=schema,  # pyright: ignore
     )
 
+    schema_ = schema
+
     class BoundSweep(sensor.sweep_spec_cls, frozen=True, kw_only=True):  # ty: ignore
         _binding = binding
+        schema = schema_
 
         mock_source: Optional[str] = None
         source: _binding.schema.source = msgspec.field(
@@ -226,7 +229,7 @@ def get_binding(
         raise TypeError('key must be a string')
 
     if mock_source is not None:
-        return mock_binding(binding, mock_source)._binding
+        return mock_binding(binding, mock_source).sensor
     else:
         return binding
 
