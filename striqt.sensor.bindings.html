@@ -92,7 +92,7 @@ peripherals and expanded data fields elsewhere.</p>
 <dd><p><strong>Bases:</strong> <a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.lib.controller.Controller"><code class="xref py py-class docutils literal notranslate"><span class="pre">Controller</span></code></a></p>
 <p>Open and control the backend <cite>striqt.sensor.lib.sources.deepwave.Airstack1Source</cite>.</p>
 <dl class="simple">
-<dt>Args:</dt><dd><ul class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
 <li><p><strong>master_clock_rate</strong> (<em>float</em>): Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em></p></li>
 <li><p><strong>trigger_strobe</strong> (<em>float | None</em>):</p></li>
 <li><p><strong>signal_trigger</strong> (<em>str | AnalysisGroup | None</em>):</p></li>
@@ -111,8 +111,21 @@ peripherals and expanded data fields elsewhere.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="striqt.sensor.bindings.air7101b.arm">
 <span class="sig-name descname"><span class="pre">arm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">duration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">15360000.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">analysis_bandwidth</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">inf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lo_shift</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'none'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">host_resample</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend_sample_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adjust_analysis</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">center_frequency</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gain</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.bindings.air7101b.arm" title="Link to this definition">¶</a></dt>
-<dd><p>Arguments:
-See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.SoapyCapture" title="striqt.sensor.specs.SoapyCapture"><code class="xref py py-class docutils literal notranslate"><span class="pre">striqt.sensor.specs.SoapyCapture</span></code></a></p>
+<dd><dl class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
+<li><p><strong>duration</strong> (<em>float</em>): Duration of the analysis waveform <em>(Constraints: units: s)</em></p></li>
+<li><p><strong>sample_rate</strong> (<em>float</em>): Analysis sample rate <em>(Constraints: units: S/s)</em></p></li>
+<li><p><strong>analysis_bandwidth</strong> (<em>float</em>): Analysis bandwidth <em>(Constraints: units: Hz)</em></p></li>
+<li><p><strong>port</strong> (<em>int | tuple[int, …]</em>): Input port indices <em>(Constraints: &gt;= 0, &gt;= 0)</em></p></li>
+<li><p><strong>lo_shift</strong> (<em>one of [‘left’, ‘right’, ‘none’]</em>): LO shift direction</p></li>
+<li><p><strong>host_resample</strong> (<em>bool</em>):</p></li>
+<li><p><strong>backend_sample_rate</strong> (<em>float | None</em>): Source sample rate <em>(Constraints: &gt; 0, units: Hz)</em></p></li>
+<li><p><strong>adjust_analysis</strong> (<em>dict[str, Any]</em>): changes to apply across each analysis for any matching parameter</p></li>
+<li><p><strong>center_frequency</strong> (<em>float | tuple[float, …]</em>): Center frequency for each port <em>(Constraints: units: Hz, &gt; 0, units: Hz, &gt; 0, units: Hz)</em></p></li>
+<li><p><strong>gain</strong> (<em>float | tuple[float, …]</em>): Gain setting for each channel <em>(Constraints: units: dB, units: dB, units: dB)</em></p></li>
+</ul>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">
@@ -130,7 +143,7 @@ See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.s
 <dd><p><strong>Bases:</strong> <a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.lib.controller.Controller"><code class="xref py py-class docutils literal notranslate"><span class="pre">Controller</span></code></a></p>
 <p>Open and control the backend <cite>striqt.sensor.lib.sources.deepwave.Airstack1Source</cite>.</p>
 <dl class="simple">
-<dt>Args:</dt><dd><ul class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
 <li><p><strong>master_clock_rate</strong> (<em>float</em>): Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em></p></li>
 <li><p><strong>trigger_strobe</strong> (<em>float | None</em>):</p></li>
 <li><p><strong>signal_trigger</strong> (<em>str | AnalysisGroup | None</em>):</p></li>
@@ -149,8 +162,22 @@ See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.s
 <dl class="py method">
 <dt class="sig sig-object py" id="striqt.sensor.bindings.air7101b_calibration.arm">
 <span class="sig-name descname"><span class="pre">arm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">duration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">15360000.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">analysis_bandwidth</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">inf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lo_shift</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'none'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">host_resample</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend_sample_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adjust_analysis</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">center_frequency</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">noise_diode_enabled</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.bindings.air7101b_calibration.arm" title="Link to this definition">¶</a></dt>
-<dd><p>Arguments:
-See <code class="xref py py-class docutils literal notranslate"><span class="pre">striqt.sensor.lib.calibration.bind_manual_yfactor_calibration.&lt;locals&gt;.capture_spec_cls</span></code></p>
+<dd><dl class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
+<li><p><strong>duration</strong> (<em>float</em>): Duration of the analysis waveform <em>(Constraints: units: s)</em></p></li>
+<li><p><strong>sample_rate</strong> (<em>float</em>): Analysis sample rate <em>(Constraints: units: S/s)</em></p></li>
+<li><p><strong>analysis_bandwidth</strong> (<em>float</em>): Analysis bandwidth <em>(Constraints: units: Hz)</em></p></li>
+<li><p><strong>port</strong> (<em>int | tuple[int, …]</em>): Input port indices <em>(Constraints: &gt;= 0, &gt;= 0)</em></p></li>
+<li><p><strong>lo_shift</strong> (<em>one of [‘left’, ‘right’, ‘none’]</em>): LO shift direction</p></li>
+<li><p><strong>host_resample</strong> (<em>bool</em>):</p></li>
+<li><p><strong>backend_sample_rate</strong> (<em>float | None</em>): Source sample rate <em>(Constraints: &gt; 0, units: Hz)</em></p></li>
+<li><p><strong>adjust_analysis</strong> (<em>dict[str, Any]</em>): changes to apply across each analysis for any matching parameter</p></li>
+<li><p><strong>center_frequency</strong> (<em>float | tuple[float, …]</em>): Center frequency for each port <em>(Constraints: units: Hz, &gt; 0, units: Hz, &gt; 0, units: Hz)</em></p></li>
+<li><p><strong>gain</strong> (<em>float | tuple[float, …]</em>): Gain setting for each channel <em>(Constraints: units: dB, units: dB, units: dB)</em></p></li>
+<li><p><strong>noise_diode_enabled</strong> (<em>bool</em>): Noise diode enabled</p></li>
+</ul>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">
@@ -168,7 +195,7 @@ See <code class="xref py py-class docutils literal notranslate"><span class="pre
 <dd><p><strong>Bases:</strong> <a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.lib.controller.Controller"><code class="xref py py-class docutils literal notranslate"><span class="pre">Controller</span></code></a></p>
 <p>Open and control the backend <cite>striqt.sensor.lib.sources.deepwave.Airstack1Source</cite>.</p>
 <dl class="simple">
-<dt>Args:</dt><dd><ul class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
 <li><p><strong>master_clock_rate</strong> (<em>float</em>): Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em></p></li>
 <li><p><strong>trigger_strobe</strong> (<em>float | None</em>):</p></li>
 <li><p><strong>signal_trigger</strong> (<em>str | AnalysisGroup | None</em>):</p></li>
@@ -187,8 +214,21 @@ See <code class="xref py py-class docutils literal notranslate"><span class="pre
 <dl class="py method">
 <dt class="sig sig-object py" id="striqt.sensor.bindings.air7201b.arm">
 <span class="sig-name descname"><span class="pre">arm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">duration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">15360000.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">analysis_bandwidth</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">inf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lo_shift</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'none'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">host_resample</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend_sample_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adjust_analysis</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">center_frequency</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gain</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.bindings.air7201b.arm" title="Link to this definition">¶</a></dt>
-<dd><p>Arguments:
-See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.SoapyCapture" title="striqt.sensor.specs.SoapyCapture"><code class="xref py py-class docutils literal notranslate"><span class="pre">striqt.sensor.specs.SoapyCapture</span></code></a></p>
+<dd><dl class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
+<li><p><strong>duration</strong> (<em>float</em>): Duration of the analysis waveform <em>(Constraints: units: s)</em></p></li>
+<li><p><strong>sample_rate</strong> (<em>float</em>): Analysis sample rate <em>(Constraints: units: S/s)</em></p></li>
+<li><p><strong>analysis_bandwidth</strong> (<em>float</em>): Analysis bandwidth <em>(Constraints: units: Hz)</em></p></li>
+<li><p><strong>port</strong> (<em>int | tuple[int, …]</em>): Input port indices <em>(Constraints: &gt;= 0, &gt;= 0)</em></p></li>
+<li><p><strong>lo_shift</strong> (<em>one of [‘left’, ‘right’, ‘none’]</em>): LO shift direction</p></li>
+<li><p><strong>host_resample</strong> (<em>bool</em>):</p></li>
+<li><p><strong>backend_sample_rate</strong> (<em>float | None</em>): Source sample rate <em>(Constraints: &gt; 0, units: Hz)</em></p></li>
+<li><p><strong>adjust_analysis</strong> (<em>dict[str, Any]</em>): changes to apply across each analysis for any matching parameter</p></li>
+<li><p><strong>center_frequency</strong> (<em>float | tuple[float, …]</em>): Center frequency for each port <em>(Constraints: units: Hz, &gt; 0, units: Hz, &gt; 0, units: Hz)</em></p></li>
+<li><p><strong>gain</strong> (<em>float | tuple[float, …]</em>): Gain setting for each channel <em>(Constraints: units: dB, units: dB, units: dB)</em></p></li>
+</ul>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">
@@ -206,7 +246,7 @@ See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.s
 <dd><p><strong>Bases:</strong> <a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.lib.controller.Controller"><code class="xref py py-class docutils literal notranslate"><span class="pre">Controller</span></code></a></p>
 <p>Open and control the backend <cite>striqt.sensor.lib.sources.deepwave.Airstack1Source</cite>.</p>
 <dl class="simple">
-<dt>Args:</dt><dd><ul class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
 <li><p><strong>master_clock_rate</strong> (<em>float</em>): Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em></p></li>
 <li><p><strong>trigger_strobe</strong> (<em>float | None</em>):</p></li>
 <li><p><strong>signal_trigger</strong> (<em>str | AnalysisGroup | None</em>):</p></li>
@@ -225,8 +265,22 @@ See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.s
 <dl class="py method">
 <dt class="sig sig-object py" id="striqt.sensor.bindings.air7201b_calibration.arm">
 <span class="sig-name descname"><span class="pre">arm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">duration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">15360000.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">analysis_bandwidth</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">inf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lo_shift</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'none'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">host_resample</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend_sample_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adjust_analysis</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">center_frequency</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">noise_diode_enabled</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.bindings.air7201b_calibration.arm" title="Link to this definition">¶</a></dt>
-<dd><p>Arguments:
-See <code class="xref py py-class docutils literal notranslate"><span class="pre">striqt.sensor.lib.calibration.bind_manual_yfactor_calibration.&lt;locals&gt;.capture_spec_cls</span></code></p>
+<dd><dl class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
+<li><p><strong>duration</strong> (<em>float</em>): Duration of the analysis waveform <em>(Constraints: units: s)</em></p></li>
+<li><p><strong>sample_rate</strong> (<em>float</em>): Analysis sample rate <em>(Constraints: units: S/s)</em></p></li>
+<li><p><strong>analysis_bandwidth</strong> (<em>float</em>): Analysis bandwidth <em>(Constraints: units: Hz)</em></p></li>
+<li><p><strong>port</strong> (<em>int | tuple[int, …]</em>): Input port indices <em>(Constraints: &gt;= 0, &gt;= 0)</em></p></li>
+<li><p><strong>lo_shift</strong> (<em>one of [‘left’, ‘right’, ‘none’]</em>): LO shift direction</p></li>
+<li><p><strong>host_resample</strong> (<em>bool</em>):</p></li>
+<li><p><strong>backend_sample_rate</strong> (<em>float | None</em>): Source sample rate <em>(Constraints: &gt; 0, units: Hz)</em></p></li>
+<li><p><strong>adjust_analysis</strong> (<em>dict[str, Any]</em>): changes to apply across each analysis for any matching parameter</p></li>
+<li><p><strong>center_frequency</strong> (<em>float | tuple[float, …]</em>): Center frequency for each port <em>(Constraints: units: Hz, &gt; 0, units: Hz, &gt; 0, units: Hz)</em></p></li>
+<li><p><strong>gain</strong> (<em>float | tuple[float, …]</em>): Gain setting for each channel <em>(Constraints: units: dB, units: dB, units: dB)</em></p></li>
+<li><p><strong>noise_diode_enabled</strong> (<em>bool</em>): Noise diode enabled</p></li>
+</ul>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">
@@ -244,7 +298,7 @@ See <code class="xref py py-class docutils literal notranslate"><span class="pre
 <dd><p><strong>Bases:</strong> <a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.lib.controller.Controller"><code class="xref py py-class docutils literal notranslate"><span class="pre">Controller</span></code></a></p>
 <p>Open and control the backend <cite>striqt.sensor.lib.sources.deepwave.Airstack1Source</cite>.</p>
 <dl class="simple">
-<dt>Args:</dt><dd><ul class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
 <li><p><strong>master_clock_rate</strong> (<em>float</em>): Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em></p></li>
 <li><p><strong>trigger_strobe</strong> (<em>float | None</em>):</p></li>
 <li><p><strong>signal_trigger</strong> (<em>str | AnalysisGroup | None</em>):</p></li>
@@ -263,8 +317,21 @@ See <code class="xref py py-class docutils literal notranslate"><span class="pre
 <dl class="py method">
 <dt class="sig sig-object py" id="striqt.sensor.bindings.air8201b.arm">
 <span class="sig-name descname"><span class="pre">arm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">duration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">15360000.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">analysis_bandwidth</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">inf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lo_shift</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'none'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">host_resample</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend_sample_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adjust_analysis</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">center_frequency</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gain</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.bindings.air8201b.arm" title="Link to this definition">¶</a></dt>
-<dd><p>Arguments:
-See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.SoapyCapture" title="striqt.sensor.specs.SoapyCapture"><code class="xref py py-class docutils literal notranslate"><span class="pre">striqt.sensor.specs.SoapyCapture</span></code></a></p>
+<dd><dl class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
+<li><p><strong>duration</strong> (<em>float</em>): Duration of the analysis waveform <em>(Constraints: units: s)</em></p></li>
+<li><p><strong>sample_rate</strong> (<em>float</em>): Analysis sample rate <em>(Constraints: units: S/s)</em></p></li>
+<li><p><strong>analysis_bandwidth</strong> (<em>float</em>): Analysis bandwidth <em>(Constraints: units: Hz)</em></p></li>
+<li><p><strong>port</strong> (<em>int | tuple[int, …]</em>): Input port indices <em>(Constraints: &gt;= 0, &gt;= 0)</em></p></li>
+<li><p><strong>lo_shift</strong> (<em>one of [‘left’, ‘right’, ‘none’]</em>): LO shift direction</p></li>
+<li><p><strong>host_resample</strong> (<em>bool</em>):</p></li>
+<li><p><strong>backend_sample_rate</strong> (<em>float | None</em>): Source sample rate <em>(Constraints: &gt; 0, units: Hz)</em></p></li>
+<li><p><strong>adjust_analysis</strong> (<em>dict[str, Any]</em>): changes to apply across each analysis for any matching parameter</p></li>
+<li><p><strong>center_frequency</strong> (<em>float | tuple[float, …]</em>): Center frequency for each port <em>(Constraints: units: Hz, &gt; 0, units: Hz, &gt; 0, units: Hz)</em></p></li>
+<li><p><strong>gain</strong> (<em>float | tuple[float, …]</em>): Gain setting for each channel <em>(Constraints: units: dB, units: dB, units: dB)</em></p></li>
+</ul>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">
@@ -282,7 +349,7 @@ See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.s
 <dd><p><strong>Bases:</strong> <a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.lib.controller.Controller"><code class="xref py py-class docutils literal notranslate"><span class="pre">Controller</span></code></a></p>
 <p>Open and control the backend <cite>striqt.sensor.lib.sources.deepwave.Airstack1Source</cite>.</p>
 <dl class="simple">
-<dt>Args:</dt><dd><ul class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
 <li><p><strong>master_clock_rate</strong> (<em>float</em>): Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em></p></li>
 <li><p><strong>trigger_strobe</strong> (<em>float | None</em>):</p></li>
 <li><p><strong>signal_trigger</strong> (<em>str | AnalysisGroup | None</em>):</p></li>
@@ -301,8 +368,22 @@ See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.s
 <dl class="py method">
 <dt class="sig sig-object py" id="striqt.sensor.bindings.air8201b_calibration.arm">
 <span class="sig-name descname"><span class="pre">arm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">duration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">15360000.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">analysis_bandwidth</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">inf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lo_shift</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'none'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">host_resample</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend_sample_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adjust_analysis</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">center_frequency</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">noise_diode_enabled</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.bindings.air8201b_calibration.arm" title="Link to this definition">¶</a></dt>
-<dd><p>Arguments:
-See <code class="xref py py-class docutils literal notranslate"><span class="pre">striqt.sensor.lib.calibration.bind_manual_yfactor_calibration.&lt;locals&gt;.capture_spec_cls</span></code></p>
+<dd><dl class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
+<li><p><strong>duration</strong> (<em>float</em>): Duration of the analysis waveform <em>(Constraints: units: s)</em></p></li>
+<li><p><strong>sample_rate</strong> (<em>float</em>): Analysis sample rate <em>(Constraints: units: S/s)</em></p></li>
+<li><p><strong>analysis_bandwidth</strong> (<em>float</em>): Analysis bandwidth <em>(Constraints: units: Hz)</em></p></li>
+<li><p><strong>port</strong> (<em>int | tuple[int, …]</em>): Input port indices <em>(Constraints: &gt;= 0, &gt;= 0)</em></p></li>
+<li><p><strong>lo_shift</strong> (<em>one of [‘left’, ‘right’, ‘none’]</em>): LO shift direction</p></li>
+<li><p><strong>host_resample</strong> (<em>bool</em>):</p></li>
+<li><p><strong>backend_sample_rate</strong> (<em>float | None</em>): Source sample rate <em>(Constraints: &gt; 0, units: Hz)</em></p></li>
+<li><p><strong>adjust_analysis</strong> (<em>dict[str, Any]</em>): changes to apply across each analysis for any matching parameter</p></li>
+<li><p><strong>center_frequency</strong> (<em>float | tuple[float, …]</em>): Center frequency for each port <em>(Constraints: units: Hz, &gt; 0, units: Hz, &gt; 0, units: Hz)</em></p></li>
+<li><p><strong>gain</strong> (<em>float | tuple[float, …]</em>): Gain setting for each channel <em>(Constraints: units: dB, units: dB, units: dB)</em></p></li>
+<li><p><strong>noise_diode_enabled</strong> (<em>bool</em>): Noise diode enabled</p></li>
+</ul>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">
@@ -320,7 +401,7 @@ See <code class="xref py py-class docutils literal notranslate"><span class="pre
 <dd><p><strong>Bases:</strong> <a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.lib.controller.Controller"><code class="xref py py-class docutils literal notranslate"><span class="pre">Controller</span></code></a></p>
 <p>Open and control the backend <cite>striqt.sensor.lib.sources.function.DiracDeltaSource</cite>.</p>
 <dl class="simple">
-<dt>Args:</dt><dd><ul class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
 <li><p><strong>master_clock_rate</strong> (<em>float</em>): Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em></p></li>
 <li><p><strong>trigger_strobe</strong> (<em>float | None</em>):</p></li>
 <li><p><strong>signal_trigger</strong> (<em>str | AnalysisGroup | None</em>):</p></li>
@@ -332,8 +413,21 @@ See <code class="xref py py-class docutils literal notranslate"><span class="pre
 <dl class="py method">
 <dt class="sig sig-object py" id="striqt.sensor.bindings.dirac_delta.arm">
 <span class="sig-name descname"><span class="pre">arm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">duration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">15360000.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">analysis_bandwidth</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">inf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lo_shift</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'none'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">host_resample</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend_sample_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adjust_analysis</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">power</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.bindings.dirac_delta.arm" title="Link to this definition">¶</a></dt>
-<dd><p>Arguments:
-See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.DiracDeltaCapture" title="striqt.sensor.specs.DiracDeltaCapture"><code class="xref py py-class docutils literal notranslate"><span class="pre">striqt.sensor.specs.DiracDeltaCapture</span></code></a></p>
+<dd><dl class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
+<li><p><strong>duration</strong> (<em>float</em>): Duration of the analysis waveform <em>(Constraints: units: s)</em></p></li>
+<li><p><strong>sample_rate</strong> (<em>float</em>): Analysis sample rate <em>(Constraints: units: S/s)</em></p></li>
+<li><p><strong>analysis_bandwidth</strong> (<em>float</em>): Analysis bandwidth <em>(Constraints: units: Hz)</em></p></li>
+<li><p><strong>port</strong> (<em>int | tuple[int, …]</em>): Input port indices <em>(Constraints: &gt;= 0, &gt;= 0)</em></p></li>
+<li><p><strong>lo_shift</strong> (<em>one of [‘left’, ‘right’, ‘none’]</em>): LO shift direction</p></li>
+<li><p><strong>host_resample</strong> (<em>bool</em>):</p></li>
+<li><p><strong>backend_sample_rate</strong> (<em>float | None</em>): Source sample rate <em>(Constraints: &gt; 0, units: Hz)</em></p></li>
+<li><p><strong>adjust_analysis</strong> (<em>dict[str, Any]</em>): changes to apply across each analysis for any matching parameter</p></li>
+<li><p><strong>time</strong> (<em>float</em>): start time offset <em>(Constraints: units: s)</em></p></li>
+<li><p><strong>power</strong> (<em>float</em>): peak power level <em>(Constraints: units: dB)</em></p></li>
+</ul>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">
@@ -352,7 +446,7 @@ See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.s
 <p>Open and control the backend <cite>striqt.sensor.lib.sources.file.MATSource</cite>.</p>
 <p>returns IQ waveforms from a .mat file</p>
 <dl class="simple">
-<dt>Args:</dt><dd><ul class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
 <li><p><strong>master_clock_rate</strong> (<em>float</em>): Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em></p></li>
 <li><p><strong>trigger_strobe</strong> (<em>float | None</em>):</p></li>
 <li><p><strong>signal_trigger</strong> (<em>str | AnalysisGroup | None</em>):</p></li>
@@ -367,8 +461,19 @@ See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.s
 <dl class="py method">
 <dt class="sig sig-object py" id="striqt.sensor.bindings.mat_file.arm">
 <span class="sig-name descname"><span class="pre">arm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">duration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">15360000.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">analysis_bandwidth</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">inf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lo_shift</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'none'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">host_resample</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend_sample_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adjust_analysis</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">&lt;factory&gt;</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.bindings.mat_file.arm" title="Link to this definition">¶</a></dt>
-<dd><p>Arguments:
-See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.FileCapture" title="striqt.sensor.specs.FileCapture"><code class="xref py py-class docutils literal notranslate"><span class="pre">striqt.sensor.specs.FileCapture</span></code></a></p>
+<dd><dl class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
+<li><p><strong>duration</strong> (<em>float</em>): Duration of the analysis waveform <em>(Constraints: units: s)</em></p></li>
+<li><p><strong>sample_rate</strong> (<em>float</em>): Analysis sample rate <em>(Constraints: units: S/s)</em></p></li>
+<li><p><strong>analysis_bandwidth</strong> (<em>float</em>): Analysis bandwidth <em>(Constraints: units: Hz)</em></p></li>
+<li><p><strong>port</strong> (<em>int | tuple[int, …]</em>): Input port indices <em>(Constraints: &gt;= 0, &gt;= 0)</em></p></li>
+<li><p><strong>lo_shift</strong> (<em>one of [‘left’, ‘right’, ‘none’]</em>): LO shift direction</p></li>
+<li><p><strong>host_resample</strong> (<em>bool</em>):</p></li>
+<li><p><strong>backend_sample_rate</strong> (<em>float | None</em>): Source sample rate <em>(Constraints: &gt; 0, units: Hz)</em></p></li>
+<li><p><strong>adjust_analysis</strong> (<em>dict[str, Any]</em>): changes to apply across each analysis for any matching parameter</p></li>
+</ul>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">
@@ -386,7 +491,7 @@ See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.s
 <dd><p><strong>Bases:</strong> <a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.lib.controller.Controller"><code class="xref py py-class docutils literal notranslate"><span class="pre">Controller</span></code></a></p>
 <p>Open and control the backend <cite>striqt.sensor.lib.sources.function.NoiseSource</cite>.</p>
 <dl class="simple">
-<dt>Args:</dt><dd><ul class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
 <li><p><strong>master_clock_rate</strong> (<em>float</em>): Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em></p></li>
 <li><p><strong>trigger_strobe</strong> (<em>float | None</em>):</p></li>
 <li><p><strong>signal_trigger</strong> (<em>str | AnalysisGroup | None</em>):</p></li>
@@ -398,8 +503,20 @@ See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.s
 <dl class="py method">
 <dt class="sig sig-object py" id="striqt.sensor.bindings.noise.arm">
 <span class="sig-name descname"><span class="pre">arm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">duration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">15360000.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">analysis_bandwidth</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">inf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lo_shift</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'none'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">host_resample</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend_sample_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adjust_analysis</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">noise_psd</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-17</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.bindings.noise.arm" title="Link to this definition">¶</a></dt>
-<dd><p>Arguments:
-See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.NoiseCapture" title="striqt.sensor.specs.NoiseCapture"><code class="xref py py-class docutils literal notranslate"><span class="pre">striqt.sensor.specs.NoiseCapture</span></code></a></p>
+<dd><dl class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
+<li><p><strong>duration</strong> (<em>float</em>): Duration of the analysis waveform <em>(Constraints: units: s)</em></p></li>
+<li><p><strong>sample_rate</strong> (<em>float</em>): Analysis sample rate <em>(Constraints: units: S/s)</em></p></li>
+<li><p><strong>analysis_bandwidth</strong> (<em>float</em>): Analysis bandwidth <em>(Constraints: units: Hz)</em></p></li>
+<li><p><strong>port</strong> (<em>int | tuple[int, …]</em>): Input port indices <em>(Constraints: &gt;= 0, &gt;= 0)</em></p></li>
+<li><p><strong>lo_shift</strong> (<em>one of [‘left’, ‘right’, ‘none’]</em>): LO shift direction</p></li>
+<li><p><strong>host_resample</strong> (<em>bool</em>):</p></li>
+<li><p><strong>backend_sample_rate</strong> (<em>float | None</em>): Source sample rate <em>(Constraints: &gt; 0, units: Hz)</em></p></li>
+<li><p><strong>adjust_analysis</strong> (<em>dict[str, Any]</em>): changes to apply across each analysis for any matching parameter</p></li>
+<li><p><strong>noise_psd</strong> (<em>float</em>): noise total channel power <em>(Constraints: &gt;= 0, units: mW/Hz)</em></p></li>
+</ul>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">
@@ -417,7 +534,7 @@ See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.s
 <dd><p><strong>Bases:</strong> <a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.lib.controller.Controller"><code class="xref py py-class docutils literal notranslate"><span class="pre">Controller</span></code></a></p>
 <p>Open and control the backend <cite>striqt.sensor.lib.sources.function.SawtoothSource</cite>.</p>
 <dl class="simple">
-<dt>Args:</dt><dd><ul class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
 <li><p><strong>master_clock_rate</strong> (<em>float</em>): Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em></p></li>
 <li><p><strong>trigger_strobe</strong> (<em>float | None</em>):</p></li>
 <li><p><strong>signal_trigger</strong> (<em>str | AnalysisGroup | None</em>):</p></li>
@@ -429,8 +546,21 @@ See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.s
 <dl class="py method">
 <dt class="sig sig-object py" id="striqt.sensor.bindings.sawtooth.arm">
 <span class="sig-name descname"><span class="pre">arm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">duration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">15360000.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">analysis_bandwidth</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">inf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lo_shift</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'none'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">host_resample</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend_sample_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adjust_analysis</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">period</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.01</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">power</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.bindings.sawtooth.arm" title="Link to this definition">¶</a></dt>
-<dd><p>Arguments:
-See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.SawtoothCapture" title="striqt.sensor.specs.SawtoothCapture"><code class="xref py py-class docutils literal notranslate"><span class="pre">striqt.sensor.specs.SawtoothCapture</span></code></a></p>
+<dd><dl class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
+<li><p><strong>duration</strong> (<em>float</em>): Duration of the analysis waveform <em>(Constraints: units: s)</em></p></li>
+<li><p><strong>sample_rate</strong> (<em>float</em>): Analysis sample rate <em>(Constraints: units: S/s)</em></p></li>
+<li><p><strong>analysis_bandwidth</strong> (<em>float</em>): Analysis bandwidth <em>(Constraints: units: Hz)</em></p></li>
+<li><p><strong>port</strong> (<em>int | tuple[int, …]</em>): Input port indices <em>(Constraints: &gt;= 0, &gt;= 0)</em></p></li>
+<li><p><strong>lo_shift</strong> (<em>one of [‘left’, ‘right’, ‘none’]</em>): LO shift direction</p></li>
+<li><p><strong>host_resample</strong> (<em>bool</em>):</p></li>
+<li><p><strong>backend_sample_rate</strong> (<em>float | None</em>): Source sample rate <em>(Constraints: &gt; 0, units: Hz)</em></p></li>
+<li><p><strong>adjust_analysis</strong> (<em>dict[str, Any]</em>): changes to apply across each analysis for any matching parameter</p></li>
+<li><p><strong>period</strong> (<em>float</em>): waveform period <em>(Constraints: &gt;= 0, units: s)</em></p></li>
+<li><p><strong>power</strong> (<em>float</em>): peak power level <em>(Constraints: units: dB)</em></p></li>
+</ul>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">
@@ -448,7 +578,7 @@ See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.s
 <dd><p><strong>Bases:</strong> <a class="reference internal" href="#striqt.sensor.bindings.Controller" title="striqt.sensor.lib.controller.Controller"><code class="xref py py-class docutils literal notranslate"><span class="pre">Controller</span></code></a></p>
 <p>Open and control the backend <cite>striqt.sensor.lib.sources.function.SingleToneSource</cite>.</p>
 <dl class="simple">
-<dt>Args:</dt><dd><ul class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
 <li><p><strong>master_clock_rate</strong> (<em>float</em>): Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em></p></li>
 <li><p><strong>trigger_strobe</strong> (<em>float | None</em>):</p></li>
 <li><p><strong>signal_trigger</strong> (<em>str | AnalysisGroup | None</em>):</p></li>
@@ -460,8 +590,21 @@ See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.s
 <dl class="py method">
 <dt class="sig sig-object py" id="striqt.sensor.bindings.single_tone.arm">
 <span class="sig-name descname"><span class="pre">arm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">duration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">15360000.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">analysis_bandwidth</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">inf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lo_shift</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'none'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">host_resample</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend_sample_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adjust_analysis</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frequency_offset</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">snr</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.bindings.single_tone.arm" title="Link to this definition">¶</a></dt>
-<dd><p>Arguments:
-See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.SingleToneCapture" title="striqt.sensor.specs.SingleToneCapture"><code class="xref py py-class docutils literal notranslate"><span class="pre">striqt.sensor.specs.SingleToneCapture</span></code></a></p>
+<dd><dl class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
+<li><p><strong>duration</strong> (<em>float</em>): Duration of the analysis waveform <em>(Constraints: units: s)</em></p></li>
+<li><p><strong>sample_rate</strong> (<em>float</em>): Analysis sample rate <em>(Constraints: units: S/s)</em></p></li>
+<li><p><strong>analysis_bandwidth</strong> (<em>float</em>): Analysis bandwidth <em>(Constraints: units: Hz)</em></p></li>
+<li><p><strong>port</strong> (<em>int | tuple[int, …]</em>): Input port indices <em>(Constraints: &gt;= 0, &gt;= 0)</em></p></li>
+<li><p><strong>lo_shift</strong> (<em>one of [‘left’, ‘right’, ‘none’]</em>): LO shift direction</p></li>
+<li><p><strong>host_resample</strong> (<em>bool</em>):</p></li>
+<li><p><strong>backend_sample_rate</strong> (<em>float | None</em>): Source sample rate <em>(Constraints: &gt; 0, units: Hz)</em></p></li>
+<li><p><strong>adjust_analysis</strong> (<em>dict[str, Any]</em>): changes to apply across each analysis for any matching parameter</p></li>
+<li><p><strong>frequency_offset</strong> (<em>float</em>): Baseband frequency offset <em>(Constraints: units: Hz)</em></p></li>
+<li><p><strong>snr</strong> (<em>float | None</em>): Add circular white gaussian noise to achieve this SNR <em>(Constraints: units: dB)</em></p></li>
+</ul>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">
@@ -480,7 +623,7 @@ See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.s
 <p>Open and control the backend <cite>striqt.sensor.lib.sources.file.TDMSSource</cite>.</p>
 <p>a source of IQ waveforms from a TDMS file</p>
 <dl class="simple">
-<dt>Args:</dt><dd><ul class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
 <li><p><strong>master_clock_rate</strong> (<em>float</em>): Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em></p></li>
 <li><p><strong>trigger_strobe</strong> (<em>float | None</em>):</p></li>
 <li><p><strong>signal_trigger</strong> (<em>str | AnalysisGroup | None</em>):</p></li>
@@ -492,8 +635,19 @@ See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.s
 <dl class="py method">
 <dt class="sig sig-object py" id="striqt.sensor.bindings.tdms_file.arm">
 <span class="sig-name descname"><span class="pre">arm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">duration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">15360000.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">analysis_bandwidth</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">inf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lo_shift</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'none'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">host_resample</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend_sample_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adjust_analysis</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">&lt;factory&gt;</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.bindings.tdms_file.arm" title="Link to this definition">¶</a></dt>
-<dd><p>Arguments:
-See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.FileCapture" title="striqt.sensor.specs.FileCapture"><code class="xref py py-class docutils literal notranslate"><span class="pre">striqt.sensor.specs.FileCapture</span></code></a></p>
+<dd><dl class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
+<li><p><strong>duration</strong> (<em>float</em>): Duration of the analysis waveform <em>(Constraints: units: s)</em></p></li>
+<li><p><strong>sample_rate</strong> (<em>float</em>): Analysis sample rate <em>(Constraints: units: S/s)</em></p></li>
+<li><p><strong>analysis_bandwidth</strong> (<em>float</em>): Analysis bandwidth <em>(Constraints: units: Hz)</em></p></li>
+<li><p><strong>port</strong> (<em>int | tuple[int, …]</em>): Input port indices <em>(Constraints: &gt;= 0, &gt;= 0)</em></p></li>
+<li><p><strong>lo_shift</strong> (<em>one of [‘left’, ‘right’, ‘none’]</em>): LO shift direction</p></li>
+<li><p><strong>host_resample</strong> (<em>bool</em>):</p></li>
+<li><p><strong>backend_sample_rate</strong> (<em>float | None</em>): Source sample rate <em>(Constraints: &gt; 0, units: Hz)</em></p></li>
+<li><p><strong>adjust_analysis</strong> (<em>dict[str, Any]</em>): changes to apply across each analysis for any matching parameter</p></li>
+</ul>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">
@@ -512,7 +666,7 @@ See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.s
 <p>Open and control the backend <cite>striqt.sensor.lib.sources.base.NoSource</cite>.</p>
 <p>fast paths to acquire empty buffers</p>
 <dl class="simple">
-<dt>Args:</dt><dd><ul class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
 <li><p><strong>master_clock_rate</strong> (<em>float</em>): Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em></p></li>
 <li><p><strong>trigger_strobe</strong> (<em>float | None</em>):</p></li>
 <li><p><strong>signal_trigger</strong> (<em>str | AnalysisGroup | None</em>):</p></li>
@@ -524,8 +678,19 @@ See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.s
 <dl class="py method">
 <dt class="sig sig-object py" id="striqt.sensor.bindings.warmup.arm">
 <span class="sig-name descname"><span class="pre">arm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">duration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">15360000.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">analysis_bandwidth</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">inf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lo_shift</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'none'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">host_resample</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend_sample_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adjust_analysis</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">&lt;factory&gt;</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.bindings.warmup.arm" title="Link to this definition">¶</a></dt>
-<dd><p>Arguments:
-See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.SensorCapture" title="striqt.sensor.specs.SensorCapture"><code class="xref py py-class docutils literal notranslate"><span class="pre">striqt.sensor.specs.SensorCapture</span></code></a></p>
+<dd><dl class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
+<li><p><strong>duration</strong> (<em>float</em>): Duration of the analysis waveform <em>(Constraints: units: s)</em></p></li>
+<li><p><strong>sample_rate</strong> (<em>float</em>): Analysis sample rate <em>(Constraints: units: S/s)</em></p></li>
+<li><p><strong>analysis_bandwidth</strong> (<em>float</em>): Analysis bandwidth <em>(Constraints: units: Hz)</em></p></li>
+<li><p><strong>port</strong> (<em>int | tuple[int, …]</em>): Input port indices <em>(Constraints: &gt;= 0, &gt;= 0)</em></p></li>
+<li><p><strong>lo_shift</strong> (<em>one of [‘left’, ‘right’, ‘none’]</em>): LO shift direction</p></li>
+<li><p><strong>host_resample</strong> (<em>bool</em>):</p></li>
+<li><p><strong>backend_sample_rate</strong> (<em>float | None</em>): Source sample rate <em>(Constraints: &gt; 0, units: Hz)</em></p></li>
+<li><p><strong>adjust_analysis</strong> (<em>dict[str, Any]</em>): changes to apply across each analysis for any matching parameter</p></li>
+</ul>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">
@@ -544,7 +709,7 @@ See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.s
 <p>Open and control the backend <cite>striqt.sensor.lib.sources.file.ZarrIQSource</cite>.</p>
 <p>a sources of IQ samples from iq_waveform variables in a zarr store</p>
 <dl class="simple">
-<dt>Args:</dt><dd><ul class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
 <li><p><strong>master_clock_rate</strong> (<em>float</em>): Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em></p></li>
 <li><p><strong>trigger_strobe</strong> (<em>float | None</em>):</p></li>
 <li><p><strong>signal_trigger</strong> (<em>str | AnalysisGroup | None</em>):</p></li>
@@ -558,8 +723,19 @@ See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.s
 <dl class="py method">
 <dt class="sig sig-object py" id="striqt.sensor.bindings.zarr_iq.arm">
 <span class="sig-name descname"><span class="pre">arm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">duration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">15360000.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">analysis_bandwidth</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">inf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lo_shift</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'none'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">host_resample</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend_sample_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adjust_analysis</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">&lt;factory&gt;</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.bindings.zarr_iq.arm" title="Link to this definition">¶</a></dt>
-<dd><p>Arguments:
-See <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.FileCapture" title="striqt.sensor.specs.FileCapture"><code class="xref py py-class docutils literal notranslate"><span class="pre">striqt.sensor.specs.FileCapture</span></code></a></p>
+<dd><dl class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
+<li><p><strong>duration</strong> (<em>float</em>): Duration of the analysis waveform <em>(Constraints: units: s)</em></p></li>
+<li><p><strong>sample_rate</strong> (<em>float</em>): Analysis sample rate <em>(Constraints: units: S/s)</em></p></li>
+<li><p><strong>analysis_bandwidth</strong> (<em>float</em>): Analysis bandwidth <em>(Constraints: units: Hz)</em></p></li>
+<li><p><strong>port</strong> (<em>int | tuple[int, …]</em>): Input port indices <em>(Constraints: &gt;= 0, &gt;= 0)</em></p></li>
+<li><p><strong>lo_shift</strong> (<em>one of [‘left’, ‘right’, ‘none’]</em>): LO shift direction</p></li>
+<li><p><strong>host_resample</strong> (<em>bool</em>):</p></li>
+<li><p><strong>backend_sample_rate</strong> (<em>float | None</em>): Source sample rate <em>(Constraints: &gt; 0, units: Hz)</em></p></li>
+<li><p><strong>adjust_analysis</strong> (<em>dict[str, Any]</em>): changes to apply across each analysis for any matching parameter</p></li>
+</ul>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">
