@@ -46,7 +46,7 @@ class SpecBase(
             return self
         return msgspec.structs.replace(self, **attrs).validate()
 
-    def to_dict(self, unfreeze: bool=False, allow_tuple_keys: bool=True) -> dict:
+    def to_dict(self, unfreeze: bool = False, allow_tuple_keys: bool = True) -> dict:
         """return a dictinary representation of `self`"""
         if allow_tuple_keys:
             enc_hook = helpers._enc_hook
