@@ -41,45 +41,18 @@ registry: dict[str, 'type[Controller[Any, Any, Any, Any, Any]]'] = {}
 tagged_sweeps: type[specs.Sweep] | None = None
 
 
-def tagged_subclass(
-    name: str, cls: type[specs.Sweep], tag_field: str
-) -> type[specs.Sweep]:
-    """build a subclass of binding.sweep_spec for use in a tagged union"""
-    kls = msgspec.defstruct(
-        name,
-        (),
-        bases=(cls,),
-        frozen=True,
-        tag=str,
-        tag_field=tag_field,
-        kw_only=True,
-    )
-
-    return cast(type[specs.Sweep], kls)
-
-
 @dataclasses.dataclass()
 class Sensor(Generic[SS, SP, SC]):
     source_cls: type[SourceBackend[SS, SC]]
-    sweep_spec_cls: type[specs.Sweep[SS, SP, SC]]
-    peripherals_cls: type[Peripherals[SP, SC]]
-    sink_cls: type[sinks.SinkBase[SC]]
+    sink_cls: type[sinks.SinkBase[SC]] = sinks.ZarrCaptureSink
+    sweep_spec_cls: type[specs.Sweep[SS, SP, SC]] = specs.Sweep
+    peripherals_cls: type[Peripherals[SP, SC]] = NoPeripherals
 
     def __post_init__(self):
         assert issubclass(self.source_cls, SourceBackend)
         assert issubclass(self.sweep_spec_cls, specs.Sweep)
         assert issubclass(self.peripherals_cls, Peripherals)
         assert issubclass(self.sink_cls, sinks.SinkBase)
-
-
-def sensor(
-    *,
-    source_cls: type[SourceBackend[SS, SC]],
-    sweep_spec_cls: type[specs.Sweep[SS, SP, SC]] = specs.Sweep,
-    peripherals_cls: type[Peripherals[SP, SC]] = NoPeripherals,
-    sink_cls: type[sinks.SinkBase[SC]] = sinks.ZarrCaptureSink,
-) -> Sensor[SS, SP, SC]:
-    return Sensor(**locals())
 
 
 @dataclasses.dataclass()
@@ -148,7 +121,7 @@ def bind_sensor(
                 )
             super().__post_init__()
 
-    BoundSweep = tagged_subclass(key, BoundSweep, specs.SWEEP_TAG_FIELD)  # type: ignore
+    BoundSweep = _subclass_with_tag(key, BoundSweep, specs.SWEEP_TAG_FIELD)  # type: ignore
     binding = dataclasses.replace(binding, sweep_spec_cls=BoundSweep)
 
     global tagged_sweeps
@@ -221,3 +194,20 @@ def get_tagged_sweep_type() -> type[specs.Sweep]:
     if tagged_sweeps is None:
         raise TypeError('no bindings have been defined')
     return tagged_sweeps  # pyright: ignore
+
+
+def _subclass_with_tag(
+    name: str, cls: type[specs.Sweep], tag_field: str
+) -> type[specs.Sweep]:
+    """build a subclass of binding.sweep_spec for use in a tagged union"""
+    kls = msgspec.defstruct(
+        name,
+        (),
+        bases=(cls,),
+        frozen=True,
+        tag=str,
+        tag_field=tag_field,
+        kw_only=True,
+    )
+
+    return cast(type[specs.Sweep], kls)

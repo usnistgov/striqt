@@ -179,9 +179,9 @@ class ControllerConfig:
     init_rx_ports: tuple[int, ...] | None
 
 
-
 def bind_controller(
-    binding: 'bindings.SensorBinding[SS, SP, SC]', schema: specs.Schema[SS, SP, SC, PS, PC]
+    binding: 'bindings.SensorBinding[SS, SP, SC]',
+    schema: specs.Schema[SS, SP, SC, PS, PC],
 ) -> type[Controller[SS, SP, SC, PS, PC]]:
     class cls(Controller, sensor=binding, schema=schema):
         # wrapper shims for customized docstrings
@@ -228,12 +228,18 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
         spec = self.schema.source(*args, **kwargs)  # type: ignore
         self._setup(spec, config)
 
-
-    def __init_subclass__(cls, *, sensor: 'bindings.SensorBinding[SS, SP, SC]', schema: specs.Schema[SS, SP, SC, PS, PC]):
+    def __init_subclass__(
+        cls,
+        *,
+        sensor: 'bindings.SensorBinding[SS, SP, SC]',
+        schema: specs.Schema[SS, SP, SC, PS, PC],
+    ):
         """customize documentation on subclassing"""
 
         if not isinstance(schema, specs.Schema):
-            raise TypeError('schema argment is not a striqt.sensor.specs.Schema instance')
+            raise TypeError(
+                'schema argment is not a striqt.sensor.specs.Schema instance'
+            )
         cls.schema = schema
         cls.sensor = sensor
         super().__init_subclass__()
@@ -243,24 +249,31 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
         # document cls.__init__()
         source_spec = cls.schema.source
         cls.__doc__ = '\n\n'.join((
-            f"Open and control the backend `{backend_name}`.",
+            f'Open and control the backend `{backend_name}`.',
             source_cls.__doc__ or '',
         ))
-        
+
         descs, types = sa.specs.doc.describe_msgspec_fields(source_spec)
-        arg_descs = [f'    - **{n}** (*{t}*): {d}\n' for n, t, d in zip(descs, types.values(), descs.values())]
-        cls.__doc__ += '\n\n'+'\n'.join(['Parameters:'] + arg_descs)
+        arg_descs = [
+            f'    - **{n}** (*{t}*): {d}\n'
+            for n, t, d in zip(descs, types.values(), descs.values())
+        ]
+        cls.__doc__ += '\n\n' + '\n'.join(['Parameters:'] + arg_descs)
 
         # document cls.arm()
         capture_spec = cls.schema.capture
         descs, types = sa.specs.doc.describe_msgspec_fields(capture_spec)
-        arg_descs = [f'    - **{n}** (*{t}*): {d}\n' for n, t, d in zip(descs, types.values(), descs.values())]
-        cls.arm.__doc__ = '\n\n'+'\n'.join(['Parameters:'] + arg_descs)
+        arg_descs = [
+            f'    - **{n}** (*{t}*): {d}\n'
+            for n, t, d in zip(descs, types.values(), descs.values())
+        ]
+        cls.arm.__doc__ = '\n\n' + '\n'.join(['Parameters:'] + arg_descs)
         cls.__signature__ = inspect.signature(cls.schema.source)
-        sig = inspect.signature(cls.schema.capture).replace(return_annotation=cls.schema.capture)
-        cls.arm.__signature__ = sig # ty: ignore
+        sig = inspect.signature(cls.schema.capture).replace(
+            return_annotation=cls.schema.capture
+        )
+        cls.arm.__signature__ = sig  # ty: ignore
         return cls
-        
 
     def _setup(self, spec: SS, config: ControllerConfig) -> 'Self':
         self._config = config
@@ -544,14 +557,13 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
             pass
         elif overlaps is not None:
             raise ValueError('overlaps must be a tuple or None')
-        elif self._config.analysis is None:
-            raise ValueError(
-                'call .target_analysis() or pass overlap (start, stop) samples'
-            )
         else:
-            analysis = specs.helpers.adjust_analysis(
-                self._config.analysis, self.capture_spec.adjust_analysis
-            )
+            if self._config.analysis is None:
+                analysis = None
+            else:
+                analysis = specs.helpers.adjust_analysis(
+                    self._config.analysis, self.capture_spec.adjust_analysis
+                )
             overlaps = compute.get_correction_overlaps(
                 self.capture_spec, self.source_spec, analysis
             )
