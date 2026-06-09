@@ -82,7 +82,7 @@ def iterate_sweep(
     compute_opts = compute.EvaluationOptions(
         sweep_spec=spec,
         registry=sa.registry,
-        extra_attrs=compute.build_dataset_attrs(spec),
+        extra_attrs=spec.to_dict(True, allow_tuple_keys=False),
         correction=True,
         cache_callback=log,
         as_xarray='delayed',
