@@ -193,9 +193,8 @@ def _warn_on_capture_lookup_miss(capture_value, capture_attr, error_label, defau
 
 
 @util.lru_cache()
-def _enc_hook(obj):
+def _enc_hook(obj) -> Any:
     if isinstance(obj, frozendict):
-        d = obj._dict
         return obj._dict
     elif isinstance(obj, fractions.Fraction):
         return str(obj)
@@ -206,8 +205,8 @@ def _enc_hook(obj):
 
 
 @util.lru_cache()
-def _enc_hook_json(obj):
-    """convert any dictionary tuple keys to strings for json"""
+def _enc_hook_no_tuple_keys(obj) -> Any:
+    """convert any dictionary tuple keys to strings"""
 
     out = _enc_hook(obj)
     if isinstance(out, dict):

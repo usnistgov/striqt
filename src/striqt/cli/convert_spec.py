@@ -64,7 +64,7 @@ def run(path, yaml: bool):
             stream.write(s)
     else:
         out_path = Path(path).with_suffix('.json')
-        s = msgspec.json.encode(spec, enc_hook=sa.specs.helpers._enc_hook_json)
+        s = msgspec.json.encode(spec, enc_hook=sa.specs.helpers._enc_hook_no_tuple_keys)
         d = json.loads(s)
         with open(out_path, 'w') as stream:
             stream.write(custom_indent(d))

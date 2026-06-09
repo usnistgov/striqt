@@ -46,9 +46,14 @@ class SpecBase(
             return self
         return msgspec.structs.replace(self, **attrs).validate()
 
-    def to_dict(self, unfreeze=False) -> dict:
+    def to_dict(self, unfreeze: bool=False, allow_tuple_keys: bool=True) -> dict:
         """return a dictinary representation of `self`"""
-        map = msgspec.to_builtins(self, enc_hook=helpers._enc_hook)
+        if allow_tuple_keys:
+            enc_hook = helpers._enc_hook
+        else:
+            enc_hook = helpers._enc_hook_no_tuple_keys
+
+        map = msgspec.to_builtins(self, enc_hook=enc_hook)
 
         if unfreeze:
             depths = helpers.inspect_freeze_depths(type(self))
