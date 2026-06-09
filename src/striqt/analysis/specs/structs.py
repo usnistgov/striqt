@@ -8,14 +8,10 @@ import typing
 from typing import Union
 
 import msgspec
+from typing_extensions import Self
 
 from . import helpers, types
 import striqt.waveform as sw
-
-if typing.TYPE_CHECKING:
-    from typing_extensions import Self
-else:
-    from typing_extensions import Self
 
 
 _T = typing.TypeVar('_T')
