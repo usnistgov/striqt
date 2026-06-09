@@ -1,5 +1,6 @@
 from __future__ import annotations as __
 
+import ast
 import msgspec
 import typing
 import string
@@ -49,7 +50,7 @@ class DataOptions(msgspec.Struct, kw_only=True, forbid_unknown_fields=True):
     def __post_init__(self):
         for k, v in list(self.select.items()):
             if isinstance(v, str):
-                self.select[k] = eval(v, {}, {'slice': slice})
+                self.select[k] = ast.literal_eval(v)
 
 
 class PlotOptions(msgspec.Struct, kw_only=True, forbid_unknown_fields=True):
