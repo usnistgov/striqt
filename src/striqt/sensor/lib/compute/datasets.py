@@ -158,28 +158,6 @@ def concat_time_dim(datasets: list['xr.Dataset'], time_dim: str) -> 'xr.Dataset'
     return ds
 
 
-def build_dataset_attrs(sweep: specs.Sweep):
-    attrs: dict[str, Any] = {}
-    as_dict = sweep.to_dict(unfreeze=True)
-
-    if isinstance(sweep.description, str):
-        attrs['description'] = sweep.description
-    else:
-        attrs['description'] = sweep.description.to_dict()
-
-    attrs['loops'] = [l.to_dict(True) for l in sweep.loops]
-    attrs['captures'] = [c.to_dict(True) for c in sweep.captures]
-
-    for field, entry in as_dict.items():
-        if field == 'adjust_captures':
-            # label specs with tuple keys are not supported by zarr (at least in 2.x)
-            continue
-        else:
-            attrs[field] = entry
-
-    return attrs
-
-
 def build_capture_coords(
     capture: specs.SensorCapture,
     extras: specs.AcquisitionInfo,

@@ -8,7 +8,6 @@ from .corrections import (
     needs_resample,
 )
 from .datasets import (
-    build_dataset_attrs,
     concat_time_dim,
     DelayedDataset,
     from_delayed,
