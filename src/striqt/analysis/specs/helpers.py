@@ -5,20 +5,25 @@ from __future__ import annotations as __
 import functools
 import fractions
 from typing import (
+    Annotated,
     Any,
     Callable,
     Iterator,
     ItemsView,
     Iterable,
     KeysView,
+    Literal,
     Mapping,
     TYPE_CHECKING,
     TypeVar,
     ValuesView,
     cast,
+    get_args,
     get_origin,
+    get_type_hints,
     overload,
 )
+import types
 import warnings
 import msgspec
 from striqt.waveform.lib import util

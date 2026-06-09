@@ -26,12 +26,12 @@ RESAMPLE_COLA_WINDOW = 'hamming'
 
 
 def correct_iq(
-    iq: sources.AcquiredIQ,
+    iq: specs.AcquiredIQ,
     *,
     signal_trigger: sa.Trigger | None = None,
     axis=1,
     overwrite_x=False,
-) -> sources.AcquiredIQ:
+) -> specs.AcquiredIQ:
     """resample, filter, and apply calibration corrections.
 
     Args:
@@ -253,7 +253,7 @@ def _apply_trigger_shifts(x: Array, shifts: Array, size_out: int) -> Array:
 
 
 def _scale_only(
-    iq: sources.AcquiredIQ, overwrite_x: bool, min_overlap: int, axis: int
+    iq: specs.AcquiredIQ, overwrite_x: bool, min_overlap: int, axis: int
 ) -> tuple[Array, int | None]:
     x = iq.pre_align
     xp = sw.array_namespace(x)
@@ -278,7 +278,7 @@ def _scale_only(
 
 
 def _resample(
-    iq: sources.AcquiredIQ, overwrite_x: bool, min_overlap: int, axis: int
+    iq: specs.AcquiredIQ, overwrite_x: bool, min_overlap: int, axis: int
 ) -> tuple[Array, int | None]:
     x = iq.pre_align
     source_spec = iq.source_spec
@@ -299,7 +299,7 @@ def _resample(
 
 
 def _oaresample(
-    iq: sources.AcquiredIQ, overwrite_x: bool, min_overlap: int, axis: int
+    iq: specs.AcquiredIQ, overwrite_x: bool, min_overlap: int, axis: int
 ) -> tuple[Array, int | None]:
     x = iq.pre_align
     source_spec = iq.source_spec

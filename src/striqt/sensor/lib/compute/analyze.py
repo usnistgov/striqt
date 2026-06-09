@@ -81,28 +81,28 @@ def _get_signal_trigger_name(setup: specs.Source) -> str | None:
 
 @overload
 def analyze(
-    iq: sources.AcquiredIQ,
+    iq: specs.AcquiredIQ,
     options: datasets.EvaluationOptions[Literal[True]],
 ) -> 'xr.Dataset': ...
 
 
 @overload
 def analyze(
-    iq: sources.AcquiredIQ,
+    iq: specs.AcquiredIQ,
     options: datasets.EvaluationOptions[Literal['delayed']],
 ) -> datasets.DelayedDataset: ...
 
 
 @overload
 def analyze(
-    iq: sources.AcquiredIQ,
+    iq: specs.AcquiredIQ,
     options: datasets.EvaluationOptions[Literal[False]],
 ) -> 'dict[str, Array]': ...
 
 
 @sa.util.stopwatch('', 'analysis')
 def analyze(
-    iq: sources.AcquiredIQ,
+    iq: specs.AcquiredIQ,
     options: datasets.EvaluationOptions,
 ) -> 'dict[str, Array] | xr.Dataset | datasets.DelayedDataset':
     """convenience function to analyze a waveform from a specification.
@@ -195,11 +195,11 @@ def prepare_compute(spec: specs.Sweep, skip_warmup: bool = False):
 
     res = resources.Resources(
         sweep_spec=spec,
-        source=bindings.warmup.source.from_spec(spec.source),
-        peripherals=bindings.warmup.peripherals(spec),
+        source=bindings.warmup.from_source_spec(spec.source),
+        peripherals=bindings.warmup.sensor.peripherals_cls(spec),
         sink=sinks.NoSink(spec),
         calibration=None,
-        alias_func=None,
+        format_path=None,
     )
 
     with res['source']:

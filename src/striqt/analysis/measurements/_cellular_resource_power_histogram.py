@@ -199,28 +199,11 @@ def _struct_defaults(spec_type: type[specs.SpecBase]) -> dict[str, typing.Any]:
     attrs={'standard_name': 'Fraction of resource grid'},
 )
 def cellular_resource_power_histogram(iq: 'Array', capture: specs.Capture, **kwargs):
-    """
+    """Evaluate the spectrograms of a cellular resource grid on each port, and
+    return a flattened histogram of its power levels.
 
     Args:
-        window: window function to use (matching the arguments to scipy.signal.get_window)
-        subcarrier_spacing (Hz): 15e3|30e3|60e3|120e3|240e3|480e3|960e3
-        power_low (dB arb units): bottom edge of the histogram bins
-        power_high (dB arb units): top edge of the histogram bins
-        power_resolution (dB): resolution of the histogram
-        frame_slots: string composed of {'d', 'u', 's'} that speficy the sequence
-            of slots in 1 TDD cellular frame, or None to fill with downlink.
-        special_symbols: string composed of {'d', 'u', 'f'} that
-            indicate the sequence of symbol types (when 's' is in frame_slots).
-        guard_bandwidths (in Hz): the channel guard bandwidths on the left and right sides
-        average_rbs: when True, counts will report power averaged to 1 RB in frequency;
-            if False, resolution is 1 subcarrier.
-        average_slot: when True, counts will report power averaged to 1 slot in time;
-            if False, resolution is 1 symbol.
-        cyclic_prefix: the 3GPP cyclic prefix size, one of
-            `('extended','normal')`
-        lo_bandstop: if specified, null this bandwidth about DC
-        as_xarray: if True (the default), returns an xarray with labeled axes and metadata;
-            otherwise, returns an (array, dict) tuple containing the result and metadata
+    {args}
 
     Returns:
         `xarray.DataArray` or `(array, dict)` based on `as_xarray`

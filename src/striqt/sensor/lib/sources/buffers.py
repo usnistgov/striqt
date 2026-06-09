@@ -12,30 +12,18 @@ import striqt.waveform as sw
 
 from ... import specs
 from .. import util
+from ..typing import SC
 
 if TYPE_CHECKING:
     import numpy as np
     from ..typing import Array
-    from .base import SourceBase
+    from ..controller import Controller
 
 else:
     np = util.lazy_import('numpy')
 
 
-@dataclasses.dataclass
-class AcquiredIQ(sa.dataarrays.AcquiredIQ):
-    """extra metadata needed for downstream analysis"""
-
-    info: specs.AcquisitionInfo
-    extra_data: dict[str, Any]
-    source_spec: specs.Source
-    resampler: sw.ResamplerDesign
-    alias_func: specs.helpers.PathAliasFormatter | None = None
-    # analysis: specs.AnalysisGroup | None = None
-    voltage_scale: Array | float = 1
-
-
-class ReceiveBuffers:
+class ReceiveBuffers(typing.Generic[SC]):
     """remember unused samples from the previous IQ capture"""
 
     carryover_samples: 'np.ndarray | None'
@@ -43,8 +31,8 @@ class ReceiveBuffers:
     buffers: list = [None, None]
     _hold_buffer_swap = False
 
-    def __init__(self, source: 'SourceBase'):
-        self.source = source
+    def __init__(self, controller: 'Controller'):
+        self.controller = controller
         self.buffers = [None, None]
         self.clear()
 
@@ -59,7 +47,7 @@ class ReceiveBuffers:
                 'carryover time information present, but missing timestamp'
             )
 
-        if not self.source.setup_spec.gapless:
+        if not self.controller.source_spec.gapless:
             return None, 0
         elif self.carryover_samples is None:
             return self.start_time_ns, 0
@@ -71,14 +59,14 @@ class ReceiveBuffers:
         return self.start_time_ns, carryover
 
     def get_next(
-        self, capture, overlaps: tuple[int, int] = (0, 0)
+        self, capture: SC, overlaps: tuple[int, int] = (0, 0)
     ) -> 'tuple[np.ndarray, list[np.ndarray]]':
         """swap the buffers, and reallocate if needed"""
 
         if not self._hold_buffer_swap:
             self.buffers = [self.buffers[1], self.buffers[0]]
         self.buffers[0], ret = _alloc_empty_iq(
-            self.source, capture, self.buffers[0], overlaps=overlaps
+            self.controller, capture, self.buffers[0], overlaps=overlaps
         )
         self._hold_buffer_swap = False
         return ret
@@ -94,7 +82,7 @@ class ReceiveBuffers:
         capture: specs.SensorCapture,
     ):
         """stash data needed to carry over extra samples into the next capture"""
-        if not self.source.setup_spec.gapless:
+        if not self.controller.source_spec.gapless:
             return
         carryover_count = unused_sample_count
         self.carryover_samples = samples[:, -carryover_count:].copy()
@@ -171,7 +159,7 @@ def get_read_count(
     'allocate buffers', 'source', threshold=5e-3, logger_level=logging.DEBUG
 )
 def _alloc_empty_iq(
-    source: 'SourceBase',
+    controller: 'Controller',
     capture: specs.SensorCapture,
     prior: 'np.ndarray|None' = None,
     overlaps: tuple[int, int] = (0, 0),
@@ -182,13 +170,13 @@ def _alloc_empty_iq(
         The buffer and the list of buffer references for streaming.
     """
     count = get_read_count(
-        source.capture_spec,
-        source.setup_spec,
+        controller.capture_spec,
+        controller.source_spec,
         include_holdoff=True,
         overlap=sum(overlaps),
     )
 
-    if source.setup_spec.array_backend == 'cupy':
+    if controller.source_spec.array_backend == 'cupy':
         try:
             from cupyx import empty_pinned as empty  # type: ignore
         except ModuleNotFoundError as ex:
@@ -198,7 +186,7 @@ def _alloc_empty_iq(
     else:
         empty = np.empty
 
-    buf_dtype = np.dtype(source.setup_spec.transport_dtype)
+    buf_dtype = np.dtype(controller.source_spec.transport_dtype)
 
     # fast reinterpretation between dtypes requires the waveform to be in the last axis
     # ports = capture.port
@@ -216,9 +204,9 @@ def _alloc_empty_iq(
     # build the list of channel buffers that will actuall be filled with data,
     # including references to the throwaway buffer of extras in case of
     # source.setup_spec.stream_all_rx_ports
-    num_rx_ports = source.info.min_port_count(len(ports))
-    if source.setup_spec.stream_all_rx_ports and len(ports) != num_rx_ports:
-        if source.setup_spec.transport_dtype == 'complex64':
+    num_rx_ports = controller.source_info.min_port_count(len(ports))
+    if controller.source_spec.stream_all_rx_ports and len(ports) != num_rx_ports:
+        if controller.source_spec.transport_dtype == 'complex64':
             # a throwaway buffer for samples that won't be returned
             extra_count = count
         else:
@@ -236,7 +224,7 @@ def _alloc_empty_iq(
         if channel in ports:
             buffers.append(cast(np.ndarray, samples[i].view(buf_dtype)))
             i += 1
-        elif source.setup_spec.stream_all_rx_ports:
+        elif controller.source_spec.stream_all_rx_ports:
             assert extra is not None
             buffers.append(extra)
 

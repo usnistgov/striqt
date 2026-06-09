@@ -12,7 +12,7 @@ from pathlib import Path
 
 import typing_extensions
 
-from . import bindings, io, sources, util
+from . import bindings, controller, io, util
 from .sinks import SinkBase
 from .typing import Peripherals, SS, SP, SC, PS, PC
 from .. import specs
@@ -28,13 +28,13 @@ if TYPE_CHECKING:
     class Resources(typing_extensions.TypedDict, Generic[SS, SP, SC, PS, PC]):
         """Sensor resources needed to run a sweep"""
 
-        source: sources.SourceBase[SS, SC, PS, PC]
+        source: controller.Controller[SS, SP, SC, PS, PC]
         sink: SinkBase
         peripherals: Peripherals[SP, SC]
         except_context: typing_extensions.NotRequired[ContextManager]
         sweep_spec: specs.Sweep[SS, SP, SC]
         calibration: 'xr.Dataset|None'
-        alias_func: specs.helpers.PathAliasFormatter | None
+        format_path: specs.helpers.PathFormatter | None
 
     class AnyResources(
         typing_extensions.TypedDict,
@@ -43,37 +43,37 @@ if TYPE_CHECKING:
     ):
         """Sensor resources needed to run a sweep"""
 
-        source: sources.SourceBase[SS, SC, PS, PC]
+        source: controller.Controller[SS, SP, SC, PS, PC]
         sink: SinkBase
         peripherals: Peripherals[SP, SC]
         except_context: typing_extensions.NotRequired[ContextManager]
         sweep_spec: specs.Sweep[SS, SP, SC]
         calibration: 'xr.Dataset|None'
-        alias_func: specs.helpers.PathAliasFormatter | None
+        format_path: specs.helpers.PathFormatter | None
 
 else:
     # python < 3.10 workaround
     class Resources(typing_extensions.TypedDict):
         """Sensor resources needed to run a sweep"""
 
-        source: sources.SourceBase
+        source: controller.Controller
         sink: SinkBase
         peripherals: typing_extensions.NotRequired[Peripherals]
         except_context: typing_extensions.NotRequired[ContextManager]
         sweep_spec: specs.Sweep
         calibration: 'xr.Dataset|None'
-        alias_func: specs.helpers.PathAliasFormatter | None
+        format_path: specs.helpers.PathFormatter | None
 
     class AnyResources(typing_extensions.TypedDict, total=False):
         """Sensor resources needed to run a sweep"""
 
-        source: sources.SourceBase
+        source: controller.Controller
         sink: SinkBase
         peripherals: typing_extensions.NotRequired[Peripherals]
         except_context: typing_extensions.NotRequired[ContextManager]
         sweep_spec: specs.Sweep
         calibration: 'xr.Dataset|None'
-        alias_func: specs.helpers.PathAliasFormatter | None
+        format_path: specs.helpers.PathFormatter | None
 
 
 def _timeit(desc: str = '') -> PassThroughWrapper:
@@ -85,7 +85,7 @@ def _timeit(desc: str = '') -> PassThroughWrapper:
 def _open_sink(
     spec: specs.Sweep[Any, Any, SC],
     default_cls: type[SinkBase] | None,
-    alias_func: specs.helpers.PathAliasFormatter | None = None,
+    format_path: specs.helpers.PathFormatter | None = None,
 ) -> SinkBase[SC]:
     with sa.util.stopwatch('open sink', 'sweep', 0.5, util.logging.INFO):
         if spec.extensions.sink is not None:
@@ -99,7 +99,7 @@ def _open_sink(
         else:
             raise TypeError('no sink class in sensor binding or spec .extensions.sink')
 
-        return sink_cls(spec, alias_func)
+        return sink_cls(spec, format_path)
 
 
 class ConnectionManager(
@@ -115,7 +115,7 @@ class ConnectionManager(
     def __enter__(self):  # pyright: ignore
         return self.resources
 
-    @functools.cached_property
+    @util.cached_property
     def resources(self) -> Resources[SS, SP, SC, PS, PC]:
         missing = Resources.__required_keys__ - set(self._resources.keys())
 
@@ -134,33 +134,18 @@ def _setup_logging(sink: specs.Sink, formatter):
 
 def _open_devices(
     conn: ConnectionManager,
-    binding: bindings.SensorBinding,
+    ctrl_cls: type[controller.Controller],
     spec: specs.Sweep,
     skip_peripherals: bool = False,
-    on_source_opened: SourceOpenCallback | None = None,
+    format_path: specs.helpers.PathFormatter | None = None,
 ):
-    """open source and any peripherals"""
+    """open source and optionally peripherals"""
 
-    def _post_source_open():
-        source_id = sources.get_source_id(spec.source)
-        specs.helpers.list_capture_adjustments(spec, source_id=source_id)
-
-        if on_source_opened is not None:
-            on_source_opened(spec, source_id)
-
-    source = util.threadpool.submit(
-        _timeit('open sensor source')(binding.source.from_spec),
-        spec.source,
-        captures=spec.captures,
-        loops=spec.loops,
-        reuse_iq=spec.options.reuse_iq,
-    )
-
-    source_callback = util.threadpool.submit(_post_source_open)
+    source = util.threadpool.submit(ctrl_cls.from_sweep_spec, spec, format_path)
 
     if not skip_peripherals:
         peripherals = util.threadpool.submit(
-            _timeit('open peripherals')(binding.peripherals), spec
+            _timeit('open peripherals')(ctrl_cls.sensor.peripherals_cls), spec
         )
     else:
         peripherals = None
@@ -171,22 +156,28 @@ def _open_devices(
             conn.enter_context(source)
 
         with exc.defer():
-            source_callback.result()
-
-        with exc.defer():
             if peripherals is not None:
                 peripherals = conn._resources['peripherals'] = peripherals.result()
                 conn.enter_context(peripherals)
 
+    # the peripherals wait until both the source and the
     if peripherals is not None:
         peripherals.setup(spec.captures, spec.loops)
+
+
+def _prepare_sweep(spec: specs.Sweep, callback: SourceOpenCallback | None = None):
+    """after the source opens, enumerate the sweep and invoke callback"""
+    source_id = controller.lookup.id(spec.source)
+    specs.helpers.list_capture_adjustments(spec, source_id=source_id)
+
+    if callback is not None:
+        callback(spec, source_id)
 
 
 @sa.util.stopwatch('open resources', 'sweep', 1.0, sa.util.INFO)
 def open_resources(
     spec: specs.Sweep[SS, SP, SC],
     spec_path: str | Path | None = None,
-    except_context: ContextManager | None = None,
     *,
     test_only: bool = False,
     on_source_opened: SourceOpenCallback | None = None,
@@ -194,7 +185,7 @@ def open_resources(
     """open the sensor hardware and software contexts needed to run the given sweep.
 
     The returned Connections object contains the resulting context. All of its resources
-    have been opened and set up as needed to run the specified sweep.
+    are then open and ready to run the sweep.
     """
 
     from .compute import prepare_compute
@@ -203,30 +194,24 @@ def open_resources(
     logger = sa.util.get_logger('sweep')
     logger.log(sa.util.INFO, 'opening sensor resources')
 
-    formatter = specs.helpers.PathAliasFormatter(spec, spec_path=spec_path)
+    fmt = specs.helpers.PathFormatter(spec, spec_path=spec_path)
 
     if spec_path is not None:
         os.chdir(str(Path(spec_path).parent))
 
-    bind = bindings.get_binding(spec)
+    ctrl_cls = bindings.get_controller(spec)
     conn = ConnectionManager(sweep_spec=spec)
 
     exc = util.ExceptionStack('failed to open resources', cancel_on_except=True)
     with util.share_thread_interrupts():
-        # background threads
         devices = util.threadpool.submit(
-            _open_devices,
-            conn,
-            bind,
-            spec,
-            skip_peripherals=test_only,
-            on_source_opened=on_source_opened,
+            _open_devices, conn, ctrl_cls, spec, test_only, fmt
         )
-
-        sink = util.threadpool.submit(_open_sink, spec, bind.sink, formatter)
+        prep_sweep = util.threadpool.submit(_prepare_sweep, spec, on_source_opened)
+        sink = util.threadpool.submit(_open_sink, spec, ctrl_cls.sensor.sink_cls, fmt)
 
         with exc.defer():
-            # foreground thread part 1: initialize warmup sweeps
+            # foreground thread 1: initialize warmup sweeps
             try:
                 # prioritize compute as we get started; load up buffers
                 compute_iter = prepare_compute(spec, skip_warmup=test_only)
@@ -239,12 +224,12 @@ def open_resources(
             cal = util.threadpool.submit(
                 _timeit('read calibration')(io.read_calibration),
                 spec.source.calibration,
-                formatter,
+                fmt,
             )
         else:
             cal = None
         if spec.sink.log_path is not None:
-            log_setup = util.threadpool.submit(_setup_logging, spec.sink, formatter)
+            log_setup = util.threadpool.submit(_setup_logging, spec.sink, fmt)
         else:
             log_setup = None
 
@@ -270,6 +255,8 @@ def open_resources(
         with exc.defer():
             if log_setup is not None:
                 log_setup.result()
+        with exc.defer():
+            prep_sweep.result()
 
     try:
         exc.handle()
@@ -278,25 +265,6 @@ def open_resources(
         raise
 
     conn._resources['sweep_spec'] = spec
-    conn._resources['alias_func'] = formatter
+    conn._resources['format_path'] = fmt
 
     return conn
-
-
-def open_sensor_from_yaml(
-    yaml_path: Path,
-    *,
-    except_context: ContextManager | None = None,
-    output_path: str | None = None,
-    store_backend: str | None = None,
-) -> ConnectionManager[Any, Any, Any, Any, Any]:
-    spec = io.read_yaml_spec(yaml_path)
-
-    sink = spec.sink
-    if output_path is not None:
-        sink = sink.replace(path=output_path)
-    if store_backend is not None:
-        sink = sink.replace(store=store_backend)
-    spec = spec.replace(output=sink)
-
-    return open_resources(spec, yaml_path, except_context)

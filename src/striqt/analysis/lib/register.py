@@ -342,7 +342,7 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
             def wrapped(
                 iq: Array,
                 capture: specs.Capture,
-                as_xarray: bool = True,
+                as_xarray: bool | Literal['delayed'] = True,
                 *args: P.args,
                 **kwargs: P.kwargs,
             ) -> Measurement:
@@ -431,7 +431,13 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
             self[spec_type] = AnalysisInfo(func=wrapped, **info_kws)
 
             setattr(wrapped, '__signature__', _make_measurement_signature(spec_type))
-            doc = f'{wrapped.__doc__}\n{_make_measurement_docstring(spec_type)}'
+            arg_doc = _make_measurement_docstring(spec_type)
+            if func.__doc__ is None:
+                doc = arg_doc
+            elif '{args}' in func.__doc__:
+                doc = func.__doc__.format(args=arg_doc)
+            else:
+                doc = func.__doc__
             setattr(wrapped, '__doc__', doc)
 
             return wrapped  # type: ignore
@@ -602,13 +608,16 @@ def _make_measurement_signature(spec_cls):
 
 
 def _make_measurement_docstring(spec_cls):
-    assert specs.Analysis.__doc__ is not None
-
-    skip = len(specs.Analysis.__mro__) + 1
-    docs = [
-        cls.__doc__.strip()
-        for cls in spec_cls.__mro__[-skip::-1]
-        if cls.__doc__ is not None
-    ]
-    args = textwrap.indent('\n'.join(docs), 4 * ' ')
-    return f'{specs.Analysis.__doc__.rstrip()}\n{args}'
+    extra_prepend = {
+        'iq': 'input waveform array',
+        'capture': 'acquisition specification',
+        'ax_xarray': "whether to return an xarray object (True), an array (False), or a delayed xarray object ('delayed')",
+    }
+    extra_types = {
+        'iq': 'Array',
+        'capture': 'striqt.analysis.specs.Capture',
+        'as_xarray': "(bool or 'delayed')",
+    }
+    return specs.doc.struct_args_docstring(
+        spec_cls, extra_prepend=extra_prepend, extra_types=extra_types
+    )

@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from typing import Any, cast, Generic, TYPE_CHECKING
 
-from . import compute, io, sources, util
+from . import compute, controller, io, util
 from .. import specs as specs
 
 import striqt.analysis as sa
@@ -42,8 +42,8 @@ class _Zipper:
     temp_spec: specs.Sink
 
     def __init__(self, zip_path, sink: SinkBase):
-        if sink._alias_func is not None:
-            self.zip_path = Path(sink._alias_func(zip_path))
+        if sink._format_path is not None:
+            self.zip_path = Path(sink._format_path(zip_path))
         else:
             self.zip_path = Path(zip_path)
 
@@ -89,7 +89,7 @@ class SinkBase(Generic[specs.SC]):
     def __init__(
         self,
         sweep_spec: specs.Sweep[Any, Any, specs.SC],
-        alias_func: specs.helpers.PathAliasFormatter | None = None,
+        format_path: specs.helpers.PathFormatter | None = None,
         *,
         force: bool = False,
     ):
@@ -97,7 +97,7 @@ class SinkBase(Generic[specs.SC]):
 
         self._spec = sweep_spec.sink
         self.captures_elapsed = 0
-        self._alias_func = alias_func
+        self._format_path = format_path
 
         self.store = None
         self.force = force
@@ -106,7 +106,7 @@ class SinkBase(Generic[specs.SC]):
         self._executor = ThreadPoolExecutor(1)
 
         # decide group sizes
-        source_id = sources.get_source_id(sweep_spec.source)
+        source_id = controller.lookup.id(sweep_spec.source)
         captures = specs.helpers.loop_captures(sweep_spec, source_id)
         if len(sweep_spec.loops) > 0 and isinstance(sweep_spec.loops[0], specs.Repeat):
             captures = sweep_spec.loops[0].count * captures
@@ -197,7 +197,9 @@ class ZarrSinkBase(SinkBase):
         else:
             spec = self._spec
 
-        self.store = io.open_store(spec, alias_func=self._alias_func, force=self.force)
+        self.store = io.open_store(
+            spec, format_path=self._format_path, force=self.force
+        )
 
     def close(self, *exc_info):
         super().close(*exc_info)
@@ -283,7 +285,7 @@ class ZarrTimeAppendSink(ZarrSinkBase):
     def __init__(
         self,
         sweep_spec: specs.Sweep,
-        alias_func: specs.helpers.PathAliasFormatter | None = None,
+        format_path: specs.helpers.PathFormatter | None = None,
         *,
         force: bool = False,
     ):
@@ -292,7 +294,7 @@ class ZarrTimeAppendSink(ZarrSinkBase):
                 '"analysis" spec must include "spectrogram" to append on spectrogram time axis'
             )
 
-        super().__init__(sweep_spec, alias_func, force=force)
+        super().__init__(sweep_spec, format_path, force=force)
 
     def append(self, capture_result):
         ret = super().append(capture_result)

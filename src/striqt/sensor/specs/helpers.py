@@ -226,16 +226,16 @@ def loop_captures(
 
     if len(sweep.captures) > 0:
         cls = type(sweep.captures[0])
-    elif sweep._bindings is None:
+    elif sweep.sensor is None:
         raise TypeError(
             'loops may apply only to explicit capture lists unless the sweep '
             'is bound to a sensor with striqt.sensor.bind_sensor'
         )
     else:
-        from ..lib import bindings
+        from .dataclasses import Schema
 
-        assert isinstance(sweep._bindings, bindings.SensorBinding)
-        cls = sweep._bindings.schema.capture
+        assert isinstance(sweep.schema, Schema)
+        cls = sweep.schema.capture
 
     return _expand_capture_loops(
         sweep.captures,
@@ -296,8 +296,8 @@ def varied_capture_fields(
 
 @sa.util.lru_cache()
 def get_capture_type(sweep_cls: type[specs.Sweep]) -> type[specs.SensorCapture]:
-    if sweep_cls._bindings is not None:
-        return sweep_cls._bindings.schema.capture
+    if sweep_cls.sensor is not None:
+        return sweep_cls.schema.capture
     else:
         captures_type = get_type_hints(sweep_cls)['captures']
         return get_args(captures_type)[0]
@@ -617,7 +617,7 @@ def get_unique_ports(
 
 
 @sa.util.lru_cache()
-def _get_format_fields(s: str):
+def get_format_fields(s: str):
     """
     Extracts and returns a list of formatting field names from a given format string.
     """
@@ -730,25 +730,25 @@ def list_capture_adjustments(
     return {name: tuple(v.keys()) for name, v in result.items()}
 
 
-class PathAliasFormatter:
+class PathFormatter:
     def __init__(
         self,
         sweep: specs.Sweep,
         spec_path: Path | str | None = None,
-        alias_timeout: float = 5,
+        id_timeout: float = 5,
     ):
         self.sweep_spec = sweep
         self.spec_path = spec_path
-        self.alias_timeout = alias_timeout
+        self.id_timeout = id_timeout
 
     def __call__(self, path: str | Path) -> str:
-        path_fields = _get_format_fields(str(path))
+        path_fields = get_format_fields(str(path))
         if len(path_fields) == 0:
             return str(path)
 
-        from ..lib.sources.base import get_source_id
+        from ..lib.controller import lookup
 
-        id_ = get_source_id(self.sweep_spec.source, timeout=self.alias_timeout)
+        id_ = lookup.id(self.sweep_spec.source, timeout=self.id_timeout)
         path = Path(path).expanduser()
 
         fields = get_path_fields(

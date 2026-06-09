@@ -89,14 +89,7 @@ def cellular_5g_ssb_spectrogram(iq, capture: specs.Capture, **kwargs):
     Returns a DataArray containing the time-lag for each combination of NID2, symbol, and SSB start time.
 
     Args:
-        iq: the vector of size (N, M) for N channels and M IQ waveform samples
-        capture: capture structure that describes the iq acquisition parameters
-        sample_rate (samples/s): downsample to this rate before analysis (or None to follow capture.sample_rate)
-        subcarrier_spacing (Hz): OFDM subcarrier spacing
-        discovery_periodicity (s): interval between synchronization blocks
-        frequency_offset (Hz): baseband center frequency of the synchronization block
-        max_block_count: if not None, the number of synchronization blocks to analyze
-        as_xarray: if True (default), return an xarray.DataArray, otherwise a ChannelAnalysisResult object
+    {args}
 
     References:
         3GPP TS 138 211: Table 7.4.3.1-1, Section 7.4.2.2

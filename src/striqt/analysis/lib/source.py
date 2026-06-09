@@ -141,7 +141,10 @@ def simulated_awgn(
 
 
 def read_tdms(path, analysis_bandwidth: float = float('nan')):
-    from nptdms import TdmsFile  # type: ignore
+    try:
+        from nptdms import TdmsFile
+    except ImportError:
+        raise ImportError('install nptdms to read tdms files')
 
     fd = TdmsFile.read(path)
 

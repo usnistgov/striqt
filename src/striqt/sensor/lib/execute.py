@@ -10,7 +10,7 @@ from typing import Any, Generator, TYPE_CHECKING
 import striqt.waveform as sw
 import striqt.analysis as sa
 
-from . import compute, sources, util
+from . import compute, util
 from .. import specs
 from .resources import Resources, AnyResources
 from .calibration import lookup_system_noise_power
@@ -91,7 +91,9 @@ def iterate_sweep(
 
     iq = None
     analysis = None
-    captures = specs.helpers.loop_captures(spec, source_id=resources['source'].id)
+    captures = specs.helpers.loop_captures(
+        spec, source_id=resources['source'].source_id
+    )
     indexer = _AcquisitionIndexer(len(captures))
 
     if len(spec.loops) > 0 and isinstance(spec.loops[0], specs.Repeat):
@@ -136,7 +138,7 @@ def iterate_sweep(
             with exc.defer():
                 if acquire is not None:
                     iq = acquire.result()
-                    assert isinstance(iq, sources.AcquiredIQ)
+                    assert isinstance(iq, specs.AcquiredIQ)
                 else:
                     iq = None
 
@@ -216,7 +218,7 @@ def _acquire_both(
     this: SC,
     next_: SC | None,
     indexer: _AcquisitionIndexer,
-) -> sources.AcquiredIQ:
+) -> specs.AcquiredIQ:
     """arm and acquire from the source and peripherals.
 
     Any acquired data returned from the peripherals is merged
@@ -229,7 +231,7 @@ def _acquire_both(
         if c is None:
             return
 
-        source = util.threadpool.submit(res['source'].arm_spec, c)
+        source = util.threadpool.submit(res['source']._arm_spec, c)
         peripherals = util.threadpool.submit(res['peripherals'].arm, c)
         util.await_and_ignore([source, peripherals], 'arm sensor')
 
@@ -238,12 +240,7 @@ def _acquire_both(
     except AttributeError:
         arm_both(this)
 
-    analysis = specs.helpers.adjust_analysis(
-        res['sweep_spec'].analysis, this.adjust_analysis
-    )
-
-    overlaps = compute.get_correction_overlaps(this, res['source'].setup_spec, analysis)
-    iq = util.threadpool.submit(res['source'].acquire, overlaps, res['alias_func'])
+    iq = util.threadpool.submit(res['source'].acquire)
     ext_data = util.threadpool.submit(res['peripherals'].acquire, this)
 
     with util.ExceptionStack('failed to acquire data') as exc:
@@ -254,7 +251,7 @@ def _acquire_both(
 
     if not isinstance(ext_data, dict):
         raise TypeError(f'peripheral acquire() returned {type(ext_data)!r}, not dict')
-    if not isinstance(iq, sources.AcquiredIQ):
+    if not isinstance(iq, specs.AcquiredIQ):
         raise TypeError(f'source acquire() returned {type(iq)!r}, not AcquiredIQ')
 
     arm_both(next_)
@@ -291,7 +288,7 @@ def _log_cache_info(
         cal,
         specs.SoapyCapture.from_spec(capture),
         master_clock_rate=resources['sweep_spec'].source.master_clock_rate,
-        alias_func=resources['alias_func'],
+        format_path=resources['format_path'],
         B=attrs['noise_bandwidth'],
         xp=xp,
     )
@@ -311,7 +308,7 @@ def _log_cache_info(
         capture_desc = specs.helpers.describe_capture(
             c,
             fields=info_fields,
-            source_id=resources['source'].id,
+            source_id=resources['source'].source_id,
             adjust_spec=resources['sweep_spec'].adjust_captures,
         )
         logger.info(f'spectrogram ▮ {snr_desc:<14} ▮ {capture_desc}')

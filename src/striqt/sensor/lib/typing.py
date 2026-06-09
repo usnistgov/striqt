@@ -1,10 +1,14 @@
 from __future__ import annotations as __
+from abc import abstractmethod
 
+import dataclasses
+import functools
 import typing
 from typing_extensions import ParamSpec, Self, TypeAlias, TypeVar, Unpack
 from typing import (
     Any,
     Callable,
+    Generic,
     Protocol,
     Sequence,
     TypedDict,
@@ -12,6 +16,9 @@ from typing import (
     TYPE_CHECKING,
     runtime_checkable,
 )
+
+import striqt.analysis as sa
+import striqt.waveform as sw
 
 if TYPE_CHECKING:
     from .. import specs
@@ -41,6 +48,7 @@ _SP = TypeVar('_SP', bound='specs.Peripherals', covariant=True)
 # %% peripherals.py
 @runtime_checkable
 class Peripherals(Protocol[_SP, _SC]):
+    @abstractmethod
     def __init__(self, spec: 'specs.Sweep[Any, _SP, _SC]'): ...
 
     def open(self): ...
@@ -60,59 +68,56 @@ class Peripherals(Protocol[_SP, _SC]):
 
 # %% sources/base.py
 @runtime_checkable
-class Source(Protocol[SS, SC, PS, PC]):
-    __setup__: SS
-    _capture: typing.Optional[SC]
+class SourceBackend(Protocol[SS, SC]):
+    @abstractmethod
+    def __init__(self, spec): ...
 
-    def __init__(
+    @abstractmethod
+    def get_info(self) -> specs.SourceInfo: ...
+
+    @abstractmethod
+    def get_id(self) -> str: ...
+
+    @abstractmethod
+    def get_resampler(self, capture: SC) -> ResamplerDesign: ...
+
+    @abstractmethod
+    def setup(self, *, rx_ports: tuple[int, ...] | None = None) -> None: ...
+
+    @abstractmethod
+    def arm(self, capture: SC) -> SC | None: ...
+
+    @abstractmethod
+    def trigger(self, overlaps: tuple[int, int] = (0, 0)) -> None: ...
+
+    @abstractmethod
+    def read(
         self,
-        _setup: SS | None = None,
-        /,
-        reuse_iq=False,
-        *args: PS.args,
-        **kwargs: PS.kwargs,
-    ): ...
-
-    @classmethod
-    def from_spec(
-        cls,
-        spec: SS,
+        buffers: list[Array],
+        offset: int,
+        count: int,
+        timeout_sec: float | None,
         *,
-        captures: tuple[SC, ...] | None = None,
-        loops: tuple[specs.LoopSpec, ...] | None = None,
-        reuse_iq: bool = False,
-    ) -> Self: ...
+        on_overflow: specs.types.OnOverflow = 'except',
+    ) -> tuple[int, int]: ...
 
-    def read_iq(
-        self, overlaps: tuple[int, int] = (0, 0)
-    ) -> 'tuple[Array, int|None]': ...
+    def prepare_retrigger(self):
+        pass
 
-    def _connect(self, spec: SS) -> None: ...
-
-    def _apply_setup(
+    def package_iq(
         self,
-        spec: SS,
-        *,
-        captures: tuple[SC, ...] | None = None,
-        loops: 'tuple[specs.LoopSpec, ...] | None' = None,
-    ) -> None: ...
+        iq: 'specs.AcquiredIQ',
+        samples: Array,
+        time_ns: int | None,
+    ) -> 'specs.AcquiredIQ':
+        return iq
 
-    def arm(self, *args: PC.args, **kwargs: PC.kwargs): ...
-
-    def arm_spec(self, spec: SC): ...
-
-    def acquire(self, overlaps: tuple[int, int] = (0, 0)) -> sources.AcquiredIQ: ...
-
-    @property
-    def capture_spec(self) -> SC: ...
-
-    def _prepare_capture(self, capture: SC) -> SC | None: ...
-
-    def get_resampler(self, capture: 'SC | None' = None) -> ResamplerDesign: ...
+    @abstractmethod
+    def close(self):
+        pass
 
 
 if typing.TYPE_CHECKING:
-    from . import sources
     from striqt.analysis.lib.typing import Array, FileStream, TAR, ZarrStore
     from striqt.waveform.fourier import ResamplerDesign
 

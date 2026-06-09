@@ -2,6 +2,7 @@ from __future__ import annotations as __
 
 import functools
 import math
+import msgspec
 import threading
 import typing
 import warnings
@@ -202,6 +203,14 @@ def decode_from_yaml_file(
         return type.from_dict(obj)
     else:
         raise TypeError(f'unsupported type {repr(type)}')
+
+
+def decode_from_json_file(
+    path: str | Path, *, type: type[specs.SpecBase] | type[dict] = dict
+):
+    with open(path, 'rb') as buf:
+        s = buf.read()
+    return msgspec.json.decode(s, type=type, dec_hook=specs.helpers._dec_hook)
 
 
 class _FileStreamBase:
@@ -515,7 +524,10 @@ class TDMSFileStream(_FileStreamBase):
         xp=np,
         **meta,
     ):
-        from nptdms import TdmsFile  # type: ignore
+        try:
+            from nptdms import TdmsFile
+        except ImportError:
+            raise ImportError('install nptdms to open TDMS file streams')
 
         self._fd = TdmsFile.read(path)
         self._header_fd, self._iq_fd = self._fd.groups()

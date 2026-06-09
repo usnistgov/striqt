@@ -4,7 +4,8 @@ from typing import cast, Any, Sequence, TYPE_CHECKING
 from pathlib import Path
 
 from .. import specs as specs
-from . import compute, io, peripherals, sinks, sources, util
+from . import compute, io, peripherals, sinks, util
+from .controller import Controller
 from .typing import Peripherals, TypeVar, SC, SP, SPC, PS, PC
 import striqt.analysis as sa
 
@@ -48,14 +49,14 @@ def lookup_power_correction(
     cal_data: 'str | Path | None',
     capture: specs.SoapyCapture,
     master_clock_rate: float,
-    alias_func: specs.helpers.PathAliasFormatter | None = None,
+    format_path: specs.helpers.PathFormatter | None = None,
     *,
     xp=None,
 ):
     if cal_data is None:
         return None
     elif isinstance(cal_data, (str, Path)):
-        corrections = io.read_calibration(cal_data, alias_func)
+        corrections = io.read_calibration(cal_data, format_path)
     else:
         raise TypeError('invalid cal_data input type')
 
@@ -75,7 +76,7 @@ def lookup_system_noise_power(
     cal_data: 'Path | str | None',
     capture: specs.SoapyCapture,
     master_clock_rate: float,
-    alias_func: specs.helpers.PathAliasFormatter | None = None,
+    format_path: specs.helpers.PathFormatter | None = None,
     *,
     T=290.0,
     B=1.0,
@@ -90,7 +91,7 @@ def lookup_system_noise_power(
     if cal_data is None:
         return None
     elif isinstance(cal_data, (str, Path)):
-        corrections = io.read_calibration(cal_data, alias_func)
+        corrections = io.read_calibration(cal_data, format_path)
     else:
         raise TypeError('invalid cal_data input type')
 
@@ -131,8 +132,8 @@ class YFactorSink(sinks.SinkBase):
     def _get_path(self) -> Path | None:
         path = self._spec.path
 
-        if self._alias_func is not None:
-            path = self._alias_func(path)
+        if self._format_path is not None:
+            path = self._format_path(path)
 
         if path is not None:
             return Path(path)
@@ -305,16 +306,18 @@ def _calibration_peripherals_cls(
 
 
 def bind_manual_yfactor_calibration(
-    name: str, sensor: 'bindings.SensorBinding[SS, SP, Any, PS, PC]'
-) -> 'bindings.SensorBinding[SS, SP, SC, PS, PC]':
+    name: str, ctrl_cls: 'type[Controller[SS, SP, Any, PS, PC]]'
+) -> 'type[Controller[SS, SP, Any, PS, PC]]':
     """extend an existing binding with a y-factor calibration"""
 
     from . import bindings
 
-    assert sensor.schema is not None
-    assert issubclass(sensor.schema.capture, specs.Capture)
+    # binding = ctrl_cls.sensor
 
-    class capture_spec_cls(sensor.schema.capture, frozen=True, kw_only=True):
+    assert ctrl_cls.schema is not None
+    assert issubclass(ctrl_cls.schema.capture, specs.Capture)
+
+    class capture_spec_cls(ctrl_cls.schema.capture, frozen=True, kw_only=True):
         noise_diode_enabled: specs.types.NoiseDiodeEnabled = False
 
     class sweep_spec_cls(specs.CalibrationSweep, frozen=True, kw_only=True):
@@ -328,28 +331,29 @@ def bind_manual_yfactor_calibration(
             super().__post_init__()
 
     peripherals_cls = _calibration_peripherals_cls(
-        sensor.peripherals, ManualYFactorPeripheral
+        ctrl_cls.sensor.peripherals_cls, ManualYFactorPeripheral
     )
+    peripherals_cls.__name__ = ManualYFactorPeripheral.__name__
 
     cal_sensor = bindings.Sensor(
-        source=sensor.source,
-        peripherals=peripherals_cls,
-        sweep_spec=sweep_spec_cls,
-        sink=YFactorSink,
+        source_cls=ctrl_cls.sensor.source_cls,
+        peripherals_cls=peripherals_cls,
+        sweep_spec_cls=sweep_spec_cls,
+        sink_cls=YFactorSink,
     )
 
-    cal_schema = bindings.Schema(
-        source=sensor.schema.source,
+    cal_schema = specs.Schema(
+        source=ctrl_cls.schema.source,
         capture=capture_spec_cls,  # pyright: ignore
-        peripherals=sensor.schema.peripherals,
-        init_like=sensor.schema.init_like,
-        arm_like=sensor.schema.arm_like,
+        peripherals=ctrl_cls.schema.peripherals,
+        init_like=ctrl_cls.schema.init_like,
+        arm_like=ctrl_cls.schema.arm_like,
     )
 
     return bindings.bind_sensor(
         name,
-        cast(bindings.Sensor[SS, SP, SC, PS, PC], cal_sensor),
-        cast(bindings.Schema[SS, SP, SC, PS, PC], cal_schema),
+        cast(bindings.Sensor[SS, SP, Any], cal_sensor),
+        cast(specs.Schema[SS, SP, Any, PS, PC], cal_schema),
     )
 
 

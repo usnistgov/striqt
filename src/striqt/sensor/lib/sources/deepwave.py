@@ -44,7 +44,7 @@ class Air8201BSourceSpec(specs.SoapySource, kw_only=True, frozen=True):
 
 
 class Airstack1Source(soapy.SoapySource):
-    def _connect(self, spec: specs.SoapySource, **kwargs):
+    def __init__(self, spec: specs.SoapySource, **kwargs):
         # trim script startup time by setting these here
         air_kwargs = dict(
             kwargs,
@@ -53,7 +53,7 @@ class Airstack1Source(soapy.SoapySource):
             clk_src=spec.clock_source,
         )
 
-        super()._connect(spec, **air_kwargs)
+        super().__init__(spec, **air_kwargs)
 
         self._set_jesd_sysref_delay(0)
 
@@ -69,7 +69,7 @@ class Airstack1Source(soapy.SoapySource):
 
         Ref: https://docs.deepwavedigital.com/Tutorials/8_triggered_signal_stream/#maintaining-fixed-delay-between-calibrations
         """
-        assert self._device is not None
+        assert self.device is not None
         addr = 0x00040010
         start_bit = 8
         field_size = 4
@@ -79,7 +79,7 @@ class Airstack1Source(soapy.SoapySource):
             field_mask |= 1 << bit
 
         # Read curr value
-        reg = self._device.readRegister('FPGA', addr)
+        reg = self.device.readRegister('FPGA', addr)
         # Clear the bit field
         reg &= ~field_mask
         # Set values of mask, dropping extra bits
@@ -88,10 +88,9 @@ class Airstack1Source(soapy.SoapySource):
         # Set the bits
         reg |= field_val_mask
         # Write reg back
-        self._device.writeRegister('FPGA', addr, reg)
+        self.device.writeRegister('FPGA', addr, reg)
 
-    @functools.cached_property
-    def id(self) -> str:
+    def get_id(self) -> str:
         # as of 1.0.0, AirStack doesn't seem to return a serial through Soapy
         # instead, take the Jetson ethernet MAC address as the radio id.
         try:
@@ -110,6 +109,6 @@ class Airstack1Source(soapy.SoapySource):
 
     def read_peripherals(self) -> dict[str, float]:
         """returns the transceiver temperature in Celsius"""
-        assert self._device is not None
+        assert self.device is not None
 
-        return {'transceiver': self._device.readSensorFloat('xcvr_temp')}
+        return {'transceiver': self.device.readSensorFloat('xcvr_temp')}

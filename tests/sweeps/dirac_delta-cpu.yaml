@@ -3,12 +3,13 @@
 
 # Run DSP filter response checks using noise input
 
-sensor_binding: "noise"
+sensor_binding: "dirac_delta"
 source:
   master_clock_rate: 125e6 # Hz
   num_rx_ports: 2
   array_backend: "numpy"
-  signal_trigger: "cellular_5g_pss_sync"
+  # skip this in order to evaluate start time offset
+  # signal_trigger: "cellular_5g_pss_sync"
 
 loops:
   - kind: repeat
@@ -18,8 +19,9 @@ captures:
   - analysis_bandwidth: 100e6 # Hz
     sample_rate: 107.52e6 # Hz
     port: [0, 1]
-    duration: 0.1
-    noise_psd: 1e-17
+    duration: 10e-3
+    power: 0
+    time: 1e-3
     adjust_analysis:
       frequency_offset: -19920000
       guard_bandwidths: [875e3, 575e3]
@@ -28,8 +30,9 @@ captures:
   - analysis_bandwidth: 60e6 # Hz
     sample_rate: 107.52e6 # Hz
     port: [0, 1]
-    duration: 0.1
-    noise_psd: 1e-17
+    duration: 10e-3
+    power: 0
+    time: 1e-3
     adjust_analysis:
       frequency_offset: -20520000
       guard_bandwidths: [875e3, 875e3]
@@ -38,8 +41,9 @@ captures:
   - analysis_bandwidth: 80e6 # Hz
     sample_rate: 107.52e6 # Hz
     port: [0, 1]
-    duration: 0.1
-    noise_psd: 1e-17
+    duration: 10e-3
+    power: 0
+    time: 1e-3
     adjust_analysis:
       frequency_offset: -28800000
       guard_bandwidths: [875e3, 875e3]
@@ -48,8 +52,9 @@ captures:
   - sample_rate: 53.76e6 # Hz
     analysis_bandwidth: 40e6 # Hz
     port: [0, 1]
-    duration: 0.1
-    noise_psd: 1e-17
+    duration: 10e-3
+    power: 0
+    time: 1e-3
     adjust_analysis:
       frequency_offset: 0
       guard_bandwidths: [0, 0]
@@ -101,9 +106,9 @@ analysis:
   cellular_5g_pss_sync:
     subcarrier_spacing: *scs
     frequency_offset: *frequency_offset
-    symbol_indexes: 'b'
     delay: *delay
     per_port: true
+    symbol_indexes: 'b'
 
   cellular_5g_ssb_spectrogram:
     lo_bandstop: *lo_bandstop
@@ -139,7 +144,7 @@ analysis:
     frame_range: [0, 1]
 
   cyclic_channel_power:
-    cyclic_period: &frame_period .01 # 10 ms in cell standards
+    cyclic_period: &frame_period .001 # 10 ms in cell standards
     cyclic_statistics:
     - min
     - mean

@@ -1,6 +1,7 @@
 [project]
 name = "striqt"
-version = "0.7.0"
+# version = "0.7.0"
+dynamic = ["version"]
 description = "tooling to support precision gpu-accelerated radio signal analysis and software radio automation"
 requires-python = ">=3.9"
 dependencies = [
@@ -44,6 +45,11 @@ dev = [
     "ruff",
     "ty"
 ]
+doc = [
+    "sphinx",
+    "toml",
+    "myst_nb"
+]
 gpu = [
     "cupy >= 12.2",
     "cython",
@@ -51,30 +57,15 @@ gpu = [
 test = [
     "pytest",
     "nptdms",
+    "pytest-order"
 ]
 kitcat = [
      "kitcat >= 1.3.0",
 ]
 
-# this will still require external SoapySDR
-#edge-airstack-1 = [
-#    "cupy-cuda102",
-#    "cython<3",
-#    "dulwich",
-#    "matplotlib>=3.7",
-#    "numba~=0.56.0",
-#    "numpy>=1.21,<2",
-#    "pandas",
-#    "pytools>=2022.1.12",
-#    "scipy~=1.9",
-#    "ssmdevices",
-#    "zarr~=2.18.2",
-#    "eval_type_backport"
-#]
-
 [project.scripts]
 check-sweep = "striqt.cli.check_sweep:run"
-sensor-sweep = "striqt.cli.sensor_sweep:run"
+sensor-sweep = "striqt.cli.sensor_sweep:cli"
 plot-capture = "striqt.cli.plot_capture:run"
 rechunk-zarr = "striqt.cli.rechunk_zarr:run"
 convert-spec = "striqt.cli.convert_spec:run"
@@ -94,15 +85,31 @@ docstring-code-line-length = "dynamic"
 [tool.hatch.metadata]
 allow-direct-references = true
 
-[tool.ruff.lint.extend-per-file-ignores]
-"**/__init__.py" = [ "F401", "F403", "E402"]
-
 [tool.hatch.build.targets.wheel]
 packages = [ "src/striqt", ]
 
 [tool.hatch.build.targets.sdist]
 packages = [ "src/striqt", ]
 
+[tool.hatch.version]
+path = "src/striqt/sensor/__about__.py"
+
+[tool.pytest]
+testpaths = ["tests"]
+pythonpath = ["src"]
+norecursedirs = [
+    ".venv",
+    "venv",
+    "env",
+    "bin",
+    "dist",
+    "build"
+]
+
+[tool.ruff.lint.extend-per-file-ignores]
+"**/__init__.py" = [ "F401", "F403", "E402"]
+
 [tool.ty.rules]
 call-top-callable = "ignore"
 invalid-type-form = "ignore"
+

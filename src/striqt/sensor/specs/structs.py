@@ -2,11 +2,12 @@
 
 from __future__ import annotations as __
 
+import dataclasses
 from typing import Any, cast, ClassVar, Generic, Literal, Optional, TYPE_CHECKING, Union
 
 import msgspec
 
-from striqt import analysis as sa
+import striqt.analysis as sa
 from striqt.analysis.specs import AnalysisGroup, SpecBase, Capture, frozendict
 
 from ..lib import util
@@ -93,8 +94,8 @@ class Source(SpecBase, frozen=True, kw_only=True):
     master_clock_rate: types.MasterClockRate
 
     # synchronization and triggering
-    trigger_strobe: Optional[float] = None
-    signal_trigger: Optional[str | AnalysisGroup] = None
+    trigger_strobe: Union[float, None] = None
+    signal_trigger: Union[str, AnalysisGroup, None] = None
 
     # in the future, these should probably move to an analysis config
     array_backend: types.ArrayBackend = 'numpy'
@@ -106,7 +107,7 @@ class Source(SpecBase, frozen=True, kw_only=True):
 
     # validation data
     transient_holdoff_time: ClassVar[float] = 0
-    stream_all_rx_ports: ClassVar[bool | None] = False
+    stream_all_rx_ports: ClassVar[Union[bool, None]] = False
     transport_dtype: ClassVar[types.TransportDType] = 'float32'
 
 
@@ -160,7 +161,7 @@ class NoSource(Source, frozen=True, kw_only=True):
 class MATSource(Source, kw_only=True, frozen=True):
     path: types.WaveformInputPath
     file_format: types.Format = 'auto'
-    file_metadata: types.FileMetadata | None = None
+    file_metadata: Union[types.FileMetadata, None] = None
     loop: types.FileLoop = False
     transport_dtype: ClassVar[types.TransportDType] = 'complex64'
 
@@ -182,7 +183,7 @@ class Description(SpecBase, frozen=True, kw_only=True):
 
 
 class LoopBase(SpecBase, tag=str.lower, tag_field='kind', frozen=True, kw_only=True):
-    field: str | None
+    field: Union[str, None]
     isin: types.IsIn = 'capture'
 
     def get_points(self) -> list:
@@ -215,7 +216,7 @@ class Repeat(LoopBase, frozen=True, kw_only=True):
 
 class List(LoopBase, frozen=True, kw_only=True):
     field: str
-    values: tuple[AdjustCapturesType | str | float | int | bool | None, ...]
+    values: tuple[Union[AdjustCapturesType, str, float, int, bool, None], ...]
 
     def get_points(self) -> list:
         return list(self.values)
@@ -258,7 +259,7 @@ class Sink(SpecBase, frozen=True, kw_only=True):
 
 
 class Extension(SpecBase, frozen=True, kw_only=True):
-    sink: types.SinkClass | None = None
+    sink: Union[types.SinkClass, None] = None
     import_path: Optional[types.ExtensionPath] = None
     import_name: types.ModuleName = None
 
@@ -290,8 +291,8 @@ SWEEP_TAG_FIELD = 'sensor_binding'
 
 
 class CaptureRemap(SpecBase, frozen=True, kw_only=True):
-    key: str | tuple[str, ...]
-    lookup: dict[tuple[Any, ...] | Any, Any]
+    key: Union[str, tuple[str, ...]]
+    lookup: dict[Union[tuple[Any, ...], Any], Any]
     required: bool = True
     default: Any = msgspec.UNSET
 
@@ -370,7 +371,8 @@ class Sweep(SpecBase, Generic[SS, SP, SC], frozen=True, kw_only=True):
     peripherals: SP = cast(SP, Peripherals())
 
     options: SweepOptions = SweepOptions(reuse_iq=False, loop_only_nyquist=False)
-    _bindings: ClassVar[Any] = None
+    schema: ClassVar[Any] = None
+    sensor: ClassVar[Any] = None
 
     def __post_init__(self):
         from . import helpers
@@ -384,8 +386,8 @@ class Sweep(SpecBase, Generic[SS, SP, SC], frozen=True, kw_only=True):
 
         if len(self.captures) > 0:
             coord_fields = set(self.captures[0].__struct_fields__)
-        elif self._bindings is not None:
-            coord_fields = set(self._bindings.capture.__struct_fields__)
+        elif self.schema is not None:
+            coord_fields = set(self.schema.capture.__struct_fields__)
         else:
             coord_fields = None
 
@@ -409,7 +411,7 @@ class CalibrationSweep(
     options: SweepOptions = SweepOptions(
         skip_warmup=True, reuse_iq=True, loop_only_nyquist=True
     )
-    calibration: SPC | None = None
+    calibration: Union[SPC, None] = None
 
     def __post_init__(self):
         super().__post_init__()
@@ -434,7 +436,7 @@ class AcquisitionInfo(msgspec.Struct, kw_only=True, frozen=True):
     # duck-type methods and structure of SpecBase
 
     source_id: types.SourceID = ''
-    sweep_index: int | None = None
+    sweep_index: Union[int, None] = None
     capture_index: int = 0
 
     def replace(self, **attrs) -> _Self:
@@ -471,8 +473,9 @@ class FileAcquisitionInfo(AcquisitionInfo, kw_only=True, frozen=True):
     source_id: types.SourceID = ''
 
 
-class BaseSourceInfo(SpecBase, kw_only=True, frozen=True, cache_hash=True):
-    num_rx_ports: int | None
+class SourceInfo(SpecBase, kw_only=True, frozen=True, cache_hash=True):
+    num_rx_ports: Union[int, None]
+    retries: Union[int, None] = None
 
     def min_port_count(self, tuple_size: int):
         if self.num_rx_ports is None:

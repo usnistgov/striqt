@@ -162,12 +162,11 @@ class FrequencyAnalysisSpecBase(
     window_fill: fractions.Fraction = 1  # type: ignore
     integration_bandwidth: typing.Optional[float] = None
     trim_stopband: bool = True
-    lo_bandstop: typing.Optional[float] = None
+    lo_bandstop: Union[types.LOBandstop, None] = None
 
 
 class Cellular5GNRSSBSpectrogram(Analysis, kw_only=True, frozen=True):
     """
-    subcarrier_spacing (float): 3GPP channel subcarrier spacing (Hz)
     sample_rate (float): output sample rate for the resampled synchronization waveform (samples/s)
     discovery_periodicity (float): time period between synchronization blocks (s)
     frequency_offset (float or dict[float, float]):
@@ -177,7 +176,7 @@ class Cellular5GNRSSBSpectrogram(Analysis, kw_only=True, frozen=True):
     max_block_count: number of synchronization blocks to evaluate
     """
 
-    subcarrier_spacing: float
+    subcarrier_spacing: types.CellularSubcarrierSpacing
 
     # ssb parameters
     sample_rate: float = 15.36e6 / 2
@@ -196,7 +195,6 @@ class Cellular5GNRSSBSpectrogram(Analysis, kw_only=True, frozen=True):
 # %% Cellular 5G NR synchronizatino
 class _Cellular5GNRSSBCorrelator(Analysis, kw_only=True, frozen=True):
     """
-    subcarrier_spacing (float): 3GPP channel subcarrier spacing (Hz)
     sample_rate (float): output sample rate for the resampled synchronization waveform (samples/s)
     discovery_periodicity (float): time period between synchronization blocks (s)
     frequency_offset (float or dict[float, float]):
@@ -206,7 +204,7 @@ class _Cellular5GNRSSBCorrelator(Analysis, kw_only=True, frozen=True):
     delay: minimum time delay (in s) to start of SSB set
     """
 
-    subcarrier_spacing: float
+    subcarrier_spacing: types.CellularSubcarrierSpacing
     sample_rate: float = 15.36e6 / 2
     discovery_periodicity: float = 20e-3
     frequency_offset: float = 0
@@ -258,9 +256,9 @@ class Spectrogram(FrequencyAnalysisSpecBase, kw_only=True, frozen=True):
 
 
 class CellularCyclicAutocorrelator(Analysis, kw_only=True, frozen=True):
-    subcarrier_spacings: Union[float, tuple[float, ...]] = (15e3, 30e3, 60e3)
+    subcarrier_spacings: types.CellularSubcarrierSpacingTuple = (15e3, 30e3, 60e3)
     frame_range: Union[int, tuple[int, int]] = (0, 1)
-    frame_slots: Union[str, None] = None
+    frame_slots: types.CellularFrame = None
     symbol_range: Union[int, tuple[int, Union[int, None]]] = (0, None)
     generation: typing.Literal['4G', '5G'] = '5G'
 
@@ -282,21 +280,17 @@ class CellularResourcePowerHistogram(
     dict=True,
 ):
     window: types.WindowType
-    subcarrier_spacing: float
-    power_low: float
-    power_high: float
-    power_resolution: float
-    average_rbs: Union[bool, typing.Literal['half']] = False
-    average_slots: bool = False
-    guard_bandwidths: tuple[float, float] = (0, 0)
-    frame_slots: Union[str, None] = None
-    special_symbols: Union[str, None] = None
-
-    cyclic_prefix: Union[typing.Literal['normal'], typing.Literal['extended']] = (
-        'normal'
-    )
-
-    lo_bandstop: typing.Optional[float] = None
+    subcarrier_spacing: types.CellularSubcarrierSpacing
+    power_low: types.PowerBinMin
+    power_high: types.PowerBinMax
+    power_resolution: types.PowerBinStep
+    average_rbs: types.CellularAverageRBs = False
+    average_slots: types.CellularAverageSlots = False
+    guard_bandwidths: types.GuardBandwidths = (0, 0)
+    frame_slots: types.CellularFrame = None
+    special_symbols: types.CellularSpecialSymbols = None
+    cyclic_prefix: types.CellularCyclicPrefix = 'normal'
+    lo_bandstop: Union[types.LOBandstop, None] = None
 
 
 class ChannelPowerTimeSeries(
@@ -313,9 +307,9 @@ class ChannelPowerHistogram(
     kw_only=True,
     frozen=True,
 ):
-    power_low: float
-    power_high: float
-    power_resolution: float
+    power_low: types.PowerBinMin
+    power_high: types.PowerBinMax
+    power_resolution: types.PowerBinStep
 
 
 class CyclicChannelPower(Analysis, kw_only=True, frozen=True):
@@ -343,9 +337,9 @@ class SpectrogramHistogram(
     kw_only=True,
     frozen=True,
 ):
-    power_low: float
-    power_high: float
-    power_resolution: float
+    power_low: types.PowerBinMin
+    power_high: types.PowerBinMax
+    power_resolution: types.PowerBinStep
 
 
 class SpectrogramHistogramRatio(

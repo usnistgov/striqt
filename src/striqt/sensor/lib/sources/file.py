@@ -18,19 +18,21 @@ from ..typing import PS, PC
 if TYPE_CHECKING:
     import numpy as np
     import xarray as xr
-    from ..typing import FileStream
+    from ..typing import Array, FileStream
 else:
     np = util.lazy_import('numpy')
 
 
-@base.bind_schema_types(specs.TDMSSource, specs.FileCapture)
-class TDMSSource(base.VirtualSource[specs.TDMSSource, specs.FileCapture, PS, PC]):
+class TDMSSource(base.VirtualSource[specs.TDMSSource, specs.FileCapture]):
     """a source of IQ waveforms from a TDMS file"""
 
     _file_info: specs.FileAcquisitionInfo
 
     def _connect(self, spec):
-        from nptdms import TdmsFile  # type: ignore
+        try:
+            from nptdms import TdmsFile
+        except ImportError:
+            raise ImportError('install nptdms to open TDMS files')
 
         fd = TdmsFile.read(spec.path)
         header_fd, iq_fd = fd.groups()
@@ -69,18 +71,17 @@ class TDMSSource(base.VirtualSource[specs.TDMSSource, specs.FileCapture, PS, PC]
 
         return (iq * float_dtype(scale)).view(dtype).copy()  # type: ignore
 
-    def acquire(self, overlaps=(0, 0), alias_func=None):
-        iq = super().acquire(overlaps, alias_func)
+    def package_iq(
+        self,
+        iq: 'specs.AcquiredIQ',
+        samples: Array,
+        time_ns: int | None,
+    ) -> 'specs.AcquiredIQ':
         iq.info = self._file_info
         return iq
 
-    def get_resampler(
-        self, capture: specs.FileCapture | None = None
-    ) -> sw.ResamplerDesign:
+    def get_resampler(self, capture: specs.FileCapture) -> sw.ResamplerDesign:
         from ..compute import design_resampler
-
-        if capture is None:
-            capture = self.capture_spec
 
         return design_resampler(
             capture,
@@ -89,14 +90,13 @@ class TDMSSource(base.VirtualSource[specs.TDMSSource, specs.FileCapture, PS, PC]
         )
 
 
-@base.bind_schema_types(specs.MATSource, specs.FileCapture)
-class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture, PS, PC]):
+class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture]):
     """returns IQ waveforms from a .mat file"""
 
     _file_info: specs.FileAcquisitionInfo
     _file_stream: FileStream
 
-    def _connect(self, spec):
+    def __init__(self, spec):
         meta = spec.file_metadata or {}
 
         if not Path(spec.path).exists():
@@ -116,13 +116,18 @@ class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture, PS, PC]):
         self._file_info = specs.FileAcquisitionInfo.from_dict(fields)
         self._file_stream.seek(0)
 
-    def _prepare_capture(self, capture):
+    def get_info(self):
+        return specs.structs.SourceInfo(num_rx_ports=None)
+
+    def get_id(self):  # pyright: ignore
+        return str(self.setup_spec.path)
+
+    def arm(self, capture):
         if self.setup_spec.loop:
             self._file_stream.seek(0)
 
     def close(self):
-        if self.is_open():
-            self._file_stream.close()
+        self._file_stream.close()
 
     def get_waveform(
         self,
@@ -139,57 +144,32 @@ class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture, PS, PC]):
         assert ret.shape[1] == count
         return ret.copy()
 
-    def acquire(self, overlaps=(0, 0), alias_func=None):
-        iq = super().acquire(overlaps, alias_func)
+    def package_iq(
+        self,
+        iq: 'specs.AcquiredIQ',
+        samples: Array,
+        time_ns: int | None,
+    ) -> 'specs.AcquiredIQ':
         iq.info = self._file_info
         return iq
 
-    def get_resampler(
-        self, capture: specs.FileCapture | None = None
-    ) -> sw.ResamplerDesign:
+    def get_resampler(self, capture) -> sw.ResamplerDesign:
         from ..compute import design_resampler
 
-        if capture is None:
-            capture = self.capture_spec
         return design_resampler(
             capture,
             master_clock_rate=self._file_info.backend_sample_rate,
             backend_sample_rate=self._file_info.backend_sample_rate,
         )
 
-    @functools.cached_property
-    def info(self):
-        return specs.structs.BaseSourceInfo(num_rx_ports=None)
 
-    @functools.cached_property
-    def id(self):
-        return str(self.setup_spec.path)
-
-
-@base.bind_schema_types(specs.ZarrIQSource, specs.FileCapture)
-class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture, PS, PC]):
+class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture]):
     """a sources of IQ samples from iq_waveform variables in a zarr store"""
 
     _waveform: 'xr.DataArray'
     _capture_info: specs.FileAcquisitionInfo
 
-    @overload
-    def _read_coord(self, name: str, single: Literal[True] = True) -> Any:
-        pass
-
-    @overload
-    def _read_coord(self, name: str, single: Literal[False] = False) -> tuple[Any, ...]:
-        pass
-
-    def _read_coord(self, name: str, single: bool = True):
-        assert self._waveform is not None
-        result = np.atleast_1d(self._waveform[name])
-        if single:
-            return result[0]
-        else:
-            return tuple(result.tolist())
-
-    def _connect(self, spec):
+    def __init__(self, spec):
         """set the waveform from an xarray.DataArray containing a single capture of IQ samples"""
 
         waveform = sa.io.load(spec.path).iq_waveform
@@ -203,12 +183,19 @@ class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture, PS,
 
         self._waveform = waveform
 
-    @functools.cached_property
-    def info(self):
-        return specs.structs.BaseSourceInfo(num_rx_ports=self._waveform.shape[0])
+    def get_id(self):  # pyright: ignore
+        return str(self.setup_spec.path)
 
-    def _prepare_capture(self, capture):
-        super()._prepare_capture(capture)
+    def get_info(self):  # pyright: ignore
+        return specs.structs.SourceInfo(num_rx_ports=self._waveform.shape[0])
+
+    def get_resampler(self, capture) -> sw.ResamplerDesign:
+        from ..compute import design_resampler
+
+        return design_resampler(capture, self._read_coord('sample_rate'))
+
+    def arm(self, capture):
+        super().arm(capture)
 
         try:
             port = self._read_coord('port', single=False)
@@ -223,15 +210,7 @@ class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture, PS,
             backend_sample_rate=self._read_coord('sample_rate'),
         )
 
-    def get_resampler(self, capture=None) -> sw.ResamplerDesign:
-        from ..compute import design_resampler
-
-        if capture is None:
-            capture = self.capture_spec
-
-        return design_resampler(capture, self._read_coord('sample_rate'))
-
-    def _read_stream(
+    def read(
         self,
         buffers,
         offset,
@@ -241,7 +220,7 @@ class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture, PS,
         on_overflow: specs.types.OnOverflow = 'except',
     ) -> tuple[int, int]:
         assert self._waveform is not None
-        iq, _ = super()._read_stream(
+        iq, _ = super().read(
             buffers, offset, count, timeout_sec=timeout_sec, on_overflow=on_overflow
         )
 
@@ -284,11 +263,27 @@ class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture, PS,
         else:
             return iq.astype(dtype)
 
-    def acquire(self, overlaps=(0, 0), alias_func=None):
-        iq = super().acquire(overlaps, alias_func)
+    def package_iq(
+        self,
+        iq: 'specs.AcquiredIQ',
+        samples: Array,
+        time_ns: int | None,
+    ) -> 'specs.AcquiredIQ':
         iq.info = self._capture_info
         return iq
 
-    @functools.cached_property
-    def id(self):
-        return str(self.setup_spec.path)
+    @overload
+    def _read_coord(self, name: str, single: Literal[True] = True) -> Any:
+        pass
+
+    @overload
+    def _read_coord(self, name: str, single: Literal[False] = False) -> tuple[Any, ...]:
+        pass
+
+    def _read_coord(self, name: str, single: bool = True):
+        assert self._waveform is not None
+        result = np.atleast_1d(self._waveform[name])
+        if single:
+            return result[0]
+        else:
+            return tuple(result.tolist())
