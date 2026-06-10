@@ -201,7 +201,8 @@ def worker_init(
         if f'{{{name}}}' in opts.plotter.filename_fmt:
             continue
         p = Path(opts.plotter.filename_fmt)
-        opts.plotter.filename_fmt = f'{p.stem} {name}={{{name}}}{p.suffix}'
+        plotter_options = opts.plotter.replace(filename_fmt = f'{p.stem} {name}={{{name}}}{p.suffix}')
+        opts = opts.replace(plotter=plotter_options)
 
     global worker_ctx
     worker_ctx = WorkerData(data=dataset, plotter=plotter, opts=opts)
