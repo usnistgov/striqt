@@ -111,9 +111,6 @@ def run(
     for _ in executor.map(worker_plot, *zip(*combos)):
         pass
 
-    if interactive:
-        import striqt.analysis as sa
-
 
 def load_data(zarr_path: str, opts: 'sf.specs.PlotOptions', index=True) -> 'xr.Dataset':
     import striqt.analysis as sa
@@ -161,6 +158,7 @@ def worker_init(
     from warnings import filterwarnings
 
     import striqt.figures as sf
+    import striqt.analysis as sa
     import striqt.sensor as ss
     import matplotlib as mpl
     from matplotlib import pyplot as plt
@@ -202,7 +200,12 @@ def worker_init(
             continue
         p = Path(opts.plotter.filename_fmt)
         plotter_options = opts.plotter.replace(filename_fmt = f'{p.stem} {name}={{{name}}}{p.suffix}')
-        opts = opts.replace(plotter=plotter_options)
+        opts_dict = dict(
+            data=opts.data,
+            variables=sa.specs.helpers.unfreeze(opts.variables),
+            plotter=plotter_options
+        )
+        opts = opts.from_dict(sa.specs.helpers.freeze(opts_dict, 10))
 
     global worker_ctx
     worker_ctx = WorkerData(data=dataset, plotter=plotter, opts=opts)
