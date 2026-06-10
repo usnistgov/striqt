@@ -39,6 +39,9 @@ def _validate_multichannel(port, gain):
             raise ValueError('gain, when specified as a tuple, must match port count')
 
 
+# %% Capture specs
+
+
 class SensorCapture(Capture, frozen=True, kw_only=True):
     """Capture specification for a generic waveform with resampling support"""
 
@@ -85,6 +88,9 @@ class FileCapture(SensorCapture, frozen=True, kw_only=True):
         super().__post_init__()
         if self.backend_sample_rate is not None:
             raise TypeError('backend_sample_rate is fixed by the file source')
+
+
+# %% Source specs
 
 
 class Source(SpecBase, frozen=True, kw_only=True):
@@ -177,9 +183,42 @@ class ZarrIQSource(Source, frozen=True, kw_only=True):
     transport_dtype: ClassVar[types.TransportDType] = 'complex64'
 
 
+# %% Sweep metadata - not used in sweep control flow
+
+
 class Description(SpecBase, frozen=True, kw_only=True):
     summary: Optional[str] = None
     version: str = 'unversioned'
+
+
+class SharedPlotOptions(msgspec.Struct, kw_only=True, forbid_unknown_fields=True):
+    # further validation in striqt.figures.specs subclass
+    style: str | None = None
+    col: str | None = 'port'
+    row: str | None = None
+    col_label_format: str = 'Port {port}'
+    row_label_format: str | None = None
+    col_wrap: int | None = None
+    suptitle_fmt: str = '{start_time}'
+    filename_fmt: str = '{name} {start_time}.svg'
+
+
+class DataOptions(msgspec.Struct, kw_only=True, forbid_unknown_fields=True):
+    # further validation in striqt.figures.specs subclass
+    groupby_dims: tuple[str, ...] = ()
+    sweep_index: int
+    query: str | None = None
+    select: dict[str, Any] = msgspec.field(default_factory=dict)
+
+
+class PlotOptions(msgspec.Struct, kw_only=True, forbid_unknown_fields=True):
+    # further validation in striqt.figures.specs subclass
+    data: DataOptions
+    plotter: SharedPlotOptions
+    variables: dict[str, dict[str, Any]] = msgspec.field(default_factory=dict)
+
+
+# %% Sequencing specs
 
 
 class LoopBase(SpecBase, tag=str.lower, tag_field='kind', frozen=True, kw_only=True):
@@ -246,6 +285,25 @@ class FrequencyBinRange(LoopBase, frozen=True, kw_only=True):
 LoopSpec = Union[Repeat, List, Range, FrequencyBinRange]
 
 
+# %% Peripheral specs
+class Peripherals(SpecBase, frozen=True, kw_only=True):
+    pass
+
+
+class NoPeripherals(Peripherals, frozen=True, kw_only=True):
+    pass
+
+
+class ManualYFactorPeripheral(Peripherals, frozen=True, kw_only=True):
+    enr: types.ENR
+    ambient_temperature: types.AmbientTemperature
+
+
+# %% Top-level Sweep specifications
+BundledAnalysis = sa.registry.tospec()
+BundledTriggers = sa.registry.signal_trigger.to_spec()
+
+
 class Sink(SpecBase, frozen=True, kw_only=True):
     path: str = '{yaml_name}-{start_time}'
     log_path: Optional[str] = None
@@ -262,23 +320,6 @@ class Extension(SpecBase, frozen=True, kw_only=True):
     sink: Union[types.SinkClass, None] = None
     import_path: Optional[types.ExtensionPath] = None
     import_name: types.ModuleName = None
-
-
-class Peripherals(SpecBase, frozen=True, kw_only=True):
-    pass
-
-
-class NoPeripherals(Peripherals, frozen=True, kw_only=True):
-    pass
-
-
-class ManualYFactorPeripheral(Peripherals, frozen=True, kw_only=True):
-    enr: types.ENR
-    ambient_temperature: types.AmbientTemperature
-
-
-BundledAnalysis = sa.registry.tospec()
-BundledTriggers = sa.registry.signal_trigger.to_spec()
 
 
 class SweepOptions(SpecBase, frozen=True, kw_only=True):
@@ -360,17 +401,26 @@ class Sweep(SpecBase, Generic[SS, SP, SC], frozen=True, kw_only=True):
     #
     # sensor_binding: str
 
+    # metadata
+    description: Description = Description()
+    plot_hint: Union[PlotOptions, None] = None
+
+    # acquisition and sequencing
     source: SS
     captures: tuple[SC, ...] = tuple()
     loops: tuple[LoopSpec, ...] = ()
-    analysis: BundledAnalysis = BundledAnalysis()  # pyright: ignore
-    description: Description = Description()
     adjust_captures: AdjustCapturesType = msgspec.field(default_factory=dict)
-    extensions: Extension = Extension()
-    sink: Sink = Sink()
     peripherals: SP = cast(SP, Peripherals())
 
+    # analysis
+    analysis: BundledAnalysis = BundledAnalysis()  # pyright: ignore
+
+    # misc
+    extensions: Extension = Extension()
+    sink: Sink = Sink()
     options: SweepOptions = SweepOptions(reuse_iq=False, loop_only_nyquist=False)
+
+    # to be defined only when subclassing
     schema: ClassVar[Any] = None
     sensor: ClassVar[Any] = None
 
@@ -424,6 +474,7 @@ class CalibrationSweep(
             raise ValueError('source.calibration must be None for a calibration sweep')
 
 
+# %% Non-Sweep specs
 # we really only need a dataclass for internal message-passing.
 # instead, use msgspec.Struct as dataclass here in order to support
 # kw_only=True for python < 3.10.
