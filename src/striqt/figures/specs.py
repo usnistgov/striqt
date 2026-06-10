@@ -42,6 +42,9 @@ class DataOptions(ss.specs.DataOptions, kw_only=True, forbid_unknown_fields=True
 
 
 class PlotOptions(ss.specs.PlotOptions, kw_only=True, forbid_unknown_fields=True):
+    data: DataOptions
+    plotter: SharedPlotOptions
+
     def __post_init__(self):
         from .data_vars import _data_plots
         import inspect

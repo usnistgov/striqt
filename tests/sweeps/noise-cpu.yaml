@@ -172,3 +172,41 @@ analysis:
 
 sink:
   path: "outputs/{spec_name}-{start_time}.zarr.zip"
+
+plot_hint:
+  data:
+    # query: "switch_input == 0"
+    sweep_index: -1
+    # groupby_dims: []
+    select:
+      spectrogram_power_bin: slice(-130, -50)
+      spectrogram_time: slice(0, 20e-3)
+      channel_power_bin: slice(-100, -15)
+
+  plotter:
+    col: 'port'
+    col_label_format: '{antenna_name} Antenna ({antenna_polarization} Polarization)'
+    suptitle_fmt: '{site_name} at {channel_name} ({start_time})'
+    filename_fmt: '{name} {channel_name}.svg'
+    style: 'striqt.figures.presentation_full_width'
+    # row: 'channel_name'
+    # row_label_format: '{channel_name}' 
+
+  variables:
+    spectrogram: {}    
+    cellular_5g_pss_correlation:
+      dB: True
+    cellular_5g_ssb_spectrogram: {}
+    # cellular_cyclic_autocorrelation:
+    #   dB: True
+    cellular_resource_power_histogram:
+      yscale: 'log'
+    channel_power_histogram:
+      yscale: 'log'
+    channel_power_time_series: {}
+    cyclic_channel_power: {}
+    power_spectral_density: {}
+    spectrogram_histogram:
+      yscale: 'log'
+    spectrogram_ratio_histogram:
+      yscale: 'log'

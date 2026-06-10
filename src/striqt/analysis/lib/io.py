@@ -151,12 +151,15 @@ def dump(
 
 
 def load(path: str | Path, chunks: ChunksSize = None, **kwargs) -> 'xr.Dataset':
-    """load a dataset or data array.
+    """load and return a dataset or data array.
 
     Args:
-        path: location of the data store
+        path: location of the data store, potentially an fsspec string
         chunks: None to load the file without dask, or 'auto' to return a dask
             array with automatically selected chunk sizes
+        kwargs: Additional arguments passed into `xr.open_dataset`
+    Returns:
+        The opened dataset object.
     """
 
     store = open_store(path, mode='r')
@@ -167,6 +170,14 @@ def load(path: str | Path, chunks: ChunksSize = None, **kwargs) -> 'xr.Dataset':
         return result
     else:
         return result.unify_chunks()
+
+
+def load_attrs(path: str | Path) -> dict[str, typing.Any]:
+    """load and return the attrs metadata dictionary from the given zarr store"""
+
+    with open_store(path, mode='r') as store:
+        array = zarr.open(store)
+        return array.attrs.asdict()
 
 
 def decode_from_yaml_file(

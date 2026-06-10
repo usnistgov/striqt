@@ -22,16 +22,14 @@ else:
 worker_ctx: WorkerData | None = None
 
 
-def _listify(values):
-    if isinstance(values, (tuple, list)):
-        return values
-    else:
-        return [values]
-
-
 @click.command('plot signal analysis from .zarr or .zarr.zip files')
 @click.argument('zarr_path', type=click.Path(exists=True, dir_okay=True))
-@click.argument('yaml_path', type=click.Path(exists=True, dir_okay=False))
+@click.argument(
+    'yaml_path',
+    type=click.Path(exists=True, dir_okay=False),
+    required=False,
+    default=None,
+)
 @click.option(
     '--interactive/',
     '-i',
@@ -47,13 +45,20 @@ def _listify(values):
     default=False,
     help="don't save the resulting plots",
 )
-def run(zarr_path: str, yaml_path: str, interactive=False, no_save=False):
+def cli(zarr_path: str, yaml_path: str, interactive=False, no_save=False):
+    run(**locals())
+
+
+def run(zarr_path: str, yaml_path: str | None, interactive=False, no_save=False):
     # yaml first, since it fails fastest
     import msgspec
     from striqt import figures as sf
 
-    yaml_text = open(yaml_path, 'rb').read()
-    opts = msgspec.yaml.decode(yaml_text, type=sf.specs.PlotOptions, strict=False)
+    if yaml_path is None:
+        opts = None
+    else:
+        yaml_text = open(yaml_path, 'rb').read()
+        opts = msgspec.yaml.decode(yaml_text, type=sf.specs.PlotOptions, strict=False)
 
     # spawn processes
     from concurrent import futures
@@ -98,7 +103,9 @@ def run(zarr_path: str, yaml_path: str, interactive=False, no_save=False):
         sa.util.blocking_input('press enter to quit')
 
 
-def load_data(zarr_path: str, opts: 'sf.specs.PlotOptions', index=True) -> 'xr.Dataset':
+def load_data(
+    zarr_path: str, opts: 'sf.specs.PlotOptions|None', index=True
+) -> 'xr.Dataset':
     import striqt.analysis as sa
     import striqt.figures as sf
     import xarray as xr
@@ -147,6 +154,7 @@ def worker_init(zarr_path, opts: 'sf.specs.PlotOptions', interactive: bool, no_s
         mpl.use('agg')
     else:
         plt.ion()
+
     if opts.plotter.style is not None:
         plt.style.use(opts.plotter.style)
 
@@ -178,6 +186,13 @@ def worker_init(zarr_path, opts: 'sf.specs.PlotOptions', interactive: bool, no_s
     worker_ctx = WorkerData(data=dataset, plotter=plotter, opts=opts)
 
 
+def _listify(values):
+    if isinstance(values, (tuple, list)):
+        return values
+    else:
+        return [values]
+
+
 def worker_plot(variable: str, sel: dict[str, typing.Any]):
     import striqt.figures as sf
 
@@ -192,4 +207,4 @@ def worker_plot(variable: str, sel: dict[str, typing.Any]):
 
 
 if __name__ == '__main__':
-    run()  # pyright: ignore
+    cli()  # pyright: ignore

@@ -191,7 +191,9 @@ class Description(SpecBase, frozen=True, kw_only=True):
     version: str = 'unversioned'
 
 
-class SharedPlotOptions(msgspec.Struct, kw_only=True, forbid_unknown_fields=True):
+class SharedPlotOptions(
+    SpecBase, frozen=True, kw_only=True, forbid_unknown_fields=True
+):
     # further validation in striqt.figures.specs subclass
     style: str | None = None
     col: str | None = 'port'
@@ -203,7 +205,7 @@ class SharedPlotOptions(msgspec.Struct, kw_only=True, forbid_unknown_fields=True
     filename_fmt: str = '{name} {start_time}.svg'
 
 
-class DataOptions(msgspec.Struct, kw_only=True, forbid_unknown_fields=True):
+class DataOptions(SpecBase, frozen=True, kw_only=True, forbid_unknown_fields=True):
     # further validation in striqt.figures.specs subclass
     groupby_dims: tuple[str, ...] = ()
     sweep_index: int
@@ -211,7 +213,7 @@ class DataOptions(msgspec.Struct, kw_only=True, forbid_unknown_fields=True):
     select: dict[str, Any] = msgspec.field(default_factory=dict)
 
 
-class PlotOptions(msgspec.Struct, kw_only=True, forbid_unknown_fields=True):
+class PlotOptions(SpecBase, frozen=True, kw_only=True, forbid_unknown_fields=True):
     # further validation in striqt.figures.specs subclass
     data: DataOptions
     plotter: SharedPlotOptions
