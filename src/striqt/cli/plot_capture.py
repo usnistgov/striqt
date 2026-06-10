@@ -33,24 +33,28 @@ worker_ctx: WorkerData | None = None
 @click.option(
     '--interactive/',
     '-i',
-    is_flag=True,
+    type=click.Choice([None, 'sixel', 'kitty']),
+    default=None,
     show_default=True,
-    default=False,
     help='',
 )
 @click.option(
-    '--no-save',
+    '--no-save/',
+    '-n',
     is_flag=True,
     show_default=True,
     default=False,
     help="don't save the resulting plots",
 )
-def cli(zarr_path: str, yaml_path: str, interactive=False, no_save=False):
+def cli(zarr_path: str, yaml_path: str, interactive=None, no_save=False):
     run(**locals())
 
 
-def run(zarr_path: str, yaml_path: str | None, interactive=False, no_save=False):
+def run(
+    zarr_path: str, yaml_path: str | None, interactive: str | None = None, no_save=False
+):
     import msgspec
+    import multiprocessing
     from striqt import figures as sf
 
     if yaml_path is None:
@@ -77,10 +81,13 @@ def run(zarr_path: str, yaml_path: str | None, interactive=False, no_save=False)
         ncores = os.cpu_count() or 1
 
     assert ncores is not None
+    manager = multiprocessing.Manager()
+    _notify_term_graphics(interactive)
+
     executor = futures.ProcessPoolExecutor(
         max(1, ncores - 1),
         initializer=worker_init,
-        initargs=(zarr_path, opts, interactive, no_save),
+        initargs=(zarr_path, opts, interactive, no_save, manager.Lock()),
     )
 
     # then the heavier data
@@ -106,8 +113,6 @@ def run(zarr_path: str, yaml_path: str | None, interactive=False, no_save=False)
 
     if interactive:
         import striqt.analysis as sa
-
-        sa.util.blocking_input('press enter to quit')
 
 
 def load_data(zarr_path: str, opts: 'sf.specs.PlotOptions', index=True) -> 'xr.Dataset':
@@ -145,7 +150,13 @@ def load_data(zarr_path: str, opts: 'sf.specs.PlotOptions', index=True) -> 'xr.D
     return dataset
 
 
-def worker_init(zarr_path, opts: 'sf.specs.PlotOptions', interactive: bool, no_save):
+def worker_init(
+    zarr_path,
+    opts: 'sf.specs.PlotOptions',
+    interactive: str | None,
+    no_save: bool,
+    lock,
+):
     from pathlib import Path
     from warnings import filterwarnings
 
@@ -154,14 +165,19 @@ def worker_init(zarr_path, opts: 'sf.specs.PlotOptions', interactive: bool, no_s
     import matplotlib as mpl
     from matplotlib import pyplot as plt
 
-    if not interactive:
-        plt.ioff()
+    plt.ioff()
+    if interactive is None:
         mpl.use('agg')
+        extra_style = []
+    elif interactive == 'sixel':
+        mpl.use('module://matplotlib-backend-sixel')
+        extra_style = ['striqt.figures.terminal']
     else:
-        plt.ion()
+        mpl.use('kitcat')
+        extra_style = ['striqt.figures.terminal']
 
     if opts.plotter.style is not None:
-        plt.style.use(opts.plotter.style)
+        plt.style.use([opts.plotter.style] + extra_style)
 
     filterwarnings('ignore', r'.*figure layout has changed.*', UserWarning)
     filterwarnings('ignore', '.*artists with labels.*', UserWarning)
@@ -176,7 +192,7 @@ def worker_init(zarr_path, opts: 'sf.specs.PlotOptions', interactive: bool, no_s
         output_path.mkdir(exist_ok=True)
 
     plotter = sf.backend.PlotBackend(
-        opts.plotter, output_dir=output_path, interactive=interactive
+        opts.plotter, output_dir=output_path, interactive=interactive, lock=lock
     )
 
     for name in ss.lib.compute.get_looped_coords(dataset):
@@ -209,6 +225,23 @@ def worker_plot(variable: str, sel: dict[str, typing.Any]):
     func = sf.data_vars._data_plots[variable]
 
     return func(ctx['data'].sel(**sel), ctx['plotter'], **kwargs)
+
+
+def _notify_term_graphics(interactive: str | None):
+    if interactive is None:
+        pass
+    elif interactive == 'sixel':
+        print(
+            "🪧 if plots don't appear in your terminal, ensure your terminal "
+            'sixel graphics protocol (wezterm, tabby, ...) '
+            'and that you are disconnected from screen or tmux'
+        )
+    else:
+        print(
+            "🪧 if plots don't appear in your terminal, ensure your terminal "
+            'supports the kitty graphics protocol (wezterm, iTerm2, ...) '
+            'and that you are disconnected from screen or tmux'
+        )
 
 
 if __name__ == '__main__':
