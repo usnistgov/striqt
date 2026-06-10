@@ -419,7 +419,6 @@ class PathFormatter:
         self.id_timeout = id_timeout
 
     def __call__(self, path: str | Path) -> str:
-        path = Path(path).resolve()
         path_fields = get_format_fields(str(path))
         if len(path_fields) == 0:
             return str(path)

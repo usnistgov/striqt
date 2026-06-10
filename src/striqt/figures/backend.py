@@ -3,6 +3,8 @@ import functools
 from pathlib import Path
 import typing
 
+from multiprocessing import RLock
+
 from . import specs, util
 
 import striqt.analysis as sa
@@ -130,17 +132,20 @@ def plot_cyclic_channel_power(
 
 class PlotBackend:
     opts: specs.SharedPlotOptions
+    lock: RLock
 
     def __init__(
         self,
         opts: specs.SharedPlotOptions,
         output_dir: Path | None,
         *,
-        interactive: bool = False,
+        interactive: None | str = None,
+        lock: RLock,
     ):
         self.opts = opts
         self.output_dir = output_dir
         self.interactive = interactive
+        self.lock = lock
 
         if self.output_dir is not None:
             self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -302,8 +307,10 @@ class PlotBackend:
         else:
             path = None
 
-        if not self.interactive:
-            plt.close(grid.fig)
+        if self.interactive:
+            with self.lock:
+                grid.fig.show()
+                plt.close(grid.fig)
 
         return path
 

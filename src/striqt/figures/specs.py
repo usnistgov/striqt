@@ -1,29 +1,18 @@
 from __future__ import annotations as __
 
-import ast
 import msgspec
 import typing
 import string
 import functools
+import striqt.sensor as ss
 
 
-@functools.lru_cache()
-def get_format_fields(fmt, exclude=()):
-    all_exclude = exclude + (None,)
-    return [l[1] for l in string.Formatter().parse(fmt) if l[1] not in all_exclude]
-
-
-class SharedPlotOptions(msgspec.Struct, kw_only=True, forbid_unknown_fields=True):
-    style: str | None = None
-    col: str | None = 'port'
-    row: str | None = None
-    col_label_format: str = 'Port {port}'
-    row_label_format: str | None = None
-    col_wrap: int | None = None
-    suptitle_fmt: str = '{start_time}'
-    filename_fmt: str = '{name} {start_time}.svg'
-
+class SharedPlotOptions(
+    ss.specs.SharedPlotOptions, frozen=True, kw_only=True, forbid_unknown_fields=True
+):
     def __post_init__(self):
+        from .util import get_format_fields
+
         if self.row is not None:
             assert self.row != self.col
             assert self.row not in get_format_fields(self.filename_fmt)
@@ -41,22 +30,22 @@ class SharedPlotOptions(msgspec.Struct, kw_only=True, forbid_unknown_fields=True
         assert self.col
 
 
-class DataOptions(msgspec.Struct, kw_only=True, forbid_unknown_fields=True):
-    groupby_dims: tuple[str, ...] = ()
-    sweep_index: int
-    query: str | None = None
-    select: dict[str, typing.Any] = msgspec.field(default_factory=dict)
-
+class DataOptions(
+    ss.specs.DataOptions, frozen=True, kw_only=True, forbid_unknown_fields=True
+):
     def __post_init__(self):
+        from .util import literal_eval
+
         for k, v in list(self.select.items()):
             if isinstance(v, str):
-                self.select[k] = ast.literal_eval(v)
+                self.select[k] = literal_eval(v)
 
 
-class PlotOptions(msgspec.Struct, kw_only=True, forbid_unknown_fields=True):
+class PlotOptions(
+    ss.specs.PlotOptions, frozen=True, kw_only=True, forbid_unknown_fields=True
+):
     data: DataOptions
     plotter: SharedPlotOptions
-    variables: dict[str, dict[str, typing.Any]] = msgspec.field(default_factory=dict)
 
     def __post_init__(self):
         from .data_vars import _data_plots
