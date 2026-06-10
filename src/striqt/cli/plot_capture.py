@@ -55,7 +55,13 @@ def run(zarr_path: str, yaml_path: str | None, interactive=False, no_save=False)
     from striqt import figures as sf
 
     if yaml_path is None:
-        opts = None
+        import striqt.analysis as sa
+
+        attrs = sa.io.load_attrs(zarr_path)
+        plot_hint = attrs.get('plot_hint', None)
+        if plot_hint is None:
+            raise IOError('no plot hint is contained in the dataset! specify YAML_PATH')
+        opts = sf.specs.PlotOptions.from_dict(plot_hint)
     else:
         yaml_text = open(yaml_path, 'rb').read()
         opts = msgspec.yaml.decode(yaml_text, type=sf.specs.PlotOptions, strict=False)
@@ -103,9 +109,7 @@ def run(zarr_path: str, yaml_path: str | None, interactive=False, no_save=False)
         sa.util.blocking_input('press enter to quit')
 
 
-def load_data(
-    zarr_path: str, opts: 'sf.specs.PlotOptions|None', index=True
-) -> 'xr.Dataset':
+def load_data(zarr_path: str, opts: 'sf.specs.PlotOptions', index=True) -> 'xr.Dataset':
     import striqt.analysis as sa
     import striqt.figures as sf
     import xarray as xr

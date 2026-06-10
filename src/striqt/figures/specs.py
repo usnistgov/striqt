@@ -1,6 +1,5 @@
 from __future__ import annotations as __
 
-import ast
 import msgspec
 import typing
 import string
@@ -8,14 +7,11 @@ import functools
 import striqt.sensor as ss
 
 
-# Add validators to the stubs defined in striqt.sensor.specs
-
-
 class SharedPlotOptions(
-    ss.specs.SharedPlotOptions, kw_only=True, forbid_unknown_fields=True
+    ss.specs.SharedPlotOptions, frozen=True, kw_only=True, forbid_unknown_fields=True
 ):
     def __post_init__(self):
-        from striqt.sensor.specs.helpers import get_format_fields
+        from .util import get_format_fields
 
         if self.row is not None:
             assert self.row != self.col
@@ -34,14 +30,20 @@ class SharedPlotOptions(
         assert self.col
 
 
-class DataOptions(ss.specs.DataOptions, kw_only=True, forbid_unknown_fields=True):
+class DataOptions(
+    ss.specs.DataOptions, frozen=True, kw_only=True, forbid_unknown_fields=True
+):
     def __post_init__(self):
+        from .util import literal_eval
+
         for k, v in list(self.select.items()):
             if isinstance(v, str):
-                self.select[k] = ast.literal_eval(v)
+                self.select[k] = literal_eval(v)
 
 
-class PlotOptions(ss.specs.PlotOptions, kw_only=True, forbid_unknown_fields=True):
+class PlotOptions(
+    ss.specs.PlotOptions, frozen=True, kw_only=True, forbid_unknown_fields=True
+):
     data: DataOptions
     plotter: SharedPlotOptions
 
