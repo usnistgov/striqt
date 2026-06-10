@@ -50,7 +50,6 @@ def cli(zarr_path: str, yaml_path: str, interactive=False, no_save=False):
 
 
 def run(zarr_path: str, yaml_path: str | None, interactive=False, no_save=False):
-    # yaml first, since it fails fastest
     import msgspec
     from striqt import figures as sf
 
@@ -60,7 +59,7 @@ def run(zarr_path: str, yaml_path: str | None, interactive=False, no_save=False)
         attrs = sa.io.load_attrs(zarr_path)
         plot_hint = attrs.get('plot_hint', None)
         if plot_hint is None:
-            raise IOError('no plot hint is contained in the dataset! specify YAML_PATH')
+            raise click.ClickException('this dataset has no plot_hint - specify an external plot config via YAML_PATH')
         opts = sf.specs.PlotOptions.from_dict(plot_hint)
     else:
         yaml_text = open(yaml_path, 'rb').read()
