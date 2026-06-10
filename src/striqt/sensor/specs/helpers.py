@@ -412,10 +412,14 @@ class PathFormatter:
         id_timeout: float = 5,
     ):
         self.sweep_spec = sweep
-        self.spec_path = spec_path
+        if spec_path is None:
+            self.spec_path = spec_path
+        else:
+            self.spec_path = Path(spec_path).resolve()
         self.id_timeout = id_timeout
 
     def __call__(self, path: str | Path) -> str:
+        path = Path(path).resolve()
         path_fields = get_format_fields(str(path))
         if len(path_fields) == 0:
             return str(path)
