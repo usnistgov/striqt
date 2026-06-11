@@ -148,7 +148,7 @@ class PlotBackend:
         opts: specs.SharedPlotOptions,
         output_dir: Path | None,
         *,
-        interactive: None | str = None,
+        interactive: None | bool | str = None,
         lock: RLock|None = None,
     ):
         self.opts = opts
@@ -320,7 +320,9 @@ class PlotBackend:
         else:
             path = None
 
-        if self.interactive:
+        if self.interactive is True:
+            plt.ion()
+        elif self.interactive:
             with self.lock:
                 grid.fig.show()
                 plt.close(grid.fig)
