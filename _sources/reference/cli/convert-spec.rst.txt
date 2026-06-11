@@ -1,0 +1,6 @@
+convert-spec
+=========================
+
+.. click:: striqt.cli.convert_spec:cli
+   :prog: convert-spec
+   :nested: full

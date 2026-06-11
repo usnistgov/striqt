@@ -1,0 +1,6 @@
+rechunk-zarr
+=========================
+
+.. click:: striqt.cli.rechunk_zarr:cli
+   :prog: rechunk-zarr
+   :nested: full

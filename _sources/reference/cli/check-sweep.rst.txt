@@ -1,0 +1,6 @@
+sensor-sweep
+=========================
+
+.. click:: striqt.cli.check_sweep:cli
+   :prog: check-sweep
+   :nested: full

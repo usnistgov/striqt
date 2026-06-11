@@ -5,4 +5,5 @@ Contents
    :maxdepth: 3
 
    guide/01_introduction.md
-   api_reference.rst
+   reference/cli.rst
+   reference/api.rst

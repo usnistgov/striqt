@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>striqt.analysis.specs &#8212; striqt</title>
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+    <link rel="stylesheet" type="text/css" href="../../_static/pyramid.css?v=63f5dc7c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css?v=8cd3d715" />
+    <script src="../../_static/documentation_options.js?v=486e5634"></script>
+    <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="striqt.sensor" href="striqt.sensor.html" />
+    <link rel="prev" title="striqt.analysis" href="striqt.analysis.html" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Neuton&amp;subset=latin" type="text/css" media="screen" charset="utf-8" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Nobile:regular,italic,bold,bolditalic&amp;subset=latin" type="text/css" media="screen" charset="utf-8" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+  </head><body>
+<header class="nist-header">
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>NIST Pages Template</title>
+  <meta name="viewport" content="width=device-width">
+  <meta name="description" content="striqt">
+  <link rel="canonical" href="../../">
+  <link rel="shortcut icon" href="/favicon.ico">
+
+  <!-- Google Analytics -->
+  <!--<script type="text/javascript" id="_fed_an_js_tag" src="http://www.nist.gov/js/federated-analytics.all.min.js?agency=NIST&subagency=mml&pua=UA-66610693-1&yt=true&exts=ppsx,pps,f90,sch,rtf,wrl,txz,m1v,xlsm,msi,xsd,f,tif,eps,mpg,xml,pl,xlt,c"></script> -->
+  <!-- DAP Analytics -->
+  <script type="text/javascript" id="_fed_an_ua_tag" src="https://dap.digitalgov.gov/Universal-Federated-Analytics-Min.js?agency=DOC&subagefncy=NIST&pua=UA-66610693-1&yt=true&exts=ppsx,pps,f90,sch,rtf,wrl,txz,m1v,xlsm,msi,xsd,f,tif,eps,mpg,xml,pl,xlt,c"></script>
+
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="../..//_static/NISTStyle.css">
+  <link rel="stylesheet" href="../..//_static/NISTPages.css">
+
+  <h1>
+    <a class="nist-logo" target="_blank" href="http://www.nist.gov/" title="Go to nist.gov">National Institute of Standards and Technology</a>
+  </h1>
+  <div class="nist-links">
+    <a class="nist-links-button" target="_blank" href="http://www.nist.gov">NIST Website</a>
+    <a class="nist-links-button mobile-hide" target="_blank" href="http://www.nist.gov/public_affairs/nandyou.cfm">About NIST</a>
+    <a class="nist-links-button mobile-hide" target="_blank" href="https://github.com/usnistgov">usnistgov on GitHub</a>
+  </div>
+  
+  <!-- HTML5 shim and Respond.js IE8 support of HTML5 elements and media queries -->
+  <!--[if lt IE 9]>
+  <script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
+    <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+  <script src="https://oss.maxcdn.com/libs/respond.js/1.4.2/respond.min.js"></script>
+  <![endif]-->
+</header>
+
+    <div class="related" role="navigation" aria-label="Related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a></li>
+        <li class="right" >
+          <a href="striqt.sensor.html" title="striqt.sensor"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="striqt.analysis.html" title="striqt.analysis"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../index.html">striqt</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../api.html" accesskey="U">API Reference</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">striqt.analysis.specs</a></li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <section id="module-striqt.analysis.specs">
+<span id="striqt-analysis-specs"></span><h1>striqt.analysis.specs<a class="headerlink" href="#module-striqt.analysis.specs" title="Link to this heading">¶</a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.analysis.specs.Analysis">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.analysis.specs.</span></span><span class="sig-name descname"><span class="pre">Analysis</span></span><a class="headerlink" href="#striqt.analysis.specs.Analysis" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#striqt.analysis.specs.SpecBase" title="striqt.analysis.specs.SpecBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">SpecBase</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Analysis result of type <cite>(xarray.DataArray if as_xarray else type(iq))</cite></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>iq</strong> (<em>numpy.ndarray</em><em> or </em><em>cupy.ndarray</em>) – the M-channel input waveform of shape (M,N)</p></li>
+<li><p><strong>capture</strong></p></li>
+<li><p><strong>as_xarray</strong> (<em>bool</em>) – True to return xarray.DataArray or False to match type(iq)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.analysis.specs.AnalysisFilter">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.analysis.specs.</span></span><span class="sig-name descname"><span class="pre">AnalysisFilter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">nfft</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">8192</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">window</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'hamming'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nfft_out</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.analysis.specs.AnalysisFilter" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#striqt.analysis.specs.SpecBase" title="striqt.analysis.specs.SpecBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">SpecBase</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>nfft</strong> (<em>int</em>)</p></li>
+<li><p><strong>window</strong> (<em>str</em><em> | </em><em>tuple</em><em>[</em><em>str</em><em>, </em><em>float</em><em>]</em>) – window function specification following <cite>scipy.signal.get_window</cite></p></li>
+<li><p><strong>nfft_out</strong> (<em>int</em><em> | </em><em>None</em>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.analysis.specs.AnalysisGroup">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.analysis.specs.</span></span><span class="sig-name descname"><span class="pre">AnalysisGroup</span></span><a class="headerlink" href="#striqt.analysis.specs.AnalysisGroup" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#striqt.analysis.specs.SpecBase" title="striqt.analysis.specs.SpecBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">SpecBase</span></code></a></p>
+<p>base class for a defining set of Analysis specs</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.analysis.specs.Capture">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.analysis.specs.</span></span><span class="sig-name descname"><span class="pre">Capture</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">duration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">15360000.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">analysis_bandwidth</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">inf</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.analysis.specs.Capture" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#striqt.analysis.specs.SpecBase" title="striqt.analysis.specs.SpecBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">SpecBase</span></code></a></p>
+<p>bare minimum information about an IQ acquisition</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>duration</strong> (<em>float</em>) – Duration of the analysis waveform <em>(Constraints: units: s)</em></p></li>
+<li><p><strong>sample_rate</strong> (<em>float</em>) – Analysis sample rate <em>(Constraints: units: S/s)</em></p></li>
+<li><p><strong>analysis_bandwidth</strong> (<em>float</em>) – Analysis bandwidth <em>(Constraints: units: Hz)</em></p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.analysis.specs.Cellular5GNPSSSync">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.analysis.specs.</span></span><span class="sig-name descname"><span class="pre">Cellular5GNPSSSync</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">subcarrier_spacing</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">7680000.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">discovery_periodicity</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.02</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frequency_offset</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shared_spectrum</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">delay</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">symbol_indexes</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'auto'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_lag_symbols</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">window_fill</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">per_port</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_beams</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.analysis.specs.Cellular5GNPSSSync" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">_Cellular5GNRSSBSync</span></code></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>subcarrier_spacing</strong> (<em>float</em>) – Subcarrier spacing (15e3, 30e3, 60e3, etc) <em>(Constraints: units: Hz)</em></p></li>
+<li><p><strong>sample_rate</strong> (<em>float</em>)</p></li>
+<li><p><strong>discovery_periodicity</strong> (<em>float</em>)</p></li>
+<li><p><strong>frequency_offset</strong> (<em>float</em>)</p></li>
+<li><p><strong>shared_spectrum</strong> (<em>bool</em>)</p></li>
+<li><p><strong>delay</strong> (<em>float</em>)</p></li>
+<li><p><strong>symbol_indexes</strong> (<em>one</em><em> of </em><em>[</em><em>'auto'</em><em>, </em><em>'a'</em><em>, </em><em>'b'</em><em>, </em><em>'c'</em><em>, </em><em>'d'</em><em>, </em><em>'e'</em><em>, </em><em>'f'</em><em>, </em><em>'g'</em><em>] </em><em>| </em><em>tuple</em><em>[</em><em>int</em><em>, </em><em>...</em><em>]</em>) – index locations in the SSB, or a cell search case from 3GPP TS 38.213 Sec. 4.1)</p></li>
+<li><p><strong>max_lag_symbols</strong> (<em>int</em><em> | </em><em>None</em>) – limit the number of symbols of lag in the 5G sync correlator <em>(Constraints: &gt;= 1, &lt;= 6)</em></p></li>
+<li><p><strong>window_fill</strong> (<em>float</em>) – Fraction of a symbol to fill with weighting function <em>(Constraints: &gt; 0, &lt;= 1)</em></p></li>
+<li><p><strong>per_port</strong> (<em>bool</em>) – whether to evaluate signal synchronization separately on each port</p></li>
+<li><p><strong>max_beams</strong> (<em>int</em><em> | </em><em>None</em>) – limit the beam count in 5G sync evaluation <em>(Constraints: &gt; 0)</em></p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.analysis.specs.Cellular5GNRPSSCorrelator">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.analysis.specs.</span></span><span class="sig-name descname"><span class="pre">Cellular5GNRPSSCorrelator</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">subcarrier_spacing</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">7680000.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">discovery_periodicity</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.02</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frequency_offset</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shared_spectrum</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">delay</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">symbol_indexes</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'auto'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_lag_symbols</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_block_count</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.analysis.specs.Cellular5GNRPSSCorrelator" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">_Cellular5GNRSSBCorrelator</span></code></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>subcarrier_spacing</strong> (<em>float</em>) – Subcarrier spacing (15e3, 30e3, 60e3, etc) <em>(Constraints: units: Hz)</em></p></li>
+<li><p><strong>sample_rate</strong> (<em>float</em>)</p></li>
+<li><p><strong>discovery_periodicity</strong> (<em>float</em>)</p></li>
+<li><p><strong>frequency_offset</strong> (<em>float</em>)</p></li>
+<li><p><strong>shared_spectrum</strong> (<em>bool</em>)</p></li>
+<li><p><strong>delay</strong> (<em>float</em>)</p></li>
+<li><p><strong>symbol_indexes</strong> (<em>one</em><em> of </em><em>[</em><em>'auto'</em><em>, </em><em>'a'</em><em>, </em><em>'b'</em><em>, </em><em>'c'</em><em>, </em><em>'d'</em><em>, </em><em>'e'</em><em>, </em><em>'f'</em><em>, </em><em>'g'</em><em>] </em><em>| </em><em>tuple</em><em>[</em><em>int</em><em>, </em><em>...</em><em>]</em>) – index locations in the SSB, or a cell search case from 3GPP TS 38.213 Sec. 4.1)</p></li>
+<li><p><strong>max_lag_symbols</strong> (<em>int</em><em> | </em><em>None</em>) – limit the number of symbols of lag in the 5G sync correlator <em>(Constraints: &gt;= 1, &lt;= 6)</em></p></li>
+<li><p><strong>max_block_count</strong> (<em>int</em><em> | </em><em>None</em>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.analysis.specs.Cellular5GNRSSBSpectrogram">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.analysis.specs.</span></span><span class="sig-name descname"><span class="pre">Cellular5GNRSSBSpectrogram</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">subcarrier_spacing</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">7680000.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">discovery_periodicity</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.02</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frequency_offset</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_block_count</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">window</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">('kaiser_by_enbw',</span> <span class="pre">2)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lo_bandstop</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.analysis.specs.Cellular5GNRSSBSpectrogram" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#striqt.analysis.specs.Analysis" title="striqt.analysis.specs.Analysis"><code class="xref py py-class docutils literal notranslate"><span class="pre">Analysis</span></code></a></p>
+<p>sample_rate (float): output sample rate for the resampled synchronization waveform (samples/s)
+discovery_periodicity (float): time period between synchronization blocks (s)
+frequency_offset (float or dict[float, float]):</p>
+<blockquote>
+<div><p>center frequency offset (see notes)</p>
+</div></blockquote>
+<dl class="simple">
+<dt>shared_spectrum:</dt><dd><p>whether to follow the 3GPP “shared spectrum” synchronizatio block layout</p>
+</dd>
+</dl>
+<p>max_block_count: number of synchronization blocks to evaluate</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>subcarrier_spacing</strong> (<em>float</em>) – Subcarrier spacing (15e3, 30e3, 60e3, etc) <em>(Constraints: units: Hz)</em></p></li>
+<li><p><strong>sample_rate</strong> (<em>float</em>)</p></li>
+<li><p><strong>discovery_periodicity</strong> (<em>float</em>)</p></li>
+<li><p><strong>frequency_offset</strong> (<em>float</em>)</p></li>
+<li><p><strong>max_block_count</strong> (<em>int</em><em> | </em><em>None</em>)</p></li>
+<li><p><strong>window</strong> (<em>str</em><em> | </em><em>tuple</em><em>[</em><em>str</em><em>, </em><em>float</em><em>]</em>) – window function specification following <cite>scipy.signal.get_window</cite></p></li>
+<li><p><strong>lo_bandstop</strong> (<em>float</em><em> | </em><em>None</em>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="striqt.analysis.specs.Cellular5GNRSSBSpectrogram.shared_spectrum">
+<span class="sig-name descname"><span class="pre">shared_spectrum</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></span><a class="headerlink" href="#striqt.analysis.specs.Cellular5GNRSSBSpectrogram.shared_spectrum" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.analysis.specs.Cellular5GNRSSSCorrelator">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.analysis.specs.</span></span><span class="sig-name descname"><span class="pre">Cellular5GNRSSSCorrelator</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">subcarrier_spacing</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">7680000.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">discovery_periodicity</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.02</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frequency_offset</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shared_spectrum</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">delay</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">symbol_indexes</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'auto'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_lag_symbols</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_block_count</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.analysis.specs.Cellular5GNRSSSCorrelator" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">_Cellular5GNRSSBCorrelator</span></code></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>subcarrier_spacing</strong> (<em>float</em>) – Subcarrier spacing (15e3, 30e3, 60e3, etc) <em>(Constraints: units: Hz)</em></p></li>
+<li><p><strong>sample_rate</strong> (<em>float</em>)</p></li>
+<li><p><strong>discovery_periodicity</strong> (<em>float</em>)</p></li>
+<li><p><strong>frequency_offset</strong> (<em>float</em>)</p></li>
+<li><p><strong>shared_spectrum</strong> (<em>bool</em>)</p></li>
+<li><p><strong>delay</strong> (<em>float</em>)</p></li>
+<li><p><strong>symbol_indexes</strong> (<em>one</em><em> of </em><em>[</em><em>'auto'</em><em>, </em><em>'a'</em><em>, </em><em>'b'</em><em>, </em><em>'c'</em><em>, </em><em>'d'</em><em>, </em><em>'e'</em><em>, </em><em>'f'</em><em>, </em><em>'g'</em><em>] </em><em>| </em><em>tuple</em><em>[</em><em>int</em><em>, </em><em>...</em><em>]</em>) – index locations in the SSB, or a cell search case from 3GPP TS 38.213 Sec. 4.1)</p></li>
+<li><p><strong>max_lag_symbols</strong> (<em>int</em><em> | </em><em>None</em>) – limit the number of symbols of lag in the 5G sync correlator <em>(Constraints: &gt;= 1, &lt;= 6)</em></p></li>
+<li><p><strong>max_block_count</strong> (<em>int</em><em> | </em><em>None</em>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.analysis.specs.Cellular5GNSSSSync">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.analysis.specs.</span></span><span class="sig-name descname"><span class="pre">Cellular5GNSSSSync</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">subcarrier_spacing</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">7680000.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">discovery_periodicity</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.02</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frequency_offset</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shared_spectrum</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">delay</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">symbol_indexes</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'auto'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_lag_symbols</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">window_fill</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">per_port</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_beams</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.analysis.specs.Cellular5GNSSSSync" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">_Cellular5GNRSSBSync</span></code></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>subcarrier_spacing</strong> (<em>float</em>) – Subcarrier spacing (15e3, 30e3, 60e3, etc) <em>(Constraints: units: Hz)</em></p></li>
+<li><p><strong>sample_rate</strong> (<em>float</em>)</p></li>
+<li><p><strong>discovery_periodicity</strong> (<em>float</em>)</p></li>
+<li><p><strong>frequency_offset</strong> (<em>float</em>)</p></li>
+<li><p><strong>shared_spectrum</strong> (<em>bool</em>)</p></li>
+<li><p><strong>delay</strong> (<em>float</em>)</p></li>
+<li><p><strong>symbol_indexes</strong> (<em>one</em><em> of </em><em>[</em><em>'auto'</em><em>, </em><em>'a'</em><em>, </em><em>'b'</em><em>, </em><em>'c'</em><em>, </em><em>'d'</em><em>, </em><em>'e'</em><em>, </em><em>'f'</em><em>, </em><em>'g'</em><em>] </em><em>| </em><em>tuple</em><em>[</em><em>int</em><em>, </em><em>...</em><em>]</em>) – index locations in the SSB, or a cell search case from 3GPP TS 38.213 Sec. 4.1)</p></li>
+<li><p><strong>max_lag_symbols</strong> (<em>int</em><em> | </em><em>None</em>) – limit the number of symbols of lag in the 5G sync correlator <em>(Constraints: &gt;= 1, &lt;= 6)</em></p></li>
+<li><p><strong>window_fill</strong> (<em>float</em>) – Fraction of a symbol to fill with weighting function <em>(Constraints: &gt; 0, &lt;= 1)</em></p></li>
+<li><p><strong>per_port</strong> (<em>bool</em>) – whether to evaluate signal synchronization separately on each port</p></li>
+<li><p><strong>max_beams</strong> (<em>int</em><em> | </em><em>None</em>) – limit the beam count in 5G sync evaluation <em>(Constraints: &gt; 0)</em></p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.analysis.specs.CellularCyclicAutocorrelator">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.analysis.specs.</span></span><span class="sig-name descname"><span class="pre">CellularCyclicAutocorrelator</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">subcarrier_spacings</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(15000.0,</span> <span class="pre">30000.0,</span> <span class="pre">60000.0)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frame_range</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(0,</span> <span class="pre">1)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frame_slots</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">symbol_range</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(0,</span> <span class="pre">None)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">generation</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'5G'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.analysis.specs.CellularCyclicAutocorrelator" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#striqt.analysis.specs.Analysis" title="striqt.analysis.specs.Analysis"><code class="xref py py-class docutils literal notranslate"><span class="pre">Analysis</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>subcarrier_spacings</strong> (<em>float</em><em> | </em><em>tuple</em><em>[</em><em>float</em><em>, </em><em>...</em><em>]</em>) – One or more subcarrier spacings (15e3, 30e3, 60e3, etc) <em>(Constraints: units: Hz)</em></p></li>
+<li><p><strong>frame_range</strong> (<em>int</em><em> | </em><em>tuple</em><em>[</em><em>int</em><em>, </em><em>int</em><em>]</em>)</p></li>
+<li><p><strong>frame_slots</strong> (<em>str</em><em> | </em><em>None</em>) – string composed of (‘d’, ‘u’, ‘s’) specifying the sequence of slots in 1 TDD cellular frame, or None to fill with downlink</p></li>
+<li><p><strong>symbol_range</strong> (<em>int</em><em> | </em><em>tuple</em><em>[</em><em>int</em><em>, </em><em>int</em><em> | </em><em>None</em><em>]</em>)</p></li>
+<li><p><strong>generation</strong> (<em>one</em><em> of </em><em>[</em><em>'4G'</em><em>, </em><em>'5G'</em><em>]</em>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.analysis.specs.CellularResourcePowerHistogram">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.analysis.specs.</span></span><span class="sig-name descname"><span class="pre">CellularResourcePowerHistogram</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">window</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">subcarrier_spacing</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">power_low</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">power_high</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">power_resolution</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">average_rbs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">average_slots</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">guard_bandwidths</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(0,</span> <span class="pre">0)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frame_slots</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">special_symbols</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cyclic_prefix</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'normal'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lo_bandstop</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.analysis.specs.CellularResourcePowerHistogram" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#striqt.analysis.specs.Analysis" title="striqt.analysis.specs.Analysis"><code class="xref py py-class docutils literal notranslate"><span class="pre">Analysis</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>window</strong> (<em>str</em><em> | </em><em>tuple</em><em>[</em><em>str</em><em>, </em><em>float</em><em>]</em>) – window function specification following <cite>scipy.signal.get_window</cite></p></li>
+<li><p><strong>subcarrier_spacing</strong> (<em>float</em>) – Subcarrier spacing (15e3, 30e3, 60e3, etc) <em>(Constraints: units: Hz)</em></p></li>
+<li><p><strong>power_low</strong> (<em>float</em>) – Minimum power bin <em>(Constraints: units: dB power)</em></p></li>
+<li><p><strong>power_high</strong> (<em>float</em>) – Maximum power bin <em>(Constraints: units: dB power)</em></p></li>
+<li><p><strong>power_resolution</strong> (<em>float</em>) – Power bin resolution <em>(Constraints: units: dB)</em></p></li>
+<li><p><strong>average_rbs</strong> (<em>bool</em><em> | </em><em>one</em><em> of </em><em>[</em><em>'half'</em><em>]</em>) – True (or “half”) to coarsen spectrogram bins by integrating 1-subcarrier frequency resolution into 1- (or 1/2)-resource block</p></li>
+<li><p><strong>average_slots</strong> (<em>bool</em>) – True to coarsen spectrogram bins by averaging 1-symbol time resolution</p></li>
+<li><p><strong>guard_bandwidths</strong> (<em>tuple</em><em>[</em><em>float</em><em>, </em><em>float</em><em>]</em>) – Channel guard bandwidths to ignore on the left and right sides <em>(Constraints: units: Hz)</em></p></li>
+<li><p><strong>frame_slots</strong> (<em>str</em><em> | </em><em>None</em>) – string composed of (‘d’, ‘u’, ‘s’) specifying the sequence of slots in 1 TDD cellular frame, or None to fill with downlink</p></li>
+<li><p><strong>special_symbols</strong> (<em>str</em><em> | </em><em>None</em>) – string composed of the characters (‘d’, ‘u’, ‘f’) indicating the sequence of symbol types (when ‘s’ is in frame_slots)</p></li>
+<li><p><strong>cyclic_prefix</strong> (<em>one</em><em> of </em><em>[</em><em>'normal'</em><em>] </em><em>| </em><em>one</em><em> of </em><em>[</em><em>'extended'</em><em>]</em>) – the 3GPP cyclic prefix type</p></li>
+<li><p><strong>lo_bandstop</strong> (<em>float</em><em> | </em><em>None</em>) – mask with float(“nan”) at this bandwidth centered at baseband DC <em>(Constraints: units: Hz)</em></p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.analysis.specs.ChannelPowerHistogram">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.analysis.specs.</span></span><span class="sig-name descname"><span class="pre">ChannelPowerHistogram</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">detector_period</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">power_detectors</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">('rms',</span> <span class="pre">'peak')</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">power_low</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">power_high</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">power_resolution</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.analysis.specs.ChannelPowerHistogram" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#striqt.analysis.specs.ChannelPowerTimeSeries" title="striqt.analysis.specs.ChannelPowerTimeSeries"><code class="xref py py-class docutils literal notranslate"><span class="pre">ChannelPowerTimeSeries</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>detector_period</strong> (<em>Fraction</em>)</p></li>
+<li><p><strong>power_detectors</strong> (<em>tuple</em><em>[</em><em>str</em><em>, </em><em>...</em><em>]</em>)</p></li>
+<li><p><strong>power_low</strong> (<em>float</em>) – Minimum power bin <em>(Constraints: units: dB power)</em></p></li>
+<li><p><strong>power_high</strong> (<em>float</em>) – Maximum power bin <em>(Constraints: units: dB power)</em></p></li>
+<li><p><strong>power_resolution</strong> (<em>float</em>) – Power bin resolution <em>(Constraints: units: dB)</em></p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.analysis.specs.ChannelPowerTimeSeries">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.analysis.specs.</span></span><span class="sig-name descname"><span class="pre">ChannelPowerTimeSeries</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">detector_period</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">power_detectors</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">('rms',</span> <span class="pre">'peak')</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.analysis.specs.ChannelPowerTimeSeries" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#striqt.analysis.specs.Analysis" title="striqt.analysis.specs.Analysis"><code class="xref py py-class docutils literal notranslate"><span class="pre">Analysis</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>detector_period</strong> (<em>Fraction</em>)</p></li>
+<li><p><strong>power_detectors</strong> (<em>tuple</em><em>[</em><em>str</em><em>, </em><em>...</em><em>]</em>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.analysis.specs.CyclicChannelPower">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.analysis.specs.</span></span><span class="sig-name descname"><span class="pre">CyclicChannelPower</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">cyclic_period</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">detector_period</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">power_detectors</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">('rms',</span> <span class="pre">'peak')</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cyclic_statistics</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">('min',</span> <span class="pre">'mean',</span> <span class="pre">'max')</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.analysis.specs.CyclicChannelPower" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#striqt.analysis.specs.Analysis" title="striqt.analysis.specs.Analysis"><code class="xref py py-class docutils literal notranslate"><span class="pre">Analysis</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>cyclic_period</strong> (<em>float</em>)</p></li>
+<li><p><strong>detector_period</strong> (<em>Fraction</em>)</p></li>
+<li><p><strong>power_detectors</strong> (<em>tuple</em><em>[</em><em>str</em><em>, </em><em>...</em><em>]</em>)</p></li>
+<li><p><strong>cyclic_statistics</strong> (<em>tuple</em><em>[</em><em>str</em><em> | </em><em>float</em><em>, </em><em>...</em><em>]</em>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.analysis.specs.FilteredCapture">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.analysis.specs.</span></span><span class="sig-name descname"><span class="pre">FilteredCapture</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">duration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">15360000.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">analysis_bandwidth</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">inf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">analysis_filter</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">AnalysisFilter(nfft=8192,</span> <span class="pre">window='hamming',</span> <span class="pre">nfft_out=None)</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.analysis.specs.FilteredCapture" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#striqt.analysis.specs.Capture" title="striqt.analysis.specs.Capture"><code class="xref py py-class docutils literal notranslate"><span class="pre">Capture</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>duration</strong> (<em>float</em>) – Duration of the analysis waveform <em>(Constraints: units: s)</em></p></li>
+<li><p><strong>sample_rate</strong> (<em>float</em>) – Analysis sample rate <em>(Constraints: units: S/s)</em></p></li>
+<li><p><strong>analysis_bandwidth</strong> (<em>float</em>) – Analysis bandwidth <em>(Constraints: units: Hz)</em></p></li>
+<li><p><strong>analysis_filter</strong> (<a class="reference internal" href="#striqt.analysis.specs.AnalysisFilter" title="striqt.analysis.specs.AnalysisFilter"><em>AnalysisFilter</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.analysis.specs.FrequencyAnalysisSpecBase">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.analysis.specs.</span></span><span class="sig-name descname"><span class="pre">FrequencyAnalysisSpecBase</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">window</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frequency_resolution</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fractional_overlap</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">window_fill</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">integration_bandwidth</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">trim_stopband</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lo_bandstop</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.analysis.specs.FrequencyAnalysisSpecBase" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#striqt.analysis.specs.Analysis" title="striqt.analysis.specs.Analysis"><code class="xref py py-class docutils literal notranslate"><span class="pre">Analysis</span></code></a></p>
+<p>window (specs.types.WindowType): a window specification, following <cite>scipy.signal.get_window</cite>
+frequency_resolution (float): the STFT resolution (in Hz)
+fractional_overlap (float):</p>
+<blockquote>
+<div><p>fraction of each FFT window that overlaps with its neighbor</p>
+</div></blockquote>
+<dl class="simple">
+<dt>window_fill (float):</dt><dd><p>fraction of each FFT window that is filled with the window function
+(leaving the rest zeroed)</p>
+</dd>
+</dl>
+<p>integration_bandwidth (float): bin bandwidth for RMS averaging in the frequency domain
+trim_stopband (bool):</p>
+<blockquote>
+<div><p>whether to trim the frequency axis to capture.analysis_bandwidth</p>
+</div></blockquote>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>window</strong> (<em>str</em><em> | </em><em>tuple</em><em>[</em><em>str</em><em>, </em><em>float</em><em>]</em>) – window function specification following <cite>scipy.signal.get_window</cite></p></li>
+<li><p><strong>frequency_resolution</strong> (<em>float</em>)</p></li>
+<li><p><strong>fractional_overlap</strong> (<em>Fraction</em>)</p></li>
+<li><p><strong>window_fill</strong> (<em>Fraction</em>)</p></li>
+<li><p><strong>integration_bandwidth</strong> (<em>float</em><em> | </em><em>None</em>)</p></li>
+<li><p><strong>trim_stopband</strong> (<em>bool</em>)</p></li>
+<li><p><strong>lo_bandstop</strong> (<em>float</em><em> | </em><em>None</em>) – mask with float(“nan”) at this bandwidth centered at baseband DC <em>(Constraints: units: Hz)</em></p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.analysis.specs.IQWaveform">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.analysis.specs.</span></span><span class="sig-name descname"><span class="pre">IQWaveform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_time_sec</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stop_time_sec</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.analysis.specs.IQWaveform" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#striqt.analysis.specs.Analysis" title="striqt.analysis.specs.Analysis"><code class="xref py py-class docutils literal notranslate"><span class="pre">Analysis</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>start_time_sec</strong> (<em>float</em><em> | </em><em>None</em>)</p></li>
+<li><p><strong>stop_time_sec</strong> (<em>float</em><em> | </em><em>None</em>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="striqt.analysis.specs.Meta">
+<span class="sig-prename descclassname"><span class="pre">striqt.analysis.specs.</span></span><span class="sig-name descname"><span class="pre">Meta</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">standard_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">units</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kws</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Meta</span></span></span><a class="headerlink" href="#striqt.analysis.specs.Meta" title="Link to this definition">¶</a></dt>
+<dd><p>annotation that is used to generate ‘standard_name’ and ‘units’ fields of xarray attrs objects</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.analysis.specs.PowerSpectralDensity">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.analysis.specs.</span></span><span class="sig-name descname"><span class="pre">PowerSpectralDensity</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">window</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frequency_resolution</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fractional_overlap</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">window_fill</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">integration_bandwidth</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">trim_stopband</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lo_bandstop</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_statistic</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">('mean',)</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.analysis.specs.PowerSpectralDensity" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#striqt.analysis.specs.FrequencyAnalysisSpecBase" title="striqt.analysis.specs.FrequencyAnalysisSpecBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">FrequencyAnalysisSpecBase</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>window</strong> (<em>str</em><em> | </em><em>tuple</em><em>[</em><em>str</em><em>, </em><em>float</em><em>]</em>) – window function specification following <cite>scipy.signal.get_window</cite></p></li>
+<li><p><strong>frequency_resolution</strong> (<em>float</em>)</p></li>
+<li><p><strong>fractional_overlap</strong> (<em>Fraction</em>)</p></li>
+<li><p><strong>window_fill</strong> (<em>Fraction</em>)</p></li>
+<li><p><strong>integration_bandwidth</strong> (<em>float</em><em> | </em><em>None</em>)</p></li>
+<li><p><strong>trim_stopband</strong> (<em>bool</em>)</p></li>
+<li><p><strong>lo_bandstop</strong> (<em>float</em><em> | </em><em>None</em>) – mask with float(“nan”) at this bandwidth centered at baseband DC <em>(Constraints: units: Hz)</em></p></li>
+<li><p><strong>time_statistic</strong> (<em>tuple</em><em>[</em><em>str</em><em> | </em><em>float</em><em>, </em><em>...</em><em>]</em>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.analysis.specs.SpecBase">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.analysis.specs.</span></span><span class="sig-name descname"><span class="pre">SpecBase</span></span><a class="headerlink" href="#striqt.analysis.specs.SpecBase" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Struct</span></code></p>
+<p>Base type for structures that support validated
+(de)serialization.</p>
+<p>It is a <cite>msgspec.Struct</cite> class with some often-used utility
+methods that fix encoding and decoding hooks for extra types.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.analysis.specs.SpecBase.from_dict">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">from_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">d</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">_T</span></span></span><a class="headerlink" href="#striqt.analysis.specs.SpecBase.from_dict" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.analysis.specs.SpecBase.from_spec">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">from_spec</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">other</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#striqt.analysis.specs.SpecBase" title="striqt.analysis.specs.SpecBase"><span class="pre">SpecBase</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">_T</span></span></span><a class="headerlink" href="#striqt.analysis.specs.SpecBase.from_spec" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.analysis.specs.SpecBase.replace">
+<span class="sig-name descname"><span class="pre">replace</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">attrs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#striqt.analysis.specs.SpecBase.replace" title="Link to this definition">¶</a></dt>
+<dd><p>returns a copy of self with changed attributes.</p>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p>Python standard library <cite>copy.replace</cite></p>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.analysis.specs.SpecBase.to_dict">
+<span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">unfreeze</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">allow_tuple_keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#striqt.analysis.specs.SpecBase.to_dict" title="Link to this definition">¶</a></dt>
+<dd><p>return a dictinary representation of <cite>self</cite></p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.analysis.specs.SpecBase.validate">
+<span class="sig-name descname"><span class="pre">validate</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#striqt.analysis.specs.SpecBase.validate" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.analysis.specs.Spectrogram">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.analysis.specs.</span></span><span class="sig-name descname"><span class="pre">Spectrogram</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">window</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frequency_resolution</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fractional_overlap</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">window_fill</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">integration_bandwidth</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">trim_stopband</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lo_bandstop</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_aperture</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.analysis.specs.Spectrogram" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#striqt.analysis.specs.FrequencyAnalysisSpecBase" title="striqt.analysis.specs.FrequencyAnalysisSpecBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">FrequencyAnalysisSpecBase</span></code></a></p>
+<dl class="simple">
+<dt>time_aperture (float):</dt><dd><p>if specified, binned RMS averaging is applied along time axis in the
+spectrogram to yield this coarser resolution (s)</p>
+</dd>
+</dl>
+<p>dB (bool): if True, returned power is transformed into dB units</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>window</strong> (<em>str</em><em> | </em><em>tuple</em><em>[</em><em>str</em><em>, </em><em>float</em><em>]</em>) – window function specification following <cite>scipy.signal.get_window</cite></p></li>
+<li><p><strong>frequency_resolution</strong> (<em>float</em>)</p></li>
+<li><p><strong>fractional_overlap</strong> (<em>Fraction</em>)</p></li>
+<li><p><strong>window_fill</strong> (<em>Fraction</em>)</p></li>
+<li><p><strong>integration_bandwidth</strong> (<em>float</em><em> | </em><em>None</em>)</p></li>
+<li><p><strong>trim_stopband</strong> (<em>bool</em>)</p></li>
+<li><p><strong>lo_bandstop</strong> (<em>float</em><em> | </em><em>None</em>) – mask with float(“nan”) at this bandwidth centered at baseband DC <em>(Constraints: units: Hz)</em></p></li>
+<li><p><strong>time_aperture</strong> (<em>float</em><em> | </em><em>None</em>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="striqt.analysis.specs.Spectrogram.dB">
+<span class="sig-name descname"><span class="pre">dB</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></span><a class="headerlink" href="#striqt.analysis.specs.Spectrogram.dB" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.analysis.specs.SpectrogramHistogram">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.analysis.specs.</span></span><span class="sig-name descname"><span class="pre">SpectrogramHistogram</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">window</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frequency_resolution</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fractional_overlap</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">window_fill</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">integration_bandwidth</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">trim_stopband</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lo_bandstop</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_aperture</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">power_low</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">power_high</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">power_resolution</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.analysis.specs.SpectrogramHistogram" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#striqt.analysis.specs.Spectrogram" title="striqt.analysis.specs.Spectrogram"><code class="xref py py-class docutils literal notranslate"><span class="pre">Spectrogram</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>window</strong> (<em>str</em><em> | </em><em>tuple</em><em>[</em><em>str</em><em>, </em><em>float</em><em>]</em>) – window function specification following <cite>scipy.signal.get_window</cite></p></li>
+<li><p><strong>frequency_resolution</strong> (<em>float</em>)</p></li>
+<li><p><strong>fractional_overlap</strong> (<em>Fraction</em>)</p></li>
+<li><p><strong>window_fill</strong> (<em>Fraction</em>)</p></li>
+<li><p><strong>integration_bandwidth</strong> (<em>float</em><em> | </em><em>None</em>)</p></li>
+<li><p><strong>trim_stopband</strong> (<em>bool</em>)</p></li>
+<li><p><strong>lo_bandstop</strong> (<em>float</em><em> | </em><em>None</em>) – mask with float(“nan”) at this bandwidth centered at baseband DC <em>(Constraints: units: Hz)</em></p></li>
+<li><p><strong>time_aperture</strong> (<em>float</em><em> | </em><em>None</em>)</p></li>
+<li><p><strong>power_low</strong> (<em>float</em>) – Minimum power bin <em>(Constraints: units: dB power)</em></p></li>
+<li><p><strong>power_high</strong> (<em>float</em>) – Maximum power bin <em>(Constraints: units: dB power)</em></p></li>
+<li><p><strong>power_resolution</strong> (<em>float</em>) – Power bin resolution <em>(Constraints: units: dB)</em></p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.analysis.specs.SpectrogramHistogramRatio">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.analysis.specs.</span></span><span class="sig-name descname"><span class="pre">SpectrogramHistogramRatio</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">window</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frequency_resolution</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fractional_overlap</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">window_fill</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">integration_bandwidth</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">trim_stopband</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lo_bandstop</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_aperture</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">power_low</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">power_high</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">power_resolution</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.analysis.specs.SpectrogramHistogramRatio" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#striqt.analysis.specs.SpectrogramHistogram" title="striqt.analysis.specs.SpectrogramHistogram"><code class="xref py py-class docutils literal notranslate"><span class="pre">SpectrogramHistogram</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>window</strong> (<em>str</em><em> | </em><em>tuple</em><em>[</em><em>str</em><em>, </em><em>float</em><em>]</em>) – window function specification following <cite>scipy.signal.get_window</cite></p></li>
+<li><p><strong>frequency_resolution</strong> (<em>float</em>)</p></li>
+<li><p><strong>fractional_overlap</strong> (<em>Fraction</em>)</p></li>
+<li><p><strong>window_fill</strong> (<em>Fraction</em>)</p></li>
+<li><p><strong>integration_bandwidth</strong> (<em>float</em><em> | </em><em>None</em>)</p></li>
+<li><p><strong>trim_stopband</strong> (<em>bool</em>)</p></li>
+<li><p><strong>lo_bandstop</strong> (<em>float</em><em> | </em><em>None</em>) – mask with float(“nan”) at this bandwidth centered at baseband DC <em>(Constraints: units: Hz)</em></p></li>
+<li><p><strong>time_aperture</strong> (<em>float</em><em> | </em><em>None</em>)</p></li>
+<li><p><strong>power_low</strong> (<em>float</em>) – Minimum power bin <em>(Constraints: units: dB power)</em></p></li>
+<li><p><strong>power_high</strong> (<em>float</em>) – Maximum power bin <em>(Constraints: units: dB power)</em></p></li>
+<li><p><strong>power_resolution</strong> (<em>float</em>) – Power bin resolution <em>(Constraints: units: dB)</em></p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.analysis.specs.frozendict">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.analysis.specs.</span></span><span class="sig-name descname"><span class="pre">frozendict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.analysis.specs.frozendict" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Mapping</span></code>[<code class="xref py py-obj docutils literal notranslate"><span class="pre">_K</span></code>, <code class="xref py py-obj docutils literal notranslate"><span class="pre">_V</span></code>]</p>
+<p>An immutable dictionary that supports hashing</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.analysis.specs.frozendict.copy">
+<span class="sig-name descname"><span class="pre">copy</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#striqt.analysis.specs.frozendict" title="striqt.analysis.specs.frozendict"><span class="pre">frozendict</span></a><span class="p"><span class="pre">[</span></span><span class="pre">_K</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">_V</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#striqt.analysis.specs.frozendict.copy" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.analysis.specs.frozendict.fromkeys">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">fromkeys</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">seq</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><span class="pre">_K</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">_V</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#striqt.analysis.specs.frozendict" title="striqt.analysis.specs.frozendict"><span class="pre">frozendict</span></a><span class="p"><span class="pre">[</span></span><span class="pre">_K</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">_V</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#striqt.analysis.specs.frozendict.fromkeys" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.analysis.specs.frozendict.items">
+<span class="sig-name descname"><span class="pre">items</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">a</span> <span class="pre">set-like</span> <span class="pre">object</span> <span class="pre">providing</span> <span class="pre">a</span> <span class="pre">view</span> <span class="pre">on</span> <span class="pre">D's</span> <span class="pre">items</span></span></span><a class="headerlink" href="#striqt.analysis.specs.frozendict.items" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.analysis.specs.frozendict.keys">
+<span class="sig-name descname"><span class="pre">keys</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">a</span> <span class="pre">set-like</span> <span class="pre">object</span> <span class="pre">providing</span> <span class="pre">a</span> <span class="pre">view</span> <span class="pre">on</span> <span class="pre">D's</span> <span class="pre">keys</span></span></span><a class="headerlink" href="#striqt.analysis.specs.frozendict.keys" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.analysis.specs.frozendict.update">
+<span class="sig-name descname"><span class="pre">update</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">other</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">_K</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">_V</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="positional-only-separator o"><abbr title="Positional-only parameter separator (PEP 570)"><span class="pre">/</span></abbr></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.analysis.specs.frozendict.update" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.analysis.specs.frozendict.values">
+<span class="sig-name descname"><span class="pre">values</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">an</span> <span class="pre">object</span> <span class="pre">providing</span> <span class="pre">a</span> <span class="pre">view</span> <span class="pre">on</span> <span class="pre">D's</span> <span class="pre">values</span></span></span><a class="headerlink" href="#striqt.analysis.specs.frozendict.values" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+  <div>
+    <h3><a href="../../index.html">Table of Contents</a></h3>
+    <ul>
+<li><a class="reference internal" href="#">striqt.analysis.specs</a><ul>
+<li><a class="reference internal" href="#striqt.analysis.specs.Analysis"><code class="docutils literal notranslate"><span class="pre">Analysis</span></code></a></li>
+<li><a class="reference internal" href="#striqt.analysis.specs.AnalysisFilter"><code class="docutils literal notranslate"><span class="pre">AnalysisFilter</span></code></a></li>
+<li><a class="reference internal" href="#striqt.analysis.specs.AnalysisGroup"><code class="docutils literal notranslate"><span class="pre">AnalysisGroup</span></code></a></li>
+<li><a class="reference internal" href="#striqt.analysis.specs.Capture"><code class="docutils literal notranslate"><span class="pre">Capture</span></code></a></li>
+<li><a class="reference internal" href="#striqt.analysis.specs.Cellular5GNPSSSync"><code class="docutils literal notranslate"><span class="pre">Cellular5GNPSSSync</span></code></a></li>
+<li><a class="reference internal" href="#striqt.analysis.specs.Cellular5GNRPSSCorrelator"><code class="docutils literal notranslate"><span class="pre">Cellular5GNRPSSCorrelator</span></code></a></li>
+<li><a class="reference internal" href="#striqt.analysis.specs.Cellular5GNRSSBSpectrogram"><code class="docutils literal notranslate"><span class="pre">Cellular5GNRSSBSpectrogram</span></code></a><ul>
+<li><a class="reference internal" href="#striqt.analysis.specs.Cellular5GNRSSBSpectrogram.shared_spectrum"><code class="docutils literal notranslate"><span class="pre">Cellular5GNRSSBSpectrogram.shared_spectrum</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#striqt.analysis.specs.Cellular5GNRSSSCorrelator"><code class="docutils literal notranslate"><span class="pre">Cellular5GNRSSSCorrelator</span></code></a></li>
+<li><a class="reference internal" href="#striqt.analysis.specs.Cellular5GNSSSSync"><code class="docutils literal notranslate"><span class="pre">Cellular5GNSSSSync</span></code></a></li>
+<li><a class="reference internal" href="#striqt.analysis.specs.CellularCyclicAutocorrelator"><code class="docutils literal notranslate"><span class="pre">CellularCyclicAutocorrelator</span></code></a></li>
+<li><a class="reference internal" href="#striqt.analysis.specs.CellularResourcePowerHistogram"><code class="docutils literal notranslate"><span class="pre">CellularResourcePowerHistogram</span></code></a></li>
+<li><a class="reference internal" href="#striqt.analysis.specs.ChannelPowerHistogram"><code class="docutils literal notranslate"><span class="pre">ChannelPowerHistogram</span></code></a></li>
+<li><a class="reference internal" href="#striqt.analysis.specs.ChannelPowerTimeSeries"><code class="docutils literal notranslate"><span class="pre">ChannelPowerTimeSeries</span></code></a></li>
+<li><a class="reference internal" href="#striqt.analysis.specs.CyclicChannelPower"><code class="docutils literal notranslate"><span class="pre">CyclicChannelPower</span></code></a></li>
+<li><a class="reference internal" href="#striqt.analysis.specs.FilteredCapture"><code class="docutils literal notranslate"><span class="pre">FilteredCapture</span></code></a></li>
+<li><a class="reference internal" href="#striqt.analysis.specs.FrequencyAnalysisSpecBase"><code class="docutils literal notranslate"><span class="pre">FrequencyAnalysisSpecBase</span></code></a></li>
+<li><a class="reference internal" href="#striqt.analysis.specs.IQWaveform"><code class="docutils literal notranslate"><span class="pre">IQWaveform</span></code></a></li>
+<li><a class="reference internal" href="#striqt.analysis.specs.Meta"><code class="docutils literal notranslate"><span class="pre">Meta()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.analysis.specs.PowerSpectralDensity"><code class="docutils literal notranslate"><span class="pre">PowerSpectralDensity</span></code></a></li>
+<li><a class="reference internal" href="#striqt.analysis.specs.SpecBase"><code class="docutils literal notranslate"><span class="pre">SpecBase</span></code></a><ul>
+<li><a class="reference internal" href="#striqt.analysis.specs.SpecBase.from_dict"><code class="docutils literal notranslate"><span class="pre">SpecBase.from_dict()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.analysis.specs.SpecBase.from_spec"><code class="docutils literal notranslate"><span class="pre">SpecBase.from_spec()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.analysis.specs.SpecBase.replace"><code class="docutils literal notranslate"><span class="pre">SpecBase.replace()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.analysis.specs.SpecBase.to_dict"><code class="docutils literal notranslate"><span class="pre">SpecBase.to_dict()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.analysis.specs.SpecBase.validate"><code class="docutils literal notranslate"><span class="pre">SpecBase.validate()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#striqt.analysis.specs.Spectrogram"><code class="docutils literal notranslate"><span class="pre">Spectrogram</span></code></a><ul>
+<li><a class="reference internal" href="#striqt.analysis.specs.Spectrogram.dB"><code class="docutils literal notranslate"><span class="pre">Spectrogram.dB</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#striqt.analysis.specs.SpectrogramHistogram"><code class="docutils literal notranslate"><span class="pre">SpectrogramHistogram</span></code></a></li>
+<li><a class="reference internal" href="#striqt.analysis.specs.SpectrogramHistogramRatio"><code class="docutils literal notranslate"><span class="pre">SpectrogramHistogramRatio</span></code></a></li>
+<li><a class="reference internal" href="#striqt.analysis.specs.frozendict"><code class="docutils literal notranslate"><span class="pre">frozendict</span></code></a><ul>
+<li><a class="reference internal" href="#striqt.analysis.specs.frozendict.copy"><code class="docutils literal notranslate"><span class="pre">frozendict.copy()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.analysis.specs.frozendict.fromkeys"><code class="docutils literal notranslate"><span class="pre">frozendict.fromkeys()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.analysis.specs.frozendict.items"><code class="docutils literal notranslate"><span class="pre">frozendict.items()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.analysis.specs.frozendict.keys"><code class="docutils literal notranslate"><span class="pre">frozendict.keys()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.analysis.specs.frozendict.update"><code class="docutils literal notranslate"><span class="pre">frozendict.update()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.analysis.specs.frozendict.values"><code class="docutils literal notranslate"><span class="pre">frozendict.values()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+  </div>
+  <div>
+    <h4>Previous topic</h4>
+    <p class="topless"><a href="striqt.analysis.html"
+                          title="previous chapter">striqt.analysis</a></p>
+  </div>
+  <div>
+    <h4>Next topic</h4>
+    <p class="topless"><a href="striqt.sensor.html"
+                          title="next chapter">striqt.sensor</a></p>
+  </div>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="../../_sources/reference/api/striqt.analysis.specs.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="Related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a></li>
+        <li class="right" >
+          <a href="striqt.sensor.html" title="striqt.sensor"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="striqt.analysis.html" title="striqt.analysis"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../index.html">striqt</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../api.html" >API Reference</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">striqt.analysis.specs</a></li> 
+      </ul>
+    </div>
+<hr \>
+<section class="footer">
+<br><a target="_blank" href="http://www.nist.gov/public_affairs/privacy.cfm#privpolicy">Privacy Policy</a> | <a target="_blank" href="http://www.nist.gov/public_affairs/privacy.cfm#secnot">Security Notice</a> | <a href="http://www.nist.gov/public_affairs/privacy.cfm#accesstate">Accessibility Statement</a>
+<br><em>United States government work, not subject to copyright in the United States</em>
+</section>
+
+  </body>
+</html>

@@ -1,0 +1,6 @@
+sensor-sweep
+=========================
+
+.. click:: striqt.cli.plot_capture:cli
+   :prog: plot-capture
+   :nested: full

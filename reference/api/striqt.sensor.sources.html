@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>striqt.sensor.sources &#8212; striqt</title>
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+    <link rel="stylesheet" type="text/css" href="../../_static/pyramid.css?v=63f5dc7c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css?v=8cd3d715" />
+    <script src="../../_static/documentation_options.js?v=486e5634"></script>
+    <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="striqt.sensor.specs" href="striqt.sensor.specs.html" />
+    <link rel="prev" title="striqt.sensor.sinks" href="striqt.sensor.sinks.html" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Neuton&amp;subset=latin" type="text/css" media="screen" charset="utf-8" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Nobile:regular,italic,bold,bolditalic&amp;subset=latin" type="text/css" media="screen" charset="utf-8" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+  </head><body>
+<header class="nist-header">
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>NIST Pages Template</title>
+  <meta name="viewport" content="width=device-width">
+  <meta name="description" content="striqt">
+  <link rel="canonical" href="../../">
+  <link rel="shortcut icon" href="/favicon.ico">
+
+  <!-- Google Analytics -->
+  <!--<script type="text/javascript" id="_fed_an_js_tag" src="http://www.nist.gov/js/federated-analytics.all.min.js?agency=NIST&subagency=mml&pua=UA-66610693-1&yt=true&exts=ppsx,pps,f90,sch,rtf,wrl,txz,m1v,xlsm,msi,xsd,f,tif,eps,mpg,xml,pl,xlt,c"></script> -->
+  <!-- DAP Analytics -->
+  <script type="text/javascript" id="_fed_an_ua_tag" src="https://dap.digitalgov.gov/Universal-Federated-Analytics-Min.js?agency=DOC&subagefncy=NIST&pua=UA-66610693-1&yt=true&exts=ppsx,pps,f90,sch,rtf,wrl,txz,m1v,xlsm,msi,xsd,f,tif,eps,mpg,xml,pl,xlt,c"></script>
+
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="../..//_static/NISTStyle.css">
+  <link rel="stylesheet" href="../..//_static/NISTPages.css">
+
+  <h1>
+    <a class="nist-logo" target="_blank" href="http://www.nist.gov/" title="Go to nist.gov">National Institute of Standards and Technology</a>
+  </h1>
+  <div class="nist-links">
+    <a class="nist-links-button" target="_blank" href="http://www.nist.gov">NIST Website</a>
+    <a class="nist-links-button mobile-hide" target="_blank" href="http://www.nist.gov/public_affairs/nandyou.cfm">About NIST</a>
+    <a class="nist-links-button mobile-hide" target="_blank" href="https://github.com/usnistgov">usnistgov on GitHub</a>
+  </div>
+  
+  <!-- HTML5 shim and Respond.js IE8 support of HTML5 elements and media queries -->
+  <!--[if lt IE 9]>
+  <script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
+    <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+  <script src="https://oss.maxcdn.com/libs/respond.js/1.4.2/respond.min.js"></script>
+  <![endif]-->
+</header>
+
+    <div class="related" role="navigation" aria-label="Related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a></li>
+        <li class="right" >
+          <a href="striqt.sensor.specs.html" title="striqt.sensor.specs"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="striqt.sensor.sinks.html" title="striqt.sensor.sinks"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../index.html">striqt</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../api.html" accesskey="U">API Reference</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">striqt.sensor.sources</a></li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <section id="module-striqt.sensor.sources">
+<span id="striqt-sensor-sources"></span><h1>striqt.sensor.sources<a class="headerlink" href="#module-striqt.sensor.sources" title="Link to this heading">¶</a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.sensor.sources.Air7101BSourceSpec">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.sensor.sources.</span></span><span class="sig-name descname"><span class="pre">Air7101BSourceSpec</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">master_clock_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">125000000.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">trigger_strobe</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">signal_trigger</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">array_backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'cupy'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">calibration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_source</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'host'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_sync_at</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'acquire'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">clock_source</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'internal'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">receive_retries</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adc_overload_limit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">-1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">if_overload_limit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gapless</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.sources.Air7101BSourceSpec" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.SoapySource" title="striqt.sensor.specs.SoapySource"><code class="xref py py-class docutils literal notranslate"><span class="pre">SoapySource</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>master_clock_rate</strong> (<em>float</em>) – Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em></p></li>
+<li><p><strong>trigger_strobe</strong> (<em>float</em><em> | </em><em>None</em>)</p></li>
+<li><p><strong>signal_trigger</strong> (<em>str</em><em> | </em><a class="reference internal" href="striqt.analysis.specs.html#striqt.analysis.specs.AnalysisGroup" title="striqt.analysis.specs.AnalysisGroup"><em>AnalysisGroup</em></a><em> | </em><em>None</em>)</p></li>
+<li><p><strong>array_backend</strong> (<em>one</em><em> of </em><em>[</em><em>'numpy'</em><em>, </em><em>'cupy'</em><em>]</em>) – array module to use to set compute device: numpy = cpu, cupy = gpu</p></li>
+<li><p><strong>calibration</strong> (<em>str</em><em> | </em><em>None</em>)</p></li>
+<li><p><strong>time_source</strong> (<em>one</em><em> of </em><em>[</em><em>'host'</em><em>, </em><em>'internal'</em><em>, </em><em>'external'</em><em>, </em><em>'gps'</em><em>]</em>) – Hardware source for timestamps</p></li>
+<li><p><strong>time_sync_at</strong> (<em>one</em><em> of </em><em>[</em><em>'open'</em><em>, </em><em>'acquire'</em><em>]</em>) – when to sync the hardware clock: on connection, or before each capture</p></li>
+<li><p><strong>clock_source</strong> (<em>one</em><em> of </em><em>[</em><em>'internal'</em><em>, </em><em>'external'</em><em>, </em><em>'gps'</em><em>]</em>) – Hardware source for the frequency reference</p></li>
+<li><p><strong>receive_retries</strong> (<em>int</em>) – number of acquisition retry attempts on stream error <em>(Constraints: &gt;= 0)</em></p></li>
+<li><p><strong>adc_overload_limit</strong> (<em>float</em><em> | </em><em>None</em>) – dataset adc_overload=True when the peak ADC level exceeds this threshold <em>(Constraints: &lt;= 0, units: dBfs)</em></p></li>
+<li><p><strong>if_overload_limit</strong> (<em>float</em><em> | </em><em>None</em>) – the maximum level at maximum gain before IF/baseband overload <em>(Constraints: units: dBfs)</em></p></li>
+<li><p><strong>gapless</strong> (<em>bool</em>) – whether to raise an exception on overflows between identical captures</p></li>
+</ul>
+</dd>
+<dt class="field-even">Variables<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>transient_holdoff_time</strong> (<em>float</em>) – <em>(Value: 0.002)</em></p></li>
+<li><p><strong>stream_all_rx_ports</strong> (<em>bool</em><em> | </em><em>None</em>) – <em>(Value: True)</em></p></li>
+<li><p><strong>transport_dtype</strong> (<em>one</em><em> of </em><em>[</em><em>'int16'</em><em>, </em><em>'float32'</em><em>, </em><em>'complex64'</em><em>]</em>) – data transfer type to use inside the source <em>(Value: float32)</em></p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="striqt.sensor.sources.Air7101BSourceSpec.rx_enable_delay">
+<span class="sig-name descname"><span class="pre">rx_enable_delay</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.35</span></span><a class="headerlink" href="#striqt.sensor.sources.Air7101BSourceSpec.rx_enable_delay" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="striqt.sensor.sources.Air7101BSourceSpec.stream_all_rx_ports">
+<span class="sig-name descname"><span class="pre">stream_all_rx_ports</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ClassVar</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></span><a class="headerlink" href="#striqt.sensor.sources.Air7101BSourceSpec.stream_all_rx_ports" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="striqt.sensor.sources.Air7101BSourceSpec.transient_holdoff_time">
+<span class="sig-name descname"><span class="pre">transient_holdoff_time</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ClassVar</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.002</span></span><a class="headerlink" href="#striqt.sensor.sources.Air7101BSourceSpec.transient_holdoff_time" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.sensor.sources.Air7201BSourceSpec">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.sensor.sources.</span></span><span class="sig-name descname"><span class="pre">Air7201BSourceSpec</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">master_clock_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">125000000.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">trigger_strobe</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">signal_trigger</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">array_backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'cupy'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">calibration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_source</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'host'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_sync_at</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'acquire'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">clock_source</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'internal'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">receive_retries</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adc_overload_limit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">-1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">if_overload_limit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gapless</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.sources.Air7201BSourceSpec" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.SoapySource" title="striqt.sensor.specs.SoapySource"><code class="xref py py-class docutils literal notranslate"><span class="pre">SoapySource</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>master_clock_rate</strong> (<em>float</em>) – Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em></p></li>
+<li><p><strong>trigger_strobe</strong> (<em>float</em><em> | </em><em>None</em>)</p></li>
+<li><p><strong>signal_trigger</strong> (<em>str</em><em> | </em><a class="reference internal" href="striqt.analysis.specs.html#striqt.analysis.specs.AnalysisGroup" title="striqt.analysis.specs.AnalysisGroup"><em>AnalysisGroup</em></a><em> | </em><em>None</em>)</p></li>
+<li><p><strong>array_backend</strong> (<em>one</em><em> of </em><em>[</em><em>'numpy'</em><em>, </em><em>'cupy'</em><em>]</em>) – array module to use to set compute device: numpy = cpu, cupy = gpu</p></li>
+<li><p><strong>calibration</strong> (<em>str</em><em> | </em><em>None</em>)</p></li>
+<li><p><strong>time_source</strong> (<em>one</em><em> of </em><em>[</em><em>'host'</em><em>, </em><em>'internal'</em><em>, </em><em>'external'</em><em>, </em><em>'gps'</em><em>]</em>) – Hardware source for timestamps</p></li>
+<li><p><strong>time_sync_at</strong> (<em>one</em><em> of </em><em>[</em><em>'open'</em><em>, </em><em>'acquire'</em><em>]</em>) – when to sync the hardware clock: on connection, or before each capture</p></li>
+<li><p><strong>clock_source</strong> (<em>one</em><em> of </em><em>[</em><em>'internal'</em><em>, </em><em>'external'</em><em>, </em><em>'gps'</em><em>]</em>) – Hardware source for the frequency reference</p></li>
+<li><p><strong>receive_retries</strong> (<em>int</em>) – number of acquisition retry attempts on stream error <em>(Constraints: &gt;= 0)</em></p></li>
+<li><p><strong>adc_overload_limit</strong> (<em>float</em><em> | </em><em>None</em>) – dataset adc_overload=True when the peak ADC level exceeds this threshold <em>(Constraints: &lt;= 0, units: dBfs)</em></p></li>
+<li><p><strong>if_overload_limit</strong> (<em>float</em><em> | </em><em>None</em>) – the maximum level at maximum gain before IF/baseband overload <em>(Constraints: units: dBfs)</em></p></li>
+<li><p><strong>gapless</strong> (<em>bool</em>) – whether to raise an exception on overflows between identical captures</p></li>
+</ul>
+</dd>
+<dt class="field-even">Variables<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>transient_holdoff_time</strong> (<em>float</em>) – <em>(Value: 0.002)</em></p></li>
+<li><p><strong>stream_all_rx_ports</strong> (<em>bool</em><em> | </em><em>None</em>) – <em>(Value: True)</em></p></li>
+<li><p><strong>transport_dtype</strong> (<em>one</em><em> of </em><em>[</em><em>'int16'</em><em>, </em><em>'float32'</em><em>, </em><em>'complex64'</em><em>]</em>) – data transfer type to use inside the source <em>(Value: float32)</em></p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="striqt.sensor.sources.Air7201BSourceSpec.rx_enable_delay">
+<span class="sig-name descname"><span class="pre">rx_enable_delay</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.35</span></span><a class="headerlink" href="#striqt.sensor.sources.Air7201BSourceSpec.rx_enable_delay" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="striqt.sensor.sources.Air7201BSourceSpec.stream_all_rx_ports">
+<span class="sig-name descname"><span class="pre">stream_all_rx_ports</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ClassVar</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></span><a class="headerlink" href="#striqt.sensor.sources.Air7201BSourceSpec.stream_all_rx_ports" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="striqt.sensor.sources.Air7201BSourceSpec.transient_holdoff_time">
+<span class="sig-name descname"><span class="pre">transient_holdoff_time</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ClassVar</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.002</span></span><a class="headerlink" href="#striqt.sensor.sources.Air7201BSourceSpec.transient_holdoff_time" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.sensor.sources.Air8201BSourceSpec">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.sensor.sources.</span></span><span class="sig-name descname"><span class="pre">Air8201BSourceSpec</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">master_clock_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">125000000.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">trigger_strobe</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">signal_trigger</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">array_backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'cupy'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">calibration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_source</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'host'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_sync_at</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'acquire'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">clock_source</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'internal'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">receive_retries</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adc_overload_limit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">-1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">if_overload_limit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gapless</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.sources.Air8201BSourceSpec" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.SoapySource" title="striqt.sensor.specs.SoapySource"><code class="xref py py-class docutils literal notranslate"><span class="pre">SoapySource</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>master_clock_rate</strong> (<em>float</em>) – Base sample rate used inside the source <em>(Constraints: &gt; 0, units: Hz)</em></p></li>
+<li><p><strong>trigger_strobe</strong> (<em>float</em><em> | </em><em>None</em>)</p></li>
+<li><p><strong>signal_trigger</strong> (<em>str</em><em> | </em><a class="reference internal" href="striqt.analysis.specs.html#striqt.analysis.specs.AnalysisGroup" title="striqt.analysis.specs.AnalysisGroup"><em>AnalysisGroup</em></a><em> | </em><em>None</em>)</p></li>
+<li><p><strong>array_backend</strong> (<em>one</em><em> of </em><em>[</em><em>'numpy'</em><em>, </em><em>'cupy'</em><em>]</em>) – array module to use to set compute device: numpy = cpu, cupy = gpu</p></li>
+<li><p><strong>calibration</strong> (<em>str</em><em> | </em><em>None</em>)</p></li>
+<li><p><strong>time_source</strong> (<em>one</em><em> of </em><em>[</em><em>'host'</em><em>, </em><em>'internal'</em><em>, </em><em>'external'</em><em>, </em><em>'gps'</em><em>]</em>) – Hardware source for timestamps</p></li>
+<li><p><strong>time_sync_at</strong> (<em>one</em><em> of </em><em>[</em><em>'open'</em><em>, </em><em>'acquire'</em><em>]</em>) – when to sync the hardware clock: on connection, or before each capture</p></li>
+<li><p><strong>clock_source</strong> (<em>one</em><em> of </em><em>[</em><em>'internal'</em><em>, </em><em>'external'</em><em>, </em><em>'gps'</em><em>]</em>) – Hardware source for the frequency reference</p></li>
+<li><p><strong>receive_retries</strong> (<em>int</em>) – number of acquisition retry attempts on stream error <em>(Constraints: &gt;= 0)</em></p></li>
+<li><p><strong>adc_overload_limit</strong> (<em>float</em><em> | </em><em>None</em>) – dataset adc_overload=True when the peak ADC level exceeds this threshold <em>(Constraints: &lt;= 0, units: dBfs)</em></p></li>
+<li><p><strong>if_overload_limit</strong> (<em>float</em><em> | </em><em>None</em>) – the maximum level at maximum gain before IF/baseband overload <em>(Constraints: units: dBfs)</em></p></li>
+<li><p><strong>gapless</strong> (<em>bool</em>) – whether to raise an exception on overflows between identical captures</p></li>
+</ul>
+</dd>
+<dt class="field-even">Variables<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>transient_holdoff_time</strong> (<em>float</em>) – <em>(Value: 0.002)</em></p></li>
+<li><p><strong>stream_all_rx_ports</strong> (<em>bool</em><em> | </em><em>None</em>) – <em>(Value: True)</em></p></li>
+<li><p><strong>transport_dtype</strong> (<em>one</em><em> of </em><em>[</em><em>'int16'</em><em>, </em><em>'float32'</em><em>, </em><em>'complex64'</em><em>]</em>) – data transfer type to use inside the source <em>(Value: float32)</em></p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="striqt.sensor.sources.Air8201BSourceSpec.rx_enable_delay">
+<span class="sig-name descname"><span class="pre">rx_enable_delay</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1.4</span></span><a class="headerlink" href="#striqt.sensor.sources.Air8201BSourceSpec.rx_enable_delay" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="striqt.sensor.sources.Air8201BSourceSpec.stream_all_rx_ports">
+<span class="sig-name descname"><span class="pre">stream_all_rx_ports</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ClassVar</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></span><a class="headerlink" href="#striqt.sensor.sources.Air8201BSourceSpec.stream_all_rx_ports" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="striqt.sensor.sources.Air8201BSourceSpec.transient_holdoff_time">
+<span class="sig-name descname"><span class="pre">transient_holdoff_time</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ClassVar</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.002</span></span><a class="headerlink" href="#striqt.sensor.sources.Air8201BSourceSpec.transient_holdoff_time" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.sensor.sources.Airstack1Source">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.sensor.sources.</span></span><span class="sig-name descname"><span class="pre">Airstack1Source</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.SoapySource" title="striqt.sensor.specs.SoapySource"><span class="pre">SoapySource</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.sources.Airstack1Source" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#striqt.sensor.sources.SoapySource" title="striqt.sensor.lib.sources.soapy.SoapySource"><code class="xref py py-class docutils literal notranslate"><span class="pre">SoapySource</span></code></a></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.sensor.sources.Airstack1Source.read_peripherals">
+<span class="sig-name descname"><span class="pre">read_peripherals</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#striqt.sensor.sources.Airstack1Source.read_peripherals" title="Link to this definition">¶</a></dt>
+<dd><p>returns the transceiver temperature in Celsius</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.sensor.sources.DiracDeltaSource">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.sensor.sources.</span></span><span class="sig-name descname"><span class="pre">DiracDeltaSource</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">SS</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.sources.DiracDeltaSource" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">TestSourceBase</span></code>[<a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.FunctionSource" title="striqt.sensor.specs.FunctionSource"><code class="xref py py-class docutils literal notranslate"><span class="pre">FunctionSource</span></code></a>, <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.DiracDeltaCapture" title="striqt.sensor.specs.DiracDeltaCapture"><code class="xref py py-class docutils literal notranslate"><span class="pre">DiracDeltaCapture</span></code></a>]</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.sensor.sources.DiracDeltaSource.get_waveform">
+<span class="sig-name descname"><span class="pre">get_waveform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">count</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">offset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">xp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'complex64'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.sources.DiracDeltaSource.get_waveform" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.sensor.sources.MATSource">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.sensor.sources.</span></span><span class="sig-name descname"><span class="pre">MATSource</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">spec</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.sources.MATSource" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#striqt.sensor.sources.VirtualSource" title="striqt.sensor.lib.sources.base.VirtualSource"><code class="xref py py-class docutils literal notranslate"><span class="pre">VirtualSource</span></code></a>[<a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.MATSource" title="striqt.sensor.specs.MATSource"><code class="xref py py-class docutils literal notranslate"><span class="pre">MATSource</span></code></a>, <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.FileCapture" title="striqt.sensor.specs.FileCapture"><code class="xref py py-class docutils literal notranslate"><span class="pre">FileCapture</span></code></a>]</p>
+<p>returns IQ waveforms from a .mat file</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.sensor.sources.MATSource.get_waveform">
+<span class="sig-name descname"><span class="pre">get_waveform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">count</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">offset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">xp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'complex64'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.sources.MATSource.get_waveform" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.sensor.sources.NoSource">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.sensor.sources.</span></span><span class="sig-name descname"><span class="pre">NoSource</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.NoSource" title="striqt.sensor.specs.NoSource"><span class="pre">NoSource</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.sources.NoSource" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">SourceBackend</span></code>[<a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.NoSource" title="striqt.sensor.specs.NoSource"><code class="xref py py-class docutils literal notranslate"><span class="pre">NoSource</span></code></a>, <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.SensorCapture" title="striqt.sensor.specs.SensorCapture"><code class="xref py py-class docutils literal notranslate"><span class="pre">SensorCapture</span></code></a>]</p>
+<p>fast paths to acquire empty buffers</p>
+<dl class="py property">
+<dt class="sig sig-object py" id="striqt.sensor.sources.NoSource.about">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">about</span></span><a class="headerlink" href="#striqt.sensor.sources.NoSource.about" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="striqt.sensor.sources.NoSource.id">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">id</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#striqt.sensor.sources.NoSource.id" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.sensor.sources.NoSource.reset_sample_counter">
+<span class="sig-name descname"><span class="pre">reset_sample_counter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.sources.NoSource.reset_sample_counter" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.sensor.sources.NoiseSource">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.sensor.sources.</span></span><span class="sig-name descname"><span class="pre">NoiseSource</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">SS</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.sources.NoiseSource" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">TestSourceBase</span></code>[<a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.FunctionSource" title="striqt.sensor.specs.FunctionSource"><code class="xref py py-class docutils literal notranslate"><span class="pre">FunctionSource</span></code></a>, <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.NoiseCapture" title="striqt.sensor.specs.NoiseCapture"><code class="xref py py-class docutils literal notranslate"><span class="pre">NoiseCapture</span></code></a>]</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.sensor.sources.NoiseSource.get_waveform">
+<span class="sig-name descname"><span class="pre">get_waveform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">count</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">offset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">xp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'complex64'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.sources.NoiseSource.get_waveform" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.sensor.sources.SawtoothSource">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.sensor.sources.</span></span><span class="sig-name descname"><span class="pre">SawtoothSource</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">SS</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.sources.SawtoothSource" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">TestSourceBase</span></code>[<a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.FunctionSource" title="striqt.sensor.specs.FunctionSource"><code class="xref py py-class docutils literal notranslate"><span class="pre">FunctionSource</span></code></a>, <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.SawtoothCapture" title="striqt.sensor.specs.SawtoothCapture"><code class="xref py py-class docutils literal notranslate"><span class="pre">SawtoothCapture</span></code></a>]</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.sensor.sources.SawtoothSource.get_waveform">
+<span class="sig-name descname"><span class="pre">get_waveform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">count</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">offset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">xp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'complex64'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.sources.SawtoothSource.get_waveform" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.sensor.sources.SingleToneSource">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.sensor.sources.</span></span><span class="sig-name descname"><span class="pre">SingleToneSource</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">SS</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.sources.SingleToneSource" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">TestSourceBase</span></code>[<a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.FunctionSource" title="striqt.sensor.specs.FunctionSource"><code class="xref py py-class docutils literal notranslate"><span class="pre">FunctionSource</span></code></a>, <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.SingleToneCapture" title="striqt.sensor.specs.SingleToneCapture"><code class="xref py py-class docutils literal notranslate"><span class="pre">SingleToneCapture</span></code></a>]</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.sensor.sources.SingleToneSource.get_waveform">
+<span class="sig-name descname"><span class="pre">get_waveform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">count</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">offset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">xp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'complex64'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.sources.SingleToneSource.get_waveform" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.sensor.sources.SoapySource">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.sensor.sources.</span></span><span class="sig-name descname"><span class="pre">SoapySource</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">SS</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">device_kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.sources.SoapySource" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">SourceBackend</span></code>[<code class="xref py py-obj docutils literal notranslate"><span class="pre">SS</span></code>, <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.SoapyCapture" title="striqt.sensor.specs.SoapyCapture"><code class="xref py py-class docutils literal notranslate"><span class="pre">SoapyCapture</span></code></a>]</p>
+<p>Applies SoapySDR for device control and acquisition</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="striqt.sensor.sources.SoapySource.device">
+<span class="sig-name descname"><span class="pre">device</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">SoapySDR.Device</span></span><a class="headerlink" href="#striqt.sensor.sources.SoapySource.device" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.sensor.sources.SoapySource.read_peripherals">
+<span class="sig-name descname"><span class="pre">read_peripherals</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#striqt.sensor.sources.SoapySource.read_peripherals" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="striqt.sensor.sources.SoapySource.rx_stream">
+<span class="sig-name descname"><span class="pre">rx_stream</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">RxStream</span></span><a class="headerlink" href="#striqt.sensor.sources.SoapySource.rx_stream" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="striqt.sensor.sources.SoapySource.sync_time">
+<span class="sig-name descname"><span class="pre">sync_time</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">HardwareTimeSync</span></span><a class="headerlink" href="#striqt.sensor.sources.SoapySource.sync_time" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.sensor.sources.TDMSSource">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.sensor.sources.</span></span><span class="sig-name descname"><span class="pre">TDMSSource</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">SS</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.sources.TDMSSource" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#striqt.sensor.sources.VirtualSource" title="striqt.sensor.lib.sources.base.VirtualSource"><code class="xref py py-class docutils literal notranslate"><span class="pre">VirtualSource</span></code></a>[<a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.TDMSSource" title="striqt.sensor.specs.TDMSSource"><code class="xref py py-class docutils literal notranslate"><span class="pre">TDMSSource</span></code></a>, <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.FileCapture" title="striqt.sensor.specs.FileCapture"><code class="xref py py-class docutils literal notranslate"><span class="pre">FileCapture</span></code></a>]</p>
+<p>a source of IQ waveforms from a TDMS file</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.sensor.sources.TDMSSource.get_waveform">
+<span class="sig-name descname"><span class="pre">get_waveform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">count</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">offset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">xp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'complex64'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.sources.TDMSSource.get_waveform" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.sensor.sources.VirtualSource">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.sensor.sources.</span></span><span class="sig-name descname"><span class="pre">VirtualSource</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">SS</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.sources.VirtualSource" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">SourceBackend</span></code>[<code class="xref py py-obj docutils literal notranslate"><span class="pre">SS</span></code>, <code class="xref py py-obj docutils literal notranslate"><span class="pre">SC</span></code>]</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.sensor.sources.VirtualSource.get_waveform">
+<span class="sig-name descname"><span class="pre">get_waveform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">count</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">offset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">xp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'complex64'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Array</span></span></span><a class="headerlink" href="#striqt.sensor.sources.VirtualSource.get_waveform" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.sensor.sources.VirtualSource.reset_sample_counter">
+<span class="sig-name descname"><span class="pre">reset_sample_counter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.sources.VirtualSource.reset_sample_counter" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="striqt.sensor.sources.VirtualSource.setup_spec">
+<span class="sig-name descname"><span class="pre">setup_spec</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">SS</span></span><a class="headerlink" href="#striqt.sensor.sources.VirtualSource.setup_spec" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="striqt.sensor.sources.ZarrIQSource">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">striqt.sensor.sources.</span></span><span class="sig-name descname"><span class="pre">ZarrIQSource</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">spec</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.sources.ZarrIQSource" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#striqt.sensor.sources.VirtualSource" title="striqt.sensor.lib.sources.base.VirtualSource"><code class="xref py py-class docutils literal notranslate"><span class="pre">VirtualSource</span></code></a>[<a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.ZarrIQSource" title="striqt.sensor.specs.ZarrIQSource"><code class="xref py py-class docutils literal notranslate"><span class="pre">ZarrIQSource</span></code></a>, <a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.FileCapture" title="striqt.sensor.specs.FileCapture"><code class="xref py py-class docutils literal notranslate"><span class="pre">FileCapture</span></code></a>]</p>
+<p>a sources of IQ samples from iq_waveform variables in a zarr store</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="striqt.sensor.sources.ZarrIQSource.get_waveform">
+<span class="sig-name descname"><span class="pre">get_waveform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">count</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">offset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">xp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'complex64'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#striqt.sensor.sources.ZarrIQSource.get_waveform" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+  <div>
+    <h3><a href="../../index.html">Table of Contents</a></h3>
+    <ul>
+<li><a class="reference internal" href="#">striqt.sensor.sources</a><ul>
+<li><a class="reference internal" href="#striqt.sensor.sources.Air7101BSourceSpec"><code class="docutils literal notranslate"><span class="pre">Air7101BSourceSpec</span></code></a><ul>
+<li><a class="reference internal" href="#striqt.sensor.sources.Air7101BSourceSpec.rx_enable_delay"><code class="docutils literal notranslate"><span class="pre">Air7101BSourceSpec.rx_enable_delay</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.sources.Air7101BSourceSpec.stream_all_rx_ports"><code class="docutils literal notranslate"><span class="pre">Air7101BSourceSpec.stream_all_rx_ports</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.sources.Air7101BSourceSpec.transient_holdoff_time"><code class="docutils literal notranslate"><span class="pre">Air7101BSourceSpec.transient_holdoff_time</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#striqt.sensor.sources.Air7201BSourceSpec"><code class="docutils literal notranslate"><span class="pre">Air7201BSourceSpec</span></code></a><ul>
+<li><a class="reference internal" href="#striqt.sensor.sources.Air7201BSourceSpec.rx_enable_delay"><code class="docutils literal notranslate"><span class="pre">Air7201BSourceSpec.rx_enable_delay</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.sources.Air7201BSourceSpec.stream_all_rx_ports"><code class="docutils literal notranslate"><span class="pre">Air7201BSourceSpec.stream_all_rx_ports</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.sources.Air7201BSourceSpec.transient_holdoff_time"><code class="docutils literal notranslate"><span class="pre">Air7201BSourceSpec.transient_holdoff_time</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#striqt.sensor.sources.Air8201BSourceSpec"><code class="docutils literal notranslate"><span class="pre">Air8201BSourceSpec</span></code></a><ul>
+<li><a class="reference internal" href="#striqt.sensor.sources.Air8201BSourceSpec.rx_enable_delay"><code class="docutils literal notranslate"><span class="pre">Air8201BSourceSpec.rx_enable_delay</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.sources.Air8201BSourceSpec.stream_all_rx_ports"><code class="docutils literal notranslate"><span class="pre">Air8201BSourceSpec.stream_all_rx_ports</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.sources.Air8201BSourceSpec.transient_holdoff_time"><code class="docutils literal notranslate"><span class="pre">Air8201BSourceSpec.transient_holdoff_time</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#striqt.sensor.sources.Airstack1Source"><code class="docutils literal notranslate"><span class="pre">Airstack1Source</span></code></a><ul>
+<li><a class="reference internal" href="#striqt.sensor.sources.Airstack1Source.read_peripherals"><code class="docutils literal notranslate"><span class="pre">Airstack1Source.read_peripherals()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#striqt.sensor.sources.DiracDeltaSource"><code class="docutils literal notranslate"><span class="pre">DiracDeltaSource</span></code></a><ul>
+<li><a class="reference internal" href="#striqt.sensor.sources.DiracDeltaSource.get_waveform"><code class="docutils literal notranslate"><span class="pre">DiracDeltaSource.get_waveform()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#striqt.sensor.sources.MATSource"><code class="docutils literal notranslate"><span class="pre">MATSource</span></code></a><ul>
+<li><a class="reference internal" href="#striqt.sensor.sources.MATSource.get_waveform"><code class="docutils literal notranslate"><span class="pre">MATSource.get_waveform()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#striqt.sensor.sources.NoSource"><code class="docutils literal notranslate"><span class="pre">NoSource</span></code></a><ul>
+<li><a class="reference internal" href="#striqt.sensor.sources.NoSource.about"><code class="docutils literal notranslate"><span class="pre">NoSource.about</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.sources.NoSource.id"><code class="docutils literal notranslate"><span class="pre">NoSource.id</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.sources.NoSource.reset_sample_counter"><code class="docutils literal notranslate"><span class="pre">NoSource.reset_sample_counter()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#striqt.sensor.sources.NoiseSource"><code class="docutils literal notranslate"><span class="pre">NoiseSource</span></code></a><ul>
+<li><a class="reference internal" href="#striqt.sensor.sources.NoiseSource.get_waveform"><code class="docutils literal notranslate"><span class="pre">NoiseSource.get_waveform()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#striqt.sensor.sources.SawtoothSource"><code class="docutils literal notranslate"><span class="pre">SawtoothSource</span></code></a><ul>
+<li><a class="reference internal" href="#striqt.sensor.sources.SawtoothSource.get_waveform"><code class="docutils literal notranslate"><span class="pre">SawtoothSource.get_waveform()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#striqt.sensor.sources.SingleToneSource"><code class="docutils literal notranslate"><span class="pre">SingleToneSource</span></code></a><ul>
+<li><a class="reference internal" href="#striqt.sensor.sources.SingleToneSource.get_waveform"><code class="docutils literal notranslate"><span class="pre">SingleToneSource.get_waveform()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#striqt.sensor.sources.SoapySource"><code class="docutils literal notranslate"><span class="pre">SoapySource</span></code></a><ul>
+<li><a class="reference internal" href="#striqt.sensor.sources.SoapySource.device"><code class="docutils literal notranslate"><span class="pre">SoapySource.device</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.sources.SoapySource.read_peripherals"><code class="docutils literal notranslate"><span class="pre">SoapySource.read_peripherals()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.sources.SoapySource.rx_stream"><code class="docutils literal notranslate"><span class="pre">SoapySource.rx_stream</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.sources.SoapySource.sync_time"><code class="docutils literal notranslate"><span class="pre">SoapySource.sync_time</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#striqt.sensor.sources.TDMSSource"><code class="docutils literal notranslate"><span class="pre">TDMSSource</span></code></a><ul>
+<li><a class="reference internal" href="#striqt.sensor.sources.TDMSSource.get_waveform"><code class="docutils literal notranslate"><span class="pre">TDMSSource.get_waveform()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#striqt.sensor.sources.VirtualSource"><code class="docutils literal notranslate"><span class="pre">VirtualSource</span></code></a><ul>
+<li><a class="reference internal" href="#striqt.sensor.sources.VirtualSource.get_waveform"><code class="docutils literal notranslate"><span class="pre">VirtualSource.get_waveform()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.sources.VirtualSource.reset_sample_counter"><code class="docutils literal notranslate"><span class="pre">VirtualSource.reset_sample_counter()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.sources.VirtualSource.setup_spec"><code class="docutils literal notranslate"><span class="pre">VirtualSource.setup_spec</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#striqt.sensor.sources.ZarrIQSource"><code class="docutils literal notranslate"><span class="pre">ZarrIQSource</span></code></a><ul>
+<li><a class="reference internal" href="#striqt.sensor.sources.ZarrIQSource.get_waveform"><code class="docutils literal notranslate"><span class="pre">ZarrIQSource.get_waveform()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+  </div>
+  <div>
+    <h4>Previous topic</h4>
+    <p class="topless"><a href="striqt.sensor.sinks.html"
+                          title="previous chapter">striqt.sensor.sinks</a></p>
+  </div>
+  <div>
+    <h4>Next topic</h4>
+    <p class="topless"><a href="striqt.sensor.specs.html"
+                          title="next chapter">striqt.sensor.specs</a></p>
+  </div>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="../../_sources/reference/api/striqt.sensor.sources.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="Related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a></li>
+        <li class="right" >
+          <a href="striqt.sensor.specs.html" title="striqt.sensor.specs"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="striqt.sensor.sinks.html" title="striqt.sensor.sinks"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../index.html">striqt</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../api.html" >API Reference</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">striqt.sensor.sources</a></li> 
+      </ul>
+    </div>
+<hr \>
+<section class="footer">
+<br><a target="_blank" href="http://www.nist.gov/public_affairs/privacy.cfm#privpolicy">Privacy Policy</a> | <a target="_blank" href="http://www.nist.gov/public_affairs/privacy.cfm#secnot">Security Notice</a> | <a href="http://www.nist.gov/public_affairs/privacy.cfm#accesstate">Accessibility Statement</a>
+<br><em>United States government work, not subject to copyright in the United States</em>
+</section>
+
+  </body>
+</html>

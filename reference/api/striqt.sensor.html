@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>striqt.sensor &#8212; striqt</title>
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+    <link rel="stylesheet" type="text/css" href="../../_static/pyramid.css?v=63f5dc7c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css?v=8cd3d715" />
+    <script src="../../_static/documentation_options.js?v=486e5634"></script>
+    <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="striqt.sensor.bindings" href="striqt.sensor.bindings.html" />
+    <link rel="prev" title="striqt.analysis.specs" href="striqt.analysis.specs.html" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Neuton&amp;subset=latin" type="text/css" media="screen" charset="utf-8" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Nobile:regular,italic,bold,bolditalic&amp;subset=latin" type="text/css" media="screen" charset="utf-8" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+  </head><body>
+<header class="nist-header">
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>NIST Pages Template</title>
+  <meta name="viewport" content="width=device-width">
+  <meta name="description" content="striqt">
+  <link rel="canonical" href="../../">
+  <link rel="shortcut icon" href="/favicon.ico">
+
+  <!-- Google Analytics -->
+  <!--<script type="text/javascript" id="_fed_an_js_tag" src="http://www.nist.gov/js/federated-analytics.all.min.js?agency=NIST&subagency=mml&pua=UA-66610693-1&yt=true&exts=ppsx,pps,f90,sch,rtf,wrl,txz,m1v,xlsm,msi,xsd,f,tif,eps,mpg,xml,pl,xlt,c"></script> -->
+  <!-- DAP Analytics -->
+  <script type="text/javascript" id="_fed_an_ua_tag" src="https://dap.digitalgov.gov/Universal-Federated-Analytics-Min.js?agency=DOC&subagefncy=NIST&pua=UA-66610693-1&yt=true&exts=ppsx,pps,f90,sch,rtf,wrl,txz,m1v,xlsm,msi,xsd,f,tif,eps,mpg,xml,pl,xlt,c"></script>
+
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="../..//_static/NISTStyle.css">
+  <link rel="stylesheet" href="../..//_static/NISTPages.css">
+
+  <h1>
+    <a class="nist-logo" target="_blank" href="http://www.nist.gov/" title="Go to nist.gov">National Institute of Standards and Technology</a>
+  </h1>
+  <div class="nist-links">
+    <a class="nist-links-button" target="_blank" href="http://www.nist.gov">NIST Website</a>
+    <a class="nist-links-button mobile-hide" target="_blank" href="http://www.nist.gov/public_affairs/nandyou.cfm">About NIST</a>
+    <a class="nist-links-button mobile-hide" target="_blank" href="https://github.com/usnistgov">usnistgov on GitHub</a>
+  </div>
+  
+  <!-- HTML5 shim and Respond.js IE8 support of HTML5 elements and media queries -->
+  <!--[if lt IE 9]>
+  <script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
+    <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+  <script src="https://oss.maxcdn.com/libs/respond.js/1.4.2/respond.min.js"></script>
+  <![endif]-->
+</header>
+
+    <div class="related" role="navigation" aria-label="Related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a></li>
+        <li class="right" >
+          <a href="striqt.sensor.bindings.html" title="striqt.sensor.bindings"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="striqt.analysis.specs.html" title="striqt.analysis.specs"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../index.html">striqt</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../api.html" accesskey="U">API Reference</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">striqt.sensor</a></li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <section id="module-striqt.sensor">
+<span id="striqt-sensor"></span><h1>striqt.sensor<a class="headerlink" href="#module-striqt.sensor" title="Link to this heading">¶</a></h1>
+<dl class="py function">
+<dt class="sig sig-object py" id="striqt.sensor.correct_iq">
+<span class="sig-prename descclassname"><span class="pre">striqt.sensor.</span></span><span class="sig-name descname"><span class="pre">correct_iq</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">iq</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.AcquiredIQ" title="striqt.sensor.specs.AcquiredIQ"><span class="pre">AcquiredIQ</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">signal_trigger</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="striqt.analysis.html#striqt.analysis.Trigger" title="striqt.analysis.lib.register.Trigger"><span class="pre">Trigger</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">axis</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overwrite_x</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.AcquiredIQ" title="striqt.sensor.specs.AcquiredIQ"><span class="pre">AcquiredIQ</span></a></span></span><a class="headerlink" href="#striqt.sensor.correct_iq" title="Link to this definition">¶</a></dt>
+<dd><p>resample, filter, and apply calibration corrections.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>iq</strong> – IQ dataclass output by a source</p></li>
+<li><p><strong>axis</strong> – the axis of <cite>x</cite> along which to compute the filter</p></li>
+<li><p><strong>overwrite_x</strong> – if True, modify the contents of IQ in-place; otherwise, a copy will be returned</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>the filtered IQ waveform</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="striqt.sensor.iterate_sweep">
+<span class="sig-prename descclassname"><span class="pre">striqt.sensor.</span></span><span class="sig-name descname"><span class="pre">iterate_sweep</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">resources</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Resources</span><span class="p"><span class="pre">[</span></span><span class="pre">SS</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">SP</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">SC</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">PS</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">PC</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">always_yield</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">yield_values</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">loop</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">replace</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Unpack</span><span class="p"><span class="pre">[</span></span><span class="pre">AnyResources</span><span class="p"><span class="pre">[</span></span><span class="pre">SS</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">SP</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">SC</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">PS</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">PC</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Generator</span><span class="p"><span class="pre">[</span></span><span class="pre">Dataset</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">DelayedDataset</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#striqt.sensor.iterate_sweep" title="Link to this definition">¶</a></dt>
+<dd><p>an iterator that steps through the execution of a sensor sweep.</p>
+<p>Data acquisition, analysis, and sink operations each run in parallel in
+separate threads. Normally, the iterator yields a result for each
+of the N captures after it is handled by the sink:</p>
+<p><code class="docutils literal notranslate"><span class="pre">`</span>
+<span class="pre">0.</span> <span class="pre">`(Acquire</span> <span class="pre">0)`</span>
+<span class="pre">1.</span> <span class="pre">`Concurrent</span> <span class="pre">(Acquire</span> <span class="pre">1,</span> <span class="pre">Analyze</span> <span class="pre">0)`.</span>
+<span class="pre">2.</span> <span class="pre">`Concurrent</span> <span class="pre">(Acquire</span> <span class="pre">2,</span> <span class="pre">Analyze</span> <span class="pre">1,</span> <span class="pre">Sink</span> <span class="pre">0)`</span> <span class="pre">➔</span> <span class="pre">yield</span> <span class="pre">(`Result</span> <span class="pre">0)`.</span>
+<span class="pre">(...)</span>
+<span class="pre">N.</span> <span class="pre">`Concurrent</span> <span class="pre">(Analyze</span> <span class="pre">N-1,</span> <span class="pre">Sink</span> <span class="pre">N-2)`</span> <span class="pre">➔</span> <span class="pre">yield</span> <span class="pre">`(Result</span> <span class="pre">N-2)`.</span>
+<span class="pre">N+1.</span> <span class="pre">`(Sink</span> <span class="pre">N-2)`</span> <span class="pre">➔</span> <span class="pre">yield</span> <span class="pre">`(Result</span> <span class="pre">N-1)`.</span>
+<span class="pre">`</span></code></p>
+<p>With the <cite>always_yield</cite> argument, the iterator yields <cite>None</cite> to support
+status information in the 2 steps that do not yield anlaysis results:</p>
+<p><code class="docutils literal notranslate"><span class="pre">`</span>
+<span class="pre">0.</span> <span class="pre">`(Acquire</span> <span class="pre">0)`</span> <span class="pre">➔</span> <span class="pre">yield</span> <span class="pre">`None`</span>
+<span class="pre">1.</span> <span class="pre">`Concurrent</span> <span class="pre">(Acquire</span> <span class="pre">1,</span> <span class="pre">Analyze</span> <span class="pre">0)`</span> <span class="pre">➔</span> <span class="pre">yield</span> <span class="pre">`(Analysis</span> <span class="pre">0)`.</span>
+<span class="pre">2.</span> <span class="pre">`Concurrent</span> <span class="pre">(Acquire</span> <span class="pre">2,</span> <span class="pre">Analyze</span> <span class="pre">1,</span> <span class="pre">Sink</span> <span class="pre">0)`</span> <span class="pre">➔</span> <span class="pre">yield</span> <span class="pre">`(Analysis</span> <span class="pre">1)`.</span>
+<span class="pre">(...)</span>
+<span class="pre">N.</span> <span class="pre">`Concurrent</span> <span class="pre">(Analyze</span> <span class="pre">N-1,</span> <span class="pre">Sink</span> <span class="pre">N-2)`</span> <span class="pre">➔</span> <span class="pre">yield</span> <span class="pre">`(Analysis</span> <span class="pre">N-1)`.</span>
+<span class="pre">N+1.</span> <span class="pre">`(Sink</span> <span class="pre">N-2)`</span> <span class="pre">➔</span> <span class="pre">yield</span> <span class="pre">`None`</span>
+<span class="pre">`</span></code></p>
+<p>The type of each yielded result depends on the return value of <cite>sink.append</cite>.
+To to minimize memory usage, the yield values can also be explicitly set to
+<cite>None</cite> with <cite>yield_values</cite>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>resources</strong> – dictionary of open resources returned by open_resources</p></li>
+<li><p><strong>always_yield</strong> – if True, yield <cite>None</cite> on steps that produce no analysis</p></li>
+<li><p><strong>always_values</strong> – if False, yield will return <cite>None</cite> instead of the sink result</p></li>
+<li><p><strong>loop</strong> – if True, the sweep will repeat at the beginning after last capture</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>An iterator of analyzed data or None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="striqt.sensor.open_resources">
+<span class="sig-prename descclassname"><span class="pre">striqt.sensor.</span></span><span class="sig-name descname"><span class="pre">open_resources</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.Sweep" title="striqt.sensor.specs.Sweep"><span class="pre">specs.Sweep</span></a><span class="p"><span class="pre">[</span></span><span class="pre">SS</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">SP</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">SC</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">spec_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">test_only</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">on_source_opened</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">SourceOpenCallback</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ConnectionManager</span><span class="p"><span class="pre">[</span></span><span class="pre">SS</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">SP</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">SC</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">PS</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">PC</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#striqt.sensor.open_resources" title="Link to this definition">¶</a></dt>
+<dd><p>open the sensor hardware and software contexts needed to run the given sweep.</p>
+<p>The returned Connections object contains the resulting context. All of its resources
+are then open and ready to run the sweep.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="striqt.sensor.open_store">
+<span class="sig-prename descclassname"><span class="pre">striqt.sensor.</span></span><span class="sig-name descname"><span class="pre">open_store</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.Sink" title="striqt.sensor.specs.Sink"><span class="pre">specs.Sink</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">format_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">specs.helpers.PathFormatter</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">force</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ZarrStore</span></span></span><a class="headerlink" href="#striqt.sensor.open_store" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="striqt.sensor.read_calibration">
+<span class="sig-prename descclassname"><span class="pre">striqt.sensor.</span></span><span class="sig-name descname"><span class="pre">read_calibration</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">format_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">specs.helpers.PathFormatter</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#striqt.sensor.read_calibration" title="Link to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">striqt.sensor.</span></span><span class="sig-name descname"><span class="pre">read_calibration</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">format_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">specs.helpers.PathFormatter</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">xr.Dataset</span></span></span></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="striqt.sensor.read_json_spec">
+<span class="sig-prename descclassname"><span class="pre">striqt.sensor.</span></span><span class="sig-name descname"><span class="pre">read_json_spec</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">type</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.Sweep" title="striqt.sensor.specs.Sweep"><span class="pre">Sweep</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">store_backend</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.Sweep" title="striqt.sensor.specs.Sweep"><span class="pre">Sweep</span></a></span></span><a class="headerlink" href="#striqt.sensor.read_json_spec" title="Link to this definition">¶</a></dt>
+<dd><p>Build a specs.Sweep specification object from a json file at the given path.</p>
+<p>This supports the same specifications as a yaml file, but without !include
+directives.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>path</strong> – path to the yaml file</p></li>
+<li><p><strong>type</strong> – the type of sweep specification to load, or None to use specs.Sweep</p></li>
+<li><p><strong>output_path</strong> – optional override for the specification’s output path</p></li>
+<li><p><strong>store_backend</strong> – optional override for the specification’s output store backend</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>an instance of specs.Sweep</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="striqt.sensor.read_yaml_spec">
+<span class="sig-prename descclassname"><span class="pre">striqt.sensor.</span></span><span class="sig-name descname"><span class="pre">read_yaml_spec</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">type</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.Sweep" title="striqt.sensor.specs.Sweep"><span class="pre">Sweep</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">store_backend</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="striqt.sensor.specs.html#striqt.sensor.specs.Sweep" title="striqt.sensor.specs.Sweep"><span class="pre">Sweep</span></a></span></span><a class="headerlink" href="#striqt.sensor.read_yaml_spec" title="Link to this definition">¶</a></dt>
+<dd><p>Build a Sweep specification object from the specified yaml file.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>path</strong> – path to the yaml file</p></li>
+<li><p><strong>output_path</strong> – optional override for the specification’s output path</p></li>
+<li><p><strong>type</strong> – the type of sweep specification to load, or None to use specs.Sweep</p></li>
+<li><p><strong>store_backend</strong> – optional override for the specification’s output store backend</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>an instance of specs.Sweep</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+  <div>
+    <h3><a href="../../index.html">Table of Contents</a></h3>
+    <ul>
+<li><a class="reference internal" href="#">striqt.sensor</a><ul>
+<li><a class="reference internal" href="#striqt.sensor.correct_iq"><code class="docutils literal notranslate"><span class="pre">correct_iq()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.iterate_sweep"><code class="docutils literal notranslate"><span class="pre">iterate_sweep()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.open_resources"><code class="docutils literal notranslate"><span class="pre">open_resources()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.open_store"><code class="docutils literal notranslate"><span class="pre">open_store()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.read_calibration"><code class="docutils literal notranslate"><span class="pre">read_calibration()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.read_json_spec"><code class="docutils literal notranslate"><span class="pre">read_json_spec()</span></code></a></li>
+<li><a class="reference internal" href="#striqt.sensor.read_yaml_spec"><code class="docutils literal notranslate"><span class="pre">read_yaml_spec()</span></code></a></li>
+</ul>
+</li>
+</ul>
+
+  </div>
+  <div>
+    <h4>Previous topic</h4>
+    <p class="topless"><a href="striqt.analysis.specs.html"
+                          title="previous chapter">striqt.analysis.specs</a></p>
+  </div>
+  <div>
+    <h4>Next topic</h4>
+    <p class="topless"><a href="striqt.sensor.bindings.html"
+                          title="next chapter">striqt.sensor.bindings</a></p>
+  </div>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="../../_sources/reference/api/striqt.sensor.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="Related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a></li>
+        <li class="right" >
+          <a href="striqt.sensor.bindings.html" title="striqt.sensor.bindings"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="striqt.analysis.specs.html" title="striqt.analysis.specs"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../index.html">striqt</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../api.html" >API Reference</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">striqt.sensor</a></li> 
+      </ul>
+    </div>
+<hr \>
+<section class="footer">
+<br><a target="_blank" href="http://www.nist.gov/public_affairs/privacy.cfm#privpolicy">Privacy Policy</a> | <a target="_blank" href="http://www.nist.gov/public_affairs/privacy.cfm#secnot">Security Notice</a> | <a href="http://www.nist.gov/public_affairs/privacy.cfm#accesstate">Accessibility Statement</a>
+<br><em>United States government work, not subject to copyright in the United States</em>
+</section>
+
+  </body>
+</html>

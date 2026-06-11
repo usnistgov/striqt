@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>convert-spec &#8212; striqt</title>
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+    <link rel="stylesheet" type="text/css" href="../../_static/pyramid.css?v=63f5dc7c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css?v=8cd3d715" />
+    <script src="../../_static/documentation_options.js?v=486e5634"></script>
+    <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="sensor-sweep" href="plot-captures.html" />
+    <link rel="prev" title="sensor-sweep" href="check-sweep.html" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Neuton&amp;subset=latin" type="text/css" media="screen" charset="utf-8" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Nobile:regular,italic,bold,bolditalic&amp;subset=latin" type="text/css" media="screen" charset="utf-8" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+  </head><body>
+<header class="nist-header">
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>NIST Pages Template</title>
+  <meta name="viewport" content="width=device-width">
+  <meta name="description" content="striqt">
+  <link rel="canonical" href="../../">
+  <link rel="shortcut icon" href="/favicon.ico">
+
+  <!-- Google Analytics -->
+  <!--<script type="text/javascript" id="_fed_an_js_tag" src="http://www.nist.gov/js/federated-analytics.all.min.js?agency=NIST&subagency=mml&pua=UA-66610693-1&yt=true&exts=ppsx,pps,f90,sch,rtf,wrl,txz,m1v,xlsm,msi,xsd,f,tif,eps,mpg,xml,pl,xlt,c"></script> -->
+  <!-- DAP Analytics -->
+  <script type="text/javascript" id="_fed_an_ua_tag" src="https://dap.digitalgov.gov/Universal-Federated-Analytics-Min.js?agency=DOC&subagefncy=NIST&pua=UA-66610693-1&yt=true&exts=ppsx,pps,f90,sch,rtf,wrl,txz,m1v,xlsm,msi,xsd,f,tif,eps,mpg,xml,pl,xlt,c"></script>
+
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="../..//_static/NISTStyle.css">
+  <link rel="stylesheet" href="../..//_static/NISTPages.css">
+
+  <h1>
+    <a class="nist-logo" target="_blank" href="http://www.nist.gov/" title="Go to nist.gov">National Institute of Standards and Technology</a>
+  </h1>
+  <div class="nist-links">
+    <a class="nist-links-button" target="_blank" href="http://www.nist.gov">NIST Website</a>
+    <a class="nist-links-button mobile-hide" target="_blank" href="http://www.nist.gov/public_affairs/nandyou.cfm">About NIST</a>
+    <a class="nist-links-button mobile-hide" target="_blank" href="https://github.com/usnistgov">usnistgov on GitHub</a>
+  </div>
+  
+  <!-- HTML5 shim and Respond.js IE8 support of HTML5 elements and media queries -->
+  <!--[if lt IE 9]>
+  <script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
+    <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+  <script src="https://oss.maxcdn.com/libs/respond.js/1.4.2/respond.min.js"></script>
+  <![endif]-->
+</header>
+
+    <div class="related" role="navigation" aria-label="Related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a></li>
+        <li class="right" >
+          <a href="plot-captures.html" title="sensor-sweep"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="check-sweep.html" title="sensor-sweep"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../index.html">striqt</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../cli.html" accesskey="U">Command-Line Reference</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">convert-spec</a></li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <section id="convert-spec">
+<h1>convert-spec<a class="headerlink" href="#convert-spec" title="Link to this heading">¶</a></h1>
+<section id="convert-spec">
+<h2>convert-spec<a class="headerlink" href="#convert-spec" title="Link to this heading">¶</a></h2>
+<p class="rubric">Usage</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>convert-spec<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span><span class="w"> </span>PATH
+</pre></div>
+</div>
+<p class="rubric">Options</p>
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-convert-spec-y">
+<span id="cmdoption-convert-spec-yaml"></span><span class="sig-name descname"><span class="pre">-y</span></span><span class="sig-prename descclassname"></span><span class="sig-prename descclassname"><span class="pre">,</span> </span><span class="sig-name descname"><span class="pre">--yaml</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-convert-spec-y" title="Link to this definition">¶</a></dt>
+<dd><p>output a flattened yaml file instead of json</p>
+<dl class="field-list simple">
+<dt class="field-odd">Default<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+</dl>
+</dd></dl>
+
+<p class="rubric">Arguments</p>
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-convert-spec-arg-PATH">
+<span class="sig-name descname"><span class="pre">PATH</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-convert-spec-arg-PATH" title="Link to this definition">¶</a></dt>
+<dd><p>Required argument</p>
+</dd></dl>
+
+</section>
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+  <div>
+    <h3><a href="../../index.html">Table of Contents</a></h3>
+    <ul>
+<li><a class="reference internal" href="#">convert-spec</a><ul>
+<li><a class="reference internal" href="#convert-spec">convert-spec</a></li>
+</ul>
+</li>
+</ul>
+
+  </div>
+  <div>
+    <h4>Previous topic</h4>
+    <p class="topless"><a href="check-sweep.html"
+                          title="previous chapter">sensor-sweep</a></p>
+  </div>
+  <div>
+    <h4>Next topic</h4>
+    <p class="topless"><a href="plot-captures.html"
+                          title="next chapter">sensor-sweep</a></p>
+  </div>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="../../_sources/reference/cli/convert-spec.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="Related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a></li>
+        <li class="right" >
+          <a href="plot-captures.html" title="sensor-sweep"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="check-sweep.html" title="sensor-sweep"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../index.html">striqt</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../cli.html" >Command-Line Reference</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">convert-spec</a></li> 
+      </ul>
+    </div>
+<hr \>
+<section class="footer">
+<br><a target="_blank" href="http://www.nist.gov/public_affairs/privacy.cfm#privpolicy">Privacy Policy</a> | <a target="_blank" href="http://www.nist.gov/public_affairs/privacy.cfm#secnot">Security Notice</a> | <a href="http://www.nist.gov/public_affairs/privacy.cfm#accesstate">Accessibility Statement</a>
+<br><em>United States government work, not subject to copyright in the United States</em>
+</section>
+
+  </body>
+</html>
