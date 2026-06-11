@@ -149,12 +149,16 @@ class PlotBackend:
         output_dir: Path | None,
         *,
         interactive: None | str = None,
-        lock: RLock|_FakeLock = _FakeLock(),
+        lock: RLock|None = None,
     ):
         self.opts = opts
         self.output_dir = output_dir
         self.interactive = interactive
-        self.lock = lock
+
+        if lock is None:
+            self.lock = _FakeLock()
+        else:
+            self.lock = lock
 
         if self.output_dir is not None:
             self.output_dir.mkdir(parents=True, exist_ok=True)
