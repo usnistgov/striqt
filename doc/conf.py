@@ -83,7 +83,9 @@ extensions = [
     'sphinx.ext.githubpages',
     #
     # for documenting click CLI
-    'sphinx_click'
+    'sphinx_click',
+
+    'sphinx-jsonschema'
 ]
 
 exclude_patterns = [

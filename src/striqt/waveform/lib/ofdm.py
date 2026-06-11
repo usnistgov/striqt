@@ -372,7 +372,7 @@ def sss_5g_nr(
     )
 
 
-def _index_pss_symbols(
+def index_pss_symbols(
     subcarrier_spacing: float,
     shared_spectrum: bool = False,
     symbol_indexes: CellSSBIndexes = 'auto',
@@ -496,7 +496,7 @@ def pss_params(
             f'sample_rate must be a multiple of {128 * subcarrier_spacing}'
         )
 
-    symbol_indexes = _index_pss_symbols(
+    symbol_indexes = index_pss_symbols(
         subcarrier_spacing, shared_spectrum, symbol_indexes, center_frequency
     )
 

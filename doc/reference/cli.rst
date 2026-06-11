@@ -1,5 +1,6 @@
-Command-Line Reference
-===========================================
+#######################
+Command-Line Interface
+#######################
 
 .. toctree::
    :maxdepth: 2
