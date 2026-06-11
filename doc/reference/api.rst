@@ -2,8 +2,7 @@ API Reference
 ===========================================
 
 .. toctree::
-   :maxdepth: 3
+   :maxdepth: 2
    :glob:
 
-   api/striqt.analysis*
-   api/striqt.sensor*
+   api/*
