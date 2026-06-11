@@ -130,9 +130,18 @@ def plot_cyclic_channel_power(
     labels.label_legend(cyclic_channel_power.power_detector, ax=ax)
 
 
+class _FakeLock:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        pass
+
+
+
 class PlotBackend:
     opts: specs.SharedPlotOptions
-    lock: RLock
+    lock: RLock | _FakeLock
 
     def __init__(
         self,
@@ -140,7 +149,7 @@ class PlotBackend:
         output_dir: Path | None,
         *,
         interactive: None | str = None,
-        lock: RLock,
+        lock: RLock|_FakeLock = _FakeLock(),
     ):
         self.opts = opts
         self.output_dir = output_dir
