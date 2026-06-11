@@ -199,11 +199,13 @@ def worker_init(
         if f'{{{name}}}' in opts.plotter.filename_fmt:
             continue
         p = Path(opts.plotter.filename_fmt)
-        plotter_options = opts.plotter.replace(filename_fmt = f'{p.stem} {name}={{{name}}}{p.suffix}')
+        plotter_options = opts.plotter.replace(
+            filename_fmt=f'{p.stem} {name}={{{name}}}{p.suffix}'
+        )
         opts_dict = dict(
             data=opts.data,
             variables=sa.specs.helpers.unfreeze(opts.variables),
-            plotter=plotter_options
+            plotter=plotter_options,
         )
         opts = opts.from_dict(sa.specs.helpers.freeze(opts_dict, 10))
 

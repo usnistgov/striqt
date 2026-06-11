@@ -1,9 +1,8 @@
-API Reference
+Command-Line Reference
 ===========================================
 
 .. toctree::
-   :maxdepth: 3
+   :maxdepth: 2
    :glob:
 
-   striqt.analysis*
-   striqt.sensor*
+   cli/*

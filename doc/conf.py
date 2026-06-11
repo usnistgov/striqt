@@ -81,6 +81,9 @@ extensions = [
     #
     # for code that will be hosted on github pages (or NIST pages)
     'sphinx.ext.githubpages',
+    #
+    # for documenting click CLI
+    'sphinx_click'
 ]
 
 exclude_patterns = [

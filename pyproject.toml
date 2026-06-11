@@ -49,6 +49,7 @@ dev = [
 ]
 doc = [
     "sphinx",
+    "sphinx-click",
     "toml",
     "myst_nb"
 ]
@@ -61,16 +62,13 @@ test = [
     "nptdms",
     "pytest-order"
 ]
-kitcat = [
-     "kitcat >= 1.3.0",
-]
 
 [project.scripts]
-check-sweep = "striqt.cli.check_sweep:run"
+check-sweep = "striqt.cli.check_sweep:cli"
 sensor-sweep = "striqt.cli.sensor_sweep:cli"
 plot-capture = "striqt.cli.plot_capture:cli"
-rechunk-zarr = "striqt.cli.rechunk_zarr:run"
-convert-spec = "striqt.cli.convert_spec:run"
+rechunk-zarr = "striqt.cli.rechunk_zarr:cli"
+convert-spec = "striqt.cli.convert_spec:cli"
 
 [tool.ruff]
 target-version = "py39"

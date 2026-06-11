@@ -5,31 +5,6 @@ import click
 import functools
 
 
-@functools.cache
-def try_zarrs_input():
-    try:
-        import zarrs  # type: ignore
-    except ImportError:
-        print('not accelerating with zarrs because it could not be imported')
-    else:
-        import zarr
-
-        zarr.config.set({'codec_pipeline.path': 'zarrs.ZarrsCodecPipeline'})
-
-
-def generate_timestamp_suffix(data) -> str:
-    from datetime import datetime
-
-    if 'start_time' not in data.variables or len(data.start_time) == 0:
-        raise click.ClickException(
-            'the data contained no timestamp to autogenerate an output file'
-        )
-
-    ts = float(data['start_time'][0])
-
-    return datetime.fromtimestamp(ts / 1e9).strftime('%Y%m%d-%Hh%Mm%S')
-
-
 @click.command('plot signal analysis from .zarr or .zarr.zip files')
 @click.argument('zarr_input', type=click.Path(exists=True, dir_okay=True))
 @click.argument('zarr_output', type=click.Path(exists=False), required=False)
@@ -42,13 +17,17 @@ def generate_timestamp_suffix(data) -> str:
     default=1,
     help='compression level (0-9)',
 )
+def cli(zarr_input: str, zarr_output: str | None, chunk_size, compression):
+    import warnings
+
+    warnings.filterwarnings('ignore', message='.*may change without warning.*')
+    run(zarr_input, zarr_output, chunk_size, compression)
+
+
 def run(zarr_input: str, zarr_output: str | None, chunk_size, compression):
     # yaml first, since it fails fastest
     import striqt.analysis as sa
     from pathlib import Path
-    import warnings
-
-    warnings.filterwarnings('ignore', message='.*may change without warning.*')
 
     path_in = Path(zarr_input)
 
@@ -97,5 +76,30 @@ def run(zarr_input: str, zarr_output: str | None, chunk_size, compression):
     )
 
 
+@functools.cache
+def try_zarrs_input():
+    try:
+        import zarrs  # type: ignore
+    except ImportError:
+        print('not accelerating with zarrs because it could not be imported')
+    else:
+        import zarr
+
+        zarr.config.set({'codec_pipeline.path': 'zarrs.ZarrsCodecPipeline'})
+
+
+def generate_timestamp_suffix(data) -> str:
+    from datetime import datetime
+
+    if 'start_time' not in data.variables or len(data.start_time) == 0:
+        raise click.ClickException(
+            'the data contained no timestamp to autogenerate an output file'
+        )
+
+    ts = float(data['start_time'][0])
+
+    return datetime.fromtimestamp(ts / 1e9).strftime('%Y%m%d-%Hh%Mm%S')
+
+
 if __name__ == '__main__':
-    run()  # pyright: ignore
+    cli()  # pyright: ignore

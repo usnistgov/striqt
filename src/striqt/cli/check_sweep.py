@@ -7,16 +7,20 @@ from striqt.sensor.lib import calibration, resources
 
 @click.command('runtime information about running a sweep')
 @click.argument('yaml_path', type=click.Path(exists=True, dir_okay=False))
-def run(yaml_path):
+def cli(yaml_path):
+    # instantiate sweep objects
+    import striqt.analysis as sa
+    sa.util.show_messages(sa.util.logging.WARNING)
+    run(yaml_path)
+
+
+def run(yaml_path: str):
     # instantiate sweep objects
     import striqt.sensor as ss
-    import striqt.analysis as sa
     from pprint import pformat
     from pathlib import Path
     import pandas as pd
     import itertools
-
-    sa.util.show_messages(sa.util.logging.WARNING)
 
     spec = ss.read_yaml_spec(yaml_path)
     print(f'Opened a bound specification for {type(spec).__name__!r} bindings')
@@ -99,4 +103,4 @@ def run(yaml_path):
 
 
 if __name__ == '__main__':
-    run()
+    cli()
