@@ -309,13 +309,13 @@ class RxStream:
 
     def __init__(
         self,
-        setup: specs.SoapySource,
+        source_spec: specs.SoapySource,
         info: SoapyInfo,
         *,
         ports: tuple[int, ...] = (),
         on_overflow: specs.types.OnOverflow = 'except',
     ):
-        self.setup = setup
+        self.source_spec = source_spec
         self.info = info
 
         self.checked_timestamp = False
@@ -325,11 +325,11 @@ class RxStream:
         self.ports = ports
 
     @sa.util.stopwatch('stream initialization', 'source')
-    def open(self, device: 'SoapySDR.Device', ports: specs.types.Port | None = None):
+    def setup(self, device: 'SoapySDR.Device', ports: specs.types.Port | None = None):
         if self.stream is not None and self.ports is not None:
             return
 
-        if self.setup.stream_all_rx_ports:
+        if self.source_spec.stream_all_rx_ports:
             ports = tuple(range(self.info.num_rx_ports))
         elif ports is not None:
             ports = specs.helpers.ensure_tuple(ports)
@@ -337,25 +337,23 @@ class RxStream:
         if not ports:
             raise RuntimeError('ports were not specified and stream_all_rx_ports=False')
 
-        print('setting ports: ', ports, self.ports)
-
+        # do we need to do anything?
         if self.stream is None:
             pass
         elif ports == self.ports:
-            # this was already setup
             return
         else:
             self.close()
 
         self.ports = ports
 
-        if self.setup.transport_dtype == 'int16':
+        if self.source_spec.transport_dtype == 'int16':
             stype = SoapySDR.SOAPY_SDR_CS16
-        elif self.setup.transport_dtype == 'float32':
+        elif self.source_spec.transport_dtype == 'float32':
             stype = SoapySDR.SOAPY_SDR_CF32
         else:
             raise ValueError(
-                f'unsupported transport type {self.setup.transport_dtype!r}'
+                f'unsupported transport type {self.source_spec.transport_dtype!r}'
             )
 
         with self._minimized_rx_gain(device):
@@ -412,8 +410,8 @@ class RxStream:
             else:
                 kws = {}
 
-            if self.setup.rx_enable_delay is not None:
-                delay_ns = round(self.setup.rx_enable_delay * 1e9)
+            if self.source_spec.rx_enable_delay is not None:
+                delay_ns = round(self.source_spec.rx_enable_delay * 1e9)
                 time_ns = device.getHardwareTime('now') + delay_ns
                 kws['timeNs'] = time_ns
 
@@ -436,7 +434,7 @@ class RxStream:
         last_sync_time: int | None,
         on_overflow: specs.types.OnOverflow | None = None,
     ) -> tuple[int, int]:
-        total_timeout = self.setup.rx_enable_delay + timeout_sec + 0.5
+        total_timeout = self.source_spec.rx_enable_delay + timeout_sec + 0.5
 
         offset_bufs = [buf[offset * 2 :] for buf in buffers]
         rx_result = device.readStream(
@@ -475,7 +473,6 @@ class RxStream:
         Returns:
             (samples received, start clock timestamp (ns))
         """
-        msg = None
 
         # ensure the proper number of waveform samples was read
         if sr.ret >= 0:
@@ -502,9 +499,6 @@ class RxStream:
 
     def capture_changes_port(self, capture: specs.SoapyCapture) -> bool:
         return specs.helpers.ensure_tuple(capture.port) == self.ports
-
-    def set_ports(self, device: 'SoapySDR.Device', ports: specs.types.Port):
-        self.open(device, ports)
 
 
 class HardwareTimeSync:
@@ -637,7 +631,7 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
             self.sync_time(self.device)
 
         if rx_ports is not None and len(rx_ports) > 0:
-            self.rx_stream.open(self.device)
+            self.rx_stream.setup(self.device)
 
     def close(self):
         if (
@@ -674,7 +668,7 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
         # manage changes to the ports
         ports_changed = self.rx_stream.capture_changes_port(capture)
         if self._capture is None or ports_changed:
-            self.rx_stream.set_ports(self.device, capture.port)
+            self.rx_stream.setup(self.device, capture.port)
 
         rs = self.get_resampler(capture)
 
