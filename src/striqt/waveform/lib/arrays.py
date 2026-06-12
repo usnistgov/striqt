@@ -574,22 +574,7 @@ def array_stream(obj: Array, null=False, non_blocking=False, ptds=False):
 
 
 def array_namespace(a, use_compat=False) -> ModuleType:
-    try:
-        return array_api_compat.array_namespace(a, use_compat=use_compat)
-    except TypeError:
-        pass
-
-    try:
-        import mlx.core as mx  # type: ignore
-
-        if isinstance(a, mx.array):
-            return mx
-        else:
-            raise TypeError
-    except (ImportError, TypeError):
-        pass
-
-    raise TypeError('unrecognized object type')
+    return array_api_compat.array_namespace(a, use_compat=use_compat)
 
 
 def convert_np_to_xp(func: _TC) -> _TC:

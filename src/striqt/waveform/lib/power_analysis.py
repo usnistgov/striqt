@@ -106,71 +106,6 @@ def stat_ufunc_from_shorthand(kind, xp=None, axis=0) -> typing.Callable:
     return ufunc
 
 
-def _arraylike_with_buffer(
-    x: ArrayLike | Number, out: ArrayLike | None = None, min_dtype: Any = None
-) -> tuple[Array, Array, ModuleType]:
-    """interpret the array-like input and output buffer arguments.
-
-    Returns:
-        Array objects pointing to the underlying array-type objects,
-        and the module to work with them
-    """
-    try:
-        xp = array_namespace(x)
-        values = x
-    except TypeError:
-        if hasattr(x, 'values'):
-            x = typing.cast('pd.DataFrame | pd.Series | xr.DataArray', x)
-            xp = array_namespace(x.values)
-            values = x.values
-        elif isinstance(x, Number):
-            xp = np
-            values = x
-        else:
-            raise TypeError(f'unsupported input type {type(x)}')
-
-    if out is None:
-        out_dtype = float_dtype_like(values, min_dtype=min_dtype)
-        out_shape = xp.shape(x)  # pyright: ignore
-        out = xp.zeros(out_shape, dtype=out_dtype)
-    elif isinstance(x, Number):
-        # for a scalar, skip buffer allocation entirely
-        out = None
-    elif hasattr(out, 'values'):
-        out = typing.cast('pd.DataFrame | pd.Series | xr.DataArray', out)
-        out = out.values
-
-    return values, out, xp
-
-
-def _repackage_arraylike(
-    values: Array,
-    obj: _ALN,
-    *,
-    unit_transform: Optional[typing.Callable] = None,
-) -> _ALN:
-    """package `values` into a data type matching `obj`"""
-
-    # accessing each of these forces imports of each module.
-    # work through progressively more expensive imports
-    if isinstance(obj, Number):
-        return values.item()
-    elif not hasattr(obj, 'values'):
-        return typing.cast('_ALN', values)
-    elif isinstance(obj, pd.Series):
-        return pd.Series(values, index=obj.index)  # type: ignore
-    elif isinstance(obj, pd.DataFrame):
-        return pd.DataFrame(values, index=obj.index, columns=obj.columns)  # type: ignore
-    elif isinstance(obj, xr.DataArray):
-        ret = obj.copy(deep=False, data=values)
-        units = ret.attrs.get('units', None)
-        if units is not None and unit_transform is not None:
-            ret.attrs['units'] = unit_transform(units)
-        return ret
-    else:
-        raise TypeError(f'unrecognized input type {type(obj)}')
-
-
 def powtodB(x: _ALN, abs: bool = True, eps: float = 0, out=None) -> _ALN:
     """compute `10*log10(abs(x) + eps)` or `10*log10(x + eps)` with speed optimizations"""
 
@@ -198,8 +133,7 @@ def powtodB(x: _ALN, abs: bool = True, eps: float = 0, out=None) -> _ALN:
             else:
                 values = cuda.powtodB_eps_noabs(x, out, eps)
     else:
-        # mlx, torch, etc
-        # TODO: CUDA kernel evaluation here
+        # torch, dask, ...
         if abs:
             values = xp.abs(values, out=out)
         if eps != 0:
@@ -213,10 +147,6 @@ def powtodB(x: _ALN, abs: bool = True, eps: float = 0, out=None) -> _ALN:
 def dBtopow(x: _ALN, out=None) -> _ALN:
     """compute `10**(x/10)` with speed optimizations"""
 
-    dtype = getattr(x, 'dtype', np.float32())
-    if dtype.itemsize < 4:
-        dtype = np.float32()
-
     values, out, xp = _arraylike_with_buffer(x, out, min_dtype='float32')
 
     if xp is np:
@@ -227,8 +157,7 @@ def dBtopow(x: _ALN, out=None) -> _ALN:
 
         values = cuda.dBtopow(x, out)
     else:
-        # mlx, torch, etc
-        # TODO: CUDA kernel evaluation here
+        # torch, dask, ...
         values = xp.divide(values, 10, out=out)
         values = xp.power(10, values, out=out)
 
@@ -253,8 +182,7 @@ def envtopow(x: _ALN, out=None) -> _ALN:
 
         values = cuda.envtopow(x, out)
     else:
-        # mlx, torch, etc
-        # TODO: CUDA kernel evaluation here
+        # torch, dask, ...
         values = xp.abs(x, out=out)
         values *= values
 
@@ -288,8 +216,7 @@ def envtodB(x: _ALN, abs: bool = True, eps: float = 0, out=None) -> _ALN:
             else:
                 values = cuda.envtodB_eps_noabs(x, out, eps)
     else:
-        # mlx, torch, etc
-        # TODO: CUDA kernel evaluation here
+        # torch, dask, ...
         if abs:
             values = xp.abs(values, out=out)
         if eps != 0:
@@ -343,11 +270,9 @@ def dBlinmean(
         dimension at the specified axes
     """
 
-    if overwrite_x:
-        out = x_dB
-    else:
-        out = None
-
+    _, out, _ = _arraylike_with_buffer(
+        x_dB, out=overwrite_x or None, min_dtype='float32'
+    )
     x = dBtopow(x_dB, out=out)
     linmean = x.mean(axis)  # type: ignore
     return powtodB(linmean, out=linmean)  # pyright: ignore
@@ -394,11 +319,9 @@ def dBlinsum(x_dB: _AL, axis=None, overwrite_x=False) -> _AL:
         dimension at the specified axes
     """
 
-    if overwrite_x:
-        out = x_dB
-    else:
-        out = None
-
+    _, out, _ = _arraylike_with_buffer(
+        x_dB, out=overwrite_x or None, min_dtype='float32'
+    )
     linmean = dBtopow(x_dB, out=out).sum(axis)  # type: ignore
     return powtodB(linmean, out=linmean)  # type: ignore
 
@@ -569,3 +492,92 @@ def sample_ccdf(a: _AT, edges: _AT, density: bool = True) -> _AT:
         ccdf /= a.shape[0]
 
     return ccdf
+
+
+# %% module-local helper functions
+def _infer_contained_array(x: Any) -> ArrayLike:
+    if hasattr(type(x), 'values'):
+        # first, guess at xarray/pandas types before expensive imports
+        if hasattr(type(x), 'data') and isinstance(x, (xr.DataArray, xr.Dataset)):
+            return x.data
+        elif isinstance(x, (pd.DataFrame, pd.Series)):
+            return x.values
+        else:
+            raise TypeError('unable to associate an array type with input')
+
+
+def _arraylike_with_buffer(
+    x: ArrayLike | Number, out: ArrayLike | bool | None = None, min_dtype: Any = None
+) -> tuple[Array, Array, ModuleType]:
+    """interpret the array-like input and output buffer arguments.
+
+    Args:
+        x: the input array-like or dataframe-like object
+        out: the output buffer, or True to use the extracted array, or False force None
+    Returns:
+        Array objects pointing to the underlying array-type objects,
+        and the module to work with them
+    """
+
+    xp = getattr(type(x), '__array_namespace__', None)
+    if xp is not None:
+        values = x
+    elif isinstance(x, (int, float)):
+        values = x
+        xp = np
+    elif hasattr(type(x), 'values'):
+        values = _infer_contained_array(x)
+        xp = array_namespace(values)
+    else:
+        raise TypeError('unable to associate an array type with input')
+
+    if out is True:
+        out = values
+    elif out is None:
+        if xp.__name__.startswith('dask'):
+            # in this case, out may be very large
+            pass
+        else:
+            out_dtype = float_dtype_like(values, min_dtype=min_dtype)
+            out_shape = xp.shape(x)  # pyright: ignore
+            out = xp.zeros(out_shape, dtype=out_dtype)
+    elif isinstance(x, Number):
+        # for a scalar, skip buffer allocation entirely
+        out = None
+    elif hasattr(type(out), 'values'):
+        out = _infer_contained_array(out)
+        xp_out = array_namespace(out)
+        if xp_out != xp:
+            raise TypeError('out array has different type than the input')
+    if out is False:
+        out = None
+
+    return values, out, xp
+
+
+def _repackage_arraylike(
+    values: Array,
+    obj: _ALN,
+    *,
+    unit_transform: Optional[typing.Callable] = None,
+) -> _ALN:
+    """package `values` into a data type matching `obj`"""
+
+    # accessing each of these forces imports of each module.
+    # work through progressively more expensive imports
+    if isinstance(obj, Number):
+        return values.item()
+    elif not hasattr(type(obj), 'values'):
+        return typing.cast('_ALN', values)
+    elif isinstance(obj, pd.Series):
+        return pd.Series(values, index=obj.index)  # type: ignore
+    elif isinstance(obj, pd.DataFrame):
+        return pd.DataFrame(values, index=obj.index, columns=obj.columns)  # type: ignore
+    elif isinstance(obj, xr.DataArray):
+        ret = obj.copy(deep=False, data=values)
+        units = ret.attrs.get('units', None)
+        if units is not None and unit_transform is not None:
+            ret.attrs['units'] = unit_transform(units)
+        return ret
+    else:
+        raise TypeError(f'unrecognized input type {type(obj)}')

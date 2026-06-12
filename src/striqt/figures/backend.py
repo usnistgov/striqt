@@ -138,7 +138,6 @@ class _FakeLock:
         pass
 
 
-
 class PlotBackend:
     opts: specs.SharedPlotOptions
     lock: RLock | _FakeLock
@@ -149,7 +148,7 @@ class PlotBackend:
         output_dir: Path | None,
         *,
         interactive: None | bool | str = None,
-        lock: RLock|None = None,
+        lock: RLock | None = None,
     ):
         self.opts = opts
         self.output_dir = output_dir
