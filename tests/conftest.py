@@ -17,7 +17,7 @@ np.seterr(divide='ignore')
 def _get_cupy():
     """Try to import cupy, return None if unavailable."""
     try:
-        import cupy as cp
+        import cupy as cp # type: ignore
         # Verify CUDA is actually available
         cp.cuda.runtime.getDeviceCount()
         return cp
