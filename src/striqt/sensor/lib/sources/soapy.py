@@ -329,14 +329,23 @@ class RxStream:
         if self.stream is not None and self.ports is not None:
             return
 
-        if ports is not None:
-            ports = specs.helpers.ensure_tuple(ports)
-        elif self.setup.stream_all_rx_ports:
+        if self.setup.stream_all_rx_ports:
             ports = tuple(range(self.info.num_rx_ports))
-        else:
-            ports = self.ports
+        elif ports is not None:
+            ports = specs.helpers.ensure_tuple(ports)
 
-        assert ports not in (None, ()), 'failed to resolve port list for stream'
+        if not ports:
+            raise RuntimeError('ports were not specified and stream_all_rx_ports=False')
+
+        print('setting ports: ', ports, self.ports)
+
+        if self.stream is None:
+            pass
+        elif ports == self.ports:
+            # this was already setup
+            return
+        else:
+            self.close()
 
         self.ports = ports
 
@@ -369,6 +378,7 @@ class RxStream:
             device.setGain(SoapySDR.SOAPY_SDR_RX, port, gain)
 
     def close(self, device: 'SoapySDR.Device'):
+        print('close stream')
         stream = getattr(self, 'stream', None)
         if stream is None:
             return
@@ -494,14 +504,6 @@ class RxStream:
         return specs.helpers.ensure_tuple(capture.port) == self.ports
 
     def set_ports(self, device: 'SoapySDR.Device', ports: specs.types.Port):
-        if getattr(self, 'stream', None) is not None:
-            if self.ports == ports:
-                # already set up
-                return
-            else:
-                self.close(device)
-
-        # if we make it this far, we need to build and enable the RX stream
         self.open(device, ports)
 
 
