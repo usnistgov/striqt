@@ -519,9 +519,9 @@ def _arraylike_with_buffer(
         and the module to work with them
     """
 
-    xp = getattr(type(x), '__array_namespace__', None)
-    if xp is not None:
+    if hasattr(type(x), '__array_namespace__'):
         values = x
+        xp = array_namespace(values)
     elif isinstance(x, (int, float)):
         values = x
         xp = np

@@ -3,7 +3,7 @@
 import pytest
 from pathlib import Path
 
-SWEEP_DIR = Path(__file__).parent / 'sweeps'
+SWEEP_DIR = Path(__file__).parent / 'sensor' / 'sweeps'
 
 CPU_RUNS = (
     SWEEP_DIR/'cw-cpu.yaml',
