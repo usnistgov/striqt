@@ -519,7 +519,7 @@ def _arraylike_with_buffer(
         and the module to work with them
     """
 
-    if hasattr(type(x), '__array_namespace__'):
+    if hasattr(type(x), '__array_function__'):
         values = x
         xp = array_namespace(values)
     elif isinstance(x, (int, float)):
