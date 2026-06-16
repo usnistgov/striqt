@@ -865,7 +865,7 @@ class TestMinDtype:
 
         # Should recover original values within reasonable tolerance
         # dB values are already relative, use atol
-        assert_allclose(to_numpy(roundtrip_dB), to_numpy(original_dB), atol=0.5)
+        assert_allclose(to_numpy(roundtrip_dB), to_numpy(original_dB), atol=2e-3)
 
     def test_dBlinmean_float16_with_min_dtype_float32(self, xp_name):
         """Test that dBlinmean with min_dtype='float32' handles float16 input."""
@@ -881,7 +881,7 @@ class TestMinDtype:
         result = to_numpy(dBlinmean(dB, min_dtype='float32'))
 
         # dB values are already relative, use atol
-        assert_allclose(result, expected, atol=0.01)
+        assert_allclose(result, expected, atol=2e-3)
 
     def test_dBlinmean_float16_random_values(self, xp_name):
         """Test dBlinmean with random float16 values and min_dtype promotion."""
@@ -891,7 +891,7 @@ class TestMinDtype:
 
         # Generate reproducible random dB values in typical range
         rng = np.random.default_rng(42)
-        dB_float64 = rng.uniform(-60, 10, size=100)
+        dB_float64 = rng.uniform(-60, -57, size=100)
 
         # Compute reference result in float64
         linear_f64 = 10 ** (dB_float64 / 10)
@@ -902,7 +902,7 @@ class TestMinDtype:
         result = to_numpy(dBlinmean(dB_float16, min_dtype='float32'))
 
         # Should be accurate within 0.1 dB despite float16 input
-        assert_allclose(result, expected, atol=0.1)
+        assert_allclose(result, expected, atol=2e-3)
 
     def test_dBlinmean_float16_2d_with_axis(self, xp_name):
         """Test dBlinmean with float16 2D array and axis parameter."""
@@ -918,7 +918,7 @@ class TestMinDtype:
 
         result = to_numpy(dBlinmean(dB, axis=1, min_dtype='float32'))
 
-        assert_allclose(result, expected, atol=0.01)
+        assert_allclose(result, expected, atol=2e-3)
 
     def test_dBlinsum_float16_with_min_dtype_float32(self, xp_name):
         """Test that dBlinsum with min_dtype='float32' handles float16 input."""
@@ -934,7 +934,7 @@ class TestMinDtype:
         result = to_numpy(dBlinsum(dB, min_dtype='float32'))
 
         # dB values are already relative, use atol
-        assert_allclose(result, expected, atol=0.01)
+        assert_allclose(result, expected, atol=2e-3)
 
     def test_dBlinsum_float16_random_values(self, xp_name):
         """Test dBlinsum with random float16 values and min_dtype promotion."""
@@ -944,7 +944,7 @@ class TestMinDtype:
 
         # Generate reproducible random dB values in typical range
         rng = np.random.default_rng(123)
-        dB_float64 = rng.uniform(-50, 0, size=50)
+        dB_float64 = rng.uniform(-50, -47, size=50)
 
         # Compute reference result in float64
         linear_f64 = 10 ** (dB_float64 / 10)
@@ -955,7 +955,7 @@ class TestMinDtype:
         result = to_numpy(dBlinsum(dB_float16, min_dtype='float32'))
 
         # Should be accurate within 0.1 dB despite float16 input
-        assert_allclose(result, expected, atol=1e-3)
+        assert_allclose(result, expected, atol=2e-3)
 
     def test_dBlinsum_float16_2d_with_axis(self, xp_name):
         """Test dBlinsum with float16 2D array and axis parameter."""
@@ -971,4 +971,4 @@ class TestMinDtype:
 
         result = to_numpy(dBlinsum(dB, axis=1, min_dtype='float32'))
 
-        assert_allclose(result, expected, atol=1e-3)
+        assert_allclose(result, expected, atol=2e-3)

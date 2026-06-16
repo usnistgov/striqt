@@ -1,7 +1,9 @@
 """shared test resources"""
 
+from __future__ import annotations
+
 import warnings
-from typing import Any
+from typing import Any, List, Tuple
 
 import numpy as np
 import pytest
@@ -46,7 +48,7 @@ def _get_dask_array():
 
 
 # Build list of available array namespaces
-_ARRAY_NAMESPACES: list[tuple[str, Any]] = [('numpy', np)]
+_ARRAY_NAMESPACES: List[Tuple[str, Any]] = [('numpy', np)]
 
 _cupy = _get_cupy()
 if _cupy is not None:
