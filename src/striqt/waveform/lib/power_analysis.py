@@ -161,9 +161,7 @@ def dBtopow(
 
     if xp is np:
         expr = '10**(values/10)'
-        dtype_in = values.dtype
         values = ne.evaluate(expr, out=out, casting='unsafe')
-        # print(xp, dtype_in, values.dtype, None if out is None else out.dtype, min_dtype)
     elif is_cupy_array(xp):
         from .jit import cuda
 
@@ -219,15 +217,11 @@ def envtodB(
     )
 
     if xp is np:
-        dtype_in = values.dtype
         if abs:
             expr = f'real(20*log10(abs(values){eps_str}))'
         else:
             expr = f'real(20*log10(values{eps_str}))'
         values = ne.evaluate(expr, out=out, casting='unsafe')
-
-        if abs:
-            print(dtype_in, values.dtype)
     elif is_cupy_array(xp):
         from .jit import cuda
 
@@ -244,6 +238,7 @@ def envtodB(
     else:
         # torch, dask, ...
         if abs:
+            # For dask, xp.abs() on complex arrays returns the magnitude correctly
             values = xp.abs(values, out=out)
         if eps != 0:
             values += eps
@@ -593,12 +588,18 @@ def _arraylike_with_buffer(
         promote_dtype = np.dtype(min_dtype)
 
     if xp.__name__.startswith('dask'):
-        return values.astype(promote_dtype), None, xp
+        if promote_dtype is not None:
+            return values.astype(promote_dtype), None, xp
+        return values, None, xp
     elif promote_dtype:
         out = xp.empty_like(values, dtype=promote_dtype)
         return values, out, xp
     elif overwrite_x:
         return values, values, xp
+    elif xp is np:
+        # numexpr promotes to float64 if out=None; provide buffer to preserve dtype
+        out = xp.empty_like(values, dtype=values.dtype)
+        return values, out, xp
     else:
         return values, None, xp
 

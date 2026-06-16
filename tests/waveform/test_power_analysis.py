@@ -233,8 +233,9 @@ class TestEnvtodB:
 
     def test_complex_values(self, xp):
         """Test conversion of complex envelope values."""
-        env = make_array(xp, [1 + 0j, 0 + 10j, 3 + 4j])  # magnitudes: 1, 10, 5
-        expected_dB = np.array(20*np.log10(np.abs(env)))
+        env_data = [1 + 0j, 0 + 10j, 3 + 4j]  # magnitudes: 1, 10, 5
+        env = make_array(xp, env_data)
+        expected_dB = 20 * np.log10(np.abs(env_data))
         result = to_numpy(envtodB(env))
         assert_allclose(result, expected_dB, rtol=1e-10)
 
@@ -1020,28 +1021,28 @@ class TestMinDtypeOutputDtype:
 
         assert to_numpy(result).dtype == np.float32
 
-    def test_dBlinmean_float16_input_produces_float32_output(self, xp_name):
-        """Test that dBlinmean with float16 input and min_dtype='float32' produces float32."""
-        name, xp = xp_name
-        if name == 'dask':
-            pytest.skip('dask does not support float16')
-
-        dB = make_array(xp, [0.0, 10.0, 20.0, 30.0], dtype=np.float16)
-        result = dBlinmean(dB, min_dtype='float32')
-
-        assert to_numpy(result).dtype == np.float32
-
-    def test_dBlinsum_float16_input_produces_float32_output(self, xp_name):
-        """Test that dBlinsum with float16 input and min_dtype='float32' produces float32."""
-        name, xp = xp_name
-        if name == 'dask':
-            pytest.skip('dask does not support float16')
-
-        dB = make_array(xp, [0.0, 10.0, 20.0, 30.0], dtype=np.float16)
-        result = dBlinsum(dB, min_dtype='float32')
-
-        assert to_numpy(result).dtype == np.float32
-
+    def test_dBlinmean_float16_input_produces_at_least_float32_output(self, xp_name):
+        def test_dBlinmean_float16_input_produces_float32_output(self, xp_name):
+            """Test that dBlinmean with float16 input and min_dtype='float32' produces float32."""
+            name, xp = xp_name
+            if name == 'dask':
+                pytest.skip('dask does not support float16')
+    
+            dB = make_array(xp, [0.0, 10.0, 20.0, 30.0], dtype=np.float16)
+            result = dBlinmean(dB, min_dtype='float32')
+    
+            assert to_numpy(result).dtype == np.float32
+    
+        def test_dBlinsum_float16_input_produces_float32_output(self, xp_name):
+            """Test that dBlinsum with float16 input and min_dtype='float32' produces float32."""
+            name, xp = xp_name
+            if name == 'dask':
+                pytest.skip('dask does not support float16')
+    
+            dB = make_array(xp, [0.0, 10.0, 20.0, 30.0], dtype=np.float16)
+            result = dBlinsum(dB, min_dtype='float32')
+    
+            assert to_numpy(result).dtype == np.float32
     def test_min_dtype_float64_promotes_float32_input(self, xp_name):
         """Test that min_dtype='float64' promotes float32 input to float64."""
         name, xp = xp_name
