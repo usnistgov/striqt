@@ -112,7 +112,7 @@ def powtodB(
     abs: bool = True,
     eps: float = 0,
     overwrite_x: bool = False,
-    min_dtype: 'DTypeLike|None' = 'float32',
+    min_dtype: 'DTypeLike' = 'float32',
 ) -> _ALN:
     """compute `10*log10(abs(x) + eps)` or `10*log10(x + eps)` with speed optimizations"""
 
@@ -151,30 +151,33 @@ def powtodB(
     return _repackage_arraylike(values, x, unit_transform=unit_linear_to_dB)
 
 
+
 def dBtopow(
-    x: _ALN, *, overwrite_x: bool = False, min_dtype: 'DTypeLike|None' = 'float32'
+    x: _ALN, *, overwrite_x: bool = False, min_dtype: 'DTypeLike' = 'float32'
 ) -> _ALN:
     """compute `10**(x/10)` with speed optimizations"""
 
     values, out, xp = _arraylike_with_buffer(x, overwrite_x, min_dtype=min_dtype)
 
     if xp is np:
-        expr = '10**(values/10.)'
+        expr = '10**(values/10)'
+        dtype_in = values.dtype
         values = ne.evaluate(expr, out=out, casting='unsafe')
+        # print(xp, dtype_in, values.dtype, None if out is None else out.dtype, min_dtype)
     elif is_cupy_array(xp):
         from .jit import cuda
 
         values = cuda.dBtopow(x, out)
     else:
         # torch, dask, ...
-        values = xp.divide(values, 10, out=out)
+        values = xp.divide(values, 10, out=out, )
         values = xp.power(10, values, out=out)
 
     return _repackage_arraylike(values, x, unit_transform=unit_dB_to_linear)
 
 
 def envtopow(
-    x: _ALN, *, overwrite_x: bool = False, min_dtype: 'DTypeLike|None' = 'float32'
+    x: _ALN, *, overwrite_x: bool = False, min_dtype: 'DTypeLike' = 'float32'
 ) -> _ALN:
     """Computes abs(x)**2 with speed optimizations"""
 
@@ -205,7 +208,7 @@ def envtodB(
     abs: bool = True,
     eps: float = 0,
     overwrite_x: bool = False,
-    min_dtype: 'DTypeLike|None' = 'float32',
+    min_dtype: 'DTypeLike' = 'float32',
 ) -> _ALN:
     """compute `20*log10(abs(x) + eps)` or `20*log10(x + eps)` with speed optimizations"""
 
@@ -216,11 +219,15 @@ def envtodB(
     )
 
     if xp is np:
+        dtype_in = values.dtype
         if abs:
             expr = f'real(20*log10(abs(values){eps_str}))'
         else:
-            expr = f'real(20*log10(values+eps){eps_str})'
+            expr = f'real(20*log10(values{eps_str}))'
         values = ne.evaluate(expr, out=out, casting='unsafe')
+
+        if abs:
+            print(dtype_in, values.dtype)
     elif is_cupy_array(xp):
         from .jit import cuda
 
@@ -289,7 +296,7 @@ def dBlinmean(
     x_dB: _AL,
     axis: 'Dims|int|Sequence[int]|None' = None,
     overwrite_x: bool = False,
-    min_dtype: 'DTypeLike|None' = 'float32',
+    min_dtype: 'DTypeLike' = 'float32',
 ) -> _AL:
     """evaluate the mean in linear power space given power in dB.
 
@@ -303,7 +310,7 @@ def dBlinmean(
 
     x = dBtopow(x_dB, overwrite_x=overwrite_x, min_dtype=min_dtype)
     linmean = x.mean(axis)  # type: ignore
-    return powtodB(linmean, overwrite_x=True)  # pyright: ignore
+    return powtodB(linmean, overwrite_x=True, min_dtype=min_dtype)  # pyright: ignore
 
 
 @overload
@@ -346,7 +353,7 @@ def dBlinsum(
 
 
 def dBlinsum(
-    x_dB: _AL, axis=None, overwrite_x=False, min_dtype: 'DTypeLike|None' = 'float32'
+    x_dB: _AL, axis=None, overwrite_x=False, min_dtype: 'DTypeLike' = 'float32'
 ) -> _AL:
     """evaluate the sum in linear power space given power in dB.
 
@@ -359,7 +366,8 @@ def dBlinsum(
     """
 
     x_lin = dBtopow(x_dB, overwrite_x=overwrite_x, min_dtype=min_dtype)
-    return powtodB(x_lin.sum(axis), overwrite_x=True)  # type: ignore
+    x_sum = x_lin.sum(axis) # type: ignore
+    return powtodB(x_sum, overwrite_x=True, min_dtype=min_dtype)  # type: ignore
 
 
 def iq_to_bin_power(
@@ -543,7 +551,7 @@ def _infer_contained_array(x: Any) -> Array:
 
 
 def _arraylike_with_buffer(
-    x: ArrayLike | Number, overwrite_x: bool = False, min_dtype: 'DTypeLike|None' = None
+    x: ArrayLike | Number, overwrite_x: bool = False, min_dtype: 'DTypeLike' = 'float32'
 ) -> 'tuple[Array, Array, ModuleType]':
     """interpret the array-like input and output buffer arguments.
 
@@ -555,44 +563,44 @@ def _arraylike_with_buffer(
         and the module to work with them
     """
     # infer the array object and namespace
-    if hasattr(type(x), '__array_function__'):
+    if min_dtype is None:
+        raise TypeError('must pass a dtype as min_dtype')
+    if min_dtype is np.dtype('float16'):
+        raise TypeError('min_dtype must be at least float32 or larger')
+    
+
+    type_ = type(x)
+    if hasattr(type_, '__array_function__') or hasattr(type_, '__array_namespace__'):
         values: Array = x
         xp = array_namespace(values)
+        if xp.ndim(values) == 0:
+            overwrite_x = False
     elif isinstance(x, (int, float)):
         values: Array = np.array(x)
         xp = np
-    elif hasattr(type(x), 'values'):
+    elif hasattr(type_, 'values'):
         values = _infer_contained_array(x)
         xp = array_namespace(values)
     else:
-        raise TypeError('unable to associate an array type with input')
+        raise TypeError(f'unable to associate an array with type {type_!r} with input')
     values = typing.cast('Array', values)
 
     # do we need to upcast?
     dtype = values.dtype
-    if min_dtype is None or np.dtype(min_dtype) <= dtype:
+    if np.dtype(min_dtype) <= dtype:
         promote_dtype = None
     else:
         promote_dtype = np.dtype(min_dtype)
 
-    if overwrite_x:
-        if xp.__name__.startswith('dask'):
-            out = None
-            cast_dtype = promote_dtype
-        elif promote_dtype:
-            out = xp.empty(values.shape, dtype=promote_dtype)
-            cast_dtype = None
-        else:
-            out = values
-            cast_dtype = None
-    else:
-        out = None
-        cast_dtype = promote_dtype
-
-    if cast_dtype is not None:
-        return values.astype(cast_dtype), out, xp
-    else:
+    if xp.__name__.startswith('dask'):
+        return values.astype(promote_dtype), None, xp
+    elif promote_dtype:
+        out = xp.empty_like(values, dtype=promote_dtype)
         return values, out, xp
+    elif overwrite_x:
+        return values, values, xp
+    else:
+        return values, None, xp
 
 
 def _repackage_arraylike(

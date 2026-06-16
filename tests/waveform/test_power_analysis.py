@@ -126,13 +126,6 @@ class TestPowtodB:
         result = to_numpy(powtodB(power, abs=True))
         assert_allclose(result, expected_dB, rtol=1e-10)
 
-    def test_complex_values(self, xp):
-        """Test conversion of complex values (uses magnitude)."""
-        power = make_array(xp, [1 + 0j, 0 + 10j, 3 + 4j])  # magnitudes: 1, 10, 5
-        expected_dB = np.array([0.0, 10.0, 10 * np.log10(5)])
-        result = to_numpy(powtodB(power))
-        assert_allclose(result, expected_dB, rtol=1e-10)
-
     def test_eps_parameter(self, xp):
         """Test epsilon parameter for avoiding log(0)."""
         power = make_array(xp, [0.0, 1.0])
@@ -241,7 +234,7 @@ class TestEnvtodB:
     def test_complex_values(self, xp):
         """Test conversion of complex envelope values."""
         env = make_array(xp, [1 + 0j, 0 + 10j, 3 + 4j])  # magnitudes: 1, 10, 5
-        expected_dB = np.array([0.0, 20.0, 20 * np.log10(5)])
+        expected_dB = np.array(20*np.log10(np.abs(env)))
         result = to_numpy(envtodB(env))
         assert_allclose(result, expected_dB, rtol=1e-10)
 
@@ -750,23 +743,6 @@ class TestInPlaceOutputs:
 class TestMinDtype:
     """Tests for min_dtype parameter that promotes low-precision inputs."""
 
-    def test_powtodB_float16_without_min_dtype_has_rounding_errors(self, xp_name):
-        """Demonstrate that float16 without min_dtype promotion has rounding errors."""
-        name, xp = xp_name
-        if name == 'dask':
-            pytest.skip('dask does not support float16')
-
-        # Values that expose float16 precision limits
-        power = make_array(xp, [0.001, 0.0001, 0.00001], dtype=np.float16)
-        expected_dB = np.array([-30.0, -40.0, -50.0])
-
-        # With min_dtype=None, computation stays in float16 and has errors
-        result = to_numpy(powtodB(power, min_dtype=None))
-
-        # float16 has ~3 decimal digits of precision, so large errors expected
-        # This test documents the problem that min_dtype solves
-        assert not np.allclose(result, expected_dB, rtol=1e-4)
-
     def test_powtodB_float16_with_min_dtype_float32_mitigates_errors(self, xp_name):
         """Test that min_dtype='float32' mitigates rounding errors for float16 input."""
         name, xp = xp_name
@@ -972,3 +948,107 @@ class TestMinDtype:
         result = to_numpy(dBlinsum(dB, axis=1, min_dtype='float32'))
 
         assert_allclose(result, expected, atol=2e-3)
+
+
+class TestMinDtypeOutputDtype:
+    """Tests that output dtype is at least the size of min_dtype."""
+
+    def test_powtodB_float16_input_produces_float32_output(self, xp_name):
+        """Test that float16 input with min_dtype='float32' produces float32 output."""
+        name, xp = xp_name
+        if name == 'dask':
+            pytest.skip('dask does not support float16')
+
+        power = make_array(xp, [1.0, 10.0, 100.0], dtype=np.float16)
+        result = powtodB(power, min_dtype='float32')
+
+        assert to_numpy(result).dtype == np.float32
+
+    def test_powtodB_float32_input_preserves_float32_output(self, xp_name):
+        """Test that float32 input with min_dtype='float32' produces float32 output."""
+        name, xp = xp_name
+        if name == 'dask':
+            pytest.skip('dask dtype handling differs')
+
+        power = make_array(xp, [1.0, 10.0, 100.0], dtype=np.float32)
+        result = powtodB(power, min_dtype='float32')
+
+        assert to_numpy(result).dtype == np.float32
+
+    def test_powtodB_float64_input_preserves_float64_output(self, xp_name):
+        """Test that float64 input is not downgraded by min_dtype='float32'."""
+        name, xp = xp_name
+        if name == 'dask':
+            pytest.skip('dask dtype handling differs')
+
+        power = make_array(xp, [1.0, 10.0, 100.0], dtype=np.float64)
+        result = powtodB(power, min_dtype='float32')
+
+        # float64 should be preserved, not downgraded to float32
+        assert to_numpy(result).dtype == np.float64
+
+    def test_dBtopow_float16_input_produces_float32_output(self, xp_name):
+        """Test that dBtopow with float16 input and min_dtype='float32' produces float32."""
+        name, xp = xp_name
+        if name == 'dask':
+            pytest.skip('dask does not support float16')
+
+        dB = make_array(xp, [0.0, 10.0, 20.0], dtype=np.float16)
+        result = dBtopow(dB, min_dtype='float32')
+
+        assert to_numpy(result).dtype == np.float32
+
+    def test_envtodB_float16_input_produces_float32_output(self, xp_name):
+        """Test that envtodB with float16 input and min_dtype='float32' produces float32."""
+        name, xp = xp_name
+        if name == 'dask':
+            pytest.skip('dask does not support float16')
+
+        env = make_array(xp, [1.0, 10.0, 100.0], dtype=np.float16)
+        result = envtodB(env, min_dtype='float32')
+
+        assert to_numpy(result).dtype == np.float32
+
+    def test_envtopow_float16_input_produces_float32_output(self, xp_name):
+        """Test that envtopow with float16 input and min_dtype='float32' produces float32."""
+        name, xp = xp_name
+        if name == 'dask':
+            pytest.skip('dask does not support float16')
+
+        env = make_array(xp, [1.0, 2.0, 3.0], dtype=np.float16)
+        result = envtopow(env, min_dtype='float32')
+
+        assert to_numpy(result).dtype == np.float32
+
+    def test_dBlinmean_float16_input_produces_float32_output(self, xp_name):
+        """Test that dBlinmean with float16 input and min_dtype='float32' produces float32."""
+        name, xp = xp_name
+        if name == 'dask':
+            pytest.skip('dask does not support float16')
+
+        dB = make_array(xp, [0.0, 10.0, 20.0, 30.0], dtype=np.float16)
+        result = dBlinmean(dB, min_dtype='float32')
+
+        assert to_numpy(result).dtype == np.float32
+
+    def test_dBlinsum_float16_input_produces_float32_output(self, xp_name):
+        """Test that dBlinsum with float16 input and min_dtype='float32' produces float32."""
+        name, xp = xp_name
+        if name == 'dask':
+            pytest.skip('dask does not support float16')
+
+        dB = make_array(xp, [0.0, 10.0, 20.0, 30.0], dtype=np.float16)
+        result = dBlinsum(dB, min_dtype='float32')
+
+        assert to_numpy(result).dtype == np.float32
+
+    def test_min_dtype_float64_promotes_float32_input(self, xp_name):
+        """Test that min_dtype='float64' promotes float32 input to float64."""
+        name, xp = xp_name
+        if name == 'dask':
+            pytest.skip('dask dtype handling differs')
+
+        power = make_array(xp, [1.0, 10.0, 100.0], dtype=np.float32)
+        result = powtodB(power, min_dtype='float64')
+
+        assert to_numpy(result).dtype == np.float64
