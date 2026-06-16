@@ -14,7 +14,9 @@ def test_yaml_schema_binding(spec_dir):
     assert isinstance(spec.captures[0], schema.capture), 'capture binding mismatch'
     assert isinstance(spec.peripherals, schema.peripherals), 'periph binding mismatch'
     assert isinstance(spec.source, schema.source), 'source binding mismatch'
-    assert isinstance(spec, ctrl_cls.sensor.sweep_spec_cls), 'sweep spec binding mismatch'
+    assert isinstance(spec, ctrl_cls.sensor.sweep_spec_cls), (
+        'sweep spec binding mismatch'
+    )
 
 
 def test_binding_args():

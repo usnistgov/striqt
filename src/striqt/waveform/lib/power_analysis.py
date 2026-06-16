@@ -27,7 +27,7 @@ if typing.TYPE_CHECKING:
     import pandas as pd
     import xarray as xr
 
-    from .typing import ArrayLike, Array, _AL, _ALN, _AT, Dims
+    from .typing import ArrayLike, Array, _AL, _ALN, _AT, Dims, DTypeLike
 
 else:
     pd = util.lazy_import('pandas')
@@ -106,12 +106,12 @@ def stat_ufunc_from_shorthand(kind, xp=None, axis=0) -> typing.Callable:
     return ufunc
 
 
-def powtodB(x: _ALN, abs: bool = True, eps: float = 0, out=None) -> _ALN:
+def powtodB(x: _ALN, *, abs: bool = True, eps: float = 0, overwrite_x: bool = False, min_dtype: 'DTypeLike|None'='float32') -> _ALN:
     """compute `10*log10(abs(x) + eps)` or `10*log10(x + eps)` with speed optimizations"""
 
     eps_str = '' if eps == 0 else '+eps'
 
-    values, out, xp = _arraylike_with_buffer(x, out)
+    values, out, xp = _arraylike_with_buffer(x, overwrite_x, min_dtype=min_dtype)
 
     if xp is np:
         if abs:
@@ -144,10 +144,10 @@ def powtodB(x: _ALN, abs: bool = True, eps: float = 0, out=None) -> _ALN:
     return _repackage_arraylike(values, x, unit_transform=unit_linear_to_dB)
 
 
-def dBtopow(x: _ALN, out=None) -> _ALN:
+def dBtopow(x: _ALN, *, overwrite_x: bool = False, min_dtype: 'DTypeLike|None'='float32') -> _ALN:
     """compute `10**(x/10)` with speed optimizations"""
 
-    values, out, xp = _arraylike_with_buffer(x, out, min_dtype='float32')
+    values, out, xp = _arraylike_with_buffer(x, overwrite_x, min_dtype=min_dtype)
 
     if xp is np:
         expr = '10**(values/10.)'
@@ -164,16 +164,15 @@ def dBtopow(x: _ALN, out=None) -> _ALN:
     return _repackage_arraylike(values, x, unit_transform=unit_dB_to_linear)
 
 
-def envtopow(x: _ALN, out=None) -> _ALN:
+def envtopow(x: _ALN, *, overwrite_x: bool = False, min_dtype: 'DTypeLike|None'='float32') -> _ALN:
     """Computes abs(x)**2 with speed optimizations"""
 
-    values, out, xp = _arraylike_with_buffer(x, out)
+    values, out, xp = _arraylike_with_buffer(x, overwrite_x, min_dtype=min_dtype)
 
     if xp is np:
         # numpy, pandas
-        values = ne.evaluate(
-            'real(abs(x)**2)', local_dict=dict(x=x), out=out, casting='unsafe'
-        )
+        expr = 'real(abs(values)**2)'
+        values = ne.evaluate(expr, out=out, casting='unsafe')
 
         if xp.iscomplexobj(values):
             values = values.real  # pyright: ignore
@@ -189,12 +188,12 @@ def envtopow(x: _ALN, out=None) -> _ALN:
     return _repackage_arraylike(values, x, unit_transform=unit_wave_to_linear)
 
 
-def envtodB(x: _ALN, abs: bool = True, eps: float = 0, out=None) -> _ALN:
+def envtodB(x: _ALN, *, abs: bool = True, eps: float = 0, overwrite_x: bool = False, min_dtype: 'DTypeLike|None'='float32') -> _ALN:
     """compute `20*log10(abs(x) + eps)` or `20*log10(x + eps)` with speed optimizations"""
 
     eps_str = '' if eps == 0 else '+eps'
 
-    values, out, xp = _arraylike_with_buffer(x, out)
+    values, out, xp = _arraylike_with_buffer(x, overwrite_x=overwrite_x, min_dtype=min_dtype)
 
     if xp is np:
         if abs:
@@ -258,7 +257,7 @@ def dBlinmean(
 
 
 def dBlinmean(
-    x_dB: _AL, axis: 'Dims|int|Sequence[int]|None' = None, overwrite_x=False
+    x_dB: _AL, axis: 'Dims|int|Sequence[int]|None' = None, overwrite_x: bool = False, min_dtype: 'DTypeLike|None'='float32'
 ) -> _AL:
     """evaluate the mean in linear power space given power in dB.
 
@@ -270,12 +269,9 @@ def dBlinmean(
         dimension at the specified axes
     """
 
-    _, out, _ = _arraylike_with_buffer(
-        x_dB, out=overwrite_x or None, min_dtype='float32'
-    )
-    x = dBtopow(x_dB, out=out)
+    x = dBtopow(x_dB, overwrite_x=overwrite_x, min_dtype=min_dtype)
     linmean = x.mean(axis)  # type: ignore
-    return powtodB(linmean, out=linmean)  # pyright: ignore
+    return powtodB(linmean, overwrite_x=True)  # pyright: ignore
 
 
 @overload
@@ -308,7 +304,7 @@ def dBlinsum(
 ) -> 'pd.DataFrame': ...
 
 
-def dBlinsum(x_dB: _AL, axis=None, overwrite_x=False) -> _AL:
+def dBlinsum(x_dB: _AL, axis=None, overwrite_x=False, min_dtype='float32') -> _AL:
     """evaluate the sum in linear power space given power in dB.
 
     This is equivalent to:
@@ -319,11 +315,8 @@ def dBlinsum(x_dB: _AL, axis=None, overwrite_x=False) -> _AL:
         dimension at the specified axes
     """
 
-    _, out, _ = _arraylike_with_buffer(
-        x_dB, out=overwrite_x or None, min_dtype='float32'
-    )
-    linmean = dBtopow(x_dB, out=out).sum(axis)  # type: ignore
-    return powtodB(linmean, out=linmean)  # type: ignore
+    x_lin = dBtopow(x_dB, overwrite_x=overwrite_x, min_dtype=min_dtype)
+    return powtodB(x_lin.sum(axis), overwrite_x=True)  # type: ignore
 
 
 def iq_to_bin_power(
@@ -495,7 +488,7 @@ def sample_ccdf(a: _AT, edges: _AT, density: bool = True) -> _AT:
 
 
 # %% module-local helper functions
-def _infer_contained_array(x: Any) -> ArrayLike:
+def _infer_contained_array(x: Any) -> Array:
     if hasattr(type(x), 'values'):
         # first, guess at xarray/pandas types before expensive imports
         if hasattr(type(x), 'data') and isinstance(x, (xr.DataArray, xr.Dataset)):
@@ -507,8 +500,8 @@ def _infer_contained_array(x: Any) -> ArrayLike:
 
 
 def _arraylike_with_buffer(
-    x: ArrayLike | Number, out: ArrayLike | bool | None = None, min_dtype: Any = None
-) -> tuple[Array, Array, ModuleType]:
+    x: ArrayLike | Number, overwrite_x: bool = False, min_dtype: 'DTypeLike|None' = None
+) -> 'tuple[Array, Array, ModuleType]':
     """interpret the array-like input and output buffer arguments.
 
     Args:
@@ -518,41 +511,45 @@ def _arraylike_with_buffer(
         Array objects pointing to the underlying array-type objects,
         and the module to work with them
     """
-
+    # infer the array object and namespace
     if hasattr(type(x), '__array_function__'):
-        values = x
+        values: Array = x
         xp = array_namespace(values)
     elif isinstance(x, (int, float)):
-        values = x
+        values: Array = np.array(x)
         xp = np
     elif hasattr(type(x), 'values'):
         values = _infer_contained_array(x)
         xp = array_namespace(values)
     else:
         raise TypeError('unable to associate an array type with input')
+    values = typing.cast('Array', values)
 
-    if out is True:
-        out = values
-    elif out is None:
+    # do we need to upcast?
+    dtype = values.dtype
+    if min_dtype is None or np.dtype(min_dtype) <= dtype:
+        promote_dtype = None
+    else:
+        promote_dtype = np.dtype(min_dtype)
+
+    if overwrite_x:
         if xp.__name__.startswith('dask'):
-            # in this case, out may be very large
-            pass
+            out = None
+            cast_dtype = promote_dtype
+        elif promote_dtype:
+            out = xp.empty(values.shape, dtype=promote_dtype)
+            cast_dtype = None
         else:
-            out_dtype = float_dtype_like(values, min_dtype=min_dtype)
-            out_shape = xp.shape(x)  # pyright: ignore
-            out = xp.zeros(out_shape, dtype=out_dtype)
-    elif isinstance(x, Number):
-        # for a scalar, skip buffer allocation entirely
+            out = values
+            cast_dtype = None
+    else:
         out = None
-    elif hasattr(type(out), 'values'):
-        out = _infer_contained_array(out)
-        xp_out = array_namespace(out)
-        if xp_out != xp:
-            raise TypeError('out array has different type than the input')
-    if out is False:
-        out = None
+        cast_dtype = promote_dtype
 
-    return values, out, xp
+    if cast_dtype is not None:
+        return values.astype(cast_dtype), out, xp
+    else:
+        return values, out, xp
 
 
 def _repackage_arraylike(
@@ -581,3 +578,5 @@ def _repackage_arraylike(
         return ret
     else:
         raise TypeError(f'unrecognized input type {type(obj)}')
+
+# %%

@@ -24,6 +24,7 @@ if typing.TYPE_CHECKING:
 
     import array_api_compat.numpy, array_api_compat.cupy
     import numpy as np
+    from numpy.typing import DTypeLike
     import pandas as pd
     import xarray as xr
     from xarray.core.types import Dims

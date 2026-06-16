@@ -148,17 +148,15 @@ class TestPowtodB:
         result = to_numpy(powtodB(power))
         assert_allclose(result, expected_dB, rtol=1e-10)
 
-    def test_output_buffer(self, xp_name):
-        """Test using pre-allocated output buffer."""
+    def test_overwrite_x(self, xp_name):
+        """Test in-place computation with overwrite_x=True."""
         name, xp = xp_name
         if name == 'dask':
-            pytest.skip('dask does not support output buffers')
+            pytest.skip('dask does not support in-place operations')
         power = make_array(xp, [1.0, 10.0, 100.0], dtype=np.float64)
-        out = xp.empty_like(power)
-        result = powtodB(power, out=out)
+        result = powtodB(power, overwrite_x=True)
         expected_dB = np.array([0.0, 10.0, 20.0])
         assert_allclose(to_numpy(result), expected_dB, rtol=1e-10)
-        assert_allclose(to_numpy(out), expected_dB, rtol=1e-10)
 
 
 class TestDBtopow:
@@ -417,7 +415,11 @@ class TestDBlinmeanVsDBlinsum:
         for axis in [0, 1, None]:
             mean_result = to_numpy(dBlinmean(dB, axis=axis))
             sum_result = to_numpy(dBlinsum(dB, axis=axis))
-            N = np.array(dB_data).shape[axis] if axis is not None else np.array(dB_data).size
+            N = (
+                np.array(dB_data).shape[axis]
+                if axis is not None
+                else np.array(dB_data).size
+            )
             expected_mean = sum_result - 10 * np.log10(N)
             assert_allclose(mean_result, expected_mean, rtol=1e-10)
 
@@ -526,82 +528,71 @@ class TestZeroValuesAndInfinity:
 
 
 class TestInPlaceOutputs:
-    """Tests for in-place output operations (out parameter and overwrite_x)."""
+    """Tests for in-place output operations (overwrite_x parameter)."""
 
-    def test_powtodB_out_parameter_overwrites_buffer(self, xp_name):
-        """Test that powtodB with out parameter writes to the provided buffer."""
+    def test_powtodB_overwrite_x_true(self, xp_name):
+        """Test that powtodB with overwrite_x=True computes in-place."""
         name, xp = xp_name
         if name == 'dask':
-            pytest.skip('dask does not support output buffers')
+            pytest.skip('dask does not support in-place operations')
 
         power = make_array(xp, [1.0, 10.0, 100.0], dtype=np.float64)
-        out = xp.zeros(3, dtype=np.float64)
-        original_out_id = id(to_numpy(out))
 
-        result = powtodB(power, out=out)
+        result = powtodB(power, overwrite_x=True)
         expected = np.array([0.0, 10.0, 20.0])
 
         # Verify result is correct
         assert_allclose(to_numpy(result), expected, rtol=1e-10)
-        # Verify out buffer was modified
-        assert_allclose(to_numpy(out), expected, rtol=1e-10)
 
-    def test_dBtopow_out_parameter_overwrites_buffer(self, xp_name):
-        """Test that dBtopow with out parameter writes to the provided buffer."""
+    def test_dBtopow_overwrite_x_true(self, xp_name):
+        """Test that dBtopow with overwrite_x=True computes in-place."""
         name, xp = xp_name
         if name == 'dask':
-            pytest.skip('dask does not support output buffers')
+            pytest.skip('dask does not support in-place operations')
 
         dB = make_array(xp, [0.0, 10.0, 20.0], dtype=np.float64)
-        out = xp.zeros(3, dtype=np.float64)
 
-        result = dBtopow(dB, out=out)
+        result = dBtopow(dB, overwrite_x=True)
         expected = np.array([1.0, 10.0, 100.0])
 
         assert_allclose(to_numpy(result), expected, rtol=1e-10)
-        assert_allclose(to_numpy(out), expected, rtol=1e-10)
 
-    def test_envtodB_out_parameter_overwrites_buffer(self, xp_name):
-        """Test that envtodB with out parameter writes to the provided buffer."""
+    def test_envtodB_overwrite_x_true(self, xp_name):
+        """Test that envtodB with overwrite_x=True computes in-place."""
         name, xp = xp_name
         if name == 'dask':
-            pytest.skip('dask does not support output buffers')
+            pytest.skip('dask does not support in-place operations')
 
         env = make_array(xp, [1.0, 10.0, 100.0], dtype=np.float64)
-        out = xp.zeros(3, dtype=np.float64)
 
-        result = envtodB(env, out=out)
+        result = envtodB(env, overwrite_x=True)
         expected = np.array([0.0, 20.0, 40.0])
 
         assert_allclose(to_numpy(result), expected, rtol=1e-10)
-        assert_allclose(to_numpy(out), expected, rtol=1e-10)
 
-    def test_envtopow_out_parameter_overwrites_buffer(self, xp_name):
-        """Test that envtopow with out parameter writes to the provided buffer."""
+    def test_envtopow_overwrite_x_true(self, xp_name):
+        """Test that envtopow with overwrite_x=True computes in-place."""
         name, xp = xp_name
         if name == 'dask':
-            pytest.skip('dask does not support output buffers')
+            pytest.skip('dask does not support in-place operations')
 
         env = make_array(xp, [1.0, 2.0, 3.0], dtype=np.float64)
-        out = xp.zeros(3, dtype=np.float64)
 
-        result = envtopow(env, out=out)
+        result = envtopow(env, overwrite_x=True)
         expected = np.array([1.0, 4.0, 9.0])
 
         assert_allclose(to_numpy(result), expected, rtol=1e-10)
-        assert_allclose(to_numpy(out), expected, rtol=1e-10)
 
-    def test_powtodB_out_does_not_modify_input(self, xp_name):
-        """Test that powtodB with out parameter does not modify input array."""
+    def test_powtodB_overwrite_x_false_preserves_input(self, xp_name):
+        """Test that powtodB with overwrite_x=False does not modify input array."""
         name, xp = xp_name
         if name == 'dask':
-            pytest.skip('dask does not support output buffers')
+            pytest.skip('dask arrays are immutable')
 
         power = make_array(xp, [1.0, 10.0, 100.0], dtype=np.float64)
         original_power = to_numpy(power).copy()
-        out = xp.zeros(3, dtype=np.float64)
 
-        powtodB(power, out=out)
+        powtodB(power, overwrite_x=False)
 
         # Input should be unchanged
         assert_allclose(to_numpy(power), original_power, rtol=1e-10)
@@ -666,20 +657,18 @@ class TestInPlaceOutputs:
         # Input array should be unchanged
         assert_allclose(to_numpy(dB), original_values, rtol=1e-10)
 
-    def test_powtodB_out_2d_array(self, xp_name):
-        """Test out parameter with 2D arrays."""
+    def test_powtodB_overwrite_x_2d_array(self, xp_name):
+        """Test overwrite_x with 2D arrays."""
         name, xp = xp_name
         if name == 'dask':
-            pytest.skip('dask does not support output buffers')
+            pytest.skip('dask does not support in-place operations')
 
         power = make_array(xp, [[1.0, 10.0], [100.0, 1000.0]], dtype=np.float64)
-        out = xp.zeros((2, 2), dtype=np.float64)
 
-        result = powtodB(power, out=out)
+        result = powtodB(power, overwrite_x=True)
         expected = np.array([[0.0, 10.0], [20.0, 30.0]])
 
         assert_allclose(to_numpy(result), expected, rtol=1e-10)
-        assert_allclose(to_numpy(out), expected, rtol=1e-10)
 
     def test_dBlinmean_overwrite_x_with_axis(self, xp_name):
         """Test overwrite_x with axis parameter."""

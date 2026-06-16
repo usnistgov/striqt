@@ -14,14 +14,19 @@ np.seterr(divide='ignore')
 # Array namespace fixtures for numerical testing (numpy, cupy, dask)
 # ---------------------------------------------------------------------------
 
+
 def _get_cupy():
     """Try to import cupy, return None if unavailable."""
     try:
-        import cupy as cp # type: ignore
+        import cupy as cp  # type: ignore
+
         # Verify CUDA is actually available
         cp.cuda.runtime.getDeviceCount()
         return cp
-    except (ImportError, cp.cuda.runtime.CUDARuntimeError if 'cp' in dir() else Exception):
+    except (
+        ImportError,
+        cp.cuda.runtime.CUDARuntimeError if 'cp' in dir() else Exception,
+    ):
         return None
 
 
@@ -29,6 +34,7 @@ def _get_dask_array():
     """Try to import dask.array, return None if unavailable."""
     try:
         import dask.array as da
+
         return da
     except ImportError:
         return None
@@ -130,10 +136,10 @@ def to_numpy(arr):
 SWEEP_DIR = Path(__file__).parent / 'sensor' / 'sweeps'
 
 CPU_RUNS = (
-    SWEEP_DIR/'cw-cpu.yaml',
-    SWEEP_DIR/'dirac_delta-cpu.yaml',
-    SWEEP_DIR/'noise-cpu.yaml',
-    SWEEP_DIR/'sawtooth-cpu.yaml'
+    SWEEP_DIR / 'cw-cpu.yaml',
+    SWEEP_DIR / 'dirac_delta-cpu.yaml',
+    SWEEP_DIR / 'noise-cpu.yaml',
+    SWEEP_DIR / 'sawtooth-cpu.yaml',
 )
 
 
