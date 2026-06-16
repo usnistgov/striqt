@@ -106,7 +106,14 @@ def stat_ufunc_from_shorthand(kind, xp=None, axis=0) -> typing.Callable:
     return ufunc
 
 
-def powtodB(x: _ALN, *, abs: bool = True, eps: float = 0, overwrite_x: bool = False, min_dtype: 'DTypeLike|None'='float32') -> _ALN:
+def powtodB(
+    x: _ALN,
+    *,
+    abs: bool = True,
+    eps: float = 0,
+    overwrite_x: bool = False,
+    min_dtype: 'DTypeLike|None' = 'float32',
+) -> _ALN:
     """compute `10*log10(abs(x) + eps)` or `10*log10(x + eps)` with speed optimizations"""
 
     eps_str = '' if eps == 0 else '+eps'
@@ -144,7 +151,9 @@ def powtodB(x: _ALN, *, abs: bool = True, eps: float = 0, overwrite_x: bool = Fa
     return _repackage_arraylike(values, x, unit_transform=unit_linear_to_dB)
 
 
-def dBtopow(x: _ALN, *, overwrite_x: bool = False, min_dtype: 'DTypeLike|None'='float32') -> _ALN:
+def dBtopow(
+    x: _ALN, *, overwrite_x: bool = False, min_dtype: 'DTypeLike|None' = 'float32'
+) -> _ALN:
     """compute `10**(x/10)` with speed optimizations"""
 
     values, out, xp = _arraylike_with_buffer(x, overwrite_x, min_dtype=min_dtype)
@@ -164,7 +173,9 @@ def dBtopow(x: _ALN, *, overwrite_x: bool = False, min_dtype: 'DTypeLike|None'='
     return _repackage_arraylike(values, x, unit_transform=unit_dB_to_linear)
 
 
-def envtopow(x: _ALN, *, overwrite_x: bool = False, min_dtype: 'DTypeLike|None'='float32') -> _ALN:
+def envtopow(
+    x: _ALN, *, overwrite_x: bool = False, min_dtype: 'DTypeLike|None' = 'float32'
+) -> _ALN:
     """Computes abs(x)**2 with speed optimizations"""
 
     values, out, xp = _arraylike_with_buffer(x, overwrite_x, min_dtype=min_dtype)
@@ -188,12 +199,21 @@ def envtopow(x: _ALN, *, overwrite_x: bool = False, min_dtype: 'DTypeLike|None'=
     return _repackage_arraylike(values, x, unit_transform=unit_wave_to_linear)
 
 
-def envtodB(x: _ALN, *, abs: bool = True, eps: float = 0, overwrite_x: bool = False, min_dtype: 'DTypeLike|None'='float32') -> _ALN:
+def envtodB(
+    x: _ALN,
+    *,
+    abs: bool = True,
+    eps: float = 0,
+    overwrite_x: bool = False,
+    min_dtype: 'DTypeLike|None' = 'float32',
+) -> _ALN:
     """compute `20*log10(abs(x) + eps)` or `20*log10(x + eps)` with speed optimizations"""
 
     eps_str = '' if eps == 0 else '+eps'
 
-    values, out, xp = _arraylike_with_buffer(x, overwrite_x=overwrite_x, min_dtype=min_dtype)
+    values, out, xp = _arraylike_with_buffer(
+        x, overwrite_x=overwrite_x, min_dtype=min_dtype
+    )
 
     if xp is np:
         if abs:
@@ -240,24 +260,36 @@ def dBlinmean(
 
 @overload
 def dBlinmean(
-    x_dB: 'np.ndarray', axis: 'int|Sequence[int]|None' = None, overwrite_x=..., min_dtype=...
+    x_dB: 'np.ndarray',
+    axis: 'int|Sequence[int]|None' = None,
+    overwrite_x=...,
+    min_dtype=...,
 ) -> 'np.ndarray': ...
 
 
 @overload
 def dBlinmean(
-    x_dB: 'pd.Series', axis: 'int|Sequence[int]|None' = None, overwrite_x=..., min_dtype=...
+    x_dB: 'pd.Series',
+    axis: 'int|Sequence[int]|None' = None,
+    overwrite_x=...,
+    min_dtype=...,
 ) -> 'pd.Series': ...
 
 
 @overload
 def dBlinmean(
-    x_dB: 'pd.DataFrame', axis: 'int|Sequence[int]|None' = None, overwrite_x=..., min_dtype=...
+    x_dB: 'pd.DataFrame',
+    axis: 'int|Sequence[int]|None' = None,
+    overwrite_x=...,
+    min_dtype=...,
 ) -> 'pd.DataFrame': ...
 
 
 def dBlinmean(
-    x_dB: _AL, axis: 'Dims|int|Sequence[int]|None' = None, overwrite_x: bool = False, min_dtype: 'DTypeLike|None'='float32'
+    x_dB: _AL,
+    axis: 'Dims|int|Sequence[int]|None' = None,
+    overwrite_x: bool = False,
+    min_dtype: 'DTypeLike|None' = 'float32',
 ) -> _AL:
     """evaluate the mean in linear power space given power in dB.
 
@@ -288,23 +320,34 @@ def dBlinsum(
 
 @overload
 def dBlinsum(
-    x_dB: 'np.ndarray', axis: 'int|Sequence[int]|None' = None, overwrite_x=..., min_dtype=...
+    x_dB: 'np.ndarray',
+    axis: 'int|Sequence[int]|None' = None,
+    overwrite_x=...,
+    min_dtype=...,
 ) -> 'np.ndarray': ...
 
 
 @overload
 def dBlinsum(
-    x_dB: 'pd.Series', axis: 'int|Sequence[int]|None' = None, overwrite_x=..., min_dtype=...
+    x_dB: 'pd.Series',
+    axis: 'int|Sequence[int]|None' = None,
+    overwrite_x=...,
+    min_dtype=...,
 ) -> 'pd.Series': ...
 
 
 @overload
 def dBlinsum(
-    x_dB: 'pd.DataFrame', axis: 'int|Sequence[int]|None' = None, overwrite_x=..., min_dtype=...
+    x_dB: 'pd.DataFrame',
+    axis: 'int|Sequence[int]|None' = None,
+    overwrite_x=...,
+    min_dtype=...,
 ) -> 'pd.DataFrame': ...
 
 
-def dBlinsum(x_dB: _AL, axis=None, overwrite_x=False, min_dtype: 'DTypeLike|None'='float32') -> _AL:
+def dBlinsum(
+    x_dB: _AL, axis=None, overwrite_x=False, min_dtype: 'DTypeLike|None' = 'float32'
+) -> _AL:
     """evaluate the sum in linear power space given power in dB.
 
     This is equivalent to:
@@ -578,5 +621,6 @@ def _repackage_arraylike(
         return ret
     else:
         raise TypeError(f'unrecognized input type {type(obj)}')
+
 
 # %%
