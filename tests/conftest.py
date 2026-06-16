@@ -30,14 +30,19 @@ def _get_cupy():
         return None
 
 
-def _get_dask_array():
-    """Try to import dask.array, return None if unavailable."""
+def _dask_available():
+    """Check if dask.array is available without importing it."""
     try:
-        import dask.array as da
+        import importlib.util
+        return importlib.util.find_spec('dask.array') is not None
+    except (ImportError, ModuleNotFoundError):
+        return False
 
-        return da
-    except ImportError:
-        return None
+
+def _get_dask_array():
+    """Import dask.array lazily."""
+    import dask.array as da
+    return da
 
 
 # Build list of available array namespaces
@@ -53,9 +58,10 @@ else:
         stacklevel=1,
     )
 
-_dask_array = _get_dask_array()
-if _dask_array is not None:
-    _ARRAY_NAMESPACES.append(('dask', _dask_array))
+# Check dask availability without importing (to avoid reifying scipy)
+_dask_is_available = _dask_available()
+if _dask_is_available:
+    _ARRAY_NAMESPACES.append(('dask', None))  # placeholder, loaded lazily
 else:
     warnings.warn(
         'dask.array is not available; dask tests will be skipped',
@@ -76,7 +82,10 @@ def xp(request):
             result = my_function(arr)
             # assertions...
     """
-    return request.param[1]
+    name, ns = request.param
+    if name == 'dask' and ns is None:
+        return _get_dask_array()
+    return ns
 
 
 @pytest.fixture(params=_ARRAY_NAMESPACES, ids=[name for name, _ in _ARRAY_NAMESPACES])
@@ -92,6 +101,9 @@ def xp_name(request):
                 pytest.skip('dask not supported for this test')
             arr = xp.array([1, 2, 3])
     """
+    name, ns = request.param
+    if name == 'dask' and ns is None:
+        return (name, _get_dask_array())
     return request.param
 
 
@@ -112,9 +124,9 @@ def cp_array():
 @pytest.fixture
 def da_array():
     """Fixture providing dask.array module, skips if unavailable."""
-    if _dask_array is None:
+    if not _dask_is_available:
         pytest.skip('dask.array is not available')
-    return _dask_array
+    return _get_dask_array()
 
 
 def to_numpy(arr):
