@@ -1321,6 +1321,6 @@ class TestNumpyCupyCrossComparison:
         x_cp = cp.asarray(x)
         kernel_cp = cp.asarray(kernel)
         result_cp = fourier.oaconvolve(x_cp, kernel_cp, mode='same')
-        result_cp_np = result_cp.get()
+        result_cp_np = result_cp.get() / x.std()
 
         assert_allclose(result_cp_np, result_np, rtol=self.RTOL_FLOAT32, atol=self.ATOL)
