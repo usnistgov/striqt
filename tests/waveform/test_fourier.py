@@ -150,8 +150,8 @@ def complex_waveforms(
                 dtype=real_dtype,
                 shape=shape,
                 elements=st.floats(
-                    min_value=-1e3,
-                    max_value=1e3,
+                    min_value=-1,
+                    max_value=1,
                     allow_nan=False,
                     allow_infinity=False,
                     allow_subnormal=allow_subnormal,
@@ -164,8 +164,8 @@ def complex_waveforms(
                 dtype=real_dtype,
                 shape=shape,
                 elements=st.floats(
-                    min_value=-1e3,
-                    max_value=1e3,
+                    min_value=-1,
+                    max_value=1,
                     allow_nan=False,
                     allow_infinity=False,
                     allow_subnormal=allow_subnormal,
@@ -173,7 +173,10 @@ def complex_waveforms(
                 ),
             )
         )
-        return (real + 1j * imag).astype(dt)
+        db_scale = draw(
+            st.floats(min_value=-130, max_value=30)
+        )
+        return (10**(db_scale/20) * (real + 1j * imag)).astype(dt)
 
     return _complex_waveform()
 
