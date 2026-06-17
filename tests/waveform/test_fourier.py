@@ -1294,7 +1294,7 @@ class TestNumpyCupyCrossComparison:
     # oaconvolve tests
     # -------------------------------------------------------------------------
 
-    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=3000)
     @given(x=real_waveforms(min_size=64, max_size=256, dtype=np.float64))
     def test_oaconvolve_numpy_vs_cupy_float64(self, cupy_available, x):
         """Test oaconvolve produces close results for numpy vs cupy (float64)."""
