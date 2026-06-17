@@ -125,6 +125,9 @@ def complex_waveforms(
     else:
         dtype_strategy = st.just(dtype)
 
+    re_rng = np.random.default_rng(seed=42)
+    im_rng = np.random.default_rng(seed=43)
+
     @st.composite
     def _complex_waveform(draw):
         dt = draw(dtype_strategy)
@@ -152,36 +155,11 @@ def complex_waveforms(
             st.sampled_from([min_log_power, max_log_power])
         )
         lin_scale = np.asarray(10**(oom/2), dtype=dt)
+        
+        real = re_rng.normal(loc=0.0, scale=1.0, size=shape).astype(dt)
+        imag = im_rng.normal(loc=0.0, scale=1.0, size=shape).astype(dt)
 
-        real = lin_scale*draw(
-            arrays(
-                dtype=real_dtype,
-                shape=shape,
-                elements=st.floats(
-                    min_value=-1,
-                    max_value=1,
-                    allow_nan=False,
-                    allow_infinity=False,
-                    allow_subnormal=allow_subnormal,
-                    width=float_width,
-                ),
-            )
-        )
-        imag = lin_scale*draw(
-            arrays(
-                dtype=real_dtype,
-                shape=shape,
-                elements=st.floats(
-                    min_value=-1,
-                    max_value=1,
-                    allow_nan=False,
-                    allow_infinity=False,
-                    allow_subnormal=allow_subnormal,
-                    width=float_width,
-                ),
-            )
-        )
-        return (real + 1j * imag).astype(dt)
+        return lin_scale * (real + 1j * imag)
 
     return _complex_waveform()
 
@@ -199,6 +177,8 @@ def real_waveforms(
     else:
         dtype_strategy = st.just(dtype)
 
+    re_rng = np.random.default_rng(seed=42)
+
     @st.composite
     def _real_waveform(draw):
         dt = draw(dtype_strategy)
@@ -211,19 +191,9 @@ def real_waveforms(
         )
         lin_scale = np.asarray(10**(oom/2), dtype=dt)
 
-        return lin_scale * draw(
-            arrays(
-                dtype=dt,
-                shape=(size,),
-                elements=st.floats(
-                    min_value=-1,
-                    max_value=1,
-                    allow_nan=False,
-                    allow_infinity=False,
-                    width=float_width,
-                ),
-            )
-        )
+        real = re_rng.normal(loc=0.0, scale=1.0, size=(size,)).astype(dt)
+
+        return lin_scale * (real + 1j * real)
 
     return _real_waveform()
 
