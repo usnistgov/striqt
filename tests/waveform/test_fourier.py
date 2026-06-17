@@ -1118,7 +1118,7 @@ class TestNumpyCupyCrossComparison:
     """
 
     # Tolerances for IEEE fast-math precision
-    RTOL_FLOAT32 = 2e-5
+    RTOL_FLOAT32 = 1e-5
     RTOL_FLOAT64 = 1e-12
     ATOL = 1e-7
 
@@ -1210,12 +1210,12 @@ class TestNumpyCupyCrossComparison:
         num_out = len(x) // 2
 
         # NumPy result
-        result_np = fourier.resample(x, num_out)
+        result_np = fourier.resample(x, num_out) / x.std()
 
         # CuPy result
         x_cp = cp.asarray(x)
         result_cp = fourier.resample(x_cp, num_out)
-        result_cp_np = result_cp.get()
+        result_cp_np = result_cp.get() / x.std()
 
         assert_allclose(result_cp_np, result_np, rtol=self.RTOL_FLOAT32, atol=self.ATOL)
 
