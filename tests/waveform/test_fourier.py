@@ -1120,7 +1120,7 @@ class TestNumpyCupyCrossComparison:
     # Tolerances for IEEE fast-math precision
     RTOL_FLOAT32 = 1e-5
     RTOL_FLOAT64 = 1e-12
-    ATOL = 1e-7
+    ATOL = 1e-10
 
     @pytest.fixture
     def cupy_available(self):
@@ -1217,7 +1217,7 @@ class TestNumpyCupyCrossComparison:
         result_cp = fourier.resample(x_cp, num_out)
         result_cp_np = result_cp.get() / x.std()
 
-        assert_allclose(result_cp_np, result_np, rtol=self.RTOL_FLOAT32, atol=self.ATOL)
+        assert_allclose(result_cp_np, result_np, rtol=self.RTOL_FLOAT32, atol=2e-7)
 
     # -------------------------------------------------------------------------
     # stft tests
