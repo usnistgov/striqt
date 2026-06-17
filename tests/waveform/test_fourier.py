@@ -144,6 +144,7 @@ def complex_waveforms(
 
         # Generate real and imaginary parts separately for better control
         real_dtype = np.float32 if dt == np.complex64 else np.float64
+        float_width = 32 if dt == np.complex64 else 64
         real = draw(
             arrays(
                 dtype=real_dtype,
@@ -154,6 +155,7 @@ def complex_waveforms(
                     allow_nan=False,
                     allow_infinity=False,
                     allow_subnormal=allow_subnormal,
+                    width=float_width,
                 ),
             )
         )
@@ -167,6 +169,7 @@ def complex_waveforms(
                     allow_nan=False,
                     allow_infinity=False,
                     allow_subnormal=allow_subnormal,
+                    width=float_width,
                 ),
             )
         )
@@ -191,6 +194,7 @@ def real_waveforms(
         dt = draw(dtype_strategy)
         # Ensure size is even for FFT operations
         size = draw(st.integers(min_value=min_size // 2, max_value=max_size // 2)) * 2
+        float_width = 32 if dt == np.float32 else 64
 
         return draw(
             arrays(
@@ -201,6 +205,7 @@ def real_waveforms(
                     max_value=1e3,
                     allow_nan=False,
                     allow_infinity=False,
+                    width=float_width,
                 ),
             )
         )
