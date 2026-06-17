@@ -592,7 +592,7 @@ def stft(
         xp=np,
     )
 
-    return (freqs, times, y)  # type: ignore[return-value]
+    return (freqs, times, y)  # type: ignore
 
 
 def istft(

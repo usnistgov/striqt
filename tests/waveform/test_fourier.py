@@ -950,7 +950,7 @@ class TestSpectrogramProperties:
 class TestMultiBackendCompatibility:
     """Tests for numpy/cupy compatibility."""
 
-    @pytest.fixture(params=['numpy', 'dask'])
+    @pytest.fixture(params=['numpy', 'cupy', 'dask'])
     def xp_name_and_module(self, request):
         """Lazily provide array namespace to avoid importing dask at collection time."""
         name = request.param
@@ -959,6 +959,11 @@ class TestMultiBackendCompatibility:
         elif name == 'dask':
             from conftest import _get_dask_array
             return name, _get_dask_array()
+        elif name == 'cupy':
+            from conftest import _get_cupy
+            return name, _get_cupy()
+        else:
+            raise ValueError(f'invalid namespace {name}')
 
     def test_get_window_backend(self, xp_name_and_module):
         """Test get_window works with different backends."""
