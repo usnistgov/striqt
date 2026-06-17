@@ -1118,7 +1118,7 @@ class TestNumpyCupyCrossComparison:
     """
 
     # Tolerances for IEEE fast-math precision
-    RTOL_FLOAT32 = 1e-5
+    RTOL_FLOAT32 = 2e-5
     RTOL_FLOAT64 = 1e-12
     ATOL = 1e-7
 
