@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 from pathlib import Path
 
+
 np.seterr(divide='ignore')
 
 
@@ -20,6 +21,8 @@ np.seterr(divide='ignore')
 def _get_cupy():
     """Try to import cupy, return None if unavailable."""
     try:
+        import pandas
+        import scipy
         import cupy as cp  # type: ignore
 
         # Verify CUDA is actually available

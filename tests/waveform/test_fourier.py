@@ -44,6 +44,7 @@ if typing.TYPE_CHECKING:
     )
 
 
+
 def _get_fourier():
     """Lazily import fourier module to avoid reifying scipy at test collection time."""
     from striqt.waveform import fourier
