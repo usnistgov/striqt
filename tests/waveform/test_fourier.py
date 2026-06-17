@@ -1147,6 +1147,7 @@ class TestNumpyCupyCrossComparison:
     # get_window tests
     # -------------------------------------------------------------------------
 
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
     @given(
         name=st.sampled_from(['hamming', 'hann', 'blackman', 'bartlett', 'flattop']),
         nwindow=st.integers(min_value=8, max_value=512),
@@ -1165,6 +1166,7 @@ class TestNumpyCupyCrossComparison:
 
         assert_allclose(result_cp_np, result_np, rtol=self.RTOL_FLOAT64, atol=self.ATOL)
 
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
     @given(
         name=st.sampled_from(['hamming', 'hann', 'blackman', 'bartlett', 'flattop']),
         nwindow=st.integers(min_value=8, max_value=512),
@@ -1187,6 +1189,7 @@ class TestNumpyCupyCrossComparison:
     # fftfreq tests
     # -------------------------------------------------------------------------
 
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
     @given(
         nfft=fft_sizes(min_size=8, max_size=512),
         fs=sample_rates(min_rate=1e3, max_rate=100e6),
@@ -1209,6 +1212,7 @@ class TestNumpyCupyCrossComparison:
     # resample tests
     # -------------------------------------------------------------------------
 
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
     @given(x=complex_waveforms(min_size=64, max_size=256, dtype=np.complex128, allow_subnormal=False))
     def test_resample_numpy_vs_cupy_complex128(self, cupy_available, x):
         """Test resample produces close results for numpy vs cupy (complex128)."""
@@ -1228,6 +1232,7 @@ class TestNumpyCupyCrossComparison:
 
         assert_allclose(result_cp_np, result_np, rtol=self.RTOL_FLOAT64, atol=self.ATOL)
 
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
     @given(x=complex_waveforms(min_size=64, max_size=256, dtype=np.complex64, allow_subnormal=False))
     def test_resample_numpy_vs_cupy_complex64(self, cupy_available, x):
         """Test resample produces close results for numpy vs cupy (complex64)."""
@@ -1251,6 +1256,7 @@ class TestNumpyCupyCrossComparison:
     # stft tests
     # -------------------------------------------------------------------------
 
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
     @given(x=complex_waveforms(min_size=256, max_size=512, dtype=np.complex128, allow_subnormal=False))
     def test_stft_numpy_vs_cupy_complex128(self, cupy_available, x):
         """Test stft produces close results for numpy vs cupy (complex128)."""
@@ -1275,6 +1281,7 @@ class TestNumpyCupyCrossComparison:
         assert_allclose(times_cp_np, times_np, rtol=self.RTOL_FLOAT64, atol=self.ATOL)
         assert_allclose(X_cp_np, X_np, rtol=self.RTOL_FLOAT64, atol=self.ATOL)
 
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
     @given(x=complex_waveforms(min_size=256, max_size=512, dtype=np.complex64, allow_subnormal=False))
     def test_stft_numpy_vs_cupy_complex64(self, cupy_available, x):
         """Test stft produces close results for numpy vs cupy (complex64)."""
@@ -1303,6 +1310,7 @@ class TestNumpyCupyCrossComparison:
     # spectrogram tests
     # -------------------------------------------------------------------------
 
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
     @given(x=complex_waveforms(min_size=256, max_size=512, dtype=np.complex128, allow_subnormal=False))
     def test_spectrogram_numpy_vs_cupy_complex128(self, cupy_available, x):
         """Test spectrogram produces close results for numpy vs cupy (complex128)."""
@@ -1327,6 +1335,7 @@ class TestNumpyCupyCrossComparison:
         assert_allclose(times_cp_np, times_np, rtol=self.RTOL_FLOAT64, atol=self.ATOL)
         assert_allclose(Sxx_cp_np, Sxx_np, rtol=self.RTOL_FLOAT64, atol=self.ATOL)
 
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
     @given(x=complex_waveforms(min_size=256, max_size=512, dtype=np.complex64, allow_subnormal=False))
     def test_spectrogram_numpy_vs_cupy_complex64(self, cupy_available, x):
         """Test spectrogram produces close results for numpy vs cupy (complex64)."""
@@ -1355,6 +1364,7 @@ class TestNumpyCupyCrossComparison:
     # oaconvolve tests
     # -------------------------------------------------------------------------
 
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
     @given(x=real_waveforms(min_size=64, max_size=256, dtype=np.float64))
     def test_oaconvolve_numpy_vs_cupy_float64(self, cupy_available, x):
         """Test oaconvolve produces close results for numpy vs cupy (float64)."""
@@ -1375,6 +1385,7 @@ class TestNumpyCupyCrossComparison:
 
         assert_allclose(result_cp_np, result_np, rtol=self.RTOL_FLOAT64, atol=self.ATOL)
 
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
     @given(x=real_waveforms(min_size=64, max_size=256, dtype=np.float32))
     def test_oaconvolve_numpy_vs_cupy_float32(self, cupy_available, x):
         """Test oaconvolve produces close results for numpy vs cupy (float32)."""
