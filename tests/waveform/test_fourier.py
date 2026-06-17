@@ -1273,6 +1273,9 @@ class TestNumpyCupyCrossComparison:
         times_cp_np = times_cp.get()
         Sxx_cp_np = Sxx_cp.get()
 
+        Sxx_cp_np /= Sxx_np.mean()
+        Sxx_np /= Sxx_np.mean()
+
         assert_allclose(freqs_cp_np, freqs_np, rtol=self.RTOL_FLOAT32, atol=self.ATOL)
         assert_allclose(times_cp_np, times_np, rtol=self.RTOL_FLOAT32, atol=self.ATOL)
         assert_allclose(Sxx_cp_np, Sxx_np, rtol=self.RTOL_FLOAT32, atol=self.ATOL)
