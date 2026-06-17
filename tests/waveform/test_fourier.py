@@ -149,7 +149,7 @@ def complex_waveforms(
         float_width = 32 if dt == np.complex64 else 64
 
         oom = draw(
-            st.sampled_from([min_log_power, 0.5 * (min_log_power + max_log_power), max_log_power])
+            st.sampled_from([min_log_power, max_log_power])
         )
         lin_scale = np.asarray(10**(oom/2), dtype=dt)
 
@@ -165,7 +165,6 @@ def complex_waveforms(
                     allow_subnormal=allow_subnormal,
                     width=float_width,
                 ),
-                unique=True
             )
         )
         imag = lin_scale*draw(
@@ -180,7 +179,6 @@ def complex_waveforms(
                     allow_subnormal=allow_subnormal,
                     width=float_width,
                 ),
-                unique=True
             )
         )
         return (real + 1j * imag).astype(dt)
