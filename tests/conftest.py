@@ -185,23 +185,33 @@ def positive_power_arrays(
     else:
         dtype_strategy = st.just(dtype)
 
-    return dtype_strategy.flatmap(
-        lambda dt: arrays(
-            dtype=dt,
-            shape=array_shapes(
+    @st.composite
+    def _positive_power(draw):
+        dt = draw(dtype_strategy)
+        float_width = 32 if dt == np.float32 else 64
+        shape = draw(
+            array_shapes(
                 min_dims=min_dims,
                 max_dims=max_dims,
                 min_side=min_size,
                 max_side=max_size,
-            ),
-            elements=st.floats(
-                min_value=min_value,
-                max_value=max_value,
-                allow_nan=False,
-                allow_infinity=False,
-            ),
+            )
         )
-    )
+        return draw(
+            arrays(
+                dtype=dt,
+                shape=shape,
+                elements=st.floats(
+                    min_value=min_value,
+                    max_value=max_value,
+                    allow_nan=False,
+                    allow_infinity=False,
+                    width=float_width,
+                ),
+            )
+        )
+
+    return _positive_power()
 
 
 def dB_arrays(
@@ -229,32 +239,43 @@ def dB_arrays(
     else:
         dtype_strategy = st.just(dtype)
 
-    if filter_near_zero:
-        # Use two ranges to avoid filtering: negative and positive values away from zero
-        elements = st.one_of(
-            st.floats(min_value=min_value, max_value=-1e-6, allow_nan=False, allow_infinity=False),
-            st.floats(min_value=1e-6, max_value=max_value, allow_nan=False, allow_infinity=False),
-        )
-    else:
-        elements = st.floats(
-            min_value=min_value,
-            max_value=max_value,
-            allow_nan=False,
-            allow_infinity=False,
-        )
-
-    return dtype_strategy.flatmap(
-        lambda dt: arrays(
-            dtype=dt,
-            shape=array_shapes(
+    @st.composite
+    def _dB(draw):
+        dt = draw(dtype_strategy)
+        float_width = 32 if dt == np.float32 else 64
+        shape = draw(
+            array_shapes(
                 min_dims=min_dims,
                 max_dims=max_dims,
                 min_side=min_size,
                 max_side=max_size,
-            ),
-            elements=elements,
+            )
         )
-    )
+
+        if filter_near_zero:
+            # Use two ranges to avoid filtering: negative and positive values away from zero
+            elements = st.one_of(
+                st.floats(min_value=min_value, max_value=-1e-6, allow_nan=False, allow_infinity=False, width=float_width),
+                st.floats(min_value=1e-6, max_value=max_value, allow_nan=False, allow_infinity=False, width=float_width),
+            )
+        else:
+            elements = st.floats(
+                min_value=min_value,
+                max_value=max_value,
+                allow_nan=False,
+                allow_infinity=False,
+                width=float_width,
+            )
+
+        return draw(
+            arrays(
+                dtype=dt,
+                shape=shape,
+                elements=elements,
+            )
+        )
+
+    return _dB()
 
 
 def envelope_arrays(
@@ -284,6 +305,7 @@ def envelope_arrays(
     @st.composite
     def _envelope(draw):
         dt = draw(dtype_strategy)
+        float_width = 32 if dt == np.float32 else 64
         shape = draw(
             array_shapes(
                 min_dims=min_dims,
@@ -304,6 +326,7 @@ def envelope_arrays(
                         max_value=max_magnitude,
                         allow_nan=False,
                         allow_infinity=False,
+                        width=float_width,
                     ),
                 )
             )
@@ -316,6 +339,7 @@ def envelope_arrays(
                         max_value=np.pi,
                         allow_nan=False,
                         allow_infinity=False,
+                        width=float_width,
                     ),
                 )
             )
@@ -330,6 +354,7 @@ def envelope_arrays(
                         max_value=max_magnitude,
                         allow_nan=False,
                         allow_infinity=False,
+                        width=float_width,
                     ),
                 )
             )
