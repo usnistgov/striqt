@@ -202,8 +202,10 @@ class TestAlgebraicProperties:
         # Use looser tolerance due to floating-point accumulation
         assert_allclose(mean_result, expected_mean, rtol=1e-6)
     
-    @given(dB=st.floats(min_value=-140, max_value=100, allow_nan=False, allow_infinity=False).filter(
-        lambda x: abs(x) > 1e-6))
+    @given(dB=st.one_of(
+        st.floats(min_value=-140, max_value=-1e-6, allow_nan=False, allow_infinity=False),
+        st.floats(min_value=1e-6, max_value=100, allow_nan=False, allow_infinity=False),
+    ))
     @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
     def test_single_value_mean_identity(self, dB):
         """Property: dBlinmean([x]) = x (mean of single value is itself).
@@ -213,10 +215,13 @@ class TestAlgebraicProperties:
         """
         arr = np.array([dB], dtype=np.float64)
         result = dBlinmean(arr)
-        assert_allclose(result, dB, rtol=1e-10)
+        # Use looser tolerance due to dB→linear→dB roundtrip precision loss
+        assert_allclose(result, dB, rtol=1e-9)
     
-    @given(dB=st.floats(min_value=-140, max_value=100, allow_nan=False, allow_infinity=False).filter(
-        lambda x: abs(x) > 1e-6))
+    @given(dB=st.one_of(
+        st.floats(min_value=-140, max_value=-1e-6, allow_nan=False, allow_infinity=False),
+        st.floats(min_value=1e-6, max_value=100, allow_nan=False, allow_infinity=False),
+    ))
     @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
     def test_single_value_sum_identity(self, dB):
         """Property: dBlinsum([x]) = x (sum of single value is itself).
@@ -226,11 +231,13 @@ class TestAlgebraicProperties:
         """
         arr = np.array([dB], dtype=np.float64)
         result = dBlinsum(arr)
-        assert_allclose(result, arr, rtol=1e-10)
+        # Use looser tolerance due to dB→linear→dB roundtrip precision loss
+        assert_allclose(result, dB, rtol=1e-9)
     
-    @given(dB=st.floats(min_value=-140, max_value=100, allow_nan=False, allow_infinity=False).filter(
-        lambda x: abs(x) > 1e-6),
-           n=st.integers(min_value=1, max_value=20))
+    @given(dB=st.one_of(
+        st.floats(min_value=-140, max_value=-1e-6, allow_nan=False, allow_infinity=False),
+        st.floats(min_value=1e-6, max_value=100, allow_nan=False, allow_infinity=False),
+    ), n=st.integers(min_value=1, max_value=20))
     @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
     def test_equal_values_mean(self, dB, n):
         """Property: dBlinmean([x, x, ..., x]) = x (mean of equal values).
@@ -481,10 +488,14 @@ class TestAxisParameter:
             st.integers(min_value=2, max_value=10),
             st.integers(min_value=2, max_value=10),
         ))
+        # Exclude values near zero to avoid precision issues in dB→linear→dB roundtrip
         dB = data.draw(arrays(
             dtype=np.float64,
             shape=shape,
-            elements=st.floats(min_value=-50, max_value=50, allow_nan=False, allow_infinity=False),
+            elements=st.one_of(
+                st.floats(min_value=-50, max_value=-1e-6, allow_nan=False, allow_infinity=False),
+                st.floats(min_value=1e-6, max_value=50, allow_nan=False, allow_infinity=False),
+            ),
         ))
         axis = data.draw(st.integers(min_value=0, max_value=1))
         

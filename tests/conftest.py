@@ -226,14 +226,19 @@ def dB_arrays(
     else:
         dtype_strategy = st.just(dtype)
 
-    elements = st.floats(
-        min_value=min_value,
-        max_value=max_value,
-        allow_nan=False,
-        allow_infinity=False,
-    )
     if filter_near_zero:
-        elements = elements.filter(lambda x: abs(x) > 1e-6)
+        # Use two ranges to avoid filtering: negative and positive values away from zero
+        elements = st.one_of(
+            st.floats(min_value=min_value, max_value=-1e-6, allow_nan=False, allow_infinity=False),
+            st.floats(min_value=1e-6, max_value=max_value, allow_nan=False, allow_infinity=False),
+        )
+    else:
+        elements = st.floats(
+            min_value=min_value,
+            max_value=max_value,
+            allow_nan=False,
+            allow_infinity=False,
+        )
 
     return dtype_strategy.flatmap(
         lambda dt: arrays(
