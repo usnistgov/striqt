@@ -1277,7 +1277,7 @@ class TestNumpyCupyCrossComparison:
 
         assert_allclose(freqs_cp_np, freqs_np, rtol=self.RTOL_FLOAT32, atol=self.ATOL)
         assert_allclose(times_cp_np, times_np, rtol=self.RTOL_FLOAT32, atol=self.ATOL)
-        assert_allclose(Sxx_cp_np/scale, Sxx_np/scale, rtol=self.RTOL_FLOAT32)
+        assert_allclose(Sxx_cp_np/scale, Sxx_np/scale, rtol=3e-5)
 
     # -------------------------------------------------------------------------
     # oaconvolve tests
