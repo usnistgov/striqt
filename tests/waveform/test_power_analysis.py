@@ -1,10 +1,31 @@
-"""Tests for dB conversion functions in striqt.waveform.lib.power_analysis"""
+"""Property-based tests for dB conversion functions using Hypothesis.
+
+This module demonstrates how to use Hypothesis to reduce boilerplate and make
+test specifications clearer. Key benefits:
+
+1. **Reduced boilerplate**: Custom strategies encapsulate array generation logic
+2. **Property-based testing**: Tests express mathematical invariants directly
+3. **Automatic edge case discovery**: Hypothesis finds corner cases automatically
+4. **Clear specifications**: Each test documents a mathematical property
+5. **Multi-backend support**: Tests run against numpy, cupy, and dask arrays
+
+Test Categories:
+- Mathematical identities (roundtrips, inverses)
+- Algebraic properties (3dB rule, 10dB rule, mean/sum relationship)
+- Dtype preservation
+- Input preservation (overwrite_x behavior)
+- Edge cases (zeros, infinities, extreme values)
+- Multi-backend compatibility (numpy, cupy, dask)
+"""
 
 from __future__ import annotations
 
 import numpy as np
 import pytest
-from numpy.testing import assert_allclose, assert_array_equal
+from hypothesis import assume, given, settings, HealthCheck
+from hypothesis import strategies as st
+from hypothesis.extra.numpy import arrays, array_shapes
+from numpy.testing import assert_allclose
 
 from striqt.waveform.lib.power_analysis import (
     dBlinmean,
@@ -20,1036 +41,613 @@ from striqt.waveform.lib.power_analysis import (
     unit_wave_to_linear,
 )
 
-# Import to_numpy helper from conftest
-from conftest import to_numpy
+# Import shared strategies and utilities from conftest
+from conftest import (
+    to_numpy,
+    positive_power_arrays,
+    dB_arrays,
+    envelope_arrays,
+    available_namespaces,
+    convert_array,
+    for_each_namespace,
+)
 
 
-def make_array(xp, data, dtype=None):
-    """Create an array using the appropriate method for each namespace.
+# =============================================================================
+# Unit Conversion Tests - Bijection properties
+# =============================================================================
 
-    For dask, uses from_array() to properly wrap numpy arrays.
-    For numpy/cupy, uses array() directly.
-    """
-    np_arr = np.array(data, dtype=dtype)
-    if hasattr(xp, 'from_array'):
-        # dask.array
-        return xp.from_array(np_arr, chunks=-1)
-    else:
-        # numpy, cupy
-        return xp.asarray(np_arr)
-
-
-class TestUnitConversions:
-    """Tests for unit string conversion functions."""
-
-    @pytest.mark.parametrize(
-        'dB_unit,linear_unit',
-        [
-            ('dBm', 'mW'),
-            ('dBW', 'W'),
-            ('dB', 'unitless'),
-            ('dBm/Hz', 'mW/Hz'),
-            ('dBW/Hz', 'W/Hz'),
-        ],
-    )
-    def test_unit_dB_to_linear(self, dB_unit: str, linear_unit: str):
-        assert unit_dB_to_linear(dB_unit) == linear_unit
-
-    @pytest.mark.parametrize(
-        'linear_unit,dB_unit',
-        [
-            ('mW', 'dBm'),
-            ('W', 'dBW'),
-            ('unitless', 'dB'),
-            ('mW/Hz', 'dBm/Hz'),
-            ('W/Hz', 'dBW/Hz'),
-        ],
-    )
-    def test_unit_linear_to_dB(self, linear_unit: str, dB_unit: str):
-        assert unit_linear_to_dB(linear_unit) == dB_unit
-
-    @pytest.mark.parametrize(
-        'dB_unit,wave_unit',
-        [
-            ('dBm', '√mW'),
-            ('dBW', '√W'),
-            ('dB', '√unitless'),
-        ],
-    )
-    def test_unit_dB_to_wave(self, dB_unit: str, wave_unit: str):
-        assert unit_dB_to_wave(dB_unit) == wave_unit
-
-    @pytest.mark.parametrize(
-        'wave_unit,dB_unit',
-        [
-            ('√mW', 'dBm'),
-            ('√W', 'dBW'),
-            ('√unitless', 'dB'),
-        ],
-    )
-    def test_unit_wave_to_dB(self, wave_unit: str, dB_unit: str):
-        assert unit_wave_to_dB(wave_unit) == dB_unit
-
-    @pytest.mark.parametrize(
-        'wave_unit,linear_unit',
-        [
-            ('√mW', 'mW'),
-            ('√W', 'W'),
-            ('√unitless', 'unitless'),
-        ],
-    )
-    def test_unit_wave_to_linear(self, wave_unit: str, linear_unit: str):
-        assert unit_wave_to_linear(wave_unit) == linear_unit
+class TestUnitConversionProperties:
+    """Property: Unit conversions form bijections (invertible mappings)."""
+    
+    UNIT_PAIRS = [
+        ('dBm', 'mW'),
+        ('dBW', 'W'),
+        ('dB', 'unitless'),
+        ('dBm/Hz', 'mW/Hz'),
+        ('dBW/Hz', 'W/Hz'),
+    ]
+    
+    WAVE_PAIRS = [
+        ('dBm', '√mW'),
+        ('dBW', '√W'),
+        ('dB', '√unitless'),
+    ]
+    
+    @pytest.mark.parametrize('dB_unit,linear_unit', UNIT_PAIRS)
+    def test_dB_linear_roundtrip(self, dB_unit: str, linear_unit: str):
+        """Property: dB → linear → dB is identity."""
+        assert unit_linear_to_dB(unit_dB_to_linear(dB_unit)) == dB_unit
+    
+    @pytest.mark.parametrize('dB_unit,linear_unit', UNIT_PAIRS)
+    def test_linear_dB_roundtrip(self, dB_unit: str, linear_unit: str):
+        """Property: linear → dB → linear is identity."""
+        assert unit_dB_to_linear(unit_linear_to_dB(linear_unit)) == linear_unit
+    
+    @pytest.mark.parametrize('dB_unit,wave_unit', WAVE_PAIRS)
+    def test_dB_wave_roundtrip(self, dB_unit: str, wave_unit: str):
+        """Property: dB → wave → dB is identity."""
+        assert unit_wave_to_dB(unit_dB_to_wave(dB_unit)) == dB_unit
 
 
-class TestPowtodB:
-    """Tests for powtodB: 10*log10(abs(x))"""
+# =============================================================================
+# Mathematical Identity Tests - Core dB conversion properties (numpy only)
+# =============================================================================
 
-    def test_basic_conversion(self, xp):
-        """Test basic power to dB conversion."""
-        power = make_array(xp, [1.0, 10.0, 100.0, 1000.0])
-        expected_dB = np.array([0.0, 10.0, 20.0, 30.0])
-        result = to_numpy(powtodB(power))
-        assert_allclose(result, expected_dB, rtol=1e-10)
+class TestConversionIdentities:
+    """Properties: Mathematical identities that must hold for dB conversions."""
+    
+    @given(power=positive_power_arrays(dtype=np.float64))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_powtodB_dBtopow_roundtrip(self, power):
+        """Property: dBtopow(powtodB(x)) ≈ x for all positive x.
+        
+        This is the fundamental inverse relationship.
+        Note: Uses float64 for precision; float32 has ~1e-6 relative error.
+        """
+        roundtrip = dBtopow(powtodB(power))
+        assert_allclose(roundtrip, power, rtol=1e-10)
+    
+    @given(dB=dB_arrays(min_value=-140, max_value=100, dtype=np.float64, filter_near_zero=True))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_dBtopow_powtodB_roundtrip(self, dB):
+        """Property: powtodB(dBtopow(x)) ≈ x for all finite x.
+        
+        Note: Range limited to ±100 dB to avoid underflow/overflow in linear domain.
+        10^(-100/10) = 10^-10 is safely representable.
+        """
+        roundtrip = powtodB(dBtopow(dB))
+        assert_allclose(roundtrip, dB, rtol=1e-9)
+    
+    @given(env=envelope_arrays(include_complex=False, dtype=np.float64, min_magnitude=1e-6, max_magnitude=1e6))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_envtodB_equals_powtodB_envtopow(self, env):
+        """Property: envtodB(x) = powtodB(envtopow(x)).
+        
+        Envelope-to-dB should equal power-to-dB of squared envelope.
+        Note: Magnitude limited to avoid squaring overflow/underflow.
+        """
+        direct = envtodB(env)
+        via_power = powtodB(envtopow(env))
+        assert_allclose(direct, via_power, rtol=1e-10)
 
-    def test_fractional_power(self, xp):
-        """Test conversion of fractional power values."""
-        power = make_array(xp, [0.1, 0.01, 0.001])
-        expected_dB = np.array([-10.0, -20.0, -30.0])
-        result = to_numpy(powtodB(power))
-        assert_allclose(result, expected_dB, rtol=1e-10)
-
-    def test_negative_values_with_abs(self, xp):
-        """Test that abs=True handles negative values."""
-        power = make_array(xp, [-1.0, -10.0, -100.0])
-        expected_dB = np.array([0.0, 10.0, 20.0])
-        result = to_numpy(powtodB(power, abs=True))
-        assert_allclose(result, expected_dB, rtol=1e-10)
-
-    def test_eps_parameter(self, xp):
-        """Test epsilon parameter for avoiding log(0)."""
-        power = make_array(xp, [0.0, 1.0])
-        eps = 1e-10
-        result = to_numpy(powtodB(power, eps=eps))
-        expected = np.array([10 * np.log10(eps), 10 * np.log10(1 + eps)])
-        assert_allclose(result, expected, rtol=1e-6)
-
-    def test_2d_array(self, xp):
-        """Test conversion of 2D arrays."""
-        power = make_array(xp, [[1.0, 10.0], [100.0, 1000.0]])
-        expected_dB = np.array([[0.0, 10.0], [20.0, 30.0]])
-        result = to_numpy(powtodB(power))
-        assert_allclose(result, expected_dB, rtol=1e-10)
-
-    def test_overwrite_x(self, xp_name):
-        """Test in-place computation with overwrite_x=True."""
-        name, xp = xp_name
-        if name == 'dask':
-            pytest.skip('dask does not support in-place operations')
-        power = make_array(xp, [1.0, 10.0, 100.0], dtype=np.float64)
-        result = powtodB(power, overwrite_x=True)
-        expected_dB = np.array([0.0, 10.0, 20.0])
-        assert_allclose(to_numpy(result), expected_dB, rtol=1e-10)
-
-
-class TestDBtopow:
-    """Tests for dBtopow: 10**(x/10)"""
-
-    def test_basic_conversion(self, xp):
-        """Test basic dB to power conversion."""
-        dB = make_array(xp, [0.0, 10.0, 20.0, 30.0])
-        expected_power = np.array([1.0, 10.0, 100.0, 1000.0])
-        result = to_numpy(dBtopow(dB))
-        assert_allclose(result, expected_power, rtol=1e-10)
-
-    def test_negative_dB(self, xp):
-        """Test conversion of negative dB values."""
-        dB = make_array(xp, [-10.0, -20.0, -30.0])
-        expected_power = np.array([0.1, 0.01, 0.001])
-        result = to_numpy(dBtopow(dB))
-        assert_allclose(result, expected_power, rtol=1e-10)
-
-    def test_roundtrip_powtodB_dBtopow(self, xp):
-        """Test that powtodB and dBtopow are inverses."""
-        power = make_array(xp, [0.001, 0.1, 1.0, 10.0, 100.0, 1000.0])
-        roundtrip = to_numpy(dBtopow(powtodB(power)))
-        assert_allclose(roundtrip, to_numpy(power), rtol=1e-10)
-
-    def test_roundtrip_dBtopow_powtodB(self, xp):
-        """Test that dBtopow and powtodB are inverses."""
-        dB = make_array(xp, [-30.0, -20.0, -10.0, 0.0, 10.0, 20.0, 30.0])
-        roundtrip = to_numpy(powtodB(dBtopow(dB)))
-        assert_allclose(roundtrip, to_numpy(dB), rtol=1e-10)
-
-    def test_2d_array(self, xp):
-        """Test conversion of 2D arrays."""
-        dB = make_array(xp, [[0.0, 10.0], [20.0, 30.0]])
-        expected_power = np.array([[1.0, 10.0], [100.0, 1000.0]])
-        result = to_numpy(dBtopow(dB))
-        assert_allclose(result, expected_power, rtol=1e-10)
-
-
-class TestEnvtopow:
-    """Tests for envtopow: abs(x)**2"""
-
-    def test_real_values(self, xp):
-        """Test envelope to power for real values."""
-        env = make_array(xp, [1.0, 2.0, 3.0, 10.0])
-        expected_power = np.array([1.0, 4.0, 9.0, 100.0])
-        result = to_numpy(envtopow(env))
-        assert_allclose(result, expected_power, rtol=1e-10)
-
-    def test_complex_values(self, xp):
-        """Test envelope to power for complex values."""
-        env = make_array(xp, [1 + 0j, 0 + 2j, 3 + 4j])  # magnitudes: 1, 2, 5
-        expected_power = np.array([1.0, 4.0, 25.0])
-        result = to_numpy(envtopow(env))
-        assert_allclose(result, expected_power, rtol=1e-10)
-
-    def test_negative_real_values(self, xp):
-        """Test that negative real values are handled correctly."""
-        env = make_array(xp, [-1.0, -2.0, -3.0])
-        expected_power = np.array([1.0, 4.0, 9.0])
-        result = to_numpy(envtopow(env))
-        assert_allclose(result, expected_power, rtol=1e-10)
-
-
-class TestEnvtodB:
-    """Tests for envtodB: 20*log10(abs(x))"""
-
-    def test_basic_conversion(self, xp):
-        """Test basic envelope to dB conversion."""
-        env = make_array(xp, [1.0, 10.0, 100.0])
-        expected_dB = np.array([0.0, 20.0, 40.0])
-        result = to_numpy(envtodB(env))
-        assert_allclose(result, expected_dB, rtol=1e-10)
-
-    def test_fractional_envelope(self, xp):
-        """Test conversion of fractional envelope values."""
-        env = make_array(xp, [0.1, 0.01, 0.001])
-        expected_dB = np.array([-20.0, -40.0, -60.0])
-        result = to_numpy(envtodB(env))
-        assert_allclose(result, expected_dB, rtol=1e-10)
-
-    def test_complex_values(self, xp):
-        """Test conversion of complex envelope values."""
-        env_data = [1 + 0j, 0 + 10j, 3 + 4j]  # magnitudes: 1, 10, 5
-        env = make_array(xp, env_data)
-        expected_dB = 20 * np.log10(np.abs(env_data))
-        result = to_numpy(envtodB(env))
-        assert_allclose(result, expected_dB, rtol=1e-10)
-
-    def test_relationship_to_powtodB(self, xp):
-        """Test that envtodB(x) == powtodB(envtopow(x))."""
-        env = make_array(xp, [0.5, 1.0, 2.0, 5.0, 10.0])
-        result_direct = to_numpy(envtodB(env))
-        result_via_power = to_numpy(powtodB(envtopow(env)))
-        assert_allclose(result_direct, result_via_power, rtol=1e-10)
-
-
-class TestDBlinmean:
-    """Tests for dBlinmean: mean in linear space, result in dB."""
-
-    def test_equal_values(self, xp):
-        """Test mean of equal dB values returns the same value."""
-        dB = make_array(xp, [10.0, 10.0, 10.0, 10.0])
-        result = to_numpy(dBlinmean(dB))
-        assert_allclose(result, 10.0, rtol=1e-10)
-
-    def test_known_values(self, xp):
-        """Test with known values where linear mean is calculable."""
-        # Two values: 0 dB (1 linear) and 10 dB (10 linear)
-        # Linear mean = (1 + 10) / 2 = 5.5
-        # dB result = 10*log10(5.5) ≈ 7.404
-        dB = make_array(xp, [0.0, 10.0])
-        expected = 10 * np.log10(5.5)
-        result = to_numpy(dBlinmean(dB))
+    @given(env=envelope_arrays(include_complex=False, dtype=np.float64))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_envtopow_is_square(self, env):
+        """Property: envtopow(x) = |x|² for real positive x."""
+        result = envtopow(env)
+        expected = np.abs(env) ** 2
+        assert_allclose(result, expected, rtol=1e-10)
+    
+    @given(power=positive_power_arrays(dtype=np.float64))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_powtodB_is_10log10(self, power):
+        """Property: powtodB(x) = 10 * log10(x)."""
+        result = powtodB(power)
+        expected = 10 * np.log10(power)
+        assert_allclose(result, expected, rtol=1e-10)
+    
+    @given(env=envelope_arrays(include_complex=False, dtype=np.float64))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_envtodB_is_20log10(self, env):
+        """Property: envtodB(x) = 20 * log10(|x|)."""
+        result = envtodB(env)
+        expected = 20 * np.log10(np.abs(env))
         assert_allclose(result, expected, rtol=1e-10)
 
-    def test_axis_parameter(self, xp):
-        """Test mean along specific axis."""
-        # 2x3 array
-        dB = make_array(xp, [[0.0, 10.0, 20.0], [0.0, 10.0, 20.0]])
-        # Mean along axis 0 should give same values (rows are identical)
-        result = to_numpy(dBlinmean(dB, axis=0))
-        expected = np.array([0.0, 10.0, 20.0])
-        assert_allclose(result, expected, rtol=1e-10)
 
-    def test_axis_1(self, xp):
-        """Test mean along axis 1."""
-        # Each row: [0 dB, 10 dB] -> linear [1, 10] -> mean 5.5 -> ~7.404 dB
-        dB = make_array(xp, [[0.0, 10.0], [0.0, 10.0]])
-        expected_single = 10 * np.log10(5.5)
-        result = to_numpy(dBlinmean(dB, axis=1))
-        expected = np.array([expected_single, expected_single])
-        assert_allclose(result, expected, rtol=1e-10)
+# =============================================================================
+# Algebraic Properties - dB arithmetic rules
+# =============================================================================
 
-    def test_full_array_mean(self, xp):
-        """Test mean over entire array (axis=None)."""
-        dB = make_array(xp, [[0.0, 10.0], [20.0, 30.0]])
-        # Linear: [1, 10, 100, 1000], mean = 277.75
-        expected = 10 * np.log10(277.75)
-        result = to_numpy(dBlinmean(dB, axis=None))
-        assert_allclose(result, expected, rtol=1e-10)
-
-    def test_single_value(self, xp):
-        """Test that single value returns itself."""
-        dB = make_array(xp, [15.0])
-        result = to_numpy(dBlinmean(dB))
-        assert_allclose(result, 15.0, rtol=1e-10)
-
-    def test_large_dynamic_range(self, xp):
-        """Test with large dynamic range values."""
-        # -30 dB (0.001) and 30 dB (1000)
-        # Linear mean = (0.001 + 1000) / 2 = 500.0005
-        dB = make_array(xp, [-30.0, 30.0])
-        expected = 10 * np.log10(500.0005)
-        result = to_numpy(dBlinmean(dB))
-        assert_allclose(result, expected, rtol=1e-6)
-
-
-class TestDBlinsum:
-    """Tests for dBlinsum: sum in linear space, result in dB."""
-
-    def test_equal_values(self, xp):
-        """Test sum of equal dB values."""
-        # Four values of 10 dB (10 linear each)
-        # Linear sum = 40, dB = 10*log10(40) ≈ 16.02
-        dB = make_array(xp, [10.0, 10.0, 10.0, 10.0])
-        expected = 10 * np.log10(40)
-        result = to_numpy(dBlinsum(dB))
-        assert_allclose(result, expected, rtol=1e-10)
-
-    def test_known_values(self, xp):
-        """Test with known values where linear sum is calculable."""
-        # 0 dB (1 linear) and 10 dB (10 linear)
-        # Linear sum = 11
-        dB = make_array(xp, [0.0, 10.0])
-        expected = 10 * np.log10(11)
-        result = to_numpy(dBlinsum(dB))
-        assert_allclose(result, expected, rtol=1e-10)
-
-    def test_axis_parameter(self, xp):
-        """Test sum along specific axis."""
-        # 2x3 array, sum along axis 0
-        dB = make_array(xp, [[0.0, 10.0, 20.0], [0.0, 10.0, 20.0]])
-        # Sum along axis 0: [2, 20, 200] in linear
-        expected = 10 * np.log10(np.array([2, 20, 200]))
-        result = to_numpy(dBlinsum(dB, axis=0))
-        assert_allclose(result, expected, rtol=1e-10)
-
-    def test_axis_1(self, xp):
-        """Test sum along axis 1."""
-        # Each row: [0 dB, 10 dB] -> linear [1, 10] -> sum 11
-        dB = make_array(xp, [[0.0, 10.0], [0.0, 10.0]])
-        expected_single = 10 * np.log10(11)
-        result = to_numpy(dBlinsum(dB, axis=1))
-        expected = np.array([expected_single, expected_single])
-        assert_allclose(result, expected, rtol=1e-10)
-
-    def test_full_array_sum(self, xp):
-        """Test sum over entire array (axis=None)."""
-        dB = make_array(xp, [[0.0, 10.0], [20.0, 30.0]])
-        # Linear: [1, 10, 100, 1000], sum = 1111
-        expected = 10 * np.log10(1111)
-        result = to_numpy(dBlinsum(dB, axis=None))
-        assert_allclose(result, expected, rtol=1e-10)
-
-    def test_single_value(self, xp):
-        """Test that single value returns itself."""
-        dB = make_array(xp, [15.0])
-        result = to_numpy(dBlinsum(dB))
-        assert_allclose(result, 15.0, rtol=1e-10)
-
-    def test_3dB_rule(self, xp):
-        """Test the 3 dB rule: doubling power adds ~3 dB."""
-        # Two equal power sources: sum should be ~3 dB higher
-        base_dB = 20.0
-        dB = make_array(xp, [base_dB, base_dB])
-        result = to_numpy(dBlinsum(dB))
-        # Doubling power = +3.0103 dB
+class TestAlgebraicProperties:
+    """Properties: Algebraic rules for dB arithmetic."""
+    
+    @given(base_dB=st.floats(min_value=-140, max_value=100, allow_nan=False, allow_infinity=False))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_3dB_rule(self, base_dB):
+        """Property: Doubling power adds ~3.01 dB.
+        
+        dBlinsum([x, x]) = x + 10*log10(2) ≈ x + 3.01
+        """
+        dB = np.array([base_dB, base_dB], dtype=np.float64)
+        result = dBlinsum(dB)
         expected = base_dB + 10 * np.log10(2)
         assert_allclose(result, expected, rtol=1e-10)
+    
+    @given(base_dB=st.floats(min_value=-140, max_value=100, allow_nan=False, allow_infinity=False))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_10dB_rule(self, base_dB):
+        """Property: 10x power adds exactly 10 dB.
+        
+        dBlinsum([x]*10) = x + 10
+        """
+        dB = np.array([base_dB] * 10, dtype=np.float64)
+        result = dBlinsum(dB)
+        expected = base_dB + 10.0
+        assert_allclose(result, expected, rtol=1e-10)
+    
+    @given(dB=dB_arrays(min_value=-50, max_value=50, min_size=2, max_size=50, dtype=np.float64, filter_near_zero=True))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_mean_sum_relationship(self, dB):
+        """Property: dBlinmean = dBlinsum - 10*log10(N).
+        
+        Linear mean = linear sum / N, so in dB:
+        mean_dB = sum_dB - 10*log10(N)
+        """
+        N = dB.size
+        mean_result = dBlinmean(dB, axis=None)
+        sum_result = dBlinsum(dB, axis=None)
+        expected_mean = sum_result - 10 * np.log10(N)
+        # Use looser tolerance due to floating-point accumulation
+        assert_allclose(mean_result, expected_mean, rtol=1e-6)
+    
+    @given(dB=st.floats(min_value=-140, max_value=100, allow_nan=False, allow_infinity=False).filter(
+        lambda x: abs(x) > 1e-6))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_single_value_mean_identity(self, dB):
+        """Property: dBlinmean([x]) = x (mean of single value is itself).
+        
+        Note: Range limited to ±100 dB to avoid underflow to zero in linear domain.
+        Values very close to zero are excluded since relative tolerance is meaningless there.
+        """
+        arr = np.array([dB], dtype=np.float64)
+        result = dBlinmean(arr)
+        assert_allclose(result, dB, rtol=1e-10)
+    
+    @given(dB=st.floats(min_value=-140, max_value=100, allow_nan=False, allow_infinity=False).filter(
+        lambda x: abs(x) > 1e-6))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_single_value_sum_identity(self, dB):
+        """Property: dBlinsum([x]) = x (sum of single value is itself).
+        
+        Note: Range limited to ±100 dB to avoid underflow to zero in linear domain.
+        Values very close to zero are excluded since relative tolerance is meaningless there.
+        """
+        arr = np.array([dB], dtype=np.float64)
+        result = dBlinsum(arr)
+        assert_allclose(result, arr, rtol=1e-10)
+    
+    @given(dB=st.floats(min_value=-140, max_value=100, allow_nan=False, allow_infinity=False).filter(
+        lambda x: abs(x) > 1e-6),
+           n=st.integers(min_value=1, max_value=20))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_equal_values_mean(self, dB, n):
+        """Property: dBlinmean([x, x, ..., x]) = x (mean of equal values).
+        
+        Note: Range limited to ±100 dB to avoid underflow to zero in linear domain.
+        Values very close to zero are excluded since relative tolerance is meaningless there.
+        """
+        arr = np.array([dB] * n, dtype=np.float64)
+        result = dBlinmean(arr)
+        assert_allclose(result, dB, rtol=1e-8)
 
-    def test_10dB_rule(self, xp):
-        """Test the 10 dB rule: 10x power adds 10 dB."""
-        # Ten equal power sources: sum should be 10 dB higher
-        base_dB = 0.0
-        dB = make_array(xp, [base_dB] * 10)
-        result = to_numpy(dBlinsum(dB))
-        expected = base_dB + 10.0  # 10*log10(10) = 10
+
+# =============================================================================
+# Dtype Preservation Tests
+# =============================================================================
+
+class TestDtypePreservation:
+    """Properties: Output dtype should be at least min_dtype."""
+    
+    @given(power=positive_power_arrays(dtype=np.float32))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_powtodB_float32_preserved(self, power):
+        """Property: float32 input with min_dtype='float32' → float32 output."""
+        result = powtodB(power, min_dtype='float32')
+        assert result.dtype == np.float32
+    
+    @given(power=positive_power_arrays(dtype=np.float64))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_powtodB_float64_preserved(self, power):
+        """Property: float64 input is never downgraded."""
+        result = powtodB(power, min_dtype='float32')
+        assert result.dtype == np.float64
+    
+    @given(dB=dB_arrays(dtype=np.float32))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_dBtopow_float32_preserved(self, dB):
+        """Property: float32 input with min_dtype='float32' → float32 output."""
+        result = dBtopow(dB, min_dtype='float32')
+        assert result.dtype == np.float32
+    
+    @given(env=envelope_arrays(include_complex=False, dtype=np.float32))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_envtodB_float32_preserved(self, env):
+        """Property: float32 input with min_dtype='float32' → float32 output."""
+        result = envtodB(env, min_dtype='float32')
+        assert result.dtype == np.float32
+    
+    @given(env=envelope_arrays(include_complex=False, dtype=np.float32))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_envtopow_float32_preserved(self, env):
+        """Property: float32 input with min_dtype='float32' → float32 output."""
+        result = envtopow(env, min_dtype='float32')
+        assert result.dtype == np.float32
+
+
+# =============================================================================
+# Input Preservation Tests (overwrite_x behavior)
+# =============================================================================
+
+class TestInputPreservation:
+    """Properties: overwrite_x=False must not modify input arrays."""
+    
+    @given(power=positive_power_arrays(dtype=np.float64))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_powtodB_preserves_input(self, power):
+        """Property: powtodB(x, overwrite_x=False) does not modify x."""
+        original = power.copy()
+        powtodB(power, overwrite_x=False)
+        assert_allclose(power, original, rtol=0)
+    
+    @given(dB=dB_arrays(dtype=np.float64))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_dBtopow_preserves_input(self, dB):
+        """Property: dBtopow(x, overwrite_x=False) does not modify x."""
+        original = dB.copy()
+        dBtopow(dB, overwrite_x=False)
+        assert_allclose(dB, original, rtol=0)
+    
+    @given(env=envelope_arrays(include_complex=False, dtype=np.float64))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_envtodB_preserves_input(self, env):
+        """Property: envtodB(x, overwrite_x=False) does not modify x."""
+        original = env.copy()
+        envtodB(env, overwrite_x=False)
+        assert_allclose(env, original, rtol=0)
+    
+    @given(env=envelope_arrays(include_complex=False, dtype=np.float64))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_envtopow_preserves_input(self, env):
+        """Property: envtopow(x, overwrite_x=False) does not modify x."""
+        original = env.copy()
+        envtopow(env, overwrite_x=False)
+        assert_allclose(env, original, rtol=0)
+    
+    @given(dB=dB_arrays(dtype=np.float64, min_value=-50, max_value=50))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_dBlinmean_preserves_input(self, dB):
+        """Property: dBlinmean(x, overwrite_x=False) does not modify x."""
+        original = dB.copy()
+        dBlinmean(dB, overwrite_x=False)
+        assert_allclose(dB, original, rtol=0)
+    
+    @given(dB=dB_arrays(dtype=np.float64, min_value=-50, max_value=50))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_dBlinsum_preserves_input(self, dB):
+        """Property: dBlinsum(x, overwrite_x=False) does not modify x."""
+        original = dB.copy()
+        dBlinsum(dB, overwrite_x=False)
+        assert_allclose(dB, original, rtol=0)
+
+
+# =============================================================================
+# Edge Case Tests - Zeros and special values
+# =============================================================================
+
+class TestEdgeCases:
+    """Properties: Behavior at edge cases (zeros, extreme values)."""
+    
+    @given(n=st.integers(min_value=1, max_value=10))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_powtodB_zero_produces_neg_inf(self, n):
+        """Property: powtodB(0) = -inf when eps=0."""
+        power = np.zeros(n, dtype=np.float64)
+        result = powtodB(power, eps=0)
+        assert np.all(result == -np.inf)
+    
+    @given(n=st.integers(min_value=1, max_value=10))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_envtodB_zero_produces_neg_inf(self, n):
+        """Property: envtodB(0) = -inf when eps=0."""
+        env = np.zeros(n, dtype=np.float64)
+        result = envtodB(env, eps=0)
+        assert np.all(result == -np.inf)
+    
+    @given(eps=st.floats(min_value=1e-30, max_value=1e-10, allow_nan=False))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_powtodB_eps_avoids_neg_inf(self, eps):
+        """Property: powtodB(0, eps=ε) is finite for ε > 0."""
+        power = np.array([0.0], dtype=np.float64)
+        result = powtodB(power, eps=eps)
+        assert np.isfinite(result[0])
+        assert_allclose(result[0], 10 * np.log10(eps), rtol=1e-6)
+    
+    @given(eps=st.floats(min_value=1e-30, max_value=1e-10, allow_nan=False))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_envtodB_eps_avoids_neg_inf(self, eps):
+        """Property: envtodB(0, eps=ε) is finite for ε > 0."""
+        env = np.array([0.0], dtype=np.float64)
+        result = envtodB(env, eps=eps)
+        assert np.isfinite(result[0])
+        assert_allclose(result[0], 20 * np.log10(eps), rtol=1e-6)
+    
+    def test_empty_array(self):
+        """Property: Empty arrays produce empty results."""
+        empty = np.array([], dtype=np.float64)
+        assert powtodB(empty).shape == (0,)
+        assert dBtopow(empty).shape == (0,)
+        assert envtodB(empty).shape == (0,)
+        assert envtopow(empty).shape == (0,)
+    
+    @given(value=st.floats(min_value=1e-10, max_value=1e10, allow_nan=False, allow_infinity=False))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_scalar_like_array(self, value):
+        """Property: 0-d arrays work correctly."""
+        scalar = np.array(value, dtype=np.float64)
+        result = powtodB(scalar)
+        expected = 10 * np.log10(value)
         assert_allclose(result, expected, rtol=1e-10)
 
 
-class TestDBlinmeanVsDBlinsum:
-    """Tests comparing dBlinmean and dBlinsum behavior."""
+# =============================================================================
+# Complex Value Tests
+# =============================================================================
 
-    def test_mean_vs_sum_relationship(self, xp):
-        """Test that dBlinmean = dBlinsum - 10*log10(N)."""
-        dB = make_array(xp, [0.0, 10.0, 20.0, 30.0])
-        N = 4
-        mean_result = to_numpy(dBlinmean(dB))
-        sum_result = to_numpy(dBlinsum(dB))
-        # mean = sum / N, so in dB: mean_dB = sum_dB - 10*log10(N)
+class TestComplexValues:
+    """Properties: Correct handling of complex-valued inputs."""
+    
+    @given(env=envelope_arrays(include_complex=True, min_magnitude=1e-6, max_magnitude=1e6, dtype=np.float64))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_envtopow_complex_is_magnitude_squared(self, env):
+        """Property: envtopow(z) = |z|² for complex z."""
+        result = envtopow(env)
+        expected = np.abs(env) ** 2
+        assert_allclose(result.real, expected, rtol=1e-6)
+    
+    @given(env=envelope_arrays(include_complex=True, min_magnitude=1e-6, max_magnitude=1e6, dtype=np.float64))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_envtodB_complex_is_20log10_magnitude(self, env):
+        """Property: envtodB(z) = 20*log10(|z|) for complex z."""
+        result = envtodB(env)
+        expected = 20 * np.log10(np.abs(env))
+        # Use atol for values near zero where relative tolerance is meaningless
+        assert_allclose(result.real, expected, rtol=1e-6, atol=1e-12)
+
+
+# =============================================================================
+# Axis Parameter Tests
+# =============================================================================
+
+class TestAxisParameter:
+    """Properties: Correct behavior with axis parameter."""
+    
+    @given(data=st.data())
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_dBlinmean_axis_reduces_dimension(self, data):
+        """Property: dBlinmean along axis reduces that dimension."""
+        shape = data.draw(st.tuples(
+            st.integers(min_value=2, max_value=10),
+            st.integers(min_value=2, max_value=10),
+        ))
+        dB = data.draw(arrays(
+            dtype=np.float64,
+            shape=shape,
+            elements=st.floats(min_value=-50, max_value=50, allow_nan=False, allow_infinity=False),
+        ))
+        axis = data.draw(st.integers(min_value=0, max_value=1))
+        
+        result = dBlinmean(dB, axis=axis)
+        expected_shape = list(shape)
+        del expected_shape[axis]
+        assert result.shape == tuple(expected_shape)
+    
+    @given(data=st.data())
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_dBlinsum_axis_reduces_dimension(self, data):
+        """Property: dBlinsum along axis reduces that dimension."""
+        shape = data.draw(st.tuples(
+            st.integers(min_value=2, max_value=10),
+            st.integers(min_value=2, max_value=10),
+        ))
+        dB = data.draw(arrays(
+            dtype=np.float64,
+            shape=shape,
+            elements=st.floats(min_value=-50, max_value=50, allow_nan=False, allow_infinity=False),
+        ))
+        axis = data.draw(st.integers(min_value=0, max_value=1))
+        
+        result = dBlinsum(dB, axis=axis)
+        expected_shape = list(shape)
+        del expected_shape[axis]
+        assert result.shape == tuple(expected_shape)
+    
+    @given(data=st.data())
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_mean_sum_relationship_with_axis(self, data):
+        """Property: mean/sum relationship holds for any axis."""
+        shape = data.draw(st.tuples(
+            st.integers(min_value=2, max_value=10),
+            st.integers(min_value=2, max_value=10),
+        ))
+        dB = data.draw(arrays(
+            dtype=np.float64,
+            shape=shape,
+            elements=st.floats(min_value=-50, max_value=50, allow_nan=False, allow_infinity=False),
+        ))
+        axis = data.draw(st.integers(min_value=0, max_value=1))
+        
+        N = shape[axis]
+        mean_result = dBlinmean(dB, axis=axis)
+        sum_result = dBlinsum(dB, axis=axis)
         expected_mean = sum_result - 10 * np.log10(N)
-        assert_allclose(mean_result, expected_mean, rtol=1e-10)
+        assert_allclose(mean_result, expected_mean, rtol=1e-6)
 
-    def test_consistency_across_axes(self, xp):
-        """Test consistency of mean/sum relationship across different axes."""
-        # Use fixed data for reproducibility
-        dB_data = [
-            [-15.2, 8.3, -5.1, 12.7, 3.9, -18.4, 7.2, -2.8, 16.5, -9.6],
-            [4.1, -11.3, 19.8, -7.5, 1.2, 14.6, -3.9, 10.4, -16.7, 5.8],
-            [-8.9, 17.1, -1.4, 9.3, -12.6, 6.7, -4.2, 15.9, -0.3, 11.5],
-            [2.6, -14.8, 8.9, -6.1, 18.3, -10.7, 13.2, -5.4, 7.6, -17.9],
-            [16.4, -3.7, 11.8, -9.2, 4.5, -15.1, 0.8, 19.3, -8.6, 12.1],
-        ]
-        dB = make_array(xp, dB_data)
 
-        for axis in [0, 1, None]:
-            mean_result = to_numpy(dBlinmean(dB, axis=axis))
-            sum_result = to_numpy(dBlinsum(dB, axis=axis))
-            N = (
-                np.array(dB_data).shape[axis]
-                if axis is not None
-                else np.array(dB_data).size
-            )
-            expected_mean = sum_result - 10 * np.log10(N)
-            assert_allclose(mean_result, expected_mean, rtol=1e-10)
+# =============================================================================
+# Min Dtype Promotion Tests
+# =============================================================================
 
-
-class TestEdgeCases:
-    """Tests for edge cases and special values."""
-
-    def test_very_small_values(self, xp):
-        """Test handling of very small power values."""
-        power = make_array(xp, [1e-15, 1e-12, 1e-9])
-        expected_dB = np.array([-150.0, -120.0, -90.0])
-        result = to_numpy(powtodB(power))
-        assert_allclose(result, expected_dB, rtol=1e-10)
-
-    def test_very_large_values(self, xp):
-        """Test handling of very large power values."""
-        power = make_array(xp, [1e9, 1e12, 1e15])
-        expected_dB = np.array([90.0, 120.0, 150.0])
-        result = to_numpy(powtodB(power))
-        assert_allclose(result, expected_dB, rtol=1e-10)
-
-    def test_mixed_dtypes_float32(self, xp):
-        """Test that float32 input works correctly."""
-        power = make_array(xp, [1.0, 10.0, 100.0], dtype=np.float32)
-        expected_dB = np.array([0.0, 10.0, 20.0])
-        result = to_numpy(powtodB(power))
-        assert_allclose(result, expected_dB, rtol=1e-5)
-
-    def test_mixed_dtypes_float64(self, xp):
-        """Test that float64 input works correctly."""
-        power = make_array(xp, [1.0, 10.0, 100.0], dtype=np.float64)
-        expected_dB = np.array([0.0, 10.0, 20.0])
-        result = to_numpy(powtodB(power))
-        assert_allclose(result, expected_dB, rtol=1e-10)
-
-    def test_empty_array(self, xp):
-        """Test handling of empty arrays."""
-        power = make_array(xp, [])
-        result = to_numpy(powtodB(power))
-        assert_array_equal(result, np.array([]))
-
-    def test_scalar_like_array(self, xp):
-        """Test handling of 0-d arrays."""
-        power = make_array(xp, 100.0)
-        result = to_numpy(powtodB(power))
-        assert_allclose(result, 20.0, rtol=1e-10)
-
-
-class TestZeroValuesAndInfinity:
-    """Tests for zero values producing -inf when eps==0."""
-
-    def test_powtodB_zero_produces_neg_inf(self, xp):
-        """Test that powtodB(0) produces -inf when eps=0."""
-        power = make_array(xp, [0.0, 1.0, 0.0])
-        result = to_numpy(powtodB(power, eps=0))
-        assert result[0] == -np.inf
-        assert_allclose(result[1], 0.0, rtol=1e-10)
-        assert result[2] == -np.inf
-
-    def test_envtodB_zero_produces_neg_inf(self, xp):
-        """Test that envtodB(0) produces -inf when eps=0."""
-        env = make_array(xp, [0.0, 1.0, 0.0])
-        result = to_numpy(envtodB(env, eps=0))
-        assert result[0] == -np.inf
-        assert_allclose(result[1], 0.0, rtol=1e-10)
-        assert result[2] == -np.inf
-
-    def test_powtodB_all_zeros(self, xp):
-        """Test array of all zeros produces all -inf."""
-        power = make_array(xp, [0.0, 0.0, 0.0])
-        result = to_numpy(powtodB(power, eps=0))
-        assert np.all(result == -np.inf)
-
-    def test_envtodB_all_zeros(self, xp):
-        """Test array of all zeros produces all -inf."""
-        env = make_array(xp, [0.0, 0.0, 0.0])
-        result = to_numpy(envtodB(env, eps=0))
-        assert np.all(result == -np.inf)
-
-    def test_powtodB_eps_avoids_neg_inf(self, xp):
-        """Test that eps parameter prevents -inf for zero values."""
-        power = make_array(xp, [0.0, 1.0])
-        eps = 1e-20
-        result = to_numpy(powtodB(power, eps=eps))
-        # With eps, zero becomes 10*log10(eps) which is finite
-        assert np.isfinite(result[0])
-        assert_allclose(result[0], 10 * np.log10(eps), rtol=1e-6)
-
-    def test_envtodB_eps_avoids_neg_inf(self, xp):
-        """Test that eps parameter prevents -inf for zero values."""
-        env = make_array(xp, [0.0, 1.0])
-        eps = 1e-20
-        result = to_numpy(envtodB(env, eps=eps))
-        # With eps, zero becomes 20*log10(eps) which is finite
-        assert np.isfinite(result[0])
-        assert_allclose(result[0], 20 * np.log10(eps), rtol=1e-6)
-
-    def test_powtodB_2d_with_zeros(self, xp):
-        """Test 2D array with scattered zeros."""
-        power = make_array(xp, [[0.0, 10.0], [100.0, 0.0]])
-        result = to_numpy(powtodB(power, eps=0))
-        assert result[0, 0] == -np.inf
-        assert_allclose(result[0, 1], 10.0, rtol=1e-10)
-        assert_allclose(result[1, 0], 20.0, rtol=1e-10)
-        assert result[1, 1] == -np.inf
-
-
-class TestInPlaceOutputs:
-    """Tests for in-place output operations (overwrite_x parameter)."""
-
-    def test_powtodB_overwrite_x_true(self, xp_name):
-        """Test that powtodB with overwrite_x=True computes in-place."""
-        name, xp = xp_name
-        if name == 'dask':
-            pytest.skip('dask does not support in-place operations')
-
-        power = make_array(xp, [1.0, 10.0, 100.0], dtype=np.float64)
-
-        result = powtodB(power, overwrite_x=True)
-        expected = np.array([0.0, 10.0, 20.0])
-
-        # Verify result is correct
-        assert_allclose(to_numpy(result), expected, rtol=1e-10)
-
-    def test_dBtopow_overwrite_x_true(self, xp_name):
-        """Test that dBtopow with overwrite_x=True computes in-place."""
-        name, xp = xp_name
-        if name == 'dask':
-            pytest.skip('dask does not support in-place operations')
-
-        dB = make_array(xp, [0.0, 10.0, 20.0], dtype=np.float64)
-
-        result = dBtopow(dB, overwrite_x=True)
-        expected = np.array([1.0, 10.0, 100.0])
-
-        assert_allclose(to_numpy(result), expected, rtol=1e-10)
-
-    def test_envtodB_overwrite_x_true(self, xp_name):
-        """Test that envtodB with overwrite_x=True computes in-place."""
-        name, xp = xp_name
-        if name == 'dask':
-            pytest.skip('dask does not support in-place operations')
-
-        env = make_array(xp, [1.0, 10.0, 100.0], dtype=np.float64)
-
-        result = envtodB(env, overwrite_x=True)
-        expected = np.array([0.0, 20.0, 40.0])
-
-        assert_allclose(to_numpy(result), expected, rtol=1e-10)
-
-    def test_envtopow_overwrite_x_true(self, xp_name):
-        """Test that envtopow with overwrite_x=True computes in-place."""
-        name, xp = xp_name
-        if name == 'dask':
-            pytest.skip('dask does not support in-place operations')
-
-        env = make_array(xp, [1.0, 2.0, 3.0], dtype=np.float64)
-
-        result = envtopow(env, overwrite_x=True)
-        expected = np.array([1.0, 4.0, 9.0])
-
-        assert_allclose(to_numpy(result), expected, rtol=1e-10)
-
-    def test_powtodB_overwrite_x_false_preserves_input(self, xp_name):
-        """Test that powtodB with overwrite_x=False does not modify input array."""
-        name, xp = xp_name
-        if name == 'dask':
-            pytest.skip('dask arrays are immutable')
-
-        power = make_array(xp, [1.0, 10.0, 100.0], dtype=np.float64)
-        original_power = to_numpy(power).copy()
-
-        powtodB(power, overwrite_x=False)
-
-        # Input should be unchanged
-        assert_allclose(to_numpy(power), original_power, rtol=1e-10)
-
-    def test_dBtopow_overwrite_x_false_preserves_input(self, xp_name):
-        """Test that dBtopow with overwrite_x=False does not modify input array."""
-        name, xp = xp_name
-        if name == 'dask':
-            pytest.skip('dask arrays are immutable')
-
-        dB = make_array(xp, [0.0, 10.0, 20.0], dtype=np.float64)
-        original_dB = to_numpy(dB).copy()
-
-        dBtopow(dB, overwrite_x=False)
-
-        # Input should be unchanged
-        assert_allclose(to_numpy(dB), original_dB, rtol=1e-10)
-
-    def test_envtodB_overwrite_x_false_preserves_input(self, xp_name):
-        """Test that envtodB with overwrite_x=False does not modify input array."""
-        name, xp = xp_name
-        if name == 'dask':
-            pytest.skip('dask arrays are immutable')
-
-        env = make_array(xp, [1.0, 10.0, 100.0], dtype=np.float64)
-        original_env = to_numpy(env).copy()
-
-        envtodB(env, overwrite_x=False)
-
-        # Input should be unchanged
-        assert_allclose(to_numpy(env), original_env, rtol=1e-10)
-
-    def test_envtopow_overwrite_x_false_preserves_input(self, xp_name):
-        """Test that envtopow with overwrite_x=False does not modify input array."""
-        name, xp = xp_name
-        if name == 'dask':
-            pytest.skip('dask arrays are immutable')
-
-        env = make_array(xp, [1.0, 2.0, 3.0], dtype=np.float64)
-        original_env = to_numpy(env).copy()
-
-        envtopow(env, overwrite_x=False)
-
-        # Input should be unchanged
-        assert_allclose(to_numpy(env), original_env, rtol=1e-10)
-
-    def test_dBlinmean_overwrite_x_true_modifies_input(self, xp_name):
-        """Test that dBlinmean with overwrite_x=True modifies the input array."""
-        name, xp = xp_name
-        if name == 'dask':
-            pytest.skip('dask does not support in-place operations')
-
-        dB = make_array(xp, [0.0, 10.0, 20.0, 30.0], dtype=np.float64)
-        original_values = to_numpy(dB).copy()
-
-        result = dBlinmean(dB, overwrite_x=True)
-
-        # Input array should be modified (contains intermediate linear values)
-        modified_values = to_numpy(dB)
-        # The array should have been overwritten with linear power values
-        # (10^(dB/10)) before the mean was computed
-        assert not np.allclose(modified_values, original_values)
-
-    def test_dBlinmean_overwrite_x_false_preserves_input(self, xp_name):
-        """Test that dBlinmean with overwrite_x=False preserves the input array."""
-        name, xp = xp_name
-        if name == 'dask':
-            pytest.skip('dask arrays are immutable')
-
-        dB = make_array(xp, [0.0, 10.0, 20.0, 30.0], dtype=np.float64)
-        original_values = to_numpy(dB).copy()
-
-        result = dBlinmean(dB, overwrite_x=False)
-
-        # Input array should be unchanged
-        assert_allclose(to_numpy(dB), original_values, rtol=1e-10)
-
-    def test_dBlinsum_overwrite_x_true_modifies_input(self, xp_name):
-        """Test that dBlinsum with overwrite_x=True modifies the input array."""
-        name, xp = xp_name
-        if name == 'dask':
-            pytest.skip('dask does not support in-place operations')
-
-        dB = make_array(xp, [0.0, 10.0, 20.0, 30.0], dtype=np.float64)
-        original_values = to_numpy(dB).copy()
-
-        result = dBlinsum(dB, overwrite_x=True)
-
-        # Input array should be modified
-        modified_values = to_numpy(dB)
-        assert not np.allclose(modified_values, original_values)
-
-    def test_dBlinsum_overwrite_x_false_preserves_input(self, xp_name):
-        """Test that dBlinsum with overwrite_x=False preserves the input array."""
-        name, xp = xp_name
-        if name == 'dask':
-            pytest.skip('dask arrays are immutable')
-
-        dB = make_array(xp, [0.0, 10.0, 20.0, 30.0], dtype=np.float64)
-        original_values = to_numpy(dB).copy()
-
-        result = dBlinsum(dB, overwrite_x=False)
-
-        # Input array should be unchanged
-        assert_allclose(to_numpy(dB), original_values, rtol=1e-10)
-
-    def test_powtodB_overwrite_x_2d_array(self, xp_name):
-        """Test overwrite_x with 2D arrays."""
-        name, xp = xp_name
-        if name == 'dask':
-            pytest.skip('dask does not support in-place operations')
-
-        power = make_array(xp, [[1.0, 10.0], [100.0, 1000.0]], dtype=np.float64)
-
-        result = powtodB(power, overwrite_x=True)
-        expected = np.array([[0.0, 10.0], [20.0, 30.0]])
-
-        assert_allclose(to_numpy(result), expected, rtol=1e-10)
-
-    def test_dBlinmean_overwrite_x_with_axis(self, xp_name):
-        """Test overwrite_x with axis parameter."""
-        name, xp = xp_name
-        if name == 'dask':
-            pytest.skip('dask does not support in-place operations')
-
-        dB = make_array(xp, [[0.0, 10.0], [0.0, 10.0]], dtype=np.float64)
-        original_values = to_numpy(dB).copy()
-
-        # Mean along axis 0
-        result = dBlinmean(dB, axis=0, overwrite_x=True)
-        expected = np.array([0.0, 10.0])
-
-        assert_allclose(to_numpy(result), expected, rtol=1e-10)
-        # Input should be modified
-        assert not np.allclose(to_numpy(dB), original_values)
-
-    def test_dBlinsum_overwrite_x_with_axis(self, xp_name):
-        """Test overwrite_x with axis parameter."""
-        name, xp = xp_name
-        if name == 'dask':
-            pytest.skip('dask does not support in-place operations')
-
-        dB = make_array(xp, [[0.0, 10.0], [0.0, 10.0]], dtype=np.float64)
-        original_values = to_numpy(dB).copy()
-
-        # Sum along axis 0: [2, 20] in linear -> [3.01, 13.01] in dB
-        result = dBlinsum(dB, axis=0, overwrite_x=True)
-        expected = 10 * np.log10(np.array([2, 20]))
-
-        assert_allclose(to_numpy(result), expected, rtol=1e-10)
-        # Input should be modified
-        assert not np.allclose(to_numpy(dB), original_values)
-
-
-class TestMinDtype:
-    """Tests for min_dtype parameter that promotes low-precision inputs."""
-
-    def test_powtodB_float16_with_min_dtype_float32_mitigates_errors(self, xp_name):
-        """Test that min_dtype='float32' mitigates rounding errors for float16 input."""
-        name, xp = xp_name
-        if name == 'dask':
-            pytest.skip('dask does not support float16')
-
-        # Values that expose float16 precision limits
-        power = make_array(xp, [0.001, 0.0001, 0.00001], dtype=np.float16)
-        expected_dB = np.array([-30.0, -40.0, -50.0])
-
-        # With min_dtype='float32', computation is promoted and accurate
-        result = to_numpy(powtodB(power, min_dtype='float32'))
-
-        # Should now be accurate within 0.01 dB (dB values are already relative)
-        assert_allclose(result, expected_dB, atol=0.006)
-
-    def test_dBtopow_float16_with_min_dtype_float32(self, xp_name):
-        """Test that dBtopow with min_dtype='float32' handles float16 input."""
-        name, xp = xp_name
-        if name == 'dask':
-            pytest.skip('dask does not support float16')
-
-        dB = make_array(xp, [-30.0, -40.0, -50.0], dtype=np.float16)
-        expected_power = np.array([0.001, 0.0001, 0.00001])
-
-        result = to_numpy(dBtopow(dB, min_dtype='float32'))
-
-        assert_allclose(result, expected_power, rtol=1e-5)
-
-    def test_envtopow_float16_with_min_dtype_float32(self, xp_name):
-        """Test that envtopow with min_dtype='float32' handles float16 input."""
-        name, xp = xp_name
-        if name == 'dask':
-            pytest.skip('dask does not support float16')
-
-        # Small envelope values that would lose precision in float16
-        env = make_array(xp, [0.01, 0.001, 0.0001], dtype=np.float16)
-        expected_power = np.array([0.0001, 0.000001, 0.00000001])
-
-        result = to_numpy(envtopow(env, min_dtype='float32'))
-
-        assert_allclose(result, expected_power, rtol=1e-3)
-
-    def test_envtodB_float16_with_min_dtype_float32(self, xp_name):
-        """Test that envtodB with min_dtype='float32' handles float16 input."""
-        name, xp = xp_name
-        if name == 'dask':
-            pytest.skip('dask does not support float16')
-
-        env = make_array(xp, [0.01, 0.001, 0.0001], dtype=np.float16)
-        expected_dB = np.array([-40.0, -60.0, -80.0])
-
-        result = to_numpy(envtodB(env, min_dtype='float32'))
-
-        # dB values are already relative, use atol
-        assert_allclose(result, expected_dB, atol=0.006)
-
-    def test_powtodB_float64_unaffected_by_min_dtype_float32(self, xp):
-        """Test that float64 input is not downgraded by min_dtype='float32'."""
-        power = make_array(xp, [1e-15, 1e-14, 1e-13], dtype=np.float64)
-        expected_dB = np.array([-150.0, -140.0, -130.0])
-
-        result = to_numpy(powtodB(power, min_dtype='float32'))
-
-        # float64 precision should be preserved (not downgraded to float32)
-        # dB values are already relative, use atol
-        assert_allclose(result, expected_dB, atol=1e-6)
-
-    def test_min_dtype_default_is_float32(self, xp_name):
-        """Test that the default min_dtype='float32' is applied."""
-        name, xp = xp_name
-        if name == 'dask':
-            pytest.skip('dask does not support float16')
-
-        # float16 input with default min_dtype should work correctly
-        power = make_array(xp, [0.001, 0.01, 0.1], dtype=np.float16)
-        expected_dB = np.array([-30.0, -20.0, -10.0])
-
-        # Default min_dtype='float32' should promote and give accurate results
-        result = to_numpy(powtodB(power))
-
-        # dB values are already relative, use atol
-        assert_allclose(result, expected_dB, atol=0.006)
-
-    def test_roundtrip_float16_with_min_dtype(self, xp_name):
-        """Test roundtrip conversion preserves values with min_dtype promotion."""
-        name, xp = xp_name
-        if name == 'dask':
-            pytest.skip('dask does not support float16')
-
-        original_dB = make_array(xp, [-30.0, -20.0, -10.0, 0.0, 10.0], dtype=np.float16)
-
-        # Roundtrip: dB -> power -> dB with min_dtype promotion
-        power = dBtopow(original_dB, min_dtype='float32')
-        roundtrip_dB = powtodB(power, min_dtype='float32')
-
-        # Should recover original values within reasonable tolerance
-        # dB values are already relative, use atol
-        assert_allclose(to_numpy(roundtrip_dB), to_numpy(original_dB), atol=2e-3)
-
-    def test_dBlinmean_float16_with_min_dtype_float32(self, xp_name):
-        """Test that dBlinmean with min_dtype='float32' handles float16 input."""
-        name, xp = xp_name
-        if name == 'dask':
-            pytest.skip('dask does not support float16')
-
-        # Known dB values where linear mean is calculable
-        dB = make_array(xp, [-30.0, -20.0, -10.0, 0.0], dtype=np.float16)
-        # Linear: [0.001, 0.01, 0.1, 1.0], mean = 0.27775
-        expected = 10 * np.log10(0.27775)
-
-        result = to_numpy(dBlinmean(dB, min_dtype='float32'))
-
-        # dB values are already relative, use atol
-        assert_allclose(result, expected, atol=2e-3)
-
-    def test_dBlinmean_float16_random_values(self, xp_name):
-        """Test dBlinmean with random float16 values and min_dtype promotion."""
-        name, xp = xp_name
-        if name == 'dask':
-            pytest.skip('dask does not support float16')
-
-        # Generate reproducible random dB values in typical range
-        rng = np.random.default_rng(42)
-        dB_float64 = rng.uniform(-60, -57, size=100)
-
-        # Compute reference result in float64
-        linear_f64 = 10 ** (dB_float64 / 10)
-        expected = 10 * np.log10(np.mean(linear_f64))
-
-        # Convert to float16 and compute with min_dtype promotion
-        dB_float16 = make_array(xp, dB_float64.astype(np.float16), dtype=np.float16)
-        result = to_numpy(dBlinmean(dB_float16, min_dtype='float32'))
-
-        # Should be accurate within 0.1 dB despite float16 input
-        assert_allclose(result, expected, atol=2e-3)
-
-    def test_dBlinmean_float16_2d_with_axis(self, xp_name):
-        """Test dBlinmean with float16 2D array and axis parameter."""
-        name, xp = xp_name
-        if name == 'dask':
-            pytest.skip('dask does not support float16')
-
-        # 2D array: mean along axis 1
-        dB = make_array(xp, [[-30.0, -20.0], [-10.0, 0.0]], dtype=np.float16)
-        # Row 0: linear [0.001, 0.01], mean = 0.0055 -> -22.596 dB
-        # Row 1: linear [0.1, 1.0], mean = 0.55 -> -2.596 dB
-        expected = np.array([10 * np.log10(0.0055), 10 * np.log10(0.55)])
-
-        result = to_numpy(dBlinmean(dB, axis=1, min_dtype='float32'))
-
-        assert_allclose(result, expected, atol=2e-3)
-
-    def test_dBlinsum_float16_with_min_dtype_float32(self, xp_name):
-        """Test that dBlinsum with min_dtype='float32' handles float16 input."""
-        name, xp = xp_name
-        if name == 'dask':
-            pytest.skip('dask does not support float16')
-
-        # Known dB values where linear sum is calculable
-        dB = make_array(xp, [-30.0, -20.0, -10.0, 0.0], dtype=np.float16)
-        # Linear: [0.001, 0.01, 0.1, 1.0], sum = 1.111
-        expected = 10 * np.log10(1.111)
-
-        result = to_numpy(dBlinsum(dB, min_dtype='float32'))
-
-        # dB values are already relative, use atol
-        assert_allclose(result, expected, atol=2e-3)
-
-    def test_dBlinsum_float16_random_values(self, xp_name):
-        """Test dBlinsum with random float16 values and min_dtype promotion."""
-        name, xp = xp_name
-        if name == 'dask':
-            pytest.skip('dask does not support float16')
-
-        # Generate reproducible random dB values in typical range
-        rng = np.random.default_rng(123)
-        dB_float64 = rng.uniform(-50, -47, size=50)
-
-        # Compute reference result in float64
-        linear_f64 = 10 ** (dB_float64 / 10)
-        expected = 10 * np.log10(np.sum(linear_f64))
-
-        # Convert to float16 and compute with min_dtype promotion
-        dB_float16 = make_array(xp, dB_float64.astype(np.float16), dtype=np.float16)
-        result = to_numpy(dBlinsum(dB_float16, min_dtype='float32'))
-
-        # Should be accurate within 0.1 dB despite float16 input
-        assert_allclose(result, expected, atol=2e-3)
-
-    def test_dBlinsum_float16_2d_with_axis(self, xp_name):
-        """Test dBlinsum with float16 2D array and axis parameter."""
-        name, xp = xp_name
-        if name == 'dask':
-            pytest.skip('dask does not support float16')
-
-        # 2D array: sum along axis 1
-        dB = make_array(xp, [[-30.0, -20.0], [-10.0, 0.0]], dtype=np.float16)
-        # Row 0: linear [0.001, 0.01], sum = 0.011 -> -19.586 dB
-        # Row 1: linear [0.1, 1.0], sum = 1.1 -> 0.414 dB
-        expected = np.array([10 * np.log10(0.011), 10 * np.log10(1.1)])
-
-        result = to_numpy(dBlinsum(dB, axis=1, min_dtype='float32'))
-
-        assert_allclose(result, expected, atol=2e-3)
-
-
-class TestMinDtypeOutputDtype:
-    """Tests that output dtype is at least the size of min_dtype."""
-
-    def test_powtodB_float16_input_produces_float32_output(self, xp_name):
-        """Test that float16 input with min_dtype='float32' produces float32 output."""
-        name, xp = xp_name
-        if name == 'dask':
-            pytest.skip('dask does not support float16')
-
-        power = make_array(xp, [1.0, 10.0, 100.0], dtype=np.float16)
-        result = powtodB(power, min_dtype='float32')
-
-        assert to_numpy(result).dtype == np.float32
-
-    def test_powtodB_float32_input_preserves_float32_output(self, xp_name):
-        """Test that float32 input with min_dtype='float32' produces float32 output."""
-        name, xp = xp_name
-        if name == 'dask':
-            pytest.skip('dask dtype handling differs')
-
-        power = make_array(xp, [1.0, 10.0, 100.0], dtype=np.float32)
-        result = powtodB(power, min_dtype='float32')
-
-        assert to_numpy(result).dtype == np.float32
-
-    def test_powtodB_float64_input_preserves_float64_output(self, xp_name):
-        """Test that float64 input is not downgraded by min_dtype='float32'."""
-        name, xp = xp_name
-        if name == 'dask':
-            pytest.skip('dask dtype handling differs')
-
-        power = make_array(xp, [1.0, 10.0, 100.0], dtype=np.float64)
-        result = powtodB(power, min_dtype='float32')
-
-        # float64 should be preserved, not downgraded to float32
-        assert to_numpy(result).dtype == np.float64
-
-    def test_dBtopow_float16_input_produces_float32_output(self, xp_name):
-        """Test that dBtopow with float16 input and min_dtype='float32' produces float32."""
-        name, xp = xp_name
-        if name == 'dask':
-            pytest.skip('dask does not support float16')
-
-        dB = make_array(xp, [0.0, 10.0, 20.0], dtype=np.float16)
-        result = dBtopow(dB, min_dtype='float32')
-
-        assert to_numpy(result).dtype == np.float32
-
-    def test_envtodB_float16_input_produces_float32_output(self, xp_name):
-        """Test that envtodB with float16 input and min_dtype='float32' produces float32."""
-        name, xp = xp_name
-        if name == 'dask':
-            pytest.skip('dask does not support float16')
-
-        env = make_array(xp, [1.0, 10.0, 100.0], dtype=np.float16)
-        result = envtodB(env, min_dtype='float32')
-
-        assert to_numpy(result).dtype == np.float32
-
-    def test_envtopow_float16_input_produces_float32_output(self, xp_name):
-        """Test that envtopow with float16 input and min_dtype='float32' produces float32."""
-        name, xp = xp_name
-        if name == 'dask':
-            pytest.skip('dask does not support float16')
-
-        env = make_array(xp, [1.0, 2.0, 3.0], dtype=np.float16)
-        result = envtopow(env, min_dtype='float32')
-
-        assert to_numpy(result).dtype == np.float32
-
-    def test_dBlinmean_float16_input_produces_at_least_float32_output(self, xp_name):
-        def test_dBlinmean_float16_input_produces_float32_output(self, xp_name):
-            """Test that dBlinmean with float16 input and min_dtype='float32' produces float32."""
-            name, xp = xp_name
-            if name == 'dask':
-                pytest.skip('dask does not support float16')
+class TestMinDtypePromotion:
+    """Properties: min_dtype promotes low-precision inputs."""
     
-            dB = make_array(xp, [0.0, 10.0, 20.0, 30.0], dtype=np.float16)
-            result = dBlinmean(dB, min_dtype='float32')
+    @given(power=positive_power_arrays(min_value=1e-3, max_value=1e3, dtype=np.float32))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_float16_promoted_to_float32(self, power):
+        """Property: float16 input with min_dtype='float32' → float32 output.
+        
+        Note: We use float32 input and cast to float16 to test promotion.
+        The comparison is against the float16-converted input (not original float32)
+        since float16 quantization changes the input values.
+        """
+        power_f16 = power.astype(np.float16)
+        result = powtodB(power_f16, min_dtype='float32')
+        assert result.dtype == np.float32
+        
+        # Verify result matches computation on the same float16 values
+        # (converted back to float32 for the expected computation)
+        expected = powtodB(power_f16.astype(np.float32), min_dtype='float32')
+        assert_allclose(result, expected, rtol=1e-6)
     
-            assert to_numpy(result).dtype == np.float32
-    
-        def test_dBlinsum_float16_input_produces_float32_output(self, xp_name):
-            """Test that dBlinsum with float16 input and min_dtype='float32' produces float32."""
-            name, xp = xp_name
-            if name == 'dask':
-                pytest.skip('dask does not support float16')
-    
-            dB = make_array(xp, [0.0, 10.0, 20.0, 30.0], dtype=np.float16)
-            result = dBlinsum(dB, min_dtype='float32')
-    
-            assert to_numpy(result).dtype == np.float32
-    def test_min_dtype_float64_promotes_float32_input(self, xp_name):
-        """Test that min_dtype='float64' promotes float32 input to float64."""
-        name, xp = xp_name
-        if name == 'dask':
-            pytest.skip('dask dtype handling differs')
+    @given(dB=dB_arrays(min_value=-30, max_value=30, dtype=np.float32))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_dBtopow_float16_promoted(self, dB):
+        """Property: float16 input with min_dtype='float32' → float32 output."""
+        dB_f16 = dB.astype(np.float16)
+        result = dBtopow(dB_f16, min_dtype='float32')
+        assert result.dtype == np.float32
 
-        power = make_array(xp, [1.0, 10.0, 100.0], dtype=np.float32)
-        result = powtodB(power, min_dtype='float64')
 
-        assert to_numpy(result).dtype == np.float64
+# =============================================================================
+# Multi-Backend Tests - numpy, cupy, dask compatibility
+# =============================================================================
+
+class TestMultiBackendRoundtrip:
+    """Properties: Roundtrip conversions work across all backends."""
+    
+    @given(data=for_each_namespace(positive_power_arrays(dtype=np.float64)))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
+    def test_powtodB_dBtopow_roundtrip_multibackend(self, data):
+        """Property: dBtopow(powtodB(x)) ≈ x for all backends."""
+        arr, xp_name, xp = data
+        
+        # Perform roundtrip
+        dB_result = powtodB(arr)
+        roundtrip = dBtopow(dB_result)
+        
+        # Convert to numpy for comparison
+        original_np = to_numpy(arr)
+        roundtrip_np = to_numpy(roundtrip)
+        
+        assert_allclose(roundtrip_np, original_np, rtol=1e-10)
+    
+    @given(data=for_each_namespace(dB_arrays(min_value=-100, max_value=100, dtype=np.float64, filter_near_zero=True)))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
+    def test_dBtopow_powtodB_roundtrip_multibackend(self, data):
+        """Property: powtodB(dBtopow(x)) ≈ x for all backends."""
+        arr, xp_name, xp = data
+        
+        # Perform roundtrip
+        pow_result = dBtopow(arr)
+        roundtrip = powtodB(pow_result)
+        
+        # Convert to numpy for comparison
+        original_np = to_numpy(arr)
+        roundtrip_np = to_numpy(roundtrip)
+        
+        assert_allclose(roundtrip_np, original_np, rtol=1e-9)
+
+
+class TestMultiBackendDtypePreservation:
+    """Properties: Dtype preservation works across all backends."""
+    
+    @given(data=for_each_namespace(positive_power_arrays(dtype=np.float32)))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
+    def test_powtodB_float32_preserved_multibackend(self, data):
+        """Property: float32 input → float32 output for all backends."""
+        arr, xp_name, xp = data
+        
+        result = powtodB(arr, min_dtype='float32')
+        result_np = to_numpy(result)
+        
+        assert result_np.dtype == np.float32, (
+            f"Expected float32 but got {result_np.dtype} for backend {xp_name}"
+        )
+    
+    @given(data=for_each_namespace(dB_arrays(dtype=np.float32)))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
+    def test_dBtopow_float32_preserved_multibackend(self, data):
+        """Property: float32 input → float32 output for all backends."""
+        arr, xp_name, xp = data
+        
+        result = dBtopow(arr, min_dtype='float32')
+        result_np = to_numpy(result)
+        
+        assert result_np.dtype == np.float32, (
+            f"Expected float32 but got {result_np.dtype} for backend {xp_name}"
+        )
+
+
+class TestMultiBackendAlgebraicProperties:
+    """Properties: Algebraic rules hold across all backends."""
+    
+    @given(data=for_each_namespace(dB_arrays(min_value=-50, max_value=50, min_size=2, max_size=20, dtype=np.float64, filter_near_zero=True)))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
+    def test_mean_sum_relationship_multibackend(self, data):
+        """Property: dBlinmean = dBlinsum - 10*log10(N) for all backends."""
+        arr, xp_name, xp = data
+        
+        arr_np = to_numpy(arr)
+        N = arr_np.size
+        
+        mean_result = dBlinmean(arr, axis=None)
+        sum_result = dBlinsum(arr, axis=None)
+        
+        mean_np = to_numpy(mean_result)
+        sum_np = to_numpy(sum_result)
+        
+        expected_mean = sum_np - 10 * np.log10(N)
+        assert_allclose(mean_np, expected_mean, rtol=1e-6)
+
+
+class TestMultiBackendComplexValues:
+    """Properties: Complex value handling works across all backends."""
+    
+    @given(data=for_each_namespace(envelope_arrays(include_complex=True, min_magnitude=1e-6, max_magnitude=1e6, dtype=np.float64)))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
+    def test_envtopow_complex_multibackend(self, data):
+        """Property: envtopow(z) = |z|² for complex z across all backends."""
+        arr, xp_name, xp = data
+        
+        result = envtopow(arr)
+        
+        arr_np = to_numpy(arr)
+        result_np = to_numpy(result)
+        expected = np.abs(arr_np) ** 2
+        
+        assert_allclose(result_np.real, expected, rtol=1e-6)
+    
+    @given(data=for_each_namespace(envelope_arrays(include_complex=True, min_magnitude=1e-6, max_magnitude=1e6, dtype=np.float64)))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
+    def test_envtodB_complex_multibackend(self, data):
+        """Property: envtodB(z) = 20*log10(|z|) for complex z across all backends."""
+        arr, xp_name, xp = data
+        
+        result = envtodB(arr)
+        
+        arr_np = to_numpy(arr)
+        result_np = to_numpy(result)
+        expected = 20 * np.log10(np.abs(arr_np))
+        
+        assert_allclose(result_np.real, expected, rtol=1e-6, atol=1e-12)

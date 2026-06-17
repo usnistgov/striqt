@@ -238,7 +238,6 @@ def envtodB(
     else:
         # torch, dask, ...
         if abs:
-            # For dask, xp.abs() on complex arrays returns the magnitude correctly
             values = xp.abs(values, out=out)
         if eps != 0:
             values += eps
