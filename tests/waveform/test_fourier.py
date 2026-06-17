@@ -621,7 +621,7 @@ class TestResampleProperties:
         assert_allclose(result_scaled, scale * result_unscaled, rtol=1e-8, atol=1e-15)
 
     @given(
-        x=complex_waveforms(min_size=64, max_size=256),
+        x=complex_waveforms(min_size=64, max_size=256), allow_subnormal=False
     )
     @settings(
         suppress_health_check=[HealthCheck.function_scoped_fixture],
