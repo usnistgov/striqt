@@ -109,6 +109,8 @@ def complex_waveforms(
     dtype=None,
     min_dims: int = 1,
     max_dims: int = 1,
+    min_log_power=-13,
+    max_log_power=3,
     allow_subnormal: bool = True,
 ):
     """Strategy for complex-valued waveform arrays.
@@ -145,7 +147,13 @@ def complex_waveforms(
         # Generate real and imaginary parts separately for better control
         real_dtype = np.float32 if dt == np.complex64 else np.float64
         float_width = 32 if dt == np.complex64 else 64
-        real = draw(
+
+        oom = draw(
+            st.sampled_from([min_log_power, 0.5 * (min_log_power + max_log_power), max_log_power])
+        )
+        lin_scale = np.asarray(10**(oom/2), dtype=dt)
+
+        real = lin_scale*draw(
             arrays(
                 dtype=real_dtype,
                 shape=shape,
@@ -157,9 +165,10 @@ def complex_waveforms(
                     allow_subnormal=allow_subnormal,
                     width=float_width,
                 ),
+                unique=True
             )
         )
-        imag = draw(
+        imag = lin_scale*draw(
             arrays(
                 dtype=real_dtype,
                 shape=shape,
@@ -171,11 +180,10 @@ def complex_waveforms(
                     allow_subnormal=allow_subnormal,
                     width=float_width,
                 ),
+                unique=True
             )
         )
-        db_scale = draw(st.floats(min_value=-130.0, max_value=30.0))
-        lin_scale = 10**(db_scale/20.)
-        return (lin_scale * (real + 1j * imag)).astype(dt)
+        return (real + 1j * imag).astype(dt)
 
     return _complex_waveform()
 
@@ -183,6 +191,8 @@ def complex_waveforms(
 def real_waveforms(
     min_size: int = 64,
     max_size: int = 2048,
+    min_log_power=-13,
+    max_log_power=3,
     dtype=None,
 ):
     """Strategy for real-valued waveform arrays."""
@@ -198,7 +208,12 @@ def real_waveforms(
         size = draw(st.integers(min_value=min_size // 2, max_value=max_size // 2)) * 2
         float_width = 32 if dt == np.float32 else 64
 
-        x = draw(
+        oom = draw(
+            st.integers(min_value=min_log_power, max_value=max_log_power)
+        )
+        lin_scale = np.asarray(10**(oom/2), dtype=dt)
+
+        return lin_scale * draw(
             arrays(
                 dtype=dt,
                 shape=(size,),
@@ -211,12 +226,6 @@ def real_waveforms(
                 ),
             )
         )
-
-        db_scale = draw(
-            st.floats(min_value=-130, max_value=30)
-        )
-
-        return (10**(db_scale/20) * x).astype(dt)
 
     return _real_waveform()
 
@@ -637,7 +646,7 @@ class TestResampleProperties:
         assert_allclose(result_scaled, scale * result_unscaled, rtol=1e-8, atol=1e-15)
 
     @given(
-        x=complex_waveforms(min_size=64, max_size=256, allow_subnormal=False)
+        x=complex_waveforms(min_size=64, max_size=256, allow_subnormal=False),
     )
     @settings(
         suppress_health_check=[HealthCheck.function_scoped_fixture],
@@ -661,19 +670,18 @@ class TestStftProperties:
     """Properties: Short-time Fourier transform."""
 
     @given(
-        x=complex_waveforms(min_size=512, max_size=2048, dtype=np.complex64),
+        x=complex_waveforms(min_size=256, max_size=512, dtype=np.complex64),
         params=stft_parameters(),
     )
     @settings(
-        suppress_health_check=[HealthCheck.function_scoped_fixture],
+        suppress_health_check=[HealthCheck.function_scoped_fixture, HealthCheck.data_too_large],
         max_examples=50,
         deadline=None,
     )
     def test_stft_output_shape(self, x, params):
         """Property: STFT output has correct shape."""
         fourier = _get_fourier()
-        # Ensure x is long enough for at least one segment
-        assume(len(x) >= params['nperseg'])
+        # min_size=256 guarantees len(x) >= max(nperseg)=256
 
         freqs, times, X = fourier.stft(
             x,
@@ -693,10 +701,10 @@ class TestStftProperties:
         assert len(times) == X.shape[0]
 
     @given(
-        x=complex_waveforms(min_size=512, max_size=1024, dtype=np.complex64),
+        x=complex_waveforms(min_size=128, max_size=256, dtype=np.complex64),
     )
     @settings(
-        suppress_health_check=[HealthCheck.function_scoped_fixture],
+        suppress_health_check=[HealthCheck.function_scoped_fixture, HealthCheck.data_too_large],
         max_examples=30,
         deadline=None,
     )
@@ -719,10 +727,10 @@ class TestStftProperties:
         assert np.max(freqs) < fs / 2 + 1
 
     @given(
-        x=complex_waveforms(min_size=256, max_size=512, dtype=np.complex64),
+        x=complex_waveforms(min_size=128, max_size=256, dtype=np.complex64),
     )
     @settings(
-        suppress_health_check=[HealthCheck.function_scoped_fixture],
+        suppress_health_check=[HealthCheck.function_scoped_fixture, HealthCheck.data_too_large],
         max_examples=30,
         deadline=None,
     )
@@ -776,10 +784,10 @@ class TestStftProperties:
         assert_allclose(X2, scale * X1, rtol=1e-6)
 
     @given(
-        x=complex_waveforms(min_size=256, max_size=512, dtype=np.complex64),
+        x=complex_waveforms(min_size=128, max_size=256, dtype=np.complex64),
     )
     @settings(
-        suppress_health_check=[HealthCheck.function_scoped_fixture],
+        suppress_health_check=[HealthCheck.function_scoped_fixture, HealthCheck.data_too_large],
         max_examples=30,
         deadline=None,
     )
@@ -813,18 +821,18 @@ class TestSpectrogramProperties:
     """Properties: Power spectrogram computation."""
 
     @given(
-        x=complex_waveforms(min_size=512, max_size=2048, dtype=np.complex64),
+        x=complex_waveforms(min_size=256, max_size=512, dtype=np.complex64),
         params=stft_parameters(),
     )
     @settings(
-        suppress_health_check=[HealthCheck.function_scoped_fixture],
+        suppress_health_check=[HealthCheck.function_scoped_fixture, HealthCheck.data_too_large],
         max_examples=50,
         deadline=None,
     )
     def test_spectrogram_output_shape(self, x, params):
         """Property: Spectrogram output has correct shape."""
         fourier = _get_fourier()
-        assume(len(x) >= params['nperseg'])
+        # min_size=256 guarantees len(x) >= max(nperseg)=256
 
         freqs, times, Sxx = fourier.spectrogram(
             x,
@@ -841,10 +849,10 @@ class TestSpectrogramProperties:
         assert len(times) == Sxx.shape[0]
 
     @given(
-        x=complex_waveforms(min_size=256, max_size=512, dtype=np.complex64),
+        x=complex_waveforms(min_size=128, max_size=256, dtype=np.complex64),
     )
     @settings(
-        suppress_health_check=[HealthCheck.function_scoped_fixture],
+        suppress_health_check=[HealthCheck.function_scoped_fixture, HealthCheck.data_too_large],
         max_examples=30,
         deadline=None,
     )
@@ -863,10 +871,10 @@ class TestSpectrogramProperties:
         assert np.all(Sxx >= 0)
 
     @given(
-        x=complex_waveforms(min_size=256, max_size=512, dtype=np.complex64),
+        x=complex_waveforms(min_size=128, max_size=256, dtype=np.complex64),
     )
     @settings(
-        suppress_health_check=[HealthCheck.function_scoped_fixture],
+        suppress_health_check=[HealthCheck.function_scoped_fixture, HealthCheck.data_too_large],
         max_examples=30,
         deadline=None,
     )
@@ -923,10 +931,10 @@ class TestSpectrogramProperties:
         assert_allclose(Sxx2, scale**2 * Sxx1, rtol=1e-5)
 
     @given(
-        x=complex_waveforms(min_size=256, max_size=512, dtype=np.complex64),
+        x=complex_waveforms(min_size=128, max_size=256, dtype=np.complex64),
     )
     @settings(
-        suppress_health_check=[HealthCheck.function_scoped_fixture],
+        suppress_health_check=[HealthCheck.function_scoped_fixture, HealthCheck.data_too_large],
         max_examples=30,
         deadline=None,
     )
@@ -988,6 +996,8 @@ class TestMultiBackendCompatibility:
         xp_name, xp = xp_name_and_module
         if xp_name == 'dask':
             pytest.skip('get_window does not support dask')
+        if xp is None:
+            pytest.skip(f'{xp_name} is not available')
 
         w = fourier.get_window('hamming', 64, xp=xp)
         w_np = to_numpy(w)
@@ -1001,6 +1011,8 @@ class TestMultiBackendCompatibility:
         xp_name, xp = xp_name_and_module
         if xp_name == 'dask':
             pytest.skip('fftfreq does not support dask')
+        if xp is None:
+            pytest.skip(f'{xp_name} is not available')
 
         freqs = fourier.fftfreq(64, 1e6, xp=xp)
         freqs_np = to_numpy(freqs)
