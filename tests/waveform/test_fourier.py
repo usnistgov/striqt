@@ -184,7 +184,6 @@ def real_waveforms(
         dt = draw(dtype_strategy)
         # Ensure size is even for FFT operations
         size = draw(st.integers(min_value=min_size // 2, max_value=max_size // 2)) * 2
-        float_width = 32 if dt == np.float32 else 64
 
         oom = draw(
             st.integers(min_value=min_log_power, max_value=max_log_power)
@@ -193,7 +192,7 @@ def real_waveforms(
 
         real = re_rng.normal(loc=0.0, scale=1.0, size=(size,)).astype(dt)
 
-        return lin_scale * (real + 1j * real)
+        return lin_scale * (real + 1j * real).astype(dt)
 
     return _real_waveform()
 
@@ -1218,11 +1217,7 @@ class TestNumpyCupyCrossComparison:
         result_cp = fourier.resample(x_cp, num_out)
         result_cp_np = result_cp.get()
 
-        # Take error relative to peak
-        atol = self.ATOL * np.abs(x).max()
-        print(np.abs(x).max())
-
-        assert_allclose(result_cp_np, result_np, rtol=self.RTOL_FLOAT32, atol=atol)
+        assert_allclose(result_cp_np, result_np, rtol=self.RTOL_FLOAT32, atol=self.ATOL)
 
     # -------------------------------------------------------------------------
     # stft tests
