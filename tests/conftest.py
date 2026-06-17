@@ -189,6 +189,9 @@ def positive_power_arrays(
     def _positive_power(draw):
         dt = draw(dtype_strategy)
         float_width = 32 if dt == np.float32 else 64
+        # Clamp min/max to representable range for the dtype
+        actual_min = float(dt(min_value))
+        actual_max = float(dt(max_value))
         shape = draw(
             array_shapes(
                 min_dims=min_dims,
@@ -202,8 +205,8 @@ def positive_power_arrays(
                 dtype=dt,
                 shape=shape,
                 elements=st.floats(
-                    min_value=min_value,
-                    max_value=max_value,
+                    min_value=actual_min,
+                    max_value=actual_max,
                     allow_nan=False,
                     allow_infinity=False,
                     width=float_width,
@@ -243,6 +246,9 @@ def dB_arrays(
     def _dB(draw):
         dt = draw(dtype_strategy)
         float_width = 32 if dt == np.float32 else 64
+        # Clamp min/max to representable range for the dtype
+        actual_min = float(dt(min_value))
+        actual_max = float(dt(max_value))
         shape = draw(
             array_shapes(
                 min_dims=min_dims,
@@ -254,14 +260,15 @@ def dB_arrays(
 
         if filter_near_zero:
             # Use two ranges to avoid filtering: negative and positive values away from zero
+            near_zero = float(dt(1e-6))
             elements = st.one_of(
-                st.floats(min_value=min_value, max_value=-1e-6, allow_nan=False, allow_infinity=False, width=float_width),
-                st.floats(min_value=1e-6, max_value=max_value, allow_nan=False, allow_infinity=False, width=float_width),
+                st.floats(min_value=actual_min, max_value=-near_zero, allow_nan=False, allow_infinity=False, width=float_width),
+                st.floats(min_value=near_zero, max_value=actual_max, allow_nan=False, allow_infinity=False, width=float_width),
             )
         else:
             elements = st.floats(
-                min_value=min_value,
-                max_value=max_value,
+                min_value=actual_min,
+                max_value=actual_max,
                 allow_nan=False,
                 allow_infinity=False,
                 width=float_width,
@@ -306,6 +313,11 @@ def envelope_arrays(
     def _envelope(draw):
         dt = draw(dtype_strategy)
         float_width = 32 if dt == np.float32 else 64
+        # Clamp min/max to representable range for the dtype
+        actual_min_mag = float(dt(min_magnitude))
+        actual_max_mag = float(dt(max_magnitude))
+        actual_min_phase = float(dt(-np.pi))
+        actual_max_phase = float(dt(np.pi))
         shape = draw(
             array_shapes(
                 min_dims=min_dims,
@@ -322,8 +334,8 @@ def envelope_arrays(
                     dtype=dt,
                     shape=shape,
                     elements=st.floats(
-                        min_value=min_magnitude,
-                        max_value=max_magnitude,
+                        min_value=actual_min_mag,
+                        max_value=actual_max_mag,
                         allow_nan=False,
                         allow_infinity=False,
                         width=float_width,
@@ -335,8 +347,8 @@ def envelope_arrays(
                     dtype=dt,
                     shape=shape,
                     elements=st.floats(
-                        min_value=-np.pi,
-                        max_value=np.pi,
+                        min_value=actual_min_phase,
+                        max_value=actual_max_phase,
                         allow_nan=False,
                         allow_infinity=False,
                         width=float_width,
@@ -350,8 +362,8 @@ def envelope_arrays(
                     dtype=dt,
                     shape=shape,
                     elements=st.floats(
-                        min_value=min_magnitude,
-                        max_value=max_magnitude,
+                        min_value=actual_min_mag,
+                        max_value=actual_max_mag,
                         allow_nan=False,
                         allow_infinity=False,
                         width=float_width,
