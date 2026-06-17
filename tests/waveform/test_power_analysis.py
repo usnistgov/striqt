@@ -662,3 +662,173 @@ class TestMultiBackendComplexValues:
         expected = 20 * np.log10(np.abs(arr_np))
         
         assert_allclose(result_np.real, expected, rtol=1e-6, atol=1e-12)
+
+
+# =============================================================================
+# NumPy vs CuPy Cross-Comparison Tests
+# =============================================================================
+
+class TestNumpyCupyCrossComparison:
+    """Cross-comparison tests validating numpy and cupy produce close results.
+    
+    These tests run the same computation on both numpy and cupy arrays and
+    compare the results. Tolerances are set for IEEE fast-math precision
+    (cupy may use fast-math optimizations).
+    """
+    
+    # Fast-math tolerances: ~1e-5 relative for float32, ~1e-12 for float64
+    RTOL_FLOAT32 = 1e-5
+    RTOL_FLOAT64 = 1e-12
+    ATOL = 1e-10
+    
+    @pytest.fixture
+    def cupy_available(self):
+        """Skip test if cupy is not available."""
+        from conftest import _cupy
+        if _cupy is None:
+            pytest.skip('cupy is not available')
+        return _cupy
+    
+    @given(power=positive_power_arrays(min_value=1e-10, max_value=1e10, dtype=np.float64, min_dims=1, max_dims=1))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
+    def test_powtodB_numpy_vs_cupy_float64(self, cupy_available, power):
+        """Cross-comparison: powtodB numpy vs cupy (float64)."""
+        cp = cupy_available
+        
+        # Compute with numpy
+        result_np = powtodB(power)
+        
+        # Compute with cupy
+        power_cp = cp.asarray(power)
+        result_cp = powtodB(power_cp)
+        result_cp_np = result_cp.get()
+        
+        assert_allclose(result_cp_np, result_np, rtol=self.RTOL_FLOAT64, atol=self.ATOL)
+    
+    @given(power=positive_power_arrays(min_value=1e-5, max_value=1e5, dtype=np.float32, min_dims=1, max_dims=1))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
+    def test_powtodB_numpy_vs_cupy_float32(self, cupy_available, power):
+        """Cross-comparison: powtodB numpy vs cupy (float32)."""
+        cp = cupy_available
+        
+        # Compute with numpy
+        result_np = powtodB(power, min_dtype='float32')
+        
+        # Compute with cupy
+        power_cp = cp.asarray(power)
+        result_cp = powtodB(power_cp, min_dtype='float32')
+        result_cp_np = result_cp.get()
+        
+        assert_allclose(result_cp_np, result_np, rtol=self.RTOL_FLOAT32, atol=self.ATOL)
+    
+    @given(dB=dB_arrays(min_value=-100, max_value=100, dtype=np.float64, min_dims=1, max_dims=1, filter_near_zero=True))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
+    def test_dBtopow_numpy_vs_cupy_float64(self, cupy_available, dB):
+        """Cross-comparison: dBtopow numpy vs cupy (float64)."""
+        cp = cupy_available
+        
+        # Compute with numpy
+        result_np = dBtopow(dB)
+        
+        # Compute with cupy
+        dB_cp = cp.asarray(dB)
+        result_cp = dBtopow(dB_cp)
+        result_cp_np = result_cp.get()
+        
+        assert_allclose(result_cp_np, result_np, rtol=self.RTOL_FLOAT64, atol=self.ATOL)
+    
+    @given(dB=dB_arrays(min_value=-30, max_value=30, dtype=np.float32, min_dims=1, max_dims=1, filter_near_zero=True))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
+    def test_dBtopow_numpy_vs_cupy_float32(self, cupy_available, dB):
+        """Cross-comparison: dBtopow numpy vs cupy (float32)."""
+        cp = cupy_available
+        
+        # Compute with numpy
+        result_np = dBtopow(dB, min_dtype='float32')
+        
+        # Compute with cupy
+        dB_cp = cp.asarray(dB)
+        result_cp = dBtopow(dB_cp, min_dtype='float32')
+        result_cp_np = result_cp.get()
+        
+        assert_allclose(result_cp_np, result_np, rtol=self.RTOL_FLOAT32, atol=self.ATOL)
+    
+    @given(env=envelope_arrays(include_complex=False, min_magnitude=1e-6, max_magnitude=1e6, dtype=np.float64, min_dims=1, max_dims=1))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
+    def test_envtodB_numpy_vs_cupy_float64(self, cupy_available, env):
+        """Cross-comparison: envtodB numpy vs cupy (float64)."""
+        cp = cupy_available
+        
+        # Compute with numpy
+        result_np = envtodB(env)
+        
+        # Compute with cupy
+        env_cp = cp.asarray(env)
+        result_cp = envtodB(env_cp)
+        result_cp_np = result_cp.get()
+        
+        assert_allclose(result_cp_np, result_np, rtol=self.RTOL_FLOAT64, atol=self.ATOL)
+    
+    @given(env=envelope_arrays(include_complex=False, min_magnitude=1e-4, max_magnitude=1e4, dtype=np.float32, min_dims=1, max_dims=1))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
+    def test_envtodB_numpy_vs_cupy_float32(self, cupy_available, env):
+        """Cross-comparison: envtodB numpy vs cupy (float32)."""
+        cp = cupy_available
+        
+        # Compute with numpy
+        result_np = envtodB(env, min_dtype='float32')
+        
+        # Compute with cupy
+        env_cp = cp.asarray(env)
+        result_cp = envtodB(env_cp, min_dtype='float32')
+        result_cp_np = result_cp.get()
+        
+        assert_allclose(result_cp_np, result_np, rtol=self.RTOL_FLOAT32, atol=self.ATOL)
+    
+    @given(env=envelope_arrays(include_complex=False, min_magnitude=1e-6, max_magnitude=1e6, dtype=np.float64, min_dims=1, max_dims=1))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
+    def test_envtopow_numpy_vs_cupy_float64(self, cupy_available, env):
+        """Cross-comparison: envtopow numpy vs cupy (float64)."""
+        cp = cupy_available
+        
+        # Compute with numpy
+        result_np = envtopow(env)
+        
+        # Compute with cupy
+        env_cp = cp.asarray(env)
+        result_cp = envtopow(env_cp)
+        result_cp_np = result_cp.get()
+        
+        assert_allclose(result_cp_np, result_np, rtol=self.RTOL_FLOAT64, atol=self.ATOL)
+    
+    @given(dB=dB_arrays(min_value=-50, max_value=50, min_size=2, max_size=50, dtype=np.float64, min_dims=1, max_dims=1, filter_near_zero=True))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
+    def test_dBlinmean_numpy_vs_cupy_float64(self, cupy_available, dB):
+        """Cross-comparison: dBlinmean numpy vs cupy (float64)."""
+        cp = cupy_available
+        
+        # Compute with numpy
+        result_np = dBlinmean(dB, axis=None)
+        
+        # Compute with cupy
+        dB_cp = cp.asarray(dB)
+        result_cp = dBlinmean(dB_cp, axis=None)
+        result_cp_np = float(result_cp.get())
+        
+        assert_allclose(result_cp_np, result_np, rtol=self.RTOL_FLOAT64, atol=self.ATOL)
+    
+    @given(dB=dB_arrays(min_value=-50, max_value=50, min_size=2, max_size=50, dtype=np.float64, min_dims=1, max_dims=1, filter_near_zero=True))
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
+    def test_dBlinsum_numpy_vs_cupy_float64(self, cupy_available, dB):
+        """Cross-comparison: dBlinsum numpy vs cupy (float64)."""
+        cp = cupy_available
+        
+        # Compute with numpy
+        result_np = dBlinsum(dB, axis=None)
+        
+        # Compute with cupy
+        dB_cp = cp.asarray(dB)
+        result_cp = dBlinsum(dB_cp, axis=None)
+        result_cp_np = float(result_cp.get())
+        
+        assert_allclose(result_cp_np, result_np, rtol=self.RTOL_FLOAT64, atol=self.ATOL)

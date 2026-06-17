@@ -1115,3 +1115,282 @@ class TestEdgeCases:
         result = fourier.resample(x, 512)
         assert len(result) == 512
         assert result.dtype == x.dtype
+
+
+# =============================================================================
+# NumPy vs CuPy Cross-Comparison Tests
+# =============================================================================
+
+
+class TestNumpyCupyCrossComparison:
+    """Cross-comparison tests validating numpy and cupy produce close results.
+
+    These tests ensure that the fourier module functions produce numerically
+    close results when operating on numpy arrays vs cupy arrays. Tolerances
+    are set assuming IEEE fast-math level precision for cupy operations.
+    """
+
+    # Tolerances for IEEE fast-math precision
+    RTOL_FLOAT32 = 1e-5
+    RTOL_FLOAT64 = 1e-12
+    ATOL = 1e-10
+
+    @pytest.fixture
+    def cupy_available(self):
+        from conftest import _cupy
+
+        if _cupy is None:
+            pytest.skip('cupy is not available')
+        return _cupy
+
+    # -------------------------------------------------------------------------
+    # get_window tests
+    # -------------------------------------------------------------------------
+
+    @given(
+        name=st.sampled_from(['hamming', 'hann', 'blackman', 'bartlett', 'flattop']),
+        nwindow=st.integers(min_value=8, max_value=512),
+    )
+    def test_get_window_numpy_vs_cupy_float64(self, cupy_available, name, nwindow):
+        """Test get_window produces close results for numpy vs cupy (float64)."""
+        cp = cupy_available
+        fourier = _get_fourier()
+
+        # NumPy result
+        result_np = fourier.get_window(name, nwindow, dtype=np.float64)
+
+        # CuPy result
+        result_cp = fourier.get_window(name, nwindow, dtype=np.float64, xp=cp)
+        result_cp_np = result_cp.get()
+
+        assert_allclose(result_cp_np, result_np, rtol=self.RTOL_FLOAT64, atol=self.ATOL)
+
+    @given(
+        name=st.sampled_from(['hamming', 'hann', 'blackman', 'bartlett', 'flattop']),
+        nwindow=st.integers(min_value=8, max_value=512),
+    )
+    def test_get_window_numpy_vs_cupy_float32(self, cupy_available, name, nwindow):
+        """Test get_window produces close results for numpy vs cupy (float32)."""
+        cp = cupy_available
+        fourier = _get_fourier()
+
+        # NumPy result
+        result_np = fourier.get_window(name, nwindow, dtype=np.float32)
+
+        # CuPy result
+        result_cp = fourier.get_window(name, nwindow, dtype=np.float32, xp=cp)
+        result_cp_np = result_cp.get()
+
+        assert_allclose(result_cp_np, result_np, rtol=self.RTOL_FLOAT32, atol=self.ATOL)
+
+    # -------------------------------------------------------------------------
+    # fftfreq tests
+    # -------------------------------------------------------------------------
+
+    @given(
+        nfft=fft_sizes(min_size=8, max_size=512),
+        fs=sample_rates(min_rate=1e3, max_rate=100e6),
+    )
+    def test_fftfreq_numpy_vs_cupy_float64(self, cupy_available, nfft, fs):
+        """Test fftfreq produces close results for numpy vs cupy (float64)."""
+        cp = cupy_available
+        fourier = _get_fourier()
+
+        # NumPy result
+        result_np = fourier.fftfreq(nfft, fs, dtype=np.float64)
+
+        # CuPy result
+        result_cp = fourier.fftfreq(nfft, fs, dtype=np.float64, xp=cp)
+        result_cp_np = result_cp.get()
+
+        assert_allclose(result_cp_np, result_np, rtol=self.RTOL_FLOAT64, atol=self.ATOL)
+
+    # -------------------------------------------------------------------------
+    # resample tests
+    # -------------------------------------------------------------------------
+
+    @given(x=complex_waveforms(min_size=64, max_size=256, dtype=np.complex128, allow_subnormal=False))
+    def test_resample_numpy_vs_cupy_complex128(self, cupy_available, x):
+        """Test resample produces close results for numpy vs cupy (complex128)."""
+        cp = cupy_available
+        fourier = _get_fourier()
+
+        # Resample to half the size
+        num_out = len(x) // 2
+
+        # NumPy result
+        result_np = fourier.resample(x, num_out)
+
+        # CuPy result
+        x_cp = cp.asarray(x)
+        result_cp = fourier.resample(x_cp, num_out)
+        result_cp_np = result_cp.get()
+
+        assert_allclose(result_cp_np, result_np, rtol=self.RTOL_FLOAT64, atol=self.ATOL)
+
+    @given(x=complex_waveforms(min_size=64, max_size=256, dtype=np.complex64, allow_subnormal=False))
+    def test_resample_numpy_vs_cupy_complex64(self, cupy_available, x):
+        """Test resample produces close results for numpy vs cupy (complex64)."""
+        cp = cupy_available
+        fourier = _get_fourier()
+
+        # Resample to half the size
+        num_out = len(x) // 2
+
+        # NumPy result
+        result_np = fourier.resample(x, num_out)
+
+        # CuPy result
+        x_cp = cp.asarray(x)
+        result_cp = fourier.resample(x_cp, num_out)
+        result_cp_np = result_cp.get()
+
+        assert_allclose(result_cp_np, result_np, rtol=self.RTOL_FLOAT32, atol=self.ATOL)
+
+    # -------------------------------------------------------------------------
+    # stft tests
+    # -------------------------------------------------------------------------
+
+    @given(x=complex_waveforms(min_size=256, max_size=512, dtype=np.complex128, allow_subnormal=False))
+    def test_stft_numpy_vs_cupy_complex128(self, cupy_available, x):
+        """Test stft produces close results for numpy vs cupy (complex128)."""
+        cp = cupy_available
+        fourier = _get_fourier()
+
+        # NumPy result
+        freqs_np, times_np, X_np = fourier.stft(
+            x, fs=1e6, window='hamming', nperseg=64, noverlap=32, truncate=True
+        )
+
+        # CuPy result
+        x_cp = cp.asarray(x)
+        freqs_cp, times_cp, X_cp = fourier.stft(
+            x_cp, fs=1e6, window='hamming', nperseg=64, noverlap=32, truncate=True
+        )
+        freqs_cp_np = freqs_cp.get()
+        times_cp_np = times_cp.get()
+        X_cp_np = X_cp.get()
+
+        assert_allclose(freqs_cp_np, freqs_np, rtol=self.RTOL_FLOAT64, atol=self.ATOL)
+        assert_allclose(times_cp_np, times_np, rtol=self.RTOL_FLOAT64, atol=self.ATOL)
+        assert_allclose(X_cp_np, X_np, rtol=self.RTOL_FLOAT64, atol=self.ATOL)
+
+    @given(x=complex_waveforms(min_size=256, max_size=512, dtype=np.complex64, allow_subnormal=False))
+    def test_stft_numpy_vs_cupy_complex64(self, cupy_available, x):
+        """Test stft produces close results for numpy vs cupy (complex64)."""
+        cp = cupy_available
+        fourier = _get_fourier()
+
+        # NumPy result
+        freqs_np, times_np, X_np = fourier.stft(
+            x, fs=1e6, window='hamming', nperseg=64, noverlap=32, truncate=True
+        )
+
+        # CuPy result
+        x_cp = cp.asarray(x)
+        freqs_cp, times_cp, X_cp = fourier.stft(
+            x_cp, fs=1e6, window='hamming', nperseg=64, noverlap=32, truncate=True
+        )
+        freqs_cp_np = freqs_cp.get()
+        times_cp_np = times_cp.get()
+        X_cp_np = X_cp.get()
+
+        assert_allclose(freqs_cp_np, freqs_np, rtol=self.RTOL_FLOAT32, atol=self.ATOL)
+        assert_allclose(times_cp_np, times_np, rtol=self.RTOL_FLOAT32, atol=self.ATOL)
+        assert_allclose(X_cp_np, X_np, rtol=self.RTOL_FLOAT32, atol=self.ATOL)
+
+    # -------------------------------------------------------------------------
+    # spectrogram tests
+    # -------------------------------------------------------------------------
+
+    @given(x=complex_waveforms(min_size=256, max_size=512, dtype=np.complex128, allow_subnormal=False))
+    def test_spectrogram_numpy_vs_cupy_complex128(self, cupy_available, x):
+        """Test spectrogram produces close results for numpy vs cupy (complex128)."""
+        cp = cupy_available
+        fourier = _get_fourier()
+
+        # NumPy result
+        freqs_np, times_np, Sxx_np = fourier.spectrogram(
+            x, fs=1e6, window='hamming', nperseg=64, noverlap=32, truncate=True
+        )
+
+        # CuPy result
+        x_cp = cp.asarray(x)
+        freqs_cp, times_cp, Sxx_cp = fourier.spectrogram(
+            x_cp, fs=1e6, window='hamming', nperseg=64, noverlap=32, truncate=True
+        )
+        freqs_cp_np = freqs_cp.get()
+        times_cp_np = times_cp.get()
+        Sxx_cp_np = Sxx_cp.get()
+
+        assert_allclose(freqs_cp_np, freqs_np, rtol=self.RTOL_FLOAT64, atol=self.ATOL)
+        assert_allclose(times_cp_np, times_np, rtol=self.RTOL_FLOAT64, atol=self.ATOL)
+        assert_allclose(Sxx_cp_np, Sxx_np, rtol=self.RTOL_FLOAT64, atol=self.ATOL)
+
+    @given(x=complex_waveforms(min_size=256, max_size=512, dtype=np.complex64, allow_subnormal=False))
+    def test_spectrogram_numpy_vs_cupy_complex64(self, cupy_available, x):
+        """Test spectrogram produces close results for numpy vs cupy (complex64)."""
+        cp = cupy_available
+        fourier = _get_fourier()
+
+        # NumPy result
+        freqs_np, times_np, Sxx_np = fourier.spectrogram(
+            x, fs=1e6, window='hamming', nperseg=64, noverlap=32, truncate=True
+        )
+
+        # CuPy result
+        x_cp = cp.asarray(x)
+        freqs_cp, times_cp, Sxx_cp = fourier.spectrogram(
+            x_cp, fs=1e6, window='hamming', nperseg=64, noverlap=32, truncate=True
+        )
+        freqs_cp_np = freqs_cp.get()
+        times_cp_np = times_cp.get()
+        Sxx_cp_np = Sxx_cp.get()
+
+        assert_allclose(freqs_cp_np, freqs_np, rtol=self.RTOL_FLOAT32, atol=self.ATOL)
+        assert_allclose(times_cp_np, times_np, rtol=self.RTOL_FLOAT32, atol=self.ATOL)
+        assert_allclose(Sxx_cp_np, Sxx_np, rtol=self.RTOL_FLOAT32, atol=self.ATOL)
+
+    # -------------------------------------------------------------------------
+    # oaconvolve tests
+    # -------------------------------------------------------------------------
+
+    @given(x=real_waveforms(min_size=64, max_size=256, dtype=np.float64))
+    def test_oaconvolve_numpy_vs_cupy_float64(self, cupy_available, x):
+        """Test oaconvolve produces close results for numpy vs cupy (float64)."""
+        cp = cupy_available
+        fourier = _get_fourier()
+
+        # Create a simple kernel
+        kernel = np.array([0.25, 0.5, 0.25], dtype=np.float64)
+
+        # NumPy result
+        result_np = fourier.oaconvolve(x, kernel, mode='same')
+
+        # CuPy result
+        x_cp = cp.asarray(x)
+        kernel_cp = cp.asarray(kernel)
+        result_cp = fourier.oaconvolve(x_cp, kernel_cp, mode='same')
+        result_cp_np = result_cp.get()
+
+        assert_allclose(result_cp_np, result_np, rtol=self.RTOL_FLOAT64, atol=self.ATOL)
+
+    @given(x=real_waveforms(min_size=64, max_size=256, dtype=np.float32))
+    def test_oaconvolve_numpy_vs_cupy_float32(self, cupy_available, x):
+        """Test oaconvolve produces close results for numpy vs cupy (float32)."""
+        cp = cupy_available
+        fourier = _get_fourier()
+
+        # Create a simple kernel
+        kernel = np.array([0.25, 0.5, 0.25], dtype=np.float32)
+
+        # NumPy result
+        result_np = fourier.oaconvolve(x, kernel, mode='same')
+
+        # CuPy result
+        x_cp = cp.asarray(x)
+        kernel_cp = cp.asarray(kernel)
+        result_cp = fourier.oaconvolve(x_cp, kernel_cp, mode='same')
+        result_cp_np = result_cp.get()
+
+        assert_allclose(result_cp_np, result_np, rtol=self.RTOL_FLOAT32, atol=self.ATOL)
