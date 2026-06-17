@@ -109,6 +109,7 @@ def complex_waveforms(
     dtype=None,
     min_dims: int = 1,
     max_dims: int = 1,
+    allow_subnormal: bool = True,
 ):
     """Strategy for complex-valued waveform arrays.
 
@@ -152,6 +153,7 @@ def complex_waveforms(
                     max_value=1e3,
                     allow_nan=False,
                     allow_infinity=False,
+                    allow_subnormal=allow_subnormal,
                 ),
             )
         )
@@ -164,6 +166,7 @@ def complex_waveforms(
                     max_value=1e3,
                     allow_nan=False,
                     allow_infinity=False,
+                    allow_subnormal=allow_subnormal,
                 ),
             )
         )
@@ -621,7 +624,7 @@ class TestResampleProperties:
         assert_allclose(result_scaled, scale * result_unscaled, rtol=1e-8, atol=1e-15)
 
     @given(
-        x=complex_waveforms(min_size=64, max_size=256), allow_subnormal=False
+        x=complex_waveforms(min_size=64, max_size=256, allow_subnormal=False)
     )
     @settings(
         suppress_health_check=[HealthCheck.function_scoped_fixture],
