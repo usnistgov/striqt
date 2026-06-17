@@ -589,7 +589,7 @@ def stft(
         nfft=nfft,
         time_size=y.shape[axis],
         overlap_frac=noverlap / nfft,
-        xp=np,
+        xp=xp,
     )
 
     return (freqs, times, y)  # type: ignore
