@@ -199,19 +199,25 @@ def real_waveforms(
         size = draw(st.integers(min_value=min_size // 2, max_value=max_size // 2)) * 2
         float_width = 32 if dt == np.float32 else 64
 
-        return draw(
+        x = draw(
             arrays(
                 dtype=dt,
                 shape=(size,),
                 elements=st.floats(
-                    min_value=-1e3,
-                    max_value=1e3,
+                    min_value=-1,
+                    max_value=1,
                     allow_nan=False,
                     allow_infinity=False,
                     width=float_width,
                 ),
             )
         )
+
+        db_scale = draw(
+            st.floats(min_value=-130, max_value=30)
+        )
+
+        return (10**(db_scale/20) * x).astype(dt)
 
     return _real_waveform()
 
