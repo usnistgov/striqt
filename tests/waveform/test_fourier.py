@@ -173,10 +173,9 @@ def complex_waveforms(
                 ),
             )
         )
-        db_scale = draw(
-            st.floats(min_value=-130, max_value=30)
-        )
-        return (10**(db_scale/20) * (real + 1j * imag)).astype(dt)
+        db_scale = draw(st.floats(min_value=-130.0, max_value=30.0))
+        lin_scale = 10**(db_scale/20.)
+        return (lin_scale * (real + 1j * imag)).astype(dt)
 
     return _complex_waveform()
 
