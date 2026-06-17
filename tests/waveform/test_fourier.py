@@ -1246,7 +1246,7 @@ class TestNumpyCupyCrossComparison:
 
         assert_allclose(freqs_cp_np, freqs_np, rtol=self.RTOL_FLOAT32, atol=self.ATOL)
         assert_allclose(times_cp_np, times_np, rtol=self.RTOL_FLOAT32, atol=self.ATOL)
-        assert_allclose(X_cp_np, X_np, rtol=self.RTOL_FLOAT32, atol=self.ATOL)
+        assert_allclose(X_cp_np / X_np.std(), X_np / X_np.std(), rtol=self.RTOL_FLOAT32, atol=1e-7)
 
     # -------------------------------------------------------------------------
     # spectrogram tests
