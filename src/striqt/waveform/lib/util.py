@@ -91,16 +91,28 @@ def lru_cache(
 
 @functools.cache
 def _get_cache_shelf():
+    import dbm
+    import glob
     import platformdirs
     import shelve
     from threading import Lock
 
     dir = Path(platformdirs.user_cache_dir('striqt'))
     dir.mkdir(parents=True, exist_ok=True)
-    filename = str(dir / 'calls.db')  # python 3.9 shelve wants str
+    # Use version-specific cache file to avoid cross-version pickle issues
+    pyver = f'{sys.version_info.major}.{sys.version_info.minor}'
+    filename = str(dir / f'calls-py{pyver}.db')  # python 3.9 shelve wants str
 
     cache_lock = Lock()
-    shelf = shelve.open(filename, writeback=True)
+
+    try:
+        shelf = shelve.open(filename, writeback=True)
+    except dbm.error:
+        # Cache file was created with a different dbm backend (e.g., different
+        # Python version). Delete and recreate.
+        for path in glob.glob(f'{filename}*'):
+            Path(path).unlink(missing_ok=True)
+        shelf = shelve.open(filename, writeback=True)
 
     # sync is forced on each operation already
     shelf.__del__ = lambda: None  # ty: ignore
@@ -108,6 +120,7 @@ def _get_cache_shelf():
 
 
 def _make_lru_key(func, args, kwargs) -> str:
+    import base64
     import pickle
 
     def fix_arg(obj):
@@ -122,7 +135,8 @@ def _make_lru_key(func, args, kwargs) -> str:
         tuple((k, fix_arg(v)) for k, v in kwargs.items()),
     ))
 
-    return p.decode(errors='replace')
+    # Use base64 encoding to avoid key collisions from decode(errors='replace')
+    return base64.b64encode(p).decode('ascii')
 
 
 def persistent_lru_cache(

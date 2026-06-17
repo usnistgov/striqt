@@ -114,3 +114,16 @@ norecursedirs = [
 call-top-callable = "ignore"
 invalid-type-form = "ignore"
 
+[tool.tox]
+# Forces tox to auto-provision the tox-uv plugin if missing
+requires = ["tox-uv"]
+env_list = ["py39", "py314"]
+
+[tool.tox.env_run_base]
+# Dependencies specified JSON-style for TOML compatibility
+package = "editable"
+deps = ["pytest"]
+extras = ["test"]
+commands = [
+    ["pytest"]
+]
