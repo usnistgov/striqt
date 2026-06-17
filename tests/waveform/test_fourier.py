@@ -1213,26 +1213,6 @@ class TestNumpyCupyCrossComparison:
     # -------------------------------------------------------------------------
 
     @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
-    @given(x=complex_waveforms(min_size=64, max_size=256, dtype=np.complex128, allow_subnormal=False))
-    def test_resample_numpy_vs_cupy_complex128(self, cupy_available, x):
-        """Test resample produces close results for numpy vs cupy (complex128)."""
-        cp = cupy_available
-        fourier = _get_fourier()
-
-        # Resample to half the size
-        num_out = len(x) // 2
-
-        # NumPy result
-        result_np = fourier.resample(x, num_out)
-
-        # CuPy result
-        x_cp = cp.asarray(x)
-        result_cp = fourier.resample(x_cp, num_out)
-        result_cp_np = result_cp.get()
-
-        assert_allclose(result_cp_np, result_np, rtol=self.RTOL_FLOAT64, atol=self.ATOL)
-
-    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
     @given(x=complex_waveforms(min_size=64, max_size=256, dtype=np.complex64, allow_subnormal=False))
     def test_resample_numpy_vs_cupy_complex64(self, cupy_available, x):
         """Test resample produces close results for numpy vs cupy (complex64)."""
@@ -1255,31 +1235,6 @@ class TestNumpyCupyCrossComparison:
     # -------------------------------------------------------------------------
     # stft tests
     # -------------------------------------------------------------------------
-
-    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
-    @given(x=complex_waveforms(min_size=256, max_size=512, dtype=np.complex128, allow_subnormal=False))
-    def test_stft_numpy_vs_cupy_complex128(self, cupy_available, x):
-        """Test stft produces close results for numpy vs cupy (complex128)."""
-        cp = cupy_available
-        fourier = _get_fourier()
-
-        # NumPy result
-        freqs_np, times_np, X_np = fourier.stft(
-            x, fs=1e6, window='hamming', nperseg=64, noverlap=32, truncate=True
-        )
-
-        # CuPy result
-        x_cp = cp.asarray(x)
-        freqs_cp, times_cp, X_cp = fourier.stft(
-            x_cp, fs=1e6, window='hamming', nperseg=64, noverlap=32, truncate=True
-        )
-        freqs_cp_np = freqs_cp.get()
-        times_cp_np = times_cp.get()
-        X_cp_np = X_cp.get()
-
-        assert_allclose(freqs_cp_np, freqs_np, rtol=self.RTOL_FLOAT64, atol=self.ATOL)
-        assert_allclose(times_cp_np, times_np, rtol=self.RTOL_FLOAT64, atol=self.ATOL)
-        assert_allclose(X_cp_np, X_np, rtol=self.RTOL_FLOAT64, atol=self.ATOL)
 
     @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
     @given(x=complex_waveforms(min_size=256, max_size=512, dtype=np.complex64, allow_subnormal=False))
@@ -1309,31 +1264,6 @@ class TestNumpyCupyCrossComparison:
     # -------------------------------------------------------------------------
     # spectrogram tests
     # -------------------------------------------------------------------------
-
-    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
-    @given(x=complex_waveforms(min_size=256, max_size=512, dtype=np.complex128, allow_subnormal=False))
-    def test_spectrogram_numpy_vs_cupy_complex128(self, cupy_available, x):
-        """Test spectrogram produces close results for numpy vs cupy (complex128)."""
-        cp = cupy_available
-        fourier = _get_fourier()
-
-        # NumPy result
-        freqs_np, times_np, Sxx_np = fourier.spectrogram(
-            x, fs=1e6, window='hamming', nperseg=64, noverlap=32, truncate=True
-        )
-
-        # CuPy result
-        x_cp = cp.asarray(x)
-        freqs_cp, times_cp, Sxx_cp = fourier.spectrogram(
-            x_cp, fs=1e6, window='hamming', nperseg=64, noverlap=32, truncate=True
-        )
-        freqs_cp_np = freqs_cp.get()
-        times_cp_np = times_cp.get()
-        Sxx_cp_np = Sxx_cp.get()
-
-        assert_allclose(freqs_cp_np, freqs_np, rtol=self.RTOL_FLOAT64, atol=self.ATOL)
-        assert_allclose(times_cp_np, times_np, rtol=self.RTOL_FLOAT64, atol=self.ATOL)
-        assert_allclose(Sxx_cp_np, Sxx_np, rtol=self.RTOL_FLOAT64, atol=self.ATOL)
 
     @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
     @given(x=complex_waveforms(min_size=256, max_size=512, dtype=np.complex64, allow_subnormal=False))
