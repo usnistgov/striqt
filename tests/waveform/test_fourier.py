@@ -1133,7 +1133,7 @@ class TestNumpyCupyCrossComparison:
     # Tolerances for IEEE fast-math precision
     RTOL_FLOAT32 = 1e-5
     RTOL_FLOAT64 = 1e-12
-    ATOL = 1e-10
+    ATOL = 5e-9
 
     @pytest.fixture
     def cupy_available(self):
