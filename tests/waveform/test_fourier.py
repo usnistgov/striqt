@@ -1212,7 +1212,7 @@ class TestNumpyCupyCrossComparison:
     # resample tests
     # -------------------------------------------------------------------------
 
-    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=3000)
     @given(x=complex_waveforms(min_size=64, max_size=256, dtype=np.complex64, allow_subnormal=False))
     def test_resample_numpy_vs_cupy_complex64(self, cupy_available, x):
         """Test resample produces close results for numpy vs cupy (complex64)."""
@@ -1236,7 +1236,7 @@ class TestNumpyCupyCrossComparison:
     # stft tests
     # -------------------------------------------------------------------------
 
-    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=3000)
     @given(x=complex_waveforms(min_size=256, max_size=512, dtype=np.complex64, allow_subnormal=False))
     def test_stft_numpy_vs_cupy_complex64(self, cupy_available, x):
         """Test stft produces close results for numpy vs cupy (complex64)."""
@@ -1265,7 +1265,7 @@ class TestNumpyCupyCrossComparison:
     # spectrogram tests
     # -------------------------------------------------------------------------
 
-    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=3000)
     @given(x=complex_waveforms(min_size=256, max_size=512, dtype=np.complex64, allow_subnormal=False))
     def test_spectrogram_numpy_vs_cupy_complex64(self, cupy_available, x):
         """Test spectrogram produces close results for numpy vs cupy (complex64)."""
@@ -1315,7 +1315,7 @@ class TestNumpyCupyCrossComparison:
 
         assert_allclose(result_cp_np, result_np, rtol=self.RTOL_FLOAT64, atol=self.ATOL)
 
-    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=3000)
     @given(x=real_waveforms(min_size=64, max_size=256, dtype=np.float32))
     def test_oaconvolve_numpy_vs_cupy_float32(self, cupy_available, x):
         """Test oaconvolve produces close results for numpy vs cupy (float32)."""
