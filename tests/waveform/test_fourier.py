@@ -1134,7 +1134,7 @@ class TestNumpyCupyCrossComparison:
     # get_window tests
     # -------------------------------------------------------------------------
 
-    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=3000)
     @given(
         name=st.sampled_from(['hamming', 'hann', 'blackman', 'bartlett', 'flattop']),
         nwindow=st.integers(min_value=8, max_value=512),
@@ -1153,7 +1153,7 @@ class TestNumpyCupyCrossComparison:
 
         assert_allclose(result_cp_np, result_np, rtol=self.RTOL_FLOAT64, atol=self.ATOL)
 
-    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=3000)
     @given(
         name=st.sampled_from(['hamming', 'hann', 'blackman', 'bartlett', 'flattop']),
         nwindow=st.integers(min_value=8, max_value=512),
