@@ -592,7 +592,7 @@ def stft(
         xp=np,
     )
 
-    return typing.cast(tuple[_AT, _AT, _AT], (freqs, times, y))
+    return (freqs, times, y)  # type: ignore[return-value]
 
 
 def istft(

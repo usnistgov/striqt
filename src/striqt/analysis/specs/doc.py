@@ -1,5 +1,4 @@
 from __future__ import annotations as __
-from IPython.utils.text import indent
 import functools
 import msgspec
 import typing

@@ -3,10 +3,9 @@
 from __future__ import annotations
 import click
 import typing
-import xarray as xr
-import dask.array
 
 if typing.TYPE_CHECKING:
+    import dask.array
     import striqt.figures as sf
     import xarray as xr
 

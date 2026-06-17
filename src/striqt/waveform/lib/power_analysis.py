@@ -73,7 +73,7 @@ def unit_wave_to_linear(s: str):
 
 
 @util.lru_cache()
-def stat_ufunc_from_shorthand(kind, xp=None, axis=0) -> typing.Callable:
+def stat_ufunc_from_shorthand(kind: str|float, xp=None, axis=0) -> typing.Callable:
     if xp is None:
         xp = np
 
@@ -151,7 +151,6 @@ def powtodB(
     return _repackage_arraylike(values, x, unit_transform=unit_linear_to_dB)
 
 
-
 def dBtopow(
     x: _ALN, *, overwrite_x: bool = False, min_dtype: 'DTypeLike' = 'float32'
 ) -> _ALN:
@@ -168,7 +167,11 @@ def dBtopow(
         values = cuda.dBtopow(x, out)
     else:
         # torch, dask, ...
-        values = xp.divide(values, 10, out=out, )
+        values = xp.divide(
+            values,
+            10,
+            out=out,
+        )
         values = xp.power(10, values, out=out)
 
     return _repackage_arraylike(values, x, unit_transform=unit_dB_to_linear)
@@ -360,7 +363,7 @@ def dBlinsum(
     """
 
     x_lin = dBtopow(x_dB, overwrite_x=overwrite_x, min_dtype=min_dtype)
-    x_sum = x_lin.sum(axis) # type: ignore
+    x_sum = x_lin.sum(axis)  # type: ignore
     return powtodB(x_sum, overwrite_x=True, min_dtype=min_dtype)  # type: ignore
 
 
@@ -561,7 +564,6 @@ def _arraylike_with_buffer(
         raise TypeError('must pass a dtype as min_dtype')
     if min_dtype is np.dtype('float16'):
         raise TypeError('min_dtype must be at least float32 or larger')
-    
 
     type_ = type(x)
     if hasattr(type_, '__array_function__') or hasattr(type_, '__array_namespace__'):
