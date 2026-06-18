@@ -3,10 +3,9 @@
 from __future__ import annotations
 import click
 import typing
-import xarray as xr
-import dask.array
 
 if typing.TYPE_CHECKING:
+    import dask.array
     import striqt.figures as sf
     import xarray as xr
 
@@ -150,7 +149,7 @@ def load_data(zarr_path: str, opts: 'sf.specs.PlotOptions', index=True) -> 'xr.D
 def worker_init(
     zarr_path,
     opts: 'sf.specs.PlotOptions',
-    interactive: str | None,
+    interactive: typing.Literal['sixel', 'kitcat'] | None,
     no_save: bool,
     lock,
 ):
@@ -160,22 +159,8 @@ def worker_init(
     import striqt.figures as sf
     import striqt.analysis as sa
     import striqt.sensor as ss
-    import matplotlib as mpl
-    from matplotlib import pyplot as plt
 
-    plt.ioff()
-    if interactive is None:
-        mpl.use('agg')
-        extra_style = []
-    elif interactive == 'sixel':
-        mpl.use('module://matplotlib-backend-sixel')
-        extra_style = ['striqt.figures.terminal']
-    else:
-        mpl.use('kitcat')
-        extra_style = ['striqt.figures.terminal']
-
-    if opts.plotter.style is not None:
-        plt.style.use([opts.plotter.style] + extra_style)
+    sf.backend.select_mpl_backend(opts.plotter.style, interactive)
 
     filterwarnings('ignore', r'.*figure layout has changed.*', UserWarning)
     filterwarnings('ignore', '.*artists with labels.*', UserWarning)

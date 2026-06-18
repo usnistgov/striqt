@@ -26,28 +26,28 @@ else:
     np = sw.util.lazy_import('numpy')
 
 
-def _select_dpi(grid, x_data, y_data: 'xr.DataArray | None', min_=0, max_=300):
-    dpi = min_
-    scale_inv = grid.fig.dpi_scale_trans.inverted()
-    for ax in grid.fig.axes:
-        if grid.cbar is not None and ax is grid.cbar.ax:
-            continue
-        bbox = ax.get_window_extent().transformed(scale_inv)
-        width, height = bbox.width, bbox.height
-        x_dpi = x_data.size / width
-        dpi = max([dpi, x_dpi] + [] if y_data is None else [y_data.size / height])
+def select_mpl_backend(style: str|None, interactive: typing.Literal['sixel', 'kitcat'] | None) -> None:
+    """select a matplotlib backend, and return extra styles to use"""
 
-    if dpi > max_:
-        return max_
-    elif dpi < min_:
-        return min_
+    from matplotlib import pyplot as plt
+    import matplotlib as mpl
+
+    styles = [style] if style else []
+
+    plt.ioff()
+    if interactive is None:
+        mpl.use('agg')
+    elif interactive == 'sixel':
+        mpl.use('module://matplotlib-backend-sixel')
+        styles.append('striqt.figures.terminal')
+    elif interactive == 'kitcat':
+        mpl.use('kitcat')
+        styles.append('striqt.figures.terminal')
     else:
-        return dpi
+        raise ValueError('interactive argument must be "kitat", "sixel", or None')
 
-
-@functools.cache
-def _matplotlib_version():
-    return tuple(int(n) for n in mpl.__version__.split('.', 2))
+    if styles:
+        plt.style.use(styles)
 
 
 def coerce_column(data: '_T', plotter: 'PlotBackend') -> '_T':
@@ -138,7 +138,6 @@ class _FakeLock:
         pass
 
 
-
 class PlotBackend:
     opts: specs.SharedPlotOptions
     lock: RLock | _FakeLock
@@ -149,7 +148,7 @@ class PlotBackend:
         output_dir: Path | None,
         *,
         interactive: None | bool | str = None,
-        lock: RLock|None = None,
+        lock: RLock | None = None,
     ):
         self.opts = opts
         self.output_dir = output_dir
@@ -314,7 +313,7 @@ class PlotBackend:
                 name=data.name,
                 **data.attrs,
             )
-            path = Path(self.output_dir) / filename[0]
+            path = Path(self.output_dir) / filename[0].with_extension('.plots')
             grid.fig.savefig(path, dpi=dpi)
             sa.util.get_logger('analysis').info(f"💾 '{str(path)}'")
         else:
@@ -374,3 +373,27 @@ class PlotBackend:
 
             else:
                 raise TypeError('where must be "x", "y", or "colorbar"')
+
+
+def _select_dpi(grid, x_data, y_data: 'xr.DataArray | None', min_=0, max_=300):
+    dpi = min_
+    scale_inv = grid.fig.dpi_scale_trans.inverted()
+    for ax in grid.fig.axes:
+        if grid.cbar is not None and ax is grid.cbar.ax:
+            continue
+        bbox = ax.get_window_extent().transformed(scale_inv)
+        width, height = bbox.width, bbox.height
+        x_dpi = x_data.size / width
+        dpi = max([dpi, x_dpi] + [] if y_data is None else [y_data.size / height])
+
+    if dpi > max_:
+        return max_
+    elif dpi < min_:
+        return min_
+    else:
+        return dpi
+
+
+@functools.cache
+def _matplotlib_version():
+    return tuple(int(n) for n in mpl.__version__.split('.', 2))
