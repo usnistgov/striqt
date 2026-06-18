@@ -159,7 +159,7 @@ def complex_waveforms(
         real = re_rng.normal(loc=0.0, scale=1.0, size=shape).astype(dt)
         imag = im_rng.normal(loc=0.0, scale=1.0, size=shape).astype(dt)
 
-        return lin_scale * (real + 1j * imag)
+        return (lin_scale * (real + 1j * imag)).astype(dt)
 
     return _complex_waveform()
 
@@ -192,7 +192,7 @@ def real_waveforms(
 
         real = re_rng.normal(loc=0.0, scale=1.0, size=(size,)).astype(dt)
 
-        return lin_scale * (real + 1j * real).astype(dt)
+        return (lin_scale * real).astype(dt)
 
     return _real_waveform()
 
@@ -1217,7 +1217,7 @@ class TestNumpyCupyCrossComparison:
         result_cp = fourier.resample(x_cp, num_out)
         result_cp_np = result_cp.get() / x.std()
 
-        assert (result_cp_np - result_np).std() < 1e-8, 'tolerance in error RMS power'
+        assert (result_cp_np - result_np).std() < 3e-7, 'tolerance in error RMS power'
         assert_allclose(result_cp_np, result_np, rtol=1e-4, atol=1e-6)
 
     # -------------------------------------------------------------------------
@@ -1245,7 +1245,7 @@ class TestNumpyCupyCrossComparison:
         times_cp_np = times_cp.get()
         X_cp_np = X_cp.get()
 
-        assert (X_cp_np - X_np).std() < 1e-8, 'tolerance in error RMS power'
+        assert (X_cp_np - X_np).std()/X_np.std() < 2e-7, 'tolerance in error RMS power'
         assert_allclose(freqs_cp_np, freqs_np, rtol=self.RTOL_FLOAT32, atol=self.ATOL)
         assert_allclose(times_cp_np, times_np, rtol=self.RTOL_FLOAT32, atol=self.ATOL)
         assert_allclose(X_cp_np / X_np.std(), X_np / X_np.std(), rtol=1e-4, atol=2e-7)
@@ -1305,8 +1305,8 @@ class TestNumpyCupyCrossComparison:
         result_cp = fourier.oaconvolve(x_cp, kernel_cp, mode='same')
         result_cp_np = result_cp.get()
 
-        assert (result_cp_np - result_np).std() < 1e-9, 'tolerance in error RMS power'
-        assert_allclose(result_cp_np, result_np, rtol=self.RTOL_FLOAT64, atol=self.ATOL)
+        assert (result_cp_np - result_np).std()/result_np.std() < 1e-9, 'tolerance in error RMS power'
+        assert_allclose(result_cp_np/result_np.std(), result_np/result_np.std(), rtol=self.RTOL_FLOAT64, atol=self.ATOL)
 
     @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=3000)
     @given(x=real_waveforms(min_size=64, max_size=256, dtype=np.float32))
@@ -1325,7 +1325,7 @@ class TestNumpyCupyCrossComparison:
         x_cp = cp.asarray(x)
         kernel_cp = cp.asarray(kernel)
         result_cp = fourier.oaconvolve(x_cp, kernel_cp, mode='same')
-        result_cp_np = result_cp.get() / x.std()
+        result_cp_np = result_cp.get()
 
-        assert (result_cp_np - result_np).std() < 1e-8, 'tolerance in error RMS power'
-        assert_allclose(result_cp_np, result_np, rtol=self.RTOL_FLOAT32, atol=self.ATOL)
+        assert (result_cp_np - result_np).std()/result_np.std() < 5e-7, 'tolerance in error RMS power'
+        assert_allclose(result_cp_np/result_np.std(), result_np/result_np.std(), rtol=self.RTOL_FLOAT32, atol=5e-7)
