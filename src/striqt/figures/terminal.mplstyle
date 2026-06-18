@@ -1,2 +1,3 @@
 savefig.facecolor: "white"
+figure.facecolor: "white"
 savefig.dpi: 110
