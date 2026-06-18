@@ -58,7 +58,7 @@ legend.fancybox: False # keep the sharp corners, matching the axis lines
 
 # export without the white background box at high default resolution
 savefig.pad_inches: 0.005
-savefig.facecolor: "none"
+savefig.facecolor: "white"
 savefig.dpi: 300
 savefig.bbox: "tight"
 
