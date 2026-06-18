@@ -26,7 +26,9 @@ else:
     np = sw.util.lazy_import('numpy')
 
 
-def select_mpl_backend(style: str|None, interactive: typing.Literal['sixel', 'kitcat'] | None) -> None:
+def select_mpl_backend(
+    style: str | None, interactive: typing.Literal['sixel', 'kitcat'] | None
+) -> None:
     """select a matplotlib backend, and return extra styles to use"""
 
     from matplotlib import pyplot as plt

@@ -10,6 +10,7 @@ from striqt.sensor.lib import calibration, resources
 def cli(yaml_path):
     # instantiate sweep objects
     import striqt.analysis as sa
+
     sa.util.show_messages(sa.util.logging.WARNING)
     run(yaml_path)
 
