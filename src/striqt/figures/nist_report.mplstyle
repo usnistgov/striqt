@@ -15,7 +15,7 @@ mathtext.fontset: "custom"
 mathtext.it: "serif:italic"
 mathtext.rm: "serif:regular"
 mathtext.bf: "serif:bold"
-mathtext.default: "it"
+mathtext.default: "regular"
 
 # the following were tuned to some sense of "good proportion" with the font size
 xtick.major.size: 5
