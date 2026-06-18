@@ -52,6 +52,23 @@ def select_mpl_backend(
         plt.style.use(styles)
 
 
+def term_graphics_notice(interactive: str | None):
+    if interactive is None:
+        pass
+    elif interactive == 'sixel':
+        print(
+            "🪧 if plots don't appear in your terminal, ensure your terminal "
+            'sixel graphics protocol (wezterm, tabby, ...) '
+            'and that you are disconnected from screen or tmux'
+        )
+    else:
+        print(
+            "🪧 if plots don't appear in your terminal, ensure your terminal "
+            'supports the kitty graphics protocol (wezterm, iTerm2, ...) '
+            'and that you are disconnected from screen or tmux'
+        )
+
+
 def coerce_column(data: '_T', plotter: 'PlotBackend') -> '_T':
     """xarray plot routines only return FacetGrid objects"""
     opts = plotter.opts

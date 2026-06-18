@@ -81,7 +81,7 @@ def run(
 
     assert ncores is not None
     manager = multiprocessing.Manager()
-    _notify_term_graphics(interactive)
+    sf.backend.term_graphics_notice(interactive)
 
     executor = futures.ProcessPoolExecutor(
         max(1, ncores - 1),
@@ -217,23 +217,6 @@ def worker_plot(variable: str, sel: dict[str, typing.Any]):
     func = sf.data_vars._data_plots[variable]
 
     return func(ctx['data'].sel(**sel), ctx['plotter'], **kwargs)
-
-
-def _notify_term_graphics(interactive: str | None):
-    if interactive is None:
-        pass
-    elif interactive == 'sixel':
-        print(
-            "🪧 if plots don't appear in your terminal, ensure your terminal "
-            'sixel graphics protocol (wezterm, tabby, ...) '
-            'and that you are disconnected from screen or tmux'
-        )
-    else:
-        print(
-            "🪧 if plots don't appear in your terminal, ensure your terminal "
-            'supports the kitty graphics protocol (wezterm, iTerm2, ...) '
-            'and that you are disconnected from screen or tmux'
-        )
 
 
 if __name__ == '__main__':
