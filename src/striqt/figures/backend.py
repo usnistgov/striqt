@@ -42,11 +42,11 @@ def select_mpl_backend(
     elif interactive == 'sixel':
         mpl.use('module://matplotlib-backend-sixel')
         styles.append('striqt.figures.terminal')
-    elif interactive == 'kitcat':
+    elif interactive == 'kitcat' or interactive == 'kitty':
         mpl.use('kitcat')
         styles.append('striqt.figures.terminal')
     else:
-        raise ValueError('interactive argument must be "kitat", "sixel", or None')
+        raise ValueError('interactive argument must be "kitcat", "sixel", or None')
 
     if styles:
         plt.style.use(styles)
@@ -315,7 +315,7 @@ class PlotBackend:
                 name=data.name,
                 **data.attrs,
             )
-            path = Path(self.output_dir) / filename[0].with_extension('.plots')
+            path = Path(self.output_dir) / filename[0]
             grid.fig.savefig(path, dpi=dpi)
             sa.util.get_logger('analysis').info(f"💾 '{str(path)}'")
         else:

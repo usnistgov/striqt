@@ -171,7 +171,8 @@ def worker_init(
     if no_save:
         output_path = None
     else:
-        output_path = Path(zarr_path).parent / Path(zarr_path).name.split('.', 1)[0]
+        output_name = Path(zarr_path).name.split('.', 1)[0]
+        output_path = (Path(zarr_path).parent / output_name).with_suffix('.plots')
         output_path.mkdir(exist_ok=True)
 
     plotter = sf.backend.PlotBackend(
