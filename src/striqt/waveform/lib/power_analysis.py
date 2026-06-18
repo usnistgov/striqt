@@ -119,8 +119,7 @@ def _arraylike_with_buffer(
         try:
             xp = array_namespace(x)
         except AttributeError:
-            from dask.array import Array
-            xp = array_namespace(x)
+            xp = np
         values = x
     except TypeError:
         if hasattr(x, 'values'):
