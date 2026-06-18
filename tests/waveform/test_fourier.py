@@ -1217,7 +1217,8 @@ class TestNumpyCupyCrossComparison:
         result_cp = fourier.resample(x_cp, num_out)
         result_cp_np = result_cp.get() / x.std()
 
-        assert_allclose(result_cp_np, result_np, rtol=self.RTOL_FLOAT32, atol=self.ATOL)
+        assert (result_cp_np - result_np).std() < 1e-8, 'tolerance in error RMS power'
+        assert_allclose(result_cp_np, result_np, rtol=1e-4, atol=1e-6)
 
     # -------------------------------------------------------------------------
     # stft tests
@@ -1244,6 +1245,7 @@ class TestNumpyCupyCrossComparison:
         times_cp_np = times_cp.get()
         X_cp_np = X_cp.get()
 
+        assert (X_cp_np - X_np).std() < 1e-8, 'tolerance in error RMS power'
         assert_allclose(freqs_cp_np, freqs_np, rtol=self.RTOL_FLOAT32, atol=self.ATOL)
         assert_allclose(times_cp_np, times_np, rtol=self.RTOL_FLOAT32, atol=self.ATOL)
         assert_allclose(X_cp_np / X_np.std(), X_np / X_np.std(), rtol=1e-4, atol=2e-7)
@@ -1277,6 +1279,7 @@ class TestNumpyCupyCrossComparison:
 
         assert_allclose(freqs_cp_np, freqs_np, rtol=self.RTOL_FLOAT32, atol=self.ATOL)
         assert_allclose(times_cp_np, times_np, rtol=self.RTOL_FLOAT32, atol=self.ATOL)
+        assert np.abs(Sxx_cp_np - Sxx_np).mean() < 1e-4, 'tolerance in error RMS power'
         assert_allclose(Sxx_cp_np/scale, Sxx_np/scale, rtol=1e-4)
 
     # -------------------------------------------------------------------------
@@ -1302,6 +1305,7 @@ class TestNumpyCupyCrossComparison:
         result_cp = fourier.oaconvolve(x_cp, kernel_cp, mode='same')
         result_cp_np = result_cp.get()
 
+        assert (result_cp_np - result_np).std() < 1e-9, 'tolerance in error RMS power'
         assert_allclose(result_cp_np, result_np, rtol=self.RTOL_FLOAT64, atol=self.ATOL)
 
     @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=3000)
@@ -1323,4 +1327,5 @@ class TestNumpyCupyCrossComparison:
         result_cp = fourier.oaconvolve(x_cp, kernel_cp, mode='same')
         result_cp_np = result_cp.get() / x.std()
 
+        assert (result_cp_np - result_np).std() < 1e-8, 'tolerance in error RMS power'
         assert_allclose(result_cp_np, result_np, rtol=self.RTOL_FLOAT32, atol=self.ATOL)
