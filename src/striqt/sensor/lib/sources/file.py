@@ -28,7 +28,9 @@ class TDMSSource(base.VirtualSource[specs.TDMSSource, specs.FileCapture]):
 
     _file_info: specs.FileAcquisitionInfo
 
-    def _connect(self, spec):
+    def __init__(self, spec):
+        super().__init__(spec)
+        
         try:
             from nptdms import TdmsFile
         except ImportError:
@@ -125,6 +127,7 @@ class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture]):
         return str(self.setup_spec.path)
 
     def arm(self, capture):
+        super().arm(capture)
         if self.setup_spec.loop:
             self._file_stream.seek(0)
 
