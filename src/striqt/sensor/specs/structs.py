@@ -51,6 +51,7 @@ class SensorCapture(Capture, frozen=True, kw_only=True):
     host_resample: bool = True
     backend_sample_rate: Optional[types.BackendSampleRate] = None
     adjust_analysis: types.AnalysisAdjustments = msgspec.field(default_factory=dict)
+    external_lo_frequency: types.LOFrequency = None
 
 
 class SoapyCapture(SensorCapture, frozen=True, kw_only=True):

@@ -675,7 +675,8 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
         # gain before center frequency to accommodate attenuator settling time
         for c in specs.helpers.split_capture_ports(capture):
             assert not isinstance(c.center_frequency, tuple)
-            freq = c.center_frequency - rs['lo_offset']
+            lo_freq = c.external_lo_frequency or 0
+            freq = abs(lo_freq - (c.center_frequency - rs['lo_offset']))
             self.device.setGain(SoapySDR.SOAPY_SDR_RX, c.port, c.gain)
             self.device.setFrequency(SoapySDR.SOAPY_SDR_RX, c.port, freq)
             self.device.setSampleRate(SoapySDR.SOAPY_SDR_RX, c.port, rs['fs_sdr'])
