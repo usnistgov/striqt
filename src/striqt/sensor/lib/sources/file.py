@@ -106,7 +106,7 @@ class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture]):
             spec.path,
             format=spec.file_format,
             dtype='complex64',
-            xp=buffers.get_array_namespace(self.setup_spec.array_backend),
+            xp=buffers.get_array_namespace(spec.array_backend),
             loop=spec.loop,
             backend_sample_rate=spec.master_clock_rate,
             **meta,
