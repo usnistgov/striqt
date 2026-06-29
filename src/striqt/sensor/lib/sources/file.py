@@ -97,6 +97,8 @@ class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture]):
     _file_stream: FileStream
 
     def __init__(self, spec):
+        super().__init__(spec)
+
         meta = spec.file_metadata or {}
 
         if not Path(spec.path).exists():
@@ -171,6 +173,7 @@ class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture]):
 
     def __init__(self, spec):
         """set the waveform from an xarray.DataArray containing a single capture of IQ samples"""
+        super().__init__(spec)
 
         waveform = sa.io.load(spec.path).iq_waveform
 
