@@ -162,7 +162,7 @@ class EngFormatter(_ticker.EngFormatter):
             suffix = ''
 
         if self._usetex or self._useMathText:
-            return f'${mant:{fmt}}${suffix}'
+            return f'{mant:{fmt}}{suffix}'
         else:
             return f'{mant:{fmt}}{suffix}'
 

@@ -81,7 +81,7 @@ def run(
 
     assert ncores is not None
     manager = multiprocessing.Manager()
-    _notify_term_graphics(interactive)
+    sf.backend.term_graphics_notice(interactive)
 
     executor = futures.ProcessPoolExecutor(
         max(1, ncores - 1),
@@ -149,7 +149,7 @@ def load_data(zarr_path: str, opts: 'sf.specs.PlotOptions', index=True) -> 'xr.D
 def worker_init(
     zarr_path,
     opts: 'sf.specs.PlotOptions',
-    interactive: str | None,
+    interactive: typing.Literal['sixel', 'kitcat'] | None,
     no_save: bool,
     lock,
 ):
@@ -159,22 +159,8 @@ def worker_init(
     import striqt.figures as sf
     import striqt.analysis as sa
     import striqt.sensor as ss
-    import matplotlib as mpl
-    from matplotlib import pyplot as plt
 
-    plt.ioff()
-    if interactive is None:
-        mpl.use('agg')
-        extra_style = []
-    elif interactive == 'sixel':
-        mpl.use('module://matplotlib-backend-sixel')
-        extra_style = ['striqt.figures.terminal']
-    else:
-        mpl.use('kitcat')
-        extra_style = ['striqt.figures.terminal']
-
-    if opts.plotter.style is not None:
-        plt.style.use([opts.plotter.style] + extra_style)
+    sf.backend.select_mpl_backend(opts.plotter.style, interactive)
 
     filterwarnings('ignore', r'.*figure layout has changed.*', UserWarning)
     filterwarnings('ignore', '.*artists with labels.*', UserWarning)
@@ -185,7 +171,8 @@ def worker_init(
     if no_save:
         output_path = None
     else:
-        output_path = Path(zarr_path).parent / Path(zarr_path).name.split('.', 1)[0]
+        output_name = Path(zarr_path).name.split('.', 1)[0]
+        output_path = (Path(zarr_path).parent / output_name).with_suffix('.plots')
         output_path.mkdir(exist_ok=True)
 
     plotter = sf.backend.PlotBackend(
@@ -230,23 +217,6 @@ def worker_plot(variable: str, sel: dict[str, typing.Any]):
     func = sf.data_vars._data_plots[variable]
 
     return func(ctx['data'].sel(**sel), ctx['plotter'], **kwargs)
-
-
-def _notify_term_graphics(interactive: str | None):
-    if interactive is None:
-        pass
-    elif interactive == 'sixel':
-        print(
-            "🪧 if plots don't appear in your terminal, ensure your terminal "
-            'sixel graphics protocol (wezterm, tabby, ...) '
-            'and that you are disconnected from screen or tmux'
-        )
-    else:
-        print(
-            "🪧 if plots don't appear in your terminal, ensure your terminal "
-            'supports the kitty graphics protocol (wezterm, iTerm2, ...) '
-            'and that you are disconnected from screen or tmux'
-        )
 
 
 if __name__ == '__main__':

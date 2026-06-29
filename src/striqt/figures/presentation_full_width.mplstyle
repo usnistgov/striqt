@@ -13,7 +13,7 @@ xtick.labelsize: 18
 ytick.labelsize: 18
 mathtext.fontset: custom
 mathtext.it: "serif:italic"
-mathtext.rm: "serif:normal"
+mathtext.rm: "serif:regular"
 mathtext.bf: "serif:bold"
 mathtext.default: "it"
 

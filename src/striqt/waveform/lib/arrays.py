@@ -90,7 +90,11 @@ def float_dtype_like(x: Array, min_dtype: Any | None = None):
         x = np.asarray(x)
         xp = np
     else:
-        xp = array_namespace(x)
+        try:
+            xp = array_namespace(x)
+        except:
+            # dask workaround
+            xp = np
 
     try:
         dtype = np.finfo(xp.asarray(x).dtype).dtype
