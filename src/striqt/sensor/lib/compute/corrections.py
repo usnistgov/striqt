@@ -36,6 +36,8 @@ def correct_iq(
 
     Args:
         iq: IQ dataclass output by a source
+        signal_trigger: a `signal.analysis.Trigger` instance to implement a
+            waveform start alignment, or `None` to default to iq.info.signal_trigger
         axis: the axis of `x` along which to compute the filter
         overwrite_x: if True, modify the contents of IQ in-place; otherwise, a copy will be returned
 
@@ -49,6 +51,9 @@ def correct_iq(
 
     if not isinstance(capture, specs.SensorCapture):
         raise TypeError('iq.capture must be a capture specification')
+
+    if signal_trigger is None:
+        signal_trigger = iq.info.signal_trigger
 
     max_lag = _get_max_trigger_lag(iq.source_spec, capture, signal_trigger)
     resample_kws = {'overwrite_x': overwrite_x, 'min_overlap': max_lag, 'axis': axis}

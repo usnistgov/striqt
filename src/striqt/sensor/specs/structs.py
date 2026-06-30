@@ -491,6 +491,7 @@ class AcquisitionInfo(msgspec.Struct, kw_only=True, frozen=True):
     source_id: types.SourceID = ''
     sweep_index: Union[int, None] = None
     capture_index: int = 0
+    signal_trigger: sa.Trigger | None = None
 
     def replace(self, **attrs) -> _Self:
         """returns a copy of self with changed attributes.

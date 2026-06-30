@@ -30,9 +30,9 @@ class TDMSSource(base.VirtualSource[specs.TDMSSource, specs.FileCapture]):
 
     def __init__(self, spec):
         super().__init__(spec)
-        
+
         try:
-            from nptdms import TdmsFile
+            from nptdms import TdmsFile  # type: ignore
         except ImportError:
             raise ImportError('install nptdms to open TDMS files')
 
