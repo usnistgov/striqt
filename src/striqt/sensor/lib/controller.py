@@ -568,6 +568,7 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
                 signal_trigger = compute.get_trigger_from_spec(
                     self.source_spec, analysis
                 )
+
             overlaps = compute.get_correction_overlaps(
                 self.capture_spec, self.source_spec, analysis
             )
@@ -576,9 +577,7 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
             with read_retries(self):
                 samples, time_ns = self.read_iq(overlaps)
 
-            info = specs.AcquisitionInfo(
-                source_id=self.source_id, signal_trigger=signal_trigger
-            )
+            info = specs.AcquisitionInfo(source_id=self.source_id)
 
             iq = specs.AcquiredIQ(
                 format_path=self._config.format_path,
@@ -594,6 +593,7 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
             )
 
             iq = self.backend.package_iq(iq, samples, time_ns)
+            iq.info = iq.info.replace(signal_trigger=signal_trigger)
 
         else:
             iq = dataclasses.replace(
