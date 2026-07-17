@@ -300,6 +300,7 @@ class NoPeripherals(Peripherals, frozen=True, kw_only=True):
 class ManualYFactorPeripheral(Peripherals, frozen=True, kw_only=True):
     enr: types.ENR
     ambient_temperature: types.AmbientTemperature
+    implied_loops: tuple[str, ...] = ()
 
 
 # %% Top-level Sweep specifications
@@ -469,7 +470,8 @@ class CalibrationSweep(
     def __post_init__(self):
         super().__post_init__()
 
-        if not self.calibration.implied_loops and len(self.captures) > 1:
+        implied_loops = getattr(self.calibration, 'implied_loops', ())
+        if len(self.captures) > 1 and not implied_loops:
             raise TypeError(
                 'calibration sweeps may only include explicit capture sequences if implied_loops are specified'
             )

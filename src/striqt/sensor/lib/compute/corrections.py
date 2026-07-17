@@ -260,7 +260,6 @@ def _apply_conj(
 ) -> Array:
     assert isinstance(do_conj, tuple)
     xp = sw.array_namespace(x)
-    hot_inds = [bool(b) for b in do_conj]
 
     if not any(do_conj):
         return x

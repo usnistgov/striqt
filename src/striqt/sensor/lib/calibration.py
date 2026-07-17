@@ -171,7 +171,8 @@ class YFactorSink(sinks.SinkBase):
         port = int(data[0].port)
 
         loops = data[0].attrs['loops']
-        fields = [l['field'] for l in loops if l['field'] is not None]
+        implied_loops = (data[0].attrs['calibration'] or {}).get('implied_loops', [])
+        fields = implied_loops + [l['field'] for l in loops if l['field'] is not None]
         if 'sample_rate' in fields:
             i = fields.index('sample_rate')
             fields[i] = 'backend_sample_rate'
