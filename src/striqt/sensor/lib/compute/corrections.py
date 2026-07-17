@@ -47,6 +47,9 @@ def correct_iq(
     capture = iq.capture
     xp = sw.array_namespace(x)
 
+    if iq.conjugate:
+        _apply_conj(x, iq.conjugate, overwrite_x=overwrite_x)
+
     if not isinstance(capture, specs.SensorCapture):
         raise TypeError('iq.capture must be a capture specification')
 
@@ -250,6 +253,19 @@ def _apply_trigger_shifts(x: Array, shifts: Array, size_out: int) -> Array:
         for i in range(x.shape[0]):
             out[i, :] = x[i, shifts[i] : shifts[i] + size_out]
         return out
+
+
+def _apply_conj(x: Array, do_conj: tuple[bool|None, ...], overwrite_x: bool = False) -> Array:
+    assert isinstance(do_conj, tuple)
+    xp = sw.array_namespace(x)
+    hot_inds = [bool(b) for b in do_conj]
+
+    if not any(hot_inds):
+        return x
+
+    sub = sw.axis_index(x, hot_inds, axis=-2)
+
+    return xp.conj(sub, out=sub if overwrite_x else None)
 
 
 def _scale_only(
