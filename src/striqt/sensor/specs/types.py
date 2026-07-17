@@ -84,7 +84,8 @@ IsIn = Annotated[
     Meta('selects whether to loop a capture or analysis parameters'),
 ]
 LOFrequency = Annotated[
-    Union[float, None], Meta('LO frequency of external frequency converter')
+    Union[float, None, tuple[Union[float, None], ...]],
+    Meta('LO frequency of external frequency converter'),
 ]
 LOShift = Annotated[Literal['left', 'right', 'none'], Meta('LO shift direction')]
 MockSensor = Annotated[
