@@ -84,7 +84,7 @@ IsIn = Annotated[
     Meta('selects whether to loop a capture or analysis parameters'),
 ]
 LOFrequencyScalar = Annotated[
-    Union[float, None, tuple[Union[float, None], ...]],
+    Union[float, None],
     Meta('LO frequency of external frequency converter'),
 ]
 LOFrequency = Annotated[
