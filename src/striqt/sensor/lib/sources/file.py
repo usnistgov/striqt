@@ -113,6 +113,7 @@ class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture]):
             xp=buffers.get_array_namespace(spec.array_backend),
             loop=spec.loop,
             backend_sample_rate=spec.master_clock_rate,
+            key=spec.key,
             **meta,
         )
 

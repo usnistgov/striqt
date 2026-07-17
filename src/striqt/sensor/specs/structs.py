@@ -170,6 +170,7 @@ class MATSource(Source, kw_only=True, frozen=True):
     file_metadata: Union[types.FileMetadata, None] = None
     loop: types.FileLoop = False
     transport_dtype: ClassVar[types.TransportDType] = 'complex64'
+    key: str|None = None
 
 
 class TDMSSource(Source, frozen=True, kw_only=True):
@@ -507,7 +508,11 @@ class AcquisitionInfo(msgspec.Struct, kw_only=True, frozen=True):
 
     @classmethod
     def from_dict(cls: type[_T], d: dict) -> _T:
-        return cls(**d)
+        try:
+            return cls(**d)
+        except:
+            print(d)
+            raise
 
 
 class SoapyAcquisitionInfo(AcquisitionInfo, kw_only=True, frozen=True):

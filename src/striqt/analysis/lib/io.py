@@ -260,10 +260,11 @@ class MATNewFileStream(_FileStreamBase):
     def __init__(
         self,
         path,
+        *,
         backend_sample_rate: float,
+        key: str|None = None,
         skip_samples=0,
         dtype='complex64',
-        input_dtype='complex128',
         loop=False,
         xp=np,
         **meta,
@@ -272,15 +273,14 @@ class MATNewFileStream(_FileStreamBase):
             'backend_sample_rate': backend_sample_rate,
             'skip_samples': skip_samples,
             'dtype': dtype,
-            'input_dtype': input_dtype,
             'xp': xp,
         }
 
         import h5py  # noqa # type: ignore
 
         self._fd = h5py.File(path, 'r')
-        self._input_dtype = input_dtype
         self._loop = loop
+        self._key = key
 
         super().__init__(path, **(kws | meta))
 
@@ -317,7 +317,10 @@ class MATNewFileStream(_FileStreamBase):
             if not hasattr(ref, 'shape') or ref.ndim != 2:
                 continue
 
-            x = xp.asarray(ref, ref.dtype).view(self._input_dtype).astype(self.dtype)
+            raw = np.asarray(ref)
+            input_dtype = np.result_type(raw.dtype[0], complex)
+            x = raw.view(input_dtype).astype(self.dtype)
+
             array_list.append(x)
             tally += x.shape[1]
 
@@ -341,7 +344,14 @@ class MATNewFileStream(_FileStreamBase):
 
         super().seek(pos)
 
-        self._refs = list(self._fd['#refs#'].values())
+        if self._key:
+            iq = np.atleast_2d(self._fd[self._key])
+            self._refs = [iq]
+        elif '#refs#' in self._fd:
+            self._refs = list(self._fd['#refs#'].values())
+        else:
+            raise IOError('no data references found in file')
+
         self.read(self._skip_samples + pos)
 
 
