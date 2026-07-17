@@ -675,11 +675,13 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
         # gain before center frequency to accommodate attenuator settling time
         for c in specs.helpers.split_capture_ports(capture):
             assert not isinstance(c.center_frequency, tuple)
-            lo_freq = c.external_lo_frequency or 0
+            lo_freq = c.external_lo_frequency or 0.
+            assert isinstance(lo_freq, float)
             freq = abs(lo_freq - (c.center_frequency - rs['lo_offset']))
             self.device.setGain(SoapySDR.SOAPY_SDR_RX, c.port, c.gain)
             self.device.setFrequency(SoapySDR.SOAPY_SDR_RX, c.port, freq)
             self.device.setSampleRate(SoapySDR.SOAPY_SDR_RX, c.port, rs['fs_sdr'])
+        
         return capture
 
     def get_resampler(self, capture: specs.SoapyCapture) -> sw.ResamplerDesign:
@@ -756,5 +758,16 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
         iq.extra_data.update(compute_overload_info(samples, self.spec, capture))
         iq.extra_data.update(self.read_peripherals())
         _assign_iq_calibration(iq)
+
+        rs = self.get_resampler(capture)
+
+        # flag conjugating the IQ for any high_side LOs
+        conj = []
+        for c in specs.helpers.split_capture_ports(capture):
+            lo_freq = c.external_lo_frequency or 0.
+            assert isinstance(c.center_frequency, float) and isinstance(lo_freq, float)
+            diff = lo_freq - (c.center_frequency - rs['lo_offset'])
+            conj.append(diff > 0)
+        iq.conjugate = tuple(conj)
 
         return iq
