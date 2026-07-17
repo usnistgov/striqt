@@ -22,9 +22,11 @@ else:
 
 class _BatchTracker:
     size: int
+    total_size: int
 
     def __init__(self, captures: tuple[specs.SensorCapture, ...], min_size: int):
         sizes = specs.helpers.concat_group_sizes(captures, min_size=min_size)
+        self.total_size = sum(sizes)
 
         self._cycler = itertools.cycle(sizes)
         if len(sizes) > 0 and sizes[0] > 0:
