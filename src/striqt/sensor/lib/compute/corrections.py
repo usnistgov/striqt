@@ -47,9 +47,6 @@ def correct_iq(
     capture = iq.capture
     xp = sw.array_namespace(x)
 
-    if iq.conjugate:
-        _apply_conj(x, iq.conjugate, overwrite_x=overwrite_x)
-
     if not isinstance(capture, specs.SensorCapture):
         raise TypeError('iq.capture must be a capture specification')
 
@@ -63,6 +60,9 @@ def correct_iq(
         needs_filter = False
     else:
         x_pre_filter, offs = _resample(iq, **resample_kws)
+
+    if iq.conjugate:
+        x_pre_filter = _apply_conj(x_pre_filter, iq.conjugate, overwrite_x=True)
 
     # apply the filter here and ensure we're working with a copy if needed
     if needs_filter:
@@ -255,17 +255,28 @@ def _apply_trigger_shifts(x: Array, shifts: Array, size_out: int) -> Array:
         return out
 
 
-def _apply_conj(x: Array, do_conj: tuple[bool|None, ...], overwrite_x: bool = False) -> Array:
+def _apply_conj(
+    x: Array, do_conj: tuple[bool | None, ...], overwrite_x: bool = False
+) -> Array:
     assert isinstance(do_conj, tuple)
     xp = sw.array_namespace(x)
     hot_inds = [bool(b) for b in do_conj]
 
-    if not any(hot_inds):
+    if not any(do_conj):
         return x
+    if len(do_conj) != x.shape[-2]:
+        raise ValueError(
+            'conjugate size mismatch in internal API: this should never happen'
+        )
+    if not overwrite_x:
+        x = x.copy()
 
-    sub = sw.axis_index(x, hot_inds, axis=-2)
+    for port, port_conj in enumerate(do_conj):
+        if port_conj:
+            sub = x[..., port, :]
+            xp.conj(sub, out=sub)
 
-    return xp.conj(sub, out=sub if overwrite_x else None)
+    return x
 
 
 def _scale_only(
