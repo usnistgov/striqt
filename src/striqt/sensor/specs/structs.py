@@ -171,7 +171,7 @@ class MATSource(Source, kw_only=True, frozen=True):
     file_metadata: Union[types.FileMetadata, None] = None
     loop: types.FileLoop = False
     transport_dtype: ClassVar[types.TransportDType] = 'complex64'
-    key: str|None = None
+    key: Union[str,None] = None
 
 
 class TDMSSource(Source, frozen=True, kw_only=True):
