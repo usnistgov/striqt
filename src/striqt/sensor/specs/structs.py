@@ -197,12 +197,12 @@ class SharedPlotOptions(
     SpecBase, frozen=True, kw_only=True, forbid_unknown_fields=True
 ):
     # further validation in striqt.figures.specs subclass
-    style: str | None = None
-    col: str | None = 'port'
-    row: str | None = None
+    style: Union[str, None] = None
+    col: Union[str, None] = 'port'
+    row: Union[str, None] = None
     col_label_format: str = 'Port {port}'
-    row_label_format: str | None = None
-    col_wrap: int | None = None
+    row_label_format: Union[str, None] = None
+    col_wrap: Union[int, None] = None
     suptitle_fmt: str = '{start_time}'
     filename_fmt: str = '{name} {start_time}.svg'
 
@@ -211,7 +211,7 @@ class DataOptions(SpecBase, frozen=True, kw_only=True, forbid_unknown_fields=Tru
     # further validation in striqt.figures.specs subclass
     groupby_dims: tuple[str, ...] = ()
     sweep_index: int
-    query: str | None = None
+    query: Union[str, None] = None
     select: dict[str, Any] = msgspec.field(default_factory=dict)
 
 
@@ -495,7 +495,7 @@ class AcquisitionInfo(msgspec.Struct, kw_only=True, frozen=True):
     source_id: types.SourceID = ''
     sweep_index: Union[int, None] = None
     capture_index: int = 0
-    signal_trigger: sa.Trigger | None = None
+    signal_trigger: Union[sa.Trigger, None] = None
 
     def replace(self, **attrs) -> _Self:
         """returns a copy of self with changed attributes.
@@ -521,8 +521,8 @@ class AcquisitionInfo(msgspec.Struct, kw_only=True, frozen=True):
 class SoapyAcquisitionInfo(AcquisitionInfo, kw_only=True, frozen=True):
     """extra coordinate information returned from an acquisition"""
 
-    sweep_start_time: types.SweepStartTime | None = None
-    start_time: types.StartTime | None
+    sweep_start_time: Union[types.SweepStartTime, None] = None
+    start_time: Union[types.StartTime, None]
     backend_sample_rate: Optional[types.BackendSampleRate]
     source_id: types.SourceID = ''
 
