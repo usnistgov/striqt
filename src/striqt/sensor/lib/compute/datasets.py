@@ -312,6 +312,9 @@ def _coords_template(
                 continue
             coord_vars[field.name] = make_var(field)
 
+    # TODO: remove this hardcoded bolt-on fix
+    coord_vars.pop('signal_trigger', None)
+
     # templates for analysis loops
     for loop in loops:
         if loop.isin != 'analysis':
