@@ -33,9 +33,14 @@ class NoSource(SourceBackend[specs.NoSource, specs.SensorCapture]):
     def about(self):
         return specs.structs.SourceInfo(num_rx_ports=self.spec.num_rx_ports)
 
-    @util.cached_property
-    def id(self) -> str:  # pyright: ignore
+    def close(self):
+        pass
+
+    def get_id(self) -> str:  # pyright: ignore
         return 'null'
+
+    def get_info(self):
+        return specs.SourceInfo(num_rx_ports=self.spec.num_rx_ports)
 
     def reset_sample_counter(self, value=0):
         self._sync_time_source()
@@ -47,6 +52,9 @@ class NoSource(SourceBackend[specs.NoSource, specs.SensorCapture]):
 
     def setup(self, rx_ports: tuple[int, ...] | None = None):
         self.reset_sample_counter()
+
+    def trigger(self, overlaps=(0, 0)):
+        self._overlaps = overlaps
 
     def arm(self, capture):
         self._capture = capture

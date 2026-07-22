@@ -560,10 +560,15 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
         else:
             if self._config.analysis is None:
                 analysis = None
+                signal_trigger = None
             else:
                 analysis = specs.helpers.adjust_analysis(
                     self._config.analysis, self.capture_spec.adjust_analysis
                 )
+                signal_trigger = compute.get_trigger_from_spec(
+                    self.source_spec, analysis
+                )
+
             overlaps = compute.get_correction_overlaps(
                 self.capture_spec, self.source_spec, analysis
             )
@@ -588,6 +593,7 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
             )
 
             iq = self.backend.package_iq(iq, samples, time_ns)
+            iq.info = iq.info.replace(signal_trigger=signal_trigger)
 
         else:
             iq = dataclasses.replace(

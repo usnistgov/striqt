@@ -171,6 +171,7 @@ class MATSource(Source, kw_only=True, frozen=True):
     file_metadata: Union[types.FileMetadata, None] = None
     loop: types.FileLoop = False
     transport_dtype: ClassVar[types.TransportDType] = 'complex64'
+    key: str|None = None
 
 
 class TDMSSource(Source, frozen=True, kw_only=True):
@@ -494,6 +495,7 @@ class AcquisitionInfo(msgspec.Struct, kw_only=True, frozen=True):
     source_id: types.SourceID = ''
     sweep_index: Union[int, None] = None
     capture_index: int = 0
+    signal_trigger: sa.Trigger | None = None
 
     def replace(self, **attrs) -> _Self:
         """returns a copy of self with changed attributes.
@@ -509,7 +511,11 @@ class AcquisitionInfo(msgspec.Struct, kw_only=True, frozen=True):
 
     @classmethod
     def from_dict(cls: type[_T], d: dict) -> _T:
-        return cls(**d)
+        try:
+            return cls(**d)
+        except:
+            print(d)
+            raise
 
 
 class SoapyAcquisitionInfo(AcquisitionInfo, kw_only=True, frozen=True):
