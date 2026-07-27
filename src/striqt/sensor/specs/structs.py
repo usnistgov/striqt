@@ -147,9 +147,7 @@ class SoapySource(Source, frozen=True, kw_only=True):
             pass
         elif self.signal_trigger not in registry.signal_trigger:
             registered = set(registry.signal_trigger)
-            raise ValueError(
-                f'signal_trigger "{self.signal_trigger!r}" is not one of the registered functions {registered!r}'
-            )
+            raise ValueError(f'signal_trigger must be one of {registered!r}')
 
 
 class FunctionSource(Source, kw_only=True, frozen=True):
@@ -171,7 +169,7 @@ class MATSource(Source, kw_only=True, frozen=True):
     file_metadata: Union[types.FileMetadata, None] = None
     loop: types.FileLoop = False
     transport_dtype: ClassVar[types.TransportDType] = 'complex64'
-    key: Union[str,None] = None
+    key: Union[str, None] = None
 
 
 class TDMSSource(Source, frozen=True, kw_only=True):

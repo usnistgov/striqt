@@ -160,6 +160,7 @@ class _FakeLock:
 class PlotBackend:
     opts: specs.SharedPlotOptions
     lock: RLock | _FakeLock
+    last_grid: 'xarray.plot.FacetGrid | None' = None
 
     def __init__(
         self,
@@ -188,7 +189,7 @@ class PlotBackend:
         else:
             col = self.opts.col
 
-        return {  # ty: ignore
+        return {
             **kwargs,
             'figsize': mpl.rcParams['figure.figsize'],
             'col_wrap': self.opts.col_wrap,
@@ -344,6 +345,8 @@ class PlotBackend:
             with self.lock:
                 grid.fig.show()
                 plt.close(grid.fig)
+
+        self.last_grid = grid
 
         return path
 

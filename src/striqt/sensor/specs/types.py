@@ -80,7 +80,8 @@ GaplessRepeat = Annotated[
     Meta('whether to raise an exception on overflows between identical captures'),
 ]
 ImpliedLoops = Annotated[
-    tuple[str, ...], Meta(standard_name='List of looped fields embedded in the capture list')
+    tuple[str, ...],
+    Meta(standard_name='List of looped fields embedded in the capture list'),
 ]
 
 IsIn = Annotated[
