@@ -29,10 +29,11 @@ def run(yaml_path: str):
     print(f'Opening sensor resources...')
     import sys
 
-    spec = spec.replace(extensions=spec.extensions.replace(sink='striqt.sensor.sinks.NoSink'))
+    spec = spec.replace(
+        extensions=spec.extensions.replace(sink='striqt.sensor.sinks.NoSink')
+    )
 
     manager = ss.open_resources(spec, yaml_path, test_only=True)
-
 
     with manager as res:
         assert isinstance(spec.sensor, ss.lib.bindings.SensorBinding)

@@ -168,7 +168,7 @@ def batch_term_images(interactive: typing.Literal['sixel', 'kitcat'] | None):
     image_payload = buffer.getvalue()
 
     if interactive == 'kitcat' or interactive == 'kitty':
-        image_payload = "\033_Ga=d,d=a\033\\\033[H" + image_payload
+        image_payload = '\033_Ga=d,d=a\033\\\033[H' + image_payload
 
     sys.stdout.write(image_payload)
     sys.stdout.flush()
