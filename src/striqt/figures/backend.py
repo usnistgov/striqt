@@ -160,8 +160,17 @@ class _FakeLock:
         pass
 
 
-def _replace_kitty_images(image_payload=''):
-    sys.stdout.write("\033_Ga=d,d=a\033\\\033[H" + image_payload)
+@contextlib.contextmanager
+def batch_term_images(interactive: typing.Literal['sixel', 'kitcat'] | None):
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer):
+        yield
+    image_payload = buffer.getvalue()
+
+    if interactive == 'kitcat' or interactive == 'kitty':
+        image_payload = "\033_Ga=d,d=a\033\\\033[H" + image_payload
+
+    sys.stdout.write(image_payload)
     sys.stdout.flush()
 
 
@@ -351,18 +360,8 @@ class PlotBackend:
             plt.ion()
         elif self.interactive:
             with self.lock:
-
-                buffer = io.StringIO()
-                with contextlib.redirect_stdout(buffer):
-                    grid.fig.show()  # nab the contextlib output
-                image_payload = buffer.getvalue()
+                grid.fig.show()  # nab the contextlib output
                 plt.close(grid.fig)
-                
-                if self.interactive == 'kitty':
-                    _replace_kitty_images(image_payload)
-                else:
-                    sys.stdout.write(image_payload)
-                    sys.stdout.flush()
 
         self.last_grid = grid
 
