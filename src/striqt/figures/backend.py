@@ -9,6 +9,7 @@ from . import specs, util
 
 import striqt.analysis as sa
 import striqt.waveform as sw
+import sys
 
 if typing.TYPE_CHECKING:
     from typing_extensions import NotRequired, Unpack
@@ -155,6 +156,12 @@ class _FakeLock:
 
     def __exit__(self, *args):
         pass
+
+
+def _clear_kitty_images():
+    # sys.stdout.write('\033[H')
+    sys.stdout.write("\033_Ga=d,d=a\033\\\033[H")
+    sys.stdout.flush()
 
 
 class PlotBackend:
@@ -343,6 +350,8 @@ class PlotBackend:
             plt.ion()
         elif self.interactive:
             with self.lock:
+                if self.interactive == 'kitty':
+                    _clear_kitty_images()
                 grid.fig.show()
                 plt.close(grid.fig)
 
