@@ -1,6 +1,9 @@
 from __future__ import annotations as __
+import contextlib
 import functools
+import io
 from pathlib import Path
+import sys
 import typing
 
 from multiprocessing import RLock
@@ -9,7 +12,6 @@ from . import specs, util
 
 import striqt.analysis as sa
 import striqt.waveform as sw
-import sys
 
 if typing.TYPE_CHECKING:
     from typing_extensions import NotRequired, Unpack
@@ -158,9 +160,8 @@ class _FakeLock:
         pass
 
 
-def _clear_kitty_images():
-    # sys.stdout.write('\033[H')
-    sys.stdout.write("\033_Ga=d,d=a\033\\\033[H")
+def _replace_kitty_images(image_payload=''):
+    sys.stdout.write("\033_Ga=d,d=a\033\\\033[H" + image_payload)
     sys.stdout.flush()
 
 
@@ -350,10 +351,18 @@ class PlotBackend:
             plt.ion()
         elif self.interactive:
             with self.lock:
-                if self.interactive == 'kitty':
-                    _clear_kitty_images()
-                grid.fig.show()
+
+                buffer = io.StringIO()
+                with contextlib.redirect_stdout(buffer):
+                    grid.fig.show()  # nab the contextlib output
+                image_payload = buffer.getvalue()
                 plt.close(grid.fig)
+                
+                if self.interactive == 'kitty':
+                    _replace_kitty_images(image_payload)
+                else:
+                    sys.stdout.write(image_payload)
+                    sys.stdout.flush()
 
         self.last_grid = grid
 
