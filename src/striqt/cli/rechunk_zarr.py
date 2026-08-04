@@ -75,18 +75,12 @@ def run(zarr_input: str, zarr_output: str | None, chunk_size, compression):
     else:
         c = compression
 
-    import zarr
-
-    print(zarr.config.get('codec_pipeline.path'))
-
-    sa.util.show_messages(sa.util.INFO)
-    with sa.util.stopwatch('rechunk', logger_level=sa.util.INFO):
-        sa.dump(
-            store,
-            data,
-            chunk_bytes=1_000_000 * chunk_size,
-            compression=c,  # type: ignore
-        )
+    sa.dump(
+        store,
+        data,
+        chunk_bytes=1_000_000 * chunk_size,
+        compression=c,  # type: ignore
+    )
 
 
 def choose_zarr_pipeline(support_zip: bool):
