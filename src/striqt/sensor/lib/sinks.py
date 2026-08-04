@@ -41,19 +41,14 @@ class Zipper:
     temp_dir: str
     temp_spec: specs.Sink|None
 
-    def __init__(self, zip_path, sink: SinkBase|None=None):
-        if sink is None:
-            force = False
-        else:
-            force = sink.force
-
+    def __init__(self, zip_path, sink: SinkBase|None=None, force: bool = False):
         if sink is not None and sink._format_path is not None:
             self.zip_path = Path(sink._format_path(zip_path))
         else:
             self.zip_path = Path(zip_path)
 
         if self.zip_path.exists() and not force:
-            raise IOError(f'a zip archive already exists at "{self.zip_path!s}"')
+            raise IOError(f'file "{self.zip_path!s}" already exists')
         elif force:
             logger = sa.util.get_logger('sink')
             logger.warning(f'will overwrite existing "{self.zip_path!s}"')
@@ -66,7 +61,7 @@ class Zipper:
             self.temp_spec = sink._spec.replace(path=self.temp_dir)
 
     @classmethod
-    def from_zarr(cls, input_dir: str|Path, out_file: str|Path|None=None):
+    def from_zarr(cls, input_dir: str|Path, out_file: str|Path|None=None, force: bool = False) -> Zipper:
         """instatiate a zipper from an existing zarr directory"""
         input_dir = Path(input_dir)
 
@@ -76,7 +71,7 @@ class Zipper:
         if out_file is None:
             out_file = input_dir.parent/(input_dir.name + '.zip')
 
-        zipper = cls(out_file)
+        zipper = cls(out_file, force=force)
         zipper.temp_dir = str(input_dir)
         
         return zipper
@@ -218,10 +213,12 @@ class ZarrSinkBase(SinkBase):
         path = Path(self._spec.path)
 
         if path.name.lower().endswith('.zarr.zip'):
-            self._zipper = Zipper(path, self)
+            self._zipper = Zipper(path, self, self.force)
             spec = self._zipper.temp_spec
         else:
             spec = self._spec
+
+        assert spec is not None
 
         self.store = io.open_store(
             spec, format_path=self._format_path, force=self.force
