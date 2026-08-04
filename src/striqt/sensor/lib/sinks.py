@@ -36,12 +36,7 @@ class _BatchTracker:
         return self.size
 
 
-class _Zipper:
-    BUFFER_SIZE = 10 * 1024 * 1024
-    temp_dir: str
-    temp_spec: specs.Sink
-
-class _Zipper:
+class Zipper:
     BUFFER_SIZE = 10 * 1024 * 1024
     temp_dir: str
     temp_spec: specs.Sink|None
@@ -217,13 +212,13 @@ class NoSink(SinkBase):
 
 
 class ZarrSinkBase(SinkBase):
-    _zipper: _Zipper | None = None
+    _zipper: Zipper | None = None
 
     def open(self):
         path = Path(self._spec.path)
 
         if path.name.lower().endswith('.zarr.zip'):
-            self._zipper = _Zipper(path, self)
+            self._zipper = Zipper(path, self)
             spec = self._zipper.temp_spec
         else:
             spec = self._spec
