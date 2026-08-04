@@ -262,7 +262,7 @@ class MATNewFileStream(_FileStreamBase):
         path,
         *,
         backend_sample_rate: float,
-        key: str|None = None,
+        key: str | None = None,
         skip_samples=0,
         dtype='complex64',
         loop=False,

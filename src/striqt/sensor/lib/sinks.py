@@ -39,9 +39,9 @@ class _BatchTracker:
 class Zipper:
     BUFFER_SIZE = 10 * 1024 * 1024
     temp_dir: str
-    temp_spec: specs.Sink|None
+    temp_spec: specs.Sink | None
 
-    def __init__(self, zip_path, sink: SinkBase|None=None, force: bool = False):
+    def __init__(self, zip_path, sink: SinkBase | None = None, force: bool = False):
         if sink is not None and sink._format_path is not None:
             self.zip_path = Path(sink._format_path(zip_path))
         else:
@@ -61,7 +61,12 @@ class Zipper:
             self.temp_spec = sink._spec.replace(path=self.temp_dir)
 
     @classmethod
-    def from_zarr(cls, input_dir: str|Path, out_file: str|Path|None=None, force: bool = False) -> Zipper:
+    def from_zarr(
+        cls,
+        input_dir: str | Path,
+        out_file: str | Path | None = None,
+        force: bool = False,
+    ) -> Zipper:
         """instatiate a zipper from an existing zarr directory"""
         input_dir = Path(input_dir)
 
@@ -69,11 +74,11 @@ class Zipper:
             raise IOError(f'no such directory {str(input_dir)}')
 
         if out_file is None:
-            out_file = input_dir.parent/(input_dir.name + '.zip')
+            out_file = input_dir.parent / (input_dir.name + '.zip')
 
         zipper = cls(out_file, force=force)
         zipper.temp_dir = str(input_dir)
-        
+
         return zipper
 
     def archive(self, remove=True):

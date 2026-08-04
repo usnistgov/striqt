@@ -17,7 +17,9 @@ def cli(zarr_input: str, zarr_output: str | None, remove: bool, force: bool):
     zip_zarr(zarr_input, zarr_output, remove=remove, force=force)
 
 
-def zip_zarr(zarr_input: str, zarr_output: str | None, remove: bool=False, force: bool=False):
+def zip_zarr(
+    zarr_input: str, zarr_output: str | None, remove: bool = False, force: bool = False
+):
     from pathlib import Path
     import striqt.analysis as sa
     from striqt.sensor.lib.sinks import Zipper
@@ -42,18 +44,6 @@ def zip_zarr(zarr_input: str, zarr_output: str | None, remove: bool=False, force
     zipper.archive(remove)
 
     print(f'wrote "{path_out!s}"')
-
-
-@functools.cache
-def try_zarrs_input():
-    try:
-        import zarrs  # type: ignore
-    except ImportError:
-        print('not accelerating with zarrs because it could not be imported')
-    else:
-        import zarr
-
-        zarr.config.set({'codec_pipeline.path': 'zarrs.ZarrsCodecPipeline'})
 
 
 def generate_timestamp_suffix(data) -> str:
