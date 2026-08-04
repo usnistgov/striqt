@@ -41,22 +41,52 @@ class _Zipper:
     temp_dir: str
     temp_spec: specs.Sink
 
-    def __init__(self, zip_path, sink: SinkBase):
-        if sink._format_path is not None:
+class _Zipper:
+    BUFFER_SIZE = 10 * 1024 * 1024
+    temp_dir: str
+    temp_spec: specs.Sink|None
+
+    def __init__(self, zip_path, sink: SinkBase|None=None):
+        if sink is None:
+            force = False
+        else:
+            force = sink.force
+
+        if sink is not None and sink._format_path is not None:
             self.zip_path = Path(sink._format_path(zip_path))
         else:
             self.zip_path = Path(zip_path)
 
-        if self.zip_path.exists() and not sink.force:
+        if self.zip_path.exists() and not force:
             raise IOError(f'a zip archive already exists at "{self.zip_path!s}"')
-        elif sink.force:
+        elif force:
             logger = sa.util.get_logger('sink')
             logger.warning(f'will overwrite existing "{self.zip_path!s}"')
 
         self.temp_dir = str(self.zip_path.with_suffix(''))
-        self.temp_spec = sink._spec.replace(path=self.temp_dir)
 
-    def archive(self):
+        if sink is None:
+            self.temp_spec = None
+        else:
+            self.temp_spec = sink._spec.replace(path=self.temp_dir)
+
+    @classmethod
+    def from_zarr(cls, input_dir: str|Path, out_file: str|Path|None=None):
+        """instatiate a zipper from an existing zarr directory"""
+        input_dir = Path(input_dir)
+
+        if not input_dir.exists():
+            raise IOError(f'no such directory {str(input_dir)}')
+
+        if out_file is None:
+            out_file = input_dir.parent/(input_dir.name + '.zip')
+
+        zipper = cls(out_file)
+        zipper.temp_dir = str(input_dir)
+        
+        return zipper
+
+    def archive(self, remove=True):
         """archive the .zarr directory and return the path to the zipfile"""
         if not Path(self.temp_dir).exists():
             return
@@ -78,7 +108,8 @@ class _Zipper:
             stream.flush()
             os.fsync(stream.fileno())
 
-        shutil.rmtree(self.temp_dir)
+        if remove:
+            shutil.rmtree(self.temp_dir)
 
         return str(self.zip_path)
 
