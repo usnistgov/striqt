@@ -31,8 +31,15 @@ def run(zarr_input: str, zarr_output: str | None, chunk_size, compression):
 
     path_in = Path(zarr_input)
 
-    if path_in.name.endswith('.zarr'):
-        try_zarrs_input()
+    # if path_in.name.endswith('.zarr'):
+    if zarr_input.endswith('.zip'):
+        support_zip = True
+    elif zarr_output is not None and zarr_output.endswith('.zip'):
+        support_zip = True
+    else:
+        support_zip = False
+
+    choose_zarr_pipeline(support_zip)
 
     data = sa.load(path_in)
 
@@ -57,11 +64,11 @@ def run(zarr_input: str, zarr_output: str | None, chunk_size, compression):
         try:
             from zarr import codecs  # pyright: ignore
 
-            # zarr v3
+            # compatibility: zarr v3
             shuffle = codecs.BloscShuffle.shuffle
             c = codecs.BloscCodec(cname='zstd', clevel=compression, shuffle=shuffle)
         except (ImportError, AttributeError):
-            # zarr v2
+            # compatibility: zarr v2
             import numcodecs
 
             c = numcodecs.Blosc('zstd', clevel=compression)
@@ -76,16 +83,28 @@ def run(zarr_input: str, zarr_output: str | None, chunk_size, compression):
     )
 
 
-@functools.cache
-def try_zarrs_input():
-    try:
-        import zarrs  # type: ignore
-    except ImportError:
-        print('not accelerating with zarrs because it could not be imported')
-    else:
-        import zarr
+def choose_zarr_pipeline(support_zip: bool):
+    import zarr
 
-        zarr.config.set({'codec_pipeline.path': 'zarrs.ZarrsCodecPipeline'})
+    if not support_zip:
+        try:
+            # compatibility: optional zarrs package
+            import zarrs  # type: ignore
+        except ImportError:
+            pass
+        else:
+            zarr.config.set({'codec_pipeline.path': 'zarrs.ZarrsCodecPipeline'})
+            return
+
+    try:
+        # compatibility: zarr-python >= 3.3 package
+        from zarr.core import codec_pipeline
+    except ImportError:
+        pass
+    else:
+        pipeline = 'zarr.core.codec_pipeline.FusedCodecPipeline'
+        zarr.config.set({'codec_pipeline.path': pipeline})
+        return
 
 
 def generate_timestamp_suffix(data) -> str:
