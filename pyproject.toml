@@ -31,6 +31,8 @@ dependencies = [
     "eval_type_backport",
     "exceptiongroup>=1.2",
     "typing-extensions",
+    "fastapi>=0.128.8",
+    "uvicorn[standard]>=0.39.0",
 ]
 
 [[project.authors]]
