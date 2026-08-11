@@ -51,6 +51,7 @@ class SensorCapture(Capture, frozen=True, kw_only=True):
     host_resample: bool = True
     backend_sample_rate: Optional[types.BackendSampleRate] = None
     adjust_analysis: types.AnalysisAdjustments = msgspec.field(default_factory=dict)
+    external_lo_frequency: types.LOFrequency = None
 
 
 class SoapyCapture(SensorCapture, frozen=True, kw_only=True):
@@ -146,9 +147,7 @@ class SoapySource(Source, frozen=True, kw_only=True):
             pass
         elif self.signal_trigger not in registry.signal_trigger:
             registered = set(registry.signal_trigger)
-            raise ValueError(
-                f'signal_trigger "{self.signal_trigger!r}" is not one of the registered functions {registered!r}'
-            )
+            raise ValueError(f'signal_trigger must be one of {registered!r}')
 
 
 class FunctionSource(Source, kw_only=True, frozen=True):
@@ -196,12 +195,12 @@ class SharedPlotOptions(
     SpecBase, frozen=True, kw_only=True, forbid_unknown_fields=True
 ):
     # further validation in striqt.figures.specs subclass
-    style: str | None = None
-    col: str | None = 'port'
-    row: str | None = None
+    style: Union[str, None] = None
+    col: Union[str, None] = 'port'
+    row: Union[str, None] = None
     col_label_format: str = 'Port {port}'
-    row_label_format: str | None = None
-    col_wrap: int | None = None
+    row_label_format: Union[str, None] = None
+    col_wrap: Union[int, None] = None
     suptitle_fmt: str = '{start_time}'
     filename_fmt: str = '{name} {start_time}.svg'
 
@@ -210,7 +209,7 @@ class DataOptions(SpecBase, frozen=True, kw_only=True, forbid_unknown_fields=Tru
     # further validation in striqt.figures.specs subclass
     groupby_dims: tuple[str, ...] = ()
     sweep_index: int
-    query: str | None = None
+    query: Union[str, None] = None
     select: dict[str, Any] = msgspec.field(default_factory=dict)
 
 
@@ -300,6 +299,7 @@ class NoPeripherals(Peripherals, frozen=True, kw_only=True):
 class ManualYFactorPeripheral(Peripherals, frozen=True, kw_only=True):
     enr: types.ENR
     ambient_temperature: types.AmbientTemperature
+    implied_loops: tuple[str, ...] = ()
 
 
 # %% Top-level Sweep specifications
@@ -469,9 +469,10 @@ class CalibrationSweep(
     def __post_init__(self):
         super().__post_init__()
 
-        if len(self.captures) > 1:
+        implied_loops = getattr(self.calibration, 'implied_loops', ())
+        if len(self.captures) > 1 and not implied_loops:
             raise TypeError(
-                'calibration sweeps may specify loops but not captures, only loops'
+                'calibration sweeps may only include explicit capture sequences if implied_loops are specified'
             )
         if self.source.calibration is not None:
             raise ValueError('source.calibration must be None for a calibration sweep')
@@ -492,7 +493,10 @@ class AcquisitionInfo(msgspec.Struct, kw_only=True, frozen=True):
     source_id: types.SourceID = ''
     sweep_index: Union[int, None] = None
     capture_index: int = 0
-    signal_trigger: sa.Trigger | None = None
+
+    # TODO: this is wrong. want sa.Trigger, but that is triggering a type
+    # resolution problem in py39
+    signal_trigger: Union[str, None] = None
 
     def replace(self, **attrs) -> _Self:
         """returns a copy of self with changed attributes.
@@ -518,8 +522,8 @@ class AcquisitionInfo(msgspec.Struct, kw_only=True, frozen=True):
 class SoapyAcquisitionInfo(AcquisitionInfo, kw_only=True, frozen=True):
     """extra coordinate information returned from an acquisition"""
 
-    sweep_start_time: types.SweepStartTime | None = None
-    start_time: types.StartTime | None
+    sweep_start_time: Union[types.SweepStartTime, None] = None
+    start_time: Union[types.StartTime, None]
     backend_sample_rate: Optional[types.BackendSampleRate]
     source_id: types.SourceID = ''
 

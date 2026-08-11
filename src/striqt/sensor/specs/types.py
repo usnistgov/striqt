@@ -79,9 +79,22 @@ GaplessRepeat = Annotated[
     bool,
     Meta('whether to raise an exception on overflows between identical captures'),
 ]
+ImpliedLoops = Annotated[
+    tuple[str, ...],
+    Meta(standard_name='List of looped fields embedded in the capture list'),
+]
+
 IsIn = Annotated[
     Literal['capture', 'analysis'],
     Meta('selects whether to loop a capture or analysis parameters'),
+]
+LOFrequencyScalar = Annotated[
+    Union[float, None],
+    Meta('LO frequency of external frequency converter'),
+]
+LOFrequency = Annotated[
+    Union[LOFrequencyScalar, tuple[LOFrequencyScalar, ...]],
+    Meta('LO frequency of external frequency converter'),
 ]
 LOShift = Annotated[Literal['left', 'right', 'none'], Meta('LO shift direction')]
 MockSensor = Annotated[

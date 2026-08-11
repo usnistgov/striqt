@@ -1,6 +1,9 @@
 from __future__ import annotations as __
+import contextlib
 import functools
+import io
 from pathlib import Path
+import sys
 import typing
 
 from multiprocessing import RLock
@@ -157,9 +160,24 @@ class _FakeLock:
         pass
 
 
+@contextlib.contextmanager
+def batch_term_images(interactive: typing.Literal['sixel', 'kitcat'] | None):
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer):
+        yield
+    image_payload = buffer.getvalue()
+
+    if interactive == 'kitcat' or interactive == 'kitty':
+        image_payload = '\033_Ga=d,d=a\033\\\033[H' + image_payload
+
+    sys.stdout.write(image_payload)
+    sys.stdout.flush()
+
+
 class PlotBackend:
     opts: specs.SharedPlotOptions
     lock: RLock | _FakeLock
+    last_grid: 'xarray.plot.FacetGrid | None' = None
 
     def __init__(
         self,
@@ -188,7 +206,7 @@ class PlotBackend:
         else:
             col = self.opts.col
 
-        return {  # ty: ignore
+        return {
             **kwargs,
             'figsize': mpl.rcParams['figure.figsize'],
             'col_wrap': self.opts.col_wrap,
@@ -342,8 +360,10 @@ class PlotBackend:
             plt.ion()
         elif self.interactive:
             with self.lock:
-                grid.fig.show()
+                grid.fig.show()  # nab the contextlib output
                 plt.close(grid.fig)
+
+        self.last_grid = grid
 
         return path
 

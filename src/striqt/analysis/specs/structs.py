@@ -186,7 +186,7 @@ class Cellular5GNRSSBSpectrogram(Analysis, kw_only=True, frozen=True):
     max_block_count: typing.Optional[int] = None
 
     # spectrogram info
-    window: types.WindowType = ('kaiser_by_enbw', 2)
+    window: types.WindowType = 'blackmanharris'
     lo_bandstop: typing.Optional[float] = None
 
     # hard-coded for re-use by PSS/SSS functions

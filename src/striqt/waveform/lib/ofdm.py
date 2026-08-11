@@ -391,6 +391,9 @@ def index_pss_symbols(
     else:
         raise TypeError('symbol_index has valid type')
 
+    if isinstance(center_frequency, tuple):
+        center_frequency = max(center_frequency)
+
     if symbol_indexes == 'auto':
         if isclose(subcarrier_spacing, 15e3):
             case = 'a'

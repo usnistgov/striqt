@@ -35,3 +35,6 @@ class AcquiredIQ(sa.dataarrays.AcquiredIQ):
     resampler: sw.ResamplerDesign
     format_path: helpers.PathFormatter | None = None
     voltage_scale: sw.typing.Array | float = 1
+
+    # whether to evaluate the complex conjugate of each port
+    conjugate: tuple[bool, ...] | False = False
