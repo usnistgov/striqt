@@ -28,14 +28,14 @@ IGNORE_HIGHSIDE_LO = int(os.environ.get('STRIQT_IGNORE_HIGHSIDE_LO', 0))
 if IGNORE_HIGHSIDE_LO:
     warnings.warn(
         'bypassing corrections for highside-LO downconversion '
-        '(shell environment STRIQT_IGNORE_HIGHSIDE_LO=1)'
+        '(shell STRIQT_IGNORE_HIGHSIDE_LO=1)'
     )
 
 # oaresample is experimental, and can leave a residual time offset
 USE_OARESAMPLE = int(os.environ.get('STRIQT_USE_OARESAMPLE', 0))
 if USE_OARESAMPLE:
     warnings.warn(
-        'experimental oaresample is enabled (shell environment STRIQT_USE_OARESAMPLE=1)'
+        'experimental oaresample is enabled (shell STRIQT_USE_OARESAMPLE=1)'
     )
 
 
