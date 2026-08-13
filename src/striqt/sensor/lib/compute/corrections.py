@@ -19,6 +19,10 @@ else:
     array_api_compat = util.lazy_import('array_api_compat')
     sw = util.lazy_import('striqt.waveform')
 
+FILTER_SIZE = 4001
+MIN_OARESAMPLE_FFT_SIZE = 4 * 4096 - 1
+RESAMPLE_COLA_WINDOW = 'hamming'
+
 # bypass for the conjugate correction for downconversion based on high-side LO
 IGNORE_HIGHSIDE_LO = int(os.environ.get('STRIQT_IGNORE_HIGHSIDE_LO', 0))
 if IGNORE_HIGHSIDE_LO:
@@ -33,10 +37,6 @@ if USE_OARESAMPLE:
     warnings.warn(
         'experimental oaresample is enabled (shell environment STRIQT_USE_OARESAMPLE=1)'
     )
-
-FILTER_SIZE = 4001
-MIN_OARESAMPLE_FFT_SIZE = 4 * 4096 - 1
-RESAMPLE_COLA_WINDOW = 'hamming'
 
 
 def correct_iq(
