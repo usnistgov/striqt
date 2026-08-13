@@ -4,6 +4,7 @@ import dataclasses
 from math import ceil, isfinite
 import os
 from typing import TYPE_CHECKING
+import warnings
 
 from .. import sources, util
 from ... import specs
@@ -20,9 +21,18 @@ else:
 
 # bypass for the conjugate correction for downconversion based on high-side LO
 IGNORE_HIGHSIDE_LO = int(os.environ.get('STRIQT_IGNORE_HIGHSIDE_LO', 0))
+if IGNORE_HIGHSIDE_LO:
+    warnings.warn(
+        'bypassing corrections for highside-LO downconversion '
+        '(shell environment STRIQT_IGNORE_HIGHSIDE_LO=1)'
+    )
 
 # oaresample is experimental, and can leave a residual time offset
 USE_OARESAMPLE = int(os.environ.get('STRIQT_USE_OARESAMPLE', 0))
+if USE_OARESAMPLE:
+    warnings.warn(
+        'experimental oaresample is enabled (shell environment STRIQT_USE_OARESAMPLE=1)'
+    )
 
 FILTER_SIZE = 4001
 MIN_OARESAMPLE_FFT_SIZE = 4 * 4096 - 1
