@@ -2,6 +2,7 @@ from __future__ import annotations as __
 
 import dataclasses
 from math import ceil, isfinite
+import os
 from typing import TYPE_CHECKING
 
 from .. import sources, util
@@ -17,9 +18,12 @@ else:
     array_api_compat = util.lazy_import('array_api_compat')
     sw = util.lazy_import('striqt.waveform')
 
+# bypass for the conjugate correction for downconversion based on high-side LO
+IGNORE_HIGHSIDE_LO = int(os.environ.get('STRIQT_IGNORE_HIGHSIDE_LO', 0))
 
 # oaresample is experimental, and can leave a residual time offset
-USE_OARESAMPLE = False
+USE_OARESAMPLE = int(os.environ.get('STRIQT_USE_OARESAMPLE', 0))
+
 FILTER_SIZE = 4001
 MIN_OARESAMPLE_FFT_SIZE = 4 * 4096 - 1
 RESAMPLE_COLA_WINDOW = 'hamming'
@@ -66,7 +70,7 @@ def correct_iq(
     else:
         x_pre_filter, offs = _resample(iq, **resample_kws)
 
-    if iq.conjugate:
+    if iq.conjugate and not IGNORE_HIGHSIDE_LO:
         x_pre_filter = _apply_conj(x_pre_filter, iq.conjugate, overwrite_x=True)
 
     # apply the filter here and ensure we're working with a copy if needed

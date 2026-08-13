@@ -399,7 +399,7 @@ class PlotBackend:
                     labels: list[typing.Any] = long_axis.get_ticklabels()
                     long_axis.set_ticks(
                         cbar.get_ticks().tolist() + [n],
-                        labels + ['$k T B$' if i == 0 else ''],  # ty: ignore
+                        labels + ['$k T B$' if i == 0 else ''],
                     )
                     label = long_axis.get_ticklabels()[-1]
                     label.set_color('#eec009')
