@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Striqt WebView - Real-time Radio Diagnostics</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            min-height: 100vh;
+        }
+        .header {
+            background: #fff;
+            padding: 1rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #ddd;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 500;
+        }
+        .controls {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        .control-group label {
+            font-size: 0.9rem;
+            color: #666;
+        }
+        select {
+            background: #fff;
+            color: #333;
+            border: 1px solid #ccc;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+        select:hover {
+            border-color: #0066cc;
+        }
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+        }
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #dc3545;
+        }
+        .status-dot.connected {
+            background: #28a745;
+        }
+        .main {
+            padding: 1rem;
+            height: calc(100vh - 70px);
+            display: flex;
+            gap: 1rem;
+        }
+        .plot-area {
+            flex: 1;
+            min-width: 0;
+            height: 100%;
+        }
+        #plot-container {
+            width: 100%;
+            height: 100%;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #999;
+        }
+        .sidebar {
+            width: 380px;
+            height: 100%;
+            background: #fff;
+            border-radius: 8px;
+            padding: 1rem;
+            overflow-y: auto;
+            flex-shrink: 0;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .coords-section {
+            margin-bottom: 1.5rem;
+        }
+        .coords-section:last-child {
+            margin-bottom: 0;
+        }
+        .coords-section h2 {
+            font-size: 0.9rem;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            color: #0066cc;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 0.4rem;
+        }
+        .coords-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+        }
+        .coords-table th {
+            text-align: left;
+            padding: 0.4rem 0.5rem;
+            color: #666;
+            font-weight: 500;
+            border-bottom: 1px solid #ddd;
+        }
+        .coords-table td {
+            padding: 0.3rem 0.5rem;
+            border-bottom: 1px solid #eee;
+            word-break: break-word;
+        }
+        .coords-table tr:hover {
+            background: #f8f9fa;
+        }
+        .coords-table .coord-name {
+            color: #666;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 0.75rem;
+            padding-left: 1rem;
+        }
+        .coords-table .coord-value {
+            color: #333;
+        }
+        .coords-table .coord-unit {
+            color: #888;
+            font-style: italic;
+        }
+        .coords-table .group-header td {
+            background: #e9ecef;
+            color: #0066cc;
+            font-weight: 500;
+            padding: 0.5rem;
+            font-size: 0.85rem;
+        }
+        .coords-table .group-header:hover {
+            background: #e9ecef;
+        }
+        .coords-table .section-header td {
+            background: #f8f9fa;
+            color: #0066cc;
+            font-weight: 500;
+            padding: 0.4rem 0.5rem;
+            font-size: 0.8rem;
+            border-bottom: 1px solid #ddd;
+        }
+        .coords-table .section-header:hover {
+            background: #f8f9fa;
+        }
+        /* Collapsible details styling */
+        .coords-details {
+            margin-bottom: 0.5rem;
+        }
+        .coords-details summary {
+            cursor: pointer;
+            padding: 0.5rem 0.75rem;
+            background: #e9ecef;
+            color: #0066cc;
+            font-weight: 500;
+            font-size: 0.85rem;
+            border-radius: 4px;
+            list-style: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .coords-details summary::-webkit-details-marker {
+            display: none;
+        }
+        .coords-details summary::before {
+            content: '▶';
+            font-size: 0.7rem;
+            transition: transform 0.2s;
+        }
+        .coords-details[open] summary::before {
+            transform: rotate(90deg);
+        }
+        .coords-details summary:hover {
+            background: #dee2e6;
+        }
+        .coords-details .coords-table {
+            margin-top: 0.25rem;
+        }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1 id="header-title">&#x1F4E1; Striqt WebView</h1>
+        <div class="controls">
+            <div class="control-group">
+                <label for="variable-select">Data Variable:</label>
+                <select id="variable-select">
+                    <option value="">Loading...</option>
+                </select>
+            </div>
+            <div class="status">
+                <div class="status-dot" id="status-dot"></div>
+                <span id="status-text">Connecting...</span>
+            </div>
+        </div>
+    </div>
+    <div class="main">
+        <div class="sidebar" id="coords-sidebar">
+            <div class="coords-section">
+                <p style="color: #666; font-size: 0.8rem;">Waiting for data...</p>
+            </div>
+        </div>
+        <div class="plot-area">
+            <div id="plot-container">
+                <div class="loading">Waiting for data...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const plotContainer = document.getElementById('plot-container');
+        const variableSelect = document.getElementById('variable-select');
+        const statusDot = document.getElementById('status-dot');
+        const statusText = document.getElementById('status-text');
+        const coordsSidebar = document.getElementById('coords-sidebar');
+
+        let ws = null;
+        let currentVariable = '';
+        let plotInitialized = false;
+        let variablesInitialized = false;
+
+        // Plotly layout defaults for light theme
+        const lightLayout = {
+            paper_bgcolor: '#fff',
+            plot_bgcolor: '#fff',
+            font: { color: '#333' },
+            xaxis: {
+                gridcolor: '#e0e0e0',
+                zerolinecolor: '#ccc'
+            },
+            yaxis: {
+                gridcolor: '#e0e0e0',
+                zerolinecolor: '#ccc'
+            },
+            margin: { t: 50, r: 50, b: 60, l: 70 }
+        };
+
+        function connect() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+
+            ws.onopen = () => {
+                statusDot.classList.add('connected');
+                statusText.textContent = 'Connected';
+                // Request initial state
+                ws.send(JSON.stringify({ type: 'get_state' }));
+            };
+
+            ws.onclose = () => {
+                statusDot.classList.remove('connected');
+                statusText.textContent = 'Disconnected';
+                // Reconnect after delay
+                setTimeout(connect, 2000);
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+
+            ws.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+                handleMessage(msg);
+            };
+        }
+
+        function handleMessage(msg) {
+            // Update header title with spec filename if provided
+            if (msg.spec_filename) {
+                document.getElementById('header-title').textContent = '\u{1F4E1} ' + msg.spec_filename;
+            }
+
+            switch (msg.type) {
+                case 'state':
+                    // State message always updates variables (initial connection)
+                    variablesInitialized = false;
+                    updateVariableSelect(msg.available_variables, msg.variable_labels, msg.selected_variable);
+                    if (msg.coordinates) {
+                        updateCoordsTable(msg.coordinates);
+                    }
+                    break;
+                case 'plot_data':
+                    updatePlot(msg.data);
+                    // Only update variables if not yet initialized (first data after reconnect)
+                    if (msg.available_variables && !variablesInitialized) {
+                        updateVariableSelect(msg.available_variables, msg.variable_labels, msg.selected_variable);
+                    }
+                    if (msg.coordinates) {
+                        updateCoordsTable(msg.coordinates);
+                    }
+                    break;
+                case 'error':
+                    console.error('Server error:', msg.message);
+                    showError(msg.message);
+                    break;
+            }
+        }
+
+        function updateCoordsTable(coordinatesData) {
+            // coordinatesData has 'num_ports', 'groups' (capture coords), and 'extra_coords' (AcquisitionInfo)
+            if (!coordinatesData || !coordinatesData.groups || Object.keys(coordinatesData.groups).length === 0) {
+                coordsSidebar.innerHTML = `
+                    <div class="coords-section">
+                        <p style="color: #666; font-size: 0.8rem;">No capture data yet</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            const numPorts = coordinatesData.num_ports || 1;
+            const groups = coordinatesData.groups;
+            const extraCoords = coordinatesData.extra_coords || {};
+            
+            let html = '<div class="coords-section">';
+            
+            // Render all extra_coords (AcquisitionInfo) in ONE unified table inside a single collapsible
+            // Use class names as section header rows within the table
+            if (Object.keys(extraCoords).length > 0) {
+                html += `
+                    <details class="coords-details" open>
+                        <summary>AcquisitionInfo</summary>
+                        <table class="coords-table">
+                            <tbody>
+                `;
+                
+                for (const [className, coords] of Object.entries(extraCoords)) {
+                    // Add a section header row for this class
+                    html += `<tr class="section-header"><td colspan="2">${className}</td></tr>`;
+                    
+                    for (const coord of coords) {
+                        html += `<tr><td class="coord-name">${coord.name}</td>`;
+                        html += `<td class="coord-value">${coord.value || ''}</td></tr>`;
+                    }
+                }
+                
+                html += `</tbody></table></details>`;
+            }
+            
+            // Render all capture coordinate groups in ONE unified table inside a single collapsible
+            // Use class names as section header rows within the table for proper column alignment
+            html += `
+                <details class="coords-details" open>
+                    <summary>Capture</summary>
+                    <table class="coords-table">
+                        <thead>
+                            <tr>
+                                <th class="coord-name"></th>
+            `;
+            
+            // Add column headers for each port
+            for (let i = 0; i < numPorts; i++) {
+                html += `<th class="coord-value">Port ${i}</th>`;
+            }
+            html += `<th class="coord-unit"></th></tr></thead><tbody>`;
+            
+            for (const [className, coords] of Object.entries(groups)) {
+                // Extract just the class name from the full module path
+                const shortName = className.split('.').pop();
+                const numCols = numPorts + 2; // name + ports + unit
+                
+                // Add a section header row for this class
+                html += `<tr class="section-header"><td colspan="${numCols}">${shortName}</td></tr>`;
+                
+                for (const coord of coords) {
+                    html += `<tr><td class="coord-name">${coord.name}</td>`;
+                    
+                    // Add value cells for each port
+                    const values = coord.values || [coord.value];
+                    for (let i = 0; i < numPorts; i++) {
+                        const val = values[i] !== undefined ? values[i] : values[0];
+                        html += `<td class="coord-value">${val}</td>`;
+                    }
+                    
+                    html += `<td class="coord-unit">${coord.unit || ''}</td></tr>`;
+                }
+            }
+            
+            html += `</tbody></table></details>`;
+            
+            html += '</div>';
+            
+            coordsSidebar.innerHTML = html;
+        }
+
+        function updateVariableSelect(variables, labels, selected) {
+            variableSelect.innerHTML = '';
+            if (!variables || variables.length === 0) {
+                // No variables available yet - show waiting state
+                const option = document.createElement('option');
+                option.value = '';
+                option.textContent = 'Waiting for data...';
+                variableSelect.appendChild(option);
+                variablesInitialized = false;
+                return;
+            }
+            variables.forEach(v => {
+                const option = document.createElement('option');
+                option.value = v;
+                // Use standard_name from labels if available, otherwise fall back to variable name
+                option.textContent = (labels && labels[v]) ? labels[v] : v.replace(/_/g, ' ');
+                if (v === selected) {
+                    option.selected = true;
+                    currentVariable = v;
+                }
+                variableSelect.appendChild(option);
+            });
+            variablesInitialized = true;
+        }
+
+        function showError(message) {
+            plotContainer.innerHTML = `
+                <div class="loading" style="flex-direction: column; gap: 1rem;">
+                    <div style="color: #e94560; font-size: 1.2rem;">⚠️ ${message}</div>
+                    <div style="color: #666; font-size: 0.9rem;">Try selecting a different data variable</div>
+                </div>
+            `;
+            plotInitialized = false;
+        }
+
+        function updatePlot(plotData) {
+            if (!plotData || plotData.length === 0) {
+                return;
+            }
+
+            const data = plotData[0];
+            const traces = data.traces;
+            const layout = { ...lightLayout, ...data.layout };
+
+            if (!plotInitialized) {
+                Plotly.newPlot(plotContainer, traces, layout, {
+                    responsive: true,
+                    displayModeBar: true,
+                    modeBarButtonsToRemove: ['lasso2d', 'select2d']
+                });
+                plotInitialized = true;
+            } else {
+                // Use react for efficient updates
+                Plotly.react(plotContainer, traces, layout);
+            }
+        }
+
+        variableSelect.addEventListener('change', (e) => {
+            const newVariable = e.target.value;
+            if (newVariable && newVariable !== currentVariable) {
+                currentVariable = newVariable;
+                plotInitialized = false;  // Reset plot for new variable type
+                ws.send(JSON.stringify({
+                    type: 'select_variable',
+                    variable: newVariable
+                }));
+            }
+        });
+
+        // Start connection
+        connect();
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            if (plotInitialized) {
+                Plotly.Plots.resize(plotContainer);
+            }
+        });
+    </script>
+</body>
+</html>
