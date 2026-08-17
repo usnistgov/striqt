@@ -383,12 +383,10 @@
             html += `<th class="coord-unit"></th></tr></thead><tbody>`;
             
             for (const [className, coords] of Object.entries(groups)) {
-                // Extract just the class name from the full module path
-                const shortName = className.split('.').pop();
                 const numCols = numPorts + 2; // name + ports + unit
                 
-                // Add a section header row for this class
-                html += `<tr class="section-header"><td colspan="${numCols}">${shortName}</td></tr>`;
+                // Add a section header row for this class (show full module path)
+                html += `<tr class="section-header"><td colspan="${numCols}">${className}</td></tr>`;
                 
                 for (const coord of coords) {
                     html += `<tr><td class="coord-name">${coord.name}</td>`;
