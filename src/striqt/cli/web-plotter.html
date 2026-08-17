@@ -11,18 +11,17 @@
         }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #f5f5f5;
-            color: #333;
+            background: #1a1a2e;
+            color: #eee;
             min-height: 100vh;
         }
         .header {
-            background: #fff;
+            background: #16213e;
             padding: 1rem 2rem;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            border-bottom: 1px solid #ddd;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            border-bottom: 1px solid #0f3460;
         }
         .header h1 {
             font-size: 1.5rem;
@@ -37,21 +36,22 @@
             display: flex;
             align-items: center;
             gap: 0.5rem;
+        }
         .control-group label {
             font-size: 0.9rem;
-            color: #666;
+            color: #aaa;
         }
         select {
-            background: #fff;
-            color: #333;
-            border: 1px solid #ccc;
+            background: #0f3460;
+            color: #eee;
+            border: 1px solid #1a1a2e;
             padding: 0.5rem 1rem;
             border-radius: 4px;
             font-size: 0.9rem;
             cursor: pointer;
         }
         select:hover {
-            border-color: #0066cc;
+            border-color: #e94560;
         }
         .status {
             display: flex;
@@ -63,10 +63,10 @@
             width: 8px;
             height: 8px;
             border-radius: 50%;
-            background: #dc3545;
+            background: #e94560;
         }
         .status-dot.connected {
-            background: #28a745;
+            background: #4ade80;
         }
         .main {
             padding: 1rem;
@@ -82,26 +82,24 @@
         #plot-container {
             width: 100%;
             height: 100%;
-            background: #fff;
+            background: #16213e;
             border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
         .loading {
             display: flex;
             align-items: center;
             justify-content: center;
             height: 100%;
-            color: #999;
+            color: #666;
         }
         .sidebar {
             width: 380px;
             height: 100%;
-            background: #fff;
+            background: #16213e;
             border-radius: 8px;
             padding: 1rem;
             overflow-y: auto;
             flex-shrink: 0;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
         .coords-section {
             margin-bottom: 1.5rem;
@@ -113,8 +111,8 @@
             font-size: 0.9rem;
             font-weight: 500;
             margin-bottom: 0.5rem;
-            color: #0066cc;
-            border-bottom: 1px solid #ddd;
+            color: #4ade80;
+            border-bottom: 1px solid #0f3460;
             padding-bottom: 0.4rem;
         }
         .coords-table {
@@ -125,51 +123,51 @@
         .coords-table th {
             text-align: left;
             padding: 0.4rem 0.5rem;
-            color: #666;
+            color: #888;
             font-weight: 500;
-            border-bottom: 1px solid #ddd;
+            border-bottom: 1px solid #0f3460;
         }
         .coords-table td {
             padding: 0.3rem 0.5rem;
-            border-bottom: 1px solid #eee;
+            border-bottom: 1px solid #0f3460;
             word-break: break-word;
         }
         .coords-table tr:hover {
-            background: #f8f9fa;
+            background: #1a1a2e;
         }
         .coords-table .coord-name {
-            color: #666;
+            color: #aaa;
             font-family: 'SF Mono', Monaco, monospace;
             font-size: 0.75rem;
             padding-left: 1rem;
         }
         .coords-table .coord-value {
-            color: #333;
+            color: #eee;
         }
         .coords-table .coord-unit {
             color: #888;
             font-style: italic;
         }
         .coords-table .group-header td {
-            background: #e9ecef;
-            color: #0066cc;
+            background: #0f3460;
+            color: #4ade80;
             font-weight: 500;
             padding: 0.5rem;
             font-size: 0.85rem;
         }
         .coords-table .group-header:hover {
-            background: #e9ecef;
+            background: #0f3460;
         }
         .coords-table .section-header td {
-            background: #f8f9fa;
-            color: #0066cc;
+            background: #1a1a2e;
+            color: #4ade80;
             font-weight: 500;
             padding: 0.4rem 0.5rem;
             font-size: 0.8rem;
-            border-bottom: 1px solid #ddd;
+            border-bottom: 1px solid #0f3460;
         }
         .coords-table .section-header:hover {
-            background: #f8f9fa;
+            background: #1a1a2e;
         }
         /* Collapsible details styling */
         .coords-details {
@@ -178,8 +176,8 @@
         .coords-details summary {
             cursor: pointer;
             padding: 0.5rem 0.75rem;
-            background: #e9ecef;
-            color: #0066cc;
+            background: #0f3460;
+            color: #4ade80;
             font-weight: 500;
             font-size: 0.85rem;
             border-radius: 4px;
@@ -200,11 +198,10 @@
             transform: rotate(90deg);
         }
         .coords-details summary:hover {
-            background: #dee2e6;
+            background: #1a4a7a;
         }
         .coords-details .coords-table {
             margin-top: 0.25rem;
-        }
         }
     </style>
 </head>
@@ -249,18 +246,18 @@
         let plotInitialized = false;
         let variablesInitialized = false;
 
-        // Plotly layout defaults for light theme
-        const lightLayout = {
-            paper_bgcolor: '#fff',
-            plot_bgcolor: '#fff',
-            font: { color: '#333' },
+        // Plotly layout defaults for dark theme
+        const darkLayout = {
+            paper_bgcolor: '#16213e',
+            plot_bgcolor: '#1a1a2e',
+            font: { color: '#eee' },
             xaxis: {
-                gridcolor: '#e0e0e0',
-                zerolinecolor: '#ccc'
+                gridcolor: '#2a2a4e',
+                zerolinecolor: '#3a3a5e'
             },
             yaxis: {
-                gridcolor: '#e0e0e0',
-                zerolinecolor: '#ccc'
+                gridcolor: '#2a2a4e',
+                zerolinecolor: '#3a3a5e'
             },
             margin: { t: 50, r: 50, b: 60, l: 70 }
         };
@@ -342,27 +339,29 @@
             
             let html = '<div class="coords-section">';
             
-            // Render all extra_coords (AcquisitionInfo) in ONE unified table inside a single collapsible
-            // Use class names as section header rows within the table
+            // First, render extra_coords (AcquisitionInfo) - each in its own collapsible with a simple 2-column table
             if (Object.keys(extraCoords).length > 0) {
-                html += `
-                    <details class="coords-details" open>
-                        <summary>AcquisitionInfo</summary>
-                        <table class="coords-table">
-                            <tbody>
-                `;
-                
                 for (const [className, coords] of Object.entries(extraCoords)) {
-                    // Add a section header row for this class
-                    html += `<tr class="section-header"><td colspan="2">${className}</td></tr>`;
+                    html += `
+                        <details class="coords-details" open>
+                            <summary>${className}</summary>
+                            <table class="coords-table">
+                                <thead>
+                                    <tr>
+                                        <th class="coord-name"></th>
+                                        <th class="coord-value">Value</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                    `;
                     
                     for (const coord of coords) {
                         html += `<tr><td class="coord-name">${coord.name}</td>`;
                         html += `<td class="coord-value">${coord.value || ''}</td></tr>`;
                     }
+                    
+                    html += `</tbody></table></details>`;
                 }
-                
-                html += `</tbody></table></details>`;
             }
             
             // Render all capture coordinate groups in ONE unified table inside a single collapsible
@@ -385,7 +384,7 @@
             for (const [className, coords] of Object.entries(groups)) {
                 const numCols = numPorts + 2; // name + ports + unit
                 
-                // Add a section header row for this class (show full module path)
+                // Add a section header row for this class (display full module path)
                 html += `<tr class="section-header"><td colspan="${numCols}">${className}</td></tr>`;
                 
                 for (const coord of coords) {
@@ -451,7 +450,7 @@
 
             const data = plotData[0];
             const traces = data.traces;
-            const layout = { ...lightLayout, ...data.layout };
+            const layout = { ...darkLayout, ...data.layout };
 
             if (!plotInitialized) {
                 Plotly.newPlot(plotContainer, traces, layout, {
