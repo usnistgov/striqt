@@ -24,19 +24,13 @@ from typing import Any, ClassVar, Dict, List, Literal, Optional, Set, Tuple, Typ
 
 import click
 import numpy as np
+import plotly.graph_objects as go
 import xarray as xr
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 
 def _to_numpy(arr: Any) -> np.ndarray:
-    """Convert array to numpy, handling cupy arrays transparently.
-
-    This enables web-plotter to work on systems where xarray data
-    is backed by cupy arrays (e.g., Jetson TX2i with GPU acceleration).
-
-    Note: Only data variables (DataArray.values) may be cupy arrays.
-    Coordinates are always numpy arrays and don't need this conversion.
-    """
+    """Convert array to numpy, handling cupy arrays transparently."""
     if hasattr(arr, 'get'):
         # cupy array - transfer to CPU
         return arr.get()  # ty: ignore[return-value]
@@ -87,21 +81,7 @@ class CoordinatesData(TypedDict, total=False):
 
 
 class AppState(TypedDict, total=False):
-    """Type definition for the global application state.
-
-    Keys:
-        delayed_dataset: Current DelayedDataset from acquisition
-        plotter: Retained WebPlotBackend instance (preserves vmin/vmax across captures)
-        selected_variable: Currently selected data variable name
-        available_variables: List of available data variable names
-        variable_labels: Mapping from variable name to display label (standard_name)
-        websockets: Set of connected WebSocket clients
-        broadcast_pending: Flag to prevent broadcast queue buildup
-        data_updated: Flag indicating new data is available
-        plot_opts: Plot options from spec file
-        data_select: Selection dict from DataOptions.select for xarray.sel()
-        spec_filename: Name of the YAML/JSON spec file being used
-    """
+    """Type definition for the global application state."""
 
     delayed_dataset: Optional['ss.lib.compute.DelayedDataset']
     plotter: Optional['WebPlotBackend']
@@ -165,10 +145,8 @@ class WebPlotBackend:
         self.opts = opts
         self._pending_traces: List[Dict[str, Any]] = []
         self._layout: Dict[str, Any] = {}
-        # Track vmin/vmax across captures for consistent colorbar scaling (heatmaps)
         self._remembered_vmin: Optional[float] = None
         self._remembered_vmax: Optional[float] = None
-        # Track ymin/ymax across captures for consistent y-axis scaling (line plots)
         self._remembered_ymin: Optional[float] = None
         self._remembered_ymax: Optional[float] = None
 
@@ -250,7 +228,6 @@ class WebPlotBackend:
         # Compute shared vmin/vmax across ALL data (all ports) for consistent colorbar
         data_np = _to_numpy(data.values)
         if vmin is None:
-            # Remember the min vmin across captures for consistent colorbar scaling
             current_vmin = float(np.nanmin(data_np))
             if self._remembered_vmin is None:
                 self._remembered_vmin = current_vmin
@@ -258,7 +235,6 @@ class WebPlotBackend:
                 self._remembered_vmin = min(self._remembered_vmin, current_vmin)
             vmin = self._remembered_vmin
         if vmax is None:
-            # Remember the max vmax across captures for consistent colorbar scaling
             current_vmax = float(np.nanmax(data_np))
             if self._remembered_vmax is None:
                 self._remembered_vmax = current_vmax
@@ -346,15 +322,19 @@ class WebPlotBackend:
             if z_data.shape == (len(x_data), len(y_data)):
                 z_data = z_data.T
 
-        # Convert to lists for JSON serialization
-        # Use preserve_inf=True for heatmaps to show -Inf as very low values
+        # Handle Inf values for heatmaps - replace with NaN (Plotly shows as gaps)
+        if np.issubdtype(z_data.dtype, np.floating):
+            z_data = np.where(np.isinf(z_data), np.nan, z_data)
+
+        # Build trace dict - pass numpy arrays directly, Plotly's to_json() will
+        # automatically apply binary encoding for ~50% smaller payloads
         trace: Dict[str, Any] = {
-            'type': 'heatmap',  # Use 'heatmapgl' for WebGL acceleration
-            'x': _to_json_serializable(x_data),
-            'y': _to_json_serializable(y_data),
-            'z': _to_json_serializable(z_data, preserve_inf=True),
+            'type': 'heatmap',
+            'x': x_data,
+            'y': y_data,
+            'z': z_data,
             'colorscale': colorscale,
-            'showscale': show_colorbar,  # Only show colorbar when requested
+            'showscale': show_colorbar,
         }
 
         # Add colorbar configuration only if showing
@@ -445,7 +425,6 @@ class WebPlotBackend:
 
         n_subplots = len(data[col_dim].values) if col_dim else 1
 
-        # Track and expand y-axis limits persistently across captures
         # Compute current data range (excluding inf values)
         data_np = _to_numpy(data.values)
         finite_mask = np.isfinite(data_np)
@@ -920,18 +899,22 @@ class WebPlotBackend:
 
 def _to_json_serializable(
     arr: Union[np.ndarray, Any], preserve_inf: bool = False
-) -> Union[list, float, int, str, None]:
-    """Convert numpy arrays to JSON-serializable format.
+) -> Union[np.ndarray, list, float, int, str, None]:
+    """Convert arrays to a format suitable for Plotly graph objects.
+
+    Returns numpy arrays directly for numeric data (Plotly's to_json() will
+    automatically apply binary encoding for ~50% smaller payloads).
+    Falls back to list format for non-numeric arrays.
 
     Handles NaN and Inf values:
-    - NaN -> None (JSON null)
-    - Inf -> None by default (for line plots where gaps are preferred)
-    - Inf -> large finite value if preserve_inf=True (for heatmaps)
+    - NaN -> preserved (Plotly handles as gaps)
+    - Inf -> NaN by default (for line plots where gaps are preferred)
+    - Inf -> preserved if preserve_inf=True (for heatmaps, shown as extreme values)
 
     Args:
         arr: The array or value to convert
-        preserve_inf: If True, convert Inf to large finite values (for heatmaps).
-                     If False, convert Inf to None (for line plots).
+        preserve_inf: If True, keep Inf values (for heatmaps).
+                     If False, convert Inf to NaN (for line plots).
     """
     # Use large but finite values for Inf when preserving
     _INF_REPLACEMENT = 1e38
@@ -966,16 +949,27 @@ def _to_json_serializable(
         arr = arr.get()  # ty: ignore[call-non-callable]
 
     if isinstance(arr, np.ndarray):
-        if arr.dtype.kind in ('U', 'S', 'O'):  # String types
+        # String types - must use list format
+        if arr.dtype.kind in ('U', 'S', 'O'):
             return arr.tolist()
-        # Handle datetime64
+        # Handle datetime64 - must use list format
         if np.issubdtype(arr.dtype, np.datetime64):
             return [str(x) for x in arr]
-        # Handle timedelta64
+        # Handle timedelta64 - convert to seconds
         if np.issubdtype(arr.dtype, np.timedelta64):
-            return (arr / np.timedelta64(1, 's')).tolist()  # Convert to seconds
-        # Convert to list and sanitize NaN/Inf values
+            arr = (arr / np.timedelta64(1, 's')).astype(np.float64)
+
+        # For numeric arrays, handle Inf values and return numpy array
+        # Plotly's to_json() will automatically apply binary encoding
+        if arr.dtype.kind in ('f', 'i', 'u'):
+            arr = np.ascontiguousarray(arr)
+            if not preserve_inf and np.issubdtype(arr.dtype, np.floating):
+                arr = np.where(np.isinf(arr), np.nan, arr)
+            return arr
+
+        # Fallback to list format for other types
         return _sanitize_list(arr.tolist())
+
     if isinstance(arr, (np.floating, np.integer)):
         val = float(arr)
         return _sanitize_value(val)
@@ -1327,8 +1321,6 @@ def _prepare_plot_data_sync(
     data_plots = get_data_plots_registry()
     plot_func = data_plots[variable]
 
-    # Pull the relevant variable and materialize it into an xarray dataset
-    # This is the main blocking operation - triggers GPU computation on TX2i
     delayed = _select_delayed_variable(result, variable)
     ds = compute.from_delayed(delayed).set_xindex('port')
 
@@ -1349,21 +1341,52 @@ def _prepare_plot_data_sync(
     return plot_data, coordinates
 
 
-async def _do_broadcast():
-    """Internal broadcast implementation.
+def _serialize_plot_message(
+    plot_data: List[Dict[str, Any]],
+    coordinates: CoordinatesData,
+    available_variables: List[str],
+    variable_labels: Dict[str, str],
+    selected_variable: str,
+    spec_filename: str,
+) -> str:
+    """Serialize plot message using Plotly's binary encoding for numpy arrays."""
+    serialized_plots = []
+    for plot in plot_data:
+        traces = plot.get('traces', [])
+        layout = plot.get('layout', {})
 
-    Uses asyncio.to_thread() to run blocking operations (GPU computation,
-    coordinate extraction, plotting) in a thread pool. This prevents the
-    event loop from being blocked, which would cause:
-    - New WebSocket connections to hang
-    - Signal handlers (Ctrl+C) to be unresponsive
-    - Existing connections to time out
-    """
+        go_traces = []
+        for trace in traces:
+            trace_type = trace.get('type', 'scatter')
+            if trace_type == 'heatmap':
+                go_traces.append(go.Heatmap(trace))
+            elif trace_type == 'scattergl':
+                go_traces.append(go.Scattergl(trace))
+            elif trace_type == 'scatter':
+                go_traces.append(go.Scatter(trace))
+            else:
+                go_traces.append(trace)
+
+        fig = go.Figure(data=go_traces, layout=layout)
+        serialized_plots.append(json.loads(fig.to_json()))
+
+    return json.dumps({
+        'type': 'plot_data',
+        'data': serialized_plots,
+        'coordinates': coordinates,
+        'available_variables': available_variables,
+        'variable_labels': variable_labels,
+        'selected_variable': selected_variable,
+        'spec_filename': spec_filename,
+    })
+
+
+async def _do_broadcast():
+    """Internal broadcast implementation."""
     result = _app_state['delayed_dataset']
     if result is None:
         return
 
-    # Use retained plotter from app state (preserves vmin/vmax across captures)
     plotter = _app_state['plotter']
     if plotter is None:
         return
@@ -1373,8 +1396,6 @@ async def _do_broadcast():
 
     if variable in data_plots:
         try:
-            # Run blocking operations in thread pool to avoid blocking event loop
-            # This is critical for TX2i where GPU operations are slow
             data_select = _app_state['data_select']
             plot_data, coordinates = await asyncio.to_thread(
                 _prepare_plot_data_sync, result, plotter, variable, data_select
@@ -1395,18 +1416,14 @@ async def _do_broadcast():
                         pass
                 return
 
-            # JSON serialization can also be slow for large datasets - run in thread
             message = await asyncio.to_thread(
-                json.dumps,
-                {
-                    'type': 'plot_data',
-                    'data': plot_data,
-                    'coordinates': coordinates,
-                    'available_variables': _app_state['available_variables'],
-                    'variable_labels': _app_state['variable_labels'],
-                    'selected_variable': _app_state['selected_variable'],
-                    'spec_filename': _app_state['spec_filename'],
-                },
+                _serialize_plot_message,
+                plot_data,
+                coordinates,
+                _app_state['available_variables'],
+                _app_state['variable_labels'],
+                _app_state['selected_variable'],
+                _app_state['spec_filename'],
             )
 
             # Broadcast to all connected clients
