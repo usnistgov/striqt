@@ -2,7 +2,7 @@
 <html>
 <head>
     <title>Striqt WebView - Real-time Radio Diagnostics</title>
-    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -449,7 +449,7 @@
             }
 
             const data = plotData[0];
-            const traces = data.traces;
+            const traces = data.data;
             const layout = { ...darkLayout, ...data.layout };
 
             if (!plotInitialized) {
