@@ -14,7 +14,6 @@ Usage:
 from __future__ import annotations
 
 import asyncio
-import json
 import sys
 import typing
 from contextlib import asynccontextmanager
@@ -23,21 +22,22 @@ from pathlib import Path
 from typing import Any, ClassVar, Dict, List, Literal, Optional, Set, Tuple, TypedDict, Union, cast
 
 import click
+import msgspec
 import numpy as np
 import plotly.graph_objects as go
 import xarray as xr
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 
+_json_encoder = msgspec.json.Encoder()
+_json_decoder = msgspec.json.Decoder()
+
 def _to_numpy(arr: Any) -> np.ndarray:
     """Convert array to numpy, handling cupy arrays transparently."""
     if hasattr(arr, 'get'):
         # cupy array - transfer to CPU
-        return arr.get()  # ty: ignore[return-value]
+        return arr.get()
     return np.asarray(arr)
-
-# Note: StaticFiles not currently used but available if needed
-# from fastapi.staticfiles import StaticFiles
 
 if typing.TYPE_CHECKING:
     import striqt.sensor as ss
@@ -1207,21 +1207,23 @@ async def websocket_endpoint(websocket: WebSocket):
     try:
         while True:
             data = await websocket.receive_text()
-            msg = json.loads(data)
+            msg = _json_decoder.decode(data)
 
             if msg['type'] == 'get_state':
                 # Extract coordinates on demand (deferred from update_dataset)
                 coordinates: CoordinatesData = {'num_ports': 1, 'groups': {}, 'extra_coords': {}}
                 if _app_state['delayed_dataset'] is not None:
                     coordinates = _extract_capture_coordinates(_app_state['delayed_dataset'])
-                await websocket.send_json({
+                # msgspec encodes to bytes; decode to str so the frame is sent as
+                # text and the browser's JSON.parse(event.data) works unchanged.
+                await websocket.send_text(_json_encoder.encode({
                     'type': 'state',
                     'available_variables': _app_state['available_variables'],
                     'variable_labels': _app_state['variable_labels'],
                     'selected_variable': _app_state['selected_variable'],
                     'coordinates': coordinates,
                     'spec_filename': _app_state['spec_filename'],
-                })
+                }).decode())
                 # If we have data, also trigger a plot update for this client
                 if _app_state['delayed_dataset'] is not None:
                     await broadcast_plot_update()
@@ -1349,7 +1351,14 @@ def _serialize_plot_message(
     selected_variable: str,
     spec_filename: str,
 ) -> str:
-    """Serialize plot message using Plotly's binary encoding for numpy arrays."""
+    """Serialize plot message using Plotly's binary encoding for numpy arrays.
+
+    Plotly's fig.to_json() emits numpy arrays as base64 typed-array specs. We let
+    Plotly own that step, decode its output with msgspec, wrap it in the outer
+    message, and re-encode with msgspec. By the time msgspec sees the data it is
+    all plain JSON-native types (dicts, lists, base64 strings), so the strict
+    non-finite-float handling is not a concern here.
+    """
     serialized_plots = []
     for plot in plot_data:
         traces = plot.get('traces', [])
@@ -1368,9 +1377,11 @@ def _serialize_plot_message(
                 go_traces.append(trace)
 
         fig = go.Figure(data=go_traces, layout=layout)
-        serialized_plots.append(json.loads(fig.to_json()))
+        serialized_plots.append(_json_decoder.decode(fig.to_json()))
 
-    return json.dumps({
+    # msgspec encodes to bytes; decode to str so callers can send it as a text
+    # WebSocket frame (keeps the browser's JSON.parse(event.data) path unchanged).
+    return _json_encoder.encode({
         'type': 'plot_data',
         'data': serialized_plots,
         'coordinates': coordinates,
@@ -1378,7 +1389,7 @@ def _serialize_plot_message(
         'variable_labels': variable_labels,
         'selected_variable': selected_variable,
         'spec_filename': spec_filename,
-    })
+    }).decode()
 
 
 async def _do_broadcast():
@@ -1405,10 +1416,10 @@ async def _do_broadcast():
                 # No plot data was generated - likely the function uses
                 # matplotlib-specific code (FacetGrid, ax=) that doesn't work
                 # with WebPlotBackend
-                error_message = json.dumps({
+                error_message = _json_encoder.encode({
                     'type': 'error',
                     'message': f"'{variable}' uses matplotlib-specific plotting that isn't supported in web view yet",
-                })
+                }).decode()
                 for ws in _app_state['websockets']:
                     try:
                         await ws.send_text(error_message)
@@ -1442,10 +1453,10 @@ async def _do_broadcast():
             traceback.print_exc()
 
             # Send error to clients
-            error_message = json.dumps({
+            error_message = _json_encoder.encode({
                 'type': 'error',
                 'message': f"Error plotting '{variable}': {str(e)}",
-            })
+            }).decode()
             for ws in _app_state['websockets']:
                 try:
                     await ws.send_text(error_message)
@@ -1933,4 +1944,3 @@ def cli(path: str, host: str, port: int):
 
 if __name__ == '__main__':
     cli()
-

@@ -2,6 +2,10 @@
 <html>
 <head>
     <title>Striqt WebView - Real-time Radio Diagnostics</title>
+    <!-- NOTE: Plotly.py (>=6.0) serializes numpy arrays as base64 typed-array
+         specs {dtype, bdata, shape}. That format is only decoded by
+         plotly.js >= 2.28.0. Do NOT pin this below 2.28.0 or plots will
+         render axes/background but NO data. -->
     <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
     <style>
         * {
@@ -246,21 +250,64 @@
         let plotInitialized = false;
         let variablesInitialized = false;
 
-        // Plotly layout defaults for dark theme
+        // Plotly layout defaults for dark theme.
+        // Axis-specific styling lives in axisDefaults (below) and is fanned out
+        // across every axis key (xaxis, yaxis, xaxis2, ...) by buildLayout().
         const darkLayout = {
             paper_bgcolor: '#16213e',
             plot_bgcolor: '#1a1a2e',
             font: { color: '#eee' },
-            xaxis: {
-                gridcolor: '#2a2a4e',
-                zerolinecolor: '#3a3a5e'
-            },
-            yaxis: {
-                gridcolor: '#2a2a4e',
-                zerolinecolor: '#3a3a5e'
-            },
             margin: { t: 50, r: 50, b: 60, l: 70 }
         };
+
+        // Grid styling applied to every axis in the merged layout.
+        const axisDefaults = { gridcolor: '#2a2a4e', zerolinecolor: '#3a3a5e' };
+
+        // Detect WebGL support once. Line traces arrive as 'scattergl' (WebGL),
+        // which fails on clients without a WebGL context. When unsupported we
+        // downgrade them to SVG 'scatter' in updatePlot(). Heatmaps are SVG and
+        // unaffected either way.
+        const webglSupported = (() => {
+            try {
+                const canvas = document.createElement('canvas');
+                return !!(window.WebGLRenderingContext &&
+                    (canvas.getContext('webgl') || canvas.getContext('experimental-webgl')));
+            } catch (e) {
+                return false;
+            }
+        })();
+
+        function isPlainObject(v) {
+            return v !== null && typeof v === 'object' && !Array.isArray(v);
+        }
+
+        // Recursive merge: recurse into plain objects, let arrays/primitives from
+        // the source win. Arrays (annotations, shapes) are replaced wholesale
+        // because the backend regenerates them every frame.
+        function deepMerge(target, source) {
+            const out = { ...target };
+            for (const key of Object.keys(source)) {
+                const sv = source[key];
+                const tv = out[key];
+                out[key] = (isPlainObject(sv) && isPlainObject(tv))
+                    ? deepMerge(tv, sv)   // both objects -> recurse
+                    : sv;                 // arrays & primitives -> source wins
+            }
+            return out;
+        }
+
+        // Merge dark theme with incoming layout, then apply grid styling to every
+        // axis key present (xaxis, yaxis, xaxis2, yaxis2, ...). Backend-provided
+        // title/domain/range/type win over axisDefaults since they spread last.
+        function buildLayout(incoming) {
+            const merged = deepMerge(darkLayout, incoming);
+            for (const key of Object.keys(merged)) {
+                if (/^[xy]axis\d*$/.test(key) && isPlainObject(merged[key])) {
+                    merged[key] = { ...axisDefaults, ...merged[key] };
+                }
+            }
+            return merged;
+        }
 
         function connect() {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -332,38 +379,43 @@
                 `;
                 return;
             }
-            
+
             const numPorts = coordinatesData.num_ports || 1;
             const groups = coordinatesData.groups;
             const extraCoords = coordinatesData.extra_coords || {};
-            
+
             let html = '<div class="coords-section">';
-            
-            // First, render extra_coords (AcquisitionInfo) - each in its own collapsible with a simple 2-column table
+
+            // Render extra_coords (AcquisitionInfo) in ONE unified table inside a
+            // single collapsible, with a section-header row per subclass - mirrors
+            // the Capture table below. AcquisitionInfo values are scalar (not
+            // per-port), so this table is two columns and colspan is 2.
             if (Object.keys(extraCoords).length > 0) {
+                html += `
+                    <details class="coords-details" open>
+                        <summary>Acquisition Info</summary>
+                        <table class="coords-table">
+                            <thead>
+                                <tr>
+                                    <th class="coord-name"></th>
+                                    <th class="coord-value">Value</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+
                 for (const [className, coords] of Object.entries(extraCoords)) {
-                    html += `
-                        <details class="coords-details" open>
-                            <summary>${className}</summary>
-                            <table class="coords-table">
-                                <thead>
-                                    <tr>
-                                        <th class="coord-name"></th>
-                                        <th class="coord-value">Value</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                    `;
-                    
+                    html += `<tr class="section-header"><td colspan="2">${className}</td></tr>`;
+
                     for (const coord of coords) {
                         html += `<tr><td class="coord-name">${coord.name}</td>`;
                         html += `<td class="coord-value">${coord.value || ''}</td></tr>`;
                     }
-                    
-                    html += `</tbody></table></details>`;
                 }
+
+                html += `</tbody></table></details>`;
             }
-            
+
             // Render all capture coordinate groups in ONE unified table inside a single collapsible
             // Use class names as section header rows within the table for proper column alignment
             html += `
@@ -374,37 +426,37 @@
                             <tr>
                                 <th class="coord-name"></th>
             `;
-            
+
             // Add column headers for each port
             for (let i = 0; i < numPorts; i++) {
                 html += `<th class="coord-value">Port ${i}</th>`;
             }
             html += `<th class="coord-unit"></th></tr></thead><tbody>`;
-            
+
             for (const [className, coords] of Object.entries(groups)) {
                 const numCols = numPorts + 2; // name + ports + unit
-                
+
                 // Add a section header row for this class (display full module path)
                 html += `<tr class="section-header"><td colspan="${numCols}">${className}</td></tr>`;
-                
+
                 for (const coord of coords) {
                     html += `<tr><td class="coord-name">${coord.name}</td>`;
-                    
+
                     // Add value cells for each port
                     const values = coord.values || [coord.value];
                     for (let i = 0; i < numPorts; i++) {
                         const val = values[i] !== undefined ? values[i] : values[0];
                         html += `<td class="coord-value">${val}</td>`;
                     }
-                    
+
                     html += `<td class="coord-unit">${coord.unit || ''}</td></tr>`;
                 }
             }
-            
+
             html += `</tbody></table></details>`;
-            
+
             html += '</div>';
-            
+
             coordsSidebar.innerHTML = html;
         }
 
@@ -449,8 +501,21 @@
             }
 
             const data = plotData[0];
+            // fig.to_json() nests traces under 'data', not 'traces'.
             const traces = data.data;
-            const layout = { ...darkLayout, ...data.layout };
+            // Downgrade WebGL line traces to SVG when WebGL is unavailable.
+            // Also bridge NaN gaps (the backend converts Inf -> NaN, e.g. empty
+            // dB bins); without connectgaps the SVG line breaks at every gap and
+            // can end up invisible while hover/legend still work.
+            if (!webglSupported && Array.isArray(traces)) {
+                traces.forEach(t => {
+                    if (t.type === 'scattergl') {
+                        t.type = 'scatter';
+                        t.connectgaps = true;
+                    }
+                });
+            }
+            const layout = buildLayout(data.layout);
 
             if (!plotInitialized) {
                 Plotly.newPlot(plotContainer, traces, layout, {
