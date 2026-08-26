@@ -36,7 +36,7 @@ ArrayBackend = Annotated[
     Literal['numpy', 'cupy'],
     Meta('array module to use to set compute device: numpy = cpu, cupy = gpu'),
 ]
-BackendSampleRate = Annotated[float, Meta('Source sample rate', 'Hz', gt=0)]
+BackendSampleRate = Annotated[float, Meta('Source sample rate', 'S/s', gt=0)]
 MasterClockRate = Annotated[
     float, Meta('Base sample rate used inside the source', 'Hz', gt=0)
 ]
@@ -79,9 +79,22 @@ GaplessRepeat = Annotated[
     bool,
     Meta('whether to raise an exception on overflows between identical captures'),
 ]
+ImpliedLoops = Annotated[
+    tuple[str, ...],
+    Meta(standard_name='List of looped fields embedded in the capture list'),
+]
+
 IsIn = Annotated[
     Literal['capture', 'analysis'],
     Meta('selects whether to loop a capture or analysis parameters'),
+]
+LOFrequencyScalar = Annotated[
+    Union[float, None],
+    Meta('LO frequency of external frequency converter'),
+]
+LOFrequency = Annotated[
+    Union[LOFrequencyScalar, tuple[LOFrequencyScalar, ...]],
+    Meta('LO frequency of external frequency converter'),
 ]
 LOShift = Annotated[Literal['left', 'right', 'none'], Meta('LO shift direction')]
 MockSensor = Annotated[

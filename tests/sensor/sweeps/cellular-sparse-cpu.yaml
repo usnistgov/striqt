@@ -11,12 +11,13 @@ source:
   loop: true
   trigger_strobe: 10e-3
   array_backend: "numpy"
+  key: "waveform"
   # skip this in order to evaluate start time offset
   # signal_trigger: "cellular_5g_pss_sync"
 
 loops:
   - kind: repeat
-    count: 1
+    count: 10
 
 captures:
   - sample_rate: 107.52e6 # Hz
@@ -29,6 +30,7 @@ captures:
     #   guard_bandwidths: [875e3, 575e3]
     #   frame_slots: "dddsuudddddddsuudddd"
     #   special_symbols: "ddddddfffffffu"
+
 analysis:
   spectrogram: &spectrogram
     frequency_resolution: 15000 # SCS/2

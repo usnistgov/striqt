@@ -31,6 +31,8 @@ dependencies = [
     "eval_type_backport",
     "exceptiongroup>=1.2",
     "typing-extensions",
+    "fastapi>=0.128.8",
+    "uvicorn[standard]>=0.39.0",
 ]
 
 [[project.authors]]
@@ -70,6 +72,7 @@ sensor-sweep = "striqt.cli.sensor_sweep:cli"
 plot-capture = "striqt.cli.plot_capture:cli"
 rechunk-zarr = "striqt.cli.rechunk_zarr:cli"
 convert-spec = "striqt.cli.convert_spec:cli"
+zip-zarr = "striqt.cli.zip_zarr:cli"
 
 [tool.ruff]
 target-version = "py39"

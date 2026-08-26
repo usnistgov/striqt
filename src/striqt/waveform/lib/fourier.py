@@ -572,7 +572,7 @@ def stft(
             nperseg=nperseg,
             noverlap=noverlap,
             axis=axis,
-            norm=norm,  # ty: ignore
+            norm=norm,
             out=out,
         )
     assert xstack.dtype == x.dtype
@@ -1550,7 +1550,7 @@ def _broadcast_onto(a: _AT, other: _AT, *, axis: int) -> _AT:
 
     slices = [xp.newaxis] * int(other.ndim)
     slices[axis] = slice(None, None)
-    return a[tuple(slices)]  # type: ignore
+    return a[tuple(slices)]  # pyright: ignore
 
 
 def _same_base_memory(a: Array, b: Array) -> bool:

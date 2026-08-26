@@ -100,6 +100,8 @@ def _coords_to_dicts(
                     d[k] = d[k].title()
             elif np.issubdtype(dtype, np.bool):
                 d[k] = str(v.item())
+            elif v is None:
+                pass
             else:
                 sa.util.get_logger('analysis').warning(
                     f'unhandled type for coord {k!r}'

@@ -153,9 +153,9 @@ class YFactorSink(sinks.SinkBase):
 
         assert isinstance(capture_result.extra_coords, specs.SoapyAcquisitionInfo)
 
-        if len(self._pending_data) == self._batch.size:
+        self.captures_elapsed += 1
+        if self.captures_elapsed == self._batch.total_size:
             self.flush()
-            self._batch.next()
 
         return ret
 
@@ -171,7 +171,10 @@ class YFactorSink(sinks.SinkBase):
         port = int(data[0].port)
 
         loops = data[0].attrs['loops']
-        fields = [l['field'] for l in loops if l['field'] is not None]
+        implied_loops = (data[0].attrs['calibration'] or {}).get('implied_loops', [])
+        fields = list(implied_loops) + [
+            l['field'] for l in loops if l['field'] is not None
+        ]
         if 'sample_rate' in fields:
             i = fields.index('sample_rate')
             fields[i] = 'backend_sample_rate'

@@ -2,7 +2,9 @@ from __future__ import annotations as __
 
 import dataclasses
 from math import ceil, isfinite
+import os
 from typing import TYPE_CHECKING
+import warnings
 
 from .. import sources, util
 from ... import specs
@@ -17,12 +19,24 @@ else:
     array_api_compat = util.lazy_import('array_api_compat')
     sw = util.lazy_import('striqt.waveform')
 
-
-# oaresample is experimental, and can leave a residual time offset
-USE_OARESAMPLE = False
 FILTER_SIZE = 4001
 MIN_OARESAMPLE_FFT_SIZE = 4 * 4096 - 1
 RESAMPLE_COLA_WINDOW = 'hamming'
+
+# bypass for the conjugate correction for downconversion based on high-side LO
+IGNORE_HIGHSIDE_LO = int(os.environ.get('STRIQT_IGNORE_HIGHSIDE_LO', 0))
+if IGNORE_HIGHSIDE_LO:
+    warnings.warn(
+        'bypassing corrections for highside-LO downconversion '
+        '(shell STRIQT_IGNORE_HIGHSIDE_LO=1)'
+    )
+
+# oaresample is experimental, and can leave a residual time offset
+USE_OARESAMPLE = int(os.environ.get('STRIQT_USE_OARESAMPLE', 0))
+if USE_OARESAMPLE:
+    warnings.warn(
+        'experimental oaresample is enabled (shell STRIQT_USE_OARESAMPLE=1)'
+    )
 
 
 def correct_iq(
@@ -36,6 +50,8 @@ def correct_iq(
 
     Args:
         iq: IQ dataclass output by a source
+        signal_trigger: a `signal.analysis.Trigger` instance to implement a
+            waveform start alignment, or `None` to default to iq.info.signal_trigger
         axis: the axis of `x` along which to compute the filter
         overwrite_x: if True, modify the contents of IQ in-place; otherwise, a copy will be returned
 
@@ -50,6 +66,9 @@ def correct_iq(
     if not isinstance(capture, specs.SensorCapture):
         raise TypeError('iq.capture must be a capture specification')
 
+    if signal_trigger is None:
+        signal_trigger = iq.info.signal_trigger
+
     max_lag = _get_max_trigger_lag(iq.source_spec, capture, signal_trigger)
     resample_kws = {'overwrite_x': overwrite_x, 'min_overlap': max_lag, 'axis': axis}
     needs_filter = isfinite(capture.analysis_bandwidth)
@@ -60,6 +79,9 @@ def correct_iq(
         needs_filter = False
     else:
         x_pre_filter, offs = _resample(iq, **resample_kws)
+
+    if iq.conjugate and not IGNORE_HIGHSIDE_LO:
+        x_pre_filter = _apply_conj(x_pre_filter, iq.conjugate, overwrite_x=True)
 
     # apply the filter here and ensure we're working with a copy if needed
     if needs_filter:
@@ -250,6 +272,29 @@ def _apply_trigger_shifts(x: Array, shifts: Array, size_out: int) -> Array:
         for i in range(x.shape[0]):
             out[i, :] = x[i, shifts[i] : shifts[i] + size_out]
         return out
+
+
+def _apply_conj(
+    x: Array, do_conj: tuple[bool | None, ...], overwrite_x: bool = False
+) -> Array:
+    assert isinstance(do_conj, tuple)
+    xp = sw.array_namespace(x)
+
+    if not any(do_conj):
+        return x
+    if len(do_conj) != x.shape[-2]:
+        raise ValueError(
+            'conjugate size mismatch in internal API: this should never happen'
+        )
+    if not overwrite_x:
+        x = x.copy()
+
+    for port, port_conj in enumerate(do_conj):
+        if port_conj:
+            sub = x[..., port, :]
+            xp.conj(sub, out=sub)
+
+    return x
 
 
 def _scale_only(

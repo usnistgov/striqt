@@ -28,9 +28,11 @@ class TDMSSource(base.VirtualSource[specs.TDMSSource, specs.FileCapture]):
 
     _file_info: specs.FileAcquisitionInfo
 
-    def _connect(self, spec):
+    def __init__(self, spec):
+        super().__init__(spec)
+
         try:
-            from nptdms import TdmsFile
+            from nptdms import TdmsFile  # type: ignore
         except ImportError:
             raise ImportError('install nptdms to open TDMS files')
 
@@ -97,6 +99,8 @@ class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture]):
     _file_stream: FileStream
 
     def __init__(self, spec):
+        super().__init__(spec)
+
         meta = spec.file_metadata or {}
 
         if not Path(spec.path).exists():
@@ -106,9 +110,10 @@ class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture]):
             spec.path,
             format=spec.file_format,
             dtype='complex64',
-            xp=buffers.get_array_namespace(self.setup_spec.array_backend),
+            xp=buffers.get_array_namespace(spec.array_backend),
             loop=spec.loop,
             backend_sample_rate=spec.master_clock_rate,
+            key=spec.key,
             **meta,
         )
 
@@ -123,6 +128,7 @@ class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture]):
         return str(self.setup_spec.path)
 
     def arm(self, capture):
+        super().arm(capture)
         if self.setup_spec.loop:
             self._file_stream.seek(0)
 
@@ -171,6 +177,7 @@ class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture]):
 
     def __init__(self, spec):
         """set the waveform from an xarray.DataArray containing a single capture of IQ samples"""
+        super().__init__(spec)
 
         waveform = sa.io.load(spec.path).iq_waveform
 
