@@ -52,6 +52,7 @@ dev = [
 doc = [
     "sphinx",
     "sphinx-click",
+    "sphinx-jsonschema",
     "toml",
     "myst_nb"
 ]
