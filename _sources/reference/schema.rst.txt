@@ -1,9 +1,9 @@
 #######################
-Command-Line Interface
+Schemas
 #######################
 
 .. toctree::
    :maxdepth: 2
    :glob:
 
-   cli/*
+   schemas/schema.rst

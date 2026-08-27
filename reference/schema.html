@@ -5,7 +5,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>API Reference &#8212; striqt</title>
+    <title>Schemas &#8212; striqt</title>
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
     <link rel="stylesheet" type="text/css" href="../_static/pyramid.css?v=63f5dc7c" />
     <link rel="stylesheet" type="text/css" href="../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css?v=8cd3d715" />
@@ -13,8 +13,8 @@
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Batched waveform analysis" href="api/striqt.analysis.html" />
-    <link rel="prev" title="Specs" href="cli/specs.html" />
+    <link rel="next" title="Schemas" href="schemas/schema.html" />
+    <link rel="prev" title="Batched sensor acquisition" href="api/striqt.sensor.html" />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Neuton&amp;subset=latin" type="text/css" media="screen" charset="utf-8" />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Nobile:regular,italic,bold,bolditalic&amp;subset=latin" type="text/css" media="screen" charset="utf-8" />
 <!--[if lte IE 6]>
@@ -64,13 +64,13 @@
           <a href="../py-modindex.html" title="Python Module Index"
              >modules</a></li>
         <li class="right" >
-          <a href="api/striqt.analysis.html" title="Batched waveform analysis"
+          <a href="schemas/schema.html" title="Schemas"
              accesskey="N">next</a> |</li>
         <li class="right" >
-          <a href="cli/specs.html" title="Specs"
+          <a href="api/striqt.sensor.html" title="Batched sensor acquisition"
              accesskey="P">previous</a> |</li>
         <li class="nav-item nav-item-0"><a href="../index.html">striqt</a> &#187;</li>
-        <li class="nav-item nav-item-this"><a href="">API Reference</a></li> 
+        <li class="nav-item nav-item-this"><a href="">Schemas</a></li> 
       </ul>
     </div>  
 
@@ -79,24 +79,44 @@
         <div class="bodywrapper">
           <div class="body" role="main">
             
-  <section id="api-reference">
-<h1>API Reference<a class="headerlink" href="#api-reference" title="Link to this heading">¶</a></h1>
+  <section id="schemas">
+<h1>Schemas<a class="headerlink" href="#schemas" title="Link to this heading">¶</a></h1>
 <div class="toctree-wrapper compound">
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="api/striqt.analysis.html">Batched waveform analysis</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="api/striqt.analysis.html#module-striqt.analysis">striqt.analysis</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/striqt.analysis.html#striqt-analysis-specs">striqt.analysis.specs</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="api/striqt.sensor.html">Batched sensor acquisition</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="api/striqt.sensor.html#module-striqt.sensor">striqt.sensor</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/striqt.sensor.html#module-striqt.sensor.bindings">striqt.sensor.bindings</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/striqt.sensor.html#module-striqt.sensor.calibration">striqt.sensor.calibration</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/striqt.sensor.html#module-striqt.sensor.peripherals">striqt.sensor.peripherals</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/striqt.sensor.html#module-striqt.sensor.sinks">striqt.sensor.sinks</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/striqt.sensor.html#module-striqt.sensor.sources">striqt.sensor.sources</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/striqt.sensor.html#module-striqt.sensor.specs">striqt.sensor.specs</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/striqt.sensor.html#module-striqt.sensor.util">striqt.sensor.util</a></li>
+<li class="toctree-l1"><a class="reference internal" href="schemas/schema.html">Schemas</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="schemas/schema.html#air7201b">air7201b</a></li>
+<li class="toctree-l2"><a class="reference internal" href="schemas/schema.html#description">Description</a></li>
+<li class="toctree-l2"><a class="reference internal" href="schemas/schema.html#plotoptions">PlotOptions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="schemas/schema.html#dataoptions">DataOptions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="schemas/schema.html#sharedplotoptions">SharedPlotOptions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="schemas/schema.html#air7201bsourcespec">Air7201BSourceSpec</a></li>
+<li class="toctree-l2"><a class="reference internal" href="schemas/schema.html#analysisgroup">AnalysisGroup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="schemas/schema.html#soapycapture">SoapyCapture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="schemas/schema.html#repeat">Repeat</a></li>
+<li class="toctree-l2"><a class="reference internal" href="schemas/schema.html#list">List</a></li>
+<li class="toctree-l2"><a class="reference internal" href="schemas/schema.html#captureremap">CaptureRemap</a></li>
+<li class="toctree-l2"><a class="reference internal" href="schemas/schema.html#range">Range</a></li>
+<li class="toctree-l2"><a class="reference internal" href="schemas/schema.html#frequencybinrange">FrequencyBinRange</a></li>
+<li class="toctree-l2"><a class="reference internal" href="schemas/schema.html#noperipherals">NoPeripherals</a></li>
+<li class="toctree-l2"><a class="reference internal" href="schemas/schema.html#analysis">Analysis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="schemas/schema.html#cellular5gnpsssync">Cellular5GNPSSSync</a></li>
+<li class="toctree-l2"><a class="reference internal" href="schemas/schema.html#cellular5gnrpsscorrelator">Cellular5GNRPSSCorrelator</a></li>
+<li class="toctree-l2"><a class="reference internal" href="schemas/schema.html#cellular5gnrssbspectrogram">Cellular5GNRSSBSpectrogram</a></li>
+<li class="toctree-l2"><a class="reference internal" href="schemas/schema.html#cellular5gnssssync">Cellular5GNSSSSync</a></li>
+<li class="toctree-l2"><a class="reference internal" href="schemas/schema.html#cellular5gnrssscorrelator">Cellular5GNRSSSCorrelator</a></li>
+<li class="toctree-l2"><a class="reference internal" href="schemas/schema.html#cellularcyclicautocorrelator">CellularCyclicAutocorrelator</a></li>
+<li class="toctree-l2"><a class="reference internal" href="schemas/schema.html#channelpowertimeseries">ChannelPowerTimeSeries</a></li>
+<li class="toctree-l2"><a class="reference internal" href="schemas/schema.html#channelpowerhistogram">ChannelPowerHistogram</a></li>
+<li class="toctree-l2"><a class="reference internal" href="schemas/schema.html#spectrogram">Spectrogram</a></li>
+<li class="toctree-l2"><a class="reference internal" href="schemas/schema.html#cellularresourcepowerhistogram">CellularResourcePowerHistogram</a></li>
+<li class="toctree-l2"><a class="reference internal" href="schemas/schema.html#cyclicchannelpower">CyclicChannelPower</a></li>
+<li class="toctree-l2"><a class="reference internal" href="schemas/schema.html#iqwaveform">IQWaveform</a></li>
+<li class="toctree-l2"><a class="reference internal" href="schemas/schema.html#powerspectraldensity">PowerSpectralDensity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="schemas/schema.html#spectrogramhistogram">SpectrogramHistogram</a></li>
+<li class="toctree-l2"><a class="reference internal" href="schemas/schema.html#spectrogramhistogramratio">SpectrogramHistogramRatio</a></li>
+<li class="toctree-l2"><a class="reference internal" href="schemas/schema.html#extension">Extension</a></li>
+<li class="toctree-l2"><a class="reference internal" href="schemas/schema.html#sink">Sink</a></li>
+<li class="toctree-l2"><a class="reference internal" href="schemas/schema.html#sweepoptions">SweepOptions</a></li>
 </ul>
 </li>
 </ul>
@@ -112,18 +132,18 @@
         <div class="sphinxsidebarwrapper">
   <div>
     <h4>Previous topic</h4>
-    <p class="topless"><a href="cli/specs.html"
-                          title="previous chapter">Specs</a></p>
+    <p class="topless"><a href="api/striqt.sensor.html"
+                          title="previous chapter">Batched sensor acquisition</a></p>
   </div>
   <div>
     <h4>Next topic</h4>
-    <p class="topless"><a href="api/striqt.analysis.html"
-                          title="next chapter">Batched waveform analysis</a></p>
+    <p class="topless"><a href="schemas/schema.html"
+                          title="next chapter">Schemas</a></p>
   </div>
   <div role="note" aria-label="source link">
     <h3>This Page</h3>
     <ul class="this-page-menu">
-      <li><a href="../_sources/reference/api.rst.txt"
+      <li><a href="../_sources/reference/schema.rst.txt"
             rel="nofollow">Show Source</a></li>
     </ul>
    </div>
@@ -148,13 +168,13 @@
           <a href="../py-modindex.html" title="Python Module Index"
              >modules</a></li>
         <li class="right" >
-          <a href="api/striqt.analysis.html" title="Batched waveform analysis"
+          <a href="schemas/schema.html" title="Schemas"
              >next</a> |</li>
         <li class="right" >
-          <a href="cli/specs.html" title="Specs"
+          <a href="api/striqt.sensor.html" title="Batched sensor acquisition"
              >previous</a> |</li>
         <li class="nav-item nav-item-0"><a href="../index.html">striqt</a> &#187;</li>
-        <li class="nav-item nav-item-this"><a href="">API Reference</a></li> 
+        <li class="nav-item nav-item-this"><a href="">Schemas</a></li> 
       </ul>
     </div>
 <hr \>

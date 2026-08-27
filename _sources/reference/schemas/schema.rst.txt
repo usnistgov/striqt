@@ -1,0 +1,7 @@
+Schemas
+===========
+
+.. jsonschema:: ./schema.json
+    :auto_reference: true
+    :lift_definitions: true
+    :auto_target: true
