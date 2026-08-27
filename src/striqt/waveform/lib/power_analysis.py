@@ -27,7 +27,7 @@ if typing.TYPE_CHECKING:
     import pandas as pd
     import xarray as xr
 
-    from .typing import ArrayLike, Array, _AL, _ALN, _AT, Dims
+    from .typing import ArrayLike, Array, _AL, _ALN, _AT, Dims, DTypeLike
 
 else:
     pd = util.lazy_import('pandas')
@@ -73,7 +73,7 @@ def unit_wave_to_linear(s: str):
 
 
 @util.lru_cache()
-def stat_ufunc_from_shorthand(kind, xp=None, axis=0) -> typing.Callable:
+def stat_ufunc_from_shorthand(kind: str|float, xp=None, axis=0) -> typing.Callable:
     if xp is None:
         xp = np
 
@@ -106,80 +106,19 @@ def stat_ufunc_from_shorthand(kind, xp=None, axis=0) -> typing.Callable:
     return ufunc
 
 
-def _arraylike_with_buffer(
-    x: ArrayLike | Number, out: ArrayLike | None = None, min_dtype: Any = None
-) -> tuple[Array, Array, ModuleType]:
-    """interpret the array-like input and output buffer arguments.
-
-    Returns:
-        Array objects pointing to the underlying array-type objects,
-        and the module to work with them
-    """
-    try:
-        try:
-            xp = array_namespace(x)
-        except AttributeError:
-            xp = np
-        values = x
-    except TypeError:
-        if hasattr(x, 'values'):
-            x = typing.cast('pd.DataFrame | pd.Series | xr.DataArray', x)
-            xp = array_namespace(x.values)
-            values = x.values
-        elif isinstance(x, Number):
-            xp = np
-            values = x
-        else:
-            raise TypeError(f'unsupported input type {type(x)}')
-
-    if out is None:
-        out_dtype = float_dtype_like(values, min_dtype=min_dtype)
-        out_shape = xp.shape(x)  # pyright: ignore
-        out = xp.zeros(out_shape, dtype=out_dtype)
-    elif isinstance(x, Number):
-        # for a scalar, skip buffer allocation entirely
-        out = None
-    elif hasattr(out, 'values'):
-        out = typing.cast('pd.DataFrame | pd.Series | xr.DataArray', out)
-        out = out.values
-
-    return values, out, xp
-
-
-def _repackage_arraylike(
-    values: Array,
-    obj: _ALN,
+def powtodB(
+    x: _ALN,
     *,
-    unit_transform: Optional[typing.Callable] = None,
+    abs: bool = True,
+    eps: float = 0,
+    overwrite_x: bool = False,
+    min_dtype: 'DTypeLike' = 'float32',
 ) -> _ALN:
-    """package `values` into a data type matching `obj`"""
-
-    # accessing each of these forces imports of each module.
-    # work through progressively more expensive imports
-    if isinstance(obj, Number):
-        return values.item()
-    elif not hasattr(obj, 'values'):
-        return typing.cast('_ALN', values)
-    elif isinstance(obj, pd.Series):
-        return pd.Series(values, index=obj.index)  # type: ignore
-    elif isinstance(obj, pd.DataFrame):
-        return pd.DataFrame(values, index=obj.index, columns=obj.columns)  # type: ignore
-    elif isinstance(obj, xr.DataArray):
-        ret = obj.copy(deep=False, data=values)
-        units = ret.attrs.get('units', None)
-        if units is not None and unit_transform is not None:
-            ret.attrs['units'] = unit_transform(units)
-        return ret
-    else:
-        raise TypeError(f'unrecognized input type {type(obj)}')
-
-
-def powtodB(x: _ALN, abs: bool = True, eps: float = 0, out=None) -> _ALN:
     """compute `10*log10(abs(x) + eps)` or `10*log10(x + eps)` with speed optimizations"""
 
     eps_str = '' if eps == 0 else '+eps'
 
-    values, out, xp = _arraylike_with_buffer(x, out)
+    values, out, xp = _arraylike_with_buffer(x, overwrite_x, min_dtype=min_dtype)
 
     if xp is np:
         if abs:
@@ -201,8 +140,7 @@ def powtodB(x: _ALN, abs: bool = True, eps: float = 0, out=None) -> _ALN:
             else:
                 values = cuda.powtodB_eps_noabs(x, out, eps)
     else:
-        # mlx, torch, etc
-        # TODO: CUDA kernel evaluation here
+        # torch, dask, ...
         if abs:
             values = xp.abs(values, out=out)
         if eps != 0:
@@ -213,41 +151,43 @@ def powtodB(x: _ALN, abs: bool = True, eps: float = 0, out=None) -> _ALN:
     return _repackage_arraylike(values, x, unit_transform=unit_linear_to_dB)
 
 
-def dBtopow(x: _ALN, out=None) -> _ALN:
+def dBtopow(
+    x: _ALN, *, overwrite_x: bool = False, min_dtype: 'DTypeLike' = 'float32'
+) -> _ALN:
     """compute `10**(x/10)` with speed optimizations"""
 
-    dtype = getattr(x, 'dtype', np.float32())
-    if dtype.itemsize < 4:
-        dtype = np.float32()
-
-    values, out, xp = _arraylike_with_buffer(x, out, min_dtype='float32')
+    values, out, xp = _arraylike_with_buffer(x, overwrite_x, min_dtype=min_dtype)
 
     if xp is np:
-        expr = '10**(values/10.)'
+        expr = '10**(values/10)'
         values = ne.evaluate(expr, out=out, casting='unsafe')
     elif is_cupy_array(xp):
         from .jit import cuda
 
         values = cuda.dBtopow(x, out)
     else:
-        # mlx, torch, etc
-        # TODO: CUDA kernel evaluation here
-        values = xp.divide(values, 10, out=out)
+        # torch, dask, ...
+        values = xp.divide(
+            values,
+            10,
+            out=out,
+        )
         values = xp.power(10, values, out=out)
 
     return _repackage_arraylike(values, x, unit_transform=unit_dB_to_linear)
 
 
-def envtopow(x: _ALN, out=None) -> _ALN:
+def envtopow(
+    x: _ALN, *, overwrite_x: bool = False, min_dtype: 'DTypeLike' = 'float32'
+) -> _ALN:
     """Computes abs(x)**2 with speed optimizations"""
 
-    values, out, xp = _arraylike_with_buffer(x, out)
+    values, out, xp = _arraylike_with_buffer(x, overwrite_x, min_dtype=min_dtype)
 
     if xp is np:
         # numpy, pandas
-        values = ne.evaluate(
-            'real(abs(x)**2)', local_dict=dict(x=x), out=out, casting='unsafe'
-        )
+        expr = 'real(abs(values)**2)'
+        values = ne.evaluate(expr, out=out, casting='unsafe')
 
         if xp.iscomplexobj(values):
             values = values.real  # pyright: ignore
@@ -256,26 +196,34 @@ def envtopow(x: _ALN, out=None) -> _ALN:
 
         values = cuda.envtopow(x, out)
     else:
-        # mlx, torch, etc
-        # TODO: CUDA kernel evaluation here
+        # torch, dask, ...
         values = xp.abs(x, out=out)
         values *= values
 
     return _repackage_arraylike(values, x, unit_transform=unit_wave_to_linear)
 
 
-def envtodB(x: _ALN, abs: bool = True, eps: float = 0, out=None) -> _ALN:
+def envtodB(
+    x: _ALN,
+    *,
+    abs: bool = True,
+    eps: float = 0,
+    overwrite_x: bool = False,
+    min_dtype: 'DTypeLike' = 'float32',
+) -> _ALN:
     """compute `20*log10(abs(x) + eps)` or `20*log10(x + eps)` with speed optimizations"""
 
     eps_str = '' if eps == 0 else '+eps'
 
-    values, out, xp = _arraylike_with_buffer(x, out)
+    values, out, xp = _arraylike_with_buffer(
+        x, overwrite_x=overwrite_x, min_dtype=min_dtype
+    )
 
     if xp is np:
         if abs:
             expr = f'real(20*log10(abs(values){eps_str}))'
         else:
-            expr = f'real(20*log10(values+eps){eps_str})'
+            expr = f'real(20*log10(values{eps_str}))'
         values = ne.evaluate(expr, out=out, casting='unsafe')
     elif is_cupy_array(xp):
         from .jit import cuda
@@ -291,8 +239,7 @@ def envtodB(x: _ALN, abs: bool = True, eps: float = 0, out=None) -> _ALN:
             else:
                 values = cuda.envtodB_eps_noabs(x, out, eps)
     else:
-        # mlx, torch, etc
-        # TODO: CUDA kernel evaluation here
+        # torch, dask, ...
         if abs:
             values = xp.abs(values, out=out)
         if eps != 0:
@@ -311,30 +258,42 @@ def dBlinmean(
 
 @overload
 def dBlinmean(
-    x_dB: 'xr.DataArray', axis: 'Dims|None' = None, overwrite_x=...
+    x_dB: 'xr.DataArray', axis: 'Dims|None' = None, overwrite_x=..., min_dtype=...
 ) -> 'xr.DataArray': ...
 
 
 @overload
 def dBlinmean(
-    x_dB: 'np.ndarray', axis: 'int|Sequence[int]|None' = None, overwrite_x=...
+    x_dB: 'np.ndarray',
+    axis: 'int|Sequence[int]|None' = None,
+    overwrite_x=...,
+    min_dtype=...,
 ) -> 'np.ndarray': ...
 
 
 @overload
 def dBlinmean(
-    x_dB: 'pd.Series', axis: 'int|Sequence[int]|None' = None, overwrite_x=...
+    x_dB: 'pd.Series',
+    axis: 'int|Sequence[int]|None' = None,
+    overwrite_x=...,
+    min_dtype=...,
 ) -> 'pd.Series': ...
 
 
 @overload
 def dBlinmean(
-    x_dB: 'pd.DataFrame', axis: 'int|Sequence[int]|None' = None, overwrite_x=...
+    x_dB: 'pd.DataFrame',
+    axis: 'int|Sequence[int]|None' = None,
+    overwrite_x=...,
+    min_dtype=...,
 ) -> 'pd.DataFrame': ...
 
 
 def dBlinmean(
-    x_dB: _AL, axis: 'Dims|int|Sequence[int]|None' = None, overwrite_x=False
+    x_dB: _AL,
+    axis: 'Dims|int|Sequence[int]|None' = None,
+    overwrite_x: bool = False,
+    min_dtype: 'DTypeLike' = 'float32',
 ) -> _AL:
     """evaluate the mean in linear power space given power in dB.
 
@@ -346,14 +305,9 @@ def dBlinmean(
         dimension at the specified axes
     """
 
-    if overwrite_x:
-        out = x_dB
-    else:
-        out = None
-
-    x = dBtopow(x_dB, out=out)
+    x = dBtopow(x_dB, overwrite_x=overwrite_x, min_dtype=min_dtype)
     linmean = x.mean(axis)  # type: ignore
-    return powtodB(linmean, out=linmean)  # pyright: ignore
+    return powtodB(linmean, overwrite_x=True, min_dtype=min_dtype)  # pyright: ignore
 
 
 @overload
@@ -370,23 +324,34 @@ def dBlinsum(
 
 @overload
 def dBlinsum(
-    x_dB: 'np.ndarray', axis: 'int|Sequence[int]|None' = None, overwrite_x=...
+    x_dB: 'np.ndarray',
+    axis: 'int|Sequence[int]|None' = None,
+    overwrite_x=...,
+    min_dtype=...,
 ) -> 'np.ndarray': ...
 
 
 @overload
 def dBlinsum(
-    x_dB: 'pd.Series', axis: 'int|Sequence[int]|None' = None, overwrite_x=...
+    x_dB: 'pd.Series',
+    axis: 'int|Sequence[int]|None' = None,
+    overwrite_x=...,
+    min_dtype=...,
 ) -> 'pd.Series': ...
 
 
 @overload
 def dBlinsum(
-    x_dB: 'pd.DataFrame', axis: 'int|Sequence[int]|None' = None, overwrite_x=...
+    x_dB: 'pd.DataFrame',
+    axis: 'int|Sequence[int]|None' = None,
+    overwrite_x=...,
+    min_dtype=...,
 ) -> 'pd.DataFrame': ...
 
 
-def dBlinsum(x_dB: _AL, axis=None, overwrite_x=False) -> _AL:
+def dBlinsum(
+    x_dB: _AL, axis=None, overwrite_x=False, min_dtype: 'DTypeLike' = 'float32'
+) -> _AL:
     """evaluate the sum in linear power space given power in dB.
 
     This is equivalent to:
@@ -397,13 +362,9 @@ def dBlinsum(x_dB: _AL, axis=None, overwrite_x=False) -> _AL:
         dimension at the specified axes
     """
 
-    if overwrite_x:
-        out = x_dB
-    else:
-        out = None
-
-    linmean = dBtopow(x_dB, out=out).sum(axis)  # type: ignore
-    return powtodB(linmean, out=linmean)  # type: ignore
+    x_lin = dBtopow(x_dB, overwrite_x=overwrite_x, min_dtype=min_dtype)
+    x_sum = x_lin.sum(axis)  # type: ignore
+    return powtodB(x_sum, overwrite_x=True, min_dtype=min_dtype)  # type: ignore
 
 
 def iq_to_bin_power(
@@ -572,3 +533,104 @@ def sample_ccdf(a: _AT, edges: _AT, density: bool = True) -> _AT:
         ccdf /= a.shape[0]
 
     return ccdf
+
+
+# %% module-local helper functions
+def _infer_contained_array(x: Any) -> Array:
+    if hasattr(type(x), 'values'):
+        # first, guess at xarray/pandas types before expensive imports
+        if hasattr(type(x), 'data') and isinstance(x, (xr.DataArray, xr.Dataset)):
+            return x.data
+        elif isinstance(x, (pd.DataFrame, pd.Series)):
+            return x.values
+        else:
+            raise TypeError('unable to associate an array type with input')
+
+
+def _arraylike_with_buffer(
+    x: ArrayLike | Number, overwrite_x: bool = False, min_dtype: 'DTypeLike' = 'float32'
+) -> 'tuple[Array, Array, ModuleType]':
+    """interpret the array-like input and output buffer arguments.
+
+    Args:
+        x: the input array-like or dataframe-like object
+        out: the output buffer, or True to use the extracted array, or False force None
+    Returns:
+        Array objects pointing to the underlying array-type objects,
+        and the module to work with them
+    """
+    # infer the array object and namespace
+    if min_dtype is None:
+        raise TypeError('must pass a dtype as min_dtype')
+    if min_dtype is np.dtype('float16'):
+        raise TypeError('min_dtype must be at least float32 or larger')
+
+    type_ = type(x)
+    if hasattr(type_, '__array_function__') or hasattr(type_, '__array_namespace__'):
+        values: Array = x
+        xp = array_namespace(values)
+        if xp.ndim(values) == 0:
+            overwrite_x = False
+    elif isinstance(x, (int, float)):
+        values: Array = np.array(x)
+        xp = np
+    elif hasattr(type_, 'values'):
+        values = _infer_contained_array(x)
+        xp = array_namespace(values)
+    else:
+        raise TypeError(f'unable to associate an array with type {type_!r} with input')
+    values = typing.cast('Array', values)
+
+    # do we need to upcast?
+    dtype = values.dtype
+    if np.dtype(min_dtype) <= dtype:
+        promote_dtype = None
+    else:
+        promote_dtype = np.dtype(min_dtype)
+
+    if xp.__name__.startswith('dask'):
+        if promote_dtype is not None:
+            return values.astype(promote_dtype), None, xp
+        return values, None, xp
+    elif promote_dtype:
+        out = xp.empty_like(values, dtype=promote_dtype)
+        return values, out, xp
+    elif overwrite_x:
+        return values, values, xp
+    elif xp is np:
+        # numexpr promotes to float64 if out=None; provide buffer to preserve dtype
+        out = xp.empty_like(values, dtype=values.dtype)
+        return values, out, xp
+    else:
+        return values, None, xp
+
+
+def _repackage_arraylike(
+    values: Array,
+    obj: _ALN,
+    *,
+    unit_transform: Optional[typing.Callable] = None,
+) -> _ALN:
+    """package `values` into a data type matching `obj`"""
+
+    # accessing each of these forces imports of each module.
+    # work through progressively more expensive imports
+    if isinstance(obj, Number):
+        return values.item()
+    elif not hasattr(type(obj), 'values'):
+        return typing.cast('_ALN', values)
+    elif isinstance(obj, pd.Series):
+        return pd.Series(values, index=obj.index)  # type: ignore
+    elif isinstance(obj, pd.DataFrame):
+        return pd.DataFrame(values, index=obj.index, columns=obj.columns)  # type: ignore
+    elif isinstance(obj, xr.DataArray):
+        ret = obj.copy(deep=False, data=values)
+        units = ret.attrs.get('units', None)
+        if units is not None and unit_transform is not None:
+            ret.attrs['units'] = unit_transform(units)
+        return ret
+    else:
+        raise TypeError(f'unrecognized input type {type(obj)}')
+
+
+# %%

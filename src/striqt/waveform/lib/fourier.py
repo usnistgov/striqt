@@ -319,7 +319,7 @@ def fftfreq(
         values = [fres * n for n in span]
     else:
         values = [fres * (n + 1) for n in span]
-    return np.array(values, dtype=dtype)
+    return xp.array(values, dtype=dtype)
 
 
 def time_fftshift(x, scale: Array | float | None = None, overwrite_x=False, axis=0):
@@ -589,10 +589,10 @@ def stft(
         nfft=nfft,
         time_size=y.shape[axis],
         overlap_frac=noverlap / nfft,
-        xp=np,
+        xp=xp,
     )
 
-    return typing.cast(tuple[_AT, _AT, _AT], (freqs, times, y))
+    return (freqs, times, y)  # type: ignore
 
 
 def istft(

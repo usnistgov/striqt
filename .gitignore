@@ -51,6 +51,10 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 cover/
+tests/sensor/sweeps/outputs
+doc/html
+uv.lock
+pixi.lock
 
 # Jupyter Notebook
 .ipynb_checkpoints
