@@ -58,7 +58,7 @@ class Sensor(Generic[SS, SP, SC]):
 @dataclasses.dataclass()
 class SensorBinding(Sensor[SS, SP, SC]):
     # schema: specs.Schema[SS, SP, SC, PS, PC]
-    sweep_spec_cls: type[BoundSweep[SS, SP, SC]]  # pyright: ignore
+    sweep_spec_cls: type[BoundSweep[SS, SP, SC]]  # type: ignore
 
     def __post_init__(self):
         super().__post_init__()
@@ -92,7 +92,7 @@ def bind_sensor(
     binding = SensorBinding(
         source_cls=cast(type[SourceBackend[SS, SC]], sensor.source_cls),
         sweep_spec_cls=sensor.sweep_spec_cls,  # type: ignore
-        peripherals_cls=sensor.peripherals_cls,  # pyright: ignore
+        peripherals_cls=sensor.peripherals_cls,  # type: ignore
         sink_cls=cast(type[sinks.SinkBase[SC]], sensor.sink_cls),
     )
 
@@ -128,7 +128,7 @@ def bind_sensor(
     if tagged_sweeps is None:
         tagged_sweeps = BoundSweep
     else:
-        tagged_sweeps = Union[tagged_sweeps, BoundSweep]  # pyright: ignore
+        tagged_sweeps = Union[tagged_sweeps, BoundSweep]  # type: ignore
 
     cls = bind_controller(cast(SensorBinding[SS, SP, SC], binding), schema)
     cls.__module__ = sys._getframe(1).f_globals.get('__name__') or schema.__module__

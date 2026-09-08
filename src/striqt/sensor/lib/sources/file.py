@@ -32,7 +32,7 @@ class TDMSSource(base.VirtualSource[specs.TDMSSource, specs.FileCapture]):
         super().__init__(spec)
 
         try:
-            from nptdms import TdmsFile  # type: ignore
+            from nptdms import TdmsFile  # pyright: ignore # pyrefly: ignore
         except ImportError:
             raise ImportError('install nptdms to open TDMS files')
 

@@ -342,9 +342,9 @@ def get_path_fields(
 def ensure_tuple(obj: _T | tuple[_T, ...], size: int | None = None) -> tuple[_T, ...]:
     if isinstance(obj, tuple):
         if size is not None and len(obj) == 1:
-            return obj * size  # ty: ignore
+            return obj * size
         else:
-            return obj  # ty: ignore
+            return obj
     elif size is None:
         return (obj,)
     else:
@@ -689,7 +689,7 @@ def _get_capture_adjust_dependencies(
 @sa.util.lru_cache()
 def _get_capture_adjust_fields(
     spec: structs.AdjustCapturesType, source_id: str | None
-) -> dict[str, str | structs.CaptureRemap]:
+) -> dict[str, str | structs.CaptureRemap | _AdjustCaptureMap]:
     fields = {}
     map = _get_capture_adjust_map(spec)
 

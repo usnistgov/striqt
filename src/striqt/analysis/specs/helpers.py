@@ -80,7 +80,7 @@ class frozendict(Mapping[_K, _V]):
 
     def __new__(cls, *args: Any, **kwargs: Any) -> frozendict[_K, _V]:
         inst = super().__new__(cls)
-        inst._dict = dict(*args, **kwargs)  # pyright: ignore
+        inst._dict = dict(*args, **kwargs)  # type: ignore
         inst._hash = None
         return inst
 
@@ -266,9 +266,9 @@ def freeze(
         nd = None if max_depth is None else max_depth - 1
         if nd is None or nd > 0:
             ret = tuple([freeze(v, nd) for v in obj])
-            return ret  # type: ignore
+            return ret  # pyright: ignore
         else:
-            return tuple(obj)  # type: ignore
+            return tuple(obj)  # pyright: ignore
     elif isinstance(obj, dict):
         nd = None if max_depth is None else max_depth - 1
         if nd is None or nd > 0:
@@ -304,7 +304,7 @@ def unfreeze(
         nd = None if max_depth is None else max_depth - 1
         if nd is None or nd > 0:
             ret = [unfreeze(v, nd) for v in obj]
-            return ret  # type: ignore
+            return ret  # pyright: ignore # pyrefly: ignore
         else:
             return list(obj)
 
@@ -312,7 +312,7 @@ def unfreeze(
         nd = None if max_depth is None else max_depth - 1
         if nd is None or nd > 0:
             ret = {k: unfreeze(v, nd) for k, v in obj.items()}
-            return ret  # type: ignore
+            return ret  # pyright: ignore # pyrefly: ignore
         else:
             return dict(obj)
     else:
