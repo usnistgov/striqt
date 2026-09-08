@@ -73,7 +73,7 @@ def unit_wave_to_linear(s: str):
 
 
 @util.lru_cache()
-def stat_ufunc_from_shorthand(kind: str|float, xp=None, axis=0) -> typing.Callable:
+def stat_ufunc_from_shorthand(kind: str | float, xp=None, axis=0) -> typing.Callable:
     if xp is None:
         xp = np
 

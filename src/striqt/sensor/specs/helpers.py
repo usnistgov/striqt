@@ -320,10 +320,10 @@ def get_path_fields(
 
     assert isinstance(sweep, structs.Sweep)
 
-    if callable(source_id):
-        id_ = source_id()
-    else:
+    if isinstance(source_id, str):
         id_ = source_id
+    else:
+        id_ = source_id()
 
     fields = {}
     fields['start_time'] = datetime.now().strftime('%Y%m%d-%Hh%Mm%S')
@@ -689,7 +689,7 @@ def _get_capture_adjust_dependencies(
 @sa.util.lru_cache()
 def _get_capture_adjust_fields(
     spec: structs.AdjustCapturesType, source_id: str | None
-) -> dict[str, str | structs.CaptureRemap | _AdjustCaptureMap]:
+) -> dict[str, str | structs.CaptureRemap | float | None]:
     fields = {}
     map = _get_capture_adjust_map(spec)
 

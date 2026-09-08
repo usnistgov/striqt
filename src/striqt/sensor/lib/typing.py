@@ -35,7 +35,7 @@ SS = TypeVar('SS', bound='specs.Source')
 SC = TypeVar('SC', bound='specs.SensorCapture')
 SP = TypeVar('SP', bound='specs.Peripherals')
 SPC = TypeVar('SPC', bound='specs.Peripherals')
-
+_SS = TypeVar('_SS', bound='specs.Source', covariant=True)
 
 # %% compute.py
 from striqt.analysis.lib.typing import TAR
@@ -68,7 +68,7 @@ class Peripherals(Protocol[_SP, _SC]):
 
 # %% sources/base.py
 @runtime_checkable
-class SourceBackend(Protocol[SS, SC]):
+class SourceBackend(Protocol[_SS, SC]):
     @abstractmethod
     def __init__(self, spec): ...
 

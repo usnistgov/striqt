@@ -34,9 +34,7 @@ if IGNORE_HIGHSIDE_LO:
 # oaresample is experimental, and can leave a residual time offset
 USE_OARESAMPLE = int(os.environ.get('STRIQT_USE_OARESAMPLE', 0))
 if USE_OARESAMPLE:
-    warnings.warn(
-        'experimental oaresample is enabled (shell STRIQT_USE_OARESAMPLE=1)'
-    )
+    warnings.warn('experimental oaresample is enabled (shell STRIQT_USE_OARESAMPLE=1)')
 
 
 def correct_iq(
@@ -67,7 +65,8 @@ def correct_iq(
         raise TypeError('iq.capture must be a capture specification')
 
     if signal_trigger is None:
-        signal_trigger = iq.info.signal_trigger
+        # TODO: this will need to be fixed along with the definition in iq.info
+        signal_trigger = iq.info.signal_trigger # ty: ignore
 
     max_lag = _get_max_trigger_lag(iq.source_spec, capture, signal_trigger)
     resample_kws = {'overwrite_x': overwrite_x, 'min_overlap': max_lag, 'axis': axis}

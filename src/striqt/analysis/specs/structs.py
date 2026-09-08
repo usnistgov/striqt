@@ -59,7 +59,7 @@ class SpecBase(
         return map
 
     @classmethod
-    def from_dict(cls: type[_T], d: dict) -> _T:
+    def from_dict(cls: type[_T], d: dict | helpers.frozendict) -> _T:
         return helpers.convert_dict(d, type=cls)
 
     @classmethod
