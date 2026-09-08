@@ -30,13 +30,13 @@ CellularSubcarrierSpacingTuple = Annotated[
     Meta('One or more subcarrier spacings (15e3, 30e3, 60e3, etc)', units='Hz'),
 ]
 CellularCyclicPrefix = Annotated[
-    Union[Literal['normal'], Literal['extended']], Meta('the 3GPP cyclic prefix type')
+    Literal['normal', 'extended'], Meta('the 3GPP cyclic prefix type')
 ]
 CellularAverageSlots = Annotated[
     bool, Meta('True to coarsen spectrogram bins by averaging 1-symbol time resolution')
 ]
 CellularAverageRBs = Annotated[
-    Union[bool, Literal['half']],
+    Literal[True, False, 'half'],
     Meta(
         'True (or "half") to coarsen spectrogram bins by integrating 1-subcarrier frequency resolution into 1- (or 1/2)-resource block'
     ),
