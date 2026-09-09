@@ -1180,7 +1180,7 @@ class TestEdgeCases:
 # Roundoff model for the cross-backend tests. Per FFT pass the rms error relative to
 # the output rms is c*eps*sqrt(log2 N) (Gentleman & Sande 1966; FFTW accuracy notes),
 # and each elementwise rounding adds (eps/sqrt(3))**2 of error variance. c was fitted
-# with chores/measure_fft_accuracy.py: pocketfft gives 0.55-0.65 (1.2 for sizes with a
+# with chores/tests/measure_fft_accuracy.py: pocketfft gives 0.55-0.65 (1.2 for sizes with a
 # prime factor >= 128); cuFFT on a Jetson TX2i reaches 1.9 at N=512 and 2.1 for
 # Bluestein sizes. Errors of independent backends add in quadrature (measured 0.83-1.0).
 FFT_ROUNDOFF_C = 2.2
@@ -1207,6 +1207,19 @@ def peak_factor(size):
 
 def _rms(x):
     return float(np.sqrt(np.mean(np.abs(x) ** 2)))
+
+
+def rms_tolerance_dBc(sigma, power=False):
+    """express an rms tolerance relative to the output rms as error power in dBc.
+
+    `sigma` bounds an amplitude ratio unless `power` is True (e.g. for spectrograms).
+    """
+    return (10 if power else 20) * np.log10(sigma)
+
+
+def peak_tolerance_dBc(sigma, size, power=False):
+    """express the peak tolerance implied by `sigma` over `size` outputs in dBc"""
+    return rms_tolerance_dBc(peak_factor(size) * sigma, power=power)
 
 
 class TestNumpyCupyCrossComparison:
@@ -1330,12 +1343,15 @@ class TestNumpyCupyCrossComparison:
         # fftshift multiply, fft(N), ifft(N/2), ifftshift multiply
         sigma = cross_backend_rms(x.dtype, [len(x), num_out], n_elementwise=2)
         scale = _rms(result_np)
-        assert _rms(result_cp_np - result_np) < sigma * scale, 'rms roundoff'
+        assert _rms(result_cp_np - result_np) < sigma * scale, (
+            f'rms roundoff above {rms_tolerance_dBc(sigma):.1f} dBc'
+        )
         assert_allclose(
             result_cp_np,
             result_np,
             rtol=0,
             atol=peak_factor(result_np.size) * sigma * scale,
+            err_msg=f'peak above {peak_tolerance_dBc(sigma, result_np.size):.1f} dBc',
         )
 
     # -------------------------------------------------------------------------
@@ -1375,9 +1391,15 @@ class TestNumpyCupyCrossComparison:
         # window/nfft and the window multiply, then fft(nperseg)
         sigma = cross_backend_rms(x.dtype, [64], n_elementwise=2)
         scale = _rms(X_np)
-        assert _rms(X_cp_np - X_np) < sigma * scale, 'rms roundoff'
+        assert _rms(X_cp_np - X_np) < sigma * scale, (
+            f'rms roundoff above {rms_tolerance_dBc(sigma):.1f} dBc'
+        )
         assert_allclose(
-            X_cp_np, X_np, rtol=0, atol=peak_factor(X_np.size) * sigma * scale
+            X_cp_np,
+            X_np,
+            rtol=0,
+            atol=peak_factor(X_np.size) * sigma * scale,
+            err_msg=f'peak above {peak_tolerance_dBc(sigma, X_np.size):.1f} dBc',
         )
 
     # -------------------------------------------------------------------------
@@ -1419,12 +1441,16 @@ class TestNumpyCupyCrossComparison:
         # sqrt(Sxx), so atol covers the small bins and rtol the large ones.
         sigma = cross_backend_rms(x.dtype, [64], n_elementwise=3)
         scale = _rms(Sxx_np)
-        assert _rms(Sxx_cp_np - Sxx_np) < sigma * scale, 'rms roundoff'
+        assert _rms(Sxx_cp_np - Sxx_np) < sigma * scale, (
+            f'rms roundoff above {rms_tolerance_dBc(sigma, power=True):.1f} dBc'
+        )
+        peak_dBc = peak_tolerance_dBc(sigma, Sxx_np.size, power=True)
         assert_allclose(
             Sxx_cp_np,
             Sxx_np,
             rtol=4 * sigma,
             atol=peak_factor(Sxx_np.size) * sigma * scale,
+            err_msg=f'peak above {peak_dBc:.1f} dBc',
         )
 
     # -------------------------------------------------------------------------
@@ -1456,9 +1482,15 @@ class TestNumpyCupyCrossComparison:
         # accounts for the kernel's gain
         sigma = cross_backend_rms(x.dtype, [len(x), len(x)], n_elementwise=1)
         scale = _rms(x)
-        assert _rms(result_cp_np - result_np) < sigma * scale, 'rms roundoff'
+        assert _rms(result_cp_np - result_np) < sigma * scale, (
+            f'rms roundoff above {rms_tolerance_dBc(sigma):.1f} dBc'
+        )
         assert_allclose(
-            result_cp_np, result_np, rtol=0, atol=peak_factor(x.size) * sigma * scale
+            result_cp_np,
+            result_np,
+            rtol=0,
+            atol=peak_factor(x.size) * sigma * scale,
+            err_msg=f'peak above {peak_tolerance_dBc(sigma, x.size):.1f} dBc',
         )
 
     @settings(
@@ -1484,7 +1516,13 @@ class TestNumpyCupyCrossComparison:
 
         sigma = cross_backend_rms(x.dtype, [len(x), len(x)], n_elementwise=1)
         scale = _rms(x)
-        assert _rms(result_cp_np - result_np) < sigma * scale, 'rms roundoff'
+        assert _rms(result_cp_np - result_np) < sigma * scale, (
+            f'rms roundoff above {rms_tolerance_dBc(sigma):.1f} dBc'
+        )
         assert_allclose(
-            result_cp_np, result_np, rtol=0, atol=peak_factor(x.size) * sigma * scale
+            result_cp_np,
+            result_np,
+            rtol=0,
+            atol=peak_factor(x.size) * sigma * scale,
+            err_msg=f'peak above {peak_tolerance_dBc(sigma, x.size):.1f} dBc',
         )

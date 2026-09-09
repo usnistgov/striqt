@@ -7,11 +7,12 @@ tests/waveform/test_fourier.py:
     rms_rel_error = c * eps * sqrt(log2(N))        (per FFT pass, eps = 2**-24)
 
 Usage:
-    uv run --extra test --extra gpu python chores/measure_fft_accuracy.py [--trials 32]
+    uv run --extra test --extra gpu python chores/tests/measure_fft_accuracy.py [--trials 32]
 
-Each table reports the ratio of the measured error to the model, so any value that
-is consistently above ~1.2 (smooth sizes) or ~2.4 (Bluestein sizes) means the
-constant assumed by the tests is too optimistic for that backend.
+The single-fft tables report the fitted c per backend; the pipeline table reports the
+ratio of the measured error to the model with c = C_ASSUMED (the value used by the
+tests). Any c or ratio consistently above C_ASSUMED / 1.0 means the constant assumed
+by the tests is too optimistic for that backend.
 """
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ EPS32 = 2.0**-24
 SMOOTH_SIZES = [64, 128, 256, 512, 1024, 4096, 16384, 96, 100, 250, 1000]
 # sizes with a prime factor >= 128: cuFFT falls back to Bluestein for these
 BLUESTEIN_SIZES = [254, 1018, 4094, 2 * 8191]
-C_ASSUMED = 1.2
+C_ASSUMED = 2.2
 
 
 def _rms(x):
