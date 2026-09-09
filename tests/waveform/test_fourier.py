@@ -1180,8 +1180,8 @@ class TestEdgeCases:
 # Roundoff model for the cross-backend tests. Per FFT pass the rms error relative to
 # the output rms is c*eps*sqrt(log2 N) (Gentleman & Sande 1966; FFTW accuracy notes),
 # and each elementwise rounding adds (eps/sqrt(3))**2 of error variance. c was fitted
-# with chores/tests/measure_fft_accuracy.py: pocketfft gives 0.55-0.65 (1.2 for sizes with a
-# prime factor >= 128); cuFFT on a Jetson TX2i reaches 1.9 at N=512 and 2.1 for
+# with chores/tests/measure_fft_accuracy.py: pocketfft gives 0.55-0.65 (1.2 for sizes
+# with a prime factor >= 128); cuFFT on a Jetson TX2i reaches 1.9 at N=512 and 2.1 for
 # Bluestein sizes. Errors of independent backends add in quadrature (measured 0.83-1.0).
 FFT_ROUNDOFF_C = 2.2
 ROUNDOFF_SAFETY = 3
@@ -1195,9 +1195,15 @@ def roundoff_rms(dtype, nffts, n_elementwise=0):
     return float(np.sqrt(var))
 
 
+def single_backend_rms(dtype, nffts, n_elementwise=0):
+    """rms tolerance on one backend's error against an exact reference, relative to
+    the output rms"""
+    return ROUNDOFF_SAFETY * roundoff_rms(dtype, nffts, n_elementwise)
+
+
 def cross_backend_rms(dtype, nffts, n_elementwise=0):
-    """rms tolerance on the difference between two backends, relative to the output rms"""
-    return ROUNDOFF_SAFETY * np.sqrt(2) * roundoff_rms(dtype, nffts, n_elementwise)
+    """rms tolerance on the difference between two backends, relative to output rms"""
+    return np.sqrt(2) * single_backend_rms(dtype, nffts, n_elementwise)
 
 
 def peak_factor(size):
@@ -1220,6 +1226,90 @@ def rms_tolerance_dBc(sigma, power=False):
 def peak_tolerance_dBc(sigma, size, power=False):
     """express the peak tolerance implied by `sigma` over `size` outputs in dBc"""
     return rms_tolerance_dBc(peak_factor(size) * sigma, power=power)
+
+
+def far_bin_floor_dBc(sigma, nfft, size=None):
+    """express the roundoff tolerance in bins away from a bin-centered tone, relative
+    to the tone, in dBc.
+
+    The tone occupies one bin while roundoff spreads evenly over all `nfft` bins. With
+    `size`, the result is the peak tolerance over that many far bins; otherwise the rms.
+    """
+    factor = 1 if size is None else peak_factor(size)
+    return rms_tolerance_dBc(factor * sigma / np.sqrt(nfft))
+
+
+def bin_centered_tone(nfft, bin_fraction, nseg, dtype=np.complex64):
+    """a unit tone with an integer number of cycles per segment, over `nseg` segments"""
+    k = int(round(bin_fraction * (nfft - 1))) - nfft // 2
+    n = np.arange(nseg * nfft)
+    return np.exp(2j * np.pi * k * n / nfft).astype(dtype)
+
+
+class TestToneFarBinFloor:
+    """Roundoff in the bins away from a bin-centered tone, where the exact STFT is zero.
+
+    A rectangular window and an integer number of cycles per segment put the whole
+    signal in one bin per segment, so every other bin measures roundoff alone against
+    a float64 reference of the same (float32-quantized) input.
+    """
+
+    NSEG = 4
+
+    @pytest.fixture
+    def cupy_available(self):
+        from conftest import _cupy
+
+        if _cupy is None:
+            pytest.skip('cupy is not available')
+        return _cupy
+
+    @staticmethod
+    def _stft(x, nfft):
+        fourier = _get_fourier()
+        return fourier.stft(x, fs=1.0, window='rect', nperseg=nfft, noverlap=0)[2]
+
+    def _check_far_bins(self, X, X_ref, nfft):
+        err = np.asarray(X).astype(np.complex128) - X_ref
+        far = np.ones(nfft, dtype=bool)
+        far[int(np.argmax(np.abs(X_ref[0])))] = False
+        err_far = err[:, far]
+
+        # window/nfft and the window multiply, then fft(nfft)
+        sigma = single_backend_rms(np.complex64, [nfft], n_elementwise=2)
+        scale = _rms(X_ref)
+        assert _rms(err_far) < sigma * scale, (
+            f'far-bin rms roundoff above {far_bin_floor_dBc(sigma, nfft):.1f} dBc'
+        )
+        assert np.abs(err_far).max() < peak_factor(err_far.size) * sigma * scale, (
+            f'far-bin peak roundoff above '
+            f'{far_bin_floor_dBc(sigma, nfft, err_far.size):.1f} dBc'
+        )
+
+    @settings(
+        suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None
+    )
+    @given(
+        nfft=st.sampled_from([64, 256, 1024, 4096]),
+        bin_fraction=st.floats(min_value=0, max_value=1),
+    )
+    def test_far_bins_numpy_float32(self, nfft, bin_fraction):
+        x = bin_centered_tone(nfft, bin_fraction, self.NSEG)
+        X_ref = self._stft(x.astype(np.complex128), nfft)
+        self._check_far_bins(self._stft(x, nfft), X_ref, nfft)
+
+    @settings(
+        suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None
+    )
+    @given(
+        nfft=st.sampled_from([64, 256, 1024, 4096]),
+        bin_fraction=st.floats(min_value=0, max_value=1),
+    )
+    def test_far_bins_cupy_float32(self, cupy_available, nfft, bin_fraction):
+        cp = cupy_available
+        x = bin_centered_tone(nfft, bin_fraction, self.NSEG)
+        X_ref = self._stft(x.astype(np.complex128), nfft)
+        self._check_far_bins(self._stft(cp.asarray(x), nfft).get(), X_ref, nfft)
 
 
 class TestNumpyCupyCrossComparison:
