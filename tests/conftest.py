@@ -262,8 +262,20 @@ def dB_arrays(
             # Use two ranges to avoid filtering: negative and positive values away from zero
             near_zero = float(dt(1e-6))
             elements = st.one_of(
-                st.floats(min_value=actual_min, max_value=-near_zero, allow_nan=False, allow_infinity=False, width=float_width),
-                st.floats(min_value=near_zero, max_value=actual_max, allow_nan=False, allow_infinity=False, width=float_width),
+                st.floats(
+                    min_value=actual_min,
+                    max_value=-near_zero,
+                    allow_nan=False,
+                    allow_infinity=False,
+                    width=float_width,
+                ),
+                st.floats(
+                    min_value=near_zero,
+                    max_value=actual_max,
+                    allow_nan=False,
+                    allow_infinity=False,
+                    width=float_width,
+                ),
             )
         else:
             elements = st.floats(
@@ -376,7 +388,7 @@ def envelope_arrays(
 
 def available_namespaces() -> List[Tuple[str, Any]]:
     """Return list of (name, module) for available array namespaces.
-    
+
     Note: dask is returned with a lazy loader to avoid importing scipy
     during test collection.
     """
@@ -405,7 +417,7 @@ def convert_array(arr: np.ndarray, xp, chunks: str | None = 'auto'):
         # Lazy dask loading
         xp = _get_dask_array()
         return xp.from_array(arr, chunks=chunks)
-    
+
     xp_name = getattr(xp, '__name__', str(xp))
 
     if 'cupy' in xp_name:
