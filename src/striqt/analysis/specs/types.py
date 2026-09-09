@@ -36,9 +36,9 @@ CellularAverageSlots = Annotated[
     bool, Meta('True to coarsen spectrogram bins by averaging 1-symbol time resolution')
 ]
 CellularAverageRBs = Annotated[
-    Literal[True, False, 'half'],
+    Union[bool, Literal['half']],
     Meta(
-        'True (or "half") to coarsen spectrogram bins by integrating 1-subcarrier frequency resolution into 1- (or 1/2)-resource block'
+        'True (or "half") to coarsen spectrogram bins by integrating 1-subcarrier frequency resolution into 1 or ½ RBs'
     ),
 ]
 Duration = Annotated[float, Meta('Duration of the analysis waveform', 's')]
