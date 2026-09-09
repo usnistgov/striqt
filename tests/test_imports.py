@@ -40,7 +40,7 @@ def test_lazy_import():
     # with hypothesis and lazy imports. We skip these checks when hypothesis
     # tests are collected (detected by checking if hypothesis has been imported).
     hypothesis_active = 'hypothesis' in sys.modules
-    
+
     # lazy module checks - skip if hypothesis plugin is active (it reifies them)
     if not hypothesis_active:
         for lazy_name in ('scipy', 'xarray', 'pandas'):
