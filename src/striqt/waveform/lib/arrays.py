@@ -165,7 +165,7 @@ def binned_mean(
 
 @util.lru_cache()
 def _sliding_window_output_shape(
-    array_shape: tuple[int, ...] | int, window_shape: tuple[int, ...]|int, axis
+    array_shape: tuple[int, ...] | int, window_shape: tuple[int, ...] | int, axis
 ):
     """return the shape of the output of sliding_window_view, for example
     to pre-create an output buffer."""

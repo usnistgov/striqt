@@ -65,7 +65,7 @@ def run(zarr_input: str, zarr_output: str | None, chunk_size, compression):
             from zarr import codecs  # pyright: ignore
 
             # compatibility: zarr v3
-            c = codecs.BloscCodec(cname='zstd', clevel=compression, shuffle="shuffle")
+            c = codecs.BloscCodec(cname='zstd', clevel=compression, shuffle='shuffle')
         except (ImportError, AttributeError):
             # compatibility: zarr v2
             import numcodecs

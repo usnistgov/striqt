@@ -306,7 +306,7 @@ def unfreeze(
             ret = [unfreeze(v, nd) for v in obj]
             return ret  # pyright: ignore # pyrefly: ignore
         else:
-            return list(obj) # ty: ignore
+            return list(obj)  # ty: ignore
 
     if isinstance(obj, (dict, frozendict)):
         nd = None if max_depth is None else max_depth - 1

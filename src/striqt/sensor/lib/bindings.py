@@ -46,7 +46,9 @@ class Sensor(Generic[SS, SP, SC]):
     source_cls: type[SourceBackend[SS, SC]]
     sink_cls: type[sinks.SinkBase[SC]] = sinks.ZarrCaptureSink
     sweep_spec_cls: type[specs.Sweep[SS, SP, SC]] = specs.Sweep
-    peripherals_cls: type[Peripherals[SP, SC]] | type[NoPeripherals[SP, SC]] = NoPeripherals
+    peripherals_cls: type[Peripherals[SP, SC]] | type[NoPeripherals[SP, SC]] = (
+        NoPeripherals
+    )
 
     def __post_init__(self):
         assert issubclass(self.source_cls, SourceBackend)
@@ -90,10 +92,10 @@ def bind_sensor(
         raise TypeError(f'a sensor binding named {key!r} was already registered')
 
     binding = SensorBinding(
-        source_cls=cast(type[SourceBackend[SS, SC]], sensor.source_cls), # ty: ignore
+        source_cls=cast(type[SourceBackend[SS, SC]], sensor.source_cls),  # ty: ignore
         sweep_spec_cls=sensor.sweep_spec_cls,  # type: ignore
         peripherals_cls=sensor.peripherals_cls,  # type: ignore
-        sink_cls=cast(type[sinks.SinkBase[SC]], sensor.sink_cls), # ty: ignore
+        sink_cls=cast(type[sinks.SinkBase[SC]], sensor.sink_cls),  # ty: ignore
     )
 
     schema_ = schema

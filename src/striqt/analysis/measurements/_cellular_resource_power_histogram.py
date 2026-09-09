@@ -152,7 +152,6 @@ def build_tdd_link_symbol_masks(
         flex_as=flex_as,
     )
 
-    
     out_shape = (len(link_direction), count or 1)
     out = xp.empty(out_shape, dtype='float32')
     for i, direction in enumerate(link_direction):

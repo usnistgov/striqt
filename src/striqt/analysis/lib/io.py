@@ -725,7 +725,8 @@ def _build_encodings_zarr_v3(
         compressors = [compression]
     elif compression:
         from zarr import codecs  # pyright: ignore
-        compressors = [codecs.BloscCodec(cname='zstd', clevel=1, shuffle="shuffle")]
+
+        compressors = [codecs.BloscCodec(cname='zstd', clevel=1, shuffle='shuffle')]
     else:
         compressors = None
 
