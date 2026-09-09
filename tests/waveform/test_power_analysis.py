@@ -1,21 +1,8 @@
-"""Property-based tests for dB conversion functions using Hypothesis.
+"""Property-based tests for striqt.waveform.power_analysis using Hypothesis.
 
-This module demonstrates how to use Hypothesis to reduce boilerplate and make
-test specifications clearer. Key benefits:
-
-1. **Reduced boilerplate**: Custom strategies encapsulate array generation logic
-2. **Property-based testing**: Tests express mathematical invariants directly
-3. **Automatic edge case discovery**: Hypothesis finds corner cases automatically
-4. **Clear specifications**: Each test documents a mathematical property
-5. **Multi-backend support**: Tests run against numpy, cupy, and dask arrays
-
-Test Categories:
-- Mathematical identities (roundtrips, inverses)
-- Algebraic properties (3dB rule, 10dB rule, mean/sum relationship)
-- Dtype preservation
-- Input preservation (overwrite_x behavior)
-- Edge cases (zeros, infinities, extreme values)
-- Multi-backend compatibility (numpy, cupy, dask)
+Covers the dB/linear conversions and dB-domain statistics: identities and algebraic
+rules, dtype handling, input preservation, edge cases, complex inputs, numpy/cupy/dask
+compatibility, and numpy-vs-cupy agreement within ulp budgets for the library calls.
 """
 
 from __future__ import annotations
@@ -41,7 +28,6 @@ from striqt.waveform.lib.power_analysis import (
     unit_wave_to_linear,
 )
 
-# Import shared strategies and utilities from conftest
 from conftest import (
     to_numpy,
     positive_power_arrays,
@@ -54,8 +40,9 @@ from conftest import (
 
 # Roundoff budgets for the dB conversions, in ulps per library call (1 ulp <= 2u
 # relative, u = unit roundoff). Sized to cover CUDA's single-precision bounds (log10f 2,
-# powf 8, hypotf 3 ulp) as well as libm (~1 ulp); confirm on a GPU with
-# chores/tests/measure_db_accuracy.py.
+# powf 8, hypotf 3 ulp) as well as libm (~1 ulp). Measured with
+# chores/tests/measure_db_accuracy.py: libm log10 1.1-1.9 ulp; CUDA libdevice on a
+# Jetson TX2i log10f 2.0, powf 5 (|x| <= 30 dB), complex |z| 1.6 input ulps.
 LOG10_ULP = 2
 POW_ULP = 8
 HYPOT_ULP = 3
@@ -129,11 +116,6 @@ def dB_tolerance(rtol, atol, max_abs_dB):
     return atol + rtol * max_abs_dB
 
 
-# =============================================================================
-# Unit Conversion Tests - Bijection properties
-# =============================================================================
-
-
 class TestUnitConversionProperties:
     """Property: Unit conversions form bijections (invertible mappings)."""
 
@@ -167,38 +149,21 @@ class TestUnitConversionProperties:
         assert unit_wave_to_dB(unit_dB_to_wave(dB_unit)) == dB_unit
 
 
-# =============================================================================
-# Mathematical Identity Tests - Core dB conversion properties (numpy only)
-# =============================================================================
-
-
 class TestConversionIdentities:
     """Properties: Mathematical identities that must hold for dB conversions."""
 
     @given(power=positive_power_arrays(dtype=np.float64))
     @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
     def test_powtodB_dBtopow_roundtrip(self, power):
-        """Property: dBtopow(powtodB(x)) ≈ x for all positive x.
-
-        This is the fundamental inverse relationship.
-        Note: Uses float64 for precision; float32 has ~1e-6 relative error.
-        """
+        """Property: dBtopow(powtodB(x)) ≈ x for all positive x."""
         roundtrip = dBtopow(powtodB(power))
         rtol = roundtrip_power_rtol(power.dtype, np.abs(powtodB(power)).max())
         assert_allclose(roundtrip, power, rtol=rtol)
 
-    @given(
-        dB=dB_arrays(
-            min_value=-140, max_value=100, dtype=np.float64, filter_near_zero=True
-        )
-    )
+    @given(dB=dB_arrays(min_value=-140, max_value=100, dtype=np.float64))
     @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
     def test_dBtopow_powtodB_roundtrip(self, dB):
-        """Property: powtodB(dBtopow(x)) ≈ x for all finite x.
-
-        Note: Range limited to ±100 dB to avoid underflow/overflow in linear domain.
-        10^(-100/10) = 10^-10 is safely representable.
-        """
+        """Property: powtodB(dBtopow(x)) ≈ x."""
         roundtrip = powtodB(dBtopow(dB))
         rtol, atol = roundtrip_dB_tol(dB.dtype, np.abs(dB).max())
         assert_allclose(roundtrip, dB, rtol=rtol, atol=atol)
@@ -213,11 +178,7 @@ class TestConversionIdentities:
     )
     @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
     def test_envtodB_equals_powtodB_envtopow(self, env):
-        """Property: envtodB(x) = powtodB(envtopow(x)).
-
-        Envelope-to-dB should equal power-to-dB of squared envelope.
-        Note: Magnitude limited to avoid squaring overflow/underflow.
-        """
+        """Property: envtodB(x) = powtodB(envtopow(x))."""
         direct = envtodB(env)
         via_power = powtodB(envtopow(env))
         rtol, atol = log_conversion_tol(env.dtype, 20, n_impl=2)
@@ -249,11 +210,6 @@ class TestConversionIdentities:
         expected = 20 * np.log10(np.abs(env))
         rtol, atol = log_conversion_tol(env.dtype, 20, n_impl=2)
         assert_allclose(result, expected, rtol=rtol, atol=atol)
-
-
-# =============================================================================
-# Algebraic Properties - dB arithmetic rules
-# =============================================================================
 
 
 class TestAlgebraicProperties:
@@ -300,7 +256,6 @@ class TestAlgebraicProperties:
             min_size=2,
             max_size=50,
             dtype=np.float64,
-            filter_near_zero=True,
         )
     )
     @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
@@ -318,76 +273,44 @@ class TestAlgebraicProperties:
         assert_allclose(mean_result, expected_mean, rtol=rtol, atol=atol)
 
     @given(
-        dB=st.one_of(
-            st.floats(
-                min_value=-140, max_value=-1e-6, allow_nan=False, allow_infinity=False
-            ),
-            st.floats(
-                min_value=1e-6, max_value=100, allow_nan=False, allow_infinity=False
-            ),
+        dB=st.floats(
+            min_value=-140, max_value=100, allow_nan=False, allow_infinity=False
         )
     )
     @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
     def test_single_value_mean_identity(self, dB):
-        """Property: dBlinmean([x]) = x (mean of single value is itself).
-
-        Note: Range limited to ±100 dB to avoid underflow to zero in linear domain.
-        Values very close to zero are excluded since relative tolerance is meaningless there.
-        """
+        """Property: dBlinmean([x]) = x."""
         arr = np.array([dB], dtype=np.float64)
         result = dBlinmean(arr)
         rtol, atol = linear_stat_tol(np.float64, abs(dB), 1)
         assert_allclose(result, dB, rtol=rtol, atol=atol)
 
     @given(
-        dB=st.one_of(
-            st.floats(
-                min_value=-140, max_value=-1e-6, allow_nan=False, allow_infinity=False
-            ),
-            st.floats(
-                min_value=1e-6, max_value=100, allow_nan=False, allow_infinity=False
-            ),
+        dB=st.floats(
+            min_value=-140, max_value=100, allow_nan=False, allow_infinity=False
         )
     )
     @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
     def test_single_value_sum_identity(self, dB):
-        """Property: dBlinsum([x]) = x (sum of single value is itself).
-
-        Note: Range limited to ±100 dB to avoid underflow to zero in linear domain.
-        Values very close to zero are excluded since relative tolerance is meaningless there.
-        """
+        """Property: dBlinsum([x]) = x."""
         arr = np.array([dB], dtype=np.float64)
         result = dBlinsum(arr)
         rtol, atol = linear_stat_tol(np.float64, abs(dB), 1)
         assert_allclose(result, dB, rtol=rtol, atol=atol)
 
     @given(
-        dB=st.one_of(
-            st.floats(
-                min_value=-140, max_value=-1e-6, allow_nan=False, allow_infinity=False
-            ),
-            st.floats(
-                min_value=1e-6, max_value=100, allow_nan=False, allow_infinity=False
-            ),
+        dB=st.floats(
+            min_value=-140, max_value=100, allow_nan=False, allow_infinity=False
         ),
         n=st.integers(min_value=1, max_value=20),
     )
     @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
     def test_equal_values_mean(self, dB, n):
-        """Property: dBlinmean([x, x, ..., x]) = x (mean of equal values).
-
-        Note: Range limited to ±100 dB to avoid underflow to zero in linear domain.
-        Values very close to zero are excluded since relative tolerance is meaningless there.
-        """
+        """Property: dBlinmean([x, x, ..., x]) = x."""
         arr = np.array([dB] * n, dtype=np.float64)
         result = dBlinmean(arr)
         rtol, atol = linear_stat_tol(np.float64, abs(dB), n)
         assert_allclose(result, dB, rtol=rtol, atol=atol)
-
-
-# =============================================================================
-# Dtype Preservation Tests
-# =============================================================================
 
 
 class TestDtypePreservation:
@@ -427,11 +350,6 @@ class TestDtypePreservation:
         """Property: float32 input with min_dtype='float32' → float32 output."""
         result = envtopow(env, min_dtype='float32')
         assert result.dtype == np.float32
-
-
-# =============================================================================
-# Input Preservation Tests (overwrite_x behavior)
-# =============================================================================
 
 
 class TestInputPreservation:
@@ -484,11 +402,6 @@ class TestInputPreservation:
         original = dB.copy()
         dBlinsum(dB, overwrite_x=False)
         assert_allclose(dB, original, rtol=0)
-
-
-# =============================================================================
-# Edge Case Tests - Zeros and special values
-# =============================================================================
 
 
 class TestEdgeCases:
@@ -553,11 +466,6 @@ class TestEdgeCases:
         assert_allclose(result, expected, rtol=rtol, atol=atol)
 
 
-# =============================================================================
-# Complex Value Tests
-# =============================================================================
-
-
 class TestComplexValues:
     """Properties: Correct handling of complex-valued inputs."""
 
@@ -592,11 +500,6 @@ class TestComplexValues:
         expected = 20 * np.log10(np.abs(env))
         rtol, atol = log_conversion_tol(np.float64, 20, complex_input=True, n_impl=2)
         assert_allclose(result.real, expected, rtol=rtol, atol=atol)
-
-
-# =============================================================================
-# Axis Parameter Tests
-# =============================================================================
 
 
 class TestAxisParameter:
@@ -664,24 +567,12 @@ class TestAxisParameter:
                 st.integers(min_value=2, max_value=10),
             )
         )
-        # Exclude values near zero to avoid precision issues in dB→linear→dB roundtrip
         dB = data.draw(
             arrays(
                 dtype=np.float64,
                 shape=shape,
-                elements=st.one_of(
-                    st.floats(
-                        min_value=-50,
-                        max_value=-1e-6,
-                        allow_nan=False,
-                        allow_infinity=False,
-                    ),
-                    st.floats(
-                        min_value=1e-6,
-                        max_value=50,
-                        allow_nan=False,
-                        allow_infinity=False,
-                    ),
+                elements=st.floats(
+                    min_value=-50, max_value=50, allow_nan=False, allow_infinity=False
                 ),
             )
         )
@@ -695,11 +586,6 @@ class TestAxisParameter:
         assert_allclose(mean_result, expected_mean, rtol=rtol, atol=atol)
 
 
-# =============================================================================
-# Min Dtype Promotion Tests
-# =============================================================================
-
-
 class TestMinDtypePromotion:
     """Properties: min_dtype promotes low-precision inputs."""
 
@@ -708,16 +594,13 @@ class TestMinDtypePromotion:
     def test_float16_promoted_to_float32(self, power):
         """Property: float16 input with min_dtype='float32' → float32 output.
 
-        Note: We use float32 input and cast to float16 to test promotion.
-        The comparison is against the float16-converted input (not original float32)
-        since float16 quantization changes the input values.
+        The expected value is computed from the float16-quantized input, not the
+        original float32 draw.
         """
         power_f16 = power.astype(np.float16)
         result = powtodB(power_f16, min_dtype='float32')
         assert result.dtype == np.float32
 
-        # Verify result matches computation on the same float16 values
-        # (converted back to float32 for the expected computation)
         expected = powtodB(power_f16.astype(np.float32), min_dtype='float32')
         rtol, atol = log_conversion_tol(np.float32, 10, n_impl=2)
         assert_allclose(result, expected, rtol=rtol, atol=atol)
@@ -731,11 +614,6 @@ class TestMinDtypePromotion:
         assert result.dtype == np.float32
 
 
-# =============================================================================
-# Multi-Backend Tests - numpy, cupy, dask compatibility
-# =============================================================================
-
-
 class TestMultiBackendRoundtrip:
     """Properties: Roundtrip conversions work across all backends."""
 
@@ -747,11 +625,9 @@ class TestMultiBackendRoundtrip:
         """Property: dBtopow(powtodB(x)) ≈ x for all backends."""
         arr, xp_name, xp = data
 
-        # Perform roundtrip
         dB_result = powtodB(arr)
         roundtrip = dBtopow(dB_result)
 
-        # Convert to numpy for comparison
         original_np = to_numpy(arr)
         roundtrip_np = to_numpy(roundtrip)
 
@@ -760,9 +636,7 @@ class TestMultiBackendRoundtrip:
 
     @given(
         data=for_each_namespace(
-            dB_arrays(
-                min_value=-100, max_value=100, dtype=np.float64, filter_near_zero=True
-            )
+            dB_arrays(min_value=-100, max_value=100, dtype=np.float64)
         )
     )
     @settings(
@@ -772,11 +646,9 @@ class TestMultiBackendRoundtrip:
         """Property: powtodB(dBtopow(x)) ≈ x for all backends."""
         arr, xp_name, xp = data
 
-        # Perform roundtrip
         pow_result = dBtopow(arr)
         roundtrip = powtodB(pow_result)
 
-        # Convert to numpy for comparison
         original_np = to_numpy(arr)
         roundtrip_np = to_numpy(roundtrip)
 
@@ -829,7 +701,6 @@ class TestMultiBackendAlgebraicProperties:
                 min_size=2,
                 max_size=20,
                 dtype=np.float64,
-                filter_near_zero=True,
             )
         )
     )
@@ -910,11 +781,6 @@ class TestMultiBackendComplexValues:
         assert_allclose(result_np.real, expected, rtol=rtol, atol=atol)
 
 
-# =============================================================================
-# NumPy vs CuPy Cross-Comparison Tests
-# =============================================================================
-
-
 class TestNumpyCupyCrossComparison:
     """Cross-comparison tests validating numpy and cupy produce close results.
 
@@ -924,7 +790,6 @@ class TestNumpyCupyCrossComparison:
 
     @pytest.fixture
     def cupy_available(self):
-        """Skip test if cupy is not available."""
         from conftest import _cupy
 
         if _cupy is None:
@@ -943,10 +808,8 @@ class TestNumpyCupyCrossComparison:
         """Cross-comparison: powtodB numpy vs cupy (float64)."""
         cp = cupy_available
 
-        # Compute with numpy
         result_np = powtodB(power)
 
-        # Compute with cupy
         power_cp = cp.asarray(power)
         result_cp = powtodB(power_cp)
         result_cp_np = result_cp.get()
@@ -969,10 +832,8 @@ class TestNumpyCupyCrossComparison:
         """Cross-comparison: powtodB numpy vs cupy (float32)."""
         cp = cupy_available
 
-        # Compute with numpy
         result_np = powtodB(power, min_dtype='float32')
 
-        # Compute with cupy
         power_cp = cp.asarray(power)
         result_cp = powtodB(power_cp, min_dtype='float32')
         result_cp_np = result_cp.get()
@@ -990,7 +851,6 @@ class TestNumpyCupyCrossComparison:
             dtype=np.float64,
             min_dims=1,
             max_dims=1,
-            filter_near_zero=True,
         )
     )
     @settings(
@@ -1000,10 +860,8 @@ class TestNumpyCupyCrossComparison:
         """Cross-comparison: dBtopow numpy vs cupy (float64)."""
         cp = cupy_available
 
-        # Compute with numpy
         result_np = dBtopow(dB)
 
-        # Compute with cupy
         dB_cp = cp.asarray(dB)
         result_cp = dBtopow(dB_cp)
         result_cp_np = result_cp.get()
@@ -1019,7 +877,6 @@ class TestNumpyCupyCrossComparison:
             dtype=np.float32,
             min_dims=1,
             max_dims=1,
-            filter_near_zero=True,
         )
     )
     @settings(
@@ -1029,10 +886,8 @@ class TestNumpyCupyCrossComparison:
         """Cross-comparison: dBtopow numpy vs cupy (float32)."""
         cp = cupy_available
 
-        # Compute with numpy
         result_np = dBtopow(dB, min_dtype='float32')
 
-        # Compute with cupy
         dB_cp = cp.asarray(dB)
         result_cp = dBtopow(dB_cp, min_dtype='float32')
         result_cp_np = result_cp.get()
@@ -1058,10 +913,8 @@ class TestNumpyCupyCrossComparison:
         """Cross-comparison: envtodB numpy vs cupy (float64)."""
         cp = cupy_available
 
-        # Compute with numpy
         result_np = envtodB(env)
 
-        # Compute with cupy
         env_cp = cp.asarray(env)
         result_cp = envtodB(env_cp)
         result_cp_np = result_cp.get()
@@ -1089,10 +942,8 @@ class TestNumpyCupyCrossComparison:
         """Cross-comparison: envtodB numpy vs cupy (float32)."""
         cp = cupy_available
 
-        # Compute with numpy
         result_np = envtodB(env, min_dtype='float32')
 
-        # Compute with cupy
         env_cp = cp.asarray(env)
         result_cp = envtodB(env_cp, min_dtype='float32')
         result_cp_np = result_cp.get()
@@ -1120,10 +971,8 @@ class TestNumpyCupyCrossComparison:
         """Cross-comparison: envtopow numpy vs cupy (float64)."""
         cp = cupy_available
 
-        # Compute with numpy
         result_np = envtopow(env)
 
-        # Compute with cupy
         env_cp = cp.asarray(env)
         result_cp = envtopow(env_cp)
         result_cp_np = result_cp.get()
@@ -1141,7 +990,6 @@ class TestNumpyCupyCrossComparison:
             dtype=np.float64,
             min_dims=1,
             max_dims=1,
-            filter_near_zero=True,
         )
     )
     @settings(
@@ -1151,10 +999,8 @@ class TestNumpyCupyCrossComparison:
         """Cross-comparison: dBlinmean numpy vs cupy (float64)."""
         cp = cupy_available
 
-        # Compute with numpy
         result_np = dBlinmean(dB, axis=None)
 
-        # Compute with cupy
         dB_cp = cp.asarray(dB)
         result_cp = dBlinmean(dB_cp, axis=None)
         result_cp_np = float(result_cp.get())
@@ -1174,7 +1020,6 @@ class TestNumpyCupyCrossComparison:
             dtype=np.float64,
             min_dims=1,
             max_dims=1,
-            filter_near_zero=True,
         )
     )
     @settings(
@@ -1184,10 +1029,8 @@ class TestNumpyCupyCrossComparison:
         """Cross-comparison: dBlinsum numpy vs cupy (float64)."""
         cp = cupy_available
 
-        # Compute with numpy
         result_np = dBlinsum(dB, axis=None)
 
-        # Compute with cupy
         dB_cp = cp.asarray(dB)
         result_cp = dBlinsum(dB_cp, axis=None)
         result_cp_np = float(result_cp.get())
