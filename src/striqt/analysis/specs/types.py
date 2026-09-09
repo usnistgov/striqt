@@ -30,7 +30,7 @@ CellularSubcarrierSpacingTuple = Annotated[
     Meta('One or more subcarrier spacings (15e3, 30e3, 60e3, etc)', units='Hz'),
 ]
 CellularCyclicPrefix = Annotated[
-    Union[Literal['normal'], Literal['extended']], Meta('the 3GPP cyclic prefix type')
+    Literal['normal', 'extended'], Meta('the 3GPP cyclic prefix type')
 ]
 CellularAverageSlots = Annotated[
     bool, Meta('True to coarsen spectrogram bins by averaging 1-symbol time resolution')
@@ -38,13 +38,13 @@ CellularAverageSlots = Annotated[
 CellularAverageRBs = Annotated[
     Union[bool, Literal['half']],
     Meta(
-        'True (or "half") to coarsen spectrogram bins by integrating 1-subcarrier frequency resolution into 1- (or 1/2)-resource block'
+        'True (or "half") to coarsen spectrogram bins by integrating 1-subcarrier frequency resolution into 1 or ½ RBs'
     ),
 ]
 Duration = Annotated[float, Meta('Duration of the analysis waveform', 's')]
 GuardBandwidths = Annotated[
     tuple[float, float],
-    Meta('Channel guard bandwidths to ignore on the left and right sides', units='Hz'),
+    Meta('Guard bandwidths trimmed from [low, high] edges of the analysis band', units='Hz'),
 ]
 LOBandstop = Annotated[
     float,

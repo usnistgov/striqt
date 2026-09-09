@@ -74,6 +74,7 @@ plot-capture = "striqt.cli.plot_capture:cli"
 rechunk-zarr = "striqt.cli.rechunk_zarr:cli"
 convert-spec = "striqt.cli.convert_spec:cli"
 zip-zarr = "striqt.cli.zip_zarr:cli"
+_warmup_striqt = "striqt.cli.warmup:cli"
 
 [tool.ruff]
 target-version = "py39"

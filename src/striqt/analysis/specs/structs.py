@@ -59,7 +59,7 @@ class SpecBase(
         return map
 
     @classmethod
-    def from_dict(cls: type[_T], d: dict) -> _T:
+    def from_dict(cls: type[_T], d: dict | helpers.frozendict) -> _T:
         return helpers.convert_dict(d, type=cls)
 
     @classmethod
@@ -116,7 +116,7 @@ class FilteredCapture(Capture, kw_only=True, frozen=True):
 
 
 class AnalysisKeywords(typing.TypedDict, total=False):
-    as_xarray: Union[bool, typing.Literal['delayed']]
+    as_xarray: types.AsXArray
 
 
 class Analysis(SpecBase, kw_only=True, frozen=True):

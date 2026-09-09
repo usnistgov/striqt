@@ -84,7 +84,7 @@ def lru_cache(
     def wrap(wrapee: Callable[P, R]) -> LRUWrapped[P, R]:
         wrapped = func(wrapee)
         _caches[wrapee] = wrapped
-        return wrapped  # pyright: ignore
+        return wrapped  # type: ignore
 
     return wrap
 

@@ -164,8 +164,8 @@ def binned_mean(
 
 
 @util.lru_cache()
-def sliding_window_output_shape(
-    array_shape: tuple[int, ...] | int, window_shape: tuple, axis
+def _sliding_window_output_shape(
+    array_shape: tuple[int, ...] | int, window_shape: tuple[int, ...] | int, axis
 ):
     """return the shape of the output of sliding_window_view, for example
     to pre-create an output buffer."""
@@ -176,8 +176,10 @@ def sliding_window_output_shape(
         # numpy < 2?
         from numpy.lib import stride_tricks
 
-    if not isinstance(array_shape, tuple):
+    if isinstance(array_shape, int):
         array_shape = (array_shape,)
+    if isinstance(window_shape, int):
+        window_shape = (window_shape,)
 
     if min(window_shape) < 0:
         raise ValueError('`window_shape` cannot contain negative values')
@@ -195,7 +197,6 @@ def sliding_window_output_shape(
                 f'Must provide matching length window_shape and axis; got {len(window_shape)} window_shape elements and {len(axis)} axes elements.'
             )
 
-    window_shape = tuple(window_shape) if np.iterable(window_shape) else (window_shape,)
     x_shape_trimmed = list(array_shape)
     for ax, dim in zip(axis, window_shape):
         if x_shape_trimmed[ax] < dim:
@@ -291,7 +292,7 @@ def sliding_window_view(x, window_shape, axis=None, *, subok=False, writeable=Fa
     # first convert input to array, possibly keeping subclass
     x = xp.array(x, copy=False, subok=subok)
 
-    out_shape = sliding_window_output_shape(x.shape, window_shape, axis)
+    out_shape = _sliding_window_output_shape(x.shape, window_shape, axis)
     axis = stride_tricks.normalize_axis_tuple(axis, x.ndim)  # type: ignore
     out_strides = x.strides + tuple(x.strides[ax] for ax in axis)
 

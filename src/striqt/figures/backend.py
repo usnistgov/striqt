@@ -144,7 +144,7 @@ def plot_cyclic_channel_power(
             alpha=0.25,
             lw=0,
             rasterized=True,
-            **fill_kws,
+            **fill_kws,  # ty: ignore
         )
 
     labels.label_axis('x', cyclic_channel_power.cyclic_lag, ax=ax)
@@ -237,7 +237,7 @@ class PlotBackend:
             _cmap = mpl.colormaps.get_cmap(cmap).resampled(len(levels) - 1)
             norm = colors.BoundaryNorm(levels, ncolors=_cmap.N)
 
-        grid = data.plot.imshow(  # ty: ignore
+        grid = data.plot.imshow(
             **coords,
             cmap=_cmap,
             norm=norm,
@@ -251,10 +251,10 @@ class PlotBackend:
         if grid.cbar is not None and grid.cbar.solids is not None:
             grid.cbar.solids.set_rasterized(rasterized)
 
-        x = grid._x_var = kwargs['x']  # pyright: ignore
-        y = grid._y_var = kwargs.get('y', None)  # pyright: ignore
+        x = grid._x_var = kwargs['x']  # type: ignore
+        y = grid._y_var = kwargs.get('y', None)  # type: ignore
         ydata = data if y is None else data[y]
-        grid._dpi = _select_dpi(grid, data[x], ydata, min_=120, max_=300)  # pyright: ignore
+        grid._dpi = _select_dpi(grid, data[x], ydata, min_=120, max_=300)  # type: ignore
 
         return grid
 
@@ -267,11 +267,11 @@ class PlotBackend:
         coords = self._coord_kws(**kwargs)
         rasterized = data.size > 10000
 
-        grid = data.plot.line(**coords, yscale=yscale, rasterized=rasterized)  # ty: ignore
+        grid = data.plot.line(**coords, yscale=yscale, rasterized=rasterized)
 
-        grid._x_var = kwargs['x']  # pyright: ignore
+        grid._x_var = kwargs['x']  # type: ignore
         grid._y_var = None
-        grid._dpi = _select_dpi(grid, data[grid._x_var], None, min_=120, max_=300)  # pyright: ignore
+        grid._dpi = _select_dpi(grid, data[grid._x_var], None, min_=120, max_=300)  # type: ignore
 
         return grid
 
