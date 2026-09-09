@@ -44,7 +44,7 @@ CellularAverageRBs = Annotated[
 Duration = Annotated[float, Meta('Duration of the analysis waveform', 's')]
 GuardBandwidths = Annotated[
     tuple[float, float],
-    Meta('Channel guard bandwidths to ignore on the left and right sides', units='Hz'),
+    Meta('Guard bandwidths trimmed from [low, high] edges of the analysis band', units='Hz'),
 ]
 LOBandstop = Annotated[
     float,
