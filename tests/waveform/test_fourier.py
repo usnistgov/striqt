@@ -1185,6 +1185,10 @@ class TestEdgeCases:
 # Bluestein sizes. Errors of independent backends add in quadrature (measured 0.83-1.0).
 FFT_ROUNDOFF_C = 2.2
 ROUNDOFF_SAFETY = 3
+# An FFT of a tone concentrates roundoff in a few bins instead of spreading it evenly:
+# measured up to 6.7 units of roundoff of the tone amplitude at the tone (cuFFT, N=512)
+# and 3.9 in a far bin (cuFFT, N=1024), against ~2 for pocketfft.
+TONE_PEAK_ROUNDOFF = 8
 
 
 def roundoff_rms(dtype, nffts, n_elementwise=0):
@@ -1215,28 +1219,44 @@ def _rms(x):
     return float(np.sqrt(np.mean(np.abs(x) ** 2)))
 
 
-def rms_tolerance_dBc(sigma, power=False):
-    """express an rms tolerance relative to the output rms as error power in dBc.
+def rms_tolerance_dBc(sigma):
+    """express an rms amplitude tolerance relative to the output rms as error power
+    relative to the signal, in dBc"""
+    return 20 * np.log10(sigma)
 
-    `sigma` bounds an amplitude ratio unless `power` is True (e.g. for spectrograms).
+
+def level_tolerance_dB(sigma, power=False):
+    """express a relative tolerance on an output as the uncertainty of its level in dB.
+
+    `sigma` bounds an amplitude ratio (level 20*log10|x|) unless `power` is True
+    (level 10*log10 x, e.g. spectrogram bins).
     """
-    return (10 if power else 20) * np.log10(sigma)
+    return (10 if power else 20) * np.log10(1 + sigma)
 
 
-def peak_tolerance_dBc(sigma, size, power=False):
-    """express the peak tolerance implied by `sigma` over `size` outputs in dBc"""
-    return rms_tolerance_dBc(peak_factor(size) * sigma, power=power)
+def peak_level_tolerance_dB(sigma, size, power=False):
+    """express the peak tolerance implied by `sigma` over `size` outputs as a level
+    uncertainty in dB"""
+    return level_tolerance_dB(peak_factor(size) * sigma, power=power)
 
 
-def far_bin_floor_dBc(sigma, nfft, size=None):
+def tone_peak_roundoff(dtype):
+    """bound on structured roundoff in any one bin, relative to a tone's amplitude"""
+    return ROUNDOFF_SAFETY * TONE_PEAK_ROUNDOFF * np.finfo(dtype).eps / 2
+
+
+def far_bin_floor_dBc(sigma, nfft, size=None, dtype=np.complex64):
     """express the roundoff tolerance in bins away from a bin-centered tone, relative
     to the tone, in dBc.
 
     The tone occupies one bin while roundoff spreads evenly over all `nfft` bins. With
-    `size`, the result is the peak tolerance over that many far bins; otherwise the rms.
+    `size`, the result is the peak tolerance over that many far bins, which is the
+    larger of the white-noise tail and the structured `tone_peak_roundoff`.
     """
-    factor = 1 if size is None else peak_factor(size)
-    return rms_tolerance_dBc(factor * sigma / np.sqrt(nfft))
+    if size is None:
+        return rms_tolerance_dBc(sigma / np.sqrt(nfft))
+    white = peak_factor(size) * sigma / np.sqrt(nfft)
+    return rms_tolerance_dBc(max(white, tone_peak_roundoff(dtype)))
 
 
 def bin_centered_tone(nfft, bin_fraction, nseg, dtype=np.complex64):
@@ -1271,8 +1291,10 @@ class TestToneFarBinFloor:
 
     def _check_far_bins(self, X, X_ref, nfft):
         err = np.asarray(X).astype(np.complex128) - X_ref
+        peak_bin = int(np.argmax(np.abs(X_ref[0])))
+        peak = np.abs(X_ref[0, peak_bin])
         far = np.ones(nfft, dtype=bool)
-        far[int(np.argmax(np.abs(X_ref[0])))] = False
+        far[peak_bin] = False
         err_far = err[:, far]
 
         # window/nfft and the window multiply, then fft(nfft)
@@ -1281,7 +1303,9 @@ class TestToneFarBinFloor:
         assert _rms(err_far) < sigma * scale, (
             f'far-bin rms roundoff above {far_bin_floor_dBc(sigma, nfft):.1f} dBc'
         )
-        assert np.abs(err_far).max() < peak_factor(err_far.size) * sigma * scale, (
+        white = peak_factor(err_far.size) * sigma * scale
+        structured = tone_peak_roundoff(np.complex64) * peak
+        assert np.abs(err_far).max() < max(white, structured), (
             f'far-bin peak roundoff above '
             f'{far_bin_floor_dBc(sigma, nfft, err_far.size):.1f} dBc'
         )
@@ -1434,14 +1458,15 @@ class TestNumpyCupyCrossComparison:
         sigma = cross_backend_rms(x.dtype, [len(x), num_out], n_elementwise=2)
         scale = _rms(result_np)
         assert _rms(result_cp_np - result_np) < sigma * scale, (
-            f'rms roundoff above {rms_tolerance_dBc(sigma):.1f} dBc'
+            f'rms roundoff above {level_tolerance_dB(sigma):.1e} dB'
         )
+        peak_dB = peak_level_tolerance_dB(sigma, result_np.size)
         assert_allclose(
             result_cp_np,
             result_np,
             rtol=0,
             atol=peak_factor(result_np.size) * sigma * scale,
-            err_msg=f'peak above {peak_tolerance_dBc(sigma, result_np.size):.1f} dBc',
+            err_msg=f'peak above {peak_dB:.1e} dB',
         )
 
     # -------------------------------------------------------------------------
@@ -1482,14 +1507,15 @@ class TestNumpyCupyCrossComparison:
         sigma = cross_backend_rms(x.dtype, [64], n_elementwise=2)
         scale = _rms(X_np)
         assert _rms(X_cp_np - X_np) < sigma * scale, (
-            f'rms roundoff above {rms_tolerance_dBc(sigma):.1f} dBc'
+            f'rms roundoff above {level_tolerance_dB(sigma):.1e} dB'
         )
+        peak_dB = peak_level_tolerance_dB(sigma, X_np.size)
         assert_allclose(
             X_cp_np,
             X_np,
             rtol=0,
             atol=peak_factor(X_np.size) * sigma * scale,
-            err_msg=f'peak above {peak_tolerance_dBc(sigma, X_np.size):.1f} dBc',
+            err_msg=f'peak above {peak_dB:.1e} dB',
         )
 
     # -------------------------------------------------------------------------
@@ -1532,15 +1558,15 @@ class TestNumpyCupyCrossComparison:
         sigma = cross_backend_rms(x.dtype, [64], n_elementwise=3)
         scale = _rms(Sxx_np)
         assert _rms(Sxx_cp_np - Sxx_np) < sigma * scale, (
-            f'rms roundoff above {rms_tolerance_dBc(sigma, power=True):.1f} dBc'
+            f'rms roundoff above {level_tolerance_dB(sigma, power=True):.1e} dB'
         )
-        peak_dBc = peak_tolerance_dBc(sigma, Sxx_np.size, power=True)
+        peak_dB = peak_level_tolerance_dB(sigma, Sxx_np.size, power=True)
         assert_allclose(
             Sxx_cp_np,
             Sxx_np,
             rtol=4 * sigma,
             atol=peak_factor(Sxx_np.size) * sigma * scale,
-            err_msg=f'peak above {peak_dBc:.1f} dBc',
+            err_msg=f'peak above {peak_dB:.1e} dB',
         )
 
     # -------------------------------------------------------------------------
@@ -1573,14 +1599,15 @@ class TestNumpyCupyCrossComparison:
         sigma = cross_backend_rms(x.dtype, [len(x), len(x)], n_elementwise=1)
         scale = _rms(x)
         assert _rms(result_cp_np - result_np) < sigma * scale, (
-            f'rms roundoff above {rms_tolerance_dBc(sigma):.1f} dBc'
+            f'rms roundoff above {level_tolerance_dB(sigma):.1e} dB'
         )
+        peak_dB = peak_level_tolerance_dB(sigma, x.size)
         assert_allclose(
             result_cp_np,
             result_np,
             rtol=0,
             atol=peak_factor(x.size) * sigma * scale,
-            err_msg=f'peak above {peak_tolerance_dBc(sigma, x.size):.1f} dBc',
+            err_msg=f'peak above {peak_dB:.1e} dB',
         )
 
     @settings(
@@ -1607,12 +1634,13 @@ class TestNumpyCupyCrossComparison:
         sigma = cross_backend_rms(x.dtype, [len(x), len(x)], n_elementwise=1)
         scale = _rms(x)
         assert _rms(result_cp_np - result_np) < sigma * scale, (
-            f'rms roundoff above {rms_tolerance_dBc(sigma):.1f} dBc'
+            f'rms roundoff above {level_tolerance_dB(sigma):.1e} dB'
         )
+        peak_dB = peak_level_tolerance_dB(sigma, x.size)
         assert_allclose(
             result_cp_np,
             result_np,
             rtol=0,
             atol=peak_factor(x.size) * sigma * scale,
-            err_msg=f'peak above {peak_tolerance_dBc(sigma, x.size):.1f} dBc',
+            err_msg=f'peak above {peak_dB:.1e} dB',
         )
