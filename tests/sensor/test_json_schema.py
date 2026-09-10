@@ -1,5 +1,5 @@
-import striqt.sensor as ss
 import striqt.analysis as sa
+import striqt.sensor as ss
 
 
 def test_schema_generation(spec_dir):

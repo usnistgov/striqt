@@ -1,5 +1,6 @@
-import striqt.sensor as ss
 import msgspec
+
+import striqt.sensor as ss
 
 
 def test_read(spec_dir):

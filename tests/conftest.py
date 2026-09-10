@@ -487,3 +487,33 @@ def spec_dir() -> Path:
 def output_dir(data_dir) -> Path:
     """path to dataset outputs"""
     return data_dir / 'outputs'
+
+
+@pytest.fixture(scope='session')
+def cw_spec_path() -> Path:
+    return SWEEP_DIR / 'cw-cpu.yaml'
+
+
+@pytest.fixture(scope='session')
+def cw_sweep():
+    import striqt.sensor as ss
+
+    return ss.read_yaml_spec(SWEEP_DIR / 'cw-cpu.yaml')
+
+
+@pytest.fixture(scope='session')
+def calibration_sweep():
+    import striqt.sensor as ss
+
+    return ss.read_json_spec(SWEEP_DIR / 'calibration.json')
+
+
+@pytest.fixture
+def fake_source_id(monkeypatch):
+    """stand in for the hardware id lookup that PathFormatter performs"""
+    import striqt.sensor as ss
+
+    monkeypatch.setattr(
+        ss.lib.controller.lookup, 'id', lambda spec, timeout=0.5: 'beef'
+    )
+    return 'beef'
