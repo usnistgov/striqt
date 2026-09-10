@@ -402,9 +402,8 @@ def infer_coord_info(
                 name = type_key.cls.__qualname__
                 raise TypeError(f'failed to make default for type {name!r}') from ex
     elif isinstance(type_key, mi.Metadata):
-        return type_key.extra or {}, infer_coord_info(type_key.type, allow_timestamps)[
-            1
-        ]
+        info = infer_coord_info(type_key.type, allow_timestamps)[1]
+        return type_key.extra or {}, info
     elif isinstance(type_key, mi.LiteralType):
         return {}, type(type_key.values[0])
     elif isinstance(type_key, mi.UnionType):

@@ -1168,14 +1168,17 @@ def bin_centered_tone(nfft, bin_fraction, nseg, dtype=np.complex64):
 
 
 class TestToneFarBinFloor:
-    """Roundoff in the bins away from a bin-centered tone, where the exact STFT is zero.
+    """Roundoff in the bins away from a unit, bin-centered complex64 tone.
 
-    A rectangular window and an integer number of cycles per segment put the whole
-    signal in one bin per segment, so every other bin measures roundoff alone against
-    a float64 reference of the same (float32-quantized) input.
+    With an integer number of cycles per segment (and a rectangular window for the
+    STFT) the exact spectrum occupies one bin, so every other bin measures roundoff
+    alone against a float64 reference of the same float32-quantized input. For the
+    time-domain outputs of resample and oaconvolve the bins are those of the error
+    spectrum, taken in float64 so the analysis adds no roundoff of its own.
     """
 
     NSEG = 4
+    KERNEL_TAPS = 400
 
     @pytest.fixture
     def cupy_available(self):
@@ -1235,6 +1238,107 @@ class TestToneFarBinFloor:
         x = bin_centered_tone(nfft, bin_fraction, self.NSEG)
         X_ref = self._stft(x.astype(np.complex128), nfft)
         self._check_far_bins(self._stft(cp.asarray(x), nfft).get(), X_ref, nfft)
+
+    def _check_error_spectrum(self, out, out_ref, sigma):
+        """bound the spectrum of the roundoff error in a time-domain output of a unit
+        tone, excluding the tone's own bin; `sigma` is the rms error model relative to
+        the unit input"""
+        err = np.fft.fft(np.asarray(out).astype(np.complex128) - out_ref)
+        size = err.size
+        far = np.ones(size, dtype=bool)
+        far[int(np.argmax(np.abs(np.fft.fft(out_ref))))] = False
+        err_far = err[far]
+
+        # unnormalized fft: bin rms is sqrt(size) times the sample rms, and the unit
+        # tone peaks at size
+        rms_bins = np.sqrt(size) * sigma
+        assert _rms(err_far) < rms_bins, (
+            f'far-bin rms roundoff above {far_bin_floor_dBc(sigma, size):.1f} dBc'
+        )
+        white = peak_factor(err_far.size) * rms_bins
+        structured = tone_peak_roundoff(np.complex64) * size
+        assert np.abs(err_far).max() < max(white, structured), (
+            f'far-bin peak roundoff above '
+            f'{far_bin_floor_dBc(sigma, size, err_far.size):.1f} dBc'
+        )
+
+    def _resample_case(self, nfft, bin_fraction):
+        # keep the tone inside the half band that survives downsampling by 2
+        x = bin_centered_tone(nfft, 0.3 + 0.4 * bin_fraction, self.NSEG)
+        num_out = x.size // 2
+        # fftshift multiply, fft(N), ifft(N/2), ifftshift multiply
+        sigma = single_backend_rms(np.complex64, [x.size, num_out], n_elementwise=2)
+        out_ref = _get_fourier().resample(x.astype(np.complex128), num_out)
+        return x, num_out, out_ref, sigma
+
+    @settings(
+        suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None
+    )
+    @given(
+        nfft=st.sampled_from([64, 256, 1024, 4096]),
+        bin_fraction=st.floats(min_value=0, max_value=1),
+    )
+    def test_resample_far_bins_numpy_complex64(self, nfft, bin_fraction):
+        x, num_out, out_ref, sigma = self._resample_case(nfft, bin_fraction)
+        out = _get_fourier().resample(x, num_out)
+        self._check_error_spectrum(out, out_ref, sigma)
+
+    @settings(
+        suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None
+    )
+    @given(
+        nfft=st.sampled_from([64, 256, 1024, 4096]),
+        bin_fraction=st.floats(min_value=0, max_value=1),
+    )
+    def test_resample_far_bins_cupy_complex64(self, cupy_available, nfft, bin_fraction):
+        cp = cupy_available
+        x, num_out, out_ref, sigma = self._resample_case(nfft, bin_fraction)
+        out = _get_fourier().resample(cp.asarray(x), num_out).get()
+        self._check_error_spectrum(out, out_ref, sigma)
+
+    def _oaconvolve_case(self, nfft, bin_fraction):
+        x = bin_centered_tone(nfft, bin_fraction, self.NSEG)
+        # a unit-gain lowpass; the tone may land in its stopband, so bounds are
+        # anchored to the input tone rather than the output
+        kernel = np.hanning(self.KERNEL_TAPS).astype(np.float32)
+        kernel /= kernel.sum()
+        # the overlap-add block is at most x.size long
+        sigma = single_backend_rms(np.complex64, [x.size, x.size], n_elementwise=1)
+        out_ref = _get_fourier().oaconvolve(
+            x.astype(np.complex128), kernel.astype(np.float64), mode='same'
+        )
+        return x, kernel, out_ref, sigma
+
+    @settings(
+        suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None
+    )
+    @given(
+        nfft=st.sampled_from([64, 256, 1024, 4096]),
+        bin_fraction=st.floats(min_value=0, max_value=1),
+    )
+    def test_oaconvolve_far_bins_numpy_complex64(self, nfft, bin_fraction):
+        x, kernel, out_ref, sigma = self._oaconvolve_case(nfft, bin_fraction)
+        out = _get_fourier().oaconvolve(x, kernel, mode='same')
+        self._check_error_spectrum(out, out_ref, sigma)
+
+    @settings(
+        suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None
+    )
+    @given(
+        nfft=st.sampled_from([64, 256, 1024, 4096]),
+        bin_fraction=st.floats(min_value=0, max_value=1),
+    )
+    def test_oaconvolve_far_bins_cupy_complex64(
+        self, cupy_available, nfft, bin_fraction
+    ):
+        cp = cupy_available
+        x, kernel, out_ref, sigma = self._oaconvolve_case(nfft, bin_fraction)
+        out = (
+            _get_fourier()
+            .oaconvolve(cp.asarray(x), cp.asarray(kernel), mode='same')
+            .get()
+        )
+        self._check_error_spectrum(out, out_ref, sigma)
 
 
 class TestNumpyCupyCrossComparison:
