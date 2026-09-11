@@ -487,3 +487,60 @@ def spec_dir() -> Path:
 def output_dir(data_dir) -> Path:
     """path to dataset outputs"""
     return data_dir / 'outputs'
+
+
+@pytest.fixture(scope='session')
+def cw_spec_path() -> Path:
+    return SWEEP_DIR / 'cw-cpu.yaml'
+
+
+@pytest.fixture(scope='session')
+def cw_sweep():
+    import striqt.sensor as ss
+
+    return ss.read_yaml_spec(SWEEP_DIR / 'cw-cpu.yaml')
+
+
+@pytest.fixture(scope='session')
+def calibration_sweep():
+    import striqt.sensor as ss
+
+    return ss.read_json_spec(SWEEP_DIR / 'calibration.json')
+
+
+@pytest.fixture
+def fake_source_id(monkeypatch):
+    """stand in for the hardware id lookup that PathFormatter performs"""
+    import striqt.sensor as ss
+
+    monkeypatch.setattr(
+        ss.lib.controller.lookup, 'id', lambda spec, timeout=0.5: 'beef'
+    )
+    return 'beef'
+
+
+# ---------------------------------------------------------------------------
+# Spec construction paths
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(params=('direct', 'from_dict'))
+def construct(request):
+    """build a spec either directly or through msgspec conversion"""
+    if request.param == 'direct':
+        return lambda cls, **kws: cls(**kws)
+    return lambda cls, **kws: cls.from_dict(kws)
+
+
+def raises_on_both_paths(cls, exc, match, **kws):
+    """assert that constructing `cls` raises `exc` directly and via from_dict.
+
+    msgspec re-raises ValueError and TypeError from __post_init__ as its own
+    ValidationError on the conversion path, so either is accepted there.
+    """
+    import msgspec
+
+    with pytest.raises(exc, match=match):
+        cls(**kws)
+    with pytest.raises((exc, msgspec.ValidationError), match=match):
+        cls.from_dict(kws)
