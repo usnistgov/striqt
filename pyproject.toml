@@ -61,9 +61,11 @@ gpu = [
     "cython",
 ]
 test = [
+    "coverage",
     "pytest",
     "nptdms",
     "pytest-order",
+    "pytest-cov",
     "hypothesis"
 ]
 
