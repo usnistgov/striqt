@@ -1,0 +1,16 @@
+data:
+  sweep_index: -1
+  select:
+    spectrogram_time: slice(0, 20e-3)
+
+plotter:
+  col: port
+  col_label_format: '{channel_name} {antenna_name} Antenna ({antenna_polarization} Polarization)'
+  suptitle_fmt: '{site_name} at {channel_name} ({start_time})'
+  filename_fmt: '{name} {channel_name}.png'
+  style: striqt.figures.presentation_full_width
+
+variables:
+  spectrogram: {}
+  cellular_5g_pss_correlation:
+    dB: True
