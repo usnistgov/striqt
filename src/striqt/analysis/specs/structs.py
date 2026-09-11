@@ -19,7 +19,10 @@ _TS = typing.TypeVar('_TS', bound='SpecBase')
 
 # msgspec.structs.replace only calls __post_init__ from 0.21, and 0.21
 # dropped Python 3.9
-_REPLACE_RUNS_POST_INIT = tuple(int(s) for s in msgspec.__version__.split('.')[:2]) >= (0, 21)
+_REPLACE_RUNS_POST_INIT = tuple(int(s) for s in msgspec.__version__.split('.')[:2]) >= (
+    0,
+    21,
+)
 
 
 class SpecBase(

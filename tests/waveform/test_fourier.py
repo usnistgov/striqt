@@ -679,17 +679,22 @@ class TestEdgeCases:
 
         assert_allclose(Sxx, 0, atol=1e-10)
 
-    @pytest.mark.parametrize('size, ok', [(128, True), (100, False)])
-    def test_stft_truncate_false_requires_whole_segments(self, size, ok):
+    @pytest.mark.parametrize(
+        'size, noverlap, nseg',
+        [(128, 0, 2), (100, 0, None), (96, 32, 2), (100, 32, None)],
+    )
+    def test_stft_truncate_false_requires_whole_segments(self, size, noverlap, nseg):
         fourier = _get_fourier()
         x = np.ones(size, dtype=np.complex64)
-        kws = dict(fs=1e6, window='hamming', nperseg=64, noverlap=0, truncate=False)
-        if ok:
-            _, _, X = fourier.stft(x, **kws)
-            assert X.shape == (size // 64, 64)
-        else:
-            with pytest.raises(ValueError, match='not a factor'):
+        kws = dict(
+            fs=1e6, window='hamming', nperseg=64, noverlap=noverlap, truncate=False
+        )
+        if nseg is None:
+            with pytest.raises(ValueError, match=f'size {size}'):
                 fourier.stft(x, **kws)
+        else:
+            _, _, X = fourier.stft(x, **kws)
+            assert X.shape == (nseg, 64)
 
     def test_stft_with_overlap(self):
         """Test STFT with 50% overlap."""

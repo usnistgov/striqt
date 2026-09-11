@@ -502,7 +502,8 @@ def stft(
     Raises:
         NotImplementedError: if axis != 0
 
-        ValueError: if truncate == False and x.shape[axis] % nperseg != 0
+        ValueError: if truncate == False and x.shape[axis] does not hold a whole
+            number of segments at the given nperseg and noverlap
 
     Returns:
         stft (see scipy.fft.stft)
@@ -566,6 +567,12 @@ def stft(
         )
 
     else:
+        hop = nperseg - noverlap
+        if not truncate and (x.shape[axis] - nperseg) % hop != 0:
+            raise ValueError(
+                f'axis {axis} size {x.shape[axis]} is not a whole number of segments '
+                f'with nperseg={nperseg} and noverlap={noverlap}'
+            )
         xstack = _stack_stft_windows(
             x,
             window=w / nfft,
