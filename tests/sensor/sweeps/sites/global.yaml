@@ -1,0 +1,20 @@
+defaults:
+  channel_name:
+    key: center_frequency
+    lookup:
+      3750e6: "3750 MHz"
+      3829.8e6: "3830 MHz"
+      3900e6: "3900 MHz"
+    default: null
+  antenna_index:
+    key: port
+    lookup:
+      0: 0
+      1: 1
+  antenna_name: Unspecified
+  antenna_polarization: Unspecified
+  antenna_model:
+    key: antenna_name
+    lookup:
+      Omni: OmniModel
+      1x32: PanelModel

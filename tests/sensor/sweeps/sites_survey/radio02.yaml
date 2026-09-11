@@ -1,0 +1,10 @@
+48b02d17a587:
+  radio_name: radio02
+  site_name: WAPA-north
+  antenna_name:
+    key: port
+    lookup:
+      0: Omni
+      1: 1x32
+  tx1_power: nan
+  test_case: 3

@@ -1,0 +1,18 @@
+- field: port
+  kind: list
+  values: [0, 1]
+- field: sample_rate
+  kind: list
+  values: [125.0e6, 62.5e6]
+- field: center_frequency
+  kind: list
+  values: [3750e6, 3829.8e6, 3900e6, 3960e6]
+- field: gain
+  kind: list
+  values: [0, -10, -20]
+- field: analysis_bandwidth
+  kind: list
+  values: [40e6, 60e6, 80e6, 100e6, inf]
+- field: lo_shift
+  kind: list
+  values: [none]

@@ -17,6 +17,10 @@ import striqt.waveform as sw
 _T = typing.TypeVar('_T')
 _TS = typing.TypeVar('_TS', bound='SpecBase')
 
+# msgspec.structs.replace only calls __post_init__ from 0.21, and 0.21
+# dropped Python 3.9
+_REPLACE_RUNS_POST_INIT = tuple(int(s) for s in msgspec.__version__.split('.')[:2]) >= (0, 21)
+
 
 class SpecBase(
     msgspec.Struct,
@@ -40,7 +44,10 @@ class SpecBase(
         """
         if len(attrs) == 0:
             return self
-        return msgspec.structs.replace(self, **attrs).validate()
+        new = msgspec.structs.replace(self, **attrs)
+        if not _REPLACE_RUNS_POST_INIT:
+            new.__post_init__()
+        return new.validate()
 
     def to_dict(self, unfreeze: bool = False, allow_tuple_keys: bool = True) -> dict:
         """return a dictinary representation of `self`"""

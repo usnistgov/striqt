@@ -1,0 +1,22 @@
+48b02d17a587:
+  radio_name: radio02
+  site_name: WAPA-north
+  gain: 0
+  mast_height: 1.7
+  azimuth_offset: 150
+  elevation_offset: -0
+  antenna_name:
+    key: port
+    lookup:
+      0: Omni
+      1: 1x32
+  antenna_polarization:
+    key: antenna_name
+    lookup:
+      Omni: Vertical
+      1x32: "Linear +45"
+  antenna_model:
+    key: antenna_name
+    lookup:
+      Omni: OmniModel
+      1x32: PanelModel

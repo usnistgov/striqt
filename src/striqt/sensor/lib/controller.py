@@ -208,6 +208,7 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
     _capture: SC | None
     _buffers: buffers.ReceiveBuffers
     _timeout: float = 10
+    _closed: bool = False
     _prev_iq: specs.AcquiredIQ | None = None
     _config: ControllerConfig
     schema: 'specs.Schema[SS, SP, SC, PS, PC]'
@@ -376,9 +377,19 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
         return lookup.is_ready(self.__setup__, self._timeout, wait=wait)
 
     def close(self):
-        lookup._clear(self.__setup__)
+        if self._closed:
+            return
+        self._closed = True
+
+        # the registry is keyed by spec value, so a stale controller that the
+        # garbage collector finalizes late must not clear the entry of a live
+        # controller that was opened afterward with an equal spec
+        current = lookup._obj.get(self.__setup__)
+        if current is self or isinstance(current, BaseException):
+            lookup._clear(self.__setup__)
+
         try:
-            backend = self.backend
+            backend = getattr(self, 'backend', None)
             if backend is not None:
                 backend.close()
         finally:
@@ -392,10 +403,7 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
         return self
 
     def __exit__(self, *exc_info):
-        if self.is_open():
-            self.close()
-        else:
-            lookup._clear(self.__setup__)
+        self.close()
 
     def target_analysis(self, analysis: specs.AnalysisGroup | None):
         """sets or disables an analysis target to auto-select acquisition overlap"""

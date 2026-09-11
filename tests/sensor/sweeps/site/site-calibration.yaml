@@ -1,0 +1,30 @@
+sensor_binding: site_single_tone_calibration
+
+extensions:
+  import_path: ../src
+  import_name: extensions
+
+# the synthetic source has no default master clock rate
+source: !include ../fragments/source/tone.yaml
+
+loops: !include ../fragments/loops/calibration.yaml
+
+# these serve as defaults for parameters that are not looped
+captures:
+  - duration: 20e-3
+    port: 0
+    center_frequency: 3750e6
+    gain: 0
+
+adjust_captures: !include "../sites/*.yaml"
+
+calibration:
+  enr: 20.9
+  ambient_temperature: 294.5389
+
+analysis:
+  channel_power_time_series:
+    detector_period: 0.01
+
+sink:
+  path: "../../cals/{site_name}-{parent_name}-{radio_name}.nc"

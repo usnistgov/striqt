@@ -1,0 +1,2 @@
+path: "../outputs/{site_name}/{spec_name}_{parent_name}_{start_time}.zarr.zip"
+max_threads: 1

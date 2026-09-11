@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import warnings
+from pathlib import Path
 from typing import Any, List, Tuple
 
 import numpy as np
 import pytest
-from pathlib import Path
-
 
 np.seterr(divide='ignore')
 
@@ -20,10 +19,17 @@ np.seterr(divide='ignore')
 
 def _get_cupy():
     """Try to import cupy, return None if unavailable."""
+    import importlib.util
+
+    # importing pandas and scipy here would reify striqt's lazy imports even
+    # when cupy is absent, which is what tests/test_imports.py guards against
+    if importlib.util.find_spec('cupy') is None:
+        return None
+
     try:
+        import cupy as cp  # type: ignore
         import pandas
         import scipy
-        import cupy as cp  # type: ignore
 
         # Verify CUDA is actually available
         cp.cuda.runtime.getDeviceCount()
@@ -53,13 +59,8 @@ def _get_dask_array():
     return da
 
 
-# Build list of available array namespaces
-_ARRAY_NAMESPACES: List[Tuple[str, Any]] = [('numpy', np)]
-
 _cupy = _get_cupy()
-if _cupy is not None:
-    _ARRAY_NAMESPACES.append(('cupy', _cupy))
-else:
+if _cupy is None:
     warnings.warn(
         'cupy is not available or CUDA is not configured; cupy tests will be skipped',
         UserWarning,
@@ -68,73 +69,12 @@ else:
 
 # Check dask availability without importing (to avoid reifying scipy)
 _dask_is_available = _dask_available()
-if _dask_is_available:
-    _ARRAY_NAMESPACES.append(('dask', None))  # placeholder, loaded lazily
-else:
+if not _dask_is_available:
     warnings.warn(
         'dask.array is not available; dask tests will be skipped',
         UserWarning,
         stacklevel=1,
     )
-
-
-@pytest.fixture(params=_ARRAY_NAMESPACES, ids=[name for name, _ in _ARRAY_NAMESPACES])
-def xp(request):
-    """Parameterized fixture providing array namespace (numpy, cupy, dask).
-
-    Use this fixture to write tests that run against multiple array backends.
-
-    Example:
-        def test_my_function(xp):
-            arr = xp.array([1, 2, 3])
-            result = my_function(arr)
-            # assertions...
-    """
-    name, ns = request.param
-    if name == 'dask' and ns is None:
-        return _get_dask_array()
-    return ns
-
-
-@pytest.fixture(params=_ARRAY_NAMESPACES, ids=[name for name, _ in _ARRAY_NAMESPACES])
-def xp_name(request):
-    """Parameterized fixture providing (name, namespace) tuple.
-
-    Use when you need both the name and the namespace.
-
-    Example:
-        def test_my_function(xp_name):
-            name, xp = xp_name
-            if name == 'dask':
-                pytest.skip('dask not supported for this test')
-            arr = xp.array([1, 2, 3])
-    """
-    name, ns = request.param
-    if name == 'dask' and ns is None:
-        return (name, _get_dask_array())
-    return request.param
-
-
-@pytest.fixture
-def np_array():
-    """Fixture providing numpy module (always available)."""
-    return np
-
-
-@pytest.fixture
-def cp_array():
-    """Fixture providing cupy module, skips if unavailable."""
-    if _cupy is None:
-        pytest.skip('cupy is not available')
-    return _cupy
-
-
-@pytest.fixture
-def da_array():
-    """Fixture providing dask.array module, skips if unavailable."""
-    if not _dask_is_available:
-        pytest.skip('dask.array is not available')
-    return _get_dask_array()
 
 
 def to_numpy(arr):
@@ -157,7 +97,7 @@ def to_numpy(arr):
 def _get_hypothesis_extras():
     """Lazily import hypothesis extras to avoid import overhead."""
     from hypothesis import strategies as st
-    from hypothesis.extra.numpy import arrays, array_shapes
+    from hypothesis.extra.numpy import array_shapes, arrays
 
     return st, arrays, array_shapes
 
@@ -225,7 +165,6 @@ def dB_arrays(
     max_size: int = 100,
     min_dims: int = 1,
     max_dims: int = 2,
-    filter_near_zero: bool = False,
 ):
     """Strategy for dB values in typical measurement range.
 
@@ -233,7 +172,6 @@ def dB_arrays(
         - Range: -150 to +150 dB (covers most RF applications)
         - No NaN or infinity
         - Supports float32 and float64 dtypes
-        - filter_near_zero: exclude values with |x| < 1e-6 (avoids precision issues)
     """
     st, arrays, array_shapes = _get_hypothesis_extras()
 
@@ -258,33 +196,13 @@ def dB_arrays(
             )
         )
 
-        if filter_near_zero:
-            # Use two ranges to avoid filtering: negative and positive values away from zero
-            near_zero = float(dt(1e-6))
-            elements = st.one_of(
-                st.floats(
-                    min_value=actual_min,
-                    max_value=-near_zero,
-                    allow_nan=False,
-                    allow_infinity=False,
-                    width=float_width,
-                ),
-                st.floats(
-                    min_value=near_zero,
-                    max_value=actual_max,
-                    allow_nan=False,
-                    allow_infinity=False,
-                    width=float_width,
-                ),
-            )
-        else:
-            elements = st.floats(
-                min_value=actual_min,
-                max_value=actual_max,
-                allow_nan=False,
-                allow_infinity=False,
-                width=float_width,
-            )
+        elements = st.floats(
+            min_value=actual_min,
+            max_value=actual_max,
+            allow_nan=False,
+            allow_infinity=False,
+            width=float_width,
+        )
 
         return draw(
             arrays(
@@ -470,6 +388,7 @@ CPU_RUNS = (
     SWEEP_DIR / 'dirac_delta-cpu.yaml',
     SWEEP_DIR / 'noise-cpu.yaml',
     SWEEP_DIR / 'sawtooth-cpu.yaml',
+    SWEEP_DIR / 'site' / 'site-cpu.yaml',
 )
 
 
@@ -544,3 +463,85 @@ def raises_on_both_paths(cls, exc, match, **kws):
         cls(**kws)
     with pytest.raises((exc, msgspec.ValidationError), match=match):
         cls.from_dict(kws)
+
+
+# ---------------------------------------------------------------------------
+# Site-style sweeps: extension module binding + per-source overrides
+# ---------------------------------------------------------------------------
+
+SITE_DIR = SWEEP_DIR / 'site'
+
+
+@pytest.fixture(scope='session')
+def site_spec_path() -> Path:
+    return SITE_DIR / 'site-cpu.yaml'
+
+
+@pytest.fixture(scope='session')
+def site_sweep():
+    import striqt.sensor as ss
+
+    return ss.read_yaml_spec(SITE_DIR / 'site-cpu.yaml')
+
+
+@pytest.fixture(scope='session')
+def site_survey_sweep():
+    import striqt.sensor as ss
+
+    return ss.read_yaml_spec(SITE_DIR / 'site-survey.yaml')
+
+
+@pytest.fixture(scope='session')
+def site_calibration_sweep():
+    import striqt.sensor as ss
+
+    return ss.read_yaml_spec(SITE_DIR / 'site-calibration.yaml')
+
+
+@pytest.fixture
+def fake_radio_id(monkeypatch):
+    """stand in for the hardware id lookup, returning the id keyed in sites/radio02.yaml"""
+    from site_strategies import RADIO_ID
+
+    import striqt.sensor as ss
+
+    monkeypatch.setattr(
+        ss.lib.controller.lookup, 'id', lambda spec, timeout=0.5: RADIO_ID
+    )
+    return RADIO_ID
+
+
+@pytest.fixture
+def write_yaml(tmp_path):
+    """write dedented YAML text to `tmp_path / relpath`, creating parent directories"""
+    import textwrap
+
+    def write(relpath: str, text: str) -> Path:
+        path = tmp_path / relpath
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(textwrap.dedent(text))
+        return path
+
+    return write
+
+
+@pytest.fixture
+def isolated_extension_import():
+    """hide the test suite's `extensions` module so a spec can import its own.
+
+    Restores sys.path and sys.modules afterwards; leaving a temporary module
+    cached under the name `extensions` would break every later site YAML read.
+    """
+    import sys
+
+    src_dir = (SWEEP_DIR / 'src').resolve()
+    saved_path = list(sys.path)
+    saved_module = sys.modules.pop('extensions', None)
+    sys.path[:] = [p for p in sys.path if Path(p or '.').resolve() != src_dir]
+    try:
+        yield
+    finally:
+        sys.path[:] = saved_path
+        sys.modules.pop('extensions', None)
+        if saved_module is not None:
+            sys.modules['extensions'] = saved_module

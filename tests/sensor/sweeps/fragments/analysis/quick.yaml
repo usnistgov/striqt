@@ -1,0 +1,14 @@
+spectrogram: &spectrogram
+  frequency_resolution: 15000 # SCS/2
+  fractional_overlap: 13/28
+  window_fill: 15/28
+  window: ['kaiser', 11.884] # gives ENBW = 2
+  integration_bandwidth: 360e3 # 1 RB
+
+power_spectral_density:
+  <<: *spectrogram
+  time_statistic: [mean, 0.5, 0.99, max]
+
+channel_power_time_series:
+  detector_period: 1/28000 # 1 symbol for (30 kHz SCS, normal CP)
+  power_detectors: [rms, peak]

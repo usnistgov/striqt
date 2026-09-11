@@ -7,29 +7,12 @@ bounds derived from an FFT error model (numpy vs cupy, and the floor far from a 
 
 from __future__ import annotations
 
-import typing
-
 import numpy as np
 import pytest
-from hypothesis import assume, given, settings, HealthCheck
+from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
-from hypothesis.extra.numpy import arrays, array_shapes
+from hypothesis.extra.numpy import array_shapes
 from numpy.testing import assert_allclose, assert_array_equal
-
-from conftest import (
-    to_numpy,
-    convert_array,
-)
-
-if typing.TYPE_CHECKING:
-    from striqt.waveform.fourier import (
-        fftfreq,
-        get_window,
-        oaconvolve,
-        resample,
-        spectrogram,
-        stft,
-    )
 
 
 def _get_fourier():
@@ -43,6 +26,15 @@ def _get_fourier():
 def fourier_module():
     """Fixture that lazily imports the fourier module."""
     return _get_fourier()
+
+
+@pytest.fixture
+def cupy_available():
+    from conftest import _cupy
+
+    if _cupy is None:
+        pytest.skip('cupy is not available')
+    return _cupy
 
 
 def window_names():
@@ -90,7 +82,6 @@ def complex_waveforms(
     max_dims: int = 1,
     min_log_power=-13,
     max_log_power=3,
-    allow_subnormal: bool = True,
 ):
     """Strategy for complex gaussian-noise waveforms.
 
@@ -192,11 +183,6 @@ def stft_parameters():
     return _stft_params()
 
 
-def resample_ratios():
-    """Strategy for valid resample ratios (output_size / input_size)."""
-    return st.sampled_from([0.5, 0.25, 1.0, 2.0, 4.0])
-
-
 class TestGetWindowProperties:
     """Properties: Window function generation."""
 
@@ -258,28 +244,16 @@ class TestGetWindowProperties:
     @given(
         name=window_names(),
         nwindow=window_sizes(min_size=8, max_size=256),
+        dtype=st.sampled_from([np.float32, np.float64]),
     )
     @settings(
         suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None
     )
-    def test_window_dtype_float32(self, name, nwindow):
+    def test_window_dtype(self, name, nwindow, dtype):
         """Property: Window dtype matches requested dtype."""
         fourier = _get_fourier()
-        w = fourier.get_window(name, nwindow, dtype='float32')
-        assert w.dtype == np.float32
-
-    @given(
-        name=window_names(),
-        nwindow=window_sizes(min_size=8, max_size=256),
-    )
-    @settings(
-        suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None
-    )
-    def test_window_dtype_float64(self, name, nwindow):
-        """Property: Window dtype matches requested dtype."""
-        fourier = _get_fourier()
-        w = fourier.get_window(name, nwindow, dtype='float64')
-        assert w.dtype == np.float64
+        w = fourier.get_window(name, nwindow, dtype=dtype)
+        assert w.dtype == dtype
 
     @given(
         name=window_names(),
@@ -335,20 +309,6 @@ class TestFftfreqProperties:
     @settings(
         suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None
     )
-    def test_fftfreq_range(self, nfft, fs):
-        """Property: Frequencies are within [-fs/2, fs/2)."""
-        fourier = _get_fourier()
-        freqs = fourier.fftfreq(nfft, fs)
-        assert np.all(freqs >= -fs / 2 - 1e-6)
-        assert np.all(freqs < fs / 2 + 1e-6)
-
-    @given(
-        nfft=fft_sizes(min_size=4, max_size=1024),
-        fs=sample_rates(min_rate=1e3, max_rate=100e6),
-    )
-    @settings(
-        suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None
-    )
     def test_fftfreq_spacing(self, nfft, fs):
         """Property: Frequency spacing is fs/nfft."""
         fourier = _get_fourier()
@@ -373,6 +333,19 @@ class TestFftfreqProperties:
         assert_allclose(freqs[1 : nfft // 2], -freqs[-1 : nfft // 2 : -1], rtol=1e-10)
 
     @given(
+        nfft=st.integers(min_value=5, max_value=511).filter(lambda n: n % 2 == 1),
+        fs=sample_rates(min_rate=1e3, max_rate=100e6),
+    )
+    @settings(
+        suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None
+    )
+    def test_fftfreq_symmetry_odd(self, nfft, fs):
+        fourier = _get_fourier()
+        freqs = fourier.fftfreq(nfft, fs)
+        assert freqs[nfft // 2] == 0
+        assert_allclose(freqs, -freqs[::-1], rtol=1e-10)
+
+    @given(
         nfft=fft_sizes(min_size=4, max_size=512),
         fs=sample_rates(min_rate=1e3, max_rate=100e6),
     )
@@ -387,26 +360,13 @@ class TestFftfreqProperties:
         assert freqs_32.dtype == np.float32
         assert freqs_64.dtype == np.float64
 
-    @given(
-        nfft=fft_sizes(min_size=4, max_size=256),
-        fs=sample_rates(min_rate=1e3, max_rate=10e6),
-    )
-    @settings(
-        suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None
-    )
-    def test_fftfreq_contains_zero(self, nfft, fs):
-        """Property: fftfreq contains zero frequency (DC component)."""
-        fourier = _get_fourier()
-        freqs = fourier.fftfreq(nfft, fs, dtype='float64')
-        assert np.any(np.abs(freqs) < fs / nfft / 2)
-
 
 class TestOaconvolveProperties:
     """Properties: Overlap-add convolution."""
 
     @given(
         x=real_waveforms(min_size=64, max_size=512, dtype=np.float64),
-        kernel_size=st.integers(min_value=3, max_value=31).filter(lambda n: n % 2 == 1),
+        kernel_size=st.integers(min_value=1, max_value=31).filter(lambda n: n % 2 == 1),
     )
     @settings(
         suppress_health_check=[HealthCheck.function_scoped_fixture],
@@ -484,23 +444,6 @@ class TestOaconvolveProperties:
         expected_length = len(x) + len(kernel) - 1
         assert len(result) == expected_length
 
-    @given(
-        x=real_waveforms(min_size=64, max_size=256, dtype=np.float64),
-    )
-    @settings(
-        suppress_health_check=[HealthCheck.function_scoped_fixture],
-        max_examples=50,
-        deadline=None,
-    )
-    def test_oaconvolve_output_length_same(self, x):
-        """Property: Same-mode convolution preserves input length."""
-        fourier = _get_fourier()
-        kernel = np.array([0.25, 0.5, 0.25], dtype=x.dtype)
-
-        result = fourier.oaconvolve(x, kernel, mode='same')
-
-        assert len(result) == len(x)
-
 
 class TestResampleProperties:
     """Properties: Frequency-domain resampling."""
@@ -518,36 +461,6 @@ class TestResampleProperties:
         fourier = _get_fourier()
         result = fourier.resample(x, len(x))
         assert_allclose(result, x, rtol=1e-10)
-
-    @given(
-        x=complex_waveforms(min_size=128, max_size=512, dtype=np.complex128),
-    )
-    @settings(
-        suppress_health_check=[HealthCheck.function_scoped_fixture],
-        max_examples=50,
-        deadline=None,
-    )
-    def test_resample_output_length(self, x):
-        """Property: Resampled output has requested length."""
-        fourier = _get_fourier()
-        num_out = len(x) // 2
-        result = fourier.resample(x, num_out)
-        assert len(result) == num_out
-
-    @given(
-        x=complex_waveforms(min_size=64, max_size=256, dtype=np.complex128),
-    )
-    @settings(
-        suppress_health_check=[HealthCheck.function_scoped_fixture],
-        max_examples=50,
-        deadline=None,
-    )
-    def test_resample_upsample_output_length(self, x):
-        """Property: Upsampled output has requested length."""
-        fourier = _get_fourier()
-        num_out = len(x) * 2
-        result = fourier.resample(x, num_out)
-        assert len(result) == num_out
 
     @given(
         scale=st.floats(min_value=0.5, max_value=2.0, allow_nan=False),
@@ -573,108 +486,25 @@ class TestResampleProperties:
         assert_allclose(result_scaled, scale * result_unscaled, rtol=1e-8, atol=1e-15)
 
     @given(
-        x=complex_waveforms(min_size=64, max_size=256, allow_subnormal=False),
+        x=complex_waveforms(min_size=64, max_size=512),
+        ratio=st.sampled_from([0.5, 2]),
     )
     @settings(
         suppress_health_check=[HealthCheck.function_scoped_fixture],
         max_examples=50,
         deadline=None,
     )
-    def test_resample_dtype_preservation(self, x):
-        """Property: Resample preserves complex dtype."""
+    def test_resample_length_and_dtype(self, x, ratio):
+        """Property: Resampled output has the requested length and the input dtype."""
         fourier = _get_fourier()
-        num_out = len(x) // 2
+        num_out = int(len(x) * ratio)
         result = fourier.resample(x, num_out)
+        assert len(result) == num_out
         assert result.dtype == x.dtype
 
 
 class TestStftProperties:
     """Properties: Short-time Fourier transform."""
-
-    @given(
-        x=complex_waveforms(min_size=256, max_size=512, dtype=np.complex64),
-        params=stft_parameters(),
-    )
-    @settings(
-        suppress_health_check=[
-            HealthCheck.function_scoped_fixture,
-            HealthCheck.data_too_large,
-        ],
-        max_examples=50,
-        deadline=None,
-    )
-    def test_stft_output_shape(self, x, params):
-        """Property: STFT output has correct shape."""
-        fourier = _get_fourier()
-        # min_size=256 guarantees len(x) >= max(nperseg)=256
-
-        freqs, times, X = fourier.stft(
-            x,
-            fs=params['fs'],
-            window=params['window'],
-            nperseg=params['nperseg'],
-            noverlap=params['noverlap'],
-            truncate=True,
-        )
-
-        # axis 0 is time, axis 1 is frequency
-        assert X.shape[1] == params['nperseg']
-        assert len(freqs) == params['nperseg']
-        assert len(times) == X.shape[0]
-
-    @given(
-        x=complex_waveforms(min_size=128, max_size=256, dtype=np.complex64),
-    )
-    @settings(
-        suppress_health_check=[
-            HealthCheck.function_scoped_fixture,
-            HealthCheck.data_too_large,
-        ],
-        max_examples=30,
-        deadline=None,
-    )
-    def test_stft_frequency_range(self, x):
-        """Property: STFT frequencies span [-fs/2, fs/2)."""
-        fourier = _get_fourier()
-        fs = 1e6
-        nperseg = 128
-
-        freqs, times, X = fourier.stft(
-            x,
-            fs=fs,
-            window='hamming',
-            nperseg=nperseg,
-            noverlap=0,
-            truncate=True,
-        )
-
-        assert np.min(freqs) >= -fs / 2 - 1
-        assert np.max(freqs) < fs / 2 + 1
-
-    @given(
-        x=complex_waveforms(min_size=128, max_size=256, dtype=np.complex64),
-    )
-    @settings(
-        suppress_health_check=[
-            HealthCheck.function_scoped_fixture,
-            HealthCheck.data_too_large,
-        ],
-        max_examples=30,
-        deadline=None,
-    )
-    def test_stft_dtype_preservation(self, x):
-        """Property: STFT preserves input dtype."""
-        fourier = _get_fourier()
-        freqs, times, X = fourier.stft(
-            x,
-            fs=1e6,
-            window='hamming',
-            nperseg=64,
-            noverlap=0,
-            truncate=True,
-        )
-
-        assert X.dtype == x.dtype
 
     @given(
         scale=st.floats(min_value=0.5, max_value=2.0, allow_nan=False),
@@ -714,7 +544,7 @@ class TestStftProperties:
         assert_allclose(X2, scale * X1, rtol=1e-6)
 
     @given(
-        x=complex_waveforms(min_size=128, max_size=256, dtype=np.complex64),
+        x=complex_waveforms(min_size=64, max_size=256, dtype=np.complex64),
     )
     @settings(
         suppress_health_check=[
@@ -748,7 +578,7 @@ class TestSpectrogramProperties:
     """Properties: Power spectrogram computation."""
 
     @given(
-        x=complex_waveforms(min_size=256, max_size=512, dtype=np.complex64),
+        x=complex_waveforms(min_size=256, max_size=512),
         params=stft_parameters(),
     )
     @settings(
@@ -760,112 +590,21 @@ class TestSpectrogramProperties:
         deadline=None,
     )
     def test_spectrogram_output_shape(self, x, params):
-        """Property: Spectrogram output has correct shape."""
+        """Property: stft and spectrogram outputs have the right shape, dtype and
+        frequency axis."""
         fourier = _get_fourier()
         # min_size=256 guarantees len(x) >= max(nperseg)=256
 
-        freqs, times, Sxx = fourier.spectrogram(
-            x,
-            fs=params['fs'],
-            window=params['window'],
-            nperseg=params['nperseg'],
-            noverlap=params['noverlap'],
-            truncate=True,
-        )
+        _, _, X = fourier.stft(x, truncate=True, **params)
+        freqs, times, Sxx = fourier.spectrogram(x, truncate=True, **params)
 
+        assert X.shape == Sxx.shape
         assert Sxx.shape[1] == params['nperseg']
         assert len(freqs) == params['nperseg']
         assert len(times) == Sxx.shape[0]
-
-    @given(
-        x=complex_waveforms(min_size=128, max_size=256, dtype=np.complex64),
-    )
-    @settings(
-        suppress_health_check=[
-            HealthCheck.function_scoped_fixture,
-            HealthCheck.data_too_large,
-        ],
-        max_examples=30,
-        deadline=None,
-    )
-    def test_spectrogram_non_negative(self, x):
-        """Property: Spectrogram (power) values are non-negative."""
-        fourier = _get_fourier()
-        freqs, times, Sxx = fourier.spectrogram(
-            x,
-            fs=1e6,
-            window='hamming',
-            nperseg=64,
-            noverlap=0,
-            truncate=True,
-        )
-
-        assert np.all(Sxx >= 0)
-
-    @given(
-        x=complex_waveforms(min_size=128, max_size=256, dtype=np.complex64),
-    )
-    @settings(
-        suppress_health_check=[
-            HealthCheck.function_scoped_fixture,
-            HealthCheck.data_too_large,
-        ],
-        max_examples=30,
-        deadline=None,
-    )
-    def test_spectrogram_real_output(self, x):
-        """Property: Spectrogram output is real (power values)."""
-        fourier = _get_fourier()
-        freqs, times, Sxx = fourier.spectrogram(
-            x,
-            fs=1e6,
-            window='hamming',
-            nperseg=64,
-            noverlap=0,
-            truncate=True,
-        )
-
-        assert np.isrealobj(Sxx)
-
-    @given(
-        scale=st.floats(min_value=0.5, max_value=2.0, allow_nan=False),
-    )
-    @settings(
-        suppress_health_check=[HealthCheck.function_scoped_fixture],
-        max_examples=30,
-        deadline=None,
-    )
-    def test_spectrogram_power_scaling(self, scale):
-        """Property: Spectrogram scales as square of amplitude.
-
-        If input is scaled by k, power spectrogram scales by k².
-        """
-        fourier = _get_fourier()
-        rng = np.random.default_rng(42)
-        x = (rng.standard_normal(512) + 1j * rng.standard_normal(512)).astype(
-            np.complex128
-        )
-
-        _, _, Sxx1 = fourier.spectrogram(
-            x,
-            fs=1e6,
-            window='hamming',
-            nperseg=64,
-            noverlap=0,
-            truncate=True,
-        )
-
-        scaled_x = (scale * x).astype(np.complex128)
-        _, _, Sxx2 = fourier.spectrogram(
-            scaled_x,
-            fs=1e6,
-            window='hamming',
-            nperseg=64,
-            noverlap=0,
-            truncate=True,
-        )
-
-        assert_allclose(Sxx2, scale**2 * Sxx1, rtol=1e-5)
+        assert X.dtype == x.dtype
+        assert Sxx.dtype == np.finfo(x.dtype).dtype
+        assert_array_equal(freqs, fourier.fftfreq(params['nperseg'], params['fs']))
 
     @given(
         x=complex_waveforms(min_size=128, max_size=256, dtype=np.complex64),
@@ -903,60 +642,10 @@ class TestSpectrogramProperties:
             truncate=True,
         )
 
+        assert np.isrealobj(Sxx)
+        assert np.all(Sxx >= 0)
         expected = np.abs(X) ** 2
         assert_allclose(Sxx, expected, rtol=1e-5)
-
-
-class TestMultiBackendCompatibility:
-    """Tests for numpy/cupy compatibility."""
-
-    @pytest.fixture(params=['numpy', 'cupy', 'dask'])
-    def xp_name_and_module(self, request):
-        """Lazily provide array namespace to avoid importing dask at collection time."""
-        name = request.param
-        if name == 'numpy':
-            return name, np
-        elif name == 'dask':
-            from conftest import _get_dask_array
-
-            return name, _get_dask_array()
-        elif name == 'cupy':
-            from conftest import _get_cupy
-
-            return name, _get_cupy()
-        else:
-            raise ValueError(f'invalid namespace {name}')
-
-    def test_get_window_backend(self, xp_name_and_module):
-        """Test get_window works with different backends."""
-        fourier = _get_fourier()
-        xp_name, xp = xp_name_and_module
-        if xp_name == 'dask':
-            pytest.skip('get_window does not support dask')
-        if xp is None:
-            pytest.skip(f'{xp_name} is not available')
-
-        w = fourier.get_window('hamming', 64, xp=xp)
-        w_np = to_numpy(w)
-
-        assert len(w_np) == 64
-        assert_allclose(np.mean(np.abs(w_np) ** 2), 1.0, rtol=1e-6)
-
-    def test_fftfreq_backend(self, xp_name_and_module):
-        """Test fftfreq works with different backends."""
-        fourier = _get_fourier()
-        xp_name, xp = xp_name_and_module
-        if xp_name == 'dask':
-            pytest.skip('fftfreq does not support dask')
-        if xp is None:
-            pytest.skip(f'{xp_name} is not available')
-
-        freqs = fourier.fftfreq(64, 1e6, xp=xp)
-        freqs_np = to_numpy(freqs)
-
-        assert len(freqs_np) == 64
-        assert np.all(freqs_np >= -0.5e6 - 1)
-        assert np.all(freqs_np < 0.5e6 + 1)
 
 
 class TestEdgeCases:
@@ -974,37 +663,6 @@ class TestEdgeCases:
         freqs = fourier.fftfreq(2, 1e6)
         assert len(freqs) == 2
 
-    def test_resample_no_change(self):
-        """Test resample when output size equals input size."""
-        fourier = _get_fourier()
-        rng = np.random.default_rng(42)
-        x = (rng.standard_normal(64) + 1j * rng.standard_normal(64)).astype(
-            np.complex64
-        )
-
-        result = fourier.resample(x, 64)
-        assert_allclose(result, x, rtol=1e-6)
-
-    def test_stft_single_segment(self):
-        """Test STFT with input exactly one segment long."""
-        fourier = _get_fourier()
-        rng = np.random.default_rng(42)
-        x = (rng.standard_normal(64) + 1j * rng.standard_normal(64)).astype(
-            np.complex64
-        )
-
-        freqs, times, X = fourier.stft(
-            x,
-            fs=1e6,
-            window='hamming',
-            nperseg=64,
-            noverlap=0,
-            truncate=True,
-        )
-
-        assert X.shape[0] == 1
-        assert X.shape[1] == 64
-
     def test_spectrogram_zero_input(self):
         """Test spectrogram with zero input."""
         fourier = _get_fourier()
@@ -1021,15 +679,17 @@ class TestEdgeCases:
 
         assert_allclose(Sxx, 0, atol=1e-10)
 
-    def test_oaconvolve_single_element_kernel(self):
-        """Test oaconvolve with single-element kernel."""
+    @pytest.mark.parametrize('size, ok', [(128, True), (100, False)])
+    def test_stft_truncate_false_requires_whole_segments(self, size, ok):
         fourier = _get_fourier()
-        rng = np.random.default_rng(42)
-        x = rng.standard_normal(64)
-        kernel = np.array([2.0])
-
-        result = fourier.oaconvolve(x, kernel, mode='same')
-        assert_allclose(result, 2.0 * x, rtol=1e-10)
+        x = np.ones(size, dtype=np.complex64)
+        kws = dict(fs=1e6, window='hamming', nperseg=64, noverlap=0, truncate=False)
+        if ok:
+            _, _, X = fourier.stft(x, **kws)
+            assert X.shape == (size // 64, 64)
+        else:
+            with pytest.raises(ValueError, match='not a factor'):
+                fourier.stft(x, **kws)
 
     def test_stft_with_overlap(self):
         """Test STFT with 50% overlap."""
@@ -1179,14 +839,6 @@ class TestToneFarBinFloor:
 
     NSEG = 4
     KERNEL_TAPS = 400
-
-    @pytest.fixture
-    def cupy_available(self):
-        from conftest import _cupy
-
-        if _cupy is None:
-            pytest.skip('cupy is not available')
-        return _cupy
 
     @staticmethod
     def _stft(x, nfft):
@@ -1354,51 +1006,26 @@ class TestNumpyCupyCrossComparison:
     RTOL_FLOAT64 = 1e-12
     ATOL = 1e-10
 
-    @pytest.fixture
-    def cupy_available(self):
-        from conftest import _cupy
-
-        if _cupy is None:
-            pytest.skip('cupy is not available')
-        return _cupy
-
     @settings(
         suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=3000
     )
     @given(
         name=st.sampled_from(['hamming', 'hann', 'blackman', 'bartlett', 'flattop']),
-        nwindow=st.integers(min_value=8, max_value=512),
+        nwindow=st.sampled_from([8, 64, 129, 512]),
+        dtype=st.sampled_from([np.float32, np.float64]),
     )
-    def test_get_window_numpy_vs_cupy_float64(self, cupy_available, name, nwindow):
-        """Test get_window produces close results for numpy vs cupy (float64)."""
+    def test_get_window_numpy_vs_cupy(self, cupy_available, name, nwindow, dtype):
+        """Test get_window produces close results for numpy vs cupy."""
         cp = cupy_available
         fourier = _get_fourier()
 
-        result_np = fourier.get_window(name, nwindow, dtype=np.float64)
+        result_np = fourier.get_window(name, nwindow, dtype=dtype)
 
-        result_cp = fourier.get_window(name, nwindow, dtype=np.float64, xp=cp)
+        result_cp = fourier.get_window(name, nwindow, dtype=dtype, xp=cp)
         result_cp_np = result_cp.get()
 
-        assert_allclose(result_cp_np, result_np, rtol=self.RTOL_FLOAT64, atol=self.ATOL)
-
-    @settings(
-        suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=3000
-    )
-    @given(
-        name=st.sampled_from(['hamming', 'hann', 'blackman', 'bartlett', 'flattop']),
-        nwindow=st.integers(min_value=8, max_value=512),
-    )
-    def test_get_window_numpy_vs_cupy_float32(self, cupy_available, name, nwindow):
-        """Test get_window produces close results for numpy vs cupy (float32)."""
-        cp = cupy_available
-        fourier = _get_fourier()
-
-        result_np = fourier.get_window(name, nwindow, dtype=np.float32)
-
-        result_cp = fourier.get_window(name, nwindow, dtype=np.float32, xp=cp)
-        result_cp_np = result_cp.get()
-
-        assert_allclose(result_cp_np, result_np, rtol=self.RTOL_FLOAT32, atol=self.ATOL)
+        rtol = {np.float32: self.RTOL_FLOAT32, np.float64: self.RTOL_FLOAT64}[dtype]
+        assert_allclose(result_cp_np, result_np, rtol=rtol, atol=self.ATOL)
 
     @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
     @given(
@@ -1420,11 +1047,7 @@ class TestNumpyCupyCrossComparison:
     @settings(
         suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=3000
     )
-    @given(
-        x=complex_waveforms(
-            min_size=64, max_size=256, dtype=np.complex64, allow_subnormal=False
-        )
-    )
+    @given(x=complex_waveforms(min_size=64, max_size=256, dtype=np.complex64))
     def test_resample_numpy_vs_cupy_complex64(self, cupy_available, x):
         """Test resample produces close results for numpy vs cupy (complex64)."""
         cp = cupy_available
@@ -1456,11 +1079,7 @@ class TestNumpyCupyCrossComparison:
     @settings(
         suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=3000
     )
-    @given(
-        x=complex_waveforms(
-            min_size=256, max_size=512, dtype=np.complex64, allow_subnormal=False
-        )
-    )
+    @given(x=complex_waveforms(min_size=256, max_size=512, dtype=np.complex64))
     def test_stft_numpy_vs_cupy_complex64(self, cupy_available, x):
         """Test stft produces close results for numpy vs cupy (complex64)."""
         cp = cupy_available
@@ -1499,11 +1118,7 @@ class TestNumpyCupyCrossComparison:
     @settings(
         suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=3000
     )
-    @given(
-        x=complex_waveforms(
-            min_size=256, max_size=512, dtype=np.complex64, allow_subnormal=False
-        )
-    )
+    @given(x=complex_waveforms(min_size=256, max_size=512, dtype=np.complex64))
     def test_spectrogram_numpy_vs_cupy_complex64(self, cupy_available, x):
         """Test spectrogram produces close results for numpy vs cupy (complex64)."""
         cp = cupy_available
@@ -1544,13 +1159,13 @@ class TestNumpyCupyCrossComparison:
     @settings(
         suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=3000
     )
-    @given(x=real_waveforms(min_size=64, max_size=256, dtype=np.float64))
-    def test_oaconvolve_numpy_vs_cupy_float64(self, cupy_available, x):
-        """Test oaconvolve produces close results for numpy vs cupy (float64)."""
+    @given(x=real_waveforms(min_size=64, max_size=256))
+    def test_oaconvolve_numpy_vs_cupy(self, cupy_available, x):
+        """Test oaconvolve produces close results for numpy vs cupy."""
         cp = cupy_available
         fourier = _get_fourier()
 
-        kernel = np.array([0.25, 0.5, 0.25], dtype=np.float64)
+        kernel = np.array([0.25, 0.5, 0.25], dtype=x.dtype)
 
         result_np = fourier.oaconvolve(x, kernel, mode='same')
 
@@ -1561,38 +1176,6 @@ class TestNumpyCupyCrossComparison:
 
         # overlap-add blocks are at most len(x) long; anchoring to the input rms
         # accounts for the kernel's gain
-        sigma = cross_backend_rms(x.dtype, [len(x), len(x)], n_elementwise=1)
-        scale = _rms(x)
-        assert _rms(result_cp_np - result_np) < sigma * scale, (
-            f'rms roundoff above {level_tolerance_dB(sigma):.1e} dB'
-        )
-        peak_dB = peak_level_tolerance_dB(sigma, x.size)
-        assert_allclose(
-            result_cp_np,
-            result_np,
-            rtol=0,
-            atol=peak_factor(x.size) * sigma * scale,
-            err_msg=f'peak above {peak_dB:.1e} dB',
-        )
-
-    @settings(
-        suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=3000
-    )
-    @given(x=real_waveforms(min_size=64, max_size=256, dtype=np.float32))
-    def test_oaconvolve_numpy_vs_cupy_float32(self, cupy_available, x):
-        """Test oaconvolve produces close results for numpy vs cupy (float32)."""
-        cp = cupy_available
-        fourier = _get_fourier()
-
-        kernel = np.array([0.25, 0.5, 0.25], dtype=np.float32)
-
-        result_np = fourier.oaconvolve(x, kernel, mode='same')
-
-        x_cp = cp.asarray(x)
-        kernel_cp = cp.asarray(kernel)
-        result_cp = fourier.oaconvolve(x_cp, kernel_cp, mode='same')
-        result_cp_np = result_cp.get()
-
         sigma = cross_backend_rms(x.dtype, [len(x), len(x)], n_elementwise=1)
         scale = _rms(x)
         assert _rms(result_cp_np - result_np) < sigma * scale, (

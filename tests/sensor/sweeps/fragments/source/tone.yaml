@@ -1,0 +1,4 @@
+master_clock_rate: 125e6 # Hz
+num_rx_ports: 2
+array_backend: numpy
+signal_trigger: cellular_5g_pss_sync

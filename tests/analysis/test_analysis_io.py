@@ -1,0 +1,188 @@
+"""striqt.analysis.lib.io.decode_from_yaml_file: `!include` globs, lists and nesting,
+flow-sequence keys, scalar typing"""
+
+from __future__ import annotations
+
+import functools
+import itertools
+import math
+
+import pytest
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
+
+import striqt.analysis as sa
+
+load = sa.lib.io.decode_from_yaml_file
+PROPERTY = settings(
+    suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None
+)
+_example_dirs = itertools.count()
+
+
+def _dump(d: dict) -> str:
+    return ''.join(f'{k}: {v}\n' for k, v in d.items())
+
+
+# %% !include
+
+
+@given(
+    entries=st.lists(
+        st.tuples(
+            st.from_regex(r'\A[a-z]{1,6}\Z'),
+            st.dictionaries(st.sampled_from('abcd'), st.integers(), min_size=1),
+        ),
+        min_size=1,
+        max_size=4,
+        unique_by=lambda e: e[0],
+    )
+)
+@PROPERTY
+def test_glob_include_merges_in_sorted_filename_order(write_yaml, entries):
+    sub = f'case{next(_example_dirs)}'
+    for name, d in entries:
+        write_yaml(f'{sub}/sites/{name}.yaml', _dump(d))
+    spec = write_yaml(f'{sub}/spec.yaml', 'sites: !include "sites/*.yaml"\n')
+
+    expected = functools.reduce(
+        lambda a, b: {**a, **b}, [d for _, d in sorted(entries)]
+    )
+    assert load(spec)['sites'] == expected
+
+
+def test_list_include_merges_dicts_with_later_files_winning(write_yaml):
+    write_yaml('a.yaml', 'x: 1\ny: 1\n')
+    write_yaml('b.yaml', 'y: 2\n')
+    spec = write_yaml('spec.yaml', 'source: !include [a.yaml, b.yaml]\n')
+    assert load(spec)['source'] == {'x': 1, 'y': 2}
+
+
+def test_glob_include_merges_only_one_level_deep(write_yaml):
+    write_yaml('sites/a.yaml', 'block:\n  x: 1\n  y: 1\n')
+    write_yaml('sites/b.yaml', 'block:\n  y: 2\n')
+    spec = write_yaml('spec.yaml', 'sites: !include "sites/*.yaml"\n')
+    assert load(spec)['sites'] == {'block': {'y': 2}}
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason='_expand_paths sorts the expanded paths, so list-form includes apply in '
+    'filename order rather than the listed order',
+)
+def test_list_include_applies_files_in_listed_order(write_yaml):
+    write_yaml('a.yaml', 'y: 1\n')
+    write_yaml('b.yaml', 'x: 1\ny: 2\n')
+    spec = write_yaml('spec.yaml', 'source: !include [b.yaml, a.yaml]\n')
+    assert load(spec)['source'] == {'x': 1, 'y': 1}
+
+
+def test_list_include_concatenates_sequences(write_yaml):
+    write_yaml('a.yaml', '- 1\n- 2\n')
+    write_yaml('b.yaml', '- 3\n')
+    spec = write_yaml('spec.yaml', 'items: !include [a.yaml, b.yaml]\n')
+    assert load(spec)['items'] == [1, 2, 3]
+
+
+def test_mixed_include_types_raise(write_yaml):
+    write_yaml('a.yaml', 'x: 1\n')
+    write_yaml('b.yaml', '- 3\n')
+    spec = write_yaml('spec.yaml', 'items: !include [a.yaml, b.yaml]\n')
+    with pytest.raises(TypeError, match='all mappings or all sequences'):
+        load(spec)
+
+
+def test_empty_glob_raises_with_the_pattern(write_yaml):
+    spec = write_yaml('spec.yaml', 'sites: !include "missing/*.yaml"\n')
+    with pytest.raises(FileNotFoundError) as excinfo:
+        load(spec)
+    assert excinfo.value.args == ('missing/*.yaml',)
+
+
+def test_parent_relative_glob_from_subdirectory(write_yaml):
+    write_yaml('sites/global.yaml', 'defaults: {a: 1}\n')
+    write_yaml('sites/radio.yaml', 'beef: {b: 2}\n')
+    spec = write_yaml('site/spec.yaml', 'adjust: !include "../sites/*.yaml"\n')
+    assert load(spec)['adjust'] == {'defaults': {'a': 1}, 'beef': {'b': 2}}
+
+
+def test_absolute_include_inside_root(write_yaml):
+    frag = write_yaml('frag.yaml', 'v: 1\n')
+    spec = write_yaml('spec.yaml', f'top: !include {frag}\n')
+    assert load(spec)['top'] == {'v': 1}
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=ValueError,
+    reason='_expand_paths rewrites every path relative to the top-level directory, '
+    'which fails for an absolute include outside it',
+)
+def test_absolute_include_outside_root(write_yaml):
+    frag = write_yaml('elsewhere/frag.yaml', 'v: 1\n')
+    spec = write_yaml('site/spec.yaml', f'top: !include {frag}\n')
+    assert load(spec)['top'] == {'v': 1}
+
+
+def test_nested_include_in_the_same_directory(write_yaml):
+    write_yaml('leaf.yaml', 'v: 1\n')
+    write_yaml('frag.yaml', 'x: !include leaf.yaml\n')
+    spec = write_yaml('spec.yaml', 'top: !include frag.yaml\n')
+    assert load(spec)['top'] == {'x': {'v': 1}}
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=FileNotFoundError,
+    reason='nested includes are globbed relative to the top-level file but opened '
+    'relative to the including fragment',
+)
+def test_nested_include_resolves_relative_to_the_including_file(write_yaml):
+    write_yaml('frag/leaf.yaml', 'v: 1\n')
+    write_yaml('frag/c.yaml', 'x: !include leaf.yaml\n')
+    spec = write_yaml('spec.yaml', 'top: !include frag/c.yaml\n')
+    assert load(spec)['top'] == {'x': {'v': 1}}
+
+
+# %% loader behavior
+
+
+def test_flow_sequence_mapping_keys_become_tuples(write_yaml):
+    spec = write_yaml('spec.yaml', 'lookup:\n  [0, 1]: 2\n  [1, 0]: 3\n')
+    assert load(spec)['lookup'] == {(0, 1): 2, (1, 0): 3}
+
+
+def test_duplicate_top_level_key_keeps_the_last(write_yaml):
+    spec = write_yaml('spec.yaml', 'options: {a: 1}\noptions: {b: 2}\n')
+    assert load(spec) == {'options': {'b': 2}}
+
+
+@pytest.mark.parametrize(
+    'text, expected',
+    [
+        ('125.0e6', '125.0e6'),
+        ('3750e6', '3750e6'),
+        ('20e-3', '20e-3'),
+        ('inf', 'inf'),
+        ('nan', 'nan'),
+        ('none', 'none'),
+        ('13/28', '13/28'),
+        ('1/28000', '1/28000'),
+        ('.01', 0.01),
+        ('.inf', math.inf),
+        ('.nan', math.nan),
+        ('-0', 0),
+        ('null', None),
+        ('True', True),
+    ],
+)
+def test_scalar_typing(write_yaml, text, expected):
+    # YAML 1.1 leaves most engineering-notation numbers as strings; msgspec's lax
+    # conversion turns them into numbers only once a spec field type is known
+    value = load(write_yaml('spec.yaml', f'v: {text}\n'))['v']
+    if isinstance(expected, float) and math.isnan(expected):
+        assert isinstance(value, float) and math.isnan(value)
+    else:
+        assert value == expected
+        assert type(value) is type(expected)
