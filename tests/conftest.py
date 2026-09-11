@@ -20,6 +20,13 @@ np.seterr(divide='ignore')
 
 def _get_cupy():
     """Try to import cupy, return None if unavailable."""
+    import importlib.util
+
+    # importing pandas and scipy here would reify striqt's lazy imports even
+    # when cupy is absent, which is what tests/test_imports.py guards against
+    if importlib.util.find_spec('cupy') is None:
+        return None
+
     try:
         import pandas
         import scipy
