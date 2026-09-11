@@ -1,0 +1,45 @@
+sensor_binding: site_single_tone_calibration
+
+extensions:
+  import_path: ../src
+  import_name: extensions
+
+# the synthetic source has no default master clock rate
+source: !include ../fragments/source/tone.yaml
+
+loops:
+  - kind: list
+    field: lo_shift
+    values: [none]
+
+captures:
+  - port: 0
+    center_frequency: &cband 3750e6
+    gain: 0
+    duration: 20e-3
+    sample_rate: 125e6
+    analysis_bandwidth: 100e6
+  - port: 1
+    center_frequency: *cband
+    gain: 0
+    duration: 20e-3
+    sample_rate: 62.5e6
+    analysis_bandwidth: 40e6
+
+calibration:
+  enr: 20.9
+  ambient_temperature: 294.5
+  implied_loops:
+    - port
+    - center_frequency
+    - sample_rate
+    - analysis_bandwidth
+    - external_lo_frequency
+    - gain
+
+analysis:
+  channel_power_time_series:
+    detector_period: 0.01
+
+sink:
+  path: "../../cals/{site_name}-{parent_name}-{radio_name}.nc"
