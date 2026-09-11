@@ -593,7 +593,7 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
             raise RuntimeError('SoapySDR instantiated an unexpected type')
 
     def get_id(self) -> str:
-        raise self.device.getHardwareKey()
+        return self.device.getHardwareKey()
 
     def get_info(self) -> SoapyInfo:
         if self._info is not None:
