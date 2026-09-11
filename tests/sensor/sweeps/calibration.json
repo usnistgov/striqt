@@ -1,0 +1,88 @@
+{
+    "mock_source": "warmup",
+    "sensor_binding": "air7101b_calibration",
+    "source": {
+        "master_clock_rate": 125000000.0,
+        "num_rx_ports": 2
+    },
+    "captures": [{
+        "duration": 0.04,
+        "sample_rate": 107.52e6,
+        "center_frequency": 3750000000.0,
+        "backend_sample_rate": 125e6,
+        "gain": 0.0,
+        "noise_diode_enabled": false,
+        "port": [0,1]
+    }],
+    "loops": [{
+        "kind": "list",
+        "field": "port",
+        "isin": "capture",
+        "values": [0, 1]
+    }, {
+        "kind": "list",
+        "field": "noise_diode_enabled",
+        "isin": "capture",
+        "values": [false, true]
+    }, {
+        "kind": "list",
+        "field": "sample_rate",
+        "isin": "capture",
+        "values": ["125.0e6", "62.5e6"]
+    }, {
+        "kind": "list",
+        "field": "center_frequency",
+        "isin": "capture",
+        "values": ["3750e6", "3829.8e6", "3900e6", "3960e6"]
+    }, {
+        "kind": "list",
+        "field": "gain",
+        "isin": "capture",
+        "values": [0, -10, -20]
+    }, {
+        "kind": "list",
+        "field": "analysis_bandwidth",
+        "isin": "capture",
+        "values": ["40e6", "60e6", "80e6", "100e6", "inf"]
+    }, {
+        "kind": "list",
+        "field": "lo_shift",
+        "isin": "capture",
+        "values": ["none"]
+    }],
+    "analysis": {
+        "channel_power_time_series": {
+            "detector_period": "5764607523034235/576460752303423488",
+            "power_detectors": ["rms", "peak"]
+        }
+    },
+    "description": {
+        "summary": null,
+        "version": "unversioned"
+    },
+    "adjust_captures": {},
+    "extensions": {
+        "sink": null,
+        "import_path": null,
+        "import_name": null
+    },
+    "sink": {
+        "path": "outputs/calibration.nc",
+        "log_path": null,
+        "log_level": "info",
+        "store": "directory",
+        "max_threads": null,
+        "batched_write_count": 1,
+        "max_chunk_bytes": 50000000
+    },
+    "peripherals": {},
+    "options": {
+        "reuse_iq": true,
+        "loop_only_nyquist": true,
+        "skip_warmup": true
+    },
+    "calibration": {
+        "enr": 20.87,
+        "ambient_temperature": 294.5389
+    }
+}

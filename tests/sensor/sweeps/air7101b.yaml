@@ -1,0 +1,267 @@
+sensor_binding: air7101b
+source:
+  master_clock_rate: 125000000.0
+  trigger_strobe: 0.02
+  signal_trigger: cellular_5g_pss_sync
+  array_backend: cupy
+  calibration: outputs/calibration.nc
+  time_source: external
+  time_sync_at: acquire
+  clock_source: internal
+  receive_retries: 3
+  adc_overload_limit: -3.0
+  if_overload_limit: -14.0
+  gapless: false
+captures:
+- duration: 10e-3
+  sample_rate: 107520000.0
+  analysis_bandwidth: 100000000.0
+  port:
+  - 0
+  - 1
+  lo_shift: none
+  host_resample: true
+  backend_sample_rate: null
+  adjust_analysis:
+    frequency_offset: -40.08e6
+    guard_bandwidths:
+    - 875e3
+    - 575e3
+    frame_slots: dddsuudddddddsuudddd
+    special_symbols: ddddddfffffffu
+  center_frequency: 3750000000.0
+  gain: -10.0
+- duration: 10e-3
+  sample_rate: 107520000.0
+  analysis_bandwidth: 60000000.0
+  port:
+  - 0
+  - 1
+  lo_shift: none
+  host_resample: true
+  backend_sample_rate: null
+  adjust_analysis:
+    frequency_offset: -20.52e6
+    guard_bandwidths:
+    - 875e3
+    - 875e3
+    frame_slots: dddsuudddddddsuudddd
+    special_symbols: ddddddfffffffu
+  center_frequency: 3829800000.0
+  gain: -10.0
+- duration: 10e-3
+  sample_rate: 107520000.0
+  analysis_bandwidth: 80000000.0
+  port:
+  - 0
+  - 1
+  lo_shift: none
+  host_resample: true
+  backend_sample_rate: null
+  adjust_analysis:
+    frequency_offset: -28.8e6
+    guard_bandwidths:
+    - 875e3
+    - 875e3
+    frame_slots: dddsuudddddddsuudddd
+    special_symbols: ddddddfffffffu
+    max_beams: 2
+  center_frequency: 3900000000.0
+  gain: -10.0
+- duration: 10e-3
+  sample_rate: 53760000.0
+  analysis_bandwidth: 40000000.0
+  port:
+  - 0
+  - 1
+  lo_shift: none
+  host_resample: true
+  backend_sample_rate: null
+  adjust_analysis:
+    frequency_offset: 0
+    guard_bandwidths:
+    - 0
+    - 0
+    frame_slots: dddsuudddddddsuudddd
+    special_symbols: ddddddfffffffu
+  center_frequency: 3960000000.0
+  gain: -10.0
+loops: []
+analysis:
+  cellular_5g_pss_sync:
+    subcarrier_spacing: 30000.0
+    sample_rate: 7680000.0
+    discovery_periodicity: 0.02
+    frequency_offset: 0.0
+    shared_spectrum: false
+    delay: 0.0
+    symbol_indexes: c
+    max_lag_symbols: null
+    window_fill: 1.0
+    per_port: true
+    max_beams: 4
+  cellular_5g_pss_correlation:
+    subcarrier_spacing: 30000.0
+    sample_rate: 7680000.0
+    discovery_periodicity: 0.02
+    frequency_offset: 0.0
+    shared_spectrum: false
+    delay: 0.0
+    symbol_indexes: c
+    max_lag_symbols: null
+    max_block_count: 1
+  cellular_5g_ssb_spectrogram:
+    subcarrier_spacing: 30000.0
+    sample_rate: 7680000.0
+    discovery_periodicity: 0.02
+    frequency_offset: 0.0
+    max_block_count: null
+    window:
+    - kaiser
+    - 11.884
+    lo_bandstop: 120000.0
+  cellular_cyclic_autocorrelation:
+    subcarrier_spacings:
+    - 30000.0
+    frame_range:
+    - 0
+    - 1
+    frame_slots: dddsuudddddddsuudddd
+    symbol_range:
+    - 0
+    - null
+    generation: 5G
+  channel_power_time_series:
+    detector_period: 5764607523034235/576460752303423488
+    power_detectors:
+    - rms
+    - peak
+  channel_power_histogram:
+    detector_period: 1/28000
+    power_detectors:
+    - rms
+    - peak
+    power_low: -100.0
+    power_high: 5.0
+    power_resolution: 0.1
+  spectrogram:
+    window:
+    - kaiser
+    - 11.884
+    frequency_resolution: 15000.0
+    fractional_overlap: 13/28
+    window_fill: 15/28
+    integration_bandwidth: 360000.0
+    trim_stopband: true
+    lo_bandstop: 120000.0
+    time_aperture: null
+  cellular_resource_power_histogram:
+    window:
+    - kaiser
+    - 11.884
+    subcarrier_spacing: 30000.0
+    power_low: -150.0
+    power_high: 0.0
+    power_resolution: 0.1
+    average_rbs: true
+    average_slots: false
+    guard_bandwidths:
+    - 875000.0
+    - 875000.0
+    frame_slots: dddsuudddddddsuudddd
+    special_symbols: ddddddfffffffu
+    cyclic_prefix: normal
+    lo_bandstop: 120000.0
+  cyclic_channel_power:
+    cyclic_period: 0.01
+    detector_period: 1/28000
+    power_detectors:
+    - rms
+    - peak
+    cyclic_statistics:
+    - min
+    - mean
+    - max
+  power_spectral_density:
+    window:
+    - kaiser
+    - 11.884
+    frequency_resolution: 15000.0
+    fractional_overlap: 13/28
+    window_fill: 15/28
+    integration_bandwidth: 360000.0
+    trim_stopband: true
+    lo_bandstop: 120000.0
+    time_statistic:
+    - mean
+    - 0.5
+    - 0.9
+    - 0.95
+    - 0.99
+    - max
+  spectrogram_histogram:
+    window:
+    - kaiser
+    - 11.884
+    frequency_resolution: 15000.0
+    fractional_overlap: 13/28
+    window_fill: 15/28
+    integration_bandwidth: 360000.0
+    trim_stopband: true
+    lo_bandstop: 120000.0
+    time_aperture: null
+    power_low: -150.0
+    power_high: 0.0
+    power_resolution: 0.1
+  spectrogram_ratio_histogram:
+    window:
+    - kaiser
+    - 11.884
+    frequency_resolution: 15000.0
+    fractional_overlap: 13/28
+    window_fill: 15/28
+    integration_bandwidth: 360000.0
+    trim_stopband: true
+    lo_bandstop: 120000.0
+    time_aperture: null
+    power_low: -50.0
+    power_high: 50.0
+    power_resolution: 0.1
+# adjust_captures:
+#   defaults:
+#     channel_name:
+#       key: center_frequency
+#       lookup:
+#         3750000000.0: 3750 MHz
+#         3819990000.0: 3820 MHz
+#         3829800000.0: 3830 MHz
+#         3879990000.0: 3880 MHz
+#         3900000000.0: 3900 MHz
+#         3960000000.0: 3960 MHz
+#       required: true
+#       default: null
+#     antenna_index:
+#       key: port
+#       lookup:
+#         0: 0
+#         1: 1
+#       required: true
+#     antenna_name: Unspecified
+#     antenna_polarization: Unspecified
+# extensions:
+#   sink: null
+#   import_path: src
+#   import_name: extensions
+sink:
+  path: outputs/{spec_name}_{start_time}.zarr.zip
+  log_path: null
+  log_level: info
+  store: directory
+  max_threads: 1
+  batched_write_count: 24
+  max_chunk_bytes: 50000000
+options:
+  reuse_iq: false
+  loop_only_nyquist: false
+  skip_warmup: true
+mock_source: null
