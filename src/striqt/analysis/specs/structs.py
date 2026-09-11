@@ -256,6 +256,16 @@ class Spectrogram(FrequencyAnalysisSpecBase, kw_only=True, frozen=True):
     dB = True
 
 
+def _validate_range(name: str, value) -> None:
+    if not isinstance(value, tuple) or value[0] <= 0:
+        return
+    start, stop = value
+    if stop is None:
+        raise msgspec.ValidationError(f'{name} end must be specified when start > 0')
+    if stop < start:
+        raise msgspec.ValidationError(f'{name} end must be >= start')
+
+
 class CellularCyclicAutocorrelator(Analysis, kw_only=True, frozen=True):
     subcarrier_spacings: types.CellularSubcarrierSpacingTuple = (15e3, 30e3, 60e3)
     frame_range: Union[int, tuple[int, int]] = (0, 1)
@@ -265,13 +275,8 @@ class CellularCyclicAutocorrelator(Analysis, kw_only=True, frozen=True):
 
     def __post_init__(self):
         super().__post_init__()
-
-        if isinstance(self.frame_range, tuple) and self.frame_range[0] > 0:
-            assert self.frame_range[1] is not None
-            assert self.frame_range[1] >= self.frame_range[0]
-        if isinstance(self.symbol_range, tuple) and self.symbol_range[0] > 0:
-            assert self.symbol_range[1] is not None
-            assert self.symbol_range[1] >= self.symbol_range[0]
+        _validate_range('frame_range', self.frame_range)
+        _validate_range('symbol_range', self.symbol_range)
 
 
 class CellularResourcePowerHistogram(

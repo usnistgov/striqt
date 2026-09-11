@@ -517,3 +517,30 @@ def fake_source_id(monkeypatch):
         ss.lib.controller.lookup, 'id', lambda spec, timeout=0.5: 'beef'
     )
     return 'beef'
+
+
+# ---------------------------------------------------------------------------
+# Spec construction paths
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(params=('direct', 'from_dict'))
+def construct(request):
+    """build a spec either directly or through msgspec conversion"""
+    if request.param == 'direct':
+        return lambda cls, **kws: cls(**kws)
+    return lambda cls, **kws: cls.from_dict(kws)
+
+
+def raises_on_both_paths(cls, exc, match, **kws):
+    """assert that constructing `cls` raises `exc` directly and via from_dict.
+
+    msgspec re-raises ValueError and TypeError from __post_init__ as its own
+    ValidationError on the conversion path, so either is accepted there.
+    """
+    import msgspec
+
+    with pytest.raises(exc, match=match):
+        cls(**kws)
+    with pytest.raises((exc, msgspec.ValidationError), match=match):
+        cls.from_dict(kws)
