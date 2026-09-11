@@ -470,6 +470,7 @@ CPU_RUNS = (
     SWEEP_DIR / 'dirac_delta-cpu.yaml',
     SWEEP_DIR / 'noise-cpu.yaml',
     SWEEP_DIR / 'sawtooth-cpu.yaml',
+    SWEEP_DIR / 'site' / 'site-cpu.yaml',
 )
 
 
@@ -544,3 +545,84 @@ def raises_on_both_paths(cls, exc, match, **kws):
         cls(**kws)
     with pytest.raises((exc, msgspec.ValidationError), match=match):
         cls.from_dict(kws)
+
+
+# ---------------------------------------------------------------------------
+# Site-style sweeps: extension module binding + per-source overrides
+# ---------------------------------------------------------------------------
+
+SITE_DIR = SWEEP_DIR / 'site'
+SITE_RADIO_ID = '48b02d17a587'
+
+
+@pytest.fixture(scope='session')
+def site_spec_path() -> Path:
+    return SITE_DIR / 'site-cpu.yaml'
+
+
+@pytest.fixture(scope='session')
+def site_sweep():
+    import striqt.sensor as ss
+
+    return ss.read_yaml_spec(SITE_DIR / 'site-cpu.yaml')
+
+
+@pytest.fixture(scope='session')
+def site_survey_sweep():
+    import striqt.sensor as ss
+
+    return ss.read_yaml_spec(SITE_DIR / 'site-survey.yaml')
+
+
+@pytest.fixture(scope='session')
+def site_calibration_sweep():
+    import striqt.sensor as ss
+
+    return ss.read_yaml_spec(SITE_DIR / 'site-calibration.yaml')
+
+
+@pytest.fixture
+def fake_radio_id(monkeypatch):
+    """stand in for the hardware id lookup, returning the id keyed in sites/radio02.yaml"""
+    import striqt.sensor as ss
+
+    monkeypatch.setattr(
+        ss.lib.controller.lookup, 'id', lambda spec, timeout=0.5: SITE_RADIO_ID
+    )
+    return SITE_RADIO_ID
+
+
+@pytest.fixture
+def write_yaml(tmp_path):
+    """write dedented YAML text to `tmp_path / relpath`, creating parent directories"""
+    import textwrap
+
+    def write(relpath: str, text: str) -> Path:
+        path = tmp_path / relpath
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(textwrap.dedent(text))
+        return path
+
+    return write
+
+
+@pytest.fixture
+def isolated_extension_import():
+    """hide the test suite's `extensions` module so a spec can import its own.
+
+    Restores sys.path and sys.modules afterwards; leaving a temporary module
+    cached under the name `extensions` would break every later site YAML read.
+    """
+    import sys
+
+    src_dir = (SWEEP_DIR / 'src').resolve()
+    saved_path = list(sys.path)
+    saved_module = sys.modules.pop('extensions', None)
+    sys.path[:] = [p for p in sys.path if Path(p or '.').resolve() != src_dir]
+    try:
+        yield
+    finally:
+        sys.path[:] = saved_path
+        sys.modules.pop('extensions', None)
+        if saved_module is not None:
+            sys.modules['extensions'] = saved_module
